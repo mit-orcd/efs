@@ -33,7 +33,10 @@ three-host RDMA). Driver fixes: the `b-checks` plugin called
 with "retry". Findings on nuc: a clean `client.sh stop` is refused when the
 unmount session revoke takes over 10 s (2 of 2 full private runs); one
 30 s REPORT timeout in append failover (8,000/8,000 records exact); four
-live harnesses still use `--node-id`.
+live harnesses still use `--node-id`. nuc `make test-all` at `8d858a791`:
+458 commands, 1 FAIL, 14 NOTRUN host limits; the FAIL,
+`tests/test_get_integrity.py`, no longer compiles on `merge-wave5` (no stub
+for K34's `read_reprobe_down`) and fails the same on the base `376369aa8`.
 
 [D42 `EFS_READ_VERIFY`: GET-path integrity audit](read-verify-audit-20261024.md):
 **PASS (scoped), branch `claude/devel-read-verify-08e19c`, not merged.** The

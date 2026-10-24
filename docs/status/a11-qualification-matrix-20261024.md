@@ -247,7 +247,29 @@ their own `SHA256SUMS`; `python3 scripts/qualify.py verify-sums DIR`):
 Stores, mounts and scratch were deleted by the driver; daemon and client logs
 are in each run's `gates/_teardown/` (driver-owned) or `loopback/`.
 
-TODO-GATE
+### Code gate
+
+- nuc, `bash scripts/make_test_summary.sh` (test-all) on `8d858a791` (the
+  final code; built with that identity): **458 commands, 1 FAIL, 14 NOTRUN**
+  (1,889 s). NOTRUN are host limits: 9 RDMA (no device), valgrind (2),
+  `~/git/cluster` absent, an `EFS_FAULTS` phase, the runner's self-test.
+  On `ea3360a75` the same 1 FAIL, plus `tests/test_qualify_driver.py` counted
+  NOTRUN because its PASS line contained the word (fixed in `8d858a791`).
+- **The FAIL is the base's, not this branch's (finding 4):**
+  `tests/test_get_integrity.py` (D42 READ_VERIFY) no longer compiles on
+  `merge-wave5`: its slice of `src/client/read.c` now calls K34's
+  `read_reprobe_down`, which the test neither extracts nor stubs (`implicit
+  declaration of function 'read_reprobe_down'`, `-Werror`). The untouched
+  base `376369aa8` fails the same way on nuc; this branch changes no file
+  the test reads. The merge-wave5 gate fails on it until the test stubs the
+  function (one line, like its `efs_client_node_is_down` stub).
+- Docs gate: `cd docs && python3 gen-architecture-full.py` and
+  `python3 docs/check-architecture.py`: 5/5 checks pass.
+- Raw: nuc `~/efs-artifacts/a11-20261024/test-all-8d858a791/` (summary,
+  timings, the failure log, the base rerun of the test). The whole evidence
+  directory has `SHA256SUMS` over 1,004 files, sha256
+  `27d741470aac2c75896b7938cc6ff5faff1ddf2571e4a3ba18607b61e4896711`. The
+  build tree `~/efs-qual-matrix` was deleted after the runs.
 
 ## Code changes
 
