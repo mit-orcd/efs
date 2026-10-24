@@ -88,6 +88,15 @@ execution review complete; speedup NOTRUN. Fix the fault-daemon dependency,
 then build harnesses incrementally and schedule isolated cases concurrently.
 The fast/long split does not reduce full-gate work or qualify parallel safety.
 
+[W155 per-request receipts and same-identity resolution](w155-ambiguous-completion-20261024.md):
+**code fix PASS (scoped), branch `claude/devel-w155-ab5120` (`b36710b65`), not
+merged; `make test-all` on nuc PASS (the one parallel-runner FAIL,
+`test_k32_entry_count`, fails the same way on the base); nuc b1/b2 live reruns NOTRUN.** A REPORT runs under a
+receipt keyed by session and publication id; a sync REPORT or identified
+directory op whose reply was lost is resolved by identity before failing, and
+EIO remains only for an outcome still unknown after the bound. Client and
+server lines carry the request identity (G1–G6).
+
 [W155 modify oracle and correlation tooling](w155-oracle-correlation-20261023.md):
 **self-tests PASS on nuc; the W148 campaign rerun with it is NOTRUN** (branch
 `devel-w155h`, merged Oct 23 `92886b8e2`). A failed modify records its syscall stages and
