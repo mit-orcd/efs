@@ -18,6 +18,17 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K9/W87 append interleavings and the K15/K29 accounting rule](k9-k15-append-interleave-20261024.md):
+**K9: no defect reproduced, no fix; W87 OPEN, K9 INCOMPLETE. K15/K29 rule PASS
+(scoped). On `claude/devel-k9-append-836bbe`, not merged.** 14 interleavings
+of the buffered `O_APPEND` path forced deterministically (model over the real
+reservation state machine, 50,000 seeds; loopback live test with fault-client
+barriers, exact records warm and cold). `append_failover.py` now accounts a
+failure the client saw (record absent, hole explained by its abandon) and
+keeps lost acknowledged records and unexplained holes as mismatches; it and
+`append_oracle_cluster.sh` start efsd with the K33 CLI. Oracle soak and live
+failover gates NOTRUN (parent session).
+
 [Oct 24 merge: W155, D31 drain, K33 increment 2, K33 client view](k33-client-view-20261024.md#after-the-merge):
 **merged into devel; Merged-tree `make test-all` on intel2 (W155, D31 drain, K33 increment 2 and live client view at `910bbeef4`): 442 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave2-20261024/`, `SHA256SUMS` `0d13a146…4ecf`). The first run at `3e01ba95c` failed only `tests/test_k33_client_view.py`, which waited for a joiner log line that increment 2 renamed; fixed in `910bbeef4`.** Before the next deploy, devops `start.sh` and cluster `cluster.sh` must move to the positional `efsd ADDR:PORT STORAGE` / `efsd --join SEED STORAGE` form (`--node-id` is refused), and every store needs a fresh format.
 

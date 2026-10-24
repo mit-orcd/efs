@@ -3813,6 +3813,15 @@ collection remain open. [Checkpoint](../status/dependency-package-20261009.md#ex
 
 ## W87 · Buffered concurrent append loses records under broader load
 
+**Oct 24 analysis and deterministic interleavings (K9, branch `claude/devel-k9-append-836bbe`):**
+the buffered `O_APPEND` path (burst publication, stripe, reservation, dcache
+patch, flush/REPORT, abandon, fence and drain cleanup) was traced and 14
+interleavings were forced: a seeded model over the real reservation state
+machine (`tests/test_append_interleave.c`, 50,000 seeds PASS) and a loopback
+live test with fault-client barriers (`tests/test_append_interleave_live.py`).
+No defect reproduced and no fix; keep W87 open; the original-load soak is
+NOTRUN. [Evidence](../status/k9-k15-append-interleave-20261024.md).
+
 **Oct 22 efs2 reproduction attempt (K9):** a new exact append oracle
 (`tests/live/append_oracle.py`, classification unit test in `make test`) ran 23
 rounds, 19,597 acknowledged records, on a private 3-daemon TCP buffered cluster
