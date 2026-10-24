@@ -1,9 +1,9 @@
 # orcd-mini fresh-format deploy of devel `cb970ca7c`, POSIX suites (RDMA, direct I/O) — 2026-10-24
 
 **Deployed; core, extras, durability, `.efs` and two-client suites PASS.
-The expiry suite is NOTRUN: its fixture stops at `raft-mkfs`, which returns
-NOT_PRIMARY because it is sent before group 0 has a leader (harness bug
-since W153, below).** User request: deploy latest devel to orcd-mini with
+Expiry: all 29 expiry checks PASS after the fixture's formation fix
+(below); its closing core POSIX run failed one case (`dir_times_mkdir_rmdir`,
+rmdir EBUSY), recorded under W159.** User request: deploy latest devel to orcd-mini with
 RDMA and direct I/O and run all POSIX suites, including two-client. W153
 refuses pre-W153 stores, so the user authorized a wipe and fresh format.
 
@@ -42,17 +42,30 @@ refuses pre-W153 stores, so the user authorized a wipe and fresh format.
 | Durability across remount | devops `smoke-persist.sh` | 27/27 prepare + 27/27 verify PASS |
 | `.efs` virtual interfaces | `tests/live/virtual_interfaces.py --freshness-s 150`, temporary peer mount | 10/10 PASS |
 | Two-client (node9901 ↔ node9900) | `scripts/orcd_mini_posix2.py` from the Mac | 68/68 PASS (314 s) |
-| Expiry lifecycle (private four-node fixture, /tmp, port 24410) | `posix_expiry.py --suite expiry` | **NOTRUN**: fixture stopped at `raft-mkfs` (below) |
+| Expiry lifecycle (private four-node fixture, /tmp, port 24410) | `posix_expiry.py --suite expiry` | first run: fixture stopped at `raft-mkfs` (below). Rerun with the fix: 29/29 expiry checks PASS; the fixture's closing core POSIX run 215/216 (`dir_times_mkdir_rmdir` rmdir EBUSY; W159) |
 
-## Harness defect
+## Harness defect (fixed)
 
 `tests/live/gc_reclamation.py`, which builds the expiry fixture, calls
 `efs-mgmt raft-mkfs` once as soon as every member has joined. Since W153,
 formation needs group 0 to have a leader, and right after the members join
 it may not have one. The call then returns -15 (NOT_PRIMARY), and the
 harness treats that as fatal. devops `start.sh` hits the same response
-and retries. Fix: retry `raft-mkfs` on NOT_PRIMARY within a bounded
-deadline, as `start.sh` does.
+and retries.
+
+Fixed: the new `tests/live/raft_form.py` retries `raft-mkfs` while it answers
+NOT_PRIMARY (rc=-15), within 60 s, and treats any other failure as final.
+`gc_reclamation.py`, `k13_ticket_cluster.py` and `reclaim_crash.py` use it.
+They were the remaining single-shot formation calls; the other harnesses
+already retried.
+- **Checks on node9901 (same build):** the 10 unit tests that inspect these
+  harnesses PASS.
+- **Expiry rerun:** the fixture logged two NOT_PRIMARY answers before
+  forming. Then all 29 expiry checks PASS, 114 PASS lines in all.
+- **Remaining failure:** the closing core POSIX run inside the fixture failed
+  `dir_times_mkdir_rmdir`, with `rmdir` answering EBUSY. The cluster's own
+  core suite on the same build is 216/216. This is the same fixture-only
+  family as W159 (two timeouts on intel), so it is added there.
 
 ## Reproduce
 
@@ -68,5 +81,5 @@ deadline, as `start.sh` does.
 
 ## Remaining
 
-- Rerun the expiry suite once the fixture retries formation.
+- W159: the fixture's closing core POSIX run (rmdir EBUSY here, timeouts on intel).
 - Not run: ior, `make test-all`.

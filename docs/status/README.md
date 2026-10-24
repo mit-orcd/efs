@@ -20,8 +20,8 @@ full acceptance are separate states.
 
 [orcd-mini fresh deploy of `cb970ca7c` (RDMA, direct I/O)](orcd-mini-deploy-cb970ca7c-20261024.md):
 **core 216/216, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
-two-client 68/68 PASS; expiry NOTRUN** (fixture's single `raft-mkfs` gets
-NOT_PRIMARY before a leader exists, a harness defect since W153).
+two-client 68/68 PASS; expiry 29/29 checks PASS** after the fixture's
+formation retry (`eb8333ddc`); its closing core run failed one case (W159).
 
 [K32 fix: batched K14 publication and K13 tickets](k32-write-fix-20261023.md):
 **code fix PASS (scoped), merged into devel (`ea2dc4443`).** Merged-tree `make test-all` on intel2 (K32 + K33 at `2d03d9837`): 435 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-k32-k33-20261024/`, `SHA256SUMS` `b5649ea9…8c1c`). A REPORT's consecutive units of one file publish as one

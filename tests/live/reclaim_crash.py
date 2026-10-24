@@ -23,6 +23,7 @@ written after the first kill. Exit 0 = PASS. Logs and roots stay in BASE
 for diagnosis; delete BASE afterwards.
 """
 import argparse, hashlib, os, random, re, signal, socket, subprocess, sys, time
+from raft_form import form
 from pathlib import Path
 
 p = argparse.ArgumentParser()
@@ -134,7 +135,7 @@ try:
     for i in range(3):
         start(i)
     time.sleep(3)
-    mgmt('raft-mkfs', f'127.0.0.1:{a.port}')
+    form(src / 'efs-mgmt', f'127.0.0.1:{a.port}', env=env)
     mount_fs()
     log('cluster up')
     keep, doom = [], []

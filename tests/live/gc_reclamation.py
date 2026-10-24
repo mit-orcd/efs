@@ -20,6 +20,7 @@ import shutil
 import threading
 import socket
 import subprocess
+from raft_form import form
 import select
 import tempfile
 from raft_tail import commands as raft_commands
@@ -635,7 +636,7 @@ def fresh_format(label):
     for root in roots:shutil.rmtree(root)
     start()
     wait_joined()
-    run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
+    form(source/'efs-mgmt',f'127.0.0.1:{a.port}',env=env)
     mount_client()
     print('fresh format of all four stores for '+label,flush=True)
 
@@ -668,7 +669,7 @@ try:
         run(['cc','-shared','-fPIC','-Wall','-Wextra','-Werror',source/'tests/live/kv_wal_fault.c','-ldl','-o',work/'kv-wal-fault.so'])
     start()
     wait_joined()
-    run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
+    form(source/'efs-mgmt',f'127.0.0.1:{a.port}',env=env)
     mount_client()
     if a.expiry:
         from expiry_lifecycle import exercise

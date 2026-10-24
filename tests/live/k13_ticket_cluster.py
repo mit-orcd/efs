@@ -18,6 +18,7 @@ No pub-reject line may appear in any daemon log. Only processes this script
 started are signalled. Raw logs stay in --work (outside Git).
 """
 import argparse, hashlib, os, random, re, signal, socket, subprocess, sys, threading, time
+from raft_form import form
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
@@ -146,7 +147,7 @@ try:
     run(['cc', '-Wall', '-Wextra', '-Werror', '-I' + str(src / 'include'), src / 'tests/live/client_put_ticket.c',
          src / 'libefs.a', '-pthread', '-lm', '-ldl', '-libverbs', '-o', helper])
     start_all()
-    run([src / 'efs-mgmt', 'raft-mkfs', f'127.0.0.1:{a.port}'], stdout=subprocess.DEVNULL)
+    form(src / 'efs-mgmt', f'127.0.0.1:{a.port}', env=env, quiet=True)
     mount()
     log('three daemons (RAFT_N=3, tcp, buffered I/O) and one mount serving PASS')
 
