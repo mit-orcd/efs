@@ -1270,33 +1270,10 @@ static int cmd_raft_mkfs(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    /* W153: formation commits the members joined now; say who is missing
-     * before asking (efsd enforces the same rule). */
-    if (send_recv(fd, EFS_MSG_LIST_NODES, NULL, 0, &reply_type, &reply, &reply_len) != 0 ||
-        reply_type != EFS_MSG_LIST_NODES_REPLY ||
-        reply_len != sizeof(struct efs_msg_list_nodes_reply)) {
-        fprintf(stderr, "raft-mkfs: cannot read the node table of %s:%u\n", host, port);
-        free(reply);
-        close(fd);
-        return 1;
-    }
-    {
-        const struct efs_msg_list_nodes_reply *list = reply;
-        struct efs_membership m;
-        char err[1024];
-        /* Preflight only: the daemon supplies the cluster identity. */
-        if (efs_membership_from_nodes(list->nodes, list->node_count, 1, &m, err,
-                                      sizeof(err)) != EFS_OK) {
-            fprintf(stderr, "raft-mkfs refused: %s\n", err);
-            free(reply);
-            close(fd);
-            return 1;
-        }
-        printf("raft-mkfs: %u joined members with node ids 1..%u (formation forms "
-               "automatically; this forms now and adds them)\n", m.count, m.count);
-    }
-    free(reply);
-    reply = NULL;
+    /* K33: formation is automatic; this asks the node to form now. Before
+     * formation the seed proposes with the stores joined so far (at least
+     * three members in all) and forms once each promised; the daemon names
+     * what it waits for in its log and refuses with UNFORMED. */
     if (send_recv(fd, EFS_MSG_RAFT_MKFS, NULL, 0, &reply_type, &reply,
                   &reply_len) != 0 ||
         reply_type != EFS_MSG_RAFT_MKFS_REPLY ||

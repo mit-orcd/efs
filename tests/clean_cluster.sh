@@ -18,9 +18,9 @@ DEPLOY=1
 say() { echo "[clean] $*"; }
 ssh_to() { local t=$1; shift; EFS_SSH_TIMEOUT=$t "$SSH" "$@"; }
 
-start_efsd() { # host node-id addr [join]
+start_efsd() { # host node-id addr [join]  (K33: node-id is only a label; the cluster assigns ids)
     local h=$1 nid=$2 addr=$3 join=${4:-}
-    local j=""; [ -n "$join" ] && j="--join $join"
+    local j="$addr:19810"; [ -n "$join" ] && j="--join $join --listen $addr:19810"
     # setsid detaches; the ssh session may linger (harmless) so allow rc=124.
     # Optional trace variables are forwarded only when the caller set them.
     local prof=""
@@ -28,8 +28,7 @@ start_efsd() { # host node-id addr [join]
     [ -n "${EFS_RDMA_FIRST:-}" ] && prof="$prof EFS_RDMA_FIRST=$EFS_RDMA_FIRST"
     [ -n "${EFS_TRANSPORT:-}" ] && prof="$prof EFS_TRANSPORT=$EFS_TRANSPORT"
     ssh_to 15 "$h" "cd /tmp/efs && $prof \
-        setsid ./efsd --node-id $nid --addr $addr \
-        --port 19810 --storage $STORAGE --quota 36T --direct-io $j \
+        setsid ./efsd $j $STORAGE --quota 36T --direct-io \
         >efsd.log 2>&1 </dev/null & sleep 3; pgrep -x efsd >/dev/null && echo UP" \
         2>/dev/null | grep -q UP
 }

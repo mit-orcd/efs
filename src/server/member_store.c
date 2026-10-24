@@ -15,7 +15,7 @@
 static const uint8_t boot_magic[8] = {'E', 'F', 'S', 'B', 'O', 'O', 'T', 0};
 static const uint8_t ident_magic[8] = {'E', 'F', 'S', 'I', 'D', 'N', 'T', 0};
 #define BOOT_VERSION 1u
-#define IDENT_VERSION 2u
+#define IDENT_VERSION 3u
 #define IDENT_SUM_AT (EFS_IDENTITY_FILE_LEN - 32u)
 
 static void ms_err(char *err, size_t errlen, const char *fmt, ...)
@@ -75,22 +75,31 @@ int member_store_boot_decode(const uint8_t *in, size_t len, uint64_t *counter)
 
 const char *member_store_state_name(uint32_t state)
 {
-    return state == EFS_MEMBER_UNFORMED ? "unformed" : state == EFS_MEMBER_FORMED ? "formed"
+    return state == EFS_MEMBER_JOINING ? "joining" : state == EFS_MEMBER_FORMED ? "formed"
+           : state == EFS_MEMBER_SEED ? "seed" : state == EFS_MEMBER_PROMISED ? "promised"
            : "invalid";
 }
 
-/* [magic:8][version:4][member:4][state:4][reclen:4][token:8][record:MAX][sum:32]. */
-#define IDENT_REC_AT 32u
+/* [magic:8][version:4][member:4][state:4][reclen:4][token:8]
+ * [cluster:8][port:2][alen:1][addr:63][pad:6][record:MAX][sum:32]. */
+#define IDENT_REC_AT EFS_IDENTITY_REC_AT
 static int ident_encode(const struct member_store *ms, uint8_t out[EFS_IDENTITY_FILE_LEN])
 {
-    size_t rlen = 0;
+    size_t rlen = 0, alen = strlen(ms->addr);
     memset(out, 0, EFS_IDENTITY_FILE_LEN);
     memcpy(out, ident_magic, 8);
     put32(out + 8, IDENT_VERSION);
     put32(out + 12, ms->member_id);
     put32(out + 16, ms->state);
     put64(out + 24, ms->token);
-    if (ms->state == EFS_MEMBER_FORMED &&
+    put64(out + 32, ms->cluster);
+    out[40] = (uint8_t)(ms->port >> 8);
+    out[41] = (uint8_t)ms->port;
+    if (alen > EFS_MEMBER_ADDR_MAX)
+        return EFS_ERR_INVAL;
+    out[42] = (uint8_t)alen;
+    memcpy(out + 43, ms->addr, alen);
+    if ((ms->state == EFS_MEMBER_FORMED || ms->state == EFS_MEMBER_PROMISED) &&
         efs_membership_encode(&ms->members, out + IDENT_REC_AT, EFS_MEMBERSHIP_MAX_LEN,
                               &rlen) != EFS_OK)
         return EFS_ERR_INVAL;
@@ -212,8 +221,8 @@ void member_store_close(struct member_store *ms)
     }
 }
 
-int member_store_open(struct member_store *ms, const char *dir, uint32_t member_id,
-                      char *err, size_t errlen)
+int member_store_open(struct member_store *ms, const char *dir, int seed, const char *addr,
+                      uint16_t port, char *err, size_t errlen)
 {
     char p[4200];
     uint8_t buf[EFS_IDENTITY_FILE_LEN + 1];
@@ -262,14 +271,23 @@ int member_store_open(struct member_store *ms, const char *dir, uint32_t member_
             member_store_close(ms);
             return EFS_ERR_UNSUPPORTED;
         }
+        if (seed && (!addr || !*addr || strlen(addr) > EFS_MEMBER_ADDR_MAX || !port)) {
+            ms_err(err, errlen, "store %s: a new cluster needs this node's ADDR:PORT", dir);
+            member_store_close(ms);
+            return EFS_ERR_INVAL;
+        }
         uint8_t b[EFS_BOOT_FILE_LEN], id[EFS_IDENTITY_FILE_LEN];
         member_store_boot_encode(0, b);
-        ms->member_id = member_id;
-        ms->state = EFS_MEMBER_UNFORMED;
-        if (mint_token(&ms->token) != EFS_OK) {
+        ms->state = seed ? EFS_MEMBER_SEED : EFS_MEMBER_JOINING;
+        if (mint_token(&ms->token) != EFS_OK || (seed && mint_token(&ms->cluster) != EFS_OK)) {
             ms_err(err, errlen, "store %s: cannot read /dev/urandom for its token", dir);
             member_store_close(ms);
             return EFS_ERR_IO;
+        }
+        if (seed) {
+            ms->member_id = 1;
+            snprintf(ms->addr, sizeof(ms->addr), "%s", addr);
+            ms->port = port;
         }
         if (ident_encode(ms, id) != EFS_OK ||
             write_replace(dir, "boot.bin", b, sizeof(b)) != EFS_OK ||
@@ -287,7 +305,8 @@ int member_store_open(struct member_store *ms, const char *dir, uint32_t member_
         efs_hash(buf, IDENT_SUM_AT, sum);
     if (rc != EFS_OK || got != EFS_IDENTITY_FILE_LEN || memcmp(buf, ident_magic, 8) ||
         get32(buf + 8) != IDENT_VERSION || memcmp(sum, buf + IDENT_SUM_AT, EFS_HASH_SIZE) ||
-        get32(buf + 16) > EFS_MEMBER_FORMED || get32(buf + 20) > EFS_MEMBERSHIP_MAX_LEN) {
+        get32(buf + 16) > EFS_MEMBER_PROMISED || get32(buf + 20) > EFS_MEMBERSHIP_MAX_LEN ||
+        buf[42] > EFS_MEMBER_ADDR_MAX) {
         ms_err(err, errlen, "store %s: identity.bin is unreadable, short, corrupt or of "
                "another version", dir);
         member_store_close(ms);
@@ -296,22 +315,29 @@ int member_store_open(struct member_store *ms, const char *dir, uint32_t member_
     ms->member_id = get32(buf + 12);
     ms->state = get32(buf + 16);
     ms->token = get64(buf + 24);
+    ms->cluster = get64(buf + 32);
+    ms->port = (uint16_t)(buf[40] << 8 | buf[41]);
+    memcpy(ms->addr, buf + 43, buf[42]);
+    ms->addr[buf[42]] = '\0';
     uint32_t rlen = get32(buf + 20);
     const struct efs_member *self = NULL;
+    int has_rec = ms->state == EFS_MEMBER_FORMED || ms->state == EFS_MEMBER_PROMISED;
     if (rlen && efs_membership_decode(buf + IDENT_REC_AT, rlen, &ms->members) == EFS_OK)
         self = efs_membership_find(&ms->members, ms->member_id);
-    if ((ms->state == EFS_MEMBER_FORMED) != (rlen != 0) || !ms->token ||
-        (rlen && (!self || self->token != ms->token))) {
-        ms_err(err, errlen, "store %s: identity.bin state %s disagrees with its committed "
-               "membership record", dir, member_store_state_name(ms->state));
+    int ok = ms->token && has_rec == (rlen != 0);
+    if (ms->state == EFS_MEMBER_JOINING)
+        ok = ok && !ms->member_id && !ms->cluster && !ms->port && !ms->addr[0];
+    else if (ms->state == EFS_MEMBER_SEED)
+        ok = ok && ms->member_id == 1 && ms->cluster && ms->port && ms->addr[0];
+    else
+        ok = ok && self && self->token == ms->token && self->port == ms->port &&
+             !strcmp(self->addr, ms->addr) && ms->members.cluster == ms->cluster &&
+             (ms->state == EFS_MEMBER_FORMED || ms->members.count == ms->members.formed);
+    if (!ok) {
+        ms_err(err, errlen, "store %s: identity.bin state %s disagrees with its node id, "
+               "endpoint or membership record", dir, member_store_state_name(ms->state));
         member_store_close(ms);
         return EFS_ERR_UNSUPPORTED;
-    }
-    if (ms->member_id != member_id) {
-        ms_err(err, errlen, "store %s belongs to node %u; this daemon is node %u; use the "
-               "matching --node-id or format the store fresh", dir, ms->member_id, member_id);
-        member_store_close(ms);
-        return EFS_ERR_FENCED;
     }
     return EFS_OK;
 }
@@ -356,6 +382,93 @@ int member_store_boot(struct member_store *ms, uint64_t fresh, uint64_t *incarna
     return EFS_OK;
 }
 
+/* Write `next` as this store's identity, then adopt it. */
+static int ms_persist(struct member_store *ms, const struct member_store *next, char *err,
+                      size_t errlen)
+{
+    uint8_t id[EFS_IDENTITY_FILE_LEN];
+    if (ident_encode(next, id) != EFS_OK ||
+        write_replace(ms->dir, "identity.bin", id, sizeof(id)) != EFS_OK) {
+        ms_err(err, errlen, "store %s: cannot persist identity: %s", ms->dir, strerror(errno));
+        return EFS_ERR_IO;
+    }
+    int lockfd = ms->lockfd, created = ms->created;
+    *ms = *next;
+    ms->lockfd = lockfd;
+    ms->created = created;
+    return EFS_OK;
+}
+
+/* The record's entry for this store (by token, then checked against the
+ * node id and endpoint it already has), or NULL with err set. */
+static const struct efs_member *ms_self(const struct member_store *ms,
+                                        const struct efs_membership *m, char *err,
+                                        size_t errlen)
+{
+    const struct efs_member *self = NULL;
+    for (uint32_t i = 0; i < m->count; i++)
+        if (m->m[i].token == ms->token)
+            self = &m->m[i];
+    if (ms->state != EFS_MEMBER_JOINING) {
+        const struct efs_member *at = efs_membership_find(m, ms->member_id);
+        if (!self && at) {
+            ms_err(err, errlen, "store %s: the committed member %u holds store token %016llx, "
+                   "this store is %016llx (the store was replaced; a member's store cannot be "
+                   "swapped)", ms->dir, ms->member_id, (unsigned long long)at->token,
+                   (unsigned long long)ms->token);
+            return NULL;
+        }
+        if (self && (self->id != ms->member_id || self->port != ms->port ||
+                     strcmp(self->addr, ms->addr))) {
+            ms_err(err, errlen, "store %s: the record holds this store as node %u at %s:%u; "
+                   "it is node %u at %s:%u", ms->dir, self->id, self->addr, self->port,
+                   ms->member_id, ms->addr, ms->port);
+            return NULL;
+        }
+    }
+    if (!self)
+        ms_err(err, errlen, "store %s: node %u (store %016llx) is not in the membership of %u "
+               "members", ms->dir, ms->member_id, (unsigned long long)ms->token, m->count);
+    return self;
+}
+
+int member_store_promise(struct member_store *ms, const struct efs_membership *proposal,
+                         char *err, size_t errlen)
+{
+    const struct efs_member *self;
+    if (!efs_membership_valid(proposal) || proposal->count != proposal->formed) {
+        ms_err(err, errlen, "store %s: invalid formation proposal", ms->dir);
+        return EFS_ERR_INVAL;
+    }
+    if (ms->state == EFS_MEMBER_PROMISED || ms->state == EFS_MEMBER_FORMED) {
+        if (ms->state == EFS_MEMBER_PROMISED ? efs_membership_equal(&ms->members, proposal)
+                                            : efs_membership_extends(&ms->members, proposal))
+            return EFS_OK;
+        ms_err(err, errlen, "store %s: it promised (or formed) %u members of cluster %016llx; "
+               "a proposal of %u members of cluster %016llx is refused", ms->dir,
+               ms->members.formed, (unsigned long long)ms->cluster, proposal->count,
+               (unsigned long long)proposal->cluster);
+        return EFS_ERR_FENCED;
+    }
+    if (ms->state == EFS_MEMBER_SEED && proposal->cluster != ms->cluster) {
+        ms_err(err, errlen, "store %s: the seed of cluster %016llx cannot promise cluster "
+               "%016llx", ms->dir, (unsigned long long)ms->cluster,
+               (unsigned long long)proposal->cluster);
+        return EFS_ERR_FENCED;
+    }
+    self = ms_self(ms, proposal, err, errlen);
+    if (!self)
+        return EFS_ERR_FENCED;
+    struct member_store next = *ms;
+    next.state = EFS_MEMBER_PROMISED;
+    next.member_id = self->id;
+    next.cluster = proposal->cluster;
+    next.port = self->port;
+    snprintf(next.addr, sizeof(next.addr), "%s", self->addr);
+    next.members = *proposal;
+    return ms_persist(ms, &next, err, errlen);
+}
+
 int member_store_learn(struct member_store *ms, const struct efs_membership *m,
                        char *err, size_t errlen)
 {
@@ -363,21 +476,17 @@ int member_store_learn(struct member_store *ms, const struct efs_membership *m,
         ms_err(err, errlen, "store %s: invalid membership record", ms->dir);
         return EFS_ERR_INVAL;
     }
-    const struct efs_member *self = efs_membership_find(m, ms->member_id);
-    if (!self) {
-        ms_err(err, errlen, "store %s: node %u is not in the committed membership of %u "
-               "members", ms->dir, ms->member_id, m->count);
+    if (ms->state != EFS_MEMBER_JOINING && m->cluster != ms->cluster) {
+        ms_err(err, errlen, "store %s belongs to cluster %016llx; a record of cluster %016llx "
+               "is refused", ms->dir, (unsigned long long)ms->cluster,
+               (unsigned long long)m->cluster);
         return EFS_ERR_FENCED;
     }
-    if (self->token != ms->token) {
-        ms_err(err, errlen, "store %s: the committed member %u holds store token %016llx, this "
-               "store is %016llx (the store was replaced; a member's store cannot be swapped)",
-               ms->dir, ms->member_id, (unsigned long long)self->token,
-               (unsigned long long)ms->token);
+    const struct efs_member *self = ms_self(ms, m, err, errlen);
+    if (!self)
         return EFS_ERR_FENCED;
-    }
-    if (ms->state == EFS_MEMBER_FORMED) {
-        if (efs_membership_extends(&ms->members, m))
+    if (ms->state == EFS_MEMBER_FORMED || ms->state == EFS_MEMBER_PROMISED) {
+        if (ms->state == EFS_MEMBER_FORMED && efs_membership_extends(&ms->members, m))
             return EFS_OK; /* the same or an earlier revision */
         if (!efs_membership_extends(m, &ms->members)) {
             ms_err(err, errlen, "store %s: committed membership of %u members (cluster %016llx) "
@@ -388,15 +497,11 @@ int member_store_learn(struct member_store *ms, const struct efs_membership *m,
         }
     }
     struct member_store next = *ms;
-    uint8_t id[EFS_IDENTITY_FILE_LEN];
     next.state = EFS_MEMBER_FORMED;
+    next.member_id = self->id;
+    next.cluster = m->cluster;
+    next.port = self->port;
+    snprintf(next.addr, sizeof(next.addr), "%s", self->addr);
     next.members = *m;
-    if (ident_encode(&next, id) != EFS_OK ||
-        write_replace(ms->dir, "identity.bin", id, sizeof(id)) != EFS_OK) {
-        ms_err(err, errlen, "store %s: cannot persist identity: %s", ms->dir, strerror(errno));
-        return EFS_ERR_IO;
-    }
-    ms->state = EFS_MEMBER_FORMED;
-    ms->members = *m;
-    return EFS_OK;
+    return ms_persist(ms, &next, err, errlen);
 }

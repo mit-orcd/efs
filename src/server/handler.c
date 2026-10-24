@@ -301,17 +301,34 @@ void server_handle_conn(struct efs_conn *conn)
                     free(rej);
                     break;
                 }
+                /* K33 (M4', M5): a joining store (no node id) never enters
+                 * the node table: it is told to wait, to promise the seed's
+                 * formation proposal, or given the committed revision that
+                 * names it, or refused. */
+                if (h->node_id == 0) {
+                    char haddr[sizeof(h->addr)];
+                    memcpy(haddr, h->addr, sizeof(haddr));
+                    haddr[sizeof(haddr) - 1] = '\0';
+                    struct efs_msg_hello_ack *ja = calloc(1, sizeof(*ja));
+                    if (!ja)
+                        break;
+                    strncpy(ja->build_id, EFS_BUILD_ID, sizeof(ja->build_id) - 1);
+                    server_member_hello_join(haddr, h->port, h->token, ja);
+                    efs_conn_send_msg(conn, EFS_MSG_HELLO_ACK, ja, sizeof(*ja));
+                    free(ja);
+                    break;
+                }
                 /* W153/K33 (M5): a formed cluster admits its committed members
-                 * at their committed endpoint and store; a node that is not a
-                 * member yet is pending (its addition runs when its id is
-                 * next); anything else is refused and the sender exits. */
+                 * at their committed endpoint and store; anything else is
+                 * refused and the sender exits. Before formation the seed's
+                 * and the promised stores of its cluster form the table. */
                 {
                     char haddr[sizeof(h->addr)];
                     uint32_t committed = 0;
                     memcpy(haddr, h->addr, sizeof(haddr));
                     haddr[sizeof(haddr) - 1] = '\0';
                     uint32_t why = server_member_hello(h->node_id, haddr, h->port, h->token,
-                                                       h->cluster, &committed);
+                                                       h->cluster, h->flags, &committed);
                     if (why != EFS_HELLO_REJECT_NONE) {
                         struct efs_msg_hello_ack *rej = calloc(1, sizeof(*rej));
                         if (!rej)

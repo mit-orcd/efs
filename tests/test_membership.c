@@ -4,14 +4,17 @@
  * taken, shared endpoints and tokens refused), record encoding and every
  * malformed record refused, revisions (one-member extensions, prefix
  * order), the group-anchor apply rules, the voters derived from the
- * committed count, and the store's ownership lock, durable boot counter,
- * token and persisted revisions. */
+ * committed count, the store's ownership lock, durable boot counter,
+ * token, the K33 joining / seed / promised / formed identities (M4') and
+ * persisted revisions, and the discovery datagrams and subnet broadcast
+ * addresses (src/server/discovery.c). */
 #include "efs/membership.h"
 #include "efs/kv.h"
 #include "efs/meta_apply.h"
 #include "efs/raft.h"
 #include "efs/checksum.h"
 #include "../src/server/member_store.h"
+#include "../src/server/discovery.h"
 #include "test_tmpdir.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -263,10 +266,10 @@ static ssize_t read_file(const char *dir, const char *name, void *b, size_t n)
 
 static void store(void)
 {
-    char base[EFS_TEST_PATH], dir[4200], err[1024];
+    char base[EFS_TEST_PATH], dir[4200], sdir[4200], jdir[4200], err[1024];
     struct member_store ms, ms2;
     struct efs_node t[EFS_MAX_NODES];
-    struct efs_membership m3, m4, m4f, m5;
+    struct efs_membership m3, m4, m4f, m5, other;
     uint64_t inc = 0;
     uint8_t good[EFS_BOOT_FILE_LEN], bad[EFS_BOOT_FILE_LEN], now[EFS_BOOT_FILE_LEN + 4];
     uint8_t ident[EFS_IDENTITY_FILE_LEN];
@@ -275,10 +278,13 @@ static void store(void)
     efs_test_path(base, sizeof(base), "efs-w153-store-XXXXXX");
     if (!efs_test_mkdtemp(base)) { perror("mkdtemp"); exit(1); }
     snprintf(dir, sizeof(dir), "%s/mdraft", base);
-    /* Fresh store: initialized unformed with a token, boot counter
-     * max(fresh, saved+1). */
-    CHECK(member_store_open(&ms, dir, 2, err, sizeof(err)) == EFS_OK && ms.created &&
-          ms.state == EFS_MEMBER_UNFORMED && ms.token, err);
+    snprintf(sdir, sizeof(sdir), "%s/seed", base);
+    snprintf(jdir, sizeof(jdir), "%s/joiner", base);
+    /* K33: a fresh store started with --join is joining: a token, no node
+     * id, no cluster; the boot counter is max(fresh, saved+1). */
+    CHECK(member_store_open(&ms, dir, 0, NULL, 0, err, sizeof(err)) == EFS_OK && ms.created &&
+          ms.state == EFS_MEMBER_JOINING && ms.token && !ms.member_id && !ms.cluster &&
+          !ms.port, err);
     uint64_t token = ms.token;
     table(t, 3, ids);
     t[1].token = token;
@@ -293,7 +299,7 @@ static void store(void)
     if (pid == 0) {
         struct member_store o;
         char e[512];
-        _exit(member_store_open(&o, dir, 2, e, sizeof(e)) == EFS_ERR_BUSY &&
+        _exit(member_store_open(&o, dir, 0, NULL, 0, e, sizeof(e)) == EFS_ERR_BUSY &&
               strstr(e, "owned by another running process") ? 0 : 1);
     }
     int st = 0;
@@ -303,40 +309,96 @@ static void store(void)
     CHECK(member_store_boot(&ms, 1000, &inc, err, sizeof(err)) == EFS_OK && inc == 1000, "fresh");
     member_store_close(&ms);
 
-    /* Restart: the counter and token persist; another node id is fenced. */
-    CHECK(member_store_open(&ms, dir, 2, err, sizeof(err)) == EFS_OK && !ms.created &&
-          ms.token == token, err);
+    /* Restart: the counter and token persist; it is still joining (opening
+     * it as a seed does not turn it into one). */
+    CHECK(member_store_open(&ms, dir, 1, "10.0.0.2", 18600, err, sizeof(err)) == EFS_OK &&
+          !ms.created && ms.token == token && ms.state == EFS_MEMBER_JOINING, err);
     CHECK(member_store_boot(&ms, 1, &inc, err, sizeof(err)) == EFS_OK && inc == 1001, "restart");
-    member_store_close(&ms);
-    CHECK(member_store_open(&ms2, dir, 3, err, sizeof(err)) == EFS_ERR_FENCED &&
-          strstr(err, "belongs to node 2"), err);
 
-    /* A record naming another store at this id is refused (M2). */
-    CHECK(member_store_open(&ms, dir, 2, err, sizeof(err)) == EFS_OK, err);
+    /* M4': a proposal naming this store is promised at its id and endpoint;
+     * the same again is OK; another proposal is refused and not written. */
     {
         struct efs_membership w = m3;
         w.m[1].token = token + 1;
-        CHECK(member_store_learn(&ms, &w, err, sizeof(err)) == EFS_ERR_FENCED &&
-              strstr(err, "store was replaced") && ms.state == EFS_MEMBER_UNFORMED, err);
+        CHECK(member_store_promise(&ms, &w, err, sizeof(err)) == EFS_ERR_FENCED &&
+              strstr(err, "not in the membership") && ms.state == EFS_MEMBER_JOINING, err);
     }
+    CHECK(member_store_promise(&ms, &m4, err, sizeof(err)) == EFS_ERR_INVAL,
+          "a revision after formation is no proposal");
+    CHECK(member_store_promise(&ms, &m3, err, sizeof(err)) == EFS_OK &&
+          ms.state == EFS_MEMBER_PROMISED && ms.member_id == 2 && ms.port == 18600 &&
+          !strcmp(ms.addr, "10.0.0.2") && ms.cluster == 77, err);
+    CHECK(member_store_promise(&ms, &m3, err, sizeof(err)) == EFS_OK, "same proposal again");
+    other = m3;
+    other.cluster = 78;
+    CHECK(member_store_promise(&ms, &other, err, sizeof(err)) == EFS_ERR_FENCED &&
+          ms.cluster == 77, "another cluster's proposal");
+    CHECK(member_store_learn(&ms, &other, err, sizeof(err)) == EFS_ERR_FENCED &&
+          strstr(err, "belongs to cluster"), err);
+    CHECK(member_store_learn(&ms, &m4f, err, sizeof(err)) == EFS_ERR_FENCED &&
+          ms.state == EFS_MEMBER_PROMISED, "a formation other than the promised one");
+    member_store_close(&ms);
+    CHECK(member_store_open(&ms, dir, 0, NULL, 0, err, sizeof(err)) == EFS_OK &&
+          ms.state == EFS_MEMBER_PROMISED && ms.member_id == 2 &&
+          efs_membership_equal(&ms.members, &m3), "the promise survives a restart");
+
     /* Formation: persisted once; the same record is OK, a later revision is
      * persisted, an earlier one keeps the newer, another history FENCED. */
     CHECK(member_store_learn(&ms, &m3, err, sizeof(err)) == EFS_OK &&
           ms.state == EFS_MEMBER_FORMED, err);
     CHECK(member_store_learn(&ms, &m3, err, sizeof(err)) == EFS_OK, "same record again");
+    CHECK(member_store_promise(&ms, &m3, err, sizeof(err)) == EFS_OK, "formed holds the proposal");
     CHECK(member_store_learn(&ms, &m4f, err, sizeof(err)) == EFS_ERR_FENCED, "other history");
+    {
+        struct efs_membership w = m4;
+        w.m[1].token = token + 1;
+        CHECK(member_store_learn(&ms, &w, err, sizeof(err)) == EFS_ERR_FENCED &&
+              strstr(err, "store was replaced"), err);
+    }
     CHECK(member_store_learn(&ms, &m4, err, sizeof(err)) == EFS_OK && ms.members.count == 4,
           "revision 2");
     CHECK(member_store_learn(&ms, &m3, err, sizeof(err)) == EFS_OK && ms.members.count == 4,
           "an earlier revision keeps the newer");
     member_store_close(&ms);
     /* Restart derives the count (and so the voters) from the newest revision. */
-    CHECK(member_store_open(&ms, dir, 2, err, sizeof(err)) == EFS_OK &&
-          ms.state == EFS_MEMBER_FORMED && ms.members.count == 4 &&
+    CHECK(member_store_open(&ms, dir, 0, NULL, 0, err, sizeof(err)) == EFS_OK &&
+          ms.state == EFS_MEMBER_FORMED && ms.members.count == 4 && ms.member_id == 2 &&
           efs_membership_equal(&ms.members, &m4) &&
           efs_md_group_voters(EFS_RAFT_GROUP_SHARD2, (int)ms.members.count) == 0xe, err);
     CHECK(efs_membership_plus(&m4, "10.0.0.5", 18600, 0x1005, &m5, NULL, 0) == EFS_OK &&
           member_store_learn(&ms, &m5, err, sizeof(err)) == EFS_OK && ms.members.count == 5, err);
+
+    /* A seed: node 1 at its endpoint with a fresh cluster identity, kept
+     * across restarts; it promises only its own cluster as node 1. */
+    CHECK(member_store_open(&ms2, sdir, 1, NULL, 0, err, sizeof(err)) == EFS_ERR_INVAL,
+          "a seed needs its endpoint");
+    CHECK(member_store_open(&ms2, sdir, 1, "10.0.0.1", 18600, err, sizeof(err)) == EFS_OK &&
+          ms2.created && ms2.state == EFS_MEMBER_SEED && ms2.member_id == 1 && ms2.cluster &&
+          ms2.port == 18600 && !strcmp(ms2.addr, "10.0.0.1"), err);
+    uint64_t cl = ms2.cluster, stok = ms2.token;
+    member_store_close(&ms2);
+    CHECK(member_store_open(&ms2, sdir, 1, "10.0.0.1", 18600, err, sizeof(err)) == EFS_OK &&
+          !ms2.created && ms2.state == EFS_MEMBER_SEED && ms2.cluster == cl, err);
+    table(t, 3, ids);
+    t[0].token = stok;
+    efs_membership_from_nodes(t, 3, cl + 1, &other, NULL, 0);
+    CHECK(member_store_promise(&ms2, &other, err, sizeof(err)) == EFS_ERR_FENCED &&
+          strstr(err, "cannot promise"), err);
+    efs_membership_from_nodes(t, 3, cl, &other, NULL, 0);
+    CHECK(member_store_promise(&ms2, &other, err, sizeof(err)) == EFS_OK &&
+          ms2.state == EFS_MEMBER_PROMISED && ms2.member_id == 1, err);
+    member_store_close(&ms2);
+
+    /* A joining store added to a formed cluster learns the committed
+     * revision naming it and takes that id. */
+    CHECK(member_store_open(&ms2, jdir, 0, NULL, 0, err, sizeof(err)) == EFS_OK, err);
+    {
+        struct efs_membership w;
+        CHECK(efs_membership_plus(&m4, "10.0.0.7", 18607, ms2.token, &w, NULL, 0) == EFS_OK &&
+              member_store_learn(&ms2, &w, err, sizeof(err)) == EFS_OK &&
+              ms2.state == EFS_MEMBER_FORMED && ms2.member_id == 5 && ms2.port == 18607, err);
+    }
+    member_store_close(&ms2);
 
     /* Boot counter: corrupt, short, other version, missing and exhausted
      * counters are refused and left as they were. */
@@ -365,25 +427,40 @@ static void store(void)
     write_file(dir, "boot.bin", good, sizeof(good));
     member_store_close(&ms);
 
-    /* identity.bin: a corrupt or truncated identity, or a malformed record
-     * under a valid checksum, is refused. */
+    /* identity.bin: a corrupt or truncated identity, another version, or a
+     * malformed record or a node id that disagrees with the record under a
+     * valid checksum, is refused. */
     CHECK(read_file(dir, "identity.bin", ident, sizeof(ident)) == EFS_IDENTITY_FILE_LEN, "identity size");
     {
         uint8_t c[EFS_IDENTITY_FILE_LEN];
         memcpy(c, ident, sizeof(c));
         c[30] ^= 1;
         write_file(dir, "identity.bin", c, sizeof(c));
-        CHECK(member_store_open(&ms2, dir, 2, err, sizeof(err)) == EFS_ERR_UNSUPPORTED, "corrupt identity");
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_ERR_UNSUPPORTED,
+              "corrupt identity");
         write_file(dir, "identity.bin", ident, 40);
-        CHECK(member_store_open(&ms2, dir, 2, err, sizeof(err)) == EFS_ERR_UNSUPPORTED, "short identity");
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_ERR_UNSUPPORTED,
+              "short identity");
         memcpy(c, ident, sizeof(c));
-        c[32 + 2] = 2; /* record's formation count 2, checksum recomputed */
+        c[11] = 2; /* identity version 2 (an earlier build), checksum recomputed */
         efs_hash(c, EFS_IDENTITY_FILE_LEN - 32, c + EFS_IDENTITY_FILE_LEN - 32);
         write_file(dir, "identity.bin", c, sizeof(c));
-        CHECK(member_store_open(&ms2, dir, 2, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
+              strstr(err, "another version"), err);
+        memcpy(c, ident, sizeof(c));
+        c[EFS_IDENTITY_REC_AT + 2] = 2; /* record's formation count 2, checksum recomputed */
+        efs_hash(c, EFS_IDENTITY_FILE_LEN - 32, c + EFS_IDENTITY_FILE_LEN - 32);
+        write_file(dir, "identity.bin", c, sizeof(c));
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
+              strstr(err, "disagrees"), err);
+        memcpy(c, ident, sizeof(c));
+        c[15] = 3; /* node id 3 while the record holds this store as node 2 */
+        efs_hash(c, EFS_IDENTITY_FILE_LEN - 32, c + EFS_IDENTITY_FILE_LEN - 32);
+        write_file(dir, "identity.bin", c, sizeof(c));
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
               strstr(err, "disagrees"), err);
         write_file(dir, "identity.bin", ident, sizeof(ident));
-        CHECK(member_store_open(&ms2, dir, 2, err, sizeof(err)) == EFS_OK, err);
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_OK, err);
         member_store_close(&ms2);
     }
 
@@ -392,16 +469,69 @@ static void store(void)
         char p[4300];
         snprintf(p, sizeof(p), "%s/identity.bin", dir);
         unlink(p);
-        CHECK(member_store_open(&ms2, dir, 2, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
               strstr(err, "interrupted"), err);
         snprintf(p, sizeof(p), "%s/boot.bin", dir);
         unlink(p);
         snprintf(p, sizeof(p), "%s/kv", dir);
         mkdir(p, 0755);
-        CHECK(member_store_open(&ms2, dir, 2, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
-              strstr(err, "another build"), err);
+        CHECK(member_store_open(&ms2, dir, 1, "10.0.0.2", 18600, err, sizeof(err)) ==
+              EFS_ERR_UNSUPPORTED && strstr(err, "another build"), err);
         rmdir(p);
     }
+}
+
+/* K33: discovery datagrams and the subnet broadcast address. */
+static void discovery(void)
+{
+    uint8_t p[EFS_DISC_PROBE_LEN], a[EFS_DISC_ANSWER_MAX + 8], bad[EFS_DISC_ANSWER_MAX + 8];
+    struct efs_disc_answer in, out;
+    uint64_t nonce = 0;
+
+    efs_disc_probe_encode(p, 0x0102030405060708ull);
+    CHECK(efs_disc_probe_decode(p, sizeof(p), &nonce) == 0 && nonce == 0x0102030405060708ull,
+          "probe round trip");
+    CHECK(efs_disc_probe_decode(p, sizeof(p) - 1, &nonce) != 0, "short probe");
+    p[7] = 2;
+    CHECK(efs_disc_probe_decode(p, sizeof(p), &nonce) != 0, "probe of another version");
+    memset(&in, 0, sizeof(in));
+    in.cluster = 0xabcdef;
+    in.count = 4;
+    in.formed = 1;
+    snprintf(in.addr, sizeof(in.addr), "10.0.0.11");
+    in.port = 17500;
+    snprintf(in.build_id, sizeof(in.build_id), "0123abcd");
+    size_t n = efs_disc_answer_encode(a, sizeof(a), 9, &in);
+    CHECK(n == 34 + 9 + 8, "answer length");
+    CHECK(efs_disc_answer_decode(a, n, 9, &out) == 0 && out.cluster == in.cluster &&
+          out.count == 4 && out.formed == 1 && !strcmp(out.addr, "10.0.0.11") &&
+          out.port == 17500 && !strcmp(out.build_id, "0123abcd"),
+          "answer round trip: a non-default service port is advertised");
+    CHECK(efs_disc_answer_decode(a, n, 10, &out) != 0, "answer to another probe");
+    CHECK(efs_disc_answer_decode(a, n - 1, 9, &out) != 0, "truncated answer");
+    memcpy(bad, a, n);
+    bad[n] = 0;
+    CHECK(efs_disc_answer_decode(bad, n + 1, 9, &out) != 0, "trailing byte");
+    memcpy(bad, a, n);
+    memset(bad + 17, 0, 8);
+    CHECK(efs_disc_answer_decode(bad, n, 9, &out) != 0, "cluster 0");
+    memcpy(bad, a, n);
+    bad[33] = ' ';
+    CHECK(efs_disc_answer_decode(bad, n, 9, &out) != 0, "unprintable address");
+    memcpy(bad, a, n);
+    bad[8] = 1;
+    CHECK(efs_disc_answer_decode(bad, n, 9, &out) != 0, "a probe is no answer");
+    in.port = 0;
+    CHECK(efs_disc_answer_encode(a, sizeof(a), 9, &in) == 0, "port 0 not encoded");
+    /* The subnet's own mask, never an assumed /24. */
+    CHECK(efs_disc_broadcast(0x0a00000b, 0xffffff00) == 0x0a0000ff, "/24");
+    CHECK(efs_disc_broadcast(0x0a00010b, 0xfffffc00) == 0x0a0003ff, "/22");
+    CHECK(efs_disc_broadcast(0xac10050b, 0xffff0000) == 0xac10ffff, "/16");
+    CHECK(efs_disc_broadcast(0x7f000001, 0xff000000) == 0x7fffffff, "loopback /8");
+    struct efs_disc_target t[EFS_DISC_MAX_TARGETS];
+    char names[512];
+    CHECK(efs_disc_targets("no-such-interface-k33", t, EFS_DISC_MAX_TARGETS, names,
+                           sizeof(names)) == 0, "an interface that does not exist");
 }
 
 int main(void)
@@ -410,6 +540,7 @@ int main(void)
     record();
     revisions();
     store();
+    discovery();
     if (failures) {
         fprintf(stderr, "membership: %d of %d checks FAILED\n", failures, checks);
         return 1;
@@ -417,6 +548,7 @@ int main(void)
     printf("membership: formation input (2 refused, 3 and 5 committed, contiguous ids, "
            "duplicates refused), record encoding and malformed records, revisions and the "
            "anchor apply rules, voters from the committed count, store lock, boot counter, "
-           "token and persisted revisions: %d checks PASS\n", checks);
+           "token, joining/seed/promised/formed identities and persisted revisions, discovery "
+           "datagrams and broadcast addresses: %d checks PASS\n", checks);
     return 0;
 }

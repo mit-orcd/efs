@@ -301,15 +301,28 @@ class Server(object):
         self.log_path = os.path.join(storage, "efsd.log")
 
     def argv(self):
-        args = [
-            self.binary, "--node-id", str(self.node_id),
-            "--addr", "127.0.0.1", "--port", str(self.port),
-            "--storage", self.storage, "--quota", "1G",
-            "--direct-io" if self.mode == "direct" else "--no-direct-io",
-        ]
-        if self.join:
-            args += ["--join", self.join]
+        # K33: the seed creates the cluster at its endpoint; the others join
+        # it and name their own endpoint. Node ids come from the cluster.
+        ep = "127.0.0.1:%d" % self.port
+        args = [self.binary] + (["--join", self.join, "--listen", ep] if self.join else [ep])
+        args += [self.storage, "--quota", "1G", "--discovery-port", "0",
+                 "--direct-io" if self.mode == "direct" else "--no-direct-io"]
         return args
+
+    def wait_banner(self, timeout=60):
+        """The node id the cluster gave this daemon (its serving banner)."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with open(self.log_path, "rb") as f:
+                f.seek(self.log_offset)
+                m = re.search(rb"node (\d+) listening on 127\.0\.0\.1:%d" % self.port, f.read())
+            if m:
+                self.node_id = int(m.group(1))
+                return
+            if self.proc.poll() is not None:
+                break
+            time.sleep(.2)
+        raise RuntimeError("efsd at port %d never served" % self.port)
 
     def start(self):
         os.makedirs(self.storage, exist_ok=True)
@@ -384,6 +397,9 @@ class Cluster(object):
             srv = Server(i + 1, port, storage, join, self.efsd(), self.mode, self.transport, self.device)
             self.servers.append(srv)
             srv.start()
+        for srv in self.servers:
+            srv.wait_banner()
+        self.servers.sort(key=lambda srv: srv.node_id)
         self.journal = Journal(os.path.join(self.work, "journal.jsonl"))
         # A listening socket precedes joining/election. Formation commits the
         # members joined at that moment (W153): wait for all four first. Retry

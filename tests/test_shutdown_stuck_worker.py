@@ -74,24 +74,26 @@ def read_record(store):
 
 
 class Daemon:
-    def __init__(self, store, park=None):
-        self.store, self.port = store, free_port()
+    def __init__(self, store, park=None, port=None):
+        # K33: a store keeps its endpoint; a restart reuses the port.
+        self.store, self.port = store, port or free_port()
         (store/'log').mkdir(parents=True, exist_ok=True)
         env = dict(os.environ, EFS_FAULT_SHUTDOWN_TOTAL_MS=str(TOTAL_MS))
         env.pop('EFS_FAULT_SHUTDOWN_PARK', None)
         if park:
             env['EFS_FAULT_SHUTDOWN_PARK'] = park
         self.log = (store/'log/efsd.log').open('a')
+        self.offset = self.log.tell()  # a restart on the same port appends
         self.proc = subprocess.Popen(
-            [str(binary), '--node-id', '1', '--addr', '127.0.0.1', '--port', str(self.port),
-             '--storage', str(store), '--direct-io'],
+            [str(binary), f'127.0.0.1:{self.port}', str(store), '--discovery-port', '0',
+             '--direct-io'],
             cwd=root, env=env, stdout=self.log, stderr=subprocess.STDOUT)
         self.pidfile = store/'log/efsd.pid'
         self.pidfile.write_text(f'{self.proc.pid}\n')
         # The port accepts once bound, before SIGTERM is handled; the banner
         # is printed after the handler is installed, just before serving.
         deadline = time.monotonic() + 60
-        while f'listening on 127.0.0.1:{self.port}' not in self.tail():
+        while f'listening on 127.0.0.1:{self.port}' not in self.run_log():
             assert self.proc.poll() is None, f'efsd exited during start: {self.tail()}'
             assert time.monotonic() < deadline, f'efsd did not start serving: {self.tail()}'
             time.sleep(0.2)
@@ -99,6 +101,10 @@ class Daemon:
             pass
         subprocess.run([sys.executable, str(helper), 'record', str(self.pidfile), str(store)],
                        check=True, timeout=10)
+
+    def run_log(self):
+        self.log.flush()
+        return (self.store/'log/efsd.log').read_text()[self.offset:]
 
     def tail(self):
         if not self.log.closed:
@@ -158,12 +164,12 @@ def forced_case(name, park, phase, worker_text, max_elapsed_ms, hold_connection=
     print(f'{name}: forced rc 3 at {elapsed} ms (deadline {TOTAL_MS} ms, stop wall '
           f'{wall_ms:.0f} ms), phase {phase}, worker "{record["worker"]}", '
           f'{len(before)} store files kept PASS', flush=True)
-    return store
+    return store, daemon.port
 
 
-def after_forced_case(name, store):
+def after_forced_case(name, store, port):
     files = store_files(store)
-    daemon = Daemon(store)
+    daemon = Daemon(store, port=port)
     try:
         rc, out, wall_ms = daemon.stop()
     finally:
@@ -203,8 +209,9 @@ def orderly_case(name, store):
 # they mostly wait out real deadlines, and each keeps its bounds. The restart
 # reuses the packer case's store, so those two stay in order.
 def packer_then_restart():
-    packer_store = forced_case('packer-parked', 'packer', 'packer', 'packer thread', TOTAL_MS + 200)
-    after_forced_case('restart-after-forced', packer_store)
+    packer_store, port = forced_case('packer-parked', 'packer', 'packer', 'packer thread',
+                                     TOTAL_MS + 200)
+    after_forced_case('restart-after-forced', packer_store, port)
 
 
 groups = {

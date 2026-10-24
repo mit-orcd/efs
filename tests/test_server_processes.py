@@ -31,7 +31,12 @@ for bad in (rec(usage_flush='failed'),rec(rc='3'),rec(outcome='forced'),rec(pid=
     assert outcome!='orderly' and 'not an orderly stop' in message,(bad,outcome,message)
 assert module.classify(4242,None)[0]=='unknown'
 assert module.OUTCOME_RC=={'orderly':0,'forced':3,'barrier-failed':4,'unknown':4}
-assert module.exit_record_path({'args':['efsd','--storage','/a,/b']})==Path('/a/log/efsd.exit')
+assert module.exit_record_path({'args':['efsd','127.0.0.1:1','/a,/b']})==Path('/a/log/efsd.exit')
+# K33 CLI: the storage is the last positional; the port is ADDR:PORT's or --listen's.
+assert module.efsd_args(['efsd','--quota','1G','10.0.0.1:17432','/a,/b','--writers','2'])==('17432','/a')
+assert module.efsd_args(['efsd','--join','10.0.0.1:17432','--listen','10.0.0.2:17500','/c'])==('17500','/c')
+assert module.efsd_args(['efsd','--join','/d','--meta-storage','/m'])==(None,'/d')
+assert module.efsd_args(['efsd','--join','10.0.0.1:17432','/e'])==(None,'/e')
 with tempfile.TemporaryDirectory(prefix='efs-exit-record-') as work:
     path=Path(work)/'efsd.exit'
     assert module.read_exit_record(path) is None
@@ -52,7 +57,8 @@ static const char *storage,*mode="none";
 static volatile sig_atomic_t stop;
 static void done(int s){(void)s;stop=1;}
 int main(int argc,char **argv){
- for(int i=1;i+1<argc;i++){if(!strcmp(argv[i],"--storage"))storage=argv[i+1];if(!strcmp(argv[i],"--exit-mode"))mode=argv[i+1];}
+ storage=argv[argc-1]; /* positional STORAGE comes last here */
+ for(int i=1;i+1<argc;i++){if(!strcmp(argv[i],"--exit-mode"))mode=argv[i+1];}
  signal(SIGINT,SIG_DFL);
  if(!strcmp(mode,"none")){signal(SIGTERM,SIG_DFL);for(;;)pause();}
  signal(SIGTERM,done);while(!stop)pause();
@@ -73,7 +79,7 @@ with tempfile.TemporaryDirectory(prefix='efs-owner-') as work:
     binary=directory/'efsd'
     subprocess.run(['cc',str(source),'-o',str(binary)],check=True)
     unrelated=subprocess.Popen(['sleep','120'])
-    daemon=subprocess.Popen([str(binary),'--storage',str(storage),'--port','21950'])
+    daemon=subprocess.Popen([str(binary),'127.0.0.1:21950',str(storage)])
     pidfile=storage/'log/efsd.pid'
     def wrapper():
         subprocess.run(['bash',str(root/'scripts/server.sh'),'stop',str(storage)],check=True,timeout=10)
@@ -111,7 +117,7 @@ with tempfile.TemporaryDirectory(prefix='efs-owner-') as work:
         assert daemon.returncode==-15 and not pidfile.exists() and unrelated.poll() is None
         sentinel=storage/'data/sentinel';(storage/'data').mkdir();sentinel.write_bytes(b'kept')
         def owned(mode):
-            process=subprocess.Popen([str(binary),'--storage',str(storage),'--port','21950','--exit-mode',mode])
+            process=subprocess.Popen([str(binary),'--exit-mode',mode,'127.0.0.1:21950',str(storage)])
             pidfile.write_text(str(process.pid))
             for _ in range(100):
                 if module.owns(module.identity(process.pid),'storage',str(storage)):break

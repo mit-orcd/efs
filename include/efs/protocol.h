@@ -6,6 +6,7 @@
 #include "efs/metadata.h"
 #include "efs/meta_cmd.h"
 #include "efs/pack_ledger.h"
+#include "efs/membership.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -644,7 +645,7 @@ struct efs_msg_get_features {
 
 struct efs_msg_hello {
     uint32_t version;
-    efs_node_id_t node_id;
+    efs_node_id_t node_id; /* K33: 0 for a joining store (no node id yet) */
     char addr[64];
     uint16_t port;
     char storage_path[EFS_MAX_PATH];
@@ -652,8 +653,13 @@ struct efs_msg_hello {
     uint64_t used;  /* bytes currently stored on this node */
     char build_id[EFS_BUILD_ID_LEN]; /* git build id; must match the cluster's */
     uint64_t token;   /* K33: the sender's member-store token (never 0) */
-    uint64_t cluster; /* K33: its committed cluster identity; 0 while unformed */
+    uint64_t cluster; /* K33: its cluster identity (seed, promised or formed); 0 while joining */
+    uint32_t flags;   /* EFS_HELLO_F_* */
 };
+
+/* K33: the sender's store holds a committed membership record (formed);
+ * without it a sender with a cluster is a seed or holds a promise. */
+#define EFS_HELLO_F_FORMED 1u
 
 struct efs_msg_hello_ack {
     uint32_t epoch;
@@ -662,6 +668,13 @@ struct efs_msg_hello_ack {
     struct efs_node nodes[EFS_MAX_NODES];
     uint32_t reject_reason; /* EFS_HELLO_REJECT_*; valid when assigned_id == 0 */
     char build_id[EFS_BUILD_ID_LEN]; /* receiver's build id (for diagnostics) */
+    /* K33, to a joining store (node_id 0): the cluster it is joining, and
+     * a record: the formation proposal to promise (EFS_HELLO_PROMISE), or
+     * the committed revision naming it (accepted: assigned_id is its id). */
+    uint64_t cluster;
+    uint32_t formed; /* 1: the cluster is formed (an addition is queued when pending) */
+    uint32_t record_len;
+    uint8_t record[EFS_MEMBERSHIP_MAX_LEN];
 };
 
 #define EFS_HELLO_REJECT_NONE    0
@@ -676,6 +689,10 @@ struct efs_msg_hello_ack {
  * learned a committed revision naming it. Before formation: its id is held
  * by another store token (refused, exits) -- see EFS_HELLO_REJECT_FORMED. */
 #define EFS_HELLO_REJECT_PENDING 4
+/* K33 (M4'): to a joining store named in the seed's formation proposal:
+ * persist a promise for `record` (it is node assigned_id), then say HELLO
+ * with that id. */
+#define EFS_HELLO_PROMISE        5
 
 struct efs_msg_get_chunk {
     efs_export_id_t export_id;

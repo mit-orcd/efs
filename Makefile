@@ -136,7 +136,7 @@ SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orph
               src/server/peer_pool.c src/server/writer.c \
               src/server/iostats.c src/server/thread.c \
               src/server/raft_host.c src/server/reclaim.c src/server/segment_store.c \
-              src/server/packer.c src/server/member_store.c
+              src/server/packer.c src/server/member_store.c src/server/discovery.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c
@@ -754,8 +754,8 @@ tests/test_writer_routing: tests/test_writer_routing.c src/server/writer.c src/s
 
 tests: $(TEST_BINS)
 
-tests/test_membership: tests/test_membership.c src/server/member_store.c src/server/member_store.h $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_membership.c src/server/member_store.c $(LIB) $(LDFLAGS)
+tests/test_membership: tests/test_membership.c src/server/member_store.c src/server/member_store.h src/server/discovery.c src/server/discovery.h $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_membership.c src/server/member_store.c src/server/discovery.c $(LIB) $(LDFLAGS)
 
 src/sim/sim.o: src/sim/sim.c src/sim/sim_internal.h include/efs/sim.h include/efs/store.h include/efs/kv.h include/efs/meta_apply.h include/efs/transport.h include/efs/opid.h include/efs/raft.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/sim -c -o $@ $<
@@ -969,6 +969,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_w153_formation.py
 	python3 tests/test_k33_growth.py
+	python3 tests/test_k33_autoid.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	./tests/test_reclaim

@@ -6,6 +6,8 @@
 #include "efs/network.h"
 #include "efs/version.h"
 #include "server_internal.h"
+#include "discovery.h"
+#include <arpa/inet.h>
 #include "storage_roots.h"
 #include <stdarg.h>
 #include <stdio.h>
@@ -651,6 +653,230 @@ static void sigint_handler(int sig)
         g_server->running = 0;
 }
 
+/* K33 discovery answer (discovery.h): this node's service endpoint and
+ * what it knows of its cluster. Silent while the host is not running. */
+static int discovery_info(struct efs_disc_answer *a)
+{
+    int formed = 0;
+    if (!g_server || server_member_view(&a->cluster, &a->count, &formed) != 0)
+        return -1;
+    a->formed = (uint8_t)formed;
+    snprintf(a->addr, sizeof(a->addr), "%s", g_server->addr);
+    a->port = g_server->port;
+    snprintf(a->build_id, sizeof(a->build_id), "%s", EFS_BUILD_ID);
+    return 0;
+}
+
+/* Sleep up to ms, returning early when a stop signal arrived. */
+static void join_pause(struct efsd_server *s, int ms)
+{
+    for (int t = 0; t < ms && s->running; t += 100)
+        poll(NULL, 0, 100);
+}
+
+/* K33: find a cluster on the local subnet. The answers of the one cluster
+ * found (formed members first), 0 when nobody answered (said, and the
+ * caller waits), or -1 when the operator must name a seed (several
+ * clusters, no interface, discovery off). */
+static int join_discover(struct efsd_server *s, struct efs_disc_answer *out, int max,
+                         uint64_t *noted_ms)
+{
+    struct efs_disc_target t[EFS_DISC_MAX_TARGETS];
+    struct efs_disc_answer a[64];
+    char names[1024];
+    uint64_t clusters[64];
+    int nc = 0, n, k = 0;
+
+    if (!s->discovery_port) {
+        fprintf(stderr, "join: no seed given and discovery is off (--discovery-port 0); name "
+                "a member: efsd --join ADDR:PORT STORAGE\n");
+        return -1;
+    }
+    int nt = efs_disc_targets(s->discover_on[0] ? s->discover_on : NULL, t,
+                              EFS_DISC_MAX_TARGETS, names, sizeof(names));
+    if (!nt) {
+        fprintf(stderr, "join: no IPv4 interface that is up%s%s to discover a cluster on; name "
+                "a member: efsd --join ADDR:PORT STORAGE\n",
+                s->discover_on[0] ? " matches --discover-on " : "", s->discover_on);
+        return -1;
+    }
+    n = efs_disc_probe(t, nt, s->discovery_port, 1500, a, 64);
+    if (n < 0) {
+        fprintf(stderr, "join: cannot send a discovery probe on %s: %s\n", names, strerror(errno));
+        n = 0;
+    }
+    for (int i = 0; i < n; i++) {
+        if (strncmp(a[i].build_id, EFS_BUILD_ID, sizeof(a[i].build_id))) {
+            fprintf(stderr, "discovery: %s:%u (cluster %016llx) runs build '%s', this node "
+                    "'%s'; ignored\n", a[i].addr, a[i].port, (unsigned long long)a[i].cluster,
+                    a[i].build_id, EFS_BUILD_ID);
+            continue;
+        }
+        int j;
+        for (j = 0; j < nc && clusters[j] != a[i].cluster; j++)
+            ;
+        if (j == nc && nc < 64)
+            clusters[nc++] = a[i].cluster;
+        a[k++] = a[i];
+    }
+    if (nc > 1) {
+        fprintf(stderr, "discovery: %d clusters answer on %s (UDP port %u):\n", nc, names,
+                s->discovery_port);
+        for (int j = 0; j < nc; j++)
+            for (int i = 0; i < k; i++)
+                if (a[i].cluster == clusters[j])
+                    fprintf(stderr, "  cluster %016llx: %s:%u (%s, %u members)\n",
+                            (unsigned long long)a[i].cluster, a[i].addr, a[i].port,
+                            a[i].formed ? "formed" : "forming", a[i].count);
+        fprintf(stderr, "join: several clusters answer; start again naming a member of the one "
+                "to join: efsd --join ADDR:PORT STORAGE\n");
+        return -1;
+    }
+    if (!nc) {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        uint64_t now = (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+        if (!*noted_ms || now - *noted_ms >= 30000) {
+            *noted_ms = now;
+            fprintf(stderr, "discovery: no EFS cluster answered on %s (UDP port %u); waiting "
+                    "and asking again every 5 s. Start the first node with efsd ADDR:PORT "
+                    "STORAGE, or name a member on another subnet: efsd --join ADDR:PORT "
+                    "STORAGE\n", names, s->discovery_port);
+        }
+        return 0;
+    }
+    int m = 0;
+    for (int pass = 1; pass >= 0; pass--)
+        for (int i = 0; i < k && m < max; i++)
+            if (a[i].formed == pass)
+                out[m++] = a[i];
+    fprintf(stderr, "discovery: found cluster %016llx (%s, %u members) at %d endpoint%s, "
+            "first %s:%u\n", (unsigned long long)out[0].cluster,
+            out[0].formed ? "formed" : "forming", out[0].count, m, m == 1 ? "" : "s",
+            out[0].addr, out[0].port);
+    return m;
+}
+
+/* K33 (M4', M5): a joining store has no node id. Find a peer (the seed,
+ * or one found by discovery), choose this node's endpoint (--listen, or
+ * the address of the interface that reaches the peer with the peer's
+ * service port) and bind it, then say HELLO every second until the
+ * cluster gives this store a node id: a promise for the seed's formation
+ * proposal, or the committed revision of its addition (both persisted).
+ * 0 (admitted; s->rejoin_addr names the peer), 1 (refused or nothing to
+ * join: exit 1) or 2 (stopped by a signal). */
+static int join_as_new(struct efsd_server *s, const char *seed_host, uint16_t seed_port,
+                       int have_endpoint)
+{
+    struct efs_disc_answer found[32];
+    struct efs_join_note note;
+    struct { char addr[64]; uint16_t port; } alt[EFS_MAX_NODES];
+    int nfound = 0, next = 0, nalt = 0, cur = -1;
+    uint64_t noted_ms = 0;
+    time_t last_note = 0;
+    struct sigaction sa;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    s->running = 1;
+    while (s->running) {
+        char host[64];
+        uint16_t port;
+        if (cur >= 0) {
+            /* Another member an earlier answer named (the contact went away). */
+            snprintf(host, sizeof(host), "%s", alt[cur].addr);
+            port = alt[cur].port;
+        } else if (seed_host) {
+            snprintf(host, sizeof(host), "%s", seed_host);
+            port = seed_port;
+        } else {
+            if (next >= nfound) {
+                nfound = join_discover(s, found, 32, &noted_ms);
+                next = 0;
+                if (nfound < 0)
+                    return 1;
+                if (!nfound) {
+                    join_pause(s, 5000);
+                    continue;
+                }
+            }
+            snprintf(host, sizeof(host), "%s", found[next].addr);
+            port = found[next].port;
+            next++;
+        }
+        if (s->listen_fd < 0) {
+            if (!have_endpoint) {
+                if (efs_disc_local_addr(host, port, s->addr, sizeof(s->addr)) != 0) {
+                    fprintf(stderr, "join: no route to %s:%u; retrying\n", host, port);
+                    join_pause(s, 1000);
+                    continue;
+                }
+                s->port = port;
+            }
+            s->listen_fd = efs_listen_tcp(s->addr, s->port, EFS_LISTEN_BACKLOG);
+            if (s->listen_fd < 0) {
+                fprintf(stderr, "Failed to listen on %s:%u: %s%s\n", s->addr, s->port,
+                        strerror(errno), have_endpoint ? "" :
+                        " (this node takes the address that reaches the cluster and its "
+                        "service port; give another with --listen ADDR:PORT)");
+                return 1;
+            }
+            if (have_endpoint)
+                fprintf(stderr, "join: this node's endpoint is %s:%u (--listen)\n", s->addr,
+                        s->port);
+            else
+                fprintf(stderr, "join: this node's endpoint is %s:%u (the interface that "
+                        "reaches %s, the cluster's service port)\n", s->addr, s->port, host);
+        }
+        int rc = server_join_as_new(s, host, port, &note);
+        if (note.npeers) {
+            nalt = (int)note.npeers;
+            for (int i = 0; i < nalt; i++) {
+                snprintf(alt[i].addr, sizeof(alt[i].addr), "%s", note.peer[i].addr);
+                alt[i].port = note.peer[i].port;
+            }
+            if (cur >= nalt)
+                cur = -1;
+        }
+        if (rc == EFS_JOIN_ADMITTED) {
+            snprintf(s->rejoin_addr, sizeof(s->rejoin_addr), "%s", host);
+            s->rejoin_port = port;
+            return 0;
+        }
+        if (rc == EFS_JOIN_REFUSED_FORMED)
+            return 1;
+        time_t now = time(NULL);
+        if (now - last_note >= 10) {
+            last_note = now;
+            if (rc == EFS_JOIN_PENDING && note.formed)
+                fprintf(stderr, "join: pending at %s:%u: cluster %016llx has %u members; this "
+                        "store (%016llx) at %s:%u is being added; retrying every second\n",
+                        host, port, (unsigned long long)note.cluster, note.count,
+                        (unsigned long long)s->mstore.token, s->addr, s->port);
+            else if (rc == EFS_JOIN_PENDING)
+                fprintf(stderr, "join: waiting at %s:%u: cluster %016llx is forming (%u "
+                        "joined; formation needs %u); retrying every second\n", host, port,
+                        (unsigned long long)note.cluster, note.count, EFS_FORMATION_MIN);
+            else
+                fprintf(stderr, "join: %s:%u does not answer; retrying\n", host, port);
+        }
+        if (rc != EFS_JOIN_PENDING && nalt) {
+            /* Unreachable: ask the next member it named, then the seed (or
+             * the endpoints discovery found) again. */
+            cur = cur + 1 < nalt ? cur + 1 : -1;
+            join_pause(s, 200);
+            continue;
+        }
+        if (rc != EFS_JOIN_PENDING && !seed_host)
+            continue; /* the next endpoint found, or discover again */
+        join_pause(s, 1000);
+    }
+    return 2;
+}
+
 int main(int argc, char **argv)
 {
     efs_version_check_argv("efsd", argc, argv);
@@ -684,20 +910,28 @@ int main(int argc, char **argv)
     pthread_cond_init(&server.export_idle_cv, NULL);
     server_peer_pool_init();
 
-    char *join_peer = NULL;
+    const char *pos[2], *listen_ep = NULL;
+    int join = 0, npos = 0;
+    char seed_host[64] = "";
+    uint16_t seed_port = 0;
+    server.discovery_port = EFS_DISCOVERY_PORT;
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--node-id") == 0 && i + 1 < argc) {
-            server.id = (efs_node_id_t)atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--addr") == 0 && i + 1 < argc) {
-            strncpy(server.addr, argv[++i], sizeof(server.addr) - 1);
-        } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
-            server.port = (uint16_t)atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--storage") == 0 && i + 1 < argc) {
-            if (parse_storage_arg(&server, argv[++i]) != 0) {
+        if (strcmp(argv[i], "--join") == 0) {
+            join = 1;
+        } else if (strcmp(argv[i], "--listen") == 0 && i + 1 < argc) {
+            listen_ep = argv[++i];
+        } else if (strcmp(argv[i], "--discovery-port") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            long v = strtol(argv[++i], &end, 10);
+            if (!*argv[i] || *end || v < 0 || v > 65535) {
+                fprintf(stderr, "Invalid --discovery-port value (0..65535; 0 turns discovery off)\n");
                 usage(argv[0]);
                 return 1;
             }
+            server.discovery_port = (uint16_t)v;
+        } else if (strcmp(argv[i], "--discover-on") == 0 && i + 1 < argc) {
+            snprintf(server.discover_on, sizeof(server.discover_on), "%s", argv[++i]);
         } else if (strcmp(argv[i], "--meta-storage") == 0 && i + 1 < argc) {
             strncpy(server.meta_storage, argv[++i],
                     sizeof(server.meta_storage) - 1);
@@ -722,8 +956,6 @@ int main(int argc, char **argv)
                 return 1;
             }
             server.nwriters = n;
-        } else if (strcmp(argv[i], "--join") == 0 && i + 1 < argc) {
-            join_peer = argv[++i];
         } else if (strcmp(argv[i], "--no-persist") == 0) {
             server.persist_nodes = 0;
         } else if (strcmp(argv[i], "--perf") == 0) {
@@ -733,20 +965,66 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--help") == 0) {
             usage(argv[0]);
             return 0;
-        } else {
+        } else if (!strcmp(argv[i], "--node-id") || !strcmp(argv[i], "--addr") ||
+                   !strcmp(argv[i], "--port") || !strcmp(argv[i], "--storage")) {
+            fprintf(stderr, "%s was removed (K33): node ids come from the cluster; start a "
+                    "node with efsd ADDR:PORT STORAGE (new cluster or restart) or efsd --join "
+                    "[SEED] STORAGE (join)\n", argv[i]);
+            usage(argv[0]);
+            return 1;
+        } else if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "Unknown argument: %s\n", argv[i]);
+            usage(argv[0]);
+            return 1;
+        } else if (npos < 2) {
+            pos[npos++] = argv[i];
+        } else {
+            fprintf(stderr, "Unexpected argument: %s\n", argv[i]);
             usage(argv[0]);
             return 1;
         }
     }
 
-    if (server.id == 0 || server.port == 0 || server.storage_path_count == 0) {
-        fprintf(stderr, "Missing required arguments\n");
+    /* efsd ADDR:PORT STORAGE      create a cluster (fresh STORAGE) or restart
+     * efsd --join [SEED] STORAGE  join (SEED, or discovery) or restart */
+    const char *storage = NULL, *endpoint = NULL;
+    if (join && npos == 2) {
+        storage = pos[1];
+        if (parse_host_port(pos[0], seed_host, sizeof(seed_host), &seed_port) != 0) {
+            fprintf(stderr, "Invalid seed address: %s (want ADDR:PORT)\n", pos[0]);
+            return 1;
+        }
+    } else if (join && npos == 1) {
+        storage = pos[0];
+    } else if (!join && npos == 2) {
+        endpoint = pos[0];
+        storage = pos[1];
+    }
+    if (!storage) {
+        fprintf(stderr, join ? "Missing STORAGE: efsd --join [SEED] STORAGE\n"
+                             : "Missing arguments: efsd ADDR:PORT STORAGE, or efsd --join "
+                               "[SEED] STORAGE\n");
         usage(argv[0]);
         return 1;
     }
-    if (server.id > EFS_MAX_NODES) {
-        fprintf(stderr, "--node-id must be 1..%d\n", EFS_MAX_NODES);
+    if (listen_ep && !join) {
+        fprintf(stderr, "--listen is for --join; a new cluster's node is given as ADDR:PORT\n");
+        return 1;
+    }
+    if (listen_ep)
+        endpoint = listen_ep;
+    if (endpoint) {
+        struct in_addr ia;
+        if (parse_host_port(endpoint, server.addr, sizeof(server.addr), &server.port) != 0 ||
+            inet_pton(AF_INET, server.addr, &ia) != 1 || ia.s_addr == htonl(INADDR_ANY)) {
+            fprintf(stderr, "Invalid endpoint %s: want an IPv4 ADDR:PORT this node listens on\n",
+                    endpoint);
+            return 1;
+        }
+    }
+    if (parse_storage_arg(&server, storage) != 0 || server.storage_path_count == 0) {
+        fprintf(stderr, "Invalid STORAGE: %s\n", storage);
+        usage(argv[0]);
         return 1;
     }
     /* W153: the member count is the membership committed at formation
@@ -834,12 +1112,15 @@ int main(int argc, char **argv)
 
     /* Own the member store before anything else touches it, then advance
      * the durable boot counter (the incarnation, the Raft boot id) before
-     * anything is served. A refusal leaves the store as it was. */
+     * anything is served. A refusal leaves the store as it was. K33: a
+     * fresh store started with ADDR:PORT becomes a seed (node 1 of a new
+     * cluster); one started with --join a joining store (no node id). */
     {
         char mdraft[EFS_MAX_PATH + 16], err[1024];
         const char *meta_root = server.meta_storage[0] ? server.meta_storage : server.storage_path;
         snprintf(mdraft, sizeof(mdraft), "%s/mdraft", meta_root);
-        if (member_store_open(&server.mstore, mdraft, server.id, err, sizeof(err)) != EFS_OK) {
+        if (member_store_open(&server.mstore, mdraft, !join, server.addr, server.port, err,
+                              sizeof(err)) != EFS_OK) {
             fprintf(stderr, "member store refused: %s\n", err);
             return 1;
         }
@@ -853,25 +1134,54 @@ int main(int argc, char **argv)
             member_store_close(&server.mstore);
             return 1;
         }
-        if (server.mstore.state == EFS_MEMBER_FORMED) {
-            const struct efs_member *self = efs_membership_find(&server.mstore.members, server.id);
-            if (!self || self->port != server.port || strcmp(self->addr, server.addr) ||
-                self->token != server.mstore.token) {
-                fprintf(stderr, "member store refused: %s is node %u of a formed cluster at "
-                        "%s:%u; this daemon advertises %s:%u\n", mdraft, server.id,
-                        self ? self->addr : "?", self ? self->port : 0, server.addr, server.port);
-                member_store_close(&server.mstore);
+        struct member_store *ms = &server.mstore;
+        if (!join && ms->state == EFS_MEMBER_JOINING) {
+            fprintf(stderr, "member store refused: %s was started with --join and is not a "
+                    "member yet; start it again with efsd --join [SEED] %s\n", mdraft, storage);
+            member_store_close(ms);
+            return 1;
+        }
+        if (ms->state != EFS_MEMBER_JOINING) {
+            if (server.port && (server.port != ms->port || strcmp(server.addr, ms->addr))) {
+                fprintf(stderr, "member store refused: %s is node %u at %s:%u of cluster "
+                        "%016llx; this command names %s:%u (a member keeps its endpoint)\n",
+                        mdraft, ms->member_id, ms->addr, ms->port,
+                        (unsigned long long)ms->cluster, server.addr, server.port);
+                member_store_close(ms);
                 return 1;
             }
+            server.id = ms->member_id;
+            snprintf(server.addr, sizeof(server.addr), "%s", ms->addr);
+            server.port = ms->port;
+            fprintf(stderr, "node %u: store %s, %s:%u, cluster %016llx, incarnation %llu%s, %s",
+                    server.id, mdraft, server.addr, server.port, (unsigned long long)ms->cluster,
+                    (unsigned long long)server.incarnation,
+                    ms->created ? " (initialized now)" : "", member_store_state_name(ms->state));
+            if (ms->state == EFS_MEMBER_FORMED)
+                fprintf(stderr, " (%u committed members)\n", ms->members.count);
+            else if (ms->state == EFS_MEMBER_PROMISED)
+                fprintf(stderr, " (formation proposal of %u members)\n", ms->members.count);
+            else
+                fprintf(stderr, " (new cluster: forms automatically once two nodes started "
+                        "with --join have joined)\n");
+        } else {
+            fprintf(stderr, "store %s: joining (no node id yet), store %016llx, incarnation "
+                    "%llu%s\n", mdraft, (unsigned long long)ms->token,
+                    (unsigned long long)server.incarnation,
+                    ms->created ? " (initialized now)" : "");
+            int jr = join_as_new(&server, seed_host[0] ? seed_host : NULL, seed_port,
+                                 listen_ep != NULL);
+            /* The rest of startup runs as for any node: a signal before
+             * serving ends the process (the serving handler comes later). */
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTERM, SIG_DFL);
+            if (jr) {
+                if (server.listen_fd >= 0)
+                    close(server.listen_fd);
+                member_store_close(ms);
+                return jr == 2 ? 0 : 1;
+            }
         }
-        fprintf(stderr, "node %u: store %s, incarnation %llu%s, %s", server.id, mdraft,
-                (unsigned long long)server.incarnation,
-                server.mstore.created ? " (initialized now)" : "",
-                member_store_state_name(server.mstore.state));
-        if (server.mstore.state == EFS_MEMBER_FORMED)
-            fprintf(stderr, " (%u committed members)\n", server.mstore.members.count);
-        else
-            fprintf(stderr, " (forms automatically once members 1..3 have joined)\n");
     }
 
     server.nodes[0].id = server.id;
@@ -964,7 +1274,8 @@ int main(int argc, char **argv)
 
     /* Start listening first. If the configured address/port cannot be bound,
        fail immediately before contacting peers. */
-    server.listen_fd = efs_listen_tcp(server.addr, server.port, EFS_LISTEN_BACKLOG);
+    if (server.listen_fd < 0)
+        server.listen_fd = efs_listen_tcp(server.addr, server.port, EFS_LISTEN_BACKLOG);
     if (server.listen_fd < 0) {
         fprintf(stderr, "Failed to listen on %s:%u: %s\n",
                 server.addr, server.port, strerror(errno));
@@ -981,15 +1292,25 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (join_peer) {
-        char host[64];
-        uint16_t port;
-        if (parse_host_port(join_peer, host, sizeof(host), &port) != 0) {
-            fprintf(stderr, "Invalid join address: %s\n", join_peer);
-            close(server.listen_fd);
-            return 1;
-        }
-        int joined = server_join_cluster(&server, host, port);
+    /* K33: whom to say HELLO to. A formed member with persisted peers
+     * rejoins through them (the seed may be gone); otherwise the seed it
+     * was given, the peer that admitted it, or (promised) the proposal's
+     * seed. Until its store learned a committed revision naming it, it
+     * keeps saying HELLO. */
+    char chost[64] = "";
+    uint16_t cport = 0;
+    if (seed_host[0]) {
+        snprintf(chost, sizeof(chost), "%s", seed_host);
+        cport = seed_port;
+    } else if (server.rejoin_addr[0]) {
+        snprintf(chost, sizeof(chost), "%s", server.rejoin_addr);
+        cport = server.rejoin_port;
+    } else if (server.mstore.state == EFS_MEMBER_PROMISED && server.id != 1) {
+        snprintf(chost, sizeof(chost), "%s", server.mstore.members.m[0].addr);
+        cport = server.mstore.members.m[0].port;
+    }
+    if (chost[0] && (server.mstore.state != EFS_MEMBER_FORMED || server.node_count <= 1)) {
+        int joined = server_join_cluster(&server, chost, cport);
         if (joined == EFS_JOIN_REFUSED_FORMED) {
             close(server.listen_fd);
             return 1;
@@ -998,17 +1319,14 @@ int main(int argc, char **argv)
             server_save_nodes(&server);
         else if (joined != EFS_JOIN_PENDING)
             fprintf(stderr,
-                    "Could not join cluster at %s; starting as standalone and retrying in background\n",
-                    join_peer);
-        /* K33: until this store learned a committed revision naming it
-         * (formation, or its addition), keep saying HELLO. */
+                    "Could not reach %s:%u; starting and retrying in background\n", chost, cport);
         if (joined != 0 || !server_raft_host_formed()) {
-            strncpy(server.rejoin_addr, host, sizeof(server.rejoin_addr) - 1);
-            server.rejoin_addr[sizeof(server.rejoin_addr) - 1] = '\0';
-            server.rejoin_port = port;
+            snprintf(server.rejoin_addr, sizeof(server.rejoin_addr), "%s", chost);
+            server.rejoin_port = cport;
             server_start_rejoin(&server);
         }
     } else if (server.node_count > 1) {
+        server.rejoin_addr[0] = '\0';
         if (server_rejoin_cluster(&server) != 0) {
             fprintf(stderr,
                     "Could not rejoin cluster from persisted peers; starting as standalone and retrying in background\n");
@@ -1036,7 +1354,8 @@ int main(int argc, char **argv)
         sigaction(SIGTERM, &sa, NULL);
     }
     server_put_sync_serving();
-    server.running = 1;
+    /* A stop signal caught while joining (join_as_new) still stops. */
+    server.running = !__atomic_load_n(&g_stop_signal_ms, __ATOMIC_ACQUIRE);
     if (server_writer_pool_start(&server) != 0) {
         fprintf(stderr, "Failed to start writer pool (%d threads, %u paths)\n",
                 server.nwriters, server.storage_path_count);
@@ -1053,6 +1372,14 @@ int main(int argc, char **argv)
         server_raft_host_stop();
         server_writer_pool_stop(&server);
         return 1;
+    }
+    if (server.discovery_port) {
+        if (efs_disc_responder_start(server.discovery_port, discovery_info) != 0)
+            fprintf(stderr, "discovery: cannot answer on UDP port %u: %s; joiners must name a "
+                    "seed (efsd --join ADDR:PORT STORAGE)\n", server.discovery_port,
+                    strerror(errno));
+        else
+            fprintf(stderr, "discovery: answering on UDP port %u\n", server.discovery_port);
     }
 
     {

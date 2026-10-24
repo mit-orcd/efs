@@ -23,13 +23,15 @@ kill_ours
 start_one() {
     local id=$1 join=$2
     local port=$((PORT + id - 1))
-    EFS_TRANSPORT=auto setsid ./efsd --node-id "$id" \
-        --addr "$ADDR" --port "$port" --storage "$WORK/store/s$id" \
-        --quota 1G --writers 0 --no-direct-io $join \
+    # K33: the seed creates the cluster; the others join with their endpoint.
+    local ep="$ADDR:$port"
+    [ -n "$join" ] && ep="$join --listen $ADDR:$port"
+    EFS_TRANSPORT=auto setsid ./efsd $ep "$WORK/store/s$id" \
+        --quota 1G --writers 0 --no-direct-io --discovery-port 0 \
         >"$WORK/s$id.log" 2>&1 </dev/null &
     local i
     for i in $(seq 1 40); do
-        grep -q listening "$WORK/s$id.log" 2>/dev/null && return 0
+        grep -qE 'listening|join: (waiting|pending)' "$WORK/s$id.log" 2>/dev/null && return 0
         sleep 0.1
     done
     echo "START_FAIL node $id"
