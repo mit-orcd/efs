@@ -31,11 +31,24 @@ batched per Raft group (new tags 90, 91). Counted entries per 1 MiB write:
 what the base fails, and the K14 torn-read gate passes 30/30. **The ior
 easy write gate on orcd-mini is NOTRUN** (parent session).
 
+[K33/W157 automatic formation and node addition](k33-w157-formation-addition-20261023.md):
+**model PASS; implementation merged (`0098e06c4`;
+increment 1, operator node ids; Raft tags renumbered to 92, 93 at merge), code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN); live addition
+gates NOTRUN.** Three joined members form without `raft-mkfs`; one or two
+stay unready; a node with the next id joins a live cluster by `--join` any
+member: a committed membership revision (store tokens, one cluster
+identity), group 2 moves {1,2,3} → {2,3,4} by joint consensus with
+catch-up, later nodes add storage only, old data keeps its recorded
+placement. [Protocol](k33-membership-protocol-20261023.md) (M1–M9).
+Remaining: automatic ids and positional CLI, discovery, live client view
+refresh.
+
 [W153 committed membership](w153-committed-membership-20261023.md): **code
 fixed and merged (`4026e254d`); merged-tree `make test-all` on intel2 0 FAIL;
 live formation and failover gates NOTRUN; needs a fresh format.** `raft-mkfs` commits the
 joined membership in both groups; count and voters come from it on every
-start; `EFS_MD_RAFT_N` removed; joins after formation refused (K33/W157).
+start; `EFS_MD_RAFT_N` removed; joins after formation refused (since
+K33/W157 on its branch: added as committed revisions).
 
 [Alpha 1.0 simple startup and node addition](alpha-1.0-node-addition-20261023.md):
 **ACCEPTED; implementation OPEN, gates NOTRUN.** Minimal seed/join startup,
@@ -162,14 +175,12 @@ of successful durability or rollback. A blanket old-or-new rewrite oracle
 is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
-[D39 admission implementation](d39-admission-20261023.md): **stages 1–2 IMPLEMENTED, `make test-all` on amd PASS with host limits, on
-branch `devel-d39adm`, since merged via `246bae7cf`.** Mandatory-file startup
-is superseded by the node-addition amendment; it is a current implementation gap. `cluster.conf` replaces `--node-id`,
-`--join` and `EFS_MD_RAFT_N` (W153a refusals at start); store lock, encoded
-boot counter, protocol 6 roles and identity declarations, bindings, formation
-states, `FORMATION_READ` and C7 checks at receive and inbox drain landed.
-Effect registration, owned continuations and the stage-4 lifecycle are
-INCOMPLETE; private-cluster gates NOTRUN.
+[D39 admission implementation](d39-admission-20261023.md): **historical;
+merged via `246bae7cf` and reverted on devel (`d7bca79d6`) by the user's
+Oct 23 decision.** devel has no `--cluster`, no `cluster.conf` and no
+admission layer; startup is seed/`--join`. The store lock and durable boot
+counter returned with W153; formation and node addition are K33/W157. The
+page records what the reverted branch did.
 
 [D39 consolidated model](d39-consolidated-model-20261023.md): **MODEL PASS on
 branch `devel-d39model`, merged Oct 23 `16d716308`.** Historical fixed-membership model; superseded for startup and membership growth

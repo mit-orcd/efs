@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 
@@ -28,6 +29,12 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     {
         struct efs_node *local = server_local_node(s);
         h.used = local ? local->used : server_compute_local_usage(s);
+    }
+    /* K33 (M2): this store's token and, once formed, its cluster. */
+    h.token = s->mstore.token;
+    {
+        struct efs_membership m;
+        h.cluster = server_membership_get(&m) ? m.cluster : 0;
     }
 
     if (efs_conn_send_msg(pc, EFS_MSG_HELLO, &h, sizeof(h)) != 0) {
@@ -62,15 +69,30 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 
     struct efs_msg_hello_ack *ack = payload;
     if (ack->assigned_id == 0 || ack->assigned_id != s->id) {
+        if (ack->reject_reason == EFS_HELLO_REJECT_PENDING) {
+            static uint64_t last_note;
+            uint64_t now = (uint64_t)time(NULL);
+            if (now - last_note >= 10) {
+                last_note = now;
+                fprintf(stderr,
+                        "Join pending at %s:%u — the cluster has %u committed members; node "
+                        "%llu at %s:%u (store %016llx) is being added (node ids are added "
+                        "in order); retrying\n", peer_host, peer_port, ack->node_count,
+                        (unsigned long long)s->id, s->addr, s->port,
+                        (unsigned long long)s->mstore.token);
+            }
+            free(payload);
+            server_peer_conn_release(peer_host, peer_port, pc);
+            return EFS_JOIN_PENDING;
+        }
         if (ack->reject_reason == EFS_HELLO_REJECT_FORMED) {
             fprintf(stderr,
-                    "Join refused by %s:%u — the cluster is already formed with %u "
-                    "committed members and node %llu at %s:%u is not one of them. "
-                    "Adding a node to a formed cluster is node addition (K33/W157), "
-                    "which this build does not implement; a member keeps its node id "
-                    "and endpoint.\n",
-                    peer_host, peer_port, ack->node_count, (unsigned long long)s->id,
-                    s->addr, s->port);
+                    "Join refused by %s:%u — node %llu at %s:%u (store %016llx) can never "
+                    "be a member of this cluster (%u committed members): its node id or "
+                    "endpoint belongs to another store, or this store belongs to another "
+                    "cluster. A member keeps its node id, endpoint and store.\n",
+                    peer_host, peer_port, (unsigned long long)s->id, s->addr, s->port,
+                    (unsigned long long)s->mstore.token, ack->node_count);
             free(payload);
             server_peer_conn_drop(peer_host, peer_port, pc);
             return EFS_JOIN_REFUSED_FORMED;
@@ -141,6 +163,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         server_format_storage_paths(s, local->storage_path, sizeof(local->storage_path));
         local->quota = s->quota;
         local->used = keep_used;
+        local->token = s->mstore.token;
     }
     server_dedupe_nodes_locked(s);
     joined = s->node_count;
@@ -156,22 +179,45 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 
 void server_nodes_keep_members(struct efsd_server *s, const struct efs_membership *m)
 {
-    uint32_t kept = 0;
+    uint32_t kept = 0, old;
+    int dirty = 0;
     pthread_mutex_lock(&s->lock);
+    old = s->node_count;
     for (uint32_t i = 0; i < s->node_count && i < EFS_MAX_NODES; i++) {
         if (!efs_membership_find(m, s->nodes[i].id)) {
             fprintf(stderr, "membership: node %u (%s:%u) is not a committed member; dropped "
-                    "from the node table\n", s->nodes[i].id, s->nodes[i].addr, s->nodes[i].port);
+                    "from the node table (pending)\n", s->nodes[i].id, s->nodes[i].addr,
+                    s->nodes[i].port);
+            server_member_pending_note(s->nodes[i].id, s->nodes[i].addr, s->nodes[i].port,
+                                       s->nodes[i].token);
             continue;
         }
         if (kept != i)
             s->nodes[kept] = s->nodes[i];
         kept++;
     }
-    if (kept != s->node_count) {
-        s->node_count = kept;
-        server_nodes_mark_dirty(s);
+    s->node_count = kept;
+    dirty = kept != old;
+    /* K33: a member learned from a revision enters the table at its
+     * committed endpoint; its HELLO later fills storage and usage. */
+    for (uint32_t i = 0; i < m->count && s->node_count < EFS_MAX_NODES; i++) {
+        uint32_t j;
+        for (j = 0; j < s->node_count && s->nodes[j].id != m->m[i].id; j++)
+            ;
+        if (j < s->node_count)
+            continue;
+        struct efs_node *n = &s->nodes[s->node_count++];
+        memset(n, 0, sizeof(*n));
+        n->id = m->m[i].id;
+        snprintf(n->addr, sizeof(n->addr), "%s", m->m[i].addr);
+        n->port = m->m[i].port;
+        n->token = m->m[i].token;
+        dirty = 1;
+        fprintf(stderr, "membership: member %u (%s:%u) added to the node table\n", n->id,
+                n->addr, n->port);
     }
+    if (dirty)
+        server_nodes_mark_dirty(s);
     pthread_mutex_unlock(&s->lock);
     server_nodes_flush_dirty(s);
 }
@@ -402,8 +448,10 @@ static void *rejoin_thread(void *arg)
         uint32_t node_count = s->node_count;
         pthread_mutex_unlock(&s->lock);
 
-        /* Already in a cluster with at least one peer: nothing to do. */
-        if (node_count > 1)
+        /* Already in a cluster with at least one peer and a member: done.
+         * K33: an unformed node (a pending joiner, or one formation left
+         * out) keeps saying HELLO until its store learned a revision. */
+        if (node_count > 1 && server_raft_host_formed())
             break;
 
         int rc;
@@ -411,10 +459,14 @@ static void *rejoin_thread(void *arg)
             rc = server_join_cluster(s, s->rejoin_addr, s->rejoin_port);
             if (rc == EFS_JOIN_REFUSED_FORMED) {
                 fprintf(stderr, "Stopping: this node cannot join the formed cluster\n");
+                __atomic_store_n(&s->join_refused, 1, __ATOMIC_RELEASE);
                 __atomic_store_n(&s->running, 0, __ATOMIC_RELEASE);
                 break;
             }
-            if (rc == 0) {
+            if (rc == 0 && !server_raft_host_formed()) {
+                /* Before formation, or a member that missed the notice:
+                 * the HELLO refreshed the table; keep going. */
+            } else if (rc == 0) {
                 printf("Rejoined cluster via %s:%u\n", s->rejoin_addr, s->rejoin_port);
                 pthread_mutex_lock(&s->lock);
                 server_nodes_mark_dirty(s);

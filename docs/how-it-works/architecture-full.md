@@ -1585,11 +1585,24 @@ batched per Raft group (new tags 90, 91). Counted entries per 1 MiB write:
 what the base fails, and the K14 torn-read gate passes 30/30. **The ior
 easy write gate on orcd-mini is NOTRUN** (parent session).
 
+[K33/W157 automatic formation and node addition](../status/k33-w157-formation-addition-20261023.md):
+**model PASS; implementation merged (`0098e06c4`;
+increment 1, operator node ids; Raft tags renumbered to 92, 93 at merge), code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN); live addition
+gates NOTRUN.** Three joined members form without `raft-mkfs`; one or two
+stay unready; a node with the next id joins a live cluster by `--join` any
+member: a committed membership revision (store tokens, one cluster
+identity), group 2 moves {1,2,3} → {2,3,4} by joint consensus with
+catch-up, later nodes add storage only, old data keeps its recorded
+placement. [Protocol](../status/k33-membership-protocol-20261023.md) (M1–M9).
+Remaining: automatic ids and positional CLI, discovery, live client view
+refresh.
+
 [W153 committed membership](../status/w153-committed-membership-20261023.md): **code
 fixed and merged (`4026e254d`); merged-tree `make test-all` on intel2 0 FAIL;
 live formation and failover gates NOTRUN; needs a fresh format.** `raft-mkfs` commits the
 joined membership in both groups; count and voters come from it on every
-start; `EFS_MD_RAFT_N` removed; joins after formation refused (K33/W157).
+start; `EFS_MD_RAFT_N` removed; joins after formation refused (since
+K33/W157 on its branch: added as committed revisions).
 
 [Alpha 1.0 simple startup and node addition](../status/alpha-1.0-node-addition-20261023.md):
 **ACCEPTED; implementation OPEN, gates NOTRUN.** Minimal seed/join startup,
@@ -1716,14 +1729,12 @@ of successful durability or rollback. A blanket old-or-new rewrite oracle
 is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
-[D39 admission implementation](../status/d39-admission-20261023.md): **stages 1–2 IMPLEMENTED, `make test-all` on amd PASS with host limits, on
-branch `devel-d39adm`, since merged via `246bae7cf`.** Mandatory-file startup
-is superseded by the node-addition amendment; it is a current implementation gap. `cluster.conf` replaces `--node-id`,
-`--join` and `EFS_MD_RAFT_N` (W153a refusals at start); store lock, encoded
-boot counter, protocol 6 roles and identity declarations, bindings, formation
-states, `FORMATION_READ` and C7 checks at receive and inbox drain landed.
-Effect registration, owned continuations and the stage-4 lifecycle are
-INCOMPLETE; private-cluster gates NOTRUN.
+[D39 admission implementation](../status/d39-admission-20261023.md): **historical;
+merged via `246bae7cf` and reverted on devel (`d7bca79d6`) by the user's
+Oct 23 decision.** devel has no `--cluster`, no `cluster.conf` and no
+admission layer; startup is seed/`--join`. The store lock and durable boot
+counter returned with W153; formation and node addition are K33/W157. The
+page records what the reverted branch did.
 
 [D39 consolidated model](../status/d39-consolidated-model-20261023.md): **MODEL PASS on
 branch `devel-d39model`, merged Oct 23 `16d716308`.** Historical fixed-membership model; superseded for startup and membership growth
@@ -2670,7 +2681,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | degraded-stripe-reprotect | **W154** · a stripe acknowledged with two fragments while a node was down stays at two fragments after that node returns: no rebuild, no warning at acknowledgement; one later single-node outage made the file EIO until the second node returned (K28 five-node gate, F1, xorinox Oct 23: 4 of 512 chunks written in the window before the client marked node 5 down) | data protection / deferred repair | FIX (decided Oct 23, D40: rebuild on return): re-protect a stripe acknowledged with two fragments when the missing node returns, log the degraded acknowledgement, keep write availability; no unconditional single-node-failure protection claim until this is in and gated | [gates-xorinox](../status/gates-xorinox-20261022.md), K28 |
 | eio-after-commit | **W155** · flush/close returned EIO after a receive timeout/BUSY sequence; later reads matched the attempted rewrite version (nuc b1/b2). Visibility does not prove the full durability contract succeeded; exact request/receipt and failure stage need correlation. | ambiguous completion / error resolution / harness | OPEN; investigate bounded same-identity outcome resolution. Record completed syscall stages and quarantine unresolved files; do not assume rollback or blanket old-or-new atomicity. Preserve EIO/EBUSY as gate failures. Oracle and correlation tooling merged into devel Oct 23 (`92886b8e2`): the modifier records stages and quarantines unresolved files with syscall-boundary candidates, never PASSes with an error, and `w155_correlate.py` lists logging gaps G1–G8, led by the missing per-request receipt (G2) ([evidence](../status/w155-oracle-correlation-20261023.md)). | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23), K8, K29 |
 | client-discovery-ownership | **W156** · `scripts/client_processes.py` cannot inspect another user's `efs-fuse` on a shared host (relative mount argv needs that process's cwd), so non-root test users could not stop their own mounts; the merged opt-in `EFS_CLIENT_SKIP_FOREIGN=1` (`2213a4120`) skips uninspectable foreign clients, which proves nothing about foreign clients on the same target | test ownership / operator path | FIXED on `devel-w156` (Oct 23, `dca4dd544`, not merged): owner from mountinfo `user_id=`, controller is the one inspectable `efs-fuse` holding the mount's control endpoint and `/dev/fuse`; foreign or ambiguous ownership refused, foreign processes never inspected; `EFS_CLIENT_SKIP_FOREIGN` removed. Synthetic same-target/unrelated/ambiguous tests PASS; `make test-all` on nuc PASS without a switch. Live foreign-client case NOTRUN (nuc's client was not running) ([evidence](../status/w156-client-discovery-20261023.md)) | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23) |
-| simple-startup-node-add | **W157** · simple seed/`--join` startup, automatic formation and safe online node addition (user amendment Oct 23; supersedes the D39 mandatory cluster file and fixed membership; removal deferred) | scope / implementation, alpha blocker | OPEN: `--cluster` removed and the D39 admission merge reverted (user, Oct 23); W153 first (count and voters from committed membership, formation at three joined members), then node addition as its own design | [contract](../status/alpha-1.0-node-addition-20261023.md), K33, D39, W153 |
+| simple-startup-node-add | **W157** · simple seed/`--join` startup, automatic formation and safe online node addition (user amendment Oct 23; supersedes the D39 mandatory cluster file and fixed membership; removal deferred) | scope / implementation, alpha blocker | IN PROGRESS: increment 1 on branch `claude/vibrant-lalande-556adb`, not merged: model C16–C22 clean (8 negative controls), [protocol](../status/k33-membership-protocol-20261023.md); automatic formation at three joined members, committed membership revisions (store tokens, stable cluster identity), pending joiners, SHARD2 {1,2,3} → {2,3,4} by joint consensus with catch-up, retired replicas, storage-only members from five, retained placement; code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN) ([evidence](../status/k33-w157-formation-addition-20261023.md)). Remaining: automatic ids and positional CLI, discovery, live client view refresh; live addition gates NOTRUN (parent) | [contract](../status/alpha-1.0-node-addition-20261023.md), K33, D39, W153 |
 | harness-unticketed-put | **W158** · `tests/live/gc_reclamation.py` hand-builds an unticketed PUT for its "valid late-PUT control"; since K13 every PUT needs an admitted ticket, so storage refuses it and the expiry fixture stops before its expiry checks | test correctness (K13 drift) | FIXED, merged (`33c68a465`): the late-PUT control admits a ticket and checks that an unticketed PUT is refused; the same fix in `fragment_integrity`, `fragment_tail_smoke`, `io_stats_smoke`; static test in `make test`; nuc `make test-all` PASS. Intel expiry fixture rerun: every expiry check PASS; the fixture's closing POSIX run is W159 | [W158 evidence](../status/w158-ticketed-harness-20261023.md), [intel run](../status/intel-devel-a23d45540-20261023.md), K13 |
 | fixture-posix-timeouts | **W159** · the expiry fixture's closing core POSIX run (four members and client on intel1, devel `a23d45540`) timed out `dir_many_files` (75 s) and `concurrent_creates_same_dir` (30 s); client log shows metadata RPCs of 2–7 s; the same build passed both on the real four-host cluster | performance or fixture environment, cause not established | OPEN: rerun on a post-W153 build (fresh fixture); if it repeats, trace the slow metadata RPCs (types 67, 125) on the leader | [intel run](../status/intel-devel-a23d45540-20261023.md) |
 | nfs-macos-clients | **W152** · NFS re-export and macOS clients | beta backlog | DECIDED out of alpha 1.0 (user, Oct 22); the W55 NFS/macOS triggers move here; alpha publishes "Linux FUSE client only" (F4) | [alpha checklist S1](../status/alpha-1.0-2plus1-checklist.md) |

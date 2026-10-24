@@ -2911,6 +2911,7 @@ void server_sync_local_membership(struct efsd_server *s)
     local->port = s->port;
     server_format_storage_paths(s, local->storage_path, sizeof(local->storage_path));
     local->quota = s->quota;
+    local->token = s->mstore.token;
     /* used left as-is (usage.bin / prior counter). */
     server_dedupe_nodes_locked(s);
     pthread_mutex_unlock(&s->lock);
@@ -3142,7 +3143,7 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
 }
 
 #define EFS_NODES_MAGIC "EFSN"
-#define EFS_NODES_VERSION 1
+#define EFS_NODES_VERSION 2 /* K33: struct efs_node carries the store token */
 
 static void nodes_path_at(struct efsd_server *s, uint32_t root_idx,
                           char *path, size_t path_len)

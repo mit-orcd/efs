@@ -520,13 +520,23 @@ int efs_meta_apply_mkfs(struct efs_kv *kv, uint64_t now, uint64_t salt);
 int efs_meta_apply_export_salt(struct efs_kv *kv, uint64_t *out);
 int efs_meta_apply_salt_record(struct efs_kv *kv, uint32_t anchor,
                                uint64_t salt);
-/* W153: the committed formation membership record (efs/membership.h
- * encoding, validated by the caller) on a group's anchor shard. MKFS keeps
- * the first record (keep_first: a later one is a no-op, the W37 salt rule);
- * SALT installs it on the even group, where an existing record must match
- * (EFS_ERR_PROTO, nothing written). Get: EFS_ERR_NOT_FOUND when absent. */
+/* W153/K33: the committed membership record (efs/membership.h encoding,
+ * validated by the caller) on a group's anchor shard, by mode:
+ *   KEEP_FIRST  MKFS: install when absent; a later one is a no-op (W37).
+ *   EXTEND_ONE  MEMBERS on group 0, the authority: install a record that
+ *               extends the stored one by exactly one member; absent is
+ *               EFS_ERR_UNFORMED.
+ *   EXTEND_ANY  SALT on group 2, a copy: install when absent or a later
+ *               revision of the stored one.
+ * For the EXTEND modes a record the stored one already extends (the same or
+ * an earlier revision) is EFS_OK and writes nothing; anything else
+ * (another cluster, divergent members) is EFS_ERR_FENCED, nothing written.
+ * Get: EFS_ERR_NOT_FOUND when absent. */
+#define EFS_MEMBERSHIP_KEEP_FIRST 0
+#define EFS_MEMBERSHIP_EXTEND_ONE 1
+#define EFS_MEMBERSHIP_EXTEND_ANY 2
 int efs_meta_apply_membership_record(struct efs_kv *kv, uint32_t anchor,
-                                     const uint8_t *rec, uint32_t len, int keep_first);
+                                     const uint8_t *rec, uint32_t len, int mode);
 int efs_meta_membership_get(struct efs_kv *kv, uint32_t anchor, uint8_t *out,
                             uint32_t cap, uint32_t *len);
 int efs_meta_apply_get_inode(struct efs_kv *kv, efs_ino_t ino,

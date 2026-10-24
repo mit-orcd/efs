@@ -74,6 +74,7 @@ struct efsd_server {
     pthread_mutex_t lock;
     int listen_fd;
     int running;
+    int join_refused; /* K33: stopped because the cluster refused this node */
 
     pthread_t rejoin_tid; /* background rejoin retry thread */
     char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
@@ -357,9 +358,11 @@ struct efs_conn;
 void server_handle_conn(struct efs_conn *conn);
 
 /* Join an existing cluster by contacting a peer. */
-/* -2: the cluster is formed and refuses this node (W153; node addition is
- * K33/W157). Never retried. */
+/* -2: the cluster is formed and this node can never be a member (W153/K33:
+ * its id or endpoint belongs to another store, or another cluster). Never
+ * retried. -3: not a member yet, its addition is pending (K33): retried. */
 #define EFS_JOIN_REFUSED_FORMED -2
+#define EFS_JOIN_PENDING -3
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port);
 
 /* Relay a membership change to all other peers (ring convergence). */
@@ -393,16 +396,27 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 void server_raft_host_resync(const struct efs_msg_raft_resync *in, struct efs_msg_raft_resync_reply *out);
 void server_raft_host_step_down(const struct efs_msg_raft_step_down *in, struct efs_msg_raft_step_down_reply *out);
 int server_raft_host_active(void);
-/* W153: committed formation membership. formed: raft-mkfs committed it
- * (before the host starts, as the member store recorded it). member_check:
- * EFS_OK when unformed or id is a committed member at exactly addr:port,
- * else EFS_ERR_FENCED; *count is the committed count (0 unformed).
+/* W153/K33: the committed membership. formed: a revision is committed and
+ * learned here (before the host starts, as the member store recorded it).
+ * member_hello admits a HELLO (docs/status/k33-membership-protocol-20261023.md
+ * M5): EFS_HELLO_REJECT_NONE when both are unformed or the sender is the committed
+ * member at exactly id, addr:port and store token; _PENDING for a node that
+ * is not a member yet (its addition is queued when its id is count + 1);
+ * _FORMED when it can never be one (id or endpoint held by another store,
+ * another cluster). *count is the committed count (0 unformed).
  * member_filter compacts a node table to the committed members (unchanged
  * when unformed) and returns the kept count. keep_members drops HELLO-table
- * rows that are not committed members (persisted). */
+ * rows that are not committed members and adds rows for members the table
+ * lacks, from the record (persisted). */
 int server_raft_host_formed(void);
-int server_member_check(efs_node_id_t id, const char *addr, uint16_t port, uint32_t *count);
+/* 1 and a copy of the committed membership this node learned, 0 unformed. */
+int server_membership_get(struct efs_membership *out);
+uint32_t server_member_hello(efs_node_id_t id, const char *addr, uint16_t port, uint64_t token,
+                             uint64_t cluster, uint32_t *count);
 uint32_t server_member_filter(struct efs_node *nodes, uint32_t count);
+/* K33: remember a pending joiner (raft-mkfs adds the recent ones in order). */
+void server_member_pending_note(efs_node_id_t id, const char *addr, uint16_t port,
+                                uint64_t token);
 void server_nodes_keep_members(struct efsd_server *s, const struct efs_membership *m);
 int server_raft_host_inode_reaped(efs_ino_t ino, int *dead);
 /* Borrowed immutable query image; group slots are 0 and 2. Only background

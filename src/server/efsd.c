@@ -855,7 +855,8 @@ int main(int argc, char **argv)
         }
         if (server.mstore.state == EFS_MEMBER_FORMED) {
             const struct efs_member *self = efs_membership_find(&server.mstore.members, server.id);
-            if (!self || self->port != server.port || strcmp(self->addr, server.addr)) {
+            if (!self || self->port != server.port || strcmp(self->addr, server.addr) ||
+                self->token != server.mstore.token) {
                 fprintf(stderr, "member store refused: %s is node %u of a formed cluster at "
                         "%s:%u; this daemon advertises %s:%u\n", mdraft, server.id,
                         self ? self->addr : "?", self ? self->port : 0, server.addr, server.port);
@@ -870,7 +871,7 @@ int main(int argc, char **argv)
         if (server.mstore.state == EFS_MEMBER_FORMED)
             fprintf(stderr, " (%u committed members)\n", server.mstore.members.count);
         else
-            fprintf(stderr, " (formation: start at least three members, then efs-mgmt raft-mkfs)\n");
+            fprintf(stderr, " (forms automatically once members 1..3 have joined)\n");
     }
 
     server.nodes[0].id = server.id;
@@ -880,6 +881,7 @@ int main(int argc, char **argv)
                                 sizeof(server.nodes[0].storage_path));
     server.nodes[0].quota = server.quota;
     server.nodes[0].used = 0;
+    server.nodes[0].token = server.mstore.token;
     server.node_count = 1;
 
     server_load_nodes(&server);
@@ -992,16 +994,19 @@ int main(int argc, char **argv)
             close(server.listen_fd);
             return 1;
         }
-        if (joined != 0) {
+        if (joined == 0)
+            server_save_nodes(&server);
+        else if (joined != EFS_JOIN_PENDING)
             fprintf(stderr,
                     "Could not join cluster at %s; starting as standalone and retrying in background\n",
                     join_peer);
+        /* K33: until this store learned a committed revision naming it
+         * (formation, or its addition), keep saying HELLO. */
+        if (joined != 0 || !server_raft_host_formed()) {
             strncpy(server.rejoin_addr, host, sizeof(server.rejoin_addr) - 1);
             server.rejoin_addr[sizeof(server.rejoin_addr) - 1] = '\0';
             server.rejoin_port = port;
             server_start_rejoin(&server);
-        } else {
-            server_save_nodes(&server);
         }
     } else if (server.node_count > 1) {
         if (server_rejoin_cluster(&server) != 0) {
@@ -1167,6 +1172,8 @@ int main(int argc, char **argv)
     if (!stop_t0)
         stop_t0 = shutdown_now_ms(); /* the accept loop ended without a signal */
     int exit_rc = shutdown_bounded(&server, stop_t0);
+    if (!exit_rc && __atomic_load_n(&server.join_refused, __ATOMIC_ACQUIRE))
+        exit_rc = 1; /* K33: refused by the cluster, as at the first HELLO */
     pthread_mutex_destroy(&server.lock);
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);

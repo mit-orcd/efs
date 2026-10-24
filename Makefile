@@ -968,6 +968,7 @@ test: test-rdma-message
 test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_w153_formation.py
+	python3 tests/test_k33_growth.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	./tests/test_reclaim

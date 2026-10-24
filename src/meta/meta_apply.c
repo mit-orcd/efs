@@ -1364,22 +1364,32 @@ int efs_meta_membership_get(struct efs_kv *kv, uint32_t anchor, uint8_t *out,
 }
 
 int efs_meta_apply_membership_record(struct efs_kv *kv, uint32_t anchor,
-                                     const uint8_t *rec, uint32_t len, int keep_first)
+                                     const uint8_t *rec, uint32_t len, int mode)
 {
     uint8_t k[EFS_KV_KEY_MAX], have[EFS_MEMBERSHIP_MAX_LEN];
     uint32_t kl = 0, hl = 0;
+    struct efs_membership want, cur;
     int rc;
 
-    if (!kv || !rec || !len || len > EFS_MEMBERSHIP_MAX_LEN)
+    if (!kv || !rec || !len || len > EFS_MEMBERSHIP_MAX_LEN ||
+        efs_membership_decode(rec, len, &want) != EFS_OK)
         return EFS_ERR_INVAL;
     rc = efs_meta_membership_get(kv, anchor, have, sizeof(have), &hl);
     if (rc == EFS_OK) {
-        if (keep_first || (hl == len && !memcmp(have, rec, len)))
+        if (mode == EFS_MEMBERSHIP_KEEP_FIRST)
             return EFS_OK;
-        return EFS_ERR_PROTO;
-    }
-    if (rc != EFS_ERR_NOT_FOUND)
+        if (efs_membership_decode(have, hl, &cur) != EFS_OK)
+            return EFS_ERR_PROTO;
+        if (efs_membership_extends(&cur, &want))
+            return EFS_OK;
+        if (!efs_membership_extends(&want, &cur) ||
+            (mode == EFS_MEMBERSHIP_EXTEND_ONE && want.count != cur.count + 1))
+            return EFS_ERR_FENCED;
+    } else if (rc != EFS_ERR_NOT_FOUND) {
         return rc;
+    } else if (mode == EFS_MEMBERSHIP_EXTEND_ONE) {
+        return EFS_ERR_UNFORMED;
+    }
     rc = efs_kv_key_membership(anchor, k, &kl);
     if (rc != EFS_OK)
         return rc;

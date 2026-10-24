@@ -271,9 +271,9 @@ int main(void)
 
     /* Real clusters use non-sequential ids (e.g. derived from IP:port). */
     struct efs_node cluster_big[3] = {
-        {3737533, "10.1.223.57", 1981, "", 0, 0, 0, 0},
-        {3803069, "10.1.223.58", 1981, "", 0, 0, 0, 0},
-        {3868605, "10.1.223.59", 1981, "", 0, 0, 0, 0},
+        {3737533, "10.1.223.57", 1981, "", 0, 0, 0, 0, 0},
+        {3803069, "10.1.223.58", 1981, "", 0, 0, 0, 0, 0},
+        {3868605, "10.1.223.59", 1981, "", 0, 0, 0, 0, 0},
     };
     for (efs_ino_t ino = 1; ino <= 20; ino++) {
         efs_place_fragments(cluster_big, 3, ino, 0, nodes);
@@ -303,10 +303,10 @@ int main(void)
     /* 4-node cluster: one file's chunks must use all servers, never two
      * fragments of a chunk on one node, and no node should hog the file. */
     struct efs_node cluster4[4] = {
-        {3, "10.1.223.57", 7740, "", 0, 0, 0, 0},
-        {4, "10.1.223.58", 7740, "", 0, 0, 0, 0},
-        {5, "10.1.223.59", 7740, "", 0, 0, 0, 0},
-        {6, "10.1.223.60", 7740, "", 0, 0, 0, 0},
+        {3, "10.1.223.57", 7740, "", 0, 0, 0, 0, 0},
+        {4, "10.1.223.58", 7740, "", 0, 0, 0, 0, 0},
+        {5, "10.1.223.59", 7740, "", 0, 0, 0, 0, 0},
+        {6, "10.1.223.60", 7740, "", 0, 0, 0, 0, 0},
     };
     int hit[7] = {0};
     int load[7] = {0};
@@ -362,9 +362,9 @@ int main(void)
 
     efs_node_id_t local_id;
     struct efs_node cluster[3] = {
-        {1, "node1", 7432, "", 0, 0, 0, 0},
-        {2, "node2", 7432, "", 0, 0, 0, 0},
-        {3, "localhost", 7432, "", 0, 0, 0, 0},
+        {1, "node1", 7432, "", 0, 0, 0, 0, 0},
+        {2, "node2", 7432, "", 0, 0, 0, 0, 0},
+        {3, "localhost", 7432, "", 0, 0, 0, 0, 0},
     };
     if (!efs_is_local_node(cluster, 3, "localhost", &local_id) || local_id != 3) {
         fprintf(stderr, "FAIL locality detection for localhost\n");

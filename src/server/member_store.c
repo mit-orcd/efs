@@ -15,7 +15,7 @@
 static const uint8_t boot_magic[8] = {'E', 'F', 'S', 'B', 'O', 'O', 'T', 0};
 static const uint8_t ident_magic[8] = {'E', 'F', 'S', 'I', 'D', 'N', 'T', 0};
 #define BOOT_VERSION 1u
-#define IDENT_VERSION 1u
+#define IDENT_VERSION 2u
 #define IDENT_SUM_AT (EFS_IDENTITY_FILE_LEN - 32u)
 
 static void ms_err(char *err, size_t errlen, const char *fmt, ...)
@@ -79,7 +79,8 @@ const char *member_store_state_name(uint32_t state)
            : "invalid";
 }
 
-/* [magic:8][version:4][member:4][state:4][reclen:4][record:MAX][sum:32]. */
+/* [magic:8][version:4][member:4][state:4][reclen:4][token:8][record:MAX][sum:32]. */
+#define IDENT_REC_AT 32u
 static int ident_encode(const struct member_store *ms, uint8_t out[EFS_IDENTITY_FILE_LEN])
 {
     size_t rlen = 0;
@@ -88,8 +89,10 @@ static int ident_encode(const struct member_store *ms, uint8_t out[EFS_IDENTITY_
     put32(out + 8, IDENT_VERSION);
     put32(out + 12, ms->member_id);
     put32(out + 16, ms->state);
+    put64(out + 24, ms->token);
     if (ms->state == EFS_MEMBER_FORMED &&
-        efs_membership_encode(&ms->members, out + 24, EFS_MEMBERSHIP_MAX_LEN, &rlen) != EFS_OK)
+        efs_membership_encode(&ms->members, out + IDENT_REC_AT, EFS_MEMBERSHIP_MAX_LEN,
+                              &rlen) != EFS_OK)
         return EFS_ERR_INVAL;
     put32(out + 20, (uint32_t)rlen);
     efs_hash(out, IDENT_SUM_AT, out + IDENT_SUM_AT);
@@ -168,6 +171,31 @@ static int write_replace(const char *dir, const char *name, const uint8_t *buf, 
     return rc;
 }
 
+/* 64 random bits from the kernel, never 0. */
+static int mint_token(uint64_t *tok)
+{
+    uint8_t b[8];
+    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return EFS_ERR_IO;
+    do {
+        size_t n = 0;
+        while (n < sizeof(b)) {
+            ssize_t r = read(fd, b + n, sizeof(b) - n);
+            if (r < 0 && errno == EINTR)
+                continue;
+            if (r <= 0) {
+                close(fd);
+                return EFS_ERR_IO;
+            }
+            n += (size_t)r;
+        }
+        *tok = get64(b);
+    } while (!*tok);
+    close(fd);
+    return EFS_OK;
+}
+
 static int path_exists(const char *dir, const char *name)
 {
     char p[4200];
@@ -238,6 +266,11 @@ int member_store_open(struct member_store *ms, const char *dir, uint32_t member_
         member_store_boot_encode(0, b);
         ms->member_id = member_id;
         ms->state = EFS_MEMBER_UNFORMED;
+        if (mint_token(&ms->token) != EFS_OK) {
+            ms_err(err, errlen, "store %s: cannot read /dev/urandom for its token", dir);
+            member_store_close(ms);
+            return EFS_ERR_IO;
+        }
         if (ident_encode(ms, id) != EFS_OK ||
             write_replace(dir, "boot.bin", b, sizeof(b)) != EFS_OK ||
             write_replace(dir, "identity.bin", id, sizeof(id)) != EFS_OK) {
@@ -262,10 +295,13 @@ int member_store_open(struct member_store *ms, const char *dir, uint32_t member_
     }
     ms->member_id = get32(buf + 12);
     ms->state = get32(buf + 16);
+    ms->token = get64(buf + 24);
     uint32_t rlen = get32(buf + 20);
-    if ((ms->state == EFS_MEMBER_FORMED) != (rlen != 0) ||
-        (rlen && efs_membership_decode(buf + 24, rlen, &ms->members) != EFS_OK) ||
-        (rlen && !efs_membership_find(&ms->members, ms->member_id))) {
+    const struct efs_member *self = NULL;
+    if (rlen && efs_membership_decode(buf + IDENT_REC_AT, rlen, &ms->members) == EFS_OK)
+        self = efs_membership_find(&ms->members, ms->member_id);
+    if ((ms->state == EFS_MEMBER_FORMED) != (rlen != 0) || !ms->token ||
+        (rlen && (!self || self->token != ms->token))) {
         ms_err(err, errlen, "store %s: identity.bin state %s disagrees with its committed "
                "membership record", dir, member_store_state_name(ms->state));
         member_store_close(ms);
@@ -327,17 +363,29 @@ int member_store_learn(struct member_store *ms, const struct efs_membership *m,
         ms_err(err, errlen, "store %s: invalid membership record", ms->dir);
         return EFS_ERR_INVAL;
     }
-    if (ms->state == EFS_MEMBER_FORMED) {
-        if (efs_membership_equal(&ms->members, m))
-            return EFS_OK;
-        ms_err(err, errlen, "store %s: committed membership of %u members conflicts with the "
-               "persisted one of %u members", ms->dir, m->count, ms->members.count);
-        return EFS_ERR_FENCED;
-    }
-    if (!efs_membership_find(m, ms->member_id)) {
+    const struct efs_member *self = efs_membership_find(m, ms->member_id);
+    if (!self) {
         ms_err(err, errlen, "store %s: node %u is not in the committed membership of %u "
                "members", ms->dir, ms->member_id, m->count);
         return EFS_ERR_FENCED;
+    }
+    if (self->token != ms->token) {
+        ms_err(err, errlen, "store %s: the committed member %u holds store token %016llx, this "
+               "store is %016llx (the store was replaced; a member's store cannot be swapped)",
+               ms->dir, ms->member_id, (unsigned long long)self->token,
+               (unsigned long long)ms->token);
+        return EFS_ERR_FENCED;
+    }
+    if (ms->state == EFS_MEMBER_FORMED) {
+        if (efs_membership_extends(&ms->members, m))
+            return EFS_OK; /* the same or an earlier revision */
+        if (!efs_membership_extends(m, &ms->members)) {
+            ms_err(err, errlen, "store %s: committed membership of %u members (cluster %016llx) "
+                   "conflicts with the persisted one of %u members (cluster %016llx)", ms->dir,
+                   m->count, (unsigned long long)m->cluster, ms->members.count,
+                   (unsigned long long)ms->members.cluster);
+            return EFS_ERR_FENCED;
+        }
     }
     struct member_store next = *ms;
     uint8_t id[EFS_IDENTITY_FILE_LEN];
