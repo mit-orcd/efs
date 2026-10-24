@@ -507,6 +507,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_cluster_stop.py
 	python3 tests/test_rdma_memcheck.py
 	python3 tests/test_live_fixture_names.py
+	python3 tests/test_qualify_driver.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
 	$(MAKE) test-dirty-ranges
