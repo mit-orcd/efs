@@ -1618,6 +1618,20 @@ removed names stop efsd and efs-fuse. The 15 A/B selectors (13 variables,
 for the user; none removed. Portal and launch-script changes listed for the
 parent.
 
+[Stage 2 qualification driver `scripts/qualify.py`](../status/stage2-qualify-driver-20261024.md):
+**driver PASS (scoped), on `claude/devel-qual-driver-f46b04`, not merged.**
+One command runs the POSIX suites, the live harnesses, E1–E3 and a pluggable
+B-checks gate against a described cluster, with per-gate commands, deadlines,
+verdicts, live build identity and fixtures, `SHA256SUMS`, a summary draft and
+the F3 row; destructive steps need `--allow`. Bookkeeping test in `make test`.
+Loopback dry run on intel1 (three daemons, one host): POSIX core 216/216,
+2-client, durability, append failover, E1, E2 PASS; K13, K14, fragment
+integrity and GC reclamation FAIL on their stale `--node-id` CLI; E3 FAIL:
+EIO on the mount while one member is stopped orderly (turnover itself clean).
+intel1 `make test-all`: 450 commands, 0 FAIL except `tests/test_k33_payload.py`,
+a read EIO in its member-outage phase that fails 3 of 5 runs on the base too
+(proposed K34). Real-host runs NOTRUN (parent).
+
 [K15/K29 append harness accounting rule](../status/k15-k29-accounting-rule-20261024.md):
 **PASS (scoped), merged into devel (`a2326a369`).**
 `tests/live/append_failover.py` accounts a write the client saw fail (record
