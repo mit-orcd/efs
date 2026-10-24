@@ -1881,6 +1881,181 @@ def neg_random_search_detects_superseded_rules():
         print('    %s: search found %s at seed %d n %d' % (rules.name, hit, seed, n))
 
 
+
+# ---------------------------------------------------------------------------
+# C16-C22: automatic formation and online node addition (K33/W157). The
+# rules are docs/status/k33-membership-protocol-20261023.md M1-M9; every
+# `explore` enumerates all interleavings of the scenario and settles every
+# k-th reachable state to the converged membership.
+
+A3 = [('10.0.0.1:18901', 1), ('10.0.0.2:18902', 2), ('10.0.0.3:18903', 3)]
+N4, N4B, N5 = ('10.0.0.4:18904', 4), ('10.0.0.9:18909', 4), ('10.0.0.5:18905', 5)
+
+
+def growth(actors, label, **kw):
+    t = time.time()
+    st = M.Growth(actors, **kw).explore()
+    print('    %-34s %7d states %8d transitions, %6d settled, max %d members, %d joint, %.1fs'
+          % (label, st['states'], st['transitions'], st['settled'], st['max_count'], st['joint'],
+             time.time() - t))
+    return st
+
+
+@test
+def growth_one_or_two_nodes_stay_unready():
+    for n in (1, 2):
+        st = growth(A3[:n], '%d node(s), 2 crashes' % n, crashes=2)
+        assert st['formed'] == 0
+    g, s = M.growth_run(A3[:2], steps=[('up', 0), ('up', 1), ('join', 1)])
+    assert not any(g.formed(s, a) for a in range(2)) and s.g0 is None and not s.inflight
+
+
+@test
+def growth_automatic_formation_exhaustive():
+    """M4: three joined members form without an operator step; every crash
+    pair and every lost proposal still converges to one record."""
+    st = growth(A3, 'formation, 2 crashes', crashes=2, settle_every=3)
+    assert st['formed'] and st['max_count'] == 3
+    g, s = M.growth_run(A3, steps=[('up', 0), ('up', 1), ('up', 2), ('join', 1), ('join', 2),
+                                   ('propose-mkfs', 0), ('apply-mkfs', None)])
+    s = g.settle(s)
+    assert g.converged(s)[0] and s.g0.count == 3 and s.g0.revision == 1
+    assert s.g2cfg == (frozenset({1, 2, 3}), None)
+
+
+@test
+def growth_automatic_ids_formation_exhaustive():
+    """M4' (target design): the seed allocates ids, every candidate promises
+    durably before the formation commits; competing restarts converge."""
+    st = growth([('a', 0), ('b', 0), ('c', 0)], 'auto-id formation, 2 crashes', mode='auto',
+                crashes=2, settle_every=3)
+    assert st['max_count'] == 3
+
+
+@test
+def growth_add_fourth_node_exhaustive():
+    """M5/M6: pending joiner, committed revision, SHARD2 {1,2,3} -> {2,3,4}
+    with catch-up and joint consensus, restart after every durable step."""
+    st = growth(A3 + [N4], 'add node 4, 2 crashes', crashes=2, settle_every=11, from_formed=3)
+    assert st['max_count'] == 4 and st['joint']
+    g = M.Growth(A3 + [N4], from_formed=3)
+    s = g.settle(g.init)
+    assert s.g0.count == 4 and s.g0.revision == 2 and s.g2cfg == (frozenset({2, 3, 4}), None)
+
+
+@test
+def growth_competing_and_retried_joins_exhaustive():
+    """Two stores claim id 4 (manual ids); duplicate HELLOs, retried and lost
+    proposals: exactly one identity commits, the other is refused."""
+    st = growth(A3 + [N4, N4B], 'two claims of id 4, 1 crash', crashes=1, settle_every=7,
+                from_formed=3)
+    assert st['refused'] and st['max_count'] == 4
+
+
+@test
+def growth_concurrent_automatic_joins_exhaustive():
+    """Target design: concurrent joiners get distinct ids by the committed
+    revision order; a stale proposal conflicts and is retried."""
+    st = growth(A3 + [('d', 0), ('e', 0)], 'two auto-id joiners', mode='auto', crashes=0,
+                settle_every=7, from_formed=3)
+    assert st['max_count'] == 5
+    st = growth(A3 + [('d', 0)], 'auto-id joiner, 2 crashes, 1 wipe', mode='auto', crashes=2,
+                wipes=1, settle_every=11, from_formed=3)
+
+
+@test
+def growth_fifth_node_adds_storage_only_exhaustive():
+    st = growth(A3 + [N4, N5], 'add node 5 after 4, 1 crash', crashes=1, settle_every=7,
+                from_formed=4)
+    assert st['max_count'] == 5 and not st['joint']
+    st = growth(A3 + [N4, N5], 'add 4 and 5 together', crashes=0, settle_every=7, from_formed=3)
+    g = M.Growth(A3 + [N4, N5], from_formed=3)
+    s = g.settle(g.init)
+    assert s.g0.count == 5 and s.g2cfg == (frozenset({2, 3, 4}), None)
+    assert 4 not in s.g2att  # actor 4 is node 5: hosts no metadata group
+
+
+@test
+def growth_store_replacement_refused_member_stays():
+    """M2: a wiped store is a new token; it is refused, the committed member
+    stays a member (unreachable), group 2 waits on it instead of dropping it."""
+    st = growth(A3 + [N4], 'add node 4, 1 crash, 1 wipe', crashes=1, wipes=1, settle_every=7,
+                from_formed=3)
+    assert st['refused']
+    g, s = M.growth_run(A3 + [N4], from_formed=3, crashes=1, wipes=1,
+                        steps=[('up', 3), ('propose-add', None), ('apply-add', None), ('crash', 3),
+                               ('wipe', 3)])
+    s = g.settle(s)
+    assert s.refused[3] and s.g0.count == 4 and s.g2cfg == (frozenset({1, 2, 3}), None)
+    assert g.converged(s)[0]
+
+
+@test
+def growth_retained_placement_and_usable_capacity():
+    """M7: chunks keep the fragment nodes recorded at publication; new writes
+    on the enlarged view use the new member."""
+    st = growth(A3 + [N4], 'add node 4 with 2 writes', crashes=0, writes=2, settle_every=7,
+                from_formed=3)
+    g = M.Growth(A3 + [N4], from_formed=3)
+    s = g.settle(g.init)
+    ids = [m[0] for m in s.g0.members]
+    on4 = [ino for ino in range(1000, 1100) if 4 in M.place_wide(ids, ino)]
+    assert len(on4) > 40, 'node 4 receives about 3/4 of new chunks: %d of 100' % len(on4)
+    moved = [ino for ino in range(1000, 1100) if M.place_wide([1, 2, 3], ino) != M.place_wide(ids, ino)]
+    assert moved, 'recomputing old chunks would move them; the recorded nodes are authoritative'
+
+
+def neg_growth(rules, expect, actors, **kw):
+    try:
+        M.Growth(actors, rules=rules, settle_every=0, **kw).explore()
+    except Violation as v:
+        assert v.name in expect, '%s: got %s' % (rules.name, v)
+        print('    %s: %s after %s' % (rules.name, v.name, ' '.join(v.trace())))
+        return
+    raise AssertionError('%s: no violation' % rules.name)
+
+
+@test
+def neg_growth_hello_table_authority():
+    neg_growth(M.NEG_HELLO_TABLE, ('voter_without_identity', 'divergent_membership'),
+               A3 + [N4, N4B], from_formed=3, crashes=0)
+
+
+@test
+def neg_growth_direct_voter_change():
+    neg_growth(M.NEG_DIRECT, ('disjoint_quorums',), A3 + [N4], from_formed=3, crashes=0)
+
+
+@test
+def neg_growth_voter_without_catch_up():
+    neg_growth(M.NEG_NO_CATCHUP, ('uncaught_voter',), A3 + [N4], from_formed=3, crashes=0)
+
+
+@test
+def neg_growth_replica_before_identity():
+    neg_growth(M.NEG_EARLY_VOTE, ('voter_without_identity',), A3 + [N4], from_formed=3, crashes=1)
+
+
+@test
+def neg_growth_no_store_token():
+    neg_growth(M.NEG_NO_TOKEN, ('store_not_member',), A3 + [N4], from_formed=3, crashes=1, wipes=1)
+
+
+@test
+def neg_growth_recomputed_placement():
+    neg_growth(M.NEG_RECOMPUTE, ('read_misplaced',), A3 + [N4], from_formed=3, crashes=0, writes=1)
+
+
+@test
+def neg_growth_two_member_formation():
+    neg_growth(M.NEG_FORM_TWO, ('formation_below_three',), A3[:2], crashes=0)
+
+
+@test
+def neg_growth_drop_unreachable_member():
+    neg_growth(M.NEG_DROP, ('membership_shrank',), A3 + [N4], from_formed=3, crashes=1)
+
+
 def main(argv):
     global SEEDS
     k = None

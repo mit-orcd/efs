@@ -2558,3 +2558,645 @@ def random_search(seed, n=3, steps=1500, rules=CONSOLIDATED, crashes=2, settle_s
                 handoffs=sum(1 for e in ev if e[1] == 'handoff'),
                 stale=sum(1 for e in ev if e[1] == 'refuse' and 'stale' in str(e[5])),
                 busy=sum(1 for e in ev if e[1] == 'refuse' and e[5] == 'BUSY'))
+
+
+# ===========================================================================
+# C16-C22. Automatic formation and online node addition (K33/W157)
+#
+# The rules are stated in docs/status/k33-membership-protocol-20261023.md
+# (sections M1-M9 there). This part is a separate explicit-state model: every
+# action below is one durable or soft step of the protocol, `Growth.explore`
+# enumerates every interleaving of a bounded scenario (breadth first, states
+# deduplicated) and checks the invariants in every reachable state and on
+# every transition, and `settle` drives each reachable state, fault free, to
+# the converged membership (convergence after every interruption).
+#
+# Identities. A member is (id, endpoint, token). The token is minted once
+# when a store is initialized; a wiped store gets a new one (M2). The
+# committed membership record (Rec) is (cluster, formation count, members);
+# a revision is a record that extends its predecessor by exactly one member,
+# so revision = count - formed + 1 and records form one prefix chain (M3).
+#
+# Durable state: each store (fresh / unformed U / promised P / formed F),
+# the group-0 record, the group-2 copy, the group-2 configuration and which
+# group-2 replicas hold the log, proposals that may still commit, published
+# chunks. Soft state (lost on crash): alive, the pre-formation join tables,
+# group-2 attachment.
+
+class GrowthRules:
+    def __init__(self, name='K33', **kw):
+        self.name = name
+        self.cas = True                 # M3: membership changes only by a committed extension
+        self.joint = True               # M6: voter change through joint consensus
+        self.catchup = True             # M6: a new voter holds the log before JOINT
+        self.learn_before_vote = True   # M6: a replica attaches only after its store learned
+        self.token = True               # M2: the record names each member's store token
+        self.retained = True            # M7: reads use the recorded fragment nodes
+        self.min_formation = MIN_MEMBERS
+        self.drop_unreachable = False   # superseded idea: shrink by liveness
+        for k, v in kw.items():
+            assert hasattr(self, k), k
+            setattr(self, k, v)
+
+
+GROWTH = GrowthRules()
+NEG_HELLO_TABLE = GrowthRules('hello-table', cas=False)
+NEG_DIRECT = GrowthRules('direct-change', joint=False)
+NEG_NO_CATCHUP = GrowthRules('no-catch-up', catchup=False)
+NEG_EARLY_VOTE = GrowthRules('early-vote', learn_before_vote=False)
+NEG_NO_TOKEN = GrowthRules('no-token', token=False)
+NEG_RECOMPUTE = GrowthRules('recompute-placement', retained=False)
+NEG_FORM_TWO = GrowthRules('form-two', min_formation=2)
+NEG_DROP = GrowthRules('drop-unreachable', drop_unreachable=True)
+
+
+@dataclass(frozen=True)
+class Rec:
+    cluster: str
+    formed: int
+    members: tuple  # ((id, endpoint, token), ...) for ids 1..count
+
+    @property
+    def count(self):
+        return len(self.members)
+
+    @property
+    def revision(self):
+        return self.count - self.formed + 1
+
+    def by_ep(self, ep):
+        for m in self.members:
+            if m[1] == ep:
+                return m
+        return None
+
+    def by_id(self, mid):
+        return self.members[mid - 1] if 1 <= mid <= self.count else None
+
+    def extends(self, other):
+        """self == other or self is a later revision of other."""
+        return other is None or (self.cluster == other.cluster and self.formed == other.formed and
+                                 self.members[:other.count] == other.members)
+
+    def plus(self, ep, tok):
+        return Rec(self.cluster, self.formed, self.members + ((self.count + 1, ep, tok),))
+
+
+def comparable(a, b):
+    return a.extends(b) or b.extends(a)
+
+
+def _fnv1a(key):
+    h = 14695981039346656037
+    for i in range(8):
+        h ^= (key >> (i * 8)) & 0xff
+        h = (h * 1099511628211) & 0xffffffffffffffff
+    return h
+
+
+def place_wide(ids, ino, ci=0):
+    """src/common/placement.c efs_place_fragments for a data inode: ranks over the
+    sorted id list, mapped to ids."""
+    ids = sorted(ids)
+    n = len(ids)
+    start = (_fnv1a(ino) + ci) % n
+    stride = max(1, n // 3)
+    used, out = set(), []
+    for i in range(3):
+        idx = (start + i * stride) % n
+        hops = 0
+        while idx in used and hops < n:
+            idx = (idx + 1) % n
+            hops += 1
+        used.add(idx)
+        out.append(ids[idx])
+    return tuple(out)
+
+
+def majorities(ids):
+    ids = sorted(ids)
+    need = len(ids) // 2 + 1
+    out = []
+
+    def rec(i, cur):
+        if len(cur) == need:
+            out.append(frozenset(cur))
+            return
+        for j in range(i, len(ids)):
+            rec(j + 1, cur + [ids[j]])
+    rec(0, [])
+    return out
+
+
+def disjoint_quorums(a, b):
+    return any(not (x & y) for x in majorities(a) for y in majorities(b))
+
+
+@dataclass(frozen=True)
+class Actor:
+    ep: str
+    req: int  # requested id (manual mode); 0 in automatic mode
+
+
+@dataclass(frozen=True)
+class GState:
+    stores: tuple     # per actor: None | ('U', tok) | ('P', tok, Rec) | ('F', tok, Rec)
+    toks: tuple       # per actor: the token its store has or will get
+    alive: tuple
+    refused: tuple
+    tables: tuple     # per actor: frozenset of (req or 0, ep, tok) heard before formation
+    g0: object        # committed record in group 0, or None
+    g2rec: object     # group 2's copy
+    g2cfg: tuple      # (old ids, new ids or None)
+    g2log: frozenset  # ids whose group-2 replica holds the log (durable)
+    g2att: frozenset  # actor indices with an attached group-2 replica (soft)
+    inflight: frozenset  # proposals that may still commit: ('MKFS'|'ADD', Rec)
+    seed_prop: object    # automatic mode: the seed's durable formation proposal
+    chunks: tuple        # ((ino, nodes), ...) published with their fragment nodes
+    budget: tuple        # (crashes, wipes, writes) left
+
+
+class GrowthViolation(Violation):
+    pass
+
+
+class Growth:
+    """One bounded scenario. `actors` are (endpoint, requested id); actor 0 is the
+    seed. mode 'manual': ids are the operator's (the K33 increment, --node-id);
+    mode 'auto': ids are allocated by the committed record (the target design)."""
+
+    def __init__(self, actors, mode='manual', rules=GROWTH, crashes=1, wipes=0, writes=0,
+                 drops=True, settle_every=1, max_states=400000, from_formed=0):
+        self.actors = tuple(Actor(ep, req) for ep, req in actors)
+        self.mode, self.rules = mode, rules
+        self.max_states, self.settle_every, self.drops = max_states, settle_every, drops
+        A = len(self.actors)
+        self.init = GState(stores=(None,) * A, toks=tuple('t%d' % a for a in range(A)),
+                           alive=(False,) * A, refused=(False,) * A,
+                           tables=(frozenset(),) * A, g0=None, g2rec=None, g2cfg=(None, None),
+                           g2log=frozenset(), g2att=frozenset(), inflight=frozenset(),
+                           seed_prop=None, chunks=(), budget=(crashes, wipes, writes))
+        self.stats = dict(states=0, transitions=0, settled=0, formed=0, max_count=0,
+                          joint=0, refused=0)
+        if from_formed:
+            # Start from the settled cluster of the first `from_formed` actors
+            # (the others not yet started), with the scenario's full budget.
+            pre = Growth(actors[:from_formed], mode=mode, rules=rules, crashes=0)
+            s = pre.settle(pre.init)
+            pad = len(self.actors) - from_formed
+            self.init = replace(
+                self.init, stores=s.stores + (None,) * pad, alive=s.alive + (False,) * pad,
+                refused=s.refused + (False,) * pad, tables=s.tables + (frozenset(),) * pad,
+                g0=s.g0, g2rec=s.g2rec, g2cfg=s.g2cfg, g2log=s.g2log, g2att=s.g2att)
+
+    # -- helpers ----------------------------------------------------------
+    def ident(self, s, a):
+        st = s.stores[a]
+        return (self.actors[a].req, self.actors[a].ep, st[1] if st else s.toks[a])
+
+    def rec_of(self, s, a):
+        st = s.stores[a]
+        return st[2] if st and st[0] in ('F', 'P') else None
+
+    def formed(self, s, a):
+        st = s.stores[a]
+        return bool(st) and st[0] == 'F'
+
+    def actor_of_id(self, s, rec, mid):
+        e = rec.by_id(mid) if rec else None
+        if not e:
+            return None
+        for a, x in enumerate(self.actors):
+            if x.ep == e[1]:
+                return a
+        return None
+
+    def g0_ids(self, s):
+        """Group 0 runs on ids 1..3: before formation on the operator's ids
+        (manual), after it on the record's."""
+        if s.g0:
+            return [a for a in (self.actor_of_id(s, s.g0, i) for i in (1, 2, 3)) if a is not None]
+        if self.mode == 'manual':
+            return [a for a, x in enumerate(self.actors) if 1 <= x.req <= 3 and s.stores[a]]
+        return []
+
+    def g0_quorum(self, s):
+        ids = self.g0_ids(s)
+        return len(ids) >= 2 and sum(1 for a in ids if s.alive[a]) >= 2
+
+    def g2_voters_alive(self, s, ids, need_log=False):
+        n = 0
+        for i in ids:
+            a = self.actor_of_id(s, s.g0, i)
+            if a is not None and s.alive[a] and a in s.g2att and (not need_log or i in s.g2log):
+                n += 1
+        return n
+
+    def g2_quorum(self, s, need_log=False):
+        old, new = s.g2cfg
+        if old is None:
+            return False
+        ok = self.g2_voters_alive(s, old, need_log) > len(old) // 2
+        if new is not None:
+            ok = ok and self.g2_voters_alive(s, new, need_log) > len(new) // 2
+        return ok
+
+    def violate(self, name, detail, trace=None):
+        v = GrowthViolation(name, detail)
+        v.trace = trace
+        raise v
+
+    # -- actions ----------------------------------------------------------
+    def successors(self, s):
+        out = []
+        R = self.rules
+        A = len(self.actors)
+        crashes, wipes, writes = s.budget
+        for a in range(A):
+            x = self.actors[a]
+            if s.refused[a]:
+                continue
+            st = s.stores[a]
+            if not s.alive[a]:
+                # start or restart: a fresh store is initialized (token minted, durable)
+                stores = s.stores if st else _set(s.stores, a, ('U', s.toks[a]))
+                tables = _set(s.tables, a, frozenset([self.ident_of(stores, s, a)]))
+                out.append(('up', a, replace(s, stores=stores, alive=_set(s.alive, a, True),
+                                             tables=tables)))
+                if st and wipes:
+                    lost = self.rec_of(s, a).by_ep(x.ep)[0] if self.rec_of(s, a) else None
+                    out.append(('wipe', a, replace(s, stores=_set(s.stores, a, None),
+                                                   g2log=s.g2log - {lost},
+                                                   toks=_set(s.toks, a, s.toks[a] + "'"),
+                                                   budget=(crashes, wipes - 1, writes))))
+                continue
+            if crashes:
+                out.append(('crash', a, replace(s, alive=_set(s.alive, a, False),
+                                                tables=_set(s.tables, a, frozenset()),
+                                                g2att=s.g2att - {a},
+                                                budget=(crashes - 1, wipes, writes))))
+            # join before formation: HELLO to the seed (actor 0), tables merge
+            seed = 0
+            if (st[0] == 'U' and a != seed and s.alive[seed] and s.stores[seed] and
+                    s.stores[seed][0] in ('U', 'P') and s.g0 is None):
+                me = self.ident(s, a)
+                clash = [e for e in s.tables[seed] if self.mode == 'manual' and e[0] == me[0] and e != me]
+                if clash:
+                    out.append(('join-refused', a, replace(s, refused=_set(s.refused, a, True),
+                                                           alive=_set(s.alive, a, False))))
+                elif me not in s.tables[seed] or not s.tables[a] >= s.tables[seed]:
+                    t = s.tables[seed] | {me}
+                    out.append(('join', a, replace(s, tables=_set(_set(s.tables, seed, t), a, t))))
+            out.extend(self.formation_actions(s, a))
+            out.extend(self.member_actions(s, a))
+        out.extend(self.group_actions(s))
+        return out
+
+    def ident_of(self, stores, s, a):
+        st = stores[a]
+        return (self.actors[a].req, self.actors[a].ep, st[1] if st else s.toks[a])
+
+    def formation_actions(self, s, a):
+        R, out = self.rules, []
+        st = s.stores[a]
+        if self.mode == 'manual':
+            # M4: the group-0 leader (one of ids 1..3) proposes MKFS with the
+            # contiguous prefix 1..k of its join table, k >= 3. No operator step.
+            if (1 <= self.actors[a].req <= 3 and st[0] == 'U' and s.g0 is None and
+                    self.g0_quorum(s)):
+                by = {e[0]: e for e in s.tables[a]}
+                k = 0
+                while k + 1 in by:
+                    k += 1
+                if k >= R.min_formation:
+                    rec = Rec('c' + st[1], k, tuple((i, by[i][1], by[i][2]) for i in range(1, k + 1)))
+                    if ('MKFS', rec) not in s.inflight:
+                        out.append(('propose-mkfs', a, replace(s, inflight=s.inflight | {('MKFS', rec)})))
+            return out
+        # automatic ids: the seed (actor 0) proposes ids in join order and
+        # every candidate promises durably before anything is served (M4').
+        if a == 0 and st[0] == 'U' and s.seed_prop is None:
+            ents = sorted(s.tables[a], key=lambda e: (e[1] != self.actors[0].ep, e[1]))
+            if len(ents) >= R.min_formation:
+                rec = Rec('c' + st[1], len(ents),
+                          tuple((i + 1, e[1], e[2]) for i, e in enumerate(ents)))
+                out.append(('seed-propose', a, replace(s, seed_prop=rec,
+                                                       stores=_set(s.stores, a, ('P', st[1], rec)))))
+        if s.seed_prop is not None and st[0] == 'U' and s.alive[0]:
+            e = s.seed_prop.by_ep(self.actors[a].ep)
+            if e and e[2] == st[1]:
+                out.append(('promise', a, replace(s, stores=_set(s.stores, a, ('P', st[1], s.seed_prop)))))
+        if (a == 0 and s.seed_prop is not None and s.g0 is None and
+                all(self._promised(s, e) for e in s.seed_prop.members)):
+            rec = s.seed_prop
+            out.append(('formation-commit', a, self._install_g0(
+                replace(s, stores=_set(s.stores, a, ('F', st[1], rec))), rec)))
+        return out
+
+    def _promised(self, s, e):
+        for a, x in enumerate(self.actors):
+            st = s.stores[a]
+            if x.ep == e[1] and st and st[0] in ('P', 'F') and st[1] == e[2] and st[2].extends(s.seed_prop):
+                return True
+        return False
+
+    def _install_g0(self, s, rec):
+        g2cfg, g2log = s.g2cfg, s.g2log
+        if s.g0 is None:
+            boot = frozenset(group_voters(2, rec.formed))
+            g2cfg, g2log = (boot, None), boot  # bootstrap: every boot voter holds the (empty) log
+        return replace(s, g0=rec, g2cfg=g2cfg, g2log=g2log)
+
+    def member_actions(self, s, a):
+        R, out = self.rules, []
+        st = s.stores[a]
+        x = self.actors[a]
+        # M5: learn the committed record (the notice pump of the group-0
+        # leader, or this node's own apply); persisted before acting on it.
+        if s.g0 is not None and any(s.alive[b] for b in self.g0_ids(s)):
+            e = s.g0.by_ep(x.ep)
+            mine = self.rec_of(s, a)
+            if e and (st[0] in ('U', 'P') or (st[0] == 'F' and mine != s.g0 and s.g0.extends(mine))):
+                if e[2] != st[1] and R.token:
+                    out.append(('store-refused', a, replace(s, refused=_set(s.refused, a, True),
+                                                            alive=_set(s.alive, a, False))))
+                elif st[0] != 'P' or st[2].cluster == s.g0.cluster:
+                    out.append(('learn', a, replace(s, stores=_set(s.stores, a, ('F', st[1], s.g0)))))
+        # M5: a joiner after formation says HELLO to any formed member m; m
+        # proposes the one-member extension of the record it knows.
+        if st[0] == 'U' and s.g0 is not None:
+            me_ep, me_tok = x.ep, st[1]
+            for m in range(len(self.actors)):
+                if m == a or not s.alive[m] or not self.formed(s, m):
+                    continue
+                view = self.rec_of(s, m)
+                e = view.by_ep(me_ep)
+                if e:
+                    if e[2] != me_tok and R.token:
+                        out.append(('hello-refused', a, replace(s, refused=_set(s.refused, a, True),
+                                                                alive=_set(s.alive, a, False))))
+                    continue
+                if self.mode == 'manual':
+                    held = view.by_id(x.req)
+                    if held:
+                        out.append(('hello-refused', a, replace(s, refused=_set(s.refused, a, True),
+                                                                alive=_set(s.alive, a, False))))
+                        continue
+                    if x.req != view.count + 1:
+                        continue  # waits: a lower id is not added yet
+                prop = ('ADD', view.plus(me_ep, me_tok))
+                if not R.cas:
+                    # Superseded: the contacted member's table is the authority;
+                    # it admits the joiner locally, no committed agreement.
+                    rec = prop[1]
+                    out.append(('hello-admit', (a, m), replace(s, stores=_set(_set(
+                        s.stores, m, ('F', s.stores[m][1], rec)), a, ('F', me_tok, rec)))))
+                    continue
+                if prop not in s.inflight:
+                    out.append(('propose-add', (a, m), replace(s, inflight=s.inflight | {prop})))
+        # M6: a member attaches its group-2 replica once its store holds the
+        # record (boot config = the formation voters; the log overlays it).
+        if s.g0 is not None and a not in s.g2att:
+            mine = self.rec_of(s, a) if st[0] == 'F' else (s.g0 if not R.learn_before_vote else None)
+            e = mine.by_ep(x.ep) if mine else None
+            if e:
+                mid = e[0]
+                target = group_voters(2, mine.count)
+                old, new = s.g2cfg
+                if mid in target or mid in old or (new and mid in new) or mid in s.g2log:
+                    out.append(('attach', a, replace(s, g2att=s.g2att | {a})))
+        # write: a client of member a places on a's committed view and the
+        # publication records the fragment nodes (M7).
+        crashes, wipes, writes = s.budget
+        if writes and st[0] == 'F' and self.g0_quorum(s):
+            view = self.rec_of(s, a)
+            ino = 1000 + len(s.chunks)
+            nodes = place_wide([m[0] for m in view.members], ino)
+            out.append(('write', a, replace(s, chunks=s.chunks + ((ino, nodes),),
+                                            budget=(crashes, wipes, writes - 1))))
+        return out
+
+    def group_actions(self, s):
+        R, out = self.rules, []
+        # proposals commit (or are lost with a leader change)
+        if self.g0_quorum(s):
+            for op in sorted(s.inflight, key=repr):
+                kind, rec = op
+                rest = s.inflight - {op}
+                if kind == 'MKFS':
+                    ns = self._install_g0(replace(s, inflight=rest), rec) if s.g0 is None else replace(s, inflight=rest)
+                    out.append(('apply-mkfs', rec.cluster, ns))
+                else:
+                    ok = s.g0 is not None and rec.extends(s.g0) and rec.count == s.g0.count + 1
+                    ns = replace(s, inflight=rest)
+                    if ok:
+                        ns = replace(ns, g0=rec)
+                    out.append(('apply-add', rec.count, ns))
+                if self.drops:
+                    out.append(('lose', kind, replace(s, inflight=rest)))
+        if R.drop_unreachable and s.g0 is not None and s.g0.count > s.g0.formed:
+            last = self.actor_of_id(s, s.g0, s.g0.count)
+            if last is not None and not s.alive[last]:
+                rec = Rec(s.g0.cluster, s.g0.formed, s.g0.members[:-1])
+                out.append(('drop-member', s.g0.count, replace(s, g0=rec)))
+        if s.g0 is None:
+            return out
+        old, new = s.g2cfg
+        # group 2 copies the authority's record (a later revision only)
+        if self.g2_quorum(s) and s.g2rec != s.g0 and s.g0.extends(s.g2rec):
+            out.append(('g2-copy', s.g0.count, replace(s, g2rec=s.g0)))
+        # catch-up: an attached replica receives the log (snapshot + entries)
+        if self.g2_quorum(s, need_log=True):
+            for a in sorted(s.g2att):
+                st = s.stores[a]
+                e = s.g0.by_ep(self.actors[a].ep)
+                if e and e[0] not in s.g2log and s.alive[a]:
+                    out.append(('catch-up', a, replace(s, g2log=s.g2log | {e[0]})))
+        # the group-2 leader reconciles its voters with the record it knows
+        leaders = [a for a in s.g2att if s.alive[a] and self.formed(s, a) and
+                   self.rec_of(s, a).by_ep(self.actors[a].ep)[0] in old]
+        if new is None and leaders and self.g2_quorum(s, need_log=True):
+            for a in sorted(leaders):
+                target = frozenset(group_voters(2, self.rec_of(s, a).count))
+                if target == old:
+                    continue
+                add = target - old
+                if R.catchup and not all(i in s.g2log for i in add):
+                    continue
+                if R.joint:
+                    out.append(('joint', a, replace(s, g2cfg=(old, target))))
+                else:
+                    out.append(('direct', a, replace(s, g2cfg=(target, None))))
+        if new is not None:
+            if self.g2_quorum(s, need_log=True):
+                out.append(('cold', 0, replace(s, g2cfg=(new, None))))
+            out.append(('joint-lost', 0, replace(s, g2cfg=(old, None))))
+        return out
+
+    # -- invariants -------------------------------------------------------
+    def check(self, s, trace):
+        R = self.rules
+        recs = [('g0', s.g0), ('g2', s.g2rec)] + [
+            ('store%d' % a, st[2]) for a, st in enumerate(s.stores) if st and st[0] == 'F']
+        recs = [(n, r) for n, r in recs if r is not None]
+        for i, (na, ra) in enumerate(recs):
+            for nb, rb in recs[i + 1:]:
+                if not comparable(ra, rb):
+                    self.violate('divergent_membership', '%s %s vs %s %s' % (na, ra, nb, rb), trace)
+        if s.g0 is not None:
+            g0 = s.g0
+            if g0.formed < MIN_MEMBERS:
+                self.violate('formation_below_three', repr(g0), trace)
+            if [m[0] for m in g0.members] != list(range(1, g0.count + 1)):
+                self.violate('identity_gap', repr(g0), trace)
+            if len({m[1] for m in g0.members}) != g0.count:
+                self.violate('duplicate_identity', 'endpoint twice: %r' % (g0,), trace)
+            if s.g2rec is not None and not g0.extends(s.g2rec):
+                self.violate('copy_ahead_of_authority', '%r vs %r' % (s.g2rec, g0), trace)
+        for a, st in enumerate(s.stores):
+            if st and st[0] == 'F':
+                if s.g0 is None:
+                    self.violate('served_before_formation', 'actor %d' % a, trace)
+                e = st[2].by_ep(self.actors[a].ep)
+                if not e or e[2] != st[1]:
+                    self.violate('store_not_member', 'actor %d store %r rec %r' % (a, st, st[2]), trace)
+        old, new = s.g2cfg
+        if old is not None:
+            for i in (old | (new or frozenset())):
+                if i > 4:
+                    self.violate('storage_only_node_votes', 'id %d' % i, trace)
+            # A replica that takes part (attached) must be the committed
+            # member: its own store holds the record naming it (M6).
+            for a in s.g2att:
+                st = s.stores[a]
+                e = s.g0.by_ep(self.actors[a].ep)
+                if not st or st[0] != 'F' or not e or st[2].by_ep(self.actors[a].ep) != e:
+                    self.violate('voter_without_identity', 'actor %d store %r' % (a, st), trace)
+        for ino, nodes in s.chunks:
+            if len(set(nodes)) != 3:
+                self.violate('placement_not_distinct', repr((ino, nodes)), trace)
+            if s.g0 is None or any(not s.g0.by_id(n) for n in nodes):
+                self.violate('fragment_on_non_member', repr((ino, nodes, s.g0)), trace)
+            read = nodes if R.retained else place_wide([m[0] for m in s.g0.members], ino)
+            if read != nodes:
+                self.violate('read_misplaced', 'ino %d written to %s, read from %s' % (ino, nodes, read), trace)
+
+    def check_step(self, s, t, act, trace):
+        if s.g0 is not None and (t.g0 is None or not t.g0.extends(s.g0)):
+            self.violate('membership_shrank' if t.g0 and t.g0.count < s.g0.count else 'record_replaced',
+                         '%r -> %r' % (s.g0, t.g0), trace)
+        new = t.g2cfg[1] if t.g2cfg[1] is not None else t.g2cfg[0]
+        if s.g2cfg[0] is not None and new != (s.g2cfg[1] or s.g2cfg[0]) and act in ('joint', 'direct'):
+            for i in new - s.g2cfg[0]:
+                if i not in s.g2log:
+                    self.violate('uncaught_voter', 'id %d joined voters %s without the log'
+                                 % (i, sorted(new)), trace)
+        if s.g2cfg[0] is not None and t.g2cfg[0] != s.g2cfg[0] and s.g2cfg[1] is None:
+            if disjoint_quorums(s.g2cfg[0], t.g2cfg[0]):
+                self.violate('disjoint_quorums', '%s -> %s without joint consensus'
+                             % (sorted(s.g2cfg[0]), sorted(t.g2cfg[0])), trace)
+
+    # -- convergence ------------------------------------------------------
+    def settle(self, s, limit=400):
+        """Fault-free fair run: restart everyone not refused, then take every
+        repair step (commit proposals, learn, HELLO, attach, catch up,
+        reconcile voters) until nothing changes."""
+        s = replace(s, budget=(0, 0, 0))
+        for _ in range(limit):
+            moves = [(n, w, t) for n, w, t in self.successors(s) if n not in ('lose', 'joint-lost', 'wipe')]
+            if not moves:
+                return s
+            pri = ('up', 'join', 'seed-propose', 'promise', 'formation-commit', 'propose-mkfs',
+                   'apply-mkfs', 'learn', 'propose-add', 'apply-add', 'g2-copy', 'attach',
+                   'catch-up', 'joint', 'cold', 'hello-refused', 'join-refused', 'store-refused')
+            moves.sort(key=lambda m: (pri.index(m[0]) if m[0] in pri else 99, repr(m[1])))
+            s = moves[0][2]
+        raise AssertionError('settle did not reach a fixed point')
+
+    def converged(self, s):
+        """Every started, unrefused actor is a member that learned the
+        authority's record; group 2 holds it and votes on its target."""
+        started = [a for a in range(len(self.actors)) if s.stores[a] and not s.refused[a]]
+        if len(started) < self.rules.min_formation:
+            return s.g0 is None, 'unready with %d started' % len(started)
+        if s.g0 is None:
+            return False, 'not formed'
+        for a in started:
+            if not self.formed(s, a) or self.rec_of(s, a) != s.g0:
+                if self.mode == 'manual' and self.actors[a].req > s.g0.count + 1:
+                    continue  # waits for a lower id that never started
+                return False, 'actor %d not a member with the record: %r' % (a, s.stores[a])
+        if s.g2rec != s.g0:
+            return False, 'group 2 copy %r' % (s.g2rec,)
+        target = frozenset(group_voters(2, s.g0.count))
+        if s.g2cfg != (target, None):
+            # A committed member whose store was replaced is refused and stays
+            # a member (removal is deferred): the voter change waits on it.
+            lost = [i for i in target - (s.g2cfg[0] or frozenset())
+                    if s.refused[self.actor_of_id(s, s.g0, i)]]
+            if not (lost and s.g2cfg[1] is None):
+                return False, 'group 2 voters %r' % (s.g2cfg,)
+        return True, ''
+
+    def explore(self):
+        from collections import deque as _dq
+        seen = {self.init: None}
+        q = _dq([self.init])
+        k = 0
+        while q:
+            s = q.popleft()
+            k += 1
+            trace = lambda s=s: self.trace_to(seen, s)  # noqa: E731
+            self.check(s, trace)
+            if s.g0 is not None:
+                self.stats['formed'] += 1
+                self.stats['max_count'] = max(self.stats['max_count'], s.g0.count)
+            if s.g2cfg[1] is not None:
+                self.stats['joint'] += 1
+            if any(s.refused):
+                self.stats['refused'] += 1
+            if self.settle_every and k % self.settle_every == 0:
+                ok, why = self.converged(self.settle(s))
+                self.stats['settled'] += 1
+                if not ok:
+                    self.violate('no_convergence', why, trace)
+            for act, who, t in self.successors(s):
+                self.stats['transitions'] += 1
+                self.check_step(s, t, act, trace)
+                if t not in seen:
+                    seen[t] = (s, act, who)
+                    q.append(t)
+                    if len(seen) > self.max_states:
+                        raise AssertionError('state bound %d exceeded' % self.max_states)
+        self.stats['states'] = len(seen)
+        return self.stats
+
+    def trace_to(self, seen, s):
+        out = []
+        while seen.get(s):
+            p, act, who = seen[s]
+            out.append('%s(%s)' % (act, who))
+            s = p
+        return list(reversed(out))
+
+
+def _set(t, i, v):
+    return t[:i] + (v,) + t[i + 1:]
+
+
+def growth_run(actors, mode='manual', rules=GROWTH, steps=None, **kw):
+    """A deterministic driver over the same actions for the gate tests:
+    `steps` is a list of (action, who) taken in order (who may be None for
+    the first enabled one); returns the final state."""
+    g = Growth(actors, mode=mode, rules=rules, **kw)
+    s = g.init
+    for act, who in steps or []:
+        cand = [(n, w, t) for n, w, t in g.successors(s) if n == act and (who is None or w == who)]
+        if not cand:
+            raise AssertionError('%s(%s) not enabled; enabled: %s' % (
+                act, who, sorted({(n, repr(w)) for n, w, _ in g.successors(s)})))
+        t = cand[0][2]
+        g.check_step(s, t, act, None)
+        g.check(t, None)
+        s = t
+    return g, s
