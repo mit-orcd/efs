@@ -1572,6 +1572,13 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Oct 24: A7 removals decided in D42](../status/a7-removals-20261024.md):
+**PASS (scoped): `make test-all` on amd at `735b82562` fails only the 11 commands that also fail on the base (RDMA on rxe0, a fault-test timeout, K34 in `test_k33_payload.py`); live qualification NOTRUN.** Direct I/O only (storage without `O_DIRECT` refused),
+12 selectors and 3 efsd flags removed and refused, expiry compiled out,
+`EFS_RDMA_TRACE`, strict `EFS_TRANSPORT=rdma`; A/B selectors 15 → 1
+(`EFS_READ_VERIFY`). Branch `claude/devel-a7-removals-d55c03`, not merged.
+External launch/portal changes for the parent are listed there.
+
 [Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](../status/a6-settings-inventory-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
 

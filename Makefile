@@ -1058,8 +1058,9 @@ test-all: test test-long
 # tests run only in a tree built with `make EFS_BUILD_EXPIRY=1` (all objects
 # rebuilt with the flag); this target refuses a product build.
 .PHONY: test-expiry
-test-expiry: all tests/test_expiry
+test-expiry:
 	@[ "$(EFS_BUILD_EXPIRY)" = 1 ] || { echo "test-expiry needs make EFS_BUILD_EXPIRY=1 (clean tree)" >&2; exit 2; }
+	$(MAKE) EFS_BUILD_EXPIRY=1 all tests/test_expiry
 	./tests/test_expiry
 	python3 tests/test_mgmt_expiry_lookup.py
 	python3 tests/test_expiry_cli.py ./efs-mgmt
