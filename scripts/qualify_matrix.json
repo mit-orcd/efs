@@ -1,0 +1,1242 @@
+{
+ "version": 1,
+ "about": "A11 reduced qualification matrix (docs/status/a11-qualification-matrix-20261024.md). Run one topology: python3 scripts/qualify.py run --matrix scripts/qualify_matrix.json --topology NAME --out DIR; list and validate: python3 scripts/qualify.py plan. CANDIDATE is replaced by the frozen candidate commit before the run.",
+ "dimensions": {
+  "transport": {
+   "values": [
+    "tcp",
+    "rdma"
+   ],
+   "auto": "resolves to rdma when a device is configured, else tcp; qualified as the value it resolved to (identity/topology record it)",
+   "qualified": "both, every topology size"
+  },
+  "topology": {
+   "values": "3..16 members (EFS_MAX_NODES 16), one efsd per distinct host",
+   "qualified": [
+    3,
+    4,
+    5
+   ],
+   "sampled": "6..8 loopback B1-B5 only; 9..16 not run"
+  },
+  "storage": {
+   "direct_io": "O_DIRECT only (D42); a root without it is refused",
+   "disks_per_node": {
+    "qualified": 1,
+    "supported": "add-storage roots (S3: no test, F11)"
+   }
+  },
+  "clients": {
+   "qualified": [
+    1,
+    2
+   ],
+   "note": "mounts on one or two client hosts; concurrency inside a mount from the suites (4 jobs, 4 writers)"
+  },
+  "features": {
+   "packing": "on (built in)",
+   ".efs": "cluster commands-policy, default enabled",
+   "expiry": "compiled out",
+   "containers": "off"
+  },
+  "numeric_tunables": {
+   "count": 33,
+   "qualified": "built-in values only; a deployment that sets one is outside the qualified matrix (A8 open)"
+  }
+ },
+ "cells": {
+  "3-host": {
+   "tcp": "bare-metal-3-tcp (BLOCKED)",
+   "rdma": "none: no three distinct RDMA hosts",
+   "nearest_today": [
+    "loopback-3",
+    "nuc-private-3",
+    "orcd-mini-rdma"
+   ]
+  },
+  "4-host": {
+   "tcp": "bare-metal-4-tcp (BLOCKED)",
+   "rdma": "none",
+   "nearest_today": [
+    "intel-4x2-tcp"
+   ]
+  },
+  "5-host": {
+   "tcp": "bare-metal-5-tcp (BLOCKED)",
+   "rdma": "none",
+   "nearest_today": []
+  },
+  "once": {
+   "tcp": "loopback-3 (live harnesses: private single-host TCP clusters) and make test-all on the candidate",
+   "rdma": "not driven: no RDMA live harness"
+  }
+ },
+ "topologies": {
+  "loopback-3": {
+   "loopback": 3,
+   "port_base": 18940,
+   "private_port_base": 18900,
+   "transport": "tcp",
+   "fixture": {
+    "posix_timeout_s": 150
+   },
+   "purpose": "driver dry run and the topology-independent live harnesses, once per candidate",
+   "host": "nuc (ports 18900-18999) or any host with its own range: pass --port-base/--private-port-base",
+   "gates": [
+    "identity",
+    "topology",
+    "b-checks",
+    "posix-core",
+    "posix-extras",
+    "posix-2client",
+    "posix-durability",
+    "append-failover",
+    "k14-torn-read",
+    "k13-tickets",
+    "fragment-integrity",
+    "gc-reclamation",
+    "e1-manifest",
+    "e2-client-stop",
+    "e3-turnover"
+   ],
+   "allow": [
+    "restart",
+    "turnover",
+    "remount"
+   ],
+   "duration": "about 25 minutes measured on intel1 with the four stale harnesses failing at once; up to about 3 hours once they run (deadlines 1 h, gc 2 h)",
+   "covers": [
+    "C4, B2, D2 live harnesses (TCP, one host)",
+    "driver regression"
+   ],
+   "cannot_cover": [
+    "A4 (one host)",
+    "RDMA",
+    "4 or 5 members"
+   ]
+  },
+  "nuc-private-3": {
+   "cluster": {
+    "name": "nuc-private-3",
+    "candidate": "CANDIDATE",
+    "source": "/home/maik/efs-qual-matrix/src",
+    "seed": "127.0.0.1:18960",
+    "nodes": [
+     {
+      "addr": "127.0.0.1:18960",
+      "host": "nuc",
+      "store": "/home/maik/efs-qual-matrix/nuc-private-3/n1"
+     },
+     {
+      "addr": "127.0.0.1:18961",
+      "host": "nuc",
+      "store": "/home/maik/efs-qual-matrix/nuc-private-3/n2"
+     },
+     {
+      "addr": "127.0.0.1:18962",
+      "host": "nuc",
+      "store": "/home/maik/efs-qual-matrix/nuc-private-3/n3"
+     }
+    ],
+    "mounts": [
+     {
+      "path": "/home/maik/efs-qual-matrix/nuc-private-3/mnt-a",
+      "host": "nuc"
+     },
+     {
+      "path": "/home/maik/efs-qual-matrix/nuc-private-3/mnt-b",
+      "host": "nuc"
+     }
+    ],
+    "transport": "tcp",
+    "direct_io": true,
+    "features": {
+     "packing": "built in (background packer)",
+     "efs_commands": "cluster commands-policy (default enabled)",
+     "expiry": "compiled out (EFS_BUILD_EXPIRY off)",
+     "containers": "off"
+    },
+    "quota": "4G per node",
+    "hardware": "nuc (8 CPU, 30 GB, Rocky 10), one host",
+    "mgmt_host": "nuc",
+    "private": {
+     "host": "nuc",
+     "root": "/home/maik/efs-qual-matrix/live",
+     "port_base": 18900
+    },
+    "private_cluster": {
+     "root": "/home/maik/efs-qual-matrix/nuc-private-3",
+     "quota": "4G",
+     "ready_timeout_s": 300
+    },
+    "fixture": {
+     "posix_timeout_s": 150,
+     "remote_tmp": "/tmp"
+    },
+    "notes": "driver-owned private cluster on private ports; fresh stores every run"
+   },
+   "transport": "tcp",
+   "purpose": "exercises the driver-owned multi-host controller (_node, setup/teardown, member stop/start) on one host; the bare-metal topologies differ only in hosts and addresses",
+   "gates": [
+    "identity",
+    "topology",
+    "b-checks",
+    "posix-core",
+    "posix-extras",
+    "posix-2client",
+    "posix-durability",
+    "e1-manifest",
+    "e2-client-stop",
+    "e3-turnover",
+    "a13-node-addition",
+    "b6-unavailable",
+    "c5-protocol-live",
+    "d1-packing",
+    "d3-efs-load",
+    "d4-progress",
+    "e4-scale"
+   ],
+   "allow": [
+    "restart",
+    "turnover",
+    "remount"
+   ],
+   "duration": "about 15 minutes",
+   "covers": [
+    "private-cluster control path: formation, E1 restart, E3 member catch-up"
+   ],
+   "cannot_cover": [
+    "A4 (one host)",
+    "RDMA",
+    "two client hosts (two mounts on nuc)"
+   ]
+  },
+  "orcd-mini-rdma": {
+   "live_user_cluster": true,
+   "transport": "rdma",
+   "cluster": {
+    "name": "orcd-mini-rdma",
+    "candidate": "CANDIDATE",
+    "ssh": "scripts/orcd_mini_ssh.sh",
+    "source": "/data1/efs/src",
+    "sources": {
+     "node9901": "/data1/efs/src",
+     "node9900": "/data1/efs/orcd-mini-client/src"
+    },
+    "seed": "10.1.99.1:17432",
+    "nodes": [
+     {
+      "addr": "10.1.99.1:17432",
+      "host": "node9901",
+      "id": 1
+     },
+     {
+      "addr": "10.1.99.1:17433",
+      "host": "node9901",
+      "id": 2
+     },
+     {
+      "addr": "10.1.99.1:17434",
+      "host": "node9901",
+      "id": 3
+     }
+    ],
+    "mounts": [
+     {
+      "path": "/data1/efs/mnt",
+      "host": "node9901"
+     },
+     {
+      "path": "/data1/efs/mnt",
+      "host": "node9900"
+     }
+    ],
+    "transport": "rdma",
+    "direct_io": true,
+    "features": {
+     "packing": "built in",
+     "efs_commands": "cluster commands-policy (default enabled)",
+     "expiry": "compiled out"
+    },
+    "quota": "720G per node",
+    "hardware": "node9901: 3 efsd (192 cores, 3 TB xiRAID /data1, mlx5_0); node9900: client (RHEL 9.8, mlx5_0)",
+    "mgmt_host": "node9901",
+    "control_host": "node9901",
+    "control": {
+     "stop_cluster": "cd /data1/efs/devops && EFS_CLUSTER=orcd-mini ./stop.sh",
+     "start_cluster": "cd /data1/efs/devops && EFS_CLUSTER=orcd-mini EFS_START_TIMEOUT=900 ./start.sh",
+     "client_stop": "cd {source} && scripts/client.sh stop {mount}",
+     "client_start": "cd {source} && export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 && scripts/client.sh {seed} {mount}",
+     "stop_timeout_s": 600,
+     "ready_timeout_s": 900
+    },
+    "fixture": {
+     "posix_timeout_s": 150,
+     "remote_tmp": "/tmp"
+    },
+    "notes": "the user's live cluster; node9900 mount is /data1/efs/orcd-mini-mnt: orcd_mini_ssh.sh rewrites /data1/efs/mnt for that host, so posix-2client can use one path; check the client_start line against the devops client wrapper before the first run; no per-member stop/start command: E3 catch-up NOTRUN"
+   },
+   "gates": [
+    "identity",
+    "topology",
+    "b-checks",
+    "posix-core",
+    "posix-extras",
+    "posix-2client",
+    "posix-durability",
+    "e1-manifest",
+    "e2-client-stop",
+    "e3-turnover",
+    "d1-packing",
+    "d3-efs-load",
+    "d4-progress",
+    "e4-scale"
+   ],
+   "allow": [
+    "remount",
+    "turnover",
+    "restart"
+   ],
+   "duration": "about 1.5 hours (two-client suite about 13 minutes there; orderly restart with a 3 minute n1 inventory)",
+   "prerequisites": [
+    "user go-ahead (live cluster, its workload, restart rule)",
+    "fuser -m idle on both mounts",
+    "fresh format when the candidate changes a store format",
+    "candidate release on node9901 and node9900 built with the same EFS_GIT_ID"
+   ],
+   "covers": [
+    "RDMA transport (mlx5_0) for C1-C3, D3 (extras), E1-E3, B1-B5 on 3 members",
+    "two client hosts"
+   ],
+   "cannot_cover": [
+    "A4: all three daemons on node9901",
+    "4 or 5 members",
+    "B5 cost figures on a busy cluster (b-checks needs a quiet cluster)",
+    "E3 member catch-up (no per-node stop)",
+    "live harnesses over RDMA"
+   ]
+  },
+  "intel-4x2-tcp": {
+   "live_user_cluster": true,
+   "transport": "tcp",
+   "cluster": {
+    "name": "intel-4x2-tcp",
+    "candidate": "CANDIDATE",
+    "source": "/data1/efs/src",
+    "seed": "10.1.0.208:17432",
+    "nodes": [
+     {
+      "addr": "10.1.0.208:17432",
+      "host": "intel1_efs",
+      "id": 1
+     },
+     {
+      "addr": "10.1.0.208:17433",
+      "host": "intel1_efs",
+      "id": 2
+     },
+     {
+      "addr": "10.1.0.210:17432",
+      "host": "intel2_efs",
+      "id": 3
+     },
+     {
+      "addr": "10.1.0.210:17433",
+      "host": "intel2_efs",
+      "id": 4
+     }
+    ],
+    "mounts": [
+     {
+      "path": "/data1/efs/mnt",
+      "host": "intel1_efs"
+     },
+     {
+      "path": "/data1/efs/mnt",
+      "host": "intel2_efs"
+     }
+    ],
+    "transport": "tcp",
+    "direct_io": true,
+    "features": {
+     "packing": "built in",
+     "efs_commands": "cluster commands-policy (default enabled)",
+     "expiry": "compiled out"
+    },
+    "quota": "400G per node",
+    "hardware": "intel1, intel2: 8 CPU, 15 GB, Rocky 10, one storage filesystem per daemon, 10.1.0.0/24 wired",
+    "mgmt_host": "intel1_efs",
+    "control_host": "intel1_efs",
+    "control": {
+     "stop_cluster": "cd /data1/efs/devops && EFS_CLUSTER=intel ./stop.sh",
+     "start_cluster": "cd /data1/efs/devops && EFS_CLUSTER=intel ./start.sh",
+     "stop_timeout_s": 600,
+     "ready_timeout_s": 600
+    },
+    "fixture": {
+     "posix_timeout_s": 150,
+     "remote_tmp": "/tmp"
+    },
+    "notes": "the user's live cluster as the efs user; xorinox is a further client (not described); check the control lines against devops before the first run"
+   },
+   "gates": [
+    "identity",
+    "topology",
+    "b-checks",
+    "posix-core",
+    "posix-extras",
+    "posix-2client",
+    "posix-durability",
+    "e1-manifest",
+    "e2-client-stop",
+    "e3-turnover",
+    "d1-packing",
+    "d3-efs-load",
+    "d4-progress",
+    "e4-scale"
+   ],
+   "allow": [
+    "remount",
+    "turnover",
+    "restart"
+   ],
+   "duration": "about 1 hour",
+   "prerequisites": [
+    "user go-ahead (live cluster)",
+    "fuser -m idle on both mounts",
+    "fresh format when the candidate changes a store format"
+   ],
+   "covers": [
+    "4-member placement rotation and C/E gates over a real network (TCP)",
+    "two client hosts"
+   ],
+   "cannot_cover": [
+    "A4: four daemons on two hosts",
+    "RDMA",
+    "5 members",
+    "E3 member catch-up (no per-node stop)"
+   ]
+  },
+  "bare-metal-3-tcp": {
+   "blocked": [
+    "firewalld on nuc, intel1 and intel2 rejects every probed non-ssh port from the other hosts (No route to host, Oct 24); open a private range such as 18600-19199/tcp on 10.1.0.0/24"
+   ],
+   "transport": "tcp",
+   "cluster": {
+    "name": "bare-metal-3-tcp",
+    "candidate": "CANDIDATE",
+    "source": "/home/maik/efs-qual-matrix/src",
+    "seed": "10.1.0.204:18960",
+    "nodes": [
+     {
+      "addr": "10.1.0.204:18960",
+      "host": "nuc",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-3-tcp/n1"
+     },
+     {
+      "addr": "10.1.0.208:18760",
+      "host": "intel1",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-3-tcp/n2"
+     },
+     {
+      "addr": "10.1.0.210:18860",
+      "host": "intel2",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-3-tcp/n3"
+     }
+    ],
+    "mounts": [
+     {
+      "path": "/home/maik/efs-qual-matrix/bare-metal-3-tcp/mnt",
+      "host": "nuc"
+     },
+     {
+      "path": "/home/maik/efs-qual-matrix/bare-metal-3-tcp/mnt",
+      "host": "intel1"
+     }
+    ],
+    "transport": "tcp",
+    "direct_io": true,
+    "features": {
+     "packing": "built in (background packer)",
+     "efs_commands": "cluster commands-policy (default enabled)",
+     "expiry": "compiled out (EFS_BUILD_EXPIRY off)",
+     "containers": "off"
+    },
+    "quota": "4G per node",
+    "hardware": "nuc (8 CPU, 30 GB), intel1, intel2 (8 CPU, 15 GB); Rocky 10; 10.1.0.0/24 wired",
+    "mgmt_host": "nuc",
+    "private": {
+     "host": "nuc",
+     "root": "/home/maik/efs-qual-matrix/live",
+     "port_base": 18900
+    },
+    "private_cluster": {
+     "root": "/home/maik/efs-qual-matrix/bare-metal-3-tcp",
+     "quota": "4G",
+     "ready_timeout_s": 300
+    },
+    "fixture": {
+     "posix_timeout_s": 150,
+     "remote_tmp": "/tmp"
+    },
+    "notes": "driver-owned private cluster on private ports; fresh stores every run"
+   },
+   "gates": [
+    "identity",
+    "topology",
+    "b-checks",
+    "posix-core",
+    "posix-extras",
+    "posix-2client",
+    "posix-durability",
+    "e1-manifest",
+    "e2-client-stop",
+    "e3-turnover",
+    "a13-node-addition",
+    "b6-unavailable",
+    "c5-protocol-live",
+    "d1-packing",
+    "d3-efs-load",
+    "d4-progress",
+    "e4-scale"
+   ],
+   "allow": [
+    "restart",
+    "turnover",
+    "remount"
+   ],
+   "duration": "about 1 hour",
+   "driver_host": "the Mac (no ssh between the hosts)",
+   "prerequisites": [
+    "candidate tree built at /home/maik/efs-qual-matrix/src on every host",
+    "firewall opened (blocked)"
+   ],
+   "covers": [
+    "A3/A4 3 distinct hosts, TCP",
+    "E3 member catch-up (driver-owned stop/start)"
+   ],
+   "cannot_cover": [
+    "RDMA"
+   ]
+  },
+  "bare-metal-4-tcp": {
+   "blocked": [
+    "firewalld on nuc, intel1, intel2 and xorinox (as above)"
+   ],
+   "transport": "tcp",
+   "cluster": {
+    "name": "bare-metal-4-tcp",
+    "candidate": "CANDIDATE",
+    "source": "/home/maik/efs-qual-matrix/src",
+    "seed": "10.1.0.204:18960",
+    "nodes": [
+     {
+      "addr": "10.1.0.204:18960",
+      "host": "nuc",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-4-tcp/n1"
+     },
+     {
+      "addr": "10.1.0.208:18760",
+      "host": "intel1",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-4-tcp/n2"
+     },
+     {
+      "addr": "10.1.0.210:18860",
+      "host": "intel2",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-4-tcp/n3"
+     },
+     {
+      "addr": "10.1.0.202:19060",
+      "host": "xorinox",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-4-tcp/n4"
+     }
+    ],
+    "mounts": [
+     {
+      "path": "/home/maik/efs-qual-matrix/bare-metal-4-tcp/mnt",
+      "host": "nuc"
+     },
+     {
+      "path": "/home/maik/efs-qual-matrix/bare-metal-4-tcp/mnt",
+      "host": "xorinox"
+     }
+    ],
+    "transport": "tcp",
+    "direct_io": true,
+    "features": {
+     "packing": "built in (background packer)",
+     "efs_commands": "cluster commands-policy (default enabled)",
+     "expiry": "compiled out (EFS_BUILD_EXPIRY off)",
+     "containers": "off"
+    },
+    "quota": "4G per node",
+    "hardware": "nuc, intel1, intel2, xorinox (16 CPU, 60 GB); Rocky 10; 10.1.0.0/24 wired",
+    "mgmt_host": "nuc",
+    "private": {
+     "host": "nuc",
+     "root": "/home/maik/efs-qual-matrix/live",
+     "port_base": 18900
+    },
+    "private_cluster": {
+     "root": "/home/maik/efs-qual-matrix/bare-metal-4-tcp",
+     "quota": "4G",
+     "ready_timeout_s": 300
+    },
+    "fixture": {
+     "posix_timeout_s": 150,
+     "remote_tmp": "/tmp"
+    },
+    "notes": "driver-owned private cluster on private ports; fresh stores every run"
+   },
+   "gates": [
+    "identity",
+    "topology",
+    "b-checks",
+    "posix-core",
+    "posix-extras",
+    "posix-2client",
+    "posix-durability",
+    "e1-manifest",
+    "e2-client-stop",
+    "e3-turnover",
+    "a13-node-addition",
+    "b6-unavailable",
+    "c5-protocol-live",
+    "d1-packing",
+    "d3-efs-load",
+    "d4-progress",
+    "e4-scale"
+   ],
+   "allow": [
+    "restart",
+    "turnover",
+    "remount"
+   ],
+   "duration": "about 1 hour",
+   "driver_host": "the Mac",
+   "prerequisites": [
+    "candidate tree on every host",
+    "firewall opened (blocked)"
+   ],
+   "covers": [
+    "A3/A4 4 distinct hosts, TCP"
+   ],
+   "cannot_cover": [
+    "RDMA"
+   ]
+  },
+  "bare-metal-5-tcp": {
+   "blocked": [
+    "firewalld on the four Rocky hosts (as above)",
+    "amd has no 10.1.0.0/24 link: the five hosts share only the 10.0.0.0/24 Wi-Fi network, so every member uses its Wi-Fi address; a wired link for amd removes this"
+   ],
+   "transport": "tcp",
+   "cluster": {
+    "name": "bare-metal-5-tcp",
+    "candidate": "CANDIDATE",
+    "source": "/home/maik/efs-qual-matrix/src",
+    "seed": "10.0.0.204:18960",
+    "nodes": [
+     {
+      "addr": "10.0.0.204:18960",
+      "host": "nuc",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-5-tcp/n1"
+     },
+     {
+      "addr": "10.0.0.208:18760",
+      "host": "intel1",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-5-tcp/n2"
+     },
+     {
+      "addr": "10.0.0.210:18860",
+      "host": "intel2",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-5-tcp/n3"
+     },
+     {
+      "addr": "10.0.0.202:19060",
+      "host": "xorinox",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-5-tcp/n4"
+     },
+     {
+      "addr": "10.0.0.206:18660",
+      "host": "amd",
+      "store": "/home/maik/efs-qual-matrix/bare-metal-5-tcp/n5"
+     }
+    ],
+    "mounts": [
+     {
+      "path": "/home/maik/efs-qual-matrix/bare-metal-5-tcp/mnt",
+      "host": "nuc"
+     },
+     {
+      "path": "/home/maik/efs-qual-matrix/bare-metal-5-tcp/mnt",
+      "host": "amd"
+     }
+    ],
+    "transport": "tcp",
+    "direct_io": true,
+    "features": {
+     "packing": "built in (background packer)",
+     "efs_commands": "cluster commands-policy (default enabled)",
+     "expiry": "compiled out (EFS_BUILD_EXPIRY off)",
+     "containers": "off"
+    },
+    "quota": "4G per node",
+    "hardware": "nuc, intel1, intel2, xorinox (Rocky 10), amd (32 CPU, 119 GB, Ubuntu); 10.0.0.0/24 Wi-Fi",
+    "mgmt_host": "nuc",
+    "private": {
+     "host": "nuc",
+     "root": "/home/maik/efs-qual-matrix/live",
+     "port_base": 18900
+    },
+    "private_cluster": {
+     "root": "/home/maik/efs-qual-matrix/bare-metal-5-tcp",
+     "quota": "4G",
+     "ready_timeout_s": 300
+    },
+    "fixture": {
+     "posix_timeout_s": 150,
+     "remote_tmp": "/tmp"
+    },
+    "notes": "driver-owned private cluster on private ports; fresh stores every run"
+   },
+   "gates": [
+    "identity",
+    "topology",
+    "b-checks",
+    "posix-core",
+    "posix-extras",
+    "posix-2client",
+    "posix-durability",
+    "e1-manifest",
+    "e2-client-stop",
+    "e3-turnover",
+    "a13-node-addition",
+    "b6-unavailable",
+    "c5-protocol-live",
+    "d1-packing",
+    "d3-efs-load",
+    "d4-progress",
+    "e4-scale"
+   ],
+   "allow": [
+    "restart",
+    "turnover",
+    "remount"
+   ],
+   "duration": "about 1.5 hours (Wi-Fi)",
+   "driver_host": "the Mac",
+   "prerequisites": [
+    "candidate tree on every host",
+    "firewall opened and a network every host reaches (blocked)"
+   ],
+   "covers": [
+    "A3 >4 members and A4 5 distinct hosts, TCP"
+   ],
+   "cannot_cover": [
+    "RDMA"
+   ]
+  }
+ },
+ "items": {
+  "A1": {
+   "checks": [
+    "qualify:identity"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "under 1 minute per topology",
+   "prerequisites": [
+    "frozen candidate commit",
+    "every tree built with EFS_GIT_ID, EFS_GIT_DESCRIBE, EFS_GIT_BRANCH",
+    "the same build on every host"
+   ]
+  },
+  "A2": {
+   "checks": [
+    "qualify:identity",
+    "qualify:topology"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "under 1 minute",
+   "prerequisites": [
+    "A1"
+   ]
+  },
+  "A3": {
+   "checks": [
+    "qualify:topology"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "under 1 minute",
+   "prerequisites": [
+    "K28 (cap 16, merged)",
+    "a cluster of 3, 4 and 5 members"
+   ],
+   "note": "one 5-member PASS does not qualify 6-16"
+  },
+  "A4": {
+   "checks": [
+    "qualify:topology"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "under 1 minute",
+   "prerequisites": [
+    "one efsd per distinct host: BLOCKED today (firewall, amd link, RDMA hosts)"
+   ]
+  },
+  "A5": {
+   "checks": [
+    "qualify:topology",
+    "qualify:identity"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "recorded by every run",
+   "prerequisites": [
+    "fresh format when the candidate changes a store, log or fragment format since the cluster was formatted (driver-owned clusters are fresh every run)"
+   ],
+   "note": "every gate records its fixture, deadlines and counts in result.json"
+  },
+  "A13": {
+   "checks": [
+    "qualify:a13-node-addition",
+    "code:make test-all"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "about 30 minutes (estimate)",
+   "prerequisites": [
+    "driver-owned cluster (membership changes)",
+    "spare distinct hosts for 3->4->5",
+    "fresh format when the candidate changes a store, log or fragment format since the cluster was formatted (driver-owned clusters are fresh every run)"
+   ],
+   "note": "STUB: loopback K33 tests only"
+  },
+  "B1": {
+   "checks": [
+    "qualify:b-checks",
+    "b_checks:scripts/b_checks.py"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "about 10 minutes (pack wait 300 s)",
+   "prerequisites": [
+    "quiet cluster",
+    "mounts on one host for b_checks.py; --store only where the stores are local"
+   ]
+  },
+  "B2": {
+   "checks": [
+    "qualify:b-checks",
+    "qualify:fragment-integrity",
+    "live:tests/live/fragment_integrity.py"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host",
+    "once"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "b-checks about 10 minutes; fragment-integrity up to 1 hour",
+   "prerequisites": [
+    "quiet cluster",
+    "fragment-integrity: K33 CLI fix of ticket_put.py (stale --node-id)"
+   ]
+  },
+  "B3": {
+   "checks": [
+    "qualify:b-checks"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "within b-checks",
+   "prerequisites": [
+    "quiet cluster",
+    "at least 48 two-chunk files (12 x N)"
+   ]
+  },
+  "B4": {
+   "checks": [
+    "qualify:b-checks"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "within b-checks",
+   "prerequisites": [
+    "packing on (built in)",
+    "pack wait above EFS_PACK_MIN_AGE_MS"
+   ]
+  },
+  "B5": {
+   "checks": [
+    "qualify:b-checks",
+    "code:make test-all"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "within b-checks",
+   "prerequisites": [
+    "quiet cluster (cost figures)",
+    "full member and growth cases: tests/test_b_geometry.py in make test-all"
+   ]
+  },
+  "B6": {
+   "checks": [
+    "qualify:b6-unavailable",
+    "code:make test-all"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "about 20 minutes (estimate)",
+   "prerequisites": [
+    "K34, K35 merged; K36 (verified recovery) open",
+    "per-member stop/start control (driver-owned clusters)"
+   ],
+   "note": "STUB: loopback test_k33_payload, test_k34_stop_put, test_k35_fsync_degraded"
+  },
+  "C1": {
+   "checks": [
+    "qualify:posix-core",
+    "qualify:posix-extras",
+    "qualify:posix-2client",
+    "posix:tests/posix/posix_suite.py",
+    "posix:tests/posix/posix_extras.py",
+    "posix:tests/posix/posix_2client.py"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "about 30 minutes on real hosts (loopback 2 minutes)",
+   "prerequisites": [
+    "two mounts with the same path on two client hosts for posix-2client"
+   ]
+  },
+  "C2": {
+   "checks": [
+    "qualify:posix-core",
+    "qualify:posix-durability",
+    "posix:tests/posix/posix_persist.py"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "within C1 plus about 2 minutes",
+   "prerequisites": [
+    "--allow remount"
+   ]
+  },
+  "C3": {
+   "checks": [
+    "qualify:posix-2client",
+    "qualify:posix-core",
+    "qualify:append-failover",
+    "live:tests/live/append_failover.py"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host",
+    "once"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "within C1; append-failover about 17 minutes",
+   "prerequisites": []
+  },
+  "C4": {
+   "checks": [
+    "qualify:append-failover",
+    "qualify:k14-torn-read",
+    "qualify:k13-tickets",
+    "live:tests/live/k13_ticket_cluster.py",
+    "live:scripts/k14_atomic_cluster.sh"
+   ],
+   "topologies": [
+    "once"
+   ],
+   "transports": [
+    "tcp"
+   ],
+   "duration": "up to 3 hours (deadlines)",
+   "prerequisites": [
+    "K33 CLI fix of k13_ticket_cluster.py, k14_atomic_cluster.sh (stale --node-id)",
+    "an EFS_FAULTS build for K14 phases beyond 1 2 3 7 and lost-reply mode"
+   ],
+   "note": "RDMA not driven: the live harnesses run on TCP loopback"
+  },
+  "C5": {
+   "checks": [
+    "qualify:c5-protocol-live",
+    "code:make test-all"
+   ],
+   "topologies": [
+    "once",
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "make test-all about 25 minutes",
+   "prerequisites": [
+    "candidate tree on the code-gate host"
+   ],
+   "note": "STUB for the per-topology part"
+  },
+  "D1": {
+   "checks": [
+    "qualify:d1-packing",
+    "qualify:b-checks"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "about 20 minutes (estimate)",
+   "prerequisites": [
+    "--allow restart (cold restart)"
+   ],
+   "note": "STUB; b-checks B4 shows packed segments exist"
+  },
+  "D2": {
+   "checks": [
+    "qualify:gc-reclamation",
+    "live:tests/live/gc_reclamation.py"
+   ],
+   "topologies": [
+    "once"
+   ],
+   "transports": [
+    "tcp"
+   ],
+   "duration": "up to 2 hours",
+   "prerequisites": [
+    "K33 CLI fix of gc_reclamation.py (stale --node-id)"
+   ]
+  },
+  "D3": {
+   "checks": [
+    "qualify:posix-extras",
+    "qualify:d3-efs-load",
+    "live:tests/live/efs_commands_load.py"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "extras about 3 minutes; load gate about 30 minutes (estimate)",
+   "prerequisites": [
+    ".efs catalog indexed (posix_timeout_s 150 on a fresh directory)"
+   ],
+   "note": "STUB for the load part"
+  },
+  "D4": {
+   "checks": [
+    "qualify:d4-progress"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "about 1 hour (estimate)",
+   "prerequisites": [
+    "E4 fixture running"
+   ],
+   "note": "STUB"
+  },
+  "E1": {
+   "checks": [
+    "qualify:e1-manifest"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "about 5 minutes plus one orderly restart",
+   "prerequisites": [
+    "--allow restart",
+    "control.stop_cluster and start_cluster"
+   ]
+  },
+  "E2": {
+   "checks": [
+    "qualify:e2-client-stop",
+    "qualify:posix-durability",
+    "qualify:e1-manifest"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "about 2 minutes",
+   "prerequisites": [
+    "--allow remount",
+    "mounts idle (fuser -m)"
+   ]
+  },
+  "E3": {
+   "checks": [
+    "qualify:e3-turnover"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "about 5 minutes",
+   "prerequisites": [
+    "--allow turnover,restart",
+    "control.stop_node/start_node for catch-up (driver-owned clusters only)"
+   ]
+  },
+  "E4": {
+   "checks": [
+    "qualify:e4-scale"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp",
+    "rdma"
+   ],
+   "duration": "several hours (estimate; declared counts)",
+   "prerequisites": [
+    "quota sized for the declared counts"
+   ],
+   "note": "STUB"
+  }
+ }
+}
