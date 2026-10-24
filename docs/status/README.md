@@ -18,11 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Oct 24 merge: placement spread, K33 acceptance, test hygiene, W126, K15/K29 rule](k33-acceptance-20261024.md):
+**merged into devel; merged-tree `make test-all` on intel2 at `a2326a369`: 449 commands, 0 FAIL, 14 NOTRUN host limits (1,340 s; raw: intel2 `~/efs-artifacts/merge-wave3-20261024/`, `SHA256SUMS` `3e1f0f95…b2c`).** Placement needs a fresh format. Live gates for all five stay NOTRUN.
+
 [D41: K9 / W87 closed without resolution](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
 [K15/K29 append harness accounting rule](k15-k29-accounting-rule-20261024.md):
-**PASS (scoped), on `claude/devel-k9-append-836bbe`, not merged.**
+**PASS (scoped), merged into devel (`a2326a369`).**
 `tests/live/append_failover.py` accounts a write the client saw fail (record
 absent, hole explained by its abandon) and reports it separately; a lost
 acknowledged record or an unexplained hole stays a mismatch. Unit check with
@@ -34,7 +37,7 @@ untouched base fails. Live failover gates NOTRUN (parent session).
 **merged into devel; Merged-tree `make test-all` on intel2 (W155, D31 drain, K33 increment 2 and live client view at `910bbeef4`): 442 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave2-20261024/`, `SHA256SUMS` `0d13a146…4ecf`). The first run at `3e01ba95c` failed only `tests/test_k33_client_view.py`, which waited for a joiner log line that increment 2 renamed; fixed in `910bbeef4`.** Before the next deploy, devops `start.sh` and cluster `cluster.sh` must move to the positional `efsd ADDR:PORT STORAGE` / `efsd --join SEED STORAGE` form (`--node-id` is refused), and every store needs a fresh format.
 
 [Test hygiene: K32 entry-count flake, W149, W140](test-hygiene-k32-w149-w140-20261024.md):
-**PASS (scoped) on branch `claude/devel-test-hygiene-8e9443`, not merged.**
+**PASS (scoped) merged into devel (`e7900d8a7`).**
 On nuc at `8cd6e42be`, serial `make test-all` PASS, and the summary runner
 at 8 jobs reports 443 commands, 0 FAIL, 14 NOTRUN host limits (twice).
 
@@ -47,8 +50,7 @@ at 8 jobs reports 443 commands, 0 FAIL, 14 NOTRUN host limits (twice).
 - The merged K33 client-view test now waits for the increment-2 joiner
   lines.
 
-[W126 peek ordering fix](w126-peek-order-20261024.md): **PASS (scoped) on
-`claude/devel-w126-peek-8a1155` (`680a7d0dd`), not merged.** Peeks take a
+[W126 peek ordering fix](w126-peek-order-20261024.md): **PASS (scoped) merged into devel (`d5a1df25e`; tested at `680a7d0dd`).** Peeks take a
 separate `peek_mu` after `view_rw`, so a writer queued on `view_rw` behind
 a reader no longer holds them back (the K30 pinned case is now a liveness
 test). On intel1: TSan clean on the KV tests, `make leak-check` 25/25, and
@@ -72,7 +74,7 @@ easy write gate on orcd-mini is NOTRUN** (parent session).
 [K33 placement spread for more than four nodes](k33-placement-spread-20261024.md):
 **code gate PASS with host limits (amd `make test-all` at `f7553b06e`:
 442 commands, 11 FAIL, all also failing on the base); branch
-`claude/devel-placement-spread-b6a3c4`, not merged; live gates NOTRUN.** The stripe start was
+merged into devel (`5692db50f`); live gates NOTRUN.** The stripe start was
 `fnv1a(ino) % n`; inodes of one shard differ only in high bits, so runs of
 new files started on one rank (eight members: a node got nothing). Start,
 packed segments and down-node spares now use fmix64 with a multiply-shift
@@ -82,8 +84,7 @@ new fragments. New writes only; needs a fresh format.
 
 [K33 acceptance: node addition against the alpha checklist](k33-acceptance-20261024.md):
 **code gate PASS with host limits (xorinox `make test-all` at `2ebd4fd85`:
-446 commands, 0 FAIL, 13 NOTRUN); on branch
-`claude/devel-k33-acceptance-75e95e`, not merged; live multi-host, RDMA and
+446 commands, 0 FAIL, 13 NOTRUN); merged into devel (`cbe38a86d`); live multi-host, RDMA and
 orcd-mini NOTRUN.** Loopback daemon tests for four checklist items: additions
 interrupted at every durable handoff (new hooks) and concurrent interrupted
 joins converge to one membership without duplicate ids or orphaned
