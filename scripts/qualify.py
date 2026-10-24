@@ -1049,11 +1049,11 @@ def g_e3(q, g):
         # Name the successor: an untargeted step-down may be re-won by the
         # same node at a higher term, which is no turnover.
         others = [v for v in voters if v != lid]
-        target = sorted(others, key=lambda v: (v - lid) % 64)[0] + 1 if others else None
-        g.step('turnover', f'raft-step-down group {group} on leader {addr} (term {term}) to node {target}')
+        successor = sorted(others, key=lambda v: (v - lid) % 64)[0] + 1 if others else None
+        g.step('turnover', f'raft-step-down group {group} on leader {addr} (term {term}) to node {successor}')
         t0 = time.monotonic()
         rc, text = q.mgmt(g, f'step-down-g{group}', 'raft-step-down', addr, group,
-                          *([target] if target else []))
+                          *([successor] if successor else []))
         new = None
         while time.monotonic() - t0 < q.fixture['turnover_timeout_s']:
             now_leaders, views = leaders(q, g, f'leaders-g{group}')
@@ -1062,7 +1062,7 @@ def g_e3(q, g):
                 new = cur
                 break
             time.sleep(1)
-        events.append(dict(group=group, old=addr, old_term=term, target_node=target, rc=rc,
+        events.append(dict(group=group, old=addr, old_term=term, target_node=successor, rc=rc,
                            new=new and new[0], new_term=new and new[1],
                            seconds=round(time.monotonic() - t0, 3),
                            views=views.get(group)))
@@ -1077,6 +1077,7 @@ def g_e3(q, g):
         group, (addr, *_) = sorted(before.items())[0]
         node = next(n for n in q.cluster['nodes'] if n['addr'] == addr)
         g.step('restart', f'orderly stop and start of member {addr} (returning member catch-up)')
+        down_at = now()
         rc, text = q.control.stop_node(g, node)
         if rc:
             workload.wait()
@@ -1096,7 +1097,8 @@ def g_e3(q, g):
                 caught = True
                 break
             time.sleep(2)
-        catchup = dict(member=addr, caught_up=caught, seconds=round(time.monotonic() - t0, 3))
+        catchup = dict(member=addr, down_at=down_at, caught_at=now(), caught_up=caught,
+                       seconds=round(time.monotonic() - t0, 3))
         g.fixture['catchup'] = catchup
         if not caught:
             workload.wait()
@@ -1110,13 +1112,23 @@ def g_e3(q, g):
         wl = json.loads(wl_log.read_text().strip().splitlines()[-1])
     except (ValueError, IndexError):
         return FAIL, 'workload produced no report: ' + wl_log.read_text()[-200:]
-    g.fixture['workload'] = {k: v for k, v in wl.items() if k != 'files'}
+    g.fixture['workload'] = {k: v for k, v in wl.items() if k not in ('files', 'failed')}
     manifest = g.raw_file('workload-manifest.json')
-    manifest.write_text(json.dumps(dict(dir=target, files=wl['files'], errors=[])) + '\n')
+    # A failed write may leave its name behind; only acknowledged files are checked.
+    manifest.write_text(json.dumps(dict(dir=target, files=wl['files'],
+                                        errors=[dict(name=n) for n in wl.get('failed', [])])) + '\n')
     ok, result = manifest_verify(q, g, m, manifest, 'verify-workload')
     g.fixture['verify'] = result
     if wl['errors']:
-        return FAIL, f'{len(wl["errors"])} client errors across turnover: {wl["errors"][0]}'[:400]
+        # Split by window so triage sees whether turnover or the member
+        # outage (catch-up phase) cost the I/O; either is a FAIL.
+        outage = [e for e in wl['errors'] if catchup and catchup['down_at'] <= e['at'] <= catchup['caught_at']]
+        g.fixture['errors_in_member_outage'] = len(outage)
+        g.fixture['errors_in_turnover'] = len(wl['errors']) - len(outage)
+        failed = wl['ops'] - wl['acknowledged']
+        return FAIL, (f'{failed} of {wl["ops"]} client ops failed ({len(wl["errors"]) - len(outage)} of the first '
+                      f'{len(wl["errors"])} in the turnover window, {len(outage)} while member '
+                      f'{catchup and catchup["member"]} was down): {wl["errors"][0]}')[:400]
     if not ok:
         return FAIL, f'acknowledged workload files wrong after turnover: {result}'[:400]
     if wl['max_gap_s'] > q.fixture['turnover_timeout_s']:
@@ -1485,7 +1497,7 @@ def h_workload(args):
         i += 1
     max_gap = max(max_gap, time.monotonic() - last_ok)
     print(json.dumps(dict(dir=str(d), ops=i, acknowledged=len(files), errors=errors[:50],
-                          max_gap_s=round(max_gap, 3), files=files)))
+                          failed=[e['name'] for e in errors], max_gap_s=round(max_gap, 3), files=files)))
     return 0
 
 
