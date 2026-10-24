@@ -333,7 +333,9 @@ class Loopback(Controller):
         self.stores = [work / 'loopback' / f'n{i + 1}' for i in range(self.n)]
         self.mounts = [work / 'loopback' / 'mnt-a', work / 'loopback' / 'mnt-b']
         self.procs, self.c = {}, {}
-        self.env = dict(os.environ, EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'))
+        # The A2 profile enables .efs commands (opt-in on clients and servers).
+        self.env = dict(os.environ, EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'),
+                        EFS_COMMANDS='1', EFS_COMMANDS_SERVER='1')
 
     def description(self, private_base):
         return dict(name=f'loopback-{self.n}', candidate=None, source=str(ROOT),
@@ -341,7 +343,8 @@ class Loopback(Controller):
                     nodes=[dict(addr=a, host='local', id=i + 1) for i, a in enumerate(self.addrs)],
                     mounts=[dict(path=str(m), host='local') for m in self.mounts],
                     transport='tcp', direct_io=self.direct,
-                    features=dict(packing=True, efs_commands=True, expiry=False, containers=False),
+                    features=dict(efs_commands='EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1',
+                                  packing='build default (not set by the driver)'),
                     quota='1G per daemon', hardware=f'{socket.gethostname()} (one host, loopback)',
                     private=dict(host='local', root=str(self.work / 'live'), port_base=private_base),
                     notes='driver-owned loopback dry-run cluster; not distinct hosts (A4)')
@@ -453,7 +456,7 @@ class Loopback(Controller):
 
     def client_start(self, g, m):
         return g.run('client-start', 'local', f'cd {shlex.quote(str(ROOT))} && export '
-                     f'EFS_TRANSPORT=tcp && scripts/client.sh {self.addrs[0]} {shlex.quote(m["path"])}',
+                     f'EFS_TRANSPORT=tcp EFS_COMMANDS=1 && scripts/client.sh {self.addrs[0]} {shlex.quote(m["path"])}',
                      300)
 
     def stop_cluster(self, g):
@@ -712,8 +715,17 @@ def g_posix(script, extra=''):
         g.fixture.update(cases=count_marks(g.fetch(m['host'], res, 'results.tsv').read_text(errors='replace')
                                            if not q.plan else ''), mount=m['path'],
                          jobs=q.fixture['posix_jobs'], per_case_timeout_s=q.fixture['posix_timeout_s'])
-        return outcome_from_rc(rc, text, g.commands[-1].get('timed_out'))
+        return scoped(g, outcome_from_rc(rc, text, g.commands[-1].get('timed_out')))
     return gate
+
+
+def scoped(g, outcome):
+    """A PASS whose suite skipped cases says so: skipped cases are scope, not PASS."""
+    cases = g.fixture.get('cases') or {}
+    skipped = cases.get('SKIP', 0) + cases.get('NOTRUN', 0)
+    if outcome[0] == PASS and skipped:
+        return PASS, f'{cases.get("PASS", 0)} cases pass; {skipped} SKIP/NOTRUN cases are out of scope (see results.tsv)'
+    return outcome
 
 
 def g_two_client(q, g):
@@ -738,7 +750,7 @@ def g_two_client(q, g):
     rc, text = g.run('suite', host, cmd)
     g.fixture.update(cases=count_marks(g.fetch(host, res, 'results.tsv').read_text(errors='replace')
                                        if not q.plan else ''), mounts=[a['path'], b['path']])
-    return outcome_from_rc(rc, text, g.commands[-1].get('timed_out'))
+    return scoped(g, outcome_from_rc(rc, text, g.commands[-1].get('timed_out')))
 
 
 def g_durability(q, g):
