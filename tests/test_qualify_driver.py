@@ -131,7 +131,7 @@ try:
     f3 = (out1 / 'f3-row.md').read_text()
     assert '| Placement/capacity and decode | FAIL (stub-pass PASS, stub-fail FAIL' in f3, f3
     assert '| Full payloads + orderly restart | NOTRUN (no gate selected in this run' in f3
-    assert '| Scale/progress evidence (E4, D4) | NOTRUN (not covered by this driver' in f3
+    assert '| Scale/progress evidence (E4, D4) | NOTRUN (no gate selected in this run' in f3
 
     # 2. The destructive stub runs once allowed and the step is listed.
     out2 = tmp / 'out2'
@@ -189,7 +189,127 @@ try:
     reasons = {g['gate']: g['reason'] for g in load(tmp / 'out7/run.json')['gates']}
     assert all(r == 'plan only (--plan): nothing ran' for r in reasons.values()), reasons
     assert not (tmp / 'live').exists()
+
+    # 6. Topology gate against a stub efs-mgmt: PASS on distinct hosts,
+    # NOTRUN when daemons share a host, FAIL on a down or missing member.
+    status = ('Cluster state: healthy (3 up, 0 down)\n'
+              '  node 1: 10.0.0.1:17432  up  used=1M  quota=4G (0.1%)  storage(1):\n'
+              '  node 2: 10.0.0.2:17432  up  used=1M  quota=unlimited  storage(2):\n'
+              '  node 3: 10.0.0.3:17432  {s}  used=1M  quota=4G (0.1%)  storage(1):\n')
+    assert Q.parse_members(status.format(s='up')) == {'10.0.0.1:17432': (True, 1), '10.0.0.2:17432': (True, 2),
+                                                      '10.0.0.3:17432': (True, 1)}
+    fake = tmp / 'fake-src'
+    fake.mkdir()
+    def topo(name, st, hosts, rc_want, verdict, reason):
+        (fake / 'efs-mgmt').write_text(f'#!/bin/sh\ncat <<\'X\'\n{st}X\n')
+        (fake / 'efs-mgmt').chmod(0o755)
+        c = dict(name=name, source=str(fake), seed='10.0.0.1:17432', transport='tcp', direct_io=True,
+                 nodes=[dict(addr=f'10.0.0.{i}:17432', host=h) for i, h in zip((1, 2, 3), hosts)], mounts=[])
+        (tmp / f'{name}.json').write_text(json.dumps(c))
+        rc, text = run('--cluster', str(tmp / f'{name}.json'), '--out', str(tmp / f'out-{name}'), '--gates', 'topology')
+        r = load(tmp / f'out-{name}/gates/topology/result.json')
+        assert rc == rc_want and r['verdict'] == verdict and reason in r['reason'], (name, rc, r['reason'], text)
+        return r
+    r = topo('t-pass', status.format(s='up'), ['local'] * 3, 3, 'NOTRUN', '3 members on 1 host(s)')
+    assert r['fixture']['members']['10.0.0.2:17432'] == dict(up=True, storage_roots=2)
+    topo('t-down', status.format(s='DOWN'), ['local'] * 3, 1, 'FAIL', 'members down: 10.0.0.3:17432')
+    topo('t-missing', status.format(s='up').replace('10.0.0.3', '10.0.0.9'), ['local'] * 3, 1, 'FAIL',
+         'status reports members')
+    rc, text = run('--cluster', str(desc), '--out', str(tmp / 'out-t0'), '--gates', 'topology')
+    assert rc == 1 and 'alpha 1.0 needs at least 3' in load(tmp / 'out-t0/gates/topology/result.json')['reason']
+
+    # 7. Stub gates exist, are listed and report NOTRUN with their reason.
+    names = [g.name for g in Q.gates(Q.default_plugins({}, []))]
+    stubs = [n for n, *_ in Q.STUBS]
+    assert set(stubs) <= set(names) and {'d4-progress', 'e4-scale', 'b6-unavailable'} <= set(stubs)
+    rc, text = run('--cluster', str(desc), '--out', str(tmp / 'out-stubs'), '--gates', ','.join(stubs))
+    assert rc == 3, (rc, text)
+    for g in load(tmp / 'out-stubs/run.json')['gates']:
+        assert g['verdict'] == 'NOTRUN' and g['reason'].startswith('no harness yet: '), g
+
+    # 8. The b-checks plugin matches scripts/b_checks.py's CLI.
+    host, cmd = Q.b_checks_command(dict(nodes=three['nodes'], mounts=[
+        dict(path='/m/a', host='h1'), dict(path='/m/b', host='h2'), dict(path='/m/c', host='h1')]))
+    filled = cmd.format(source='/src', seed='S')
+    assert host == 'h1' and '--mount /m/a --mount /m/c --expect-members 3' in filled and '/m/b' not in filled
+    assert 'b_checks.py --seed S' in filled and 'exit $rc' in filled and '${TMPDIR:-/tmp}' in filled
+
+    # 9. ssh wrapper replaces ssh; relative wrappers resolve in the tree.
+    argv = Q.Runner(ssh='scripts/orcd_mini_ssh.sh').argv('node9901', 'echo hi', 10)
+    assert argv[:2] == [str(root / 'scripts/orcd_mini_ssh.sh'), 'node9901'] and 'echo hi' in argv[2]
+
+    # 10. The committed matrix validates; broken ones are caught.
+    with contextlib.redirect_stdout(io.StringIO()) as buf:
+        assert Q.main(['plan', '--check']) == 0, buf.getvalue()
+    matrix = load(root / 'scripts/qualify_matrix.json')
+    assert Q.matrix_errors(matrix) == []
+    assert set(matrix['items']) == set(Q.STAGE2_ITEMS)
+    broken = json.loads(json.dumps(matrix))
+    del broken['items']['E4']
+    broken['items']['C1']['checks'].append('qualify:no-such-gate')
+    broken['items']['D2']['checks'].append('live:tests/live/no_such.py')
+    broken['topologies']['loopback-3']['gates'].append('nope')
+    broken['topologies']['bare-metal-3-tcp']['cluster']['nodes'][1]['store'] = '/data1/efs/n2'
+    errors = '\n'.join(Q.matrix_errors(broken))
+    for want in ('item E4: not in the plan', "qualify gate 'no-such-gate' does not exist",
+                 'tests/live/no_such.py does not exist', "gate 'nope' does not exist",
+                 "store '/data1/efs/n2' is not under private_cluster.root"):
+        assert want in errors, (want, errors)
+
+    # 11. run --matrix: blocked and live topologies are refused without the
+    # flags; a driver-owned topology plans formation (seed, then --join) and
+    # a teardown that deletes its root on every host.
+    rc, text = run('--matrix', str(root / 'scripts/qualify_matrix.json'), '--topology', 'bare-metal-5-tcp',
+                   '--out', str(tmp / 'm1'), '--plan')
+    assert rc == 2 and 'is blocked: firewalld' in text, text
+    rc, text = run('--matrix', str(root / 'scripts/qualify_matrix.json'), '--topology', 'orcd-mini-rdma',
+                   '--out', str(tmp / 'm2'), '--plan')
+    assert rc == 2 and "user's live cluster" in text, text
+    rc, text = run('--matrix', str(root / 'scripts/qualify_matrix.json'), '--topology', 'bare-metal-4-tcp',
+                   '--out', str(tmp / 'm3'), '--plan', '--ignore-blocked')
+    assert rc == 3, (rc, text)
+    setup = [c['command'] for c in load(tmp / 'm3/gates/_setup/result.json')['commands']]
+    starts = [c for c in setup if '_node start' in c]
+    assert len(starts) == 4 and '--join' not in starts[0] and all('--join 10.1.0.204:18960' in c for c in starts[1:])
+    teardown = [(c['host'], c['command']) for c in load(tmp / 'm3/gates/_teardown/result.json')['commands']]
+    deleted = {h for h, c in teardown if 'edelete --force --delete /home/maik/efs-qual-matrix/bare-metal-4-tcp' in c}
+    assert deleted == {'nuc', 'intel1', 'intel2', 'xorinox'}, teardown
+    assert load(tmp / 'm3/run.json')['allow'] == ['remount', 'restart', 'turnover']
+
+    # 12. _node: start waits until the daemon listens, refuses a second
+    # start, stop sends SIGTERM and waits (a stub efsd from a stub tree).
+    tree = tmp / 'tree'
+    tree.mkdir()
+    (tree / 'efsd').write_text('#!/usr/bin/env python3\nimport socket, sys, signal, time\n'
+                               'addr = next(a for a in sys.argv[1:] if a.count(":") == 1 and not a.startswith("-"))\n'
+                               'h, p = addr.rsplit(":", 1)\ntime.sleep(0.5)\ns = socket.socket()\n'
+                               's.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\ns.bind((h, int(p)))\n'
+                               's.listen()\nsignal.signal(signal.SIGTERM, lambda *a: sys.exit(0))\n'
+                               'while True:\n    time.sleep(1)\n')
+    (tree / 'efsd').chmod(0o755)
+    import socket as _socket
+    with _socket.socket() as probe:
+        probe.bind(('127.0.0.1', 0))
+        port = probe.getsockname()[1]
+    saved, Q.ROOT = Q.ROOT, tree
+    try:
+        node = ['--addr', f'127.0.0.1:{port}', '--store', str(tmp / 'pc/n1'), '--timeout', '20']
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            assert Q.main(['_node', 'start', *node, '--env=EFS_TRANSPORT=tcp']) == 0, buf.getvalue()
+            assert Q.main(['_node', 'start', *node]) == 1
+            pid = int((tmp / 'pc/n1.pid').read_text())
+            assert Q.pid_alive(pid)
+            assert Q.main(['_node', 'stop', *node]) == 0
+            assert Q.main(['_node', 'stop', *node]) == 0
+        out = buf.getvalue()
+        assert 'listening' in out and 'already running' in out and 'exited' in out and 'not running' in out, out
+        assert f'efsd 127.0.0.1:{port} {tmp / "pc/n1"} --quota 4G --discovery-port 0' in (tmp / 'pc/n1.log').read_text()
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert Q.main(['_node', 'start', '--addr', '127.0.0.1:1', '--store', '/data1/efs/x']) == 2
+    finally:
+        Q.ROOT = saved
 finally:
     shutil.rmtree(tmp)
 print('qualify driver: stub pass/fail/not-run/deadline/liar verdicts, result fields, SHA256SUMS '
-      'and tamper control, summary and F3 row, refusals, --plan commands PASS')
+      'and tamper control, summary and F3 row, refusals, --plan commands, topology gate, stub gates, '
+      'b-checks CLI, ssh wrapper, A11 matrix validation and topologies, _node start/stop PASS')
