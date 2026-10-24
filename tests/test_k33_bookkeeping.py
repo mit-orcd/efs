@@ -20,10 +20,12 @@ At six members:
 - reclaim: 24 files of 300 KiB, whose fragments land on the added nodes
   too, are deleted; the fragment files on every store and the used bytes of
   every node return to their values before the files were written;
-- W154 rebuild on return: added storage-only node 6 stops (SIGTERM); files
-  written at once are acknowledged degraded on two fragments; status counts
-  the marks while node 6 is away; node 6 restarts and the count returns to
-  0 with rebuilt + retired covering the marks; every file reads back.
+- K35 (D42) placement with an added member down: storage-only node 6 stops
+  (SIGTERM); files written and fsynced at once go to the available members
+  (no degraded acknowledgement, count 0); node 6 restarts, every file reads
+  back, and from a new mount the counters return to 0 (the objects given up
+  for re-placement are collected as abandoned uploads). The W154 rebuild on
+  return is tested by tests/test_k35_fsync_degraded.py.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, threading, time
@@ -156,7 +158,10 @@ try:
     assert now == before, (before, mid, now)
     notes.append(f'reclaim: fragments per node {grew} written, all removed')
 
-    # W154 rebuild on return of an added member.
+    # K35 (D42): an added member down at six members. Every fragment goes to
+    # an available member (resent once, then placed again): no degraded
+    # acknowledgement and no mark, unlike the W154 behavior before K35.
+    log0 = a.logp.read_text(errors='replace')
     c.stop(6)
     names = [f'd-{k}' for k in range(12)]
     errs = []
@@ -164,6 +169,11 @@ try:
     def wr(nm):
         try:
             (a.path / nm).write_bytes(payload(nm, 1 << 20))
+            fd = os.open(a.path / nm, os.O_RDWR)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
         except OSError as e:
             errs.append((nm, e))
     ths = [threading.Thread(target=wr, args=(nm,)) for nm in names]
@@ -172,37 +182,28 @@ try:
     for t in ths:
         t.join()
     assert not errs, errs
-    acks = len(re.findall(r'degraded acknowledgement', a.logp.read_text(errors='replace')))
-    end = time.time() + 30
-    marks = None
-    while time.time() < end:
-        m = re.search(r'Degraded chunks: (\d+) \(', status(2))
-        if m and int(m.group(1)) >= max(acks, 1):
-            marks = int(m.group(1))
-            break
-        time.sleep(0.5)
-    assert marks, (acks, status(2))
+    log1 = a.logp.read_text(errors='replace')[len(log0):]
+    acks = len(re.findall(r'degraded acknowledgement', log1))
+    placed = len(re.findall(r'placing again', log1))
+    assert acks == 0, log1[-3000:]
     time.sleep(3)
-    m = re.search(r'Degraded chunks: (\d+) \(', status(3))
-    assert m and int(m.group(1)) == marks, (marks, status(3))
+    for i in (2, 3):
+        m = re.search(r'Degraded chunks: (\d+) \(', status(i))
+        assert m and int(m.group(1)) == 0, status(i)
     c.restart(6, quota=None)
     c.wait_log(6, r'raft-host: up raft_id=5 n=6 formed', timeout=60)
-    end = time.time() + 90
-    while time.time() < end:
-        out = status(2)
-        m = re.search(r'Degraded chunks: (\d+) \(.*?rebuilt=(\d+) retired=(\d+)', out)
-        if m and int(m.group(1)) == 0:
-            break
-        time.sleep(1)
-    assert m and int(m.group(1)) == 0, out
-    rebuilt = sum(len(re.findall(r'raft-host: rebuilt ino=', c.log(i))) for i in range(1, 7))
-    assert rebuilt + int(m.group(3)) >= marks, (marks, rebuilt, out)
     for nm in names + [f'base-{k}' for k in range(4)]:
         size = 1 << 20 if nm.startswith('d-') else 200000
         assert (a.path / nm).read_bytes() == payload(nm, size), nm
-    notes.append(f'W154: {acks} degraded acknowledgements, {marks} marks, {rebuilt} rebuilt '
-                 f'after node 6 returned')
-    check_count(6, a)
+    notes.append(f'K35: node 6 down, 12 files written and fsynced on the available members '
+                 f'({placed} objects placed again), no degraded mark')
+    # The given-up objects are abandoned uploads, collected once the
+    # session that wrote them ends: check the counters from a new mount.
+    a.close()
+    mounts.remove(a)
+    b = Mount(c, 2, 'mnt-after')
+    mounts.append(b)
+    check_count(6, b)
 finally:
     for m in mounts:
         m.close()
@@ -214,4 +215,4 @@ finally:
 for n in notes:
     print(n)
 print('K33 bookkeeping 3->6: readiness, capacity (status and df), protection and abandoned-upload '
-      f'reporting, automatic quota, reclaim and W154 rebuild on return: PASS ({time.time() - t0:.1f} s)')
+      f'reporting, automatic quota, reclaim and placement around a down member (K35): PASS ({time.time() - t0:.1f} s)')

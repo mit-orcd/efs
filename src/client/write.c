@@ -3312,6 +3312,23 @@ static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
     }
 }
 
+/* Two acks (the quorum loop) leave exactly one missing. Write availability
+ * is kept (D40): record and announce it, or refuse the write. */
+static int degraded_record(efs_ino_t ino, uint32_t chunk_index, uint64_t object,
+                           const efs_node_id_t nodes[EFS_NUM_FRAGMENTS], uint32_t missing)
+{
+    if (dgobj_note(ino, chunk_index, object, missing) != EFS_OK) {
+        fprintf(stderr,
+                "put_fragments ino=%llu chunk=%u: degraded acknowledgement "
+                "could not be recorded (missing=%x) — refusing the write\n",
+                (unsigned long long)ino, chunk_index, missing);
+        fflush(stderr);
+        return EFS_ERR_NOMEM;
+    }
+    degraded_ack_log(ino, chunk_index, object, nodes, __builtin_ctz(missing));
+    return EFS_OK;
+}
+
 /* Retries reuse the ticket: same object name, placement and bytes.
  * *quota_mask gets the slots whose member refused the object as full.
  * On EFS_OK seq/epoch hold each acknowledged slot's acknowledgement (0 for
@@ -3375,18 +3392,11 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
              * places the object again without it, or reports ENOSPC. */
             if (missing & *quota_mask)
                 return EFS_ERR_QUOTA;
-            /* Two acks (the quorum loop) leave exactly one missing. Write
-             * availability is kept (D40): record and announce it. */
-            if (dgobj_note(ino, chunk_index, ticket->object, missing) != EFS_OK) {
-                fprintf(stderr,
-                        "put_fragments ino=%llu chunk=%u: degraded acknowledgement "
-                        "could not be recorded (missing=%x) — refusing the write\n",
-                        (unsigned long long)ino, chunk_index, missing);
-                fflush(stderr);
-                return EFS_ERR_NOMEM;
-            }
-            degraded_ack_log(ino, chunk_index, ticket->object, nodes, __builtin_ctz(missing));
-            return rc;
+            /* K35: an unreachable member may still be placed around; the
+             * caller records the degraded acknowledgement if it is not. */
+            if (*unreachable_mask)
+                return rc;
+            return degraded_record(ino, chunk_index, ticket->object, nodes, missing);
         }
         if (rc == EFS_ERR_QUOTA || rc == EFS_ERR_STALE)
             return rc;
@@ -3522,7 +3532,6 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                 if ((away_mask & (1u << i)) && nodes[i] == before[i])
                     moved = 0;
             if (moved) {
-                efs_client_degraded_drop(ino, chunk_index, ticket->object);
                 efs_client_put_release(ticket->id.seq, 0);
                 fprintf(stderr, "put_fragments ino=%llu chunk=%u: member(s) %u,%u,%u "
                         "unreachable (mask %x); placing again on %u,%u,%u\n",
@@ -3535,6 +3544,8 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
             }
             memcpy(nodes, before, sizeof(before));
         }
+        if (rc == EFS_OK && away_mask) /* stays on two fragments */
+            rc = degraded_record(ino, chunk_index, ticket->object, ticket->nodes, away_mask);
         if (rc == EFS_OK) {
             /* K35: fsync proves this object from its acknowledgements. */
             rc = efs_client_stripe_note(ticket, ack_seq, ack_epoch);

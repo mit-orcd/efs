@@ -49,7 +49,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint
  /* Acks from an earlier attempt of the same object still count. */
  if(rc==EFS_OK)for(unsigned i=0;i<3;i++)if(!degrade||i!=2||t->nodes[2]!=3){acked[i]=1;seq[i]=calls*3+i+1;epoch[i]=9;}
  return rc;}
-'''+fn('report_retry_pause')+fn('put_fragments_parallel_run')+fn('efs_client_put_fragments_parallel')+r'''
+'''+fn('report_retry_pause')+fn('static int degraded_record')+fn('put_fragments_parallel_run')+fn('efs_client_put_fragments_parallel')+r'''
 #define PUT(t) efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,0,0,t)
 int main(void){
  efs_node_id_t nodes[3]={1,2,3};const uint8_t *fragments[3]={0};const uint8_t checksums[3][EFS_HASH_SIZE]={{0}};struct efs_put_ticket t;
@@ -110,21 +110,22 @@ int main(void){
  full_slot=-1;
  /* K35: a member that failed hard on a two-fragment acknowledgement: with
   * a spare the object is placed again there (new ticket, the degraded one
-  * released and its W154 record dropped) and stored on three; without one
+  * released, never recorded degraded) and stored on three; without one
   * the degraded acknowledgement stands. Either way the stored object is
   * recorded for fsync, and an unrecordable one fails the write. */
  calls=0;terminal=EFS_OK;degrade=1;degrade_hard=1;spare_left=1;aways=0;fulls=0;before=admits;rel=releases;
- unsigned st=stripes,dr=drops,inv=invalidations;nb=notes;deadline=report_clock_ms()+500;
+ unsigned st=stripes,dr=drops,inv=invalidations,lg=logs;nb=notes;deadline=report_clock_ms()+500;
  /* Only node 3 is dead: the object placed again on node 4 is a full stripe. */
  assert(PUT(&t)==EFS_OK);
- assert(aways==1&&admits==before+2&&releases==rel+1&&drops==dr+1&&nodes[2]==4&&t.nodes[2]==4);
- assert(stripes==st+1&&notes==nb+1);
+ assert(aways==1&&admits==before+2&&releases==rel+1&&drops==dr&&nodes[2]==4&&t.nodes[2]==4);
+ /* Placed again: never recorded or announced as degraded. */
+ assert(stripes==st+1&&notes==nb&&logs==lg);
  /* The missing fragment was sent once more on a fresh connection first. */
  assert(calls==3&&invalidations==inv+1);
  nodes[2]=3;calls=0;spare_left=0;aways=0;before=admits;rel=releases;st=stripes;dr=drops;inv=invalidations;
  deadline=report_clock_ms()+500;
  assert(PUT(&t)==EFS_OK);
- assert(aways==1&&admits==before+1&&releases==rel&&drops==dr&&nodes[2]==3&&stripes==st+1&&notes==nb+2);
+ assert(aways==1&&admits==before+1&&releases==rel&&drops==dr&&nodes[2]==3&&stripes==st+1&&notes==nb+1&&logs==lg+1);
  assert(calls==2&&invalidations==inv+1);
  degrade=0;degrade_hard=0;stripe_rc=EFS_ERR_BUSY;calls=0;rel=releases;dr=drops;
  deadline=report_clock_ms()+500;
