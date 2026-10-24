@@ -191,5 +191,5 @@ try:
     assert not (tmp / 'live').exists()
 finally:
     shutil.rmtree(tmp)
-print('qualify driver: stub PASS/FAIL/NOTRUN/deadline/liar verdicts, result fields, SHA256SUMS '
+print('qualify driver: stub pass/fail/not-run/deadline/liar verdicts, result fields, SHA256SUMS '
       'and tamper control, summary and F3 row, refusals, --plan commands PASS')
