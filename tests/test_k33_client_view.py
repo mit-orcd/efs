@@ -221,7 +221,7 @@ try:
 
     # 3. Node 4 joins while the mounts serve and write.
     c.start(4, join=2)
-    c.wait_log(4, r'raft-host: formed: 4 members')
+    c.wait_log(4, r'raft-host: up raft_id=3 n=4 formed')  # K33 inc2 joiner line
     for m in (a, b):
         m.wait_log(r'membership view: revision 1 -> 2 from node \d+: added member 4 at '
                    rf'{HOST}:{c.ports[4]} \(4 members, no remount\)')
@@ -235,7 +235,7 @@ try:
 
     # 4. Node 5 joins.
     c.start(5, join=3)
-    c.wait_log(5, r'raft-host: formed: 5 members')
+    c.wait_log(5, r'raft-host: up raft_id=4 n=5 formed')  # K33 inc2 joiner line
     for m in (a, b):
         m.wait_log(r'membership view: revision 2 -> 3 from node \d+: added member 5 at '
                    rf'{HOST}:{c.ports[5]} \(5 members, no remount\)')
