@@ -192,6 +192,12 @@ try:
         assert (v[0][0] == 1) == (nid in (2, 3)) and (v[2][0] == 1) == (nid in (2, 3, 4)), (i, v)
     rc, out = mgmt('status', c.ep(3))
     assert rc == 0 and 'Cluster nodes (8)' in out, out
+    # A9/D42: elections alone place the leaders (no balance pump); status
+    # reports where they are. Each group's leader is one of its voters.
+    led = c.leader_placement(3)
+    assert sorted(led) == [0, 2] and led[0] in (1, 2, 3) and led[2] in (2, 3, 4), led
+    print('leader placement at 8 members: group 0 -> node %d, group 2 -> node %d (%s)'
+          % (led[0], led[2], 'colocated' if led[0] == led[2] else 'spread'))
 
     # 6. A wiped store at a member's endpoint is refused; restarts keep the state.
     c.stop(5)

@@ -241,8 +241,7 @@ class Cluster:
             cmd = [self.rel / 'efsd', '--join', self.addr(1), '--listen', self.addr(i), d]
         else:
             cmd = [self.rel / 'efsd', self.addr(i), d]
-        cmd += ['--quota', self.a.quota, '--discovery-port', '0',
-                '--direct-io' if self.a.direct else '--no-direct-io']
+        cmd += ['--quota', self.a.quota, '--discovery-port', '0']
         log = open(self.root / 'logs' / f'efsd-n{i}.log', 'ab')
         self.procs[i] = subprocess.Popen([str(c) for c in cmd], env=self.env, stdout=log, stderr=log)
         for _ in range(120):
@@ -385,7 +384,6 @@ def main():
     p.add_argument('--fsync-every', type=int, default=0, help='also fsync every N records per writer')
     p.add_argument('--report-bound', type=float, default=30.0)
     p.add_argument('--quota', default='8G')
-    p.add_argument('--direct', action='store_true')
     p.add_argument('--failover', choices=('none', 'step-down', 'kill'), default='none')
     p.add_argument('--interval', type=float, default=20.0)
     p.add_argument('--first-event', type=float, default=10.0)

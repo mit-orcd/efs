@@ -38,9 +38,12 @@ assert 'undeclared_refuse' not in handler, 'the old three-message refusal is gon
 # server are the only efs_connect_tcp callers left outside the helper.
 mgmt = (root/'src/mgmt/efs_mgmt.c').read_text()
 assert mgmt.count('efs_connect_tcp(') == 1, 'efs-mgmt connects through efs_connect_declared'
-probe = mgmt[mgmt.index('static int probe_node_up('):]
+probe = mgmt[mgmt.index('static int probe_node_rpc('):]
 probe = probe[:probe.index('\n}\n')]
 assert 'efs_connect_tcp(' in probe and 'efs_fd_declare(pfd)' in probe, 'status probe declares under its own bound'
+for user in ('static int probe_node_up(', 'static int raft_status_fetch('):
+    body = mgmt[mgmt.index(user):]
+    assert 'probe_node_rpc(' in body[:body.index('\n}\n')], (user, 'probes share the bounded opener')
 for f in sorted(glob.glob(str(root/'tests/live/*.c'))) + [str(root/'tests/measure/metadata_route_smoke.c')]:
     assert 'efs_connect_tcp(' not in Path(f).read_text(), (f, 'live programs connect through efs_connect_declared')
 node = (root/'src/client/node_cache.c').read_text()

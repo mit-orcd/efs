@@ -182,7 +182,7 @@ try:
     assert '--suite core' in joined['posix-core']
     assert 'posix_2client.py --local /mnt/a /mnt/b' in joined['posix-2client']
     assert '--port 18710' in joined['k13-tickets'] and '--rel /src' in joined['append-failover']
-    assert '--direct' in joined['append-failover'] and '--mode direct' in joined['gc-reclamation']
+    assert '--direct' not in joined['append-failover'] and '--mode direct' in joined['gc-reclamation']
     assert "K14_PHASES='1 2 3 7' scripts/k14_atomic_cluster.sh run /src" in joined['k14-torn-read']
     assert '/src/efs-mgmt version 10.0.0.2:17432' in joined['identity']
     assert joined['e2-client-stop'] == '' and joined['posix-durability'] == ''

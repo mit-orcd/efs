@@ -382,6 +382,15 @@ alternatives reduces both product complexity and the supported test matrix.
   not redundant (with it off, 12 of 51 negative cases returned wrong bytes
   on chunk GET, reconstruction, retries and spans); the re-hash is built in,
   the variable is removed and refused at startup.
+  **Oct 24, A7 done as decided in D42 ([evidence](a7-removals-20261024.md);
+  branch `claude/devel-a7-removals-d55c03`, not merged):** 12 variables and
+  the 3 efsd flags removed with their code paths and refused at startup;
+  fragment I/O is `O_DIRECT` only and a root without it is refused; Raft
+  batching, KV bloom, disk query backend, 16-chunk prefetch and unmount
+  revoke are the one behavior; `.efs` follows the cluster commands-policy;
+  expiry is compiled out (`EFS_BUILD_EXPIRY`); `EFS_RDMA_FIRST` is
+  `EFS_RDMA_TRACE`. A/B selectors 15 → 1: `EFS_READ_VERIFY` waits on its
+  GET-path audit. Live qualification of the retained paths stays open (A11).
 - [ ] **A8 — Keep only justified configuration.** Retain deployment inputs such as
   nodes, disks, addresses and quotas. Prefer built-in or automatically derived
   internal batching/concurrency/maintenance settings; justify any remaining
@@ -404,11 +413,20 @@ alternatives reduces both product complexity and the supported test matrix.
   present common-voter/co-located-leader preference on as a substitute for that
   decision. Preserve quorum, safe transfer and catch-up; expose actual leadership
   diagnostically. This does not claim the later many-group design is complete.
+  **Oct 24 (D42, [A7 evidence](a7-removals-20261024.md#metadata-leadership-a9-part)):
+  the variable and the co-location pump are removed; elections alone place
+  leaders; `efs-mgmt status` reports actual placement per group and node
+  (`raft-status` per node). Placement is not yet measured under A11 load.**
 - [ ] **A10 — Operational consistency.** Update launch/deployment scripts, portal
   settings, help and generated settings listings with each removal. Stale launch
   configurations must be detected by validation rather than silently presented
   as effective settings. No new deployment should require a hidden toggle to
   obtain the qualified behavior.
+  **Oct 24 (A7): help, user docs and the A6 inventory updated; every removed
+  setting stops efsd/efs-fuse with a clear message. Launch, env, portal and
+  gateway changes outside the repository are listed with file and line in the
+  [A7 evidence](a7-removals-20261024.md#for-the-parent-changes-outside-this-repository-a10);
+  not yet applied.**
 - [ ] **A11 — Reduced qualification matrix.** Publish the remaining supported
   configuration dimensions and rationale. Qualify the selected paths under the
   topology/profile gates below, including automatic-policy boundaries, load

@@ -36,7 +36,7 @@ def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
     assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,5),('declaration refused',reply)
 
-cluster = ticket_put.Cluster(a.source, work, members=4, base=a.port, extra=['--quota', '1G', '--no-direct-io'], env=os.environ)
+cluster = ticket_put.Cluster(a.source, work, members=4, base=a.port, extra=['--quota', '1G'], env=os.environ)
 
 def put_reply(node, body):
     with socket.create_connection(('127.0.0.1', cluster.base + node), timeout=5) as sock:

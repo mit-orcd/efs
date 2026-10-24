@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Bounded actual GET smoke: direct reader accepts both stored record tails
-(K16: the 128-byte fragment record, or the 4 KiB direct page holding it).
+"""Bounded actual GET smoke: the O_DIRECT reader (D42) serves only this
+build's layout, the 4 KiB tail page holding the fragment record (K16); the
+removed buffered layout (a bare 128-byte record) and torn tails are refused.
 
 Usage: python3 tests/live/fragment_tail_smoke.py [BINARY_DIRECTORY]
 Starts a temporary formed three-member TCP/direct files cluster; never
@@ -38,8 +39,8 @@ def declare(sock):
     assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,5),('declaration refused',reply)
 
 with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
-    env = dict(os.environ, EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0', EFS_EXPIRY='0')
-    cluster = ticket_put.Cluster(source, work, extra=['--quota', '16M', '--direct-io'], env=env)
+    env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_')}
+    cluster = ticket_put.Cluster(source, work, extra=['--quota', '16M'], env=env)
 
     def rpc(node, kind, body):
         with socket.create_connection(('127.0.0.1', cluster.base+node), 5) as sock:
@@ -72,13 +73,13 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
             print(label, 'PASS', flush=True)
 
         check('direct padded tail', True)
-        for length in (128, 4096):
+        for length, accepted in ((4096, True), (128, False)):
             with fragment.open('r+b') as f:
                 f.write(original[:65536+length])
                 f.truncate(65536+length)
                 f.flush()
                 os.fsync(f.fileno())
-            check('stored tail length %d' % length, True)
+            check('stored tail length %d %s' % (length, 'served' if accepted else 'refused'), accepted)
         for length in (127, 0):
             with fragment.open('r+b') as f:
                 f.truncate(65536+length)
@@ -86,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
                 os.fsync(f.fileno())
             check('incomplete tail length %d refused' % length, False)
         for corruption in ('payload', 'record'):
-            data = bytearray(original[:65536+128])
+            data = bytearray(original)
             data[0 if corruption == 'payload' else 65536] ^= 1
             with fragment.open('wb') as f:
                 f.write(data)

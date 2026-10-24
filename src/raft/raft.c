@@ -21,8 +21,6 @@ struct efs_raft {
     uint64_t recv_stable_commit;
     efs_raft_recv_persist_fn recv_persist;
     int storage_failed; /* failed deferred persistence requires restart */
-    int batch_noop;
-    int batch_overlap;
     int preserve_ack_window;
     int role;
     int leader;
@@ -2268,8 +2266,6 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->send = cfg->send;
     r->send_ready = cfg->send_ready;
     r->recv_persist = cfg->recv_persist;
-    r->batch_noop = cfg->batch_noop;
-    r->batch_overlap = cfg->batch_overlap;
     r->preserve_ack_window = cfg->preserve_ack_window;
     r->net = cfg->net;
     r->apply = cfg->apply;
@@ -2466,14 +2462,20 @@ static int recv_can_batch(struct efs_raft *r, const struct efs_raft_msg *m,
     return 1;
 }
 
-/* Only extend an existing hold with a request that cannot change its log or
+/* Follower receive batching of no-op and overlapping AppendEntries is the
+ * one behavior (D42; prefix/term/suffix/admission/byte/config validated
+ * below): without it a follower synced every overlapping AE separately
+ * (Oct 16 Intel files engine: 1.1 entries per sync, 12-16 ms pump drains,
+ * ~25 ms lease edges; with it 3.7-3.9 ms).
+ *
+ * Only extend an existing hold with a request that cannot change its log or
  * hard state. Validate every duplicate term before suppressing the boundary;
  * a conflict, new suffix, fresh read or changed leader/term keeps the normal
  * path. Its ACK is queued behind the same durable barrier as the data. */
 static int recv_batch_noop(struct efs_raft *r, const struct efs_raft_msg *m)
 {
     uint64_t tail, term, pt;
-    if (!r->batch_noop || !r->recv_replies ||
+    if (!r->recv_replies ||
         r->role != EFS_RAFT_FOLLOWER || m->type != EFS_RAFT_MSG_AE_REQ ||
         m->group != r->group || m->to != r->id || m->from != r->leader ||
         m->term != r->current_term || m->last_log_index ||
@@ -2492,9 +2494,9 @@ static int recv_batch_noop(struct efs_raft *r, const struct efs_raft_msg *m)
     return 1;
 }
 
-/* Read-only shape of a behind-tail request. Only diagnostics call this until
- * overlap eligibility has its own gates. Index arithmetic and every overlapping
- * term must be proved; a new suffix is distinct from a conflicting prefix. */
+/* Read-only shape of a behind-tail request; recv_overlap_batch admits only
+ * a proven new suffix. Index arithmetic and every overlapping term must be
+ * proved; a new suffix is distinct from a conflicting prefix. */
 static enum efs_batch_counter recv_overlap_shape(struct efs_raft *r,
                                                 const struct efs_raft_msg *m)
 {
@@ -2542,7 +2544,7 @@ static int recv_overlap_batch(struct efs_raft *r,const struct efs_raft_msg *m,
                                uint32_t *novel)
 {
     uint64_t tail,term;
-    if (!r->batch_overlap || shape!=BO_OVERLAP_SUFFIX ||
+    if (shape!=BO_OVERLAP_SUFFIX ||
         m->from<0 || m->from>=EFS_RAFT_MAX_PEERS ||
         (m->boot_id?m->boot_id:1)<r->peer_boot[m->from]) return 0;
     if (r->recv_replies && m->last_log_index) {
@@ -2631,7 +2633,7 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
         bytes = 0;
         reject = BO_ELIGIBLE;
         eligible = noop || recv_can_batch(r, &msgs[i], &bytes, &reject);
-        if (!eligible && reject==BO_TAIL_BEHIND && (BO_ON() || r->batch_overlap)) {
+        if (!eligible && reject==BO_TAIL_BEHIND) {
             shape=recv_overlap_shape(r,&msgs[i]);
             if (BO_ON()) recv_overlap_observe(r,&msgs[i],shape);
             eligible=overlap=recv_overlap_batch(r,&msgs[i],shape,&bytes,&novel);
@@ -2648,7 +2650,7 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
             total = 0;
             eligible = recv_can_batch(r, &msgs[i], &bytes, &reject);
             overlap=0;
-            if (!eligible && reject==BO_TAIL_BEHIND && r->batch_overlap)
+            if (!eligible && reject==BO_TAIL_BEHIND)
                 eligible=overlap=recv_overlap_batch(r,&msgs[i],recv_overlap_shape(r,&msgs[i]),&bytes,&novel);
         }
         if (eligible && !r->recv_replies) {

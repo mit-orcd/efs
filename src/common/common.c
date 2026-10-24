@@ -134,7 +134,38 @@ static const struct { const char *name, *why; } removed_env[] = {
     { "EFS_REPORT_RECEIPTS", "A6): the REPORT receipt table holds 4096 entries" },
     { "EFS_READ_VERIFY", "D42 GET-path audit): the client always re-hashes fragment "
       "payloads on GET receive" },
+    /* A7 (D42): one supported behavior per selector. */
+    { "EFS_METADATA_BALANCE", "D42): elections alone place metadata leaders; "
+      "efs-mgmt status reports where they are" },
+    { "EFS_RAFT_BATCH_NOOP", "D42): follower no-op batching is always on" },
+    { "EFS_RAFT_BATCH_OVERLAP", "D42): follower overlap batching is always on" },
+    { "EFS_QUERY_BACKEND", "D42): the query catalog is on disk only" },
+    { "EFS_READ_PREFETCH", "D42): reads prefetch 16 chunks" },
+    { "EFS_FUSE_SPLICE_READ", "D42): FUSE splice reads are off" },
+    { "EFS_KV_BLOOM", "D42): every KV segment has a bloom filter" },
+    { "EFS_UNMOUNT_REVOKE", "D42): a clean unmount always settles, then revokes its session" },
+    { "EFS_COMMANDS", "D42): .efs follows the cluster commands-policy (efs-mgmt commands-policy)" },
+    { "EFS_COMMANDS_SERVER", "D42): query workers always run; the cluster commands-policy "
+      "is the only .efs authority" },
+    { "EFS_EXPIRY", "D42): expiry is not in the alpha product" },
+    { "EFS_FUSE_EXPORT", "D42): NFS re-export of a mount is not supported" },
+    { "EFS_RDMA_FIRST", "D42): renamed EFS_RDMA_TRACE=1, diagnostics only" },
 };
+
+/* D42: EFS_RDMA_TRACE=1 prints RDMA and connection diagnostics on stderr.
+ * Off by default; it changes no protocol, transport or timing decision
+ * (tests/test_rdma_trace.py checks every reader). Read once. */
+int efs_rdma_trace_on(void)
+{
+    static int on = -1;
+    int v = __atomic_load_n(&on, __ATOMIC_RELAXED);
+    if (v < 0) {
+        const char *e = getenv("EFS_RDMA_TRACE");
+        v = e && !strcmp(e, "1");
+        __atomic_store_n(&on, v, __ATOMIC_RELAXED);
+    }
+    return v;
+}
 
 unsigned efs_env_removed_refuse(const char *prog)
 {

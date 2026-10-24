@@ -230,8 +230,6 @@ struct host_group {
      * highest round a reader waits for; the pump (and the read-ack path)
      * starts it under h->mu, so readers never queue on h->mu. */
     uint64_t ri_begun, ri_request;
-    uint64_t balance_term, balance_since_us, balance_attempt_us;
-    uint32_t balance_voters;
     uint8_t group;
     uint8_t hosted;
     uint32_t voters;
@@ -371,7 +369,6 @@ struct host_waiter {
 struct efs_raft_host {
     struct efsd_server *s;
     int raft_id;
-    int balance_enabled; /* Opt-in until W66 distribution/failover gates pass. */
     /* W153/K33: member count. Before formation EFS_FORMATION_MIN (group 0
      * on nodes 1..3 is all formation needs); from formation on the count of
      * the newest committed revision this node learned. Grows only, under
@@ -434,7 +431,8 @@ struct efs_raft_host {
     int started;
     pthread_rwlock_t query_lock;
     pthread_t query_tid;
-    int query_running,query_started,query_error,query_enabled;
+    int query_running,query_started,query_error;
+#if EFS_BUILD_EXPIRY
     int expiry_enabled;
     int expiry_peer_skip; /* last failed coordinator; protected by mu */
     struct efs_expiry_clock expiry_clock;
@@ -444,6 +442,7 @@ struct efs_raft_host {
     uint64_t expiry_passes,expiry_last_pass_us,expiry_last_delete_us;
     uint64_t expiry_due[2],expiry_sample_us[2];
     uint32_t expiry_capped[2],expiry_sampled_mask;
+#endif
     uint64_t query_deadline_ms;
     uint32_t query_cancel_checks; /* Owned by the query publisher thread. */
     struct efs_server_query_view query_view;
@@ -660,8 +659,10 @@ static void unpack_opid_trailer(const uint8_t *p, struct efs_opid_req *q)
 }
 
 static uint64_t now_ns(void);
+#if EFS_BUILD_EXPIRY
 static int host_expiry_renew_txn(struct efs_raft_host *,const uint8_t *,int *);
 static int host_expiry_enable_txn(struct efs_raft_host *,const uint8_t *,int *);
+#endif
 static void host_stop_senders(struct efs_raft_host *h);
 static void host_rec_mark(struct efs_raft_host *h, uint32_t shard);
 
@@ -3880,6 +3881,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         struct efs_opid_req q;unpack_opid_trailer(cmd+5,&q);
         return efs_meta_apply_create_refusal(h->kv,rd32be(cmd+1),&q);
     }
+#if EFS_BUILD_EXPIRY
     if(cmd[0]==EFS_MD_CMD_EXPIRY_POLICY) {
         if(clen!=46 || (cmd[45]&~3u))return EFS_ERR_UNSUPPORTED;
         struct efs_expiry_policy p={.ttl_ns=rd64be(cmd+29),.max_ns=rd64be(cmd+37),
@@ -3893,6 +3895,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return efs_meta_apply_expiry_renew(h->kv,rd64be(cmd+1),rd64be(cmd+9),
               rd32be(cmd+17),rd64be(cmd+21),rd64be(cmd+29),rd64be(cmd+37));
     }
+#endif
 
     if(cmd[0]==EFS_MD_CMD_APPEND_CATCHUP)
         return apply_append_catchup_cmd(h,cmd,clen,group);
@@ -7492,18 +7495,6 @@ static void applied_path(struct efs_raft_host *h, uint8_t group,
  * (10..1000) overrides it. */
 #define HOST_APPLIED_PERSIST_US 100000ull
 
-/* Follower receive batching of no-op and overlapping AppendEntries
- * (prefix/term/suffix/admission/byte/config validated in raft.c). On by
- * default for both engines: without it a follower synced every overlapping
- * AE separately (Oct 16 Intel files engine: 1.1 entries per sync, 12-16 ms
- * pump drains, ~25 ms lease edges; with it 3.7-3.9 ms). "0" disables. */
-static int host_batch_flag(const char *mode, int *out)
-{
-    if (!mode) { *out = 1; return EFS_OK; }
-    if (strcmp(mode, "0") && strcmp(mode, "1")) return EFS_ERR_INVAL;
-    *out = !strcmp(mode, "1");
-    return EFS_OK;
-}
 #define HOST_APPLIED_MAX_TAIL 1024ull
 
 /* Checkpoints are replay hints, never ACK watermarks. Keep the historical
@@ -7849,62 +7840,6 @@ static int host_checkpoint_retire(struct efs_raft_host *h, const uint64_t *idx,
                                    uint64_t now, int kv_rc)
 {
     return host_save_applied(h,idx,now,0,kv_rc);
-}
-
-/* Namespace reads can route to leaders hosting both metadata
- * groups. Prefer that committed-membership intersection for placement too;
- * choosing a single-group leader forces an extra forwarding hop per lookup.
- * This is only an opt-in placement hint under h->mu, never read authority.
- * Unknown membership postpones handoff; disjoint groups keep their ordinary
- * actual-voter preference. This placement is independent of the data engine. */
-static int host_balanced_voter(struct efs_raft_host *h,uint32_t voters,unsigned ordinal)
-{
-    if(!h->s)return efs_raft_preferred_voter(voters,ordinal);
-    uint32_t common=voters;
-    for(unsigned i=0;i<HOST_NGROUPS;i++){
-        struct host_group *g=group_slot(h,(uint8_t)(i<<1));
-        uint32_t mask=g?(g->r?efs_raft_voters(g->r):g->voters):0;
-        if(!mask)return -1;
-        common&=mask;
-    }
-    /* Colocate related fresh proofs on one committed dual-group voter.
-     * Disjoint groups still require their independent placement policy. */
-    return efs_raft_preferred_voter(common?common:voters,common?HOST_NGROUPS-1:ordinal);
-}
-
-/* Shared pump, bounded state per hosted group; no extra timer/thread/lease.
- * Stable placement is a preference. Loss/lag/pressure never weakens quorum. */
-static void host_balance_leaders(struct efs_raft_host *h, uint64_t now)
-{
-    if (!h->balance_enabled) return;
-    for (int i = 0; i < HOST_NGROUPS; i++) {
-        struct host_group *g = &h->g[i];
-        uint64_t term;
-        uint32_t voters;
-        int target, rc;
-        if (!g->r || g->kv_incomplete || efs_raft_role(g->r) != EFS_RAFT_LEADER)
-            continue;
-        term = efs_raft_term(g->r); voters = efs_raft_voters(g->r);
-        if (g->balance_voters != voters) {
-            g->balance_voters = voters; g->balance_since_us = now;
-            g->balance_attempt_us = 0;
-        }
-        if (g->balance_term != term) {
-            g->balance_term = term; g->balance_since_us = now;
-        }
-        /* Let new leadership/configuration settle; avoid repeated handoff
-         * churn when a preferred peer cannot campaign or a trigger is lost. */
-        if (now - g->balance_since_us < 2000000u ||
-            (g->balance_attempt_us && now - g->balance_attempt_us < 30000000u))
-            continue;
-        target = host_balanced_voter(h,voters,(unsigned)i);
-        if (target < 0 || target == h->raft_id) continue;
-        rc = efs_raft_transfer(g->r, target);
-        if (rc == EFS_ERR_BUSY) continue; /* Target not durably caught up yet. */
-        g->balance_attempt_us = now;
-        fprintf(stderr, "raft-host: balance group=%u target=%d term=%llu rc=%d\n",
-                g->group, target+1, (unsigned long long)term, rc);
-    }
 }
 
 /* One in-flight checkpoint, no growing queue. The pump already flushed
@@ -8349,7 +8284,6 @@ static void *host_pump(void *arg)
          * otherwise a new leader with one surviving follower cannot commit
          * its no-op, and fresh reads block the first client proposal forever. */
         host_durable_synced(h);
-        host_balance_leaders(h, now_us_());
         if (obs) {
             t_tick = now_us_() - c0;
             c0 = now_us_();
@@ -8579,9 +8513,6 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
      * either engine. Keeping the window avoids redundant durable rewrites;
      * ordinary partial progress, negative replies and retry age are unchanged. */
     cfg.preserve_ack_window = 1;
-    if (host_batch_flag(getenv("EFS_RAFT_BATCH_NOOP"), &cfg.batch_noop) != EFS_OK ||
-        host_batch_flag(getenv("EFS_RAFT_BATCH_OVERLAP"), &cfg.batch_overlap) != EFS_OK)
-        return EFS_ERR_INVAL;
     cfg.net = h;
     cfg.apply = host_apply;
     cfg.app = &h->g[gi]; /* per-group: host_apply records into g->arc_* */
@@ -10872,6 +10803,7 @@ static unsigned host_gc_backlog_idle(unsigned configured, int capped,
 }
 
 
+#if EFS_BUILD_EXPIRY
 /* Progress is confirmed by the expiry transaction reply, including remote
  * coordination. Keep the same per-group work budget and yield to reads/writes;
  * idle, clock-paused and blocked passes retain the ordinary one-second backoff. */
@@ -10986,6 +10918,7 @@ static int host_gc_expiry_groups(struct efs_raft_host *h)
     }
     return progress;
 }
+#endif
 
 /* D25 protocol §4.1: drive TRUNC_PENDING inodes of this anchor toward an
  * empty history. Per inode: sweep each active lane not yet done for the
@@ -11753,7 +11686,9 @@ static void *host_gc_thread(void *arg)
         uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED) +
                                   host_reap_completed;
         int backlog_capped = 0;
+#if EFS_BUILD_EXPIRY
         int expiry_progress=0;
+#endif
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -11796,7 +11731,9 @@ static void *host_gc_thread(void *arg)
             ta = now_us_();
             __atomic_store_n(&h->s->gc_group, h->g[g].group, __ATOMIC_RELAXED);
             __atomic_store_n(&h->s->gc_stage, 3, __ATOMIC_RELAXED);
+#if EFS_BUILD_EXPIRY
             expiry_progress |= host_gc_expiry_pass(h,h->g[g].group,anchor);
+#endif
             if (maintenance) {
                 host_gc_close_step_pass(h, h->g[g].group, anchor);
                 host_gc_close_pass(h, h->g[g].group, anchor);
@@ -11883,7 +11820,9 @@ static void *host_gc_thread(void *arg)
         uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED) +
                                  host_reap_completed;
         unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
+#if EFS_BUILD_EXPIRY
         idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress);
+#endif
         /* W124: capped reclaim reruns after a short idle. When foreground
          * metadata is waiting (and capacity is not pressed), idle at least as
          * long as this pass took, so reclaim holds at most half the Raft time. */
@@ -11900,16 +11839,20 @@ static void *host_gc_thread(void *arg)
          * Their time counts toward the yield; snapshot/shutdown checks remain
          * at <=20ms sleep intervals (work itself keeps its existing budgets). */
         uint64_t idle_end = efs_iostats_now_us() + (uint64_t)idle_ms * 1000;
+#if EFS_BUILD_EXPIRY
         uint64_t expiry_at = efs_iostats_now_us() +
                             20000;
+#endif
         while (__atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && efs_iostats_now_us() < idle_end) {
             host_snap_export_pass(h);
             host_snap_import_pass(h);
+#if EFS_BUILD_EXPIRY
             if (expiry_progress && efs_iostats_now_us() >= expiry_at) {
                 expiry_progress = host_gc_expiry_groups(h);
                 expiry_at = efs_iostats_now_us() +
                             20000;
             }
+#endif
             uint64_t now = efs_iostats_now_us();
             if (now >= idle_end) break;
             uint64_t sleep_us = idle_end - now;
@@ -12198,22 +12141,18 @@ static int host_query_policy_operation(uint8_t operation)
 static void *host_query_thread(void *ctx)
 {
     struct efs_raft_host *h=ctx;
+    /* Named so its idle cost can be measured per thread (D42). */
+    (void)pthread_setname_np(pthread_self(),"efsd-query");
     uint64_t published[4096]={0},current[4096],first_dirty=0,last_attempt=0;
     int failed=0,last_error=0,cut_retry=0;uint64_t last_error_log=0,work_completed=0;
     struct efs_query_build_failure build_failure={0};
     uint64_t catalog_bytes=HOST_QUERY_BYTES;
-    const char *backend=getenv("EFS_QUERY_BACKEND");
-    int disk_backend=!backend || strcmp(backend,"ram");
-    if(backend && strcmp(backend,"disk") && strcmp(backend,"ram")) {
-        /* A mistyped backend must not silently select another one. */
-        fprintf(stderr,"query-config: invalid EFS_QUERY_BACKEND=%s (use disk or ram); query publisher unavailable\n",backend);
-        pthread_rwlock_wrlock(&h->query_lock);h->query_error=EFS_ERR_INVAL;
-        pthread_rwlock_unlock(&h->query_lock);return NULL;
-    }
+    /* The disk catalog (bounded, restart catch-up) is the only backend
+     * (D42); the in-memory builder is a test oracle, never served. */
     char query_root[sizeof(h->mdraft)+32];
     snprintf(query_root,sizeof(query_root),"%s/query-cache",h->mdraft);
     int disk_lease=-1;
-    if(disk_backend) {
+    {
         int recovery=efs_query_catalog_disk_recover(query_root,&disk_lease);
         if(recovery) {
             fprintf(stderr,"query-recovery: rc=%d; disk publisher unavailable\n",recovery);
@@ -12297,7 +12236,7 @@ static void *host_query_thread(void *ctx)
         uint64_t watermark[4]={view.applied[0],view.applied[1],view.terms[0],view.terms[1]};
         if(!rc && !host_query_cancel(h)) {
             refresh_stage="build";
-            if(disk_backend) {
+            {
                 int restored=EFS_ERR_NOT_FOUND;
                 uint64_t restore_start=work_enabled && initial?query_mono_ms():0;
                 if(initial)restored=efs_query_catalog_restore_disk(query_root,source,watermark,catalog_bytes,&candidate);
@@ -12330,9 +12269,7 @@ static void *host_query_thread(void *ctx)
                     if(work_enabled)work.checkpoint_ms=query_mono_ms()-checkpoint_start; }
                 /* The long disk build does not extend any request budget. */
                 h->query_deadline_ms=query_mono_ms()+HOST_QUERY_BUILD_MS;
-            } else { uint64_t build_start=work_enabled?query_mono_ms():0;
-                rc=efs_query_catalog_build(source,h->query_view.catalog,catalog_bytes,host_query_cancel,h,&candidate);
-                if(work_enabled)work.build_ms=query_mono_ms()-build_start; }
+            }
         } else if(!rc)rc=EFS_ERR_BUSY;
         efs_kv_lsm_snapshot_release(source);
         if(rc && candidate){efs_query_catalog_free(candidate);candidate=NULL;}
@@ -12400,7 +12337,6 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     struct efs_raft_host *h=g_host;
     if (primary_id) *primary_id=0;
     if (!h || !consume) return EFS_ERR_INVAL;
-    if (!h->query_enabled) return EFS_ERR_NOT_FOUND;
     uint8_t both[2];host_need_both(both);
     pthread_mutex_lock(&h->mu);
     int capable=host_query_capable(h);
@@ -12781,14 +12717,14 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
     if (!rc) r->text_len=q->len;
     return rc;
 }
-/* Startup capability is a local ceiling. Durable export policy is resolved
- * through current authority and also gates raw query RPCs and continuations. */
+/* The durable, versioned export commands-policy, resolved through current
+ * authority, is the only authority (D42); it also gates raw query RPCs and
+ * continuations. */
 int server_raft_host_query_features_checked(uint32_t *mask)
 {
     if (!mask) return EFS_ERR_INVAL;
     *mask=0;
     if (!g_host) return EFS_ERR_BUSY;
-    if (!g_host->query_enabled) return EFS_OK; /* Authoritative local ceiling. */
     if (!g_host->query_started) return EFS_ERR_BUSY;
     return host_query_policy_authority(mask);
 }
@@ -12796,7 +12732,7 @@ int server_raft_host_query_features_checked(uint32_t *mask)
 int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,void **out,uint32_t *len)
 {
     if (out) *out=NULL;
-    if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
+    if (!g_host) return EFS_ERR_NOT_FOUND;
     if (!req || !out || !len || req->version!=EFS_QUERY_VERSION || !req->root ||
         req->operation!=EFS_QUERY_STATS || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
         !req->max_output || req->max_output>EFS_QUERY_MAX_OUTPUT ||
@@ -12842,7 +12778,7 @@ static int query_page_capture(void *ctx,const struct efs_server_query_view *view
 int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void **out,uint32_t *len)
 {
     if (out) *out=NULL;
-    if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
+    if (!g_host) return EFS_ERR_NOT_FOUND;
     if (!req || !out || !len || req->base.version!=EFS_QUERY_PAGE_VERSION ||
         !req->base.root || req->base.operation>EFS_QUERY_LS ||
         req->base.ngroups>EFS_QUERY_GROUPS || req->base.match>EFS_NAME_CONTAINS || req->limit>10000 ||
@@ -12923,22 +12859,11 @@ int server_raft_host_start(struct efsd_server *s)
      * starts — there is no env gate. */
     if (!s || g_host)
         return EFS_ERR_INVAL;
-    const char *commands=getenv("EFS_COMMANDS_SERVER");
-    if (commands && strcmp(commands,"0") && strcmp(commands,"1")) {
-        fprintf(stderr,"raft-host: EFS_COMMANDS_SERVER must be 0 or 1\n");
-        return EFS_ERR_INVAL;
-    }
     unsigned gc_backlog_idle_ms;
     if (host_gc_backlog_config(getenv("EFS_GC_BACKLOG_IDLE_MS"), &gc_backlog_idle_ms) != EFS_OK) {
         fprintf(stderr, "raft-host: EFS_GC_BACKLOG_IDLE_MS must be 20..1000\n");
         return EFS_ERR_INVAL;
     }
-    int query_enabled=!commands || !strcmp(commands,"1");
-    const char *expiry=getenv("EFS_EXPIRY");
-    if(expiry && strcmp(expiry,"0") && strcmp(expiry,"1")) {
-        fprintf(stderr,"raft-host: EFS_EXPIRY must be 0 or 1\n");return EFS_ERR_INVAL;
-    }
-    int expiry_enabled=expiry && !strcmp(expiry,"1");
     uint64_t applied_interval;
     if (host_applied_interval(getenv("EFS_RAFT_APPLIED_INTERVAL_MS"),&applied_interval)!=EFS_OK) {
         fprintf(stderr,"raft-host: EFS_RAFT_APPLIED_INTERVAL_MS must be 10..1000\n");
@@ -12956,20 +12881,16 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_INVAL;
     }
 
-    const char *balance = getenv("EFS_METADATA_BALANCE");
-    if (balance && strcmp(balance,"0") && strcmp(balance,"1")) {
-        fprintf(stderr,"raft-host: EFS_METADATA_BALANCE must be 0 or 1\n");
-        return EFS_ERR_INVAL;
-    }
     h = calloc(1, sizeof(*h));
     if (!h)
         return EFS_ERR_NOMEM;
     h->applied_persist_us=applied_interval;
     h->gc_backlog_idle_ms = gc_backlog_idle_ms;
-    h->balance_enabled = balance && !strcmp(balance,"1");
     h->s = s;
-    h->query_enabled=query_enabled;
-    h->expiry_enabled=expiry_enabled;h->expiry_peer_skip=-1;
+#if EFS_BUILD_EXPIRY
+    /* A development build with expiry runs it; the alpha product has none. */
+    h->expiry_enabled=1;h->expiry_peer_skip=-1;
+#endif
     h->raft_id = (int)s->id - 1;
     h->n = n;
     h->formed = formed;
@@ -13043,10 +12964,6 @@ int server_raft_host_start(struct efsd_server *s)
         snprintf(logdir, sizeof(logdir), "%s/log", dir);
         memset(&kcfg, 0, sizeof(kcfg));
         kcfg.sync_mode = EFS_KV_LSM_SYNC;
-        {
-            const char *bloom = getenv("EFS_KV_BLOOM");
-            efs_kv_lsm_bloom_enable(!(bloom && !strcmp(bloom, "0")));
-        }
         h->kv = efs_kv_lsm_open(kvdir, &kcfg);
         if (!h->kv) {
             fprintf(stderr, "raft-host: kv_lsm_open %s failed\n", kvdir);
@@ -13079,7 +12996,10 @@ int server_raft_host_start(struct efsd_server *s)
     }
     h->tx_running = 1;
     h->running = 1;
-    efs_kv_lsm_query_tracking(h->kv,h->query_enabled);
+    /* .efs: the versioned commands policy (efs_query_policy) is the only
+     * authority (D42). Tracking and the catalog worker always run; the
+     * worker idles on its poll while the policy is off or nothing changed. */
+    efs_kv_lsm_query_tracking(h->kv,1);
     g_host = h;
     if (efsd_pthread_create(&h->tid, host_pump, h) != 0) {
         fprintf(stderr, "raft-host: pump thread failed\n");
@@ -13094,13 +13014,11 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     h->started = 1;
-    if (h->query_enabled) {
-        __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
-        if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
-            __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
-            fprintf(stderr,"raft-host: query refresh thread failed; virtual queries unavailable\n");
-        } else h->query_started=1;
-    } else fprintf(stderr,"raft-host: .efs server queries disabled; no catalog worker or query tracking\n");
+    __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
+    if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
+        __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
+        fprintf(stderr,"raft-host: query refresh thread failed; virtual queries unavailable\n");
+    } else h->query_started=1;
     /* GC reaper after the pump: its proposals need the pump to apply. A
      * spawn failure only leaks fragments (logged), never corrupts.
      * EFS_FAULT_GC_DISABLE (EFS_FAULTS builds, daemon tests): the
@@ -14422,6 +14340,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->rc = EFS_ERR_UNFORMED;
         return;
     }
+#if EFS_BUILD_EXPIRY
     if(clen && (cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK || cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET)) {
         if(clen!=(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK?1u:5u)) {out->rc=EFS_ERR_INVAL;return;}
         if(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET && (!h->expiry_enabled || rd32be(cmd+1))) {
@@ -14526,6 +14445,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
         out->rc=rc;out->leader_hint=hint;return;
     }
+#else
+    /* Expiry is not in this build (D42): refuse its requests and commands;
+     * never propose one. */
+    if(clen && efs_md_is_expiry(cmd[0])) {out->rc=EFS_ERR_UNSUPPORTED;return;}
+#endif
     if(clen && (cmd[0]==EFS_MD_CMD_QUERY_POLICY || cmd[0]==EFS_MD_REQ_QUERY_POLICY)) {
         if(group!=efs_raft_shard_group(1) ||
            clen!=(cmd[0]==EFS_MD_CMD_QUERY_POLICY?13u:1u)) {out->rc=EFS_ERR_INVAL;return;}
@@ -14885,6 +14809,7 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
     }
 }
 
+#if EFS_BUILD_EXPIRY
 void server_raft_host_expiry_status(struct efs_expiry_status *out)
 {
     memset(out,0,sizeof(*out));
@@ -14914,6 +14839,7 @@ void server_raft_host_expiry_status(struct efs_expiry_status *out)
 #undef EXP_AGE
 #undef EXP_LOAD
 }
+#endif
 
 void server_raft_host_status(struct efs_msg_raft_status_reply *out)
 {
@@ -16138,6 +16064,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
  * on another group is a 2-shard txn (parent used_shards + dest
  * dentry/inode). SPLITTING dest writes hashed (spec: writes go hashed;
  * reads hashed-then-local). MKDIR is a 2-shard txn of its own. */
+#if EFS_BUILD_EXPIRY
 struct host_expiry_source {
     uint32_t shard,policy_len,pver_len;
     uint8_t policy_key[EFS_EXPIRY_KEY_BYTES],policy_value[EFS_EXPIRY_POLICY_BYTES];
@@ -16149,6 +16076,8 @@ struct host_expiry_birth {
 };
 static int host_expiry_collect(struct efs_raft_host *,efs_ino_t,uint64_t,
                                struct host_expiry_birth *,int *);
+#endif
+struct host_expiry_birth; /* opaque and always NULL without EFS_BUILD_EXPIRY */
 static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const char *name, uint32_t mode,
                                   const struct efs_meta_attrs *at,
@@ -16574,17 +16503,20 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
             set_inode_rc(out, EFS_ERR_EXIST, hint);
             return;
         }
+#if EFS_BUILD_EXPIRY
         if(rc==EFS_OK && h->expiry_enabled && S_ISREG(mode)) {
             uint8_t refusal[5+HOST_OPID_TRAILER]={EFS_MD_CMD_CREATE_REFUSAL};
             wr32be(refusal+1,dsh);pack_opid_trailer(refusal+5,q);
             rc=host_propose_wait(h,dg,refusal,sizeof(refusal),&hint);
             set_inode_rc(out,rc,hint);return;
         }
+#endif
         /* Identified requests must reach replicated apply, including EEXIST.
          * Otherwise unlink can turn a delayed retry into a second operation. */
         if (rc == EFS_ERR_NOT_FOUND)
             rc = EFS_OK;
     }
+#if EFS_BUILD_EXPIRY
     if(rc==EFS_OK && h->expiry_enabled && S_ISREG(mode)) {
         if(!host_hosts(h,EFS_RAFT_GROUP_SHARD) || !host_hosts(h,EFS_RAFT_GROUP_SHARD2)) {
             uint8_t need[2];host_need_both(need);
@@ -16599,7 +16531,9 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
         if(rc==EFS_OK)rc=host_hashed_create_txn(h,parent,name,mode,&at,&prow,dsh,q,
                                                hold,pending,birth,&hint);
         free(birth);hashed=1;
-    } else if (rc == EFS_OK &&
+    } else
+#endif
+    if (rc == EFS_OK &&
         (prow.layout == EFS_META_LAYOUT_HASHED ||
          prow.layout == EFS_META_LAYOUT_SPLITTING) &&
         (prow.used_shards & (1ull << efs_kv_dir_lane(name))) == 0 &&
@@ -16850,6 +16784,7 @@ static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
     return host_namespace_capacity("ancestry", (uint32_t)*ng);
 }
 
+#if EFS_BUILD_EXPIRY
 static int host_expiry_collect(struct efs_raft_host *h,efs_ino_t parent,
                                uint64_t now,struct host_expiry_birth *birth,int *hint)
 {
@@ -16886,6 +16821,7 @@ static int host_expiry_collect(struct efs_raft_host *h,efs_ino_t parent,
     }
     return EFS_ERR_IO;
 }
+#endif
 
 struct host_idx_ref {
     uint8_t group;
@@ -18364,6 +18300,7 @@ static int host_dent_drop_prep(struct efs_raft_host *h, uint32_t sh,
  * exclusive; dest dentry, child inode, alloc, dseq, and dir-lane ride
  * the dest shard. Parent mtime/ctime stay on the dir-lane (not the
  * home row). */
+#if EFS_BUILD_EXPIRY
 static int host_expiry_update_txn(struct efs_raft_host *h,const uint8_t *cmd,
                                   const struct host_expiry_birth *birth,int *hint)
 {
@@ -18484,6 +18421,7 @@ static int host_expiry_enable_txn(struct efs_raft_host *h,const uint8_t *cmd,int
     }
     free(birth);return rc;
 }
+#endif
 
 static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const char *name, uint32_t mode,
@@ -18515,8 +18453,12 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     uint8_t lane;
     efs_ino_t next = 0, ino = 0;
     int rc, i;
+#if EFS_BUILD_EXPIRY
     struct efs_expiry_change expiry_change;
     uint32_t expiry_anchor=0;
+#else
+    (void)birth;
+#endif
 
     if (pending && (!q || !efs_opid_req_valid(q) || !q->id.session_epoch ||
                     q->ack>=q->id.seq || hold)) return EFS_ERR_INVAL;
@@ -18598,6 +18540,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
         memset(&parts, 0, sizeof(parts));
         rc=host_parts_add(&parts,psh);
         if(rc==EFS_OK)rc=host_parts_add(&parts,dsh);
+#if EFS_BUILD_EXPIRY
         if(birth)for(uint32_t j=0;j<birth->count && rc==EFS_OK;j++)
             rc=host_parts_add(&parts,birth->source[j].shard);
         if(rc==EFS_OK && birth && birth->record.deadline_ns) {
@@ -18606,10 +18549,12 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
             if(rc==EFS_OK)rc=efs_expiry_plan(h->kv,ino,crow.generation,0,
                                            &birth->record,&expiry_change);
         }
+#endif
         if(rc!=EFS_OK)return rc;
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
+#if EFS_BUILD_EXPIRY
             if(birth)for(uint32_t j=0;j<birth->count && rc==EFS_OK;j++) {
                 const struct host_expiry_source *v=&birth->source[j];
                 if(v->shard!=sh)continue;
@@ -18627,6 +18572,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
             if(rc==EFS_OK && expiry_anchor && sh==expiry_anchor)
                 rc=host_prep_value(h,sh,&t,&parts,expiry_change.new_index,EFS_EXPIRY_INDEX_BYTES,
                      NULL,EFS_TXN_ABSENT,EFS_TXN_PUT,expiry_change.value,EFS_EXPIRY_RECORD_BYTES,hint);
+#endif
             if (rc==EFS_OK && sh == psh)
                 rc = host_prep_ino_delta(h, psh, &t, &parts, k_pino, kpi, &pd,
                                          NULL, hint);
@@ -19405,7 +19351,9 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     struct efs_meta_row prow, row;
     struct efs_meta_dentry dent;
     struct efs_meta_stat st;
+#if EFS_BUILD_EXPIRY
     uint64_t expired_size=UINT64_MAX;
+#endif
     struct efs_txid t;
     struct efs_txn_parts parts;
     struct efs_meta_dentry_drop drop;
@@ -19418,9 +19366,11 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     uint64_t iver = 0, now;
     uint64_t rver = 0;
     uint32_t nlink_out = 0;
+#if EFS_BUILD_EXPIRY
     struct efs_expiry_change expiry_change;
     uint8_t expiry_before[EFS_EXPIRY_RECORD_BYTES];
     uint32_t expiry_bytes=sizeof(expiry_before), expiry_anchor=0;
+#endif
     int hint = -1;
     int rc, i, held = 0, last = 0, put_ino = 0;
     int touch_parent = 0, stamp_lane = 0;
@@ -19454,6 +19404,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
         rc = efs_meta_apply_resolve_tx(h->kv, parent, name, host_txn_coord, h, &dent, &row);
     if (rc == EFS_OK && S_ISDIR(row.mode))
         rc = EFS_ERR_INVAL;
+#if EFS_BUILD_EXPIRY
     if (rc == EFS_OK && expiry) {
         struct efs_expiry_record record;
         if(!S_ISREG(row.mode) || row.nlink!=1 || row.ino!=expiry->ino ||
@@ -19477,6 +19428,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
                          rd64be(expiry_before+8)!=expiry->revision))rc=EFS_ERR_STALE;
         expiry_anchor=efs_kv_anchor_shard(efs_kv_inode_shard(row.ino));
     }
+#endif
     ish = (rc == EFS_OK) ? efs_kv_inode_shard(row.ino) : 0;
     if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(dsh))
         rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
@@ -19537,6 +19489,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     }
     if (rc == EFS_OK && !put_ino)
         rc = efs_txn_ver_get(h->kv, k_ino, ki, &iver);
+#if EFS_BUILD_EXPIRY
     if(rc==EFS_OK && expiry) {
         /* Best-effort telemetry only: do not fail a safe expiry because a
          * concurrent publisher prevents a stable size collect. Lane EOFs,
@@ -19546,6 +19499,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
            efs_meta_apply_getattr(h->kv,row.ino,host_txn_coord,h,&observed)==EFS_OK)
             expired_size=observed.size;
     }
+#endif
     if (rc == EFS_OK) {
         memset(&parts, 0, sizeof(parts));
         rc = host_parts_add(&parts, dsh);
@@ -19559,8 +19513,10 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             rc = host_parts_add(&parts, drop.hsh);
         if (rc == EFS_OK && last && !held)
             rc = host_parts_add(&parts, ash);
+#if EFS_BUILD_EXPIRY
         if (rc == EFS_OK && expiry)
             rc = host_parts_add(&parts, expiry_anchor);
+#endif
         if (rc != EFS_OK)
             goto unlink_done;
         fill_txid(h, &t);
@@ -19580,6 +19536,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             if (rc == EFS_OK && touch_parent && sh == psh)
                 rc = host_prep_ino_delta(h, psh, &t, &parts, k_par, kp, &pd,
                                          NULL, &hint);
+#if EFS_BUILD_EXPIRY
             if (rc == EFS_OK && expiry && sh == ish)
                 rc=host_prep_value(h,ish,&t,&parts,expiry_change.record_key,
                      EFS_EXPIRY_KEY_BYTES,expiry_before,sizeof(expiry_before),
@@ -19587,6 +19544,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             if (rc == EFS_OK && expiry && sh == expiry_anchor)
                 rc=host_prep_value(h,expiry_anchor,&t,&parts,expiry_change.old_index,
                      EFS_EXPIRY_INDEX_BYTES,expiry_before,EFS_EXPIRY_RECORD_BYTES,EFS_TXN_DEL,NULL,0,&hint);
+#endif
             if (rc == EFS_OK && sh == ish) {
                 if (put_ino)
                     rc = host_prep_ino_delta(h, ish, &t, &parts, k_ino, ki,
@@ -19633,12 +19591,14 @@ unlink_done:
                 dsh, ish, psh);
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
+#if EFS_BUILD_EXPIRY
         if(expiry) {
             __atomic_fetch_add(&h->expiry_removed,1,__ATOMIC_RELAXED);
             if(expired_size==UINT64_MAX)__atomic_fetch_add(&h->expiry_size_unknown,1,__ATOMIC_RELAXED);
             else __atomic_fetch_add(&h->expiry_namespace_bytes,expired_size,__ATOMIC_RELAXED);
             __atomic_store_n(&h->expiry_last_delete_us,now_us_(),__ATOMIC_RELAXED);
         }
+#endif
         if (!last)
             stat_to_inode(&st, &out->inode);
         else {
@@ -19651,6 +19611,7 @@ unlink_done:
     }
 }
 
+#if EFS_BUILD_EXPIRY
 void server_raft_host_expire(efs_ino_t parent,const char *name,
                              uint64_t committed_now,
                              const struct efs_expiry_due *due,
@@ -19662,6 +19623,7 @@ void server_raft_host_expire(efs_ino_t parent,const char *name,
     }
     host_unlink_txn(parent,name,NULL,due,committed_now,out);
 }
+#endif
 
 /* Last-link file UNLINK on one group: one Raft entry on the dentry
  * group. nlink>1, last-link with dsh ≠ ish, or SPLITTING unlink whose
@@ -20390,8 +20352,10 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
     uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
     uint8_t k_dseq[EFS_KV_KEY_MAX];
     uint8_t v_dent[EFS_META_DENT_BYTES];
+#if EFS_BUILD_EXPIRY
     uint8_t expiry_key[EFS_EXPIRY_KEY_BYTES], expiry_value[EFS_EXPIRY_RECORD_BYTES];
     uint32_t expiry_len=sizeof(expiry_value);
+#endif
     uint32_t kd = 0, ki = 0, kp = 0, ks = 0;
     uint32_t dsh, ish, psh, coord;
     uint64_t dver = 0, now;
@@ -20532,6 +20496,7 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         rc = efs_kv_key_dseq(dsh, new_parent, d_lane, k_dseq, &ks);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
+#if EFS_BUILD_EXPIRY
     if (rc == EFS_OK) {
         struct efs_expiry_record expiry;
         rc=efs_expiry_get(h->kv,src_ino,row.generation,&expiry);
@@ -20545,6 +20510,7 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
                 rc=EFS_ERR_INVAL;
         }
     }
+#endif
     if (rc == EFS_OK) {
         memset(&parts, 0, sizeof(parts));
         rc = host_parts_add(&parts, dsh);
@@ -20574,12 +20540,14 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
             if (rc == EFS_OK && touch_parent && sh == psh)
                 rc = host_prep_ino_delta(h, psh, &t, &parts, k_par, kp, &pd,
                                          NULL, &hint);
+#if EFS_BUILD_EXPIRY
             if (rc == EFS_OK && sh == ish)
                 rc=host_prep_value(h,ish,&t,&parts,expiry_key,sizeof(expiry_key),
                      expiry_len==EFS_TXN_ABSENT?NULL:expiry_value,expiry_len,
                      expiry_len==EFS_TXN_ABSENT?EFS_TXN_DEL:EFS_TXN_PUT,
                      expiry_len==EFS_TXN_ABSENT?NULL:expiry_value,
                      expiry_len==EFS_TXN_ABSENT?0:expiry_len,&hint);
+#endif
             if (rc == EFS_OK && sh == ish)
                 rc = host_prep_ino_delta(h, ish, &t, &parts, k_ino, ki, &id,
                                          NULL, &hint);
@@ -20627,9 +20595,11 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     struct efs_meta_row prow, dprow, row, nrow;
     struct efs_meta_dentry dent, ndent;
     struct efs_meta_stat st;
+#if EFS_BUILD_EXPIRY
     struct efs_expiry_change expiry_move;
     uint8_t expiry_before[EFS_EXPIRY_RECORD_BYTES];
     uint32_t expiry_bytes=sizeof(expiry_before),expiry_anchor=0;
+#endif
     struct efs_txid t;
     struct efs_txn_parts parts;
     struct host_pver_guard gv[EFS_TXN_NAMESPACE_MAX_PART];
@@ -21053,6 +21023,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             stamp_dst = 0;
         two_dseq = !(ssh == dsh && s_lane == d_lane);
     }
+#if EFS_BUILD_EXPIRY
     if(rc==EFS_OK && !is_dir) {
         struct efs_expiry_record expiry;
         rc=efs_expiry_get(h->kv,row.ino,row.generation,&expiry);
@@ -21069,6 +21040,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             if(rc==EFS_OK)expiry_anchor=efs_kv_anchor_shard(ish);
         }
     }
+#endif
     memset(&parts, 0, sizeof(parts));
     if (rc == EFS_OK)
         rc = host_parts_add(&parts, ssh);
@@ -21084,7 +21056,9 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = host_parts_add(&parts, nsh);
     if (rc == EFS_OK && xist && !xdir && !xput)
         rc = host_parts_add(&parts, ash);
+#if EFS_BUILD_EXPIRY
     if(rc==EFS_OK && expiry_anchor)rc=host_parts_add(&parts,expiry_anchor);
+#endif
     for (i = 0; i < nxd && rc == EFS_OK; i++)
         rc = host_parts_add(&parts, xdseq[i].shard);
     if (rc == EFS_OK && is_dir) {
@@ -21158,6 +21132,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
+#if EFS_BUILD_EXPIRY
             if(rc==EFS_OK && expiry_anchor && sh==ish)
                 rc=host_prep_value(h,sh,&t,&parts,expiry_move.record_key,EFS_EXPIRY_KEY_BYTES,
                      expiry_before,sizeof(expiry_before),EFS_TXN_PUT,
@@ -21166,6 +21141,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                 rc=host_prep_value(h,sh,&t,&parts,expiry_move.new_index,EFS_EXPIRY_INDEX_BYTES,
                      expiry_before,sizeof(expiry_before),EFS_TXN_PUT,
                      expiry_move.value,EFS_EXPIRY_RECORD_BYTES,&hint);
+#endif
             if(rc==EFS_OK)rc = host_dent_drop_prep(h, sh, &drop, &t, &parts, &hint);
             if (rc == EFS_OK && dest_del_loc && sh == dpsh)
                 rc = host_prep(h, dpsh, EFS_TXN_EXCL, &t, &parts, k_dloc, kdl,

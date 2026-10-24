@@ -700,7 +700,6 @@ static int run_data_bench(struct efsd_server *s, double time_sec, int qd, int ce
     s->nodes[0].port = 0;
     s->node_count = 1;
     s->quota = 0;
-    s->persist_nodes = 0;
 
     if (ceiling) {
         if (have_fio()) ceil_fio(s->storage_paths[0]);
@@ -718,10 +717,10 @@ static int run_data_bench(struct efsd_server *s, double time_sec, int qd, int ce
     }
     uint32_t frag_len = server_frag_len(ex, (efs_ino_t)0xBEEF0000u);
 
-    printf("bench data paths=1..%u time_s=%.3f writers=%d direct_io=%s sync=%s "
+    printf("bench data paths=1..%u time_s=%.3f writers=%d direct_io=on sync=%s "
            "frag_bytes=%u selected_qd=%d window_per_slot=%u (0=append-only)\n",
            npaths_total, time_sec,
-           s->nwriters, s->direct_io ? "on" : "off", s->bench_sync ? "on" : "off", frag_len, qd, window);
+           s->nwriters, s->bench_sync ? "on" : "off", frag_len, qd, window);
     fflush(stdout);
 
     struct bench_slot *slots = calloc(BENCH_MAX_SLOTS, sizeof(*slots));
@@ -1129,8 +1128,10 @@ int efs_bench_local_main(int argc, char **argv)
         if (!strcmp(opt, "--full-paths")) { full_paths = 1; continue; }
         if (!strcmp(opt, "--skip-ceiling")) { ceiling = 0; continue; }
         if (!strcmp(opt, "--perf")) { s.perf = 1; continue; }
-        if (!strcmp(opt, "--direct-io")) { s.direct_io = 1; continue; }
-        if (!strcmp(opt, "--no-direct-io")) { s.direct_io = 0; continue; }
+        if (!strcmp(opt, "--direct-io") || !strcmp(opt, "--no-direct-io")) {
+            fprintf(stderr, "%s was removed (D42): the store is O_DIRECT only\n", opt);
+            return 2;
+        }
         if (i + 1 >= argc) goto invalid;
         const char *value = argv[++i];
         char *end = NULL;

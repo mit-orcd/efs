@@ -21,7 +21,7 @@ import tempfile
 import time
 
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--mode',choices=('direct','buffered'),default='buffered')
+parser.add_argument('--mode',choices=('direct',),default='direct',help='fragment I/O is O_DIRECT only (D42)')
 args=parser.parse_args()
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root/'tests/live'))
@@ -44,8 +44,7 @@ def declare(sock):
     assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,5),('declaration refused',reply)
 
 with tempfile.TemporaryDirectory(prefix='efs-io-stats-') as work:
-    cluster = ticket_put.Cluster(root, work, extra=['--quota', '16M',
-        '--direct-io' if args.mode=='direct' else '--no-direct-io'], env=os.environ)
+    cluster = ticket_put.Cluster(root, work, extra=['--quota', '16M'], env=os.environ)
 
     def rpc(node, kind, body):
         with socket.create_connection(('127.0.0.1', cluster.base+node), 5) as sock:

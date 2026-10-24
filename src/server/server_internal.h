@@ -116,11 +116,9 @@ struct efsd_server {
     struct efs_gc_io_stats gc_io[EFS_GC_IO_CLASSES];
     uint32_t gc_stage, gc_group, gc_sampled_mask, gc_reap_capped[2];
     void *storage_roots[EFS_MAX_STORAGE_PATHS]; /* root identity/locks (storage_roots.c) */
-    int direct_io; /* use O_DIRECT for fragment reads/writes */
     int bench_sync; /* benchmark-only O_SYNC; daemon store builds ignore it */
     /* Shared writer-pool size (0 = inline, <0 = auto from nproc at start). */
     int nwriters;
-    int persist_nodes; /* persist cluster membership to disk */
     int perf; /* run under perf record when starting */
     int strace; /* attach strace -f (EFS_STRACE_PATH / EFS_STRACE_EXPR) */
     int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
@@ -216,6 +214,12 @@ int server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
 /* Checksum-conditional fragment delete for the data-plane GC (L7).
  * EFS_OK = dead fragment gone; EFS_ERR_EXIST = a mismatched live fragment
  * occupies the slot (ackable); EFS_ERR_IO = real failure (retry). */
+/* Fragment file I/O is O_DIRECT only (D42), with no buffered fallback. */
+int server_frag_open(const char *path, int flags, mode_t mode);
+ssize_t server_frag_pread(int fd, void *out, size_t len, off_t off);
+/* EFS_OK when dir's filesystem opens, writes and reads back an aligned page
+ * with O_DIRECT; otherwise why names the failing step and errno. */
+int server_storage_direct_io_check(const char *dir, char *why, size_t why_len);
 int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index,
@@ -415,7 +419,9 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out);
  * ReadIndex). Leader-only; NOT_PRIMARY otherwise. */
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out);
+#if EFS_BUILD_EXPIRY
 void server_raft_host_expiry_status(struct efs_expiry_status *out);
+#endif
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 void server_raft_host_resync(const struct efs_msg_raft_resync *in, struct efs_msg_raft_resync_reply *out);
 void server_raft_host_step_down(const struct efs_msg_raft_step_down *in, struct efs_msg_raft_step_down_reply *out);
@@ -510,12 +516,14 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint64_t atime, uint32_t atime_nsec,
                               const struct efs_opid_req *q,
                               struct efs_msg_inode_reply *out);
+#if EFS_BUILD_EXPIRY
 struct efs_expiry_due;
 /* Staged conditional transaction. Not connected to RPC or a live worker. */
 void server_raft_host_expire(efs_ino_t parent,const char *name,
                              uint64_t committed_now,
                              const struct efs_expiry_due *,
                              struct efs_msg_inode_reply *);
+#endif
 void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
                             const uint8_t *name, uint16_t nlen,
                             const uint8_t *val, uint32_t vlen,

@@ -13,7 +13,7 @@ code=r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
-struct host { int query_enabled,query_started; } host={1,1},*g_host=&host;
+struct host { int query_started; } host={1},*g_host=&host;
 static int policy_rc;static uint32_t policy_mask=3;
 static int host_query_policy_authority(uint32_t *mask){*mask=policy_mask;return policy_rc;}
 '''+helper+r'''
@@ -33,7 +33,6 @@ int main(void){
  policy_rc=0;policy_mask=3;reply();assert(captured.status==EFS_FEATURES_OK&&captured.features==3);
  policy_mask=0;reply();assert(captured.status==EFS_FEATURES_OK&&!captured.features);
  host.query_started=0;reply();assert(captured.status!=EFS_FEATURES_OK);
- host.query_enabled=0;reply();assert(captured.status==EFS_FEATURES_OK&&!captured.features);
  g_host=NULL;reply();assert(captured.status!=EFS_FEATURES_OK);
  puts("feature discovery: transient authority unavailable; genuine disabled mask remains authoritative; startup ceiling and reply status PASS");
 }

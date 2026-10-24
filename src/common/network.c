@@ -485,14 +485,14 @@ void efs_conn_destroy(struct efs_conn *c)
 {
     if (!c)
         return;
-    if (c->rc && getenv("EFS_RDMA_FIRST")) {
+    if (c->rc && efs_rdma_trace_on()) {
         /* Closing the fd makes the peer tear down its QP, after which any
          * send still riding this conn is dropped with no error on either
          * side. Name the caller so a destroy that races an in-flight RPC is
          * attributable. */
         void *bt[8];
         int nb = backtrace(bt, 8);
-        fprintf(stderr, "rdma-first: conn destroy fd=%d qpn=%u match=%d\n",
+        fprintf(stderr, "rdma-trace: conn destroy fd=%d qpn=%u match=%d\n",
                 c->fd, efs_rdma_qpn(c->rc), efs_conn_fd_matches(c));
         /* fd 2, not fileno(stderr): the daemons' stderr is a cookie
          * stream (log_ts.c) whose fileno is -1. */

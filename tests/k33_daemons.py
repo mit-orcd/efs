@@ -195,6 +195,26 @@ class Cluster:
         assert len(rows) == n, out
         return {int(k): (ep, st.lower()) for k, ep, st in rows}
 
+    def leader_placement(self, i, timeout=30):
+        """A9/D42: {group: leader node id} from the placement section of
+        `efs-mgmt status` on node i, once every member reported and each
+        group has exactly one self-reported leader."""
+        end, out = time.time() + timeout, ''
+        while time.time() < end:
+            rc, out = mgmt(self.env, 'status', self.ep(i))
+            m = re.search(r'leaders: (\d+)/(\d+) groups on (\d+) distinct node\(s\); '
+                          r'(\d+)/(\d+) members reported', out)
+            if m and m.group(1) == m.group(2) and m.group(4) == m.group(5):
+                led = {}
+                for nid, rest in re.findall(r'^\s+node (\d+): leads (.*)$', out, re.M):
+                    for g in re.findall(r'group (\d+) \(term \d+\)', rest):
+                        assert int(g) not in led, out
+                        led[int(g)] = int(nid)
+                assert len(led) == int(m.group(2)) and len(set(led.values())) == int(m.group(3)), out
+                return led
+            time.sleep(0.5)
+        raise AssertionError('leader placement never settled:\n' + out)
+
     def wait_members(self, ids, count, timeout=60):
         """Every node in ids reports the same `count` members: ids 1..count,
         distinct endpoints (no duplicate identity). Returns the table."""

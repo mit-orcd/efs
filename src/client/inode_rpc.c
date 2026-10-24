@@ -3527,14 +3527,12 @@ static int session_revoke_submit(void *ctx,const uint8_t *payload,uint32_t plen,
  * collectable without an operator: the group leaders drain its streams
  * into the orphan ledger and collect them. The barrier is the operator's
  * (efs_session_revoke); a failure leaves it resumable by `efs-mgmt
- * raft-session fence`. EFS_UNMOUNT_REVOKE=0 keeps the session open. */
+ * raft-session fence`. Always (D42): there is no keep-open mode. */
 int efs_client_session_end(void)
 {
-    const char *keep=getenv("EFS_UNMOUNT_REVOKE");
     if (!__atomic_load_n(&g_client.session_started,__ATOMIC_ACQUIRE) ||
         efs_client_session_fenced())
         return EFS_OK;
-    if (keep && !strcmp(keep,"0")) return EFS_OK;
     struct efs_opid id;
     int rc=efs_client_publication_id(1,&id);
     if (rc!=EFS_OK) return rc;

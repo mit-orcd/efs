@@ -621,9 +621,11 @@ int efs_meta_apply_lookup_path(struct efs_kv *kv, efs_ino_t start,
 /* Staged one-group CREATE: materialize effective fixed policy and index in
  * the namespace batch. Ordinary CREATE wrappers remain expiry-disabled. */
 int efs_meta_apply_create_refusal(struct efs_kv *,uint32_t shard,const struct efs_opid_req *);
+#if EFS_BUILD_EXPIRY
 int efs_meta_apply_create_expiring(struct efs_kv *,const struct efs_meta_attrs *,
                                      efs_ino_t parent,uint32_t mode,
                                      const char *name,efs_ino_t *out);
+#endif
 int efs_meta_apply_create_file(struct efs_kv *kv, const struct efs_meta_attrs *at,
                                efs_ino_t parent, uint32_t mode,
                                const char *name, efs_ino_t *out);
@@ -683,6 +685,7 @@ int efs_meta_apply_mkdir_log_op(struct efs_kv *kv, const struct efs_meta_attrs *
  * ino = the removed inode; extra = nlink after, unlink only). */
 /* Single-group policy/renewal applies. The root and file policy must be on
  * this participant's group; cross-group callers need guarded transactions. */
+#if EFS_BUILD_EXPIRY
 int efs_meta_apply_expiry_policy(struct efs_kv *, efs_ino_t root,
                                  uint64_t gen, uint32_t caller_uid,
                                  uint64_t expected,
@@ -695,6 +698,7 @@ int efs_meta_apply_expiry_renew(struct efs_kv *, efs_ino_t ino,
  * clock decision. This never reads a replica wall clock or deletes fragments. */
 int efs_meta_apply_expire(struct efs_kv *, efs_ino_t parent, const char *name,
                           uint64_t committed_now, const struct efs_expiry_due *);
+#endif
 int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
                              uint64_t now, const struct efs_opid_req *q);
 int efs_meta_apply_rmdir_op(struct efs_kv *kv, efs_ino_t parent, const char *name,

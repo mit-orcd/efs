@@ -110,7 +110,7 @@ p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing p
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
 p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
 p.add_argument('--mount-sync',action='store_true',help='run only mount-wide sync acceptance: ordinary writes, peer-before-close, cold bytes and deletion')
-p.add_argument('--mode', choices=('buffered', 'direct'), required=True)
+p.add_argument('--mode', choices=('direct',), default='direct', help='fragment I/O is O_DIRECT only (D42)')
 p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
                help='TCP by default; use RDMA only for transport-specific gates')
 p.add_argument('--root', action='append', default=[])
@@ -273,7 +273,7 @@ if a.expiry_soak_seconds:
     assert a.expiry and 60 <= a.expiry_soak_seconds <= 7200
 if a.expiry:
     assert a.mode=='direct' and a.transport=='tcp' and a.disable_efs_commands
-    env.update(EFS_EXPIRY='1')
+    # D42: expiry needs an EFS_BUILD_EXPIRY build (--server-binary); no variable.
     if a.expiry_clock_fault:env['EFS_FAULT_EXPIRY_CLOCK_FILE']=str(work/'expiry-clock-uncertain')
 if a.replication_pressure:
     assert a.tiny_sustained_seconds>=120, 'pressure requires a sustained recovery window'
@@ -281,10 +281,13 @@ if a.replication_pressure:
     run_preload=work/'raft-slow-sync.so'
     subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/raft_slow_sync.c','-ldl','-o',run_preload],check=True)
     env.update(LD_PRELOAD=str(run_preload),EFS_TEST_RAFT_SLOW_FILE=str(work/'raft-slow-armed'))
-if a.efs_commands_only:env.update(EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_QUERY_TEST_PORT=str(a.port))
+if a.efs_commands_only:env.update(EFS_QUERY_TEST_PORT=str(a.port))
 if a.disable_efs_commands:
     assert not a.efs_commands_only, 'command-only gate conflicts with disabled .efs'
-    env.update(EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0')
+    # D42: no environment switch disables .efs; port this to `efs-mgmt
+    # commands-policy NODE set 0 VERSION` after formation. Refuse, never ignore.
+    raise SystemExit('--disable-efs-commands: EFS_COMMANDS/EFS_COMMANDS_SERVER were removed (D42); '
+                     'disable .efs with efs-mgmt commands-policy (not yet ported here)')
 if a.storage_session_fence_fault:
     assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
     subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/storage_session_fence_fault.c','-ldl','-o',work/'put-session-fault.so'],check=True)
@@ -395,7 +398,7 @@ def start(prefer_single_host=False):
         root = roots[i]
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
-        cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
+        cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G'))]
         if a.fixture_quota == '0':
             quota_arg = cmd.index('--quota');del cmd[quota_arg:quota_arg+2]
         if a.storage_roots==2:
@@ -678,11 +681,10 @@ try:
             base=Path('/proc')/str(proc.pid)
             command=(base/'cmdline').read_bytes().split(b'\0')
             values=dict(item.split(b'=',1) for item in (base/'environ').read_bytes().split(b'\0') if b'=' in item)
-            for key,value in ((b'EFS_COMMANDS',b'0'),(b'EFS_COMMANDS_SERVER',b'0'),(b'EFS_TRANSPORT',b'tcp')):
+            for key,value in ((b'EFS_TRANSPORT',b'tcp'),):
                 assert values.get(key)==value,(proc.pid,key,values.get(key))
             if proc in servers:
-                assert b'--direct-io' in command
-                assert values.get(b'EFS_EXPIRY')==b'1'
+                assert not any(k in values for k in (b'EFS_EXPIRY',b'EFS_COMMANDS',b'EFS_COMMANDS_SERVER'))
             runtime.append({'pid':proc.pid,'command':[item.decode() for item in command if item],
                 'environment':{key.decode():values[key].decode() for key in values if key.startswith(b'EFS_')},
                 'mapped_exe_sha256':hashlib.sha256((base/'exe').read_bytes()).hexdigest()})
@@ -694,7 +696,7 @@ try:
         # still prove the durable expiry index across a cold daemon start.
         def expiry_restart(enabled=None):
             unmount();stop(crash=False)
-            if enabled is not None:env['EFS_EXPIRY']='1' if enabled else '0'
+            assert enabled is None or enabled, 'D42: expiry cannot be disabled by environment'
             start();mount_client()
         def expiry_offline(group=None,storage_ino=None,node_id=None):
             node=3 if node_id is None else node_id-1

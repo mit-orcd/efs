@@ -37,6 +37,15 @@ endif
 ifeq ($(EFS_MEMCHECK),1)
 CFLAGS += -DEFS_MEMCHECK=1
 endif
+# D42: expiry is excluded from the alpha product and compiled out. A
+# development build with `make EFS_BUILD_EXPIRY=1` (in its own tree) keeps the
+# feature and its tests (make test-expiry); no gate runs it.
+ifeq ($(EFS_BUILD_EXPIRY),1)
+CFLAGS += -DEFS_BUILD_EXPIRY=1
+EXPIRY_SRCS = src/meta/expiry.c
+else
+EXPIRY_SRCS =
+endif
 INCLUDES = -Iinclude -Isrc/common -Ideps/blake3
 
 LDFLAGS = -lpthread -lm -ldl -libverbs
@@ -79,7 +88,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               src/kv/kv_wal.c \
               src/kv/kv_seg.c \
               src/kv/kv_snap.c \
-              src/meta/query_catalog.c src/meta/query_disk.c src/meta/query_policy.c src/meta/expiry.c \
+              src/meta/query_catalog.c src/meta/query_disk.c src/meta/query_policy.c $(EXPIRY_SRCS) \
               src/meta/name_index.c \
               src/meta/metadata.c \
               src/meta/meta_apply.c src/meta/pack_mapping.c \
@@ -116,8 +125,8 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_rdma_segmented.c tests/test_expiry.c tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_txn_retire.c tests/test_pub_stage.c tests/test_namespace_session.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_append_cleanup.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_put_orphan.c tests/test_store_gc.c tests/test_reclaim.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_kv_seg_bloom.c tests/test_kv_lsm_concurrent.c tests/test_kv_block_hash.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_declaration_gate.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_follower_bound.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
-TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_txn_retire tests/test_pub_stage tests/test_namespace_session tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_append_cleanup tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_put_orphan tests/test_store_gc tests/test_reclaim tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_kv_seg_bloom tests/test_kv_lsm_concurrent tests/test_kv_block_hash tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_declaration_gate tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_follower_bound tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
+TEST_SRCS = tests/test_rdma_segmented.c tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_txn_retire.c tests/test_pub_stage.c tests/test_namespace_session.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_append_cleanup.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_put_orphan.c tests/test_store_gc.c tests/test_reclaim.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_kv_seg_bloom.c tests/test_kv_lsm_concurrent.c tests/test_kv_block_hash.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_declaration_gate.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_follower_bound.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
+TEST_BINS = tests/test_rdma_segmented tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_txn_retire tests/test_pub_stage tests/test_namespace_session tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_append_cleanup tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_put_orphan tests/test_store_gc tests/test_reclaim tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_kv_seg_bloom tests/test_kv_lsm_concurrent tests/test_kv_block_hash tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_declaration_gate tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_follower_bound tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
 TEST_SRCS += tests/test_kv_reader_gate.c
 TEST_SRCS += tests/test_membership.c
 TEST_BINS += tests/test_membership
@@ -347,7 +356,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 # helpers built with extra flags). They are real prerequisites of test and
 # test-long, never built inside a recipe, so test-long works on its own and a
 # parallel make cannot start a test before its binary exists.
-TEST_SPECIAL_BINS = tests/faults/efsd tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
+TEST_SPECIAL_BINS = tests/faults/efsd tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -381,6 +390,9 @@ test-bins: all $(TEST_SPECIAL_BINS)
 test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_env_inventory.py
 	python3 tests/test_env_removed.py
+	python3 tests/test_direct_io_required.py
+	python3 tests/test_rdma_trace.py
+	python3 tests/test_transport_select.py
 	python3 tests/test_retired_root_markers.py
 	python3 tests/faults/test_create_retry_fault.py
 	python3 tests/faults/test_create_retry_integrated.py
@@ -450,8 +462,6 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_get_integrity.py
 	python3 tests/test_query_rpc_routing.py
 	python3 tests/test_mgmt_session_routing.py
-	python3 tests/test_mgmt_expiry_lookup.py
-	python3 tests/test_expiry_cli.py ./efs-mgmt
 	python3 tests/test_gc_status_expiry.py ./efs-mgmt
 	python3 tests/test_session_admission.py
 	python3 tests/test_close_effects.py
@@ -547,7 +557,6 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_live_ticketed_put.py
 	./tests/test_data
 	./tests/test_kv
-	./tests/test_expiry
 	./tests/test_rdma_xprt
 	./tests/test_rdma_segmented normal
 	./tests/test_rdma_segmented interrupt
@@ -556,7 +565,6 @@ test: all $(TEST_SPECIAL_BINS)
 	./tests/test_rdma_segmented burst
 	./tests/test_rdma_segmented burst-asym
 	./tests/test_rdma_segmented churn
-	python3 tests/test_metadata_balance.py
 	python3 tests/test_host_outbox.py
 	python3 tests/test_raft_read_probe.py
 	python3 tests/test_raft_read_admission.py
@@ -841,9 +849,9 @@ clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
-	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/faults/efsd
+	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
 	rm -rf tests/faults/server
-	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
+	rm -f $(TEST_BINS) tests/test_expiry tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
 	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
 
@@ -1046,6 +1054,22 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_posix_phase_trace.py
 
 test-all: test test-long
+
+# D42: expiry is excluded from the alpha product and from every gate. Its
+# tests run only in a tree built with `make EFS_BUILD_EXPIRY=1` (all objects
+# rebuilt with the flag); this target refuses a product build.
+.PHONY: test-expiry
+test-expiry:
+	@[ "$(EFS_BUILD_EXPIRY)" = 1 ] || { echo "test-expiry needs make EFS_BUILD_EXPIRY=1 (clean tree)" >&2; exit 2; }
+	$(MAKE) EFS_BUILD_EXPIRY=1 all tests/test_expiry
+	./tests/test_expiry
+	python3 tests/test_mgmt_expiry_lookup.py
+	python3 tests/test_expiry_cli.py ./efs-mgmt
+	python3 tests/test_gc_status_expiry.py ./efs-mgmt
+
+# FUSE passthrough that refuses O_DIRECT (test_direct_io_required.py, D42).
+tests/nodirect_fs: tests/nodirect_fs.c
+	$(CC) $(CFLAGS) $(FUSE_CFLAGS) -o $@ $< $(FUSE_LIBS)
 
 # Read routing hints must rebuild the production fragment selector.
 src/client/read.o: src/client/read_peer_order.h

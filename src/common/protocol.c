@@ -306,14 +306,14 @@ static int tcp_has_request(int fd)
     /* EOF and a socket error both tear the conn (and its QP) down, but they
      * have completely different causes: distinguish them. */
     if (n == 0) {
-        if (getenv("EFS_RDMA_FIRST"))
-            fprintf(stderr, "rdma-first: tcp EOF (peer FIN) fd=%d\n", fd);
+        if (efs_rdma_trace_on())
+            fprintf(stderr, "rdma-trace: tcp EOF (peer FIN) fd=%d\n", fd);
         return -1;
     }
     if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
         return 0;
-    if (getenv("EFS_RDMA_FIRST"))
-        fprintf(stderr, "rdma-first: tcp recv error fd=%d errno=%d (%s)\n", fd,
+    if (efs_rdma_trace_on())
+        fprintf(stderr, "rdma-trace: tcp recv error fd=%d errno=%d (%s)\n", fd,
                 errno, strerror(errno));
     return -1;
 }
@@ -325,8 +325,8 @@ static int tcp_has_request(int fd)
  * log the teardown is invisible from both ends. */
 static int wait_teardown(struct efs_conn *c, const char *why)
 {
-    if (getenv("EFS_RDMA_FIRST"))
-        fprintf(stderr, "rdma-first: conn teardown fd=%d qpn=%u reason=%s\n",
+    if (efs_rdma_trace_on())
+        fprintf(stderr, "rdma-trace: conn teardown fd=%d qpn=%u reason=%s\n",
                 c->fd, c->rc ? efs_rdma_qpn(c->rc) : 0, why);
     return -1;
 }

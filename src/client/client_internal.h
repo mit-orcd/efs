@@ -793,7 +793,9 @@ void efs_client_conn_init(void);
 
 /* Close pooled sockets, free dirty-tracking / export memory, destroy locks.
  * Safe to call once from FUSE destroy / process exit. */
-void efs_client_shutdown(void);
+/* Clean unmount: flush, settle, revoke the session. EFS_OK, or the first
+ * failure (also logged); repeated calls return the same result. */
+int efs_client_shutdown(void);
 
 /* Admit the object's ticket, then PUT all three fragments concurrently
  * (send-all / recv-all on three pooled sockets). Returns EFS_OK if quorum

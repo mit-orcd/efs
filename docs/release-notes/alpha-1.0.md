@@ -43,7 +43,7 @@ fragments is rebuilt when the missing node returns.
 
 | ID | Limitation | Trigger | What the user sees | Reference |
 | --- | --- | --- | --- | --- |
-| L9 | Linux FUSE client only | NFS re-export, macOS | Not supported; `EFS_FUSE_EXPORT` is outside the alpha surface | W152 (user, Oct 22) |
+| L9 | Linux FUSE client only | NFS re-export, macOS | Not supported; the `EFS_FUSE_EXPORT` switch is removed (D42) | W152 (user, Oct 22) |
 | L10 | Read after fork (K10/W121) | A process forks while another of its threads has a read in flight on EFS, on a kernel without the FUSE direct-I/O page-pinning fix (upstream `738adade96b2`; the diagnosis host ran RHEL 9 `5.14.0-687.39.1.el9_8`) | The read succeeds but the caller's buffer keeps its previous bytes; a reread is correct. No EFS workaround in alpha; `posix_spawn` instead of `fork` avoids it | D40, [diagnosis](../status/orcd-w121-fork-read-20261016.md) |
 | L11 | Shared mmap not supported | `mmap(MAP_SHARED)` of an EFS file | The mapping fails; `MAP_PRIVATE` works | W104 |
 | L12 | `renameat2` flags not supported, *proposed* | `RENAME_EXCHANGE`, `RENAME_WHITEOUT`, `RENAME_NOREPLACE` onto a free name | `EOPNOTSUPP`, nothing renamed (`RENAME_NOREPLACE` onto an existing name gets `EEXIST`) | [POSIX P3](../using/alpha-1.0-posix.md#known-deviations) |
@@ -65,7 +65,7 @@ fragments is rebuilt when the missing node returns.
 | L23 | Same build everywhere; no upgrade in place | A peer or client of another build; a format change | The connection is refused; a format change needs a fresh format, no migration and no downgrade | AGENTS.md (no backward compatibility) |
 | L24 | No effective-settings listing, unless W122 enters alpha | An operator wants every effective value | Only the startup log and the status commands show settings | S4, W122 |
 | L25 | Cross-host RDMA not qualified | RDMA between hosts | Recorded RDMA runs use one host's devices or software RXE | W106, A2 |
-| L26 | The alpha profile is not all defaults, *proposed* | A daemon started without `--direct-io`, a mount without `EFS_COMMANDS=1` | Buffered fragment I/O, no `.efs`; both differ from the qualified profile until A7 decides | Findings F7, F8 |
+| L26 | The alpha profile is the only behavior (A7, D42) | — | Fragment I/O is always `O_DIRECT`, `.efs` follows the cluster commands-policy, expiry is compiled out; removed settings are refused at startup | Findings F7, F8 (closed by A7) |
 
 ## Open items that are not yet limitations
 
