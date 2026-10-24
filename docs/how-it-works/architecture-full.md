@@ -1592,6 +1592,19 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[K37: rebuild on return for packed segments](../status/k37-segment-rebuild-20261024.md):
+**FIXED, PASS (scoped, loopback), branch `claude/devel-pack-rebuild-fa5139`,
+code `b48ec444f`, `5ef2b8d6d`, `b205cb9db`, not merged.** A packed segment with a missing fragment
+gets one durable degraded mark (KV kind 249, Raft tag 247): written
+degraded by packing or compaction (two fragments durable; one cancels),
+found missing or torn by the leader's audit of a returning member (wire
+241/242), or a rebuild source proven lost (unrecoverable, reported, never
+cleared). The leader rebuilds, verifies, stores under the exact mark and
+clears only after the placement node verified the copy; `efs-mgmt status`
+counts degraded segments and the cluster stays DEGRADED until they clear.
+Daemon test `tests/test_k37_segment_rebuild.py` PASS. intel2 `make test-all` at `b205cb9db`: 459 commands, 1 FAIL that also fails on the base (`tests/test_get_integrity.py`, a READ_VERIFY test / K34 merge interaction), 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/k37-20261024/`, `SHA256SUMS` `61fbd81d…98f0`). Live
+multi-host, RDMA and orcd-mini NOTRUN (parent).
+
 [D42 `EFS_READ_VERIFY`: GET-path integrity audit](../status/read-verify-audit-20261024.md):
 **PASS (scoped), branch `claude/devel-read-verify-08e19c`, not merged.** The
 storage node's record check does not cover the wire or the client's
