@@ -77,8 +77,8 @@ class Daemon:
             env['EFS_FAULT_SHUTDOWN_RECORD_PARK'] = record_park
         self.log = (store/'log/efsd.log').open('a')
         self.proc = subprocess.Popen(
-            [str(binary), '--node-id', '1', '--addr', '127.0.0.1', '--port', str(self.port),
-             '--storage', str(store), '--direct-io'],
+            [str(binary), f'127.0.0.1:{self.port}', str(store), '--discovery-port', '0',
+             '--direct-io'],
             cwd=root, env=env, stdout=self.log,
             stderr=stderr_fd if stderr_fd is not None else subprocess.STDOUT)
         self.pidfile = store/'log/efsd.pid'

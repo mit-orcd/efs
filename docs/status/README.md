@@ -41,8 +41,17 @@ member: a committed membership revision (store tokens, one cluster
 identity), group 2 moves {1,2,3} → {2,3,4} by joint consensus with
 catch-up, later nodes add storage only, old data keeps its recorded
 placement. [Protocol](k33-membership-protocol-20261023.md) (M1–M9).
-Remaining: automatic ids and positional CLI, discovery, live client view
-refresh.
+Remaining: live client view refresh.
+
+[K33/W157 increment 2: automatic node ids, positional CLI, discovery](k33-w157-autoid-discovery-20261024.md):
+**code gate PASS with host limits (xorinox `make test-all` at `53080d744`:
+436 commands, 0 FAIL, 13 NOTRUN); model PASS; branch
+`claude/devel-k33-inc2-e4299e`, not merged; live multi-host, cross-subnet,
+RDMA and orcd-mini gates NOTRUN; needs a fresh format.** `efsd ADDR:PORT
+STORAGE` creates a cluster or restarts; `efsd --join [SEED] STORAGE` joins
+through a member or a cluster found on the local subnet; no node id (the
+seed is 1, formation allocates by promise, additions take `count + 1`).
+Open finding: placement collapses for power-of-two member counts.
 
 [W153 committed membership](w153-committed-membership-20261023.md): **code
 fixed and merged (`4026e254d`); merged-tree `make test-all` on intel2 0 FAIL;

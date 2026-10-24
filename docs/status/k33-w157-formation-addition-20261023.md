@@ -176,6 +176,9 @@ PASS.
 
 ## Remaining increments
 
+Items 1 and 2 are built in increment 2
+([evidence](k33-w157-autoid-discovery-20261024.md)).
+
 1. Automatic ids and the positional CLI (`efsd ADDR:PORT STORAGE`,
    `efsd --join [SEED] STORAGE`) with the M4′ promise formation (modelled).
 2. Discovery on the local subnet; explicit seed across subnets.

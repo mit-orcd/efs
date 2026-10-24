@@ -1,6 +1,7 @@
 #include "../common/query_stage_trace.h"
 #include "efs/query_policy.h"
 #include "server_internal.h"
+#include <arpa/inet.h>
 #include "efs/checksum.h"
 #include "efs/raft.h"
 #include "efs/batch_obs.h"
@@ -388,10 +389,13 @@ struct efs_raft_host {
     int mb_running, mb_started, mb_kick;
     struct efs_member mb_join[EFS_MAX_NODES];
     int mb_njoin;
-    /* Pending joiners recently seen (HELLO answered pending, or a table row
-     * a formation left out), by id slot; raft-mkfs adds them in id order. */
-    struct efs_member mb_seen[EFS_MAX_NODES];
-    uint64_t mb_seen_us[EFS_MAX_NODES];
+    /* K33 (M4'), on a seed before its formation proposal: the joining
+     * stores (node id 0) that said HELLO, by token, with when they last
+     * did (under mb_mu). The proposal takes the ones heard recently. */
+    struct efs_member mb_cand[EFS_MAX_NODES];
+    uint64_t mb_cand_us[EFS_MAX_NODES];
+    int mb_ncand;
+    int mb_force; /* raft-mkfs: propose now, without the quiet second */
     uint32_t mb_acked[EFS_MAX_NODES]; /* count each member acknowledged */
     uint64_t mb_retry_us[EFS_MAX_NODES];
     uint64_t mb_term;                 /* group-0 term of the pump state */
@@ -807,11 +811,34 @@ static pthread_mutex_t mview_mu = PTHREAD_MUTEX_INITIALIZER;
 static struct efs_membership mview;
 static int mview_formed;
 
+/* K33 (M4'): the member store's state, cluster and formation proposal,
+ * for answering joining stores (mview_mu). */
+static uint32_t mview_state;
+static uint64_t mview_cluster;
+static struct efs_membership mview_prop;
+/* A joining store is a formation candidate while its HELLOs (every second)
+ * keep arriving. */
+#define HOST_CAND_FRESH_US 3000000ull
+
 static void mview_publish(const struct efs_membership *m)
 {
     pthread_mutex_lock(&mview_mu);
     mview = *m;
     mview_formed = 1;
+    mview_state = EFS_MEMBER_FORMED;
+    mview_cluster = m->cluster;
+    pthread_mutex_unlock(&mview_mu);
+}
+
+static void mview_publish_store(const struct member_store *ms)
+{
+    pthread_mutex_lock(&mview_mu);
+    if (!mview_formed) {
+        mview_state = ms->state;
+        mview_cluster = ms->cluster;
+        if (ms->state == EFS_MEMBER_PROMISED)
+            mview_prop = ms->members;
+    }
     pthread_mutex_unlock(&mview_mu);
 }
 
@@ -8673,8 +8700,9 @@ static void host_retire_check(struct efs_raft_host *h)
 /* K33 test hook (tests/test_k33_growth.py): EFS_TEST_MEMBER_EXIT=<point>
  * ends the process at that durable handoff, so a test interrupts it
  * deterministically. Points: after-members-commit (the proposer, MEMBERS
- * committed, nothing learned or notified), before-learn (a joiner got its
- * notice, nothing persisted). Unset in every deployment. */
+ * committed, nothing learned or notified), before-learn (a member got its
+ * notice, nothing persisted; a joining store's twin is in cluster.c).
+ * Unset in every deployment. */
 static void host_test_exit(const char *point)
 {
     const char *e = getenv("EFS_TEST_MEMBER_EXIT");
@@ -12791,6 +12819,8 @@ int server_raft_host_start(struct efsd_server *s)
     if (formed) {
         h->members = s->mstore.members;
         mview_publish(&h->members);
+    } else {
+        mview_publish_store(&s->mstore);
     }
     /* The store's durable boot counter, advanced at this start (efsd.c). */
     h->boot_id = s->incarnation;
@@ -13266,7 +13296,8 @@ static int host_form(struct efs_raft_host *h, const struct efs_membership *want,
 
     cmd[0] = EFS_MD_CMD_MKFS;
     wr64be(cmd + 1, now_ns());
-    wr64be(cmd + 9, h->salt);
+    /* K33 (M2): the cluster identity, minted by the seed, is the salt. */
+    wr64be(cmd + 9, want->cluster);
     rc = efs_membership_encode(want, cmd + 17, EFS_MEMBERSHIP_MAX_LEN, &rlen);
     if (rc == EFS_OK)
         rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, (uint32_t)(17 + rlen), hint);
@@ -13278,12 +13309,11 @@ static int host_form(struct efs_raft_host *h, const struct efs_membership *want,
         rc = host_mkfs_committed(h, &committed, &salt);
     }
     if (rc == EFS_OK) {
-        if (salt != h->salt) {
+        if (salt != want->cluster)
             fprintf(stderr, "raft-host: raft-mkfs: table exists with salt %llu; "
-                    "own salt %llu not used (mkfs once, on one node)\n",
-                    (unsigned long long)salt, (unsigned long long)h->salt);
-            h->salt = salt;
-        }
+                    "proposed salt %llu not used (mkfs once)\n",
+                    (unsigned long long)salt, (unsigned long long)want->cluster);
+        h->salt = salt;
         if (!efs_membership_extends(&committed, want))
             fprintf(stderr, "raft-host: raft-mkfs: the cluster formed earlier with %u members; "
                     "this request's %u members not used\n", committed.formed, want->count);
@@ -13320,76 +13350,200 @@ static uint32_t host_table_copy(struct efs_raft_host *h, struct efs_node *nodes)
     return count;
 }
 
-static int host_member_add(struct efs_raft_host *h, const struct efs_member *j);
+/* K33 (M4'): endpoint order for the formation proposal: the seed is
+ * node 1, the joining stores follow by IPv4 address, then port. */
+static int cand_cmp(const void *pa, const void *pb)
+{
+    const struct efs_member *a = pa, *b = pb;
+    struct in_addr x, y;
+    if (inet_pton(AF_INET, a->addr, &x) == 1 && inet_pton(AF_INET, b->addr, &y) == 1 &&
+        x.s_addr != y.s_addr)
+        return ntohl(x.s_addr) < ntohl(y.s_addr) ? -1 : 1;
+    int c = strcmp(a->addr, b->addr);
+    if (c)
+        return c;
+    return a->port < b->port ? -1 : a->port > b->port;
+}
 
-/* Formation (W153, K33 M4), from efs-mgmt raft-mkfs or automatically: the
- * membership that has joined at this moment (the contiguous node ids
- * 1..k, k >= 3, of the node table) is formed; then every table node whose
- * id is the next one is added (M5), so the call returns once the committed
- * count covers the contiguous joined ids. Fewer than EFS_FORMATION_MIN
- * members, a shared endpoint or a missing store token is refused before
- * anything is proposed. */
+/* K33 (M4'), on the seed before its proposal: once at least two joining
+ * stores have said HELLO recently and that set has not changed for one
+ * second (raft-mkfs: at once), allocate node ids 2..k in endpoint order and
+ * persist the proposal as this store's own promise. From then on the seed
+ * answers the named stores with the proposal (they promise) and every
+ * other one waits for formation. */
+#define HOST_FORM_QUIET_US 1000000ull
+static void host_seed_propose(struct efs_raft_host *h, uint64_t now)
+{
+    struct efs_member c[EFS_MAX_NODES];
+    struct efs_membership want;
+    char err[512], joined[1024] = "";
+    size_t jl = 0;
+    uint32_t n = 0;
+    uint64_t sig = 1469598103934665603ull;
+    int force;
+
+    pthread_mutex_lock(&h->mb_mu);
+    for (int i = 0; i < h->mb_ncand; i++)
+        if (now - h->mb_cand_us[i] < HOST_CAND_FRESH_US)
+            c[n++] = h->mb_cand[i];
+    force = h->mb_force;
+    h->mb_force = 0;
+    pthread_mutex_unlock(&h->mb_mu);
+    qsort(c, n, sizeof(c[0]), cand_cmp);
+    for (uint32_t i = 0; i < n; i++) {
+        sig = (sig ^ c[i].token ^ ((uint64_t)c[i].port << 32)) * 1099511628211ull;
+        if (jl < sizeof(joined))
+            jl += (size_t)snprintf(joined + jl, sizeof(joined) - jl, ", %s:%u", c[i].addr,
+                                   c[i].port);
+    }
+    if (n + 1 < EFS_FORMATION_MIN) {
+        if (now - h->mb_log_us >= 10000000ull) {
+            h->mb_log_us = now;
+            fprintf(stderr, "raft-host: unready: formation needs %u members (joined: this seed "
+                    "at %s:%u%s); waiting for nodes started with --join\n", EFS_FORMATION_MIN,
+                    h->s->addr, h->s->port, joined);
+        }
+        h->mb_sig = 0;
+        return;
+    }
+    if (!force && sig != h->mb_sig) {
+        h->mb_sig = sig;
+        h->mb_sig_us = now;
+        return;
+    }
+    if (!force && now - h->mb_sig_us < HOST_FORM_QUIET_US)
+        return;
+    memset(&want, 0, sizeof(want));
+    want.count = want.formed = n + 1;
+    pthread_mutex_lock(&h->mu);
+    want.cluster = h->s->mstore.cluster;
+    want.m[0].id = 1;
+    want.m[0].port = h->s->port;
+    want.m[0].token = h->s->mstore.token;
+    snprintf(want.m[0].addr, sizeof(want.m[0].addr), "%s", h->s->addr);
+    for (uint32_t i = 0; i < n; i++) {
+        want.m[i + 1] = c[i];
+        want.m[i + 1].id = i + 2;
+    }
+    int rc = h->s->mstore.state != EFS_MEMBER_SEED ? EFS_OK
+             : member_store_promise(&h->s->mstore, &want, err, sizeof(err));
+    if (rc == EFS_OK)
+        mview_publish_store(&h->s->mstore);
+    pthread_mutex_unlock(&h->mu);
+    h->mb_sig = 0;
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: formation proposal not persisted: %s\n", err);
+        return;
+    }
+    fprintf(stderr, "raft-host: formation proposed: %u members of cluster %016llx (node 1 at "
+            "%s:%u%s, node ids in that order); waiting for their promises\n", want.count,
+            (unsigned long long)want.cluster, h->s->addr, h->s->port, joined);
+}
+
+/* K33 (M4'): the formation input is this store's promised proposal; it is
+ * ready once every proposed member is in this node's table at its proposed
+ * id, endpoint and token, which it enters only by saying HELLO with that
+ * id after persisting its promise. *missing names the others. */
+static int host_formation_ready(struct efs_raft_host *h, struct efs_membership *want,
+                                char *missing, size_t cap)
+{
+    EFS_NODE_TABLE(nodes);
+    size_t ml = 0;
+    int ready = 1;
+
+    missing[0] = '\0';
+    pthread_mutex_lock(&h->mu);
+    int promised = h->s->mstore.state == EFS_MEMBER_PROMISED;
+    if (promised)
+        *want = h->s->mstore.members;
+    pthread_mutex_unlock(&h->mu);
+    if (!promised) {
+        snprintf(missing, cap, "no formation proposal yet (the seed proposes once two "
+                 "nodes started with --join have said HELLO)");
+        return 0;
+    }
+    if (!nodes) {
+        snprintf(missing, cap, "out of memory");
+        return 0;
+    }
+    uint32_t count = host_table_copy(h, nodes);
+    for (uint32_t i = 0; i < want->count; i++) {
+        const struct efs_member *p = &want->m[i];
+        uint32_t k;
+        if (p->id == h->s->id)
+            continue;
+        for (k = 0; k < count; k++)
+            if (nodes[k].id == p->id && nodes[k].token == p->token &&
+                nodes[k].port == p->port && !strcmp(nodes[k].addr, p->addr))
+                break;
+        if (k < count)
+            continue;
+        ready = 0;
+        if (ml < cap)
+            ml += (size_t)snprintf(missing + ml, cap - ml, "%snode %u at %s:%u", ml ? ", " : "",
+                                   p->id, p->addr, p->port);
+    }
+    return ready;
+}
+
+/* Formation (W153, K33 M4'), from efs-mgmt raft-mkfs or automatically:
+ * the promised proposal is formed once every proposed member promised
+ * (MKFS on group 0, the notice, SALT on group 2). On the seed before its
+ * proposal raft-mkfs proposes at once (two joining stores at least) and
+ * waits up to 20 s for the promises. Nodes that join later are additions
+ * their own HELLOs drive; nothing here adds them. */
 void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
 {
     struct efs_raft_host *h = g_host;
     struct efs_raft *r;
     struct efs_membership want;
-    char err[1024];
+    char missing[1024];
     int hint = -1;
     int rc;
-    EFS_NODE_TABLE(nodes);
-    uint32_t count = 0;
 
     memset(out, 0, sizeof(*out));
     out->leader_hint = -1;
-    if (!h || !h->running || !nodes) {
-        out->rc = !nodes ? EFS_ERR_NOMEM : EFS_ERR_INVAL;
+    if (!h || !h->running) {
+        out->rc = EFS_ERR_INVAL;
         return;
     }
     out->salt = h->salt;
-    count = host_table_copy(h, nodes);
     if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
         pthread_mutex_lock(&h->mu);
         want = h->members;
         pthread_mutex_unlock(&h->mu);
+        rc = host_form(h, &want, &hint);
     } else {
-        rc = efs_membership_from_nodes(nodes, count, h->salt, &want, err, sizeof(err));
-        if (rc != EFS_OK) {
-            fprintf(stderr, "raft-host: raft-mkfs refused: %s\n", err);
-            out->rc = rc;
+        int ready = 0, fresh = 0;
+        uint64_t now = now_us_();
+        pthread_mutex_lock(&h->mu);
+        int seed = h->s->mstore.state == EFS_MEMBER_SEED;
+        pthread_mutex_unlock(&h->mu);
+        pthread_mutex_lock(&h->mb_mu);
+        for (int i = 0; i < h->mb_ncand; i++)
+            fresh += now - h->mb_cand_us[i] < HOST_CAND_FRESH_US;
+        h->mb_force = seed;
+        pthread_cond_signal(&h->mb_cv);
+        pthread_mutex_unlock(&h->mb_mu);
+        if (seed && (uint32_t)fresh + 1 < EFS_FORMATION_MIN) {
+            fprintf(stderr, "raft-host: raft-mkfs refused: formation needs %u members; %d "
+                    "joined this seed (start more nodes with --join)\n", EFS_FORMATION_MIN,
+                    fresh + 1);
+            out->rc = EFS_ERR_UNFORMED;
             return;
         }
-    }
-    rc = host_form(h, &want, &hint);
-    /* K33: add the joined nodes after the formed prefix, in id order: the
-     * table's, and the pending joiners seen in the last 30 s (a formation
-     * that ran first left them out of the table). */
-    for (efs_node_id_t next = 0; rc == EFS_OK && next <= EFS_MAX_NODES;) {
-        struct efs_member j;
-        pthread_mutex_lock(&h->mu);
-        next = h->members.count + 1;
-        pthread_mutex_unlock(&h->mu);
-        if (next > EFS_MAX_NODES)
-            break;
-        uint32_t i;
-        memset(&j, 0, sizeof(j));
-        for (i = 0; i < count && nodes[i].id != next; i++)
-            ;
-        if (i < count) {
-            j.id = next;
-            j.port = nodes[i].port;
-            j.token = nodes[i].token;
-            snprintf(j.addr, sizeof(j.addr), "%s", nodes[i].addr);
-        } else {
-            pthread_mutex_lock(&h->mb_mu);
-            if (h->mb_seen[next - 1].id == next &&
-                now_us_() - h->mb_seen_us[next - 1] < 30000000ull)
-                j = h->mb_seen[next - 1];
-            pthread_mutex_unlock(&h->mb_mu);
+        for (int tries = 0; tries < 100 && !ready; tries++) {
+            ready = host_formation_ready(h, &want, missing, sizeof(missing));
+            if (!ready)
+                usleep(200000);
         }
-        if (j.id != next)
-            break;
-        rc = host_member_add(h, &j);
+        if (ready) {
+            rc = host_form(h, &want, &hint);
+        } else {
+            fprintf(stderr, "raft-host: raft-mkfs refused: the cluster is not formed; "
+                    "formation waits for: %s\n", missing);
+            rc = EFS_ERR_UNFORMED;
+        }
     }
     out->salt = h->salt;
     pthread_mutex_lock(&h->mu);
@@ -13413,14 +13567,14 @@ static int host_member_add_forward(struct efs_raft_host *h, const struct efs_mem
     int rc = EFS_ERR_NET;
 
     cmd[0] = EFS_MD_REQ_MEMBER_ADD;
-    wr32be(cmd + 1, j->id);
+    wr32be(cmd + 1, 0); /* K33: node ids come from the record (count + 1) */
     cmd[5] = (uint8_t)(j->port >> 8);
     cmd[6] = (uint8_t)j->port;
     wr64be(cmd + 7, j->token);
     cmd[15] = (uint8_t)alen;
     memcpy(cmd + 16, j->addr, alen);
     /* Every group-0 member in turn (any of them may be down); stop at a
-     * verdict: OK, FENCED, or BUSY (the joiner's id is not next yet). */
+     * verdict: OK or FENCED. */
     for (int rid = 0; rid < (int)EFS_FORMATION_MIN; rid++) {
         struct efs_msg_raft_mkfs_reply rep;
         if (rid == h->raft_id)
@@ -13431,9 +13585,9 @@ static int host_member_add_forward(struct efs_raft_host *h, const struct efs_mem
         if (rc != EFS_OK)
             continue; /* unreachable (its transport may say BUSY): the next one */
         rc = rep.rc;
-        if (rc == EFS_OK || rc == EFS_ERR_FENCED || rc == EFS_ERR_BUSY) {
-            fprintf(stderr, "membership: forwarded node %u at %s:%u to member %d: rc=%d\n",
-                    j->id, j->addr, j->port, rid + 1, rc);
+        if (rc == EFS_OK || rc == EFS_ERR_FENCED) {
+            fprintf(stderr, "membership: forwarded %s:%u to member %d: rc=%d\n",
+                    j->addr, j->port, rid + 1, rc);
             break;
         }
     }
@@ -13453,11 +13607,13 @@ static int host_member_add_decode(const uint8_t *cmd, uint32_t clen, struct efs_
     return EFS_OK;
 }
 
-/* Add joiner j: commit the one-member extension of the record this node
- * holds on group 0 (MEMBERS), then learn it. Already a member with this
- * identity: OK. Its id or endpoint held by another store: FENCED. An id
- * after the next one: BUSY (it waits). Idempotent and safe to run on
- * several members at once: group 0 installs one revision per id. */
+/* Add joining store j (no node id): commit the one-member extension of
+ * the record this node holds on group 0 (MEMBERS), giving it id count + 1,
+ * then learn it. Already a member with this endpoint and token: OK. Its
+ * endpoint or token held by another member: FENCED. Idempotent and safe to
+ * run on several members at once: group 0 installs one revision per id, so
+ * a proposal from a stale view (another store took that id) is FENCED and
+ * the joiner's next HELLO proposes it again on the newer record. */
 static int host_member_add(struct efs_raft_host *h, const struct efs_member *j)
 {
     struct efs_membership view, next;
@@ -13474,11 +13630,10 @@ static int host_member_add(struct efs_raft_host *h, const struct efs_member *j)
     pthread_mutex_unlock(&h->mu);
     e = efs_membership_find_ep(&view, j->addr, j->port);
     if (e)
-        return e->id == j->id && e->token == j->token ? EFS_OK : EFS_ERR_FENCED;
-    if (j->id <= view.count)
-        return EFS_ERR_FENCED;
-    if (j->id != view.count + 1)
-        return EFS_ERR_BUSY;
+        return e->token == j->token ? EFS_OK : EFS_ERR_FENCED;
+    for (uint32_t i = 0; i < view.count; i++)
+        if (view.m[i].token == j->token)
+            return EFS_ERR_FENCED;
     if (!hosts_group(h->raft_id, group_voters(EFS_RAFT_GROUP_SHARD, (int)view.count)))
         return host_member_add_forward(h, j);
     rc = efs_membership_plus(&view, j->addr, j->port, j->token, &next, err, sizeof(err));
@@ -13491,13 +13646,14 @@ static int host_member_add(struct efs_raft_host *h, const struct efs_member *j)
     if (rc == EFS_OK)
         rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, (uint32_t)(1 + rlen), &hint);
     if (rc != EFS_OK) {
-        fprintf(stderr, "membership: adding node %u at %s:%u (token %016llx) as member %u: "
-                "rc=%d%s\n", j->id, j->addr, j->port, (unsigned long long)j->token, next.count,
-                rc, rc == EFS_ERR_FENCED ? " (another store committed this id first)" : "");
+        fprintf(stderr, "membership: adding %s:%u (token %016llx) as member %u: rc=%d%s\n",
+                j->addr, j->port, (unsigned long long)j->token, next.count, rc,
+                rc == EFS_ERR_FENCED ? " (another store took that id first; its next HELLO "
+                "retries on the newer record)" : "");
         return rc;
     }
-    fprintf(stderr, "membership: committed node %u at %s:%u (token %016llx) as member %u "
-            "(revision %u)\n", j->id, j->addr, j->port, (unsigned long long)j->token, next.count,
+    fprintf(stderr, "membership: committed %s:%u (token %016llx) as member %u "
+            "(revision %u)\n", j->addr, j->port, (unsigned long long)j->token, next.count,
             next.count - next.formed + 1);
     host_test_exit("after-members-commit");
     /* OK means `next` is part of the committed history: learn it (a later
@@ -13523,8 +13679,8 @@ static void host_join_enqueue(struct efs_raft_host *h, const struct efs_member *
             break;
     if (i == h->mb_njoin && h->mb_njoin < EFS_MAX_NODES) {
         h->mb_join[h->mb_njoin++] = *j;
-        fprintf(stderr, "membership: node %u at %s:%u (token %016llx) is pending; adding it\n",
-                j->id, j->addr, j->port, (unsigned long long)j->token);
+        fprintf(stderr, "membership: joining store at %s:%u (token %016llx) is pending; "
+                "adding it\n", j->addr, j->port, (unsigned long long)j->token);
     }
     pthread_cond_signal(&h->mb_cv);
     pthread_mutex_unlock(&h->mb_mu);
@@ -13558,46 +13714,37 @@ static void host_member_learn_kv(struct efs_raft_host *h)
     }
 }
 
-/* Unformed: the group-0 leader forms automatically once the contiguous ids
- * 1..k (k >= 3) of its table, with their tokens, are unchanged for one
- * second (M4). Every unformed node says why it is unready every 10 s. */
-#define HOST_FORM_QUIET_US 1000000ull
+/* Unformed (M4'): the seed proposes; once every proposed member promised,
+ * the group-0 leader (one of the proposal's ids 1..3) forms with the
+ * proposal. Every unformed node says why it is unready every 10 s. */
 static void host_auto_form(struct efs_raft_host *h, uint64_t now)
 {
-    EFS_NODE_TABLE(nodes);
     struct efs_membership want;
-    char err[1024];
-    uint64_t sig = 1469598103934665603ull;
+    char missing[1024];
+    int hint = -1;
 
-    if (!nodes)
+    pthread_mutex_lock(&h->mu);
+    uint32_t state = h->s->mstore.state;
+    pthread_mutex_unlock(&h->mu);
+    if (state == EFS_MEMBER_SEED) {
+        host_seed_propose(h, now);
         return;
-    uint32_t count = host_table_copy(h, nodes);
-    int rc = efs_membership_from_nodes(nodes, count, h->salt, &want, err, sizeof(err));
-    if (rc != EFS_OK || host_local_leader(h, EFS_RAFT_GROUP_SHARD) != h->raft_id) {
+    }
+    int ready = host_formation_ready(h, &want, missing, sizeof(missing));
+    if (!ready || host_local_leader(h, EFS_RAFT_GROUP_SHARD) != h->raft_id) {
         if (now - h->mb_log_us >= 10000000ull) {
             h->mb_log_us = now;
-            fprintf(stderr, "raft-host: unready: the cluster is not formed; %s\n",
-                    rc != EFS_OK ? err : "formation waits for the group-0 leader");
+            fprintf(stderr, "raft-host: unready: the cluster is not formed; %s%s\n",
+                    ready ? "formation waits for the group-0 leader"
+                          : "formation waits for the promise of ", ready ? "" : missing);
         }
-        h->mb_sig = 0;
         return;
     }
-    for (uint32_t i = 0; i < want.count; i++)
-        sig = (sig ^ want.m[i].token ^ ((uint64_t)want.m[i].port << 32 | want.m[i].id)) *
-              1099511628211ull;
-    if (sig != h->mb_sig) {
-        h->mb_sig = sig;
-        h->mb_sig_us = now;
-        return;
-    }
-    if (now - h->mb_sig_us < HOST_FORM_QUIET_US)
-        return;
-    struct efs_msg_raft_mkfs_reply rep;
-    fprintf(stderr, "raft-host: forming automatically with %u members\n", want.count);
-    server_raft_host_mkfs(&rep);
-    if (rep.rc != EFS_OK)
-        fprintf(stderr, "raft-host: automatic formation: rc=%d; retrying\n", rep.rc);
-    h->mb_sig = 0;
+    fprintf(stderr, "raft-host: forming automatically with %u members (cluster %016llx)\n",
+            want.count, (unsigned long long)want.cluster);
+    int rc = host_form(h, &want, &hint);
+    if (rc != EFS_OK)
+        fprintf(stderr, "raft-host: automatic formation: rc=%d; retrying\n", rc);
 }
 
 /* Group-0 leader (M5 steps 3 and 5): send the current record to every
@@ -13729,9 +13876,9 @@ static void *host_member_thread(void *arg)
         }
         if (have_join) {
             int rc = host_member_add(h, &j);
-            if (rc != EFS_OK && rc != EFS_ERR_FENCED && rc != EFS_ERR_BUSY)
-                fprintf(stderr, "membership: addition of node %u at %s:%u not finished (rc=%d); "
-                        "its next HELLO retries it\n", j.id, j.addr, j.port, rc);
+            if (rc != EFS_OK && rc != EFS_ERR_FENCED)
+                fprintf(stderr, "membership: addition of %s:%u not finished (rc=%d); "
+                        "its next HELLO retries it\n", j.addr, j.port, rc);
         }
         if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
             if (h->raft_id < (int)EFS_FORMATION_MIN)
@@ -14775,63 +14922,184 @@ int server_membership_get(struct efs_membership *out)
     return membership_copy(out);
 }
 
+int server_member_view(uint64_t *cluster, uint32_t *count, int *formed)
+{
+    int rc = 0;
+    pthread_mutex_lock(&mview_mu);
+    *formed = mview_formed;
+    *cluster = mview_cluster;
+    *count = mview_formed ? mview.count : mview_state == EFS_MEMBER_PROMISED ? mview_prop.count : 1;
+    if (!g_host || (!mview_formed && mview_state != EFS_MEMBER_SEED &&
+                    mview_state != EFS_MEMBER_PROMISED))
+        rc = -1;
+    pthread_mutex_unlock(&mview_mu);
+    return rc;
+}
+
 static void host_join_enqueue(struct efs_raft_host *h, const struct efs_member *j);
 
-/* K33 (M5): admission of a HELLO. See server_internal.h. */
+/* K33 (M5): admission of a HELLO from a sender with a node id. See
+ * server_internal.h. */
 uint32_t server_member_hello(efs_node_id_t id, const char *addr, uint16_t port, uint64_t token,
-                             uint64_t cluster, uint32_t *count)
+                             uint64_t cluster, uint32_t flags, uint32_t *count)
 {
     struct efs_membership m;
     const struct efs_member *p;
 
     if (count)
         *count = 0;
-    /* Unformed here: a formed sender is a member this node has not learned
-     * about yet, or of another cluster. Either way it must not enter the
-     * formation table; it waits (pending) while this node learns. */
-    if (!membership_copy(&m))
-        return cluster ? EFS_HELLO_REJECT_PENDING : EFS_HELLO_REJECT_NONE;
+    if (!membership_copy(&m)) {
+        /* Unformed here: a formed sender is a member this node has not
+         * learned about yet (or of another cluster); it must not enter the
+         * formation table and waits (pending) while this node learns. A
+         * seed or promised sender of this cluster enters it (M4'). */
+        if (flags & EFS_HELLO_F_FORMED)
+            return EFS_HELLO_REJECT_PENDING;
+        uint64_t mine;
+        pthread_mutex_lock(&mview_mu);
+        mine = mview_cluster;
+        pthread_mutex_unlock(&mview_mu);
+        if (!token || !cluster || cluster != mine) {
+            fprintf(stderr, "membership: HELLO from node %u at %s:%u refused: %s (cluster "
+                    "%016llx, this node %016llx)\n", id, addr ? addr : "?", port,
+                    !token ? "no store token" : "another cluster", (unsigned long long)cluster,
+                    (unsigned long long)mine);
+            return EFS_HELLO_REJECT_FORMED;
+        }
+        return EFS_HELLO_REJECT_NONE;
+    }
     if (count)
         *count = m.count;
-    if (!addr || !token || (cluster && cluster != m.cluster)) {
+    if (!addr || !token || cluster != m.cluster) {
         fprintf(stderr, "membership: HELLO from node %u at %s:%u refused: %s\n", id,
                 addr ? addr : "?", port, !token ? "no store token" : "another cluster");
         return EFS_HELLO_REJECT_FORMED;
     }
     p = efs_membership_find(&m, id);
-    if (p)
-        return p->port == port && !strcmp(p->addr, addr) && p->token == token
-                   ? EFS_HELLO_REJECT_NONE : EFS_HELLO_REJECT_FORMED;
-    if (efs_membership_find_ep(&m, addr, port) || id < 1 || id > EFS_MAX_NODES)
-        return EFS_HELLO_REJECT_FORMED;
-    server_member_pending_note(id, addr, port, token);
-    if (id == m.count + 1 && g_host) {
+    if (p && p->port == port && !strcmp(p->addr, addr) && p->token == token)
+        return EFS_HELLO_REJECT_NONE;
+    /* Another store at this id, or a node id the committed record never
+     * gave (node ids come from formation and additions only). */
+    return EFS_HELLO_REJECT_FORMED;
+}
+
+static void hello_ack_record(struct efs_msg_hello_ack *ack, const struct efs_membership *m)
+{
+    size_t rlen = 0;
+    if (efs_membership_encode(m, ack->record, sizeof(ack->record), &rlen) == EFS_OK)
+        ack->record_len = (uint32_t)rlen;
+}
+
+/* The members' endpoints, so a joiner whose contact goes away asks
+ * another member (discovery finds peers; this only names more of them). */
+static void hello_ack_members(struct efs_msg_hello_ack *ack, const struct efs_membership *m)
+{
+    for (uint32_t i = 0; i < m->count && i < EFS_MAX_NODES; i++) {
+        ack->nodes[i].id = m->m[i].id;
+        snprintf(ack->nodes[i].addr, sizeof(ack->nodes[i].addr), "%s", m->m[i].addr);
+        ack->nodes[i].port = m->m[i].port;
+    }
+}
+
+/* K33 (M4', M5): a joining store's HELLO. See server_internal.h. */
+void server_member_hello_join(const char *addr, uint16_t port, uint64_t token,
+                              struct efs_msg_hello_ack *ack)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_membership m;
+    const struct efs_member *e = NULL;
+    uint32_t state;
+
+    ack->assigned_id = 0;
+    ack->reject_reason = EFS_HELLO_REJECT_PENDING;
+    ack->record_len = 0;
+    if (!h || !addr || !*addr || !port || !token) {
+        ack->reject_reason = EFS_HELLO_REJECT_FORMED;
+        return;
+    }
+    if (membership_copy(&m)) {
+        ack->cluster = m.cluster;
+        ack->formed = 1;
+        ack->node_count = m.count;
+        hello_ack_members(ack, &m);
+        for (uint32_t i = 0; i < m.count; i++)
+            if (m.m[i].token == token)
+                e = &m.m[i];
+        if (e && e->port == port && !strcmp(e->addr, addr)) {
+            /* Its addition committed: hand it the record naming it (a
+             * retried join after a lost answer gets the same id). */
+            hello_ack_record(ack, &m);
+            ack->assigned_id = e->id;
+            ack->reject_reason = EFS_HELLO_REJECT_NONE;
+            return;
+        }
+        if (e || efs_membership_find_ep(&m, addr, port)) {
+            fprintf(stderr, "membership: joining store %016llx at %s:%u refused: %s\n",
+                    (unsigned long long)token, addr, port,
+                    e ? "this store is a member at another endpoint"
+                      : "the endpoint is a member with another store");
+            ack->reject_reason = EFS_HELLO_REJECT_FORMED;
+            return;
+        }
         struct efs_member j;
         memset(&j, 0, sizeof(j));
-        j.id = id;
         j.port = port;
         j.token = token;
         snprintf(j.addr, sizeof(j.addr), "%s", addr);
-        host_join_enqueue(g_host, &j);
-    }
-    return EFS_HELLO_REJECT_PENDING;
-}
-
-void server_member_pending_note(efs_node_id_t id, const char *addr, uint16_t port,
-                                uint64_t token)
-{
-    struct efs_raft_host *h = g_host;
-    if (!h || id < 1 || id > EFS_MAX_NODES || !token || !addr)
+        host_join_enqueue(h, &j);
         return;
+    }
+    pthread_mutex_lock(&mview_mu);
+    state = mview_state;
+    ack->cluster = mview_cluster;
+    m = mview_prop;
+    pthread_mutex_unlock(&mview_mu);
+    if (state == EFS_MEMBER_PROMISED) {
+        /* M4': the proposal is fixed; a store it names promises it, any
+         * other waits for formation and joins as an addition. */
+        ack->node_count = m.count;
+        hello_ack_members(ack, &m);
+        for (uint32_t i = 0; i < m.count; i++)
+            if (m.m[i].token == token)
+                e = &m.m[i];
+        if (e && e->port == port && !strcmp(e->addr, addr)) {
+            hello_ack_record(ack, &m);
+            ack->assigned_id = e->id;
+            ack->reject_reason = EFS_HELLO_PROMISE;
+        } else if (e || efs_membership_find_ep(&m, addr, port)) {
+            ack->reject_reason = EFS_HELLO_REJECT_FORMED;
+        }
+        return;
+    }
+    if (state != EFS_MEMBER_SEED) {
+        ack->node_count = 0;
+        return;
+    }
+    /* The seed before its proposal: remember the joining store. */
+    uint64_t now = now_us_();
+    int fresh = 0, slot = -1;
     pthread_mutex_lock(&h->mb_mu);
-    struct efs_member *e = &h->mb_seen[id - 1];
-    memset(e, 0, sizeof(*e));
-    e->id = id;
-    e->port = port;
-    e->token = token;
-    snprintf(e->addr, sizeof(e->addr), "%s", addr);
-    h->mb_seen_us[id - 1] = now_us_();
+    for (int i = 0; i < h->mb_ncand; i++)
+        if (h->mb_cand[i].token == token ||
+            (h->mb_cand[i].port == port && !strcmp(h->mb_cand[i].addr, addr)))
+            slot = i; /* the same store again, or a store restarted fresh at that endpoint */
+    if (slot < 0 && h->mb_ncand < EFS_MAX_NODES - 1)
+        slot = h->mb_ncand++;
+    if (slot >= 0) {
+        if (h->mb_cand[slot].token != token)
+            fprintf(stderr, "membership: joining store %016llx at %s:%u waits for formation\n",
+                    (unsigned long long)token, addr, port);
+        memset(&h->mb_cand[slot], 0, sizeof(h->mb_cand[slot]));
+        h->mb_cand[slot].port = port;
+        h->mb_cand[slot].token = token;
+        snprintf(h->mb_cand[slot].addr, sizeof(h->mb_cand[slot].addr), "%s", addr);
+        h->mb_cand_us[slot] = now;
+    }
+    for (int i = 0; i < h->mb_ncand; i++)
+        fresh += now - h->mb_cand_us[i] < HOST_CAND_FRESH_US;
+    pthread_cond_signal(&h->mb_cv);
     pthread_mutex_unlock(&h->mb_mu);
+    ack->node_count = 1u + (uint32_t)fresh;
 }
 
 uint32_t server_member_filter(struct efs_node *nodes, uint32_t count)

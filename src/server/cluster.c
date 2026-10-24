@@ -30,11 +30,13 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         struct efs_node *local = server_local_node(s);
         h.used = local ? local->used : server_compute_local_usage(s);
     }
-    /* K33 (M2): this store's token and, once formed, its cluster. */
+    /* K33 (M2): this store's token, its cluster and whether it is formed. */
     h.token = s->mstore.token;
     {
         struct efs_membership m;
-        h.cluster = server_membership_get(&m) ? m.cluster : 0;
+        int formed = server_membership_get(&m);
+        h.cluster = formed ? m.cluster : s->mstore.cluster;
+        h.flags = formed ? EFS_HELLO_F_FORMED : 0;
     }
 
     if (efs_conn_send_msg(pc, EFS_MSG_HELLO, &h, sizeof(h)) != 0) {
@@ -75,9 +77,9 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
             if (now - last_note >= 10) {
                 last_note = now;
                 fprintf(stderr,
-                        "Join pending at %s:%u — the cluster has %u committed members; node "
-                        "%llu at %s:%u (store %016llx) is being added (node ids are added "
-                        "in order); retrying\n", peer_host, peer_port, ack->node_count,
+                        "Join pending at %s:%u — it has not learned this node's membership "
+                        "yet (%u committed members there); node %llu at %s:%u (store "
+                        "%016llx) retrying\n", peer_host, peer_port, ack->node_count,
                         (unsigned long long)s->id, s->addr, s->port,
                         (unsigned long long)s->mstore.token);
             }
@@ -177,6 +179,110 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     return 0;
 }
 
+/* K33 (M4', M5): one HELLO of a joining store (node id 0). See
+ * server_internal.h. A promise or a committed record is persisted before
+ * this returns EFS_JOIN_ADMITTED; nothing else is written. */
+int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t peer_port,
+                       struct efs_join_note *note)
+{
+    struct efs_membership m;
+    char err[1024];
+    int rc = -1;
+
+    memset(note, 0, sizeof(*note));
+    struct efs_conn *pc = server_peer_conn_new(peer_host, peer_port);
+    if (!pc)
+        return -1;
+    struct efs_msg_hello h;
+    memset(&h, 0, sizeof(h));
+    h.version = EFS_VERSION_PACK;
+    strncpy(h.build_id, EFS_BUILD_ID, sizeof(h.build_id) - 1);
+    h.node_id = 0;
+    strncpy(h.addr, s->addr, sizeof(h.addr) - 1);
+    h.port = s->port;
+    server_format_storage_paths(s, h.storage_path, sizeof(h.storage_path));
+    h.quota = s->quota;
+    h.token = s->mstore.token;
+    uint8_t type = 0;
+    void *payload = NULL;
+    uint32_t payload_len = 0;
+    if (efs_conn_send_msg(pc, EFS_MSG_HELLO, &h, sizeof(h)) != 0 ||
+        efs_conn_recv_msg(pc, &type, &payload, &payload_len) != 0 ||
+        type != EFS_MSG_HELLO_ACK || payload_len != sizeof(struct efs_msg_hello_ack)) {
+        free(payload);
+        efs_conn_destroy(pc);
+        return -1;
+    }
+    efs_conn_destroy(pc);
+    struct efs_msg_hello_ack *ack = payload;
+    note->cluster = ack->cluster;
+    note->count = ack->node_count;
+    note->formed = ack->formed;
+    for (uint32_t i = 0; i < ack->node_count && i < EFS_MAX_NODES && note->npeers < EFS_MAX_NODES;
+         i++) {
+        if (!ack->nodes[i].port || !ack->nodes[i].addr[0] ||
+            (ack->nodes[i].port == s->port && !strcmp(ack->nodes[i].addr, s->addr)))
+            continue;
+        snprintf(note->peer[note->npeers].addr, sizeof(note->peer[0].addr), "%.*s",
+                 (int)sizeof(ack->nodes[i].addr) - 1, ack->nodes[i].addr);
+        note->peer[note->npeers++].port = ack->nodes[i].port;
+    }
+    if (ack->reject_reason == EFS_HELLO_REJECT_VERSION) {
+        fprintf(stderr, "Join refused by %s:%u — VERSION MISMATCH: this node runs build '%s', "
+                "the cluster runs build '%.*s'. Run the same efsd build on every node.\n",
+                peer_host, peer_port, EFS_BUILD_ID, (int)sizeof(ack->build_id), ack->build_id);
+    } else if (ack->reject_reason == EFS_HELLO_REJECT_PENDING) {
+        rc = EFS_JOIN_PENDING;
+    } else if (ack->reject_reason == EFS_HELLO_REJECT_FORMED) {
+        fprintf(stderr, "Join refused by %s:%u (cluster %016llx) — this store (%016llx) at "
+                "%s:%u can never be a member: its endpoint belongs to another member's store, "
+                "or this store is a member at another endpoint.\n", peer_host, peer_port,
+                (unsigned long long)ack->cluster, (unsigned long long)s->mstore.token, s->addr,
+                s->port);
+        rc = EFS_JOIN_REFUSED_FORMED;
+    } else if ((ack->reject_reason == EFS_HELLO_PROMISE ||
+                ack->reject_reason == EFS_HELLO_REJECT_NONE) &&
+               ack->record_len && ack->record_len <= sizeof(ack->record) &&
+               efs_membership_decode(ack->record, ack->record_len, &m) == EFS_OK &&
+               m.cluster == ack->cluster) {
+        const struct efs_member *self = efs_membership_find(&m, ack->assigned_id);
+        if (!self || self->token != s->mstore.token || self->port != s->port ||
+            strcmp(self->addr, s->addr)) {
+            fprintf(stderr, "Join: %s:%u sent a record that does not name this store at "
+                    "%s:%u; ignored\n", peer_host, peer_port, s->addr, s->port);
+        } else {
+            int promise = ack->reject_reason == EFS_HELLO_PROMISE;
+            /* K33 test hook (tests/test_k33_growth.py): the record arrived,
+             * nothing is persisted yet. Unset in every deployment. */
+            const char *tx = getenv("EFS_TEST_MEMBER_EXIT");
+            if (!promise && tx && !strcmp(tx, "before-learn")) {
+                fprintf(stderr, "membership: EFS_TEST_MEMBER_EXIT at before-learn; exiting\n");
+                fflush(stderr);
+                _exit(86);
+            }
+            rc = promise ? member_store_promise(&s->mstore, &m, err, sizeof(err))
+                         : member_store_learn(&s->mstore, &m, err, sizeof(err));
+            if (rc != EFS_OK) {
+                fprintf(stderr, "Join: %s refused: %s\n", promise ? "promise" : "membership",
+                        err);
+                rc = rc == EFS_ERR_FENCED ? EFS_JOIN_REFUSED_FORMED : -1;
+            } else {
+                s->id = self->id;
+                printf("Joined cluster %016llx as node %u at %s:%u (%s: %u members)\n",
+                       (unsigned long long)m.cluster, self->id, s->addr, s->port,
+                       promise ? "promised the formation proposal" : "committed member",
+                       m.count);
+                rc = EFS_JOIN_ADMITTED;
+            }
+        }
+    } else {
+        fprintf(stderr, "Join: %s:%u answered reason %u without a usable record\n", peer_host,
+                peer_port, ack->reject_reason);
+    }
+    free(payload);
+    return rc;
+}
+
 void server_nodes_keep_members(struct efsd_server *s, const struct efs_membership *m)
 {
     uint32_t kept = 0, old;
@@ -186,10 +292,8 @@ void server_nodes_keep_members(struct efsd_server *s, const struct efs_membershi
     for (uint32_t i = 0; i < s->node_count && i < EFS_MAX_NODES; i++) {
         if (!efs_membership_find(m, s->nodes[i].id)) {
             fprintf(stderr, "membership: node %u (%s:%u) is not a committed member; dropped "
-                    "from the node table (pending)\n", s->nodes[i].id, s->nodes[i].addr,
+                    "from the node table\n", s->nodes[i].id, s->nodes[i].addr,
                     s->nodes[i].port);
-            server_member_pending_note(s->nodes[i].id, s->nodes[i].addr, s->nodes[i].port,
-                                       s->nodes[i].token);
             continue;
         }
         if (kept != i)

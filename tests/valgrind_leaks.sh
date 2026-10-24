@@ -16,7 +16,7 @@
 #
 # Step 11 port: the metadata engine is the raft host, so a single-node efsd
 # can no longer serve an export (no quorum). Every wire phase runs a 3-node
-# localhost raft group (three committed members, node-ids 1..3 on ports PORT..PORT+2,
+# localhost raft group (three committed members on ports PORT..PORT+2, node ids from the cluster,
 # one storage dir per node) and `efs-mgmt raft-mkfs`.
 #
 # Gate criteria (hard fail unless all hold):
@@ -268,27 +268,31 @@ start_group_vg_server() {
         join="--join $ADDR:$((PORT + 1))"
         [ "$id" = 2 ] && join=""                            # node 2 seeds
         out="$WORK-group$id.out"
-        EFS_TRANSPORT=$xport setsid ./efsd --node-id "$id" \
-            --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
-            --quota 1G --writers 0 "$IO_FLAG" $join \
+        # K33: the seed creates the cluster at its endpoint; joiners name theirs.
+        local ep="$ADDR:$port"
+        [ -n "$join" ] && ep="$join --listen $ADDR:$port"
+        EFS_TRANSPORT=$xport setsid ./efsd $ep "$STORAGE/s$id" \
+            --quota 1G --writers 0 "$IO_FLAG" --discovery-port 0 \
             >"$out" 2>&1 </dev/null &
         record_ours "$!"
         for i in $(seq 1 40); do
-            grep -q listening "$out" 2>/dev/null && break; sleep 0.5
+            grep -qE 'listening|join: (waiting|pending)' "$out" 2>/dev/null && break; sleep 0.5
         done
-        grep -q listening "$out" || { echo "[leaks] node $id did not start"; cat "$out"; exit 2; }
+        grep -qE 'listening|join: (waiting|pending)' "$out" ||
+            { echo "[leaks] node $id did not start"; cat "$out"; exit 2; }
     done
-    format_group "$ADDR:$((PORT + 1))"
-    # valgrind'd node 1 joins last; do not wait for it (slow under memcheck)
+    # The valgrind'd node joins last (slow under memcheck); formation waits
+    # for its promise, so format after it has started.
     EFS_TRANSPORT=$xport $VG --log-file="$WORK-group1.vg" \
-        ./efsd --node-id 1 --addr "$ADDR" --port "$PORT" \
-        --storage "$STORAGE/s1" --quota 1G --writers 0 "$IO_FLAG" \
-        --join "$ADDR:$((PORT + 1))" >"$WORK-group1.out" 2>&1 &
+        ./efsd --join "$ADDR:$((PORT + 1))" --listen "$ADDR:$PORT" \
+        "$STORAGE/s1" --quota 1G --writers 0 "$IO_FLAG" --discovery-port 0 \
+        >"$WORK-group1.out" 2>&1 &
     record_ours "$!"
     for i in $(seq 1 240); do
         grep -q listening "$WORK-group1.out" 2>/dev/null && break; sleep 0.5
     done
     grep -q listening "$WORK-group1.out" || { fail 'valgrind follower never listened'; exit 2; }
+    format_group "$ADDR:$((PORT + 1))"
 }
 
 # Start a plain 3-node group with node 1 as seed (used by the fuse phases).
@@ -300,15 +304,17 @@ start_group_plain() {
         join="--join $ADDR:$PORT"
         [ "$id" = 1 ] && join=""
         out="$WORK-group$id.out"
-        EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" \
-            --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
-            --quota 1G --writers 0 "$IO_FLAG" $join \
+        local ep="$ADDR:$port"
+        [ -n "$join" ] && ep="$join --listen $ADDR:$port"
+        EFS_TRANSPORT=tcp setsid ./efsd $ep "$STORAGE/s$id" \
+            --quota 1G --writers 0 "$IO_FLAG" --discovery-port 0 \
             >"$out" 2>&1 </dev/null &
         record_ours "$!"
         for i in $(seq 1 40); do
-            grep -q listening "$out" 2>/dev/null && break; sleep 0.5
+            grep -qE 'listening|join: (waiting|pending)' "$out" 2>/dev/null && break; sleep 0.5
         done
-        grep -q listening "$out" || { echo "[leaks] node $id did not start"; cat "$out"; exit 2; }
+        grep -qE 'listening|join: (waiting|pending)' "$out" ||
+            { echo "[leaks] node $id did not start"; cat "$out"; exit 2; }
     done
     format_group "$ADDR:$PORT"
 }

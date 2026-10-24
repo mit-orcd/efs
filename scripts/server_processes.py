@@ -41,6 +41,28 @@ def identity(pid):
         return None
 
 
+# efsd options that take a value (K33 CLI: efsd ADDR:PORT STORAGE, or
+# efsd --join [SEED] STORAGE [--listen ADDR:PORT]).
+VALUE_OPTIONS=('--listen','--discovery-port','--discover-on','--meta-storage','--quota','--writers')
+
+
+def efsd_args(args):
+    """(listen port or None, first storage root or None) of an efsd command line."""
+    positional,listen,join,index=[],None,False,1
+    while index<len(args):
+        value=args[index]
+        if value in VALUE_OPTIONS and index+1<len(args):
+            if value=='--listen':listen=args[index+1]
+            index+=2;continue
+        if value=='--join':join=True
+        elif not value.startswith('-'):positional.append(value)
+        index+=1
+    storage=positional[-1].split(',')[0] if positional else None
+    endpoint=listen if join else (positional[0] if len(positional)==2 else None)
+    port=endpoint.rsplit(':',1)[1] if endpoint and ':' in endpoint else None
+    return port,storage
+
+
 def owns(info,kind,value):
     if kind=='perf':
         if not info or Path(info['exe']).name != 'perf':return False
@@ -48,11 +70,10 @@ def owns(info,kind,value):
         return 'record' in args and any(args[index]=='-o' and os.path.realpath(args[index+1])==os.path.realpath(value) for index in range(len(args)-1))
     if not info or Path(info['exe']).name != 'efsd':
         return False
-    args=info['args']
+    port,storage=efsd_args(info['args'])
     if kind=='port':
-        return any(args[index]=='--port' and args[index+1]==value for index in range(len(args)-1))
-    roots=[args[index+1].split(',')[0] for index in range(len(args)-1) if args[index]=='--storage']
-    return bool(roots) and os.path.realpath(roots[0])==os.path.realpath(value)
+        return port==value
+    return bool(storage) and os.path.realpath(storage)==os.path.realpath(value)
 
 
 def numeric(value):
@@ -82,9 +103,8 @@ BARRIERS=('put_sync','reclaim_journal','usage_flush')
 
 def exit_record_path(info):
     """The exit record of the daemon whose identity is info."""
-    args=info['args']
-    roots=[args[index+1].split(',')[0] for index in range(len(args)-1) if args[index]=='--storage']
-    return Path(roots[0])/EXIT_RECORD if roots else None
+    storage=efsd_args(info['args'])[1]
+    return Path(storage)/EXIT_RECORD if storage else None
 
 
 def read_exit_record(path):

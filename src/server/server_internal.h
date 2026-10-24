@@ -79,6 +79,8 @@ struct efsd_server {
     pthread_t rejoin_tid; /* background rejoin retry thread */
     char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
     uint16_t rejoin_port;
+    uint16_t discovery_port;  /* K33: UDP port of local-subnet discovery; 0 off */
+    char discover_on[64];     /* K33: probe only this interface (name or address) */
 
     /* Runtime GC progress: atomically updated, reset on daemon restart. */
     uint64_t gc_removed_fragments, gc_removed_file_bytes, gc_removed_payload_bytes;
@@ -363,7 +365,23 @@ void server_handle_conn(struct efs_conn *conn);
  * retried. -3: not a member yet, its addition is pending (K33): retried. */
 #define EFS_JOIN_REFUSED_FORMED -2
 #define EFS_JOIN_PENDING -3
+/* K33: a joining store got its node id (promise persisted, or the committed
+ * revision naming it learned); s->id, s->addr and s->port are set. */
+#define EFS_JOIN_ADMITTED -4
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port);
+/* K33: one HELLO of a joining store (no node id) at s->addr:s->port to
+ * peer: EFS_JOIN_PENDING (keep asking), EFS_JOIN_ADMITTED, EFS_JOIN_REFUSED_FORMED
+ * or -1 (unreachable, another build). *note says what answered (zero
+ * when nothing did). */
+struct efs_join_note {
+    uint64_t cluster;
+    uint32_t count;  /* committed members, proposal size or stores joined so far */
+    uint32_t formed;
+    uint32_t npeers; /* other members' endpoints the answer named */
+    struct { char addr[64]; uint16_t port; } peer[EFS_MAX_NODES];
+};
+int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t peer_port,
+                       struct efs_join_note *note);
 
 /* Relay a membership change to all other peers (ring convergence). */
 struct efs_msg_hello;
@@ -399,11 +417,18 @@ int server_raft_host_active(void);
 /* W153/K33: the committed membership. formed: a revision is committed and
  * learned here (before the host starts, as the member store recorded it).
  * member_hello admits a HELLO (docs/status/k33-membership-protocol-20261023.md
- * M5): EFS_HELLO_REJECT_NONE when both are unformed or the sender is the committed
- * member at exactly id, addr:port and store token; _PENDING for a node that
- * is not a member yet (its addition is queued when its id is count + 1);
+ * M5) from a sender with a node id: EFS_HELLO_REJECT_NONE when both are
+ * unformed in one cluster (the sender is a seed or holds a promise) or the
+ * sender is the committed member at exactly id, addr:port and store token;
+ * _PENDING for a formed sender this unformed node has not learned about;
  * _FORMED when it can never be one (id or endpoint held by another store,
  * another cluster). *count is the committed count (0 unformed).
+ * member_hello_join answers a joining store (node id 0, M4'/M5) in ack:
+ * reject_reason _PENDING (formation not proposed yet, or its addition is
+ * queued), EFS_HELLO_PROMISE with the seed's formation proposal naming it,
+ * _NONE with the committed revision naming it (assigned_id its id), or
+ * _FORMED (its endpoint or store belongs to another member). ack->cluster
+ * names the cluster; node_count the members (or joined stores) so far.
  * member_filter compacts a node table to the committed members (unchanged
  * when unformed) and returns the kept count. keep_members drops HELLO-table
  * rows that are not committed members and adds rows for members the table
@@ -411,12 +436,16 @@ int server_raft_host_active(void);
 int server_raft_host_formed(void);
 /* 1 and a copy of the committed membership this node learned, 0 unformed. */
 int server_membership_get(struct efs_membership *out);
+/* K33 discovery answer: this node's cluster, member count (or proposal
+ * size, or 1 for a seed) and whether it is formed; -1 before the host runs
+ * or while joining. */
+int server_member_view(uint64_t *cluster, uint32_t *count, int *formed);
 uint32_t server_member_hello(efs_node_id_t id, const char *addr, uint16_t port, uint64_t token,
-                             uint64_t cluster, uint32_t *count);
+                             uint64_t cluster, uint32_t flags, uint32_t *count);
+struct efs_msg_hello_ack;
+void server_member_hello_join(const char *addr, uint16_t port, uint64_t token,
+                              struct efs_msg_hello_ack *ack);
 uint32_t server_member_filter(struct efs_node *nodes, uint32_t count);
-/* K33: remember a pending joiner (raft-mkfs adds the recent ones in order). */
-void server_member_pending_note(efs_node_id_t id, const char *addr, uint16_t port,
-                                uint64_t token);
 void server_nodes_keep_members(struct efsd_server *s, const struct efs_membership *m);
 int server_raft_host_inode_reaped(efs_ino_t ino, int *dead);
 /* Borrowed immutable query image; group slots are 0 and 2. Only background

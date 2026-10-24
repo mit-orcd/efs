@@ -4,11 +4,16 @@ set -e
 usage() {
     cat <<EOF
 Usage:
-  $0 [--perf] <addr:port> <path[,path...][:quota]> [join-addr:port] [extra-efsd-args...]
+  $0 [--perf] <addr:port> <path[,path...][:quota]> [join-addr:port|join] [extra-efsd-args...]
   $0 stop <path[:quota]|path[,path...]|addr:port>
 
   start:  bind addr:port; one storage path or comma-separated 1..24 paths
-          (optional :quota after the path list); optional join
+          (optional :quota after the path list). Without a join target the
+          node creates a new cluster in fresh storage (efsd ADDR:PORT
+          STORAGE) or restarts; with join-addr:port it joins through that
+          member, with the word "join" through discovery on the local
+          subnet (efsd --join [SEED] --listen ADDR:PORT STORAGE). Node ids
+          come from the cluster.
   --perf: record efsd (perf record -F 499 -g) until stop.
           stop then writes flat.txt, by_thread.txt, and callers.txt under
           ~/orcd/scratch/efs/perf/efsd-<port>/ (override with EFS_PERF_DIR).
@@ -170,10 +175,11 @@ ADDR_PORT=$1
 PATH_QUOTA=$2
 shift 2
 
-# Optional third positional argument is the join address.
+# Optional third positional argument is the join address, or "join"
+# (discovery on the local subnet).
 JOIN=""
 EXTRA_ARGS=()
-if [ $# -gt 0 ] && [[ "$1" == *:* ]]; then
+if [ $# -gt 0 ] && { [[ "$1" == *:* ]] || [ "$1" = join ]; }; then
     JOIN=$1
     shift
 fi
@@ -218,20 +224,16 @@ if [ "$prev_rc" -ne 0 ]; then
     exit "$prev_rc"
 fi
 
-# Derive a stable node id from the address and port.
-if [[ "$ADDR" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-    LAST_OCTET=${BASH_REMATCH[4]}
-    NODE_ID=$((LAST_OCTET * 65536 + PORT))
+# K33: no node id; a joiner names its own endpoint with --listen.
+if [ -n "$JOIN" ]; then
+    ARGS=(./efsd --join)
+    [ "$JOIN" = join ] || ARGS+=("$JOIN")
+    ARGS+=(--listen "$ADDR_PORT" "$STORAGE")
 else
-    NODE_ID=$(printf '%d' "0x$(echo -n "$ADDR_PORT" | sha256sum | head -c 8)")
+    ARGS=(./efsd "$ADDR_PORT" "$STORAGE")
 fi
-
-ARGS=(./efsd --node-id "$NODE_ID" --addr "$ADDR" --port "$PORT" --storage "$STORAGE")
 if [ -n "$QUOTA" ]; then
     ARGS+=(--quota "$QUOTA")
-fi
-if [ -n "$JOIN" ]; then
-    ARGS+=(--join "$JOIN")
 fi
 if [ ${#EXTRA_ARGS[@]} -gt 0 ]; then
     ARGS+=("${EXTRA_ARGS[@]}")
@@ -265,9 +267,10 @@ fi
 # must be visible on the terminal — not only buried in the log.
 if [ -n "$JOIN" ]; then
     NEW_LOG=$(tail -n +"$((LOG_MARK + 1))" "$LOG_FILE" 2>/dev/null || true)
-    if echo "$NEW_LOG" | grep -qE 'Cannot connect to peer|Could not join cluster|Invalid join address|Join rejected|Join failed|No HELLO_ACK'; then
-        echo "WARNING: join to $JOIN failed; efsd is running standalone and will retry in the background." >&2
-        echo "$NEW_LOG" | grep -E 'Cannot connect to peer|Could not join cluster|Invalid join address|Join rejected|Join failed|No HELLO_ACK' >&2 || true
+    JOIN_ERRORS='Cannot connect to peer|Could not reach|does not answer|no EFS cluster answered|Join refused|Join failed|No HELLO_ACK'
+    if echo "$NEW_LOG" | grep -qE "$JOIN_ERRORS"; then
+        echo "WARNING: join to $JOIN has not succeeded yet; efsd keeps retrying in the background." >&2
+        echo "$NEW_LOG" | grep -E "$JOIN_ERRORS" >&2 || true
         echo "See full log: $LOG_FILE" >&2
     elif ! echo "$NEW_LOG" | grep -q 'Joined cluster'; then
         echo "WARNING: join to $JOIN was requested but no join success was logged yet; check $LOG_FILE" >&2

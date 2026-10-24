@@ -37,10 +37,10 @@ static inline void efs_cli_help(FILE *out,const char *program,const char *topic)
     const char *summary="",*syntax="",*commands=NULL,*options=NULL,*examples=NULL,*notes=NULL;
     if (!strcmp(name,"efsd")) {
         summary="Run an EFS storage node";
-        syntax="--node-id ID --addr ADDRESS --port PORT --storage PATH [options]";
-        options="--node-id ID          Node identifier\n--addr ADDRESS        Listen address\n--port PORT           Listen port\n--storage PATH        Storage roots; repeat or separate with commas\n--quota SIZE          Safe storage quota (default: automatic); K/M/G/T\n--direct-io           Use O_DIRECT for fragment I/O\n--no-direct-io        Use buffered fragment I/O (default)\n--writers N           Shared writer threads; 0 runs writes inline\n--join HOST:PORT      Join an existing cluster\n--meta-storage PATH   Raft/KV root (default: first storage root)\n--no-persist          Disable cluster configuration persistence\n--perf               Record a CPU profile\n--strace             Record system calls";
-        examples="efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1";
-        notes="Metadata root changes do not move existing mdraft data.\nStorage roots use least-queue write placement across paths.\nEFS_COMMANDS_SERVER=0 disables query workers, tracking and query RPCs.\nSet the same policy on every node; changes require graceful restart.\nDefault: enabled. Re-enabling rebuilds from current persisted metadata.";
+        syntax="ADDR:PORT STORAGE [options]\n  efsd --join [SEED] STORAGE [options]";
+        options="ADDR:PORT             This node's endpoint: creates a cluster in fresh STORAGE, or restarts\n--join [SEED]         Join: the cluster at SEED (ADDR:PORT of any member), or found on the local subnet\nSTORAGE               Storage roots, separated with commas\n--listen ADDR:PORT    Joiner's endpoint (default: the interface reaching the cluster, its port)\n--discovery-port N    UDP discovery port (default 17430; 0 turns discovery off)\n--discover-on IFACE   Discover only on this interface (name or address)\n--quota SIZE          Safe storage quota (default: automatic); K/M/G/T\n--direct-io           Use O_DIRECT for fragment I/O\n--no-direct-io        Use buffered fragment I/O (default)\n--writers N           Shared writer threads; 0 runs writes inline\n--meta-storage PATH   Raft/KV root (default: first storage root)\n--no-persist          Disable cluster configuration persistence\n--perf               Record a CPU profile\n--strace             Record system calls";
+        examples="efsd 10.0.0.11:17432 /data/efs\nefsd --join /data/efs\nefsd --join 10.0.0.11:17432 /data/efs\nefsd --join 10.0.0.11:17432 --listen 10.0.1.12:17432 /data/efs";
+        notes="The first node creates the cluster; the cluster forms by itself once two nodes have joined.\nNode ids come from the cluster (the first node is 1); there is no node id or member count to give.\nA node started with --join later is added online; restart a node with the same command.\nWithout SEED, --join asks the local subnet (broadcast on each interface); several clusters need a SEED.\nWhen nobody answers, the node says so and waits; it never creates a cluster.\nA store keeps its cluster, node id and endpoint; another cluster's store is refused.\nMetadata root changes do not move existing mdraft data.\nStorage roots use least-queue write placement across paths.\nEFS_COMMANDS_SERVER=0 disables query workers, tracking and query RPCs.\nSet the same policy on every node; changes require graceful restart.\nDefault: enabled. Re-enabling rebuilds from current persisted metadata.";
     } else if (!strcmp(name,"efs-fuse")) {
         summary="Mount an EFS export";
         syntax="NODE:PORT [NODE:PORT ...] MOUNTPOINT [options]";
@@ -142,8 +142,9 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
             "Set requires operator UID 0 and server EFS_EXPIRY=1.\n"
             "Node addresses use HOST:PORT." :
             (!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
-            "Single export; no label argument.\nCommits the members joined at this moment as the "
-            "cluster membership (at least three, node ids 1..n); a repeat keeps the first.\n"
+            "Single export; no label argument. Optional: the cluster forms by itself.\n"
+            "On the first node, proposes formation now with the nodes joined so far (at least three in all)\n"
+            "and forms once each promised; a repeat keeps the first membership.\n"
             "Node addresses use HOST:PORT." :
             "Node addresses use HOST:PORT.");return 0;
     }

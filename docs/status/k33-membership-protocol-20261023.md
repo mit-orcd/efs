@@ -8,9 +8,10 @@ Contract: [alpha 1.0 node addition](alpha-1.0-node-addition-20261023.md),
 [W153](w153-committed-membership-20261023.md).**
 
 Rules M1–M9 below are the protocol. Each names the model action and
-invariant that checks it. "Implemented" marks what the K33 increment on this
-branch builds; "target" marks what a later increment adds on the same
-record and rules.
+invariant that checks it. "Implemented" marks what K33 increments 1
+(formation, addition) and 2 (automatic ids, positional CLI, discovery;
+[evidence](k33-w157-autoid-discovery-20261024.md)) build; "target" marks what
+a later increment adds on the same record and rules.
 
 ## M1 One membership authority
 
@@ -24,7 +25,14 @@ record and rules.
   member, never changes the count and never selects a voter. Before
   formation it is the input from which the formation record is built and
   then committed; after formation it keeps committed members only.
-- Discovery (target) finds endpoints; it never defines membership.
+- Discovery (implemented, increment 2) finds endpoints; it never defines
+  membership. A seed, promised or formed node answers UDP probes with its
+  cluster identity, state, member count, service endpoint and build; a
+  joiner without a seed probes the broadcast address of each up IPv4
+  interface's own subnet (or the one `--discover-on` names), ignores other
+  builds, refuses when several clusters answer (an explicit seed is then
+  required), says so and waits when nobody answers, and then says HELLO to
+  a peer it found: the committed record, not the answer, decides.
 
 ## M2 Stable identities
 
@@ -35,9 +43,14 @@ record and rules.
   token is minted from the kernel RNG when a member store is initialized
   and kept in `identity.bin`; it never changes for that store. A wiped or
   replaced store is a new token. The record carries every member's token.
-- Before formation a node's provisional identity is (operator id,
-  endpoint, token). The seed's table refuses a second store claiming an id
-  that a different store holds (`HELLO` rejected, duplicate id).
+- Node ids are never an operator input (increment 2). A store created with
+  `efsd ADDR:PORT STORAGE` is a **seed**: node 1 at that endpoint, with a
+  64-bit cluster identity minted at creation (the later MKFS salt). A store
+  created with `efsd --join [SEED] STORAGE` is **joining**: a token and no
+  id; its provisional identity is (endpoint, token) and it never enters a
+  node table. It gets its id from the seed's formation proposal (M4′, a
+  durable promise) or from the committed revision that adds it (M5, id
+  count + 1). One store per id in the formation table, as before.
 - A store whose token differs from the record's entry for its endpoint is
   refused at start and at learning ("store replaced"; model
   `store_not_member`, negative control `no-token`). Its member stays a
@@ -89,24 +102,38 @@ record and rules.
   table's nodes after the formed prefix (M5). Nodes that join after
   formation are pending, not in the table; their own HELLO retries add
   them (every two seconds). Nothing requires the command.
-- **Target (automatic ids, M4′):** the seed allocates provisional ids in
-  join order and persists its proposal; each candidate persists a promise
-  for that proposal (refusing another cluster's); the seed commits the
-  formation only when every proposed member has promised, and group 0 is
-  bootstrapped from the committed ids. Modelled
-  (`growth_automatic_ids_formation_exhaustive`); not built in this increment,
-  where ids remain the operator's `--node-id`.
+- **Automatic ids, M4′ (implemented, increment 2):** joining stores say
+  HELLO with node id 0 to the seed, which keeps them as candidates while
+  their HELLOs (every second) keep arriving. Once at least two are fresh
+  and the set is unchanged for one second (or at once on `raft-mkfs`), the
+  seed allocates ids 2..k in endpoint order (IPv4 address, then port) and
+  persists the proposal as its own promise (identity state `promised`).
+  From then on it answers each named store with the proposal
+  (`EFS_HELLO_PROMISE`); the store persists its promise (refusing a
+  proposal of another cluster or another one than it promised) and says
+  HELLO again with its id and the cluster, entering the formation table.
+  A store the proposal does not name waits for formation and joins as an
+  addition. A promised store knows its id and the boot voters, so ids 1..3
+  run group 0; the group-0 leader, itself promised, proposes MKFS with the
+  proposal once every proposed member is in its table at the proposed id,
+  endpoint and token (each promised), and the MKFS salt is the cluster
+  identity. A lost MKFS is proposed again; MKFS keeps the first record.
+  Model: `growth_automatic_ids_formation_exhaustive` (formation through
+  group 0 with lost proposals since increment 2). A proposed store that
+  never returns blocks formation (wipe and start again); removal is
+  deferred.
 
 ## M5 Online addition (implemented)
 
-1. **Pending.** A node with an unformed store says HELLO (with its id,
-   endpoint, token and no cluster) to any member. The member answers
-   `EFS_HELLO_REJECT_PENDING` when the node is eligible: its endpoint is not
-   in the record and its id is `count + 1` (manual ids; target: the record
-   allocates `count + 1`). A higher id waits (pending) until the lower ids
-   are added; an id held by another identity, an endpoint held by another
-   token or another cluster is refused (`EFS_HELLO_REJECT_FORMED`, the
-   joiner exits). A pending node is not in the node table, not in any
+1. **Pending.** A joining store says HELLO (node id 0, its endpoint and
+   token) to any member. The member answers `EFS_HELLO_REJECT_PENDING` with
+   the cluster and the members' endpoints (so the joiner can ask another
+   member if this one goes away) and queues its addition, when its endpoint
+   and token are not in the record; once the record names it at that
+   endpoint with that token, the answer is the record itself (accepted,
+   `assigned_id` its id): the joiner persists it and is a member. An
+   endpoint held by another token, or this token at another endpoint, is
+   refused (`EFS_HELLO_REJECT_FORMED`, the joiner exits). A pending node is not in the node table, not in any
    placement and not a voter. Before formation a node whose store already
    belongs to a formed cluster is told to wait (pending), never entered in
    the formation table: it is a member this node has not learned about yet,
@@ -116,8 +143,11 @@ record and rules.
    (`EFS_MD_REQ_MEMBER_ADD`, tag 93) to the group-0 members in turn,
    skipping unreachable ones, until one gives a verdict. Duplicate HELLOs,
    retries and concurrent proposals by several members are the same record
-   (success); two stores claiming one id: one commits, the other gets
-   `FENCED` and is refused at its next HELLO (model
+   (success). Two joiners at once propose the same id `count + 1` from one
+   view: one commits, the other's proposal is `FENCED` (it does not extend
+   the record) and its next HELLO proposes `count + 2` on the newer record,
+   so concurrent joiners get distinct ids (model
+   `growth_concurrent_automatic_joins_exhaustive`; manual ids:
    `growth_competing_and_retried_joins_exhaustive`).
 3. **Learn.** Every node that applies the revision (group 0 or 2 replicas)
    learns it from its own apply; the **notice pump** of the group-0 leader
@@ -126,8 +156,10 @@ record and rules.
    change and every two seconds for a member that did not answer. A down
    member learns when it returns; no node coordinates permanently, so losing
    the seed changes nothing (the leader moves).
-4. **Joiner.** The joiner keeps retrying HELLO (every two seconds) until its
-   store holds a record naming it. Then it is a member: it enters node
+4. **Joiner.** The joiner keeps retrying HELLO (every second) until a
+   member answers with the record naming it, which it persists before it
+   serves anything; a member restarted from its store keeps saying HELLO
+   until its store learned the revision. Then it is a member: it enters node
    tables (endpoint from the record, storage and usage from its HELLO) and
    new placements, and attaches the metadata groups it votes in (M6).
 5. **Copy.** The group-0 leader proposes the new record to group 2 (group-2
@@ -204,32 +236,45 @@ the converged membership.
 
 | Durable step | Who | Restart / interruption |
 | --- | --- | --- |
-| store init (token) | every node | same token; wiped store = new token, refused once committed |
+| store init (token; seed: id 1, cluster) | every node | same token and cluster; wiped store = new token, refused once committed |
+| formation proposal (seed's promise) | seed | the same proposal is answered again; never replaced |
+| promise | each proposed store | restarts promised with its id; a lost answer is repeated |
 | MKFS commit | group 0 | first record kept; notice and SALT repeat |
 | store learns formation | each member | re-learned from own KV (`host_membership_reconcile`) or the notice pump |
 | SALT / MEMBERS on group 2 | group-0 leader | repeated until held; history = success |
 | MEMBERS commit on group 0 | any member (forwarded) | lost proposal: joiner's next HELLO repeats it; committed: pump notifies |
-| joiner store learns | joiner | until then it retries HELLO; its member check passes on (id, endpoint, token) |
+| joiner store learns | joiner | until then it retries HELLO (id 0); a member answers with the record on (endpoint, token): same id after a lost answer |
 | group-2 learner catch-up | group-2 leader | reconciler retries; learner restarts from its log |
 | JOINT / COLD | group 2 | Raft I18; reconciler completes after leader change |
 
 Refusals are fail-closed and name the conflict: another cluster, another
 token for a committed endpoint or id, a record that does not extend the
-store's, a node id out of order (manual ids). No refusal removes a member.
+store's or its promise, another endpoint for a store's member, a joining
+store started as a seed. No refusal removes a member.
 
 ## Wire and storage numbers
 
 - Log tag 92 `EFS_MD_CMD_MEMBERS`; request tag 93 `EFS_MD_REQ_MEMBER_ADD` (90 and 91 before the merge with K32, which took them).
-- `EFS_HELLO_REJECT_PENDING` = 4. `struct efs_msg_hello` gains `token` and
-  `cluster`; `struct efs_node` gains `token`.
-- Record version 2 (above); member store `identity.bin` version 2 (token).
+- `EFS_HELLO_REJECT_PENDING` = 4; `EFS_HELLO_PROMISE` = 5 (increment 2).
+  `struct efs_msg_hello` gains `token`, `cluster` and (increment 2) `flags`
+  (`EFS_HELLO_F_FORMED` = 1); node id 0 is a joining store. `struct
+  efs_msg_hello_ack` gains (increment 2) `cluster`, `formed`, `record_len`
+  and `record`; `struct efs_node` gains `token`.
+- Record version 2 (above); member store `identity.bin` version 3
+  (increment 2: state joining / seed / promised / formed, cluster identity,
+  endpoint).
+- Discovery datagrams (increment 2, UDP port 17430 by default): magic
+  `EFSDISC` version 1, probe `[magic:8][1][nonce:8]`, answer `[magic:8][2]
+  [nonce:8][cluster:8][count:4][formed:1][port:2][alen:1][addr][blen:1]
+  [build]` (`src/server/discovery.h`). No log tag, request tag, message type
+  or KV kind added in increment 2.
   No KV kind added (the record stays `EFS_KV_KIND_MEMBERSHIP` 55).
 - Earlier stores and records are refused (no backward compatibility).
 
-## Remaining increments (not in this branch)
+## Remaining increments
 
-1. Automatic ids and the positional CLI (`efsd ADDR:PORT STORAGE`,
-   `efsd --join [SEED] STORAGE`), M4′ promise formation.
-2. Discovery on the local subnet and explicit seed across subnets.
-3. Live client view refresh on a new revision (mounted clients).
-4. Rebalance (not required), removal (deferred).
+1. ~~Automatic ids and the positional CLI, M4′ promise formation~~ and
+   ~~discovery on the local subnet, explicit seed across subnets~~: built in
+   increment 2 (live multi-host and cross-subnet gates NOTRUN).
+2. Live client view refresh on a new revision (mounted clients).
+3. Rebalance (not required), removal (deferred).
