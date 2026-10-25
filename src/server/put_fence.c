@@ -12,6 +12,42 @@
 #define PUT_SESSION_STRIPES 64u
 #define PUT_SESSION_CERT_BYTES 56u
 static pthread_mutex_t put_session_mu[PUT_SESSION_STRIPES];
+/* Certificates this process has written or found and then synced with
+ * their parent directories, per stripe, under its mutex. A repeated seal
+ * at or below such a floor is already durable: every FENCE_LOC of a revoke
+ * seals the same floor once per touched shard, and three directory fsyncs
+ * each, in the serial apply, made a 2,058-shard revoke take 24 s (A11
+ * finding 1). Process memory only: after a restart the first seal syncs. */
+#define PUT_SESSION_SEALED 4u
+static struct { uint64_t path; uint8_t uuid[16]; uint32_t floor; }
+    put_session_sealed[PUT_SESSION_STRIPES][PUT_SESSION_SEALED];
+static unsigned put_session_sealed_next[PUT_SESSION_STRIPES];
+static uint64_t sealed_path_hash(const char *path)
+{
+    uint64_t h=14695981039346656037ull;
+    for(const unsigned char *p=(const unsigned char *)path;*p;p++)h=(h^*p)*1099511628211ull;
+    return h;
+}
+static int sealed_durable(unsigned stripe,const char *path,const uint8_t uuid[16],uint32_t floor)
+{
+    uint64_t h=sealed_path_hash(path);
+    for(unsigned i=0;i<PUT_SESSION_SEALED;i++)
+        if(put_session_sealed[stripe][i].floor>=floor && put_session_sealed[stripe][i].path==h &&
+           !memcmp(put_session_sealed[stripe][i].uuid,uuid,16))return 1;
+    return 0;
+}
+static void sealed_note(unsigned stripe,const char *path,const uint8_t uuid[16],uint32_t floor)
+{
+    uint64_t h=sealed_path_hash(path);
+    for(unsigned i=0;i<PUT_SESSION_SEALED;i++)
+        if(put_session_sealed[stripe][i].path==h && !memcmp(put_session_sealed[stripe][i].uuid,uuid,16)) {
+            if(put_session_sealed[stripe][i].floor<floor)put_session_sealed[stripe][i].floor=floor;
+            return;
+        }
+    unsigned i=put_session_sealed_next[stripe]++%PUT_SESSION_SEALED;
+    put_session_sealed[stripe][i].path=h;
+    memcpy(put_session_sealed[stripe][i].uuid,uuid,16);put_session_sealed[stripe][i].floor=floor;
+}
 static pthread_once_t put_session_once=PTHREAD_ONCE_INIT;
 static void put_session_init(void)
 {
@@ -87,7 +123,11 @@ static int storage_fence_seal(struct efsd_server *s,const uint8_t uuid[16],uint3
     if(!floor)return EFS_ERR_INVAL;
     char path[EFS_MAX_PATH+80];pthread_mutex_t *mu;
     int rc=storage_fence_path(s,uuid,path,&mu);if(rc!=EFS_OK)return rc;
+    unsigned stripe=(unsigned)(mu-put_session_mu);
     pthread_mutex_lock(mu);uint32_t old=0;rc=storage_fence_read(path,uuid,&old);
+    if(rc==EFS_OK && floor<=old && sealed_durable(stripe,path,uuid,floor)) {
+        pthread_mutex_unlock(mu);return EFS_OK;
+    }
     if(rc==EFS_OK && floor>old){
         char dir[EFS_MAX_PATH+80];strcpy(dir,path);*strrchr(dir,'/')=0;
         char *slash=strrchr(dir,'/');*slash=0;
@@ -115,6 +155,9 @@ static int storage_fence_seal(struct efsd_server *s,const uint8_t uuid[16],uint3
         }
     }
     if(rc==EFS_OK)rc=put_session_sync_parents(path);
+    /* The file was fsynced before its rename, or read back from disk; with
+     * its parents synced, the larger floor is durable. */
+    if(rc==EFS_OK)sealed_note(stripe,path,uuid,floor>old?floor:old);
     pthread_mutex_unlock(mu);return rc;
 }
 

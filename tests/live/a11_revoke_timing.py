@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A11 finding 1 evidence: how long a clean unmount's session revoke takes.
 
-Usage: python3 tests/live/a11_revoke_timing.py [DIRS ...]   (default 300 1000 3000)
+Usage: python3 tests/live/a11_revoke_timing.py [--keep] [DIRS ...]   (default 300 1000 3000)
 
 Run from the root of a built tree (make, make tests/faults/efsd). For each
 DIRS count it starts three private efsd daemons on free loopback ports
@@ -13,7 +13,8 @@ shard, so the session touches about that many shards), unmounts with
 where revoke_s is the time between the client's "put tickets outstanding
 at unmount" and "session revoked at unmount" log lines (both builds log
 them with timestamps), so the same script measures the tree before and
-after the fix. Work directories are deleted at the end of each run.
+after the fix. Work directories are deleted at the end of each run, or kept
+(daemon and client logs, stores) with --keep, which prints their path.
 """
 import os, re, shutil, subprocess, sys, tempfile, time
 from datetime import datetime
@@ -52,8 +53,12 @@ def run(files):
               flush=True)
     finally:
         c.stop_all()
-        shutil.rmtree(work, ignore_errors=True)
+        if KEEP:
+            print(f'kept {work}', flush=True)
+        else:
+            shutil.rmtree(work, ignore_errors=True)
 
 
-for n in [int(a) for a in sys.argv[1:]] or [300, 1000, 3000]:
+KEEP = '--keep' in sys.argv[1:]
+for n in [int(a) for a in sys.argv[1:] if a != '--keep'] or [300, 1000, 3000]:
     run(n)
