@@ -2569,7 +2569,7 @@ static void *shard_io_thread(void *arg)
                 buffers->bounce_len = alloc;
             }
             static int once_bounce;
-            if (a->rec && !once_bounce &&
+            if (a->rec && !__atomic_load_n(&once_bounce, __ATOMIC_RELAXED) &&
                 __sync_bool_compare_and_swap(&once_bounce, 0, 1))
                 fprintf(stderr, "store: put O_DIRECT bounce copy "
                         "(buf align=%u len=%u)\n",

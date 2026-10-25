@@ -1324,8 +1324,8 @@ static void *pk_main(void *arg)
             uint64_t term = 0;
             pk.g[g].busy = busy;
             if (!server_raft_host_pack_leader(groups[g], &term, NULL)) {
-                pk.g[g].backlog = 0; /* counted by that group's leader */
-                pk.g[g].count_ns = 0;
+                __atomic_store_n(&pk.g[g].backlog, 0, __ATOMIC_RELAXED); /* counted by that group's leader */
+                __atomic_store_n(&pk.g[g].count_ns, 0, __ATOMIC_RELAXED);
                 continue;
             }
             if (measured) {
