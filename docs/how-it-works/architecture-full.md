@@ -1598,6 +1598,10 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Flake sweep: every intermittent failure of the gate](../status/flake-sweep-20261025.md):
+**FIXED, final gate NOTRUN (stopped after the merge into merge-wave8b, gated there); branch `claude/devel-flake-sweep-1505b6` (head of the code: `8f1d50ed8`), not merged, not pushed.** Ten 8-job `make test-all` runs (471 commands) and three serial `test-long` runs (62) on intel1 at `0b01a2a1e` failed six commands at random; the final-gate attempts surfaced a seventh. Product defects fixed: the client's away mark blocked place-around (K35 case 7, 2/10 + 1/3), the packer took one transient `NOT_PRIMARY` for a missing fragment (D4, 1/10), forwarded PUT ticket admissions were forwarded again during an election until the peer pools stalled for 5 s (report step-down, 1/10; 5/28 loaded before, 0/40 after; new wire mark on member forwards). Test defects fixed: K37 case 7, B geometry, K36 case 11, B6 refuse mode, query-first NOTRUN, the runner self-test's false NOTRUN. Open, single occurrences without logs: K36 case 8 read EIO, K33 payload read-back EIO. Raw: intel1 `~/efs-artifacts/flake-sweep-20261025/`.
+
+
 [Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](../status/pack-unindex-race-20261024.md):
 **FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**
 The packer's UNINDEX deleted a candidate key unconditionally, so a rewrite whose publication
