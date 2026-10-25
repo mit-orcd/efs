@@ -2118,18 +2118,33 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,uint32_t n,int pro
         EFS_MD_CMD_PUT_TICKET_SETTLE,EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH,
         EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH};
     body[1]=tag[probe_only];
-    efs_node_id_t target=0;
+    efs_node_id_t target=0,skip=0;
+    int lost=0;
     for(unsigned attempt=0;attempt<8;attempt++) {
-        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        if(efs_client_rpc_past_deadline())return lost?EFS_ERR_NET:EFS_ERR_BUSY;
         efs_node_id_t nid=target;
-        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
-        if(!conn)return EFS_ERR_NET;
-        if(efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,len)) {
-            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
-        }
+        struct efs_conn *conn=target?efs_client_conn_get(target):raft_voter_conn_skip(shard,&nid,skip);
         uint8_t type=0;uint32_t bytes=0;void *payload=NULL;
-        if(efs_conn_recv_msg(conn,&type,&payload,&bytes)) {
-            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        /* K39: the lane group's leader in orderly stop (a member down) closes
+         * its connections; one lost exchange is not the verdict. Every
+         * command here is idempotent on the host (ADMIT of an admitted
+         * ticket is OK, SETTLE of a retired one is OK, STATUS reads), so
+         * re-pick another voter after a pause, the identical body, as
+         * session_command_reply does (K34). NET only once the attempts or
+         * the budget are used up; the ledger keeps a sent ticket for its
+         * settle. It was NET at the first loss: a write placed around the
+         * stopped member failed EIO (test_k35_fsync_degraded.py case 7). */
+        if(!conn || efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,len) ||
+           efs_conn_recv_msg(conn,&type,&payload,&bytes)) {
+            free(payload);
+            if(conn)efs_client_conn_drop(nid,conn);
+            rpc_retry_peer(shard,nid,&target,&skip,conn!=NULL);
+            lost=1;
+            int last=attempt+1==8 || rpc_writer_retry_pause(attempt)!=EFS_OK;
+            fprintf(stderr,"put-ticket: lost exchange op=%d shard=%u nid=%u attempt=%u%s\n",
+                    probe_only,shard,nid,attempt,last?" -> NET":"; another voter");
+            if(last)return EFS_ERR_NET;
+            continue;
         }
         efs_client_conn_release(nid,conn);
         if(type!=EFS_MSG_RAFT_MKFS_REPLY || bytes!=sizeof(struct efs_msg_raft_mkfs_reply)) {
@@ -2202,18 +2217,28 @@ int efs_client_rpc_degraded_mark(efs_ino_t ino,uint64_t inode_gen,uint64_t objec
         body[31+i]=(uint8_t)((uint32_t)node>>(24-8*i));
     }
     body[30]=(uint8_t)fi;
-    efs_node_id_t target=0;
+    efs_node_id_t target=0,skip=0;
+    int lost=0;
     for(unsigned attempt=0;attempt<8;attempt++) {
-        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        if(efs_client_rpc_past_deadline())return lost?EFS_ERR_NET:EFS_ERR_BUSY;
         efs_node_id_t nid=target;
-        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
-        if(!conn)return EFS_ERR_NET;
-        if(efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,sizeof(body))) {
-            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
-        }
+        struct efs_conn *conn=target?efs_client_conn_get(target):raft_voter_conn_skip(shard,&nid,skip);
         uint8_t type=0;uint32_t bytes=0;void *payload=NULL;
-        if(efs_conn_recv_msg(conn,&type,&payload,&bytes)) {
-            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        /* K39: fsync with a member down marks on the lane group, whose
+         * leader may be that member. The host applies a mark once (a
+         * repeat adds nothing), so a lost exchange re-picks another voter
+         * as rpc_put_ticket does. */
+        if(!conn || efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,sizeof(body)) ||
+           efs_conn_recv_msg(conn,&type,&payload,&bytes)) {
+            free(payload);
+            if(conn)efs_client_conn_drop(nid,conn);
+            rpc_retry_peer(shard,nid,&target,&skip,conn!=NULL);
+            lost=1;
+            int last=attempt+1==8 || rpc_writer_retry_pause(attempt)!=EFS_OK;
+            fprintf(stderr,"degraded-mark: lost exchange ino=%llu ci=%u nid=%u attempt=%u%s\n",
+                    (unsigned long long)ino,ci,nid,attempt,last?" -> NET":"; another voter");
+            if(last)return EFS_ERR_NET;
+            continue;
         }
         efs_client_conn_release(nid,conn);
         if(type!=EFS_MSG_RAFT_MKFS_REPLY || bytes!=sizeof(struct efs_msg_raft_mkfs_reply)) {

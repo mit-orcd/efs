@@ -1262,12 +1262,6 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
 int efs_meta_apply_append_state(struct efs_kv *kv, efs_ino_t ino,
                                 uint64_t *watermark, uint64_t *frontier,
                                 uint32_t *nopen);
-/* 0 = this uuid may reserve (none open, or only this uuid). 1 = another
- * uuid holds an OPEN reservation. <0 = KV error. In-place EC fragments
- * cannot merge two clients' GET+PUT of the same chunk, so a second
- * appender waits until the first REPORT resolves nopen. */
-int efs_meta_apply_append_foreign(struct efs_kv *kv, efs_ino_t ino,
-                                  const uint8_t uuid[EFS_OPID_UUID_LEN]);
 /* OPEN reservations only. *n is capacity in, count out (capped). */
 int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
                                uint64_t *lens, uint32_t *n);

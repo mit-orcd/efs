@@ -1370,31 +1370,9 @@ static uint64_t ib_port_counter(const char *dev, unsigned port,
     return (uint64_t)v;
 }
 
-/* Identity of the conn at post time. If any of this differs at failure time,
- * the conn was torn down (and its slot reused) under an active sender, and
- * the completion we are waiting for died with the per-conn send CQ. */
-struct send_ident {
-    struct ibv_qp *qp;
-    struct ibv_cq *cq;
-    uint32_t qpn;
-    uint32_t gen;
-    int st;
-    uint64_t xmit_pkts;
-};
-
-static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
-                            const char *why, const struct send_ident *id);
-
 static void send_fail_dump(struct efs_rdma_conn *rc, uint8_t type,
                            const char *why)
 {
-    send_fail_dump2(rc, type, why, NULL);
-}
-
-static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
-                            const char *why, const struct send_ident *id)
-{
-    int st_pre = id ? id->st : -2;
     static int n;
     int i = __sync_fetch_and_add(&n, 1);
     if (i >= 10 && (i % 100) != 0)
@@ -1413,11 +1391,11 @@ static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
     for (int i = 0; i < EFS_RDMA_NSEND; i++)
         busy += rc->send_busy[i] ? 1 : 0;
     fprintf(stderr,
-            "efs: RDMA send type=%u FAILED (%s) qpn=%u state=%d st_pre=%d "
+            "efs: RDMA send type=%u FAILED (%s) qpn=%u state=%d "
             "dest_qpn=%u dlid=%u rnr_retry=%u retry_cnt=%u timeout=%u "
             "busy=%d broken=%d qrc=%d\n",
             type, why, rc->qp ? rc->qp->qp_num : 0,
-            qrc == 0 ? (int)a.qp_state : -1, st_pre, qrc == 0 ? a.dest_qp_num : 0,
+            qrc == 0 ? (int)a.qp_state : -1, qrc == 0 ? a.dest_qp_num : 0,
             qrc == 0 ? a.ah_attr.dlid : 0, qrc == 0 ? a.rnr_retry : 0,
             qrc == 0 ? a.retry_cnt : 0, qrc == 0 ? a.timeout : 0,
             busy, rc->broken, qrc);
@@ -1431,17 +1409,6 @@ static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
                                                : "*** CQ MISMATCH ***",
                 (void *)rc->qp->recv_cq,
                 (void *)(rc->dev ? rc->dev->recv_cq : NULL), rc->qp->handle);
-    if (id)
-        fprintf(stderr,
-                "efs: RDMA send identity now/at-post: qp=%p/%p cq=%p/%p "
-                "qpn=%u/%u reg_gen=%u/%u %s\n",
-                (void *)rc->qp, (void *)id->qp, (void *)rc->send_cq,
-                (void *)id->cq, rc->qp ? rc->qp->qp_num : 0, id->qpn,
-                rc->reg_gen, id->gen,
-                (rc->qp != id->qp || rc->send_cq != id->cq ||
-                 rc->reg_gen != id->gen)
-                    ? "*** CONN REPLACED UNDER SENDER ***"
-                    : "(same conn)");
     char now_link[64];
     fd_link_now(rc->tcp_fd, now_link, sizeof(now_link));
     fprintf(stderr, "efs: RDMA tcp_fd=%d link now=\"%s\" at-upgrade=\"%s\" %s\n",

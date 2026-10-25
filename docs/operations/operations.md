@@ -41,7 +41,19 @@ back to it.
 `scripts/server_processes.py` verifies executable, arguments and saved process
 identity, then uses a Linux pidfd to send SIGTERM and wait up to 60 seconds.
 A timeout retains the process and reports failure; it does not escalate to
-SIGKILL. Stale PID identity is not authority to signal an unrelated process.
+SIGKILL. Stale PID identity is not authority to signal an unrelated process:
+`Stale daemon identity for PID N; process retained` names a process the
+wrapper leaves alone (on one host, every other local daemon connected to
+the stopped port, or a PID from a previous boot). `server.sh stop` exits 0
+for an orderly stop (or no daemon), 3 for a forced exit and 4 for a failed
+durability barrier or an unknown outcome; a start whose retirement of the
+previous daemon was not orderly is refused once with that outcome and a
+rerun starts on the preserved stores. A daemon that is already gone
+(crash, `SIGKILL`) is simply started again; its store then runs verified
+recovery (K36) and `efs-mgmt sync-status` shows the phase and result. The
+first start on a fresh root prints a harmless
+`line 244: …/log/efsd.log: No such file or directory` from the log-mark
+`wc` before the daemon creates the log.
 There is no node id to give: the first node is 1 and the cluster assigns the
 others (K33). The member count and the metadata voters come from the committed
 membership; efsd refuses the removed `--node-id` and `EFS_MD_RAFT_N`. A third
@@ -58,13 +70,18 @@ listing the path is not enough. Pass `-f` to stay in the foreground.
 
 Ordinary client stop quiesces mutations, attempts a bounded drain, and refuses
 to detach unresolved writes. If stop fails, keep the servers available and
-resolve the failure. `--force-discard` explicitly permits loss and lazy detach;
+resolve the failure. With a storage member down the drain succeeds but the
+session revoke fails after 15 s (`revoke rc=-13 phase=storage-fence`: the
+storage fence must reach every configured member) and the stop exits 1 with
+the mount already detached; see the
+[alpha guide](../using/alpha-1.0-guide.md#mount-and-unmount-a-client). `--force-discard` explicitly permits loss and lazy detach;
 see the [controlled-stop contract](#scripts). Signals and
 external unmount bypass that contract.
 
 ## Transport and storage mode
 
-TCP and native-IB/RoCE RDMA are independent of buffered/direct fragment I/O.
+TCP and native-IB/RoCE RDMA are the two transports; fragment I/O is always
+`O_DIRECT` (D42), whichever transport is used.
 See [transport selection](../using/power-user.md#mounting-and-transport) for
 verbs device/GID settings. Use the same intended transport on servers and
 clients when validating a configuration, including clients remounted during
@@ -145,8 +162,8 @@ data/exports/{export_id}/{d4}/{d3}/{d2}/{d1}/{d0}/{chunk>>10}/{chunk}.{frag}.{ge
 ```
 
 Fragment payload length depends on the object; an ordinary full data chunk
-produces 64 KiB fragments. Direct-I/O writes append a 4 KiB tail page holding
-the 32-byte digest; buffered writes append the digest itself. Server GET fails closed on missing/corrupt checksum evidence;
+produces 64 KiB fragments. Each fragment file ends in a 4 KiB tail page
+holding the 32-byte digest (`O_DIRECT` writes, D42). Server GET fails closed on missing/corrupt checksum evidence;
 client GET paths compare replies with captured metadata digests where available.
 Fragment record format 2 binds the fragment identity and payload digest (K16,
 W75); the only repair is W154 rebuild on return.
@@ -260,13 +277,22 @@ Metadata plane (Raft + KV):
 ```
 
 `efs-mgmt` also has a `raft-<op>` for every metadata operation
-(`raft-create`, `raft-lookup`, `raft-rename`, `raft-publish`, `raft-flock`, …).
-Those bypass FUSE and are the fastest way to test one operation against one
-node — that is what the smoke scripts under `tests/stress/` use.
+(`raft-getattr`, `raft-lookup`, `raft-lookup-path`, `raft-create`,
+`raft-unlink`, `raft-rmdir`, `raft-link`, `raft-setattr`, `raft-rename`,
+`raft-readdir`, `raft-publish`, `raft-getchunks`, `raft-append`,
+`raft-hold`, `raft-flock`, `raft-fcntl`) and `raft-session` for the
+session lifecycle (`raft-session fence` resumes a failed mount-session
+revoke). Those bypass FUSE and are the fastest way to test one operation
+against one node — that is what the smoke scripts under `tests/stress/`
+use. `raft-resync NODE:PORT GROUP` asks a follower to take the leader's
+snapshot (the leader refuses it: `this node leads the group`), and
+`raft-step-down NODE:PORT GROUP [TARGET]` moves a group's leadership.
+`efs-mgmt status` shows where the leaders are (`Metadata leader
+placement`); elections alone place them (D42).
 
 ## Writer threads and direct I/O
 
-One writer pool is shared across all `--storage` paths; each daemon defaults
+One writer pool is shared across all storage roots; each daemon defaults
 to eight writer workers, independent of CPU count. These workers overlap durable
 file and directory I/O; increasing their count does not weaken durability.
 `--writers <n>` overrides the total (maximum 64), and `--writers 0` runs PUTs
@@ -321,10 +347,12 @@ This list is not blanket POSIX/concurrency acceptance: staged logical truncate
 and public-path gates remain in the [queue](../status/README.md) and
 [capability matrix](../status/spec-implementation.md).
 
-With `EFS_COMMANDS=1` on the mount, each directory has a **lookup-only**
-`.efs/` command directory (`.efs/ls`, `.efs/find`, `.efs/stats`, `.efs/help`;
-[commands](../using/efs-commands.md)). `ls` does not list it, and a real
-`.efs` entry takes precedence. The former `.stats` and `.find` virtual files
+While the cluster commands-policy allows it (`efs-mgmt commands-policy`,
+mask 3 by default; `EFS_COMMANDS` is removed, D42), each directory has a
+**lookup-only** `.efs/` command directory (`.efs/ls`, `.efs/find`,
+`.efs/stats`, `.efs/help`; [commands](../using/efs-commands.md)). `ls` does
+not list it, and a real `.efs` entry takes precedence. A policy change
+reaches mounted clients at once: with mask 0, `.efs` answers `ENOENT`. The former `.stats` and `.find` virtual files
 no longer exist (W92).
 
 The old whole-table `efs-query` tool was removed on October 21, 2026. The

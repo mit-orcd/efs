@@ -73,6 +73,10 @@
 
 #define PK_SCAN_MAX 4096u
 #define PK_FAIL_BACKOFF_NS (30ull * 1000000000ull) /* after a failed admission or upload */
+/* A fragment PUT refused with a transient authority code is sent again,
+ * PK_PUT_RETRIES times PK_PUT_RETRY_US apart, before it counts as missing. */
+#define PK_PUT_RETRIES 4
+#define PK_PUT_RETRY_US 50000
 
 static struct {
     struct efsd_server *s;
@@ -495,6 +499,10 @@ static int pk_put_fragment(const struct efs_node *nodes, uint32_t count, uint32_
     free(reply);
     return rc;
 }
+static int pk_put_transient(int rc)
+{
+    return rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_PRIMARY || rc == EFS_ERR_AGAIN;
+}
 struct pk_put {
     const struct efs_node *nodes;
     uint32_t count, id;
@@ -604,10 +612,30 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         puts[i] = (struct pk_put){nodes, count, o->nodes[i], b, EFS_SEGMENT_PUT_HEADER + flen, EFS_ERR_IO};
         pstarted[i] = i > 0 && pthread_create(&pt[i], NULL, pk_put_run, &puts[i]) == 0;
     }
-    uint32_t nok = 0, missing = 0;
     for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (!pstarted[i]) pk_put_run(&puts[i]);
         else pthread_join(pt[i], NULL);
+    }
+    /* K34 for the packer: a live member's transient refusal (BUSY,
+     * NOT_PRIMARY or AGAIN from its linearizable read of the object
+     * admitted a moment ago, under load) is not a missing fragment. The
+     * fragment is sent again before the segment is written degraded.
+     * Found by tests/test_d4_progress.py under the parallel gate: one
+     * NOT_PRIMARY from a follower wrote a degraded segment (put_errors=1)
+     * and a rebuild of it a second later. */
+    for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        int first = puts[i].rc;
+        for (int k = 0; k < PK_PUT_RETRIES && pk_put_transient(puts[i].rc); k++) {
+            usleep(PK_PUT_RETRY_US);
+            puts[i].rc = pk_put_fragment(nodes, count, o->nodes[i], puts[i].body, puts[i].len);
+        }
+        if (first != puts[i].rc)
+            fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx fragment %u for node %u resent "
+                    "after rc=%d: rc=%d\n", group, (unsigned long long)id, (unsigned long long)gen,
+                    i, o->nodes[i], first, puts[i].rc);
+    }
+    uint32_t nok = 0, missing = 0;
+    for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (puts[i].rc != EFS_OK) { put_ok = 0; missing = i; }
         else nok++;
     }

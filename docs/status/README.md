@@ -18,8 +18,25 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K39: write EIO with one member down](k39-write-eio-one-member-down-20261025.md): **FIXED (scoped), branch `claude/k39-write-eio` on merge-wave8b `9a28c1b1c` (code `7c4c2d318`, tests `bd330dd3c`), not merged, not pushed; intel1: `test_k35_fsync_degraded.py` 20 of 20 at the 10 s default (base 4 of 8 FAIL), `make test-all` at 8 jobs 485 commands in 471 s, 0 FAIL, 14 NOTRUN host limits. Raw: intel1 `~/efs-artifacts/k39-20261025/` (`SHA256SUMS` `ef7faa5a…a88c`).** The `EIO` was the client's put-ticket ADMIT to a stopping lane-group leader: one lost exchange was NET at once (the "REPORT" in `flush-meta stage=report` was never sent). Ticket and fsync degraded-mark RPCs now re-pick a voter; placement probes a member back for under a second that the client still marked down; an earlier fragment acknowledgement counts once and a drain-time loss is a hard failure (each was a degraded stripe where place-around was possible). The wave-8b merge waits on this branch. Open: `test_k33_payload.py` read `EIO` with one member down, 4 of 10 on the fix and 5 of 10 on the base (same `fetch published ... rc=-6` line), the K33 read session's item.
+
+[A12 closure](a12-closure-20261025.md) and [A6–A12 hygiene: dead-code sweep, buffered I/O remnants, A9 leader placement](a12-hygiene-20261025.md):
+**branch `claude/fervent-wilson-67282f` on devel `5a7463440`, not merged, not pushed; intel2 `make test-all` at `ab07a9c40` (8 jobs): 480 commands in 493 s, 2 FAIL, 16 NOTRUN host limits. Both FAILs are pre-existing intermittents: `test_k33_payload.py` node-down EIO (also 2/2 FAIL on the base) and B6 `refuse` vs K37 packing; each passed 2/2 alone on the branch. Raw: intel2 `~/efs-artifacts/a12-20261025/` (`SHA256SUMS` `bf87d4c8…5759`).**
+A12: every A6 selector is removed and refused, or justified (`EFS_TRANSPORT`, A8). A/B selectors 15 → 0; reachable A/B combinations 32,768 → 1; variables a normal build reads 105 → 77. `env_inventory.py --check` now fails any read setting whose kind is not a retained one. The sweep removed two orphaned functions and the fields nothing read, and dropped the buffered/direct options from the live harnesses, the fault harness, `qualify.py` and `bench_profile.py`. A9 on loopback (600 s, 12 step-downs, 6 leader restarts): both leaders on one node 41.5 % of the run at 3 members and 20.7 % at 4 and 5. Real-host placement and live qualification of the retained paths stay open. Expiry code is untouched (D43).
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
+
+[Oct 25 user-docs audit against `ec3e09306`: every command, option, workflow and failure case exercised on a loopback cluster](docs-audit-20261025.md):
+**docs updated; docs gate PASS; nuc `make test-all` at `e1ce4a4d4`: 472 commands, 4 FAIL at 8 jobs (3 PASS alone, `test_report_stepdown.py` intermittent, 2 of 4 alone), 14 NOTRUN host limits (raw: nuc `~/efs-artifacts/docs-audit-20261025/`, `SHA256SUMS` `51666fda…05bf5`); no product code changed.**
+The guide, surface list, POSIX subset, release notes, operations, power-user, quick start and
+`efs-commands` pages now match the binaries (K34–K37, E2, `status` output and exit status,
+restart after a forced, failed-barrier or killed daemon, `.efs` by policy only, `O_DIRECT` only).
+New `make test` check `tests/test_cli_docs.py`: every `efs-mgmt` command and `efsd`/`efs-fuse`
+option in `cli_help.h` is named in the user docs, and the docs name no command or flag the help
+lacks. The pages follow D43 (expiry and `.efs` ship in alpha 1.0); at this base expiry is still
+compiled out and being re-enabled (U19). Open for the user: U4, a clean client stop fails at the session revoke
+(`storage-fence`, `EFS_ERR_BUSY`) while any member is down; S4/W122 and F12 unchanged.
 
 [Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `0b01a2a1e`: 471 commands, 0 FAIL, 15 NOTRUN host limits (2,604 s; raw: intel2 `~/efs-artifacts/merge-wave7-20261025/`, `SHA256SUMS` in that directory).** A11 findings 1 and 2 are fixed; every Stage 2 item now maps to a real `scripts/qualify.py` gate; live and real-host runs stay NOTRUN; every store needs a fresh format.
@@ -44,6 +61,26 @@ independent commands, parallel verification and fast payloads in the K33 tests a
 polls instead of settle sleeps, and ports held for the life of a loopback cluster. No assertion relaxed; four
 tests check more. Follow-ups: 15 s unmount storage fence to a down member, 32 s `efs-mgmt status` with a frozen
 member, intermittent EIO on a degraded read in `test_k33_payload.py` under host load (pre-existing).
+
+[W159: fixture POSIX timeouts, slow durable barriers and the 400 ms applied-wait](w159-fixture-posix-timeouts-20261025.md):
+**CAUSE FOUND, fix PARTIAL, PASS (scoped, loopback); branch `claude/devel-w159-fe09e8` on `merge-wave7`, not merged, not pushed; amd `make test-all` on the fixed tree: see the page.**
+The expiry fixture's closing POSIX run timed out two metadata-heavy cases
+because its one consumer NVMe answers a durable barrier in 7–28 ms (29× amd)
+and four members queue on it: about 39 fsync/fdatasync per create-and-unlink
+pair across the members, so the Raft pump's apply lag passed the server's
+fixed 400 ms applied-wait, each expiry answered BUSY and the client's backoff
+ladder made the 2–7 s RPCs. Reproduced on amd on the untouched base with an
+emulated 7 ms barrier queued on one lock (`scripts/w159_fixture.py`); the
+same fixture on amd's disk passes everything with no RPC over 1 s. The
+applied-wait for a member's own committed entry is now bounded by progress
+(`src/server/apply_wait.h`, 400 ms grants renewed while the member applies,
+2 s cap): `concurrent_creates_same_dir` passes under the emulation,
+`dir_many_files` passes one round in two there (the barrier cost, a Stage 3
+follow-up).
+
+[Flake sweep: every intermittent failure of the gate](flake-sweep-20261025.md):
+**FIXED, final gate NOTRUN (stopped after the merge into merge-wave8b, gated there); branch `claude/devel-flake-sweep-1505b6` (head of the code: `8f1d50ed8`), not merged, not pushed.** Ten 8-job `make test-all` runs (471 commands) and three serial `test-long` runs (62) on intel1 at `0b01a2a1e` failed six commands at random; the final-gate attempts surfaced a seventh. Product defects fixed: the client's away mark blocked place-around (K35 case 7, 2/10 + 1/3), the packer took one transient `NOT_PRIMARY` for a missing fragment (D4, 1/10), forwarded PUT ticket admissions were forwarded again during an election until the peer pools stalled for 5 s (report step-down, 1/10; 5/28 loaded before, 0/40 after; new wire mark on member forwards). Test defects fixed: K37 case 7, B geometry, K36 case 11, B6 refuse mode, query-first NOTRUN, the runner self-test's false NOTRUN. Open, single occurrences without logs: K36 case 8 read EIO, K33 payload read-back EIO. Raw: intel1 `~/efs-artifacts/flake-sweep-20261025/`.
+
 
 [Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](pack-unindex-race-20261024.md):
 **FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**

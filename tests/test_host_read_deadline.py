@@ -45,6 +45,7 @@ rpc=r'''
 #include <string.h>
 #include <stdio.h>
 #define HOST_CMD_MAX 512
+#define HOST_SUBMIT_FORWARDED 0x80u
 struct efs_raft_host {int raft_id;};
 static struct efs_conn peer;static int setters,drops,releases,sends,recvs,fail_send,fail_recv,bad_type,short_reply,expected_timeout,ordinary_gets,read_gets;
 static int peer_addr(struct efs_raft_host *h,int rid,char *a,size_t n,uint16_t *port)
@@ -56,7 +57,7 @@ void server_peer_conn_release(const char *h,uint16_t port,struct efs_conn *c){(v
 void efs_conn_set_recv_timeout(struct efs_conn *c,int value){assert(c==&peer);setters++;c->recv_timeout_ms=value;}
 int efs_set_send_timeout(int fd,int ms){assert(fd==42 && (ms==expected_timeout || ms==EFS_IO_TIMEOUT_MS));return 0;}
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *p,uint32_t n)
-{assert(c==&peer && type==EFS_MSG_RAFT_MKFS && ((const uint8_t *)p)[0]==2 && n>=1 && c->recv_timeout_ms==expected_timeout);sends++;return fail_send;}
+{assert(c==&peer && type==EFS_MSG_RAFT_MKFS && ((const uint8_t *)p)[0]==(2|HOST_SUBMIT_FORWARDED) && n>=1 && c->recv_timeout_ms==expected_timeout);sends++;return fail_send;}
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *n)
 {assert(c==&peer && c->recv_timeout_ms==expected_timeout);recvs++;if(fail_recv)return -1;
  *type=bad_type?0:EFS_MSG_RAFT_MKFS_REPLY;*n=sizeof(struct efs_msg_raft_mkfs_reply)-(short_reply?1:0);

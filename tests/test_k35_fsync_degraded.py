@@ -24,7 +24,21 @@ Three members:
     full`), every file reads back exactly.
 Four, then five members (additions through K33):
  7. An unrelated member down (node 4 of 4): writes and fsync succeed and
-    leave no degraded mark: fragments go to the available members.
+    leave no degraded mark: fragments go to the available members. The
+    interleaving that broke this is forced: node 3 is first marked "away"
+    on the client (a write while it is stopped fails its fragment hard and
+    is placed around on node 4, no mark), returns, and node 4 stops while
+    that mark is live (the product's 10 s window: efs-fuse is a normal
+    build, so EFS_FAULT_AWAY_MARK_MS does not exist there and this case
+    runs timed; node 4 stops a few seconds after node 3's return). The
+    client must then place around node 4 onto node 3, the away member, rather than
+    acknowledge on two fragments (it did, until the fix: 2 of 10 gate
+    runs, whenever node 4 joined and stopped within 10 s of node 3's last
+    hard failure).
+ 7b. K39: the leader of metadata group 2 stops (never node 1 at four
+    members) while a writer keeps writing and syncing: no EIO. The client's put-ticket ADMIT to
+    the stopping leader lost its exchange and was NET at once, so the
+    write was EIO; it now re-picks another voter within the budget.
  8. Five members, node 2 down: the same, no degraded mark.
  9. A member that dies during COMMIT (node 5, EFS_FAULT_MEMBER_EXIT=
     data-commit): fsync succeeds with the stripes on node 5 marked
@@ -33,7 +47,7 @@ Four, then five members (additions through K33):
 Every file written in the run reads back exactly at the end.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
-import errno, os, re, shutil, sys, tempfile, time
+import errno, os, re, shutil, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload, voters_ok  # noqa: E402
@@ -235,17 +249,93 @@ try:
     c.wait_voters([1, 2, 3, 4], lambda i, v: voters_ok(i, v, 4))
     write(a, 'four-warm', LARGE)
     fsync(a, 'four-warm')
+    # Node 3 away on the client: one single-chunk write whose stripe has
+    # node 3 fails that fragment hard while node 3 is stopped and is placed
+    # around on node 4 (`placing again`; four members: no mark). One chunk
+    # keeps node 3 below the four hard failures that would mark it down
+    # for 30 s (EFS_NODE_DOWN_FAILS, EFS_NODE_DOWN_MS): a down member is no
+    # spare either, by design; what this case forces is the away mark
+    # alone. Later stripes are routed around the away member before any
+    # attempt, so they add no failures.
+    c.stop(3)
+    placed = re.compile(r'put_fragments ino=\d+ chunk=\d+: member\(s\) (\d),(\d),(\d) unreachable')
+    for k in range(24):
+        write(a, f'away-{k}', 65536)
+        fsync(a, f'away-{k}')
+        if any('3' in m.groups() for m in placed.finditer(client_log(a))):
+            break
+    else:
+        raise AssertionError('no stripe of 24 single-chunk files had node 3: ' + client_log(a)[-3000:])
+    wait_degraded(c, 1, lambda n: n == 0, 'four members, node 3 down')
+    marks = client_log(a).count('degraded acknowledgement')
+    c.restart(3)
+    up(c, 3, 4)
+    c.wait_members([1, 2, 3, 4], 4)
+    # Node 4 stops while node 3's away mark is live: the only spare is
+    # the away member.
     c.stop(4)
     for k in range(6):
         write(a, f'four-{k}', LARGE)
         fsync(a, f'four-{k}')
     time.sleep(3)
     wait_degraded(c, 1, lambda n: n == 0, 'four members, node 4 down')
-    print('7. four members, node 4 down: fsync OK, fragments on available members, no mark PASS')
+    assert client_log(a).count('degraded acknowledgement') == marks, client_log(a)[-3000:]
+    assert re.search(r'placing again on (?:3,|\d,3,|\d,\d,3)', client_log(a)), client_log(a)[-3000:]
+    print('7. four members, node 4 down while node 3 is away-marked: fsync OK, fragments placed '
+          'around on node 3, no mark PASS')
     c.restart(4)
     up(c, 4, 4)
     c.wait_members([1, 2, 3, 4], 4)
     settle(a, 4)
+
+    # 7b. K39: the leader of metadata group 2 (voters 2, 3, 4 at four
+    # members, so never node 1) stops while a writer keeps writing and
+    # syncing. Tickets of its lane shards are in flight to it: the client's
+    # ADMIT lost its exchange with the stopping leader and returned NET at
+    # once, the write EIO (2 of 3 merge-gate runs, cases 7 and 8).
+    led = c.leader_placement(1)
+    lead = led[2]
+    assert lead != 1, led
+    errs, stop_writer = [], threading.Event()
+    log_at = len(client_log(a))
+
+    def writer():
+        k = 0
+        try:
+            while not stop_writer.is_set():
+                write(a, f'lead-{k}', LARGE)
+                fsync(a, f'lead-{k}')
+                k += 1
+        except OSError as e:
+            errs.append(f'lead-{k}: {e!r}')
+
+    t = threading.Thread(target=writer)
+    t.start()
+    time.sleep(1)
+    c.stop(lead)
+    time.sleep(4)
+    stop_writer.set()
+    t.join(timeout=120)
+    assert not t.is_alive() and not errs, (errs, client_log(a)[-3000:])
+    # Stripes written before the stop and synced after it are marked
+    # degraded (case 3's rule), and one acknowledged while the leader was
+    # going away may be published degraded. Case 8 stops another member,
+    # so they must be rebuilt on the leader's return first. The leaders
+    # report the count periodically: wait until it includes every stripe
+    # the client named (none is rebuilt while the leader is down), then
+    # for zero after the return.
+    named = set(re.findall(r'ino=(\d+) chunk=(\d+) gen=([0-9a-f]+) nodes=[\d,]+(?: fragments=\S+)?: '
+                           r'(?:degraded acknowledgement|2 of 3 durable; marked degraded)',
+                           client_log(a)[log_at:]))
+    if named:
+        wait_degraded(c, 1, lambda n: n >= len(named), f'7b: {len(named)} stripes counted')
+    print(f'7b. K39: group 2 leader (node {lead}) stopped under a writer: writes and fsync OK, '
+          f'{len(named)} stripes degraded PASS')
+    c.restart(lead)
+    up(c, lead, 4)
+    c.wait_members([1, 2, 3, 4], 4)
+    settle(a, f'7b-{lead}')
+    wait_degraded(c, 1, lambda n: n == 0, '7b rebuild on return', timeout=180)
 
     # 8. Five members, node 2 down.
     c.start(5, join=3)

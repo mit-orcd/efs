@@ -1,9 +1,10 @@
 # Alpha 1.0 — POSIX subset (draft)
 
-**Draft, October 24, 2026; checklist item S2.** The supported operations and
-every known deviation of a Linux EFS FUSE mount, derived from the suites in
-`tests/posix/` and their recorded results, and checked against the client
-code at `a2326a369`. A deviation is either a limitation of alpha (listed in
+**Draft, October 24, 2026, revised October 25; checklist item S2.** The
+supported operations and every known deviation of a Linux EFS FUSE mount,
+derived from the suites in `tests/posix/` and their recorded results, and
+checked against the client code at `ec3e09306`
+([audit](../status/docs-audit-20261025.md)). A deviation is either a limitation of alpha (listed in
 the [release notes draft](../release-notes/alpha-1.0.md)) or a gap still to
 fix; none counts as PASS.
 
@@ -18,10 +19,10 @@ fix; none counts as PASS.
 | Extras | `tests/posix/posix_extras.py` (`--suite extras`) | 5 | mmap and the `.efs` commands |
 | Two-client | `tests/posix/posix_2client.py` | 68 | Visibility, races, locks and overlapping writes across two mounts on different hosts |
 | Durability | `tests/posix/posix_persist.py` | 27 | Prepare, orderly unmount and remount, then verify bytes and metadata |
-| Expiry | `tests/posix/posix_expiry.py` | — | Expiry lifecycle on a private fixture; expiry is out of alpha |
+| Expiry | `tests/posix/posix_expiry.py` (`--suite expiry`) | — | Expiry lifecycle on a private four-node fixture, then core, two-client and physical-GC checks; expiry is in alpha (D43), the suite needs an expiry build ([how to run](../status/posix-expiry-suite.md)); no run on `ec3e09306` |
 
 The most recent recorded runs (both before the base commit; nothing has been
-recorded on `a2326a369` itself, and the C1 runs on 3, 4 and more than 4
+recorded on `ec3e09306` itself, and the C1 runs on 3, 4 and more than 4
 distinct hosts are NOTRUN):
 
 | Run | Build | Core | Extras | Two-client | Durability |
@@ -99,7 +100,8 @@ Each line is covered by the named suite cases, all PASS in both runs above.
   links, symlinks, modes, setgid inheritance, sizes and `mtime` (all 27
   `posix_persist.py` cases). This is an orderly unmount, not a crash.
 - **`.efs` commands** (extras: `virt_stats_readable`, `virt_find_query`,
-  `virt_find_not_a_real_dir`), when the mount has `EFS_COMMANDS=1`.
+  `virt_find_not_a_real_dir`), while the cluster commands-policy allows them
+  (the default; `EFS_COMMANDS` is removed, D42).
 
 ## Known deviations
 
@@ -117,9 +119,11 @@ Each line is covered by the named suite cases, all PASS in both runs above.
 | P10 | Unpublished buffered writes | Writes not yet closed or synced are lost if the client process dies (D28); an orderly stop drains them or refuses | `posix_persist.py` covers orderly remounts only | Limitation (D28) |
 | P11 | Large namespace operations | An operation touching more than 144 metadata participants is refused at once and atomically (D32) | Not in the POSIX suites | Limitation (D32) |
 | P12 | Reserved `.efs` name | With `.efs` on, every directory resolves `.efs` to the command directory unless a real `.efs` entry exists, which wins; the command directory is not listed and not writable | `virt_find_not_a_real_dir` (not listed, not writable); the precedence of a real `.efs` has no POSIX case | Documented behavior |
-| P13 | W159 | On a private four-member fixture on one host, the closing core run failed `dir_times_mkdir_rmdir` with `rmdir` `EBUSY` (orcd-mini) or timed out `dir_many_files` and `concurrent_creates_same_dir` (Intel); the same builds passed on the clusters | `dir_times_mkdir_rmdir`, `dir_many_files`, `concurrent_creates_same_dir` | OPEN, cause not established |
+| P13 | W159 | On a private four-member fixture on one host, the closing core run failed `dir_times_mkdir_rmdir` with `rmdir` `EBUSY` (orcd-mini) or timed out `dir_many_files` and `concurrent_creates_same_dir` (Intel); the same builds passed on the clusters. Diagnosis in progress (Oct 25): the fixture's members share one slow disk, and the metadata path's per-member `fsync` cost pushes apply waits past a fixed 400 ms budget, so RPCs take seconds; a fix is on a branch, not merged | `dir_times_mkdir_rmdir`, `dir_many_files`, `concurrent_creates_same_dir` | OPEN |
 | P14 | Concurrent `O_APPEND` record loss (K9/W87) was never reproduced and has no root cause | No known symptom; the item reopens if a loss is seen | `concurrent_appends`, `peer_concurrent_append` PASS | Closed without resolution (D41) |
-| P15 | `fsync` with a member down is degraded | `fsync`/`fdatasync` succeed when two fragments of every stripe the file's writes touched are proven durable and a third that is not is marked degraded; `EIO` with two of a stripe's nodes down or unproven (also after an unclean stop, whose COMMIT is fenced until a fresh format) | `tests/test_data_commit.c`, `tests/test_k35_fsync_degraded.py` (K35); not in the POSIX suites | Limitation, *proposed* (findings F22, F23) |
+| P15 | `fsync` with a member down is degraded | `fsync`/`fdatasync` succeed when two fragments of every stripe the file's writes touched are proven durable and a third that is not is marked degraded; `EIO` with two of a stripe's nodes down or unproven. A member back from an unclean stop proves nothing until its verified recovery (K36) is done, which on a small store takes seconds | `tests/test_data_commit.c`, `tests/test_k35_fsync_degraded.py` (K35), `tests/test_k36_recovery.py` (K36); not in the POSIX suites | Limitation, *proposed* (findings F22, F23) |
 
-Not POSIX deviations, but limits a user meets: no expiry (rejected by the
-commands), no NFS re-export, no macOS client, one export per cluster.
+Not POSIX deviations, but limits a user meets: no NFS re-export, no macOS
+client, one export per cluster. Expiry ships in alpha (D43): a file under
+an expiry policy is removed when its deadline passes; at `ec3e09306` the
+product build still compiles expiry out ([finding U19](../status/docs-audit-20261025.md)).

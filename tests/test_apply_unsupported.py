@@ -51,7 +51,7 @@ struct host_group {
     uint64_t incompat_index,incompat_term;uint32_t incompat_len;uint8_t incompat_tag,incompat_sub;
     struct efs_raft *r;struct efs_raft_host *host;struct efs_arc_slot arc[HOST_APPLY_RC_RING];
 };
-struct efs_raft_host {struct efs_kv *kv;int snap_batch;uint64_t apply_extra,obs_apply_cnt,obs_apply_cycle_us;};
+struct efs_raft_host {struct efs_kv *kv;int snap_batch;uint64_t apply_extra,obs_apply_cnt,obs_apply_cycle_us,apply_progress;};
 static int write_prof_on(void){return 0;}
 static uint64_t wprof_now(void){return 0;}
 static void wprof_add(int k,uint64_t v){(void)k;(void)v;}

@@ -40,13 +40,18 @@ EFS_DEMO_ROOT=$(mktemp -d "${EFS_DEMO_DIR:-$HOME}/efs-demo.XXXXXX")
 ```
 
 There is no node id, member count or cluster file to give (efsd refuses the
-removed `--node-id` and `EFS_MD_RAFT_N`). One or two servers stay unready and
-say so in `$EFS_DEMO_ROOT/s*/log/efsd.log`; with the third the logs show
-`raft-host: formed: 3 members`. A server started later with the address of
-any member (or `join` instead of an address, to find the cluster on the local
-subnet) is added online. `./efs-mgmt status 127.0.0.1:17432` lists the
-members. `mkfs` below is optional: it forms at once if the automatic
-formation has not happened yet, and changes nothing afterwards.
+removed `--node-id` and `EFS_MD_RAFT_N`). The first joiner's `server.sh`
+prints `WARNING: join to 127.0.0.1:17432 was requested but no join success
+was logged yet`: that is expected, the join completes when the third server
+arrives. Until then the servers say `unready: formation needs 3 members` in
+`$EFS_DEMO_ROOT/s*/log/efsd.log`; with the third the logs show
+`raft-host: formed: 3 members` (within a few seconds). A server started
+later with the address of any member (or `join` instead of an address, to
+find the cluster on the local subnet) is added online.
+`./efs-mgmt status 127.0.0.1:17432` lists the members, the usable capacity,
+`Cluster state: OK` and `Protection: full`. `mkfs` below is optional: it
+forms at once if the automatic formation has not happened yet, and changes
+nothing afterwards.
 
 Mount:
 
@@ -60,7 +65,9 @@ cat "$EFS_DEMO_ROOT/mnt/world.txt"
 
 Repeated `mkfs` preserves an existing root/salt; after an uncertain outcome,
 inspect `raft-status` before retrying against the same intended cluster. It
-is not a wipe or a named-export creation command.
+is not a wipe or a named-export creation command. The mount also has the
+`.efs` command directory in every directory (`"$EFS_DEMO_ROOT/mnt/.efs/help"`),
+because the cluster commands-policy allows it by default.
 
 Stop the client successfully before stopping any server. A failed ordinary
 client stop retains unresolved writes; keep the servers up to resolve them:

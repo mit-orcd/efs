@@ -35,7 +35,7 @@ static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;
 static void efs_client_node_note_fail(efs_node_id_t n){(void)n;fails++;}
 int efs_put_ticket_encode(const struct efs_put_ticket *t,uint8_t out[EFS_PUT_TICKET_WIRE_LEN]){assert(t->ino==1);memset(out,7,EFS_PUT_TICKET_WIRE_LEN);return 0;}
 int efs_conn_send_msg_parts(struct efs_conn *c,uint8_t t,const void *a,uint32_t an,const void *b,uint32_t bn){(void)c;(void)b;assert(t==EFS_MSG_PUT_CHUNK&&an==EFS_PUT_UPLOAD_HEADER_LEN&&bn==1&&efs_put_upload_rd32(a)==1);sends++;return 0;}
-int efs_conn_reply_watch_quick(struct efs_conn *c){return ((mode==1 && c!=&conns[2]) || (mode==3 && c==&conns[0]) || mode==4 || mode==5 || mode==6 || mode==7 || mode==8 || mode==10 || mode==11)?EFS_CONN_REPLY_READY:c->fd;}
+int efs_conn_reply_watch_quick(struct efs_conn *c){if(mode==12)return c==&conns[2]?-1:EFS_CONN_REPLY_READY;return ((mode==1 && c!=&conns[2]) || (mode==3 && c==&conns[0]) || mode==4 || mode==5 || mode==6 || mode==7 || mode==8 || mode==10 || mode==11)?EFS_CONN_REPLY_READY:c->fd;}
 int efs_conn_reply_watch_us(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
 int efs_conn_put_reply_watch(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
 static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
@@ -85,6 +85,22 @@ int main(void){
   int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch);
   assert(rc==EFS_OK&&sends==1&&checkouts==1&&acked[2]&&seq[2]&&epoch[2]==123&&seq[0]==7&&seq[1]==8);
  }
+ /* K39: one earlier acknowledgement counts once: with the other two
+  * members BUSY there is no quorum (it returned OK holding one fragment). */
+ {
+  mode=7;drops=releases=fails=sends=checkouts=0;deadline=report_clock_ms()+50;
+  int acked[3]={1,0,0},quota[3]={0,0,0};uint64_t seq[3]={7,0,0},epoch[3]={123,0,0};
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch);
+  assert(rc==EFS_ERR_BUSY&&sends==2&&acked[0]&&!acked[1]&&!acked[2]&&failed[1]==3&&failed[2]==3);
+ }
+ /* K39: the third member's connection fails after the quorum (it stops):
+  * a hard failure of that slot, so the caller resends or places it around. */
+ {
+  mode=12;drops=releases=fails=sends=checkouts=0;deadline=report_clock_ms()+50;
+  int acked[3]={0,0,0},quota[3]={0,0,0};uint64_t seq[3]={0,0,0},epoch[3]={0,0,0};
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch);
+  assert(rc==EFS_OK&&acked[0]&&acked[1]&&!acked[2]&&failed[2]==1&&!fails);
+ }
  close(pp[0]);close(pp[1]);return 0;
 }
 '''
@@ -94,4 +110,4 @@ with tempfile.TemporaryDirectory(prefix='efs-put-reply-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('parallel ticketed PUT: caller-bound quorum/drain, expired admission, one-ACK refusal, negative replies, terminal ticket refusal (also after the quorum), earlier acknowledgements not resent, a BUSY third member reported, full members named (also after the quorum), acknowledgement sequence and verifier per fragment, resend of the missing slot only (K35) and no false peer failures PASS')
+print('parallel ticketed PUT: caller-bound quorum/drain, expired admission, one-ACK refusal, negative replies, terminal ticket refusal (also after the quorum), earlier acknowledgements not resent, a BUSY third member reported, full members named (also after the quorum), acknowledgement sequence and verifier per fragment, resend of the missing slot only (K35), an earlier acknowledgement counted once and a drain-time loss reported (K39) and no false peer failures PASS')

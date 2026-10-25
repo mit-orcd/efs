@@ -15,13 +15,18 @@ src/common/common.c (efs_env_removed_refuse).
   env_inventory.py [--root DIR] --json        full facts
   env_inventory.py [--root DIR] --uses NAME.. where tests/, scripts/, Makefile use NAME
   env_inventory.py [--root DIR] --check DOC   the make test gate
+  env_inventory.py [--root DIR] --kinds DOC   NAME, kind (from DOC), first reader
 
 --check fails when a variable read by the product, an environ scanner, a
 compile-time mode or a removed setting has no row in DOC (a table row whose
 first cell names it in backquotes); when a removed setting is still read;
 when an EFS_FAULT_* variable is read outside #if EFS_FAULTS; or when a read
-that exists only under EFS_FAULTS is not named EFS_FAULT_*. A new EFS_*
-reader therefore needs a row in docs/status/a6-settings-inventory-20261024.md.
+that exists only under EFS_FAULTS is not named EFS_FAULT_*. A12: it also
+fails when a variable read by the product has no inventory row with a kind
+(the fourth cell of a seven-cell row) or a kind other than the retained
+ones in KINDS, so an A/B behavior selector, an experimental or a legacy
+switch cannot be read without failing the gate. A new EFS_* reader
+therefore needs a row in docs/status/a6-settings-inventory-20261024.md.
 """
 import bisect
 import json
@@ -32,6 +37,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRODUCT_DIRS = ("src", "include")
 GETENV = ("getenv", "secure_getenv")
+# A12: the kinds a setting the product reads may have (A8 dispositions).
+# Transport is a deployment input: a justified support dimension, not an A/B.
+KINDS = ("deployment input", "numeric tunable", "observability", "fault/test hook",
+         "tool input")
 NAME_RE = re.compile(r'"(EFS_[A-Z0-9_]*)"')
 FUNC_RE = re.compile(
     r'^[A-Za-z_][\w \t\*]*?\b([A-Za-z_]\w*)\s*\(([^;{}()]*)\)\s*\{', re.M)
@@ -238,11 +247,16 @@ def scan():
             "mentions": mentions, "modes": modes, "removed": removed}
 
 
-def problems(facts, listed, doc):
+def problems(facts, listed, doc, kinds=None):
     out = []
     for v in sorted(facts["reads"]):
         if v not in listed:
             out.append("%s is read by the product but has no entry in %s" % (v, doc))
+        elif kinds is not None and v not in kinds:
+            out.append("%s is read by the product but its entry in %s gives no kind" % (v, doc))
+        elif kinds is not None and kinds[v] not in KINDS:
+            out.append("%s is read by the product as kind '%s' (A12 allows: %s)"
+                       % (v, kinds[v], ", ".join(KINDS)))
     for sc in facts["scanners"]:
         if sc["scanner"] not in listed:
             out.append("environ scanner %s has no entry in %s" % (sc["scanner"], doc))
@@ -303,6 +317,21 @@ def inventory_names(doc):
     return names
 
 
+def inventory_kinds(doc):
+    """{name: kind} from the inventory's seven-cell rows (Setting, Readers,
+    Default, Kind, Launch / portal, Tests, Disposition)."""
+    kinds = {}
+    with open(doc, encoding='utf-8') as f:
+        for line in f:
+            m = re.match(r'\|\s*`([^`]+)`', line)
+            if not m:
+                continue
+            cells = [c.strip() for c in line.strip().strip('|').split('|')]
+            if len(cells) == 7:
+                kinds[m.group(1)] = cells[3]
+    return kinds
+
+
 def main(argv):
     args = argv[1:]
     if args[:1] == ["--root"]:
@@ -320,13 +349,19 @@ def main(argv):
         return 0
     if args[:1] == ["--check"] and len(args) == 2:
         doc = args[1]
-        out = problems(facts, inventory_names(doc), os.path.basename(doc))
+        out = problems(facts, inventory_names(doc), os.path.basename(doc), inventory_kinds(doc))
         for line in out:
             print("env_inventory: " + line)
         print("env_inventory: %d variables read, %d environ scanners, %d compile-time modes, "
               "%d removed; %s" % (len(facts["reads"]), len(facts["scanners"]), len(facts["modes"]),
                                    len(facts["removed"]), "%d problems" % len(out) if out else "PASS"))
         return 1 if out else 0
+    if args[:1] == ["--kinds"] and len(args) == 2:
+        kinds = inventory_kinds(args[1])
+        for v in sorted(facts["reads"]):
+            r = facts["reads"][v][0]
+            print("%s\t%s\t%s:%d" % (v, kinds.get(v, "-"), r["file"], r["line"]))
+        return 0
     if args:
         print(__doc__, file=sys.stderr)
         return 2

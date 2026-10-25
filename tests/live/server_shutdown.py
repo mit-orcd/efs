@@ -10,66 +10,65 @@ import threading
 import time
 
 source=Path(__file__).resolve().parents[2]
-for direct in (False,True):
-    for repeat in range(3):
-        with tempfile.TemporaryDirectory(prefix='efs-shutdown-') as work:
-            with socket.socket() as free:
-                free.bind(('127.0.0.1',0));port=free.getsockname()[1]
-            logpath=Path(work)/'daemon.log'
-            sockets=[];stop=threading.Event()
-            with logpath.open('w') as log:
-                proc=subprocess.Popen([str(source/'efsd'),'--node-id','1','--addr','127.0.0.1','--port',str(port),'--storage',work,'--direct-io' if direct else '--no-direct-io'],env=dict(os.environ,EFS_TRANSPORT='tcp'),stdout=log,stderr=log)
-                def churn():
-                    while not stop.is_set():
-                        try:
-                            with socket.create_connection(('127.0.0.1',port),.1):pass
-                        except OSError:pass
-                worker=threading.Thread(target=churn)
-                try:
-                    deadline=time.monotonic()+10
-                    while True:
-                        assert proc.poll() is None,'daemon exited during startup'
-                        try:
-                            sockets.append(socket.create_connection(('127.0.0.1',port),.1));break
-                        except OSError:
-                            assert time.monotonic()<deadline,'startup timeout';time.sleep(.05)
-                    for index in range(48):
-                        sock=socket.create_connection(('127.0.0.1',port),1);sockets.append(sock)
-                        if index%2:sock.sendall(b'\x00\x00') # incomplete length frame
-                    # Only the listener may be nonblocking. Accepted framing
-                    # sockets must preserve blocking reads on every platform.
-                    time.sleep(.1)
-                    nonblocking=0;socket_count=0
-                    for fd_path in (Path('/proc')/str(proc.pid)/'fd').iterdir():
-                        try:
-                            if not os.readlink(fd_path).startswith('socket:'):continue
-                            text=(Path('/proc')/str(proc.pid)/'fdinfo'/fd_path.name).read_text()
-                            flags=int(re.search(r'flags:\s+([0-7]+)',text).group(1),8)
-                            socket_count+=1;nonblocking+=bool(flags & os.O_NONBLOCK)
-                        except FileNotFoundError:continue
-                    assert socket_count>=49 and nonblocking==1,(socket_count,nonblocking)
-                    worker.start();time.sleep(.15)
-                    if repeat==1:
-                        # No new connection may accidentally wake accept. Deliver
-                        # SIGTERM to a non-main task, as Linux may normally do.
-                        stop.set();worker.join(2);time.sleep(.1)
-                        tasks=[int(path.name) for path in (Path('/proc')/str(proc.pid)/'task').iterdir() if int(path.name)!=proc.pid]
-                        assert tasks,'no worker signal target'
-                        helper=Path(work)/'signal.c'
-                        helper.write_text('#define _GNU_SOURCE\n#include <unistd.h>\n#include <sys/syscall.h>\n#include <signal.h>\n#include <stdlib.h>\nint main(int c,char**v){if(c!=3)return 2;return syscall(SYS_tgkill,atoi(v[1]),atoi(v[2]),SIGTERM)<0;}\n')
-                        binary=Path(work)/'signal'
-                        subprocess.run(['cc',str(helper),'-o',str(binary)],check=True)
-                        before=time.monotonic()
-                        subprocess.run([str(binary),str(proc.pid),str(max(tasks))],check=True)
-                    else:
-                        before=time.monotonic();proc.terminate()
-                    proc.wait(5)
-                    elapsed=time.monotonic()-before
-                    assert proc.returncode==0,proc.returncode
-                    assert 'forcing teardown' not in logpath.read_text()
-                    print(f'{direct=} {repeat=} idle/partial/churning TCP shutdown {elapsed:.3f}s PASS',flush=True)
-                finally:
-                    stop.set()
-                    if worker.is_alive():worker.join(2)
-                    for sock in sockets:sock.close()
-                    if proc.poll() is None:proc.kill();proc.wait()
+for repeat in range(3):
+    with tempfile.TemporaryDirectory(prefix='efs-shutdown-') as work:
+        with socket.socket() as free:
+            free.bind(('127.0.0.1',0));port=free.getsockname()[1]
+        logpath=Path(work)/'daemon.log'
+        sockets=[];stop=threading.Event()
+        with logpath.open('w') as log:
+            proc=subprocess.Popen([str(source/'efsd'),'--node-id','1','--addr','127.0.0.1','--port',str(port),'--storage',work],env=dict(os.environ,EFS_TRANSPORT='tcp'),stdout=log,stderr=log)
+            def churn():
+                while not stop.is_set():
+                    try:
+                        with socket.create_connection(('127.0.0.1',port),.1):pass
+                    except OSError:pass
+            worker=threading.Thread(target=churn)
+            try:
+                deadline=time.monotonic()+10
+                while True:
+                    assert proc.poll() is None,'daemon exited during startup'
+                    try:
+                        sockets.append(socket.create_connection(('127.0.0.1',port),.1));break
+                    except OSError:
+                        assert time.monotonic()<deadline,'startup timeout';time.sleep(.05)
+                for index in range(48):
+                    sock=socket.create_connection(('127.0.0.1',port),1);sockets.append(sock)
+                    if index%2:sock.sendall(b'\x00\x00') # incomplete length frame
+                # Only the listener may be nonblocking. Accepted framing
+                # sockets must preserve blocking reads on every platform.
+                time.sleep(.1)
+                nonblocking=0;socket_count=0
+                for fd_path in (Path('/proc')/str(proc.pid)/'fd').iterdir():
+                    try:
+                        if not os.readlink(fd_path).startswith('socket:'):continue
+                        text=(Path('/proc')/str(proc.pid)/'fdinfo'/fd_path.name).read_text()
+                        flags=int(re.search(r'flags:\s+([0-7]+)',text).group(1),8)
+                        socket_count+=1;nonblocking+=bool(flags & os.O_NONBLOCK)
+                    except FileNotFoundError:continue
+                assert socket_count>=49 and nonblocking==1,(socket_count,nonblocking)
+                worker.start();time.sleep(.15)
+                if repeat==1:
+                    # No new connection may accidentally wake accept. Deliver
+                    # SIGTERM to a non-main task, as Linux may normally do.
+                    stop.set();worker.join(2);time.sleep(.1)
+                    tasks=[int(path.name) for path in (Path('/proc')/str(proc.pid)/'task').iterdir() if int(path.name)!=proc.pid]
+                    assert tasks,'no worker signal target'
+                    helper=Path(work)/'signal.c'
+                    helper.write_text('#define _GNU_SOURCE\n#include <unistd.h>\n#include <sys/syscall.h>\n#include <signal.h>\n#include <stdlib.h>\nint main(int c,char**v){if(c!=3)return 2;return syscall(SYS_tgkill,atoi(v[1]),atoi(v[2]),SIGTERM)<0;}\n')
+                    binary=Path(work)/'signal'
+                    subprocess.run(['cc',str(helper),'-o',str(binary)],check=True)
+                    before=time.monotonic()
+                    subprocess.run([str(binary),str(proc.pid),str(max(tasks))],check=True)
+                else:
+                    before=time.monotonic();proc.terminate()
+                proc.wait(5)
+                elapsed=time.monotonic()-before
+                assert proc.returncode==0,proc.returncode
+                assert 'forcing teardown' not in logpath.read_text()
+                print(f'{repeat=} idle/partial/churning TCP shutdown {elapsed:.3f}s PASS',flush=True)
+            finally:
+                stop.set()
+                if worker.is_alive():worker.join(2)
+                for sock in sockets:sock.close()
+                if proc.poll() is None:proc.kill();proc.wait()

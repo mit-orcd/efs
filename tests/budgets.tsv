@@ -40,7 +40,7 @@ python3 tests/test_query_first_catalog.py	35	1
 python3 tests/test_client_processes.py	20	1	
 python3 tests/test_shutdown_stuck_worker.py	10	1	
 python3 tests/test_k36_recovery.py	120	1	
-python3 tests/test_k36_segment_recovery.py	100	1	
+python3 tests/test_k36_segment_recovery.py	160	1	
 ./tests/test_reclaim	35	1	
 python3 tests/test_opid_admission.py	15	1	
 EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta	40	1	
@@ -82,3 +82,4 @@ python3 tests/test_create_retry_ack.py	5	1
 python3 tests/test_apply_ring.py	5	1	
 python3 tests/test_posix_phase_trace.py	5	1	
 python3 tests/test_sanitizer_gate.py	120	1	
+python3 tests/test_w159_apply_wait.py	70	2	

@@ -131,6 +131,7 @@ row is checked again on current devel before work starts.
 | K36 | **F23** a store after an unclean stop (crash, `SIGKILL`, forced exit rc 3, power loss) stays "recovery uncertain" and COMMIT returns `EIO` for good; no verified recovery exists and a member cannot be removed, so every client's `fsync` fails from then on ([F23](s-docs-alpha-1.0-20261024.md)) | durability / availability, alpha blocker | FIX (user, Oct 24, [D42](decisions.md)): verified recovery that establishes log, metadata, fragment and journal consistency before the fence clears; an earlier ambiguous write is not thereby proven. Crash-recovery tests in alpha; power-loss qualification a separate scope decision. **Implemented, scoped PASS on loopback; merged into devel (`0f0a79eac`, recovery mark on Raft tag 248; tested at `87034b518`)** ([evidence](k36-verified-recovery-20261024.md)): a recovery thread proves boot counter, reclaim journal, session certificates, every local fragment, each hosted group applied to its leader's commit and every published reference against its digest, drops what it cannot prove and marks those stripes for W154 rebuild (Raft tag 248, wire 243/244), then clears the fence; `sync-status` shows phase, counts and reason. Crash tests during PUT, publication, reclaim, KV compaction and recovery, torn and missing fragments, fence held and cleared, COMMIT after recovery with the old client's fsync still `EIO`: PASS (8 of 8 consecutive runs). Merged-tree gate on intel1 at `87034b518`: `make test-long` PASS, `make test` PASS except `test_get_integrity.py`, fixed in `merge-wave5` (`1898c4c63`) and PASS at `c19bf9fdb`; host-limit NOTRUNs only. Power-loss qualification, multi-host and RDMA NOTRUN. **Packed segments (Oct 24, [evidence](k36-k37-segment-recovery-20261024.md), merged into devel (`fc3af9169`)):** a referenced segment fragment recovery drops is no longer only counted: recovery commits K37's segment mark (`EFS_MD_CMD_PACK_DEGRADED`, reason `R_RECOVERY`, forwarded to the group leader, read back) before the fence clears, K37's rebuild restores and verifies it, and a mask with a second bit is reported unrecoverable, never healed; `sync-status` counts segments marked, rebuilt and unrecoverable. Daemon test `tests/test_k36_segment_recovery.py` PASS. |
 | K37 | A packed segment (D38: one 2+1 stripe holding many small files) with a missing fragment was never re-protected: K36 can only count referenced segment fragments that are missing, and no segment rebuild existed, so such a segment stayed one loss away from losing every packed file in it (the alpha 1.0 rule: every acknowledged write survives any single-member loss once protection is restored) | durability, alpha blocker | **FIXED, PASS (scoped, loopback), merged into devel (`0061a2343`; tested at `b205cb9db`)** ([evidence](k37-segment-rebuild-20261024.md), code `b48ec444f`, `5ef2b8d6d`, `b205cb9db`): one durable degraded mark per segment (KV kind 249, Raft tag 247 `EFS_MD_CMD_PACK_DEGRADED`) written when a segment (packing or compaction) is copied with two fragments durable and the third PUT not acknowledged (one durable fragment cancels), when the group leader's audit of a member that returned with a new incarnation (wire 241/242, full verification of every placed fragment, only once the member's stores are settled) finds a fragment missing or torn, and when a rebuild source is proven lost (two bits: unrecoverable, reported, never cleared by a rebuild); the leader rebuilds the fragment from the other two, verifies it against the segment checksums, stores it with a rebuild PUT that the storage node accepts only under the exact mark, and clears the mark only after the placement node read it back and verified it; `efs-mgmt status` counts degraded and unrecoverable segments and the cluster state stays DEGRADED until they clear; a packed read with fewer than two fragments is `EIO` (was `ENOENT`). Daemon test `tests/test_k37_segment_rebuild.py` (7 steps) PASS; `tests/test_k33_payload.py` now also waits for `Degraded segments: 0` before the next outage (3 of its 5 outages pack a segment degraded in the detection window). intel2 `make test-all` at `b205cb9db`: 459 commands, 1 FAIL that also fails on the base (`tests/test_get_integrity.py`, a READ_VERIFY test / K34 merge interaction), 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/k37-20261024/`, `SHA256SUMS` `61fbd81d…98f0`). Live multi-host, RDMA and orcd-mini NOTRUN (parent). **K36 integration (Oct 24, [evidence](k36-k37-segment-recovery-20261024.md), merged into devel (`fc3af9169`)):** a fragment K36 verified recovery drops is marked by the recovering member itself through the same `PACK_DEGRADED` MARK before its fence clears (one mechanism: the audit sweeps only settled stores and skips marked fragments), then rebuilt here; a recovered segment is re-protected without waiting for the audit. |
 | K38 | **W161** ior hard (8 ranks, one shared file) on orcd-mini node9901, devel `5a7463440`, RDMA, direct I/O: `write()` returned `EIO` once (1 of 4 runs; node9900 0 of 1; passed on `d94ca85bf`). A REPORT answered STALE (`report-split stale=1 rc=-14`); the client's same-identity resolution gave `outcome=partial rc=-14 first_rc=-13`, retained the error as background pressure, and fsync/flush kept returning the stale generation until the file was removed. Hard write throughput also fell from 47.9 to 16–21 MiB/s ([deploy](orcd-mini-deploy-5a7463440-20261025.md)) | data correctness / error resolution, alpha blocker | FIX: an application write must not get `EIO` on a healthy cluster. **Cause found Oct 25 (origin session, devel `d3ddb141d`, [investigation](orcd-mini-deploy-5a7463440-20261025.md#investigation-oct-25-from-the-retained-logs-and-devel-source)): a REPORT livelock on one chunk whose span record carries a stale base.** n1 logged `pub-stale why=span-base` 30+ times in 4 s; the client re-sent the same base every round and its K32 unit lost 215 other chunks each round until the 8 s budget, then report-resolve mapped the PARTIAL receipt to STALE and the error stayed with the inode. Hypothesis (unproven): `dcache_replay_stale_ex_budgeted` (`src/client/write.c`) returns `EFS_OK` and does nothing when the dcache entry has no body, so the putid keeps its old `span_base_gen` and the next round rebuilds the same record; the body can be gone under dcache pressure or after another span of the same chunk committed and freed it (47008-byte transfers: two ranks' spans share a chunk). Fix direction: that replay fetches the committed image and rebuilds the span on it, or fails closed with a distinct error, never `EFS_OK` silently; unit test forcing span putid present, body gone, committed generation moved. Proof on orcd-mini (ior hard repeated with dcache tracing) is the parent's. The throughput drop (47.9 → 16–21 MiB/s) is a Stage 3 finding unless it shares the cause. |
+| K39 | `write()`/`fsync` return `EIO` with one member down on a 4-member loopback cluster, 2 of 3 runs of `tests/test_k35_fsync_degraded.py` (cases 7 and 8) once the client's away-mark window is the product default of 10 s (the test's `EFS_PUT_AWAY_MARK_MS=600000`, later the fault-only `EFS_FAULT_AWAY_MARK_MS`, had hidden it; efs-fuse has no fault build, so the setting was a no-op since). Found by the merge gate of W159, the flake sweep, the dead-code sweep and the docs audit; logs kept on intel2 `~/efs-artifacts/merge-wave8b-20261025/k35-keep/` | data path / availability with one member down, alpha blocker | **FIXED (scoped) on branch `claude/k39-write-eio`** (code `7c4c2d318`, tests `bd330dd3c`, not merged, not pushed) ([evidence](k39-write-eio-one-member-down-20261025.md)). Cause of the `EIO`: the client's put-ticket ADMIT to the lane group's leader as it stopped lost its exchange and `rpc_put_ticket` returned NET at once (`put-ticket admit ... rc=-6`, then `flush-meta stage=report rc=-6`; the REPORT itself was never sent, and no stale mark was involved): it now re-picks another voter (the commands are idempotent), as does the fsync degraded mark. Two more client defects on the same path made stripes degraded instead of placed around: a member back for under a second was still client-down-marked and no spare (placement now probes it), and `put_fragments_parallel_once` counted an earlier acknowledgement twice and recorded a drain-time loss as no failure. intel1: K35 test 20 of 20 at the 10 s default (base 4 of 8 FAIL); `make test-all` 485 commands, 0 FAIL, 14 NOTRUN host limits. Open: `test_k33_payload.py` 4 of 10 read `EIO` on the fix, 5 of 10 on the base, same client line (`fetch published ... rc=-6`): the K33 read session's item, not K39. |
 
 ### Recheck on devel `ab1920fae` (October 22)
 
@@ -157,15 +158,16 @@ cluster. No row was found already fixed.
 | K25 | Fixed Oct 22 (`35647dd0f`); R1 fixed and merged Oct 22 (`6df08cc3a`); see the K row. |
 | K26 | Gate done and merged Oct 22 (`b8ef49e58`): `make leak-check` PASS on efs2 and efs1 ([evidence](k26-leak-gate-20261022.md)); NOTRUN on node9901. x86_64: `make leak-check` PASS 25/25 (291 s) on nuc at `163241584`, merged Oct 23 (`2213a4120`) ([evidence](gates-nuc-20261022.md)). |
 | K29 | Open (found Oct 23 by the K15 live gates); needs a dedicated-host rerun. |
-| K30 | Fixed and merged Oct 23; 0/25 FAIL per case on amd ([evidence](k30-intermittent-tests-20261023.md)). |
+| K30 | Fixed and merged Oct 23; 0/25 FAIL per case on amd ([evidence](k30-intermittent-tests-20261023.md)). **Oct 25 flake sweep** ([evidence](flake-sweep-20261025.md)): ten 8-job gate runs and three serial `test-long` runs on intel1 at `0b01a2a1e` failed six commands at random; three product defects (the client's away mark, K35; the packer's single PUT attempt, D4; re-forwarded admissions), three test defects (K37 case 7, B geometry, K36 case 11), the query-first NOTRUN and the runner self-test fixed on branch `claude/devel-flake-sweep-1505b6`; the final-gate attempts found a B6 refuse-mode test race and the step-down stall, a third product defect (forwarded PUT ticket admissions forwarded again during an election until the peer pools stalled 5 s; `8f1d50ed8`, 5/28 loaded runs before, 0/40 after). Open: two single read EIOs without logs (K36 case 8, K33 payload). Final gate NOTRUN on the branch (merged into merge-wave8b and gated there). |
 | K31 | Fixed Oct 23 (`24e58fb1d`); see the K row. |
 | K32 | Code fixed Oct 23 and merged (`ea2dc4443`); ior easy write gate on orcd-mini NOTRUN ([evidence](k32-write-fix-20261023.md)). Oct 24: `test_k32_entry_count` load flake was the test (1 ms linger is a bound); counts made schedule-independent, 0/288 FAIL at 8 jobs ([evidence](test-hygiene-k32-w149-w140-20261024.md)). |
 | K33 | OPEN; increment 1 (model, protocol, automatic formation, online addition with operator ids) merged (`0098e06c4`), code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN) ([evidence](k33-w157-formation-addition-20261023.md)); increment 2 (automatic ids, positional CLI, discovery) merged (`53080d744`), code gate PASS with host limits (xorinox: 436 commands, 0 FAIL, 13 NOTRUN) ([evidence](k33-w157-autoid-discovery-20261024.md)); live client view refresh merged (`8b4cfbe77`, intel1 `make -k test-all` exit 0) ([evidence](k33-client-view-20261024.md)); placement spread fix merged (`95a0e678a`), code gate PASS with host limits on amd ([evidence](k33-placement-spread-20261024.md)); acceptance items (interruptions, exact payloads, seed loss, growth bookkeeping) PASS on loopback with two fixes, code gate PASS with host limits (xorinox `make test-all` at `2ebd4fd85`: 446 commands, 0 FAIL, 13 NOTRUN) ([evidence](k33-acceptance-20261024.md)); the live multi-host, cross-subnet, RDMA and orcd-mini gates remain. |
 | K34 | Found Oct 24 (F24/E3/B6); fixed merged into devel (`fc5c1d64e`; tested at `6c09649a3`); see the K row ([evidence](k34-stop-put-ack-20261024.md)). |
-| K35 | Found Oct 24 (F22); decided D42; fixed and merged (`376369aa8`): `fsync` proves each stripe, COMMIT only on the nodes holding the file's fragments, degraded only with a durable mark; xorinox `make test-all` 0 FAIL ([evidence](k35-fsync-degraded-20261024.md)). Live multi-host verification NOTRUN. |
-| K36 | Found Oct 24 (F23); decided D42; implemented and merged (`0f0a79eac`): verified recovery clears the fence only once log, metadata, fragments, journal and ledgers are proven; dropped fragments are marked for rebuild (tag 248); intel1 gate PASS with host limits ([evidence](k36-verified-recovery-20261024.md)). Power-loss qualification is a separate scope decision; live runs NOTRUN. Segment fragments dropped by recovery are marked for K37 only on branch `claude/devel-k36-k37-segments-5885d9` (not merged). |
-| K37 | Found Oct 24 by K36; fixed and merged (`0061a2343`): packed segments copied with two durable fragments carry a degraded mark (tag 247, KV kind 249) and are rebuilt on return; intel2 gate PASS with host limits ([evidence](k37-segment-rebuild-20261024.md)). Live runs NOTRUN. |
+| K35 | Found Oct 24 (F22); decided D42; fixed and merged (`376369aa8`): `fsync` proves each stripe, COMMIT only on the nodes holding the file's fragments, degraded only with a durable mark; xorinox `make test-all` 0 FAIL ([evidence](k35-fsync-degraded-20261024.md)). Live multi-host verification NOTRUN. **Oct 25:** case 7 failed 2 of 10 gate runs: the client's 10 s away mark on a member that had just failed a PUT excluded it as a spare, so another member's stop was acknowledged degraded instead of placed around; fixed (`fc79fe086`: away members are spares of last resort, an acknowledgement clears the mark) and the case forces the interleaving ([flake sweep](flake-sweep-20261025.md)). |
+| K36 | Found Oct 24 (F23); decided D42; implemented and merged (`0f0a79eac`): verified recovery clears the fence only once log, metadata, fragments, journal and ledgers are proven; dropped fragments are marked for rebuild (tag 248); intel1 gate PASS with host limits ([evidence](k36-verified-recovery-20261024.md)). Power-loss qualification is a separate scope decision; live runs NOTRUN. Segment fragments dropped by recovery are marked for K37 only on branch `claude/devel-k36-k37-segments-5885d9` (not merged). **Oct 25:** case 11 chose a segment the packer had already written degraded (1 of 10 gate runs); the case waits for `Degraded segments: 0` first ([flake sweep](flake-sweep-20261025.md)). |
+| K37 | Found Oct 24 by K36; fixed and merged (`0061a2343`): packed segments copied with two durable fragments carry a degraded mark (tag 247, KV kind 249) and are rebuilt on return; intel2 gate PASS with host limits ([evidence](k37-segment-rebuild-20261024.md)). Live runs NOTRUN. **Oct 25:** the packer sent each fragment once, so one transient `NOT_PRIMARY` from a follower under load wrote a segment degraded (D4 `put_errors=1`, 1 of 10 gate runs); a fragment refused BUSY, NOT_PRIMARY or AGAIN is sent again first (`fc79fe086`), K37 case 1b forces it with `EFS_FAULT_SEGMENT_PUT_TRANSIENT`; case 7 of the test matched old log lines after a leader change (2 of 10), fixed ([flake sweep](flake-sweep-20261025.md)). |
 | K38 | Found Oct 25 on orcd-mini (W161); cause hypothesised Oct 25 (stale-base span replay with the dcache body gone, `d3ddb141d`); fix and proof OPEN. |
+| K39 | Found Oct 25 by the wave-8b merge gate once the away-mark override became fault-only; fixed (scoped) Oct 25 on branch `claude/k39-write-eio` (ticket and degraded-mark RPCs re-pick a voter after a lost exchange; placement probes a just-returned member; acknowledgements counted once), intel1 K35 20/20 and `make test-all` 0 FAIL ([evidence](k39-write-eio-one-member-down-20261025.md)); not merged; the K33 payload read `EIO` (base and fix alike) stays open. |
 
 **Oct 23 evidence qualification:** nuc capture bundles are reported lost;
 xorinox raw outputs were deleted. Their PASS labels below are historical
@@ -430,6 +432,15 @@ alternatives reduces both product complexity and the supported test matrix.
   the variable and the co-location pump are removed; elections alone place
   leaders; `efs-mgmt status` reports actual placement per group and node
   (`raft-status` per node). Placement is not yet measured under A11 load.**
+  **Oct 25 ([A6–A12 hygiene](a12-hygiene-20261025.md#a9-leader-placement-item-2),
+  branch `claude/fervent-wilson-67282f`, not merged):** `scripts/leader_placement.py`
+  records who leads each metadata group over a run, through forced
+  step-downs and leader restarts. It reports each group's distribution and
+  the share of time both leaders sat on one node; `make test` checks its
+  parsing. On loopback (intel2, TCP, 600 s each, 12 step-downs, 6 restarts)
+  both leaders sat on one node 41.5 % of the run at 3 members and 20.7 % at
+  4 and 5. Elections neither co-locate nor spread them. The real-host
+  measurement under A11 load is the parent's.
 - [ ] **A10 — Operational consistency.** Update launch/deployment scripts, portal
   settings, help and generated settings listings with each removal. Stale launch
   configurations must be detected by validation rather than silently presented
@@ -466,6 +477,18 @@ alternatives reduces both product complexity and the supported test matrix.
   dimension under A8. No unexplained experimental, legacy or correctness-policy
   toggle remains in the alpha product. Record failures and gate results for the
   integrated candidate; flag removal alone is not correctness evidence.
+  **Oct 25 ([closure](a12-closure-20261025.md), branch
+  `claude/fervent-wilson-67282f`, not merged):** every A6 selector is listed
+  with its disposition. All 15 are removed and refused, and `EFS_TRANSPORT`
+  is a justified A8 support dimension. A/B selectors 15 → 0; reachable A/B
+  combinations 32,768 → 1; variables a normal build reads 105 → 77. Every
+  remaining reader has a retained kind: deployment input, numeric tunable,
+  observability, fault/test hook or tool input. `env_inventory.py --check`
+  now fails on any other kind. A dead-code sweep and the removal of buffered
+  I/O remnants from the harnesses and docs are in the
+  [hygiene evidence](a12-hygiene-20261025.md). D43 (Oct 25) ships expiry and
+  `.efs`; expiry code was left untouched. The retained paths' live
+  qualification (A11, D42 direct I/O) stays NOTRUN.
 
 **Review of A6–A12 (October 22, at devel `a569de971`).** These are starting
 facts for A6, not decisions.
@@ -518,6 +541,18 @@ facts for A6, not decisions.
   Rows marked *proposed* (for example `--no-direct-io`, `--writers`,
   `--no-persist`, `add-node`, `shrink-quota`, `raft-step-down`) wait for the
   user; findings F2–F8, F11, F12 list help-text gaps and profile defaults.
+  **Audited Oct 25 against `ec3e09306` ([audit](docs-audit-20261025.md)):**
+  every binary, option, `efs-mgmt` and `.efs` command and refusal exercised
+  on a loopback cluster of that build; the page lists every `raft-<op>`,
+  `status`'s sections and exit status, and the removed `EFS_COMMANDS`;
+  `tests/test_cli_docs.py` (`make test`) fails when `cli_help.h` and the
+  user pages name different commands or options. Still *proposed*:
+  `--writers`, `sync-status`, `pack-compact`, `raft-resync`, `shrink-quota`,
+  `raft-step-down`, `data-commit`; F12 (port authentication) waits for the
+  user. **Scope change Oct 25 (D43, user):** expiry and `.efs` ship in
+  alpha 1.0; the surface list, guide, POSIX page and release notes say so.
+  At `ec3e09306` expiry is still compiled out of the product build and
+  being re-enabled (audit finding U19).
 - [ ] **S2 — POSIX subset.** Publish the supported operations and every known
   gap (for example, mmap is skipped in the extras suite). Each gap is either
   fixed or justified as a limitation (F4). No gap counts as PASS.
@@ -527,6 +562,11 @@ facts for A6, not decisions.
   mmap W104, K10 fork readback, `renameat2` flags, `fallocate` modes,
   non-`user.` xattrs, `mknod`, D28, D32, W159 open). Recorded runs are on
   `cb970ca7c` and `163241584`; none on the base; C1 per topology NOTRUN.
+  **Audited Oct 25 ([audit](docs-audit-20261025.md)):** case counts match
+  the suites at `ec3e09306` (218 core, 5 extras, 68 two-client, 27
+  durability); P15 no longer says COMMIT is fenced until a fresh format
+  (K36); P13 (W159) records the Oct 25 diagnosis; `.efs` extras depend on
+  the commands-policy, not on the removed `EFS_COMMANDS`.
 - [ ] **S3 — Operator workflows.** Format, start, stop, status, `df`,
   quotas, `raft-status`, `raft-resync`, packing control, and failure
   messages. Each one is documented and covered by a test.
@@ -534,22 +574,37 @@ facts for A6, not decisions.
   (automatic at three members, optional `mkfs`), start, status, mount and
   unmount, `df`, quotas, adding a node, adding storage, stop, restart and
   orderly shutdown with the current CLI. Test coverage gaps: `add-storage`
-  and `add-node` have no test, `raft-resync` only a gate script (F11, F20).
+  and `add-node` have no test, `raft-resync` only a gate script (F11, F20;
+  fixed Oct 24). **Audited Oct 25 ([audit](docs-audit-20261025.md)):**
+  every workflow run on a loopback cluster at `ec3e09306`; the guide now
+  describes `status`'s full output and exit status, the clean-stop output
+  and stop record, the restart rules after a forced, failed-barrier or
+  killed daemon (verified recovery, K36), K34, K37 and `Protection: LOST`.
+  Open finding U4: a clean client stop fails at the session revoke
+  (`revoke rc=-13 phase=storage-fence`) while any member is down, because
+  the storage fence must reach every configured member; the user decides
+  whether that is an alpha limitation or a fix.
 - [ ] **S4 — Effective settings.** Decide whether **W122**, the listing of
   effective settings, is in alpha. It supports A8 and A10.
   **STRUCTURE Oct 24 ([effective settings](../using/alpha-1.0-surface.md#s4--effective-settings)):**
   where each effective value is visible today (startup log, `status`,
   `raft-status`, `version`, `sync-status`, `commands-policy get`; tunables
-  not at all) and the page layout once A6 lands. **Waits for** the A6
-  inventory (`a6-settings-inventory-20261024.md`) and the user's W122
-  decision.
+  not at all) and the page layout once A6 lands. The A6 inventory exists
+  and the A7 removals are done (D42); **waits for** the user's W122
+  decision only (described, not decided, in the Oct 25
+  [audit](docs-audit-20261025.md)).
 - [ ] **S5 — User documentation.** Install, configuration, supported
   topologies, the reduced configuration matrix (A11) and the published
   limitations.
   **DRAFT Oct 24 ([alpha guide](../using/alpha-1.0-guide.md)):** install,
   configuration, topology (3–16 nodes, 2+1, distinct hosts), transport and
   direct I/O, quotas, failure behavior (one node down, rebuild on return,
-  two down). The A11 matrix waits for A11.
+  two down). The A11 matrix waits for A11. **Revised Oct 25
+  ([audit](docs-audit-20261025.md)):** failure behavior brought up to K34,
+  K35, K36 and K37 and checked on a loopback cluster; `operations.md`,
+  `power-user.md`, `quickstart.md`, `efs-commands.md` and the README no
+  longer describe buffered I/O, `EFS_COMMANDS`, splice or `add-storage` as
+  current; `v030-candidate.md` is marked historical.
 
 ## B. Verify geometry, placement and usable capacity
 
@@ -801,6 +856,11 @@ round says which physical or software limiter it hit.
   **DRAFT Oct 24 ([release notes](../release-notes/alpha-1.0.md)):**
   limitations L1–L28 with trigger, what the user sees and reference, and
   the open K rows that must close or be added before release.
+  **Revised Oct 25 ([audit](docs-audit-20261025.md)):** checked against
+  D40–D42 and the K rows at `ec3e09306`: L6, L7, L8 and L28 now describe
+  verified recovery and segment rebuild (K36, K37) instead of "deferred";
+  the open-items paragraph lists K34–K37 as fixed on loopback with live
+  runs NOTRUN; L22 and L24 are marked as open user decisions (F12, W122).
   Release-notes entries decided so far (D40, Oct 23), one each:
   - **K10/W121 readback after fsync:** a read issued right after a
     successful fsync can return the previous file's payload; triggered by

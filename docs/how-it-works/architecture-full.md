@@ -1598,8 +1598,25 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[K39: write EIO with one member down](../status/k39-write-eio-one-member-down-20261025.md): **FIXED (scoped), branch `claude/k39-write-eio` on merge-wave8b `9a28c1b1c` (code `7c4c2d318`, tests `bd330dd3c`), not merged, not pushed; intel1: `test_k35_fsync_degraded.py` 20 of 20 at the 10 s default (base 4 of 8 FAIL), `make test-all` at 8 jobs 485 commands in 471 s, 0 FAIL, 14 NOTRUN host limits. Raw: intel1 `~/efs-artifacts/k39-20261025/` (`SHA256SUMS` `ef7faa5a…a88c`).** The `EIO` was the client's put-ticket ADMIT to a stopping lane-group leader: one lost exchange was NET at once (the "REPORT" in `flush-meta stage=report` was never sent). Ticket and fsync degraded-mark RPCs now re-pick a voter; placement probes a member back for under a second that the client still marked down; an earlier fragment acknowledgement counts once and a drain-time loss is a hard failure (each was a degraded stripe where place-around was possible). The wave-8b merge waits on this branch. Open: `test_k33_payload.py` read `EIO` with one member down, 4 of 10 on the fix and 5 of 10 on the base (same `fetch published ... rc=-6` line), the K33 read session's item.
+
+[A12 closure](../status/a12-closure-20261025.md) and [A6–A12 hygiene: dead-code sweep, buffered I/O remnants, A9 leader placement](../status/a12-hygiene-20261025.md):
+**branch `claude/fervent-wilson-67282f` on devel `5a7463440`, not merged, not pushed; intel2 `make test-all` at `ab07a9c40` (8 jobs): 480 commands in 493 s, 2 FAIL, 16 NOTRUN host limits. Both FAILs are pre-existing intermittents: `test_k33_payload.py` node-down EIO (also 2/2 FAIL on the base) and B6 `refuse` vs K37 packing; each passed 2/2 alone on the branch. Raw: intel2 `~/efs-artifacts/a12-20261025/` (`SHA256SUMS` `bf87d4c8…5759`).**
+A12: every A6 selector is removed and refused, or justified (`EFS_TRANSPORT`, A8). A/B selectors 15 → 0; reachable A/B combinations 32,768 → 1; variables a normal build reads 105 → 77. `env_inventory.py --check` now fails any read setting whose kind is not a retained one. The sweep removed two orphaned functions and the fields nothing read, and dropped the buffered/direct options from the live harnesses, the fault harness, `qualify.py` and `bench_profile.py`. A9 on loopback (600 s, 12 step-downs, 6 leader restarts): both leaders on one node 41.5 % of the run at 3 members and 20.7 % at 4 and 5. Real-host placement and live qualification of the retained paths stay open. Expiry code is untouched (D43).
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](../status/f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
+
+[Oct 25 user-docs audit against `ec3e09306`: every command, option, workflow and failure case exercised on a loopback cluster](../status/docs-audit-20261025.md):
+**docs updated; docs gate PASS; nuc `make test-all` at `e1ce4a4d4`: 472 commands, 4 FAIL at 8 jobs (3 PASS alone, `test_report_stepdown.py` intermittent, 2 of 4 alone), 14 NOTRUN host limits (raw: nuc `~/efs-artifacts/docs-audit-20261025/`, `SHA256SUMS` `51666fda…05bf5`); no product code changed.**
+The guide, surface list, POSIX subset, release notes, operations, power-user, quick start and
+`efs-commands` pages now match the binaries (K34–K37, E2, `status` output and exit status,
+restart after a forced, failed-barrier or killed daemon, `.efs` by policy only, `O_DIRECT` only).
+New `make test` check `tests/test_cli_docs.py`: every `efs-mgmt` command and `efsd`/`efs-fuse`
+option in `cli_help.h` is named in the user docs, and the docs name no command or flag the help
+lacks. The pages follow D43 (expiry and `.efs` ship in alpha 1.0); at this base expiry is still
+compiled out and being re-enabled (U19). Open for the user: U4, a clean client stop fails at the session revoke
+(`storage-fence`, `EFS_ERR_BUSY`) while any member is down; S4/W122 and F12 unchanged.
 
 [Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](../status/a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `0b01a2a1e`: 471 commands, 0 FAIL, 15 NOTRUN host limits (2,604 s; raw: intel2 `~/efs-artifacts/merge-wave7-20261025/`, `SHA256SUMS` in that directory).** A11 findings 1 and 2 are fixed; every Stage 2 item now maps to a real `scripts/qualify.py` gate; live and real-host runs stay NOTRUN; every store needs a fresh format.
@@ -1624,6 +1641,26 @@ independent commands, parallel verification and fast payloads in the K33 tests a
 polls instead of settle sleeps, and ports held for the life of a loopback cluster. No assertion relaxed; four
 tests check more. Follow-ups: 15 s unmount storage fence to a down member, 32 s `efs-mgmt status` with a frozen
 member, intermittent EIO on a degraded read in `test_k33_payload.py` under host load (pre-existing).
+
+[W159: fixture POSIX timeouts, slow durable barriers and the 400 ms applied-wait](../status/w159-fixture-posix-timeouts-20261025.md):
+**CAUSE FOUND, fix PARTIAL, PASS (scoped, loopback); branch `claude/devel-w159-fe09e8` on `merge-wave7`, not merged, not pushed; amd `make test-all` on the fixed tree: see the page.**
+The expiry fixture's closing POSIX run timed out two metadata-heavy cases
+because its one consumer NVMe answers a durable barrier in 7–28 ms (29× amd)
+and four members queue on it: about 39 fsync/fdatasync per create-and-unlink
+pair across the members, so the Raft pump's apply lag passed the server's
+fixed 400 ms applied-wait, each expiry answered BUSY and the client's backoff
+ladder made the 2–7 s RPCs. Reproduced on amd on the untouched base with an
+emulated 7 ms barrier queued on one lock (`scripts/w159_fixture.py`); the
+same fixture on amd's disk passes everything with no RPC over 1 s. The
+applied-wait for a member's own committed entry is now bounded by progress
+(`src/server/apply_wait.h`, 400 ms grants renewed while the member applies,
+2 s cap): `concurrent_creates_same_dir` passes under the emulation,
+`dir_many_files` passes one round in two there (the barrier cost, a Stage 3
+follow-up).
+
+[Flake sweep: every intermittent failure of the gate](../status/flake-sweep-20261025.md):
+**FIXED, final gate NOTRUN (stopped after the merge into merge-wave8b, gated there); branch `claude/devel-flake-sweep-1505b6` (head of the code: `8f1d50ed8`), not merged, not pushed.** Ten 8-job `make test-all` runs (471 commands) and three serial `test-long` runs (62) on intel1 at `0b01a2a1e` failed six commands at random; the final-gate attempts surfaced a seventh. Product defects fixed: the client's away mark blocked place-around (K35 case 7, 2/10 + 1/3), the packer took one transient `NOT_PRIMARY` for a missing fragment (D4, 1/10), forwarded PUT ticket admissions were forwarded again during an election until the peer pools stalled for 5 s (report step-down, 1/10; 5/28 loaded before, 0/40 after; new wire mark on member forwards). Test defects fixed: K37 case 7, B geometry, K36 case 11, B6 refuse mode, query-first NOTRUN, the runner self-test's false NOTRUN. Open, single occurrences without logs: K36 case 8 read EIO, K33 payload read-back EIO. Raw: intel1 `~/efs-artifacts/flake-sweep-20261025/`.
+
 
 [Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](../status/pack-unindex-race-20261024.md):
 **FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**
@@ -3098,7 +3135,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | client-discovery-ownership | **W156** · `scripts/client_processes.py` cannot inspect another user's `efs-fuse` on a shared host (relative mount argv needs that process's cwd), so non-root test users could not stop their own mounts; the merged opt-in `EFS_CLIENT_SKIP_FOREIGN=1` (`2213a4120`) skips uninspectable foreign clients, which proves nothing about foreign clients on the same target | test ownership / operator path | FIXED on `devel-w156` (Oct 23, `dca4dd544`, not merged): owner from mountinfo `user_id=`, controller is the one inspectable `efs-fuse` holding the mount's control endpoint and `/dev/fuse`; foreign or ambiguous ownership refused, foreign processes never inspected; `EFS_CLIENT_SKIP_FOREIGN` removed. Synthetic same-target/unrelated/ambiguous tests PASS; `make test-all` on nuc PASS without a switch. Live foreign-client case NOTRUN (nuc's client was not running) ([evidence](../status/w156-client-discovery-20261023.md)) | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23) |
 | simple-startup-node-add | **W157** · simple seed/`--join` startup, automatic formation and safe online node addition (user amendment Oct 23; supersedes the D39 mandatory cluster file and fixed membership; removal deferred) | scope / implementation, alpha blocker | IN PROGRESS: increment 1 on branch `claude/vibrant-lalande-556adb`, not merged: model C16–C22 clean (8 negative controls), [protocol](../status/k33-membership-protocol-20261023.md); automatic formation at three joined members, committed membership revisions (store tokens, stable cluster identity), pending joiners, SHARD2 {1,2,3} → {2,3,4} by joint consensus with catch-up, retired replicas, storage-only members from five, retained placement; code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN) ([evidence](../status/k33-w157-formation-addition-20261023.md)). Increment 2 merged (`53080d744`) ([evidence](../status/k33-w157-autoid-discovery-20261024.md)): no operator node ids (`efsd ADDR:PORT STORAGE` creates or restarts, `efsd --join [SEED] STORAGE` joins; `--node-id` removed), M4′ promise formation (the seed proposes ids in endpoint order, each joiner persists a promise, group 0 commits), additions take `count + 1` (concurrent joiners distinct, a retried join the same id), local-subnet discovery by UDP broadcast on each interface's own subnet (several clusters need a seed; no answer is said and waited; finds peers only), identity v3 (fresh format); code gate PASS with host limits (xorinox `make test-all` at `53080d744`: 436 commands, 0 FAIL, 13 NOTRUN). Placement spread fix merged (`95a0e678a`) ([evidence](../status/k33-placement-spread-20261024.md)): the stripe start, packed segments and spares use a full-avalanche hash (fmix64, multiply-shift); unit tests for N = 3..16 PASS; code gate PASS with host limits (amd `make test-all` at `f7553b06e`: 442 commands, 11 FAIL, all also failing on the base `3e01ba95c`, 5 NOTRUN); real daemons: every added node takes new fragments (`{4: 25, 6: 22, 7: 21, 8: 18}`, base `{4: 0, …}`). Acceptance qualification merged (`2ebd4fd85`) ([evidence](../status/k33-acceptance-20261024.md)): interrupted additions at every handoff (new hooks after-learn, learner-added, joint-started, after-g2-copy; concurrent interrupted joins), exact packed and unpacked payloads across additions, a whole-cluster restart and each single-member outage at five, seed loss, and growth bookkeeping 3→6 (capacity, df, protection and abandoned-upload reporting, automatic quota, reclaim, W154) PASS as loopback daemon tests; fixed: reclaim stalled once node 1's group-2 replica retired, and a whole-cluster restart waited 30 s per starting peer; code gate PASS with host limits (xorinox `make test-all`: 446 commands, 0 FAIL, 13 NOTRUN). Remaining: live multi-host, cross-subnet, RDMA and orcd-mini gates NOTRUN (parent) | [contract](../status/alpha-1.0-node-addition-20261023.md), K33, D39, W153 |
 | harness-unticketed-put | **W158** · `tests/live/gc_reclamation.py` hand-builds an unticketed PUT for its "valid late-PUT control"; since K13 every PUT needs an admitted ticket, so storage refuses it and the expiry fixture stops before its expiry checks | test correctness (K13 drift) | FIXED, merged (`33c68a465`): the late-PUT control admits a ticket and checks that an unticketed PUT is refused; the same fix in `fragment_integrity`, `fragment_tail_smoke`, `io_stats_smoke`; static test in `make test`; nuc `make test-all` PASS. Intel expiry fixture rerun: every expiry check PASS; the fixture's closing POSIX run is W159 | [W158 evidence](../status/w158-ticketed-harness-20261023.md), [intel run](../status/intel-devel-a23d45540-20261023.md), K13 |
-| fixture-posix-timeouts | **W159** · the expiry fixture's closing core POSIX run (four members and client on intel1, devel `a23d45540`) timed out `dir_many_files` (75 s) and `concurrent_creates_same_dir` (30 s); client log shows metadata RPCs of 2–7 s; the same build passed both on the real four-host cluster | performance or fixture environment, cause not established | OPEN: post-W153 rerun on orcd-mini (`cb970ca7c`, node9901 /tmp fixture, 2026-10-24) passed every expiry check but the closing core run failed `dir_times_mkdir_rmdir` (rmdir EBUSY), 215/216; the cluster's own core suite on the same build passed 216/216. Next: trace the fixture client's EBUSY/slow metadata RPCs (types 67, 125) on the leader | [intel run](../status/intel-devel-a23d45540-20261023.md), [orcd-mini run](../status/orcd-mini-deploy-cb970ca7c-20261024.md) |
+| fixture-posix-timeouts | **W159** · the expiry fixture's closing core POSIX run (four members and client on intel1, devel `a23d45540`) timed out `dir_many_files` (75 s) and `concurrent_creates_same_dir` (30 s); client log shows metadata RPCs of 2–7 s; the same build passed both on the real four-host cluster | fixture environment (one consumer NVMe shared by four members: 7–28 ms per durable barrier) amplified by the product (fixed 400 ms applied-wait → BUSY → client backoff ladder) | CAUSE FOUND, fix PARTIAL, PASS (scoped), branch `claude/devel-w159-fe09e8`, not merged: the metadata path costs about 39 fsync/fdatasync per create-and-unlink pair across the members (13 per member); on the fixture's disk each takes 7–28 ms (intel1 measured p50 7.2 ms against 0.25 ms on amd) and the four daemons queue on it, so the Raft pump's apply lag passes the server's fixed 400 ms applied-wait budget, every expired wait answered BUSY and the client's 50..800 ms backoff ladder plus re-proposal made the 2–7 s RPCs. amd reproduces both timeouts on the untouched base with an emulated 7 ms barrier queued on one lock (`scripts/w159_fixture.py --fsync-delay-us 7000 --fsync-lock`); without the emulation the same fixture passes 218/218 and the three cases under load with no RPC over 1 s (runs 1–6). Fix: progress-bounded applied-wait for a member's own committed entry (`src/server/apply_wait.h`: a 400 ms grant renewed while the member applies, 2 s cap, `raft-obs wait_extends=`; a follower's ReadIndex wait keeps the fixed budget so the client asks the leader); under the emulation `concurrent_creates_same_dir` now passes (28–29 s of 30) and `dir_many_files` passes 1 of 2 rounds (the barrier cost itself). Tests: `tests/test_apply_wait.c` (make test), `tests/test_w159_apply_wait.py` (make test-long). Follow-up (Stage 3): the per-operation barrier count and the follower's AppendEntries fdatasync inside the pump; the expiry wrapper `posix_suite.py --suite expiry` cannot start on this base (`--disable-efs-commands` refused since D42) | [W159 evidence](../status/w159-fixture-posix-timeouts-20261025.md), [intel run](../status/intel-devel-a23d45540-20261023.md), [orcd-mini run](../status/orcd-mini-deploy-cb970ca7c-20261024.md) |
 | ior-hard-stale-eio | **W161** · ior hard (8 ranks, one shared file, orcd-mini node9901, devel `5a7463440`) got EIO from `write()`: a REPORT answered STALE (`report-split stale=1 rc=-14`), the client resolved it `outcome=partial rc=-14`, retained the error and returned it to fsync/flush instead of replaying; 1 of 4 runs, 0 of 1 on node9900; passed on `d94ca85bf` | data path / REPORT replay, alpha blocker candidate | OPEN, hypothesis (Oct 25): one chunk (ci=2033) kept a span record on a stale base (`pub-stale why=span-base`, 30+ rounds); its K32 unit took 215 other chunks down with it each round until the budget ended. The STALE replay returns OK without rebasing when the chunk's dcache body is gone (`dcache_replay_stale_ex_budgeted` early return), and the putid entry keeps the old span base; to prove: traced repeated ior hard | [orcd-mini 5a7463440 deploy](../status/orcd-mini-deploy-5a7463440-20261025.md) |
 | gate-speed | **W160** · the merged-tree code gate (`make test-all` through `scripts/make_test_summary.sh`) grew from 298 s to 2,641 s in a day with the new daemon tests, and at `EFS_TEST_JOBS=8` eight daemon tests at once oversubscribe an 8-CPU host's disk (nuc: 1,209 s, 6 FAIL) | test infrastructure / gate time | IMPLEMENTED, PARTIAL PASS, not merged (branch `claude/devel-gate-speed-8aee30`): runner budgets and disk-weighted slots per `test-long` command (`tests/budgets.tsv`), a drift check in `tests/test_make_test_recipe.py` (per-command bound with a recorded reason, budgeted gate bound), B6 / B geometry / D39 model split into independent commands, parallel verification and fast payloads, status polls for settle sleeps, ports held for a cluster's life. nuc at 8 jobs: 811 s, 839 s (0 FAIL), 989 s (2 pre-existing intermittents); serial 2,754 → 2,311 s. Not reached: three clean runs under 900 s on the nuc's single NVMe. Follow-ups: 15 s unmount storage fence to a down member; 32 s `efs-mgmt status` with a frozen member; intermittents under disk load (payload degraded-read EIO, report step-down 3 s bound, K36 step 11, K35 step 7) | [evidence](../status/gate-speed-20261025.md), [testing guide](testing.md) |
 | nfs-macos-clients | **W152** · NFS re-export and macOS clients | beta backlog | DECIDED out of alpha 1.0 (user, Oct 22); the W55 NFS/macOS triggers move here; alpha publishes "Linux FUSE client only" (F4) | [alpha checklist S1](../status/alpha-1.0-2plus1-checklist.md) |
@@ -12276,10 +12313,12 @@ ever actually tested.
 ##### Fragment record format 2 (implemented, W75)
 
 Every fragment file a storage node writes, chunk fragments and packed-segment
-fragments alike, is the payload followed by one fixed 128-byte **fragment
-record** (`include/efs/frag_record.h`). Buffered roots append the record
-directly after the payload. O_DIRECT roots append a 4 KiB tail page that
-begins with the record and is zero-padded. There is no sidecar file. All
+fragments alike, carries one fixed 128-byte **fragment record**
+(`include/efs/frag_record.h`). Fragment files are written and read with
+`O_DIRECT` only (D42): the payload is padded to 4 KiB and followed by one 4 KiB
+tail page that begins with the record and is zero-padded. This is the only
+layout; a file of any other size, such as the removed buffered layout (a bare
+record right after the payload), is refused. There is no sidecar file. All
 integers are big-endian.
 
 ```text
@@ -13558,7 +13597,7 @@ unprofiled success. The script does not install packages or change kernel policy
 
 Defaults now also include the raw I/O groups described below. BLAKE3 one-shot and streaming at 4 KiB, 64 KiB, 128 KiB and 1 MiB,
 with 1/2/4/affinity-CPU-count workers (deduplicated and capped by affinity);
-data buffered/direct I/O, inline/two-thread/automatic writer pools and QD
+data (store) I/O, which is `O_DIRECT` only (D42), inline/two-thread/automatic writer pools and QD
 1/16/64/256; local KV and Raft workloads including individual and batch32
 appends. The fixed data payload remains 64 KiB. The harness bounds the local resident
 working set to 256 MiB of fragment payload across QD slots (`--data-size`);
@@ -13834,9 +13873,10 @@ sync/durability default changed.
 
 Completed xorinox measurements and acceptance are recorded in the
 [writer investigation](../../results/measure/20261007-writer-investigation/SUMMARY.md).
-Buffered shard overwrites preserve extents instead of truncating before writing;
-a successful write checks exact body/checksum length and truncates an old longer
-tail. Direct I/O and persistence barriers are unchanged. The matched warm bounded
+Shard overwrites preserve extents instead of truncating before writing; a
+successful write checks exact body/checksum length and truncates an old longer
+tail. (That investigation measured the since-removed buffered store path; the
+store is `O_DIRECT` only, D42.) Persistence barriers are unchanged. The matched warm bounded
 overwrite gain is about 4–8×; it is not physical-media or FUSE throughput.
 A single-waiter signal experiment caused starvation and was rejected. Fair
 admission needs reserved handoff and anti-bypass protection, including worst-wait
@@ -13845,7 +13885,7 @@ and shutdown gates. Writer-count defaults remain unchanged.
 
 For synchronous engine-write diagnostics use `efs-bench --bench data --sync`
 or `efs-bench.sh --data-sync`. This benchmark-only option opens fragment files
-with O_SYNC; buffered writes also sync final length handling. Body/checksum
+with O_SYNC; a length change still takes an `fsync`. Body/checksum
 writes can therefore incur multiple persistence waits per PUT. The daemon's
 build and defaults do not enable it. Compare untraced repeats before separate
 perf/strace runs; O_SYNC does not establish SSD power-loss guarantees. See the

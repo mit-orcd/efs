@@ -4,6 +4,8 @@ from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_propose_impl(');b=s.index('\n}',a)+2
+# The forward-once refusal (flake sweep, Oct 25) is part of the exact production body.
+fa=s.index('static int host_forward_refused(');fb=s.index('\n}',fa)+2
 code=r'''
 #include "efs/raft.h"
 #include "efs/raft_disk.h"
@@ -16,7 +18,8 @@ code=r'''
 #define BO_COUNT(a) ((void)0)
 struct efs_raft {int role;uint32_t voters;};
 struct efs_raft_disk {int depth,hold_rc;};
-struct efs_raft_host {pthread_mutex_t mu;struct efs_raft_disk *disk;struct efs_raft *r;};
+struct efs_raft_host {pthread_mutex_t mu;struct efs_raft_disk *disk;struct efs_raft *r;int raft_id;};
+static __thread int host_serving_forward;
 static struct efs_raft_host *test_host;
 static int first_depth,appends,locked_sync,held_sync;
 int efs_raft_disk_sync_depth(struct efs_raft_disk*d){if(first_depth){first_depth=0;return 1;}return d->depth;}
@@ -42,7 +45,7 @@ static int host_remote_cmd(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint
 ''' + 'static int host_group_incompatible(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return 0;}\n' \
   + '/* W140 tag gate: tested in test_submit_unknown_tag.py. */\n' \
   + 'static int host_tag_refused(uint8_t g,const uint8_t *c,uint32_t n){(void)g;(void)c;(void)n;return 0;}\n' \
-  + 'static int host_admit(struct efs_raft_host *h,struct efs_raft *r,const uint8_t *c,uint32_t n){(void)h;(void)r;(void)c;(void)n;return 0;}\n' + s[a:b] + r'''
+  + 'static int host_admit(struct efs_raft_host *h,struct efs_raft *r,const uint8_t *c,uint32_t n){(void)h;(void)r;(void)c;(void)n;return 0;}\n' + s[fa:fb] + '\n' + s[a:b] + r'''
 int main(void){struct efs_raft r={EFS_RAFT_LEADER,3};struct efs_raft_disk d={0};
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.disk=&d,.r=&r};test_host=&h;
  uint8_t cmd[]={EFS_MD_CMD_CREATE};uint64_t index=0,term=0;int hint=-1;

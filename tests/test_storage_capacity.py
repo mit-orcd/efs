@@ -54,6 +54,11 @@ int main(int argc,char **argv){
  assert(!efs_storage_safe_quota(roots,usage,2,&q2)&&q2==55*g);
  usage[0]=usage[1]=0;strcpy(roots[1],"/capacity-other-device");
  assert(!efs_storage_safe_quota(roots,usage,2,&q2)&&q2==q1+35*g/2);
+ /* The detail rows are the estimate's own inputs: one per filesystem. */
+ struct efs_storage_fs_budget fsb[EFS_MAX_STORAGE_PATHS];uint32_t nfs=0;
+ assert(!efs_storage_safe_quota_detail(roots,usage,2,&q2,fsb,&nfs)&&nfs==2);
+ assert(fsb[0].total==100*g&&fsb[0].available==60*g&&fsb[0].used==0&&fsb[0].budget==35*g);
+ assert(fsb[1].available==40*g&&fsb[1].budget==35*g/2&&fsb[0].budget+fsb[1].budget==q2);
  strcpy(roots[1],roots[0]);mock=2;
  assert(efs_storage_safe_quota(roots,usage,1,&q1));
  assert(efs_storage_safe_quota(roots,usage,2,&q2));

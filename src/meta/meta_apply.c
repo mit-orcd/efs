@@ -8087,26 +8087,6 @@ static int append_foreign_open(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
     return scan.foreign;
 }
 
-int efs_meta_apply_append_foreign(struct efs_kv *kv, efs_ino_t ino,
-                                  const uint8_t uuid[EFS_OPID_UUID_LEN])
-{
-    struct efs_meta_row row;
-    struct append_cur cur;
-    int rc;
-
-    if (!kv || !uuid || ino == 0)
-        return EFS_ERR_INVAL;
-    rc = efs_meta_apply_get_inode(kv, ino, &row);
-    if (rc != EFS_OK)
-        return rc;
-    rc = load_append_cur(kv, ino, row.generation, &cur);
-    if (rc != EFS_OK)
-        return rc;
-    if (cur.nopen == 0)
-        return 0;
-    return append_foreign_open(kv, ino, row.generation, uuid);
-}
-
 /* Unlike directory windows, append's result must bind the requested length
  * and must never turn a retired success into an invented offset zero. Keep
  * this window on the inode's group, in a separate identity namespace. */

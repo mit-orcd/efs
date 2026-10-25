@@ -7,6 +7,7 @@
 #include "efs/batch_obs.h"
 #include "write_prof.h"
 #include "apply_ring.h"
+#include "apply_wait.h"
 #include "efs/raft_disk.h"
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
@@ -82,7 +83,16 @@ _Static_assert(EFS_RAFT_STATUS_PEERS == EFS_RAFT_MAX_PEERS,
 #define HOST_OUTBOX_MAX    2048
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
+/* High bit of a member-forwarded submit's group byte (host_rpc_submit). */
+#define HOST_SUBMIT_FORWARDED 0x80u
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
+/* W159: the whole applied-wait for an own entry, however much the apply
+ * progresses (apply_wait.h): five grants. It must end well inside the
+ * client's REPORT and resolve budgets (8 s), so a wait the server cannot
+ * finish still answers BUSY while the client has time to retry; an 8 s
+ * cap made test_k33_payload.py's writes during a member outage miss the
+ * client budget instead (read EIO in 5 of 9 runs, 0 of 5 on the base). */
+#define HOST_APPLY_WAIT_CAP_US 2000000ull
 #define HOST_CREATE_NAME_OFF 31
 static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
                           uint64_t gen, const uint8_t uuid[EFS_OPID_UUID_LEN],
@@ -233,7 +243,6 @@ struct host_group {
     uint8_t group;
     uint8_t hosted;
     uint32_t voters;
-    uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
     uint64_t applied_saved_us; /* checkpoint owner: last recovery-prefix save */
     uint64_t cursor_durable;   /* atomic: validated KV cursor after a successful barrier */
@@ -544,6 +553,8 @@ struct efs_raft_host {
     /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
      * the last stats-dump timestamp (ms). */
     uint64_t obs_wait_timeouts;
+    uint64_t obs_wait_extends; /* W159: applied-wait grants renewed on progress */
+    uint64_t obs_wait_timeouts_own; /* W159: of obs_wait_timeouts, waits for an own entry */
     /* Raft frames a peer handler could not queue (inbox full): the frame
      * is lost and the peer still gets its RAFT_REPLY. Counted since Sep 30
      * 2026; before that a drop had no line and no counter. Not gated on
@@ -567,6 +578,10 @@ struct efs_raft_host {
     uint64_t obs_apply_max_us;
     uint64_t obs_apply_cycle_us; /* cumulative apply time, current cycle */
     uint64_t obs_apply_cnt;      /* applies in the current cycle */
+    /* W159: every apply, across cycles, read lock-free by waiters as
+     * progress: a long cycle applies for seconds before it publishes
+     * its view, and that is progress too (apply_wait.h). */
+    uint64_t apply_progress;
     uint64_t obs_apply_max_cnt;  /* most applies in one cycle */
     /* Apply-result ring reads that found the slot overwritten
      * (>HOST_APPLY_RC_RING applies in one wait window). The waiter returns
@@ -3603,6 +3618,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         h->obs_apply_cnt++;
         h->obs_apply_cycle_us += elapsed;
     }
+    __atomic_fetch_add(&h->apply_progress, 1, __ATOMIC_RELAXED);
     /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
      * waiter that observes applied >= index always finds the slot: the
      * slot's release store precedes the view publish that carries applied.
@@ -4675,7 +4691,7 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
         if (!payload)
             return EFS_ERR_NOMEM;
     }
-    payload[0] = group;
+    payload[0] = (uint8_t)(group | HOST_SUBMIT_FORWARDED);
     if (clen)
         memcpy(payload + 1, cmd, clen);
     if (peer_addr(h, rid, host, sizeof(host), &port) != 0) {
@@ -4791,6 +4807,7 @@ static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
         prefer_rid = -1;
     }
 }
+
 
 /* A read-only forwarded proof must not borrow the mutation RPC's 30-second
  * transport wait. One absolute budget covers pool admission, connection,
@@ -5533,17 +5550,33 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
     return rc==EFS_OK ? host_read_index_admitted(h,second,hint,&admission[1],NULL,0) : rc;
 }
 
-static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
-                             uint64_t idx, int *leader_hint)
+/* own=1: the waiter's own committed entry (a proposal's verdict, a REPORT
+ * batch): apply is certain, a BUSY would only re-propose it behind the
+ * same lag, so the wait is bounded by progress (W159, apply_wait.h: a
+ * 400 ms grant renewed while the member applies, 2 s cap). own=0: a
+ * ReadIndex served behind a follower's apply, where a BUSY lets the
+ * client ask the leader instead; that keeps the one fixed budget. */
+static int host_wait_applied_mode(struct efs_raft_host *h, uint8_t group,
+                                  uint64_t idx, int *leader_hint, int own)
 {
     struct timespec end;
     struct host_view v;
+    struct efs_apply_wait w;
 
-    /* Same overall budget as the old poll loop (HOST_READ_TRIES x
-     * HOST_TICK_US), but the pump's applied_cv broadcast wakes us the
-     * moment the index applies instead of up to 5 ms later. Lock-free
-     * predicate on the published view; sleeps under cv_mu, never h->mu. */
-    host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
+    /* One grant is the old poll loop's budget (HOST_READ_TRIES x
+     * HOST_TICK_US); the pump's applied_cv broadcast wakes us the moment
+     * the index applies instead of up to 5 ms later. Lock-free predicate
+     * on the published view; sleeps under cv_mu, never h->mu. */
+    /* Progress is the published applied index plus the count of applies
+     * so far: a cycle that applies for longer than one grant publishes
+     * nothing until it ends, but every apply in it moves the count. */
+    host_view_get(h, group, &v);
+    efs_apply_wait_start(&w, now_us_(),
+                         (v.has ? v.applied : 0) +
+                             __atomic_load_n(&h->apply_progress, __ATOMIC_RELAXED),
+                         (uint64_t)HOST_READ_TRIES * HOST_TICK_US,
+                         own ? HOST_APPLY_WAIT_CAP_US
+                             : (uint64_t)HOST_READ_TRIES * HOST_TICK_US);
     for (;;) {
         host_view_get(h, group, &v);
         if (!v.has) {
@@ -5554,10 +5587,20 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
             *leader_hint = v.leader;
         if (v.applied >= idx)
             return EFS_OK;
-        if (host_past_deadline(&end)) {
-            __atomic_fetch_add(&h->obs_wait_timeouts, 1, __ATOMIC_RELAXED);
-            return EFS_ERR_BUSY;
+        {
+            unsigned before = w.extensions;
+            uint64_t progress = v.applied +
+                __atomic_load_n(&h->apply_progress, __ATOMIC_RELAXED);
+            if (efs_apply_wait_expired(&w, now_us_(), progress)) {
+                __atomic_fetch_add(&h->obs_wait_timeouts, 1, __ATOMIC_RELAXED);
+                if (own)
+                    __atomic_fetch_add(&h->obs_wait_timeouts_own, 1, __ATOMIC_RELAXED);
+                return EFS_ERR_BUSY;
+            }
+            if (w.extensions != before)
+                __atomic_fetch_add(&h->obs_wait_extends, 1, __ATOMIC_RELAXED);
         }
+        host_deadline_us(&end, (long)efs_apply_wait_remaining_us(&w, now_us_()));
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
         if (v.has && v.applied < idx) {
@@ -5573,6 +5616,18 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
         }
         pthread_mutex_unlock(&h->cv_mu);
     }
+}
+
+static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
+                             uint64_t idx, int *leader_hint)
+{
+    return host_wait_applied_mode(h, group, idx, leader_hint, 0);
+}
+
+static int host_wait_applied_own(struct efs_raft_host *h, uint8_t group,
+                                 uint64_t idx, int *leader_hint)
+{
+    return host_wait_applied_mode(h, group, idx, leader_hint, 1);
 }
 
 /* h->mu held. One fsync covered every append whose record ends at or
@@ -5693,6 +5748,43 @@ busy:
         fprintf(stderr, "raft-host: admission busy (refused=%llu)\n",
                 (unsigned long long)h->admit_busy);
     return EFS_ERR_BUSY;
+}
+
+/* Set while this thread serves a command another member forwarded
+ * (server_raft_host_submit). Such a command is answered here, by this
+ * group's leader, or refused NOT_PRIMARY with the leader hint; it is never
+ * forwarded again. The generic submit path had this rule (Sep 21: under a
+ * leaderless group every hop parked a thread and a peer-pool slot), but
+ * the put-ticket admission branches propose before reaching it, so a
+ * forwarded admission that landed on a follower during an election was
+ * forwarded on, hop after hop, until the peer pools were full and every
+ * forward waited out the 5 s checkout (flake sweep, Oct 25:
+ * test_report_stepdown.py 5.2-6.0 s writes in 5 of 28 runs under load). */
+static __thread int host_serving_forward;
+
+/* A submit's group byte, and whether this thread then serves a member's
+ * forward: marked by host_rpc_submit, except DIR_MIGRATE (see
+ * server_raft_host_submit). */
+static int host_submit_serves_forward(const uint8_t *payload, uint32_t plen, uint8_t *group)
+{
+    *group = plen >= 1 ? (uint8_t)(payload[0] & ~HOST_SUBMIT_FORWARDED) : 0;
+    if (plen < 1 || !(payload[0] & HOST_SUBMIT_FORWARDED))
+        return 0;
+    return !(plen >= 1u + HOST_DIR_LEN && payload[1] == EFS_MD_CMD_DIR &&
+             payload[2] == EFS_MD_DIR_MIGRATE);
+}
+
+/* A proposal on a member that is not the group's leader is forwarded to
+ * it, unless this thread serves a member's forward: then it is refused
+ * NOT_PRIMARY with the leader it knows (never itself), for the forwarder
+ * to retry. Returns 1 when refused. */
+static int host_forward_refused(int serving_forward, int lid, int self, int *leader_hint)
+{
+    if (!serving_forward)
+        return 0;
+    if (leader_hint)
+        *leader_hint = lid >= 0 && lid != self ? lid : -1;
+    return 1;
 }
 
 static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
@@ -5880,6 +5972,11 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
     if (quiet)
         (void)efs_raft_disk_sync_release(h->disk);
     if (local_only) return EFS_ERR_NOT_PRIMARY;
+    /* Already one hop from the caller: answer, never forward again. The
+     * forwarder's host_remote_cmd retries the hinted leader (lid, -1 while
+     * the group elects) within its own budget. */
+    if (host_forward_refused(host_serving_forward, lid, h->raft_id, leader_hint))
+        return EFS_ERR_NOT_PRIMARY;
     /* Not the leader: forward to it. host_remote_cmd is a blocking peer
      * RPC; no host lock is held across it. The command is already fully
      * formed and the Raft log + apply-side validation order it against
@@ -5905,6 +6002,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
         *leader_hint = rep.leader_hint;
     return EFS_OK;
 }
+
 
 /* Bounded lock-free attempts before a verdict read takes h->mu. */
 #define HOST_ARC_READ_TRIES 64
@@ -5996,7 +6094,7 @@ static int host_wait_verdict(struct efs_raft_host *h, uint8_t group,
     struct efs_arc_view v;
     int rc, hosted;
 
-    rc = host_wait_applied(h, group, idx, hint);
+    rc = host_wait_applied_own(h, group, idx, hint);
     if (rc != EFS_OK)
         return rc;
     if (wp0) seen = wprof_now();
@@ -6018,7 +6116,7 @@ static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
     struct efs_arc_view v;
     int rc = EFS_OK;
 
-    rc = host_wait_applied(h, group, idx, hint);
+    rc = host_wait_applied_own(h, group, idx, hint);
     if (rc != EFS_OK || !term)
         return rc;
     if (host_arc_read(h, group, idx, &v) && v.idx == idx && v.term != term) {
@@ -7873,13 +7971,15 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
             pub_p50 = psamp[pc / 2];
         }
         fprintf(stderr,
-                "raft-obs: wait_timeouts=%llu pump_hold_max=%lluus "
+                "raft-obs: wait_timeouts=%llu wait_timeouts_own=%llu wait_extends=%llu pump_hold_max=%lluus "
                 "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
                 "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
                 "arc_miss=%llu arc_term_miss=%llu opid_replay=%llu "
                 "fin_q=%llu fin_done=%llu fin_drop=%llu fin_full=%llu "
                 "pub_p50=%lluus pub_max=%lluus inbox_drop=%llu\n",
                 (unsigned long long)h->obs_wait_timeouts,
+                (unsigned long long)__atomic_load_n(&h->obs_wait_timeouts_own, __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&h->obs_wait_extends, __ATOMIC_RELAXED),
                 (unsigned long long)h->obs_pump_hold_max_us,
                 (unsigned long long)h->obs_wait_max_us,
                 (unsigned long long)h->obs_drain_max_us,
@@ -8604,6 +8704,11 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.voters = cfg_voters;
     cfg.election_ticks = HOST_ELECT_BASE;
     cfg.heartbeat_ticks = HOST_HB_TICKS;
+#if EFS_FAULTS
+    /* Every election line (daemon tests): the one-per-10-s limiter hid a
+     * test's whole leader timeline (flake sweep, Oct 25). */
+    cfg.elect_log_all = env_on("EFS_FAULT_RAFT_ELECT_LOG");
+#endif
     cfg.boot_id = h->boot_id;
     /* Entropy-seeded (h->salt reads /dev/urandom) per-(node,group) so the
      * randomized election timeout is actually de-synchronized in production. */
@@ -8681,11 +8786,9 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
      * no voters and nothing is hosted; host_learn_membership attaches it. */
     if (group != EFS_RAFT_GROUP_SHARD && !__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
         __atomic_store_n(&h->g[gi].voters, 0, __ATOMIC_RELEASE);
-        h->g[gi].desired = 0;
         return EFS_OK;
     }
     want = load_desired(h, group, target);
-    h->g[gi].desired = want;
     if (!hosts_group(h->raft_id, boot) && !hosts_group(h->raft_id, target) &&
         !hosts_group(h->raft_id, want))
         return EFS_OK;
@@ -8740,8 +8843,6 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
         return rc;
     pthread_mutex_lock(&h->mu);
     s = group_slot(h, group);
-    if (s)
-        s->desired = voters;
     if (s && !s->r && hosts_group(h->raft_id, voters))
         rc = attach_replica(h, (int)(s - h->g), host_boot_voters(h, group));
     pthread_mutex_unlock(&h->mu);
@@ -8870,7 +8971,6 @@ static int host_learn_membership(struct efs_raft_host *h, const struct efs_membe
     boot = host_boot_voters(h, EFS_RAFT_GROUP_SHARD2);
     target = group_voters(EFS_RAFT_GROUP_SHARD2, (int)m->count);
     want = load_desired(h, EFS_RAFT_GROUP_SHARD2, target);
-    g2->desired = want;
     if (!g2->r)
         __atomic_store_n(&g2->voters, target, __ATOMIC_RELEASE);
     if (!g2->r && (hosts_group(h->raft_id, boot) || hosts_group(h->raft_id, target) ||
@@ -9259,7 +9359,7 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
      * deleted files were never reclaimed (tests/test_k33_bookkeeping.py). */
     if (retired)
         return EFS_OK;
-    return host_wait_applied(h, group, rep.index, NULL);
+    return host_wait_applied_own(h, group, rep.index, NULL);
 }
 
 static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
@@ -12357,6 +12457,17 @@ static void *host_query_thread(void *ctx)
         if(work_enabled){work.dirty=dirty;uint64_t admitted=query_mono_ms();
             work.spacing_ms=work_completed?admitted-work_completed:0;}
         uint64_t source_start=work_enabled?query_mono_ms():0;
+#if EFS_FAULTS
+        /* EFS_FAULT_QUERY_FIRST_UNFORMED (daemon tests): the first capture
+         * is refused UNFORMED, once, as when the commands-policy row lands
+         * just before the member counts itself formed (D4's formation
+         * race); the retry after about a second is what the test checks. */
+        static int first_unformed_fired;
+        if(initial && !first_unformed_fired && env_on("EFS_FAULT_QUERY_FIRST_UNFORMED")){
+            first_unformed_fired=1;source=NULL;rc=EFS_ERR_UNFORMED;
+            fprintf(stderr,"fault: EFS_FAULT_QUERY_FIRST_UNFORMED refused the first catalog capture\n");
+        } else
+#endif
         rc=host_query_source(h,&source,&view,revisions,import_generation,&final_transaction_changed,work_enabled?&work:NULL);
         uint64_t capture_done=query_mono_ms();
         cut_retry=efs_query_refresh_cut_retry(rc,final_transaction_changed,capture_done-now);
@@ -14426,11 +14537,24 @@ static void host_put_ticket_batch_submit(struct efs_raft_host *h, uint8_t group,
     out->leader_hint=hint;
 }
 
+static void host_serving_forward_restore(const int *previous)
+{
+    host_serving_forward = *previous;
+}
+
+/* payload[0] is the group; HOST_SUBMIT_FORWARDED in it marks a command a
+ * member forwarded (host_rpc_submit), as opposed to one a client or this
+ * process submits. A forwarded command is served without a further forward
+ * (host_serving_forward, restored on every return), except DIR_MIGRATE: it
+ * is bounced to a dual-host because the parent group's leader may not host
+ * the destination group, and its own proposals each forward one hop to a
+ * leader that answers. */
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out)
 {
-    struct efs_raft_host *h = g_host;
+    __attribute__((cleanup(host_serving_forward_restore))) int serving_outer = host_serving_forward;
     uint8_t group;
+    struct efs_raft_host *h = g_host;
     const uint8_t *cmd;
     uint8_t storage_finish_cmd[HOST_SESS_CREATE_LEN];
     uint8_t sweep_cmd[21+4*EFS_META_SWEEP_BATCH_MAX];
@@ -14447,7 +14571,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->rc = EFS_ERR_INVAL;
         return;
     }
-    group = payload[0];
+    host_serving_forward = host_submit_serves_forward(payload, plen, &group);
     cmd = payload + 1;
     clen = plen - 1;
     /* Never propose reserved commands/requests. Any other tag this build
@@ -15901,18 +16025,6 @@ uint64_t server_raft_host_group_commit(uint8_t group)
     if (r) c = efs_raft_commit(r);
     pthread_mutex_unlock(&h->mu);
     return c;
-}
-/* Voters of a hosted group as a node mask (bit id-1, as Raft id + 1). */
-uint32_t server_raft_host_group_voters(uint8_t group)
-{
-    struct efs_raft_host *h = g_host;
-    uint32_t v = 0;
-    if (!h || !__atomic_load_n(&h->running, __ATOMIC_ACQUIRE)) return 0;
-    pthread_mutex_lock(&h->mu);
-    struct efs_raft *r = group_raft(h, group);
-    if (r) v = efs_raft_voters(r);
-    pthread_mutex_unlock(&h->mu);
-    return v;
 }
 /* K37: 0 once the GC loop is stopping (the segment rebuild pass ends early,
  * as W154's does, so shutdown never waits on its proposals). */
@@ -22571,7 +22683,7 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
 
     uint64_t wp0 = idx && write_prof_on() ? wprof_now() : 0, seen = 0, apply_us = 0;
     if (idx)
-        rc = host_wait_applied(h, b->group, idx, hint);
+        rc = host_wait_applied_own(h, b->group, idx, hint);
     if (rc == EFS_OK && idx) {
         if (wp0) seen = wprof_now();
         for (i = 0; i < b->nidx; i++) {

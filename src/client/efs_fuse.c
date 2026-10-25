@@ -7510,7 +7510,7 @@ int main(int argc, char **argv)
     g_client.export_id = 1;
     pthread_mutex_init(&g_client.lock, NULL);
     efs_export_init(&g_client.export, g_client.export_id, g_client.export_name);
-    efs_client_setup_ino_namespace();
+    efs_client_setup_mount_token();
 
     /* argv addresses are bootstrap only. init_nodes assigns 1..N, which
      * will not match a cluster started with --node-id 3,4,5. Always take

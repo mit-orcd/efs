@@ -47,7 +47,7 @@ shell-quoted, so never quote them in the template):
      "seed": "10.0.0.1:17432",
      "nodes": [{"addr": "10.0.0.1:17432", "host": "h1"}, ...],
      "mounts": [{"path": "/mnt/a", "host": "h1"}, {"path": "/mnt/b", "host": "h2"}],
-     "transport": "rdma", "direct_io": true,  # always true since D42
+     "transport": "rdma",                    # fragment I/O is O_DIRECT only (D42)
      "features": {"packing": true, "efs_commands": true, "expiry": false},
      "quota": "...", "hardware": "...", "notes": "...",
      "mgmt_host": "local",                   # where efs-mgmt reaches the nodes
@@ -370,7 +370,7 @@ class Loopback(Controller):
                     seed=self.addrs[0], owned=True,
                     nodes=[dict(addr=a, host='local', id=i + 1) for i, a in enumerate(self.addrs)],
                     mounts=[dict(path=str(m), host='local') for m in self.mounts],
-                    transport='tcp', direct_io=True,
+                    transport='tcp',
                     features=dict(efs_commands='cluster commands-policy (default: enabled)',
                                   packing='build default (not set by the driver)'),
                     quota=f'{self.quota} per daemon', hardware=f'{socket.gethostname()} (one host, loopback)',
@@ -900,7 +900,7 @@ def g_topology(q, g):
     nodes, hosts = c.get('nodes', []), distinct_hosts(c)
     mounts = c.get('mounts', [])
     g.fixture.update(nodes=len(nodes), node_hosts=hosts, transport=c.get('transport'),
-                     direct_io=c.get('direct_io'), quota=c.get('quota'), features=c.get('features', {}),
+                     quota=c.get('quota'), features=c.get('features', {}),
                      mounts=[f'{m["host"]}:{m["path"]}' for m in mounts],
                      client_hosts=sorted({m['host'] for m in mounts}), hardware=c.get('hardware'),
                      fixture=q.fixture)
@@ -1058,11 +1058,10 @@ def b_fragment(q, src, work, port):
 
 
 def b_gc(q, src, work, port):
-    mode = 'direct'  # O_DIRECT only (D42)
     w = shlex.quote(work)
     return [('gc-reclamation', f'mkdir -p {w}/p1 {w}/p2 && python3 tests/live/gc_reclamation.py '
-             f'--mode {mode} --root {w}/p1 --root {w}/p2 --port {port + 30} {q.fixture["gc_args"]}',
-             False)], dict(mode=mode, args=q.fixture['gc_args'], ports=f'{port + 30}-{port + 33}')
+             f'--root {w}/p1 --root {w}/p2 --port {port + 30} {q.fixture["gc_args"]}',
+             False)], dict(args=q.fixture['gc_args'], ports=f'{port + 30}-{port + 33}')
 
 
 def manifest_verify(q, g, m, manifest_path, label):
@@ -2321,7 +2320,7 @@ def g_plugin(name, spec):
         values = dict(source=q.source(host), cluster=str(q.out / 'cluster.json'), gate_dir=str(g.dir),
                       seed=q.cluster.get('seed', ''), mount=(q.mount(0) or {}).get('path', ''),
                       peer_mount=(q.mount(1) or {}).get('path', ''),
-                      transport=q.cluster.get('transport', ''), direct=int(bool(q.cluster.get('direct_io'))))
+                      transport=q.cluster.get('transport', ''))
         if spec.get('requires'):
             need = spec['requires'].format(**values)
             rc, text = g.run('requires', host, f'test -e {shlex.quote(need)}', 60)
@@ -2538,7 +2537,7 @@ def write_summary(q, run, results, sums):
     L.append(f'- Nodes: {len(c.get("nodes", []))} on {len(hosts)} distinct host(s): '
              + ', '.join(f'{n["addr"]} ({n.get("host")})' for n in c.get('nodes', [])) + '.')
     L.append('- Mounts: ' + (', '.join(f'{m["host"]}:{m["path"]}' for m in c.get('mounts', [])) or 'none') + '.')
-    L.append(f'- Transport {c.get("transport", "TODO")}, direct I/O {c.get("direct_io")}, features '
+    L.append(f'- Transport {c.get("transport", "TODO")}, `O_DIRECT` fragment I/O (the only mode), features '
              f'`{json.dumps(c.get("features", {}))}`, quota {c.get("quota", "TODO")}.')
     L.append(f'- Hardware: {c.get("hardware", "TODO")}. Notes: {c.get("notes", "-")}.')
     L.append(f'- Live harnesses: private clusters on {q.private["host"]} under {q.private["root"]}, '

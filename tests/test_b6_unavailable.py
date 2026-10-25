@@ -111,14 +111,22 @@ def degraded_segments(c, i=1):
     return int(m.group(1)) if m else None
 
 
-def logs(c):
-    return ''.join(c.log(i) for i in c.ports if (c.dir / f'n{i}.log').exists())
+def snapshot(c):
+    """Every member's log, read once. The packer logs a segment's `written
+    degraded` line and the pass-end `packed_total=` line a few ms apart;
+    counts that must agree (files packed, segments written degraded) come
+    from one snapshot, never from two reads that a pass end can straddle
+    (two reads 4 ms apart counted 3 files as packed during the fault while
+    their segment's degraded line was already "before": 1 of 21 gate runs
+    and 1 of 8 alone, Oct 25)."""
+    return {i: c.log(i) for i in c.ports if (c.dir / f'n{i}.log').exists()}
 
 
-def degraded_writes(c):
+def degraded_writes(c, snap=None):
     """(group, id, gen, fragment, node) of each K37 `written degraded` line."""
+    text = ''.join((snap if snap is not None else snapshot(c)).values())
     return re.findall(r'packer: segment g(\d+) id=([0-9a-f]+) gen=([0-9a-f]+) written degraded: '
-                      r'fragment (\d+) for node (\d+)', logs(c))
+                      r'fragment (\d+) for node (\d+)', text)
 
 
 def segment_back(c, seg):
@@ -144,13 +152,11 @@ def rebuilt(c, i=1):
     return int(m.group(1)) if m else 0
 
 
-def packed_total(c):
+def packed_total(c, snap=None):
     """Files the packers switched, summed over every daemon run and group."""
     total = 0
-    for i in c.ports:
-        if not (c.dir / f'n{i}.log').exists():
-            continue
-        for run in c.log(i).split('==== start')[1:]:
+    for i, text in (snap if snap is not None else snapshot(c)).items():
+        for run in text.split('==== start')[1:]:
             last = {}
             for g, t, n in re.findall(r'packer: group=(\d+) term=(\d+) .*?packed_total=(\d+)', run):
                 last[(g, t)] = int(n)
@@ -331,8 +337,9 @@ def run_mode(mode):
         th.join(timeout=WRITE_BOUND_S + 10)
         assert not th.is_alive(), f'{mode}: the in-flight write is still running'
         r.out['inflight_write'] = inflight['v']
-    pk_before = packed_total(c)
-    dw_before = set(degraded_writes(c))
+    snap = snapshot(c)
+    pk_before = packed_total(c, snap)
+    dw_before = set(degraded_writes(c, snap))
     rebuilt_before = rebuilt(c)
 
     # 3. Read through a fresh mount.
@@ -441,8 +448,9 @@ def run_mode(mode):
     # files read back from the two, and the mark ends on return (rebuilt, or
     # retired with the segment). slow: node 3 acknowledges late, so the
     # packer waits and packs on three, or marks if a PUT missed its deadline.
-    r.out['packed_during_fault'] = packed_total(c) - pk_before
-    dw = [s for s in degraded_writes(c) if s not in dw_before]
+    snap = snapshot(c)
+    r.out['packed_during_fault'] = packed_total(c, snap) - pk_before
+    dw = [s for s in degraded_writes(c, snap) if s not in dw_before]
     r.out['segments_written_degraded'] = len(dw)
     assert all(node == '3' for *_, node in dw), f'{mode}: written degraded {dw}'
     if mode in ('down', 'refuse', 'full'):

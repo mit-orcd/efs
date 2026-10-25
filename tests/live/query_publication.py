@@ -18,7 +18,6 @@ import time
 source=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('work',type=Path)
-parser.add_argument('--mode',choices=('direct','buffered'),default='direct')
 parser.add_argument('--mount',type=Path)
 parser.add_argument('--peer-mount',type=Path)
 args=parser.parse_args()
@@ -28,7 +27,6 @@ mount_paths=[args.mount,args.peer_mount] if args.mount else [work/'mnt1',work/'m
 for mount in mount_paths:
     if mount.exists():
         assert mount.is_dir() and not os.path.ismount(mount) and not any(mount.iterdir()),'mount must be empty and unmounted'
-io_flag='--direct-io' if args.mode=='direct' else '--no-direct-io'
 work.mkdir(parents=True,exist_ok=False)
 logs=[];procs=[];fuse_procs=[];mounts=[];held_stream=None
 env=dict(os.environ,EFS_TRANSPORT='tcp')
@@ -48,7 +46,7 @@ for base in range(24800,25000,4):
         for sock in held:sock.close()
 else:
     raise RuntimeError('no free fixture port range')
-print(f'fixture={work} ports={base}-{base+3} mode={args.mode} transport=tcp',flush=True)
+print(f'fixture={work} ports={base}-{base+3} transport=tcp',flush=True)
 def stop_mount(mount):
     if not os.path.ismount(mount):return
     # Drain while our servers are still alive. Foreground FUSE below keeps
@@ -76,7 +74,7 @@ try:
         log=(work/f'n{node}.log').open('w');logs.append(log)
         args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
               '--port',str(base+node-1),'--storage',str(work/f'n{node}'),
-              '--quota','1G','--writers','0',io_flag]
+              '--quota','1G','--writers','0']
         if node>1:args+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
         wait_for(lambda: 'listening' in (work/f'n{node}.log').read_text(),10)
@@ -249,7 +247,7 @@ try:
             log=(work/'n2-rejoin.log').open('w');logs.append(log)
             args=[str(source/'efsd'),'--node-id','2','--addr','127.0.0.1',
                   '--port',str(base+1),'--storage',str(work/'n2'),'--quota','1G',
-                  '--writers','0',io_flag,'--join',f'127.0.0.1:{base}']
+                  '--writers','0','--join',f'127.0.0.1:{base}']
             procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
             wait_for(lambda:'listening' in (work/'n2-rejoin.log').read_text(),20)
             recovery_deadline=time.monotonic()+30
@@ -326,7 +324,7 @@ try:
             log=(work/f'n{node}-off.log').open('w');logs.append(log)
             args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
                   '--port',str(base+node-1),'--storage',str(work/f'n{node}'),
-                  '--quota','1G','--writers','0',io_flag]
+                  '--quota','1G','--writers','0']
             if node>1:args+=['--join',f'127.0.0.1:{base}']
             procs.append(subprocess.Popen(args,env=disabled_env,stdout=log,stderr=log))
             wait_for(lambda:'listening' in (work/f'n{node}-off.log').read_text(),10)
@@ -377,7 +375,7 @@ try:
         log=(work/f'n{node}-restart.log').open('w');logs.append(log)
         args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
               '--port',str(base+node-1),'--storage',str(work/f'n{node}'),
-              '--quota','1G','--writers','0',io_flag]
+              '--quota','1G','--writers','0']
         if node>1:args+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
         wait_for(lambda: 'listening' in (work/f'n{node}-restart.log').read_text(),10)

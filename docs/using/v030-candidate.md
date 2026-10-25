@@ -1,5 +1,15 @@
 # v0.3.0-pre-alpha candidate notes
 
+**Historical (October 2026, before the alpha 1.0 work).** This page records
+the v0.3.0 candidate as it was; it is not the current operator surface.
+Several settings it names are gone since D42: fragment I/O is `O_DIRECT`
+only (`--direct-io`/`--no-direct-io` are refused), `.efs` follows the
+cluster commands-policy (`EFS_COMMANDS` and `EFS_COMMANDS_SERVER` are
+refused at startup) and `EFS_GC_BACKLOG_IDLE_MS` is a tunable outside the
+alpha surface. The current pages are the [alpha 1.0 guide](alpha-1.0-guide.md),
+the [surface list](alpha-1.0-surface.md) and the
+[release notes draft](../release-notes/alpha-1.0.md).
+
 **Latest exact-source result:** `4e239d029029b8105a6e07f0e69a26fdc449de32` passes AMD ordinary-files qualification after the deep-directory fix; .efs remains disabled. [Report](../status/v030-deep-directory-fix-20261012.md). No push or tag. Earlier failed checkpoints below are historical.
 
 **Latest alpha scope:** ordinary files/TCP/direct only, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. `.efs`, RDMA, buffered and dedicated repair/recovery are excluded.

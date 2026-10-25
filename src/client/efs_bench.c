@@ -548,7 +548,6 @@ struct meta_file {
 };
 
 struct meta_state {
-    efs_ino_t root_ino;
     char root_name[64];
     char root_path[128];
     uint32_t ndirs;
@@ -873,7 +872,7 @@ static int run_meta_bench(const char *seed, const char *export_name,
     strncpy(g_client.export_name, export_name, EFS_MAX_NAME - 1);
     g_client.export_id = 1;
     efs_export_init(&g_client.export, g_client.export_id, g_client.export_name);
-    efs_client_setup_ino_namespace();
+    efs_client_setup_mount_token();
 
     if (efs_client_discover_nodes(&g_client, host, port) != 0) {
         fprintf(stderr, "Failed to discover cluster from %s:%u\n", host, port);
@@ -965,9 +964,6 @@ static int run_meta_bench(const char *seed, const char *export_name,
     fflush(stdout);
 
     int any_fail = 0;
-    if (need_tree)
-        st.root_ino = EFS_ROOT_INO;
-
     if (need_tree)
         any_fail |= run_meta_phase(&st, MP_MKDIR, "mkdir", "write", nworkers,
                                    st.ndirs);

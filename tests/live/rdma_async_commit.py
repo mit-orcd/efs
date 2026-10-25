@@ -42,7 +42,7 @@ def start(i):
     log = open(work / ('n%d.log' % i), 'ab'); logs.append(log)
     args = [str(src/'efsd'),'--node-id',str(i),'--addr','127.0.0.1',
             '--port',str(base+i-1),'--storage',str(work/('n%d'%i)),
-            '--quota','4G','--direct-io']
+            '--quota','4G']
     if i != 1: args += ['--join','127.0.0.1:%d'%base]
     p = sp.Popen(args, env=env, stdout=log, stderr=log); nodes[i]=p
     until=time.monotonic()+30

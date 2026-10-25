@@ -71,7 +71,7 @@ def listening(port):
 def start_node(i):
     assert not listening(PORT + i), f'port {PORT + i} in use'
     cmd = [str(REL / 'efsd'), '--node-id', str(i), '--addr', ADDR, '--port', str(PORT + i),
-           '--storage', str(WORK / f'n{i}'), '--quota', '4G', '--no-direct-io']
+           '--storage', str(WORK / f'n{i}'), '--quota', '4G']
     if i > 1:
         cmd += ['--join', ep(1)]
     log = open(LOGS / f'efsd-n{i}.log', 'a')

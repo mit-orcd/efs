@@ -193,7 +193,8 @@ the sanitized binaries. `make sanitize-check` runs both.
 ## Current release acceptance and local POSIX suites
 
 [v0.2.0-pre-alpha AMD acceptance](../status/v020-amd-release.md) records
-four modes: buffered/direct fragment I/O × TCP/RXE RDMA. Each has 216 POSIX
+four modes: buffered/direct fragment I/O × TCP/RXE RDMA (buffered fragment I/O
+has since been removed; the store is `O_DIRECT` only, D42). Each has 216 POSIX
 passes, one unsupported writable-mmap skip, 64 peer passes and 26 cold-remount
 verification passes. Full Linux `make test` passes. These are functional gates,
 not power-loss durability or cross-host hardware-RoCE measurements.
