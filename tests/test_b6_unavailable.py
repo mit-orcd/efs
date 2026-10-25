@@ -48,9 +48,9 @@ In each mode:
  6. Restore in order: fault off, node 3 stopped in order and started again
     (full: with a 1 GiB quota). W154 rebuilds every mark (`Degraded
     chunks: 0`, `Protection: full`), K37 every segment written degraded
-    (`Degraded segments: 0`, a `rebuilt` line for each); every acknowledged
-    file (R, P, F, W, Q) reads back exactly; the packer resumes and packs
-    the Q* files written during the fault.
+    (`Degraded segments: 0`, each missing fragment file back on node 3);
+    every acknowledged file (R, P, F, W, Q) reads back exactly; the packer
+    resumes and packs the Q* files written during the fault.
 At the end every cluster is stopped in order and started again, and every
 acknowledged file reads back exactly once more. Repair beyond W154 (a
 member that never returns) is not claimed. EFS_B6_ARTIFACTS=DIR writes
@@ -121,8 +121,13 @@ def degraded_writes(c):
 
 
 def segment_rebuilt(c, seg):
+    """The missing fragment of a segment written degraded is back on its
+    node (the file the K37 rebuild writes), or the mark was retired with a
+    segment that holds no live file any more."""
     g, sid, gen, f, node = seg
-    return f'segment-rebuild: rebuilt g{g} id={sid} gen={gen} fragment {f} on node {node} ' in logs(c)
+    path = (c.dir / f'n{node}' / 'data' / 'segments' / f'g{g}' / f'{int(sid, 16) & 0xfff:03x}' /
+            f'{sid}.{gen}.{f}')
+    return path.exists() or f'segment-rebuild: g{g} id={sid} gen={gen} mask=' in logs(c)
 
 
 def wait_degraded(c, pred, what, timeout):
@@ -482,7 +487,7 @@ def run_mode(mode):
         time.sleep(0.5)
     assert (degraded_segments(c) or 0) == 0, f'{mode}: K37 segments still degraded\n{status(c)}'
     missed = [s for s in dw if not segment_rebuilt(c, s)]
-    assert not missed, f'{mode}: segments written degraded, no rebuild logged: {missed}'
+    assert not missed, f'{mode}: segments written degraded, fragment not back on node 3: {missed}'
     assert 'Protection: full' in status(c), status(c)
     r.out['rebuild_s'] = round(time.time() - t, 1)
     r.out['rebuilt'] = sum(c.log(i).count('raft-host: rebuilt ino=') for i in (1, 2, 3))
