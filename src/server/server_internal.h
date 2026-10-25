@@ -757,6 +757,10 @@ void server_segment_rebuild_pass(struct efsd_server *s, uint8_t group);
 /* Commit a degraded mark for fragment fi (reason EFS_PACK_DEGRADED_R_*)
  * through the group's log; EFS_OK only when the local replica has it. */
 int server_segment_mark(uint8_t group, uint64_t id, uint64_t gen, uint32_t fi, uint32_t reason);
+/* The same mark from any member (forwarded to the group's leader); returns
+ * the group's apply verdict (STALE: the segment is not ACTIVE). */
+int server_segment_mark_commit(uint8_t group, uint64_t id, uint64_t gen, uint32_t fi,
+                               uint32_t reason);
 /* Leadership lost: forget the group's audit and rebuild progress. */
 void server_segment_rebuild_reset(uint8_t group);
 /* 0 while any storage root's recovery after an unclean stop is uncertain. */

@@ -7,12 +7,15 @@
  *   - the packer: a segment whose third fragment PUT was not acknowledged
  *     (member down before the heartbeat says so, or refusing) is marked
  *     before any file switches into it (packer.c), also for compaction;
+ *   - K36 verified recovery (recovery.c): after an unclean stop the
+ *     returning member itself marks every referenced fragment it could not
+ *     prove (reason EFS_PACK_DEGRADED_R_RECOVERY) before its fence clears;
  *   - this audit: a member that returns with a new incarnation is asked
  *     to read and verify every fragment of every published segment placed
  *     on it (EFS_MSG_SEGMENT_AUDIT); a missing or bad copy is marked. A
  *     store whose recovery after an unclean stop is uncertain answers only
- *     once it is settled, so a fragment that verified recovery (K36) drops
- *     is found by the audit that follows;
+ *     once it is settled, so it sweeps after K36 and skips the fragments
+ *     K36 marked; both write the same row, so they cannot disagree;
  *   - the rebuild itself: a source fragment its holder proves lost adds a
  *     second bit, and the segment is reported unrecoverable.
  *
@@ -209,13 +212,23 @@ static int sr_propose(uint8_t group, uint32_t op, uint64_t id, uint64_t gen, uin
     return server_raft_host_pack_propose(group, cmd, sizeof(cmd));
 }
 
+/* The one way a segment fragment is recorded missing (packer, audit,
+ * rebuild and K36 recovery): EFS_MD_CMD_PACK_DEGRADED MARK through the
+ * group's leader (forwarded from a follower or a non-hosting member); the
+ * group's apply verdict comes back. */
+int server_segment_mark_commit(uint8_t group, uint64_t id, uint64_t gen, uint32_t fi,
+                               uint32_t reason)
+{
+    return sr_propose(group, EFS_MD_PACK_DEGRADED_MARK, id, gen, 1u << fi, reason);
+}
+
 /* Mark fragment fi of a segment; the mark must be in the local replica
  * afterwards (the apply's verdict is the row, not the proposal's rc). */
 int server_segment_mark(uint8_t group, uint64_t id, uint64_t gen, uint32_t fi, uint32_t reason)
 {
     struct efs_kv *kv = server_raft_host_kv();
     uint8_t have = 0;
-    int rc = sr_propose(group, EFS_MD_PACK_DEGRADED_MARK, id, gen, 1u << fi, reason);
+    int rc = server_segment_mark_commit(group, id, gen, fi, reason);
     if (rc == EFS_OK && kv) rc = efs_pack_degraded_get(kv, group, id, gen, &have, NULL);
     if (rc == EFS_OK && !(have & (1u << fi))) rc = EFS_ERR_STALE;
     return rc;

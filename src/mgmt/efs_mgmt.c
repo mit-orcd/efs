@@ -3127,8 +3127,9 @@ static int cmd_sync_status(int argc, char **argv)
             printf("  recovery %s%s%s %llu ms: files checked=%llu dropped=%llu (%llu bytes) "
                    "foreign=%llu; refs checked=%llu missing=%llu marked=%llu already_marked=%llu "
                    "superseded=%llu unrecoverable=%llu rebuilt=%llu rebuild_waiting=%llu; "
-                   "tickets checked=%llu waiting=%llu; segments checked=%llu missing=%llu; "
-                   "groups proven=%u/%u incarnation=%llu\n",
+                   "tickets checked=%llu waiting=%llu; segments checked=%llu missing=%llu "
+                   "marked=%llu already_marked=%llu superseded=%llu unrecoverable=%llu "
+                   "rebuilt=%llu waiting=%llu; groups proven=%u/%u incarnation=%llu\n",
                    v->state < 4 ? states[v->state] : "?", v->phase ? " phase=" : "",
                    v->phase ? efs_recovery_phase_name(v->phase) : "",
                    (unsigned long long)v->elapsed_ms, (unsigned long long)v->files_checked,
@@ -3140,6 +3141,11 @@ static int cmd_sync_status(int argc, char **argv)
                    (unsigned long long)v->rebuild_waiting,
                    (unsigned long long)v->tickets_checked, (unsigned long long)v->tickets_waiting,
                    (unsigned long long)v->segments_checked, (unsigned long long)v->segments_missing,
+                   (unsigned long long)v->segments_marked,
+                   (unsigned long long)v->segments_already_marked,
+                   (unsigned long long)v->segments_superseded,
+                   (unsigned long long)v->segments_unrecoverable,
+                   (unsigned long long)v->segments_rebuilt, (unsigned long long)v->segments_waiting,
                    v->groups_proven, v->groups, (unsigned long long)v->incarnation);
             if (v->reason[0])
                 printf("    reason: %.*s\n", (int)sizeof(v->reason), v->reason);

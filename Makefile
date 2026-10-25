@@ -1035,6 +1035,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	python3 tests/test_k36_recovery.py
+	python3 tests/test_k36_segment_recovery.py
 	./tests/test_reclaim
 	python3 tests/test_opid_admission.py
 	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
