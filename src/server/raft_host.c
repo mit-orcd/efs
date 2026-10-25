@@ -12340,6 +12340,17 @@ static void *host_query_thread(void *ctx)
         if(work_enabled){work.dirty=dirty;uint64_t admitted=query_mono_ms();
             work.spacing_ms=work_completed?admitted-work_completed:0;}
         uint64_t source_start=work_enabled?query_mono_ms():0;
+#if EFS_FAULTS
+        /* EFS_FAULT_QUERY_FIRST_UNFORMED (daemon tests): the first capture
+         * is refused UNFORMED, once, as when the commands-policy row lands
+         * just before the member counts itself formed (D4's formation
+         * race); the retry after about a second is what the test checks. */
+        static int first_unformed_fired;
+        if(initial && !first_unformed_fired && env_on("EFS_FAULT_QUERY_FIRST_UNFORMED")){
+            first_unformed_fired=1;source=NULL;rc=EFS_ERR_UNFORMED;
+            fprintf(stderr,"fault: EFS_FAULT_QUERY_FIRST_UNFORMED refused the first catalog capture\n");
+        } else
+#endif
         rc=host_query_source(h,&source,&view,revisions,import_generation,&final_transaction_changed,work_enabled?&work:NULL);
         uint64_t capture_done=query_mono_ms();
         cut_retry=efs_query_refresh_cut_retry(rc,final_transaction_changed,capture_done-now);

@@ -1243,11 +1243,23 @@ int main(int argc, char **argv)
     fprintf(stderr, "storage-inventory: roots=%u used=%llu elapsed_ms=%lld\n",
             server.storage_path_count, (unsigned long long)local_usage,
             (long long)inventory_ms);
-    if (efs_storage_safe_quota(server.storage_paths, root_usage,
-                               server.storage_path_count, &safe_quota)) {
+    struct efs_storage_fs_budget fs_budget[EFS_MAX_STORAGE_PATHS];
+    uint32_t fs_budgets = 0;
+    if (efs_storage_safe_quota_detail(server.storage_paths, root_usage,
+                                      server.storage_path_count, &safe_quota,
+                                      fs_budget, &fs_budgets)) {
         fprintf(stderr, "Storage quota: cannot establish safe headroom; refusing startup\n");
         return 1;
     }
+    /* The exact inputs of the estimate, one line per backing filesystem:
+     * the automatic quota is a function of this sample, not of the free
+     * space a later observer sees. */
+    for (uint32_t i = 0; i < fs_budgets; i++)
+        fprintf(stderr, "storage-budget: fs=%u total=%llu available=%llu used=%llu budget=%llu\n",
+                i, (unsigned long long)fs_budget[i].total,
+                (unsigned long long)fs_budget[i].available,
+                (unsigned long long)fs_budget[i].used,
+                (unsigned long long)fs_budget[i].budget);
     const double gib = (double)(UINT64_C(1) << 30);
     const double tib = (double)(UINT64_C(1) << 40);
     const char *maximum_unit = safe_quota >= (UINT64_C(1) << 40) ? "TiB" : "GiB";

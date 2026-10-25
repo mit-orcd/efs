@@ -24,7 +24,16 @@ Three members:
     full`), every file reads back exactly.
 Four, then five members (additions through K33):
  7. An unrelated member down (node 4 of 4): writes and fsync succeed and
-    leave no degraded mark: fragments go to the available members.
+    leave no degraded mark: fragments go to the available members. The
+    interleaving that broke this is forced: node 3 is first marked "away"
+    on the client (a write while it is stopped fails its fragment hard and
+    is placed around on node 4, no mark), returns, and node 4 stops while
+    that mark is live (EFS_PUT_AWAY_MARK_MS=600000 on the mount: the
+    window outlasts the test instead of its 10 s default). The client must
+    then place around node 4 onto node 3, the away member, rather than
+    acknowledge on two fragments (it did, until the fix: 2 of 10 gate
+    runs, whenever node 4 joined and stopped within 10 s of node 3's last
+    hard failure).
  8. Five members, node 2 down: the same, no degraded mark.
  9. A member that dies during COMMIT (node 5, EFS_FAULT_MEMBER_EXIT=
     data-commit): fsync succeeds with the stripes on node 5 marked
@@ -46,7 +55,8 @@ if not fuse_ok():
     sys.exit(0)
 work = Path(tempfile.mkdtemp(prefix='efs-k35-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200')
+env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200',
+           EFS_PUT_AWAY_MARK_MS='600000')  # case 7: the away window never expires here
 SMALL = (1, 512, 4096, 16384)
 LARGE = 300000
 files = {}
@@ -235,13 +245,40 @@ try:
     c.wait_voters([1, 2, 3, 4], lambda i, v: voters_ok(i, v, 4))
     write(a, 'four-warm', LARGE)
     fsync(a, 'four-warm')
+    # Node 3 away on the client: one single-chunk write whose stripe has
+    # node 3 fails that fragment hard while node 3 is stopped and is placed
+    # around on node 4 (`placing again`; four members: no mark). One chunk
+    # keeps node 3 below the four hard failures that would mark it down
+    # for 30 s (EFS_NODE_DOWN_FAILS, EFS_NODE_DOWN_MS): a down member is no
+    # spare either, by design; what this case forces is the away mark
+    # alone. Later stripes are routed around the away member before any
+    # attempt, so they add no failures.
+    c.stop(3)
+    placed = re.compile(r'put_fragments ino=\d+ chunk=\d+: member\(s\) (\d),(\d),(\d) unreachable')
+    for k in range(24):
+        write(a, f'away-{k}', 65536)
+        fsync(a, f'away-{k}')
+        if any('3' in m.groups() for m in placed.finditer(client_log(a))):
+            break
+    else:
+        raise AssertionError('no stripe of 24 single-chunk files had node 3: ' + client_log(a)[-3000:])
+    wait_degraded(c, 1, lambda n: n == 0, 'four members, node 3 down')
+    marks = client_log(a).count('degraded acknowledgement')
+    c.restart(3)
+    up(c, 3, 4)
+    c.wait_members([1, 2, 3, 4], 4)
+    # Node 4 stops while node 3's away mark is live: the only spare is
+    # the away member.
     c.stop(4)
     for k in range(6):
         write(a, f'four-{k}', LARGE)
         fsync(a, f'four-{k}')
     time.sleep(3)
     wait_degraded(c, 1, lambda n: n == 0, 'four members, node 4 down')
-    print('7. four members, node 4 down: fsync OK, fragments on available members, no mark PASS')
+    assert client_log(a).count('degraded acknowledgement') == marks, client_log(a)[-3000:]
+    assert re.search(r'placing again on (?:3,|\d,3,|\d,\d,3)', client_log(a)), client_log(a)[-3000:]
+    print('7. four members, node 4 down while node 3 is away-marked: fsync OK, fragments placed '
+          'around on node 3, no mark PASS')
     c.restart(4)
     up(c, 4, 4)
     c.wait_members([1, 2, 3, 4], 4)

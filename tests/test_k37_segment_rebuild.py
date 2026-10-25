@@ -11,10 +11,19 @@ work directory so each step is deterministic:
                                     member is detected): its PUT fails;
   EFS_FAULT_SEGMENT_PUT_REFUSE=DIR  node N refuses segment PUTs while
                                     DIR/refuse-N exists;
+  EFS_FAULT_SEGMENT_PUT_TRANSIENT=DIR  node N refuses one segment PUT
+                                    NOT_PRIMARY while DIR/transient-N exists
+                                    (consumed);
   EFS_FAULT_SEGMENT_REBUILD_HOLD=F  marks wait while F exists.
 
  1. Baseline: two batches packed with all members up; no segment mark,
     `Protection: full`.
+ 1b. A transient refusal is not a missing fragment: node 3 refuses one
+    segment PUT NOT_PRIMARY (as a follower under load refuses the
+    linearizable read of the object admitted a moment ago); the packer
+    sends the fragment again (`resent after rc=-15: rc=0`), the segment
+    has three fragments, no `written degraded`, no put error (D4's gate
+    saw one such refusal per failing run: 1 of 10 parallel gate runs).
  2. Fragments deleted and torn while their member is down: node 2 stops, one
     of its segment fragments is deleted and another truncated; on its return
     the group leaders' audit marks both (missing, torn), the rebuild restores
@@ -63,6 +72,7 @@ env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200',
            EFS_PACK_COMPACT_DAILY_START_MIN=str((time.gmtime().tm_hour * 60 + time.gmtime().tm_min
                                                  + 720) % 1440),
            EFS_FAULT_PACK_PLACE_DOWN='3', EFS_FAULT_SEGMENT_PUT_REFUSE=str(flags),
+           EFS_FAULT_SEGMENT_PUT_TRANSIENT=str(flags),
            EFS_FAULT_SEGMENT_REBUILD_HOLD=str(hold))
 SIZES = (1, 300, 512, 4096, 5000, 9000, 12000, 16384)
 files = {}
@@ -139,11 +149,18 @@ def seg_path(c, i, group, sid, gen, fi):
             f'{sid:016x}.{gen:x}.{fi}')
 
 
-def degraded_writes(c, since=0):
-    """(group, id, gen, fragment, node) of each `written degraded` line."""
-    return [(int(g), int(i, 16), int(n, 16), int(f), int(node)) for g, i, n, f, node in
-            re.findall(r'packer: segment g(\d+) id=([0-9a-f]+) gen=([0-9a-f]+) written degraded: '
-                       r'fragment (\d+) for node (\d+)', logs(c))][since:]
+def degraded_writes(c, since=()):
+    """(group, id, gen, fragment, node) of each `written degraded` line of
+    every member's log, minus those in `since` (an earlier result). The logs
+    are concatenated in node order, so a position in the combined list is
+    not stable: a packer that moved to another leader after a step-down
+    appends its lines before the other members' older ones, and slicing by
+    count then names an old, already rebuilt segment as the new one."""
+    seen = set(since)
+    return [e for e in ((int(g), int(i, 16), int(n, 16), int(f), int(node)) for g, i, n, f, node in
+                        re.findall(r'packer: segment g(\d+) id=([0-9a-f]+) gen=([0-9a-f]+) written degraded: '
+                                   r'fragment (\d+) for node (\d+)', logs(c)))
+            if e not in seen]
 
 
 def verify(c, node, what, skip=()):
@@ -199,6 +216,24 @@ try:
     assert len(n2) >= 2, n2
     print(f'1. baseline: {packed_total(c) - base} files packed, {len(n2)} segments, no mark PASS')
 
+    # 1b. One transient refusal from node 3: resent, never written degraded.
+    put_errors0 = packer_stats(c)[2]
+    (flags / 'transient-3').write_text('')
+    base = packed_total(c)
+    batch(a, 'transient', 4)
+    wait_packed(c, base, 4, 'transient')
+    assert not (flags / 'transient-3').exists(), 'the refusal never fired'
+    assert count(c, r'fault: EFS_FAULT_SEGMENT_PUT_TRANSIENT refused segment') == 1
+    assert count(c, r'packer: segment g\d+ id=[0-9a-f]+ gen=[0-9a-f]+ fragment \d for node 3 resent '
+                    r'after rc=-15: rc=0') == 1, logs(c)[-3000:]
+    assert not degraded_writes(c), degraded_writes(c)
+    assert packer_stats(c)[2] == put_errors0, packer_stats(c)
+    wait_segs(c, 1, lambda n, u: n == 0, 'after the transient refusal')
+    n3 = len(seg_files(c, 3))
+    assert n3 == len(seg_files(c, 1)) == len(seg_files(c, 2)), (n3, len(seg_files(c, 1)), len(seg_files(c, 2)))
+    print('1b. one segment PUT refused NOT_PRIMARY by node 3: resent, three fragments, no mark, '
+          'no put error PASS')
+
     # 2. Deleted and torn while the member is down.
     c.stop(2)
     (gone, gone_p), (torn, torn_p) = sorted(n2.items())[:2]
@@ -229,7 +264,7 @@ try:
     # 3. Written with a member down.
     wait_up_status(c)
     c.stop(3)
-    seen = len(degraded_writes(c))
+    seen = degraded_writes(c)
     base = packed_total(c)
     batch(a, 'down')
     wait_packed(c, base, len(SIZES), 'member down')
@@ -266,7 +301,7 @@ try:
     time.sleep(2)
     wait_up_status(c)
     c.stop(3)
-    seen = len(degraded_writes(c))
+    seen = degraded_writes(c)
     compacted = count(c, r'packer: compact')
     for i in (1, 2):
         rc, out = mgmt(c.env, 'pack-compact', c.ep(i), '64')
@@ -292,7 +327,7 @@ try:
     wait_up_status(c)
     c.stop(3)
     (flags / 'refuse-2').touch()
-    seen = len(degraded_writes(c))
+    seen = degraded_writes(c)
     base, cancelled, put_errors = packer_stats(c)
     batch(a, 'one', 4)
     end = time.time() + 60
@@ -332,7 +367,7 @@ try:
     # 7. A second loss before the rebuild: every segment of this batch is
     # written without node 3, then loses its node 2 fragment too.
     c.stop(3)
-    seen = len(degraded_writes(c))
+    seen = degraded_writes(c)
     base = packed_total(c)
     batch(a, 'loss', 4)
     wait_packed(c, base, 4, 'loss')

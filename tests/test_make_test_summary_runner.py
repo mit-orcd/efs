@@ -102,4 +102,4 @@ try:
     assert len(Path(d, 'timings.tsv').read_text().splitlines()) == 10
 finally:
     for d in dirs: shutil.rmtree(d, ignore_errors=True)
-print('make_test_summary runner: pass 0, failure 1, timeout 1, NOTRUN 3, empty 1, parallel pool exactly-once/TMPDIR/exclusive, full failure logs PASS')
+print('make_test_summary runner: pass 0, failure 1, timeout 1, incomplete 3, empty 1, parallel pool exactly-once/TMPDIR/exclusive, full failure logs PASS')

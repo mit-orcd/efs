@@ -16,12 +16,15 @@ Three real efsd daemons on loopback (tests/k33_daemons.py), started 1 s
 apart as scripts/qualify.py --loopback does, with the production refresh
 interval (EFS_QUERY_REFRESH_MS=60000, so a missed first catalog shows),
 private stores, free ports. The refusal is a race at formation (the commands
-policy row lands just before the member counts itself formed), so up to
-TRIES fresh clusters are formed until a member logs it
-(`query-refresh: rc=-29 ... initial=1`; tests/test_query_refresh.c covers
-the scheduling deterministically):
-1. every member of every cluster publishes its first catalog within
-   FIRST_BOUND_S of formation, the one refused UNFORMED too;
+policy row lands just before the member counts itself formed) that a live
+formation rarely shows, so two clusters are formed: the first with
+EFS_FAULT_QUERY_FIRST_UNFORMED=1 on every member (tests/faults/efsd), which
+refuses each member's first capture UNFORMED exactly as the race does
+(`query-refresh: rc=-29 ... initial=1`), the second without the hook (the
+natural formation; tests/test_query_refresh.c covers the scheduling
+deterministically). On both:
+1. every member publishes its first catalog within FIRST_BOUND_S of
+   formation, the members refused UNFORMED too;
 2. `.efs/stats --json` through a mount, repeated until every member has
    published: never EIO (answers, or "not indexed yet").
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
@@ -35,16 +38,16 @@ for b in (EFSD, MGMT):
     if not b.exists():
         sys.exit(f'{b} missing: run make first')
 FIRST_BOUND_S = 15.0
-TRIES = 12
 work = Path(tempfile.mkdtemp(prefix='efs-qfirst-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items()
        if not k.startswith('EFS_FAULT_') and not k.startswith('EFS_TEST_')}
 env.update(EFS_QUERY_REFRESH_MS='60000')
 t0 = time.time()
-refused, worst = None, 0.0
+worst, refused = 0.0, {}
 try:
-    for k in range(TRIES):
-        c = Cluster(work, f'q{k}', [1, 2, 3], env)
+    for k, forced in ((0, True), (1, False)):
+        cenv = dict(env, EFS_FAULT_QUERY_FIRST_UNFORMED='1') if forced else env
+        c = Cluster(work, f'q{k}', [1, 2, 3], cenv)
         mounts = []
         try:
             for i in (1, 2, 3):
@@ -57,6 +60,15 @@ try:
                 c.wait_log(i, r'query-publish: generation=1 ', timeout=FIRST_BOUND_S)
             worst = max(worst, time.time() - formed)
             hit = [i for i in (1, 2, 3) if re.search(r'query-refresh: rc=-29 .*initial=1', c.log(i))]
+            fired = [i for i in (1, 2, 3)
+                     if 'fault: EFS_FAULT_QUERY_FIRST_UNFORMED refused the first catalog capture' in c.log(i)]
+            if forced:
+                assert fired == [1, 2, 3], f'the hook did not fire on every member: {fired}'
+                assert hit == [1, 2, 3], f'refused members {hit}: ' + ''.join(
+                    c.log(i)[-1500:] for i in (1, 2, 3) if i not in hit)
+            else:
+                assert not fired, fired
+            refused[k] = hit
             if fuse_ok():
                 m = Mount(c, 1, 'mnt')
                 mounts.append(m)
@@ -73,20 +85,14 @@ try:
                         nodata += 1
                     time.sleep(0.2)
                 assert answered >= 5, f'.efs/stats answered {answered} times ({nodata} not indexed yet)'
-            if hit:
-                refused = (k + 1, hit)
-                break
         finally:
             for mt in mounts:
                 mt.close()
             c.stop_all()
-    if refused:
-        print(f'1-2. cluster {refused[0]}: member(s) {refused[1]} refused UNFORMED at formation; every '
-              f'first catalog within {worst:.1f} s of formation (bound {FIRST_BOUND_S} s), .efs/stats '
-              'never EIO PASS')
-    else:
-        print(f'1-2. the UNFORMED race did not occur in {TRIES} formations (NOTRUN for that case); every '
-              f'first catalog within {worst:.1f} s (bound {FIRST_BOUND_S} s), .efs/stats never EIO PASS')
+    natural = f'member(s) {refused[1]}' if refused[1] else 'no member'
+    print(f'1-2. forced: every member refused UNFORMED at formation; natural formation: {natural} '
+          f'refused; every first catalog within {worst:.1f} s of formation (bound {FIRST_BOUND_S} s), '
+          '.efs/stats never EIO PASS')
 finally:
     if os.environ.get('EFS_QFIRST_KEEP'):
         print('kept', work)
