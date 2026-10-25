@@ -241,6 +241,12 @@ int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t pe
                 (unsigned long long)ack->cluster, (unsigned long long)s->mstore.token, s->addr,
                 s->port);
         rc = EFS_JOIN_REFUSED_FORMED;
+    } else if (ack->reject_reason == EFS_HELLO_REJECT_FULL) {
+        fprintf(stderr, "Join refused by %s:%u (cluster %016llx) — the cluster has the maximum "
+                "of %d members (%u now); this store (%016llx) at %s:%u cannot join it.\n",
+                peer_host, peer_port, (unsigned long long)ack->cluster, EFS_MAX_NODES,
+                ack->node_count, (unsigned long long)s->mstore.token, s->addr, s->port);
+        rc = EFS_JOIN_REFUSED_FORMED;
     } else if ((ack->reject_reason == EFS_HELLO_PROMISE ||
                 ack->reject_reason == EFS_HELLO_REJECT_NONE) &&
                ack->record_len && ack->record_len <= sizeof(ack->record) &&

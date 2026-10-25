@@ -70,8 +70,6 @@ for i, (filename, function) in enumerate(files):
     if not args.revision:
         assert '#include "../common/recorder_stop.h"' in text, filename
         assert 'efs_stop_recorder(' in body, filename
-        if filename.endswith('efs_fuse.c'):
-            assert 'efs_stop_recorder(&bench_perf);' in text
 source += r'''
 static void scenario(void (*stop)(pid_t *), int which) {
     mode = which; polls = blocks = terms = kills = sleeps = reaped = 0;

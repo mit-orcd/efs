@@ -198,8 +198,6 @@ for the active incident and validation limits.
 ```bash
 ./efs-mgmt status 127.0.0.1:17432
 ./efs-mgmt mkfs 127.0.0.1:17432          # alias for raft-mkfs
-./efs-mgmt add-node 127.0.0.1:17433 127.0.0.1:17432
-./efs-mgmt add-storage 127.0.0.1:17432 /tmp/efs/s1b
 ./efs-mgmt shrink-quota 127.0.0.1:17432 2G
 ```
 
@@ -208,9 +206,12 @@ quota immediately and refuses a result below current usage. It does not start
 background migration, and the reduction lives only in the running daemon: a
 restart applies `--quota` (or the automatic quota) again.
 
-`add-storage` attaches roots to the running daemon only. Add them to the
-node's `STORAGE` list before its next restart; the daemon does not remember
-them.
+A node is added with `efsd --join [SEED] STORAGE`; `efs-mgmt add-node` was
+removed and is refused (finding F4). A node's storage roots are fixed when
+its store is created: each root's marker (`.efs-engine`) records the root
+set, its position and the count, and a restart with a root added, dropped
+or reordered is refused. `efs-mgmt add-storage` was removed and is refused
+(finding F11). More storage means another node.
 
 `mkfs` initializes the single Raft export. Repeated application preserves an
 existing root and its committed placement salt; it does not fail on an existing

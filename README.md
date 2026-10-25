@@ -9,13 +9,18 @@ rather than deriving the design from current code.
 
 A distributed filesystem in C with a Linux FUSE client, Raft metadata and
 2+1 erasure-coded storage. Supports TCP, InfiniBand/RoCE RDMA, multiple
-storage roots, quotas, garbage collection, and buffered or direct fragment I/O.
+storage roots, quotas, garbage collection, and direct (`O_DIRECT`) fragment I/O.
 The current runtime supports 3 to 16 servers and two metadata Raft groups. Each
 group keeps three voters on nodes 1–4; data, including packed small files, uses
 every server.
 
-**Pre-alpha:** persistence, session fencing and automatic fragment repair
-remain unfinished. Use disposable data; see [implementation limits](docs/status/spec-implementation.md).
+**Pre-alpha:** still unfinished are verified recovery after an unclean stop
+(a crashed or killed node's roots refuse COMMIT, so `fsync` fails, until the
+store is formatted again; K36), online removal of a member, rebalancing of
+existing data, and authentication on daemon ports. Session fencing (K5) and
+the rebuild of degraded stripes when a member returns (W154) are in place.
+Use disposable data; see the [alpha limitations](docs/release-notes/alpha-1.0.md)
+and [implementation limits](docs/status/spec-implementation.md).
 
 ## Build and start
 

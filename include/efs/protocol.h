@@ -44,8 +44,8 @@ enum efs_msg_type {
     EFS_MSG_LIST_NODES = 12,
     EFS_MSG_LIST_NODES_REPLY = 13,
     /* 14/15 retired: CREATE_EXPORT (mkfs is EFS_MSG_RAFT_MKFS). */
-    EFS_MSG_JOIN = 16,
-    EFS_MSG_JOIN_REPLY = 17,
+    /* 16/17 retired: JOIN (efs-mgmt add-node; a node joins with efsd
+     * --join, F4). See EFS_MSG_IS_RETIRED. */
     EFS_MSG_STATUS = 18,
     EFS_MSG_STATUS_REPLY = 19,
     /* 20/21 retired: REMOVE_NODE (node lifecycle is a control-plane op). */
@@ -64,9 +64,8 @@ enum efs_msg_type {
     /* 37/38 retired: SET_FEATURES (features are not persisted). */
     EFS_MSG_GET_FEATURES = 39,
     EFS_MSG_GET_FEATURES_REPLY = 40,
-    /* Append local --storage roots on a live node (no restart). */
-    EFS_MSG_ADD_STORAGE = 41,
-    EFS_MSG_ADD_STORAGE_REPLY = 42,
+    /* 41/42 retired: ADD_STORAGE (a node's roots are fixed when its store
+     * is created, F11). See EFS_MSG_IS_RETIRED. */
     /* Server inode/dentry RPCs (EFSR v6 sharded metadata). */
     EFS_MSG_INODE_LOOKUP = 43,
     EFS_MSG_INODE_LOOKUP_REPLY = 44,
@@ -316,6 +315,8 @@ struct efs_msg_put_orphan_delete_reply { int32_t rc; };
  * connection that sends one (handler.c retired_refuse); never reuse them. */
 #define EFS_MSG_IS_RETIRED(t) \
     ((t) == 24 /* NODE_LEFT */ || \
+     (t) == 16 || (t) == 17 /* JOIN (F4) */ || \
+     (t) == 41 || (t) == 42 /* ADD_STORAGE (F11) */ || \
      (t) == 129 || (t) == 130 /* PUT_TICKETED (K13) */ || \
      (t) == 81 || (t) == 82 /* HEAL_STATUS */ || \
      (t) == 99 || (t) == 100 /* GC_FRAGMENT */ || \
@@ -729,6 +730,8 @@ struct efs_msg_hello_ack {
 };
 
 #define EFS_HELLO_REJECT_NONE    0
+/* F14: a formed cluster of EFS_MAX_NODES members refuses a joining store;
+ * the joiner exits. */
 #define EFS_HELLO_REJECT_FULL    1
 #define EFS_HELLO_REJECT_VERSION 2
 /* W153/K33: the joiner can never be a member of this formed cluster: its
@@ -950,32 +953,9 @@ struct efs_msg_shrink_quota {
 #define EFS_SHRINK_QUOTA_ERROR  1
 #define EFS_SHRINK_QUOTA_IN_PROGRESS 2
 
-/* Comma-separated absolute roots to append. Existing paths are skipped. */
-struct efs_msg_add_storage {
-    char paths[EFS_MAX_PATH];
-};
-
-#define EFS_ADD_STORAGE_OK       0
-#define EFS_ADD_STORAGE_ERROR    1
-#define EFS_ADD_STORAGE_FULL     2
-#define EFS_ADD_STORAGE_INVALID  3
-
-struct efs_msg_add_storage_reply {
-    uint8_t status;
-    uint32_t path_count; /* node's storage_path_count after the call */
-};
-
 /* Only value on the wire: node lifecycle states went with the migration
  * engine. STATUS_REPLY always reports it. */
 #define EFS_NODE_STATE_ACTIVE 0
-
-struct efs_msg_join {
-    char peer_host[64];
-    uint16_t peer_port;
-};
-
-#define EFS_JOIN_OK     0
-#define EFS_JOIN_ERROR  1
 
 #define EFS_MAX_QUERY_USERS 256
 

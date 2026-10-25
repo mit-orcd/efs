@@ -1601,6 +1601,17 @@ recovery PASS (8 of 8 runs). Merged-tree gate on intel1 at `87034b518`: `test-lo
 `test` 418 of 419 PASS, the other `test_get_integrity.py` (a merge-wave5 stub gap, fixed by
 `1898c4c63`; PASS at `c19bf9fdb`); host-limit NOTRUNs only. Power-loss qualification, multi-host and RDMA NOTRUN.
 
+[Alpha 1.0 docs review: findings F2–F6, F11, F13, F14, F18–F20 fixed](../status/s-docs-fixes-alpha-1.0-20261024.md):
+**PASS (scoped), branch `claude/devel-sdocs-fixes-f02c43`, not merged; amd `make test-all` at `f588f6efd`: 461 commands, 11 FAIL, all also failing on the base (RDMA on `rxe0`, a fault-test timeout, `test_get_integrity.py` not compiling since the merges); raw: amd `~/efs-artifacts/sdocs-fixes-20261024/`, `SHA256SUMS` `a1ed1a7f…3b7a`.** Every
+`efs-mgmt` command has help, checked against the dispatcher in `make test`;
+`add-node` (use `efsd --join`), `add-storage` and `efs-fuse --bench*` are
+removed and refused; a node's storage roots are fixed when its store is
+created (packed segments are placed by root count) and a changed root set is
+refused at startup; a 17th joiner is refused and exits; new POSIX cases
+(F13) and daemon tests for `raft-resync`, fixed roots and the member limit;
+README and quick start corrected. The [findings table](../status/s-docs-alpha-1.0-20261024.md#findings-docs-and-code-disagreements)
+records every outcome. Stores formatted by an earlier build are refused.
+
 [D42 `EFS_READ_VERIFY`: GET-path integrity audit](../status/read-verify-audit-20261024.md):
 **PASS (scoped), merged into devel (`ae3e7ab75`).** The
 storage node's record check does not cover the wire or the client's

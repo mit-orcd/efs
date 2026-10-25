@@ -14,7 +14,7 @@ fix; none counts as PASS.
 
 | Suite | File | Cases | What it covers |
 | --- | --- | --- | --- |
-| Core | `tests/posix/posix_suite.py` | 216 | One mount: files, directories, names, links, attributes, permissions, errors, locks, sync, `O_DIRECT`, sparse files, concurrency, optional calls |
+| Core | `tests/posix/posix_suite.py` | 218 | One mount: files, directories, names, links, attributes, permissions, errors, locks, sync, `O_DIRECT`, sparse files, concurrency, optional calls |
 | Extras | `tests/posix/posix_extras.py` (`--suite extras`) | 5 | mmap and the `.efs` commands |
 | Two-client | `tests/posix/posix_2client.py` | 68 | Visibility, races, locks and overlapping writes across two mounts on different hosts |
 | Durability | `tests/posix/posix_persist.py` | 27 | Prepare, orderly unmount and remount, then verify bytes and metadata |
@@ -31,6 +31,10 @@ distinct hosts are NOTRUN):
 
 The one SKIP in both runs is `mmap_write_read` (writable shared mmap,
 W104). One known failure exists outside these runs: W159 (below).
+The two F13 cases added after these runs (`dir_rename_noreplace_free_name`,
+`mknod_special_files_refused`) run on a private loopback mount in
+`tests/test_operator_workflows.py` (`make test-long`); see
+[the F-findings fixes](../status/s-docs-fixes-alpha-1.0-20261024.md).
 
 ## Supported operations
 
@@ -103,10 +107,10 @@ Each line is covered by the named suite cases, all PASS in both runs above.
 | --- | --- | --- | --- | --- |
 | P1 | Shared mmap. Every open is `FOPEN_DIRECT_IO` and the client does not ask the kernel for direct-I/O mmap | `mmap` with `MAP_SHARED` fails (the kernel refuses it); private mappings work | `mmap_write_read` SKIP (extras) | Limitation, W104 |
 | P2 | Read after `fork()` on kernels without the FUSE direct-I/O page-pinning fix (upstream `738adade96b2`) | A read in flight while another thread of the process forks can return success with the caller's buffer still holding its previous bytes; a retry reads correctly | Not in the POSIX suites; `tests/live/orcd_raft_kv/fork_repro.py` | Limitation K10/W121 (D40) |
-| P3 | `renameat2` flags. The client refuses every flag | `RENAME_EXCHANGE` and `RENAME_WHITEOUT` fail `EOPNOTSUPP`, files unchanged. `RENAME_NOREPLACE` onto an existing name fails `EEXIST` (the kernel checks first); onto a name that does not exist it fails `EOPNOTSUPP` | `dir_rename_exchange_preserves_both_files`, `dir_rename_noreplace`; the absent-target case has no case (finding F13) | Limitation (proposed) |
+| P3 | `renameat2` flags. The client refuses every flag | `RENAME_EXCHANGE` and `RENAME_WHITEOUT` fail `EOPNOTSUPP`, files unchanged. `RENAME_NOREPLACE` onto an existing name fails `EEXIST` (the kernel checks first); onto a name that does not exist it fails `EOPNOTSUPP` | `dir_rename_exchange_preserves_both_files`, `dir_rename_noreplace`, `dir_rename_noreplace_free_name` (finding F13) | Limitation (proposed) |
 | P4 | `fallocate` | Mode 0 extends the size with a hole and reserves no space (`ENOSPC` can come later, at write); `FALLOC_FL_KEEP_SIZE` inside the file succeeds and does nothing; past the end, and every other mode (punch hole, zero range, collapse, insert) fail `EOPNOTSUPP` | `opt_fallocate` | Limitation (proposed) |
 | P5 | Extended attributes outside `user.` | `security.*`, `system.*` (POSIX ACLs) and `trusted.*` fail `EOPNOTSUPP`: no ACLs and no SELinux labels on EFS files | `opt_xattr` covers `user.` only | Limitation (proposed) |
-| P6 | `mknod` | Only regular files; FIFOs, sockets and device nodes fail `EPERM` | No suite case (finding F13) | Limitation (proposed) |
+| P6 | `mknod` | Only regular files; FIFOs, sockets and device nodes fail `EPERM` and leave no name | `mknod_special_files_refused` (finding F13) | Limitation (proposed) |
 | P7 | No client page cache. Every open bypasses the kernel page cache | Correct cross-client reads, but no cached rereads; `O_DIRECT` alignment rules still apply to applications that request it | Design (client Part D); covered indirectly by the two-client suite | Documented behavior |
 | P8 | `df` reports logical 2+1 capacity | Total and free come from the 3-of-N bound over node quotas, not physical bytes; freed space appears after asynchronous unlink cleanup | `statfs_sane` | Documented behavior |
 | P9 | `st_blocks` | Counts chunks present on the server per lane (D17), so `du` can differ from size/512 for files another client wrote | `sparse_st_blocks` | Documented behavior |

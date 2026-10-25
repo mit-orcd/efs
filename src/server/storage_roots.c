@@ -246,8 +246,14 @@ int server_storage_metadata_path(const char *relative)
     }
     return efs_ino_is_meta_table(ino);
 }
+static void root_put32(uint8_t *p,uint32_t v){for(int i=3;i>=0;i--){p[i]=(uint8_t)v;v>>=8;}}
+static uint32_t root_get32(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
 int server_storage_roots_init(struct efsd_server *s)
 {
+    uint8_t markers[EFS_MAX_STORAGE_PATHS][128];
+    unsigned fresh=0;
+    if(!s->storage_path_count || s->storage_path_count>EFS_MAX_STORAGE_PATHS)return EFS_ERR_INVAL;
+    memset(markers,0,sizeof(markers));
     for(unsigned i=0;i<s->storage_path_count;i++) {
         char canonical[4096];
         if(!realpath(s->storage_paths[i],canonical) || strlen(canonical)>=sizeof(s->storage_paths[i]))goto fail;
@@ -274,8 +280,7 @@ int server_storage_roots_init(struct efsd_server *s)
         if(t->lockfd<0||flock(t->lockfd,LOCK_EX|LOCK_NB))goto fail;
         t->rootfd=open(t->root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
         if(t->rootfd<0)goto fail;
-        uint8_t marker[128]={0};
-        int rc=marker_read(t->root,marker);
+        int rc=marker_read(t->root,markers[i]);
         if(rc==EFS_ERR_NOT_FOUND){
             /* No marker: a fresh root, unless fragment data already exists
              * (written by a build that predates markers, format unknown). */
@@ -296,30 +301,66 @@ int server_storage_roots_init(struct efsd_server *s)
                         t->root,(unsigned)EFS_STORAGE_ROOT_FORMAT);
                 goto fail;
             }
-            memcpy(marker,"EFSENG01",8);
-            marker[8]=EFS_STORAGE_ROOT_FORMAT;
-            if(getrandom(marker+16,16,0)!=16)goto fail;
-            efs_hash(marker,96,marker+96);
-            snprintf(p,sizeof(p),"%s/.efs-engine",t->root);
-            int published;
-            if(atomic_page(p,marker,128,&published))goto fail;
+            fresh++;
         }
         else if(rc)goto fail;
-        else if(marker[8]!=EFS_STORAGE_ROOT_FORMAT){
+        else if(markers[i][8]!=EFS_STORAGE_ROOT_FORMAT){
             /* No migration and no legacy reader (not in production). */
             fprintf(stderr,"storage: %s has root format %u (%s); this build reads "
                     "only root format %u (fragment format 2: I25 identity-bound "
                     "fragment records); refusing startup, reformat the root\n",
-                    t->root,(unsigned)marker[8],
-                    marker[8]==0?"fragment format 1: payload-only digest tail":"unknown",
+                    t->root,(unsigned)markers[i][8],
+                    markers[i][8]==0?"fragment format 1: payload-only digest tail":"unknown",
                     (unsigned)EFS_STORAGE_ROOT_FORMAT);
             goto fail;
         }
+    }
+    /* F11: a node's roots are fixed, in order, when they are first marked.
+     * Fragments are found by probing every root, but packed segments are
+     * placed by id modulo the root count, so a root added, dropped or moved
+     * later would hide data. The marker records the set (root 0's uuid),
+     * this root's index and the count; a different set is refused. */
+    unsigned n=s->storage_path_count;
+    if(fresh && fresh!=n){
+        fprintf(stderr,"storage: %u of %u roots are new; a node's storage roots are fixed "
+                "when its store is created (give the same roots, in the same order, or format "
+                "all of them as a new store)\n",fresh,n);
+        goto fail;
+    }
+    for(unsigned i=0;i<n && fresh;i++){
+        memcpy(markers[i],"EFSENG01",8);
+        markers[i][8]=EFS_STORAGE_ROOT_FORMAT;
+        if(getrandom(markers[i]+16,16,0)!=16)goto fail;
+        memcpy(markers[i]+32,markers[0]+16,16);
+        root_put32(markers[i]+48,i);
+        root_put32(markers[i]+52,n);
+        efs_hash(markers[i],96,markers[i]+96);
+    }
+    for(unsigned i=0;i<n;i++){
+        const uint8_t *m=markers[i];
+        if(!root_get32(m+52)){
+            fprintf(stderr,"storage: %s has a root marker without a root set (an earlier "
+                    "build); format a new store\n",s->storage_paths[i]);
+            goto fail;
+        }
+        if(memcmp(m+32,markers[0]+16,16) || root_get32(m+48)!=i || root_get32(m+52)!=n){
+            fprintf(stderr,"storage: %s is root %u of %u of its root set; this command "
+                    "gives it as root %u of %u. A node's storage roots are fixed when its "
+                    "store is created: give the same roots, in the same order\n",
+                    s->storage_paths[i],root_get32(m+48)+1,root_get32(m+52),i+1,n);
+            goto fail;
+        }
+    }
+    for(unsigned i=0;i<n;i++){
+        struct target *t=s->storage_roots[i];
+        char p[8192];
+        snprintf(p,sizeof(p),"%s/.efs-engine",t->root);
+        int published;
+        if(fresh && atomic_page(p,markers[i],128,&published))goto fail;
         /* Existing roots may have been configured at a new pathname; persist
          * that ancestry once before bounded runtime namespace barriers. */
-        snprintf(p,sizeof(p),"%s/.efs-engine",t->root);
         if(parents(p))goto fail;
-        memcpy(t->uuid,marker+16,16);
+        memcpy(t->uuid,markers[i]+16,16);
         for(unsigned j=0;j<i;j++)if(!memcmp(((struct target*)s->storage_roots[j])->uuid,t->uuid,16))goto fail;
     }
     strcpy(s->storage_path, s->storage_paths[0]);
@@ -342,21 +383,3 @@ void server_storage_roots_close(struct efsd_server *s)
     }
 }
 
-/* Dynamic addition keeps exclusive root locks and the root marker check. */
-int server_storage_files_attach(struct efsd_server *s, const char *root, unsigned index)
-{
-    if (index >= EFS_MAX_STORAGE_PATHS || s->storage_roots[index]) return EFS_ERR_INVAL;
-    struct efsd_server *one = calloc(1, sizeof(*one));
-    if (!one) return EFS_ERR_NOMEM;
-    one->storage_path_count = 1;
-    if (strlen(root) >= sizeof(one->storage_paths[0])) { free(one); return EFS_ERR_INVAL; }
-    strcpy(one->storage_paths[0], root);
-    int rc = server_storage_roots_init(one);
-    if (!rc) {
-        s->storage_roots[index] = one->storage_roots[0];
-        one->storage_roots[0] = NULL;
-        strcpy(s->storage_paths[index], one->storage_paths[0]);
-    }
-    free(one);
-    return rc;
-}

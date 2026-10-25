@@ -49,11 +49,11 @@ static inline void efs_cli_help(FILE *out,const char *program,const char *topic)
         notes="One node address is enough; the client discovers the other nodes.\nThere is one export; no export label argument.\n.efs appears on a mount when the cluster commands-policy enables it.\nThose commands require Python 3 on the machine executing them.\nUse --stop MOUNTPOINT --force-discard only to discard pending writes.\nUse --help-fuse for the underlying FUSE option reference.";
     } else if (!strcmp(name,"efs-mgmt")) {
         summary="Inspect and manage an EFS cluster";syntax="COMMAND [arguments]";
-        commands="status               Cluster status\nio-stats             I/O counters\ngc-status            Garbage-collection status\nversion              Node version\nadd-node             Add a node\nadd-storage          Add storage roots\nshrink-quota         Reduce a node quota\nmkfs, raft-mkfs      Format metadata\ncommands-policy      Get/set versioned command policy\n"
+        commands="status               Cluster status\nio-stats             I/O counters\ngc-status            Garbage-collection status\nversion              Node version\nsync-status          Per-root durability state of each node\ndata-commit          Make acknowledged data durable on each node\npack-compact         Compact packed small-file segments\nshrink-quota         Reduce a node quota\nmkfs, raft-mkfs      Format metadata\ncommands-policy      Get/set versioned command policy\n"
 #if EFS_BUILD_EXPIRY
             "expiry-policy        Get/set scratch expiry policy\nexpiry               Show path expiry or inspect/renew a deadline\nexpiry-status        Worker health, backlog and removal counters\nexpiry-clock         Inspect/reset node clock health\nexpiry-enable        Enable an existing file deadline\nexpiry-id            Inspect authoritative FileID\n"
 #endif
-            "raft-status          Raft group status\nraft-resync          Resync a follower's group from the leader snapshot\nraft-change          Change group voters\nraft-dir             Directory layout migration\nraft-session         Session lifecycle\nraft-getattr         Read inode attributes\nraft-lookup          Look up a name\nraft-lookup-path     Resolve a path\nraft-create          Create a file\nraft-unlink          Remove a file name\nraft-rmdir           Remove an empty directory\nraft-link            Create a hard link\nraft-setattr         Change attributes\nraft-rename          Rename a name\nraft-readdir         List directory entries\nraft-publish         Publish a chunk\nraft-getchunks       Read chunk mappings\nraft-append          Allocate an append range\nraft-hold            Open/close a lease\nraft-flock           Whole-file locking\nraft-fcntl           Byte-range locking";
+            "raft-status          Raft group status\nraft-resync          Resync a follower's group from the leader snapshot\nraft-step-down       Move a group's leadership\nraft-change          Change group voters\nraft-dir             Directory layout migration\nraft-session         Session lifecycle\nraft-getattr         Read inode attributes\nraft-lookup          Look up a name\nraft-lookup-path     Resolve a path\nraft-create          Create a file\nraft-unlink          Remove a file name\nraft-rmdir           Remove an empty directory\nraft-link            Create a hard link\nraft-setattr         Change attributes\nraft-rename          Rename a name\nraft-readdir         List directory entries\nraft-publish         Publish a chunk\nraft-getchunks       Read chunk mappings\nraft-append          Allocate an append range\nraft-hold            Open/close a lease\nraft-flock           Whole-file locking\nraft-fcntl           Byte-range locking";
         examples="efs-mgmt status 127.0.0.1:17432\nefs-mgmt gc-status 127.0.0.1:17432";
         notes="Run efs-mgmt COMMAND --help for its argument syntax.";
     } else if (!strcmp(name,"blake3-bench") || (topic && !strcmp(topic,"blake3"))) {
@@ -101,8 +101,9 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
 {
     static const struct { const char *name,*args; } specs[]={
         {"status","NODE:PORT"},{"io-stats","NODE:PORT"},{"gc-status","NODE:PORT"},
-        {"version","NODE:PORT"},{"add-node","NEW_NODE:PORT EXISTING_NODE:PORT"},
-        {"shrink-quota","NODE:PORT AMOUNT[K|M|G|T]"},{"add-storage","NODE:PORT PATH[,PATH...]"},
+        {"version","NODE:PORT"},{"sync-status","NODE:PORT [NODE:PORT ...]"},
+        {"data-commit","NODE:PORT [NODE:PORT ...]"},{"pack-compact","NODE:PORT [SEGMENTS]"},
+        {"shrink-quota","NODE:PORT AMOUNT[K|M|G|T]"},
 #if EFS_BUILD_EXPIRY
         {"expiry-policy","NODE:PORT get ROOT GENERATION | set ROOT GENERATION EXPECTED_REV --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS"},
         {"expiry-id","NODE:PORT INO"},
@@ -112,7 +113,8 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
         {"expiry","NODE:PORT show PATH [--mount MOUNT] | get INO GENERATION | renew INO GENERATION EXPECTED_REV DEADLINE_NS"},
 #endif
         {"commands-policy","NODE:PORT get | set MASK EXPECTED_VERSION"},{"mkfs","NODE:PORT"},{"raft-mkfs","NODE:PORT"},
-        {"raft-status","NODE:PORT"},{"raft-change","NODE:PORT GROUP VOTERS"},
+        {"raft-status","NODE:PORT"},{"raft-resync","NODE:PORT GROUP"},
+        {"raft-step-down","NODE:PORT GROUP [TARGET_NODE_ID]"},{"raft-change","NODE:PORT GROUP VOTERS"},
         {"raft-dir","NODE:PORT INO begin|migrate|finish"},
         {"raft-session","NODE:PORT create|register|establish|get|fence|cleanup-leases|cleanup-appends UUID_HEX [epoch|shard] [shard]"},
         {"raft-getattr","NODE:PORT [ino]"},{"raft-lookup","NODE:PORT PARENT NAME"},
@@ -151,6 +153,15 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
             "Single export; no label argument. Optional: the cluster forms by itself.\n"
             "On the first node, proposes formation now with the nodes joined so far (at least three in all)\n"
             "and forms once each promised; a repeat keeps the first membership.\n"
+            "Node addresses use HOST:PORT." :
+            !strcmp(command,"pack-compact") ?
+            "SEGMENTS: segments to compact (default 64); 0 prints the summary only.\n"
+            "Node addresses use HOST:PORT." :
+            !strcmp(command,"raft-resync") ?
+            "Resyncs GROUP on that node from its leader's snapshot; followers only.\n"
+            "Node addresses use HOST:PORT." :
+            !strcmp(command,"raft-step-down") ?
+            "That node stops leading GROUP now; TARGET_NODE_ID names the next leader.\n"
             "Node addresses use HOST:PORT." :
             "Node addresses use HOST:PORT.");return 0;
     }

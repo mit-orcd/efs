@@ -489,54 +489,6 @@ static int cmd_status(int argc, char **argv)
     return (down_nodes > 0) ? 1 : 0;
 }
 
-static int cmd_add_node(int argc, char **argv)
-{
-    if (argc < 2) {
-        fprintf(stderr, "Usage:\n  efs-mgmt add-node <new-node:port> <existing-node:port>\n");
-        return 1;
-    }
-    char new_host[64], existing_host[64];
-    uint16_t new_port, existing_port;
-    if (parse_host_port(argv[0], new_host, sizeof(new_host), &new_port) != 0 ||
-        parse_host_port(argv[1], existing_host, sizeof(existing_host), &existing_port) != 0) {
-        fprintf(stderr, "Invalid addresses\n");
-        return 1;
-    }
-
-    int fd = efs_connect_declared(new_host, new_port);
-    if (fd < 0) {
-        fprintf(stderr, "Cannot connect to new node %s:%u\n", new_host, new_port);
-        return 1;
-    }
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-
-    struct efs_msg_join req;
-    memset(&req, 0, sizeof(req));
-    strncpy(req.peer_host, existing_host, sizeof(req.peer_host) - 1);
-    req.peer_port = existing_port;
-
-    uint8_t reply_type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    if (send_recv(fd, EFS_MSG_JOIN, &req, sizeof(req), &reply_type, &reply, &reply_len) != 0 ||
-        reply_type != EFS_MSG_JOIN_REPLY || reply_len != 1) {
-        fprintf(stderr, "Failed to send join request\n");
-        close(fd);
-        return 1;
-    }
-
-    uint8_t status = ((uint8_t *)reply)[0];
-    if (status == EFS_JOIN_OK)
-        printf("Node %s:%u joined cluster via %s:%u\n", new_host, new_port, existing_host, existing_port);
-    else
-        fprintf(stderr, "Join failed\n");
-
-    free(reply);
-    close(fd);
-    return (status == EFS_JOIN_OK) ? 0 : 1;
-}
-
 static int cmd_shrink_quota(int argc, char **argv)
 {
     if (argc < 2) {
@@ -588,87 +540,6 @@ static int cmd_shrink_quota(int argc, char **argv)
     free(reply);
     close(fd);
     return (status == EFS_SHRINK_QUOTA_IN_PROGRESS) ? 0 : 1;
-}
-
-static int cmd_add_storage(int argc, char **argv)
-{
-    if (argc < 2) {
-        fprintf(stderr, "Usage:\n  efs-mgmt add-storage <node:port> <path>[,path...]\n");
-        return 1;
-    }
-    char host[64];
-    uint16_t port;
-    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
-        fprintf(stderr, "Invalid address: %s\n", argv[0]);
-        return 1;
-    }
-
-    struct efs_msg_add_storage req;
-    memset(&req, 0, sizeof(req));
-    size_t off = 0;
-    for (int i = 1; i < argc; i++) {
-        const char *p = argv[i];
-        size_t n = strlen(p);
-        if (n == 0)
-            continue;
-        if (off + n + (off ? 1 : 0) >= sizeof(req.paths)) {
-            fprintf(stderr, "Path list too long\n");
-            return 1;
-        }
-        if (off) {
-            req.paths[off++] = ',';
-            req.paths[off] = '\0';
-        }
-        memcpy(req.paths + off, p, n + 1);
-        off += n;
-    }
-    if (off == 0) {
-        fprintf(stderr, "No storage paths given\n");
-        return 1;
-    }
-
-    int fd = efs_connect_declared(host, port);
-    if (fd < 0) {
-        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
-        return 1;
-    }
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-
-    uint8_t reply_type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    if (send_recv(fd, EFS_MSG_ADD_STORAGE, &req, sizeof(req),
-                  &reply_type, &reply, &reply_len) != 0 ||
-        reply_type != EFS_MSG_ADD_STORAGE_REPLY ||
-        reply_len != sizeof(struct efs_msg_add_storage_reply)) {
-        fprintf(stderr, "Failed to send add-storage request\n");
-        close(fd);
-        return 1;
-    }
-
-    struct efs_msg_add_storage_reply *r = reply;
-    int rc = 1;
-    switch (r->status) {
-    case EFS_ADD_STORAGE_OK:
-        printf("Added storage on %s:%u; now %u local root(s)\n",
-               host, port, r->path_count);
-        rc = 0;
-        break;
-    case EFS_ADD_STORAGE_FULL:
-        fprintf(stderr, "add-storage: too many roots (max %d)\n",
-                EFS_MAX_STORAGE_PATHS);
-        break;
-    case EFS_ADD_STORAGE_INVALID:
-        fprintf(stderr, "add-storage: invalid path list (absolute paths only)\n");
-        break;
-    default:
-        fprintf(stderr, "add-storage failed\n");
-        break;
-    }
-    free(reply);
-    close(fd);
-    return rc;
 }
 
 static const char *raft_role_name(uint8_t role)
@@ -3358,6 +3229,18 @@ int main(int argc, char **argv)
 {
     efs_version_check_argv("efs-mgmt", argc, argv);
 
+    /* Removed commands are refused by name, with or without --help: one
+     * supported way to add a node (efsd --join) and fixed storage roots. */
+    if (argc >= 2 && strcmp(argv[1], "add-node") == 0) {
+        fprintf(stderr, "efs-mgmt: add-node was removed; start the new node with "
+                "efsd --join [SEED] STORAGE\n");
+        return 2;
+    }
+    if (argc >= 2 && strcmp(argv[1], "add-storage") == 0) {
+        fprintf(stderr, "efs-mgmt: add-storage was removed; a node's storage roots are "
+                "fixed when its store is created\n");
+        return 2;
+    }
     if (efs_help_requested(argc,argv)) {
         return efs_mgmt_help(stdout,argc>2 ? argv[1] : NULL);
     }
@@ -3370,12 +3253,8 @@ int main(int argc, char **argv)
         return cmd_sync_status(argc - 2, argv + 2);
     if (strcmp(cmd, "data-commit") == 0)
         return cmd_data_commit(argc - 2, argv + 2);
-    if (strcmp(cmd, "add-node") == 0)
-        return cmd_add_node(argc - 2, argv + 2);
     if (strcmp(cmd, "shrink-quota") == 0)
         return cmd_shrink_quota(argc - 2, argv + 2);
-    if (strcmp(cmd, "add-storage") == 0)
-        return cmd_add_storage(argc - 2, argv + 2);
     if (strcmp(cmd, "io-stats") == 0)
         return cmd_io_stats(argc - 2, argv + 2);
     if (strcmp(cmd, "version") == 0)

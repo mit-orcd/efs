@@ -93,8 +93,10 @@ message naming it.
 
 ## efs-mgmt
 
-`status`, `mkfs`, `add-node`, `add-storage`, `shrink-quota`, `raft-status`,
-`raft-change`, `raft-dir`, and a `raft-<op>` for every metadata operation:
+`status`, `mkfs`, `shrink-quota`, `raft-status`, `raft-resync`,
+`raft-change`, `raft-dir`, and a `raft-<op>` for every metadata operation
+(`add-node` and `add-storage` were removed: nodes join with `efsd --join`,
+storage roots are fixed per node):
 [operations.md § Cluster management](../operations/operations.md#cluster-management).
 
 ## `df` / `du` semantics
