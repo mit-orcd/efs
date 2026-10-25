@@ -42,11 +42,15 @@ In each mode:
     DEGRADED` (down, refuse); slow: that, or W154 already rebuilding the
     marks onto the slow member during the fault (status rebuilt=N rises:
     the member is up and its rebuild PUTs succeed after 8 s).
+    K37: the packer may pack Q* during the fault only into a segment written
+    on the other two fragments and marked (`written degraded` naming node
+    3, `Degraded segments:` at least that count); those files read exact.
  6. Restore in order: fault off, node 3 stopped in order and started again
     (full: with a 1 GiB quota). W154 rebuilds every mark (`Degraded
-    chunks: 0`, `Protection: full`); every acknowledged file (R, P, F, W,
-    Q) reads back exactly; the packer resumes and packs the Q* files
-    written during the fault.
+    chunks: 0`, `Protection: full`), K37 every segment written degraded
+    (`Degraded segments: 0`, a `rebuilt` line for each); every acknowledged
+    file (R, P, F, W, Q) reads back exactly; the packer resumes and packs
+    the Q* files written during the fault.
 At the end every cluster is stopped in order and started again, and every
 acknowledged file reads back exactly once more. Repair beyond W154 (a
 member that never returns) is not claimed. EFS_B6_ARTIFACTS=DIR writes
@@ -104,6 +108,21 @@ def degraded(c, i=1):
 def degraded_segments(c, i=1):
     m = re.search(r'^Degraded segments: (\d+) ', status(c, i), re.M)
     return int(m.group(1)) if m else None
+
+
+def logs(c):
+    return ''.join(c.log(i) for i in c.ports if (c.dir / f'n{i}.log').exists())
+
+
+def degraded_writes(c):
+    """(group, id, gen, fragment, node) of each K37 `written degraded` line."""
+    return re.findall(r'packer: segment g(\d+) id=([0-9a-f]+) gen=([0-9a-f]+) written degraded: '
+                      r'fragment (\d+) for node (\d+)', logs(c))
+
+
+def segment_rebuilt(c, seg):
+    g, sid, gen, f, node = seg
+    return f'segment-rebuild: rebuilt g{g} id={sid} gen={gen} fragment {f} on node {node} ' in logs(c)
 
 
 def wait_degraded(c, pred, what, timeout):
@@ -310,6 +329,7 @@ def run_mode(mode):
         assert not th.is_alive(), f'{mode}: the in-flight write is still running'
         r.out['inflight_write'] = inflight['v']
     pk_before = packed_total(c)
+    dw_before = set(degraded_writes(c))
     rebuilt_before = rebuilt(c)
 
     # 3. Read through a fresh mount.
@@ -412,13 +432,38 @@ def run_mode(mode):
             st = status(c)
             assert 'Protection: DEGRADED' in st, st
         r.out['degraded_during'] = n
-    # K37 policy: the packer may copy a segment while node 3 is unavailable,
-    # but such a segment is marked degraded before any file goes in, and
-    # rebuilt on return (checked after the restore below).
+    # K37 policy (decided Oct 24): the packer may copy a segment while node 3
+    # is unavailable only with the other two fragments acknowledged; the
+    # segment is then marked degraded before any file is switched in, its
+    # files read back from the two, and it is rebuilt on return (checked
+    # after the restore). slow: node 3 acknowledges late, so the packer
+    # waits and packs on three, or marks if a PUT missed its deadline.
     r.out['packed_during_fault'] = packed_total(c) - pk_before
+    dw = [s for s in degraded_writes(c) if s not in dw_before]
+    r.out['segments_written_degraded'] = len(dw)
+    assert all(node == '3' for *_, node in dw), f'{mode}: written degraded {dw}'
+    if mode in ('down', 'refuse', 'full'):
+        # Node 3 takes no segment fragment: every packed file went into a
+        # segment written degraded and marked.
+        assert r.out['packed_during_fault'] == 0 or dw, \
+            f'{mode}: {r.out["packed_during_fault"]} files packed, no segment written degraded'
+    if mode in ('down', 'refuse') and dw:
+        # The marks stay while node 3 is unavailable (a rebuild needs it).
+        end, n = time.time() + 30, None
+        while time.time() < end:
+            n = degraded_segments(c)
+            if n is not None and n >= len(dw):
+                break
+            time.sleep(0.5)
+        assert n is not None and n >= len(dw), f'{mode}: {len(dw)} written degraded\n{status(c)}'
+        assert 'Protection: DEGRADED' in status(c), status(c)
     r.out['degraded_segments_during'] = degraded_segments(c)
-    assert (r.out['packed_during_fault'] == 0 or mode == 'slow' or
-            (r.out['degraded_segments_during'] or 0) > 0), r.out
+    if mode != 'full':
+        b = r.mount('mnt-q')
+        qr = r.read_check(b, [n for n in r.acked if n.startswith('Q')], 'packed during the fault')
+        r.unmount(b)
+        assert all(v[0] == 'exact' for v in qr.values()), f'{mode}: packed during the fault: {qr}'
+        r.out['reads_packed_during_fault'] = qr
 
     # 6. Orderly restore and restart.
     r.clear_fault()
@@ -434,6 +479,8 @@ def run_mode(mode):
     while (degraded_segments(c) or 0) > 0 and time.time() < end:
         time.sleep(0.5)
     assert (degraded_segments(c) or 0) == 0, f'{mode}: K37 segments still degraded\n{status(c)}'
+    missed = [s for s in dw if not segment_rebuilt(c, s)]
+    assert not missed, f'{mode}: segments written degraded, no rebuild logged: {missed}'
     assert 'Protection: full' in status(c), status(c)
     r.out['rebuild_s'] = round(time.time() - t, 1)
     r.out['rebuilt'] = sum(c.log(i).count('raft-host: rebuilt ino=') for i in (1, 2, 3))
