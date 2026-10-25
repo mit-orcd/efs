@@ -1606,6 +1606,19 @@ Candidate values are now `[inode generation][publish stamp]` and UNINDEX deletes
 exact match (fresh format). New unit case red without the comparison, green with it; B6 full
 15 of 15 PASS with the fix (the live race did not fire on devel in 31 runs). Multi-host NOTRUN.
 
+[B6 under K37, `test_get_integrity.py`, and a packer unindex race](../status/b6-k37-merge-tests-20261024.md):
+**test fixes PASS (scoped, loopback), branch `claude/admiring-babbage-a2387d` (`335bfb5a0`), not merged, not pushed; B6 3 of 3 and `test_get_integrity.py` 3 of 3 on intel1; intel2 `make test-all` at `335bfb5a0`: 467 commands, 1 FAIL in an untouched test (`test_k33_payload.py`, intermittent EIO), 15 NOTRUN host limits (raw: intel1/intel2 `~/efs-artifacts/b6-k37-335bfb5a0-20261024/`, `SHA256SUMS` `2d0eda66…e769` / `a115365d…c825`). B6 mode `full`: known intermittent FAIL, not fixed.**
+B6's "nothing packed during a fault" predated K37's decided policy. B6 now
+checks that every segment written degraded names node 3, that nothing is
+packed without one, that those files read exact, and that `Degraded
+segments: 0` after the restore. It does not check how each mark ends,
+because compaction retires marks too. Open finding (follow-up): `efs_meta_apply_pack_unindex` deletes a
+candidate key unconditionally, so an `O_TRUNC` rewrite scanned at size 0
+can lose its re-put candidate and stay unpacked (no data loss; on devel
+too). Proposed fix: compare-and-delete UNINDEX (Raft command and KV value
+format change). Also seen: `test_k36_recovery.py` step 11 assumes segments
+in both metadata groups (placement-dependent, failed once).
+
 [Oct 24 merge: docs-review fixes, B6/D4, K37, A11 and the K33 live-harness port](../status/a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `646a43041`: 467 commands, 2 FAIL from the merge (a duplicate `read_reprobe_down` stub in `test_get_integrity.py`; `test_b6_unavailable.py` still asserting no packing during a fault, which K37's policy allows with a degraded mark), both fixed in `12d2a7957` and rerun PASS on intel2; 15 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave6-20261024/`, `SHA256SUMS` `fd750fd9…d662`).** `add-node` and `add-storage` are gone (JOIN/ADD_STORAGE wire types removed). Live gates stay NOTRUN; every store needs a fresh format.
 

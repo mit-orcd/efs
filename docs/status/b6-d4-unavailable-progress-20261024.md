@@ -52,7 +52,7 @@ Measured in the development runs `b6-<mode>-4` (this test, code of
 | Writes W, Q during the fault (≤ 90 s each) | OK, max 0.06 s | OK, max 0.26 s | OK, max 4.13 s | ENOSPC (all 7), no degraded acknowledgement |
 | Degraded acknowledgements (all name node 3) | 30 | 23 | 30 | 0 |
 | `Degraded chunks` during the fault, `Protection: DEGRADED` | 17 | 34 | 10 (and W154 already rebuilding onto the slow member: 7, 9, 17 rebuilds during the fault in three runs) | 0 (`full`) |
-| Files packed during the fault (packer needs all three) | 0 | 0 | 4 (waited 8 s per segment fragment) | 0 |
+| Files packed during the fault (packer needs all three, before K37; since K37 a segment may be written on two fragments and marked, see [b6-k37-merge-tests-20261024.md](b6-k37-merge-tests-20261024.md)) | 0 | 0 | 4 (waited 8 s per segment fragment) | 0 |
 | W154 after the restore: count 0, `Protection: full` (≤ 180 s) | 4.1 s, 43 rebuilt | 22.3 s, 43 rebuilt (10 s node backoff after refused rebuilds) | 2.1 s, 32 rebuilt | 1.1 s |
 | Packer resumes, Q packed (≤ 120 s) | 9.8 s | 6.0 s | 0 s (packed during) | 30.7 s (30 s backoff after the refused segment) |
 | Acknowledged files exact after restore and after whole-cluster restart | 22 | 22 | 22 | 48 |
