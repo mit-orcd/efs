@@ -67,3 +67,11 @@ assert not q.matrix_errors(matrix), q.matrix_errors(matrix)
 assert all('soak' in t.get('gates',[]) for t in matrix['topologies'].values() if 'gates' in t)
 assert q.default_plugins({'plugins':{'soak':{'command':'site-soak --hours 4'}}},[])['soak']['command']=='site-soak --hours 4'
 print('soak qualification plugin: hours parameter, all topology selections, site override and matrix PASS')
+
+short=s.rehearsal_schedule(12345)
+assert short==s.rehearsal_schedule(12345) and short!=s.rehearsal_schedule(42)
+assert len(short)==9 and short[-1]['at']<900
+assert sorted(e['victim'] for e in short if e['kind']=='clean')==[1,2,3,4,5]
+assert {e['kind'] for e in short}=={'clean','crash','client','add'}
+assert len({e['at'] for e in short})==len(short)
+print('15-minute representative lifecycle schedule PASS')

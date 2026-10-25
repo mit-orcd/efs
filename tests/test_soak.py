@@ -20,7 +20,7 @@ if not edelete.exists():
 parent=Path(tempfile.mkdtemp(prefix='efs-soak-',dir=os.environ.get('TMPDIR')))
 source=os.environ.get('EFS_GIT_ID') or subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
 p=subprocess.run([sys.executable,str(root/'scripts/soak.py'),'--work',str(parent/'work'),'--out',str(parent/'out'),
-                  '--source',source,'--seconds','900','--schedule-scale','.0625','--verify-seconds','180'])
+                  '--source',source,'--seconds','900','--profile','rehearsal','--verify-seconds','180'])
 print('soak evidence:',parent/'out',flush=True)
 if p.returncode==0 and (parent/'work').exists():
  subprocess.run([str(edelete),'--force','--delete',str(parent/'work')],check=True)

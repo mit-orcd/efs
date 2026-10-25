@@ -2,8 +2,8 @@
 """Seeded E4/D4 endurance rehearsal. Own loopback processes only; never a live cluster.
 
 python3 scripts/soak.py --work ~/efs-taskD/run --out ~/efs-artifacts/task-d/run --hours 4
-The 15-minute recipe uses --seconds 900 --schedule-scale .0625: the same event
-ordering, accelerated, not four-hour endurance evidence. SIGKILL preserves the
+The 15-minute recipe uses --seconds 900 --profile rehearsal: five clean
+returns, one crash, one client restart and both additions, not four-hour evidence. SIGKILL preserves the
 kernel page cache; it is NOT a power-loss test. Stop churn at the first failure,
 preserve logs, and refuse to reuse either output directory. No extra EFS syncs:
 fsync belongs only to the workload's application acknowledgement contract.
@@ -53,6 +53,14 @@ def schedule(seconds, seed=12345, scale=1):
         if at * scale < seconds:
             events.append(dict(at=at * scale, kind='add', victim=member))
     return sorted(events, key=lambda e: e['at'])
+
+
+def rehearsal_schedule(seed):
+    victims=[e['victim'] for e in schedule(3600,seed) if e['kind']=='clean'][:5]
+    return ([dict(at=60+105*k,kind='clean',victim=v) for k,v in enumerate(victims)]
+            + [dict(at=585,kind='crash',victim=victims[0]),
+               dict(at=675,kind='client',victim=0),dict(at=735,kind='add',victim=6),
+               dict(at=795,kind='add',victim=7)])
 
 
 def protection(text):
@@ -444,7 +452,7 @@ class Soak:
                 raise ValueError(f'private port occupied: {port}')
             self.c.held.append(held)
         self.threads = []
-        result = dict(verdict='FAIL', source=self.a.source, schedule=schedule(self.a.seconds, self.a.seed, self.a.schedule_scale),
+        result = dict(verdict='FAIL', source=self.a.source, schedule=(rehearsal_schedule(self.a.seed) if self.a.profile=='rehearsal' else schedule(self.a.seconds,self.a.seed,self.a.schedule_scale)),
                       config=vars(self.a).copy(), scope='one physical host, TCP, O_DIRECT, fault daemon, packing built in; SIGKILL not power loss')
         try:
             for binary in (EFSD, MGMT, ROOT/'efs-fuse'):
@@ -477,13 +485,22 @@ class Soak:
                             break
                         assert rc == 75 and 'not indexed yet' in text and time.monotonic()<end, text
                         time.sleep(2)
-            self.phase = 'load'
-            self.load_start = time.monotonic()
-            self.quiet(True)
+            self.phase = 'warmup'
             for i in range(2):
                 t = threading.Thread(target=self.worker, args=(i,), daemon=True)
                 self.threads.append(t)
                 t.start()
+            # Fill the fixed working set before measuring a plateau; otherwise
+            # legitimate initial cache population is mislabelled a slow leak.
+            warm_end=time.monotonic()+180
+            while len(self.manifest)<self.a.slots*2:
+                assert not self.stop.is_set(), self.errors
+                assert time.monotonic()<warm_end, 'fixed working set warmup exceeded 180s'
+                time.sleep(.2)
+            self.note('warmup-complete', files=len(self.manifest))
+            self.phase='load'
+            self.load_start=time.monotonic()
+            self.quiet(True)
             pending = list(result['schedule'])
             for mode in ('rss', 'status'):
                 monitor = threading.Thread(target=self.monitor, args=(mode,), daemon=True)
@@ -573,6 +590,7 @@ def main(argv=None):
     p.add_argument('--seconds', type=float)
     p.add_argument('--seed', type=int, default=12345)
     p.add_argument('--source', required=True, help='frozen tested commit; recorded in result')
+    p.add_argument('--profile', choices=('endurance','rehearsal'), default='endurance')
     p.add_argument('--schedule-scale', type=float, default=1)
     p.add_argument('--verify-seconds', type=float, default=900)
     p.add_argument('--recovery-bound', type=float, default=300)
@@ -589,6 +607,8 @@ def main(argv=None):
     for key in ('seconds','schedule_scale','verify_seconds','recovery_bound','down_seconds','io_deadline','meta_deadline','churn_deadline','slots'):
         if getattr(a,key)<=0:
             p.error(f'{key} must be positive')
+    if a.profile=='rehearsal' and a.seconds!=900:
+        p.error('rehearsal is exactly 900 seconds, with its own declared event schedule')
     if not 19000 <= a.port_base <= 19993:
         p.error('private port base must be 19000..19993')
     if not fuse_ok():
