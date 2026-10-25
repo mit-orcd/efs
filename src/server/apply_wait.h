@@ -14,16 +14,21 @@
  * REPORT and CREATE RPCs of the intel1 run (seven attempts after BUSY).
  *
  * The wait is now bounded by progress, not by one clock: when the budget
- * expires and the applied index has advanced since the budget was set, the
- * waiter gets the same budget again from the new index. A pump that made no
- * progress for a whole budget still answers BUSY (a stuck apply, a lost
- * replica), and the whole wait never exceeds cap_us whatever the progress.
- * Pure arithmetic in microseconds so tests/test_apply_wait.c can pin it. */
+ * expires and the progress value has advanced since the budget was set,
+ * the waiter gets the same budget again from the new value. The value is
+ * monotonic: raft_host.c passes the group's published applied index plus
+ * the member's count of applies so far, so a pump cycle that applies for
+ * longer than one grant (it publishes its view only at the end) still
+ * counts as progress while every apply in it moves the count. A pump that
+ * made no progress for a whole budget still answers BUSY (a stuck apply, a
+ * lost replica), and the whole wait never exceeds cap_us whatever the
+ * progress. Pure arithmetic in microseconds so tests/test_apply_wait.c
+ * can pin it. */
 struct efs_apply_wait {
     uint64_t budget_us;   /* one grant */
     uint64_t end_us;      /* current grant's expiry */
     uint64_t cap_us;      /* absolute end of the whole wait */
-    uint64_t base;        /* applied index the current grant was set from */
+    uint64_t base;        /* progress value the current grant was set from */
     unsigned extensions;  /* grants after the first */
 };
 

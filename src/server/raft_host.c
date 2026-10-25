@@ -572,6 +572,10 @@ struct efs_raft_host {
     uint64_t obs_apply_max_us;
     uint64_t obs_apply_cycle_us; /* cumulative apply time, current cycle */
     uint64_t obs_apply_cnt;      /* applies in the current cycle */
+    /* W159: every apply, across cycles, read lock-free by waiters as
+     * progress: a long cycle applies for seconds before it publishes
+     * its view, and that is progress too (apply_wait.h). */
+    uint64_t apply_progress;
     uint64_t obs_apply_max_cnt;  /* most applies in one cycle */
     /* Apply-result ring reads that found the slot overwritten
      * (>HOST_APPLY_RC_RING applies in one wait window). The waiter returns
@@ -3594,6 +3598,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         h->obs_apply_cnt++;
         h->obs_apply_cycle_us += elapsed;
     }
+    __atomic_fetch_add(&h->apply_progress, 1, __ATOMIC_RELAXED);
     /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
      * waiter that observes applied >= index always finds the slot: the
      * slot's release store precedes the view publish that carries applied.
@@ -5535,8 +5540,13 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
      * grant is renewed while the applied index advances (apply_wait.h),
      * so a slow disk lengthens the wait instead of turning it into BUSY
      * and a client backoff ladder; a stalled apply still gets BUSY. */
+    /* Progress is the published applied index plus the count of applies
+     * so far: a cycle that applies for longer than one grant publishes
+     * nothing until it ends, but every apply in it moves the count. */
     host_view_get(h, group, &v);
-    efs_apply_wait_start(&w, now_us_(), v.has ? v.applied : 0,
+    efs_apply_wait_start(&w, now_us_(),
+                         (v.has ? v.applied : 0) +
+                             __atomic_load_n(&h->apply_progress, __ATOMIC_RELAXED),
                          (uint64_t)HOST_READ_TRIES * HOST_TICK_US,
                          HOST_APPLY_WAIT_CAP_US);
     for (;;) {
@@ -5551,7 +5561,9 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
             return EFS_OK;
         {
             unsigned before = w.extensions;
-            if (efs_apply_wait_expired(&w, now_us_(), v.applied)) {
+            uint64_t progress = v.applied +
+                __atomic_load_n(&h->apply_progress, __ATOMIC_RELAXED);
+            if (efs_apply_wait_expired(&w, now_us_(), progress)) {
                 __atomic_fetch_add(&h->obs_wait_timeouts, 1, __ATOMIC_RELAXED);
                 return EFS_ERR_BUSY;
             }
