@@ -1,13 +1,13 @@
 # D43 follow-up: creates keep the ordinary path until a folder policy is enabled (Oct 25)
 
-**Verdict: PASS (scoped, one shared host), not merged, not pushed.** With
+**Verdict: PASS (scoped, two hosts), not merged, not pushed.** With
 expiry on and no folder policy enabled, creates cost the same as with expiry
 off (0.93x and 1.01x on amd, against 2.20x and 2.16x for `412c779ba` in the
-same window); with any folder policy enabled, cost is unchanged. amd
-`make test-all` at 8 jobs: 484 commands, 11 FAIL, every one also failing in
-the same gate on the baseline `412c779ba` there (13 FAIL): amd host limits
-and one pool intermittent. **Not met:** "0 FAIL" on a host without those
-limits; nuc (D43's 0-FAIL host) was running another session's soak.
+same window); with any folder policy enabled, cost is unchanged. nuc
+`make test-all` at 8 jobs on `b5b9ffc03`: 484 commands, **0 FAIL**, 15 NOTRUN
+host limits (the same 15 as D43's nuc run). On amd the same gate had 11 FAIL,
+every one also failing on the baseline `412c779ba` there (13 FAIL): amd host
+limits and one pool intermittent.
 
 - **Purpose:** the follow-up proposed in
   [D43 expiry](d43-expiry-20261025.md#interpretation-and-limits): with the
@@ -23,16 +23,21 @@ limits; nuc (D43's 0-FAIL host) was running another session's soak.
   devel or main). Baseline for comparison: `412c779ba` itself. Trees copied to
   amd with `git archive` (no `.git`). `efsd` sha256: measurement trees
   `f301f569…53ab` (change, `05efb3bcf` code) and `fb02f42b…1ca2` (baseline);
-  gate trees `be604c5e…7006` (`b5b9ffc03`, `EFS_GIT_ID=b5b9ffc03000`) and
-  `f399b6cc…c2bd` (`412c779ba`, `EFS_GIT_ID=412c779ba000`). The next commit
+  amd gate trees `be604c5e…7006` (`b5b9ffc03`, `EFS_GIT_ID=b5b9ffc03000`) and
+  `f399b6cc…c2bd` (`412c779ba`, `EFS_GIT_ID=412c779ba000`); nuc gate tree
+  `68005729…6935` (`b5b9ffc03`, same `EFS_GIT_ID`). The next commit
   adds this page and the docs.
-- **Host:** amd (32 CPUs, 119 GB, Ubuntu, NVMe; Python 3.14), private trees
+- **Hosts:** nuc (8 CPUs, 30 GB, Rocky 10, one NVMe; idle, load 0.00 at the
+  start) for the final code gate, tree under `~/efs-d43-fast`, deleted after.
+  amd (32 CPUs, 119 GB, Ubuntu, NVMe; Python 3.14), private trees
   under `~/efs-d43-fast`, `TMPDIR` inside them, loopback ports the tests pick.
   Shared during every run: another session's two loopback acceptance clusters
   (`~/efs-taskA`) and the W123 campaign; load averages are recorded per run
   below. No live cluster, `/data1/efs`, `efs` user or 17432–17435/27432–27433
   port was touched.
-- **Raw outputs:** `amd:~/efs-artifacts/d43-fast-20261025/` with `SHA256SUMS`
+- **Raw outputs:** nuc gate: `nuc:~/efs-artifacts/d43-fast-20261025/` with
+  `SHA256SUMS` (6 files: summary, timings, run line, driver, `efsd` hash;
+  `SHA256SUMS` sha256 `2eaff79d…d92e`). amd: `amd:~/efs-artifacts/d43-fast-20261025/` with `SHA256SUMS`
   (33 files, 164 KB; `SHA256SUMS` sha256 `37bf20b4…9035`): the four
   create-cost JSON files and the driver log and scripts, gate run 2's
   summary, timings and failure logs, the baseline gate's summary and
@@ -109,14 +114,26 @@ Mean / p50 / p99 ms, 900 creates per cell:
 ## Code gate
 
 `scripts/make_test_summary.sh` (`make test-all`, `EFS_TEST_JOBS=8`,
-`EFS_TEST_CMD_TIMEOUT` default 900 s) on amd, driver `gate.sh`/`gate-base.sh`
-in the raw folder:
+`EFS_TEST_CMD_TIMEOUT` default 900 s), drivers `nuc-gate.sh`, `gate.sh` and
+`gate-base.sh` in the raw folders:
 
-| Run | Tree | Commands | FAIL | NOTRUN | Time | 1-min load at start |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | `05efb3bcf` | 484 | 15 | 6 | 619 s | 5.3 |
-| 2 | `b5b9ffc03` | 484 | **11** | 6 | 537 s | 2.1 |
-| baseline | `412c779ba` | 484 | 13 | 6 | 532 s | 0.3 |
+| Run | Host | Tree | Commands | FAIL | NOTRUN | Time | 1-min load at start |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **final** | nuc | `b5b9ffc03` | 484 | **0** | 15 | 854 s (build 37 s) | 0.00 |
+| 1 | amd | `05efb3bcf` | 484 | 15 | 6 | 619 s | 5.3 |
+| 2 | amd | `b5b9ffc03` | 484 | 11 | 6 | 537 s | 2.1 |
+| baseline | amd | `412c779ba` | 484 | 13 | 6 | 532 s | 0.3 |
+
+- **nuc, final:** 0 FAIL; status `INCOMPLETE` only because NOTRUN rows are
+  present (driver exit 3). The 15 NOTRUN are host limits, the same set as
+  D43's nuc run: no RDMA device (`test_declaration_gate` RDMA path,
+  `test_rdma_xprt`, seven `test_rdma_segmented` modes), no valgrind
+  (`test_rdma_memcheck.py`, `test_leak_gate.py`), no sanitizer runtime
+  (`test_sanitizer_gate.py`), no `~/git/cluster`, `test_follower_bound`
+  fault build, the summary runner's self-test. Every expiry test passed:
+  `test_expiry_policy_live.py` 30.2 s, `posix_expiry.py --private` 150.9 s,
+  `test_expiry` and the three expiry CLI/status tests. One OVERBUDGET
+  (`test_b_geometry.py` grow-a, 147 s against 120 s; listed, not failed).
 
 - **Run 1** found three source-shape tests that read the code this change
   edits: `test_meta_cmd_namespace.py` (every `EFS_MD_CMD_*` name must be a
@@ -153,8 +170,8 @@ in the raw folder:
   shared guard on a count row: the policy transaction retries `BUSY` for up
   to one second, then answers `BUSY` to `efs-mgmt`.
 - Not re-run: the `d5-expiry` qualify gate and `posix_expiry.py --private`
-  outside `make test-all` (it is inside it), real-host and RDMA runs, and a
-  nuc re-measurement.
+  outside `make test-all` (it is inside it), real-host and RDMA runs, and the
+  create-cost measurement on nuc (amd only).
 - No compatibility: tag 58 is no longer a log command and kind 57 is new; a
   log written by `412c779ba` that contains a tag-58 entry is refused at apply
   (fresh format, as for the rest of D43).
