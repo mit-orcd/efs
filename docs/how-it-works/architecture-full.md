@@ -1598,6 +1598,9 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](../status/f1-memory-concurrency-gates-20261025.md):
+**merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
+
 [Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](../status/a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `0b01a2a1e`: 471 commands, 0 FAIL, 15 NOTRUN host limits (2,604 s; raw: intel2 `~/efs-artifacts/merge-wave7-20261025/`, `SHA256SUMS` in that directory).** A11 findings 1 and 2 are fixed; every Stage 2 item now maps to a real `scripts/qualify.py` gate; live and real-host runs stay NOTRUN; every store needs a fresh format.
 
