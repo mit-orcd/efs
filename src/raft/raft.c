@@ -92,6 +92,7 @@ struct efs_raft {
     unsigned prevote_bits;      /* K1: pre-vote grants for prevote_term */
     uint64_t prevote_term;      /* current_term + 1 while pre-voting, else 0 */
     uint64_t elect_events, elect_log_tick, elect_log_shown; /* K1 log limiter */
+    int elect_log_all; /* cfg.elect_log_all: no limiter */
     uint32_t election_elapsed;
     uint32_t election_ticks;
     uint32_t election_deadline; /* randomized in [election_ticks, 2*election_ticks) */
@@ -495,7 +496,8 @@ static void reset_election(struct efs_raft *r)
 static int elect_note_ok(struct efs_raft *r)
 {
     r->elect_events++;
-    if (r->elect_events != 1 && r->ticks - r->elect_log_tick < ELECT_LOG_TICKS)
+    if (!r->elect_log_all && r->elect_events != 1 &&
+        r->ticks - r->elect_log_tick < ELECT_LOG_TICKS)
         return 0;
     r->elect_log_tick = r->ticks;
     return 1;
@@ -2267,6 +2269,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->send_ready = cfg->send_ready;
     r->recv_persist = cfg->recv_persist;
     r->preserve_ack_window = cfg->preserve_ack_window;
+    r->elect_log_all = cfg->elect_log_all;
     r->net = cfg->net;
     r->apply = cfg->apply;
     r->app = cfg->app;

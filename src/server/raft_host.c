@@ -8587,6 +8587,11 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.voters = cfg_voters;
     cfg.election_ticks = HOST_ELECT_BASE;
     cfg.heartbeat_ticks = HOST_HB_TICKS;
+#if EFS_FAULTS
+    /* Every election line (daemon tests): the one-per-10-s limiter hid a
+     * test's whole leader timeline (flake sweep, Oct 25). */
+    cfg.elect_log_all = env_on("EFS_FAULT_RAFT_ELECT_LOG");
+#endif
     cfg.boot_id = h->boot_id;
     /* Entropy-seeded (h->salt reads /dev/urandom) per-(node,group) so the
      * randomized election timeout is actually de-synchronized in production. */

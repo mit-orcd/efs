@@ -98,21 +98,28 @@ def stamp(t):
 
 def slow_report(results, c, mnt):
     """What the slow operations crossed: the writers' operations over 1 s
-    with their wall-clock start, every leader change, recovery-scan
-    resolution and REPORT stall the daemons and the client logged in that
-    minute. Printed with a timing failure so one occurrence is
-    attributable (the flake sweep of Oct 25 saw one 5.7 s write in 24
-    runs and had only the bound to show for it)."""
-    out = []
+    with their wall-clock start, then every line the daemons and the
+    client logged from one second before the first slow operation began
+    to one second after the last one ended (periodic counters left out).
+    Printed with a timing failure so one occurrence is attributable (the
+    flake sweep of Oct 25 saw 5.7 s writes across a group-2 step-down and
+    had only the bound and a rate-limited election log to show for it)."""
+    out, lo, hi = [], None, None
     for r in results:
         for kind, seq, d, w0 in r['slow']:
             out.append(f'writer {r["writer"]}: {kind} seq={seq} {d} s at {stamp(w0)}')
-    pat = re.compile(r'(leader|elected|step-?down|term=\d+ .*vote|txn-recover .*-> |txn-finish|decide-lost|'
-                     r'report-loop|slow-ok|inode-rpc: retry|opid-admission|apply-sleep us=[0-9]{6,})')
-    for i in (1, 2, 3):
-        out += [f'n{i}: {l[:200]}' for l in c.log(i).splitlines() if pat.search(l)][-40:]
-    out += [f'client: {l[:200]}' for l in mnt.logp.read_text(errors='replace').splitlines()
-            if pat.search(l)][-40:]
+            if d >= BOUND_S:
+                lo = w0 if lo is None else min(lo, w0)
+                hi = w0 + d if hi is None else max(hi, w0 + d)
+    if lo is None:
+        return '\n'.join(out)
+    a, b = stamp(lo - 1.0), stamp(hi + 1.0)
+    noise = re.compile(r'kv-obs|iostats|gc-health|packer: segments')
+    for name, text in [(f'n{i}', c.log(i)) for i in (1, 2, 3)] + \
+            [('client', mnt.logp.read_text(errors='replace'))]:
+        lines = [l for l in text.splitlines() if a <= l[:24] <= b and not noise.search(l)]
+        out.append(f'--- {name}: {len(lines)} lines in [{a}, {b}]')
+        out += [f'{name}: {l[:220]}' for l in lines[:150]]
     return '\n'.join(out)
 
 
@@ -131,6 +138,10 @@ work = Path(tempfile.mkdtemp(prefix='efs-rsd-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items()
        if not k.startswith('EFS_FAULT_') and not k.startswith('EFS_TEST_')}
 env['EFS_TRANSPORT'] = 'tcp'
+# A failure must be attributable from the logs: every Raft election line
+# (not one per 10 s) and the client's per-receive timing.
+env['EFS_FAULT_RAFT_ELECT_LOG'] = '1'
+env['EFS_RPC_PROF'] = '1'
 client_env = dict(env)
 fault = work / 'decide-lost'
 env['EFS_FAULT_DECIDE_LOST'] = str(fault)
