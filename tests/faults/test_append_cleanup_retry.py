@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Actual APPEND cleanup step certifies only read-only BUSY refusals."""
+"""Actual APPEND cleanup step certifies only definite no-op BUSY refusals:
+read-only selection, and (K42) a step whose meta call names a wait reason."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
@@ -19,7 +20,7 @@ struct host_resize_ctx {struct efs_raft_host *host;int *hint;};
 static const struct efs_meta_append_ops host_append_ops={0};
 static int admission,authority,selection,transaction;
 static unsigned admit_calls,authority_calls,select_calls,txids,finishes,retires;
-static unsigned present=1,progress;
+static unsigned present=1,progress,reason;
 static uint32_t rd32be(const uint8_t *p)
 {return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
 static int host_session_cleanup_admit(struct efs_raft_host *h,const uint8_t *p,
@@ -35,16 +36,16 @@ static void fill_txid(struct efs_raft_host *h,struct efs_txid *tx)
 {assert(h && tx);memset(tx,0,sizeof(*tx));txids++;}
 int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
  uint64_t off,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
- const struct efs_txid *tx,const struct efs_meta_append_ops *ops,void *user)
-{struct host_resize_ctx *ctx=user;assert(!kv && ino==4097 && gen==9 && off==123 && uuid[0]==42 && epoch==1 && tx && ops==&host_append_ops && ctx->host && ctx->hint);finishes++;return transaction;}
+ const struct efs_txid *tx,const struct efs_meta_append_ops *ops,void *user,unsigned *wait)
+{struct host_resize_ctx *ctx=user;assert(!kv && ino==4097 && gen==9 && off==123 && uuid[0]==42 && epoch==1 && tx && ops==&host_append_ops && ctx->host && ctx->hint);finishes++;*wait=reason;return transaction;}
 int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
  const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,const struct efs_txid *tx,
- const struct efs_meta_append_ops *ops,void *user,unsigned *done)
-{assert(!kv && shard==7 && uuid[0]==42 && epoch==1 && tx && ops==&host_append_ops && user);retires++;*done=progress;return transaction;}
+ const struct efs_meta_append_ops *ops,void *user,unsigned *done,unsigned *wait)
+{assert(!kv && shard==7 && uuid[0]==42 && epoch==1 && tx && ops==&host_append_ops && user);retires++;*done=progress;*wait=reason;return transaction;}
 '''+function+r'''
 static void reset(void) {
  admission=authority=selection=transaction=EFS_OK;
- admit_calls=authority_calls=select_calls=txids=finishes=retires=progress=0;
+ admit_calls=authority_calls=select_calls=txids=finishes=retires=progress=reason=0;
  present=1;
 }
 int main(void) {
@@ -69,13 +70,26 @@ int main(void) {
   }
   reset();present=have;transaction=EFS_ERR_NOT_FOUND;salt=99;
   assert(host_session_append_step(&h,cmd,sizeof(cmd),2,&hint,&salt)==EFS_ERR_BUSY && !salt);
+  /* K42: a named wait certifies a BUSY (or a REAP-owed NOT_FOUND) only. */
+  for(unsigned w=EFS_META_APPEND_WAIT_OPEN;w<=EFS_META_APPEND_WAIT_GONE;w++) {
+   reset();present=have;reason=w;transaction=EFS_ERR_BUSY;salt=99;
+   assert(host_session_append_step(&h,cmd,sizeof(cmd),2,&hint,&salt)==EFS_ERR_BUSY);
+   assert(salt==EFS_MD_SESSION_APPEND_RETRY_SALT+w && salt<=EFS_MD_SESSION_APPEND_WAIT_GONE);
+   reset();present=have;reason=w;transaction=EFS_ERR_NOT_FOUND;salt=99;
+   assert(host_session_append_step(&h,cmd,sizeof(cmd),2,&hint,&salt)==EFS_ERR_BUSY && salt==EFS_MD_SESSION_APPEND_RETRY_SALT+w);
+   for(unsigned i=0;i<sizeof(errors)/sizeof(errors[0]);i++) {
+    if(errors[i]==EFS_ERR_BUSY)continue;
+    reset();present=have;reason=w;transaction=errors[i];salt=99;
+    assert(host_session_append_step(&h,cmd,sizeof(cmd),2,&hint,&salt)==errors[i] && !salt);
+   }
+  }
   reset();present=have;salt=99;
   assert(host_session_append_step(&h,cmd,sizeof(cmd),2,&hint,&salt)==EFS_OK && salt==!have);
   present=have;
  }
  reset();present=0;progress=1;salt=99;
  assert(host_session_append_step(&h,cmd,sizeof(cmd),2,&hint,&salt)==EFS_OK && !salt && retires==1);
- puts("APPEND cleanup: readonly certificate, immutable identity, transaction/transport ambiguity refused, exact empty/progress verdict PASS");
+ puts("APPEND cleanup: readonly and named-wait certificates, immutable identity, transaction/transport ambiguity refused, exact empty/progress verdict PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-append-cleanup-') as directory:

@@ -47,7 +47,7 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
  assert(p[19]==0 && p[22]==1 && p[23]==0 && p[26]==7);
  for(unsigned i=3;i<19;i++)assert(p[i]==42);
  }
- assert(deadline && deadline<=30000);calls++;memset(r,0,sizeof(*r));
+ assert(deadline && deadline<=EFS_SESSION_CLEANUP_BUDGET_MS && EFS_SESSION_CLEANUP_BUDGET_MS==20000);calls++;memset(r,0,sizeof(*r));
  if(mode==6 && calls<13)return EFS_ERR_NOT_PRIMARY;
  if(mode==7)return EFS_ERR_NOT_PRIMARY;
  if(mode==8)return EFS_ERR_STALE;
@@ -66,9 +66,13 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
    if(mode==17)r->salt=EFS_MD_SESSION_CLEANUP_RETRY_SALT;
    return EFS_ERR_BUSY;
  }
+ /* K42: append waits (OPEN, frontier, aborted PREPARE, REAP), then empty. */
+ if(mode>=20 && mode<=23 && calls<13) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN+(mode-20);return EFS_ERR_BUSY;}
+ if(mode==24) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN;return EFS_ERR_BUSY;}
+ if(mode==25 && calls<13) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN;r->index=5;return EFS_ERR_BUSY;}
  if(mode==1)return EFS_ERR_IO; /* ambiguous submission: do not reselect */
  if(mode==2)return EFS_ERR_BUSY; /* active or incomplete global barrier */
- r->salt=mode==19?EFS_MD_SESSION_APPEND_RETRY_SALT:mode==3?2:mode==4?0:((mode==6 || mode==10 || mode==14)?calls==16:calls==4)?1:0;
+ r->salt=mode==19?EFS_MD_SESSION_APPEND_RETRY_SALT:mode==3?2:mode==4?0:((mode==6 || mode==10 || mode==14 || (mode>=20 && mode<=23))?calls==16:calls==4)?1:0;
  if(mode==5)tick=30;
  return EFS_OK;
 }
@@ -90,7 +94,7 @@ int main(void) {
    mode=6;calls=waits=0;tick=0;
    assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
    mode=7;calls=waits=0;tick=0;
-   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==30 && waits==30 && !deadline);
+   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==20 && waits==20 && !deadline);
    for(mode=8;mode<=9;mode++) {
      calls=waits=0;tick=0;
      assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==(mode==8?EFS_ERR_STALE:EFS_ERR_INVAL) && calls==1 && !waits && !deadline);
@@ -119,6 +123,24 @@ int main(void) {
  assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
  deadline=0;mode=19;calls=waits=0;tick=0;
  assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_PROTO && calls==1 && !waits && !deadline);
+ for(mode=20;mode<=23;mode++) {
+   append_mode=1;calls=waits=0;tick=0;
+   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+   append_mode=0;calls=waits=0;tick=0;
+   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+   assert(!strcmp(efs_session_cleanup_reason(r.salt,EFS_ERR_BUSY),
+       mode==20?"append-open-by-other-session":mode==21?"append-frontier":
+       mode==22?"append-prepare-aborted":"append-reap-owed"));
+ }
+ /* A wait that outlasts the budget fails closed and keeps its reason. */
+ append_mode=1;mode=24;calls=waits=0;tick=0;
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==20 && waits==20 && !deadline);
+ assert(r.salt==EFS_MD_SESSION_APPEND_WAIT_OPEN && !strcmp(efs_session_cleanup_reason(r.salt,EFS_ERR_BUSY),"append-open-by-other-session"));
+ /* A wait salt on a submitted (indexed) reply is not a certificate. */
+ mode=25;calls=waits=0;tick=0;
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits);
+ assert(!strcmp(efs_session_cleanup_reason(0,EFS_ERR_BUSY),"uncertified-busy") && !*efs_session_cleanup_reason(4,EFS_OK));
+ puts("session CLI: K42 append waits retried within the budget, fail closed with reason");
  puts("session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS");
 }
 '''
