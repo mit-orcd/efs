@@ -1074,6 +1074,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 ./tests/test_query_delta
 	python3 tests/test_raft_rotate_stall.py
 	python3 tests/test_leak_gate.py
+	python3 tests/test_sanitizer_gate.py
 	python3 tests/test_append_sequence.py
 	./tests/test_store_durability
 	python3 tests/test_storage_root_inventory.py

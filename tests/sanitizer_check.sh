@@ -46,6 +46,8 @@ case "$MODE" in tsan|asan) ;; *) echo "usage: $0 tsan|asan" >&2; exit 2;; esac
 
 CC="${CC:-gcc}"
 TIMEOUT="${EFS_SAN_TIMEOUT:-3600}"
+TO=()
+if command -v timeout >/dev/null 2>&1; then TO=(timeout -k 10 "$TIMEOUT"); fi   # absent on macOS
 LOGDIR="${EFS_SAN_LOGDIR:-}"
 if [ -z "$LOGDIR" ]; then
     LOGDIR="$(mktemp -d "${TMPDIR:-/tmp}/efs-$MODE-check.XXXXXX")" || exit 2
@@ -58,11 +60,26 @@ fi
 case "$MODE" in
 tsan)
     SAN_CFLAGS="-fsanitize=thread"
+    SAN_LDFLAGS="-fsanitize=thread"
     # gcc diagnoses atomic_thread_fence under TSan (W138); the Makefile has
     # no -Werror, so the build only warns. Keep -O3 -g from CFLAGS.
     ;;
 asan)
-    SAN_CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+    # Baseline ISA, as the leak gate: with -march=native on an AVX-512 host
+    # gcc emits 64-byte-aligned vector stack accesses (BLAKE3's make_output
+    # and compress_subtree_to_parent_node), and ASan's fake stack for
+    # detect_stack_use_after_return does not give that alignment, so every
+    # hashing binary died with SEGV at a wild address (xorinox, gcc 14.3).
+    # EFS_SAN_ARCH overrides; an empty value keeps the Makefile's -march.
+    case "$(uname -m)" in
+        aarch64|arm64) arch_default="-march=armv8.2-a -mtune=generic" ;;
+        x86_64)        arch_default="-march=x86-64-v3 -mtune=generic" ;;
+        *)             arch_default="" ;;
+    esac
+    SAN_CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer ${EFS_SAN_ARCH-$arch_default}"
+    SAN_LDFLAGS="-fsanitize=address,undefined"
+    # LeakSanitizer runs where it exists (Linux; it needs ptrace_scope < 2).
+    case "$(uname -s)" in Linux) LSAN="detect_leaks=1" ;; *) LSAN="" ;; esac
     ;;
 esac
 
@@ -77,8 +94,8 @@ static void *t(void *a) { return a; }
 int main(void) { pthread_t th; char *p = malloc(8); if (!p) return 2;
     if (pthread_create(&th, 0, t, p)) return 3; pthread_join(th, 0); free(p); return 0; }
 PEOF
-if ! $CC -g -O1 $SAN_CFLAGS -pthread "$probe.c" -o "$probe" >"$probe.log" 2>&1 || ! "$probe" >>"$probe.log" 2>&1; then
-    echo "NOTRUN: $MODE runtime missing ($CC $SAN_CFLAGS cannot build or run a program; $probe.log)"
+if ! $CC -g -O1 $SAN_LDFLAGS -pthread "$probe.c" -o "$probe" >"$probe.log" 2>&1 || ! "$probe" >>"$probe.log" 2>&1; then
+    echo "NOTRUN: $MODE runtime missing ($CC $SAN_LDFLAGS cannot build or run a program; $probe.log)"
     exit 3
 fi
 
@@ -193,7 +210,7 @@ else
             tar -C "$HERE" -cf - Makefile include src deps tests scripts | tar -C "$RUNDIR" -xf - &&
             make -s -C "$RUNDIR" clean >/dev/null 2>&1 &&
             make -s -C "$RUNDIR" -j"${EFS_SAN_JOBS:-$(nproc 2>/dev/null || echo 4)}" \
-                CC="$CC" EXTRA_DEFS="$SAN_CFLAGS" LDFLAGS="-lpthread -lm -ldl -libverbs $SAN_CFLAGS" \
+                CC="$CC" EXTRA_DEFS="$SAN_CFLAGS" LDFLAGS="-lpthread -lm -ldl -libverbs $SAN_LDFLAGS" \
                 test-bins >"$LOGDIR/build.log" 2>&1
         brc=$?
         if [ "$brc" != 0 ]; then
@@ -219,7 +236,10 @@ classify() {   # $1 name, $2 rc
         [ "$n" -gt 0 ] && { echo "$n AddressSanitizer errors"; return; }
         n=$(cat "$LOGDIR/$name".asan.* 2>/dev/null | grep -c '^==[0-9]*==ERROR: LeakSanitizer')
         [ "$n" -gt 0 ] && { echo "$n LeakSanitizer reports"; return; }
-        n=$(cat "$LOGDIR/$name".asan.* "$LOGDIR/$name".ubsan.* 2>/dev/null | grep -c 'runtime error:')
+        # gcc routes UBSan reports through the ASan runtime's log, clang
+        # through UBSAN_OPTIONS' log_path, and a harness-built binary without
+        # log_path prints to stderr (the .out file).
+        n=$(cat "$LOGDIR/$name".asan.* "$LOGDIR/$name".ubsan.* "$LOGDIR/$name.out" 2>/dev/null | grep -c 'runtime error:')
         [ "$n" -gt 0 ] && { echo "$n UBSan errors"; return; } ;;
     esac
     if [ "$rc" != 0 ]; then echo "test rc=$rc"; return; fi
@@ -229,7 +249,7 @@ classify() {   # $1 name, $2 rc
 # First report of a failed entry, so the failure is actionable.
 show_first() {   # $1 name
     local f
-    for f in "$LOGDIR/$1".tsan.* "$LOGDIR/$1".asan.* "$LOGDIR/$1".ubsan.*; do
+    for f in "$LOGDIR/$1".tsan.* "$LOGDIR/$1".asan.* "$LOGDIR/$1".ubsan.* "$LOGDIR/$1.out"; do
         [ -s "$f" ] || continue
         if grep -q 'WARNING: ThreadSanitizer:\|ERROR: AddressSanitizer\|ERROR: LeakSanitizer\|runtime error:' "$f"; then
             echo "--- $f"; sed -n '1,40p' "$f"; return
@@ -254,7 +274,7 @@ while IFS='|' read -r name cmd; do
         envs+=("TSAN_OPTIONS=log_path=$LOGDIR/$name.tsan second_deadlock_stack=1 halt_on_error=0 exitcode=66 ${TSAN_OPTIONS:-}"
                "EFS_TEST_TSAN=1") ;;
     asan)
-        envs+=("ASAN_OPTIONS=log_path=$LOGDIR/$name.asan detect_leaks=1 detect_stack_use_after_return=1 exitcode=66 ${ASAN_OPTIONS:-}"
+        envs+=("ASAN_OPTIONS=log_path=$LOGDIR/$name.asan $LSAN detect_stack_use_after_return=1 exitcode=66 ${ASAN_OPTIONS:-}"
                "UBSAN_OPTIONS=log_path=$LOGDIR/$name.ubsan print_stacktrace=1 halt_on_error=1 exitcode=67 ${UBSAN_OPTIONS:-}"
                "EFS_TEST_SANITIZE=1" "EFS_SANITIZE=1") ;;
     esac
@@ -262,7 +282,7 @@ while IFS='|' read -r name cmd; do
     *.py) prog=(python3 "${words[@]}") ;;
     *)    prog=("${words[@]}") ;;
     esac
-    env "${envs[@]}" timeout -k 10 "$TIMEOUT" "${prog[@]}" >"$out" 2>&1
+    env "${envs[@]}" ${TO[@]+"${TO[@]}"} "${prog[@]}" >"$out" 2>&1
     rc=$?
     reason=$(classify "$name" "$rc")
     dt=$(( $(date +%s) - t0 ))

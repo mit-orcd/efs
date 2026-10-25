@@ -178,7 +178,10 @@ with tempfile.TemporaryDirectory(prefix='efs-revoke-parallel-') as d:
     subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                    *cflags(), '-I' + str(root / 'include'), str(p), str(root / 'src/common/session_revoke.c'),
                    '-pthread', '-o', str(exe)], check=True)
-    out = subprocess.run(wrap() + [str(exe)], check=True, capture_output=True, text=True, timeout=timeout(120)).stdout
+    r = subprocess.run(wrap() + [str(exe)], capture_output=True, text=True, timeout=timeout(120))
+    if r.returncode != 0:
+        raise SystemExit('revoke harness rc=%d\n%s\n%s' % (r.returncode, r.stdout[-3000:], r.stderr[-3000:]))
+    out = r.stdout
 print(out.strip())
 print('session revoke: parallel per-shard stages keep FENCE_LOC<ACK<FINISH<cleanup, '
       'stop on the first failure and report progress PASS')

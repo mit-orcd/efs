@@ -99,6 +99,21 @@ static ssize_t ts_write(void *cookie, const char *buf, size_t size)
     return (ssize_t)size;
 }
 
+/* The two cookies live as long as the process: glibc keeps the cookie
+ * pointer inside the FILE in a form LeakSanitizer does not follow, so they
+ * are anchored here (F1 asan gate: `efsd` refusing a removed setting
+ * reported both as direct leaks), and freed if the stream is ever closed. */
+static struct ts_cookie *ts_cookies[3];
+
+static int ts_close(void *cookie)
+{
+    struct ts_cookie *c = cookie;
+    if (c->fd >= 0 && c->fd < 3)
+        ts_cookies[c->fd] = NULL;
+    free(c);
+    return 0;
+}
+
 static FILE *ts_wrap(int fd)
 {
     struct ts_cookie *c = calloc(1, sizeof(*c));
@@ -106,13 +121,15 @@ static FILE *ts_wrap(int fd)
         return NULL;
     c->fd = fd;
     c->at_line_start = 1;
-    cookie_io_functions_t fns = {.write = ts_write};
+    cookie_io_functions_t fns = {.write = ts_write, .close = ts_close};
     FILE *f = fopencookie(c, "w", fns);
     if (!f) {
         free(c);
         return NULL;
     }
     setvbuf(f, NULL, _IOLBF, 0);
+    if (fd >= 0 && fd < 3)
+        ts_cookies[fd] = c;
     return f;
 }
 
