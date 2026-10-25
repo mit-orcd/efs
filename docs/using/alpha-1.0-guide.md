@@ -224,8 +224,8 @@ deadline and `renew` extends it up to the renewal limit; reading or
 writing does not renew; `expiry-status` shows the worker, its backlog and
 its removals, `expiry-clock` the node clock health. A changed
 `--expire-after` affects only future files. Expiry is in every build
-(D43); every `expiry*` command answers `expiry off` (rc -16) until the
-cluster expiry policy is set on.
+(D43); every `expiry*` command is refused (rc -16) until the cluster
+expiry policy is set on.
 
 ### `df`
 
