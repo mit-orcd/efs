@@ -485,6 +485,19 @@ try:
     while packed_total(c) < base + 8 and time.time() < end:
         time.sleep(0.3)
     assert packed_total(c) >= base + 8, (base, packed_total(c))
+    # One loss only: a segment the packer wrote while a member was still
+    # in its peer cooldown after case 10's restart is already marked
+    # degraded (K37 `written degraded`), and deleting a second fragment of
+    # it is a correct UNRECOVERABLE, not this case. Wait until the rebuild
+    # on return has retired every segment mark before choosing the victim.
+    end = time.time() + 120
+    while True:
+        rc, out = mgmt(c.env, 'status', c.ep(1))
+        m = re.search(r'^Degraded segments: (\d+) ', out, re.M)
+        if rc == 0 and m and int(m.group(1)) == 0:
+            break
+        assert time.time() < end, out
+        time.sleep(0.5)
     holder = next((i for i in (2, 3, 4) if segs(c, i)), None)
     assert holder, 'no member holds a segment fragment'
     kill(c, holder)
