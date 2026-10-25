@@ -260,6 +260,12 @@ enum efs_msg_type {
      * bytes; rc EFS_ERR_UNFORMED before this node learned a formation. */
     EFS_MSG_MEMBERSHIP_READ = 245,
     EFS_MSG_MEMBERSHIP_READ_REPLY = 246,
+    /* K37: a group leader asks a member whether it holds good copies of
+     * the segment fragments placed on it (layout below, EFS_SEGMENT_AUDIT_*).
+     * The member reads and verifies each named file locally; an empty
+     * request only reports its incarnation and audit state. */
+    EFS_MSG_SEGMENT_AUDIT = 241,
+    EFS_MSG_SEGMENT_AUDIT_REPLY = 242,
     /* K36 verified recovery: one page of a metadata group's inventory for
      * a recovering storage node that hosts no replica of that group. The
      * receiver must host the group; it answers after its own ReadIndex and
@@ -426,6 +432,31 @@ int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t typ
  *       [ino:8][generation:8][chunk:4][fragment:1][0:3][checksum:32];
  *       reply efs_msg_gc_inode_batch_reply. */
 #define EFS_SEGMENT_PUT_HEADER 56u
+/* PUT header byte 2: 0 for the packer's copy of an admitted segment, or
+ * EFS_SEGMENT_PUT_F_REBUILD for the K37 rebuild of a published segment's
+ * one missing fragment: stored only while the group's degraded mark names
+ * exactly that fragment (no record need be pending). Byte 3 stays 0. */
+#define EFS_SEGMENT_PUT_F_REBUILD 1u
+/* K37 SEGMENT_AUDIT, big-endian:
+ * request [group:1][flags:1][0:2][count:4][incarnation:8] then count items
+ *         [id:8][generation:8][fragment:1][0:3][geometry:4][checksum:32];
+ *         flags EFS_SEGMENT_AUDIT_F_COMPLETE: the sender finished a sweep of
+ *         this member for the group at that incarnation (count 0);
+ * reply   [rc:4][count:4][incarnation:8][audited groups:4][settled:4] then
+ *         count status bytes (EFS_SEGMENT_AUDIT_OK, _MISSING, _BAD, _ERROR).
+ * Only MISSING (no such file) and BAD (torn, wrong record or checksum) are
+ * evidence; ERROR proves nothing. "audited groups" has bit g/2 set once a
+ * leader of group g completed a sweep of this incarnation; settled is 0
+ * while a storage root's recovery is uncertain (no evidence is given). */
+#define EFS_SEGMENT_AUDIT_HEADER 16u
+#define EFS_SEGMENT_AUDIT_ITEM 56u
+#define EFS_SEGMENT_AUDIT_REPLY 24u
+#define EFS_SEGMENT_AUDIT_MAX 256u
+#define EFS_SEGMENT_AUDIT_F_COMPLETE 1u
+#define EFS_SEGMENT_AUDIT_OK 0u
+#define EFS_SEGMENT_AUDIT_MISSING 1u
+#define EFS_SEGMENT_AUDIT_BAD 2u
+#define EFS_SEGMENT_AUDIT_ERROR 3u
 #define EFS_SEGMENT_GET_HEADER 24u
 #define EFS_SEGMENT_GET_REPLY 40u
 #define EFS_GC_SEGMENT_BATCH_MAX 256u
@@ -444,11 +475,14 @@ struct efs_msg_segment_put_reply { int32_t rc; };
 struct efs_msg_pack_object_read { uint32_t group, reserved; uint64_t id, generation; };
 /* rc: EFS_OK (object[0..len) is the encoded object), EFS_ERR_NOT_FOUND
  * (absent after the ReadIndex: proven gone), anything else refuses. */
+/* degraded (K37): the segment's degraded-mark mask at the same read
+ * (0 unmarked); EFS_PACK_READ_DEGRADED_BAD when the mark row is unreadable. */
+#define EFS_PACK_READ_DEGRADED_BAD 0x100u
 struct efs_msg_pack_object_read_reply {
     uint32_t group;
     int32_t rc;
     uint64_t id, generation;
-    uint32_t len, reserved;
+    uint32_t len, degraded;
     uint8_t object[EFS_PACK_OBJECT_READ_BYTES];
 };
 /* Request: header then count items; reply: count int32 results in order.
@@ -831,6 +865,15 @@ struct efs_msg_status_reply {
     uint32_t put_orphan_sampled;
     uint32_t reserved3;
     uint64_t put_orphan_collected, put_orphan_deleted, put_orphan_failures;
+    /* K37: degraded segments (one fragment missing) and unrecoverable ones
+     * (two or more) on the groups this node leads (bit g/2 of
+     * segment_sampled says groups[g/2] is current), and this node's
+     * segment audit and rebuild totals since start. */
+    uint64_t degraded_segments[2], unrecoverable_segments[2];
+    uint32_t segment_sampled;
+    uint32_t reserved4;
+    uint64_t segments_rebuilt, segment_rebuild_failures, segment_marks_retired;
+    uint64_t segment_audit_marked, segment_audit_checked;
 };
 
 /* DATA_COMMIT: make every data fragment this server acknowledged before

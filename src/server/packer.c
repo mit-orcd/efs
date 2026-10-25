@@ -596,10 +596,26 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         puts[i] = (struct pk_put){nodes, count, o->nodes[i], b, EFS_SEGMENT_PUT_HEADER + flen, EFS_ERR_IO};
         pstarted[i] = i > 0 && pthread_create(&pt[i], NULL, pk_put_run, &puts[i]) == 0;
     }
+    uint32_t nok = 0, missing = 0;
     for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (!pstarted[i]) pk_put_run(&puts[i]);
         else pthread_join(pt[i], NULL);
-        if (puts[i].rc != EFS_OK) put_ok = 0;
+        if (puts[i].rc != EFS_OK) { put_ok = 0; missing = i; }
+        else nok++;
+    }
+    /* K37: two fragments durable (each fsynced before its acknowledgement)
+     * and the third not: the segment may hold files only once its degraded
+     * mark is committed, so the rebuild on return restores the third. One
+     * durable fragment, or no mark, cancels as before. */
+    if (!put_ok && nok == EFS_NUM_FRAGMENTS - 1 &&
+        server_segment_mark(group, id, gen, missing, EFS_PACK_DEGRADED_R_WRITE) == EFS_OK) {
+        fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx written degraded: fragment %u "
+                "for node %u not acknowledged (rc=%d); marked for rebuild on return\n", group,
+                (unsigned long long)id, (unsigned long long)gen, missing, o->nodes[missing],
+                puts[missing].rc);
+        STAT_ADD(put_errors, 1);
+        pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
+        put_ok = 1;
     }
     if (!put_ok) {
         STAT_ADD(put_errors, 1);
@@ -1012,6 +1028,18 @@ static int pk_group(uint8_t group, uint64_t term)
     count = pk.s->node_count;
     memcpy(nodes, pk.s->nodes, count * sizeof(nodes[0]));
     pthread_mutex_unlock(&pk.s->lock);
+#if EFS_FAULTS
+    /* K37 tests: EFS_FAULT_PACK_PLACE_DOWN=<node id> places segments on
+     * that node even while the heartbeat marks it down, as in the window
+     * before a stopped member is detected: its PUT fails and the segment
+     * is written with two fragments. */
+    {
+        const char *pd = getenv("EFS_FAULT_PACK_PLACE_DOWN");
+        uint32_t want = pd ? (uint32_t)strtoul(pd, NULL, 10) : 0;
+        for (uint32_t i = 0; want && i < count; i++)
+            if (nodes[i].id == want) nodes[i].down_until_ms = 0;
+    }
+#endif
     /* K28/W151 (D38): segments are data and live on the data ring, three
      * distinct live members per segment (efs_pack_destinations, keyed by
      * the segment id in pk_segment), not on the group's voters. A member

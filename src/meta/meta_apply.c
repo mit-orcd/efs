@@ -10252,12 +10252,68 @@ int efs_meta_apply_pack_retire(struct efs_kv *kv, uint32_t group, const uint64_t
         if (rc == EFS_ERR_NOT_FOUND) { rc = EFS_OK; continue; }
         if (rc != EFS_OK) break;
         if (o->ledger.phase == EFS_PACK_ACTIVE) continue;
-        rc = meta_write_del(kv, key, sizeof(key));
+        /* K37: the segment's degraded mark goes first, so a replay after a
+         * crash between the two deletes still finds the object and retires
+         * both; a mark never outlives its segment. */
+        uint8_t mk[EFS_PACK_OBJECT_KEY_BYTES];
+        rc = efs_pack_degraded_key(group, ids[i], gens[i], mk);
+        if (rc == EFS_OK) rc = meta_write_del(kv, mk, sizeof(mk));
+        if (rc == EFS_ERR_NOT_FOUND) rc = EFS_OK;
+        if (rc == EFS_OK) rc = meta_write_del(kv, key, sizeof(key));
         if (rc == EFS_ERR_NOT_FOUND) rc = EFS_OK;
         if (rc == EFS_OK) done++;
     }
     free(o);
     if (retired) *retired = done;
+    return rc;
+}
+
+/* K37 segment degraded marks (pack_mapping.h). Serialized apply on the
+ * segment's group; the object row is read under the same exclusion as the
+ * packer's own commands. */
+int efs_meta_apply_pack_degraded(struct efs_kv *kv, uint32_t group, uint32_t op, uint64_t id,
+                                 uint64_t gen, uint32_t mask, uint32_t reason, int *outcome)
+{
+    uint8_t okey[EFS_PACK_OBJECT_KEY_BYTES], mkey[EFS_PACK_OBJECT_KEY_BYTES];
+    uint8_t have = 0, why = 0, v[EFS_PACK_DEGRADED_VAL] = {0};
+    if (outcome) *outcome = 0;
+    if (!kv || !mask || mask > 7u || reason > 0xffu ||
+        (op != EFS_MD_PACK_DEGRADED_MARK && op != EFS_MD_PACK_DEGRADED_CLEAR &&
+         op != EFS_MD_PACK_DEGRADED_RETIRE) ||
+        (op == EFS_MD_PACK_DEGRADED_MARK && !reason) ||
+        (op == EFS_MD_PACK_DEGRADED_CLEAR && (mask & (mask - 1u))))
+        return EFS_ERR_INVAL;
+    int rc = efs_pack_object_key(group, id, gen, okey);
+    if (rc == EFS_OK) rc = efs_pack_degraded_key(group, id, gen, mkey);
+    if (rc != EFS_OK) return rc;
+    rc = efs_txn_key_exclusive(kv, okey, sizeof(okey));
+    if (rc != EFS_OK) return rc;
+    rc = efs_pack_degraded_get(kv, group, id, gen, &have, &why);
+    if (rc == EFS_ERR_NOT_FOUND) { have = 0; rc = EFS_OK; }
+    if (rc != EFS_OK) return rc; /* a malformed mark is never overwritten */
+    struct efs_pack_object *o = malloc(sizeof(*o));
+    if (!o) return EFS_ERR_NOMEM;
+    int orc = efs_pack_object_get(kv, group, id, gen, o);
+    if (orc != EFS_OK && orc != EFS_ERR_NOT_FOUND) { free(o); return orc; }
+    struct efs_pack_ledger_usage u = {0};
+    if (orc == EFS_OK) efs_pack_ledger_usage(&o->ledger, &u);
+    int active = orc == EFS_OK && o->ledger.phase == EFS_PACK_ACTIVE;
+    free(o);
+    if (op == EFS_MD_PACK_DEGRADED_MARK) {
+        /* Only an ACTIVE segment holds data that a lost fragment endangers. */
+        if (!active) return EFS_ERR_STALE;
+        if ((have | mask) == have && (why | reason) == why) return EFS_OK;
+        v[0] = (uint8_t)(have | mask);
+        v[1] = (uint8_t)(why | reason);
+        rc = meta_write_put(kv, mkey, sizeof(mkey), v, sizeof(v));
+    } else {
+        if (!have) return EFS_OK; /* already cleared: idempotent */
+        if (have != mask) return EFS_ERR_STALE; /* decided for another mark */
+        if (op == EFS_MD_PACK_DEGRADED_RETIRE && active && (u.live || u.pending))
+            return EFS_ERR_STALE;
+        rc = meta_write_del(kv, mkey, sizeof(mkey));
+    }
+    if (rc == EFS_OK && outcome) *outcome = 1;
     return rc;
 }
 

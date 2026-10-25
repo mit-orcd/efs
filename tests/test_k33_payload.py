@@ -22,7 +22,8 @@ grow by the batch); large files (64 KiB + 1 to 1 MiB + 3) are never packed.
    SIGTERM the node, write batch S3.k and large files while it is down (the
    writer keeps going), read every file written so far through mount A,
    restart the node, wait until it is up and every stripe acknowledged
-   degraded meanwhile is rebuilt (W154, `Degraded chunks: 0`), then read
+   degraded meanwhile is rebuilt (W154, `Degraded chunks: 0`) and every
+   segment packed without it is rebuilt (K37, `Degraded segments: 0`), then read
    everything again; only then is the next member stopped.
 6. A fresh mount through node 5 reads every file: every byte matches.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
@@ -97,14 +98,17 @@ def wait_packed(c, base, n, timeout=60):
 
 def wait_protected(c, node, timeout=120):
     """W154: every stripe acknowledged degraded while a member was away is
-    rebuilt (`Degraded chunks: 0`). Until then the cluster is not back to
-    single-loss protection, and stopping another member is a second loss
-    (K34: one run stopped node 2 four seconds after node 1 returned)."""
+    rebuilt (`Degraded chunks: 0`), and K37: every packed segment written
+    without the stopping member's fragment is rebuilt (`Degraded segments:
+    0`). Until then the cluster is not back to single-loss protection, and
+    stopping another member is a second loss (K34: one run stopped node 2
+    four seconds after node 1 returned)."""
     end, out = time.time() + timeout, ''
     while time.time() < end:
         out = mgmt(c.env, 'status', c.ep(node))[1]
         m = re.search(r'Degraded chunks: (\d+) \(', out)
-        if m and int(m.group(1)) == 0:
+        g = re.search(r'Degraded segments: (\d+) \(', out)
+        if m and g and int(m.group(1)) == 0 and int(g.group(1)) == 0:
             return
         time.sleep(0.5)
     raise AssertionError(f'degraded stripes not rebuilt in {timeout} s:\n{out[-2000:]}')

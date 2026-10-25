@@ -2171,6 +2171,12 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_pack_switch_decode(cmd + 1, clen - 1, s);
         if (rc == EFS_OK) rc = efs_meta_apply_pack_switch(h->kv, s, &live);
         free(s);
+    } else if (cmd[0] == EFS_MD_CMD_PACK_DEGRADED) {
+        int changed = 0;
+        if (clen != EFS_MD_PACK_DEGRADED_LEN) return EFS_ERR_UNSUPPORTED;
+        rc = efs_meta_apply_pack_degraded(h->kv, cmd[1], cmd[2], rd64be(cmd + 3), rd64be(cmd + 11),
+                                          cmd[19], cmd[20], &changed);
+        h->apply_extra = (uint64_t)changed;
     } else if (cmd[0] == EFS_MD_CMD_PACK_CANCEL) {
         if (clen != 18) return EFS_ERR_UNSUPPORTED;
         rc = efs_meta_apply_pack_cancel(h->kv, cmd[1], rd64be(cmd + 2), rd64be(cmd + 10));
@@ -3496,7 +3502,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_RETIRE ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
            cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-           cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
+           cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX || cmd[0] == EFS_MD_CMD_PACK_DEGRADED ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_DEGRADED_MARK ||
            cmd[0] == EFS_MD_CMD_RECOVERY_MARK ||
@@ -3532,7 +3538,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_TXN_RETIRE || cmd[0] == EFS_MD_CMD_TXN_BATCH ||
          cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
          cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-         cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
+         cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX || cmd[0] == EFS_MD_CMD_PACK_DEGRADED ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_DEGRADED_MARK ||
            cmd[0] == EFS_MD_CMD_RECOVERY_MARK ||
@@ -4068,7 +4074,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_REAP_MULTI)
         return apply_reap_multi_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-        cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX)
+        cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX || cmd[0] == EFS_MD_CMD_PACK_DEGRADED)
         /* A segment belongs to exactly one publication group: never apply
          * one group's packer entry to another group's rows. */
         return clen >= 2 && cmd[1] == group ? apply_pack_cmd(h, cmd, clen, index) : EFS_ERR_PROTO;
@@ -11799,6 +11805,9 @@ static void *host_gc_thread(void *arg)
                                    __ATOMIC_RELAXED);
                 __atomic_fetch_and(&h->s->gc_sampled_mask, ~(1u << g), __ATOMIC_RELAXED);
                 __atomic_fetch_and(&h->s->degraded_sampled_mask, ~(1u << g), __ATOMIC_RELAXED);
+                __atomic_fetch_and(&h->s->segment_sampled_mask, ~(1u << gc_gi(h->g[g].group)),
+                                   __ATOMIC_RELAXED);
+                server_segment_rebuild_reset(h->g[g].group);
                 continue;
             }
             /* Group 0 owns the odd shards (anchor 1), group 2 the even
@@ -11832,6 +11841,7 @@ static void *host_gc_thread(void *arg)
                 backlog_capped |= host_gc_frag_pass(h, h->g[g].group, anchor);
                 host_pack_retire_pass(h, h->g[g].group, anchor);
                 host_rebuild_pass(h, h->g[g].group, anchor);
+                server_segment_rebuild_pass(h->s, h->g[g].group);
                 efs_kv_lsm_scan_stats(&a, 0);
                 sc_frag.scans += a.scans - b.scans;
                 sc_frag.segs += a.segs - b.segs;
@@ -15668,8 +15678,19 @@ _Static_assert(EFS_PACK_OBJECT_READ_BYTES == EFS_PACK_OBJECT_MAX_BYTES,
  * echo or an undecodable object never prove anything: they try the next
  * voter and end in EFS_ERR_BUSY, so the PUT is refused and the reclaim
  * stays BUSY. */
+/* K37: the degraded-mark mask beside the object, at the same linearizable
+ * point (EFS_PACK_READ_DEGRADED_BAD for an unreadable mark row). */
+static uint32_t host_pack_degraded_mask(struct efs_raft_host *h, uint32_t group, uint64_t id,
+                                        uint64_t gen)
+{
+    uint8_t mask = 0;
+    int rc = efs_pack_degraded_get(h->kv, group, id, gen, &mask, NULL);
+    if (rc == EFS_ERR_NOT_FOUND) return 0;
+    return rc == EFS_OK ? mask : EFS_PACK_READ_DEGRADED_BAD;
+}
+
 static int host_pack_object_remote(struct efs_raft_host *h, uint32_t group, uint64_t id,
-                                   uint64_t gen, struct efs_pack_object *out)
+                                   uint64_t gen, struct efs_pack_object *out, uint32_t *degraded)
 {
     struct efs_msg_pack_object_read q = {.group = group, .id = id, .generation = gen};
     struct efs_msg_pack_object_read_reply *r = calloc(1, sizeof(*r));
@@ -15694,6 +15715,7 @@ static int host_pack_object_remote(struct efs_raft_host *h, uint32_t group, uint
             out->ledger.segment_id != id || out->ledger.segment_generation != gen ||
             out->ledger.publication_group != group)
             continue;
+        if (degraded) *degraded = r->degraded;
         rc = EFS_OK;
         break;
     }
@@ -15719,23 +15741,35 @@ void server_raft_host_pack_object_serve(const struct efs_msg_pack_object_read *q
     if (rc == EFS_OK) rc = efs_pack_object_get(h->kv, q->group, q->id, q->generation, o);
     if (rc == EFS_OK && efs_pack_object_encode(o, r->object, sizeof(r->object), &len) != EFS_OK)
         rc = EFS_ERR_IO;
-    if (rc == EFS_OK) r->len = (uint32_t)len;
+    if (rc == EFS_OK) {
+        r->len = (uint32_t)len;
+        r->degraded = host_pack_degraded_mask(h, q->group, q->id, q->generation);
+    }
     r->rc = rc;
     free(o);
+}
+
+int server_raft_host_pack_state(uint32_t group, uint64_t id, uint64_t gen,
+                                struct efs_pack_object *out, uint32_t *degraded)
+{
+    struct efs_raft_host *h = g_host;
+    int hint = -1;
+    if (degraded) *degraded = EFS_PACK_READ_DEGRADED_BAD;
+    if (!h || !h->running || !h->kv) return EFS_ERR_NOT_PRIMARY;
+    if (!efs_pack_group_anchor(group)) return EFS_ERR_INVAL;
+    if (!host_hosts(h, (uint8_t)group))
+        return host_pack_object_remote(h, group, id, gen, out, degraded);
+    int rc = host_read_index(h, (uint8_t)group, &hint);
+    if (rc != EFS_OK) return rc;
+    rc = efs_pack_object_get(h->kv, group, id, gen, out);
+    if (rc == EFS_OK && degraded) *degraded = host_pack_degraded_mask(h, group, id, gen);
+    return rc;
 }
 
 int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
                                  struct efs_pack_object *out)
 {
-    struct efs_raft_host *h = g_host;
-    int hint = -1;
-    if (!h || !h->running || !h->kv) return EFS_ERR_NOT_PRIMARY;
-    if (!efs_pack_group_anchor(group)) return EFS_ERR_INVAL;
-    if (!host_hosts(h, (uint8_t)group))
-        return host_pack_object_remote(h, group, id, gen, out);
-    int rc = host_read_index(h, (uint8_t)group, &hint);
-    if (rc != EFS_OK) return rc;
-    return efs_pack_object_get(h->kv, group, id, gen, out);
+    return server_raft_host_pack_state(group, id, gen, out, NULL);
 }
 
 /* W125 packer support. The packer runs only where this node leads a group;
@@ -15776,6 +15810,13 @@ uint32_t server_raft_host_group_voters(uint8_t group)
     if (r) v = efs_raft_voters(r);
     pthread_mutex_unlock(&h->mu);
     return v;
+}
+/* K37: 0 once the GC loop is stopping (the segment rebuild pass ends early,
+ * as W154's does, so shutdown never waits on its proposals). */
+int server_raft_host_gc_running(void)
+{
+    struct efs_raft_host *h = g_host;
+    return h && h->running && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE);
 }
 struct efs_kv *server_raft_host_kv(void)
 {

@@ -626,6 +626,18 @@ shared packed segment:
   runs in idle batches, in a daily window, and on demand
   (`efs-mgmt pack-compact`). Tiny holes and cold segments go first, so an
   idle cluster ends with no holes.
+- **Protection (K37):** a segment holds files only with at least two of
+  its three fragments durable. One with a fragment missing carries a
+  degraded mark on its group's anchor shard (Raft tag 247, KV kind 249):
+  written with one PUT unacknowledged (packing or compaction), found
+  missing or torn by the group leader's audit of a member that returned
+  with a new incarnation, or a source proved lost during a rebuild. The
+  leader rebuilds the fragment from the other two, verifies it against the
+  segment's checksums, stores it on its placement node and clears the mark
+  only after that node read it back and verified it. A segment with two
+  fragments lost is reported unrecoverable and keeps its mark until its
+  files are rewritten or removed. `efs-mgmt status` counts degraded
+  segments, and the cluster state stays DEGRADED until they clear.
 
 There is no switch that disables the packer. The protocol is in
 [data plane: packed small files](protocols/data.md#packed-small-files-w125);
@@ -1623,6 +1635,19 @@ indexing and compaction active. FIXED: a packed read waited out a slow
 member and failed EBUSY; a just-formed member's first `.efs` catalog waited
 60 s and every query on it failed EIO. Real-host gates `b6-member-down`
 and `d4-progress` in `scripts/qualify.py`, NOTRUN (parent).
+
+[K37: rebuild on return for packed segments](../status/k37-segment-rebuild-20261024.md):
+**FIXED, PASS (scoped, loopback), branch `claude/devel-pack-rebuild-fa5139`,
+code `b48ec444f`, `5ef2b8d6d`, `b205cb9db`, not merged.** A packed segment with a missing fragment
+gets one durable degraded mark (KV kind 249, Raft tag 247): written
+degraded by packing or compaction (two fragments durable; one cancels),
+found missing or torn by the leader's audit of a returning member (wire
+241/242), or a rebuild source proven lost (unrecoverable, reported, never
+cleared). The leader rebuilds, verifies, stores under the exact mark and
+clears only after the placement node verified the copy; `efs-mgmt status`
+counts degraded segments and the cluster stays DEGRADED until they clear.
+Daemon test `tests/test_k37_segment_rebuild.py` PASS. intel2 `make test-all` at `b205cb9db`: 459 commands, 1 FAIL that also fails on the base (`tests/test_get_integrity.py`, a READ_VERIFY test / K34 merge interaction), 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/k37-20261024/`, `SHA256SUMS` `61fbd81d…98f0`). Live
+multi-host, RDMA and orcd-mini NOTRUN (parent).
 
 [D42 `EFS_READ_VERIFY`: GET-path integrity audit](../status/read-verify-audit-20261024.md):
 **PASS (scoped), merged into devel (`ae3e7ab75`).** The
@@ -11836,6 +11861,45 @@ and encodes it 2+1.
    CANCELLED (dead bytes).
 4. `PACK_CANCEL` (MD 75) abandons remaining PENDING records (failed copy,
    deposed packer).
+
+A copy with two fragments acknowledged and the third not (a member down
+before the heartbeat says so, or refusing) switches only after
+`PACK_DEGRADED` MARK for that fragment has committed and the leader's
+replica holds it; with fewer than two, or no mark, the copy is cancelled.
+Compaction writes its output segments the same way.
+
+**Segment rebuild on return (K37).** `PACK_DEGRADED` (MD 247:
+`[group][op][id:8][generation:8][mask][reason]`) keeps one row per segment
+(KV kind 249 on the group's anchor shard, value `[mask][reasons][0:2]`):
+MARK adds mask bits on an ACTIVE segment; CLEAR deletes a one-bit mark
+that still names exactly that fragment; RETIRE deletes a mark whose segment
+is gone or holds no live or pending record; `PACK_RETIRE` deletes the mark
+with the segment. Each group leader, in its GC loop:
+- **Audit:** probes each available member with `SEGMENT_AUDIT` (wire
+  241/242) at most every 2 s; a member reports its incarnation, whether a
+  leader of this group completed a sweep of that incarnation, and whether
+  its stores are settled (no root recovery-uncertain after an unclean stop).
+  An unswept, settled member gets a sweep of the group's published segments
+  (no PENDING record) from a cursor, at most 256 fragments per pass; it reads
+  and verifies each named file (size, I25 record, recorded digest, payload
+  hash) and answers OK, MISSING, BAD or ERROR. MISSING and BAD are marked;
+  ERROR leaves the sweep open, to start over after 30 s. Only a sweep with a
+  verdict for every fragment is reported complete, and the member records
+  it for its incarnation, so a new leader does not repeat it.
+- **Rebuild:** marks are walked from a cursor (at most 64 rebuilds and 1 s
+  per pass). A segment no longer live is retired; a mark with two bits is
+  reported unrecoverable and kept; otherwise, once all three placement
+  nodes are available, the two present fragments are read and checked
+  against the segment checksums, the third is rebuilt by XOR and checked,
+  stored with `PUT_SEGMENT` flag `EFS_SEGMENT_PUT_F_REBUILD` (the storage
+  node accepts it only while `PACK_OBJECT_READ` returns that exact one-bit
+  mask beside the object, replaces a torn or foreign copy and fsyncs before
+  replying), audited on that node, and only then cleared. A source fragment
+  its holder proves MISSING or BAD adds its bit: the segment is reported
+  unrecoverable and its files read EIO until rewritten or removed.
+`efs-mgmt status` prints `Degraded segments: N (group 0: a, group 2: b);
+unrecoverable=U ...`; the cluster state is DEGRADED while N > 0, and
+`Protection:` reads LOST while U > 0.
 
 **Ledger and reclaim.** Every path that drops or replaces a packed row
 (overwrite, truncate, lane sweep, reap) releases its record in the same

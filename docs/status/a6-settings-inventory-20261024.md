@@ -360,6 +360,7 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_MEMTABLE_BYTES` | `kv/kv_lsm.c:1443` (efs_kv_lsm_open) | off; KV memtable size override | fault/test hook | — | `k22_follower_bound.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PACK_CRASH` | `server/packer.c:138` (server_pack_crash_point) | off; `_exit(137)` at a packer crash point (was `EFS_PACK_CRASH`) | fault/test hook | — | `w125_p7_crash.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PACK_CRASH_NODE` | `server/packer.c:138` (server_pack_crash_point) | off; restrict the pack crash to one node (was `EFS_PACK_CRASH_NODE`) | fault/test hook | — | `w125_p7_crash.sh` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_PACK_PLACE_DOWN` | `server/packer.c` (pk_group) | off; place segments on that node id even while the heartbeat marks it down, so its PUT fails and the segment is written with two fragments (K37) | fault/test hook | — | `test_k37_segment_rebuild.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUBLICATION_APPLY_FILE` | `server/raft_host.c:3373` (host_apply) | off; refuse PUBLICATION at apply (marker) | fault/test hook | — | `publication_pending.c`, `publication_pending.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUB_BARRIER` | `server/raft_host.c:17070` (host_pub_fault) | off; park publication at a named stage | fault/test hook | — | `k14_atomic_cluster.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUT_REPLY_COLLISION` | `client/write.c:2556` (put_reply_fault) +1 | off; lose one PUT reply per fragment | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
@@ -368,6 +369,8 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_REPLY_BUFFER` | `client/reply_buffers.h:62` (reply_buffers_init) | off; client reply-buffer allocation faults | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_REPORT_FILE` | `client/write.c:1697` (report_fault_withhold) | off; REPORT withhold control file | fault/test hook | — | `gc_reclamation.py`, `rdma_four_node_qualification.sh`; `intel_w100_private.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_REPORT_SIZE_FILE` | `client/inode_rpc.c:3199` (report_fault_omit_size) | off; omit one REPORT size | fault/test hook | — | `rdma_four_node_qualification.sh`; `intel_w100_private.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_SEGMENT_PUT_REFUSE` | `server/segment_store.c` (server_segment_put) | off; directory: this member refuses the packer's segment PUTs while `<dir>/refuse-<node id>` exists (K37) | fault/test hook | — | `test_k37_segment_rebuild.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_SEGMENT_REBUILD_HOLD` | `server/segment_rebuild.c` (sr_one) | off; segment rebuilds wait while the named file exists (K37) | fault/test hook | — | `test_k37_segment_rebuild.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_SHUTDOWN_PARK` | `server/efsd.c:285` (server_shutdown_fault_park) | off; park a shutdown phase | fault/test hook | — | `test_shutdown_blocked_io.py`, `test_shutdown_bounded.py` +1; `gates_nuc_k01_stop.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_SHUTDOWN_RECORD_PARK` | `server/efsd.c:436` (shutdown_fault_record_park) | off; park the exit-record writer | fault/test hook | — | `test_shutdown_blocked_io.py`, `test_shutdown_bounded.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_SHUTDOWN_TOTAL_MS` | `server/efsd.c:271` (shutdown_total_ms) | off; shorter shutdown deadline | fault/test hook | — | `test_shutdown_blocked_io.py`, `test_shutdown_bounded.py` +1; `gates_nuc_k01_stop.sh` | Keep in `EFS_FAULTS` builds |
@@ -461,6 +464,7 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_DEFAULT_SHARD_BITS` | `include/efs/common.h` (3) | default KV shard bits | overridable constant | No override anywhere; A8 may make it a plain constant |
 | `EFS_KV_WAL_RESERVE_BYTES` | `kv/kv_wal.c` (1 MiB) | WAL reserve | overridable constant | No override anywhere; A8 may make it a plain constant |
 | `EFS_SEGMENT_TEST_AUTHORITY` | `server/segment_store.c` | a test that includes the file supplies its own pack-object oracle | test seam | Keep |
+| `EFS_SEGMENT_TEST_PACK_STATE` | `server/segment_store.c` | a test that includes the file supplies its own pack-object-and-mark oracle (K37 rebuild PUT) | test seam | Keep |
 | `EFS_STOP_MS` | `client/stop_control.h` (60000) | client stop drain bound | overridable constant | No override anywhere; A8 may make it a plain constant |
 
 ## CLI options and runtime management settings

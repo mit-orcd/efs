@@ -98,6 +98,13 @@ struct efsd_server {
     uint64_t degraded_chunks[2];
     uint32_t degraded_sampled_mask;
     uint64_t rebuilt_fragments, rebuild_failures, rebuild_retired;
+    /* K37: segment marks on the anchors this node leads (bit g of
+     * segment_sampled_mask: groups[g] current), totals, and (storage side)
+     * the groups whose leader completed an audit of this incarnation. */
+    uint64_t degraded_segments[2], unrecoverable_segments[2];
+    uint32_t segment_sampled_mask, segment_audited_mask;
+    uint64_t segments_rebuilt, segment_rebuild_failures, segment_marks_retired;
+    uint64_t segment_audit_marked, segment_audit_checked;
     /* D31: orphan records on the anchors this node leads (bit g of
      * put_orphan_sampled_mask: groups[g] finished a scan) and totals. */
     uint64_t put_orphan_pending[2];
@@ -736,16 +743,39 @@ int server_segment_delete(struct efsd_server *s, uint32_t group, uint64_t id, ui
                           uint64_t *removed);
 int server_segment_scan(struct efsd_server *s,
                         void (*fn)(void *, uint32_t, uint64_t, uint64_t), void *arg);
+/* K37 storage side of EFS_MSG_SEGMENT_AUDIT: *reply (malloc) is the whole
+ * reply frame. Never fails the connection: refusals are in its rc. */
+void server_segment_audit(struct efsd_server *s, const uint8_t *req, uint32_t bytes,
+                          uint8_t **reply, uint32_t *reply_len);
+/* Local verdict for one placed fragment (EFS_SEGMENT_AUDIT_OK, ...). */
+uint32_t server_segment_check(struct efsd_server *s, uint32_t group, uint64_t id, uint64_t gen,
+                              uint32_t fi, uint32_t geometry, const uint8_t sum[EFS_HASH_SIZE]);
+/* ---- K37 segment rebuild on return (src/server/segment_rebuild.c) ----
+ * One pass per group this node leads, from the GC loop: audit members
+ * that returned with a new incarnation, then rebuild marked segments. */
+void server_segment_rebuild_pass(struct efsd_server *s, uint8_t group);
+/* Commit a degraded mark for fragment fi (reason EFS_PACK_DEGRADED_R_*)
+ * through the group's log; EFS_OK only when the local replica has it. */
+int server_segment_mark(uint8_t group, uint64_t id, uint64_t gen, uint32_t fi, uint32_t reason);
+/* Leadership lost: forget the group's audit and rebuild progress. */
+void server_segment_rebuild_reset(uint8_t group);
+/* 0 while any storage root's recovery after an unclean stop is uncertain. */
+int server_put_sync_settled(void);
 /* Linearizable read of a segment object from its group (ReadIndex, then the
- * local replica). NOT_FOUND when absent; INVAL when the group is not hosted. */
+ * local replica). NOT_FOUND when absent; INVAL when the group is not hosted.
+ * _state also returns the segment's degraded-mark mask at the same read
+ * (0 unmarked, EFS_PACK_READ_DEGRADED_BAD for an unreadable mark). */
 /* K28/W151: answer EFS_MSG_PACK_OBJECT_READ (hosting voters only). */
 void server_raft_host_pack_object_serve(const struct efs_msg_pack_object_read *q,
                                         struct efs_msg_pack_object_read_reply *r);
 int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
                                  struct efs_pack_object *out);
+int server_raft_host_pack_state(uint32_t group, uint64_t id, uint64_t gen,
+                                struct efs_pack_object *out, uint32_t *degraded);
 /* 1 = this node leads the group; term and commit index (optional). */
 int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit);
 struct efs_kv *server_raft_host_kv(void);
+int server_raft_host_gc_running(void);
 uint64_t server_raft_host_group_commit(uint8_t group);
 uint32_t server_raft_host_group_voters(uint8_t group);
 /* Propose a packer command to its group and wait for this replica's apply

@@ -1907,6 +1907,26 @@ int server_put_sync_commit(struct efsd_server *s, uint32_t *roots)
     return rc;
 }
 
+/* K37: a member whose recovery after an unclean stop is uncertain gives no
+ * evidence about its segment fragments (verified recovery, K36, may still
+ * drop some); the segment audit waits until every root is settled. */
+int server_put_sync_settled(void)
+{
+    int settled = 1;
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        pthread_mutex_lock(&put_sync_mu);
+        int on = put_sync_state[i] > 0;
+        pthread_mutex_unlock(&put_sync_mu);
+        if (!on)
+            continue;
+        pthread_mutex_lock(&put_sync_roots[i].mu);
+        if (put_sync_roots[i].recovery_uncertain)
+            settled = 0;
+        pthread_mutex_unlock(&put_sync_roots[i].mu);
+    }
+    return settled;
+}
+
 void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_reply *out)
 {
     memset(out, 0, sizeof(*out));
@@ -2350,6 +2370,12 @@ int server_recovery_scan_local(struct efsd_server *s, struct server_recovery_fil
             return EFS_ERR_BUSY;
     }
     return server_segment_recovery_scan(s, c, stop);
+}
+#else
+/* Benchmark and storage unit builds attach no durability record. */
+int server_put_sync_settled(void)
+{
+    return 1;
 }
 #endif
 

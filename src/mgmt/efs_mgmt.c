@@ -227,6 +227,10 @@ static int cmd_status(int argc, char **argv)
     /* W154: each group's leader reports its degraded-mark count. */
     uint64_t degraded[2] = {0, 0}, rebuilt = 0, rebuild_failed = 0, rebuild_retired = 0;
     uint32_t degraded_seen = 0;
+    /* K37: each group's leader reports its degraded and lost segments. */
+    uint64_t dsegs[2] = {0, 0}, lsegs[2] = {0, 0}, seg_rebuilt = 0, seg_failed = 0,
+             seg_retired = 0, seg_marked = 0, seg_checked = 0;
+    uint32_t seg_seen = 0;
     /* D31: each group's leader reports its abandoned-upload records. */
     uint64_t orphans[2] = {0, 0}, orphan_collected = 0, orphan_deleted = 0, orphan_failed = 0;
     uint32_t orphan_seen = 0;
@@ -248,6 +252,20 @@ static int cmd_status(int argc, char **argv)
             rebuilt += current.rebuilt_fragments;
             rebuild_failed += current.rebuild_failures;
             rebuild_retired += current.rebuild_retired;
+            for (int g = 0; g < 2; g++) {
+                if (!(current.segment_sampled & (1u << g)))
+                    continue;
+                if (!(seg_seen & (1u << g)) || current.degraded_segments[g] > dsegs[g]) {
+                    dsegs[g] = current.degraded_segments[g];
+                    lsegs[g] = current.unrecoverable_segments[g];
+                }
+                seg_seen |= 1u << g;
+            }
+            seg_rebuilt += current.segments_rebuilt;
+            seg_failed += current.segment_rebuild_failures;
+            seg_retired += current.segment_marks_retired;
+            seg_marked += current.segment_audit_marked;
+            seg_checked += current.segment_audit_checked;
             for (int g = 0; g < 2; g++) {
                 if (!(current.put_orphan_sampled & (1u << g)))
                     continue;
@@ -356,6 +374,8 @@ static int cmd_status(int argc, char **argv)
         cluster_state = "FULL";
     else if (degraded_seen == 3u && degraded_total)
         cluster_state = "DEGRADED"; /* every node up, protection not restored yet */
+    else if (seg_seen == 3u && dsegs[0] + dsegs[1])
+        cluster_state = "DEGRADED"; /* packed segments not re-protected yet (K37) */
     printf("Cluster state: %s (%d up, %d down)\n", cluster_state, up_nodes,
            down_nodes);
     /* Stripes acknowledged with two of three fragments, awaiting rebuild
@@ -376,16 +396,45 @@ static int cmd_status(int argc, char **argv)
                (unsigned long long)rebuilt, (unsigned long long)rebuild_retired,
                (unsigned long long)rebuild_failed);
 
-    /* K35 (D42): a stripe on two durable fragments survives no further
-     * loss until the rebuild on return restores its third. */
-    if (degraded_seen != 3u)
-        printf("Protection: unknown (degraded-chunk count not reported by both groups)\n");
-    else if (degraded_total)
-        printf("Protection: DEGRADED: %llu chunks on two of three fragments, no fault "
-               "tolerance until rebuilt (W154 rebuilds when the missing node is up)\n",
-               (unsigned long long)degraded_total);
+    /* K37: packed segments (each one stripe holding many small files) with a
+     * fragment missing, and those that lost two (unrecoverable, kept until
+     * their files are rewritten or removed). Unknown until both metadata
+     * groups' leaders have reported a pass. */
+    uint64_t seg_total = dsegs[0] + dsegs[1], seg_lost = lsegs[0] + lsegs[1];
+    if (seg_seen == 3u)
+        printf("Degraded segments: %llu (group 0: %llu, group 2: %llu); unrecoverable=%llu "
+               "rebuilt=%llu retired=%llu failures=%llu audit_checked=%llu audit_marked=%llu\n",
+               (unsigned long long)seg_total, (unsigned long long)dsegs[0],
+               (unsigned long long)dsegs[1], (unsigned long long)seg_lost,
+               (unsigned long long)seg_rebuilt, (unsigned long long)seg_retired,
+               (unsigned long long)seg_failed, (unsigned long long)seg_checked,
+               (unsigned long long)seg_marked);
     else
-        printf("Protection: full (2+1: every chunk tolerates one lost node)\n");
+        printf("Degraded segments: unknown (group leaders reported: %s%s%s); rebuilt=%llu "
+               "retired=%llu failures=%llu audit_checked=%llu audit_marked=%llu\n",
+               seg_seen & 1u ? "0" : "", seg_seen == 3u ? "," : "",
+               seg_seen & 2u ? "2" : (seg_seen ? "" : "none"),
+               (unsigned long long)seg_rebuilt, (unsigned long long)seg_retired,
+               (unsigned long long)seg_failed, (unsigned long long)seg_checked,
+               (unsigned long long)seg_marked);
+
+    /* K35 (D42): a stripe on two durable fragments survives no further
+     * loss until the rebuild on return restores its third; K37: the same
+     * for packed segments. */
+    if (degraded_seen != 3u || seg_seen != 3u)
+        printf("Protection: unknown (degraded chunk and segment counts not reported by both "
+               "groups)\n");
+    else if (seg_lost)
+        printf("Protection: LOST: %llu packed segments lost two or more fragments; their files "
+               "read EIO until rewritten or removed (%llu chunks and %llu other segments "
+               "degraded)\n", (unsigned long long)seg_lost, (unsigned long long)degraded_total,
+               (unsigned long long)(seg_total - seg_lost));
+    else if (degraded_total || seg_total)
+        printf("Protection: DEGRADED: %llu chunks and %llu packed segments on two of three "
+               "fragments, no fault tolerance until rebuilt (W154/K37 rebuild when the missing "
+               "node is up)\n", (unsigned long long)degraded_total, (unsigned long long)seg_total);
+    else
+        printf("Protection: full (2+1: every chunk and packed segment tolerates one lost node)\n");
 
     /* Abandoned ticketed uploads awaiting revocation-gated collection on
      * every member that holds a fragment (D31). Unknown until both group

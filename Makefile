@@ -150,7 +150,7 @@ SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orph
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
               src/server/iostats.c src/server/thread.c \
-              src/server/raft_host.c src/server/reclaim.c src/server/segment_store.c \
+              src/server/raft_host.c src/server/reclaim.c src/server/segment_store.c src/server/segment_rebuild.c \
               src/server/packer.c src/server/member_store.c src/server/discovery.c \
               src/server/recovery.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
@@ -1022,6 +1022,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_interrupt.py
 	python3 tests/test_k33_payload.py
 	python3 tests/test_k35_fsync_degraded.py
+	python3 tests/test_k37_segment_rebuild.py
 	python3 tests/test_b_geometry.py
 	python3 tests/test_k33_seed_loss.py
 	python3 tests/test_k33_bookkeeping.py

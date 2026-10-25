@@ -121,6 +121,34 @@ int efs_meta_apply_pack_cancel(struct efs_kv *, uint32_t group, uint64_t id, uin
 int efs_meta_apply_pack_retire(struct efs_kv *, uint32_t group, const uint64_t *ids,
                                const uint64_t *gens, uint32_t n, uint32_t *retired);
 
+/* K37 segment degraded marks. A segment with fewer than three good
+ * fragments is recorded by one row (kind PACK_DEGRADED) on its group's
+ * anchor shard, keyed like the segment object, value [missing mask:1]
+ * [reasons:1][0:2]. The segment object stays the authority for placement
+ * and checksums; the mark is the only authority for "fragments missing".
+ * Mask bit i: fragment i is not good. One bit: rebuildable from the other
+ * two. Two or more: unrecoverable, reported and never cleared by a
+ * rebuild (the files in it read EIO until they are rewritten or removed,
+ * when the segment's retirement removes the mark). */
+#define EFS_PACK_DEGRADED_VAL 4u
+#define EFS_PACK_DEGRADED_R_WRITE 1u    /* packer: a fragment PUT was not acknowledged */
+#define EFS_PACK_DEGRADED_R_MISSING 2u  /* audit: the member returned without it */
+#define EFS_PACK_DEGRADED_R_BAD 4u      /* audit: present but torn or unverifiable */
+#define EFS_PACK_DEGRADED_R_SOURCE 8u   /* rebuild: a source fragment proved lost */
+#define EFS_PACK_DEGRADED_R_RECOVERY 16u /* K36 verified recovery dropped it */
+int efs_pack_degraded_key(uint32_t group, uint64_t id, uint64_t generation,
+    uint8_t out[EFS_PACK_OBJECT_KEY_BYTES]);
+/* NOT_FOUND when unmarked; PROTO for a malformed row (never treated as
+ * unmarked). */
+int efs_pack_degraded_get(struct efs_kv *, uint32_t group, uint64_t id, uint64_t generation,
+    uint8_t *mask, uint8_t *reasons);
+/* EFS_MD_CMD_PACK_DEGRADED apply. *outcome (optional): 1 when the row was
+ * written or deleted, 0 for a verdict that changed nothing. STALE is a
+ * logical refusal (segment not ACTIVE for MARK, mark changed for CLEAR,
+ * segment still live for RETIRE); INVAL a malformed command. */
+int efs_meta_apply_pack_degraded(struct efs_kv *, uint32_t group, uint32_t op, uint64_t id,
+    uint64_t generation, uint32_t mask, uint32_t reason, int *outcome);
+
 /* Packing candidates. A publication of chunk zero that leaves a file of at
  * most EFS_PACK_THRESHOLD bytes records the file in its group's candidate
  * index, in the same batch: key [anchor:2][kind:1][epoch:8][ino:8], value
@@ -176,6 +204,8 @@ int efs_meta_pack_backfill_cursor(struct efs_kv *, uint32_t group, uint32_t *nex
  *          [ino:8][inode generation:8][source digest:32][reference:96]
  *   CANCEL [group:1][id:8][generation:8]
  *   RETIRE [group:1][count:2] then count [id:8][generation:8]
+ *          (also deletes each retired segment's degraded mark)
+ *   DEGRADED [group:1][op:1][id:8][generation:8][mask:1][reason:1]
  *   UNINDEX [group:1][count:2] then count [epoch:8][ino:8]
  *   INDEX  [group:1][count:2][next shard:4][done:1] then count
  *          [epoch:8][ino:8][inode generation:8] */
