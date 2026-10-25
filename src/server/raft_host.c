@@ -4721,7 +4721,7 @@ static int host_local_leader(struct efs_raft_host *h, uint8_t group)
     return v.has ? v.leader : -1;
 }
 
-static int host_remote_cmd_impl_body(struct efs_raft_host *h, uint8_t group,
+static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen,
                            struct efs_msg_raft_mkfs_reply *rep, int prefer_rid)
 {
@@ -4780,19 +4780,6 @@ static int host_remote_cmd_impl_body(struct efs_raft_host *h, uint8_t group,
     }
 }
 
-/* Flake sweep (Oct 25): a single proposal or forwarded command that held
- * its caller over a second is logged with its group and outcome. */
-static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
-                           const uint8_t *cmd, uint32_t clen,
-                           struct efs_msg_raft_mkfs_reply *rep, int prefer_rid)
-{
-    uint64_t slow_t0 = now_us_();
-    int slow_rc = host_remote_cmd_impl_body(h, group, cmd, clen, rep, prefer_rid);
-    uint64_t slow_us = now_us_() - slow_t0;
-    if (slow_us >= 1000000u)
-        fprintf(stderr, "raft-host: remote-cmd-slow group=%u tag=%u prefer=%d ms=%llu rc=%d\n", group, clen ? cmd[0] : 0u, prefer_rid, (unsigned long long)(slow_us / 1000u), slow_rc);
-    return slow_rc;
-}
 
 /* A read-only forwarded proof must not borrow the mutation RPC's 30-second
  * transport wait. One absolute budget covers pool admission, connection,
@@ -5731,7 +5718,7 @@ static int host_forward_refused(int serving_forward, int lid, int self, int *lea
     return 1;
 }
 
-static int host_propose_impl_body(struct efs_raft_host *h, uint8_t group,
+static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
                         uint64_t *term, int *leader_hint, int local_only)
 {
@@ -5947,19 +5934,6 @@ static int host_propose_impl_body(struct efs_raft_host *h, uint8_t group,
     return EFS_OK;
 }
 
-/* Flake sweep (Oct 25): a single proposal or forwarded command that held
- * its caller over a second is logged with its group and outcome. */
-static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
-                        const uint8_t *cmd, uint32_t clen, uint64_t *idx,
-                        uint64_t *term, int *leader_hint, int local_only)
-{
-    uint64_t slow_t0 = now_us_();
-    int slow_rc = host_propose_impl_body(h, group, cmd, clen, idx, term, leader_hint, local_only);
-    uint64_t slow_us = now_us_() - slow_t0;
-    if (slow_us >= 1000000u)
-        fprintf(stderr, "raft-host: propose-slow group=%u tag=%u local_only=%d leader_hint=%d ms=%llu rc=%d\n", group, clen ? cmd[0] : 0u, local_only, leader_hint ? *leader_hint : -2, (unsigned long long)(slow_us / 1000u), slow_rc);
-    return slow_rc;
-}
 
 /* Bounded lock-free attempts before a verdict read takes h->mu. */
 #define HOST_ARC_READ_TRIES 64
@@ -14490,28 +14464,23 @@ static void host_put_ticket_batch_submit(struct efs_raft_host *h, uint8_t group,
     out->leader_hint=hint;
 }
 
-static void server_raft_host_submit_body(uint8_t group, const uint8_t *payload, uint32_t plen,
-                                         struct efs_msg_raft_mkfs_reply *out);
+static void host_serving_forward_restore(const int *previous)
+{
+    host_serving_forward = *previous;
+}
+
 /* payload[0] is the group; HOST_SUBMIT_FORWARDED in it marks a command a
  * member forwarded (host_rpc_submit), as opposed to one a client or this
  * process submits. A forwarded command is served without a further forward
- * (host_serving_forward), except DIR_MIGRATE: it is bounced to a dual-host
- * because the parent group's leader may not host the destination group, and
- * its own proposals each forward one hop to a leader that answers. */
+ * (host_serving_forward, restored on every return), except DIR_MIGRATE: it
+ * is bounced to a dual-host because the parent group's leader may not host
+ * the destination group, and its own proposals each forward one hop to a
+ * leader that answers. */
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out)
 {
+    __attribute__((cleanup(host_serving_forward_restore))) int serving_outer = host_serving_forward;
     uint8_t group;
-    int serves = host_submit_serves_forward(payload, plen, &group);
-    int previous = host_serving_forward;
-    host_serving_forward = serves;
-    server_raft_host_submit_body(group, payload, plen, out);
-    host_serving_forward = previous;
-}
-
-static void server_raft_host_submit_body(uint8_t group, const uint8_t *payload, uint32_t plen,
-                                         struct efs_msg_raft_mkfs_reply *out)
-{
     struct efs_raft_host *h = g_host;
     const uint8_t *cmd;
     uint8_t storage_finish_cmd[HOST_SESS_CREATE_LEN];
@@ -14529,6 +14498,7 @@ static void server_raft_host_submit_body(uint8_t group, const uint8_t *payload, 
         out->rc = EFS_ERR_INVAL;
         return;
     }
+    host_serving_forward = host_submit_serves_forward(payload, plen, &group);
     cmd = payload + 1;
     clen = plen - 1;
     /* Never propose reserved commands/requests. Any other tag this build
@@ -18642,62 +18612,20 @@ static int host_append_close_batched(struct efs_raft_host *h,efs_ino_t ino,uint6
     return rc;
 }
 
-/* One append reservation that held its RPC over a second names the phase
- * that held it (flake sweep, Oct 25: a REPORT across a step-down waited
- * 4.7 s in one receive and no daemon line said where). */
-struct host_append_slow { uint64_t t0, t[6]; unsigned n; };
-static void host_append_slow_mark(struct host_append_slow *s)
-{
-    if (s->n < 6) s->t[s->n++] = now_us_();
-}
-static int host_append_slow_note(const struct host_append_slow *s, efs_ino_t ino, int rc)
-{
-    static const char *const name[6] = {"authority", "admit", "replay", "prune",
-                                        "capture", "execute"};
-    uint64_t end = now_us_(), prev = s->t0;
-    if (end - s->t0 < 1000000u)
-        return rc;
-    char buf[256];
-    int off = snprintf(buf, sizeof(buf), "raft-host: append-slow ino=%llu total_ms=%llu",
-                       (unsigned long long)ino, (unsigned long long)((end - s->t0) / 1000u));
-    for (unsigned i = 0; i < s->n && off > 0 && (size_t)off < sizeof(buf); i++) {
-        off += snprintf(buf + off, sizeof(buf) - (size_t)off, " %s_ms=%llu", name[i],
-                        (unsigned long long)((s->t[i] - prev) / 1000u));
-        prev = s->t[i];
-    }
-    fprintf(stderr, "%s rc=%d\n", buf, rc);
-    return rc;
-}
-
-static int host_append_transaction_run(struct efs_raft_host *h,efs_ino_t ino,uint64_t len,
-                                       const struct efs_opid_req *q,uint64_t *offset,int *hint,
-                                       struct host_append_slow *slow);
 static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_t len,
-                                   const struct efs_opid_req *q,uint64_t *offset,int *hint)
-{
-    struct host_append_slow slow = {now_us_(), {0}, 0};
-    int rc = host_append_transaction_run(h, ino, len, q, offset, hint, &slow);
-    return host_append_slow_note(&slow, ino, rc);
-}
-
-static int host_append_transaction_run(struct efs_raft_host *h,efs_ino_t ino,uint64_t len,
-                                       const struct efs_opid_req *q,uint64_t *offset,int *hint,
-                                       struct host_append_slow *slow)
+                                    const struct efs_opid_req *q,uint64_t *offset,int *hint)
 {
     struct efs_txid t;
     int rc=host_append_authority(h,hint);
-    host_append_slow_mark(slow);
     /* Authority was established for both groups in this RPC, before any
      * mutation. Reuse only that request-local boundary for the owner read;
      * always reread its current epoch/state and local acceptance floor. */
     uint8_t groups[2];host_need_both(groups);
     uint8_t covered=(uint8_t)((1u<<groups[0])|(1u<<groups[1]));
     if(rc==EFS_OK)rc=host_append_session_admit_covered(h,ino,q,hint,covered);
-    host_append_slow_mark(slow);
     if(rc!=EFS_OK)return rc;
     /* Replayed reservations do not need cleanup or a new transaction. */
     rc=efs_meta_append_result(h->kv,ino,len,q,offset);
-    host_append_slow_mark(slow);
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
     uint64_t closed_watermark=0;uint32_t remaining_open=0;
     rc=efs_meta_apply_append_state(h->kv,ino,&closed_watermark,NULL,&remaining_open);
@@ -18718,12 +18646,10 @@ static int host_append_transaction_run(struct efs_raft_host *h,efs_ino_t ino,uin
         if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
         if(page==31)return EFS_ERR_BUSY;
     }
-    host_append_slow_mark(slow);
     if(rc!=EFS_OK)return rc;
     struct efs_meta_append_plan *plan=malloc(sizeof(*plan));
     if(!plan)return EFS_ERR_NOMEM;
     rc=efs_meta_capture_append(h->kv,ino,len,q,host_txn_coord,h,plan);
-    host_append_slow_mark(slow);
     if(rc==EFS_OK) {
         *offset=plan->offset;fill_txid(h,&t);
         rc=host_append_atomic_eligible(h,plan) ?
@@ -18732,7 +18658,6 @@ static int host_append_transaction_run(struct efs_raft_host *h,efs_ino_t ino,uin
         /* Exact-image conflicts are retryable; capture's retired identity
          * STALE is preserved and never allocated a second reservation. */
         if(rc==EFS_ERR_STALE)rc=EFS_ERR_BUSY;
-        host_append_slow_mark(slow);
     }
     free(plan);return rc;
 }

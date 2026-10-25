@@ -103,14 +103,17 @@ with tempfile.TemporaryDirectory(prefix='efs-fwd-once-') as d:
 send = fn('static int host_rpc_submit')
 assert 'payload[0] = (uint8_t)(group | HOST_SUBMIT_FORWARDED);' in send, send[:400]
 entry = fn('void server_raft_host_submit')
-assert re.search(r'int serves = host_submit_serves_forward\(payload, plen, &group\);', entry), entry
-assert re.search(r'int previous = host_serving_forward;\s*host_serving_forward = serves;\s*'
-                 r'server_raft_host_submit_body\(group, payload, plen, out\);\s*'
-                 r'host_serving_forward = previous;', entry), entry
-prop = fn('static int host_propose_impl_body')
+# The marker is restored on every return (scope cleanup) and set from the
+# helper before any branch can propose; the body never reads the raw byte.
+assert re.search(r'\{\n    __attribute__\(\(cleanup\(host_serving_forward_restore\)\)\) int serving_outer = '
+                 r'host_serving_forward;', entry), entry[:600]
+assert 'host_serving_forward = *previous;' in fn('static void host_serving_forward_restore')
+setter = entry.index('host_serving_forward = host_submit_serves_forward(payload, plen, &group);')
+for first in ('host_propose', 'host_remote_cmd(', 'host_put_ticket_batch_submit('):
+    assert entry.find(first) < 0 or entry.index(first) > setter, first
+assert 'payload[0]' not in entry, 'the submit entry reads the marked group byte'
+prop = fn('static int host_propose_impl')
 refuse = prop.index('host_forward_refused(host_serving_forward, lid, h->raft_id, leader_hint)')
 assert refuse < prop.index('rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);'), 'forward before refusal'
-body = fn('static void server_raft_host_submit_body')
-assert 'payload[0]' not in body.replace('payload[0] == EFS_RAFT', ''), 'the body reads the marked group byte'
 print('forward once: a member-forwarded submit is served without a further forward (DIR_MIGRATE '
       'excepted), client submits forward one hop, the refusal hints the known leader PASS')
