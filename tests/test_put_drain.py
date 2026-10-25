@@ -78,6 +78,7 @@ code = r'''
 #include "efs/protocol.h"
 #include "efs/put_orphan.h"
 #include "efs/raft.h"
+#include "efs/record_decode.h"
 #include "efs/session.h"
 #include "efs/session_revoke.h"
 #include "efs/store.h"

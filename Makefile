@@ -402,7 +402,7 @@ check:
 # Everything any test needs, built in one parallel make before tests start
 # (scripts/make_test_summary.sh).
 .PHONY: test-bins
-test-bins: all $(TEST_SPECIAL_BINS) decoder-bins
+test-bins: all $(TEST_SPECIAL_BINS) decoder-bins tests/test_apply_wait
 
 # make test: the fast, CPU-bound unit suite for every edit (each command well
 # under a second; about a minute in all). Slow tests belong in test-long.
