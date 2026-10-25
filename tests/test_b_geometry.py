@@ -320,6 +320,10 @@ def grow_to(c, m1, first, last):
             samples = [(int(total), int(avail)) for path, total, avail in samples
                        if Path(path) == c.dir / f'n{n}']
             assert samples, ('no startup statvfs sample', observed)
+            # The quota calculation is the first statvfs on this fresh
+            # root, before serving/status/reclamation threads can sample.
+            # Later free-space values must not accidentally satisfy it.
+            samples = samples[:1]
             q = mem[n]['quota']
             budgets = []
             for total, avail in samples:
