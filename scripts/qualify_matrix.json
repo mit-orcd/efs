@@ -99,7 +99,8 @@
   "e4_threads": 16,
   "e4_query_deadline_s": 30,
   "e4_refresh_s": 60,
-  "e4_reclaim_s": 900
+  "e4_reclaim_s": 900,
+  "soak_hours": 4
  },
  "topologies": {
   "loopback-3": {
@@ -136,7 +137,8 @@
     "c5-protocol-live",
     "d1-packing",
     "d3-efs-load",
-    "e4-scale"
+    "e4-scale",
+    "soak"
    ],
    "allow": [
     "restart",
@@ -234,7 +236,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "soak"
    ],
    "allow": [
     "restart",
@@ -331,7 +334,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "soak"
    ],
    "allow": [
     "remount",
@@ -435,7 +439,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "soak"
    ],
    "allow": [
     "remount",
@@ -540,7 +545,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "soak"
    ],
    "allow": [
     "restart",
@@ -647,7 +653,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "soak"
    ],
    "allow": [
     "restart",
@@ -759,7 +766,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "soak"
    ],
    "allow": [
     "restart",
@@ -1263,7 +1271,8 @@
   },
   "E4": {
    "checks": [
-    "qualify:e4-scale"
+    "qualify:e4-scale",
+    "qualify:soak"
    ],
    "topologies": [
     "3-host",
@@ -1274,11 +1283,11 @@
     "tcp",
     "rdma"
    ],
-   "duration": "about 15-40 minutes at the defaults (5000 small + 2 x 256 MiB per member); scales with the declared counts",
+   "duration": "about 15-40 minutes at the defaults (5000 small + 2 x 256 MiB per member); scales with the declared counts; soak adds four hours plus setup/verification/recovery",
    "prerequisites": [
     "quota sized for the declared counts"
    ],
-   "note": "real gate: e4-scale (fixture sized by the member count: e4_small_per_member, e4_large_per_member x e4_large_mib)"
+   "note": "real gate: e4-scale (fixture sized by the member count: e4_small_per_member, e4_large_per_member x e4_large_mib); soak is the private loopback endurance rehearsal, not distinct-host/RDMA coverage. Override the plugin for a described real-host lifecycle."
   }
  }
 }

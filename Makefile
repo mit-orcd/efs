@@ -542,6 +542,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_rdma_memcheck.py
 	python3 tests/test_live_fixture_names.py
 	python3 tests/test_qualify_driver.py
+	python3 tests/test_soak_driver.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
 	$(MAKE) test-dirty-ranges
@@ -1030,6 +1031,7 @@ test: test-rdma-message
 # runs both and is what the gates run.
 .PHONY: test-long test-all
 test-long: all $(TEST_SPECIAL_BINS)
+	python3 tests/test_soak.py
 	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_w153_formation.py
 	python3 tests/test_k33_growth.py

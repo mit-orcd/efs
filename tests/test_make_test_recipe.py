@@ -66,7 +66,11 @@ COMMAND_BOUND_S = 300
 GATE_TARGET_S = 900         # the 15 min gate (W160), measured at EFS_TEST_JOBS=8
 BUDGET_MARGIN = 1.5         # budgets are 1.25 x the measured 8-job time, rounded up to 5 s with a 5 s floor,
                             # so the gate they add up to may be up to 1.5 x the target
-GATE_BOUND_S = GATE_TARGET_S * BUDGET_MARGIN
+# Task D explicitly adds a 15-minute endurance command, run alone. Preserve
+# W160's existing bound for all other tests instead of pretending the new soak
+# fits inside the old 15-minute total. Its allowance must exactly match its row.
+ENDURANCE_S = 1200
+GATE_BOUND_S = GATE_TARGET_S * BUDGET_MARGIN + ENDURANCE_S
 JOBS = 8
 FAST_DEFAULT_S = 1          # a `make test` command without a budget row (each runs well under a second)
 budgets = {}
@@ -81,6 +85,7 @@ for line in (root / 'tests/budgets.tsv').read_text().splitlines():
     assert budget <= COMMAND_BOUND_S or reason, \
         'tests/budgets.tsv: %s is budgeted %g s, above %d s, with no reason' % (cmd, budget, COMMAND_BOUND_S)
     budgets[cmd] = (budget, slots, reason)
+assert budgets['python3 tests/test_soak.py'][:2] == (ENDURANCE_S, 8)
 long_cmds = [c.strip() for c in slow if runs(c)]
 missing = [c for c in long_cmds if c not in budgets]
 assert not missing, 'test-long commands without a row in tests/budgets.tsv: %s' % missing
