@@ -240,8 +240,7 @@ Findings for the parent (candidate `376369aa8` code; not changed here):
    loopback-3 append-failover: 8,000 of 8,000 records exact in every view, 0
    missing or duplicated, but one REPORT RPC timed out after 30 s
    (`inode-rpc: retry type=67 attempt=11 … recv_ms=30001`), which the
-   harness counts as a failure. **FIXED (scoped, loopback), branch
-   `claude/devel-report-stepdown-36888a` (`6654d5f15`), not merged
+   harness counts as a failure. **FIXED (scoped, loopback), merged into devel (`1fee9bb04`; tested at `6654d5f15`)
    ([evidence](a11-f2-report-stepdown-20261024.md)):** there was no 30 s
    wait (`recv_ms` printed the bound; the 8 s REPORT budget cut the
    receive). A DECIDE COMMIT that failed NOT_PRIMARY at the step-down was
