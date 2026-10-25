@@ -64,7 +64,9 @@
   "5-host": {
    "tcp": "bare-metal-5-tcp (BLOCKED)",
    "rdma": "none",
-   "nearest_today": []
+   "nearest_today": [
+    "loopback-5"
+   ]
   },
   "once": {
    "tcp": "loopback-3 (live harnesses: private single-host TCP clusters) and make test-all on the candidate",
@@ -131,12 +133,14 @@
     "gc-reclamation",
     "e1-manifest",
     "e2-client-stop",
+    "b6-member-down",
     "e3-turnover",
     "a13-node-addition",
     "c5-protocol-live",
     "d1-packing",
     "d3-efs-load",
-    "e4-scale"
+    "e4-scale",
+    "d4-progress"
    ],
    "allow": [
     "restart",
@@ -777,6 +781,62 @@
    ],
    "cannot_cover": [
     "RDMA"
+   ]
+  },
+  "loopback-5": {
+   "loopback": 5,
+   "port_base": 19740,
+   "private_port_base": 19600,
+   "loopback_quota": "4G",
+   "transport": "tcp",
+   "fixture": {
+    "posix_timeout_s": 150,
+    "e4_small_per_member": 2000,
+    "e4_large_per_member": 2,
+    "e4_large_mib": 32
+   },
+   "purpose": "Stage 2 five-member end-to-end rehearsal; one host, two FUSE clients, member-scaled fixtures",
+   "host": "amd private-home rehearsal (ports 19600-19849; overridable)",
+   "gates": [
+    "identity",
+    "topology",
+    "b-checks",
+    "posix-core",
+    "posix-extras",
+    "posix-2client",
+    "posix-durability",
+    "append-failover",
+    "k14-torn-read",
+    "k13-tickets",
+    "fragment-integrity",
+    "gc-reclamation",
+    "e1-manifest",
+    "e2-client-stop",
+    "b6-member-down",
+    "e3-turnover",
+    "a13-node-addition",
+    "c5-protocol-live",
+    "d1-packing",
+    "d3-efs-load",
+    "e4-scale",
+    "d4-progress"
+   ],
+   "allow": [
+    "restart",
+    "turnover",
+    "remount"
+   ],
+   "duration": "measure end-to-end and per gate; not distinct-host acceptance",
+   "covers": [
+    "C4, B2, D2 live harnesses (TCP, one host)",
+    "driver regression",
+    "A13 (own 5-member loopback cluster), C5, D1/D2, D3, E4 gate regression on one host",
+    "five members and single-outage checks; two FUSE clients"
+   ],
+   "cannot_cover": [
+    "A4 (one physical host)",
+    "RDMA",
+    "four distinct hosts"
    ]
   }
  },

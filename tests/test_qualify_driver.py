@@ -401,6 +401,19 @@ try:
         assert Q.main(['plan', '--check']) == 0, buf.getvalue()
     matrix = load(root / 'scripts/qualify_matrix.json')
     assert Q.matrix_errors(matrix) == []
+    five = matrix['topologies']['loopback-5']
+    assert five['loopback'] == 5 and five['transport'] == 'tcp'
+    assert five['gates'] == matrix['topologies']['loopback-3']['gates']
+    assert {'a13-node-addition', 'e3-turnover', 'e4-scale'} <= set(five['gates'])
+    assert five['fixture'] == matrix['topologies']['loopback-3']['fixture']
+    assert five['port_base'] >= five['private_port_base'] + 140
+    rc, text = run('--matrix', str(root / 'scripts/qualify_matrix.json'), '--topology', 'loopback-5',
+                   '--out', str(tmp / 'five-plan'), '--plan')
+    assert rc == 3, text
+    five_cluster = load(tmp / 'five-plan/cluster.json')
+    assert len(five_cluster['nodes']) == 5
+    assert len(five_cluster['mounts']) == 2
+    assert set(five['gates']) == {g.name for g in Q.gates(Q.default_plugins(five_cluster, []))}
     assert set(matrix['items']) == set(Q.STAGE2_ITEMS)
     broken = json.loads(json.dumps(matrix))
     del broken['items']['E4']
