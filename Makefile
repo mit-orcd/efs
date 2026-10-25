@@ -400,11 +400,12 @@ check:
 # Everything any test needs, built in one parallel make before tests start
 # (scripts/make_test_summary.sh).
 .PHONY: test-bins
-test-bins: all $(TEST_SPECIAL_BINS)
+test-bins: all $(TEST_SPECIAL_BINS) decoder-bins
 
 # make test: the fast, CPU-bound unit suite for every edit (each command well
 # under a second; about a minute in all). Slow tests belong in test-long.
-test: all $(TEST_SPECIAL_BINS)
+test: all $(TEST_SPECIAL_BINS) decoder-bins
+	python3 tests/test_decoder_inputs.py
 	python3 tests/test_env_inventory.py
 	python3 tests/test_env_removed.py
 	python3 tests/test_cli_surface.py
@@ -1144,3 +1145,12 @@ tests/test_b_geometry tests/test_frag_record tests/test_packed_segment tests/tes
 
 tests/test_directory_sync_group: tests/test_directory_sync_group.c src/server/directory_sync_group.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
+
+# Task C: the deterministic replay is fast; sustained sanitized mutation runs
+# are an explicit gate, never hidden inside make test.
+.PHONY: decoder-bins decoder-check
+decoder-bins: tests/decoders/check
+tests/decoders/check: tests/decoders/check.c src/server/discovery.c src/server/member_store.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/decoders/check.c src/server/discovery.c src/server/member_store.c $(LIB) $(LDFLAGS)
+decoder-check:
+	python3 scripts/decoder_check.py

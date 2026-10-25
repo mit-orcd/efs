@@ -122,3 +122,5 @@ tests/test_kv_reader_gate
 /tests/faults/server/
 /tests/faults/kv/
 /tests/nodirect_fs
+
+/tests/decoders/check

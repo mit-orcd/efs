@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+"""Task C deterministic byte mutations, including caller-state invariance."""
+from pathlib import Path
+import subprocess
+ROOT = Path(__file__).resolve().parents[1]
+TARGETS = ('membership', 'member-view', 'discovery-probe', 'discovery-answer',
+           'boot', 'fragment', 'ticket', 'declaration')
+if __name__ == '__main__':
+    for target in TARGETS:
+        subprocess.run([str(ROOT/'tests/decoders/check'), target], check=True)
