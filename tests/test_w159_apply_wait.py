@@ -4,24 +4,26 @@
 Real efsd daemons on loopback (tests/k33_daemons.py, the EFS_FAULTS build)
 and one efs-fuse mount; private stores under TMPDIR, free ports (never
 17xxx). The three daemons run under tests/live/w159_slow_fsync.c, which adds
-20 ms to every fsync/fdatasync and queues the three on one lock: the expiry
+50 ms to every fsync/fdatasync and queues the three on one lock: the expiry
 fixture's conditions (four members and the client on one host, a consumer
-NVMe answering a durable write in 7-28 ms), where the closing core POSIX run
-timed out `dir_many_files` and `concurrent_creates_same_dir`.
+NVMe answering a durable write in 7-28 ms, queued), exaggerated so that the
+pump's apply lag certainly exceeds the old fixed 400 ms applied-wait budget
+while it is still advancing. There the closing core POSIX run timed out
+`dir_many_files` and `concurrent_creates_same_dir`.
 
-A burst of 128 small-file creates from 16 threads, then their unlinks. The
-pump's apply lag then exceeds the old fixed 400 ms applied-wait budget while
-it is still advancing. Checks:
+A burst of 256 small-file creates from 32 threads, then their unlinks.
+Checks:
  1. every create and unlink succeeds (no EBUSY, no EIO);
  2. no member answered BUSY from an expired applied-wait (`raft-obs:
     wait_timeouts=0` on every member), and no client RPC reports a BUSY
     retry (`inode-rpc: slow-ok ... saw_busy=1`);
- 3. the progress-bounded wait engaged (`wait_extends` > 0 on some member),
-    or the whole burst finished inside one 400 ms budget, in which case no
-    wait could have expired at all.
+ 3. the progress-bounded wait engaged (`wait_extends` > 0 on some member):
+    some wait did outlive one 400 ms grant, so check 2 was a real test.
 The base before apply_wait.h fails check 2 under these conditions (the
-amd reproduction: `wait_timeouts` 2-17 per member at 7 ms per barrier, and
-the two timed-out cases); the fix waits while the apply advances.
+amd reproduction: `wait_timeouts` up to 254 per member at 15 ms per
+barrier, and the two timed-out cases); the fix waits while the apply
+advances. At 20 ms and 128 creates, two of three runs never outlived a
+grant at all, hence the heavier burst.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3, efs-fuse or cc.
 """
 import os, re, shutil, subprocess, sys, tempfile, threading, time
@@ -41,10 +43,9 @@ env['EFS_RAFT_OBS'] = '1'
 so = work / 'w159_slow_fsync.so'
 subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-shared', '-fPIC',
                 str(root / 'tests/live/w159_slow_fsync.c'), '-ldl', '-o', str(so)], check=True)
-slow = dict(LD_PRELOAD=str(so), EFS_TEST_FSYNC_DELAY_US='20000',
+slow = dict(LD_PRELOAD=str(so), EFS_TEST_FSYNC_DELAY_US='50000',
             EFS_TEST_FSYNC_LOCK_FILE=str(work / 'fsync.lock'))
-THREADS, PER = 16, 8
-BUDGET_S = 0.4
+THREADS, PER = 32, 8
 
 
 def obs(c, i, key):
@@ -103,7 +104,7 @@ try:
     assert all(v == 0 for v in timeouts.values()), (timeouts, extends)
     assert not busy, busy[:3]
     print(f'2. no expired applied-wait: wait_timeouts {timeouts}, no BUSY retry at the client PASS')
-    assert sum(extends.values()) > 0 or burst < BUDGET_S, (extends, burst)
+    assert sum(extends.values()) > 0, (extends, burst)
     print(f'3. progress-bounded wait engaged: wait_extends {extends} PASS')
     print('W159 apply wait: PASS')
 finally:
