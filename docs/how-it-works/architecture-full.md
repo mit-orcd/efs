@@ -1598,6 +1598,20 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[A11 finding 2: REPORT across a metadata leader step-down](../status/a11-f2-report-stepdown-20261024.md):
+**FIXED, PASS (scoped, loopback), branch `claude/devel-report-stepdown-36888a` (`6654d5f15`), not merged; amd `make test-all` at `04562f14a`: 468 commands, 12 FAIL, all also failing on the base, 6 NOTRUN host limits; raw: amd `~/efs-artifacts/report-stepdown-20261024/`, `SHA256SUMS` `3857346d…41a6d6`.**
+The nuc "30 s REPORT timeout" was an 8 s BUSY stall (`recv_ms` printed the
+configured bound): a DECIDE COMMIT that failed NOT_PRIMARY at the step-down
+was handed to nobody, so its PREPAREs held the inode until the 5 s recovery
+scan. Such a DECIDE, and a failed DROP, now go to the finisher as ABORT at
+the new leader (decide-once keeps a COMMIT that survived); a BUSY DECIDE with
+no decision after 1 s is aborted the same way. Bound: a REPORT completes
+within 3 s per leader change crossed. Daemon test `tests/test_report_stepdown.py`
+(fault `EFS_FAULT_DECIDE_LOST`) 5 of 5 PASS, control FAIL (6.1 s);
+`append_failover.py` step-down reruns 5 of 5 PASS with 0 REPORT timeouts and
+no recovery-scan stall, slowest REPORT 1.8 s (base: stalls in 4 of 5, 2 over
+the bound). Multi-host, RDMA and orcd-mini NOTRUN.
+
 [Oct 24 merge: READ_VERIFY, K34, A7 removals, K35, K36](#d42--alpha-10-decisions-taken-oct-24-user-with-review-conditions):
 **merged into devel; merged-tree `make test-all` on intel2 at `0f0a79eac`: 459 commands, 0 FAIL, 14 NOTRUN host limits (1,839 s; raw: intel2 `~/efs-artifacts/merge-wave5-0f0a79eac-20261024/`, `SHA256SUMS` `01b2d681…dcd9`).** The intermediate gate at `376369aa8` had one FAIL (a missing K34 stub in `test_get_integrity.py`, fixed in `1898c4c63`). K36's recovery mark is Raft tag 248 beside K35's tag 249. devops `8bc872e` and cluster `1402762` drop the removed settings (not pushed). Every store needs a fresh format. Live gates stay NOTRUN.
 
@@ -1663,7 +1677,8 @@ three-host RDMA). Driver fixes: the `b-checks` plugin called
 `b_checks.py` with options it rejects; E3 did not retry a step-down refused
 with "retry". Findings on nuc: a clean `client.sh stop` is refused when the
 unmount session revoke takes over 10 s (2 of 2 full private runs); one
-30 s REPORT timeout in append failover (8,000/8,000 records exact). The four
+30 s REPORT timeout in append failover (8,000/8,000 records exact; an 8 s
+BUSY stall behind a DECIDE lost to the step-down, [fixed](../status/a11-f2-report-stepdown-20261024.md)). The four
 live harnesses now use the K33 CLI: on amd k14, k13 and fragment-integrity
 PASS, gc-reclamation FAIL on the same refused client stop. nuc `make test-all` at `8d858a791`:
 458 commands, 1 FAIL, 14 NOTRUN host limits; the FAIL,
@@ -10867,6 +10882,19 @@ no serializable history even though each commits atomically.
 - **Crash recovery.** A recovering participant or a reader that finds an
   intent queries the coordinator's durable decision and drives the
   transaction to completion (L5).
+- **Leader change under the decision.** A coordinator whose DECIDE (COMMIT
+  or ABORT) or DROP fails because the coordinator group's leader stepped
+  down or lost quorum does not leave its PREPAREs to the 5 s recovery scan.
+  It hands the transaction to the host's finisher, which proposes DECIDE
+  ABORT at the group's next leader and RESOLVEs every participant. DECIDE is
+  decide-once in log order, so a COMMIT that survived the leader change is
+  ahead of that ABORT, answers it with PROTO, and is finished as COMMIT; a
+  COMMIT lost with the deposed leader's log is aborted, which is what
+  recovery would decide. A DECIDE that only ran out of its apply wait (BUSY)
+  is finished from the decision record; if none appears within one maximum
+  election timeout (1 s), the finisher decides ABORT the same way. The
+  intents are therefore resolved about one election after the step-down, not
+  after the recovery age (A11 finding 2).
 - **GC.** Resolved intents are reclaimed (L7-class). A **decision record**
   outlives its intents — a recovering participant must still be able to ask
   what happened — so it has its own explicit retirement rule
