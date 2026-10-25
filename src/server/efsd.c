@@ -895,16 +895,27 @@ static int join_as_new(struct efsd_server *s, const char *seed_host, uint16_t se
  * arena (59-73 per daemon), and freed memory stayed resident in them:
  * malloc_info showed 27-70 MiB free of 44-93 MiB of arena memory, and
  * the arena count and each arena's high-water mark kept rising with
- * thread turnover and fragmentation. Two bounds: at most
- * EFSD_MALLOC_ARENAS arenas (set before any thread exists), and every
- * EFSD_MALLOC_TRIM_MS the heartbeat thread returns their free pages
- * (malloc_trim walks every arena). Internal: not knobs. */
+ * thread turnover and fragmentation. Three bounds, set before any thread
+ * exists: at most EFSD_MALLOC_ARENAS arenas; a fixed mmap threshold, so a
+ * transient buffer of EFSD_MALLOC_MMAP_BYTES or more is its own mapping and
+ * goes back to the kernel on free (glibc's dynamic threshold rose to the
+ * largest freed block, up to 32 MiB, after which every block request and
+ * payload buffer came from the arenas and fragmented them: with the cap
+ * and trim alone the arenas still held 13-41 MiB free after 10 minutes,
+ * with the fixed threshold 5-11 MiB); and every EFSD_MALLOC_TRIM_MS the
+ * heartbeat thread returns the arenas' free pages (malloc_trim walks every
+ * arena). Internal: not knobs. */
 #define EFSD_MALLOC_ARENAS 8
+#define EFSD_MALLOC_MMAP_BYTES (256 * 1024)
 static void efsd_malloc_setup(void)
 {
 #if defined(__GLIBC__) && defined(M_ARENA_MAX)
     if (mallopt(M_ARENA_MAX, EFSD_MALLOC_ARENAS) != 1)
         fprintf(stderr, "malloc: M_ARENA_MAX %d not applied\n", EFSD_MALLOC_ARENAS);
+#endif
+#if defined(__GLIBC__) && defined(M_MMAP_THRESHOLD)
+    if (mallopt(M_MMAP_THRESHOLD, EFSD_MALLOC_MMAP_BYTES) != 1)
+        fprintf(stderr, "malloc: M_MMAP_THRESHOLD %d not applied\n", EFSD_MALLOC_MMAP_BYTES);
 #endif
 }
 

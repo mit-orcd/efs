@@ -243,9 +243,18 @@ rows = d.rss_plateau.evaluate({'p': [(t, 1000 + t * 100) for t in range(9)]}, No
 assert rows[0]['verdict'] == 'GROWING' and rows[0]['growth_pct'] > 5, rows
 rows = d.rss_plateau.evaluate({'p': [(t, 1000 + min(t, 5) * 100) for t in range(9)], 'q': [(0, 1)]}, None, 5.0)
 assert [x['verdict'] for x in rows] == ['PLATEAU', 'too few'], rows
+# The growth is the least-squares slope over the last third, not its two end
+# samples: a flat series that swings +-5 % between samples (efsd returning
+# pages to the OS) is a plateau although its end points differ by 9.5 %; a
+# steady ramp of 6.9 % over the last third is not.
+noisy = {'p': [(t, 100000 + (5000 if t % 2 else -5000)) for t in range(90)]}
+row = d.rss_plateau.evaluate(noisy, None, 5.0)[0]
+assert row['verdict'] == 'PLATEAU' and row['endpoint_pct'] > 5 and abs(row['growth_pct']) < 2, row
+row = d.rss_plateau.evaluate({'p': [(t, 100000 + t * 300) for t in range(90)]}, None, 5.0)[0]
+assert row['verdict'] == 'GROWING' and 6 < row['growth_pct'] < 8, row
 
 print('D4 driver: raft-status, pack-compact and .efs/stats parsers; PASS and one negative control per '
 
       'bound (deadline, errors, client/server RSS, memtable, L0, pack backlog, index age, packing, index, '
       'flush and compaction progress, index readiness, '
-      'drain, exact files, fixed working set, RSS plateau) PASS')
+      'drain, exact files, fixed working set, RSS plateau slope) PASS')
