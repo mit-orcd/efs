@@ -276,7 +276,7 @@ python3 scripts/qualify.py run --matrix scripts/qualify_matrix.json --topology l
 | `gc-reclamation` | **FAIL** | 254 | 56 checks PASS (POSIX 2-client 68/68), then `client.sh stop` refused: the unmount settled its tickets and had not revoked its session 10 s later (finding 1) |
 
 The same gc-reclamation FAIL at the same step reproduced in a standalone
-run before the commit. Raw: amd `~/efs-artifacts/k33-harnesses-20261024/r2`
+run before the commit. Raw: amd `~/efs-artifacts/k33-harnesses-20261024/r2` Top-level `SHA256SUMS` over `r2/` (sha256 `4df6f62b…5627`), beside the driver's own `r2/SHA256SUMS`.
 (106 files, `SHA256SUMS` sha256 `eb8d726c…0384`); private trees deleted.
 
 ### Code gate
