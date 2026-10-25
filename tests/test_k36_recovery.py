@@ -271,7 +271,14 @@ try:
     up(c, 3)
     st = wait_status(c, 3, lambda s: s['phase'] == 'fence')
     assert st['state'] == 'running' and 'held by' in st['reason'], st
-    assert st['missing'] >= 2 and st['marked'] + st['already_marked'] >= 2, st
+    # W154 rebuilds a mark as soon as the heartbeat sees its missing node up,
+    # so the mark step 3 wrote can be rebuilt onto node 3 (the PUT takes the
+    # fragment lock the scan takes, and creates O_EXCL: never a torn read)
+    # before this run's inventory reaches that stripe; under TSan the slower
+    # start makes it common. Each lost fragment is then either found missing
+    # here (marked now, or the step-3 mark found) or already back on disk.
+    back = sum(f.exists() and f.stat().st_size >= 4096 + 128 for f in (torn, gone))
+    assert st['missing'] + back >= 2 and st['marked'] + st['already_marked'] + back >= 2, (st, back)
     # The torn file was dropped by the interrupted run (step 3); recovery is
     # idempotent, so this run finds it simply missing.
     assert re.search(r'store: recovery dropped \S+/' + re.escape(torn.name), c.log(3)), torn
@@ -312,13 +319,14 @@ try:
                      f'{"".join(sorted(set(n3)))} (never D)')
     # Every mark this recovery wrote or found is retired by W154 (tickets the
     # client left ADMITTED may still settle later; nothing waits on them).
-    st = wait_status(c, 3, lambda s: s['rebuilt'] >= 2 and s['rebuild_waiting'] == 0,
+    st = wait_status(c, 3, lambda s: s['rebuilt'] >= 2 - back and s['rebuild_waiting'] == 0,
                      timeout=180)
     for f in (torn, gone):
         assert f.exists() and f.stat().st_size >= 4096 + 128, f
     notes.append('node 3 recovery: ' + ' '.join(f'{k}={st[k]}' for k in
                  ('checked', 'dropped', 'missing', 'marked', 'already_marked',
-                  'rebuilt', 'superseded', 'unrecoverable', 'waiting')))
+                  'rebuilt', 'superseded', 'unrecoverable', 'waiting')) +
+                 f' rebuilt_before_fence={back}')
     print('4. fence held until verified (data-commit EIO, fresh fsync only 2 of 3 durable), '
           'then cleared (data-commit OK, fresh fsync 3 of 3); crashed-run fragments stay lost; '
           f'torn and missing fragments rebuilt ({notes[-1]}) PASS', flush=True)
