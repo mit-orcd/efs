@@ -483,6 +483,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_lease_admission_lock.py
 	python3 tests/test_identity_revocation.py
 	python3 tests/test_put_ticket_rpc.py
+	python3 tests/test_forward_once.py
 	python3 tests/test_put_ticket_owner.py
 	python3 tests/test_put_ticket_batch.py
 	python3 tests/test_put_drain.py
