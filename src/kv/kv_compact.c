@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include "efs/fault_exit.h"
 
 /* Fault hooks, compiled only with -DEFS_FAULTS=1. W23 stalled compactor (the
  * stalled-compactor test, tests/measure/w23_stalled_compactor.sh). A
@@ -55,7 +56,7 @@ static void compact_maybe_die(void)
         return;
     n++;
     if ((uint32_t)atoi(e) == n)
-        _exit(99);
+        efs_fault_exit(99);
 }
 #else
 #define compact_maybe_die() ((void)0)

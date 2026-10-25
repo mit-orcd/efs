@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include "efs/fault_exit.h"
 
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port)
 {
@@ -325,7 +326,7 @@ void server_test_member_exit(const char *point)
     fprintf(stderr, "membership: EFS_FAULT_MEMBER_EXIT at %s; exiting\n", point);
     fflush(stderr);
     fflush(stdout);
-    _exit(86);
+    efs_fault_exit(86);
 #else
     (void)point;
 #endif

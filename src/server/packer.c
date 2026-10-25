@@ -55,6 +55,7 @@
  * tests). */
 #include "server_internal.h"
 #include "efs/placement.h"
+#include "efs/fault_exit.h"
 #include "efs/checksum.h"
 #include "efs/erasure.h"
 #include "efs/kv_key.h"
@@ -141,7 +142,7 @@ void server_pack_crash_point(const char *point)
     fired = 1;
     fprintf(stderr, "packer: injected crash at %s\n", point);
     fflush(stderr);
-    _exit(137);
+    efs_fault_exit(137);
 #else
     (void)point;
 #endif
