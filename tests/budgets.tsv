@@ -89,3 +89,4 @@ python3 tests/test_posix_phase_trace.py	5	1
 python3 tests/test_sanitizer_gate.py	120	1	
 python3 tests/test_w159_apply_wait.py	70	2	
 python3 tests/test_decoder_refusal.py	120	1	Three private loopback daemons: refusal, ReadIndex, CREATE and orderly stop
+python3 tests/test_soak.py	1200	8	Task D: mandatory 900-second accelerated endurance load plus formation, bounded recovery, final verification and teardown; exclusive quiet-host run

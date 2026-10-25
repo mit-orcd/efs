@@ -771,6 +771,11 @@ facts for A6, not decisions.
   ([Stage 2 gates](stage2-gates-20261024.md)); loopback dry run PASS on xorinox,
   real hosts NOTRUN (parent); the
   defaults (5,000 small and 2 × 256 MiB files per member) have not run.**
+  **Task D interaction endurance is in progress, not acceptance:**
+  [seeded loopback member-churn soak](task-d-20261025.md), branch
+  `agent/devel-task-d`; the four-hour clean run and base-equivalent code gate
+  remain open. The `soak` plugin's default is its own loopback fixture, not
+  qualification of a parent real-host topology.
 - [ ] **E5** Moved to Stage 3 as **P1**.
 
 ## P. Stage 3: performance

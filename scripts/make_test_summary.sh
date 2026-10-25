@@ -93,18 +93,22 @@ def text(b): return b.decode("utf-8","replace") if isinstance(b,bytes) else (b o
 def run(c,env=None):
     # Own process group: a timeout kills the whole command, and no leftover
     # child holding the output pipes can stall the runner.
+    # The declared endurance command is longer than the old 900 s default.
+    # A user-supplied hard timeout still wins; other command deadlines do not grow.
+    declared=budget(c)[0] or 0
+    command_limit=limit if "EFS_TEST_CMD_TIMEOUT" in os.environ else max(limit,declared)
     p=subprocess.Popen(["bash","-c",c],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,env=env)
-    try: out,_=p.communicate(timeout=limit); return p.returncode,text(out)
+    try: out,_=p.communicate(timeout=command_limit); return p.returncode,text(out)
     except subprocess.TimeoutExpired:
         try: os.killpg(p.pid,signal.SIGKILL)
         except ProcessLookupError: pass
         out,_=p.communicate()
-        return 124,text(out)+"\nTIMEOUT after %gs\n"%limit
+        return 124,text(out)+"\nTIMEOUT after %gs\n"%command_limit
 # Commands that observe real processes or devices, or assert on wall-clock
 # timing under load, run alone after the parallel pool.
 EXCLUSIVE=re.compile(r"rdma|shutdown|client_processes|server_processes|cluster_stop|opid_admission|"
                      r"tsan|leak|make_test|fork_oracle|stage_evict_lru|storage_root_inventory|"
-                     r"bench")
+                     r"bench|test_soak\.py")
 jobs=max(1,int(os.environ.get("EFS_TEST_JOBS","1")))
 fails=[]; notrun=[]; times=[]; t0=time.time(); done=0
 import threading
