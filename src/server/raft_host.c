@@ -11494,7 +11494,8 @@ static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t a
         long v = e ? strtol(e, NULL, 10) : 0;
         per_pass = v > 0 && v <= 65536 ? (uint64_t)v : 256;
     }
-    if (!nodes || efs_kv_key_degraded_prefix(anchor, prefix, &plen) != EFS_OK)
+    if (!nodes || efs_kv_key_degraded_prefix(anchor, prefix, &plen) != EFS_OK ||
+        server_test_rebuild_sample_held())
         return;
     have = efs_meta_degraded_count_peek(anchor);
     if (have < 0) {

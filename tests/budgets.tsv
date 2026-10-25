@@ -21,6 +21,7 @@ python3 tests/test_k33_interrupt.py	70	1
 python3 tests/test_k33_payload.py	240	2	one cluster carries additions, a restart and five outages in sequence; its writer is paced to two files a second, so it is a two-slot command that runs beside the report step-down test once D4 is done
 python3 tests/test_k35_fsync_degraded.py	95	1	
 python3 tests/test_k37_segment_rebuild.py	335	1	seven steps on one cluster: two waits on the 30 s member-down detection, nine unmounts with a member down (15 s storage fence each)
+python3 tests/test_k38_protection_now.py	120	1	
 EFS_B_PHASES=grow-a python3 tests/test_b_geometry.py	120	3	three members with the B1-B5 driver and B2 on the stores, then four and five with the driver (fsync writes and read-backs of about 500 files per size; 58 s alone, up to three times that beside other writers)
 EFS_B_PHASES=grow-b python3 tests/test_b_geometry.py	260	3	a fresh cluster grown to five, then six to eight members with the B1-B5 driver at every size (84 s alone, up to three times that beside other writers)
 EFS_B_PHASES=full python3 tests/test_b_geometry.py	75	2	
