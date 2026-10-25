@@ -1637,11 +1637,14 @@ new qualify gate `d5-expiry` (item D5) on every matrix topology.
 **IN PROGRESS, branch `agent/devel-task-d`, not merged or pushed.** New
 five-to-seven-member loopback harness, independent acknowledged-content and
 shared-append oracles, quiet-host guard, RSS interval checks and qualification
-plugin. NUC's fourth rehearsal reached five clean returns and a verified daemon
-recovery, then failed in the harness's timestamped-session parser. The corrected
-rehearsal is running in its reserved detached screen; four-hour completion
-and candidate/base code-gate comparison remain NOTRUN/queued. No acceptance
-or new product-fix claim yet.
+plugin. NUC's later rehearsal exposed a bounded session-cleanup BUSY that the harness
+failed to resume, plus a stop-order race that acknowledged one local file after
+unmount. Both are fixed in the harness only: exact old-epoch cleanup and both
+fresh readers verified 512 genuine file versions and all 363 appends. The next rehearsal completed all lifecycle/content checks but failed an RSS
+assessment contaminated by read verification and short restart windows. Harness-only
+`18d98c071` separates workloads and requires long steady windows, keeping the 5%
+threshold and explicit NOTRUN coverage. Its fresh rehearsal/conditional four-hour
+retry is building on NUC; full endurance, RSS and candidate/base comparison remain open.
 
 [Task A: full three- and five-member Stage 2 rehearsal](../status/task-a-20261025.md):
 **rehearsal complete with product findings; branch `agent/devel-task-a`,

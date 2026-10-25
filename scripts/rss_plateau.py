@@ -111,6 +111,31 @@ def format_rows(rows):
     return '\n'.join(out)
 
 
+def assess_points(pts, warmup_s=120, minimum_s=360):
+    """Assess one uninterrupted write-load window; never bless short input.
+
+    Skip two minutes of allocation/restart warmup and require six measured
+    minutes, so the unchanged last-third 5% rule observes at least two minutes.
+    Callers retain NOTRUN windows and require coverage separately.
+    """
+    if not pts:
+        return dict(verdict='NOTRUN', reason='no samples')
+    if any(k < 0 for _, k in pts) or any(b[0] <= a[0] for a,b in zip(pts,pts[1:])):
+        return dict(verdict='FAIL', reason='invalid RSS sample order/value')
+    selected = [(t,k) for t,k in pts if t >= pts[0][0]+warmup_s]
+    if len(selected)<4 or selected[-1][0]-selected[0][0]<minimum_s:
+        return dict(verdict='NOTRUN', reason='insufficient uninterrupted post-warmup write load',
+                    samples=len(selected), required_seconds=minimum_s, warmup_seconds=warmup_s)
+    values=[k for _,k in selected]
+    third=selected[len(selected)*2//3:]
+    peak=max(values)
+    growth=100*(third[-1][1]-third[0][1])/peak if peak else 0
+    return dict(verdict='PASS' if growth<=5 else 'FAIL', samples=len(selected),
+                seconds=selected[-1][0]-selected[0][0], first=values[0], peak=peak,
+                last=values[-1], lastthird=third[0][1], growth_pct=growth,
+                warmup_seconds=warmup_s, threshold_pct=5)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('path')

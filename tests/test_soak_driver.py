@@ -118,3 +118,110 @@ release.set();starter.join(2);observer.join(2);s.foreign_jobs=old
 assert not starter.is_alive() and not observer.is_alive() and not errors,errors
 assert observed.is_set()
 print('soak ownership registry: forced child-birth/observer interleaving PASS')
+
+# Current operator contract: bounded cleanup is explicitly resumable, and all
+# touched shards must be completed after a parallel coordinator stops early.
+def view(shard=4,epoch=2,state=1,bit=0):
+ return f'raft-session status=0 rc=0 primary=3 op=get ssh=7 shard={shard} epoch={epoch} state={state} touched={bit} index=99\n'
+busy=('session cleanup incomplete: epoch=1 shard=1 rc=-13; resume cleanup-leases and cleanup-appends for that epoch/shard\n'
+      'session fence incomplete: phase=cleanup epoch=2 rc=-13\n')
+calls=[];counts={};tick=[0.]
+def clock():return tick[0]
+def pause(n):tick[0]+=n
+def invoke(op,uuid,*args,timeout):
+ assert uuid==u and 0<timeout<=(300 if op=='fence' else 60)
+ calls.append((op,args));tick[0]+=.0001
+ if op=='fence':return 1,busy
+ if op=='get':return 0,view(int(args[0]) if args else 4,bit=int(bool(args) and int(args[0]) in (1,7,2049)))
+ epoch,shard=map(int,args);assert epoch==1
+ key=(op,shard);counts[key]=counts.get(key,0)+1
+ rc=-13 if key==('cleanup-appends',7) and counts[key]==1 else 0
+ return int(rc!=0),f'raft-session op={op} epoch={epoch} shard={shard} rc={rc} index=99 salt={0 if rc else 1}\n'
+proof=s.revoke_owned_session(invoke,u,1,300,clock,pause)
+assert proof['resumed'] and proof['touched']==[1,7,2049]
+assert proof['cleanup_invocations']==7 and sum(op=='fence' for op,_ in calls)==1
+assert len([1 for op,args in calls if op=='get' and args])==4096
+for bad in (busy.replace('phase=cleanup','phase=storage-fence'),busy.replace('epoch=1 shard=1','epoch=9 shard=1'),'network error',busy.replace('rc=-13','rc=-5')):
+ def reject(op,uuid,*args,timeout):assert op=='fence';return 1,bad
+ try:s.revoke_owned_session(reject,u,1,300)
+ except AssertionError:pass
+ else:raise AssertionError('unproven cleanup result resumed')
+# No extra budget, no epoch drift, no empty-phase inference from BUSY.
+for mode in ('deadline','epoch','wrong-shard','io','not-empty'):
+ calls.clear();counts.clear();tick[0]=0.
+ def faulty(op,uuid,*args,timeout):
+  if op=='get' and mode=='epoch':return 0,view(epoch=3)
+  if op.startswith('cleanup'):
+   if mode=='deadline':tick[0]=301.;return 1,f'raft-session op={op} epoch=1 shard={args[1]} rc=-13 index=0 salt=0\n'
+   if mode=='wrong-shard':return 0,f'raft-session op={op} epoch=1 shard=888 rc=0 index=99 salt=1\n'
+   if mode=='io':return 1,f'raft-session op={op} epoch=1 shard={args[1]} rc=-5 index=0 salt=0\n'
+   if mode=='not-empty':return 0,f'raft-session op={op} epoch=1 shard={args[1]} rc=0 index=99 salt=0\n'
+  return invoke(op,uuid,*args,timeout=timeout)
+ try:s.revoke_owned_session(faulty,u,1,300,clock,pause)
+ except AssertionError:pass
+ else:raise AssertionError(f'unsafe cleanup accepted: {mode}')
+print('owned session resume: frozen epoch, all touched shards, BUSY completion, no re-fence and negative controls PASS')
+
+# A failed mount transition must publish stop while still holding its lock.
+h=s.Soak.__new__(s.Soak);h.mount_mu=[threading.Lock()];h.stop=threading.Event()
+released=[]
+class ObservedLock:
+ def __enter__(self):return self
+ def __exit__(self,*args):released.append(h.stop.is_set())
+h.mount_mu=[ObservedLock()]
+try:
+ with h.changing_mount(0):raise AssertionError('simulated cleanup refusal')
+except AssertionError:pass
+assert released==[True] and h.stop.is_set(), 'writer could enter the unmounted path before stop'
+with tempfile.TemporaryDirectory() as d:
+ h.mounts=[types.SimpleNamespace(path=Path(d))]
+ h.command=lambda *a,**kw:(_ for _ in ()).throw(AssertionError('unmounted operation launched'))
+ try:h.op(0,dict(op='create',name='must-not-exist',token='x',size=1))
+ except AssertionError as e:assert 'unmounted client path' in str(e)
+ else:raise AssertionError('local backing directory accepted as an EFS mount')
+ assert not (Path(d)/'must-not-exist').exists()
+print('failed client transition: stop before unlock and unmounted IO refusal PASS')
+
+# Compressed churn/readback is not a steady-load memory plateau. Keep the 5%
+# rule, reject bad samples and preserve real late growth in a long enough run.
+flat=[(t,1000) for t in range(0,601,10)]
+assert s.RSS.assess_points(flat)['verdict']=='PASS'
+assert s.RSS.assess_points([(t,1000+t*10) for t in range(0,601,10)])['verdict']=='FAIL'
+assert s.RSS.assess_points(flat[:17])['verdict']=='NOTRUN'
+assert s.RSS.assess_points([(0,1),(0,2)])['verdict']=='FAIL'
+assert s.RSS.assess_points([(0,-1)])['verdict']=='FAIL'
+# Allocation before the fixed warmup is excluded; a late cache/growth jump
+# during genuine write load is NOT silently excluded.
+warm=[(t,100 if t<120 else 1000) for t in range(0,601,10)]
+assert s.RSS.assess_points(warm)['verdict']=='PASS'
+jump=[(t,1000 if t<550 else 2000) for t in range(0,601,10)]
+assert s.RSS.assess_points(jump)['verdict']=='FAIL'
+with tempfile.TemporaryDirectory() as d:
+ h=s.Soak.__new__(s.Soak);h.out=Path(d);h.quiet=lambda begin:None
+ h.c=types.SimpleNamespace(procs={1:None});h.rss_roles={'1':'node-1','2':'client-0','3':'client-1'}
+ h.a=types.SimpleNamespace(profile='endurance');p=h.out/'rss-quiet-000.txt';h.quiet_files=[p]
+ p.write_text('\n'.join(f'{t} 1:1000 2:1000 3:1000' for t in range(0,601,10)))
+ assert h.plateau()['verdict']=='PASS'
+ h.c.procs[2]=None
+ try:h.plateau()
+ except AssertionError:pass
+ else:raise AssertionError('unmeasured joined node accepted')
+ h.a.profile='rehearsal'
+ assert h.plateau()['verdict']=='NOTRUN'
+ p.write_text('\n'.join(f'{t} 1:{1000+t*10} 2:1000 3:1000' for t in range(0,601,10)))
+ try:h.plateau()
+ except AssertionError:pass
+ else:raise AssertionError('genuine RSS growth hidden in rehearsal')
+# Read verification closes the writer window before touching any mount.
+h=s.Soak.__new__(s.Soak);h.rss_fp=object();steps=[];h.quiet=lambda begin:steps.append(begin)
+h.note=lambda *args,**kwargs:None
+class RefuseLock:
+ def __enter__(self):
+  assert steps==[False]
+  raise RuntimeError('fixture abort')
+ def __exit__(self,*args):pass
+h.mount_mu=[RefuseLock(),RefuseLock()]
+try:h.verify()
+except RuntimeError:pass
+else:raise AssertionError('fixture did not abort')
+print('RSS: long-window growth negative controls, per-role coverage, rehearsal NOTRUN, verification isolation PASS')
