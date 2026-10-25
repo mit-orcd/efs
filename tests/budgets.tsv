@@ -40,6 +40,8 @@ python3 tests/test_query_first_catalog.py	35	1
 python3 tests/test_client_processes.py	20	1	
 python3 tests/test_shutdown_stuck_worker.py	10	1	
 python3 tests/test_k36_recovery.py	120	1	
+python3 tests/test_expiry_policy_live.py	45	1	
+python3 tests/posix/posix_expiry.py --private	170	2	
 python3 tests/test_k36_segment_recovery.py	100	1	
 ./tests/test_reclaim	35	1	
 python3 tests/test_opid_admission.py	15	1	

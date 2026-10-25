@@ -16,10 +16,7 @@ lists those commands under NOTRUN and exits 3 (INCOMPLETE), so they never
 pass silently.
 """
 # Python tests the recipe does not run, each with its reason.
-NOT_WIRED = {
-    'tests/test_expiry_cli.py': 'expiry is compiled out of the product (D42); make test-expiry in an EFS_BUILD_EXPIRY=1 tree',
-    'tests/test_mgmt_expiry_lookup.py': 'expiry is compiled out of the product (D42); make test-expiry in an EFS_BUILD_EXPIRY=1 tree',
-}
+NOT_WIRED = {}
 from pathlib import Path
 import os, re, subprocess
 root = Path(__file__).resolve().parents[1]

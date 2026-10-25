@@ -27,9 +27,7 @@ static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return u
 #undef fsync
 #undef syncfs
 /* No Raft host exists in this physical-store fixture. */
-#if EFS_BUILD_EXPIRY
 void server_raft_host_expiry_status(struct efs_expiry_status *out){memset(out,0,sizeof(*out));}
-#endif
 int server_raft_host_active(void){return 0;}
 int server_raft_host_inode_reaped(efs_ino_t ino,int *dead){(void)ino;*dead=0;return EFS_ERR_NOT_PRIMARY;}
 /* The reclaim deleter's two durable steps: death bit, then whole-inode delete. */

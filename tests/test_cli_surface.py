@@ -22,17 +22,12 @@ def run(*args):
     return subprocess.run(args, capture_output=True, text=True, timeout=10)
 
 
-# Dispatched names in main(), split by the expiry build switch.
+# Dispatched names in main(). Expiry ships in every build (D43): no switch.
 main = src[src.index('int main(int argc, char **argv)'):]
-dispatch, expiry_only, gated = set(), set(), False
-for line in main.splitlines():
-    if line.startswith('#if EFS_BUILD_EXPIRY'):
-        gated = True
-    elif line.startswith('#endif'):
-        gated = False
-    for name in re.findall(r'strcmp\(cmd,\s*"([^"]+)"\)\s*==\s*0', line):
-        (expiry_only if gated else dispatch).add(name)
+assert '#if' not in main, 'efs-mgmt dispatch must not depend on a build switch'
+dispatch = set(re.findall(r'strcmp\(cmd,\s*"([^"]+)"\)\s*==\s*0', main))
 assert 'status' in dispatch and 'raft-resync' in dispatch, dispatch
+assert {'expiry-policy', 'expiry', 'expiry-status', 'expiry-clock', 'expiry-enable', 'expiry-id'} <= dispatch, dispatch
 
 overview = run(mgmt, '--help')
 assert overview.returncode == 0, overview
@@ -43,13 +38,7 @@ listed = set()
 for line in block.splitlines():
     names = re.split(r'\s{2,}', line.strip())[0]
     listed.update(n.strip() for n in names.split(','))
-expiry_build = bool(listed & expiry_only)
-if expiry_build:
-    dispatch |= expiry_only
-
 specs = set(re.findall(r'\{"([a-z-]+)","', helph[helph.index('efs_mgmt_help'):]))
-if not expiry_build:
-    specs -= expiry_only
 
 missing_help = dispatch - listed
 assert not missing_help, f'dispatched but not in the overview help: {sorted(missing_help)}'

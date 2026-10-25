@@ -118,10 +118,57 @@ static void namespace_gates(void)
 
  assert(!efs_meta_apply_check(kv));efs_kv_mem_free(kv);
 }
+/* D43: the cluster policy row (versioned CAS, off when absent) and the
+ * coverage rule: a deadline acts only while its source folder policy is
+ * enabled and the folder is live with the recorded generation. */
+static void policy_gates(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);assert(!efs_meta_apply_init(kv,NS));
+ uint64_t version=7;uint8_t on=7;
+ assert(!efs_expiry_switch_get(kv,&version,&on));assert(version==0 && on==0);
+ assert(efs_expiry_switch_apply(kv,0,2)==EFS_ERR_INVAL);
+ assert(efs_expiry_switch_apply(kv,1,1)==EFS_ERR_STALE);
+ assert(!efs_expiry_switch_apply(kv,0,1));
+ assert(!efs_expiry_switch_get(kv,&version,&on));assert(version==1 && on==1);
+ assert(efs_expiry_switch_apply(kv,0,0)==EFS_ERR_STALE);
+ assert(!efs_expiry_switch_apply(kv,1,0));
+ assert(!efs_expiry_switch_get(kv,&version,&on));assert(version==2 && on==0);
+ assert(!efs_expiry_covered(NULL,0) && !efs_expiry_covered((const uint8_t *)"",EFS_TXN_ABSENT));
+ struct efs_meta_attrs at={123,123,NS};efs_ino_t ino,dir;
+ assert(!efs_meta_apply_mkdir(kv,&at,1,S_IFDIR|0700,"scratch",&dir));
+ struct efs_expiry_policy policy={.ttl_ns=NS,.max_ns=20*NS,.enabled=1};
+ assert(!efs_meta_apply_expiry_policy(kv,1,1,0,0,&policy));
+ uint8_t key[EFS_EXPIRY_KEY_BYTES],value[EFS_EXPIRY_POLICY_BYTES];uint32_t n=sizeof(value);
+ efs_expiry_policy_key(1,1,key);assert(!efs_kv_get(kv,key,sizeof(key),value,&n));assert(efs_expiry_covered(value,n));
+ assert(!efs_meta_apply_create_file(kv,&at,1,S_IFREG|0600,"c",&ino));
+ struct efs_expiry_record r={.deadline_ns=2*NS,.root=1,.root_generation=1,.policy_revision=1,.max_ns=20*NS,.parent=1,.name="c"};
+ apply(kv,ino,0,&r);
+ struct efs_expiry_due due={.deadline_ns=2*NS,.ino=ino,.generation=1,.revision=1,.parent=1,.name="c"};
+ struct efs_expiry_page page;assert(!efs_expiry_due_page(kv,efs_kv_anchor_shard(efs_kv_inode_shard(ino)),3*NS,NULL,&page));
+ assert(page.count==1 && page.rows[0].root==1 && page.rows[0].root_generation==1);
+ /* Disabled source: the due deadline never removes the file. */
+ policy.enabled=0;assert(!efs_meta_apply_expiry_policy(kv,1,1,0,1,&policy));
+ n=sizeof(value);assert(!efs_kv_get(kv,key,sizeof(key),value,&n));assert(!efs_expiry_covered(value,n));
+ assert(efs_meta_apply_expire(kv,1,"c",3*NS,&due)==EFS_ERR_STALE);
+ struct efs_meta_dentry dent;assert(!efs_meta_apply_lookup(kv,1,"c",&dent));assert(dent.ino==ino);
+ assert(!efs_expiry_get(kv,ino,1,&r));assert(r.revision==1 && r.deadline_ns==2*NS);
+ /* A record naming another generation of its source folder is stale. */
+ efs_ino_t other;assert(!efs_meta_apply_create_file(kv,&at,1,S_IFREG|0600,"g",&other));
+ struct efs_expiry_record g={.deadline_ns=2*NS,.root=1,.root_generation=9,.policy_revision=1,.max_ns=20*NS,.parent=1,.name="g"};
+ apply(kv,other,0,&g);
+ struct efs_expiry_due gdue={.deadline_ns=2*NS,.ino=other,.generation=1,.revision=1,.parent=1,.name="g"};
+ policy.enabled=1;assert(!efs_meta_apply_expiry_policy(kv,1,1,0,2,&policy));
+ assert(efs_meta_apply_expire(kv,1,"g",3*NS,&gdue)==EFS_ERR_STALE);
+ /* Enabled again: the same deadline acts. */
+ assert(!efs_meta_apply_expire(kv,1,"c",3*NS,&due));
+ assert(efs_meta_apply_lookup(kv,1,"c",&dent)==EFS_ERR_NOT_FOUND);
+ assert(!efs_meta_apply_check(kv));efs_kv_mem_free(kv);
+}
 int main(void)
 {
  inheritance_gates();
  namespace_gates();
+ policy_gates();
  char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-expiry-XXXXXX");assert(efs_test_mkdtemp(path));
  struct efs_kv *kv=efs_kv_lsm_open(path,NULL);assert(kv);
  struct efs_expiry_policy p;assert(!efs_expiry_policy_get(kv,1,1,&p));assert(!p.enabled && !p.revision);
@@ -169,5 +216,5 @@ int main(void)
  assert(!efs_expiry_materialize(&p,1,1,NS,&r));assert(efs_expiry_materialize(&p,1,1,UINT64_MAX,&r)==EFS_ERR_INVAL);
  efs_kv_lsm_close(kv);DIR *d=opendir(path);assert(d);struct dirent *e;
  while((e=readdir(d)))if(strcmp(e->d_name,".") && strcmp(e->d_name,"..")){char f[512];snprintf(f,sizeof(f),"%s/%s",path,e->d_name);assert(!unlink(f));}
- closedir(d);assert(!rmdir(path));puts("expiry: durable policy/CAS, FileID isolation, fixed materialization, authorization/retention/link refusal, renewal index replacement, bounded paging, cold recovery and clock refusal PASS");return 0;
+ closedir(d);assert(!rmdir(path));puts("expiry: cluster policy CAS (off by default), source-policy coverage, durable policy/CAS, FileID isolation, fixed materialization, authorization/retention/link refusal, renewal index replacement, bounded paging, cold recovery and clock refusal PASS");return 0;
 }

@@ -106,6 +106,7 @@ p.add_argument('--expiry-backlog-files',type=int,default=0,help='1000..100000 fi
 p.add_argument('--expiry-clock-fault',action='store_true',help='expiry clock-health pause/reset gate; requires a fault-enabled daemon')
 p.add_argument('--expiry-soak-seconds',type=int,default=0,help='0 or 60..7200 seconds of bounded two-mount expiry churn/restarts; requires --expiry')
 p.add_argument('--expiry',action='store_true',help='expiry lifecycle before normal reclamation/POSIX gates; explicit TCP/direct/files only')
+p.add_argument('--expiry-only',action='store_true',help='with --expiry: stop after the expiry phases, then (with --posix) the POSIX core suite on the expiry-on cluster; the d5-expiry gate')
 p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing peer mkdir races in an isolated cluster, then cold namespace verification')
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
 p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
@@ -120,6 +121,7 @@ p.add_argument('--ordinary-overwrite-only',action='store_true',help='ordinary sp
 p.add_argument('--disable-efs-commands', action='store_true', help='disable client/server .efs query work; use core POSIX qualification')
 p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
+p.add_argument('--posix-timeout-s', type=int, default=30, help='per-case POSIX timeout of the --expiry-only core run (default: 30; the qualify topology value on one-disk hosts, W159)')
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
 p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-sustained-large-mib-s',type=float,default=0,help='0=unpaced; otherwise 0..64 MiB/s per large writer in sustained gate')
@@ -273,7 +275,8 @@ if a.expiry_soak_seconds:
     assert a.expiry and 60 <= a.expiry_soak_seconds <= 7200
 if a.expiry:
     assert a.mode=='direct' and a.transport=='tcp' and a.disable_efs_commands
-    # D42: expiry needs an EFS_BUILD_EXPIRY build (--server-binary); no variable.
+    # D43: expiry is in every build; the cluster expiry policy (efs-mgmt
+    # expiry-policy NODE:PORT cluster) is its only control, off until set.
     if a.expiry_clock_fault:env['EFS_FAULT_EXPIRY_CLOCK_FILE']=str(work/'expiry-clock-uncertain')
 if a.replication_pressure:
     assert a.tiny_sustained_seconds>=120, 'pressure requires a sustained recovery window'
@@ -283,11 +286,10 @@ if a.replication_pressure:
     env.update(LD_PRELOAD=str(run_preload),EFS_TEST_RAFT_SLOW_FILE=str(work/'raft-slow-armed'))
 if a.efs_commands_only:env.update(EFS_QUERY_TEST_PORT=str(a.port))
 if a.disable_efs_commands:
+    # D42: no environment switch disables .efs; form_cluster() sets the
+    # cluster commands-policy to 0 after every formation.
     assert not a.efs_commands_only, 'command-only gate conflicts with disabled .efs'
-    # D42: no environment switch disables .efs; port this to `efs-mgmt
-    # commands-policy NODE set 0 VERSION` after formation. Refuse, never ignore.
-    raise SystemExit('--disable-efs-commands: EFS_COMMANDS/EFS_COMMANDS_SERVER were removed (D42); '
-                     'disable .efs with efs-mgmt commands-policy (not yet ported here)')
+if a.expiry_only:assert a.expiry,'--expiry-only requires --expiry'
 if a.storage_session_fence_fault:
     assert a.guarded_leases and not (a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure), 'certificate fault must own its preload'
     subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/storage_session_fence_fault.c','-ldl','-o',work/'put-session-fault.so'],check=True)
@@ -387,6 +389,15 @@ def wait_joined():
         text=True,timeout=10).stdout,'all members joined')
 
 joined=set()
+
+def form_cluster():
+    form(source/'efs-mgmt',f'127.0.0.1:{a.port}',env=env)
+    if a.disable_efs_commands:
+        get=run([source/'efs-mgmt','commands-policy',f'127.0.0.1:{a.port}','get'],capture_output=True,text=True).stdout
+        version=re.search(r'rc=0 version=(\d+) ',get).group(1)
+        out=run([source/'efs-mgmt','commands-policy',f'127.0.0.1:{a.port}','set','0',version],capture_output=True,text=True).stdout
+        assert 'rc=0 ' in out and ' mask=0 ' in out,out
+        print('.efs disabled by the cluster commands-policy (mask 0) PASS',flush=True)
 
 def start(prefer_single_host=False):
     # Follower-persistence gates fault n3, which hosts both groups. Start its
@@ -648,7 +659,7 @@ def fresh_format(label):
     joined.clear()  # empty stores: n2-n4 join the new seed again
     start()
     wait_joined()
-    form(source/'efs-mgmt',f'127.0.0.1:{a.port}',env=env)
+    form_cluster()
     mount_client()
     print('fresh format of all four stores for '+label,flush=True)
 
@@ -681,7 +692,7 @@ try:
         run(['cc','-shared','-fPIC','-Wall','-Wextra','-Werror',source/'tests/live/kv_wal_fault.c','-ldl','-o',work/'kv-wal-fault.so'])
     start()
     wait_joined()
-    form(source/'efs-mgmt',f'127.0.0.1:{a.port}',env=env)
+    form_cluster()
     mount_client()
     if a.expiry:
         from expiry_lifecycle import exercise
@@ -703,10 +714,14 @@ try:
         # (W71 "recovery uncertain") until verified recovery exists, and the
         # expiry gates write new files after each restart/rejoin. Restarts
         # still prove the durable expiry index across a cold daemon start.
+        from expiry_lifecycle import cluster_expiry
         def expiry_restart(enabled=None):
+            # D43: enabled=False turns the cluster expiry policy off before
+            # the stop (no deadline may act around it); True turns it on after.
+            if enabled is False:cluster_expiry(a.port,False,wait)
             unmount();stop(crash=False)
-            assert enabled is None or enabled, 'D42: expiry cannot be disabled by environment'
             start();mount_client()
+            if enabled:cluster_expiry(a.port,True,wait)
         def expiry_offline(group=None,storage_ino=None,node_id=None):
             node=3 if node_id is None else node_id-1
             assert 0<=node<4
@@ -759,6 +774,14 @@ try:
             from expiry_soak import exercise as soak
             soak(mount,peer_mount,a.port,work,wait,files,soak_restart,a.expiry_soak_seconds)
             run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        if a.expiry_only:
+            if a.posix:
+                # Core POSIX on the cluster with the expiry policy on.
+                run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs',str(a.posix_jobs),'--timeout-s',str(a.posix_timeout_s),
+                     '--results',work/'posix.tsv'],timeout=max(600,20*a.posix_timeout_s))
+                print('POSIX core suite with the cluster expiry policy on PASS',flush=True)
+            print('expiry-only: expiry phases complete PASS',flush=True)
+            raise SystemExit(0)
     if a.ordinary_overwrite_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

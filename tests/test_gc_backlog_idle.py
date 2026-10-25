@@ -5,7 +5,7 @@ import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static int host_gc_backlog_config(')
-b=s.index('#if EFS_BUILD_EXPIRY\n/* Progress is confirmed by the expiry',a)
+b=s.index('/* D43: the cluster expiry policy decides',a)
 code='''#include "efs/common.h"
 #include <assert.h>
 #include <errno.h>
@@ -37,17 +37,17 @@ thread=s[s.index('static void *host_gc_thread(',b):s.index('/* W92 query publica
 assert 'host_gc_reap_pass(h, h->g[g].group' in thread
 assert 'backlog_capped |= __atomic_load_n' in thread
 assert 'backlog_capped |= host_gc_frag_pass(' in thread
-# The expiry pacing exists only in EFS_BUILD_EXPIRY builds (D42).
+# Expiry pacing is in every build (D43); one policy read per pass gates it.
 for line in ('expiry_progress |= host_gc_expiry_pass(', 'idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress)',
-             'expiry_progress = host_gc_expiry_groups(h)'):
-    at = thread.index(line)
-    assert thread.rindex('#if EFS_BUILD_EXPIRY', 0, at) > thread.rfind('#endif', 0, at), line
+             'expiry_progress = host_gc_expiry_groups(h)', 'host_expiry_refresh(h);'):
+    assert line in thread, line
+assert 'EFS_BUILD_EXPIRY' not in s
 assert 'efs_iostats_now_us() < idle_end' in thread
 yield_code=thread[thread.index('uint64_t idle_end ='):]
 assert 'now_us_()' not in yield_code
 assert 'maintenance_at = efs_iostats_now_us() + (uint64_t)GC_LOOP_MS * 1000' in thread
 assert 'if (maintenance) host_dir_spread_pass(h)' in thread
-assert 'i<2 && h->gc_running' in s
+assert 'attempts<2 && h->gc_running' in s
 assert 'expiry_at = efs_iostats_now_us() +\n                            20000' in thread
 assert 'removed_before' in thread and 'removed_after' in thread
 assert thread.count('host_reap_completed')==2 # reap completions count as progress

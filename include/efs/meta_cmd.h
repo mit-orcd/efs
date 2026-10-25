@@ -64,17 +64,10 @@
 #define EFS_MD_CMD_EXPIRY_RENEW 59 /* ino/gen/uid/expected/leader-now/deadline:45 */
 #define EFS_MD_REQ_EXPIRY_POLICY 60 /* root/gen:17; fresh revision/TTL/max */
 #define EFS_MD_REQ_EXPIRY_RECORD 61 /* ino/gen:17; fresh revision/deadline/root */
-/* Expiry requests and commands (D33). Excluded from the alpha product
- * (D42): a build without EFS_BUILD_EXPIRY refuses them, never proposes them. */
-static inline int efs_md_is_expiry(uint8_t op)
-{
-    return op == EFS_MD_CMD_EXPIRY_POLICY || op == EFS_MD_CMD_EXPIRY_RENEW ||
-           (op >= EFS_MD_REQ_EXPIRY_POLICY && op <= EFS_MD_REQ_EXPIRY_RECORD) ||
-           op == EFS_MD_REQ_EXPIRY_CLOCK || op == EFS_MD_REQ_EXPIRY_CLOCK_RESET ||
-           (op >= EFS_MD_REQ_EXPIRY_DELETE && op <= EFS_MD_REQ_EXPIRY_ID) ||
-           op == EFS_MD_REQ_EXPIRY_POLICY_INFO || op == EFS_MD_REQ_EXPIRY_ORIGIN ||
-           op == EFS_MD_REQ_EXPIRY_PARENT;
-}
+/* D43: the cluster expiry policy, versioned like QUERY_POLICY on the
+ * group of shard 1. Absent means off; expiry does nothing until it is on. */
+#define EFS_MD_CMD_EXPIRY_SWITCH 102 /* expected version:8, enabled:1 */
+#define EFS_MD_REQ_EXPIRY_SWITCH 103 /* ReadIndex only, reply index=version/salt=enabled */
 #define EFS_MD_CMD_APPEND_COMPLETE_ATOMIC 54 /* ino/gen/offset/UUID/epoch/content epoch/reservation: 101 bytes */
 #define EFS_MD_CMD_APPEND_ATOMIC 53
 #define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */
@@ -344,7 +337,7 @@ static inline int efs_md_is_expiry(uint8_t op)
     X(PUBLICATION_ADMIT) X(CLOSE_CLEANUP) X(CLOSE_STEP) X(PUT_TICKET_ADMIT) \
     X(REPORT_PUBLISH) X(PUT_TICKET_SETTLE) X(QUERY_POLICY) \
     X(APPEND_CATCHUP) X(APPEND_ATOMIC) X(APPEND_COMPLETE_ATOMIC) \
-    X(EXPIRY_POLICY) X(EXPIRY_RENEW) X(CREATE_REFUSAL) \
+    X(EXPIRY_POLICY) X(EXPIRY_RENEW) X(CREATE_REFUSAL) X(EXPIRY_SWITCH) \
     X(LANE_SWEEP_MULTI) X(REAP_MULTI) \
     X(PACK_ADMIT) X(PACK_SWITCH) X(PACK_CANCEL) X(PACK_RETIRE) \
     X(PACK_UNINDEX) X(PACK_INDEX) \

@@ -105,7 +105,8 @@ static int due(void *user,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t
     if(c->page->count==EFS_EXPIRY_PAGE_MAX){c->page->more=1;return 1;}
     struct efs_expiry_due *r=&c->page->rows[c->page->count++];
     *r=(struct efs_expiry_due){.deadline_ns=deadline,.ino=get64(k+11),
-        .generation=get64(k+19),.revision=get64(v+8),.parent=get64(v+56)};
+        .generation=get64(k+19),.revision=get64(v+8),.parent=get64(v+56),
+        .root=get64(v+16),.root_generation=get64(v+24)};
     memcpy(r->name,v+64,EFS_MAX_NAME);
     if(!memchr(r->name,0,sizeof(r->name)) || strchr(r->name,'/') ||
        (!!r->parent != !!r->name[0]))return EFS_ERR_PROTO;
@@ -128,4 +129,34 @@ int efs_expiry_clock_sample(struct efs_expiry_clock *c,uint64_t wall,uint64_t mo
     if(c->initialized && wall>=c->wall && mono>c->mono){uint64_t w=wall-c->wall,m=mono-c->mono;safe=(w>m?w-m:m-w)<=1000000000ull;}
     if(c->initialized && !safe)c->uncertain=1;
     c->wall=wall;c->mono=mono;c->initialized=1;c->healthy=(uint8_t)(safe && !c->uncertain);return c->healthy;
+}
+static const uint8_t switch_key[3]={0,1,EFS_KV_KIND_EXPIRY_SWITCH};
+int efs_expiry_switch_get(struct efs_kv *kv,uint64_t *version,uint8_t *enabled)
+{
+    if(!kv || !version || !enabled)return EFS_ERR_INVAL;
+    *version=0;*enabled=0;
+    uint8_t v[9];uint32_t n=sizeof(v);
+    int rc=efs_kv_get(kv,switch_key,sizeof(switch_key),v,&n);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    if(rc)return rc;
+    if(n!=sizeof(v) || v[8]>1 || !get64(v))return EFS_ERR_PROTO;
+    *version=get64(v);*enabled=v[8];return EFS_OK;
+}
+int efs_expiry_switch_apply(struct efs_kv *kv,uint64_t expected,uint8_t enabled)
+{
+    if(enabled>1)return EFS_ERR_INVAL;
+    uint64_t version;uint8_t old;
+    int rc=efs_expiry_switch_get(kv,&version,&old);
+    if(rc)return rc;
+    if(version!=expected)return EFS_ERR_STALE;
+    if(version==UINT64_MAX)return EFS_ERR_INVAL;
+    uint8_t v[9];put64(v,version+1);v[8]=enabled;
+    return efs_kv_put(kv,switch_key,sizeof(switch_key),v,sizeof(v));
+}
+int efs_expiry_covered(const uint8_t *policy,uint32_t policy_len)
+{
+    struct efs_expiry_policy p;
+    if(!policy || policy_len==EFS_TXN_ABSENT)return 0;
+    if(efs_expiry_policy_decode(policy,policy_len,&p)!=EFS_OK)return 0;
+    return p.revision && p.enabled;
 }

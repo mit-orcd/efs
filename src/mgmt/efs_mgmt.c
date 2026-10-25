@@ -707,9 +707,7 @@ static int cmd_version(int argc, char **argv)
     return 0;
 }
 
-#if EFS_BUILD_EXPIRY
 static void expiry_duration(uint64_t ns,char *out,size_t n);
-#endif
 
 static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
 {
@@ -737,7 +735,6 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
         return 1;
     }
     struct efs_msg_gc_status_reply *g = payload;
-#if EFS_BUILD_EXPIRY
     if(expiry_only) {
         if(!g->expiry.available) {
             fprintf(stderr,"Expiry worker status unavailable on this node.\n");free(payload);return 1;
@@ -762,9 +759,6 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
         printf("Physical reclamation: separate GC totals; no expiry-only physical byte attribution\n");
         free(payload);return 0;
     }
-#else
-    (void)expiry_only;
-#endif
     printf("node=%u stage=%u group=%u exports=%u passes=%llu elapsed_ms=%llu "
            "last_pass_age_ms=%llu last_delete_age_ms=%llu\n",
            g->node_id, g->stage, g->group, g->exports, (unsigned long long)g->passes,
@@ -792,7 +786,6 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                (unsigned long long)g->first_seen_age_ms[i]);
     printf("trunc_pending group0=%llu group2=%llu\n",
            (unsigned long long)g->trunc_pending[0], (unsigned long long)g->trunc_pending[1]);
-#if EFS_BUILD_EXPIRY
     {
         const struct efs_expiry_status *e=&g->expiry;
         const char *state=!e->available?"unavailable":!e->enabled?"disabled":
@@ -809,7 +802,6 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                "overdue_capped=%u expiry_sample_age_ms=%llu\n",i*2,(e->sampled_mask>>i)&1,
                (unsigned long long)e->due_lower_bound[i],e->due_capped[i],(unsigned long long)e->sample_age_ms[i]);
     }
-#endif
     {
         const struct efs_reclaim_status *c=&g->reclaim;
         printf("reclaim_state=%s reclaim_accepted=%llu reclaim_deleted=%llu reclaim_checkpointed=%llu "
@@ -921,9 +913,7 @@ static int cmd_pack_compact(int argc, char **argv)
 }
 
 static int cmd_gc_status(int argc,char **argv) {return cmd_gc_status_mode(argc,argv,0);}
-#if EFS_BUILD_EXPIRY
 static int cmd_expiry_status(int argc,char **argv) {return cmd_gc_status_mode(argc,argv,1);}
-#endif
 
 static int cmd_raft_status(int argc, char **argv)
 {
@@ -1526,7 +1516,6 @@ static int cmd_commands_policy(int argc,char **argv)
     return rc?1:0;
 }
 
-#if EFS_BUILD_EXPIRY
 static int cmd_expiry_clock(int argc,char **argv)
 {
     int reset=argc==2 && !strcmp(argv[1],"reset");
@@ -1754,9 +1743,33 @@ static int expiry_parse_duration(const char *text,uint64_t *out)
     *out=value*mult;return 0;
 }
 
+/* D43: the cluster expiry policy, versioned like commands-policy. Off
+ * (version 0, no row) until an operator sets it; runtime, no restart. */
+static int cmd_expiry_cluster(int argc,char **argv)
+{
+    int set=argc==5 && !strcmp(argv[2],"set") && (!strcmp(argv[3],"on") || !strcmp(argv[3],"off"));
+    if(!set && !(argc==3 && !strcmp(argv[2],"get"))) {
+        fprintf(stderr,"Usage: efs-mgmt expiry-policy NODE:PORT cluster get | cluster set on|off EXPECTED_VERSION\n");
+        return 1;
+    }
+    char host[64];uint16_t port;
+    if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
+    uint8_t payload[11]={efs_raft_shard_group(1),EFS_MD_REQ_EXPIRY_SWITCH};uint32_t length=2;
+    if(set) {
+        uint64_t version;if(expiry_u64(argv[4],&version))return 1;
+        payload[1]=EFS_MD_CMD_EXPIRY_SWITCH;wr64be_mgmt(payload+2,version);
+        payload[10]=!strcmp(argv[3],"on");length=11;
+    }
+    struct efs_msg_raft_mkfs_reply reply;int rc=sess_rpc(host,port,payload,length,&reply);
+    printf("expiry-policy cluster rc=%d version=%llu expiry=%s leader_hint=%d\n",rc,
+           (unsigned long long)reply.index,rc?"unknown":reply.salt?"on":"off",reply.leader_hint);
+    return rc?1:0;
+}
+
 static int cmd_expiry(int argc,char **argv,int policy)
 {
     if(!policy && argc>=2 && !strcmp(argv[1],"show"))return cmd_expiry_show(argc,argv);
+    if(policy && argc>=2 && !strcmp(argv[1],"cluster"))return cmd_expiry_cluster(argc,argv);
     int get=argc>=2 && !strcmp(argv[1],"get");
     int mutate=argc>=2 && !strcmp(argv[1],policy?"set":"renew");
     int named=policy && mutate && argc>5 && argv[5][0]=='-';
@@ -1796,9 +1809,13 @@ static int cmd_expiry(int argc,char **argv,int policy)
            policy?"-policy":"",rc,(unsigned long long)reply.index,
            policy?"ttl_ns":"deadline_ns",(unsigned long long)reply.salt,
            policy?"max_ns":"root_ino",(unsigned long long)reply.term,reply.leader_hint);
+    if(rc==EFS_ERR_ACCES)
+        fprintf(stderr,"Refused: the cluster expiry policy is off (efs-mgmt expiry-policy NODE:PORT cluster get), "
+                       "or the caller lacks permission.\n");
     return rc?1:0;
 usage:
-    fprintf(stderr,"Usage:\n  efs-mgmt expiry-policy NODE:PORT get ROOT_INO GENERATION\n"
+    fprintf(stderr,"Usage:\n  efs-mgmt expiry-policy NODE:PORT cluster get | cluster set on|off EXPECTED_VERSION\n"
+                   "  efs-mgmt expiry-policy NODE:PORT get ROOT_INO GENERATION\n"
                    "  efs-mgmt expiry-policy NODE:PORT set ROOT_INO GENERATION EXPECTED_REV\n"
                    "    --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS\n"
                    "  efs-mgmt expiry NODE:PORT get FILE_INO GENERATION\n"
@@ -1809,11 +1826,11 @@ usage:
                    "Reading/writing does not renew expiry. Repeated explicit renewals may extend lifetime.\n"
                    "Renewal limit must be at least expire-after; it is not a maximum lifetime.\n"
                    "FLAGS: bit 0 enables future-file defaults; bit 1 permits owner clearing.\n"
-                   "An EFS_BUILD_EXPIRY build is required. Set requires uid 0. Renewal requires ownership.\n");
+                   "Expiry acts only while the cluster expiry policy is on (expiry-policy NODE:PORT cluster).\n"
+                   "Set requires uid 0. Renewal requires ownership.\n");
     return 1;
 }
 
-#endif
 
 static void sess_pack_hdr(uint8_t *payload, uint8_t group, uint8_t sub,
                           const uint8_t uuid[EFS_OPID_UUID_LEN])
@@ -3334,14 +3351,12 @@ int main(int argc, char **argv)
         return cmd_raft_resync(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-step-down") == 0)
         return cmd_raft_step_down(argc - 2, argv + 2);
-#if EFS_BUILD_EXPIRY
     if (strcmp(cmd,"expiry-status")==0)return cmd_expiry_status(argc-2,argv+2);
     if (strcmp(cmd,"expiry-id")==0)return cmd_expiry_id(argc-2,argv+2);
     if (strcmp(cmd,"expiry-enable")==0)return cmd_expiry_enable(argc-2,argv+2);
     if (strcmp(cmd,"expiry-clock")==0)return cmd_expiry_clock(argc-2,argv+2);
     if (strcmp(cmd,"expiry-policy")==0)return cmd_expiry(argc-2,argv+2,1);
     if (strcmp(cmd,"expiry")==0)return cmd_expiry(argc-2,argv+2,0);
-#endif
     if (strcmp(cmd, "commands-policy") == 0)
         return cmd_commands_policy(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-mkfs") == 0)

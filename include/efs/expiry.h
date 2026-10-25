@@ -31,6 +31,7 @@ struct efs_expiry_change {
 };
 struct efs_expiry_due {
     uint64_t deadline_ns, ino, generation, revision, parent;
+    uint64_t root, root_generation; /* policy source, for coverage */
     char name[EFS_MAX_NAME];
 };
 struct efs_expiry_page {
@@ -40,6 +41,13 @@ struct efs_expiry_page {
     uint8_t more;
 };
 struct efs_expiry_clock { uint64_t wall, mono; uint8_t initialized, healthy, uncertain; };
+/* D43 cluster expiry policy: one versioned row on shard 1 (absent: version
+ * 0, off). Apply only from serialized Raft apply; CAS on the version. */
+int efs_expiry_switch_get(struct efs_kv *, uint64_t *version, uint8_t *enabled);
+int efs_expiry_switch_apply(struct efs_kv *, uint64_t expected, uint8_t enabled);
+/* 1 when these stored policy bytes (the record's source folder) are an
+ * enabled policy: a deadline is acted on only while its source covers it. */
+int efs_expiry_covered(const uint8_t *policy, uint32_t policy_len);
 void efs_expiry_index_key(uint64_t ino,uint64_t gen,uint64_t deadline,uint8_t out[EFS_EXPIRY_INDEX_BYTES]);
 void efs_expiry_policy_key(uint64_t root,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES]);
 void efs_expiry_record_key(uint64_t ino,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES]);

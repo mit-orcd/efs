@@ -5,6 +5,7 @@ identity authentication. Raw observations stay in the fixture evidence directory
 """
 import errno
 import json
+import re
 import os
 import socket
 import subprocess
@@ -25,6 +26,24 @@ HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, 
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
     assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,5),('declaration refused',reply)
+
+
+CLI=Path(__file__).resolve().parents[2]/'efs-mgmt'
+
+def cluster_expiry(port,on,wait,nodes=4):
+    """D43: set the cluster expiry policy at runtime (CAS on the current
+    version) and wait until every node's GC status reports it."""
+    get=subprocess.run([str(CLI),'expiry-policy',f'127.0.0.1:{port}','cluster','get'],
+                       capture_output=True,text=True,check=True,timeout=60).stdout
+    version=int(re.search(r'rc=0 version=(\d+) ',get).group(1))
+    out=subprocess.run([str(CLI),'expiry-policy',f'127.0.0.1:{port}','cluster','set','on' if on else 'off',str(version)],
+                       capture_output=True,text=True,check=True,timeout=60).stdout
+    assert f'rc=0 version={version+1} expiry={"on" if on else "off"}' in out,out
+    def seen():
+        return all(f'expiry_enabled={int(on)}' in subprocess.run([str(CLI),'gc-status',f'127.0.0.1:{port+i}'],
+                   capture_output=True,text=True,timeout=60).stdout for i in range(nodes))
+    wait(seen,'cluster expiry policy '+('on' if on else 'off')+' on every node',60)
+    return version+1
 
 
 def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,clock_fault=False):
@@ -62,7 +81,13 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,c
         checks.append({'gate':name,'verdict':'PASS','wall_ns':time.time_ns()})
         (work/'expiry-lifecycle.json').write_text(json.dumps(checks,indent=2));print('expiry '+name+' PASS',flush=True)
     base=mount/'expiry-gates';base.mkdir()
-    plain=base/'default-off';created(plain);assert record(plain)[1:]==(0,0,0);mark('default-off')
+    plain=base/'default-off';created(plain)
+    # D43: off until the operator sets the cluster expiry policy.
+    off=subprocess.run([str(CLI),'expiry-policy',f'127.0.0.1:{port}','cluster','get'],capture_output=True,text=True,check=True).stdout
+    assert 'rc=0 version=0 expiry=off' in off,off
+    rpc(61,plain.stat().st_ino,accepted=(-16,));rpc(60,base.stat().st_ino,accepted=(-16,))
+    cluster_expiry(port,True,wait)
+    assert record(plain)[1:]==(0,0,0);mark('default-off')
     policy(base,uid=os.getuid(),accepted=(-16,));mark('operator authorization')
     cli=Path(__file__).resolve().parents[2]/'efs-mgmt'
     policy(base,ttl=30,max_seconds=90)
@@ -181,14 +206,25 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,c
     cold=base/'cold';ino=created(cold);restart()
     wait(lambda:not cold.exists(),'cold restart expiry',40)
     wait(lambda:not physical_files(ino),'cold expiry physical reclaim',90);mark('durable index cold restart')
+    # D43: the cluster expiry policy off at runtime pauses deadlines; files
+    # born while off get none; on again, the overdue deadline acts.
     paused_feature=base/'feature-off-existing';ino=created(paused_feature)
-    restart(False);time.sleep(5);assert paused_feature.exists()
+    cluster_expiry(port,False,wait);time.sleep(5);assert paused_feature.exists()
     no_birth=base/'feature-off-birth';created(no_birth)
-    restart(True)
+    cluster_expiry(port,True,wait)
     wait(lambda:not paused_feature.exists(),'re-enabled index catches overdue deadline',40)
     wait(lambda:not physical_files(ino),'feature re-enable physical reclaim',90)
     assert no_birth.exists() and record(no_birth)[1:]==(0,0,0)
-    no_birth.unlink();mark('global disable pauses and bounded re-enable catches up')
+    no_birth.unlink();mark('cluster policy off pauses at runtime and on again catches up')
+    # A due deadline acts only while its source folder policy covers it.
+    uncovered=base/'uncovered';ino=created(uncovered);policy(base,ttl=3,flags=0)
+    time.sleep(6);assert uncovered.exists() and record(uncovered)[2]>0
+    policy(base,ttl=3)
+    wait(lambda:not uncovered.exists(),'covered again: deadline acts',40)
+    wait(lambda:not physical_files(ino),'coverage physical reclaim',90);mark('disabled folder policy keeps due files')
+    restart(False);off=subprocess.run([str(CLI),'gc-status',f'127.0.0.1:{port}'],capture_output=True,text=True,check=True).stdout
+    assert 'expiry_enabled=0' in off,off
+    restart(True);mark('cluster policy survives restart off and on')
     remote=base/'offline';ino=created(remote);rejoin=offline(storage_ino=ino)
     try:
         wait(lambda:not remote.exists(),'expiry with offline storage member',40)

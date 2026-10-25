@@ -27,9 +27,7 @@ int server_gc_sync_roots(struct efsd_server *s)
 static int host_active; /* read by the recovery thread: atomic */
 static efs_ino_t dead_set[64];
 static int ndead;
-#if EFS_BUILD_EXPIRY
 void server_raft_host_expiry_status(struct efs_expiry_status *out){memset(out,0,sizeof(*out));}
-#endif
 int server_raft_host_active(void){return __atomic_load_n(&host_active,__ATOMIC_ACQUIRE);}
 int server_raft_host_inode_reaped(efs_ino_t ino,int *dead)
 {
