@@ -17,20 +17,24 @@ and the intents stayed undecided until the 5 s recovery scan
 Three efsd of the EFS_FAULTS build and one efs-fuse on loopback (free
 ports, stores under TMPDIR). EFS_FAULT_FWD_TXN_STALE=<dir> makes a leader
 answer the next forwarded TXN_BATCH STALE after it applied, once per flag
-file <dir>/stale-<node id>. For each of ROUNDS fresh 1 MiB files (8
+file <dir>/stale-<node id>. The two groups get different leaders
+(raft-step-down when one member leads both), so the leader running a REPORT forwards the other group's
+batch, and a fresh directory per round varies which group's batch is
+submitted first. For each of ROUNDS fresh 1 MiB files (8
 chunks: a unit spanning both groups) every member's flag is armed, the file
-is written and fsynced, and the test checks: the fault fired, write+fsync
+is written and fsynced, and the test checks: write+fsync
 took under BOUND_S (the recovery scan alone takes 5 s), the file reads back
-exact, and no member logs a txn-recover ABORT within the scan period after
-the last round. On the unfixed server about half the rounds leave the
-intents (the forwarded batch is the first one when chunk 0's lane is in
-the other group); with 8 rounds it fails with near certainty.
+exact, the hook fired in at least half the rounds, and no member logs a
+txn-recover ABORT within the scan period after the last round. On the
+unfixed server a round whose first batch is the forwarded one leaves the
+intents and fails EIO or over the bound (5 of 5 runs fail with the fix of
+`d7a6eed7e` reverted; 6 of 6 pass with it).
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster, EFSD, MGMT, SLOW, Mount, fuse_ok, payload  # noqa: E402
+from k33_daemons import Cluster, EFSD, MGMT, SLOW, Mount, fuse_ok, mgmt, payload  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -38,7 +42,7 @@ for b in (EFSD, MGMT):
 if not fuse_ok():
     print('publication unit forward abort: NOTRUN (no /dev/fuse, fusermount3 or efs-fuse)')
     sys.exit(0)
-ROUNDS = 8
+ROUNDS = 12
 BOUND_S = 3.0 * SLOW
 SIZE = 1024 * 1024
 work = Path(tempfile.mkdtemp(prefix='efs-pufa-', dir=os.environ.get('TMPDIR')))
@@ -58,13 +62,33 @@ try:
         c.wait_log(i, r'raft-host: formed: 3 members')
     c.wait_members([1, 2, 3], 3)
     ids = [c.node_id(i) for i in (1, 2, 3)]
-    m = Mount(c, 1, 'mnt')
+    # The REPORT runs at a group leader, which forwards the other group's
+    # batch: the two groups must have different leaders (a member leading
+    # both forwards nothing). Move group 2 off the leader of group 0.
+    place = c.leader_placement(1)
+    if place[0] == place[2]:
+        by_id = {c.node_id(i): i for i in (1, 2, 3)}
+        target = next(n for n in sorted(by_id) if n != place[0])
+        rc, out = mgmt(c.env, 'raft-step-down', c.ep(by_id[place[2]]), '2', str(target))
+        assert rc == 0, out
+        end = time.time() + 30 * SLOW
+        while place[0] == place[2] and time.time() < end:
+            time.sleep(0.5)
+            place = c.leader_placement(1)
+    assert place[0] != place[2], f'one member leads both groups: {place}'
+    led = set(place.values())
+    via = next((i for i in (1, 2, 3) if c.node_id(i) not in led), None)
+    assert via, f'every member leads a group: {place}'
+    m = Mount(c, via, 'mnt')
     mounts.append(m)
-    d = m.path / 'd'
-    d.mkdir()
-    fired_before = 0
+    fired_before = hit = 0
     took = []
     for r in range(ROUNDS):
+        # A fresh directory per round: inode numbers come from the parent's
+        # shard, so files of one directory put chunk 0's lane (the first
+        # batch submitted) in the same group every round.
+        d = m.path / f'd{r}'
+        d.mkdir()
         name = d / f'f{r}'
         name.write_bytes(b'')          # the create is not part of the measured unit
         for nid in ids:
@@ -79,16 +103,17 @@ try:
         for nid in ids:                # one forced refusal per round at most
             (flags / f'stale-{nid}').unlink(missing_ok=True)
         fired = sum(c.log(i).count('fault: EFS_FAULT_FWD_TXN_STALE') for i in (1, 2, 3))
-        assert fired > fired_before, f'round {r}: no forwarded TXN_BATCH was refused (leaders?)'
+        hit += fired > fired_before    # a round whose writes reported without a unit fires nothing
         fired_before = fired
         assert name.read_bytes() == data, f'{name} differs'
+    assert hit >= ROUNDS // 2, f'the hook refused a forwarded batch in only {hit} of {ROUNDS} rounds'
     slow = [(r, s) for r, s in enumerate(took) if s > BOUND_S]
     assert not slow, f'write+fsync over {BOUND_S} s after a refused forwarded PREPARE batch: {slow} ' \
                      f'(all: {took})'
     time.sleep(8 * SLOW)              # one recovery period past the last round
     rec = [ln for i in (1, 2, 3) for ln in c.log(i).splitlines() if re.search(r'txn-recover .*-> ABORT', ln)]
     assert not rec, 'undecided PREPAREs reached the recovery scan:\n' + '\n'.join(rec[:5])
-    print(f'{ROUNDS} rounds, {fired_before} forwarded PREPARE batches refused after they applied; '
+    print(f'{ROUNDS} rounds, {hit} with a forwarded PREPARE batch refused after it applied; '
           f'write+fsync max {max(took)} s <= {BOUND_S}, no txn-recover ABORT, files exact PASS')
 finally:
     for mt in mounts:
