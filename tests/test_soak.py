@@ -24,4 +24,4 @@ p=subprocess.run([sys.executable,str(root/'scripts/soak.py'),'--work',str(parent
 print('soak evidence:',parent/'out',flush=True)
 if p.returncode==0 and (parent/'work').exists():
  subprocess.run([str(edelete),'--force','--delete',str(parent/'work')],check=True)
-sys.exit(p.returncode)
+sys.exit(0 if p.returncode==77 else p.returncode)

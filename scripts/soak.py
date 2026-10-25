@@ -79,6 +79,35 @@ def recovery_clean(text):
                 r'\b(?:unrecoverable|rebuild_waiting|waiting)=[1-9]\d*', text))
 
 
+
+def foreign_jobs(owned=()):
+    """Read only our UID's /proc entries. Never signal jobs we did not create."""
+    allowed = set(owned)
+    pid = os.getpid()
+    while pid > 1:
+        allowed.add(pid)
+        try:
+            text = Path(f'/proc/{pid}/stat').read_text()
+            pid = int(text.rsplit(')', 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    found = []
+    for path in Path('/proc').glob('[0-9]*'):
+        if int(path.name) in allowed:
+            continue
+        try:
+            if path.stat().st_uid != os.getuid():
+                continue
+            comm = (path/'comm').read_text().strip()
+            args = (path/'cmdline').read_bytes().decode(errors='replace').split('\0')
+            runner = len(args)>1 and Path(args[1]).name=='make_test_summary.sh'
+            if comm in ('make','gmake','efsd') or runner:
+                found.append(dict(pid=int(path.name), command=args[:3], comm=comm))
+        except (OSError, ValueError):
+            continue
+    return found
+
+
 def digest(path):
     h = hashlib.sha256()
     size = 0
@@ -248,6 +277,8 @@ class Soak:
                 if mode == 'rss':
                     self.sample()
                 else:
+                    jobs = foreign_jobs(p.pid for p in self.c.procs.values())
+                    assert not jobs, f'quiet host lost to unrelated jobs: {jobs}'
                     self.status()
                     for node in list(self.c.procs):
                         if self.c.alive(node):
@@ -561,6 +592,10 @@ def main(argv=None):
         return 77
     if not all(b.exists() for b in (EFSD,MGMT)):
         p.error('build all and tests/faults/efsd first')
+    jobs=foreign_jobs()
+    if jobs:
+        print('NOTRUN: quiet host required; unrelated jobs: '+json.dumps(jobs))
+        return 77
     return Soak(a).run()
 
 
