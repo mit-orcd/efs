@@ -18,6 +18,22 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[W159: fixture POSIX timeouts, slow durable barriers and the 400 ms applied-wait](w159-fixture-posix-timeouts-20261025.md):
+**CAUSE FOUND, fix PARTIAL, PASS (scoped, loopback); branch `claude/devel-w159-fe09e8` on `merge-wave7`, not merged, not pushed; amd `make test-all` on the fixed tree: see the page.**
+The expiry fixture's closing POSIX run timed out two metadata-heavy cases
+because its one consumer NVMe answers a durable barrier in 7–28 ms (29× amd)
+and four members queue on it: about 39 fsync/fdatasync per create-and-unlink
+pair across the members, so the Raft pump's apply lag passed the server's
+fixed 400 ms applied-wait, each expiry answered BUSY and the client's backoff
+ladder made the 2–7 s RPCs. Reproduced on amd on the untouched base with an
+emulated 7 ms barrier queued on one lock (`scripts/w159_fixture.py`); the
+same fixture on amd's disk passes everything with no RPC over 1 s. The
+applied-wait for a member's own committed entry is now bounded by progress
+(`src/server/apply_wait.h`, 400 ms grants renewed while the member applies,
+2 s cap): `concurrent_creates_same_dir` passes under the emulation,
+`dir_many_files` passes one round in two there (the barrier cost, a Stage 3
+follow-up).
+
 [Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](pack-unindex-race-20261024.md):
 **FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**
 The packer's UNINDEX deleted a candidate key unconditionally, so a rewrite whose publication
