@@ -5790,12 +5790,18 @@ busy:
 static __thread int host_serving_forward;
 
 /* A submit's group byte, and whether this thread then serves a member's
- * forward: marked by host_rpc_submit, except DIR_MIGRATE (see
- * server_raft_host_submit). */
+ * forward: marked by host_rpc_submit, except DIR_MIGRATE and the expiry
+ * deletion (see server_raft_host_submit). Both are bounced to a dual-host
+ * on purpose: the group leader that forwards them may not host the other
+ * group of the transaction (an expiry pass runs on the inode group's
+ * leader; the deletion is a cross-group unlink, D43), and each of their own
+ * reads and proposals forwards one hop to a leader that answers. */
 static int host_submit_serves_forward(const uint8_t *payload, uint32_t plen, uint8_t *group)
 {
     *group = plen >= 1 ? (uint8_t)(payload[0] & ~HOST_SUBMIT_FORWARDED) : 0;
     if (plen < 1 || !(payload[0] & HOST_SUBMIT_FORWARDED))
+        return 0;
+    if (plen >= 2 && payload[1] == EFS_MD_REQ_EXPIRY_DELETE)
         return 0;
     return !(plen >= 1u + HOST_DIR_LEN && payload[1] == EFS_MD_CMD_DIR &&
              payload[2] == EFS_MD_DIR_MIGRATE);

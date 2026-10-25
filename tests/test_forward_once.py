@@ -80,6 +80,11 @@ int main(void)
     assert(!host_submit_serves_forward(p, 1 + HOST_DIR_LEN, &g) && g == 2);
     assert(host_submit_serves_forward(p, HOST_DIR_LEN, &g)); /* too short to be one */
     assert(!host_submit_serves_forward(p, 0, &g) && g == 0);
+    /* The expiry deletion (D43) is a cross-group unlink the inode group's
+     * leader forwards to a dual-host: it may forward its own steps. */
+    p[0] = 0 | HOST_SUBMIT_FORWARDED; p[1] = EFS_MD_REQ_EXPIRY_DELETE;
+    assert(!host_submit_serves_forward(p, 2, &g) && g == 0);
+    assert(host_submit_serves_forward(p, 1, &g)); /* a bare group byte is a forward */
     /* The refusal names the leader this member knows, never itself. */
     int hint = 7;
     assert(!host_forward_refused(0, 1, 0, &hint) && hint == 7);

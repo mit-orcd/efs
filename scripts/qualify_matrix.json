@@ -845,6 +845,7 @@
     "k13-tickets",
     "fragment-integrity",
     "gc-reclamation",
+    "d5-expiry",
     "e1-manifest",
     "e2-client-stop",
     "b6-member-down",
@@ -854,6 +855,7 @@
     "d1-packing",
     "d3-efs-load",
     "e4-scale",
+    "soak",
     "d4-progress"
    ],
    "allow": [

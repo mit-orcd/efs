@@ -70,7 +70,8 @@ assert 'soak' in plugins and '{soak_hours}' in plugins['soak']['command']
 assert plugins['soak']['deadline_s']>=4*3600
 matrix=json.loads((ROOT/'scripts/qualify_matrix.json').read_text())
 assert not q.matrix_errors(matrix), q.matrix_errors(matrix)
-assert all('soak' in t.get('gates',[]) for t in matrix['topologies'].values() if 'gates' in t)
+# Every qualification topology (one that runs e4-scale) runs the soak; the D43 expiry dry run (loopback-4) does not.
+assert all('soak' in t['gates'] for t in matrix['topologies'].values() if 'e4-scale' in t.get('gates',[]))
 assert q.default_plugins({'plugins':{'soak':{'command':'site-soak --hours 4'}}},[])['soak']['command']=='site-soak --hours 4'
 print('soak qualification plugin: hours parameter, all topology selections, site override and matrix PASS')
 
