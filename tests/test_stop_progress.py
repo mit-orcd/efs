@@ -3,8 +3,10 @@
 
 Three efsd daemons on loopback (tests/k33_daemons.py, tests/faults/efsd)
 with EFS_FAULT_REVOKE_BEGIN_FILE, and efs-fuse:
-1. Busy client: mount A creates FILES files, so its session touches
-   thousands of metadata shards. `scripts/client.sh stop` succeeds; the
+1. Busy client: mount A creates DIRS directories with one file each; a
+   new directory's inode lands on its own metadata shard (files share
+   their directory's), so the session touches thousands of shards.
+   `scripts/client.sh stop` succeeds; the
    revoke is logged with its touched count and duration.
 2. Small client: mount B writes one file; the stop succeeds within
    SMALL_STOP_S.
@@ -21,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload  # noqa: E402
 
-FILES = 4000
+DIRS = 3000
 SMALL_STOP_S = 5
 root = Path(__file__).resolve().parents[1]
 for b in (EFSD, MGMT):
@@ -65,10 +67,9 @@ try:
     a = Mount(c, 1, 'mnt-a')
     mounts.append(a)
     t = time.monotonic()
-    for d in range(FILES // 200 + 1):
-        (a.path / f'd{d}').mkdir()
-    for k in range(FILES):
-        (a.path / f'd{k // 200}' / f'f{k}').write_bytes(payload(f'stop-{k}', 64))
+    for k in range(DIRS):
+        (a.path / f'd{k}').mkdir()
+        (a.path / f'd{k}' / 'f').write_bytes(payload(f'stop-{k}', 64))
     made = time.monotonic() - t
     rc, out, took = client('bash', 'scripts/client.sh', 'stop', str(a.path))
     assert rc == 0 and f'Unmounted {a.path}' in out, out + a.logp.read_text(errors='replace')[-3000:]
@@ -76,7 +77,7 @@ try:
     mounts.remove(a)
     touched, vrc, ms, fence_ms, cleanup_ms = revoked(a)
     assert vrc == 0 and touched >= 1000, (touched, vrc)
-    notes.append(f'busy: {FILES} files in {made:.1f} s, touched={touched}, revoke {ms} ms '
+    notes.append(f'busy: {DIRS} directories in {made:.1f} s, touched={touched}, revoke {ms} ms '
                  f'(fence {fence_ms}, cleanup {cleanup_ms}), stop {took:.1f} s')
 
     # 2. Small client.

@@ -40,8 +40,14 @@ static unsigned inflight,maxflight,finished,foreign,step_us=10,fail_fence,fail_c
 static uint32_t shard_of(unsigned i){return (i*7u)%EFS_SESSION_BITS;}
 static int touched(uint32_t sh){for(unsigned i=0;i<N;i++)if(shard_of(i)==sh)return 1;return 0;}
 static uint32_t rd32(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
-static void enter(void){pthread_mutex_lock(&mu);if(!pthread_equal(pthread_self(),caller))foreign++;
- if(++inflight>maxflight)maxflight=inflight;pthread_mutex_unlock(&mu);if(step_us)usleep(step_us);}
+static void enter(void)
+{
+    pthread_mutex_lock(&mu);
+    if(!pthread_equal(pthread_self(),caller))foreign++;
+    if(++inflight>maxflight)maxflight=inflight;
+    pthread_mutex_unlock(&mu);
+    if(step_us)usleep(step_us);
+}
 static void leave(void){pthread_mutex_lock(&mu);inflight--;pthread_mutex_unlock(&mu);}
 static int submit(void *ctx,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs_reply *r)
 {
