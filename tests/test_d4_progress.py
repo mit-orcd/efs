@@ -27,6 +27,7 @@ import calendar, json, os, re, shutil, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok  # noqa: E402
+from sanitize_env import cflags  # noqa: E402
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'scripts'))
@@ -42,8 +43,13 @@ LOAD_S = float(os.environ.get('EFS_D4_LOAD_S', '45'))
 THREADS = int(os.environ.get('EFS_D4_THREADS', '8'))
 FG_DEADLINE_S = 10.0
 DRAIN_S = 150.0
-CLIENT_RSS_MIB = 1024
-SERVER_RSS_MIB = 2048
+# Under the F1 sanitizer gates (EFS_TEST_SANITIZE / EFS_TEST_TSAN) the
+# daemons carry shadow memory, redzones and the ASan quarantine: the 60 s
+# ASan load reached a 1264 MiB efs-fuse where the native run stays near
+# 260 MiB, so the RSS bounds scale there; the native bound is the gate.
+RSS_SCALE = 6 if cflags() else 1
+CLIENT_RSS_MIB = 1024 * RSS_SCALE
+SERVER_RSS_MIB = 2048 * RSS_SCALE
 PACK_BACKLOG = 50000
 INDEX_AGE_S = 60.0
 work = Path(tempfile.mkdtemp(prefix='efs-d4-', dir=os.environ.get('TMPDIR')))
