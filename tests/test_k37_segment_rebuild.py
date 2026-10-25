@@ -243,7 +243,9 @@ try:
     hold.touch()
     c.restart(3)
     up(c, 3)
-    time.sleep(3)
+    end = time.time() + 30
+    while '(3 up, 0 down)' not in status(c, 1) and time.time() < end:
+        time.sleep(0.3)
     st = status(c, 1)
     assert segcount(c, 1)[0] >= len(dw), st
     assert 'Cluster state: DEGRADED (3 up, 0 down)' in st and 'Protection: DEGRADED' in st, st

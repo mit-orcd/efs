@@ -14,9 +14,10 @@ TMPDIR, free ports (never 17xxx), discovery off; efs-fuse when available.
    node 4 (a member that joined after the seed went down) and node 6
    through node 5 (storage only: it forwards). Every member that is up
    reports six members; node 1 is listed as down, never dropped.
-4. Node 5 is frozen (SIGSTOP) for longer than the heartbeat down threshold,
-   then node 6 stops too: with the seed, three members are unreachable and
-   all three stay members (six in every table, ids unchanged). Node 5 resumes and node 6 restarts; new files are
+4. Node 5 is frozen (SIGSTOP) and node 6 stops too: once every reachable
+   member reports the seed, node 5 and node 6 down (the frozen member past
+   the heartbeat down threshold), all three are still members (six in every
+   table, ids unchanged). Node 5 resumes and node 6 restarts; new files are
    written with only the seed away (three unreachable members exceed the
    one failure 2+1 keeps for writes).
 5. The seed restarts from its store: it learns revisions 2 to 4 (six
@@ -24,6 +25,7 @@ TMPDIR, free ports (never 17xxx), discovery off; efs-fuse when available.
    is retired from group 2. A new mount through node 1 reads every file.
 """
 import os, shutil, signal, sys, tempfile, time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload, voters_ok  # noqa: E402
@@ -104,11 +106,24 @@ try:
     # 4. Unreachable members stay members.
     c.procs[5].send_signal(signal.SIGSTOP)
     c.stop(6)
-    time.sleep(12)
-    for i in (2, 3, 4):
-        t = c.members(i)
+
+    def table_with_down(i, timeout=120):
+        """Node i's table once it lists the seed, the frozen node 5 and the
+        stopped node 6 as down (the frozen member is detected past the
+        heartbeat down threshold), else the last table at the deadline. One
+        `status` takes about 30 s while a member is frozen, so the three
+        members are asked concurrently."""
+        end = time.time() + timeout
+        while True:
+            t = c.members(i)
+            if {1, 5, 6} <= {k for k, (ep, st) in t.items() if st == 'down'} or time.time() > end:
+                return t
+            time.sleep(0.5)
+    with ThreadPoolExecutor(3) as ex:
+        tables = dict(zip((2, 3, 4), ex.map(table_with_down, (2, 3, 4))))
+    for i, t in tables.items():
         assert sorted(t) == [1, 2, 3, 4, 5, 6], (i, t)
-        assert {1, 6} <= down_rows(c, i), (i, t)
+        assert {1, 5, 6} <= {k for k, (ep, st) in t.items() if st == 'down'}, (i, t)
     c.procs[5].send_signal(signal.SIGCONT)
     c.restart(6)
     c.wait_log(6, r'raft-host: up raft_id=5 n=6 formed', timeout=60)

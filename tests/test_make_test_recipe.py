@@ -9,7 +9,8 @@ runs both). Any docs lag inside the `test` recipe would stop the code tests.
 
 W139: every unit binary in TEST_BINS and every tests/test_*.py and
 tests/faults/test_*.py is run by the recipe, or is listed below with the
-reason it is not. A test that genuinely needs hardware or a tool the host
+reason it is not. W160: every test-long command has a time budget and pool
+slots in tests/budgets.tsv, bounded here per command and as a gate. A test that genuinely needs hardware or a tool the host
 lacks prints a `NOTRUN:` line and exits 0; scripts/make_test_summary.sh
 lists those commands under NOTRUN and exits 3 (INCOMPLETE), so they never
 pass silently.
@@ -52,5 +53,69 @@ unrun = [s for s in scripts if s not in tokens and s not in NOT_WIRED]
 assert not unrun, 'Python tests never run by `make test-all` and not listed with a reason (W139): %s' % unrun
 stale = sorted(s for s in NOT_WIRED if s in tokens or not (root / s).exists())
 assert not stale, 'NOT_WIRED entries that are wired or gone: %s' % stale
-print('make test-all recipe: %d commands (%d fast, %d long), docs gate kept out, %d unit binaries and %d Python tests all run (%d listed as not wired) PASS'
-      % (len(cmds), len(fast), len(slow), len(bins), len(scripts) - len(NOT_WIRED), len(NOT_WIRED)))
+
+# W160: the gate's time budget. Every test-long command declares in
+# tests/budgets.tsv the seconds it may take at EFS_TEST_JOBS=8 and the pool
+# slots it occupies; a budget above COMMAND_BOUND_S needs a recorded reason,
+# and the gate the budgets add up to (the pool's list schedule at 8 slots,
+# largest budget first, as scripts/make_test_summary.sh runs it, plus the
+# EXCLUSIVE commands' budgets in series and the fast suite) stays under
+# GATE_BOUND_S: the 15 min target with the budgets' own margin. A new or slower test therefore raises its budget here, in
+# the same change, or fails this test; the gate cannot drift unnoticed.
+COMMAND_BOUND_S = 300
+GATE_TARGET_S = 900         # the 15 min gate (W160), measured at EFS_TEST_JOBS=8
+BUDGET_MARGIN = 1.5         # budgets are 1.25 x the measured 8-job time, rounded up to 5 s with a 5 s floor,
+                            # so the gate they add up to may be up to 1.5 x the target
+GATE_BOUND_S = GATE_TARGET_S * BUDGET_MARGIN
+JOBS = 8
+FAST_DEFAULT_S = 1          # a `make test` command without a budget row (each runs well under a second)
+budgets = {}
+for line in (root / 'tests/budgets.tsv').read_text().splitlines():
+    f = line.split('\t')
+    if not line.strip() or line.startswith('#') or f[0] == 'command':
+        continue
+    assert len(f) == 4, 'tests/budgets.tsv: want command, budget_s, slots, reason: %r' % line
+    cmd, budget, slots, reason = f[0].strip(), float(f[1]), int(f[2]), f[3].strip()
+    assert cmd not in budgets, 'tests/budgets.tsv: %s twice' % cmd
+    assert budget > 0 and 1 <= slots <= JOBS, line
+    assert budget <= COMMAND_BOUND_S or reason, \
+        'tests/budgets.tsv: %s is budgeted %g s, above %d s, with no reason' % (cmd, budget, COMMAND_BOUND_S)
+    budgets[cmd] = (budget, slots, reason)
+long_cmds = [c.strip() for c in slow if runs(c)]
+missing = [c for c in long_cmds if c not in budgets]
+assert not missing, 'test-long commands without a row in tests/budgets.tsv: %s' % missing
+gone = sorted(c for c in budgets if c not in long_cmds)
+assert not gone, 'tests/budgets.tsv rows for commands `make test-long` no longer runs: %s' % gone
+
+exclusive = re.search(r'EXCLUSIVE=re\.compile\((.*?)\)\n', (root / 'scripts/make_test_summary.sh').read_text(), re.S).group(1)
+exclusive = re.compile(''.join(re.findall(r'"([^"]*)"', exclusive)))
+pool, alone = [], 0.0
+for c in [c.strip() for c in cmds if runs(c)]:
+    budget, slots = budgets.get(c, (FAST_DEFAULT_S, 1))[:2]
+    slots = min(slots, JOBS)
+    if exclusive.search(c):
+        alone += budget
+    else:
+        pool.append((budget, slots))
+# The runner's pool: most slots first, then the largest budget; the first
+# pending command whose slots fit starts, else the schedule waits for a finish.
+import heapq
+pending = sorted(pool, key=lambda b: (-b[1], -b[0]))
+running, free, now = [], JOBS, 0.0     # running: (end, slots)
+while pending:
+    k = next((k for k, b in enumerate(pending) if b[1] <= free), None)
+    if k is None:
+        now, got = heapq.heappop(running)
+        free += got
+        continue
+    budget, slots = pending.pop(k)
+    heapq.heappush(running, (now + budget, slots))
+    free -= slots
+makespan = max(end for end, _ in running) if running else 0.0
+total = makespan + alone
+assert total <= GATE_BOUND_S, ('the budgets in tests/budgets.tsv add up to %.0f s at %d jobs (pool %.0f s + exclusive %.0f s), '
+                               'above the %.0f s gate bound (%d s target x %.2f budget margin): make the test faster or split it, and record why if a budget must grow'
+                               % (total, JOBS, makespan, alone, GATE_BOUND_S, GATE_TARGET_S, BUDGET_MARGIN))
+print('make test-all recipe: %d commands (%d fast, %d long), docs gate kept out, %d unit binaries and %d Python tests all run '
+      '(%d listed as not wired); budgets: %d rows, budgeted gate %.0f s of %.0f s at %d jobs PASS'
+      % (len(cmds), len(fast), len(slow), len(bins), len(scripts) - len(NOT_WIRED), len(NOT_WIRED), len(budgets), total, GATE_BOUND_S, JOBS))

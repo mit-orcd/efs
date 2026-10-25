@@ -135,6 +135,9 @@ def rss_kib(status_text):
     return int(m.group(1)) if m else None
 
 
+VERIFY_THREADS = 8
+
+
 def payload(name, size):
     out, k = bytearray(), 0
     while len(out) < size:
@@ -461,21 +464,21 @@ class Run:
         if fg.is_alive():
             self.overdue.append(('foreground thread', 'still running'))
             self.stall_dump('foreground thread did not finish')
-        # Every acknowledged file exact.
-        bad = []
+        # Every acknowledged file exact: whole reads through VERIFY_THREADS
+        # at once (the live set is hundreds to thousands of small files).
         t = time.time()
-        for name, size in sorted(self.live.items()):
+        items = [(name, str(name.relative_to(self.dir)), size) for name, size in sorted(self.live.items())]
+        items += [(name, name.name, size) for name, size in sorted(self.fg_files.items())]
+
+        def check(item):
+            name, label, size = item
             try:
-                if name.read_bytes() != payload(str(name.relative_to(self.dir)), size):
-                    bad.append(str(name))
+                return None if name.read_bytes() == payload(label, size) else str(name)
             except OSError as e:
-                bad.append(f'{name}: {e}')
-        for name, size in sorted(self.fg_files.items()):
-            try:
-                if name.read_bytes() != payload(name.name, size):
-                    bad.append(str(name))
-            except OSError as e:
-                bad.append(f'{name}: {e}')
+                return f'{name}: {e}'
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(VERIFY_THREADS) as ex:
+            bad = [b for b in ex.map(check, items) if b]
         verify_s = time.time() - t
         return self.verdict(first, load_end, drained_at, bad, verify_s)
 

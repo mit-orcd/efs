@@ -1024,14 +1024,19 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_payload.py
 	python3 tests/test_k35_fsync_degraded.py
 	python3 tests/test_k37_segment_rebuild.py
-	python3 tests/test_b_geometry.py
+	EFS_B_PHASES=grow-a python3 tests/test_b_geometry.py
+	EFS_B_PHASES=grow-b python3 tests/test_b_geometry.py
+	EFS_B_PHASES=full python3 tests/test_b_geometry.py
 	python3 tests/test_k33_seed_loss.py
 	python3 tests/test_k33_bookkeeping.py
 	python3 tests/test_k34_stop_put.py
 	python3 tests/test_stop_progress.py
 	python3 tests/test_operator_workflows.py
 	python3 tests/test_member_limit.py
-	python3 tests/test_b6_unavailable.py
+	EFS_B6_MODES=down python3 tests/test_b6_unavailable.py
+	EFS_B6_MODES=refuse python3 tests/test_b6_unavailable.py
+	EFS_B6_MODES=slow python3 tests/test_b6_unavailable.py
+	EFS_B6_MODES=full python3 tests/test_b6_unavailable.py
 	python3 tests/test_d4_progress.py
 	python3 tests/test_report_stepdown.py
 	python3 tests/test_query_first_catalog.py
@@ -1051,7 +1056,9 @@ test-long: all $(TEST_SPECIAL_BINS)
 	./tests/test_kv_lsm_concurrent 4
 	./tests/test_txn_retire
 	./tests/test_pub_stage
-	python3 tests/test_d39_model.py
+	python3 tests/test_d39_model.py --shard 0/3
+	python3 tests/test_d39_model.py --shard 1/3
+	python3 tests/test_d39_model.py --shard 2/3
 	python3 tests/test_bench_cli.py
 	python3 tests/test_bench_profile.py
 	python3 tests/test_query_subtree_negative.py
