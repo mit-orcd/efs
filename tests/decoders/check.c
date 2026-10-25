@@ -10,6 +10,7 @@
 #include "efs/request_receipt.h"
 #include "efs/meta_cmd.h"
 #include "efs/session.h"
+#include "efs/put_upload.h"
 #include <sys/socket.h>
 #include <unistd.h>
 #include "../../src/server/discovery.h"
@@ -89,6 +90,21 @@ static size_t seed(const char *name, uint8_t *b)
     } else if (!strcmp(name,"degraded")) {
         memset(b,0,EFS_REBUILD_MARK_LEN);b[7]=1;b[23]=1;b[29]=1;
         b[33]=1;b[37]=2;b[41]=3;n=EFS_REBUILD_MARK_LEN;
+    } else if (!strcmp(name,"degraded-command")) {
+        memset(b,0,EFS_MD_DEGRADED_MARK_LEN);b[0]=EFS_MD_CMD_DEGRADED_MARK;
+        b[8]=1;b[16]=1;b[24]=1;b[33]=1;n=EFS_MD_DEGRADED_MARK_LEN;
+    } else if (!strcmp(name,"recovery-command")) {
+        b[0]=EFS_MD_CMD_RECOVERY_MARK;n=1+seed("degraded",b+1);
+    } else if (!strcmp(name,"pack-degraded")) {
+        memset(b,0,EFS_MD_PACK_DEGRADED_LEN);b[0]=EFS_MD_CMD_PACK_DEGRADED;
+        b[2]=EFS_MD_PACK_DEGRADED_MARK;b[10]=1;b[18]=1;b[19]=1;b[20]=1;n=EFS_MD_PACK_DEGRADED_LEN;
+    } else if (!strcmp(name,"ticket-drain")) {
+        memset(b,0,EFS_MD_PUT_TICKET_DRAIN_LEN);b[0]=EFS_MD_CMD_PUT_TICKET_DRAIN;
+        b[1]=1;b[20]=1;n=EFS_MD_PUT_TICKET_DRAIN_LEN;
+    } else if (!strcmp(name,"put-header")) {
+        uint8_t ticket[EFS_PUT_TICKET_WIRE_LEN];seed("ticket",ticket);
+        struct efs_put_ticket t;assert(!efs_put_ticket_decode(ticket,sizeof(ticket),&t));
+        t.fragment_len=EFS_MIN_CHUNK_SIZE/2;assert(!efs_put_upload_header(&t,1,0,b));n=EFS_PUT_UPLOAD_HEADER_LEN;
     } else if (!strcmp(name,"cleanup-probe")) {
         memset(b,0,EFS_MD_SESSION_CLEANUP_PROBE_LEN);b[0]=EFS_MD_REQ_SESSION_CLEANUP_PROBE;
         b[1]=1;b[20]=1;b[32]=1;n=EFS_MD_SESSION_CLEANUP_PROBE_LEN;
@@ -159,6 +175,24 @@ static int check(const char *name, const uint8_t *b, size_t n)
     } else if (!strcmp(name,"degraded")) {
         struct efs_meta_degraded out,before;memset(&out,0xa5,sizeof(out));before=out;
         rc=efs_degraded_mark_decode(b,n,&out);assert(rc==EFS_OK || rc==EFS_ERR_INVAL);UNCHANGED(rc,out,before);
+    } else if (!strcmp(name,"degraded-command")) {
+        struct efs_degraded_command out,before;memset(&out,0xa5,sizeof(out));before=out;
+        rc=efs_degraded_command_decode(b,n,&out);assert(rc==EFS_OK || rc==EFS_ERR_UNSUPPORTED);UNCHANGED(rc,out,before);
+    } else if (!strcmp(name,"recovery-command")) {
+        struct efs_meta_degraded out,before;memset(&out,0xa5,sizeof(out));before=out;
+        rc=n==EFS_MD_RECOVERY_MARK_LEN && b[0]==EFS_MD_CMD_RECOVERY_MARK?
+           efs_degraded_mark_decode(b+1,n-1,&out):EFS_ERR_INVAL;
+        assert(rc==EFS_OK || rc==EFS_ERR_INVAL);UNCHANGED(rc,out,before);
+    } else if (!strcmp(name,"pack-degraded")) {
+        struct efs_pack_degraded_command out,before;memset(&out,0xa5,sizeof(out));before=out;
+        rc=efs_pack_degraded_command_decode(b,n,&out);assert(rc==EFS_OK || rc==EFS_ERR_UNSUPPORTED);UNCHANGED(rc,out,before);
+    } else if (!strcmp(name,"ticket-drain")) {
+        struct efs_put_stream out,before;memset(&out,0xa5,sizeof(out));before=out;
+        rc=efs_ticket_drain_decode(b,n,&out);assert(rc==EFS_OK || rc==EFS_ERR_UNSUPPORTED);UNCHANGED(rc,out,before);
+    } else if (!strcmp(name,"put-header")) {
+        struct efs_put_ticket out,before;memset(&out,0xa5,sizeof(out));before=out;uint32_t fi=123;
+        rc=efs_put_upload_header_decode(b,n,&out,&fi);assert(rc==EFS_OK || rc==EFS_ERR_INVAL);
+        UNCHANGED(rc,out,before);if(rc)assert(fi==123);
     } else if (!strcmp(name,"cleanup-probe")) {
         struct efs_opid out,before;memset(&out,0xa5,sizeof(out));before=out;
         uint32_t word=123;uint64_t mask=123;rc=efs_cleanup_probe_decode(b,n,&out,&word,&mask);
@@ -194,9 +228,29 @@ static void input(const char *name,const uint8_t *b,size_t n,const char *dir)
         FILE *f=fopen(p,"wb"); assert(f); assert(fwrite(b,1,n,f)==n); assert(!fclose(f)); }
     uint8_t *p=malloc(n+1); assert(p); memcpy(p+1,b,n); check(name,p+1,n); free(p);
 }
+static void regressions(void)
+{
+    /* Exact rejected wire bytes from the partial-output findings. */
+    static const uint8_t membership_short[11]={[0]=2,[1]=3,[2]=3,[10]=42};
+    static const uint8_t discovery_zero_port[36]={
+        'E','F','S','D','I','S','C',1,2,[16]=42,[24]=42,[28]=3,[29]=1,
+        [32]=1,[33]='x',[34]=1,[35]='b'};
+    assert(check("membership",membership_short,sizeof(membership_short))==EFS_ERR_DECODE);
+    assert(check("discovery-answer",discovery_zero_port,sizeof(discovery_zero_port))==-1);
+    /* Intel UBSan input: a malformed declaration at an unaligned address. */
+    static const uint8_t declaration[16]={0xba,'F','S','P',5};
+    uint8_t unaligned[17];memcpy(unaligned+1,declaration,sizeof(declaration));
+    assert(check("declaration",unaligned+1,sizeof(declaration))==EFS_ERR_PROTO);
+    uint8_t batch[8192];size_t n=seed("ticket-batch",batch);
+    /* First ticket is valid; the second's first node is zero. Failure
+     * cannot leave the first ticket in the caller's pre-filled array. */
+    memset(batch+3+EFS_PUT_TICKET_WIRE_LEN+88,0,4);
+    assert(check("ticket-batch",batch,n)==EFS_ERR_INVAL);
+}
 int main(int argc,char **argv)
 {
     if(argc<2 || argc>4) {fprintf(stderr,"usage: %s DECODER [SECONDS [ARTIFACT_DIR]]\n",argv[0]);return 2;}
+    regressions();
     const char *name=argv[1],*dir=argc==4?argv[3]:NULL;
     unsigned seconds=argc>2?(unsigned)strtoul(argv[2],NULL,10):0;
     uint8_t valid[8192],b[8192]; size_t n=seed(name,valid);

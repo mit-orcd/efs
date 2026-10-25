@@ -88,14 +88,10 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
 {
     if(path_used)*path_used=0xff;
     if(!s || !body || !path_used || bytes<EFS_PUT_UPLOAD_HEADER_LEN)return EFS_ERR_INVAL;
-    uint32_t export_id=efs_put_upload_rd32(body),fi=efs_put_upload_rd32(body+4);
+    uint32_t export_id=1,fi;
     struct efs_put_ticket ticket;
-    int rc=efs_put_ticket_decode(body+8,EFS_PUT_TICKET_WIRE_LEN,&ticket);
-    /* Tickets currently belong to the one authoritative namespace export.
-     * Do not permit a ticket to be replayed into a caller-selected export. */
-    if(rc!=EFS_OK || export_id!=1 || fi>=EFS_NUM_FRAGMENTS)return EFS_ERR_INVAL;
-    if(efs_ino_is_meta_table(ticket.ino) || ticket.nodes[fi]!=s->id ||
-       !efs_chunk_size_valid(ticket.fragment_len*2u) ||
+    int rc=efs_put_upload_header_decode(body,EFS_PUT_UPLOAD_HEADER_LEN,&ticket,&fi);
+    if(rc!=EFS_OK || ticket.nodes[fi]!=s->id ||
        bytes-EFS_PUT_UPLOAD_HEADER_LEN!=ticket.fragment_len)return EFS_ERR_INVAL;
     uint8_t checksum[EFS_HASH_SIZE];
     const uint8_t *data=body+EFS_PUT_UPLOAD_HEADER_LEN;

@@ -19,4 +19,16 @@ struct efs_audit_reply {
 };
 int efs_segment_audit_request_decode(const uint8_t *, uint32_t, struct efs_audit_request *);
 int efs_segment_audit_reply_decode(const uint8_t *, uint32_t, struct efs_audit_reply *);
+struct efs_degraded_command {
+    uint64_t ino,inode_gen,object_gen;
+    uint32_t chunk_index,fragment,node;
+};
+struct efs_pack_degraded_command {
+    uint64_t id,generation;
+    uint32_t group,op,mask,reason;
+};
+int efs_put_upload_header_decode(const uint8_t *,uint32_t,struct efs_put_ticket *,uint32_t *);
+int efs_degraded_command_decode(const uint8_t *,uint32_t,struct efs_degraded_command *);
+int efs_pack_degraded_command_decode(const uint8_t *,uint32_t,struct efs_pack_degraded_command *);
+int efs_ticket_drain_decode(const uint8_t *,uint32_t,struct efs_put_stream *);
 #endif

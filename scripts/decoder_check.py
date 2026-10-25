@@ -53,7 +53,7 @@ def run(target):
         except subprocess.TimeoutExpired: rc=124
     return {'target':target,'rc':rc,'seconds':round(time.monotonic()-start,3)}
 with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as pool:
-    rows=list(pool.map(run,a.targets))
+    rows=list(pool.map(run,sorted(a.targets,key=lambda t: (t not in ('apply','declaration'),t))))
 (out/'summary.json').write_text(json.dumps(rows,indent=2)+'\n')
 files=sorted(p for p in out.rglob('*') if p.is_file() and build not in p.parents and p.name!='SHA256SUMS')
 (out/'SHA256SUMS').write_text(''.join(hashlib.sha256(f.read_bytes()).hexdigest()+'  '+str(f.relative_to(out))+'\n' for f in files))
