@@ -169,7 +169,7 @@ static int fence_insert_locked(uint32_t eid, efs_ino_t ino)
             if (fence_keys[i] == 0) fence_used++;
             fence_keys[i] = ino + 2;
             fence_eids[i] = eid;
-            fence_live++;
+            __atomic_fetch_add(&fence_live, 1, __ATOMIC_RELAXED); /* read lock-free */
             return 1;
         }
     }
@@ -179,7 +179,7 @@ static void fence_remove_locked(uint32_t eid, efs_ino_t ino)
     uint64_t slot;
     if (fence_find_locked(eid, ino, &slot)) {
         fence_keys[slot] = 1;
-        fence_live--;
+        __atomic_fetch_sub(&fence_live, 1, __ATOMIC_RELAXED);
     }
 }
 int server_reclaim_fenced(efs_export_id_t eid, efs_ino_t ino)

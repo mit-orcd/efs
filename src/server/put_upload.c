@@ -133,8 +133,10 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     struct efs_export *ex=server_export_acquire_or_create_locked(s,export_id);
     /* A storage node learns the data geometry from its first PUT, here
      * only from a ticket that is ADMITTED under a live session. */
+    /* Writer threads read chunk_size lock-free (server_frag_len): the one
+     * store that sets the geometry is atomic (TSan, F1 gate). */
     if(ex && (ex->chunk_size==0 || ex->chunk_size==EFS_DEFAULT_CHUNK_SIZE))
-        ex->chunk_size=ticket.fragment_len*2u;
+        __atomic_store_n(&ex->chunk_size,ticket.fragment_len*2u,__ATOMIC_RELEASE);
     pthread_mutex_unlock(&s->lock);
     if(!ex)rc=EFS_ERR_NOMEM;
     else if(server_frag_len(ex,ticket.ino)!=ticket.fragment_len)rc=EFS_ERR_INVAL;

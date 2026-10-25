@@ -24319,18 +24319,19 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
     out->primary_id = (hint >= 0) ? (efs_node_id_t)(hint + 1) : 0;
     t1 = now_ns();
     if (t1 - t0 > 20000000ull) {
-        static uint64_t last_ns, slow;
+        static uint64_t last_ns, slow; /* shared by every connection thread */
 
-        slow++;
-        if (t1 - last_ns > 1000000000ull) {
-            last_ns = t1;
+        uint64_t nslow = __atomic_add_fetch(&slow, 1, __ATOMIC_RELAXED);
+        uint64_t prev = __atomic_load_n(&last_ns, __ATOMIC_RELAXED);
+        if (t1 - prev > 1000000000ull &&
+            __atomic_compare_exchange_n(&last_ns, &prev, t1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
             fprintf(stderr,
                     "raft-host: getchunks slow ino=%llu start=%u n=%u "
                     "ri_ms=%llu total_ms=%llu rc=%d slow=%llu\n",
                     (unsigned long long)ino, start, out->count,
                     (unsigned long long)(t_ri / 1000000ull),
                     (unsigned long long)((t1 - t0) / 1000000ull), rc,
-                    (unsigned long long)slow);
+                    (unsigned long long)nslow);
         }
     }
 }
