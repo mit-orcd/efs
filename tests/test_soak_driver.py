@@ -84,8 +84,9 @@ assert len({e['at'] for e in short})==len(short)
 print('15-minute representative lifecycle schedule PASS')
 
 u='ab'*16
-assert s.owned_session(f'session uuid={u} epoch=12\n')==(u,12)
-for text in ('',f'session uuid={u[:-1]} epoch=1\n',f'xsession uuid={u} epoch=1',f'session uuid={u} epoch=1\nsession uuid={u} epoch=2\n'):
+stamp='2026-10-25T16:34:48.908Z '
+assert s.owned_session(f'{stamp}session uuid={u} epoch=12\n')==(u,12)
+for text in ('',f'{stamp}session uuid={u[:-1]} epoch=1\n',f'{stamp}xsession uuid={u} epoch=1',f'{stamp}session uuid={u} epoch=1\n{stamp}session uuid={u} epoch=2\n',f'bad-timestamp session uuid={u} epoch=1\n'):
  try:s.owned_session(text)
  except AssertionError:pass
  else:raise AssertionError('ambiguous/unowned session accepted')

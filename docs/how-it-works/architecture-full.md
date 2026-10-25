@@ -1635,8 +1635,9 @@ new qualify gate `d5-expiry` (item D5) on every matrix topology.
 **IN PROGRESS, branch `agent/devel-task-d`, not merged or pushed.** New
 five-to-seven-member loopback harness, independent acknowledged-content and
 shared-append oracles, quiet-host guard, RSS interval checks and qualification
-plugin. NUC's corrected 15-minute rehearsal is running (first clean return passed in
-13.29 s); four-hour completion
+plugin. NUC's fourth rehearsal reached five clean returns and a verified daemon
+recovery, then failed in the harness's timestamped-session parser. The corrected
+rehearsal is running in its reserved detached screen; four-hour completion
 and candidate/base code-gate comparison remain NOTRUN/queued. No acceptance
 or new product-fix claim yet.
 
