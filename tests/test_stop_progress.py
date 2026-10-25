@@ -3,7 +3,8 @@
 
 Three efsd daemons on loopback (tests/k33_daemons.py, tests/faults/efsd)
 with EFS_FAULT_REVOKE_BEGIN_FILE, and efs-fuse:
-1. Busy client: mount A creates DIRS directories with one file each; a
+1. Busy client: mount A creates DIRS directories with one file each (8
+   threads); a
    new directory's inode lands on its own metadata shard (files share
    their directory's), so the session touches thousands of shards.
    `scripts/client.sh stop` succeeds; the
@@ -19,6 +20,7 @@ with EFS_FAULT_REVOKE_BEGIN_FILE, and efs-fuse:
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, subprocess, sys, tempfile, time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload  # noqa: E402
@@ -67,9 +69,11 @@ try:
     a = Mount(c, 1, 'mnt-a')
     mounts.append(a)
     t = time.monotonic()
-    for k in range(DIRS):
+    def make(k):
         (a.path / f'd{k}').mkdir()
         (a.path / f'd{k}' / 'f').write_bytes(payload(f'stop-{k}', 64))
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(make, range(DIRS)))
     made = time.monotonic() - t
     rc, out, took = client('bash', 'scripts/client.sh', 'stop', str(a.path))
     assert rc == 0 and f'Unmounted {a.path}' in out, out + a.logp.read_text(errors='replace')[-3000:]
