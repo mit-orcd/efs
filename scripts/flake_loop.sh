@@ -6,7 +6,7 @@
 # One line per iteration in OUT/LABEL/loop.log; the last line is the tally.
 TREE=$1; OUT=$2; LABEL=$3; N=$4; shift 4
 D="$OUT/$LABEL"; mkdir -p "$D"; cd "$TREE" || exit 2
-export EFS_K35_KEEP=1 EFS_K36_KEEP=1 EFS_K37_KEEP=1 EFS_RSD_KEEP=1 EFS_D4_KEEP=1 EFS_QFIRST_KEEP=1
+export EFS_K33_KEEP=1 EFS_B6_KEEP=1 EFS_K35_KEEP=1 EFS_K36_KEEP=1 EFS_K37_KEEP=1 EFS_RSD_KEEP=1 EFS_D4_KEEP=1 EFS_QFIRST_KEEP=1
 fails=0
 for i in $(seq 1 $N); do
     t="$TREE/tmp/loop-$LABEL-$i"; [ -d "$t" ] && ~/bin/edelete --force --delete "$t"; mkdir -p "$t"
