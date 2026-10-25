@@ -1171,10 +1171,12 @@ ever actually tested.
 #### Fragment record format 2 (implemented, W75)
 
 Every fragment file a storage node writes, chunk fragments and packed-segment
-fragments alike, is the payload followed by one fixed 128-byte **fragment
-record** (`include/efs/frag_record.h`). Buffered roots append the record
-directly after the payload. O_DIRECT roots append a 4 KiB tail page that
-begins with the record and is zero-padded. There is no sidecar file. All
+fragments alike, carries one fixed 128-byte **fragment record**
+(`include/efs/frag_record.h`). Fragment files are written and read with
+`O_DIRECT` only (D42): the payload is padded to 4 KiB and followed by one 4 KiB
+tail page that begins with the record and is zero-padded. This is the only
+layout; a file of any other size, such as the removed buffered layout (a bare
+record right after the payload), is refused. There is no sidecar file. All
 integers are big-endian.
 
 ```text

@@ -12251,10 +12251,12 @@ ever actually tested.
 ##### Fragment record format 2 (implemented, W75)
 
 Every fragment file a storage node writes, chunk fragments and packed-segment
-fragments alike, is the payload followed by one fixed 128-byte **fragment
-record** (`include/efs/frag_record.h`). Buffered roots append the record
-directly after the payload. O_DIRECT roots append a 4 KiB tail page that
-begins with the record and is zero-padded. There is no sidecar file. All
+fragments alike, carries one fixed 128-byte **fragment record**
+(`include/efs/frag_record.h`). Fragment files are written and read with
+`O_DIRECT` only (D42): the payload is padded to 4 KiB and followed by one 4 KiB
+tail page that begins with the record and is zero-padded. This is the only
+layout; a file of any other size, such as the removed buffered layout (a bare
+record right after the payload), is refused. There is no sidecar file. All
 integers are big-endian.
 
 ```text
@@ -13533,7 +13535,7 @@ unprofiled success. The script does not install packages or change kernel policy
 
 Defaults now also include the raw I/O groups described below. BLAKE3 one-shot and streaming at 4 KiB, 64 KiB, 128 KiB and 1 MiB,
 with 1/2/4/affinity-CPU-count workers (deduplicated and capped by affinity);
-data buffered/direct I/O, inline/two-thread/automatic writer pools and QD
+data (store) I/O, which is `O_DIRECT` only (D42), inline/two-thread/automatic writer pools and QD
 1/16/64/256; local KV and Raft workloads including individual and batch32
 appends. The fixed data payload remains 64 KiB. The harness bounds the local resident
 working set to 256 MiB of fragment payload across QD slots (`--data-size`);
@@ -13809,9 +13811,10 @@ sync/durability default changed.
 
 Completed xorinox measurements and acceptance are recorded in the
 [writer investigation](../../results/measure/20261007-writer-investigation/SUMMARY.md).
-Buffered shard overwrites preserve extents instead of truncating before writing;
-a successful write checks exact body/checksum length and truncates an old longer
-tail. Direct I/O and persistence barriers are unchanged. The matched warm bounded
+Shard overwrites preserve extents instead of truncating before writing; a
+successful write checks exact body/checksum length and truncates an old longer
+tail. (That investigation measured the since-removed buffered store path; the
+store is `O_DIRECT` only, D42.) Persistence barriers are unchanged. The matched warm bounded
 overwrite gain is about 4–8×; it is not physical-media or FUSE throughput.
 A single-waiter signal experiment caused starvation and was rejected. Fair
 admission needs reserved handoff and anti-bypass protection, including worst-wait
@@ -13820,7 +13823,7 @@ and shutdown gates. Writer-count defaults remain unchanged.
 
 For synchronous engine-write diagnostics use `efs-bench --bench data --sync`
 or `efs-bench.sh --data-sync`. This benchmark-only option opens fragment files
-with O_SYNC; buffered writes also sync final length handling. Body/checksum
+with O_SYNC; a length change still takes an `fsync`. Body/checksum
 writes can therefore incur multiple persistence waits per PUT. The daemon's
 build and defaults do not enable it. Compare untraced repeats before separate
 perf/strace runs; O_SYNC does not establish SSD power-loss guarantees. See the
