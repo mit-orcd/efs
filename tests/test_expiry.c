@@ -118,10 +118,125 @@ static void namespace_gates(void)
 
  assert(!efs_meta_apply_check(kv));efs_kv_mem_free(kv);
 }
+/* D43: the cluster policy row (versioned CAS, off when absent) and the
+ * coverage rule: a deadline acts only while its source folder policy is
+ * enabled and the folder is live with the recorded generation. */
+static void policy_gates(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);assert(!efs_meta_apply_init(kv,NS));
+ uint64_t version=7;uint8_t on=7;
+ assert(!efs_expiry_switch_get(kv,&version,&on));assert(version==0 && on==0);
+ assert(efs_expiry_switch_apply(kv,0,2)==EFS_ERR_INVAL);
+ assert(efs_expiry_switch_apply(kv,1,1)==EFS_ERR_STALE);
+ assert(!efs_expiry_switch_apply(kv,0,1));
+ assert(!efs_expiry_switch_get(kv,&version,&on));assert(version==1 && on==1);
+ assert(efs_expiry_switch_apply(kv,0,0)==EFS_ERR_STALE);
+ assert(!efs_expiry_switch_apply(kv,1,0));
+ assert(!efs_expiry_switch_get(kv,&version,&on));assert(version==2 && on==0);
+ assert(!efs_expiry_covered(NULL,0) && !efs_expiry_covered((const uint8_t *)"",EFS_TXN_ABSENT));
+ struct efs_meta_attrs at={123,123,NS};efs_ino_t ino,dir;
+ assert(!efs_meta_apply_mkdir(kv,&at,1,S_IFDIR|0700,"scratch",&dir));
+ struct efs_expiry_policy policy={.ttl_ns=NS,.max_ns=20*NS,.enabled=1};
+ assert(!efs_meta_apply_expiry_policy(kv,1,1,0,0,&policy));
+ uint8_t key[EFS_EXPIRY_KEY_BYTES],value[EFS_EXPIRY_POLICY_BYTES];uint32_t n=sizeof(value);
+ efs_expiry_policy_key(1,1,key);assert(!efs_kv_get(kv,key,sizeof(key),value,&n));assert(efs_expiry_covered(value,n));
+ assert(!efs_meta_apply_create_file(kv,&at,1,S_IFREG|0600,"c",&ino));
+ struct efs_expiry_record r={.deadline_ns=2*NS,.root=1,.root_generation=1,.policy_revision=1,.max_ns=20*NS,.parent=1,.name="c"};
+ apply(kv,ino,0,&r);
+ struct efs_expiry_due due={.deadline_ns=2*NS,.ino=ino,.generation=1,.revision=1,.parent=1,.name="c"};
+ struct efs_expiry_page page;assert(!efs_expiry_due_page(kv,efs_kv_anchor_shard(efs_kv_inode_shard(ino)),3*NS,NULL,&page));
+ assert(page.count==1 && page.rows[0].root==1 && page.rows[0].root_generation==1);
+ /* Disabled source: the due deadline never removes the file. */
+ policy.enabled=0;assert(!efs_meta_apply_expiry_policy(kv,1,1,0,1,&policy));
+ n=sizeof(value);assert(!efs_kv_get(kv,key,sizeof(key),value,&n));assert(!efs_expiry_covered(value,n));
+ assert(efs_meta_apply_expire(kv,1,"c",3*NS,&due)==EFS_ERR_STALE);
+ struct efs_meta_dentry dent;assert(!efs_meta_apply_lookup(kv,1,"c",&dent));assert(dent.ino==ino);
+ assert(!efs_expiry_get(kv,ino,1,&r));assert(r.revision==1 && r.deadline_ns==2*NS);
+ /* A record naming another generation of its source folder is stale. */
+ efs_ino_t other;assert(!efs_meta_apply_create_file(kv,&at,1,S_IFREG|0600,"g",&other));
+ struct efs_expiry_record g={.deadline_ns=2*NS,.root=1,.root_generation=9,.policy_revision=1,.max_ns=20*NS,.parent=1,.name="g"};
+ apply(kv,other,0,&g);
+ struct efs_expiry_due gdue={.deadline_ns=2*NS,.ino=other,.generation=1,.revision=1,.parent=1,.name="g"};
+ policy.enabled=1;assert(!efs_meta_apply_expiry_policy(kv,1,1,0,2,&policy));
+ assert(efs_meta_apply_expire(kv,1,"g",3*NS,&gdue)==EFS_ERR_STALE);
+ /* Enabled again: the same deadline acts. */
+ assert(!efs_meta_apply_expire(kv,1,"c",3*NS,&due));
+ assert(efs_meta_apply_lookup(kv,1,"c",&dent)==EFS_ERR_NOT_FOUND);
+ assert(!efs_meta_apply_check(kv));efs_kv_mem_free(kv);
+}
+/* The folder count: equal on both anchors, moved only when a policy's
+ * enabled flag flips, and the create fence (count or an intent on the row
+ * sends a create to the expiry path; a create guard holds a change off). */
+static uint64_t folders(struct efs_kv *kv,uint32_t anchor)
+{uint64_t n=99;assert(!efs_expiry_folders_get(kv,anchor,&n));return n;}
+static void folder_count_gates(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);assert(!efs_meta_apply_init(kv,NS));
+ struct efs_meta_attrs at={123,123,NS};efs_ino_t dir;
+ assert(!efs_meta_apply_mkdir(kv,&at,1,S_IFDIR|0700,"scratch",&dir));
+ assert(folders(kv,1)==0 && folders(kv,2)==0);
+ assert(!efs_expiry_folders_fence(kv,1) && !efs_expiry_folders_fence(kv,2));
+ assert(efs_expiry_folders_fence(kv,3)==EFS_ERR_INVAL);
+ struct efs_expiry_policy p={.ttl_ns=NS,.max_ns=20*NS,.enabled=0};
+ struct efs_expiry_policy_change c;
+ /* A first row written disabled counts nothing. */
+ assert(!efs_expiry_policy_plan(kv,1,1,0,0,&p,&c));assert(c.delta==0 && c.folders==0 && c.old_len==EFS_TXN_ABSENT);
+ assert(!efs_meta_apply_expiry_policy(kv,1,1,0,0,&p));assert(folders(kv,1)==0);
+ p.enabled=1;assert(!efs_expiry_policy_plan(kv,1,1,0,1,&p,&c));
+ assert(c.delta==1 && c.folders==1 && c.old_len==EFS_EXPIRY_POLICY_BYTES && c.folders_old_len[0]==EFS_TXN_ABSENT);
+ assert(efs_expiry_policy_plan(kv,1,1,0,0,&p,&c)==EFS_ERR_STALE);
+ assert(efs_expiry_policy_plan(kv,1,1,7,1,&p,&c)==EFS_ERR_ACCES);
+ assert(!efs_meta_apply_expiry_policy(kv,1,1,0,1,&p));
+ assert(folders(kv,1)==1 && folders(kv,2)==1);
+ assert(efs_expiry_folders_fence(kv,1)==EFS_ERR_AGAIN && efs_expiry_folders_fence(kv,2)==EFS_ERR_AGAIN);
+ /* Another value of an enabled policy does not count again. */
+ p.ttl_ns=3*NS;assert(!efs_meta_apply_expiry_policy(kv,1,1,0,2,&p));assert(folders(kv,1)==1);
+ assert(!efs_meta_apply_expiry_policy(kv,dir,1,0,0,&p));assert(folders(kv,1)==2 && folders(kv,2)==2);
+ p.enabled=0;assert(!efs_meta_apply_expiry_policy(kv,1,1,0,3,&p));assert(folders(kv,1)==1);
+ assert(efs_expiry_folders_fence(kv,1)==EFS_ERR_AGAIN);
+ assert(!efs_meta_apply_expiry_policy(kv,dir,1,0,1,&p));assert(folders(kv,1)==0 && folders(kv,2)==0);
+ assert(!efs_expiry_folders_fence(kv,1) && !efs_expiry_folders_fence(kv,2));
+ assert(!efs_meta_apply_expiry_policy(kv,dir,1,0,2,&p));assert(folders(kv,1)==0);
+ /* An intent on a count row fences that group's ordinary creates and
+  * holds off another change; COMMIT writes the new count. */
+ p.enabled=1;assert(!efs_expiry_policy_plan(kv,1,1,0,4,&p,&c));assert(c.delta==1);
+ struct efs_txid tx;memset(&tx,0,sizeof(tx));tx.bytes[0]=1;
+ struct efs_txn_parts parts={.n=2,.shard={1,2}};
+ assert(!efs_txn_prepare_excl_value(kv,&tx,&parts,c.folders_key[0],EFS_EXPIRY_FOLDERS_KEY_BYTES,
+        c.folders_old[0],c.folders_old_len[0],EFS_TXN_PUT,c.folders_new[0],8));
+ assert(efs_expiry_folders_fence(kv,1)==EFS_ERR_AGAIN && !efs_expiry_folders_fence(kv,2));
+ struct efs_expiry_policy_change busy;
+ assert(efs_expiry_policy_plan(kv,dir,1,0,3,&p,&busy)==EFS_ERR_BUSY);
+ assert(!efs_txn_resolve(kv,&tx,1,EFS_TXN_COMMIT));
+ assert(folders(kv,1)==1 && efs_expiry_folders_fence(kv,1)==EFS_ERR_AGAIN);
+ /* Anchors that disagree are corrupt: no policy write repairs them. */
+ assert(efs_expiry_policy_plan(kv,dir,1,0,3,&p,&busy)==EFS_ERR_PROTO);
+ assert(!efs_kv_put(kv,c.folders_key[1],EFS_EXPIRY_FOLDERS_KEY_BYTES,c.folders_new[1],8));
+ uint64_t ver0=0;assert(!efs_txn_ver_get(kv,c.folders_key[0],EFS_EXPIRY_FOLDERS_KEY_BYTES,&ver0));assert(ver0==1);
+ /* A hashed create's shared guard on the count holds off a change until
+  * it resolves; a guard at an old version is stale. */
+ struct efs_txid g;memset(&g,0,sizeof(g));g.bytes[0]=2;
+ struct efs_txn_parts gp={.n=1,.shard={1}};
+ assert(efs_txn_prepare_guard(kv,&g,&gp,c.folders_key[0],EFS_EXPIRY_FOLDERS_KEY_BYTES,0)==EFS_ERR_STALE);
+ assert(!efs_txn_prepare_guard(kv,&g,&gp,c.folders_key[0],EFS_EXPIRY_FOLDERS_KEY_BYTES,ver0));
+ assert(efs_expiry_policy_plan(kv,dir,1,0,3,&p,&busy)==EFS_ERR_BUSY);
+ assert(!efs_txn_resolve(kv,&g,1,EFS_TXN_COMMIT));
+ assert(!efs_meta_apply_expiry_policy(kv,dir,1,0,3,&p));assert(folders(kv,1)==2 && folders(kv,2)==2);
+ /* A count of zero with an enabled policy is corrupt too. */
+ uint8_t zero[8]={0};
+ for(unsigned i=0;i<2;i++)assert(!efs_kv_put(kv,c.folders_key[i],EFS_EXPIRY_FOLDERS_KEY_BYTES,zero,8));
+ p.enabled=0;assert(efs_meta_apply_expiry_policy(kv,dir,1,0,4,&p)==EFS_ERR_PROTO);
+ uint8_t shortrow[4]={0};assert(!efs_kv_put(kv,c.folders_key[1],EFS_EXPIRY_FOLDERS_KEY_BYTES,shortrow,4));
+ uint64_t n;assert(efs_expiry_folders_get(kv,2,&n)==EFS_ERR_PROTO);
+ efs_kv_mem_free(kv);
+ puts("expiry folder count: both anchors, flips only, fence, intent and guard PASS");
+}
 int main(void)
 {
  inheritance_gates();
  namespace_gates();
+ policy_gates();
+ folder_count_gates();
  char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-expiry-XXXXXX");assert(efs_test_mkdtemp(path));
  struct efs_kv *kv=efs_kv_lsm_open(path,NULL);assert(kv);
  struct efs_expiry_policy p;assert(!efs_expiry_policy_get(kv,1,1,&p));assert(!p.enabled && !p.revision);
@@ -169,5 +284,5 @@ int main(void)
  assert(!efs_expiry_materialize(&p,1,1,NS,&r));assert(efs_expiry_materialize(&p,1,1,UINT64_MAX,&r)==EFS_ERR_INVAL);
  efs_kv_lsm_close(kv);DIR *d=opendir(path);assert(d);struct dirent *e;
  while((e=readdir(d)))if(strcmp(e->d_name,".") && strcmp(e->d_name,"..")){char f[512];snprintf(f,sizeof(f),"%s/%s",path,e->d_name);assert(!unlink(f));}
- closedir(d);assert(!rmdir(path));puts("expiry: durable policy/CAS, FileID isolation, fixed materialization, authorization/retention/link refusal, renewal index replacement, bounded paging, cold recovery and clock refusal PASS");return 0;
+ closedir(d);assert(!rmdir(path));puts("expiry: cluster policy CAS (off by default), source-policy coverage, durable policy/CAS, FileID isolation, fixed materialization, authorization/retention/link refusal, renewal index replacement, bounded paging, cold recovery and clock refusal PASS");return 0;
 }

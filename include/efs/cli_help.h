@@ -50,9 +50,7 @@ static inline void efs_cli_help(FILE *out,const char *program,const char *topic)
     } else if (!strcmp(name,"efs-mgmt")) {
         summary="Inspect and manage an EFS cluster";syntax="COMMAND [arguments]";
         commands="status               Cluster status\nio-stats             I/O counters\ngc-status            Garbage-collection status\nversion              Node version\nsync-status          Per-root durability state of each node\ndata-commit          Make acknowledged data durable on each node\npack-compact         Compact packed small-file segments\nshrink-quota         Reduce a node quota\nmkfs, raft-mkfs      Format metadata\ncommands-policy      Get/set versioned command policy\n"
-#if EFS_BUILD_EXPIRY
-            "expiry-policy        Get/set scratch expiry policy\nexpiry               Show path expiry or inspect/renew a deadline\nexpiry-status        Worker health, backlog and removal counters\nexpiry-clock         Inspect/reset node clock health\nexpiry-enable        Enable an existing file deadline\nexpiry-id            Inspect authoritative FileID\n"
-#endif
+            "expiry-policy        Get/set the cluster expiry policy and folder policies\nexpiry               Show path expiry or inspect/renew a deadline\nexpiry-status        Worker health, backlog and removal counters\nexpiry-clock         Inspect/reset node clock health\nexpiry-enable        Enable an existing file deadline\nexpiry-id            Inspect authoritative FileID\n"
             "raft-status          Raft group status\nraft-resync          Resync a follower's group from the leader snapshot\nraft-step-down       Move a group's leadership\nraft-change          Change group voters\nraft-dir             Directory layout migration\nraft-session         Session lifecycle\nraft-getattr         Read inode attributes\nraft-lookup          Look up a name\nraft-lookup-path     Resolve a path\nraft-create          Create a file\nraft-unlink          Remove a file name\nraft-rmdir           Remove an empty directory\nraft-link            Create a hard link\nraft-setattr         Change attributes\nraft-rename          Rename a name\nraft-readdir         List directory entries\nraft-publish         Publish a chunk\nraft-getchunks       Read chunk mappings\nraft-append          Allocate an append range\nraft-hold            Open/close a lease\nraft-flock           Whole-file locking\nraft-fcntl           Byte-range locking";
         examples="efs-mgmt status 127.0.0.1:17432\nefs-mgmt gc-status 127.0.0.1:17432";
         notes="Run efs-mgmt COMMAND --help for its argument syntax.";
@@ -104,14 +102,12 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
         {"version","NODE:PORT"},{"sync-status","NODE:PORT [NODE:PORT ...]"},
         {"data-commit","NODE:PORT [NODE:PORT ...]"},{"pack-compact","NODE:PORT [SEGMENTS]"},
         {"shrink-quota","NODE:PORT AMOUNT[K|M|G|T]"},
-#if EFS_BUILD_EXPIRY
-        {"expiry-policy","NODE:PORT get ROOT GENERATION | set ROOT GENERATION EXPECTED_REV --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS"},
+        {"expiry-policy","NODE:PORT cluster get | cluster set on|off EXPECTED_VERSION | get ROOT GENERATION | set ROOT GENERATION EXPECTED_REV --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS"},
         {"expiry-id","NODE:PORT INO"},
         {"expiry-enable","NODE:PORT INO GENERATION PARENT NAME DEADLINE_NS"},
         {"expiry-clock","NODE:PORT get|reset"},
         {"expiry-status","NODE:PORT"},
         {"expiry","NODE:PORT show PATH [--mount MOUNT] | get INO GENERATION | renew INO GENERATION EXPECTED_REV DEADLINE_NS"},
-#endif
         {"commands-policy","NODE:PORT get | set MASK EXPECTED_VERSION"},{"mkfs","NODE:PORT"},{"raft-mkfs","NODE:PORT"},
         {"raft-status","NODE:PORT"},{"raft-resync","NODE:PORT GROUP"},
         {"raft-step-down","NODE:PORT GROUP [TARGET_NODE_ID]"},{"raft-change","NODE:PORT GROUP VOTERS"},
@@ -147,7 +143,10 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
             "--expire-after affects future files; existing deadlines remain unchanged.\n"
             "Renewal checks the current limits at the file's saved policy source.\n"
             "The renewal limit is not a maximum lifetime rule.\n"
-            "Set requires operator UID 0 and an EFS_BUILD_EXPIRY build.\n"
+            "The cluster policy turns expiry on or off for the whole cluster at runtime;\n"
+            "it is off until set. While off, no deadline is created or acted on.\n"
+            "A deadline is acted on only while its source folder policy is enabled.\n"
+            "Folder set requires operator UID 0.\n"
             "Node addresses use HOST:PORT." :
             (!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
             "Single export; no label argument. Optional: the cluster forms by itself.\n"

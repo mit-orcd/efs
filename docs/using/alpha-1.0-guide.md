@@ -69,6 +69,7 @@ member count or cluster file.
 | Transport | `EFS_TRANSPORT=auto\|tcp\|rdma`, `EFS_RDMA_DEV`, `EFS_RDMA_GID_INDEX` on servers and clients | `auto` |
 | Discovery | `--discovery-port N` (0 off), `--discover-on IFACE` | UDP 17430 on every interface |
 | `.efs` commands | the cluster commands-policy, `efs-mgmt commands-policy` | On |
+| Expiry | the cluster expiry policy, `efs-mgmt expiry-policy NODE:PORT cluster` | Off |
 
 The endpoint must be a real local IPv4 address (not `0.0.0.0`); peers
 connect back to it. Startup refuses a quota above the safe maximum and a
@@ -222,11 +223,9 @@ from creation, `efs-mgmt expiry NODE:PORT show PATH` shows a path's
 deadline and `renew` extends it up to the renewal limit; reading or
 writing does not renew; `expiry-status` shows the worker, its backlog and
 its removals, `expiry-clock` the node clock health. A changed
-`--expire-after` affects only future files. **At `ec3e09306` the product
-build compiles expiry out** (`efs-mgmt expiry-status` answers `Unknown
-command`); it is being re-enabled, and this section follows the help text
-of an `EFS_BUILD_EXPIRY=1` build, not a run
-([finding U19](../status/docs-audit-20261025.md)).
+`--expire-after` affects only future files. Expiry is in every build
+(D43); every `expiry*` command answers `expiry off` (rc -16) until the
+cluster expiry policy is set on.
 
 ### `df`
 
@@ -312,6 +311,50 @@ order (crash, `SIGKILL`, power loss) starts again at once and runs verified
 recovery (K36, see failure behavior) before it proves fragments durable
 again. A whole-cluster restart needs a quorum of each metadata group back
 before clients are served.
+
+### Expiry
+
+Expiry removes files at a deadline fixed when they are created under a
+folder with an enabled expiry policy (D33, D43). It is in every build and
+has one control, the cluster expiry policy: versioned like the
+commands-policy, stored in the cluster, off until an operator sets it, and
+changed at runtime without a restart. No environment variable or flag turns
+it on or off; efsd refuses a leftover `EFS_EXPIRY` and names the command.
+
+```bash
+efs-mgmt expiry-policy 10.0.0.11:17432 cluster get           # version=0 expiry=off ... folder_policies=0
+efs-mgmt expiry-policy 10.0.0.11:17432 cluster set on 0      # version=1 expiry=on
+efs-mgmt expiry-policy 10.0.0.11:17432 set ROOT_INO GENERATION EXPECTED_REV \
+    --expire-after 24h --renewal-limit 7d --flags 3          # folder policy, uid 0
+efs-mgmt expiry 10.0.0.11:17432 show /scratch/run1/out.dat   # deadline of a file
+efs-mgmt expiry-status 10.0.0.11:17432                       # worker, backlog, removals
+efs-mgmt expiry-policy 10.0.0.11:17432 cluster set off 1     # pause everywhere
+```
+
+- **Off** (the default): no file gets a deadline, no deadline acts, the
+  worker only reads the policy, and the expiry commands are refused
+  (`rc=-16`). A cluster that never turns expiry on stores no expiry rows.
+- **On**: new regular files under a folder whose nearest policy is enabled
+  get a fixed deadline (`--expire-after` from creation); `expiry renew`
+  moves it within `--renewal-limit`; a file with a deadline cannot get a
+  second hard link. Every node sees a change within about a second (one GC
+  pass); the replicas of the policy group at once.
+- **Create cost**: while no folder policy is enabled anywhere
+  (`folder_policies=0` in `cluster get`), creates take the ordinary path
+  even with expiry on. Once any folder policy is enabled, every
+  regular-file create looks up its folders' policies in a cross-group
+  transaction, about twice the time of an ordinary create on one disk.
+  Disable a folder policy before removing its folder: the count only drops
+  when a policy is disabled, and a removed folder's policy can no longer be
+  changed.
+- **A deadline acts only while it is covered**: the cluster policy on, and
+  the folder policy it came from still enabled on a live folder. Turning
+  either off keeps every file; turning it on again lets the overdue
+  deadlines act. A renamed file keeps its deadline. Files created while the
+  cluster policy was off never get one.
+- Deletion waits for a healthy node clock (`expiry-clock`; an uncertain
+  clock needs an operator reset) and for both metadata groups; the space is
+  reclaimed like an unlink, after the last open descriptor closes.
 
 ## Failure behavior
 

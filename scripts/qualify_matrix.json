@@ -36,7 +36,7 @@
   "features": {
    "packing": "on (built in)",
    ".efs": "cluster commands-policy, default enabled",
-   "expiry": "compiled out",
+   "expiry": "cluster expiry policy (D43): off by default, qualified on and off (d5-expiry)",
    "containers": "off"
   },
   "numeric_tunables": {
@@ -129,6 +129,7 @@
     "k13-tickets",
     "fragment-integrity",
     "gc-reclamation",
+    "d5-expiry",
     "e1-manifest",
     "e2-client-stop",
     "e3-turnover",
@@ -153,6 +154,32 @@
     "A4 (one host)",
     "RDMA",
     "4 or 5 members"
+   ]
+  },
+  "loopback-4": {
+   "loopback": 4,
+   "port_base": 18960,
+   "private_port_base": 18900,
+   "loopback_quota": "4G",
+   "transport": "tcp",
+   "fixture": {
+    "posix_timeout_s": 150
+   },
+   "purpose": "D43 dry run: the d5-expiry gate (its own private four-node expiry fixture) beside a four-member driver cluster",
+   "host": "nuc (ports 18900-18999) or any host with its own range: pass --port-base/--private-port-base",
+   "gates": [
+    "identity",
+    "topology",
+    "d5-expiry"
+   ],
+   "allow": [],
+   "duration": "about 10 minutes on nuc (expiry phases about 3 minutes, POSIX core with the 150 s case timeout)",
+   "covers": [
+    "D5 expiry fixture and driver integration (TCP, one host)"
+   ],
+   "cannot_cover": [
+    "A4 (one host)",
+    "RDMA"
    ]
   },
   "nuc-private-3": {
@@ -192,7 +219,7 @@
     "features": {
      "packing": "built in (background packer)",
      "efs_commands": "cluster commands-policy (default enabled)",
-     "expiry": "compiled out (EFS_BUILD_EXPIRY off)",
+     "expiry": "cluster expiry policy (efs-mgmt expiry-policy NODE:PORT cluster), off by default; d5-expiry turns it on and off",
      "containers": "off"
     },
     "quota": "4G per node",
@@ -233,7 +260,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "d5-expiry"
    ],
    "allow": [
     "restart",
@@ -294,7 +322,7 @@
     "features": {
      "packing": "built in",
      "efs_commands": "cluster commands-policy (default enabled)",
-     "expiry": "compiled out"
+     "expiry": "cluster expiry policy (efs-mgmt expiry-policy NODE:PORT cluster), off by default; d5-expiry turns it on and off"
     },
     "quota": "720G per node",
     "hardware": "node9901: 3 efsd (192 cores, 3 TB xiRAID /data1, mlx5_0); node9900: client (RHEL 9.8, mlx5_0)",
@@ -329,7 +357,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "d5-expiry"
    ],
    "allow": [
     "remount",
@@ -399,7 +428,7 @@
     "features": {
      "packing": "built in",
      "efs_commands": "cluster commands-policy (default enabled)",
-     "expiry": "compiled out"
+     "expiry": "cluster expiry policy (efs-mgmt expiry-policy NODE:PORT cluster), off by default; d5-expiry turns it on and off"
     },
     "quota": "400G per node",
     "hardware": "intel1, intel2: 8 CPU, 15 GB, Rocky 10, one storage filesystem per daemon, 10.1.0.0/24 wired",
@@ -432,7 +461,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "d5-expiry"
    ],
    "allow": [
     "remount",
@@ -497,7 +527,7 @@
     "features": {
      "packing": "built in (background packer)",
      "efs_commands": "cluster commands-policy (default enabled)",
-     "expiry": "compiled out (EFS_BUILD_EXPIRY off)",
+     "expiry": "cluster expiry policy (efs-mgmt expiry-policy NODE:PORT cluster), off by default; d5-expiry turns it on and off",
      "containers": "off"
     },
     "quota": "4G per node",
@@ -536,7 +566,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "d5-expiry"
    ],
    "allow": [
     "restart",
@@ -603,7 +634,7 @@
     "features": {
      "packing": "built in (background packer)",
      "efs_commands": "cluster commands-policy (default enabled)",
-     "expiry": "compiled out (EFS_BUILD_EXPIRY off)",
+     "expiry": "cluster expiry policy (efs-mgmt expiry-policy NODE:PORT cluster), off by default; d5-expiry turns it on and off",
      "containers": "off"
     },
     "quota": "4G per node",
@@ -642,7 +673,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "d5-expiry"
    ],
    "allow": [
     "restart",
@@ -714,7 +746,7 @@
     "features": {
      "packing": "built in (background packer)",
      "efs_commands": "cluster commands-policy (default enabled)",
-     "expiry": "compiled out (EFS_BUILD_EXPIRY off)",
+     "expiry": "cluster expiry policy (efs-mgmt expiry-policy NODE:PORT cluster), off by default; d5-expiry turns it on and off",
      "containers": "off"
     },
     "quota": "4G per node",
@@ -753,7 +785,8 @@
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
-    "e4-scale"
+    "e4-scale",
+    "d5-expiry"
    ],
    "allow": [
     "restart",
@@ -1195,6 +1228,27 @@
     "E4 fixture running"
    ],
    "note": "real gate: d4-progress (scripts/d4_progress.py)"
+  },
+  "D5": {
+   "checks": [
+    "qualify:d5-expiry",
+    "posix:tests/posix/posix_expiry.py",
+    "live:tests/live/gc_reclamation.py",
+    "code:make test-long"
+   ],
+   "topologies": [
+    "3-host",
+    "4-host",
+    "5-host"
+   ],
+   "transports": [
+    "tcp"
+   ],
+   "duration": "about 10 minutes (expiry phases with 40 s deadlines, restarts, POSIX core)",
+   "prerequisites": [
+    "FUSE on the private host"
+   ],
+   "note": "D43: expiry ships, governed by the cluster expiry policy. d5-expiry runs its own private four-node TCP cluster on every topology's private host (the fixture is topology-independent); tests/test_expiry_policy_live.py (make test-long) checks zero effect while off and runtime on/off"
   },
   "E1": {
    "checks": [

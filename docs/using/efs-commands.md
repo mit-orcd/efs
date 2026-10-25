@@ -111,13 +111,12 @@ access to protected descendants. Exceeding a limit fails explicitly, without
 partial successful output. The literal pattern limit remains 120 filename bytes;
 reply size is bounded at 16 MiB. Extra metadata increases bytes per entry.
 
-Expiry ships in alpha 1.0 (D43, user, Oct 25): its policy is set with
-`efs-mgmt expiry-policy` and deadlines are shown and renewed with
-`efs-mgmt expiry`. At `ec3e09306` the product build still compiles expiry
-out and is being re-enabled ([finding U19](../status/docs-audit-20261025.md)),
-so these commands currently report expiry as **unavailable**: they do not
-set deadlines, renew files or schedule deletion, and expiry arguments are
-rejected, not silently ignored. See the
+Expiry is **not part of these commands**: they do not set deadlines, renew
+files or schedule deletion, and expiry arguments are rejected, not silently
+ignored ("expiry unavailable" in their status). Expiry itself ships (D43) and
+is operated with `efs-mgmt expiry-policy` (the cluster expiry policy, off by
+default, and folder policies) and `efs-mgmt expiry`; see the
+[alpha guide](alpha-1.0-guide.md#expiry) and the
 [expiry test status](../status/efs-command-options-20261008.md#expiry-testing).
 For activation and restart/catch-up behavior, see
 [persistent server policy](../status/efs-query-persistent-policy-20261010.md).

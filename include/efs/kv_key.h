@@ -14,6 +14,8 @@
 #define EFS_KV_KIND_EXPIRY_POLICY 42 /* directory FileID: operator policy */
 #define EFS_KV_KIND_EXPIRY 43 /* FileID: fixed deadline and monotonic revision */
 #define EFS_KV_KIND_EXPIRY_INDEX 44 /* group anchor/deadline/FileID: revision */
+#define EFS_KV_KIND_EXPIRY_SWITCH 56 /* root export: version:8, enabled:1 (D43 cluster expiry policy) */
+#define EFS_KV_KIND_EXPIRY_FOLDERS 57 /* group anchor: enabled folder policies:8, equal on both anchors */
 #define EFS_KV_KIND_PACK_SEGMENT 45 /* group anchor/segment id/generation: W125 packed segment */
 #define EFS_KV_KIND_PACK_CANDIDATE 46 /* group anchor/epoch/FileID: W125 packing candidate */
 #define EFS_KV_KIND_TRUNCATE_RECEIPT 47 /* inode/session: D25 truncate opid window */

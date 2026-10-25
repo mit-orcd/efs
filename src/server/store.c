@@ -569,9 +569,7 @@ void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out
     pthread_mutex_unlock(&s->lock);
 #undef GC_AGE
 #undef GC_LOAD
-#if EFS_BUILD_EXPIRY
     server_raft_host_expiry_status(&out->expiry);
-#endif /* else out->expiry stays zero: not in this build (D42) */
     server_reclaim_status(s, &out->reclaim);
 }
 

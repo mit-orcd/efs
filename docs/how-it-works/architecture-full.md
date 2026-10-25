@@ -1616,6 +1616,21 @@ A unit test on the production replay proves the cause; the body-less span replay
 **PASS (scoped, loopback, amd), branch `claude/kind-nash-0f2244`, not merged, not pushed; `tests/test_k33_payload.py` 30 of 30 PASS alternating with the base (devel `5a7463440` + the flake-sweep client fix), which failed 8 of 30; `make test-all` on amd at `f0b51c0ed`: 480 commands, 14 FAIL, 6 NOTRUN; untouched devel 479, 12 FAIL; the 12 are shared (RDMA, host limits), the other two (D4 `put_errors`, the step-down latency bound under load) fail on devel or pass standalone on both (raw: amd `~/efs-artifacts/k38-20261025/`, `SHA256SUMS` `4df49442…ae9b`).**
 Cause of the remaining step-5 `EIO`: the packer wrote a segment degraded (often around a member that had returned 0.3 s earlier: a stale pooled peer connection or its connect cooldown gave NET) and `efs-mgmt status` still said `Degraded segments: 0`, `Protection: full`, because both degraded counts were the last rebuild pass's sample; the test (as an operator would) then stopped the member holding one of the two fragments. Fixed: STATUS counts the leader's marks at the reply; the packer resends a NET fragment once on a new connection. New `tests/test_k38_protection_now.py` (fails with either half reverted). Live multi-host NOTRUN.
 
+[D43 follow-up: creates keep the ordinary path until a folder policy is enabled](../status/d43-expiry-fast-create-20261025.md):
+**PASS (scoped, one shared host), not merged, not pushed; branch `claude/funny-blackburn-010f41` on the D43 tip, code `b5b9ffc03`. Expiry on with no folder policy now costs as much as off (amd 0.93x/1.01x, baseline 2.2x); amd `make test-all` at 8 jobs: 11 FAIL, all failing on the baseline there too (RDMA, LeakSanitizer fixture, one pool timeout); 0 FAIL on a limit-free host not run. Raw: amd `~/efs-artifacts/d43-fast-20261025/` (`SHA256SUMS` `37bf20b4…9035`).**
+A folder-policy count (KV kind 57, both anchors) moves in the policy
+write's transaction; with expiry on and no folder policy enabled, creates
+take the ordinary path behind a per-group apply fence (no cache window).
+
+[D43: expiry ships under the cluster expiry policy](../status/d43-expiry-20261025.md):
+**PASS (scoped, one host), not merged, not pushed; branch `claude/ecstatic-mccarthy-911369`, code `6b731298d`. nuc `make test-all` at 8 jobs: 484 commands, 0 FAIL, 15 NOTRUN host limits (earlier runs: one known intermittent each, D4 `put_errors=1` twice beside the new fixture before its budget fix); `d5-expiry` loopback dry run PASS (POSIX 218/218 with expiry on). Raw: nuc `~/efs-artifacts/d43-expiry-20261025/` (`SHA256SUMS` `6d6d768e…3d63`).**
+No build switch (`EFS_BUILD_EXPIRY` and `make test-expiry` removed) and no
+environment toggle (`EFS_EXPIRY` refused, naming the policy command); the
+cluster expiry policy (`efs-mgmt expiry-policy NODE:PORT cluster`,
+versioned, off by default) changes at runtime; a deadline acts only while
+its source folder policy is enabled. Expiry tests back in `make test-all`;
+new qualify gate `d5-expiry` (item D5) on every matrix topology.
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](../status/f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
@@ -1849,7 +1864,8 @@ throughput.
 
 [Oct 24: A7 removals decided in D42](../status/a7-removals-20261024.md):
 **PASS (scoped): `make test-all` on amd at `735b82562` fails only the 11 commands that also fail on the base (RDMA on rxe0, a fault-test timeout, K34 in `test_k33_payload.py`); live qualification NOTRUN.** Direct I/O only (storage without `O_DIRECT` refused),
-12 selectors and 3 efsd flags removed and refused, expiry compiled out,
+12 selectors and 3 efsd flags removed and refused, expiry compiled out
+(reversed by D43 on Oct 25: [D43 expiry](../status/d43-expiry-20261025.md)),
 `EFS_RDMA_TRACE`, strict `EFS_TRANSPORT=rdma`; A/B selectors 15 → 1
 (`EFS_READ_VERIFY`). Branch merged into devel (`6069ada62`).
 External launch/portal changes for the parent are listed there.

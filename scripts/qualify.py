@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage 2 qualification driver (alpha 1.0: A1-A5, C1-C5, D1-D4, E1-E3, F3).
+"""Stage 2 qualification driver (alpha 1.0: A1-A5, C1-C5, D1-D5, E1-E3, F3).
 
 One command runs the Stage 2 gates against a described cluster and leaves,
 outside Git, everything an evidence summary needs:
@@ -1062,6 +1062,22 @@ def b_gc(q, src, work, port):
     return [('gc-reclamation', f'mkdir -p {w}/p1 {w}/p2 && python3 tests/live/gc_reclamation.py '
              f'--root {w}/p1 --root {w}/p2 --port {port + 30} {q.fixture["gc_args"]}',
              False)], dict(args=q.fixture['gc_args'], ports=f'{port + 30}-{port + 33}')
+
+
+def b_d5(q, src, work, port):
+    """D5 (D43): expiry under the cluster expiry policy. The owned four-node
+    fixture (tests/posix/posix_expiry.py -> gc_reclamation.py --expiry
+    --expiry-only): policy off by default, on/off/on at runtime, folder
+    coverage, lifecycle, restarts, member and leader loss, physical
+    reclamation, then the POSIX core suite with expiry on."""
+    w = shlex.quote(work)
+    return [('d5-expiry', f'mkdir -p {w}/r1 {w}/r2 {w}/mnt {w}/peer && python3 tests/posix/posix_expiry.py '
+             f'{w}/mnt --suite expiry --root {w}/r1 --root {w}/r2 --peer-mount {w}/peer '
+             f'--port {port + 40} --jobs {q.fixture["posix_jobs"]} --timeout-s {q.fixture["posix_timeout_s"]}',
+             False)], \
+        dict(ports=f'{port + 40}-{port + 43}', members=4, transport='tcp',
+             posix_timeout_s=q.fixture['posix_timeout_s'],
+             policy='cluster expiry policy off by default, then on/off/on at runtime (D43)')
 
 
 def manifest_verify(q, g, m, manifest_path, label):
@@ -2380,6 +2396,8 @@ def gates(plugins):
              deadline_s=3600, doc='tests/live/fragment_integrity.py, private clusters'),
         Gate('gc-reclamation', live_gate(b_gc), 'D2', 'Packing/shared-fragment GC', deadline_s=7200,
              doc='tests/live/gc_reclamation.py, private four-node cluster'),
+        Gate('d5-expiry', live_gate(b_d5), 'D5', 'Packing/shared-fragment GC', deadline_s=3600,
+             doc='tests/posix/posix_expiry.py (cluster expiry policy, lifecycle, POSIX core), private four-node cluster'),
         Gate('e1-manifest', g_e1, 'E1, E2', 'Full payloads + orderly restart', partial_needs=('restart',),
              deadline_s=3600, doc='acknowledged-file manifest verified after orderly stop/start'),
         Gate('e2-client-stop', g_e2, 'E2', 'Full payloads + orderly restart', needs=('remount',),
@@ -2884,7 +2902,7 @@ def h_node(a):
 
 MATRIX = ROOT / 'scripts' / 'qualify_matrix.json'
 STAGE2_ITEMS = ('A1', 'A2', 'A3', 'A4', 'A5', 'A13', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6',
-                'C1', 'C2', 'C3', 'C4', 'C5', 'D1', 'D2', 'D3', 'D4', 'E1', 'E2', 'E3', 'E4')
+                'C1', 'C2', 'C3', 'C4', 'C5', 'D1', 'D2', 'D3', 'D4', 'D5', 'E1', 'E2', 'E3', 'E4')
 CHECK_KINDS = ('qualify', 'b_checks', 'posix', 'live', 'code')
 
 
@@ -2945,7 +2963,7 @@ def matrix_errors(matrix):
             if not re.fullmatch(r'[^\s:]+:\d+', node.get('addr', '')):
                 errors.append(f'topology {name}: node address {node.get("addr")!r} is not HOST:PORT')
         base = int(c.get('private', {}).get('port_base', 18700))
-        if any(port in RESERVED_PORTS for port in range(base, base + 40)):
+        if any(port in RESERVED_PORTS for port in range(base, base + 44)):
             errors.append(f'topology {name}: private port base {base} overlaps reserved ports')
         if c.get('private_cluster'):
             errors += [f'topology {name}: {e}' for e in check_private_cluster(c)]

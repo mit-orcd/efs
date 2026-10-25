@@ -147,7 +147,8 @@ static const struct { const char *name, *why; } removed_env[] = {
     { "EFS_COMMANDS", "D42): .efs follows the cluster commands-policy (efs-mgmt commands-policy)" },
     { "EFS_COMMANDS_SERVER", "D42): query workers always run; the cluster commands-policy "
       "is the only .efs authority" },
-    { "EFS_EXPIRY", "D42): expiry is not in the alpha product" },
+    { "EFS_EXPIRY", "D43): expiry follows the cluster expiry policy; turn it on or off "
+      "at runtime with efs-mgmt expiry-policy NODE:PORT cluster set on|off VERSION" },
     { "EFS_FUSE_EXPORT", "D42): NFS re-export of a mount is not supported" },
     { "EFS_RDMA_FIRST", "D42): renamed EFS_RDMA_TRACE=1, diagnostics only" },
 };
