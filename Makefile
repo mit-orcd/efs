@@ -65,7 +65,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               $(COMMON_DIR)/log_ts.c \
               $(COMMON_DIR)/batch_obs.c \
               $(COMMON_DIR)/version.c \
-              $(COMMON_DIR)/protocol.c \
+              $(COMMON_DIR)/protocol.c $(COMMON_DIR)/record_decode.c \
               $(COMMON_DIR)/request_receipt.c \
               src/wire/wire.c \
               src/data/erasure.c \
@@ -402,11 +402,12 @@ check:
 # Everything any test needs, built in one parallel make before tests start
 # (scripts/make_test_summary.sh).
 .PHONY: test-bins
-test-bins: all $(TEST_SPECIAL_BINS)
+test-bins: all $(TEST_SPECIAL_BINS) decoder-bins
 
 # make test: the fast, CPU-bound unit suite for every edit (each command well
 # under a second; about a minute in all). Slow tests belong in test-long.
-test: all $(TEST_SPECIAL_BINS)
+test: all $(TEST_SPECIAL_BINS) decoder-bins
+	python3 tests/test_decoder_inputs.py
 	python3 tests/test_env_inventory.py
 	python3 tests/test_leader_placement.py
 	python3 tests/test_env_removed.py
@@ -1034,6 +1035,7 @@ test: test-rdma-message
 test: test-apply-wait
 
 # make test-long: tests that wait on real deadlines, start daemons or
+	python3 tests/test_decoder_refusal.py
 # processes, inject faults or carry heavy workloads (1 s or more each on an
 # 8-core host). Not part of `make test`, the fast unit suite; `make test-all`
 # runs both and is what the gates run.
@@ -1147,3 +1149,18 @@ tests/test_b_geometry tests/test_frag_record tests/test_packed_segment tests/tes
 
 tests/test_directory_sync_group: tests/test_directory_sync_group.c src/server/directory_sync_group.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
+
+# Task C: the deterministic replay is fast; sustained sanitized mutation runs
+# are an explicit gate, never hidden inside make test.
+.PHONY: decoder-bins decoder-check
+decoder-bins: tests/decoders/check
+tests/decoders/check: tests/decoders/check.c src/server/discovery.c src/server/member_store.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/decoders/check.c src/server/discovery.c src/server/member_store.c $(LIB) $(LDFLAGS)
+decoder-check:
+	python3 scripts/decoder_check.py
+
+decoder-bins: tests/decoders/apply
+tests/decoders/efsd.o: src/server/efsd.c src/server/server_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) -Dmain=efs_decoder_unused_daemon_main -c -o $@ $<
+tests/decoders/apply: tests/decoders/apply.c src/server/raft_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/decoders/apply.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB) $(LDFLAGS)

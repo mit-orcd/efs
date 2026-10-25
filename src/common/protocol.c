@@ -758,10 +758,13 @@ int efs_declaration_required(uint8_t type)
 
 int efs_client_hello_check(const void *payload, uint32_t len)
 {
-    const struct efs_msg_client_hello *h = payload;
-    if (!payload || len != sizeof(*h) || memcmp(h->magic, "EFSP", 4) != 0)
+    struct efs_msg_client_hello h;
+    if (!payload || len != sizeof(h))
         return EFS_ERR_PROTO;
-    return h->version == EFS_PROTOCOL_VERSION ? EFS_OK : EFS_ERR_PROTO;
+    memcpy(&h, payload, sizeof(h));
+    if (memcmp(h.magic, "EFSP", 4) != 0)
+        return EFS_ERR_PROTO;
+    return h.version == EFS_PROTOCOL_VERSION ? EFS_OK : EFS_ERR_PROTO;
 }
 
 /* One audible line per refused connection, bounded under a flood: the
@@ -791,10 +794,10 @@ int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t typ
         efs_conn_send_msg(c, EFS_MSG_CLIENT_HELLO_REPLY, &rep, sizeof(rep));
         if (ok)
             return EFS_GATE_ANSWERED;
-        const struct efs_msg_client_hello *h = payload;
-        gate_refuse_log("declaration of protocol",
-                        len >= offsetof(struct efs_msg_client_hello, version) + sizeof(h->version)
-                            ? h->version : 0u);
+        uint32_t version = 0;
+        if (payload && len >= offsetof(struct efs_msg_client_hello, version) + sizeof(version))
+            memcpy(&version, (const uint8_t *)payload + offsetof(struct efs_msg_client_hello, version), sizeof(version));
+        gate_refuse_log("declaration of protocol", version);
         return EFS_GATE_REFUSE;
     }
     if (!g->declared && efs_declaration_required(type)) {

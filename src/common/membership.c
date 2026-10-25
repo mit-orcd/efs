@@ -92,14 +92,15 @@ int efs_membership_decode(const uint8_t *in, size_t len, struct efs_membership *
         return EFS_ERR_UNSUPPORTED;
     if (len < off)
         return EFS_ERR_DECODE;
-    memset(out, 0, sizeof(*out));
-    out->count = in[1];
-    out->formed = in[2];
-    out->cluster = get_be(in + 3, 8);
-    if (out->count > EFS_MAX_NODES || out->formed < EFS_FORMATION_MIN || out->formed > out->count)
+    struct efs_membership decoded = {0};
+    struct efs_membership *dst = &decoded;
+    dst->count = in[1];
+    dst->formed = in[2];
+    dst->cluster = get_be(in + 3, 8);
+    if (dst->count > EFS_MAX_NODES || dst->formed < EFS_FORMATION_MIN || dst->formed > dst->count)
         return EFS_ERR_DECODE;
-    for (uint32_t i = 0; i < out->count; i++) {
-        struct efs_member *m = &out->m[i];
+    for (uint32_t i = 0; i < dst->count; i++) {
+        struct efs_member *m = &dst->m[i];
         if (len - off < 15)
             return EFS_ERR_DECODE;
         m->id = (efs_node_id_t)get_be(in + off, 4);
@@ -114,8 +115,9 @@ int efs_membership_decode(const uint8_t *in, size_t len, struct efs_membership *
             return EFS_ERR_DECODE;
         off += 15 + alen;
     }
-    if (off != len || !efs_membership_valid(out))
+    if (off != len || !efs_membership_valid(dst))
         return EFS_ERR_DECODE;
+    *out = decoded;
     return EFS_OK;
 }
 

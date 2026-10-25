@@ -81,7 +81,7 @@ size_t efs_disc_answer_encode(uint8_t *out, size_t cap, uint64_t nonce,
 int efs_disc_answer_decode(const uint8_t *in, size_t len, uint64_t nonce,
                            struct efs_disc_answer *a)
 {
-    if (len < 34 || memcmp(in, disc_magic, 8) || in[8] != DISC_ANSWER || get64(in + 9) != nonce)
+    if (!in || !a || len < 34 || memcmp(in, disc_magic, 8) || in[8] != DISC_ANSWER || get64(in + 9) != nonce)
         return -1;
     size_t alen = in[32];
     if (!alen || alen > 63 || len < 34 + alen)
@@ -89,15 +89,17 @@ int efs_disc_answer_decode(const uint8_t *in, size_t len, uint64_t nonce,
     size_t blen = in[33 + alen];
     if (blen >= EFS_BUILD_ID_LEN || len != 34 + alen + blen || in[29] > 1)
         return -1;
-    memset(a, 0, sizeof(*a));
-    a->cluster = get64(in + 17);
-    a->count = get32(in + 25);
-    a->formed = in[29];
-    a->port = get16(in + 30);
-    memcpy(a->addr, in + 33, alen);
-    memcpy(a->build_id, in + 34 + alen, blen);
-    if (!a->cluster || !a->port || !printable(a->addr, alen) || !printable(a->build_id, blen))
+    struct efs_disc_answer decoded = {0};
+    struct efs_disc_answer *dst = &decoded;
+    dst->cluster = get64(in + 17);
+    dst->count = get32(in + 25);
+    dst->formed = in[29];
+    dst->port = get16(in + 30);
+    memcpy(dst->addr, in + 33, alen);
+    memcpy(dst->build_id, in + 34 + alen, blen);
+    if (!dst->cluster || !dst->port || !printable(dst->addr, alen) || !printable(dst->build_id, blen))
         return -1;
+    *a = decoded;
     return 0;
 }
 

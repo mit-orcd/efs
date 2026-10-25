@@ -1,3 +1,4 @@
+#include "efs/record_decode.h"
 #include "../common/query_stage_trace.h"
 #include "efs/query_policy.h"
 #include "server_internal.h"
@@ -4010,6 +4011,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
      * (host_tag_refused). A tag outside it never reaches a handler; the
      * fall-through at the end still halts on anything a handler cannot
      * decode. */
+    if (!cmd || !clen)
+        return EFS_ERR_UNSUPPORTED;
     if (!efs_md_cmd_applicable(cmd[0]))
         return EFS_ERR_UNSUPPORTED;
     if(cmd[0]==EFS_MD_CMD_CREATE_REFUSAL) {
@@ -6968,25 +6971,9 @@ static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_p
 /* EFS_MD_CMD_PUT_TICKET_SETTLE: [tag][count:2][ticket:216 x count], one
  * session/lane-shard stream, strictly increasing sequence. */
 static int host_unpack_settle(const uint8_t *cmd, uint32_t clen,
-                              struct efs_put_ticket *tickets, uint32_t *count)
+                                    struct efs_put_ticket *tickets, uint32_t *count)
 {
-    if (!cmd || clen < 3 || cmd[0] != EFS_MD_CMD_PUT_TICKET_SETTLE) return EFS_ERR_INVAL;
-    uint32_t n = ((uint32_t)cmd[1] << 8) | cmd[2];
-    if (!n || n > EFS_PUT_TICKET_SETTLE_MAX || clen != 3u + n * EFS_PUT_TICKET_WIRE_LEN)
-        return EFS_ERR_INVAL;
-    for (uint32_t i = 0; i < n; i++) {
-        int rc = efs_put_ticket_decode(cmd + 3 + i * EFS_PUT_TICKET_WIRE_LEN,
-                                       EFS_PUT_TICKET_WIRE_LEN, &tickets[i]);
-        if (rc != EFS_OK) return rc;
-        if (i && (efs_kv_lane_shard(tickets[i].ino, tickets[i].ci % EFS_META_LANES) !=
-                      efs_kv_lane_shard(tickets[0].ino, tickets[0].ci % EFS_META_LANES) ||
-                  tickets[i].id.session_epoch != tickets[0].id.session_epoch ||
-                  memcmp(tickets[i].id.client_uuid, tickets[0].id.client_uuid, 16) ||
-                  tickets[i].id.seq <= tickets[i - 1].id.seq))
-            return EFS_ERR_INVAL;
-    }
-    *count = n;
-    return EFS_OK;
+    return efs_put_ticket_settle_decode(cmd, clen, tickets, count);
 }
 
 /* K32: EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH / SETTLE_BATCH (meta_cmd.h). One
@@ -6995,30 +6982,7 @@ static int host_unpack_settle(const uint8_t *cmd, uint32_t clen,
 static int host_unpack_ticket_batch(const uint8_t *cmd, uint32_t clen,
                                     struct efs_put_ticket *tickets, uint32_t *count)
 {
-    if (!cmd || clen < 3 || (cmd[0] != EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH &&
-                             cmd[0] != EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH))
-        return EFS_ERR_INVAL;
-    uint32_t n = ((uint32_t)cmd[1] << 8) | cmd[2];
-    if (n < 2 || n > EFS_PUT_TICKET_BATCH_MAX || clen != 3u + n * EFS_PUT_TICKET_WIRE_LEN)
-        return EFS_ERR_INVAL;
-    for (uint32_t i = 0; i < n; i++) {
-        int rc = efs_put_ticket_decode(cmd + 3 + i * EFS_PUT_TICKET_WIRE_LEN,
-                                       EFS_PUT_TICKET_WIRE_LEN, &tickets[i]);
-        if (rc != EFS_OK) return rc;
-        if (tickets[i].id.session_epoch != tickets[0].id.session_epoch ||
-            memcmp(tickets[i].id.client_uuid, tickets[0].id.client_uuid, 16))
-            return EFS_ERR_INVAL;
-        for (uint32_t j = 0; j < i; j++)
-            if (tickets[j].id.seq == tickets[i].id.seq) return EFS_ERR_INVAL;
-        if (i && cmd[0] == EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH) {
-            uint32_t a = efs_kv_lane_shard(tickets[i - 1].ino, tickets[i - 1].ci % EFS_META_LANES);
-            uint32_t b = efs_kv_lane_shard(tickets[i].ino, tickets[i].ci % EFS_META_LANES);
-            if (b < a || (b == a && tickets[i].id.seq <= tickets[i - 1].id.seq))
-                return EFS_ERR_INVAL;
-        }
-    }
-    *count = n;
-    return EFS_OK;
+    return efs_put_ticket_batch_decode(cmd, clen, tickets, count);
 }
 
 /* K13 REPORT record: PUBLISH body + ticket trailer (uuid/epoch from the
@@ -15002,9 +14966,10 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->leader_hint=hint;return;
     }
     if(clen && cmd[0]==EFS_MD_REQ_SESSION_CLEANUP_PROBE) {
-        uint64_t mask=clen==EFS_MD_SESSION_CLEANUP_PROBE_LEN?rd64be(cmd+25):0;
-        uint32_t word=clen==EFS_MD_SESSION_CLEANUP_PROBE_LEN?rd32be(cmd+21):0;
-        int wrong=!mask || !rd32be(cmd+17) || word>=EFS_SESSION_BITS/64u;
+        struct efs_opid probe;
+        uint64_t mask=0;
+        uint32_t word=0;
+        int wrong=efs_cleanup_probe_decode(cmd,clen,&probe,&word,&mask)!=EFS_OK;
         for(uint32_t b=0;b<64 && !wrong;b++)
             wrong=(mask>>b&1) && group!=efs_raft_shard_group(word*64u+b);
         if(wrong){out->rc=EFS_ERR_INVAL;return;}
@@ -15607,7 +15572,7 @@ static int host_recovery_scan_remote(struct efs_raft_host *h, uint8_t group, uin
     uint16_t port = 0;
     uint8_t type = 0;
     void *reply = NULL;
-    uint32_t rlen = 0, reclen = recovery_rec_len(what);
+    uint32_t rlen = 0;
     int rid = host_pick_peer(h, &group, 1, -1); /* as host_remote_cmd_impl: no h->mu */
     *n = 0;
     if (rid < 0 || peer_addr(h, rid, addr, sizeof(addr), &port) != 0)
@@ -15622,18 +15587,13 @@ static int host_recovery_scan_remote(struct efs_raft_host *h, uint8_t group, uin
         return EFS_ERR_NET;
     }
     server_peer_conn_release(addr, port, pc);
-    const struct efs_msg_recovery_scan_reply *r = reply;
+    struct efs_msg_recovery_scan_reply decoded;
     int rc = EFS_ERR_PROTO;
-    if (type == EFS_MSG_RECOVERY_SCAN_REPLY && rlen >= sizeof(*r)) {
-        rc = r->rc;
-        if (rc == EFS_OK &&
-            (r->n > EFS_RECOVERY_SCAN_PAGE || rlen != sizeof(*r) + (size_t)r->n * reclen ||
-             r->next.len > EFS_RECOVERY_CURSOR_MAX || r->next.shard > EFS_RECOVERY_SHARD_END))
-            rc = EFS_ERR_PROTO;
+    if (type == EFS_MSG_RECOVERY_SCAN_REPLY) {
+        rc = efs_recovery_scan_reply_decode(reply, rlen, what, &decoded, recs);
         if (rc == EFS_OK) {
-            memcpy(recs, (const uint8_t *)reply + sizeof(*r), (size_t)r->n * reclen);
-            *n = r->n;
-            *cur = r->next;
+            *n = decoded.n;
+            *cur = decoded.next;
         }
     }
     free(reply);
@@ -15669,8 +15629,7 @@ void server_raft_host_recovery_scan_serve(const uint8_t *payload, uint32_t len,
     *rlen = 0;
     if (!out)
         return;
-    if (len == sizeof(req)) {
-        memcpy(&req, payload, sizeof(req));
+    if (efs_recovery_scan_request_decode(payload, len, &req) == EFS_OK) {
         hdr.next = req.at;
         if (!h || !__atomic_load_n(&h->running, __ATOMIC_ACQUIRE) || req.group > 255 || !host_hosts(h, (uint8_t)req.group))
             hdr.rc = EFS_ERR_NOT_PRIMARY;
