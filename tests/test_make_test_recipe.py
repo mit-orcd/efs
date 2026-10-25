@@ -17,6 +17,8 @@ pass silently.
 """
 # Python tests the recipe does not run, each with its reason.
 NOT_WIRED = {
+    'tests/test_d4_plateau.py': 'F1/D4 measurement driver (30-60 min runs); its gate-length drain and '
+                                'efsd RSS are open findings (docs/status/f1-followups-20261025.md)',
     'tests/test_expiry_cli.py': 'expiry is compiled out of the product (D42); make test-expiry in an EFS_BUILD_EXPIRY=1 tree',
     'tests/test_mgmt_expiry_lookup.py': 'expiry is compiled out of the product (D42); make test-expiry in an EFS_BUILD_EXPIRY=1 tree',
 }
