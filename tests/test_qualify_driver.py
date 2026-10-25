@@ -461,6 +461,14 @@ try:
     # False compares equal to integer 0 in Python, but is a failed controller
     # operation, not a successful stop or a successful readiness predicate.
     from types import SimpleNamespace
+    private_q = SimpleNamespace(control=SimpleNamespace(owned=True))
+    observed = 'ERROR: /private/mnt is in use by: localsearch-3(123), gvfs-udisks2-vo(456); stop refused (no force)'
+    assert Q.stop_failure(private_q, observed, 'stop: ')[0] == 'NOTRUN'
+    assert 'desktop mount observer' in Q.stop_failure(private_q, observed, 'stop: ')[1]
+    assert Q.stop_failure(private_q, observed.replace('localsearch-3', 'python3'), 'stop: ')[0] == 'FAIL'
+    assert Q.stop_failure(private_q, 'ERROR: drain timed out', 'stop: ')[0] == 'FAIL'
+    assert Q.stop_failure(private_q, observed, 'stop: ', 124) == ('FAIL', 'stop: deadline exceeded')
+    assert Q.stop_failure(SimpleNamespace(control=SimpleNamespace(owned=False)), observed, 'stop: ')[0] == 'FAIL'
     for value, expected in ((False, 1), (True, 0), (None, 0), (0, 0), (1, 1)):
         commands = SimpleNamespace(commands=[])
         rc, why = Q.Loopback._logged(loop, commands, 'controller-result', lambda: value)

@@ -1010,6 +1010,20 @@ def g_two_client(q, g):
     return scoped(g, outcome_from_rc(rc, text, g.commands[-1].get('timed_out')))
 
 
+def stop_failure(q, text, context, rc=1):
+    """A desktop observer makes a private clean-stop gate untestable, not PASS.
+
+    Never ignore an owned writer, arbitrary holder or another stop error, and
+    never change the client's refusal or send a signal to the observer.
+    """
+    match = re.search(r'is in use by: ([^\n;]+); stop refused', text)
+    if rc == 1 and getattr(q.control, 'owned', False) and match:
+        holders = re.findall(r'([^ ,()]+)\(\d+\)', match.group(1))
+        if holders and all(re.fullmatch(r'localsearch(?:-3)?|gvfs-[A-Za-z0-9_-]+', h) for h in holders):
+            return NOTRUN, 'environment: desktop mount observer holds the private fixture; clean stop was refused: ' + ', '.join(holders)
+    return FAIL, context + outcome_from_rc(rc, text, rc == 124)[1]
+
+
 def g_durability(q, g):
     m = q.mount(0)
     if not m:
@@ -1024,7 +1038,7 @@ def g_durability(q, g):
     g.step('remount', f'client stop (no force) and remount of {m["host"]}:{m["path"]}')
     rc, text = q.control.client_stop(g, m)
     if rc:
-        return FAIL, 'clean client stop refused or failed: ' + outcome_from_rc(rc, text)[1]
+        return stop_failure(q, text, 'clean client stop refused or failed: ', rc)
     rc, text = q.control.client_start(g, m)
     if rc:
         return FAIL, 'remount failed: ' + outcome_from_rc(rc, text)[1]
@@ -1216,7 +1230,7 @@ def g_e2(q, g):
     g.fixture.update(stop_seconds=round(time.monotonic() - t0, 3),
                      stop_deadline_s=q.cluster.get('control', {}).get('stop_timeout_s', 300))
     if rc:
-        return FAIL, 'clean client stop failed with the mount idle: ' + outcome_from_rc(rc, text)[1]
+        return stop_failure(q, text, 'clean client stop failed with the mount idle: ', rc)
     rc, text = g.run('unmounted', host, f'! mountpoint -q {shlex.quote(path)}', 30)
     if rc:
         q.control.client_start(g, m)
@@ -1992,7 +2006,7 @@ def g_c5(q, g):
         rc, text = q.control.client_stop(g, r)
         out['revoke_stop_s'] = round(time.monotonic() - t0, 3)
         if rc:
-            return FAIL, 'clean stop (no force) of the revoke mount refused or failed: ' + outcome_from_rc(rc, text)[1]
+            return stop_failure(q, text, 'clean stop (no force) of the revoke mount refused or failed: ', rc)
         mounted.remove(r)
         rc0, epoch, state = session_get(q, g, r['uuid'], 'session-after-unmount')
         out['revoke_session_after_unmount'] = dict(rc=rc0, epoch=epoch, state=state)
@@ -2037,7 +2051,7 @@ def orderly_restart(q, g, what):
     for mm in mounts:
         rc, text = q.control.client_stop(g, mm)
         if rc:
-            return FAIL, f'clean client stop of {mm["path"]} failed: {outcome_from_rc(rc, text)[1]}'
+            return stop_failure(q, text, f'clean client stop of {mm["path"]} failed: ', rc)
     t0 = time.monotonic()
     rc, text = q.control.stop_cluster(g)
     g.fixture['stop_seconds'] = round(time.monotonic() - t0, 3)
@@ -2274,7 +2288,7 @@ def g_e4(q, g):
         g.step('remount', f'client stop (no force) and remount of {m["host"]}:{m["path"]} (E4 cold reads)')
         rc, text = q.control.client_stop(g, m)
         if rc:
-            return FAIL, 'clean client stop failed: ' + outcome_from_rc(rc, text)[1]
+            return stop_failure(q, text, 'clean client stop failed: ', rc)
         rc, text = q.control.client_start(g, m)
         if rc:
             return FAIL, 'remount failed: ' + outcome_from_rc(rc, text)[1]
