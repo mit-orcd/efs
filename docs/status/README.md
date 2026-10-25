@@ -18,6 +18,17 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[F1: memory and concurrency gates on the candidate](f1-memory-concurrency-gates-20261025.md):
+**branch `claude/devel-f1-gates-46ff64` on `merge-wave7`, not merged, not pushed; xorinox, last code commit `c32cdf544`: `make leak-check` PASS 41/41, `make asan-check` PASS 47/47, `make tsan-check` PASS 18/18 (`test_k36_recovery.py` intermittent under TSan), `make test-all` PASS (861 commands, exit 0); RDMA memcheck NOTRUN (no device). Raw: xorinox `~/efs-artifacts/f1-gates-20261025/` (`SHA256SUMS` `825a4507…ab106`).**
+Two new gates (`tests/sanitizer_check.sh`: ThreadSanitizer and ASan+UBSan+LeakSanitizer over
+a sanitized copy of the tree, unit binaries, harnesses and daemons, with a self-test in `make test`),
+16 new entries in the leak gate. 15 findings fixed in product and test code: UB in the K36 recovery
+thread, a `fopencookie` cookie leak at every daemon exit, twelve data races (shutdown flags,
+member-store copy during formation, startup banner vs rejoin, counters and lazy env flags), a
+misaligned read in `test_wire`. 20-minute D4 RSS bounded (client 247 MiB, servers 134 MiB) but not
+flat while the namespace grows. Open: `test_k36_recovery.py` step 4 intermittent under TSan; 3–7
+packer put errors over a 20-minute load (not memory; logs not retained).
+
 [Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](pack-unindex-race-20261024.md):
 **FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**
 The packer's UNINDEX deleted a candidate key unconditionally, so a rewrite whose publication
