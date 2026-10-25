@@ -76,6 +76,7 @@ code = r'''
 #include "efs/meta_apply.h"
 #include "efs/meta_cmd.h"
 #include "efs/protocol.h"
+#include "efs/record_decode.h"
 #include "efs/put_orphan.h"
 #include "efs/raft.h"
 #include "efs/record_decode.h"

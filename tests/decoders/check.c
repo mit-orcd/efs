@@ -49,7 +49,7 @@ static size_t seed(const char *name, uint8_t *b)
         n=efs_disc_answer_encode(b,8192,42,&a); assert(n);
     } else if (!strcmp(name,"boot")) {
         member_store_boot_encode(42,b); n=EFS_BOOT_FILE_LEN;
-    } else if (!strcmp(name,"fragment")) {
+    } else if ((!strcmp(name,"fragment") || !strcmp(name,"fragment-verify"))) {
         struct efs_frag_ident id={.kind=EFS_FRAG_KIND_CHUNK,.space=1,
             .object=42,.generation=43,.payload_len=4096,.coding_profile=1};
         uint8_t digest[EFS_HASH_SIZE]={1};
@@ -142,6 +142,13 @@ static int check(const char *name, const uint8_t *b, size_t n)
         rc=efs_frag_record_parse(b,n,&out,digest);
         assert(rc==EFS_OK || rc==EFS_ERR_CHECKSUM || rc==EFS_ERR_FRAG_FORMAT);
         UNCHANGED(rc,out,before); if(rc)assert(!memcmp(digest,old,32));
+    } else if (!strcmp(name,"fragment-verify")) {
+        struct efs_frag_ident expect={.kind=EFS_FRAG_KIND_CHUNK,.space=1,.object=42,
+            .generation=43,.payload_len=4096,.coding_profile=1};
+        uint8_t digest[32],before[32];memset(digest,0xa5,32);memcpy(before,digest,32);
+        rc=efs_frag_record_verify(b,n,&expect,digest,NULL);
+        assert(rc==EFS_OK || rc==EFS_ERR_CHECKSUM || rc==EFS_ERR_FRAG_FORMAT || rc==EFS_ERR_FRAG_IDENTITY);
+        if(rc)assert(!memcmp(digest,before,32));
     } else if (!strcmp(name,"ticket")) {
         struct efs_put_ticket out,before; memset(&out,0xa5,sizeof(out)); before=out;
         rc=efs_put_ticket_decode(b,n,&out); assert(rc==EFS_OK || rc==EFS_ERR_INVAL); UNCHANGED(rc,out,before);

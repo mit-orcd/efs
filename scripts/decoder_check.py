@@ -12,7 +12,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
-import shutil
+from decoder_source import copy_source
 import subprocess
 import tempfile
 import time
@@ -28,11 +28,13 @@ p.add_argument('--out', type=Path)
 p.add_argument('--targets', nargs='+', choices=(*module.TARGETS, 'apply'), default=(*module.TARGETS, 'apply'))
 a = p.parse_args()
 if min(a.seconds,a.extended_seconds,a.jobs) < 1: p.error('durations and jobs must be positive')
-out = (a.out or Path(tempfile.mkdtemp(prefix='efs-decoders-'))).resolve()
+default_parent = Path.home()/'efs-artifacts'/'decoder-check'
+if a.out is None: default_parent.mkdir(parents=True,exist_ok=True)
+out = (a.out or Path(tempfile.mkdtemp(prefix='run-', dir=default_parent))).resolve()
 out.mkdir(parents=True,exist_ok=True)
 build = out/'build'
 if build.exists(): p.error('output already contains a build; use a fresh output directory')
-shutil.copytree(ROOT,build,ignore=shutil.ignore_patterns('.git','artifacts','results','*.o','*.a','__pycache__'))
+copy_source(ROOT,build)
 flags='-O1 -g -std=c99 -D_GNU_SOURCE -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all'
 env=dict(os.environ,ASAN_OPTIONS='abort_on_error=1:detect_leaks=1',UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1')
 with (out/'build.log').open('w') as f:

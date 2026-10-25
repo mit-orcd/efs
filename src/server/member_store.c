@@ -63,7 +63,7 @@ void member_store_boot_encode(uint64_t counter, uint8_t out[EFS_BOOT_FILE_LEN])
 
 int member_store_boot_decode(const uint8_t *in, size_t len, uint64_t *counter)
 {
-    if (len != EFS_BOOT_FILE_LEN)
+    if (!in || !counter || len != EFS_BOOT_FILE_LEN)
         return EFS_ERR_DECODE;
     if (memcmp(in, boot_magic, 8) || get32(in + 8) != BOOT_VERSION || get32(in + 12))
         return EFS_ERR_UNSUPPORTED;
