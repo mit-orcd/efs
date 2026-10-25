@@ -35,7 +35,7 @@ hooks, toggled by files in the work directory so each step is forced:
     at once: `Degraded chunks: >= 1`, `Protection: DEGRADED`. (Base: 0 and
     `Protection: full`.) N returns and the hold is released: rebuilt,
     `Protection: full`; a fresh mount reads every file exactly.
-Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
+EFS_K38_STEPS=2,3 runs only the listed steps. Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, time
 from pathlib import Path
@@ -59,6 +59,8 @@ env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200',
 SMALL = (1, 300, 4096, 9000, 16384)
 LARGE = 1024 * 1024 + 3
 files = {}
+# EFS_K38_STEPS=2: only the listed steps (a control run of one interleaving).
+STEPS = set(os.environ.get('EFS_K38_STEPS', '1,2,3').split(','))
 t0 = time.time()
 
 
@@ -114,7 +116,7 @@ def counts(out):
     """(degraded chunks, degraded segments, protection word) or None."""
     ch = re.search(r'^Degraded chunks: (\d+) \(', out, re.M)
     sg = re.search(r'^Degraded segments: (\d+) \(', out, re.M)
-    pr = re.search(r'^Protection: (\S+)', out, re.M)
+    pr = re.search(r'^Protection: (\w+)', out, re.M)
     return (int(ch.group(1)), int(sg.group(1)), pr.group(1)) if ch and sg and pr else None
 
 
@@ -153,68 +155,71 @@ try:
     wait_full(c, 1, 'baseline')
 
     # 1. A pooled connection that fails once is not a missing fragment.
-    n = non_leader(c)
-    degraded0 = count(c, r'written degraded')
-    base = packed_total(c)
-    (flags / f'stale-{n}').touch()
-    batch(a, 's1')
-    wait_packed(c, base, len(SMALL), 'stale connection')
-    assert not (flags / f'stale-{n}').exists(), 'the packer never used its pooled connection'
-    assert count(c, rf'pooled connection to node {n} fails once') == 1, logs(c)[-3000:]
-    assert count(c, r'written degraded') == degraded0, \
-        'segment written degraded around a live member:\n' + \
-        '\n'.join(re.findall(r'.*written degraded.*', logs(c)))
-    assert count(c, rf'fragment for node {n} sent on a new connection after the pooled one '
-                    rf'failed: rc=0') >= 1, logs(c)[-3000:]
-    wait_full(c, 1, 'after the stale connection')
-    print(f'1. stale pooled connection to node {n}: fragment sent again on a new connection, '
-          'no degraded segment PASS')
+    if '1' in STEPS:
+        n = non_leader(c)
+        degraded0 = count(c, r'written degraded')
+        base = packed_total(c)
+        (flags / f'stale-{n}').touch()
+        batch(a, 's1')
+        wait_packed(c, base, len(SMALL), 'stale connection')
+        assert not (flags / f'stale-{n}').exists(), 'the packer never used its pooled connection'
+        assert count(c, rf'pooled connection to node {n} fails once') == 1, logs(c)[-3000:]
+        assert count(c, r'written degraded') == degraded0, \
+            'segment written degraded around a live member:\n' + \
+            '\n'.join(re.findall(r'.*written degraded.*', logs(c)))
+        assert count(c, rf'fragment for node {n} sent on a new connection after the pooled one '
+                        rf'failed: rc=0') >= 1, logs(c)[-3000:]
+        wait_full(c, 1, 'after the stale connection')
+        print(f'1. stale pooled connection to node {n}: fragment sent again on a new connection, '
+              'no degraded segment PASS')
 
     # 2. A segment marked after the last pass is reported at once.
-    hold.touch()
-    time.sleep(1.5)  # a pass that started before the hold has ended
-    n = non_leader(c)
-    degraded0 = count(c, r'written degraded')
-    base = packed_total(c)
-    (flags / f'refuse-{n}').touch()
-    batch(a, 's2')
-    wait_packed(c, base, len(SMALL), 'refused segment PUT')
-    (flags / f'refuse-{n}').unlink()
-    assert count(c, r'written degraded') > degraded0, logs(c)[-3000:]
-    for i in (1, 2, 3):
-        got = counts(status(c, i))
-        assert got and got[1] >= 1 and got[2] == 'DEGRADED', \
-            f'node {i} status right after a degraded segment write: {got}\n{status(c, i)}'
-    hold.unlink()
-    wait_full(c, 1, 'segment rebuild')
-    print(f'2. segment written degraded (node {n} refused) with the passes held: '
-          f'every member reports it at once; rebuilt after release PASS')
+    if '2' in STEPS:
+        hold.touch()
+        time.sleep(1.5)  # a pass that started before the hold has ended
+        n = non_leader(c)
+        degraded0 = count(c, r'written degraded')
+        base = packed_total(c)
+        (flags / f'refuse-{n}').touch()
+        batch(a, 's2')
+        wait_packed(c, base, len(SMALL), 'refused segment PUT')
+        (flags / f'refuse-{n}').unlink()
+        assert count(c, r'written degraded') > degraded0, logs(c)[-3000:]
+        for i in (1, 2, 3):
+            got = counts(status(c, i))
+            assert got and got[1] >= 1 and got[2] == 'DEGRADED', \
+                f'node {i} status right after a degraded segment write: {got}\n{status(c, i)}'
+        hold.unlink()
+        wait_full(c, 1, 'segment rebuild')
+        print(f'2. segment written degraded (node {n} refused) with the passes held: '
+              f'every member reports it at once; rebuilt after release PASS')
 
     # 3. A chunk acknowledged degraded after the last pass is reported at once.
-    n = non_leader(c)
-    hold.touch()
-    time.sleep(1.5)
-    c.stop(n)
-    write(a, 'l3', LARGE, sync=True)
-    live = [i for i in (1, 2, 3) if i != n]
-    for i in live:
-        got = counts(status(c, i))
-        assert got and got[0] >= 1 and got[2] == 'DEGRADED', \
-            f'node {i} status right after a degraded chunk acknowledgement: {got}\n{status(c, i)}'
-    assert (a.path / 'l3').read_bytes() == payload('l3', LARGE)
-    c.restart(n)
-    c.wait_log(n, r'raft-host: up raft_id=\d+ n=3 formed', timeout=60)
-    c.wait_members([1, 2, 3], 3)
-    hold.unlink()
-    wait_full(c, 1, 'chunk rebuild')
-    a.close()
-    mounts.remove(a)
-    d = Mount(c, 2, 'mnt-d')
-    mounts.append(d)
-    for name, size in files.items():
-        assert (d.path / name).read_bytes() == payload(name, size), name
-    print(f'3. chunk acknowledged degraded (node {n} down) with the passes held: reported at '
-          f'once; rebuilt; {len(files)} files exact through a fresh mount PASS')
+    if '3' in STEPS:
+        n = non_leader(c)
+        hold.touch()
+        time.sleep(1.5)
+        c.stop(n)
+        write(a, 'l3', LARGE, sync=True)
+        live = [i for i in (1, 2, 3) if i != n]
+        for i in live:
+            got = counts(status(c, i))
+            assert got and got[0] >= 1 and got[2] == 'DEGRADED', \
+                f'node {i} status right after a degraded chunk acknowledgement: {got}\n{status(c, i)}'
+        assert (a.path / 'l3').read_bytes() == payload('l3', LARGE)
+        c.restart(n)
+        c.wait_log(n, r'raft-host: up raft_id=\d+ n=3 formed', timeout=60)
+        c.wait_members([1, 2, 3], 3)
+        hold.unlink()
+        wait_full(c, 1, 'chunk rebuild')
+        a.close()
+        mounts.remove(a)
+        d = Mount(c, 2, 'mnt-d')
+        mounts.append(d)
+        for name, size in files.items():
+            assert (d.path / name).read_bytes() == payload(name, size), name
+        print(f'3. chunk acknowledged degraded (node {n} down) with the passes held: reported at '
+              f'once; rebuilt; {len(files)} files exact through a fresh mount PASS')
 finally:
     for m in mounts:
         m.close()
