@@ -427,6 +427,15 @@ alternatives reduces both product complexity and the supported test matrix.
   the variable and the co-location pump are removed; elections alone place
   leaders; `efs-mgmt status` reports actual placement per group and node
   (`raft-status` per node). Placement is not yet measured under A11 load.**
+  **Oct 25 ([A6–A12 hygiene](a12-hygiene-20261025.md#a9-leader-placement-item-2),
+  branch `claude/fervent-wilson-67282f`, not merged):** `scripts/leader_placement.py`
+  records who leads each metadata group over a run, through forced
+  step-downs and leader restarts. It reports each group's distribution and
+  the share of time both leaders sat on one node; `make test` checks its
+  parsing. On loopback (intel2, TCP, 600 s each, 12 step-downs, 6 restarts)
+  both leaders sat on one node 41.5 % of the run at 3 members and 20.7 % at
+  4 and 5. Elections neither co-locate nor spread them. The real-host
+  measurement under A11 load is the parent's.
 - [ ] **A10 — Operational consistency.** Update launch/deployment scripts, portal
   settings, help and generated settings listings with each removal. Stale launch
   configurations must be detected by validation rather than silently presented
@@ -463,6 +472,18 @@ alternatives reduces both product complexity and the supported test matrix.
   dimension under A8. No unexplained experimental, legacy or correctness-policy
   toggle remains in the alpha product. Record failures and gate results for the
   integrated candidate; flag removal alone is not correctness evidence.
+  **Oct 25 ([closure](a12-closure-20261025.md), branch
+  `claude/fervent-wilson-67282f`, not merged):** every A6 selector is listed
+  with its disposition. All 15 are removed and refused, and `EFS_TRANSPORT`
+  is a justified A8 support dimension. A/B selectors 15 → 0; reachable A/B
+  combinations 32,768 → 1; variables a normal build reads 105 → 77. Every
+  remaining reader has a retained kind: deployment input, numeric tunable,
+  observability, fault/test hook or tool input. `env_inventory.py --check`
+  now fails on any other kind. A dead-code sweep and the removal of buffered
+  I/O remnants from the harnesses and docs are in the
+  [hygiene evidence](a12-hygiene-20261025.md). D43 (Oct 25) ships expiry and
+  `.efs`; expiry code was left untouched. The retained paths' live
+  qualification (A11, D42 direct I/O) stays NOTRUN.
 
 **Review of A6–A12 (October 22, at devel `a569de971`).** These are starting
 facts for A6, not decisions.
