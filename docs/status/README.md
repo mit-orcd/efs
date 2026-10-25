@@ -91,6 +91,12 @@ put errors were follower `NOT_PRIMARY`; with the flake-sweep fix the 20-minute D
 60-minute rewrite load still with 5. New product fix: a W77 publication unit whose forwarded PREPARE batch
 was refused skipped its ABORT, which made rewrites EIO (regression test red 5 of 5, green 6 of 6).
 
+[Task C: transactional decoder validation](task-c-20261025.md):
+**branch `agent/devel-task-c`, code `cd5ed9dc5`, not merged.** Original randomized
+campaign PASS 25/25, expanded two-hour apply PASS, private three-node W140
+refusal PASS, ASan PASS 47/47. Corrected full-suite and five affected decoder
+reruns RUNNING; acceptance PENDING. Raw evidence stays outside Git on intel1.
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
