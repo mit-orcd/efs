@@ -28,6 +28,7 @@ static int down_third,reprobe_ok;static unsigned probes;
 static int efs_client_node_is_down(efs_node_id_t n){return down_third && n==3;}
 static int efs_client_node_reprobe(efs_node_id_t n){assert(n==3);probes++;if(reprobe_ok)down_third=0;return reprobe_ok;}
 static void node_note_full(efs_node_id_t n){assert(n==3);fulls++;}
+static unsigned backs;static void node_note_back(efs_node_id_t n){(void)n;backs++;}
 /* B5: a full member's slot moves to the spare (node 4) while one is left. */
 static unsigned aways,stripes,drops;static int stripe_rc=EFS_OK,degrade_hard;
 static void node_note_away(efs_node_id_t n){assert(n==3);aways++;}
