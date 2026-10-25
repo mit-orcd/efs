@@ -68,7 +68,7 @@ fresh readers verified 512 genuine file versions and all 363 appends. The next r
 assessment contaminated by read verification and short restart windows. Harness-only
 `18d98c071` separates workloads and requires long steady windows, keeping the 5%
 threshold and explicit NOTRUN coverage. Its fresh rehearsal/conditional four-hour
-retry is building on NUC; full endurance, RSS and candidate/base comparison remain open.
+retry is running on NUC after build and component checks passed; full endurance, RSS and candidate/base comparison remain open.
 
 [Task A: full three- and five-member Stage 2 rehearsal](task-a-20261025.md):
 **rehearsal complete with product findings; branch `agent/devel-task-a`,
