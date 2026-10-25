@@ -167,7 +167,12 @@ int main(void)
     step_us=100;
     probe_fail=1;double serial=run(1,EFS_OK,NULL,0),parallel=run(16,EFS_OK,NULL,0);probe_fail=0;
     printf("serial %.2f s, parallel(16) %.2f s\n",serial,parallel);
+#ifndef EFS_INSTRUMENTED
+    /* The speed ratio holds natively only: memcheck serialises threads and
+     * the sanitizers slow each step unevenly. The overlap check in run()
+     * (maxflight>1) is what the instrumented gates keep. */
     assert(parallel*4<serial);
+#endif
     return 0;
 }
 '''
@@ -175,8 +180,9 @@ with tempfile.TemporaryDirectory(prefix='efs-revoke-parallel-') as d:
     p = Path(d) / 'test.c'
     p.write_text(code)
     exe = p.with_suffix('')
+    instrumented = ['-DEFS_INSTRUMENTED=1'] if wrap() or cflags() else []
     subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
-                   *cflags(), '-I' + str(root / 'include'), str(p), str(root / 'src/common/session_revoke.c'),
+                   *cflags(), *instrumented, '-I' + str(root / 'include'), str(p), str(root / 'src/common/session_revoke.c'),
                    '-pthread', '-o', str(exe)], check=True)
     r = subprocess.run(wrap() + [str(exe)], capture_output=True, text=True, timeout=timeout(120))
     if r.returncode != 0:

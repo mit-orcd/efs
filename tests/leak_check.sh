@@ -62,10 +62,16 @@ fi
 # error code and the parent's own child-status checks failed. With
 # --child-silent-after-fork those children write no report and keep their
 # exit status, so the gate covers the parent process, not forked children.
+#
+# --fair-sched: memcheck's default thread scheduling (a pipe-based lock) let
+# four KV reader threads starve the writer of test_kv_lsm_concurrent for
+# more than 3 minutes without one flush (F1, xorinox); with fair scheduling
+# the same 4 s stress finishes in 17 s. `try` keeps hosts without futex
+# support on the default.
 vg_args() {   # $1 = log file pattern
     printf '%s\n' "$VALGRIND" --tool=memcheck --leak-check=full \
         --show-leak-kinds=definite --errors-for-leak-kinds=definite \
-        --child-silent-after-fork=yes \
+        --child-silent-after-fork=yes --fair-sched=try \
         --num-callers=30 --suppressions="$SUPP" --log-file="$1"
 }
 
