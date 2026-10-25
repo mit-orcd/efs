@@ -29,8 +29,12 @@ fragment records against the chunk rows and pack objects.
    above 0 again and new writes succeed on three members, none on the full
    node 3, with no degraded acknowledgement; every file reads back.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
-EFS_B_PHASES=grow or =full runs one part (negative controls on a base
-build); EFS_B_ARTIFACTS=DIR keeps the driver's JSON results there.
+EFS_B_PHASES=grow or =full runs one part; the test recipe runs three
+commands on independent clusters so the parallel pool overlaps them:
+grow-a (three members, B2 on the stores, growth to five with the driver at
+every size), grow-b (a fresh cluster grown to five without the driver, then
+six to eight with it) and full. EFS_B_ARTIFACTS=DIR keeps the driver's JSON
+results there.
 """
 import errno, json, os, re, shutil, sys, tempfile, time
 from pathlib import Path
@@ -125,6 +129,23 @@ def status(c, i):
     return b_checks.parse_status(out), out
 
 
+def wait_status(c, i, m, pred, timeout=30):
+    """status on node i once pred holds and mount m's df agrees with its
+    capacity (the client refreshes its statfs view every few seconds), or
+    the last status after timeout: the caller asserts, so a failure reads as
+    before."""
+    end = time.time() + timeout
+    while True:
+        st, out = status(c, i)
+        try:
+            ok = pred(st) and b_checks.statfs(m.path)['total'] == st['usable']['capacity'] // 512 * 512
+        except (KeyError, TypeError):
+            ok = False
+        if ok or time.time() >= end:
+            return st, out
+        time.sleep(0.5)
+
+
 def write(path, size, name=None):
     data = payload(name or path.name, size)
     with open(path, 'wb') as f:
@@ -153,9 +174,16 @@ def fresh_read(c, node, path_rel, name):
         m.close()
 
 
-def grow_phase():
+def grow_phase(first=3, last=8):
+    """Growth from three to `last` members. The driver runs at every size
+    from `first` on, and B2 on the stores at three when `first` is 3; a
+    size below `first` is still joined (ids, voters, the mounted client's
+    view and the capacity bound are checked) but not driven. The recipe
+    runs grow-a (3..5) and grow-b (6..8) as two commands on their own
+    clusters (W160), so every size is driven exactly once between them and
+    neither is a 450 s tail of the parallel pool."""
     # ---- 1. Three members ----------------------------------------------
-    c = _Cluster(work, 'grow', [1, 2, 3, 4, 5, 6, 7, 8], env)
+    c = _Cluster(work, 'grow', list(range(1, last + 1)), env)
     clusters.append(c)
     c.start(1)
     c.start(2, join=1)
@@ -166,13 +194,21 @@ def grow_phase():
     m1 = Mount(c, 1, 'mnt-1')
     mounts.append(m1)
     wait_mount(m1, r'membership view: revision 1, 3 members')
-    extra = [Mount(c, 2, 'mnt-2'), Mount(c, 3, 'mnt-3')]
-    mounts.extend(extra)
-    driver(c, [1, 2, 3], [m1] + extra, 'n3')
-    for m in extra:
-        m.close()
-        mounts.remove(m)
+    if first <= 3:
+        extra = [Mount(c, 2, 'mnt-2'), Mount(c, 3, 'mnt-3')]
+        mounts.extend(extra)
+        driver(c, [1, 2, 3], [m1] + extra, 'n3')
+        for m in extra:
+            m.close()
+            mounts.remove(m)
+        b2_on_stores(c, m1)
+    grow_to(c, m1, first, last)
+    m1.close()
+    mounts.remove(m1)
+    c.stop_all()
 
+
+def b2_on_stores(c, m1):
     # ---- 2. B2 on the stores: pairs, corruption, mismatch --------------
     name = 'b2-corrupt'
     size = 3 * CS + 17
@@ -231,9 +267,11 @@ def grow_phase():
     assert fresh_read(c, 1, rel, 'mnt-c4') == data, 'restored chunk does not read'
     summary['b2_store'] = 'pairs exact; corrupt D1, mismatched D1 decoded from the others; two corrupt EIO'
 
-    # ---- 3. Growth 4..8 --------------------------------------------------
+
+def grow_to(c, m1, first, last):
+    # ---- 3. Growth 4..last; the driver from `first` on; node 8 without --quota
     caps = {3: status(c, 1)[0]['usable']['capacity']}
-    for n in range(4, 9):
+    for n in range(4, last + 1):
         quota = None if n == 8 else '1G'
         c.start(n, join=2 if n % 2 == 0 else 3, quota=quota)
         wait_formed(c, n, n)
@@ -245,13 +283,14 @@ def grow_phase():
         c.wait_voters(list(range(1, n + 1)), lambda i, v: voters_ok(i, v, n), timeout=90)
         wait_mount(m1, rf'membership view: revision \d+ -> \d+ from node \d+: added member {n} at '
                    rf'{HOST}:{c.ports[n]} \({n} members, no remount\)')
-        mn = Mount(c, n, f'mnt-{n}')
-        mounts.append(mn)
-        try:
-            res = driver(c, list(range(1, n + 1)), [m1, mn], f'n{n}')
-        finally:
-            mn.close()
-            mounts.remove(mn)
+        if n >= first:
+            mn = Mount(c, n, f'mnt-{n}')
+            mounts.append(mn)
+            try:
+                driver(c, list(range(1, n + 1)), [m1, mn], f'n{n}')
+            finally:
+                mn.close()
+                mounts.remove(mn)
         st, out = status(c, n)
         caps[n] = st['usable']['capacity']
         mem = st['members']
@@ -275,9 +314,6 @@ def grow_phase():
             assert q >= min(ceiling, (avail_now - reserve) * 7 // 8) - (256 << 20), (q, avail_now, reserve)
             summary['auto_quota'] = {'quota': q, 'fs_total': total, 'ceiling': ceiling}
     summary['capacity_by_members'] = caps
-    m1.close()
-    mounts.remove(m1)
-    c.stop_all()
 
 
 
@@ -314,8 +350,8 @@ def full_phase():
         raise AssertionError('write after ENOSPC succeeded with a full member at three')
     except OSError as e:
         assert e.errno == errno.ENOSPC, e
-    time.sleep(6)
-    st, out = status(f, 2)
+    # status follows the refusal within seconds: wait on it, not on a timer.
+    st, out = wait_status(f, 2, fm, lambda st: st['usable']['free'] == 0)
     assert st['usable']['free'] == 0, out
     assert re.search(r'^Degraded chunks: 0 ', out, re.M), out
     flog = fm.logp.read_text(errors='replace')
@@ -329,8 +365,7 @@ def full_phase():
     for i in (1, 2, 3, 4):
         wait_formed(f, i, 4)
     wait_mount(fm, r'added member 4 at .*\(4 members, no remount\)')
-    time.sleep(6)
-    st, out = status(f, 1)
+    st, out = wait_status(f, 1, fm, lambda st: st['usable']['capacity'] > 2 * (16 << 20) and st['usable']['free'] > 0)
     assert st['usable']['capacity'] > 2 * (16 << 20) and st['usable']['free'] > 0, out
     df = b_checks.statfs(fm.path)
     assert df['total'] == st['usable']['capacity'] // 512 * 512, (df, st['usable'])
@@ -364,13 +399,17 @@ clusters, mounts = [], []
 try:
     if 'grow' in phases:
         grow_phase()
+    if 'grow-a' in phases:
+        grow_phase(3, 5)
+    if 'grow-b' in phases:
+        grow_phase(6, 8)
     if 'full' in phases:
         full_phase()
     print(json.dumps(summary, indent=1, sort_keys=True, default=str))
     if artifacts:
         (artifacts / 'test_b_geometry-summary.json').write_text(json.dumps(summary, indent=1, sort_keys=True, default=str))
-    print(f'B geometry: B1-B5 on real daemons (3..8 members, full member, ENOSPC, addition) PASS '
-          f'in {time.time() - t0:.0f} s')
+    print(f'B geometry ({",".join(sorted(phases))}): B1-B5 on real daemons (3..8 members, full member, ENOSPC, '
+          f'addition) PASS in {time.time() - t0:.0f} s')
 except BaseException:
     for cl in clusters:
         for i in sorted(cl.ports):

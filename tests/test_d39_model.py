@@ -7,7 +7,12 @@ are tests/d39_model.py and docs/status/d39-consolidated-model-20261023.md.
 Negative controls (`neg_*`) run a trace under a superseded rule set and
 require the failure that section's review predicted.
 
-Usage: python3 tests/test_d39_model.py [-k substring] [--seeds N]
+Usage: python3 tests/test_d39_model.py [-k substring] [--seeds N] [--shard I/N]
+
+--shard I/N runs every N-th test from the I-th (0-based) and, inside the
+randomized search, every N-th seed: the N shards together run every test
+and every seed exactly once (the test recipe runs three shards as three
+commands so the pool overlaps this CPU-bound suite).
 """
 import sys
 import time
@@ -20,6 +25,7 @@ from d39_model import (CONSOLIDATED, S9_CLIENTS, S9_LOCAL, S9_PAIR, S13, S15, S2
 
 TESTS = []
 SEEDS = 30
+SHARD = (0, 1)   # (index, count): see --shard
 
 
 def test(fn):
@@ -1848,7 +1854,7 @@ def s32_vote_reply_waits_for_durable_hard_state():
 def random_interleavings():
     t0 = time.time()
     tot = dict(runs=0, faults=0, ops=0, restarts=0, handoffs=0, stale=0, busy=0)
-    for seed in range(SEEDS):
+    for seed in range(SHARD[0], SEEDS, SHARD[1]):
         for n in (3, 4, 5):
             r = M.random_search(seed, n)
             tot['runs'] += 1
@@ -2057,16 +2063,22 @@ def neg_growth_drop_unreachable_member():
 
 
 def main(argv):
-    global SEEDS
+    global SEEDS, SHARD
     k = None
     if '-k' in argv:
         k = argv[argv.index('-k') + 1]
     if '--seeds' in argv:
         SEEDS = int(argv[argv.index('--seeds') + 1])
+    if '--shard' in argv:
+        i, n = argv[argv.index('--shard') + 1].split('/')
+        SHARD = (int(i), int(n))
+        assert 0 <= SHARD[0] < SHARD[1], SHARD
     passed = failed = 0
     t0 = time.time()
-    for fn in TESTS:
+    for idx, fn in enumerate(TESTS):
         if k and k not in fn.__name__:
+            continue
+        if idx % SHARD[1] != SHARD[0]:
             continue
         t = time.time()
         try:
@@ -2077,9 +2089,10 @@ def main(argv):
             continue
         passed += 1
         print('ok   %-66s %5.2fs' % (fn.__name__, time.time() - t))
-    neg = sum(1 for fn in TESTS if fn.__name__.startswith('neg_') and (not k or k in fn.__name__))
-    print('test_d39_model: %d passed, %d failed (%d negative controls), %.1fs'
-          % (passed, failed, neg, time.time() - t0))
+    neg = sum(1 for idx, fn in enumerate(TESTS) if fn.__name__.startswith('neg_') and (not k or k in fn.__name__)
+              and idx % SHARD[1] == SHARD[0])
+    print('test_d39_model%s: %d passed, %d failed (%d negative controls), %.1fs'
+          % (' shard %d/%d' % SHARD if SHARD[1] > 1 else '', passed, failed, neg, time.time() - t0))
     return 1 if failed else 0
 
 

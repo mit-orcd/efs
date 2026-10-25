@@ -21,13 +21,17 @@
 # EFS_TEST_JOBS (default 1) runs that many test commands at once, each with
 # its own TMPDIR; commands matching EXCLUSIVE below (real processes, shutdown,
 # RDMA, timing, sanitizers, build introspection) still run alone, after the
-# pool. EFS_BUILD_JOBS (default nproc) bounds the build; EFS_FUSE_PREFIX names
+# pool. tests/budgets.tsv gives each test-long command a wall-time budget
+# and the pool slots it occupies (W160): the pool runs the largest budgets
+# first and never oversubscribes its slots; a command past its budget is
+# listed `OVERBUDGET index seconds budget command` after the NOTRUN lines
+# and counted `OVERBUDGET n` on line 1 (the status does not change). EFS_BUILD_JOBS (default nproc) bounds the build; EFS_FUSE_PREFIX names
 # a private libfuse (default /data1/efs/deps/libfuse, used when present).
 # summary.txt line 1 ends with the build time, e.g. `(233s) BUILD 31s`.
 cd "$(dirname "$0")/.." || exit 2
 [ -f Makefile ] || { echo "make_test_summary: no Makefile in $PWD" >&2; exit 2; }
 # A previous run's markers and results must never decide this run.
-rm -f build.failed enum.failed summary.txt progress.txt timings.tsv cmds.txt
+rm -f build.failed enum.failed summary.txt progress.txt timings.tsv cmds.txt tmp/fail-*.log
 mkdir -p tmp  # C tests mkdtemp under TMPDIR and assert on failure
 export TMPDIR=$PWD/tmp
 # Private libfuse (ORCD/Intel build hosts) when present, else the system one.
@@ -54,9 +58,9 @@ if [ -e build.failed ] || [ -e enum.failed ] || [ ! -s cmds.txt ]; then
 fi
 python3 - <<"EOP"
 # Reads cmds.txt in the current directory; writes summary.txt, progress.txt,
-# timings.tsv (index, seconds, exit status, first command line; slowest
-# first) and tmp/fail-<index>.log. tests/test_make_test_summary_runner.py runs this
-# block on its own.
+# timings.tsv (index, seconds, exit status, first command line, budget;
+# slowest first) and tmp/fail-<index>.log. tests/test_make_test_summary_runner.py
+# runs this block on its own.
 import os, re, signal, subprocess, sys, time
 lines=open("cmds.txt").read().split("\n"); cmds=[]; cur=""
 for l in lines:
@@ -66,6 +70,25 @@ for l in lines:
         cur=""
 limit=float(os.environ.get("EFS_TEST_CMD_TIMEOUT","900"))
 os.makedirs("tmp",exist_ok=True)
+# tests/budgets.tsv (W160): per test-long command its wall-time budget in
+# seconds at EFS_TEST_JOBS=8 and the CPU slots it takes from the pool (a
+# daemon test with several efsd, efs-fuse and writers is 2 or 3). The pool
+# starts the commands with the most slots first, then the largest budgets
+# (so one long command never tails the run), and admits a command only
+# while its slots fit, skipping to the next that fits; a command without a
+# row takes 1 slot. A command that runs past
+# its budget is listed OVERBUDGET in summary.txt (the status is unchanged);
+# tests/test_make_test_recipe.py bounds the declared budgets.
+BUDGETS={}
+if os.path.exists("tests/budgets.tsv"):
+    for l in open("tests/budgets.tsv"):
+        f=l.rstrip("\n").split("\t")
+        if len(f)<3 or l.startswith("#") or f[0]=="command": continue
+        BUDGETS[f[0].strip()]=(float(f[1]),max(1,int(f[2])))
+def budget(c):
+    """(budget seconds or None, slots) of a command by its first line."""
+    b=BUDGETS.get(c.split("\n")[0].strip())
+    return b if b else (None,1)
 def text(b): return b.decode("utf-8","replace") if isinstance(b,bytes) else (b or "")
 def run(c,env=None):
     # Own process group: a timeout kills the whole command, and no leftover
@@ -84,7 +107,7 @@ EXCLUSIVE=re.compile(r"rdma|shutdown|client_processes|server_processes|cluster_s
                      r"bench")
 jobs=max(1,int(os.environ.get("EFS_TEST_JOBS","1")))
 fails=[]; notrun=[]; times=[]; t0=time.time(); done=0
-import threading, concurrent.futures
+import threading
 lock=threading.Lock()
 def one(i,c,tmp=None):
     global done
@@ -111,17 +134,39 @@ if jobs==1:
 else:
     pooled=[(i,c) for i,c in enumerate(cmds) if not EXCLUSIVE.search(c)]
     alone=[(i,c) for i,c in enumerate(cmds) if EXCLUSIVE.search(c)]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
-        list(ex.map(lambda ic: one(ic[0],ic[1],"tmp/case-%d"%ic[0]),pooled))
+    # Most slots first, then the largest budget (the command hardest to place
+    # starts while the pool is empty, a long one never tails the run); a
+    # command without a budget keeps the recipe order after every budgeted
+    # one. A command whose slots do not fit yet is skipped for the next that
+    # fits. Slots never exceed the pool, so every command can start.
+    pending=sorted(pooled,key=lambda ic:(-min(budget(ic[1])[1],jobs),-(budget(ic[1])[0] or 0),ic[0]))
+    free=jobs; cv=threading.Condition(lock); threads=[]
+    def pooled_one(i,c,slots):
+        global free
+        try: one(i,c,"tmp/case-%d"%i)
+        finally:
+            with cv: free+=slots; cv.notify_all()
+    with cv:
+        while pending:
+            pick=next((ic for ic in pending if min(budget(ic[1])[1],jobs)<=free),None)
+            if pick is None:
+                cv.wait(); continue
+            pending.remove(pick); slots=min(budget(pick[1])[1],jobs); free-=slots
+            t=threading.Thread(target=pooled_one,args=(pick[0],pick[1],slots)); t.start(); threads.append(t)
+    for t in threads: t.join()
     for i,c in alone: one(i,c)
 fails.sort(); notrun.sort()
+over=sorted((i,sec,budget(cmds[i])[0],head) for i,sec,rc,head in times if budget(cmds[i])[0] is not None and sec>budget(cmds[i])[0])
 with open("timings.tsv","w") as f:
-    f.write("index\tseconds\trc\tcommand\n")
-    for i,sec,rc,head in sorted(times,key=lambda t:-t[1]): f.write("%d\t%.1f\t%d\t%s\n"%(i,sec,rc,head))
+    f.write("index\tseconds\trc\tcommand\tbudget\n")
+    for i,sec,rc,head in sorted(times,key=lambda t:-t[1]):
+        b=budget(cmds[i])[0]
+        f.write("%d\t%.1f\t%d\t%s\t%s\n"%(i,sec,rc,head,"%g"%b if b is not None else ""))
 status,code=("FAIL",1) if fails or not cmds else ("INCOMPLETE",3) if notrun else ("PASS",0)
 build=os.environ.get("EFS_BUILD_SECONDS")
-open("summary.txt","w").write("TOTAL %d FAIL %d NOTRUN %d STATUS %s (%.0fs)%s\n"%(len(cmds),len(fails),len(notrun),status,time.time()-t0,
-    " BUILD %ss"%build if build else "")
-    +"".join("%d\t%d\t%s\t%s\t%s\n"%f for f in fails)+"".join("NOTRUN\t%d\t%s\t%s\n"%n for n in notrun))
+open("summary.txt","w").write("TOTAL %d FAIL %d NOTRUN %d STATUS %s (%.0fs)%s%s\n"%(len(cmds),len(fails),len(notrun),status,time.time()-t0,
+    " OVERBUDGET %d"%len(over) if over else "", " BUILD %ss"%build if build else "")
+    +"".join("%d\t%d\t%s\t%s\t%s\n"%f for f in fails)+"".join("NOTRUN\t%d\t%s\t%s\n"%n for n in notrun)
+    +"".join("OVERBUDGET\t%d\t%.1f\t%g\t%s\n"%o for o in over))
 sys.exit(code)
 EOP

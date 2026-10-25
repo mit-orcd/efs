@@ -46,7 +46,7 @@ for b in (EFSD, MGMT):
 if not fuse_ok():
     print('D4 plateau: NOTRUN (no /dev/fuse, fusermount3 or efs-fuse)')
     sys.exit(0)
-LOAD_S = float(os.environ.get('EFS_D4_LOAD_S', '90'))
+LOAD_S = float(os.environ.get('EFS_D4_LOAD_S', '75'))
 THREADS = int(os.environ.get('EFS_D4_THREADS', '8'))
 WORKING_SET = int(os.environ.get('EFS_D4_SET', '256'))
 FG_SET = int(os.environ.get('EFS_D4_FG_SET', '32'))

@@ -100,6 +100,44 @@ try:
     assert rows[-1].split() == ['shutdown', '6'], rows  # alone, after every pooled case
     assert elapsed < 2.5, elapsed  # six 0.5 s cases on four workers, not 3 s serial
     assert len(Path(d, 'timings.tsv').read_text().splitlines()) == 10
+
+    # Budgets (tests/budgets.tsv, W160): the pool starts the largest budget
+    # first, a command takes its declared slots (never more than the pool, so
+    # a 3-slot command and two 1-slot commands share 4 workers while a second
+    # 3-slot one waits), and a command past its budget is listed OVERBUDGET
+    # with the status unchanged.
+    d = tempfile.mkdtemp(prefix='efs-summary-runner-'); dirs.append(d)
+    Path(d, 'tests').mkdir()
+    Path(d, 'tests/budgets.tsv').write_text(
+        'command\tbudget_s\tslots\treason\n'
+        'sleep 1; echo "big-a $(date +%s.%N)" >> ran.log\t100\t3\tthree daemons\n'
+        'sleep 1; echo "big-b $(date +%s.%N)" >> ran.log\t90\t3\tthree daemons\n'
+        'sleep 0.5; echo "late $(date +%s.%N)" >> ran.log\t0.1\t1\t\n')
+    cmds = ('echo "first $(date +%s.%N)" >> ran.log\n'            # recipe order: first, no budget
+            'sleep 0.5; echo "late $(date +%s.%N)" >> ran.log\n'   # budget 0.1 s: OVERBUDGET
+            'sleep 1; echo "big-b $(date +%s.%N)" >> ran.log\n'
+            'sleep 1; echo "big-a $(date +%s.%N)" >> ran.log\n')
+    Path(d, 'cmds.txt').write_text(cmds)
+    env = dict(os.environ, EFS_TEST_JOBS='4')
+    started = time.time()
+    r = subprocess.run([sys.executable, '-c', runner], cwd=d, env=env, timeout=60)
+    elapsed = time.time() - started
+    s = Path(d, 'summary.txt').read_text().splitlines()
+    assert r.returncode == 0, (r.returncode, s)
+    head(s[0], 4, 0, 0, 'PASS')
+    assert ' OVERBUDGET 1' in s[0], s[0]
+    assert len(s) == 2 and s[1].split('\t')[:2] == ['OVERBUDGET', '1'] and s[1].split('\t')[3] == '0.1', s
+    ends = {}
+    for row in Path(d, 'ran.log').read_text().splitlines():
+        name, at = row.split(); ends[name] = float(at)
+    # big-a (budget 100) ends about 1 s before big-b (budget 90), which could
+    # not start beside it on four workers; the 1-slot commands ran beside big-a.
+    assert ends['big-b'] - ends['big-a'] > 0.7, ends
+    assert ends['late'] < ends['big-b'] and ends['first'] < ends['big-b'], ends
+    assert 1.9 < elapsed < 3.5, elapsed  # two 1 s commands in turn, not four workers at once
+    tsv = Path(d, 'timings.tsv').read_text().splitlines()
+    assert tsv[0] == 'index\tseconds\trc\tcommand\tbudget' and len(tsv) == 5, tsv
+    assert {l.split('\t')[4] for l in tsv[1:]} == {'100', '90', '0.1', ''}, tsv
 finally:
     for d in dirs: shutil.rmtree(d, ignore_errors=True)
-print('make_test_summary runner: pass 0, failure 1, timeout 1, NOTRUN 3, empty 1, parallel pool exactly-once/TMPDIR/exclusive, full failure logs PASS')
+print('make_test_summary runner: pass 0, failure 1, timeout 1, NOTRUN 3, empty 1, parallel pool exactly-once/TMPDIR/exclusive, budgets largest-first/slots/OVERBUDGET, full failure logs PASS')

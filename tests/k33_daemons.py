@@ -36,6 +36,25 @@ def free_ports(n):
     return sorted(ports)
 
 
+def hold_port(host, port):
+    """A socket bound (not listening) to host:port with SO_REUSEADDR, kept
+    for the life of a Cluster. The kernel never hands the port to another
+    test's `bind(0)` (free_port) while it is held, and efsd, which binds
+    its listener with SO_REUSEADDR too (src/common/network.c), binds and
+    listens beside it. Without the hold a port picked at Cluster() for a
+    node that starts minutes later (B geometry node 8) was taken by a
+    concurrent test in the parallel pool: `bind failed ... Address already
+    in use`."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.bind((host, port))
+    except OSError:
+        s.close()
+        return None
+    return s
+
+
 def mgmt(env, *args):
     p = subprocess.run([str(MGMT), *args], capture_output=True, text=True, env=env, timeout=60)
     return p.returncode, p.stdout + p.stderr
@@ -49,6 +68,7 @@ class Cluster:
         self.disc_port = disc_port
         self.hosts = hosts or {}
         self.ports = dict(zip(ids, free_ports(len(ids))))
+        self.held = [h for h in (hold_port(self.hosts.get(i, HOST), p) for i, p in self.ports.items()) if h]
         self.procs = {}
 
     def ep(self, i):
@@ -144,6 +164,9 @@ class Cluster:
     def stop_all(self):
         for i in list(self.procs):
             self.stop(i)
+        for h in self.held:
+            h.close()
+        self.held = []
 
     def status(self, i):
         out = ''
@@ -288,12 +311,12 @@ class Mount:
 
 
 def payload(name, size):
+    """`size` bytes that depend on every byte of `name`: SHAKE-256 of the
+    name, one C call (about 2 ms per MiB). The sha256-per-32-bytes Python
+    loop it replaces cost 6 ms per file in tests/test_k33_payload.py's
+    verification of 10,000 files and a third of its wall time."""
     import hashlib
-    out, k = bytearray(), 0
-    while len(out) < size:
-        out += hashlib.sha256(f'{name}:{k}'.encode()).digest()
-        k += 1
-    return bytes(out[:size])
+    return hashlib.shake_256(name.encode()).digest(size) if size else b''
 
 
 def fragments(store):

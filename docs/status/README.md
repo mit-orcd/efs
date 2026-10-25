@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
+**merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
+
+[Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](a11-qualification-matrix-20261024.md):
+**merged into devel; merged-tree `make test-all` on intel2 at `0b01a2a1e`: 471 commands, 0 FAIL, 15 NOTRUN host limits (2,604 s; raw: intel2 `~/efs-artifacts/merge-wave7-20261025/`, `SHA256SUMS` in that directory).** A11 findings 1 and 2 are fixed; every Stage 2 item now maps to a real `scripts/qualify.py` gate; live and real-host runs stay NOTRUN; every store needs a fresh format.
+
 [F1: memory and concurrency gates on the candidate](f1-memory-concurrency-gates-20261025.md):
 **branch `claude/devel-f1-gates-46ff64` on `merge-wave7`, not merged, not pushed; xorinox, last code commit `c32cdf544`: `make leak-check` PASS 41/41, `make asan-check` PASS 47/47, `make tsan-check` PASS 18/18 (`test_k36_recovery.py` intermittent under TSan), `make test-all` PASS (861 commands, exit 0); RDMA memcheck NOTRUN (no device). Raw: xorinox `~/efs-artifacts/f1-gates-20261025/` (`SHA256SUMS` `825a4507…ab106`).**
 Two new gates (`tests/sanitizer_check.sh`: ThreadSanitizer and ASan+UBSan+LeakSanitizer over
@@ -28,8 +34,16 @@ member-store copy during formation, startup banner vs rejoin, counters and lazy 
 misaligned read in `test_wire`. 20-minute D4 RSS bounded (client 247 MiB, servers 134 MiB) but not
 flat while the namespace grows. Open: `test_k36_recovery.py` step 4 intermittent under TSan; 3–7
 packer put errors over a 20-minute load (not memory; logs not retained).
-[Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](a11-qualification-matrix-20261024.md):
-**merged into devel; merged-tree `make test-all` on intel2 at `0b01a2a1e`: 471 commands, 0 FAIL, 15 NOTRUN host limits (2,604 s; raw: intel2 `~/efs-artifacts/merge-wave7-20261025/`, `SHA256SUMS` in that directory).** A11 findings 1 and 2 are fixed; every Stage 2 item now maps to a real `scripts/qualify.py` gate; live and real-host runs stay NOTRUN; every store needs a fresh format.
+
+[Gate speed: `make test-all` under 15 minutes at 8 jobs (W160)](gate-speed-20261025.md):
+**PARTIAL PASS, not merged; branch `claude/devel-gate-speed-8aee30` on merge-wave7: nuc `make test-all` at 8 jobs 811 s / 839 s (0 FAIL) / 989 s (2 pre-existing intermittents) against 1,182–1,217 s with 3–6 load failures before; serial 2,754 s → 2,311 s. Three clean runs under 15 min not reached: the nuc's one NVMe (raw: nuc `~/efs-artifacts/gate-speed-20261025/`).**
+The code gate had grown to 44 minutes (serial on intel2) and failed six commands under an 8-way pool on the nuc.
+Runner budgets and disk-weighted slots per `test-long` command (`tests/budgets.tsv`, largest first,
+`OVERBUDGET` lines), a drift check in `tests/test_make_test_recipe.py`, B6, B geometry and the D39 model as
+independent commands, parallel verification and fast payloads in the K33 tests and the B/D4 drivers, status
+polls instead of settle sleeps, and ports held for the life of a loopback cluster. No assertion relaxed; four
+tests check more. Follow-ups: 15 s unmount storage fence to a down member, 32 s `efs-mgmt status` with a frozen
+member, intermittent EIO on a degraded read in `test_k33_payload.py` under host load (pre-existing).
 
 [Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](pack-unindex-race-20261024.md):
 **FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**
