@@ -355,8 +355,12 @@ try:
                          c.last_run(2)), (key, c.last_run(2)[-3000:])
     rb_hold.unlink()
     wait_segs(c, 1, lambda n, u: u == len(new), 'second loss')
+    # The rebuild pass repeats its UNRECOVERABLE line at most once a minute
+    # per group, so a mark that turned lost just after a reporting pass is
+    # first named up to 60 s and one pass later. Status counts it at once
+    # (K38), so the wait starts at the commit: 60 s missed one by 170 ms.
     for g, sid, gen, fi in new:
-        end = time.time() + 60
+        end = time.time() + 75
         while count(c, rf'g{g} id={sid:016x} gen={gen:x} UNRECOVERABLE') == 0:
             assert time.time() < end, logs(c)[-4000:]
             time.sleep(0.5)
