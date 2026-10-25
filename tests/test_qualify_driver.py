@@ -312,6 +312,23 @@ try:
     assert status == 0 and rows[0]['packed'] == dict(segment=77, gen=1, group=0, offset=1044, len=300)
     assert H.stored_objects(rows) == {('segment', 77, 1), ('span', 99, (1, 2, 3))}
 
+    # The GC crash gate must follow K36 verified recovery, never demand a
+    # permanent crash fence after legitimate automatic recovery completed.
+    import ast, re
+    gc_tree = ast.parse((root / 'tests/live/gc_reclamation.py').read_text())
+    ready_fn = next(n for n in gc_tree.body if isinstance(n, ast.FunctionDef) and n.name == 'recovery_fsync_ready')
+    namespace = {'re': re}
+    exec(compile(ast.Module(body=[ready_fn], type_ignores=[]), 'gc-readiness', 'exec'), namespace)
+    ready = namespace['recovery_fsync_ready']
+    eps = ['127.0.0.1:19001', '127.0.0.1:19002']
+    reports = [ep + ': window 100 ms / 8 MiB\n  root: async\n  recovery verified phase=rebuild 50 ms: groups proven=2/2\n' for ep in eps]
+    assert ready(''.join(reports), eps)
+    assert not ready(reports[0], eps)
+    assert not ready(reports[0] * 2, eps)
+    assert not ready(''.join(reports).replace('verified', 'running'), eps)
+    assert not ready(''.join(reports).replace('root: async', 'root: async ERROR(barrier)'), eps)
+    assert not ready(''.join(reports) + '    recovery uncertain: fenced\n', eps)
+
     # 7c. The wire probe against fake daemons: a correct gate (leader
     # refuses the tags, follower redirects) passes every check; a daemon
     # that serves undeclared requests and applies any tag fails them.

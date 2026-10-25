@@ -638,10 +638,9 @@ def chunk_state(ino, allow_absent=False):
 def fresh_format(label):
     """Discard every owned store and initialize a new fixture.
 
-    An unclean stop leaves recovery_uncertain on each crashed root and COMMIT
-    (fsync) returns EIO until verified recovery or fresh format (W71). There
-    is no verified recovery, so later fsync-dependent gates use a fresh format
-    rather than clearing the fence on retained data.
+    K36 now verifies roots automatically after an unclean stop. This reset
+    isolates the later POSIX/append/outage cases; it is not a recovery method
+    or permission to clear an uncertain root's fence on retained data.
     """
     unmount();stop(crash=True)
     for root in roots:shutil.rmtree(root)
@@ -652,21 +651,47 @@ def fresh_format(label):
     mount_client()
     print('fresh format of all four stores for '+label,flush=True)
 
-def assert_commit_fenced(label):
-    """After an unclean stop a new fsync must fail with EIO."""
-    probe=mount/('fence-probe-'+label)
+def recovery_fsync_ready(text, endpoints):
+    """Every named daemon explicitly verified, with no uncertain/error root."""
+    blocks=re.findall(r'^(\S+): window[^\n]*\n((?:[ \t][^\n]*(?:\n|$))*)',text,re.M)
+    if len(blocks)!=len(endpoints) or {ep for ep,_ in blocks}!=set(endpoints):return False
+    return all(re.search(r'^  recovery verified\b',body,re.M) and
+               'recovery uncertain:' not in body and 'ERROR(' not in body
+               for _,body in blocks)
+
+def assert_commit_recovered(label):
+    """K36 may already clear the fence; prove readiness before durable I/O.
+
+    A timing race against recovery is not a fence-refusal oracle. The K36
+    fault suite holds recovery explicitly to test that negative boundary.
+    """
+    endpoints=[f'127.0.0.1:{a.port+i}' for i in range(4)]
+    evidence={'endpoints':endpoints,'polls':0}
+    def recovered():
+        result=subprocess.run([str(source/'efs-mgmt'),'sync-status',*endpoints],
+                              env=env,capture_output=True,text=True,timeout=15)
+        evidence.update(polls=evidence['polls']+1,rc=result.returncode,
+                        status=result.stdout,stderr=result.stderr)
+        (work/'recovery-after-crash.json').write_text(json.dumps(evidence,indent=2))
+        return result.returncode==0 and recovery_fsync_ready(result.stdout,endpoints)
+    wait(recovered,'K36 verified every root after '+label)
+    probe=mount/('recovery-probe-'+label)
+    body=b'f'*65536
     fd=os.open(probe,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
     try:
-        assert os.write(fd,b'f'*65536)==65536
-        try:os.fsync(fd)
-        except OSError as error:
-            assert error.errno==errno.EIO,('fence errno',error.errno)
-        else:raise AssertionError('fsync acknowledged after unclean stop: '+label)
+        assert os.write(fd,body)==len(body)
+        os.fsync(fd)
+        os.lseek(fd,0,os.SEEK_SET)
+        got=bytearray()
+        while len(got)<=len(body):
+            part=os.read(fd,len(body)+1-len(got))
+            if not part:break
+            got.extend(part)
+        assert got==body,'post-recovery payload differs'
     finally:
-        try:os.close(fd)
-        except OSError:pass
+        os.close(fd)
     os.unlink(probe)
-    print('fsync EIO after unclean stop ('+label+') PASS',flush=True)
+    print('fsync and exact payload after verified recovery ('+label+') PASS',flush=True)
 
 try:
     query_work_observer=PosixPhaseCollector(work,env.get('EFS_QUERY_WORK_TRACE')=='1',name='query-capture-work',limit=2048)
@@ -3005,13 +3030,13 @@ int main(int argc,char**argv){assert(argc==3);port=atoi(argv[1]);
     assert hashlib.sha256(sentinel.read_bytes()).hexdigest()==expected
     assert (mount/'peer-fold').read_bytes()==model
     print('cold two-peer fold and live-base reads after GC PASS',flush=True)
-    assert_commit_fenced('four-server crash')
+    assert_commit_recovered('four-server crash')
     os.unlink(mount/'peer-fold')
     wait(lambda:not files(fino),'fold fragments physically reclaimed')
     os.unlink(sentinel)
     wait(lambda:not files(sino),'sentinel physically reclaimed')
     wait(drained,'crashed fixture GC records retired')
-    # Every root is now fenced; fsync-dependent gates need a fresh format.
+    # Start independent POSIX/append/outage scenarios from an empty fixture.
     fresh_format('POSIX, append and offline-member gates')
     if a.posix:
         posix_checkpoint = totals(status())
