@@ -148,7 +148,7 @@ A6 branch**. "Every gate" means the qualification and gate runs recorded in
 | `EFS_RAFT_BATCH_OVERLAP` | `1` | `0`: overlapping AppendEntries never batched | as above | Keep `1`; remove `0` | As above |
 | `EFS_COMMANDS` (client) | off | `1`: `.efs` commands on this mount | many test harnesses and launch env files | Remove; `.efs` on whenever the cluster policy allows | A2 puts `.efs` in the alpha profile; `efs-mgmt commands-policy` is already the versioned cluster switch, so two environment layers on top of it multiply the matrix |
 | `EFS_COMMANDS_SERVER` | `1` | `0`: no query workers, tracking or query RPCs | launch env files (`0` on some) | Remove; always `1`, governed by the policy | As above |
-| `EFS_EXPIRY` | `0` | `1`: expiry worker | launch env files (`0`), expiry tests | Remove the feature from the alpha product (or compile it out) | A2: expiry off in alpha (W90); shipping it dark behind a variable is the pattern A6–A12 reject |
+| `EFS_EXPIRY` | `0` | `1`: expiry worker | launch env files (`0`), expiry tests | Remove the feature from the alpha product (or compile it out) | A2: expiry off in alpha (W90); shipping it dark behind a variable is the pattern A6–A12 reject. **D43 (Oct 25): expiry ships; the variable stays removed and refused, the cluster expiry policy (`efs-mgmt expiry-policy NODE:PORT cluster`) is the only control** |
 | `EFS_FUSE_EXPORT` | off | NFS re-export capability | `cluster/ct-up.sh`, `gw-up.sh` set `1` | Remove; off | NFS re-export is decided out of alpha (W152) |
 | `EFS_UNMOUNT_REVOKE` | revoke at clean unmount (D31) | `0`: keep the session open | none | Remove; always revoke | Never set anywhere; D31 needs the revoke for orphan collection |
 | `--direct-io` / `--no-direct-io` (efsd) | buffered | `O_DIRECT` fragment I/O | launch scripts via `EFS_DIRECT_IO` (orcd: on) | User decision: qualify the mode the release clusters run, or both as an A8 support dimension | A storage-mode choice with real hardware consequences; both are in use today |
@@ -450,7 +450,7 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_UNMOUNT_REVOKE` | `client/inode_rpc.c` (efs_client_session_end), A7 | always revoke after the last settle; failures exit 1 | none |
 | `EFS_COMMANDS` | `client/efs_fuse.c` (commands_enabled), A7 | the cluster commands-policy (`efs-mgmt commands-policy`) | many test harnesses and launch env files (updated here; external listed in the [A7 evidence](a7-removals-20261024.md)) |
 | `EFS_COMMANDS_SERVER` | `server/raft_host.c` (server_raft_host_start), A7 | query workers always run | as above |
-| `EFS_EXPIRY` | `server/raft_host.c` (server_raft_host_start), A7 | none: expiry compiled out (`EFS_BUILD_EXPIRY`, development builds only) | launch env files, expiry tests |
+| `EFS_EXPIRY` | `server/raft_host.c` (server_raft_host_start), A7 | none: the cluster expiry policy, off by default (D43; until Oct 25 compiled out behind `EFS_BUILD_EXPIRY`) | launch env files, expiry tests |
 | `EFS_FUSE_EXPORT` | `client/efs_fuse.c` (efs_fuse_init), A7 | none: no NFS re-export | cluster `ct-up.sh`, `gw-up.sh` |
 | `EFS_RDMA_FIRST` | `common/network.c` +5, A7 | `EFS_RDMA_TRACE=1` | `clean_cluster.sh`, `rdma_first_inode.sh` (updated) |
 

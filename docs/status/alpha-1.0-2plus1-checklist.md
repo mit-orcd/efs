@@ -400,7 +400,12 @@ alternatives reduces both product complexity and the supported test matrix.
   batching, KV bloom, disk query backend, 16-chunk prefetch and unmount
   revoke are the one behavior; `.efs` follows the cluster commands-policy;
   expiry is compiled out (`EFS_BUILD_EXPIRY`); `EFS_RDMA_FIRST` is
-  `EFS_RDMA_TRACE`. A/B selectors 15 → 1: `EFS_READ_VERIFY` waits on its
+  `EFS_RDMA_TRACE`. **Oct 25, D43:** expiry ships again, in every build
+  (no `EFS_BUILD_EXPIRY`, `EFS_EXPIRY` stays refused and names the policy);
+  the cluster expiry policy (`efs-mgmt expiry-policy NODE:PORT cluster`,
+  versioned, off by default) is its only control; its tests are back in
+  `make test-all` and the `d5-expiry` qualify gate
+  ([evidence](d43-expiry-20261025.md)). A/B selectors 15 → 1: `EFS_READ_VERIFY` waits on its
   GET-path audit. Live qualification of the retained paths stays open (A11).
 - [ ] **A8 — Keep only justified configuration.** Retain deployment inputs such as
   nodes, disks, addresses and quotas. Prefer built-in or automatically derived
@@ -484,7 +489,7 @@ facts for A6, not decisions.
   confirmed not to change behavior.
 - **Feature enablement is also A/B.** `EFS_COMMANDS`/`EFS_COMMANDS_SERVER` and
   `EFS_EXPIRY` select whether whole features exist. A2 fixes the alpha profile
-  (`.efs` on, containers and expiry off). A7 must decide whether the disabled
+  (`.efs` on, containers off; expiry policy-governed since D43, Oct 25). A7 must decide whether the disabled
   features leave the alpha product or stay as a justified dimension under A8;
   shipping them dark behind a variable is the pattern this gate rejects.
 - **Fault injection leaks into normal builds.** `EFS_KV_COMPACT_DIE`
@@ -503,9 +508,10 @@ facts for A6, not decisions.
 - [ ] **S1 — Surface list.** Mark every user-facing surface in or out, with
   a reason. Candidates in scope: Linux FUSE mount over RDMA with direct I/O
   (and TCP if supported), `.efs` commands (**W91/W92** named gates),
-  background packing (**W125**), logical truncate (**D25**), the `efs-mgmt`
+  background packing (**W125**), logical truncate (**D25**), expiry under
+  the cluster expiry policy (**D43**, Oct 25), the `efs-mgmt`
   operator commands, and the start/stop/deploy scripts. Candidates out of
-  scope: containers, expiry (**W90**; resolve under A7), 2+2, automatic repair
+  scope: containers, 2+2, automatic repair
   and crash recovery (K23). **Decided out (user, Oct 22):** NFS re-export and
   macOS clients, on the beta backlog as **W152**; alpha supports the Linux FUSE
   client only, and F4 says so.

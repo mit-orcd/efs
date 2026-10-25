@@ -1598,6 +1598,15 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[D43: expiry ships under the cluster expiry policy](../status/d43-expiry-20261025.md):
+**PASS (scoped, one host), not merged, not pushed; branch `claude/ecstatic-mccarthy-911369`, code `6b731298d`. nuc `make test-all` at 8 jobs: 484 commands, 0 FAIL, 15 NOTRUN host limits (earlier runs: one known intermittent each, D4 `put_errors=1` twice beside the new fixture before its budget fix); `d5-expiry` loopback dry run PASS (POSIX 218/218 with expiry on). Raw: nuc `~/efs-artifacts/d43-expiry-20261025/` (`SHA256SUMS` `6d6d768e…3d63`).**
+No build switch (`EFS_BUILD_EXPIRY` and `make test-expiry` removed) and no
+environment toggle (`EFS_EXPIRY` refused, naming the policy command); the
+cluster expiry policy (`efs-mgmt expiry-policy NODE:PORT cluster`,
+versioned, off by default) changes at runtime; a deadline acts only while
+its source folder policy is enabled. Expiry tests back in `make test-all`;
+new qualify gate `d5-expiry` (item D5) on every matrix topology.
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](../status/f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
@@ -1800,7 +1809,8 @@ throughput.
 
 [Oct 24: A7 removals decided in D42](../status/a7-removals-20261024.md):
 **PASS (scoped): `make test-all` on amd at `735b82562` fails only the 11 commands that also fail on the base (RDMA on rxe0, a fault-test timeout, K34 in `test_k33_payload.py`); live qualification NOTRUN.** Direct I/O only (storage without `O_DIRECT` refused),
-12 selectors and 3 efsd flags removed and refused, expiry compiled out,
+12 selectors and 3 efsd flags removed and refused, expiry compiled out
+(reversed by D43 on Oct 25: [D43 expiry](../status/d43-expiry-20261025.md)),
 `EFS_RDMA_TRACE`, strict `EFS_TRANSPORT=rdma`; A/B selectors 15 → 1
 (`EFS_READ_VERIFY`). Branch merged into devel (`6069ada62`).
 External launch/portal changes for the parent are listed there.

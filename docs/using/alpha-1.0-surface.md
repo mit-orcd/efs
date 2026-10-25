@@ -14,10 +14,12 @@ outside the alpha support claim.
 [Findings](../status/s-docs-alpha-1.0-20261024.md)
 
 The alpha profile (A2) is: Linux FUSE client, RDMA or TCP, direct fragment
-I/O, `.efs` commands on, background packing on, expiry off, containers
+I/O, `.efs` commands on, background packing on, expiry governed by the
+cluster expiry policy (off until an operator turns it on), containers
 absent. Since A7 (D42) these are the only behaviors: fragment I/O is always
 `O_DIRECT`, `.efs` follows the cluster commands-policy (on by default), and
-expiry is compiled out of the product (findings F7 and F8 closed).
+expiry is in every build and follows the cluster expiry policy (D43; no
+build switch, no environment variable; findings F7 and F8 closed).
 
 ## Binaries and scripts
 
@@ -82,7 +84,8 @@ expiry is compiled out of the product (findings F7 and F8 closed).
 | `raft-dir`, `raft-session` and every `raft-<op>` (`raft-create`, `raft-lookup`, `raft-rename`, `raft-publish`, `raft-flock`, …) | out | Debug commands that bypass FUSE and change metadata directly |
 | `add-node` | removed | Refused, naming `efsd --join`: one way to add a node (K33, finding F4) |
 | `add-storage` | removed | Refused: a node's storage roots are fixed when its store is created; a restart with other roots is refused (finding F11) |
-| `expiry`, `expiry-policy`, `expiry-status`, `expiry-clock`, `expiry-enable`, `expiry-id` | removed | Compiled out of the product (D42); only an `EFS_BUILD_EXPIRY` development build has them |
+| `expiry-policy` | in | D43: `expiry-policy NODE:PORT cluster get` / `cluster set on\|off EXPECTED_VERSION` turns expiry on or off for the whole cluster at runtime (versioned like `commands-policy`, off by default); `get`/`set ROOT GENERATION ...` reads and sets a folder policy (set needs uid 0). Qualified by the `d5-expiry` gate |
+| `expiry`, `expiry-status`, `expiry-clock`, `expiry-enable`, `expiry-id` | in | D43: path and deadline inspection, renewal, worker status, clock health and existing-file deadlines; refused (rc -16) while the cluster expiry policy is off |
 
 `efs-mgmt` has no authentication: any host that reaches a daemon port can
 run every command, including the mutating ones (finding F12). Keep the
@@ -93,7 +96,7 @@ cluster ports on a trusted network.
 | Command | Alpha | Reason |
 | --- | --- | --- |
 | `.efs/ls`, `.efs/find`, `.efs/stats`, `.efs/help` | in | D34/W91–W92; needs `EFS_COMMANDS=1` on the mount, server policy, and Python 3 on the client ([commands](efs-commands.md)) |
-| Expiry options of the commands | out | Rejected by the commands; expiry is off |
+| Expiry options of the commands | out | Rejected by the commands; the `.efs` commands neither set nor show expiry. Expiry itself ships through `efs-mgmt` (D43) |
 | The former `.stats`/`.find` lookup-only files | removed | Replaced by `.efs/stats` and `.efs/find` (W92); `operations.md` still described `.stats` (finding F9, corrected) |
 
 ## Environment variables
@@ -106,7 +109,7 @@ and waits for the A6 inventory and the A7/A8 decisions.
 | --- | --- | --- | --- |
 | `EFS_TRANSPORT=auto\|tcp\|rdma` | both | in | Transport choice; default `auto` (logs the transport used); `rdma` refuses to start without a usable device |
 | `EFS_RDMA_DEV`, `EFS_RDMA_GID_INDEX` | both | in | RDMA device and RoCE GID selection |
-| `EFS_COMMANDS`, `EFS_COMMANDS_SERVER`, `EFS_EXPIRY`, `EFS_FUSE_EXPORT` | both | removed | Refused at startup (D42): `.efs` follows `efs-mgmt commands-policy`; expiry and NFS re-export are not in alpha |
+| `EFS_COMMANDS`, `EFS_COMMANDS_SERVER`, `EFS_EXPIRY`, `EFS_FUSE_EXPORT` | both | removed | Refused at startup (D42, D43): `.efs` follows `efs-mgmt commands-policy`; expiry follows `efs-mgmt expiry-policy NODE:PORT cluster` (the refusal names it); NFS re-export is not in alpha |
 | `EFS_CLIENT_META_MB`, `EFS_DCACHE_HARD_BYTES`, `EFS_DCACHE_DRAIN_BYTES`, `EFS_DCACHE_BYTES`, `EFS_CLIENT_CONNS_PER_NODE`, `EFS_RDMA_BUFS`, `EFS_NUMA_NODE` | client | out, pending A8 | Capacity and placement tunables; defaults are the qualified values |
 | `EFS_QUERY_DISK_MAX_MIB`, `EFS_QUERY_DISK_TOTAL_MIB`, `EFS_QUERY_DISK_RESERVE_MIB`, `EFS_QUERY_REFRESH_MS`, `EFS_QUERY_EXPORT_MAX_MS` | server | out, pending A8 | Query-cache sizing; a large namespace may need them, so A8 must decide |
 | `EFS_PACK_*`, `EFS_REBUILD_PER_PASS` | server | out | Internal tunables; D37 allows no setting that disables the packer |

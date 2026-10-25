@@ -16,7 +16,9 @@ decided by the user.
 
 A distributed file system with 2+1 erasure-coded data on 3 to 16 storage
 nodes, two three-voter Raft metadata groups, a Linux FUSE client over TCP or
-RDMA, background packing of small files and the `.efs` directory commands.
+RDMA, background packing of small files, the `.efs` directory commands and
+scratch expiry under a cluster expiry policy (off until an operator turns it
+on with `efs-mgmt expiry-policy NODE:PORT cluster set on VERSION`, D43).
 A cluster starts with `efsd ADDR:PORT STORAGE` on the first node and
 `efsd --join [SEED] STORAGE` on the others, forms by itself at three
 members and takes further nodes online. A stripe acknowledged with only two
@@ -59,13 +61,13 @@ fragments is rebuilt when the missing node returns.
 
 | ID | Limitation | Trigger | What the user sees | Reference |
 | --- | --- | --- | --- | --- |
-| L20 | Expiry disabled, containers removed | `EFS_EXPIRY=1`, `efs-mgmt expiry*`, `.efs` expiry options | Outside the alpha surface; the commands reject expiry options | D33/W90, D37, A2 |
+| L20 | Containers removed; expiry only through `efs-mgmt` | `EFS_EXPIRY=1`, `.efs` expiry options | efsd refuses `EFS_EXPIRY` and names `efs-mgmt expiry-policy NODE:PORT cluster`; the `.efs` commands reject expiry options. Expiry ships (D43), off by default; a deadline acts only while the cluster policy is on and its source folder policy enabled | D33, D37, D43, A2 |
 | L21 | One export per cluster | Any | No export label, no second export | `efs-fuse`, `mkfs` |
 | L22 | No authentication on the cluster ports, *proposed* | Any host that reaches a daemon port | Can run every `efs-mgmt` command, including mutating ones; keep the network trusted | Finding F12 |
 | L23 | Same build everywhere; no upgrade in place | A peer or client of another build; a format change | The connection is refused; a format change needs a fresh format, no migration and no downgrade | AGENTS.md (no backward compatibility) |
 | L24 | No effective-settings listing, unless W122 enters alpha | An operator wants every effective value | Only the startup log and the status commands show settings | S4, W122 |
 | L25 | Cross-host RDMA not qualified | RDMA between hosts | Recorded RDMA runs use one host's devices or software RXE | W106, A2 |
-| L26 | The alpha profile is the only behavior (A7, D42) | — | Fragment I/O is always `O_DIRECT`, `.efs` follows the cluster commands-policy, expiry is compiled out; removed settings are refused at startup | Findings F7, F8 (closed by A7) |
+| L26 | The alpha profile is the only behavior (A7, D42) | — | Fragment I/O is always `O_DIRECT`, `.efs` follows the cluster commands-policy, expiry follows the cluster expiry policy (D43); removed settings are refused at startup | Findings F7, F8 (closed by A7) |
 
 ## Open items that are not yet limitations
 

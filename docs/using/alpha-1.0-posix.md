@@ -18,7 +18,7 @@ fix; none counts as PASS.
 | Extras | `tests/posix/posix_extras.py` (`--suite extras`) | 5 | mmap and the `.efs` commands |
 | Two-client | `tests/posix/posix_2client.py` | 68 | Visibility, races, locks and overlapping writes across two mounts on different hosts |
 | Durability | `tests/posix/posix_persist.py` | 27 | Prepare, orderly unmount and remount, then verify bytes and metadata |
-| Expiry | `tests/posix/posix_expiry.py` | — | Expiry lifecycle on a private fixture; expiry is out of alpha |
+| Expiry | `tests/posix/posix_expiry.py` | `d5-expiry` | Expiry lifecycle on a private four-node fixture: the cluster expiry policy off by default, on/off at runtime, folder coverage, restarts and member loss, physical reclamation, then the core suite with expiry on (D43) |
 
 The most recent recorded runs (both before the base commit; nothing has been
 recorded on `a2326a369` itself, and the C1 runs on 3, 4 and more than 4
@@ -121,5 +121,8 @@ Each line is covered by the named suite cases, all PASS in both runs above.
 | P14 | Concurrent `O_APPEND` record loss (K9/W87) was never reproduced and has no root cause | No known symptom; the item reopens if a loss is seen | `concurrent_appends`, `peer_concurrent_append` PASS | Closed without resolution (D41) |
 | P15 | `fsync` with a member down is degraded | `fsync`/`fdatasync` succeed when two fragments of every stripe the file's writes touched are proven durable and a third that is not is marked degraded; `EIO` with two of a stripe's nodes down or unproven (also after an unclean stop, whose COMMIT is fenced until a fresh format) | `tests/test_data_commit.c`, `tests/test_k35_fsync_degraded.py` (K35); not in the POSIX suites | Limitation, *proposed* (findings F22, F23) |
 
-Not POSIX deviations, but limits a user meets: no expiry (rejected by the
-commands), no NFS re-export, no macOS client, one export per cluster.
+Not POSIX deviations, but limits a user meets: no expiry options in the
+`.efs` commands (expiry is operated with `efs-mgmt`, off by default; with
+it on, a file whose deadline passed disappears from its directory like an
+unlink and cannot get a second hard link while it has a deadline), no NFS
+re-export, no macOS client, one export per cluster.

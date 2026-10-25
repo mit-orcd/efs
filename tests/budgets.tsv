@@ -41,7 +41,7 @@ python3 tests/test_client_processes.py	20	1
 python3 tests/test_shutdown_stuck_worker.py	10	1	
 python3 tests/test_k36_recovery.py	120	1	
 python3 tests/test_expiry_policy_live.py	45	1	
-python3 tests/posix/posix_expiry.py --private	175	3	the four-member expiry fixture and its fsynced create bursts (135 s alone, 133-139 s in the pool, 239 s beside the first-wave writers): three slots and a budget below D4's, so it never runs beside the report step-down or D4 in the first wave
+python3 tests/posix/posix_expiry.py --private	175	3	the four-member expiry fixture and its fsynced create bursts (135 s alone, 133-262 s in the pool depending on its neighbours): three slots and a budget below D4's, so it never runs beside the report step-down or D4 in the first wave
 python3 tests/test_k36_segment_recovery.py	100	1	
 ./tests/test_reclaim	35	1	
 python3 tests/test_opid_admission.py	15	1	
