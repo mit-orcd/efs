@@ -108,7 +108,9 @@ try:
                            *owner.split(), '--stall', '3')
     assert rc == 2 and 'no progress for 3 s in phase revoking' in out, out
     assert 'no forced kill' in out and m.p.poll() is None, out
-    c.wait_log(1, r'EFS_FAULT_REVOKE_BEGIN_FILE present', run=False)
+    # The client's BEGIN reaches whichever member it asks (and its leader).
+    assert any('EFS_FAULT_REVOKE_BEGIN_FILE present: session BEGIN held' in c.log(i)
+               for i in (1, 2, 3)), c.others(0)
     notes.append(f'stalled: retire refused after {took:.1f} s, client alive')
     hold.write_text('fail\n')
     rc, out, took = client(sys.executable, 'scripts/client_processes.py', 'retire', str(m.path),
