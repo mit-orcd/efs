@@ -21,6 +21,10 @@ Usage:
           client is ~1 GB per 10 min. Needs kernel.yama.ptrace_scope=0.
           With --perf too, the perf shares include the ptrace stops.
   stop:   quiesce and drain while mounted; refuse if unresolved after 60 s.
+          After the unmount it follows the client's stop record (flush,
+          report, settle, session revoke) while the phases advance: no
+          progress for 30 s, 600 s in all, or a failed flush, settle or
+          revoke is a failed stop with the reason. Nothing is force-killed.
           --force-discard explicitly permits loss and lazy detach.
   env:    EFS_TRANSPORT=auto|tcp|rdma (default auto: RDMA if IB is up, else TCP)
           rdma is strict (no TCP fallback). Optional EFS_RDMA_DEV=<ibdev>.

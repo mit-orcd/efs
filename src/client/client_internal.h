@@ -299,6 +299,8 @@ void efs_client_session_fence(int rc);
 int efs_client_session_fenced(void);
 /* D31: revoke this mount's own session at clean unmount (inode_rpc.c). */
 int efs_client_session_end(void);
+/* Why the revoke last failed ("revoke rc=-6 phase=cleanup shard=12"), or "". */
+const char *efs_client_session_end_reason(void);
 /* ReadIndex of global owner: ACTIVE newer epoch proves completed revocation.
  * Missing owner/fencing state/transport failure never proves revocation. */
 int efs_client_rpc_identity_revoked(const struct efs_opid *,int *);
@@ -796,6 +798,16 @@ void efs_client_conn_init(void);
 /* Clean unmount: flush, settle, revoke the session. EFS_OK, or the first
  * failure (also logged); repeated calls return the same result. */
 int efs_client_shutdown(void);
+/* The failure efs_client_shutdown returned, as text; "" when clean. */
+const char *efs_client_shutdown_reason(void);
+/* Unmount progress (A11 finding 1). The thread that installs an observer
+ * owns the stop; efs_client_stop_phase reports to it from any thread
+ * (revoke workers too). A stop phase is a name and a step that grows while
+ * the phase makes progress; the stop tooling waits while it advances. */
+void efs_client_set_stop_observer(void (*fn)(const char *phase, uint64_t step,
+                                             uint64_t total));
+void efs_client_stop_phase(const char *phase, uint64_t step, uint64_t total);
+int efs_client_stop_owner(void);
 
 /* Admit the object's ticket, then PUT all three fragments concurrently
  * (send-all / recv-all on three pooled sockets). Returns EFS_OK if quorum

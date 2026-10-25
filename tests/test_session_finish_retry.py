@@ -7,8 +7,11 @@ s=(root/'src/common/session_revoke.c').read_text()
 def function(name):
     a=s.index(name)
     return s[a:s.index('\n}',a)+2]
+# The per-shard stage runner the coordinator calls (parallel=0: in the caller).
+stages=s[s.index('static void wr64be_sess('):s.index('/* Coordinator-driven I23 barrier')]
 code=r'''
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -33,6 +36,8 @@ static void wr32be_sess(uint8_t *p,uint32_t x){p[0]=x>>24;p[1]=x>>16;p[2]=x>>8;p
 static uint32_t read32(const uint8_t *p){return ((uint32_t)p[0]<<24)|((uint32_t)p[1]<<16)|((uint32_t)p[2]<<8)|p[3];}
 static int seed;
 static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t bytes,struct efs_msg_raft_mkfs_reply *r){
+ if(p[1]==EFS_MD_REQ_SESSION_CLEANUP_PROBE){assert(bytes==34&&!memcmp(p+2,identity,16)&&finishes>=3);
+  memset(r,0,sizeof(*r));r->salt=~0ull;return EFS_OK;} /* every shard still owes cleanup */
  assert(rpc->ctx==&seed&&!memcmp(p+3,identity,16));
  memset(r,0,sizeof(*r));r->leader_hint=-1;
  if(p[2]==EFS_MD_SESS_BEGIN){assert(bytes==19);begins++;}
@@ -42,19 +47,19 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
   assert(bytes==23);uint32_t sh=read32(p+19);
   r->salt=sh==7?((uint64_t)(finishes>=3?1:2)<<32)|5:(sh==EFS_SESSION_BITS?2:0);
  }
- else if(p[2]==EFS_MD_SESS_FENCE_LOC){assert(bytes==27&&read32(p+19)==5&&read32(p+23)==1);}
- else {assert(p[2]==EFS_MD_SESS_ACK&&bytes==23&&read32(p+19)==1);}
+ else if(p[2]==EFS_MD_SESS_FENCE_LOC){assert(bytes==35&&read32(p+19)==5&&read32(p+23)==0&&!read32(p+27)&&read32(p+31)==2);}
+ else {assert(p[2]==EFS_MD_SESS_ACK&&bytes==31&&read32(p+19)==0&&!read32(p+23)&&read32(p+27)==2);}
  return EFS_OK;
 }
 int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,const uint8_t id[EFS_OPID_UUID_LEN],uint32_t old,uint32_t shard,int append,struct efs_msg_raft_mkfs_reply *r){
  assert(rpc->ctx==&seed);(void)r;assert(!memcmp(id,identity,16)&&old==4&&shard==1&&append==(int)cleanups);cleanups++;return EFS_OK;
 }
-'''+function('int efs_session_storage_barrier(')+'\n'+function('static void sess_pack_hdr(')+'\n'+function('int efs_session_revoke(')+r'''
-int main(void){identity[0]=42;const struct efs_session_rpc rpc={&seed,NULL};struct efs_session_revoke_result res;
+'''+function('int efs_session_storage_barrier(')+'\n'+function('static void sess_pack_hdr(')+'\n'+stages+function('int efs_session_revoke(')+r'''
+int main(void){identity[0]=42;const struct efs_session_rpc rpc={&seed,NULL,0,NULL};struct efs_session_revoke_result res;
  assert(!efs_session_revoke(&rpc,identity,&res)&&res.epoch==5&&res.state==1&&res.ntouch==1);assert(begins==1&&finishes==3&&cleanups==2&&deadline==0);return 0;}
 '''
 with tempfile.TemporaryDirectory() as directory:
     p=Path(directory)/'test.c';p.write_text(code)
-    subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
+    subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-pthread','-o',str(p.with_suffix(''))],check=True)
     subprocess.run([str(p.with_suffix(''))],check=True)
 print('session FINISH: BUSY retries keep UUID/epoch, one BEGIN, both cleanup stages PASS')

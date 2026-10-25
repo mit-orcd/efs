@@ -5152,19 +5152,32 @@ static int efs_control_drain(uint64_t deadline, int force)
 }
 
 /* Nonzero once a clean unmount failed to flush, report, settle or revoke:
- * efs-fuse then exits 1, never reporting a clean completion (D42). */
+ * efs-fuse then exits 1, never reporting a clean completion (D42). The
+ * first reason goes into the stop record. */
 static int g_unmount_unclean;
+static char g_unclean_reason[192];
+
+static void unmount_unclean(const char *reason)
+{
+    if (!g_unmount_unclean && reason && *reason)
+        snprintf(g_unclean_reason, sizeof(g_unclean_reason), "%s", reason);
+    g_unmount_unclean = 1;
+}
 
 static void efs_fuse_destroy(void *userdata)
 {
     (void)userdata;
+    efs_client_set_stop_observer(efs_stop_phase);
+    efs_stop_phase("flushing", 0, 0);
     fuse_pressure_stop();
     int wrc = efs_wb_sync();
     int drc = efs_dcache_flush_all();
     if (wrc != EFS_OK || drc != EFS_OK) {
+        char why[96];
         fprintf(stderr, "efs-fuse: unmount: data flush incomplete "
                         "(writeback=%d dcache=%d)\n", wrc, drc);
-        g_unmount_unclean = 1;
+        snprintf(why, sizeof(why), "data flush writeback=%d dcache=%d", wrc, drc);
+        unmount_unclean(why);
     }
     if (g_wb.ready) {
         pthread_mutex_lock(&g_wb.mu);
@@ -5195,7 +5208,8 @@ static void efs_fuse_destroy(void *userdata)
         struct timespec t0, now;
         int mrc;
         clock_gettime(CLOCK_MONOTONIC, &t0);
-        for (;;) {
+        for (uint64_t attempt = 1;; attempt++) {
+            efs_stop_phase("draining", attempt, 0);
             mrc = efs_client_note_meta_change(1);
             if (mrc == EFS_OK)
                 break;
@@ -5213,10 +5227,12 @@ static void efs_fuse_destroy(void *userdata)
             usleep(200000);
         }
         if (mrc != EFS_OK) {
+            char why[96];
             fprintf(stderr, "efs-fuse: UNMOUNT DATA LOSS: metadata flush "
                             "still failing (rc=%d) after %lds; writes that "
                             "were never reported are gone\n", mrc, drain_s);
-            g_unmount_unclean = 1;
+            snprintf(why, sizeof(why), "metadata report rc=%d after %lds", mrc, drain_s);
+            unmount_unclean(why);
         }
     }
     /* Free cached .find query results. */
@@ -5230,7 +5246,7 @@ static void efs_fuse_destroy(void *userdata)
     efs_open_retry_stop();
     efs_client_view_stop();
     if (efs_client_shutdown() != EFS_OK)
-        g_unmount_unclean = 1;
+        unmount_unclean(efs_client_shutdown_reason());
 }
 
 static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
@@ -7619,12 +7635,22 @@ int main(int argc, char **argv)
     stop_perf_recorder();
     /* destroy() already shut down on clean unmount; a repeat returns its
      * result. A failed flush, settle or revoke is not a clean exit. */
+    efs_client_set_stop_observer(efs_stop_phase);
     if (efs_client_shutdown() != EFS_OK)
-        g_unmount_unclean = 1;
+        unmount_unclean(efs_client_shutdown_reason());
     if (!ret && g_unmount_unclean) {
         fprintf(stderr, "efs-fuse: unmount did not complete cleanly; exit 1\n");
         ret = 1;
     }
+    /* The stop record's last word: the stop tooling reports this verdict. */
+    if (ret) {
+        char why[sizeof(g_unclean_reason) + 32];
+        snprintf(why, sizeof(why), "%s", g_unclean_reason[0] ? g_unclean_reason : "");
+        if (!why[0])
+            snprintf(why, sizeof(why), "efs-fuse exit %d", ret);
+        efs_stop_status("failed", 0, 0, ret, why);
+    } else
+        efs_stop_status("done", 0, 0, 0, NULL);
     return ret;
 }
 

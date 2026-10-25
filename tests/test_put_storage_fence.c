@@ -49,11 +49,17 @@ int main(void)
     fail_sync=sync_calls+3;assert(server_put_session_fence(&server,uuid,3)==EFS_ERR_IO);fail_sync=0;
     assert(!storage_fence_read(path,uuid,&floor)&&floor==3);
     assert(!server_put_session_fence(&server,uuid,3));
+    /* A11: once synced in this process, a repeat at or below that floor
+     * (every FENCE_LOC of one revoke) needs no further fsync. */
+    unsigned synced=sync_calls;
+    assert(!server_put_session_fence(&server,uuid,3)&&!server_put_session_fence(&server,uuid,2));
+    assert(sync_calls==synced);
     assert(server_put_session_begin(&cold,uuid,2,&guard)==EFS_ERR_STALE);
     /* Configured roots may deliberately be symlinks to a storage volume. */
     char alias[256];snprintf(alias,sizeof(alias),"%s-alias",root);assert(!symlink(root,alias));
     struct efsd_server linked={.storage_path_count=1};strcpy(linked.storage_paths[0],alias);
-    assert(!server_put_session_fence(&linked,uuid,3));
+    synced=sync_calls;assert(!server_put_session_fence(&linked,uuid,3));
+    assert(sync_calls>synced); /* another certificate path is synced on its own */
     assert(server_put_session_begin(&linked,uuid,2,&guard)==EFS_ERR_STALE);
     assert(!unlink(alias));
     /* Full UUID identity and checksum, rather than epoch alone, are sealed. */

@@ -2783,28 +2783,36 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_BEGIN:
         rc = efs_session_begin_fence(h->kv, uuid);
         break;
-    case EFS_MD_SESS_FENCE_LOC:
-        if (clen != HOST_SESS_REG_LEN)
+    case EFS_MD_SESS_FENCE_LOC: {
+        if (clen != EFS_MD_SESS_FENCE_LOC_LEN)
             return EFS_ERR_UNSUPPORTED;
         epoch = rd32be(cmd + 18);
-        shard = rd32be(cmd + 22);
-        if (!epoch || shard >= EFS_SESSION_BITS)
+        uint32_t word = rd32be(cmd + 22);
+        uint64_t mask = rd64be(cmd + 26);
+        if (!epoch || !mask || word >= EFS_SESSION_BITS / 64u)
             return EFS_ERR_INVAL;
+        shard = word * 64u + (uint32_t)__builtin_ctzll(mask);
         /* Do not publish a metadata fence before old guarded storage writes
          * finish and its rejection certificate survives a cold restart. */
         rc = server_put_session_fence(h->s, uuid, epoch);
-        if (rc == EFS_OK) rc = efs_session_fence_local(h->kv, shard, uuid, epoch);
+        for (uint32_t b = 0; b < 64 && rc == EFS_OK; b++)
+            if (mask & (1ull << b))
+                rc = efs_session_fence_local(h->kv, word * 64u + b, uuid, epoch);
         /* Abort in-memory waiters of the fenced epoch now (not only at
          * LEASE_DROP): a queued waiter must not GRANT after FENCE_LOC. */
         if (rc == EFS_OK && epoch > 0)
             host_lock_wait_drop_session(h, uuid, epoch - 1);
         break;
-    case EFS_MD_SESS_ACK:
-        if (clen < HOST_SESS_CREATE_LEN)
+    }
+    case EFS_MD_SESS_ACK: {
+        if (clen != EFS_MD_SESS_ACK_LEN)
             return EFS_ERR_UNSUPPORTED;
-        shard = rd32be(cmd + 18);
-        rc = efs_session_ack_fence(h->kv, uuid, shard);
+        uint32_t word = rd32be(cmd + 18);
+        uint64_t mask = rd64be(cmd + 22);
+        shard = mask ? word * 64u + (uint32_t)__builtin_ctzll(mask) : 0;
+        rc = efs_session_ack_fence_word(h->kv, uuid, word, mask);
         break;
+    }
     case EFS_MD_SESS_FINISH:
         if(clen!=HOST_SESS_HDR_LEN && clen!=HOST_SESS_CREATE_LEN)return EFS_ERR_INVAL;
         rc = clen==HOST_SESS_CREATE_LEN?
@@ -9448,6 +9456,7 @@ static int host_append_close_batched(struct efs_raft_host *,efs_ino_t,uint64_t,
 
 static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
     const uint8_t identity[EFS_CLOSE_STEP_VALUE]);
+static int host_session_cleanup_probe(struct efs_raft_host *,const uint8_t *,uint8_t,int *,uint64_t *);
 static int host_session_append_step(struct efs_raft_host *,const uint8_t *,uint32_t,
                                      uint8_t,int *,uint64_t *);
 struct close_step_scan {
@@ -14423,6 +14432,27 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     if(clen && EFS_MD_CMD_IS_RESERVED(cmd[0])) {
         out->rc=EFS_ERR_PROTO;return;
     }
+#if EFS_FAULTS
+    /* Test-only (A11 finding 1): a session revoke that makes no progress.
+     * While the file exists, BEGIN is held; once it reads "fail", BEGIN is
+     * refused with EFS_ERR_IO, as a revoke that fails. */
+    if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_BEGIN) {
+        const char *gate=getenv("EFS_FAULT_REVOKE_BEGIN_FILE");
+        int noted=0;
+        while(gate && *gate && access(gate,F_OK)==0) {
+            char word[8]={0};
+            FILE *f=fopen(gate,"r");
+            if(f){if(!fgets(word,sizeof(word),f))word[0]=0;fclose(f);}
+            if(!strncmp(word,"fail",4)) {
+                fprintf(stderr,"raft-host: EFS_FAULT_REVOKE_BEGIN_FILE fail: session BEGIN refused\n");
+                out->rc=EFS_ERR_IO;return;
+            }
+            if(!noted++)
+                fprintf(stderr,"raft-host: EFS_FAULT_REVOKE_BEGIN_FILE present: session BEGIN held\n");
+            usleep(50000);
+        }
+    }
+#endif
     /* W153: the formation notice, and before formation nothing but the
      * group-0 MKFS a raft-mkfs forwards to the group-0 leader. */
     if (clen && cmd[0] == EFS_MD_REQ_FORMED) {
@@ -14711,12 +14741,24 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
     }
     if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION && cmd[1] == EFS_MD_SESS_FENCE_LOC) {
-        if (clen != HOST_SESS_REG_LEN || !rd32be(cmd + 18) ||
-            rd32be(cmd + 22) >= EFS_SESSION_BITS ||
-            group != efs_raft_shard_group(rd32be(cmd + 22))) {
+        /* Every shard of the mask lives in this group's log. */
+        uint32_t word = clen == EFS_MD_SESS_FENCE_LOC_LEN ? rd32be(cmd + 22) : 0;
+        uint64_t mask = clen == EFS_MD_SESS_FENCE_LOC_LEN ? rd64be(cmd + 26) : 0;
+        int wrong = clen != EFS_MD_SESS_FENCE_LOC_LEN || !rd32be(cmd + 18) || !mask ||
+                    word >= EFS_SESSION_BITS / 64u;
+        for (uint32_t b = 0; b < 64 && !wrong; b++)
+            wrong = (mask & (1ull << b)) && group != efs_raft_shard_group(word * 64u + b);
+        if (wrong) {
             out->rc = EFS_ERR_INVAL;
             return;
         }
+    }
+    if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION && cmd[1] == EFS_MD_SESS_ACK &&
+        (clen != EFS_MD_SESS_ACK_LEN || !rd64be(cmd + 22) ||
+         rd32be(cmd + 18) >= EFS_SESSION_BITS / 64u ||
+         group != efs_raft_shard_group(efs_kv_session_shard(cmd + 2)))) {
+        out->rc = EFS_ERR_INVAL;
+        return;
     }
     if(clen && cmd[0]==EFS_MD_REQ_SESSION_APPEND_NEXT) {
         if(clen!=25 || !rd32be(cmd+17) || rd32be(cmd+21)>=EFS_SESSION_BITS ||
@@ -14728,6 +14770,20 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=host_pick_peer(h,groups,2,-1);return;
         }
         out->rc=host_session_append_step(h,cmd,clen,group,&hint,&out->salt);
+        out->leader_hint=hint;return;
+    }
+    if(clen && cmd[0]==EFS_MD_REQ_SESSION_CLEANUP_PROBE) {
+        uint64_t mask=clen==EFS_MD_SESSION_CLEANUP_PROBE_LEN?rd64be(cmd+25):0;
+        uint32_t word=clen==EFS_MD_SESSION_CLEANUP_PROBE_LEN?rd32be(cmd+21):0;
+        int wrong=!mask || !rd32be(cmd+17) || word>=EFS_SESSION_BITS/64u;
+        for(uint32_t b=0;b<64 && !wrong;b++)
+            wrong=(mask>>b&1) && group!=efs_raft_shard_group(word*64u+b);
+        if(wrong){out->rc=EFS_ERR_INVAL;return;}
+        uint8_t groups[2];host_need_both(groups);
+        if(!host_hosts(h,groups[0]) || !host_hosts(h,groups[1])) {
+            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=host_pick_peer(h,groups,2,-1);return;
+        }
+        out->rc=host_session_cleanup_probe(h,cmd,group,&hint,&out->salt);
         out->leader_hint=hint;return;
     }
     if(clen && cmd[0]==EFS_MD_REQ_CLOSE_APPEND_NEXT) {
@@ -18273,6 +18329,33 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
                                     rd32be(cmd+17),&tx,&host_append_ops,&ctx);
     /* A dead inode still owes REAP_MULTI; absence is never empty-phase proof. */
     return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
+}
+/* EFS_MD_REQ_SESSION_CLEANUP_PROBE: the proofs of both cleanup phases
+ * once for a word of shards (owner ACTIVE past epoch, fresh views of both
+ * groups), then their read-only selections per shard. *pending gets every
+ * shard either phase could still act on, or could not prove empty. */
+static int host_session_cleanup_probe(struct efs_raft_host *h,const uint8_t *cmd,
+    uint8_t group,int *hint,uint64_t *pending)
+{
+    const uint8_t *uuid=cmd+1;
+    uint32_t epoch=rd32be(cmd+17),word=rd32be(cmd+21);
+    uint64_t mask=rd64be(cmd+25);
+    uint8_t owner[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_LEASE_LOCK_NEXT};
+    *pending=mask;
+    memcpy(owner+2,uuid,16);wr32be(owner+18,epoch);
+    wr32be(owner+22,word*64u+(uint32_t)__builtin_ctzll(mask));
+    int rc=host_session_cleanup_admit(h,owner,sizeof(owner),group,hint);
+    if(rc==EFS_OK)rc=host_append_authority(h,hint);
+    if(rc!=EFS_OK)return rc;
+    for(uint32_t b=0;b<64;b++) {
+        if(!(mask>>b&1))continue;
+        uint32_t shard=word*64u+b,n=0;int idle=0;
+        struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];
+        int r=efs_session_cleanup_select(h->kv,shard,uuid,epoch,keys,&n);
+        if(r==EFS_OK && !n)r=efs_meta_append_session_idle(h->kv,shard,uuid,epoch,&idle);
+        if(r==EFS_OK && idle)*pending&=~(1ull<<b);
+    }
+    return EFS_OK;
 }
 static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
     const uint8_t identity[EFS_CLOSE_STEP_VALUE])

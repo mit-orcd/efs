@@ -12,6 +12,8 @@
  * the operator (`efs-mgmt raft-session fence`) and a mount revoking its own
  * session at clean unmount (D31: the abandoned bodies of a departed client
  * become collectable without an operator). Only the transport differs. */
+/* Upper bound on concurrent per-shard steps of one revoke. */
+#define EFS_SESSION_REVOKE_PARALLEL_MAX 32u
 struct efs_session_rpc {
     void *ctx;
     /* One EFS_MSG_RAFT_MKFS submit; payload[0] is the Raft group. Follows
@@ -19,6 +21,13 @@ struct efs_session_rpc {
      * efs_session_busy_retry_ok allows. Returns out->rc. */
     int (*submit)(void *ctx, const uint8_t *payload, uint32_t plen,
                   struct efs_msg_raft_mkfs_reply *out);
+    /* Concurrent per-shard steps (FENCE_LOC+ACK, then cleanup), capped by
+     * EFS_SESSION_REVOKE_PARALLEL_MAX. 0 or 1 runs every step in the
+     * caller's thread; above that, submit must be thread-safe. */
+    unsigned parallel;
+    /* Optional: called after each shard of a stage ("fence", "cleanup")
+     * completes, from any worker thread. */
+    void (*progress)(void *ctx, const char *stage, uint32_t done, uint32_t total);
 };
 /* Fresh session reads and exact-floor fences can be BUSY while a cold
  * participant catches up; these requests are idempotent with unchanged
@@ -27,7 +36,7 @@ static inline int efs_session_busy_retry_ok(const uint8_t *payload, uint32_t ple
 {
     return plen >= 3 && payload[1] == EFS_MD_CMD_SESSION &&
            ((payload[2] == 0 && plen == 23) ||
-            (payload[2] == EFS_MD_SESS_FENCE_LOC && plen == 27) ||
+            (payload[2] == EFS_MD_SESS_FENCE_LOC && plen == 1 + EFS_MD_SESS_FENCE_LOC_LEN) ||
             (payload[2] == EFS_MD_SESS_STORAGE_FENCE && plen == 23));
 }
 /* Repeat one certificate barrier (STORAGE_FENCE, FENCE_LOC, FINISH) while
@@ -45,6 +54,9 @@ struct efs_session_revoke_result {
     uint32_t old_epoch, shard;     /* the revoked epoch; shard where cleanup stopped */
     const char *phase;             /* where an incomplete barrier stopped */
     struct efs_msg_raft_mkfs_reply last;
+    uint64_t fence_ms, cleanup_ms, total_ms; /* wall time of the stages */
+    uint32_t cleaned;      /* shards the cleanup probe left to per-shard cleanup */
+    uint32_t probe_failed; /* probes that failed (their whole word was cleaned) */
 };
 /* The whole barrier. OK only when the owner reads ACTIVE at the new epoch
  * after FINISH and every cleanup phase; any other result leaves the barrier

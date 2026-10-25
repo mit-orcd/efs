@@ -926,6 +926,13 @@ void efs_client_conn_drop(efs_node_id_t node_id, struct efs_conn *conn)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
+static char g_shutdown_reason[192];
+
+const char *efs_client_shutdown_reason(void)
+{
+    return g_shutdown_reason;
+}
+
 int efs_client_shutdown(void)
 {
     static int done, result;
@@ -945,12 +952,21 @@ int efs_client_shutdown(void)
     /* Settle what this mount can, then revoke its session (D31, always:
      * D42): the leaders drain and collect what is left. Needs the
      * connections. A failure is reported, never a clean completion. */
+    efs_client_stop_phase("settling", 0, 0);
     int settle_rc = efs_client_put_settle();
+    efs_client_stop_phase("revoking", 0, 0);
     int revoke_rc = efs_client_session_end();
     if (flush_rc != EFS_OK || settle_rc != EFS_OK || revoke_rc != EFS_OK) {
         fprintf(stderr, "efs: unmount not clean: flush rc=%d settle rc=%d revoke rc=%d\n",
                 flush_rc, settle_rc, revoke_rc);
         result = flush_rc != EFS_OK ? flush_rc : settle_rc != EFS_OK ? settle_rc : revoke_rc;
+        if (flush_rc != EFS_OK)
+            snprintf(g_shutdown_reason, sizeof(g_shutdown_reason), "data flush rc=%d", flush_rc);
+        else if (settle_rc != EFS_OK)
+            snprintf(g_shutdown_reason, sizeof(g_shutdown_reason), "put settle rc=%d", settle_rc);
+        else
+            snprintf(g_shutdown_reason, sizeof(g_shutdown_reason), "%s",
+                     efs_client_session_end_reason());
     }
 
     /* Stop the staging-table evictor (it takes the table locks; must be

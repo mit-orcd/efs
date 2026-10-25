@@ -87,6 +87,13 @@ static inline int efs_md_is_expiry(uint8_t op)
 #define EFS_MD_CMD_PUT_TICKET_ADMIT 39
 #define EFS_MD_REQ_PUT_TICKET_STATUS 40
 #define EFS_MD_REQ_SESSION_APPEND_NEXT 38 /* RPC only: [uuid:16][epoch:4][shard:4] */
+/* RPC only, never logged (A11 finding 1): [uuid:16][epoch:4][word:4][mask:8],
+ * every masked shard word*64+b in the request's group. With the same
+ * admission and fresh views as the two cleanup phases, reply salt = the
+ * masked shards that still owe lease/lock or append cleanup for epoch; a
+ * shard left out is proven empty for both phases. */
+#define EFS_MD_REQ_SESSION_CLEANUP_PROBE 94
+#define EFS_MD_SESSION_CLEANUP_PROBE_LEN 33u
 #define EFS_MD_REQ_CLOSE_APPEND_NEXT 37 /* RPC only: [ino:8][identity:36] */
 #define EFS_MD_CMD_CLOSE_STEP 36 /* [ino:8][identity:36][phase:1], 46 bytes */
 #define EFS_MD_REQ_SWEEP_NEXT 35 /* RPC only: leader selects exact keys; never log */
@@ -207,8 +214,16 @@ static inline int efs_md_is_expiry(uint8_t op)
 #define EFS_MD_SESS_REGISTER    2
 /* sub=0 is a host ReadIndex GET (not a log command; 10.5c-35a). */
 #define EFS_MD_SESS_BEGIN       3
+/* FENCE_LOC [tag,sub,uuid:16,epoch:4,word:4,mask:8] fences shard
+ * word*64+b for every set bit b; every such shard is in the command's Raft
+ * group. ACK [tag,sub,uuid:16,word:4,mask:8] acknowledges those shards on
+ * the session owner in one record write. One command per bitmap word and
+ * group, not per shard: a revoke of 2,000 touched shards proposed 4,000
+ * one-shard commits (A11 finding 1). */
 #define EFS_MD_SESS_FENCE_LOC   4
 #define EFS_MD_SESS_ACK         5
+#define EFS_MD_SESS_FENCE_LOC_LEN 34u
+#define EFS_MD_SESS_ACK_LEN       30u
 #define EFS_MD_SESS_FINISH      6
 #define EFS_MD_SESS_ESTABLISH   7
 #define EFS_MD_SESS_LEASE_OPEN  8

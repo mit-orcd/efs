@@ -62,7 +62,9 @@ assert 'efs_session_revoke(&rpc,id.client_uuid,&res)' in end and 'session_fenced
 assert 'getenv' not in end, 'clean unmount revoke has no switch'
 assert 'return result;' in sd
 fz = (root / 'src/client/efs_fuse.c').read_text()
-assert 'if (efs_client_shutdown() != EFS_OK)\n        g_unmount_unclean = 1;' in fz
+assert 'if (efs_client_shutdown() != EFS_OK)\n        unmount_unclean(efs_client_shutdown_reason());' in fz
+# A11 finding 1: the verdict reaches the stop record the stop tooling reads.
+assert 'efs_stop_status("failed", 0, 0, ret, why);' in fz and 'efs_stop_status("done", 0, 0, 0, NULL);' in fz
 assert 'if (!ret && g_unmount_unclean) {' in fz and 'ret = 1;' in fz
 mg = (root / 'src/mgmt/efs_mgmt.c').read_text()
 assert 'efs_session_revoke(&rpc, uuid, &res)' in mg, 'efs-mgmt fence uses the same coordinator'
@@ -250,6 +252,7 @@ static void passes(void)
 
 /* ---- the revocation coordinator's transport, applied to the same KV ---- */
 static unsigned rpcs;
+static unsigned probes;
 static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_raft_mkfs_reply *out)
 {
     (void)ctx;
@@ -258,6 +261,24 @@ static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_
     out->leader_hint = 0;
     struct efs_kv *kv = host.kv;
     if (p[1] == EFS_MD_REQ_SESSION_APPEND_NEXT) { assert(n == 26); out->salt = 1; return out->rc = EFS_OK; }
+    if (p[1] == EFS_MD_REQ_SESSION_CLEANUP_PROBE) {
+        /* A11: the masked shards either cleanup phase could still act on,
+         * from the same read-only selections the host probe uses. */
+        assert(n == 1 + EFS_MD_SESSION_CLEANUP_PROBE_LEN);
+        uint32_t epoch = rd32be(p + 18), word = rd32be(p + 22);
+        uint64_t mask = (uint64_t)rd32be(p + 26) << 32 | rd32be(p + 30);
+        for (unsigned b = 0; b < 64; b++) {
+            if (!(mask >> b & 1)) continue;
+            struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];
+            uint32_t found = 0; int idle = 0;
+            int rc = efs_session_cleanup_select(host.kv, word * 64 + b, p + 2, epoch, keys, &found);
+            if (rc == EFS_OK && !found)
+                rc = efs_meta_append_session_idle(host.kv, word * 64 + b, p + 2, epoch, &idle);
+            if (rc != EFS_OK || !idle) out->salt |= 1ull << b;
+        }
+        probes++;
+        return out->rc = EFS_OK;
+    }
     assert(p[1] == EFS_MD_CMD_SESSION && n >= 19);
     const uint8_t *uuid = p + 3;
     uint32_t f1 = n >= 23 ? rd32be(p + 19) : 0, f2 = n >= 27 ? rd32be(p + 23) : 0;
@@ -276,8 +297,19 @@ static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_
     case EFS_MD_SESS_STORAGE_FENCE:
         for (unsigned m = 0; m < MEMBERS; m++) if (floor_[m] < f1) floor_[m] = f1;
         return out->rc = EFS_OK;
-    case EFS_MD_SESS_FENCE_LOC: return out->rc = efs_session_fence_local(kv, f2, uuid, f1);
-    case EFS_MD_SESS_ACK: return out->rc = efs_session_ack_fence(kv, uuid, f1);
+    case EFS_MD_SESS_FENCE_LOC: {
+        /* [epoch][word][mask]: every shard of the mask (A11). */
+        assert(n == 1 + EFS_MD_SESS_FENCE_LOC_LEN);
+        uint64_t mask = (uint64_t)rd32be(p + 27) << 32 | rd32be(p + 31);
+        out->rc = EFS_OK;
+        for (unsigned b = 0; b < 64 && !out->rc; b++)
+            if (mask & (1ull << b)) out->rc = efs_session_fence_local(kv, f2 * 64 + b, uuid, f1);
+        return out->rc;
+    }
+    case EFS_MD_SESS_ACK:
+        assert(n == 1 + EFS_MD_SESS_ACK_LEN);
+        return out->rc = efs_session_ack_fence_word(kv, uuid, f1,
+                                                    (uint64_t)rd32be(p + 23) << 32 | rd32be(p + 27));
     case EFS_MD_SESS_FINISH: return out->rc = efs_session_finish_fence_epoch(kv, uuid, f1);
     case EFS_MD_SESS_LEASE_LOCK_NEXT: out->salt = 1; return out->rc = EFS_OK;
     }
@@ -287,11 +319,12 @@ static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_
 static void revoke(uint8_t uuid0)
 {
     uint8_t uuid[16] = {uuid0};
-    const struct efs_session_rpc rpc = {NULL, fence_submit};
+    const struct efs_session_rpc rpc = {NULL, fence_submit, 0, NULL};
     struct efs_session_revoke_result res;
     int rc = efs_session_revoke(&rpc, uuid, &res);
     if (rc) fprintf(stderr, "revoke rc=%d phase=%s\n", rc, res.phase);
     assert(rc == EFS_OK && res.epoch == 2 && res.state == EFS_SESSION_ACTIVE && res.ntouch);
+    assert(probes); /* cleanup asked the probe first (A11) */
 }
 
 /* ---- fixture ---- */

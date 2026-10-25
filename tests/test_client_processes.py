@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 from unittest.mock import patch
 from contextlib import nullcontext
 root=Path(__file__).resolve().parents[1]
@@ -14,6 +15,7 @@ script=root/'scripts/client_processes.py'
 spec=importlib.util.spec_from_file_location('clients',script)
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 m.NATURAL_RETIRE_S=2  # the refusal cases wait out the full bound; keep it short
+m.STALL_S=3
 
 def refused(text,call,*args,**kw):
     try: call(*args,**kw)
@@ -138,18 +140,38 @@ if not os.path.exists('/dev/fuse'):
 with tempfile.TemporaryDirectory(prefix='efs-process-owner-') as directory:
     mount=str(Path(directory)/'mount')
     endpoint=m.endpoint(mount)
-    code='''import ctypes,os,socket,sys,time
+    record=m.stop_record_path(mount)
+    code='''import ctypes,os,signal,socket,sys,time
 ctypes.CDLL(None).prctl(15,b"efs-fuse",0,0,0)
+def stop_record(phase,step=0,reason="-",rc=0):
+    tmp=sys.argv[4]+".tmp"
+    open(tmp,"w").write(f"pid={os.getpid()} phase={phase} step={step} total=0 rc={rc} reason={reason}\\n")
+    os.rename(tmp,sys.argv[4])
+def finish(*_):
+    stop_record("revoking",1);time.sleep(.3);stop_record("done");os._exit(0)
+signal.signal(signal.SIGTERM,finish)
 if sys.argv[3]!="nofuse": fuse=os.open("/dev/fuse",os.O_RDWR)
 s=socket.socket(socket.AF_UNIX);s.bind(sys.argv[2]);s.listen(4)
-if sys.argv[3]=="closing":
+stop_record("serving")
+if sys.argv[3] in ("closing","progress","stall","failed","norecord","forever"):
  s.close();os.unlink(sys.argv[2])
 print("READY",flush=True)
-time.sleep(.5 if sys.argv[3]=="closing" else 30)
+mode=sys.argv[3]
+if mode=="closing": time.sleep(.5);stop_record("done")
+elif mode=="progress":
+ for step in range(1,12): stop_record("revoking",step);time.sleep(.3)
+ stop_record("done")
+elif mode=="stall": stop_record("revoking",5);time.sleep(30)
+elif mode=="failed": time.sleep(.3);stop_record("failed",reason="revoke rc=-6 phase=cleanup shard=12 touched=765",rc=1);sys.exit(1)
+elif mode=="norecord": os.unlink(sys.argv[4]);time.sleep(.3)
+elif mode=="forever":
+ step=0
+ while True: step+=1;stop_record("draining",step);time.sleep(.2)
+else: time.sleep(30)
 '''
-    for case in ('owned','other','closing','denied','nofuse'):
+    for case in ('owned','other','closing','denied','nofuse','progress','stall','failed','norecord','forever'):
         bound=endpoint+'.other' if case=='other' else endpoint
-        process=subprocess.Popen([sys.executable,'-c',code,mount,bound,case],stdout=subprocess.PIPE,text=True)
+        process=subprocess.Popen([sys.executable,'-c',code,mount,bound,case,record],stdout=subprocess.PIPE,text=True)
         try:
             assert process.stdout.readline().strip()=='READY'
             stamp=m.stat_fields(Path('/proc'),process.pid)[19]
@@ -161,12 +183,28 @@ time.sleep(.5 if sys.argv[3]=="closing" else 30)
                 if case=='owned':
                     assert m.controller(mount)==(process.pid,stamp)
                     assert (process.pid,mount,stamp) in m.clients()
-                    m.retire(mount,process.pid,stamp)
-                    assert process.wait(timeout=2)==-15
+                    assert m.retire(mount,process.pid,stamp)['phase']=='done'
+                    assert process.wait(timeout=2)==0
                 elif case=='closing':
                     assert m.controller(mount) is None
                     m.retire(mount,process.pid,stamp)
                     assert process.wait(timeout=2)==0
+                elif case=='progress':
+                    # 3.3 s of advancing steps outlasts a 1 s stall window.
+                    started=time.monotonic()
+                    assert m.retire(mount,process.pid,stamp,stall_s=1)['phase']=='done'
+                    assert time.monotonic()-started>2.5 and process.wait(timeout=2)==0
+                elif case=='stall':
+                    refused('no progress for 1 s in phase revoking step 5',m.retire,mount,process.pid,stamp,stall_s=1)
+                    assert process.poll() is None, 'a stalled client must not be killed'
+                elif case=='failed':
+                    refused('failed: revoke rc=-6 phase=cleanup shard=12 touched=765 (rc=1)',m.retire,mount,process.pid,stamp)
+                    assert process.wait(timeout=2)==1
+                elif case=='norecord':
+                    refused('exited without a final stop record',m.retire,mount,process.pid,stamp)
+                elif case=='forever':
+                    refused('not finished after 2 s (phase draining',m.retire,mount,process.pid,stamp,stall_s=1,deadline_s=2)
+                    assert process.poll() is None
                 else:
                     if case=='other': assert m.controller(mount) is None
                     else: refused('held by no process' if case=='denied' else 'without a FUSE connection',m.controller,mount)
@@ -176,6 +214,14 @@ time.sleep(.5 if sys.argv[3]=="closing" else 30)
                     assert process.poll() is None
         finally:
             if process.poll() is None: process.terminate();process.wait()
-            try: os.unlink(bound)
-            except FileNotFoundError: pass
-print('client processes: endpoint-owner retirement and refusal PASS')
+            for path in (bound,record):
+                try: os.unlink(path)
+                except FileNotFoundError: pass
+    # A record of another PID, or one that is not a regular file, is not this client's.
+    Path(record).write_text('pid=1 phase=done step=0 total=0 rc=0 reason=-\n')
+    assert m.stop_record(mount,2,os.getuid()) is None and m.stop_record(mount,1,os.getuid())['phase']=='done'
+    assert m.stop_record(mount,1,os.getuid()+1) is None
+    os.unlink(record);os.symlink('/dev/null',record)
+    assert m.stop_record(mount,1,None) is None
+    os.unlink(record)
+print('client processes: endpoint-owner retirement and refusal, stop-record progress, stall, failure and deadline PASS')

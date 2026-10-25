@@ -65,6 +65,9 @@ int efs_session_begin_fence(struct efs_kv *kv,
                             const uint8_t uuid[EFS_OPID_UUID_LEN]);
 int efs_session_ack_fence(struct efs_kv *kv,
                           const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t shard);
+/* ACK of shard word*64+b for every set bit b of mask, one record write. */
+int efs_session_ack_fence_word(struct efs_kv *kv, const uint8_t uuid[EFS_OPID_UUID_LEN],
+                               uint32_t word, uint64_t mask);
 /* New production completion is epoch-bound; a delayed coordinator cannot
  * finish a later barrier. The legacy entry point remains for persisted logs. */
 int efs_session_finish_fence_epoch(struct efs_kv *,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch);

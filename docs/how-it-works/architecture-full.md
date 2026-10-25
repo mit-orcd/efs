@@ -1690,6 +1690,24 @@ fault), 15 NOTRUN host limits (raw: intel1
 `~/efs-artifacts/k36-k37-segments-20261024/`, `SHA256SUMS` `9817196b…b7fd`).
 Live multi-host, RDMA and orcd-mini NOTRUN (parent).
 
+[E2 / A11 finding 1: clean client stop on a busy client](../status/e2-clean-stop-20261024.md):
+**PASS (scoped, one host), branch `claude/devel-e2-clean-stop-a53dcb` on `merge-wave6`, not merged.**
+The unmount's session revoke took about 11 s for 765 touched shards (one
+Raft commit per shard and step, and three directory `fsync`s in every
+FENCE_LOC apply), so `client.sh stop` gave up after its fixed 10 s. Now the
+per-shard work runs 16 wide, FENCE_LOC/ACK cover a bitmap word per entry
+(new encodings: fresh format), the certificate's directories are synced
+once, and a cleanup probe skips empty shards: 2,058 shards 63 s → 11 s, ~870
+shards 8.7 s → 1.5 s. efs-fuse writes its stop phases to a stop record and
+`client_processes.py retire` waits while they advance (30 s stall, 600 s
+total), reporting a stall or a failed revoke with its reason and never
+killing (hook `EFS_FAULT_REVOKE_BEGIN_FILE`). `nuc-private-3` rerun:
+posix-durability (busy mount `touched=747`, stop 2.3 s), e1-manifest and
+e2-client-stop PASS. nuc `make test-all` at `e6b3317fc`: 469 commands, 2 FAIL, both
+failing identically on the base (`test_get_integrity.py`,
+`test_b6_unavailable.py`), 15 NOTRUN host limits (raw: nuc
+`~/efs-artifacts/e2-stop-20261024/`, `SHA256SUMS` `84a5b55d…de857`).
+
 [A11: reduced qualification matrix and the Stage 2 run plan](../status/a11-qualification-matrix-20261024.md):
 **plan PASS (scoped), qualification NOTRUN; merged into devel (`646a43041`).**
 Dimensions left after A6/A7/D42: transport (`tcp`, `rdma`), 3–16 members,
