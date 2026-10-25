@@ -419,7 +419,9 @@ static int packed_short(efs_ino_t ino, const struct efs_chunk_entry *ce,
         answered += pc->tried[i] && pc->rc[i] != EFS_ERR_NET;
         good += pc->tried[i] && pc->rc[i] == EFS_OK;
     }
-    if (!answered && prc == EFS_ERR_NET)
+    /* Two fragments read: the decode or the record check refused (STALE,
+     * DECODE), not a short segment. */
+    if (good >= 2 || (!answered && prc == EFS_ERR_NET))
         return prc;
     uint64_t now = read_peer_now_ms(), id = ce->packed.segment_id;
     if (__atomic_load_n(&said_id, __ATOMIC_RELAXED) != id ||

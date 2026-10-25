@@ -40,7 +40,7 @@ assert 'EFS_READ_VERIFY' not in read and 'read_verify' not in read
 names = ('data_chunk_size', 'data_frag_size', 'frag_ptrs', 'frag_get_thread',
          'read_frag_prof_init', 'fragment_reply_verified', 'get_one_reply',
          'get_pair_start', 'get_two_parallel_run', 'get_two_parallel',
-         'read_peer_now_ms', 'packed_fetch_run', 'packed_fetch', 'read_reprobe_down',
+         'read_peer_now_ms', 'packed_fetch_run', 'packed_fetch', 'packed_short', 'read_reprobe_down',
          'efs_client_decode_placed_chunk_attempts', 'fetch_published_once',
          'get_fragment_run', 'efs_client_get_fragment', 'overlay_one_delta_ex', 'overlay_one_delta',
          'overlay_chunk_deltas_ce')
