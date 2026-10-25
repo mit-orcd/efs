@@ -100,7 +100,7 @@ DEFAULT_FIXTURE = dict(
     k14_phases='1 2 3 7', gc_args='--posix', remote_tmp='/tmp',
     b6_pack_wait_s=600, b6_rebuild_s=900, b6_read_s=30, b6_write_s=90, b6_fsync_s=75,
     a13_members=5, a13_quota='2G', a13_port_offset=100, a13_files=60, a13_threads=4, a13_op_deadline_s=30,
-    a13_join_timeout_s=180, a13_interrupt_s=0.5,
+    a13_join_timeout_s=180, a13_interrupt_s=0.1,
     c5_fence_attempts=12,
     d1_files=400, d1_max_size=8192, d1_pack_wait_s=600, d1_compact_wait_s=300,
     d3_static_files=200, d3_writers=8, d3_queriers=4, d3_load_s=300, d3_io_deadline_s=10,
@@ -1541,11 +1541,13 @@ def parse_status(text):
 
 
 def parse_raft(text):
-    """`efs-mgmt raft-status` of one node -> (node id, {group: {role, voters, joint}}) for hosted groups."""
+    """`efs-mgmt raft-status` of one node -> (node id, {group: {role, voters, joint}}) for the groups
+    it hosts as a voter; a replica retired by a voter change (K33: `retired=1`, its last view kept)
+    is not hosted."""
     m = re.search(r'^node (\d+) root=', text, re.M)
-    groups = {int(gr): dict(role=role, voters=int(v, 16), joint=int(j)) for gr, role, v, j in
+    groups = {int(gr): dict(role=role, voters=int(v, 16), joint=int(j)) for gr, role, v, j, retired in
               re.findall(r'group (\d+) hosted=1 role=(\w+) leader=-?\d+ term=\d+ .*?voters=0x([0-9a-f]+) '
-                         r'joint=(\d+)', text)}
+                         r'joint=(\d+) retired=(\d+)', text) if retired == '0'}
     return (int(m.group(1)) if m else None), groups
 
 
@@ -1623,8 +1625,9 @@ def g_a13(q, g):
         return g.run(label or f'start-n{i + 1}', nodes[i]['host'], node_cmd(nodes[i], 'start', join), 300)
 
     def status(via):
+        # status exits nonzero while a member is down (DEGRADED); the text still lists every member.
         rc, text = q.mgmt(g, 'status', 'status', via, deadline=60)
-        return parse_status(text) if rc == 0 else ({}, None)
+        return parse_status(text) if 'Cluster nodes' in text else ({}, None)
 
     def raft(i):
         rc, text = q.mgmt(g, 'raft-status', 'raft-status', nodes[i]['addr'], deadline=30)
@@ -1715,6 +1718,9 @@ def g_a13(q, g):
                 return FAIL, 'interrupted join of member 4 could not be started/killed: ' + text.strip()[-200:]
             mid, _ = status(nodes[1]['addr'])
             g.fixture['members_after_interrupt'] = len(mid)
+            # A product build interrupts by timing only: say which handoff it hit.
+            interrupted = 'before its commit' if len(mid) == 3 else 'after its commit'
+            g.fixture['interrupted'] = interrupted
             rc, text = start(3, join=nodes[1]['addr'], label='join-n4-retry')
             if rc:
                 return FAIL, 'retried join of member 4 failed: ' + text.strip()[-200:]
@@ -1831,7 +1837,7 @@ def g_a13(q, g):
                 g.run('delete-a13', host, f'test -e {shlex.quote(root)} || exit 0; if command -v edelete >/dev/null; '
                       f'then edelete --force --delete {shlex.quote(root)}; else rm -rf -- {shlex.quote(root)}; fi', 900)
     shared = g.fixture['distinct_hosts'] < len(nodes)
-    return PASS, ('3 -> 4 (interrupted join retried: same member 4; SHARD2 {1,2,3} -> {2,3,4}) -> 5 through '
+    return PASS, (f'3 -> 4 (join killed {interrupted}, retried: same member 4; SHARD2 {{1,2,3}} -> {{2,3,4}}) -> 5 through '
                   f'member 3 with the seed down (member 5 storage only); usable {cap3} -> {cap5} B; '
                   f'{wl["acknowledged"]} load files and every manifest exact' +
                   (f'; members share {g.fixture["distinct_hosts"]} host(s) (A4: regression evidence)' if shared else ''))
@@ -2119,7 +2125,8 @@ def g_d1(q, g):
         time.sleep(5)
     out['compaction'] = dict(start=c0, mutated=c1, compacted=c2)
     repacked, why = wait_packed(manifest2, 'rows-repacked', fx['d1_pack_wait_s'])
-    out['after_compaction'] = {k: repacked.get(k) for k in ('packed', 'unpacked', 'stored_objects', 'segments')}
+    out['after_compaction'] = {k: repacked.get(k) for k in ('packed', 'clipped', 'unpacked', 'stored_objects',
+                                                            'segments')}
     if why:
         return FAIL, why
     why = verify_all(manifest2, 'verify-after-compaction')

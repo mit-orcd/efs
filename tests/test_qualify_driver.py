@@ -257,7 +257,8 @@ try:
                                    4: dict(addr='10.0.0.4:1', up=False)}, dict(used=7, free=93, capacity=100))
     rs = ('node 3 root=1 salt=1 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=2 commit=8 applied=8 '
           'voters=0x7 joint=0 retired=0\n  group 2 hosted=1 role=LEADER leader=2 term=3 commit=9 applied=9 '
-          'voters=0xe joint=1 retired=0\n')
+          'voters=0xe joint=1 retired=0\n  group 5 hosted=1 role=FOLLOWER leader=0 term=1 commit=3 applied=3 '
+          'voters=0x7 joint=1 retired=1\n')
     assert Q.parse_raft(rs) == (3, {0: dict(role='FOLLOWER', voters=7, joint=0), 2: dict(role='LEADER', voters=14, joint=1)})
     assert Q.mask({2, 3, 4}) == 0xe and Q.mask({1, 2, 3}) == 7
     hspec = importlib.util.spec_from_file_location('stage2_helpers', root / 'scripts/stage2_helpers.py')

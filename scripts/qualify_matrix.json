@@ -80,7 +80,7 @@
   "a13_threads": 4,
   "a13_op_deadline_s": 30,
   "a13_join_timeout_s": 180,
-  "a13_interrupt_s": 0.5,
+  "a13_interrupt_s": 0.1,
   "c5_fence_attempts": 12,
   "d1_files": 400,
   "d1_max_size": 8192,

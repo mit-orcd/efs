@@ -457,7 +457,7 @@ def h_small_rows(a):
     """Which manifest files are packed, and the stored objects they need
     (inventory: one segment holds many files)."""
     doc = json.loads(sys.stdin.read())
-    packed, unpacked, objects, segments, bad = 0, [], set(), set(), []
+    packed, clipped, unpacked, objects, segments, bad = 0, 0, [], set(), set(), []
     for f in doc['files']:
         try:
             rows = file_rows(a.mgmt, a.node, f['ino'])
@@ -471,11 +471,15 @@ def h_small_rows(a):
             packed += 1
             for r in rows:
                 segments.add((r['packed']['segment'], r['packed']['gen']))
-                if r['packed']['len'] != f['size']:
-                    bad.append(f'{f["name"]}: packed len {r["packed"]["len"]} != size {f["size"]}')
+                # A logical truncate (D25) clips reads at the file size; a
+                # reference shorter than the size would lose bytes.
+                if r['packed']['len'] < f['size']:
+                    bad.append(f'{f["name"]}: packed len {r["packed"]["len"]} < size {f["size"]}')
+                elif r['packed']['len'] > f['size']:
+                    clipped += 1
         else:
             unpacked.append(f['name'])
-    out = dict(files=len(doc['files']), packed=packed, unpacked=len(unpacked), unpacked_names=unpacked[:20],
+    out = dict(files=len(doc['files']), packed=packed, clipped=clipped, unpacked=len(unpacked), unpacked_names=unpacked[:20],
                stored_objects=len(objects), segments=len(segments), bad=bad[:20], nbad=len(bad))
     return emit(out, not bad)
 
@@ -584,7 +588,7 @@ def h_d3(a):
     stop = time.monotonic() + a.load_s
     lock = threading.Lock()
     res = dict(io_ops=0, io_errors=[], io_over=[], io_lat=[], q_ops=0, q_errors=[], q_over=[], q_lat=[],
-               q_busy=0, generations=set(), files=[])
+               q_busy=0, q_busy_max_s=0.0, generations=set(), files=[])
 
     def writer(w):
         d = base / 'load' / f'w{w}'
@@ -640,20 +644,37 @@ def h_d3(a):
         else:  # bounded refusal: an invalid request is refused at once
             rc, so, err, dt = efs_cmd(peer, 'find', 'x' * 200, timeout=a.query_deadline_s)
             return rc, dt, (rc == 2 and 'exceeds' in err) or f'invalid find rc={rc} {err[-120:]}', None
+        if rc == 1 and 'resource busy' in err:
+            return rc, dt, 'busy', None
         return rc, dt, f'{kind} exit {rc}: {err.strip()[-200:]}', None
 
     def querier(q):
+        # EBUSY while mutations publish is a bounded refusal, never a
+        # partial answer: it is retried, and the same kind must answer
+        # exactly within the query deadline of the first refusal.
         kinds = ('find', 'ls', 'stats', 'invalid')
-        i = q
+        i, refused = q, {}
         while time.monotonic() < stop:
             kind = kinds[i % len(kinds)]
             rc, dt, verdict, doc = check_query(kind)
+            t = time.monotonic()
             with lock:
                 res['q_ops'] += 1
                 res['q_lat'].append(dt)
                 if dt > a.query_deadline_s:
                     res['q_over'].append(dict(kind=kind, seconds=round(dt, 3)))
-                if verdict is not True:
+                if verdict == 'busy':
+                    res['q_busy'] += 1
+                    first = refused.setdefault(kind, t - dt)
+                    if t - first > a.query_deadline_s:
+                        res['q_errors'].append(dict(kind=kind, rc=rc, error=f'refused BUSY for {t - first:.1f} s',
+                                                    at=now()))
+                        refused.pop(kind)
+                    else:
+                        continue  # retry the same kind at once
+                elif verdict is True and kind in refused:
+                    res['q_busy_max_s'] = max(res['q_busy_max_s'], t - refused.pop(kind))
+                if verdict not in (True, 'busy'):
                     res['q_errors'].append(dict(kind=kind, rc=rc, error=str(verdict)[:300], at=now()))
                 if doc:
                     res['generations'].add(doc['snapshot']['generation'])
@@ -668,13 +689,13 @@ def h_d3(a):
     expected = len(res['files'])
     t0 = time.monotonic()
     load = Path(a.peer) / (base / 'load').relative_to(a.mount) if a.peer else base / 'load'
-    converged, last = False, None
+    converged, last, converge_s = False, None, None
     while time.monotonic() - t0 < settle:
         rc, so, err, _ = efs_cmd(load, 'stats', '--json')
         if rc == 0:
             last = json.loads(so)['stats']
             if last['tree_files'] == expected and last['tree_bytes'] == sum(s for _, s, _ in res['files']):
-                converged = True
+                converged, converge_s = True, round(time.monotonic() - t0, 3)
                 break
         time.sleep(1)
     bad = []
@@ -688,10 +709,11 @@ def h_d3(a):
                io_over_deadline=res['io_over'][:20], io_p50_s=pct(res['io_lat'], .5),
                io_p99_s=pct(res['io_lat'], .99), io_max_s=round(max(res['io_lat'] or [0]), 3),
                query_ops=res['q_ops'], query_errors=res['q_errors'][:20], nquery_errors=len(res['q_errors']),
-               query_over_deadline=res['q_over'][:20], query_p50_s=pct(res['q_lat'], .5),
+               query_over_deadline=res['q_over'][:20], query_busy=res['q_busy'],
+               query_busy_max_s=round(res['q_busy_max_s'], 3), query_p50_s=pct(res['q_lat'], .5),
                query_p99_s=pct(res['q_lat'], .99), query_max_s=round(max(res['q_lat'] or [0]), 3),
                generations=len(res['generations']), load_files=expected, load_converged=converged,
-               load_converge_s=round(time.monotonic() - t0, 3), load_stats=last,
+               load_converge_s=converge_s, load_settle_s=settle, load_stats=last,
                payloads_verified=expected - len(bad), bad_payloads=bad[:20])
     ok = (not res['io_errors'] and not res['io_over'] and not res['q_errors'] and not res['q_over']
           and res['q_ops'] > 0 and res['io_ops'] > 0 and converged and not bad and len(res['generations']) > 1)
