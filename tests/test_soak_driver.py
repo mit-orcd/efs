@@ -36,9 +36,14 @@ with tempfile.TemporaryDirectory() as d:
  else:raise AssertionError('create silently replaced existing file')
  expected=s.io(dict(req,op='overwrite',token='new',size=4096))
  assert expected['size']==4096
- trimmed=s.io(dict(req,op='truncate',size=128))
+ trimmed=s.io(dict(req,op='truncate',size=128,token='new'))
  assert trimmed['size']==128
  assert (Path(d)/'x').read_bytes()==s.payload('new',4096)[:128]
+ # The oracle must not bless arbitrary bytes merely because readback hashes.
+ with open(Path(d)/'x','r+b') as f:f.write(b'!')
+ try:s.io(dict(req,op='truncate',size=64,token='new'))
+ except AssertionError:pass
+ else:raise AssertionError('truncate oracle accepted a corrupted retained prefix')
  for w in (0,1):
   for seq in range(3):s.io(dict(mount=d,name='shared',op='append',writer=w,seq=seq))
  acked={'0':list(range(3)),'1':list(range(3))}

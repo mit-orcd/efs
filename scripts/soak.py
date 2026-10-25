@@ -155,7 +155,9 @@ def io(req):
             os.fsync(fd)
         finally:
             os.close(fd)
-        return digest(path)
+        expected = dict(size=req['size'], sha256=hashlib.sha256(payload(req['token'],req['size'])).hexdigest())
+        assert digest(path) == expected, 'truncate changed the retained prefix'
+        return expected
     data = payload(req['token'], req['size'])
     flags = os.O_WRONLY | os.O_CREAT
     if op == 'create':
@@ -189,6 +191,7 @@ class Soak:
         self.mount_mu = [threading.Lock(), threading.Lock()]
         self.stop = threading.Event()
         self.errors, self.manifest, self.appends = [], {}, {0: [], 1: []}
+        self.tokens = {}
         self.procs = set()
         self.events = []
         self.mounts = []
@@ -332,13 +335,14 @@ class Soak:
                     large = slot % 64 == 0
                     size = (1, 4, 16, 64)[(slot // 64) % 4] * 1048576 if large else rng.choice((1, 512, 4096, 8192))
                     if old and seq % 5 == 0:
-                        req = dict(op='truncate', name=name, size=old['size']//2)
+                        req = dict(op='truncate', name=name, size=old['size']//2, token=self.tokens[name])
                     else:
                         req = dict(op='overwrite' if old else 'create', name=name,
                                    token=f'{self.a.seed}:{idx}:{seq}', size=size)
                     got = self.op(idx, req)
                     with self.mu:
                         self.manifest[name] = got
+                        self.tokens[name] = req['token']
                         self.note('ack-fsync', mount=idx, name=name, expected=got, request=req)
                     if seq % 8 == 0:
                         self.op(idx, dict(op='append', name='soak-shared', writer=idx, seq=seq))
