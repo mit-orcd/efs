@@ -16,6 +16,7 @@ static void wr32be_sess(uint8_t *p, uint32_t v)
         p[i] = (uint8_t)(v >> (24 - 8 * i));
 }
 
+
 static int sess_rpc(const struct efs_session_rpc *rpc, const uint8_t *payload, uint32_t plen,
                     struct efs_msg_raft_mkfs_reply *out)
 {
@@ -104,6 +105,12 @@ int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,
     return result;
 }
 
+static void wr64be_sess(uint8_t *p, uint64_t v)
+{
+    for (unsigned i = 0; i < 8; i++)
+        p[i] = (uint8_t)(v >> (56 - 8 * i));
+}
+
 static uint64_t sess_now_ms(void)
 {
     struct timespec now;
@@ -112,18 +119,27 @@ static uint64_t sess_now_ms(void)
     return (uint64_t)now.tv_sec * 1000 + (uint64_t)now.tv_nsec / 1000000;
 }
 
-/* One stage of per-shard work spread over rpc->parallel workers. Shards
- * are independent within a stage (FENCE_LOC+ACK of one shard, or its two
- * cleanup phases); the stages stay ordered by the caller. Each concurrent
- * proposal shares the group's fsync, so a session with hundreds of touched
- * shards no longer pays one commit latency per step (A11 finding 1). The
- * first failure stops new shards; in-flight shards finish. Every step is
- * idempotent, so a partial stage stays resumable by a later fence. */
+/* The touched shards of one bitmap word that share a Raft group: one
+ * FENCE_LOC and one ACK cover them all. */
+struct sess_unit {
+    uint32_t word;
+    uint64_t mask;
+};
+
+/* One stage of work spread over rpc->parallel workers: the fence stage
+ * runs FENCE_LOC+ACK per unit, the cleanup stage both cleanup phases per
+ * shard. Items are independent within a stage; the stages stay ordered by
+ * the caller. Concurrent proposals share their group's fsync, so a session
+ * with thousands of touched shards no longer pays one commit latency per
+ * shard and step (A11 finding 1). The first failure stops new items;
+ * in-flight items finish. Every step is idempotent, so a partial stage
+ * stays resumable by a later fence. */
 struct sess_stage {
     const struct efs_session_rpc *rpc;
     const uint8_t *uuid;
-    const uint32_t *shards;
-    uint32_t n, ssh, epoch, old_epoch;
+    const uint32_t *shards;      /* cleanup items */
+    const struct sess_unit *units; /* fence items */
+    uint32_t n, total, ssh, epoch, old_epoch;
     int cleanup;
     uint64_t deadline;
     const char *label;
@@ -135,32 +151,38 @@ struct sess_stage {
     struct efs_msg_raft_mkfs_reply last;
 };
 
-static int sess_shard_step(struct sess_stage *st, uint32_t sh,
-                           struct efs_msg_raft_mkfs_reply *r, const char **phase)
+static int sess_item_step(struct sess_stage *st, uint32_t i,
+                          struct efs_msg_raft_mkfs_reply *r, const char **phase)
 {
-    uint8_t payload[1 + 26];
+    uint8_t payload[1 + EFS_MD_SESS_FENCE_LOC_LEN];
+    const struct sess_unit *u;
     int rc;
 
     if (st->cleanup) {
+        uint32_t sh = st->shards[i];
         *phase = "cleanup";
         rc = efs_session_cleanup_bounded(st->rpc, st->uuid, st->old_epoch, sh, 0, r);
         if (rc == EFS_OK)
             rc = efs_session_cleanup_bounded(st->rpc, st->uuid, st->old_epoch, sh, 1, r);
         return rc;
     }
+    u = &st->units[i];
     memset(payload, 0, sizeof(payload));
-    sess_pack_hdr(payload, efs_raft_shard_group(sh), EFS_MD_SESS_FENCE_LOC, st->uuid);
+    sess_pack_hdr(payload, efs_raft_shard_group(u->word * 64u + (uint32_t)__builtin_ctzll(u->mask)),
+                  EFS_MD_SESS_FENCE_LOC, st->uuid);
     wr32be_sess(payload + 3 + EFS_OPID_UUID_LEN, st->epoch);
-    wr32be_sess(payload + 3 + EFS_OPID_UUID_LEN + 4, sh);
+    wr32be_sess(payload + 3 + EFS_OPID_UUID_LEN + 4, u->word);
+    wr64be_sess(payload + 3 + EFS_OPID_UUID_LEN + 8, u->mask);
     *phase = "participant-floor";
-    rc = efs_session_storage_barrier(st->rpc, payload, 1 + 26, r);
+    rc = efs_session_storage_barrier(st->rpc, payload, 1 + EFS_MD_SESS_FENCE_LOC_LEN, r);
     if (rc != EFS_OK)
         return rc;
     memset(payload, 0, sizeof(payload));
     sess_pack_hdr(payload, efs_raft_shard_group(st->ssh), EFS_MD_SESS_ACK, st->uuid);
-    wr32be_sess(payload + 3 + EFS_OPID_UUID_LEN, sh);
+    wr32be_sess(payload + 3 + EFS_OPID_UUID_LEN, u->word);
+    wr64be_sess(payload + 3 + EFS_OPID_UUID_LEN + 4, u->mask);
     *phase = "participant-ack";
-    return sess_rpc(st->rpc, payload, 1 + 22, r);
+    return sess_rpc(st->rpc, payload, 1 + EFS_MD_SESS_ACK_LEN, r);
 }
 
 static void *sess_stage_worker(void *arg)
@@ -180,18 +202,20 @@ static void *sess_stage_worker(void *arg)
         pthread_mutex_unlock(&st->mu);
         if (i >= st->n)
             break;
-        rc = sess_shard_step(st, st->shards[i], &r, &phase);
+        rc = sess_item_step(st, i, &r, &phase);
         pthread_mutex_lock(&st->mu);
         st->last = r;
         if (rc != EFS_OK && st->rc == EFS_OK) {
             st->rc = rc;
-            st->failed = st->shards[i];
+            st->failed = st->cleanup ? st->shards[i] : 0;
             st->phase = phase;
         }
-        done = rc == EFS_OK ? ++st->done : st->done;
+        if (rc == EFS_OK)
+            st->done += st->cleanup ? 1u : (uint32_t)__builtin_popcountll(st->units[i].mask);
+        done = st->done;
         pthread_mutex_unlock(&st->mu);
         if (rc == EFS_OK && st->rpc->progress)
-            st->rpc->progress(st->rpc->ctx, st->label, done, st->n);
+            st->rpc->progress(st->rpc->ctx, st->label, done, st->total);
     }
     efs_net_set_deadline_ms(saved);
     return NULL;
@@ -230,8 +254,9 @@ int efs_session_revoke(const struct efs_session_rpc *rpc,
 {
     uint8_t payload[1 + 26];
     struct efs_msg_raft_mkfs_reply r = {.leader_hint = -1};
-    uint32_t ssh, epoch = 0, old_epoch = 0, state = 0, word, ntouch = 0, stopped = 0;
+    uint32_t ssh, epoch = 0, old_epoch = 0, state = 0, word, ntouch = 0, nunit = 0, stopped = 0;
     static __thread uint32_t shards[4096];
+    static __thread struct sess_unit units[2 * (EFS_SESSION_BITMAP / 8u)];
     struct sess_stage stage;
     uint64_t t0 = sess_now_ms(), t_fence = 0, t_cleanup = 0, mark;
     int rc;
@@ -276,6 +301,13 @@ int efs_session_revoke(const struct efs_session_rpc *rpc,
         if (rc != EFS_OK)
             goto out;
         bits = r.salt;
+        /* Odd shards and even shards of a word are in different groups
+         * (efs_raft_shard_group); a FENCE_LOC never mixes them. */
+        for (b = 0; b < 2; b++) {
+            uint64_t mask = bits & (b ? 0x5555555555555555ull : 0xaaaaaaaaaaaaaaaaull);
+            if (mask)
+                units[nunit++] = (struct sess_unit){word, mask};
+        }
         for (b = 0; b < 64; b++) {
             uint32_t sh;
 
@@ -290,7 +322,8 @@ int efs_session_revoke(const struct efs_session_rpc *rpc,
         }
     }
     memset(&stage, 0, sizeof(stage));
-    stage.rpc = rpc; stage.uuid = uuid; stage.shards = shards; stage.n = ntouch;
+    stage.rpc = rpc; stage.uuid = uuid; stage.units = units; stage.n = nunit;
+    stage.total = ntouch;
     stage.ssh = ssh; stage.epoch = epoch; stage.old_epoch = old_epoch;
     stage.label = "fence"; stage.last = r;
     mark = sess_now_ms();
@@ -313,6 +346,7 @@ int efs_session_revoke(const struct efs_session_rpc *rpc,
     phase = "cleanup";
     memset(&stage, 0, sizeof(stage));
     stage.rpc = rpc; stage.uuid = uuid; stage.shards = shards; stage.n = ntouch;
+    stage.total = ntouch;
     stage.ssh = ssh; stage.epoch = epoch; stage.old_epoch = old_epoch;
     stage.cleanup = 1; stage.label = "cleanup"; stage.last = r;
     mark = sess_now_ms();

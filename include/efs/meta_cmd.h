@@ -207,8 +207,16 @@ static inline int efs_md_is_expiry(uint8_t op)
 #define EFS_MD_SESS_REGISTER    2
 /* sub=0 is a host ReadIndex GET (not a log command; 10.5c-35a). */
 #define EFS_MD_SESS_BEGIN       3
+/* FENCE_LOC [tag,sub,uuid:16,epoch:4,word:4,mask:8] fences shard
+ * word*64+b for every set bit b; every such shard is in the command's Raft
+ * group. ACK [tag,sub,uuid:16,word:4,mask:8] acknowledges those shards on
+ * the session owner in one record write. One command per bitmap word and
+ * group, not per shard: a revoke of 2,000 touched shards proposed 4,000
+ * one-shard commits (A11 finding 1). */
 #define EFS_MD_SESS_FENCE_LOC   4
 #define EFS_MD_SESS_ACK         5
+#define EFS_MD_SESS_FENCE_LOC_LEN 34u
+#define EFS_MD_SESS_ACK_LEN       30u
 #define EFS_MD_SESS_FINISH      6
 #define EFS_MD_SESS_ESTABLISH   7
 #define EFS_MD_SESS_LEASE_OPEN  8

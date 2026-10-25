@@ -4,7 +4,8 @@
 Compiles src/common/session_revoke.c against a thread-safe fake owner with
 1500 touched shards and checks, for parallel=16 and parallel=0 (caller only):
 - every shard gets FENCE_LOC before its ACK, every ACK precedes FINISH and
-  every cleanup follows FINISH, each step exactly once per shard;
+  every cleanup follows FINISH, each step exactly once per shard; FENCE_LOC
+  and ACK carry one bitmap word's shards of one Raft group (odd or even);
 - parallel=16 really overlaps steps (more than one in flight) and is faster
   than serial when each step costs a commit latency; parallel=0 never
   leaves the calling thread;
@@ -51,7 +52,7 @@ static void enter(void)
 static void leave(void){pthread_mutex_lock(&mu);inflight--;pthread_mutex_unlock(&mu);}
 static int submit(void *ctx,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs_reply *r)
 {
-    (void)ctx;(void)n;memset(r,0,sizeof(*r));r->leader_hint=-1;
+    (void)ctx;memset(r,0,sizeof(*r));r->leader_hint=-1;
     if(p[1]==EFS_MD_REQ_SESSION_APPEND_NEXT) {
         uint32_t sh=rd32(p+22);enter();pthread_mutex_lock(&mu);
         assert(finished&&touched(sh)&&cleaned[sh][0]==1&&!cleaned[sh][1]);cleaned[sh][1]++;
@@ -69,14 +70,26 @@ static int submit(void *ctx,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs
     }
     case EFS_MD_SESS_STORAGE_FENCE: return r->rc=EFS_OK;
     case EFS_MD_SESS_FENCE_LOC: {
-        uint32_t sh=rd32(p+23);enter();pthread_mutex_lock(&mu);
-        assert(rd32(p+19)==2&&touched(sh)&&!fenced[sh]&&!finished);fenced[sh]++;
+        uint32_t word=rd32(p+23);uint64_t mask=(uint64_t)rd32(p+27)<<32|rd32(p+31);
+        assert(n==1+EFS_MD_SESS_FENCE_LOC_LEN&&rd32(p+19)==2&&mask);
+        /* One group per FENCE_LOC: only odd or only even shards. */
+        assert(!(mask&0x5555555555555555ull)||!(mask&0xaaaaaaaaaaaaaaaaull));
+        enter();pthread_mutex_lock(&mu);int fail=0;
+        for(unsigned b=0;b<64;b++)if(mask>>b&1){
+            uint32_t sh=word*64+b;assert(touched(sh)&&!fenced[sh]&&!finished);fenced[sh]++;
+            fail|=fail_fence&&sh==shard_of(N/2);
+        }
         pthread_mutex_unlock(&mu);leave();
-        return r->rc=fail_fence&&sh==shard_of(N/2)?EFS_ERR_IO:EFS_OK;
+        return r->rc=fail?EFS_ERR_IO:EFS_OK;
     }
     case EFS_MD_SESS_ACK: {
-        uint32_t sh=rd32(p+19);enter();pthread_mutex_lock(&mu);
-        assert(fenced[sh]==1&&!acked[sh]);acked[sh]++;pthread_mutex_unlock(&mu);leave();
+        uint32_t word=rd32(p+19);uint64_t mask=(uint64_t)rd32(p+23)<<32|rd32(p+27);
+        assert(n==1+EFS_MD_SESS_ACK_LEN&&mask);
+        enter();pthread_mutex_lock(&mu);
+        for(unsigned b=0;b<64;b++)if(mask>>b&1){
+            uint32_t sh=word*64+b;assert(fenced[sh]==1&&!acked[sh]);acked[sh]++;
+        }
+        pthread_mutex_unlock(&mu);leave();
         return r->rc=EFS_OK;
     }
     case EFS_MD_SESS_FINISH:

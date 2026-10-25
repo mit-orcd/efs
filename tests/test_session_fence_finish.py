@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/common/session_revoke.c').read_text();a=s.index('int efs_session_revoke(');b=s.index('\n}',a)+2
-stages=s[s.index('static uint64_t sess_now_ms('):s.index('/* Coordinator-driven I23 barrier')]
+stages=s[s.index('static void wr64be_sess('):s.index('/* Coordinator-driven I23 barrier')]
 code=r'''
 #include <efs/protocol.h>
 #include <efs/meta_cmd.h>
@@ -26,7 +26,7 @@ static int owned;
 static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs_reply *r){
  assert(rpc->ctx==&owned);memset(r,0,sizeof(*r));r->leader_hint=1;
  if(p[2]==EFS_MD_SESS_BEGIN){assert(n==19);return 0;}
- if(p[2]==EFS_MD_SESS_ACK){assert(n==23&&read32(p+19)==7&&barriers==2);return 0;}
+ if(p[2]==EFS_MD_SESS_ACK){assert(n==31&&read32(p+19)==0&&!read32(p+23)&&read32(p+27)==1u<<7&&barriers==2);return 0;}
  assert(p[2]==0&&n==23);uint32_t sh=read32(p+19);
  r->salt=sh==31?2|((uint64_t)(finished?EFS_SESSION_ACTIVE:EFS_SESSION_FENCING)<<32):sh==EFS_SESSION_BITS?1u<<7:0;
  return 0;
@@ -34,7 +34,7 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
 int efs_session_storage_barrier(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs_reply *r){
  (void)r;assert(rpc->ctx==&owned&&p[1]==EFS_MD_CMD_SESSION&&p[3]==42&&read32(p+19)==2);barriers++;
  if(barriers==1){assert(p[2]==EFS_MD_SESS_STORAGE_FENCE&&n==23);return 0;}
- if(barriers==2){assert(p[2]==EFS_MD_SESS_FENCE_LOC&&n==27&&read32(p+23)==7);return mode==1?EFS_ERR_BUSY:0;}
+ if(barriers==2){assert(p[2]==EFS_MD_SESS_FENCE_LOC&&n==35&&read32(p+23)==0&&!read32(p+27)&&read32(p+31)==1u<<7);return mode==1?EFS_ERR_BUSY:0;}
  assert(barriers==3&&p[2]==EFS_MD_SESS_FINISH&&n==23);
  if(mode==2)return EFS_ERR_BUSY;
  if(mode==3)return EFS_ERR_STALE;

@@ -278,8 +278,19 @@ static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_
     case EFS_MD_SESS_STORAGE_FENCE:
         for (unsigned m = 0; m < MEMBERS; m++) if (floor_[m] < f1) floor_[m] = f1;
         return out->rc = EFS_OK;
-    case EFS_MD_SESS_FENCE_LOC: return out->rc = efs_session_fence_local(kv, f2, uuid, f1);
-    case EFS_MD_SESS_ACK: return out->rc = efs_session_ack_fence(kv, uuid, f1);
+    case EFS_MD_SESS_FENCE_LOC: {
+        /* [epoch][word][mask]: every shard of the mask (A11). */
+        assert(n == 1 + EFS_MD_SESS_FENCE_LOC_LEN);
+        uint64_t mask = (uint64_t)rd32be(p + 27) << 32 | rd32be(p + 31);
+        out->rc = EFS_OK;
+        for (unsigned b = 0; b < 64 && !out->rc; b++)
+            if (mask & (1ull << b)) out->rc = efs_session_fence_local(kv, f2 * 64 + b, uuid, f1);
+        return out->rc;
+    }
+    case EFS_MD_SESS_ACK:
+        assert(n == 1 + EFS_MD_SESS_ACK_LEN);
+        return out->rc = efs_session_ack_fence_word(kv, uuid, f1,
+                                                    (uint64_t)rd32be(p + 23) << 32 | rd32be(p + 27));
     case EFS_MD_SESS_FINISH: return out->rc = efs_session_finish_fence_epoch(kv, uuid, f1);
     case EFS_MD_SESS_LEASE_LOCK_NEXT: out->salt = 1; return out->rc = EFS_OK;
     }

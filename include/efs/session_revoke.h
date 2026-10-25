@@ -36,7 +36,7 @@ static inline int efs_session_busy_retry_ok(const uint8_t *payload, uint32_t ple
 {
     return plen >= 3 && payload[1] == EFS_MD_CMD_SESSION &&
            ((payload[2] == 0 && plen == 23) ||
-            (payload[2] == EFS_MD_SESS_FENCE_LOC && plen == 27) ||
+            (payload[2] == EFS_MD_SESS_FENCE_LOC && plen == 1 + EFS_MD_SESS_FENCE_LOC_LEN) ||
             (payload[2] == EFS_MD_SESS_STORAGE_FENCE && plen == 23));
 }
 /* Repeat one certificate barrier (STORAGE_FENCE, FENCE_LOC, FINISH) while

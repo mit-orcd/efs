@@ -276,6 +276,30 @@ int efs_session_ack_fence(struct efs_kv *kv,
     return store_rec(kv, uuid, &r);
 }
 
+int efs_session_ack_fence_word(struct efs_kv *kv, const uint8_t uuid[EFS_OPID_UUID_LEN],
+                               uint32_t word, uint64_t mask)
+{
+    struct efs_session_rec r;
+    int rc, changed = 0;
+
+    if (!kv || !uuid || !mask || word >= EFS_SESSION_BITS / 64u)
+        return EFS_ERR_INVAL;
+    rc = load_rec(kv, uuid, &r);
+    if (rc != EFS_OK)
+        return rc;
+    if (r.state != EFS_SESSION_FENCING)
+        return EFS_ERR_INVAL;
+    for (uint32_t b = 0; b < 64; b++) {
+        uint32_t shard = word * 64u + b;
+        if (!(mask & (1ull << b)) || !efs_session_bit_get(r.touched, shard) ||
+            efs_session_bit_get(r.acked, shard))
+            continue;
+        bit_set(r.acked, shard);
+        changed = 1;
+    }
+    return changed ? store_rec(kv, uuid, &r) : EFS_OK;
+}
+
 static int finish_fence(struct efs_kv *kv,
                          const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t expected_epoch)
 {
