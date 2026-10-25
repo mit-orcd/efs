@@ -8,7 +8,16 @@ while `client_processes.py` allowed 10 s after the unmount. A clean stop must
 succeed on a busy client and must stay visibly failed when the stop really
 fails.
 
-**Verdict: PASS (scoped: one host, loopback, TCP).** GATE_SUMMARY
+**Verdict: PASS (scoped: one host, loopback, TCP).** The busy-client clean stop succeeds
+(`nuc-private-3` posix-durability, e1-manifest and e2-client-stop PASS;
+busy mount `touched=747` revoked in 1.9 s and stopped in 2.3 s, where it
+failed after about 11 s before), a stalled or failed revoke makes the stop
+fail with its reason and without a kill, and the revoke of 2,058 touched
+shards takes 10.9 s instead of 63.1 s. nuc `make test-all` (summary runner,
+one job) at `e6b3317fc`: 469 commands, **2 FAIL, both failing identically on
+the base `646a43041`** (`test_get_integrity.py` does not compile;
+`test_b6_unavailable.py` packs a file during the fault, 2 of 2 base runs),
+15 NOTRUN host limits.
 
 - **Branch:** `claude/devel-e2-clean-stop-a53dcb` on `merge-wave6`
   (`646a43041`); not merged, not pushed. Code and tests: `ce4b66a8a` …
@@ -21,7 +30,9 @@ fails.
   the matrix topology `nuc-private-3` (ports 18960–18962, 4 G quota) for the
   qualification gates. The user's nuc cluster (17432–17435) was not touched.
 - **Raw outputs:** nuc `~/efs-artifacts/e2-stop-20261024/` with `SHA256SUMS`
-  (SUMS_LINE).
+  (183 files, 3.5 MB, `SHA256SUMS` sha256 `84a5b55d…de857`): build and
+  timing logs, test reruns, the gate summary, timings and failure logs
+  (`test-all-e6b3317fc/`) and the qualification run (`qual-nuc-private-3/`).
 
 ## Why the revoke took 11 s
 
@@ -173,7 +184,30 @@ revoked), stop "client remains alive … no forced kill attempted"
 
 ## Code gate
 
-TEST_ALL_SECTION
+`EFS_TEST_JOBS=1 bash scripts/make_test_summary.sh` (target `test-all`)
+in `~/e2-stop/fix3`, a `git archive` of `e6b3317fc`; the runner rebuilt
+the tree without `EFS_GIT_ID`, so its binaries report "no git metadata".
+
+`TOTAL 469 FAIL 2 NOTRUN 15 STATUS FAIL (2637s) BUILD 38s`
+
+| Failure | On the base `646a43041` | Cause |
+| --- | --- | --- |
+| `tests/test_get_integrity.py` | fails identically | the generated test defines `read_reprobe_down` twice (merge-wave6) |
+| `tests/test_b6_unavailable.py` | fails identically, 2 of 2 alone | `packed_during_fault` is 1: a small file is packed while node 3 refuses; reruns of this tree alone: same assertion once, a member-status timeout once |
+
+NOTRUN (15): no RDMA device (9), valgrind or `memcheck.h` absent (2),
+`~/git/cluster` absent, the stalled-compactor case that needs `make
+EFS_FAULTS=1`, a K33 UNFORMED race that did not occur in 12 formations, and
+the runner self-test's expected NOTRUN line.
+
+An earlier run with four jobs at `798d78dab` (469 commands, 7 FAIL) found
+four failures of this branch, fixed in `f4e026e73`: the probe's length
+macro used the `EFS_MD_REQ_` prefix (`test_meta_cmd_namespace.py`), the
+mgmt routing test still sent the 27-byte FENCE_LOC, and the stop-phase
+calls in the settle loop linked `node_cache.o` and with it the RDMA stack
+into two tests that link without `-libverbs` (moved to `stop_phase.c`).
+Its `test_b_geometry.py` timeout and `test_d4_progress.py` packer error
+were load from the pool: both PASS alone (369 s and 189 s).
 
 ## Reproduction
 

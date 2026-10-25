@@ -82,7 +82,10 @@ shards 8.7 s → 1.5 s. efs-fuse writes its stop phases to a stop record and
 total), reporting a stall or a failed revoke with its reason and never
 killing (hook `EFS_FAULT_REVOKE_BEGIN_FILE`). `nuc-private-3` rerun:
 posix-durability (busy mount `touched=747`, stop 2.3 s), e1-manifest and
-e2-client-stop PASS. GATE_README
+e2-client-stop PASS. nuc `make test-all` at `e6b3317fc`: 469 commands, 2 FAIL, both
+failing identically on the base (`test_get_integrity.py`,
+`test_b6_unavailable.py`), 15 NOTRUN host limits (raw: nuc
+`~/efs-artifacts/e2-stop-20261024/`, `SHA256SUMS` `84a5b55d…de857`).
 
 [A11: reduced qualification matrix and the Stage 2 run plan](a11-qualification-matrix-20261024.md):
 **plan PASS (scoped), qualification NOTRUN; branch `claude/devel-a11-matrix-2bfd14`, not merged.**
