@@ -549,6 +549,7 @@ struct efs_raft_host {
      * the last stats-dump timestamp (ms). */
     uint64_t obs_wait_timeouts;
     uint64_t obs_wait_extends; /* W159: applied-wait grants renewed on progress */
+    uint64_t obs_wait_timeouts_own; /* W159: of obs_wait_timeouts, waits for an own entry */
     /* Raft frames a peer handler could not queue (inbox full): the frame
      * is lost and the peer still gets its RAFT_REPLY. Counted since Sep 30
      * 2026; before that a drop had no line and no counter. Not gated on
@@ -5569,6 +5570,8 @@ static int host_wait_applied_mode(struct efs_raft_host *h, uint8_t group,
                 __atomic_load_n(&h->apply_progress, __ATOMIC_RELAXED);
             if (efs_apply_wait_expired(&w, now_us_(), progress)) {
                 __atomic_fetch_add(&h->obs_wait_timeouts, 1, __ATOMIC_RELAXED);
+                if (own)
+                    __atomic_fetch_add(&h->obs_wait_timeouts_own, 1, __ATOMIC_RELAXED);
                 return EFS_ERR_BUSY;
             }
             if (w.extensions != before)
@@ -7902,13 +7905,14 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
             pub_p50 = psamp[pc / 2];
         }
         fprintf(stderr,
-                "raft-obs: wait_timeouts=%llu wait_extends=%llu pump_hold_max=%lluus "
+                "raft-obs: wait_timeouts=%llu wait_timeouts_own=%llu wait_extends=%llu pump_hold_max=%lluus "
                 "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
                 "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
                 "arc_miss=%llu arc_term_miss=%llu opid_replay=%llu "
                 "fin_q=%llu fin_done=%llu fin_drop=%llu fin_full=%llu "
                 "pub_p50=%lluus pub_max=%lluus inbox_drop=%llu\n",
                 (unsigned long long)h->obs_wait_timeouts,
+                (unsigned long long)__atomic_load_n(&h->obs_wait_timeouts_own, __ATOMIC_RELAXED),
                 (unsigned long long)__atomic_load_n(&h->obs_wait_extends, __ATOMIC_RELAXED),
                 (unsigned long long)h->obs_pump_hold_max_us,
                 (unsigned long long)h->obs_wait_max_us,
