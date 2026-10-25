@@ -523,7 +523,10 @@ facts for A6, not decisions.
   user pages name different commands or options. Still *proposed*:
   `--writers`, `sync-status`, `pack-compact`, `raft-resync`, `shrink-quota`,
   `raft-step-down`, `data-commit`; F12 (port authentication) waits for the
-  user.
+  user. **Scope change Oct 25 (D43, user):** expiry and `.efs` ship in
+  alpha 1.0; the surface list, guide, POSIX page and release notes say so.
+  At `ec3e09306` expiry is still compiled out of the product build and
+  being re-enabled (audit finding U19).
 - [ ] **S2 — POSIX subset.** Publish the supported operations and every known
   gap (for example, mmap is skipped in the extras suite). Each gap is either
   fixed or justified as a limitation (F4). No gap counts as PASS.

@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """The CLI help and the user docs name the same surface.
 
-Every efs-mgmt command of the product build, every efsd and efs-fuse option
-and every efsd note's setting in include/efs/cli_help.h appears, back-quoted,
+Every efs-mgmt command, every efsd and efs-fuse option in
+include/efs/cli_help.h appears, back-quoted,
 in at least one user-facing page (docs/using, docs/operations/operations.md,
 docs/release-notes, README.md). The other way round, every `efs-mgmt NAME`
 and every `efsd`/`efs-fuse` `--flag` the user docs name is either in the
 help or on the list of removed names the docs describe as refused. The
 help is parsed from the header, so no build is needed and the check stays
-fast (`make test`)."""
+fast (`make test`). The expiry commands count as shipped surface (D43,
+user, Oct 25: expiry is in alpha 1.0), also while cli_help.h still keeps
+them under #if EFS_BUILD_EXPIRY."""
 from pathlib import Path
 import re, sys
 
@@ -19,8 +21,7 @@ PAGES = sorted(root.glob('docs/using/*.md')) + [root / 'docs/operations/operatio
 # Names the docs may mention although the binaries refuse them (with the page
 # that says so). Keep this list short: a removed name belongs here only while
 # a user may still type it.
-REMOVED_MGMT = {'add-node', 'add-storage', 'expiry', 'expiry-policy', 'expiry-status',
-                'expiry-clock', 'expiry-enable', 'expiry-id'}
+REMOVED_MGMT = {'add-node', 'add-storage'}
 REMOVED_FLAGS = {'efsd': {'--direct-io', '--no-direct-io', '--no-persist', '--node-id', '--addr',
                           '--port', '--storage', '--cluster'},
                  'efs-fuse': {'--bench', '--bench-time', '--bench-mib'}}
@@ -28,21 +29,18 @@ REMOVED_FLAGS = {'efsd': {'--direct-io', '--no-direct-io', '--no-persist', '--no
 
 def c_string(text, start):
     """The concatenated C string literal that starts at text[start] == '"',
-    with #if EFS_BUILD_EXPIRY ... #endif pieces dropped (product build)."""
-    out, i, gated = [], start, False
+    #if EFS_BUILD_EXPIRY ... #endif pieces included (D43: expiry ships)."""
+    out, i = [], start
     while i < len(text):
         if text[i] == '"':
             j = i + 1
             while text[j] != '"':
                 j += 2 if text[j] == '\\' else 1
             piece = bytes(text[i + 1:j], 'utf-8').decode('unicode_escape')
-            if not gated:
-                out.append(piece)
+            out.append(piece)
             i = j + 1
-        elif text.startswith('#if EFS_BUILD_EXPIRY', i):
-            gated = True; i = text.index('\n', i)
-        elif text.startswith('#endif', i):
-            gated = False; i = text.index('\n', i)
+        elif text.startswith('#if EFS_BUILD_EXPIRY', i) or text.startswith('#endif', i):
+            i = text.index('\n', i)
         elif text[i] in ' \t\r\n':
             i += 1
         else:
@@ -79,7 +77,8 @@ mgmt_cmds = set()
 for line in field(mgmt, 'commands').splitlines():
     mgmt_cmds.update(n.strip() for n in re.split(r'\s{2,}', line.strip())[0].split(','))
 assert {'--join', '--listen', '--quota'} <= efsd_opts and {'--stop', '--resume'} <= fuse_opts, (efsd_opts, fuse_opts)
-assert {'status', 'mkfs', 'raft-mkfs', 'raft-resync', 'sync-status'} <= mgmt_cmds and not (mgmt_cmds & REMOVED_MGMT), mgmt_cmds
+assert {'status', 'mkfs', 'raft-mkfs', 'raft-resync', 'sync-status', 'expiry-policy'} <= mgmt_cmds \
+    and not (mgmt_cmds & REMOVED_MGMT), mgmt_cmds
 
 docs = {p: p.read_text() for p in PAGES}
 alltext = '\n'.join(docs.values())

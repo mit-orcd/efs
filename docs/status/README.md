@@ -25,7 +25,8 @@ The guide, surface list, POSIX subset, release notes, operations, power-user, qu
 restart after a forced, failed-barrier or killed daemon, `.efs` by policy only, `O_DIRECT` only).
 New `make test` check `tests/test_cli_docs.py`: every `efs-mgmt` command and `efsd`/`efs-fuse`
 option in `cli_help.h` is named in the user docs, and the docs name no command or flag the help
-lacks. Open for the user: U4, a clean client stop fails at the session revoke
+lacks. The pages follow D43 (expiry and `.efs` ship in alpha 1.0); at this base expiry is still
+compiled out and being re-enabled (U19). Open for the user: U4, a clean client stop fails at the session revoke
 (`storage-fence`, `EFS_ERR_BUSY`) while any member is down; S4/W122 and F12 unchanged.
 
 [Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](a11-qualification-matrix-20261024.md):

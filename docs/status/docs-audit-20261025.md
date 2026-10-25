@@ -9,9 +9,11 @@ the code), and add a `make test` check that keeps the CLI help and the
 user docs from drifting apart again.
 
 **Verdict: docs updated; docs gate PASS; nuc `make test-all` GATE_RESULT.**
-No product code was changed. Two findings need the user: U4 (a clean
-client stop fails while a member is down) and the unchanged S4/W122 and
-F12 decisions. Everything else below is fixed in the docs or is a
+No product code was changed. The pages follow the user's Oct 25 scope
+change D43 (expiry and `.efs` ship in alpha 1.0); at this base expiry is
+still compiled out and being re-enabled (U19). Two findings need the user:
+U4 (a clean client stop fails while a member is down) and the unchanged
+S4/W122 and F12 decisions. Everything else below is fixed in the docs or is a
 cosmetic script behavior recorded for a later change.
 
 ## Scope
@@ -77,6 +79,7 @@ are recorded and left to the user; the docs describe the current behavior.
 | U15 | Script (cosmetic) | `server.sh` prints `line 244: …/log/efsd.log: No such file or directory` on the first start of a fresh root (the log-mark `wc` runs before the daemon creates the log); `server.sh stop ADDR:PORT` on a host with several daemons prints `Stale daemon identity for PID N; process retained` for every other local daemon connected to that port (they hold a socket on it), which reads as if something went wrong; `client.sh` silently drops a leftover export-name word that `efs-fuse` itself refuses | `scripts/server.sh` 244, `kill_port_holder`; `scripts/client.sh` | Not changed (scripts are product surface; documentation only). `operations.md` and the guide explain the two messages |
 | U16 | Docs | `power-user.md` said `efs-mgmt` has `status`, `mkfs`, `shrink-quota`, `raft-status`, `raft-resync`, `raft-change`, `raft-dir` and the `raft-<op>`s; it omitted `version`, `io-stats`, `gc-status`, `sync-status`, `data-commit`, `pack-compact`, `commands-policy`, `raft-step-down`, `raft-session` | `cli_help.h` | Fixed |
 | U17 | Docs | The release notes' summary paragraph described alpha without K34–K37, D42's `O_DIRECT`-only and policy-only `.efs`; the open-items paragraph named `a2326a369` and proposed K34 | D42, K rows | Fixed |
+| U19 | **Scope change / code** | The user decided on Oct 25 (D43, recorded in the [decision register](decisions.md) by the parent session) that expiry and `.efs` ship in alpha 1.0, reversing D42's "expiry out of alpha". The Oct 24 pages listed expiry as removed or out (surface list, POSIX page, release notes L20 and L26, `efs-commands.md`). At `ec3e09306` the product build still compiles expiry out: `efs-mgmt expiry-status` answers `Unknown command: expiry-status` (exit 1), the `expiry-*` commands exist only in a `make EFS_BUILD_EXPIRY=1` tree, and the `.efs` commands print `expiry unavailable`. Another session is re-enabling it | `cli_help.h` and `efs_mgmt.c` under `#if EFS_BUILD_EXPIRY`, `Makefile` `EFS_BUILD_EXPIRY`, `src/client/commands/command.py` | Docs fixed for D43: expiry is in (governed by `efs-mgmt expiry-policy`), every page notes that this base compiles it out and that it is being re-enabled; the guide has an Expiry section taken from the expiry build's help text, not from a run; L20 says the W90 lifecycle gates must pass before the release claims it. The drift check now counts the six `expiry-*` commands as shipped surface. Not run here: no expiry build was exercised |
 | U18 | Verified, no change | Everything else checked held: every `efsd`, `efs-fuse` and `efs-mgmt` option and command in the help exists and behaves as the pages say; every removed option, setting and command is refused with the documented message (`--direct-io`, `--no-direct-io`, `--no-persist`, `--node-id`, `EFS_MD_RAFT_N`, `EFS_COMMANDS`, `EFS_READ_VERIFY`, `EFS_FUSE_EXPORT`, `EFS_GC_DISABLE`, `add-node`, `add-storage`, `efs-fuse --bench`, the export label, `mkfs` with a label); a tmpfs root is refused for `O_DIRECT`; `0.0.0.0` is refused; the quick start works as written; `mkfs` repeats keep the salt; `shrink-quota`, `raft-step-down`, `raft-resync` (leader refuses, follower accepts), `commands-policy set` with a stale version, `pack-compact 0`, `data-commit` behave as documented; one node down: writes, `fsync`, `fdatasync` and reads continue, status as documented, rebuild on return (33 chunks in 12 s, 1,515 in 84 s); node addition online, `g2 target voters 0xe` by joint consensus; a changed root set is refused (`1 of 2 roots are new; a node's storage roots are fixed when its store is created`); another endpoint is refused (`a member keeps its endpoint`); a joiner restarts without the seed; the whole cluster restarts in order and serves every file exact; POSIX case counts are 218 core, 5 extras, 68 two-client, 27 durability; the quota rule (20 %, at least 1 GiB, 7/8), 55 s stop deadline, 60 s drain, 30 s/600 s stop record bounds, 30 s down mark after four failures, 256 rebuilds per pass, 24 roots, 64 writers (default 8) match the code | — | — |
 
 ## Drift check
@@ -93,7 +96,10 @@ span of those pages must be in the help or on the short list of removed
 names the pages describe as refused (and the test checks that such a page
 says "removed" or "refused" next to the name). At `ec3e09306` with the
 Oct 24 docs it failed on the eleven `raft-<op>` commands of U10; with this
-branch it passes (33 commands, 11 efsd and 9 efs-fuse options, 10 pages).
+branch it passes (39 commands with the six `expiry-*` commands of D43,
+11 efsd and 9 efs-fuse options, 10 pages). The `#if EFS_BUILD_EXPIRY`
+pieces of `cli_help.h` are read as shipped surface, so the test needs no
+change when the re-enabling removes the switch.
 `tests/test_make_test_recipe.py` accepts the new command.
 
 ## What the user decides

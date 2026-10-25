@@ -211,6 +211,23 @@ the next session cleanup retires them. Whether alpha keeps this as a
 limitation or changes it is an open user decision
 ([audit finding U4](../status/docs-audit-20261025.md)).
 
+### Expiry
+
+Scratch expiry ships in alpha 1.0 (D43, user, Oct 25; D42's exclusion is
+reversed). A root gets a policy with
+`efs-mgmt expiry-policy NODE:PORT set ROOT GENERATION EXPECTED_REV
+--expire-after 24h [--renewal-limit DURATION] --flags 1` (operator UID 0;
+`get ROOT GENERATION` reads it); new files under it get a deadline that far
+from creation, `efs-mgmt expiry NODE:PORT show PATH` shows a path's
+deadline and `renew` extends it up to the renewal limit; reading or
+writing does not renew; `expiry-status` shows the worker, its backlog and
+its removals, `expiry-clock` the node clock health. A changed
+`--expire-after` affects only future files. **At `ec3e09306` the product
+build compiles expiry out** (`efs-mgmt expiry-status` answers `Unknown
+command`); it is being re-enabled, and this section follows the help text
+of an `EFS_BUILD_EXPIRY=1` build, not a run
+([finding U19](../status/docs-audit-20261025.md)).
+
 ### `df`
 
 `df /mnt/efs` reports the logical 2+1 capacity of the members that are up:

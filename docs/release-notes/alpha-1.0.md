@@ -28,6 +28,9 @@ succeeds once two fragments of every stripe are proven durable and the
 third is marked for rebuild (K35); a member that stops in order
 acknowledges no fragment it still receives (K34). Fragment I/O is
 `O_DIRECT` only and `.efs` follows the cluster commands-policy (D42).
+Scratch expiry ships too (D43): files under an `efs-mgmt expiry-policy`
+get a deadline, can be renewed and are removed when it passes; at this
+base it is still compiled out and being re-enabled (L20).
 
 ## Limitations
 
@@ -67,13 +70,13 @@ acknowledges no fragment it still receives (K34). Fragment I/O is
 
 | ID | Limitation | Trigger | What the user sees | Reference |
 | --- | --- | --- | --- | --- |
-| L20 | Expiry disabled, containers removed | `EFS_EXPIRY=1`, `efs-mgmt expiry*`, `.efs` expiry options | Outside the alpha surface; the commands reject expiry options | D33/W90, D37, A2 |
+| L20 | Containers removed; expiry ships but is not yet re-enabled at this base | `efs-mgmt expiry*`, an expiry policy | Containers: none. Expiry is in alpha 1.0 (D43, reversing D42): scratch deadlines under `efs-mgmt expiry-policy`, renewal, and removal by the expiry worker. At `ec3e09306` the product build compiles it out (`Unknown command: expiry-status`) and the `.efs` commands report `expiry unavailable`; it is being re-enabled. Its lifecycle, clock-safety and restart gates (W90) must pass before the release claims it | D33/W90, D37, D43; [finding U19](../status/docs-audit-20261025.md) |
 | L21 | One export per cluster | Any | No export label, no second export | `efs-fuse`, `mkfs` |
 | L22 | No authentication on the cluster ports, *proposed* (user decision open) | Any host that reaches a daemon port | Can run every `efs-mgmt` command, including mutating ones; keep the network trusted | Finding F12 |
 | L23 | Same build everywhere; no upgrade in place | A peer or client of another build; a format change | The connection is refused; a format change needs a fresh format, no migration and no downgrade | AGENTS.md (no backward compatibility) |
 | L24 | No effective-settings listing, unless W122 enters alpha (user decision open) | An operator wants every effective value | Only the startup log and the status commands show settings; the [A6 inventory](../status/a6-settings-inventory-20261024.md) lists every setting and its default | S4, W122 |
 | L25 | Cross-host RDMA not qualified | RDMA between hosts | Recorded RDMA runs use one host's devices or software RXE | W106, A2 |
-| L26 | The alpha profile is the only behavior (A7, D42) | — | Fragment I/O is always `O_DIRECT`, `.efs` follows the cluster commands-policy, expiry is compiled out; removed settings are refused at startup | Findings F7, F8 (closed by A7) |
+| L26 | The alpha profile is the only behavior (A7, D42) | — | Fragment I/O is always `O_DIRECT`, `.efs` follows the cluster commands-policy, expiry follows `efs-mgmt expiry-policy` (D43; compiled out at `ec3e09306`, being re-enabled); removed settings are refused at startup | Findings F7, F8 (closed by A7) |
 
 ## Open items that are not yet limitations
 

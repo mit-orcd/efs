@@ -19,7 +19,7 @@ fix; none counts as PASS.
 | Extras | `tests/posix/posix_extras.py` (`--suite extras`) | 5 | mmap and the `.efs` commands |
 | Two-client | `tests/posix/posix_2client.py` | 68 | Visibility, races, locks and overlapping writes across two mounts on different hosts |
 | Durability | `tests/posix/posix_persist.py` | 27 | Prepare, orderly unmount and remount, then verify bytes and metadata |
-| Expiry | `tests/posix/posix_expiry.py` | — | Expiry lifecycle on a private fixture; expiry is out of alpha |
+| Expiry | `tests/posix/posix_expiry.py` (`--suite expiry`) | — | Expiry lifecycle on a private four-node fixture, then core, two-client and physical-GC checks; expiry is in alpha (D43), the suite needs an expiry build ([how to run](../status/posix-expiry-suite.md)); no run on `ec3e09306` |
 
 The most recent recorded runs (both before the base commit; nothing has been
 recorded on `ec3e09306` itself, and the C1 runs on 3, 4 and more than 4
@@ -123,5 +123,7 @@ Each line is covered by the named suite cases, all PASS in both runs above.
 | P14 | Concurrent `O_APPEND` record loss (K9/W87) was never reproduced and has no root cause | No known symptom; the item reopens if a loss is seen | `concurrent_appends`, `peer_concurrent_append` PASS | Closed without resolution (D41) |
 | P15 | `fsync` with a member down is degraded | `fsync`/`fdatasync` succeed when two fragments of every stripe the file's writes touched are proven durable and a third that is not is marked degraded; `EIO` with two of a stripe's nodes down or unproven. A member back from an unclean stop proves nothing until its verified recovery (K36) is done, which on a small store takes seconds | `tests/test_data_commit.c`, `tests/test_k35_fsync_degraded.py` (K35), `tests/test_k36_recovery.py` (K36); not in the POSIX suites | Limitation, *proposed* (findings F22, F23) |
 
-Not POSIX deviations, but limits a user meets: no expiry (rejected by the
-commands), no NFS re-export, no macOS client, one export per cluster.
+Not POSIX deviations, but limits a user meets: no NFS re-export, no macOS
+client, one export per cluster. Expiry ships in alpha (D43): a file under
+an expiry policy is removed when its deadline passes; at `ec3e09306` the
+product build still compiles expiry out ([finding U19](../status/docs-audit-20261025.md)).
