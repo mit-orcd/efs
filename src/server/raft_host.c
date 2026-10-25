@@ -243,7 +243,6 @@ struct host_group {
     uint8_t group;
     uint8_t hosted;
     uint32_t voters;
-    uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
     uint64_t applied_saved_us; /* checkpoint owner: last recovery-prefix save */
     uint64_t cursor_durable;   /* atomic: validated KV cursor after a successful barrier */
@@ -8787,11 +8786,9 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
      * no voters and nothing is hosted; host_learn_membership attaches it. */
     if (group != EFS_RAFT_GROUP_SHARD && !__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
         __atomic_store_n(&h->g[gi].voters, 0, __ATOMIC_RELEASE);
-        h->g[gi].desired = 0;
         return EFS_OK;
     }
     want = load_desired(h, group, target);
-    h->g[gi].desired = want;
     if (!hosts_group(h->raft_id, boot) && !hosts_group(h->raft_id, target) &&
         !hosts_group(h->raft_id, want))
         return EFS_OK;
@@ -8846,8 +8843,6 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
         return rc;
     pthread_mutex_lock(&h->mu);
     s = group_slot(h, group);
-    if (s)
-        s->desired = voters;
     if (s && !s->r && hosts_group(h->raft_id, voters))
         rc = attach_replica(h, (int)(s - h->g), host_boot_voters(h, group));
     pthread_mutex_unlock(&h->mu);
@@ -8976,7 +8971,6 @@ static int host_learn_membership(struct efs_raft_host *h, const struct efs_membe
     boot = host_boot_voters(h, EFS_RAFT_GROUP_SHARD2);
     target = group_voters(EFS_RAFT_GROUP_SHARD2, (int)m->count);
     want = load_desired(h, EFS_RAFT_GROUP_SHARD2, target);
-    g2->desired = want;
     if (!g2->r)
         __atomic_store_n(&g2->voters, target, __ATOMIC_RELEASE);
     if (!g2->r && (hosts_group(h->raft_id, boot) || hosts_group(h->raft_id, target) ||
@@ -16031,18 +16025,6 @@ uint64_t server_raft_host_group_commit(uint8_t group)
     if (r) c = efs_raft_commit(r);
     pthread_mutex_unlock(&h->mu);
     return c;
-}
-/* Voters of a hosted group as a node mask (bit id-1, as Raft id + 1). */
-uint32_t server_raft_host_group_voters(uint8_t group)
-{
-    struct efs_raft_host *h = g_host;
-    uint32_t v = 0;
-    if (!h || !__atomic_load_n(&h->running, __ATOMIC_ACQUIRE)) return 0;
-    pthread_mutex_lock(&h->mu);
-    struct efs_raft *r = group_raft(h, group);
-    if (r) v = efs_raft_voters(r);
-    pthread_mutex_unlock(&h->mu);
-    return v;
 }
 /* K37: 0 once the GC loop is stopping (the segment rebuild pass ends early,
  * as W154's does, so shutdown never waits on its proposals). */

@@ -414,6 +414,7 @@ test-bins: all $(TEST_SPECIAL_BINS)
 # under a second; about a minute in all). Slow tests belong in test-long.
 test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_env_inventory.py
+	python3 tests/test_leader_placement.py
 	python3 tests/test_env_removed.py
 	python3 tests/test_cli_surface.py
 	python3 tests/test_direct_io_required.py

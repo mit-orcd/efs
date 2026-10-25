@@ -6,7 +6,7 @@
 #   two-client  posix_2client.py --local on two efs-fuse mounts of one
 #               private 3-daemon RDMA cluster (17681-17683), minimum age 0;
 #   persist     posix_persist.py prepare, 30 s for packing, remount, verify;
-#   gc          tests/live/gc_reclamation.py --mode direct --posix (owned
+#   gc          tests/live/gc_reclamation.py --posix (owned
 #               four-node TCP fixture), minimum age 2 s;
 #   expiry      posix_suite.py --suite expiry (owned four-node fixture),
 #               minimum age 2 s.
@@ -30,7 +30,7 @@ python3 "$T/posix/posix_persist.py" $R/mnt --phase verify > "$OUT/persist.out" 2
 echo "persist rc=$? $(tail -1 "$OUT/persist.out") packed=$(grep -h 'packed_total=' $R/logs/efsd-n*.log | tail -1 | sed 's/.*packed_total=//')"
 "$HERE/w125_p0_cluster.sh" stop "$REL" $R 17680 >/dev/null 2>&1; rm -rf $R
 rm -rf /tmp/w125-gc-a /tmp/w125-gc-b; mkdir -p /tmp/w125-gc-a /tmp/w125-gc-b
-(cd "$(dirname "$HERE")" && EFS_PACK_MIN_AGE_MS=2000 python3 tests/live/gc_reclamation.py --mode direct --posix \
+(cd "$(dirname "$HERE")" && EFS_PACK_MIN_AGE_MS=2000 python3 tests/live/gc_reclamation.py --posix \
    --root /tmp/w125-gc-a --root /tmp/w125-gc-b > "$OUT/gc.out" 2>&1)
 echo "gc rc=$? $(tail -1 "$OUT/gc.out")"
 rm -rf /tmp/w125-exp-*; mkdir -p /tmp/w125-exp-a /tmp/w125-exp-b /tmp/w125-exp-mnt /tmp/w125-exp-peer

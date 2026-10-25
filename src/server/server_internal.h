@@ -780,7 +780,6 @@ int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit
 struct efs_kv *server_raft_host_kv(void);
 int server_raft_host_gc_running(void);
 uint64_t server_raft_host_group_commit(uint8_t group);
-uint32_t server_raft_host_group_voters(uint8_t group);
 /* Propose a packer command to its group and wait for this replica's apply
  * verdict. */
 int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t len);

@@ -284,7 +284,7 @@ def transport_of(pid, log_path, expected="tcp", log_offset=0):
 
 
 class Server(object):
-    def __init__(self, node_id, port, storage, join, binary, mode="direct", transport="tcp", device=None):
+    def __init__(self, node_id, port, storage, join, binary, transport="tcp", device=None):
         assert_safe_port(port)
         assert_safe_storage(storage)
         self.node_id = node_id
@@ -292,9 +292,6 @@ class Server(object):
         self.storage = storage
         self.join = join
         self.binary = binary
-        if mode != "direct":
-            raise ValueError("invalid storage I/O mode (O_DIRECT only, D42)")
-        self.mode = mode
         self.transport = transport
         self.device = device
         self.proc = None
@@ -359,10 +356,9 @@ def kill_owned_one(proc):
 
 
 class Cluster(object):
-    def __init__(self, work, binary_dir, mode="direct", transport="tcp", device=None):
+    def __init__(self, work, binary_dir, transport="tcp", device=None):
         self.work = work
         self.binary_dir = binary_dir
-        self.mode = mode
         self.transport = transport
         self.device = device
         self.servers = []
@@ -393,7 +389,7 @@ class Cluster(object):
         for i, port in enumerate(ports):
             storage = os.path.join(self.work, "s%d" % (i + 1))
             join = None if i == 0 else seed
-            srv = Server(i + 1, port, storage, join, self.efsd(), self.mode, self.transport, self.device)
+            srv = Server(i + 1, port, storage, join, self.efsd(), self.transport, self.device)
             self.servers.append(srv)
             srv.start()
         for srv in self.servers:
@@ -954,12 +950,12 @@ def case_name(fn):
     return getattr(fn, "__name__", None) or fn.func.__name__
 
 
-def integrate(work, binary_dir, seed, mode="direct", transport="tcp", device=None):
+def integrate(work, binary_dir, seed, transport="tcp", device=None):
     signal.signal(signal.SIGTERM, _on_signal)
     signal.signal(signal.SIGINT, _on_signal)
     results = []
     for fixture, cases in fixtures():
-        cluster = Cluster(os.path.join(work, fixture), binary_dir, mode, transport, device)
+        cluster = Cluster(os.path.join(work, fixture), binary_dir, transport, device)
         try:
             cluster.start()
             build = ""
@@ -1053,11 +1049,6 @@ def self_test():
     argv = Server(1, 25000, "/tmp/efs-fault-mode-test", None, "/tmp/efsd").argv()
     if any("direct-io" in a for a in argv):
         fails.append("integration daemons pass a removed I/O flag")
-    try:
-        Server(1, 25000, "/tmp/efs-fault-mode-test", None, "/tmp/efsd", "buffered")
-        fails.append("buffered I/O mode accepted")
-    except ValueError:
-        pass
     data_a = pattern(7, "a", 64)
     data_b = pattern(7, "b", 64)
     if data_a == data_b or 0 in data_a:
@@ -1154,8 +1145,6 @@ def main(argv):
     parser.add_argument("--out", default="")
     parser.add_argument("--integrate", action="store_true",
                         help="start a private 4-server cluster")
-    parser.add_argument("--mode", choices=("direct",), default="direct",
-                        help="private integration daemon storage mode (O_DIRECT only, D42)")
     parser.add_argument("--transport", choices=("tcp", "rdma"), default="tcp")
     parser.add_argument("--rdma-device", default=None)
     parser.add_argument("--seed", type=int, default=101)
@@ -1177,9 +1166,8 @@ def main(argv):
             "transport": args.transport,
             "rdma_device": args.rdma_device,
             "integrate": args.integrate,
-            "mode": args.mode,
             "replay_argv": ["bash", "tests/faults/run_faults.sh", args.out,
-                            "--mode", args.mode, "--transport", args.transport,
+                            "--transport", args.transport,
                             "--seed", str(args.seed)]
                            + (["--rdma-device", args.rdma_device] if args.rdma_device else [])
                            + (["--integrate"] if args.integrate else []),
@@ -1190,7 +1178,7 @@ def main(argv):
         rows.extend(run_sim(sim_bin, fp))
         if args.integrate:
             part = integrate(os.path.join(args.out, "cluster"),
-                             os.environ.get("EFS_FAULT_BIN", ROOT), args.seed, args.mode, args.transport, args.rdma_device)
+                             os.environ.get("EFS_FAULT_BIN", ROOT), args.seed, args.transport, args.rdma_device)
             for item in part:
                 fp.write(json.dumps(item, sort_keys=True) + "\n")
                 fp.flush()

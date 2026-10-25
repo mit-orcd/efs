@@ -92,13 +92,6 @@ struct efs_client {
     pthread_mutex_t idx_mu;   /* inode/name/chunk index mutations */
     int dir_locks_ready;
 
-    /* Inode allocation namespace. When non-zero, new inodes are allocated as
-     * (ino_namespace | counter) so that concurrent clients never assign the
-     * same inode number to different files (which would collide chunk
-     * placements and corrupt data). Zero means allocate sequentially from
-     * export.next_ino (single-client / test behaviour). */
-    uint64_t ino_namespace;
-    uint64_t ino_counter;
     /* Per-mount token for cluster flock / open-hold (not a POSIX lock owner). */
     uint64_t flock_token;
     /* I16 namespace/append op-id (§7.9): per-mount identity, one monotonic seq
@@ -178,14 +171,8 @@ struct efs_client {
     struct timespec meta_flush_ready; /* first kick's fixed coalescing boundary */
     int meta_flush_stop;
     int meta_flush_started;
-    int meta_flush_force; /* next flush does a full serialize */
     int last_err;          /* EFS_ERR_* from the last mutating client op */
     int write_readonly;    /* mount is read-only (no write path enabled) */
-
-    /* Phase 2b: sticky flag set when a dirty-report RPC fails (so fsync can
-     * report EIO). The dirty set itself is the pending-report queue (reused
-     * from the crash-safe rebase); report_dirty clears it on success. */
-    int report_flush_failed;
 };
 
 struct efs_report_pressure {
@@ -533,8 +520,8 @@ int efs_client_lookup(const char *path, struct efs_inode *out);
 int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
                             uint64_t atime, uint32_t atime_nsec);
 
-/* Client inode-number namespace so concurrent writers do not collide. */
-void efs_client_setup_ino_namespace(void);
+/* Per-mount flock/open-hold token (the server allocates inode numbers). */
+void efs_client_setup_mount_token(void);
 
 /* Record a local metadata mutation. With meta_batch==0 this replicates
  * immediately (test / C-API behaviour). With meta_batch!=0 it coalesces

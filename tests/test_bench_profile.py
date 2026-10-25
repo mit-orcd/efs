@@ -75,7 +75,7 @@ class ProfileTests(unittest.TestCase):
                                       '--hash-sizes', '64K', '--io-sizes', '64K', '--qds', '1', '--writers', '0'])
         cases = bench.cases_for(a, 4)
         self.assertLess([c['name'] for c in cases].index('store-prime'), [c['name'] for c in cases].index('read'))
-        self.assertEqual(len(cases), 22)
+        self.assertEqual(len(cases), 21)  # one data case: the store is O_DIRECT only (D42)
         a.seed = None
         with self.assertRaises(ValueError):
             bench.cases_for(a, 4)
@@ -84,9 +84,11 @@ class ProfileTests(unittest.TestCase):
         a = bench.parser().parse_args(['--modes', 'data', '--qds', '1', '--writers', '2',
                                       '--data-rw', 'split', '--data-full-paths', '--writer-stats'])
         cases = bench.cases_for(a, 4)
-        self.assertEqual(len(cases), 4)
+        self.assertEqual(len(cases), 2)
         self.assertEqual({c['args'][c['args'].index('--rw') + 1] for c in cases}, {'read', 'write'})
         for case in cases:
+            # D42: the store bench takes no I/O mode flag (it refuses both).
+            self.assertFalse({'--direct-io', '--no-direct-io'} & set(case['args']))
             self.assertIn('--full-paths', case['args'])
             self.assertIn('--writer-stats', case['args'])
 

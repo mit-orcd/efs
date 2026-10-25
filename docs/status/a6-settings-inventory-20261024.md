@@ -501,10 +501,11 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `-o OPTIONS` | efs-fuse | FUSE mount options | deployment input | launch | Keep |
 | `--stop MOUNTPOINT [--force-discard]`, `--resume MOUNTPOINT` | efs-fuse | drain/stop or resume a mounted client | operator command | `scripts/client.sh`, tests | Keep |
 | `--help-fuse` | efs-fuse | libfuse option reference | — | — | Keep |
-| `--bench KIND`, `--bench-time SEC`, `--bench-mib N` | efs-fuse | undocumented client bench ladder instead of mounting | bench hook in a product binary | none found | Follow-up: move to efs-bench (not a selector, nothing to decide) |
+| `--bench KIND`, `--bench-time SEC`, `--bench-mib N` | efs-fuse | refused (docs-review fixes): the undocumented client bench ladder is gone | removed | none | Keep refusing (`test_cli_surface.py`) |
 | `efs-mgmt commands-policy` | efs-mgmt | versioned cluster `.efs` command policy | runtime management setting | tests, launch | Keep: the only `.efs` authority (D42) |
 | `efs-mgmt expiry-policy`, `expiry-enable`, `expiry-clock`, `expiry-status`, `expiry` | efs-mgmt | scratch expiry policy and clock health | development build only | expiry tests (`make test-expiry`) | Compiled out of the product (D42) |
-| `efs-mgmt shrink-quota`, `add-storage`, `add-node` | efs-mgmt | quota and capacity changes | runtime management setting | tests | Keep |
+| `efs-mgmt shrink-quota` | efs-mgmt | quota change | runtime management setting | tests | Keep |
+| `efs-mgmt add-storage`, `add-node` | efs-mgmt | refused by name (docs-review fixes): roots are fixed when a store is created; a node joins with `efsd --join`; wire types 16/17 and 41/42 are retired | removed | — | Keep refusing (`test_cli_surface.py`, `EFS_MSG_IS_RETIRED`) |
 | `efs-mgmt status` | efs-mgmt | cluster status; now also metadata leader placement per group and node (self-reported) | operator command | K33 tests | Keep (A9 measurement, D42) |
 | `efs-mgmt raft-dir` | efs-mgmt | directory layout migration | runtime management setting | tests | Keep |
 | `efs-bench` options | efs-bench | bench tool (`efs-bench --help`, `--bench io/data/meta/principles/blake3 --help`) | bench tool | bench scripts | Keep: not in the product path |

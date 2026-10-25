@@ -1247,19 +1247,9 @@ struct dirty_snap {
     efs_ino_t *chunk_inos;
     uint32_t *chunk_idxs;
     uint64_t chunk_cap;
-    uint64_t *ino_slots; /* snapshot-time inode array slots */
-    uint64_t *chunk_slots;
-    uint64_t layout_epoch;
-    uint64_t snap_icount, snap_ccount;
     int meta_dirty;
     uint32_t dirty_ops;
     uint64_t since_ms;
-    /* Packed under the table lock from the live export (no full-table copy). */
-    char *packed;
-    size_t packed_len;
-    uint32_t packed_ino_len, packed_ch_len;
-    uint8_t *ino_dirty_pg, *ch_dirty_pg;
-    int packed_is_cache;
 };
 
 /* Move one record's marks into the snapshot (W41). Caller holds
@@ -1341,12 +1331,6 @@ static void dirty_snap_free(struct dirty_snap *ds)
     free(ds->chunk_keys);
     free(ds->chunk_inos);
     free(ds->chunk_idxs);
-    free(ds->ino_slots);
-    free(ds->chunk_slots);
-    if (!ds->packed_is_cache)
-        free(ds->packed);
-    free(ds->ino_dirty_pg);
-    free(ds->ch_dirty_pg);
     memset(ds, 0, sizeof(*ds));
 }
 
@@ -2320,7 +2304,6 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         pub_release(pub);
         dirty_snap_free(&ds);
         report_snapshot_unlock(only_ino);
-        g_client.report_flush_failed = 1;
     }
     return rc;
 }
@@ -2514,8 +2497,6 @@ void efs_client_stop_meta_flush(void)
 
 int efs_client_note_meta_change(int force)
 {
-    if (force)
-        g_client.meta_flush_force = 1;
     if (!g_client.meta_batch || force)
         /* Forced flush (fsync/unmount) or non-batched C API: durable report. */
         return efs_client_report_dirty(1);

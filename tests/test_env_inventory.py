@@ -8,6 +8,8 @@
    a new compile-time mode, a fault hook outside #if EFS_FAULTS, a hook only
    under EFS_FAULTS without the EFS_FAULT_ prefix and a removed setting read
    again each fail the check, naming the variable.
+3. A12: a read setting whose row gives the kind "A/B behavior selector",
+   or no kind, fails the check.
 
 Usage: python3 tests/test_env_inventory.py (no build needed)"""
 from pathlib import Path
@@ -31,6 +33,21 @@ with tempfile.TemporaryDirectory(prefix='efs-env-inventory-') as d:
     (tree / doc).parent.mkdir(parents=True)
     shutil.copy(root / doc, tree / doc)
     assert check(tree).returncode == 0
+    # A12: a read setting classed as an A/B selector (or with no kind) fails.
+    text = (tree / doc).read_text()
+    row = next(l for l in text.splitlines()
+               if l.startswith('| `EFS_TRANSPORT` |') and l.count(' | ') == 6)
+    cells = row.split(' | ')
+    assert cells[3] == 'deployment input', row
+    (tree / doc).write_text(text.replace(row, ' | '.join(cells[:3] + ['A/B behavior selector'] + cells[4:])))
+    p = check(tree)
+    assert p.returncode == 1 and "EFS_TRANSPORT is read by the product as kind 'A/B behavior selector'" \
+        in p.stdout, p.stdout[-2000:]
+    (tree / doc).write_text(text.replace(row, ' | '.join(cells[:3] + cells[4:])))
+    p = check(tree)
+    assert p.returncode == 1 and 'EFS_TRANSPORT is read by the product but its entry' in p.stdout, \
+        p.stdout[-2000:]
+    (tree / doc).write_text(text)
     (tree / 'src/common/zz_inventory_probe.c').write_text(r'''
 #include <stdlib.h>
 #define PROBE_NAME "EFS_PROBE_MACRO"
@@ -67,4 +84,5 @@ unsigned long probe_all(void)
                  'EFS_PROBE_GATED exists only under EFS_FAULTS',
                  'removed setting EFS_PACK_CRASH is still read'):
         assert want in p.stdout, (want, p.stdout[-2000:])
-print('A6 inventory check: tree PASS; helper, macro, mode, fault-gate and removed-read controls FAIL as expected PASS')
+print('A6 inventory check: tree PASS; helper, macro, mode, fault-gate, removed-read and A12 '
+      'kind controls FAIL as expected PASS')

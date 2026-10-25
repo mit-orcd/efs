@@ -208,7 +208,6 @@ struct efs_export {
     char name[EFS_MAX_NAME];
     uint32_t chunk_size; /* data EC unit; default EFS_DEFAULT_CHUNK_SIZE */
     uint32_t features;   /* EFS_FEATURE_* bitmask; mirrors root.features */
-    uint64_t next_ino;
     struct efs_inode_mem *inodes; /* NULL when using ino_slabs */
     struct efs_ino_slab *ino_slabs;
     uint32_t ino_slab_n;
@@ -283,17 +282,6 @@ struct efs_export {
      * root. present_chunks lives on the root row. */
     struct efs_export *owner;
     uint64_t shard_tick;
-    /* Cross-client O_APPEND barrier (in-memory only, never serialized):
-     * outstanding reserved-but-unflushed append end, open-addressed by ino.
-     * The handler refuses a second reserve (BUSY) while one is unflushed.
-     * A single-slot (ino%N) table used to evict another ino's live rsv
-     * (9-way POSIX lost append lines). A crashed appender's rsv expires. */
-#define EFS_APPEND_RSV_SLOTS 256
-    struct {
-        efs_ino_t ino;
-        uint64_t end;
-        uint64_t ts_ms;
-    } append_rsv[EFS_APPEND_RSV_SLOTS];
 };
 
 /* Rollup bookkeeping flags for the deferred *_norollup paths. */

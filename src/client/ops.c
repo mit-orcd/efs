@@ -1892,7 +1892,7 @@ int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_nam
     return EFS_OK;
 }
 
-void efs_client_setup_ino_namespace(void)
+void efs_client_setup_mount_token(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
@@ -1901,14 +1901,12 @@ void efs_client_setup_ino_namespace(void)
                    ((uint64_t)ts.tv_sec << 12) ^
                    (uint64_t)ts.tv_nsec ^
                    ((uint64_t)random() << 20);
-    tag &= 0x7FFFFF; /* 23 bits, keeps the ino positive */
+    tag &= 0x7FFFFF; /* 23 bits: the flock fallback below */
     if (tag == 0)
         tag = 1;
-    g_client.ino_namespace = tag << 40;
-    g_client.ino_counter = 1;
     if (!g_client.flock_token) {
         /* Append receipt identity must remain distinct across many mounts;
-         * the old 23-bit inode namespace tag is too small for this purpose. */
+         * the 23-bit tag alone is too small for this purpose. */
         struct efs_opid mount_id;
         if (efs_client_publication_id(1, &mount_id) == EFS_OK)
             memcpy(&g_client.flock_token, mount_id.client_uuid, 8);

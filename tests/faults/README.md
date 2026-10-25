@@ -1,7 +1,8 @@
 # Standalone fault suite
 
-This suite keeps simulator and real-process evidence separate. Defaults remain
-TCP and buffered I/O; select direct I/O and RDMA explicitly.
+This suite keeps simulator and real-process evidence separate. The default
+transport is TCP; select RDMA explicitly. Fragment I/O is `O_DIRECT` only (D42),
+so there is no I/O mode to choose.
 
 The simulator also models a synchronous per-role repair, checking
 identity-bound digests and exact reads after a second corruption. That model
@@ -15,14 +16,14 @@ refuse a nonempty fixture root.
 make tests/faults/fault_sim efsd efs-fuse efs-mgmt
 bash tests/faults/run_faults.sh /tmp/efs-fault-model
 EFS_FAULT_BIN=/path/to/build bash tests/faults/run_faults.sh /tmp/efs-fault-tcp \
-    --integrate --mode direct
+    --integrate
 ```
 
 Native RDMA, on a machine with an active HCA:
 
 ```sh
 EFS_FAULT_BIN=/path/to/build bash tests/faults/run_faults.sh /tmp/efs-fault-rdma \
-    --integrate --mode direct --transport rdma --rdma-device mlx5_2
+    --integrate --transport rdma --rdma-device mlx5_2
 ```
 
 Without `--integrate`, integration is `not_run` and returns exit 2. An
