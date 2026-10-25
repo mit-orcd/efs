@@ -156,6 +156,32 @@
     "4 or 5 members"
    ]
   },
+  "loopback-4": {
+   "loopback": 4,
+   "port_base": 18960,
+   "private_port_base": 18900,
+   "loopback_quota": "4G",
+   "transport": "tcp",
+   "fixture": {
+    "posix_timeout_s": 150
+   },
+   "purpose": "D43 dry run: the d5-expiry gate (its own private four-node expiry fixture) beside a four-member driver cluster",
+   "host": "nuc (ports 18900-18999) or any host with its own range: pass --port-base/--private-port-base",
+   "gates": [
+    "identity",
+    "topology",
+    "d5-expiry"
+   ],
+   "allow": [],
+   "duration": "about 10 minutes on nuc (expiry phases about 3 minutes, POSIX core with the 150 s case timeout)",
+   "covers": [
+    "D5 expiry fixture and driver integration (TCP, one host)"
+   ],
+   "cannot_cover": [
+    "A4 (one host)",
+    "RDMA"
+   ]
+  },
   "nuc-private-3": {
    "cluster": {
     "name": "nuc-private-3",

@@ -11,12 +11,14 @@ cluster with expiry on. .efs is off by the cluster commands-policy.
 
 `posix_expiry.py --private` (make test-long) owns everything: mount paths
 and stores in a new directory under TMPDIR (deleted after a PASS, kept for
-diagnosis after a failure), four free loopback ports, no POSIX core run.
+diagnosis after a failure), four free loopback ports below the ephemeral
+range, no POSIX core run.
 It prints NOTRUN and exits 0 without /dev/fuse, fusermount3 or efs-fuse.
 """
 import argparse
 import os
 from pathlib import Path
+import random
 import shutil
 import socket
 import subprocess
@@ -27,13 +29,19 @@ SOURCE = Path(__file__).resolve().parents[2]
 
 
 def free_base():
-    """The first of four consecutive free loopback ports, outside the
-    reserved 17432-17435/27432-27433 ranges."""
+    """The first of four consecutive free loopback ports, chosen below the
+    kernel's ephemeral range: concurrent tests that take ports with bind(0)
+    can never be handed one of them while this fixture starts (gate pool).
+    Outside the reserved 17432-17435 and 27432-27433."""
+    low = 32768
+    try:
+        low = int(Path('/proc/sys/net/ipv4/ip_local_port_range').read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        pass
+    rng = random.Random()
     for _ in range(200):
-        with socket.socket() as probe:
-            probe.bind(('127.0.0.1', 0))
-            base = probe.getsockname()[1]
-        if base > 65531 or base // 10 in (1743, 2743):
+        base = rng.randrange(20000, max(20001, low - 4))
+        if any(p in (17432, 17433, 17434, 17435, 27432, 27433) for p in range(base, base + 4)):
             continue
         held = []
         try:
