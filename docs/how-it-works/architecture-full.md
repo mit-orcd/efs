@@ -3233,6 +3233,24 @@ repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
 
+### D43 — `.efs` and expiry ship in alpha 1.0 (user, Oct 25)
+
+The user's statement of Oct 25: "`.efs` and expiry are features which ship
+with alpha 1.0." This reverses D42's "`EFS_EXPIRY`: excluded from the alpha
+product" (A7 compiled expiry out behind `EFS_BUILD_EXPIRY`). Binding:
+
+- **`.efs` ships**, governed by the versioned cluster commands-policy
+  (`efs-mgmt commands-policy`), as D42 already decided; the alpha profile
+  (A2) has it on, and `.efs` under load is qualified (D3).
+- **Expiry ships**: compiled into the product again (no `EFS_BUILD_EXPIRY`
+  switch, no `EFS_EXPIRY` environment toggle: D42's one-behavior rule holds),
+  governed by the cluster expiry policy (`efs-mgmt expiry-policy`), off until
+  an operator sets it. Its tests return to `make test-all`, its live fixture
+  (`tests/posix/posix_expiry.py`, `gc_reclamation.py`) returns to Stage 2
+  with a qualify gate, and the user docs describe it as supported.
+- A2's profile line "containers and expiry remain disabled" becomes
+  "containers disabled; expiry policy-governed, qualified on and off".
+
 ### D42 — alpha 1.0 decisions taken Oct 24 (user, with review conditions)
 
 | Question | Decision and binding conditions |
@@ -3259,7 +3277,7 @@ A6 Raft and query selectors, user Oct 24:
 A6 feature selectors, user Oct 24:
 
 - `EFS_COMMANDS` (client) and `EFS_COMMANDS_SERVER`: **remove both.** The versioned cluster commands-policy is the single authority for `.efs`, enforced by the server, with no competing client or server environment toggle. Query workers run automatically and use minimal resources when idle.
-- `EFS_EXPIRY`: **excluded from the alpha product**, not left as an unsupported runtime mode.
+- `EFS_EXPIRY`: **excluded from the alpha product**, not left as an unsupported runtime mode. *Reversed by D43 (Oct 25): expiry ships, policy-governed, with no environment toggle.*
 - `EFS_FUSE_EXPORT`: **remove** the NFS re-export capability switch and its gateway-script settings (W152).
 
 A6 remaining selectors, user Oct 24:

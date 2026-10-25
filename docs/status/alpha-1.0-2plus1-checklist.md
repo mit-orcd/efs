@@ -318,7 +318,8 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
   do not qualify an undocumented mixture of binaries and scripts.
 - [ ] **A2** Record the actual enabled features and transport/storage settings.
   Include RDMA/direct I/O, enabled `.efs` and background packing for the current
-  target profile; containers and expiry remain disabled. If any of those choices
+  target profile; containers remain disabled, expiry is policy-governed and
+  qualified both off and on (D43, Oct 25). If any of those choices
   changes, amend this matrix before calling the run alpha acceptance.
 - [ ] **A3** Specify supported node-count range. Qualify 3 nodes, 4 nodes and at
   least one concrete larger topology (minimum 5). Prerequisite: K28/W151, the
