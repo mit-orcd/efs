@@ -5526,8 +5526,14 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
     return rc==EFS_OK ? host_read_index_admitted(h,second,hint,&admission[1],NULL,0) : rc;
 }
 
-static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
-                             uint64_t idx, int *leader_hint)
+/* own=1: the waiter's own committed entry (a proposal's verdict, a REPORT
+ * batch): apply is certain, a BUSY would only re-propose it behind the
+ * same lag, so the wait is bounded by progress (W159, apply_wait.h: a
+ * 400 ms grant renewed while the member applies, 8 s cap). own=0: a
+ * ReadIndex served behind a follower's apply, where a BUSY lets the
+ * client ask the leader instead; that keeps the one fixed budget. */
+static int host_wait_applied_mode(struct efs_raft_host *h, uint8_t group,
+                                  uint64_t idx, int *leader_hint, int own)
 {
     struct timespec end;
     struct host_view v;
@@ -5536,10 +5542,7 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
     /* One grant is the old poll loop's budget (HOST_READ_TRIES x
      * HOST_TICK_US); the pump's applied_cv broadcast wakes us the moment
      * the index applies instead of up to 5 ms later. Lock-free predicate
-     * on the published view; sleeps under cv_mu, never h->mu. W159: a
-     * grant is renewed while the applied index advances (apply_wait.h),
-     * so a slow disk lengthens the wait instead of turning it into BUSY
-     * and a client backoff ladder; a stalled apply still gets BUSY. */
+     * on the published view; sleeps under cv_mu, never h->mu. */
     /* Progress is the published applied index plus the count of applies
      * so far: a cycle that applies for longer than one grant publishes
      * nothing until it ends, but every apply in it moves the count. */
@@ -5548,7 +5551,8 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
                          (v.has ? v.applied : 0) +
                              __atomic_load_n(&h->apply_progress, __ATOMIC_RELAXED),
                          (uint64_t)HOST_READ_TRIES * HOST_TICK_US,
-                         HOST_APPLY_WAIT_CAP_US);
+                         own ? HOST_APPLY_WAIT_CAP_US
+                             : (uint64_t)HOST_READ_TRIES * HOST_TICK_US);
     for (;;) {
         host_view_get(h, group, &v);
         if (!v.has) {
@@ -5586,6 +5590,18 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
         }
         pthread_mutex_unlock(&h->cv_mu);
     }
+}
+
+static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
+                             uint64_t idx, int *leader_hint)
+{
+    return host_wait_applied_mode(h, group, idx, leader_hint, 0);
+}
+
+static int host_wait_applied_own(struct efs_raft_host *h, uint8_t group,
+                                 uint64_t idx, int *leader_hint)
+{
+    return host_wait_applied_mode(h, group, idx, leader_hint, 1);
 }
 
 /* h->mu held. One fsync covered every append whose record ends at or
@@ -6009,7 +6025,7 @@ static int host_wait_verdict(struct efs_raft_host *h, uint8_t group,
     struct efs_arc_view v;
     int rc, hosted;
 
-    rc = host_wait_applied(h, group, idx, hint);
+    rc = host_wait_applied_own(h, group, idx, hint);
     if (rc != EFS_OK)
         return rc;
     if (wp0) seen = wprof_now();
@@ -6031,7 +6047,7 @@ static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
     struct efs_arc_view v;
     int rc = EFS_OK;
 
-    rc = host_wait_applied(h, group, idx, hint);
+    rc = host_wait_applied_own(h, group, idx, hint);
     if (rc != EFS_OK || !term)
         return rc;
     if (host_arc_read(h, group, idx, &v) && v.idx == idx && v.term != term) {
@@ -9273,7 +9289,7 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
      * deleted files were never reclaimed (tests/test_k33_bookkeeping.py). */
     if (retired)
         return EFS_OK;
-    return host_wait_applied(h, group, rep.index, NULL);
+    return host_wait_applied_own(h, group, rep.index, NULL);
 }
 
 static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
@@ -22578,7 +22594,7 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
 
     uint64_t wp0 = idx && write_prof_on() ? wprof_now() : 0, seen = 0, apply_us = 0;
     if (idx)
-        rc = host_wait_applied(h, b->group, idx, hint);
+        rc = host_wait_applied_own(h, b->group, idx, hint);
     if (rc == EFS_OK && idx) {
         if (wp0) seen = wprof_now();
         for (i = 0; i < b->nidx; i++) {

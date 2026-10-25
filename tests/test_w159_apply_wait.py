@@ -13,8 +13,9 @@ A burst of 128 small-file creates from 16 threads, then their unlinks.
 Checks:
  1. every create and unlink succeeds (no EBUSY, no EIO);
  2. no member answered BUSY from an expired applied-wait (`raft-obs:
-    wait_timeouts=0` on every member), and no client RPC reports a BUSY
-    retry (`inode-rpc: slow-ok ... saw_busy=1`);
+    wait_timeouts=0` on every member); the client's slow RPCs after a
+    BUSY/STALE retry (`inode-rpc: slow-ok ... saw_busy=1`, which has other
+    sources such as an allocation intent) are recorded only;
  3. recorded only: how many grants the progress-bounded wait renewed
     (`wait_extends`), which depends on the host's timing.
 Under these conditions the fixed 400 ms budget before apply_wait.h answered
@@ -101,8 +102,10 @@ try:
     extends = {i: obs(c, i, 'wait_extends') for i in (1, 2, 3)}
     busy = re.findall(r'inode-rpc: slow-ok .*saw_busy=1.*', mount.logp.read_text(errors='replace'))
     assert all(v == 0 for v in timeouts.values()), (timeouts, extends)
-    assert not busy, busy[:3]
-    print(f'2. no expired applied-wait: wait_timeouts {timeouts}, no BUSY retry at the client PASS')
+    # BUSY has other sources (an allocation intent, a STALE dentry); the
+    # client's slow retried RPCs are recorded, the server's count decides.
+    print(f'2. no expired applied-wait: wait_timeouts {timeouts} PASS; client slow RPCs after a '
+          f'BUSY/STALE retry: {len(busy)} (recorded)')
     # Whether some wait outlived one grant depends on the host's timing;
     # recorded, not asserted (at 50 ms per barrier every run renews
     # hundreds of grants, and a few waits then outlive even the renewals).
