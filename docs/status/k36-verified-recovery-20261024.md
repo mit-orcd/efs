@@ -194,7 +194,9 @@ NOTRUN host limits as above (RDMA ×9, valgrind ×2, `~/git/cluster`,
   stays fenced; a group without quorum delays the fence the same way.
 - A referenced packed-segment fragment that is not proven is dropped and
   counted, not rebuilt (W154 covers chunk stripes only); its two peers
-  still serve it.
+  still serve it. **Superseded Oct 24:** recovery now marks it through K37
+  before the fence clears and K37 rebuilds it
+  ([k36-k37-segment-recovery-20261024.md](k36-k37-segment-recovery-20261024.md)).
 - ADMITTED tickets a live client never settles keep the post-fence tail
   waiting (shown as `tickets ... waiting=`); no promise depends on it.
 - A stop during recovery waits for an in-flight metadata RPC inside the
