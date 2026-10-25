@@ -10,17 +10,20 @@ exited 0 before the fix. Runs the extracted Python block in a temporary
 directory: no build, no make, no cluster.
 """
 from pathlib import Path
-import os, shutil, subprocess, sys, tempfile, time
+import ast, os, shutil, subprocess, sys, tempfile, time, types
 
 root = Path(__file__).resolve().parents[1]
 source = (root / 'scripts/make_test_summary.sh').read_text()
 runner = source.split('python3 - <<"EOP"\n', 1)[1].rsplit('\nEOP', 1)[0]
 
 
-def run(cmds, timeout=None, jobs=None):
+def run(cmds, timeout=None, jobs=None, budget_rows=None):
     """Run the runner on cmds; return (status, summary lines, directory)."""
     d = tempfile.mkdtemp(prefix='efs-summary-runner-')
     Path(d, 'cmds.txt').write_text(cmds)
+    if budget_rows:
+        Path(d,'tests').mkdir()
+        Path(d,'tests/budgets.tsv').write_text(budget_rows)
     env = dict(os.environ)
     if timeout is not None:
         env['EFS_TEST_CMD_TIMEOUT'] = str(timeout)
@@ -68,6 +71,24 @@ try:
     f = s[1].split('\t')
     assert f[:2] == ['1', '124'], f
     assert 'TIMEOUT after 1s' in Path(d, f[4]).read_text()
+
+    # Task D: declared long budgets may exceed the default only. An explicit
+    # hard user timeout must still interrupt a command with a larger budget.
+    rc,s,d=run('sleep 2\n',timeout=.1,budget_rows='sleep 2\t1200\t8\tendurance\n');dirs.append(d)
+    assert rc==1 and s[1].split('\t')[1]=='124',s
+    # Exercise the real timeout selection without a 900-second sleep.
+    fn=next(n for n in ast.parse(runner).body if isinstance(n,ast.FunctionDef) and n.name=='run')
+    selected=[]
+    class Child:
+        returncode=0
+        def communicate(self,timeout):selected.append(timeout);return ('',None)
+    env={}
+    ns=dict(budget=lambda c:(1200,8),limit=900,os=types.SimpleNamespace(environ=env),
+            subprocess=types.SimpleNamespace(Popen=lambda *a,**k:Child(),PIPE=-1,STDOUT=-2),text=lambda x:x)
+    exec(compile(ast.Module(body=[fn],type_ignores=[]),'<real runner timeout>','exec'),ns)
+    assert ns['run']('true')==(0,'') and selected[-1]==1200
+    env['EFS_TEST_CMD_TIMEOUT']='0.1';ns['limit']=.1
+    assert ns['run']('true')==(0,'') and selected[-1]==.1
 
     # NOTRUN with everything passing is INCOMPLETE, never PASS.
     rc, s, d = run("true\necho 'NOTRUN: no RDMA device'\n"); dirs.append(d)
