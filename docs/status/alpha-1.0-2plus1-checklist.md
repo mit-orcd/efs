@@ -435,7 +435,7 @@ alternatives reduces both product complexity and the supported test matrix.
   reachable configuration counts where defensible; do not claim exhaustive
   coverage from testing flags individually or from pairwise tests alone.
   **Oct 24, matrix and plan published ([A11](a11-qualification-matrix-20261024.md);
-  branch `claude/devel-a11-matrix-2bfd14`, not merged); qualification
+  merged into devel (`646a43041`)); qualification
   NOTRUN.** Dimensions: transport (`tcp`, `rdma`; `auto` resolves to one),
   members 3–16, `O_DIRECT` only, one root per node, one or two client
   mounts, one feature profile, 33 numeric tunables at built-in values.

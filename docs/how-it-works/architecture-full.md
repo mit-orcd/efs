@@ -1598,6 +1598,9 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Oct 24 merge: docs-review fixes, B6/D4, K37, A11 and the K33 live-harness port](../status/a11-qualification-matrix-20261024.md):
+**merged into devel; merged-tree `make test-all` on intel2 at `646a43041`: 467 commands, 2 FAIL from the merge (a duplicate `read_reprobe_down` stub in `test_get_integrity.py`; `test_b6_unavailable.py` still asserting no packing during a fault, which K37's policy allows with a degraded mark), both fixed in `12d2a7957` and rerun PASS on intel2; 15 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave6-20261024/`, `SHA256SUMS` `fd750fd9…d662`).** `add-node` and `add-storage` are gone (JOIN/ADD_STORAGE wire types removed). Live gates stay NOTRUN; every store needs a fresh format.
+
 [Oct 24 merge: READ_VERIFY, K34, A7 removals, K35, K36](#d42--alpha-10-decisions-taken-oct-24-user-with-review-conditions):
 **merged into devel; merged-tree `make test-all` on intel2 at `0f0a79eac`: 459 commands, 0 FAIL, 14 NOTRUN host limits (1,839 s; raw: intel2 `~/efs-artifacts/merge-wave5-0f0a79eac-20261024/`, `SHA256SUMS` `01b2d681…dcd9`).** The intermediate gate at `376369aa8` had one FAIL (a missing K34 stub in `test_get_integrity.py`, fixed in `1898c4c63`). K36's recovery mark is Raft tag 248 beside K35's tag 249. devops `8bc872e` and cluster `1402762` drop the removed settings (not pushed). Every store needs a fresh format. Live gates stay NOTRUN.
 
@@ -1614,7 +1617,7 @@ recovery PASS (8 of 8 runs). Merged-tree gate on intel1 at `87034b518`: `test-lo
 `1898c4c63`; PASS at `c19bf9fdb`); host-limit NOTRUNs only. Power-loss qualification, multi-host and RDMA NOTRUN.
 
 [Alpha 1.0 docs review: findings F2–F6, F11, F13, F14, F18–F20 fixed](../status/s-docs-fixes-alpha-1.0-20261024.md):
-**PASS (scoped), branch `claude/devel-sdocs-fixes-f02c43`, not merged; amd `make test-all` at `f588f6efd`: 461 commands, 11 FAIL, all also failing on the base (RDMA on `rxe0`, a fault-test timeout, `test_get_integrity.py` not compiling since the merges); raw: amd `~/efs-artifacts/sdocs-fixes-20261024/`, `SHA256SUMS` `a1ed1a7f…3b7a`.** Every
+**PASS (scoped), merged into devel (`77d937d27`); amd `make test-all` at `f588f6efd`: 461 commands, 11 FAIL, all also failing on the base (RDMA on `rxe0`, a fault-test timeout, `test_get_integrity.py` not compiling since the merges); raw: amd `~/efs-artifacts/sdocs-fixes-20261024/`, `SHA256SUMS` `a1ed1a7f…3b7a`.** Every
 `efs-mgmt` command has help, checked against the dispatcher in `make test`;
 `add-node` (use `efsd --join`), `add-storage` and `efs-fuse --bench*` are
 removed and refused; a node's storage roots are fixed when its store is
@@ -1625,7 +1628,7 @@ README and quick start corrected. The [findings table](../status/s-docs-alpha-1.
 records every outcome. Stores formatted by an earlier build are refused.
 
 [B6 and D4: an unavailable fragment destination, bounded progress under background work](../status/b6-d4-unavailable-progress-20261024.md):
-**PASS (scoped, loopback), branch `claude/devel-b6-d4-4f65ac` (`834f0b7ec`), not merged; xorinox `make test-all` at `834f0b7ec`: exit 0, 0 FAIL, 14 NOTRUN host limits (raw: xorinox `~/efs-artifacts/b6-d4-20261024/`, `SHA256SUMS` `f5e519ff…8840`).**
+**PASS (scoped, loopback), merged into devel (`1b3fd25b7`; tested at `834f0b7ec`); xorinox `make test-all` at `834f0b7ec`: exit 0, 0 FAIL, 14 NOTRUN host limits (raw: xorinox `~/efs-artifacts/b6-d4-20261024/`, `SHA256SUMS` `f5e519ff…8840`).**
 B6: node 3 of three down, refusing, slow past every client deadline and
 full, for ordinary and packed files during write, fsync and read; reads
 exact, fsync only with proof, W154 clears after the orderly restore. D4:
@@ -1650,7 +1653,7 @@ Daemon test `tests/test_k37_segment_rebuild.py` PASS. intel2 `make test-all` at 
 multi-host, RDMA and orcd-mini NOTRUN (parent).
 
 [A11: reduced qualification matrix and the Stage 2 run plan](../status/a11-qualification-matrix-20261024.md):
-**plan PASS (scoped), qualification NOTRUN; branch `claude/devel-a11-matrix-2bfd14`, not merged.**
+**plan PASS (scoped), qualification NOTRUN; merged into devel (`646a43041`).**
 Dimensions left after A6/A7/D42: transport (`tcp`, `rdma`), 3–16 members,
 `O_DIRECT` only, one root per node, one or two client mounts, built-in
 tunables. Selector × transport × member count 1,376,256 → 28; qualified
