@@ -22,11 +22,12 @@ full acceptance are separate states.
 **IN PROGRESS, branch `agent/devel-task-d`, not merged or pushed.** New
 five-to-seven-member loopback harness, independent acknowledged-content and
 shared-append oracles, quiet-host guard, RSS interval checks and qualification
-plugin. NUC's fourth rehearsal reached five clean returns and a verified daemon
-recovery, then failed in the harness's timestamped-session parser. The corrected
-rehearsal is running in its reserved detached screen; four-hour completion
-and candidate/base code-gate comparison remain NOTRUN/queued. No acceptance
-or new product-fix claim yet.
+plugin. NUC's later rehearsal exposed a bounded session-cleanup BUSY that the harness
+failed to resume, plus a stop-order race that acknowledged one local file after
+unmount. Both are fixed in the harness only: exact old-epoch cleanup and both
+fresh readers verified 512 genuine file versions and all 363 appends. Fresh
+rehearsal/conditional four-hour soak is running on `487ad5b0e`; full endurance
+and candidate/base comparison remain open.
 
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
