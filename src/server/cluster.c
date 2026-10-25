@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include "efs/fault_exit.h"
 
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port)
 {
@@ -325,7 +326,7 @@ void server_test_member_exit(const char *point)
     fprintf(stderr, "membership: EFS_FAULT_MEMBER_EXIT at %s; exiting\n", point);
     fflush(stderr);
     fflush(stdout);
-    _exit(86);
+    efs_fault_exit(86);
 #else
     (void)point;
 #endif
@@ -508,7 +509,7 @@ static void *heartbeat_thread(void *arg)
     if (!nodes)
         return NULL;
 
-    uint64_t gc_log_ms = 0;
+    uint64_t gc_log_ms = 0, trim_ms = hb_now_ms();
     while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) {
         usleep(EFS_HEARTBEAT_MS * 1000);
 
@@ -537,6 +538,10 @@ static void *heartbeat_thread(void *arg)
                     (unsigned long long)gc.sweep_errors, (unsigned long long)gc.reap_errors,
                     (unsigned long long)gc.ack_errors, (unsigned long long)gc.missing_exports);
             gc_log_ms = now;
+        }
+        if (now - trim_ms >= EFSD_MALLOC_TRIM_MS) {
+            efsd_malloc_trim();
+            trim_ms = now;
         }
         for (uint32_t i = 0; i < node_count; i++) {
             if (nodes[i].id == self)

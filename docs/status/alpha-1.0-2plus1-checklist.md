@@ -746,6 +746,18 @@ facts for A6, not decisions.
   the first gate run); now a prompt retry and "not indexed yet". Finding
   for Stage 3: cold packed small-file reads 8–33 ms each. Real-host runs
   NOTRUN ([evidence](b6-d4-unavailable-progress-20261024.md)).**
+  **Oct 25 (F1 follow-ups, branch `claude/devel-f1-followups-ae2deb`,
+  [evidence](f1-followups-20261025.md)):** a fixed-working-set variant
+  (`scripts/d4_progress.py --working-set`, `tests/test_d4_plateau.py`) rewrites
+  2048 files, packed and unpacked, for 30 and 60 minutes with no net creation.
+  Every D4 bound held (efsd peak 102 MiB of 2048, efs-fuse 197 of 1024), every
+  file exact, foreground ops within 10 s; efsd RSS is not flat (F1). The
+  20-minute create load now ends with 0 packer put errors (was 3; flake-sweep
+  fix `fc79fe086`); the 60-minute rewrite load at its highest rate still
+  counted 5. Found and fixed on the rewrite load: three rewrite EIOs from a
+  publication unit that skipped its ABORT. The drain after a long rewrite load
+  takes 390–415 s (index changes from segment compaction), against 3.5 s
+  after the create load; the long runs use a 900 s drain bound.
 
 ## E. Full verification and orderly lifecycle
 
@@ -852,9 +864,28 @@ round says which physical or software limiter it hit.
   the gate entry that found it as regression test. 20-minute D4 RSS: bounded
   (client peak 247 MiB of 1 GiB, servers 134 MiB of 2 GiB), not flat while the
   namespace grows; LSan at daemon exits finds no leak. NOTRUN: RDMA memcheck
-  (no device on xorinox). Open: `test_k36_recovery.py` step 4 under TSan is
-  intermittent (1 of 3 runs), and the 20-minute D4 load counts 3–7 packer put
-  errors (not memory; logs not retained; follow-up).
+  (no device on xorinox). **Oct 25 follow-ups, branch
+  `claude/devel-f1-followups-ae2deb` ([evidence](f1-followups-20261025.md)):**
+  `test_k36_recovery.py` under TSan PASS 10 of 10 (was 7 of 10). The causes
+  were the crash hooks' `_exit` (libtsan finalised for a second, so a
+  "crashed" daemon took a rebuild PUT; hooks now `exit_group`), a race in the
+  `EFS_FAULT_PUT_BUSY_FILE` hook and a case-11 test defect. The RSS plateau
+  is measured on a fixed working set (`tests/test_d4_plateau.py`: rewrites
+  only, no net creation). **Plateau FAIL, bounded not flat:** the clients
+  plateau. efsd's live heap is flat, but glibc arenas held freed memory.
+  efsd now caps arenas at 8, fixes the mmap threshold at 256 KiB and trims
+  every 15 s, which cuts its 60-minute peak by about a third (101.8 MiB).
+  It still grows 8–13 % over minutes 40–60 with throughput, tracking the
+  connection-thread high-water mark (open). The packer put errors were
+  `NOT_PRIMARY` from a follower's authority read and are covered by the
+  flake-sweep fix (`fc79fe086`) on the 20-minute load (3 before, 0 after),
+  but not at the highest rewrite rate (5 in 60 minutes; the refusal outlasts
+  its 200 ms retry; open). The fixed working set also found rewrite EIOs: a
+  W77 publication unit skipped its ABORT when its forwarded PREPARE batch
+  was refused. Fixed, with a regression test that fails 5 of 5 without the
+  fix. Gates: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18 and `make asan-check` PASS 47/47 (`758dd144c`, the same code). Also open, each seen
+  once: a late finisher abort (one EIO in 33 748 rewrites on a doubly loaded
+  host) and one foreground EBUSY after five failed SETATTR receives.
 - [ ] **F2** Triage each failure on the selected candidate and repeat affected
   acceptance after fixes. Retain failed evidence and explain harness corrections.
   No unresolved enabled-path corruption, lost acknowledged state, indefinite

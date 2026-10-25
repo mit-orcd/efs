@@ -41,12 +41,19 @@ static int put_refuse_stopping(const struct efs_put_ticket *t,uint32_t fi)
  * hand. */
 static int put_test_busy(void)
 {
+    /* The path is read once, by whichever connection thread comes first;
+     * two first threads must publish the same value through the atomic
+     * itself ("" when unset), not through a separate flag: with the flag
+     * both wrote and read `path` plainly (TSan, F1 follow-up under
+     * tests/test_k36_recovery.py). */
     static const char *path;
-    static int init;
-    if(!__atomic_load_n(&init,__ATOMIC_ACQUIRE)){
-        path=getenv("EFS_FAULT_PUT_BUSY_FILE");__atomic_store_n(&init,1,__ATOMIC_RELEASE);
+    const char *p=__atomic_load_n(&path,__ATOMIC_ACQUIRE);
+    if(!p){
+        p=getenv("EFS_FAULT_PUT_BUSY_FILE");
+        if(!p)p="";
+        __atomic_store_n(&path,p,__ATOMIC_RELEASE);
     }
-    if(!path || !*path || access(path,F_OK)!=0)return 0;
+    if(!*p || access(p,F_OK)!=0)return 0;
     static uint64_t n;
     if(__atomic_add_fetch(&n,1,__ATOMIC_RELAXED)<=10)
         fprintf(stderr,"put-upload: EFS_FAULT_PUT_BUSY_FILE present; answering BUSY\n");

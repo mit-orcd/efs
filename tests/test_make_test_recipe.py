@@ -18,6 +18,8 @@ pass silently.
 # Python tests the recipe does not run, each with its reason.
 NOT_WIRED = {
     'tests/test_soak.py': 'Task D 15-minute accelerated endurance run; its own gate (make test-soak), outside the W160 15-minute test-all target',
+    'tests/test_d4_plateau.py': 'F1/D4 measurement driver (30-60 min runs); its gate-length drain and '
+                                'efsd RSS are open findings (docs/status/f1-followups-20261025.md)',
 }
 from pathlib import Path
 import os, re, subprocess
