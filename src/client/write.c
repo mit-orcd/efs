@@ -3274,7 +3274,7 @@ static int node_is_full(efs_node_id_t id)
  * two fragments. Found by tests/test_k35_fsync_degraded.py case 7: node 3
  * marked away by a write during its restart kept a 4-member cluster from
  * placing around node 4, stopped a few seconds later, so every stripe
- * touching node 4 was acknowledged degraded. EFS_PUT_AWAY_MARK_MS
+ * touching node 4 was acknowledged degraded. EFS_FAULT_AWAY_MARK_MS
  * (milliseconds) overrides the window; tests make it long so the
  * interleaving is forced, not timed. */
 #define PUT_AWAY_MARK_MS 10000u
@@ -3284,7 +3284,7 @@ static uint64_t put_away_mark_ms(void)
 {
     static uint64_t ms;
     if (!ms) {
-        const char *v = getenv("EFS_PUT_AWAY_MARK_MS");
+        const char *v = getenv("EFS_FAULT_AWAY_MARK_MS");
         unsigned long long n = v && *v ? strtoull(v, NULL, 10) : 0;
         ms = n ? (uint64_t)n : PUT_AWAY_MARK_MS;
     }
