@@ -1,3 +1,4 @@
+#include "efs/record_decode.h"
 /* K37 rebuild on return for packed segments (W154 for segments).
  *
  * A packed segment is one 2+1 stripe; every packed file in it is lost with
@@ -183,19 +184,16 @@ static int sr_audit_call(struct efsd_server *s, const struct efs_node *nodes, ui
                 : EFS_ERR_IO;
     }
     free(req);
-    if (rc == EFS_OK && (rlen < EFS_SEGMENT_AUDIT_REPLY ||
-                         sr_get32(rep + 4) > EFS_SEGMENT_AUDIT_MAX ||
-                         rlen != EFS_SEGMENT_AUDIT_REPLY + sr_get32(rep + 4)))
-        rc = EFS_ERR_PROTO;
+    struct efs_audit_reply decoded;
+    if (rc == EFS_OK) rc = efs_segment_audit_reply_decode(rep, rlen, &decoded);
+    if (rc == EFS_OK && decoded.rc == EFS_OK && decoded.count != n) rc = EFS_ERR_PROTO;
     if (rc == EFS_OK) {
-        out->rc = (int32_t)sr_get32(rep);
-        out->count = sr_get32(rep + 4);
-        out->inc = sr_get64(rep + 8);
-        out->audited = sr_get32(rep + 16);
-        out->settled = sr_get32(rep + 20);
-        memcpy(out->v, rep + EFS_SEGMENT_AUDIT_REPLY, out->count);
-        /* A verdict list must answer exactly the items asked. */
-        if (out->rc == EFS_OK && out->count != n) rc = EFS_ERR_PROTO;
+        out->rc = decoded.rc;
+        out->count = decoded.count;
+        out->inc = decoded.incarnation;
+        out->audited = decoded.audited;
+        out->settled = decoded.settled;
+        memcpy(out->v, decoded.status, decoded.count);
     }
     free(rep);
     return rc;

@@ -1,3 +1,4 @@
+#include "efs/record_decode.h"
 /* W125 packed segment store on a storage node.
  *
  * A packed segment is one stripe of standard fragments owned by its
@@ -411,10 +412,8 @@ void server_segment_audit(struct efsd_server *s, const uint8_t *req, uint32_t by
     uint64_t inc = bytes >= EFS_SEGMENT_AUDIT_HEADER ? sg_get64(req + 8) : 0;
     uint32_t bit = group == 0 ? 1u : 2u, out = 0;
     int settled = server_put_sync_settled();
-    if (!s || bytes < EFS_SEGMENT_AUDIT_HEADER || !efs_pack_group_anchor(group) ||
-        (flags & ~EFS_SEGMENT_AUDIT_F_COMPLETE) || req[2] || req[3] ||
-        count > EFS_SEGMENT_AUDIT_MAX || bytes != EFS_SEGMENT_AUDIT_HEADER + count * EFS_SEGMENT_AUDIT_ITEM ||
-        ((flags & EFS_SEGMENT_AUDIT_F_COMPLETE) && count))
+    struct efs_audit_request decoded;
+    if (!s || efs_segment_audit_request_decode(req, bytes, &decoded) != EFS_OK)
         rc = (uint32_t)EFS_ERR_INVAL;
     else if (inc && inc != s->incarnation)
         rc = (uint32_t)EFS_ERR_STALE; /* restarted since the sweep began */

@@ -6,6 +6,7 @@
 #include "efs/publication.h"
 #include "efs/session.h"
 #include "efs/txn.h"
+#include "efs/meta_cmd.h"
 #include <string.h>
 
 static void wr32(uint8_t *p, uint32_t v)
@@ -697,4 +698,61 @@ int efs_put_ticket_drain(struct efs_kv *kv,const struct efs_put_stream *s,uint32
     }
     if (moved) *moved=n;
     return n && rc==EFS_ERR_BUSY?EFS_OK:rc;
+}
+
+int efs_put_ticket_settle_decode(const uint8_t *cmd, uint32_t clen,
+                              struct efs_put_ticket *tickets, uint32_t *count)
+{
+    if (!cmd || clen < 3 || cmd[0] != EFS_MD_CMD_PUT_TICKET_SETTLE) return EFS_ERR_INVAL;
+    uint32_t n = ((uint32_t)cmd[1] << 8) | cmd[2];
+    if (!n || n > EFS_PUT_TICKET_SETTLE_MAX || clen != 3u + n * EFS_PUT_TICKET_WIRE_LEN)
+        return EFS_ERR_INVAL;
+    if (!tickets || !count) return EFS_ERR_INVAL;
+    struct efs_put_ticket decoded[EFS_PUT_TICKET_SETTLE_MAX];
+    for (uint32_t i = 0; i < n; i++) {
+        int rc = efs_put_ticket_decode(cmd + 3 + i * EFS_PUT_TICKET_WIRE_LEN,
+                                       EFS_PUT_TICKET_WIRE_LEN, &decoded[i]);
+        if (rc != EFS_OK) return rc;
+        if (i && (efs_kv_lane_shard(decoded[i].ino, decoded[i].ci % EFS_META_LANES) !=
+                      efs_kv_lane_shard(decoded[0].ino, decoded[0].ci % EFS_META_LANES) ||
+                  decoded[i].id.session_epoch != decoded[0].id.session_epoch ||
+                  memcmp(decoded[i].id.client_uuid, decoded[0].id.client_uuid, 16) ||
+                  decoded[i].id.seq <= decoded[i - 1].id.seq))
+            return EFS_ERR_INVAL;
+    }
+    memcpy(tickets, decoded, n * sizeof(*tickets));
+    *count = n;
+    return EFS_OK;
+}
+
+int efs_put_ticket_batch_decode(const uint8_t *cmd, uint32_t clen,
+                                    struct efs_put_ticket *tickets, uint32_t *count)
+{
+    if (!cmd || clen < 3 || (cmd[0] != EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH &&
+                             cmd[0] != EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH))
+        return EFS_ERR_INVAL;
+    uint32_t n = ((uint32_t)cmd[1] << 8) | cmd[2];
+    if (n < 2 || n > EFS_PUT_TICKET_BATCH_MAX || clen != 3u + n * EFS_PUT_TICKET_WIRE_LEN)
+        return EFS_ERR_INVAL;
+    if (!tickets || !count) return EFS_ERR_INVAL;
+    struct efs_put_ticket decoded[EFS_PUT_TICKET_BATCH_MAX];
+    for (uint32_t i = 0; i < n; i++) {
+        int rc = efs_put_ticket_decode(cmd + 3 + i * EFS_PUT_TICKET_WIRE_LEN,
+                                       EFS_PUT_TICKET_WIRE_LEN, &decoded[i]);
+        if (rc != EFS_OK) return rc;
+        if (decoded[i].id.session_epoch != decoded[0].id.session_epoch ||
+            memcmp(decoded[i].id.client_uuid, decoded[0].id.client_uuid, 16))
+            return EFS_ERR_INVAL;
+        for (uint32_t j = 0; j < i; j++)
+            if (decoded[j].id.seq == decoded[i].id.seq) return EFS_ERR_INVAL;
+        if (i && cmd[0] == EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH) {
+            uint32_t a = efs_kv_lane_shard(decoded[i - 1].ino, decoded[i - 1].ci % EFS_META_LANES);
+            uint32_t b = efs_kv_lane_shard(decoded[i].ino, decoded[i].ci % EFS_META_LANES);
+            if (b < a || (b == a && decoded[i].id.seq <= decoded[i - 1].id.seq))
+                return EFS_ERR_INVAL;
+        }
+    }
+    memcpy(tickets, decoded, n * sizeof(*tickets));
+    *count = n;
+    return EFS_OK;
 }

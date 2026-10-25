@@ -1,3 +1,4 @@
+#include "efs/record_decode.h"
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
@@ -262,11 +263,15 @@ void server_handle_conn(struct efs_conn *conn)
              * refuse it too — a node we cannot identify by build must not
              * join the placement ring. */
             if (payload_len >= sizeof(uint32_t)) {
-                struct efs_msg_hello *h = payload;
-                int version_ok =
-                    payload_len >= sizeof(struct efs_msg_hello) &&
-                    h->version == EFS_VERSION_PACK &&
-                    strncmp(h->build_id, EFS_BUILD_ID, EFS_BUILD_ID_LEN) == 0;
+                struct efs_msg_hello decoded = {0};
+                struct efs_msg_hello *h = &decoded;
+                int version_ok = efs_peer_hello_decode(payload, payload_len, h) == EFS_OK;
+                /* Diagnostics never dereference a short/unaligned input or
+                 * print an unterminated peer-provided field. */
+                if (!version_ok && payload)
+                    memcpy(h, payload, payload_len < sizeof(*h) ? payload_len : sizeof(*h));
+                h->addr[sizeof(h->addr)-1] = 0;
+                h->build_id[sizeof(h->build_id)-1] = 0;
                 if (!version_ok) {
                     /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~68 KiB at 16). */
                     struct efs_msg_hello_ack *rej = calloc(1, sizeof(*rej));

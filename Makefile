@@ -74,7 +74,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               $(COMMON_DIR)/log_ts.c \
               $(COMMON_DIR)/batch_obs.c \
               $(COMMON_DIR)/version.c \
-              $(COMMON_DIR)/protocol.c \
+              $(COMMON_DIR)/protocol.c $(COMMON_DIR)/record_decode.c \
               $(COMMON_DIR)/request_receipt.c \
               src/wire/wire.c \
               src/data/erasure.c \

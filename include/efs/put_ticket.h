@@ -127,4 +127,6 @@ int efs_put_ticket_stream_live(struct efs_kv *,const struct efs_put_stream *);
  * deleted only by the orphan collector, under its own four conditions. */
 int efs_put_ticket_drain(struct efs_kv *,const struct efs_put_stream *,uint32_t max,
                          uint32_t *moved);
+int efs_put_ticket_settle_decode(const uint8_t *, uint32_t, struct efs_put_ticket *, uint32_t *);
+int efs_put_ticket_batch_decode(const uint8_t *, uint32_t, struct efs_put_ticket *, uint32_t *);
 #endif

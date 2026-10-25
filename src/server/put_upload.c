@@ -1,3 +1,4 @@
+#include "efs/record_decode.h"
 #include "server_internal.h"
 #include "dest_fault.h"
 #include "efs/put_upload.h"
@@ -183,19 +184,7 @@ void server_degraded_mark_encode(uint8_t *q, const struct efs_meta_degraded *d)
 
 int server_degraded_mark_decode(const uint8_t *q, struct efs_meta_degraded *d)
 {
-    memset(d, 0, sizeof(*d));
-    d->ino = put_rd64(q);
-    d->inode_gen = put_rd64(q + 8);
-    d->object_gen = put_rd64(q + 16);
-    d->chunk_index = efs_put_upload_rd32(q + 24);
-    d->lane = q[28];
-    d->missing_mask = q[29];
-    q += 30;
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++, q += 4)
-        d->nodes[i] = efs_put_upload_rd32(q);
-    memcpy(d->checksums, q, sizeof(d->checksums));
-    return d->ino && d->object_gen && d->lane == d->chunk_index % EFS_META_LANES &&
-           d->missing_mask && efs_chunk_missing_valid(d->missing_mask) ? EFS_OK : EFS_ERR_INVAL;
+    return efs_degraded_mark_decode(q, EFS_REBUILD_MARK_LEN, d);
 }
 
 /* W154 rebuild of a published object's missing fragment (K13): no ticket

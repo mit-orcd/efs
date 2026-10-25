@@ -83,7 +83,7 @@ const char *member_store_state_name(uint32_t state)
 /* [magic:8][version:4][member:4][state:4][reclen:4][token:8]
  * [cluster:8][port:2][alen:1][addr:63][pad:6][record:MAX][sum:32]. */
 #define IDENT_REC_AT EFS_IDENTITY_REC_AT
-static int ident_encode(const struct member_store *ms, uint8_t out[EFS_IDENTITY_FILE_LEN])
+int member_store_identity_encode(const struct member_store *ms, uint8_t out[EFS_IDENTITY_FILE_LEN])
 {
     size_t rlen = 0, alen = strlen(ms->addr);
     memset(out, 0, EFS_IDENTITY_FILE_LEN);
@@ -105,6 +105,58 @@ static int ident_encode(const struct member_store *ms, uint8_t out[EFS_IDENTITY_
         return EFS_ERR_INVAL;
     put32(out + 20, (uint32_t)rlen);
     efs_hash(out, IDENT_SUM_AT, out + IDENT_SUM_AT);
+    return EFS_OK;
+}
+
+int member_store_identity_decode(const uint8_t *buf, size_t got,
+                                  struct member_store *ms, char *err, size_t errlen)
+{
+    uint8_t sum[EFS_HASH_SIZE];
+    if (buf && got == EFS_IDENTITY_FILE_LEN)
+        efs_hash(buf, IDENT_SUM_AT, sum);
+    if (!buf || !ms || got != EFS_IDENTITY_FILE_LEN || memcmp(buf, ident_magic, 8) ||
+        get32(buf + 8) != IDENT_VERSION || memcmp(sum, buf + IDENT_SUM_AT, EFS_HASH_SIZE) ||
+        get32(buf + 16) > EFS_MEMBER_PROMISED || get32(buf + 20) > EFS_MEMBERSHIP_MAX_LEN ||
+        buf[42] > EFS_MEMBER_ADDR_MAX) {
+        ms_err(err, errlen, "store %s: identity.bin is unreadable, short, corrupt or of "
+               "another version", "record");
+        return EFS_ERR_UNSUPPORTED;
+    }
+    struct member_store decoded = *ms;
+    struct member_store *out = ms;
+    ms = &decoded;
+    ms->member_id = get32(buf + 12);
+    ms->state = get32(buf + 16);
+    ms->token = get64(buf + 24);
+    ms->cluster = get64(buf + 32);
+    ms->port = (uint16_t)(buf[40] << 8 | buf[41]);
+    memcpy(ms->addr, buf + 43, buf[42]);
+    ms->addr[buf[42]] = '\0';
+    for (unsigned i = 0; i < buf[42]; i++)
+        if (buf[43+i] <= 0x20 || buf[43+i] >= 0x7f) {
+            ms_err(err, errlen, "identity.bin: invalid endpoint");
+            return EFS_ERR_UNSUPPORTED;
+        }
+    uint32_t rlen = get32(buf + 20);
+    const struct efs_member *self = NULL;
+    int has_rec = ms->state == EFS_MEMBER_FORMED || ms->state == EFS_MEMBER_PROMISED;
+    if (rlen && efs_membership_decode(buf + IDENT_REC_AT, rlen, &ms->members) == EFS_OK)
+        self = efs_membership_find(&ms->members, ms->member_id);
+    int ok = ms->token && has_rec == (rlen != 0);
+    if (ms->state == EFS_MEMBER_JOINING)
+        ok = ok && !ms->member_id && !ms->cluster && !ms->port && !ms->addr[0];
+    else if (ms->state == EFS_MEMBER_SEED)
+        ok = ok && ms->member_id == 1 && ms->cluster && ms->port && ms->addr[0];
+    else
+        ok = ok && self && self->token == ms->token && self->port == ms->port &&
+             !strcmp(self->addr, ms->addr) && ms->members.cluster == ms->cluster &&
+             (ms->state == EFS_MEMBER_FORMED || ms->members.count == ms->members.formed);
+    if (!ok) {
+        ms_err(err, errlen, "store %s: identity.bin state %s disagrees with its node id, "
+               "endpoint or membership record", "record", member_store_state_name(ms->state));
+        return EFS_ERR_UNSUPPORTED;
+    }
+    *out = decoded;
     return EFS_OK;
 }
 
@@ -289,7 +341,7 @@ int member_store_open(struct member_store *ms, const char *dir, int seed, const 
             snprintf(ms->addr, sizeof(ms->addr), "%s", addr);
             ms->port = port;
         }
-        if (ident_encode(ms, id) != EFS_OK ||
+        if (member_store_identity_encode(ms, id) != EFS_OK ||
             write_replace(dir, "boot.bin", b, sizeof(b)) != EFS_OK ||
             write_replace(dir, "identity.bin", id, sizeof(id)) != EFS_OK) {
             ms_err(err, errlen, "store %s: cannot persist its initialization: %s", dir,
@@ -300,46 +352,10 @@ int member_store_open(struct member_store *ms, const char *dir, int seed, const 
         ms->created = 1;
         return EFS_OK;
     }
-    uint8_t sum[EFS_HASH_SIZE];
-    if (rc == EFS_OK && got == EFS_IDENTITY_FILE_LEN)
-        efs_hash(buf, IDENT_SUM_AT, sum);
-    if (rc != EFS_OK || got != EFS_IDENTITY_FILE_LEN || memcmp(buf, ident_magic, 8) ||
-        get32(buf + 8) != IDENT_VERSION || memcmp(sum, buf + IDENT_SUM_AT, EFS_HASH_SIZE) ||
-        get32(buf + 16) > EFS_MEMBER_PROMISED || get32(buf + 20) > EFS_MEMBERSHIP_MAX_LEN ||
-        buf[42] > EFS_MEMBER_ADDR_MAX) {
-        ms_err(err, errlen, "store %s: identity.bin is unreadable, short, corrupt or of "
-               "another version", dir);
+    rc = member_store_identity_decode(buf, got, ms, err, errlen);
+    if (rc != EFS_OK)
         member_store_close(ms);
-        return EFS_ERR_UNSUPPORTED;
-    }
-    ms->member_id = get32(buf + 12);
-    ms->state = get32(buf + 16);
-    ms->token = get64(buf + 24);
-    ms->cluster = get64(buf + 32);
-    ms->port = (uint16_t)(buf[40] << 8 | buf[41]);
-    memcpy(ms->addr, buf + 43, buf[42]);
-    ms->addr[buf[42]] = '\0';
-    uint32_t rlen = get32(buf + 20);
-    const struct efs_member *self = NULL;
-    int has_rec = ms->state == EFS_MEMBER_FORMED || ms->state == EFS_MEMBER_PROMISED;
-    if (rlen && efs_membership_decode(buf + IDENT_REC_AT, rlen, &ms->members) == EFS_OK)
-        self = efs_membership_find(&ms->members, ms->member_id);
-    int ok = ms->token && has_rec == (rlen != 0);
-    if (ms->state == EFS_MEMBER_JOINING)
-        ok = ok && !ms->member_id && !ms->cluster && !ms->port && !ms->addr[0];
-    else if (ms->state == EFS_MEMBER_SEED)
-        ok = ok && ms->member_id == 1 && ms->cluster && ms->port && ms->addr[0];
-    else
-        ok = ok && self && self->token == ms->token && self->port == ms->port &&
-             !strcmp(self->addr, ms->addr) && ms->members.cluster == ms->cluster &&
-             (ms->state == EFS_MEMBER_FORMED || ms->members.count == ms->members.formed);
-    if (!ok) {
-        ms_err(err, errlen, "store %s: identity.bin state %s disagrees with its node id, "
-               "endpoint or membership record", dir, member_store_state_name(ms->state));
-        member_store_close(ms);
-        return EFS_ERR_UNSUPPORTED;
-    }
-    return EFS_OK;
+    return rc;
 }
 
 int member_store_boot(struct member_store *ms, uint64_t fresh, uint64_t *incarnation,
@@ -387,7 +403,7 @@ static int ms_persist(struct member_store *ms, const struct member_store *next, 
                       size_t errlen)
 {
     uint8_t id[EFS_IDENTITY_FILE_LEN];
-    if (ident_encode(next, id) != EFS_OK ||
+    if (member_store_identity_encode(next, id) != EFS_OK ||
         write_replace(ms->dir, "identity.bin", id, sizeof(id)) != EFS_OK) {
         ms_err(err, errlen, "store %s: cannot persist identity: %s", ms->dir, strerror(errno));
         return EFS_ERR_IO;

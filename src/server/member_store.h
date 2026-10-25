@@ -83,6 +83,11 @@ int member_store_learn(struct member_store *ms, const struct efs_membership *m,
                        char *err, size_t errlen);
 void member_store_close(struct member_store *ms);
 
+/* Pure record codecs. A failed decode leaves *ms unchanged (including
+ * caller-owned path and lock). No filesystem access or synchronization. */
+int member_store_identity_encode(const struct member_store *ms, uint8_t out[EFS_IDENTITY_FILE_LEN]);
+int member_store_identity_decode(const uint8_t *buf, size_t len, struct member_store *ms,
+                                  char *err, size_t errlen);
 /* Encodings, exposed for tests. */
 void member_store_boot_encode(uint64_t counter, uint8_t out[EFS_BOOT_FILE_LEN]);
 int member_store_boot_decode(const uint8_t *in, size_t len, uint64_t *counter);
