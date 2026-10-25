@@ -1026,6 +1026,7 @@ test-rdma-message:
 test: test-rdma-message
 
 # make test-long: tests that wait on real deadlines, start daemons or
+	python3 tests/test_decoder_refusal.py
 # processes, inject faults or carry heavy workloads (1 s or more each on an
 # 8-core host). Not part of `make test`, the fast unit suite; `make test-all`
 # runs both and is what the gates run.
@@ -1154,3 +1155,9 @@ tests/decoders/check: tests/decoders/check.c src/server/discovery.c src/server/m
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/decoders/check.c src/server/discovery.c src/server/member_store.c $(LIB) $(LDFLAGS)
 decoder-check:
 	python3 scripts/decoder_check.py
+
+decoder-bins: tests/decoders/apply
+tests/decoders/efsd.o: src/server/efsd.c src/server/server_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) -Dmain=efs_decoder_unused_daemon_main -c -o $@ $<
+tests/decoders/apply: tests/decoders/apply.c src/server/raft_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/decoders/apply.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB) $(LDFLAGS)

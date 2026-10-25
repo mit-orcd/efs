@@ -1450,8 +1450,15 @@ void server_handle_conn(struct efs_conn *conn)
             efs_conn_send_msg(conn, EFS_MSG_QUERY_STATS_REPLY, &status, 1);
             break;
         }
-        default:
+        default: {
+            static uint64_t unknown;
+            uint64_t n=__atomic_add_fetch(&unknown,1,__ATOMIC_RELAXED);
+            if(n<=10 || !(n%1000))
+                fprintf(stderr,"handler: refused unknown message %u; closing (%llu so far)\n",
+                        (unsigned)type,(unsigned long long)n);
+            close_conn=1;
             break;
+        }
         }
 
         if (rdma_frame)

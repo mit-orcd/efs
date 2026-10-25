@@ -3969,6 +3969,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
      * (host_tag_refused). A tag outside it never reaches a handler; the
      * fall-through at the end still halts on anything a handler cannot
      * decode. */
+    if (!cmd || !clen)
+        return EFS_ERR_UNSUPPORTED;
     if (!efs_md_cmd_applicable(cmd[0]))
         return EFS_ERR_UNSUPPORTED;
     if(cmd[0]==EFS_MD_CMD_CREATE_REFUSAL) {

@@ -25,7 +25,7 @@ p.add_argument('--seconds', type=int, default=1200)
 p.add_argument('--extended-seconds', type=int, default=7200)
 p.add_argument('--jobs', type=int, default=2)
 p.add_argument('--out', type=Path)
-p.add_argument('--targets', nargs='+', choices=module.TARGETS, default=module.TARGETS)
+p.add_argument('--targets', nargs='+', choices=(*module.TARGETS, 'apply'), default=(*module.TARGETS, 'apply'))
 a = p.parse_args()
 if min(a.seconds,a.extended_seconds,a.jobs) < 1: p.error('durations and jobs must be positive')
 out = (a.out or Path(tempfile.mkdtemp(prefix='efs-decoders-'))).resolve()
@@ -41,11 +41,13 @@ with (out/'build.log').open('w') as f:
 if result.returncode: raise SystemExit('FAIL: sanitized decoder build; '+str(out/'build.log'))
 def run(target):
     work=out/target;work.mkdir()
-    duration=a.extended_seconds if target=='declaration' else a.seconds
+    duration=a.extended_seconds if target in ('declaration','apply') else a.seconds
     start=time.monotonic()
     with (work/'run.log').open('w') as f:
         try:
-            r=subprocess.run([str(build/'tests/decoders/check'),target,str(duration),str(work)],env=env,
+            command=([str(build/'tests/decoders/apply'),str(duration)] if target=='apply' else
+                     [str(build/'tests/decoders/check'),target,str(duration),str(work)])
+            r=subprocess.run(command,env=env,
                 stdout=f,stderr=subprocess.STDOUT,timeout=duration+60)
             rc=r.returncode
         except subprocess.TimeoutExpired: rc=124

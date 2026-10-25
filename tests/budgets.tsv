@@ -82,3 +82,4 @@ python3 tests/test_create_retry_ack.py	5	1
 python3 tests/test_apply_ring.py	5	1	
 python3 tests/test_posix_phase_trace.py	5	1	
 python3 tests/test_sanitizer_gate.py	120	1	
+python3 tests/test_decoder_refusal.py	120	1	Three private loopback daemons: refusal, ReadIndex, CREATE and orderly stop
