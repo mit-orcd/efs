@@ -84,9 +84,13 @@ _Static_assert(EFS_RAFT_STATUS_PEERS == EFS_RAFT_MAX_PEERS,
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
-/* W159: the whole applied-wait, however much the apply progresses
- * (apply_wait.h); the client's REPORT and resolve budgets are 8 s. */
-#define HOST_APPLY_WAIT_CAP_US 8000000ull
+/* W159: the whole applied-wait for an own entry, however much the apply
+ * progresses (apply_wait.h): five grants. It must end well inside the
+ * client's REPORT and resolve budgets (8 s), so a wait the server cannot
+ * finish still answers BUSY while the client has time to retry; an 8 s
+ * cap made test_k33_payload.py's writes during a member outage miss the
+ * client budget instead (read EIO in 5 of 9 runs, 0 of 5 on the base). */
+#define HOST_APPLY_WAIT_CAP_US 2000000ull
 #define HOST_CREATE_NAME_OFF 31
 static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
                           uint64_t gen, const uint8_t uuid[EFS_OPID_UUID_LEN],
@@ -5530,7 +5534,7 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
 /* own=1: the waiter's own committed entry (a proposal's verdict, a REPORT
  * batch): apply is certain, a BUSY would only re-propose it behind the
  * same lag, so the wait is bounded by progress (W159, apply_wait.h: a
- * 400 ms grant renewed while the member applies, 8 s cap). own=0: a
+ * 400 ms grant renewed while the member applies, 2 s cap). own=0: a
  * ReadIndex served behind a follower's apply, where a BUSY lets the
  * client ask the leader instead; that keeps the one fixed budget. */
 static int host_wait_applied_mode(struct efs_raft_host *h, uint8_t group,
