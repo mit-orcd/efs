@@ -342,6 +342,12 @@ test). On intel1: TSan clean on the KV tests, `make leak-check` 25/25, and
 `test_k33_client_view.py`, fails 5/5 on base `3e01ba95c` too. The orcd-mini
 A/B rerun is NOTRUN.
 
+[orcd-mini fresh deploy of `5a7463440` (RDMA), POSIX and ior](orcd-mini-deploy-5a7463440-20261025.md):
+**core 218/218, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
+two-client 68/68 PASS; ior easy PASS on both clients; ior hard FAIL 1 of 4
+runs on node9901 (EIO from a stale-generation REPORT, W161).** Expiry NOTRUN
+(`posix_expiry.py` not ported off `--disable-efs-commands`).
+
 [orcd-mini fresh deploy of `cb970ca7c` (RDMA, direct I/O)](orcd-mini-deploy-cb970ca7c-20261024.md):
 **core 216/216, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
 two-client 68/68 PASS; expiry 29/29 checks PASS** after the fixture's
