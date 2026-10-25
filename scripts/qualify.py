@@ -489,7 +489,7 @@ class Loopback(Controller):
         t0 = time.monotonic()
         try:
             ok = fn()
-            rc = 0 if ok in (None, True, 0) else 1
+            rc = 0 if ok is None or ok is True or (type(ok) is int and ok == 0) else 1
         except Exception as exc:  # recorded as the step's failure
             rc, ok = 1, exc
         entry.update(end=now(), seconds=round(time.monotonic() - t0, 3), rc=rc, timed_out=False)
@@ -2847,6 +2847,39 @@ def pid_alive(pid):
         return True
 
 
+def node_identity(pid, addr, store):
+    return dict(pid=pid, start=Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19],
+                uid=os.getuid(), source=str(ROOT.resolve()), addr=addr, store=str(store.resolve()))
+
+
+def signal_owned_node(pid, sig, addr, store, identity_path):
+    """A stale/reused numeric pid is never authority to stop a process."""
+    expected = json.loads(identity_path.read_text())
+    if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
+        raise RuntimeError('owned node signalling requires Linux pidfd support')
+    fd = os.pidfd_open(pid)
+    try:
+        actual = node_identity(pid, addr, store)
+        if expected != actual or Path(f'/proc/{pid}').stat().st_uid != os.getuid():
+            raise RuntimeError('recorded node identity does not match live process')
+        # /proc cmdline can be empty briefly during exec. This matters for an
+        # interrupted join (--timeout 0); an empty read is not an identity.
+        end = time.monotonic() + 1
+        while True:
+            args = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
+            if args[0]:break
+            if time.monotonic() >= end:raise RuntimeError('node command identity remained unreadable')
+            time.sleep(.005)
+        binary = os.fsencode(str(ROOT / 'efsd'))
+        # A shebang launcher may prepend interpreter arguments. The recorded
+        # boot tick and pidfd still bind this to the child we started.
+        if binary not in args or os.fsencode(str(store)) not in args or os.fsencode(addr) not in args:
+            raise RuntimeError('recorded node command does not match live process')
+        signal.pidfd_send_signal(fd, sig)
+    finally:
+        os.close(fd)
+
+
 def h_node(a):
     """One efsd of a driver-owned private cluster, on this host from this
     tree: `start` launches it detached (seed: ADDR STORE; joiner: --join
@@ -2855,14 +2888,31 @@ def h_node(a):
     sends SIGTERM to the recorded pid and waits, SIGKILL only after
     --timeout (exit 124); `kill` sends SIGKILL at once (an interrupted join)."""
     store = Path(a.store)
+    for endpoint in (a.addr, a.join):
+        if not endpoint:continue
+        if not re.fullmatch(r'[^\s:]+:\d+', endpoint) or \
+                not 1024 < int(endpoint.rsplit(':', 1)[1]) < 65536 or \
+                int(endpoint.rsplit(':', 1)[1]) in RESERVED_PORTS:
+            print(f'_node: reserved or invalid endpoint {endpoint}')
+            return 2
     pidfile, logfile = store.parent / f'{store.name}.pid', store.parent / f'{store.name}.log'
     if str(store.resolve()).startswith('/data1/efs'):
         print('_node: stores may not live under /data1/efs')
         return 2
+    identity_path = pidfile.with_suffix('.identity.json')
     old = int(pidfile.read_text()) if pidfile.exists() and pidfile.read_text().strip().isdigit() else None
+    def send(sig):
+        try:
+            signal_owned_node(old, sig, a.addr, store, identity_path)
+            return True
+        except ProcessLookupError:
+            return True
+        except (OSError, ValueError, RuntimeError, KeyError, IndexError) as exc:
+            print(f'_node {a.op} {a.addr}: refusing signal: {exc}')
+            return False
     if a.op == 'kill':  # A13: an interrupted join (no orderly stop)
         if old and pid_alive(old):
-            os.kill(old, signal.SIGKILL)
+            if not send(signal.SIGKILL):return 2
             end = time.monotonic() + 30
             while time.monotonic() < end and pid_alive(old):
                 time.sleep(0.1)
@@ -2872,12 +2922,12 @@ def h_node(a):
         if not old or not pid_alive(old):
             print(f'_node stop {a.addr}: not running')
             return 0
-        os.kill(old, signal.SIGTERM)
+        if not send(signal.SIGTERM):return 2
         end = time.monotonic() + a.timeout
         while time.monotonic() < end and pid_alive(old):
             time.sleep(0.2)
         if pid_alive(old):
-            os.kill(old, signal.SIGKILL)
+            if not send(signal.SIGKILL):return 2
             print(f'_node stop {a.addr}: pid {old} ignored SIGTERM for {a.timeout}s; SIGKILL')
             return 124
         print(f'_node stop {a.addr}: pid {old} exited')
@@ -2897,6 +2947,7 @@ def h_node(a):
         log.flush()
         proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 env=env, start_new_session=True)
+    identity_path.write_text(json.dumps(node_identity(proc.pid, a.addr, store)))
     pidfile.write_text(f'{proc.pid}\n')
     host, port = a.addr.rsplit(':', 1)
     end = time.monotonic() + a.timeout
@@ -2912,7 +2963,7 @@ def h_node(a):
         except OSError:
             time.sleep(0.5)
     print(f'_node start {a.addr}: pid {proc.pid} alive, not listening after {a.timeout}s')
-    return 0
+    return 0 if a.timeout == 0 else 1
 
 
 # --------------------------------------------------------------------------
@@ -3236,6 +3287,11 @@ def main(argv=None):
             p.error(f'unknown gate {name!r}; known: {", ".join(names)}')
     out.mkdir(parents=True, exist_ok=True)
     work.mkdir(parents=True, exist_ok=True)
+    if controller is not None and not a.plan:
+        # Tracker/LocalSearch must not crawl driver-owned FUSE fixtures.
+        # Its documented exclusion marker lives on the host, never in EFS.
+        # Busy mount checks still refuse every external holder they observe.
+        (work / '.nomedia').touch()
     q = Qualify(a, cluster, out, work, None, plugins)
     q.control = controller or (PrivateCluster(q) if cluster.get('private_cluster') else Controller(q))
     if loop:

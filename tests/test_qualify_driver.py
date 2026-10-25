@@ -458,6 +458,13 @@ try:
     loop.stop_daemon = lambda i: called.append(i) or (1 if i == 0 else 0)
     loop._logged = lambda g, label, fn: fn()
     assert loop.stop_cluster(None) is False and called == [0, 1, 2]
+    # False compares equal to integer 0 in Python, but is a failed controller
+    # operation, not a successful stop or a successful readiness predicate.
+    from types import SimpleNamespace
+    for value, expected in ((False, 1), (True, 0), (None, 0), (0, 0), (1, 1)):
+        commands = SimpleNamespace(commands=[])
+        rc, why = Q.Loopback._logged(loop, commands, 'controller-result', lambda: value)
+        assert rc == expected and commands.commands[-1]['rc'] == expected, (value, rc)
     five = matrix['topologies']['loopback-5']
     assert five['loopback'] == 5 and five['transport'] == 'tcp'
     assert five['gates'] == matrix['topologies']['loopback-3']['gates']
@@ -507,6 +514,18 @@ try:
     assert any('_node start --addr 10.1.0.204:19060 --store /home/maik/efs-qual-matrix/bare-metal-4-tcp/a13/n1'
                in c and '--quota 2G' in c and '--join' not in c for c in a13), a13
 
+    # The owned loopback tree excludes desktop crawlers before formation,
+    # without adding a marker inside the mounted filesystem or bypassing stop.
+    seen_marker = []
+    def formation_failure(loop):
+        seen_marker.append((loop.work / '.nomedia').is_file())
+        raise RuntimeError('test formation failure')
+    with patch.object(Q.Loopback, 'start', formation_failure), patch.object(Q.Loopback, 'teardown'):
+        try:run('--loopback', '3', '--out', str(tmp / 'marker-out'), '--work', str(tmp / 'marker-work'))
+        except RuntimeError as exc:assert str(exc) == 'test formation failure'
+        else:raise AssertionError('formation failure hidden')
+    assert seen_marker == [True]
+
     # 12. _node: start waits until the daemon listens, refuses a second
     # start, stop sends SIGTERM and waits (a stub efsd from a stub tree).
     tree = tmp / 'tree'
@@ -532,10 +551,48 @@ try:
             assert Q.pid_alive(pid)
             assert Q.main(['_node', 'stop', *node]) == 0
             assert Q.main(['_node', 'stop', *node]) == 0
+            # A private pidfile alone does not own another process. Neither
+            # a missing record nor a forged identity may signal the child.
+            import subprocess
+            unrelated = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(60)'])
+            pidfile = tmp / 'pc/n1.pid'
+            identity = tmp / 'pc/n1.identity.json'
+            saved_identity = identity.read_text()
+            try:
+                pidfile.write_text(str(unrelated.pid))
+                identity.unlink()
+                assert Q.main(['_node', 'kill', *node]) == 2 and unrelated.poll() is None
+                forged = Q.node_identity(unrelated.pid, f'127.0.0.1:{port}', tmp / 'pc/n1')
+                forged['start'] = str(int(forged['start']) + 1)
+                identity.write_text(json.dumps(forged))
+                assert Q.main(['_node', 'stop', *node]) == 2 and unrelated.poll() is None
+                forged['start'] = Q.node_identity(unrelated.pid, f'127.0.0.1:{port}', tmp / 'pc/n1')['start']
+                identity.write_text(json.dumps(forged))
+                assert Q.main(['_node', 'kill', *node]) == 2 and unrelated.poll() is None
+                # Empty /proc cmdline during exec is never permission to
+                # signal. Wait for a readable command, retaining the pidfd.
+                command = b'python3\0-u\0' + os.fsencode(str(tree / 'efsd')) + b'\0' + os.fsencode(f'127.0.0.1:{port}') + b'\0' + os.fsencode(str(tmp / 'pc/n1')) + b'\0'
+                with patch.object(Path, 'read_bytes', side_effect=[b'', command]) as read, \
+                     patch.object(Q.time, 'sleep') as pause, \
+                     patch.object(Q.signal, 'pidfd_send_signal') as send:
+                    Q.signal_owned_node(unrelated.pid, Q.signal.SIGTERM, f'127.0.0.1:{port}', tmp / 'pc/n1', identity)
+                    assert read.call_count == 2 and pause.call_count == 1
+                    send.assert_called_once()
+                assert unrelated.poll() is None
+            finally:
+                unrelated.terminate();unrelated.wait()
+                identity.write_text(saved_identity)
             # kill: an interrupted join (A13); --timeout 0 returns once spawned.
             assert Q.main(['_node', 'start', *node[:4], '--timeout', '0']) == 0
             pid = int((tmp / 'pc/n1.pid').read_text())
-            assert Q.main(['_node', 'kill', *node]) == 0 and not Q.pid_alive(pid)
+            assert Q.main(['_node', 'kill', *node]) == 0 and not Q.pid_alive(pid), buf.getvalue()
+            assert Q.main(['_node', 'start', *node[:4], '--timeout', '0.05']) == 1
+            assert Q.main(['_node', 'stop', *node]) == 0
+            refused = tmp / 'reserved-node'
+            assert Q.main(['_node', 'start', '--addr', '127.0.0.1:17432', '--store', str(refused)]) == 2
+            assert Q.main(['_node', 'start', '--addr', f'127.0.0.1:{port}', '--store', str(refused),
+                           '--join', '127.0.0.1:27432']) == 2
+            assert not refused.exists()
         out = buf.getvalue()
         assert 'listening' in out and 'already running' in out and 'exited' in out and 'not running' in out, out
         assert f'efsd 127.0.0.1:{port} {tmp / "pc/n1"} --quota 4G --discovery-port 0' in (tmp / 'pc/n1.log').read_text()
