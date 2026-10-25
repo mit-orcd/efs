@@ -3282,6 +3282,9 @@ static uint64_t g_node_away_until_ms[EFS_MAX_NODES + 1];
 
 static uint64_t put_away_mark_ms(void)
 {
+#if EFS_FAULTS
+    /* Fault builds only (A6): tests make the window outlast the test so the
+     * away-member interleaving is forced, not timed. */
     static uint64_t ms;
     if (!ms) {
         const char *v = getenv("EFS_FAULT_AWAY_MARK_MS");
@@ -3289,6 +3292,9 @@ static uint64_t put_away_mark_ms(void)
         ms = n ? (uint64_t)n : PUT_AWAY_MARK_MS;
     }
     return ms;
+#else
+    return PUT_AWAY_MARK_MS;
+#endif
 }
 
 static void node_note_away(efs_node_id_t id)

@@ -29,7 +29,8 @@ Four, then five members (additions through K33):
     on the client (a write while it is stopped fails its fragment hard and
     is placed around on node 4, no mark), returns, and node 4 stops while
     that mark is live (EFS_FAULT_AWAY_MARK_MS=600000 on the mount: the
-    window outlasts the test instead of its 10 s default). The client must
+    window outlasts the test instead of its 10 s default; the hook exists in
+    EFS_FAULTS builds only, so a normal build runs this case timed). The client must
     then place around node 4 onto node 3, the away member, rather than
     acknowledge on two fragments (it did, until the fix: 2 of 10 gate
     runs, whenever node 4 joined and stopped within 10 s of node 3's last
