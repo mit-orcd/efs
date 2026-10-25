@@ -154,7 +154,7 @@ renewals as `wait_extends=`. No wire, store or setting change; no new
 | Refined fix (apply-progress counter, `da75f8527`) at 7 ms, one lock: run 17 (with the base reruns of two gate tests on the host at the same time), run 18 (core run alone, quieter host) | Run 17: `concurrent_creates_same_dir` PASS in both rounds, `dir_many_files` timeout in both, `wait_extends` 75 on n3 and 2 on n2, `wait_timeouts` 4 on n3 and 0 elsewhere; the core run took 438 s under the extra load and timed out `mtime_monotonic_many_writes` (30 s). Run 18: core run **218/218 in 336 s**, no RPC ≥ 1 s (slowest receive 491 ms), so that timeout was the host's load, not the change. |
 | Final tree (`08850a2d3`: own-entry waits progress-bounded, reads at the fixed budget) at 7 ms, one lock, 4 load threads, 2 rounds: run 20 | Core run **218/218 in 328 s**; `concurrent_creates_same_dir` PASS in both rounds, `dir_many_files` timeout in round 0 and PASS in round 1 (74 s of 75): **5 of 6** against the base's 2 of 6 (run 13); expired waits 22 on n2 (ReadIndex, by design), own-entry 1 on n3 (one renewal, then the cap); 2 RPCs ≥ 1 s (max 1.35 s); host load average 6.2 (the W123 campaign). |
 | Final cap (2 s, `19f8aa426`) at 7 ms, one lock, 4 load threads, 2 rounds: run 21 | Core run 218/218 in 325 s; `concurrent_creates_same_dir` PASS in both rounds, `dir_many_files` timeout in both: **4 of 6** (base 2 of 6, 8 s cap 5 of 6); own-entry waits reached the cap 3 times on n1 and 2 on n2 (two renewals), 6 RPCs ≥ 1 s (max 1.24 s); host load average 7.4. |
-| `test_k33_payload.py` (K33 acceptance, step 5 reads with a member down) | Untouched base on amd: **5 of 5 PASS**. Fixed trees: 8 s cap 4 of 9 PASS (every failure a read EIO in step 5), 2 s cap **3 of 4 PASS** (one EIO, same step). The same EIO is on record for an untouched base on intel2 ([b6-k37](b6-k37-merge-tests-20261024.md), one gate), so it is intermittent there too, but the rate on the fixed trees is higher than this host's base shows: **open check before merge** (whether a longer own-entry wait during an outage lets a REPORT or its publication run past a client budget). |
+| `test_k33_payload.py` (K33 acceptance, step 5 reads with a member down) | Untouched base on amd: **5 of 5 PASS**. Fixed trees: 8 s cap 4 of 9 PASS (every failure a read EIO in step 5), 2 s cap **3 of 4 PASS** (one EIO, same step). The same EIO is on record for an untouched base on intel2 ([b6-k37](b6-k37-merge-tests-20261024.md), one gate), so it is intermittent there too, but the rate on the fixed trees looked higher than this host's base showed. **Settled** (`78d8c9148`, the flake-sweep client fix `fc79fe086` taken: an away member is a spare of last resort, an acknowledged fragment clears its mark): **10 runs each, alternating on amd, this tree 9 of 10 PASS and devel `ec3e09306` 9 of 10 PASS**, the one failure on each side the same step-5 read EIO in the same (third) round. The rate is the base's; the earlier difference was the away-mark defect plus small samples. Raw: `payload-10x/`. |
 | Final tree at 15 ms, no queueing: run 19 | No wait on any member outlived a grant (`wait_timeouts` 0 everywhere, against 296 on the base in run 15), so the run says nothing about the change; the host was at load average 6.6 (2.9 in run 15) and the core run took 435 s with `concurrent_appends_two_proc` and `mtime_monotonic_many_writes` timing out, `dir_many_files` PASS in round 0 and timeout in round 1 as on the base. |
 | A/B at 15 ms per barrier, no queueing (base run 15, fix run 16) | **Base:** `wait_timeouts` **254** on n1 and 42 on n3 (296 BUSY answers from expired waits), `dir_many_files` PASS in round 0 (69 s of 75) and timeout in round 1, other cases PASS, no RPC ≥ 1 s. **Fix:** `wait_timeouts` **3** (2 on n2, 1 on n3), `wait_extends` 80 on n3; the same case verdicts (`dir_many_files` timeout in round 1 only), no RPC ≥ 1 s. Core run 275 s (base) and 272 s (fix); host load average 3.7 in both. The fix removes the BUSY storm (296 → 3) and leaves the barrier cost, which decides `dir_many_files` here. Formation itself is sensitive to the barrier latency: run 11 at the same 15 ms never formed (`raft-mkfs rc=-13` for 120 s), runs 15 and 16 formed within seconds. |
 | amd `make test-all` on the final tree (`19f8aa426`: 2 s cap, all harness updates; `EFS_TEST_TARGET=test-all bash scripts/make_test_summary.sh`) | 473 commands, **10 FAIL, 6 NOTRUN** (2746 s): the 9 RDMA host limits (`test_declaration_gate`, `test_rdma_xprt`, 7 × `test_rdma_segmented`, as on every amd gate and on devel there) and `test_stop_progress.py` (the clean stop could not unmount the test's FUSE mount: `fusermount3: failed to unmount`; in the two earlier gates the desktop's `gvfs-udisks2-volume-monitor` was named as holding it; the test passed 2 of 2 standalone on the base and 1 of 3 gates); `test_k33_payload.py` and `test_w159_apply_wait.py` PASS in this gate. NOTRUN: cluster scripts, EFS_FAULTS build, no first-catalog race in 12 formations, valgrind absent, TMPDIR not XFS, the runner self-test. Raw: `testall-src5/`. |
@@ -163,10 +163,11 @@ renewals as `wait_extends=`. No wire, store or setting change; no new
 
 ## Limitations and follow-ups
 
-- **Open before merge:** `test_k33_payload.py` fails more often on the
-  fixed trees than on this host's base (table above). Either establish
-  the step-5 read EIO as the known intermittent, or find what the longer
-  own-entry wait changes during a member outage.
+- `test_k33_payload.py`'s step-5 read EIO is a base intermittent (1 of 10
+  on devel `ec3e09306` and on this tree with the flake-sweep client fix,
+  table above); the earlier higher rate on the fixed trees went with the
+  away-mark defect that `fc79fe086` fixes. The `EFS_PUT_AWAY_MARK_MS`
+  inventory row belongs to that branch.
 - Single host, loopback, TCP, emulated barrier latency: regression
   evidence, not qualification (A4). The intel1 fixture logs could not be
   read (owned by `efs`); the mechanism is shown on amd with the emulation,
@@ -217,9 +218,12 @@ amd `~/efs-artifacts/w159-20261025/`: one directory per run
 gates (`summary.txt`, `timings.tsv`, `cmds.txt`, `fail-*.log`); the
 standalone reruns (`basefail*`, `fixre*`, `v3`–`v5-*`, `basepay*`,
 `w159test*`, `maketest-*`), the build logs and `fsync_probe.py`.
-`SHA256SUMS` over 593 files, sha256 `960b0614…bde3`. Private trees
-`~/w159/src`, `~/w159/base` and the work directories deleted after the run.
+`payload-10x/` (the ten alternating `test_k33_payload.py` runs per tree).
+`SHA256SUMS` over 616 files, sha256 `f5b13550…4fc5`. Private trees
+`~/w159/src`, `~/w159/base`, `~/w159/devel` and the work directories
+deleted after the run.
 Source commits: `8b860a554` (first fix, reproduction script, tests),
 `da75f8527` (apply-progress counter), `1da68234a` (own-entry waits only),
 `08850a2d3` (own-entry counter), `19f8aa426` (2 s cap), harness updates
-`6bc5ac5ea`, `6e17db494`, `55b0d21c1`, `f0216b72d`.
+`6bc5ac5ea`, `6e17db494`, `55b0d21c1`, `f0216b72d`, `78d8c9148` (the
+flake-sweep client fix taken).
