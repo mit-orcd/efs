@@ -1612,6 +1612,10 @@ A forwarded PREPARE batch refused for one CAS-lost chunk left the other chunks' 
 **code fix PASS (scoped), branch `claude/vibrant-wiles-325684` on devel `5af760ff1`, not merged, not pushed; intel2 `make test-all` PASS with host limits at `bac34da00` (483 commands, 0 FAIL, 16 NOTRUN; a first run had 1 FAIL, `test_k36_recovery.py` step 8 read EIO, which passed 3 of 3 alone on the branch and on the base and did not recur); orcd-mini ior hard rerun NOTRUN.**
 A unit test on the production replay proves the cause; the body-less span replay now rebuilds or fails closed, a record re-sent unchanged after two STALE rounds is stopped, and `report-resolve` names the stuck record. The loopback test found and the branch fixes two silent losses of acknowledged bytes in the same path. Loopback, 24 writers sharing chunks under dcache pressure: base 6 of 6 runs fail (5 `EIO` with the K38 signature, 1 with lost records), fix 20 of 20 pass. Two writing clients on shared chunks failed ~50 % with unit BUSY (base too): K40 above.
 
+[K38: packed read EIO after "Protection: full" in the K33 payload outages](../status/k38-payload-protection-now-20261025.md):
+**PASS (scoped, loopback, amd), branch `claude/kind-nash-0f2244`, not merged, not pushed; `tests/test_k33_payload.py` 30 of 30 PASS alternating with the base (devel `5a7463440` + the flake-sweep client fix), which failed 8 of 30; `make test-all` on amd at `f0b51c0ed`: 480 commands, 14 FAIL, 6 NOTRUN; untouched devel 479, 12 FAIL; the 12 are shared (RDMA, host limits), the other two (D4 `put_errors`, the step-down latency bound under load) fail on devel or pass standalone on both (raw: amd `~/efs-artifacts/k38-20261025/`, `SHA256SUMS` `4df49442…ae9b`).**
+Cause of the remaining step-5 `EIO`: the packer wrote a segment degraded (often around a member that had returned 0.3 s earlier: a stale pooled peer connection or its connect cooldown gave NET) and `efs-mgmt status` still said `Degraded segments: 0`, `Protection: full`, because both degraded counts were the last rebuild pass's sample; the test (as an operator would) then stopped the member holding one of the two fragments. Fixed: STATUS counts the leader's marks at the reply; the packer resends a NET fragment once on a new connection. New `tests/test_k38_protection_now.py` (fails with either half reverted). Live multi-host NOTRUN.
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](../status/f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
@@ -1871,7 +1875,10 @@ skipped a member that was back. Fixed in efsd (no acknowledgement while
 stopping) and the client (complete the stripe, re-pick a voter, probe a
 down-marked member). New `tests/test_k34_stop_put.py`. On nuc: `make
 test-all` 450 commands, 0 FAIL, 14 NOTRUN host limits; `tests/test_k33_payload.py` 20 of 20 runs PASS (base: 2 of 8 FAIL). Live
-multi-host stop under load NOTRUN.
+multi-host stop under load NOTRUN. **Oct 25:** the step-5 `EIO` came back intermittently on later devel
+(W159: 1 of 10; amd, three parallel lanes: 8 of 30) from a fourth cause,
+a segment written degraded while status still reported full protection:
+fixed by [K38](../status/k38-payload-protection-now-20261025.md) (30 of 30).
 
 [Oct 24 merge: placement spread, K33 acceptance, test hygiene, W126, K15/K29 rule](../status/k33-acceptance-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `a2326a369`: 449 commands, 0 FAIL, 14 NOTRUN host limits (1,340 s; raw: intel2 `~/efs-artifacts/merge-wave3-20261024/`, `SHA256SUMS` `3e1f0f95…b2c`).** Placement needs a fresh format. Live gates for all five stay NOTRUN.
@@ -2009,7 +2016,10 @@ with joins through other members, unreachable members kept; 3→6 capacity,
 `df`, protection and abandoned-upload reporting, automatic quota, reclaim
 and W154 rebuild. Fixed: reclaim stalled after growth (a retired group-2
 replica waited on its own apply) and a whole-cluster restart waited 30 s
-per starting peer.
+per starting peer. **Oct 25:** the payload test's single-member outages
+waited on `efs-mgmt status` counts that lagged a degraded segment write by
+up to a GC pass (read `EIO`, base 8 of 30 on amd); fixed by
+[K38](../status/k38-payload-protection-now-20261025.md), payload 30 of 30.
 
 [K33 live client view refresh](../status/k33-client-view-20261024.md):
 **code gate PASS with host limits (intel1 `make -k test-all` at `8b4cfbe77`,

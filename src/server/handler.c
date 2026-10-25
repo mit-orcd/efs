@@ -8,6 +8,8 @@
 #include "efs/put_upload.h"
 #include "efs/opid.h"
 #include "efs/meta_cmd.h"
+#include "efs/meta_apply.h"
+#include "efs/raft.h"
 #include "efs/version.h"
 #include "efs/storage_capacity.h"
 #include "server_internal.h"
@@ -867,6 +869,28 @@ void server_handle_conn(struct efs_conn *conn)
             }
             reply.segment_sampled =
                 __atomic_load_n(&g_server->segment_sampled_mask, __ATOMIC_RELAXED);
+            /* K38: for the groups this node leads (the sampled bits), the
+             * degraded counts come from the local replica at this reply,
+             * not from the last rebuild pass: a stripe or segment marked
+             * degraded after the pass sampled was reported as "Protection:
+             * full" for up to a GC pass, and a member stopped on that word
+             * took the stripe's second fragment (test_k33_payload.py step 5
+             * read EIO). The chunk count is the apply-kept one (W154; it
+             * may overshoot, never undershoot); segments are counted now. */
+            for (int g = 0; g < 2; g++) {
+                uint8_t group = g ? EFS_RAFT_GROUP_SHARD2 : EFS_RAFT_GROUP_SHARD;
+                if (reply.degraded_sampled & (1u << g)) {
+                    int64_t have = efs_meta_degraded_count_peek(g ? 2u : 1u);
+                    if (have >= 0)
+                        reply.degraded_chunks[g] = (uint64_t)have;
+                }
+                uint64_t total = 0, lost = 0;
+                if ((reply.segment_sampled & (1u << g)) &&
+                    server_segment_degraded_now(group, &total, &lost) == EFS_OK) {
+                    reply.degraded_segments[g] = total;
+                    reply.unrecoverable_segments[g] = lost;
+                }
+            }
             reply.segments_rebuilt =
                 __atomic_load_n(&g_server->segments_rebuilt, __ATOMIC_RELAXED);
             reply.segment_rebuild_failures =

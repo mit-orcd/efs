@@ -634,6 +634,39 @@ static int sr_count_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v,
     return 0;
 }
 
+/* K38: a group's degraded-segment marks counted in the local replica now.
+ * The status reply uses this, not the pass's sample, for the groups this
+ * node leads: a mark committed after the pass sampled (the packer writes a
+ * segment degraded between two GC passes) was reported as "Degraded
+ * segments: 0" and "Protection: full" for up to a pass, and a member
+ * stopped on that word took the segment's second fragment with it
+ * (tests/test_k33_payload.py step 5, read EIO). */
+int server_segment_degraded_now(uint8_t group, uint64_t *total, uint64_t *lost)
+{
+    struct efs_kv *kv = server_raft_host_kv();
+    uint32_t anchor = efs_pack_group_anchor(group);
+    if (!kv || !anchor) return EFS_ERR_INVAL;
+    uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_DEGRADED};
+    struct sr_count cnt = {0};
+    if (efs_kv_scan_prefix(kv, prefix, sizeof(prefix), sr_count_cb, &cnt) < 0) return EFS_ERR_IO;
+    *total = cnt.total;
+    *lost = cnt.lost;
+    return EFS_OK;
+}
+
+/* K38 tests: EFS_FAULT_REBUILD_SAMPLE_HOLD=<path> stops the W154 chunk and
+ * K37 segment rebuild passes before they sample or rebuild while the file
+ * exists, so a status reply cannot take its counts from a pass. */
+int server_test_rebuild_sample_held(void)
+{
+#if EFS_FAULTS
+    const char *path = getenv("EFS_FAULT_REBUILD_SAMPLE_HOLD");
+    return path && *path && !access(path, F_OK);
+#else
+    return 0;
+#endif
+}
+
 void server_segment_rebuild_pass(struct efsd_server *s, uint8_t group)
 {
     struct efs_kv *kv = server_raft_host_kv();
@@ -641,7 +674,7 @@ void server_segment_rebuild_pass(struct efsd_server *s, uint8_t group)
     int gi = sr_gi(group);
     uint64_t t0 = sr_now_us();
     EFS_NODE_TABLE(nodes);
-    if (!s || !kv || !anchor || !nodes) return;
+    if (!s || !kv || !anchor || !nodes || server_test_rebuild_sample_held()) return;
     pthread_mutex_lock(&s->lock);
     count = s->node_count > EFS_MAX_NODES ? EFS_MAX_NODES : s->node_count;
     memcpy(nodes, s->nodes, count * sizeof(nodes[0]));

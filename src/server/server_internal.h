@@ -762,6 +762,13 @@ int server_segment_mark_commit(uint8_t group, uint64_t id, uint64_t gen, uint32_
                                uint32_t reason);
 /* Leadership lost: forget the group's audit and rebuild progress. */
 void server_segment_rebuild_reset(uint8_t group);
+/* K38: the group's degraded-segment marks (total; lost: two or more
+ * fragments) counted in the local replica at the call, for the status
+ * reply of a group this node leads. */
+int server_segment_degraded_now(uint8_t group, uint64_t *total, uint64_t *lost);
+/* 1 while EFS_FAULT_REBUILD_SAMPLE_HOLD holds the rebuild passes (EFS_FAULTS
+ * builds; always 0 otherwise). */
+int server_test_rebuild_sample_held(void);
 /* 0 while any storage root's recovery after an unclean stop is uncertain. */
 int server_put_sync_settled(void);
 /* Linearizable read of a segment object from its group (ReadIndex, then the

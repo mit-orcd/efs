@@ -476,28 +476,65 @@ static void pk_read_files(const struct efs_node *nodes, uint32_t count, struct p
     pk_reader_run(&r); /* this thread reads too; a failed create only slows it */
     for (uint32_t i = 0; i < started; i++) pthread_join(t[i], NULL);
 }
+/* K38 tests: EFS_FAULT_SEGMENT_PUT_STALE=<dir>: while <dir>/stale-<node id>
+ * exists, the packer's next pooled connection to that node fails as one
+ * kept across the node's restart does (the flag is consumed). */
+static int pk_stale_fault(uint32_t id)
+{
+#if EFS_FAULTS
+    const char *d = getenv("EFS_FAULT_SEGMENT_PUT_STALE");
+    char flag[EFS_MAX_PATH];
+    if (!d || !*d) return 0;
+    snprintf(flag, sizeof(flag), "%s/stale-%u", d, id);
+    if (unlink(flag)) return 0;
+    fprintf(stderr, "fault: EFS_FAULT_SEGMENT_PUT_STALE: pooled connection to node %u fails once\n", id);
+    return 1;
+#else
+    (void)id;
+    return 0;
+#endif
+}
+/* K38: a NET failure on the pooled connection (or none from the pool) is
+ * tried once more on a new connection before the fragment counts as
+ * missing. The pool keeps connections across a member's restart (dropped
+ * only when used) and refuses a peer for its connect cooldown until a
+ * heartbeat answers, so 0.3 s after node 3 returned the packer wrote a
+ * segment degraded on nodes 4 and 5 (rc=-6); node 4 stopped next and the
+ * segment's files read EIO (tests/test_k33_payload.py step 5). A member
+ * that is down fails the new connection too: one connect per segment, and
+ * the packer backs off after a degraded or failed upload. */
 static int pk_put_fragment(const struct efs_node *nodes, uint32_t count, uint32_t id,
                            const uint8_t *body, uint32_t len)
 {
     if (id == pk.s->id) return server_segment_put(pk.s, body, len);
     const struct efs_node *n = pk_node(nodes, count, id);
     if (!n) return EFS_ERR_IO;
-    struct efs_conn *pc = server_peer_conn_get(n->addr, n->port);
-    if (!pc) return EFS_ERR_NET;
-    uint8_t type;
-    void *reply = NULL;
-    uint32_t rlen = 0;
-    if (efs_conn_send_msg(pc, EFS_MSG_PUT_SEGMENT, body, len) ||
-        efs_conn_recv_msg(pc, &type, &reply, &rlen)) {
-        server_peer_conn_drop(n->addr, n->port, pc);
+    for (int fresh = 0; fresh < 2; fresh++) {
+        struct efs_conn *pc = fresh ? server_peer_conn_new(n->addr, n->port)
+                                    : server_peer_conn_get(n->addr, n->port);
+        if (!pc) continue;
+        uint8_t type = 0;
+        void *reply = NULL;
+        uint32_t rlen = 0;
+        if ((!fresh && pk_stale_fault(id)) ||
+            efs_conn_send_msg(pc, EFS_MSG_PUT_SEGMENT, body, len) ||
+            efs_conn_recv_msg(pc, &type, &reply, &rlen)) {
+            if (fresh) efs_conn_destroy(pc);
+            else server_peer_conn_drop(n->addr, n->port, pc);
+            free(reply);
+            continue;
+        }
+        if (fresh) efs_conn_destroy(pc);
+        else server_peer_conn_release(n->addr, n->port, pc);
+        int rc = type == EFS_MSG_PUT_SEGMENT_REPLY && rlen == sizeof(struct efs_msg_segment_put_reply)
+                 ? ((struct efs_msg_segment_put_reply *)reply)->rc : EFS_ERR_PROTO;
         free(reply);
-        return EFS_ERR_NET;
+        if (fresh)
+            fprintf(stderr, "packer: segment fragment for node %u sent on a new connection after "
+                    "the pooled one failed: rc=%d\n", id, rc);
+        return rc;
     }
-    server_peer_conn_release(n->addr, n->port, pc);
-    int rc = type == EFS_MSG_PUT_SEGMENT_REPLY && rlen == sizeof(struct efs_msg_segment_put_reply)
-             ? ((struct efs_msg_segment_put_reply *)reply)->rc : EFS_ERR_PROTO;
-    free(reply);
-    return rc;
+    return EFS_ERR_NET;
 }
 static int pk_put_transient(int rc)
 {
