@@ -253,7 +253,7 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| `EFS_FAULT_AWAY_MARK_MS` | `client/write.c` (put_away_mark_ms) | 10000 ms: a member that failed a PUT hard takes no new placement while another spare exists; `test_k35_fsync_degraded.py` sets 600000 so case 7 forces the interleaving | fault/test hook | — | `test_k35_fsync_degraded.py` | Keep: the forced K35 case needs it |
+| `EFS_FAULT_AWAY_MARK_MS` | `client/write.c` (put_away_mark_ms) | 10000 ms: a member that failed a PUT hard takes no new placement while another spare exists. No test sets it since K39 (Oct 25): efs-fuse is never built with `EFS_FAULTS`, so the hook is absent from every mount and `test_k35_fsync_degraded.py` case 7 runs at the 10 s default (its old 600000 setting was a no-op) | fault/test hook | — | — | Unused: candidate for removal (follow-up) |
 | `EFS_CLIENT_CONNS_PER_NODE` | `client/node_cache.c:88` (efs_client_conn_init) | 64 pooled connections per server (1..cap) | numeric tunable | portal (observed only) | `get_pair_deadline.py` | Keep until A8: set by `get_pair_deadline.py` |
 | `EFS_CLIENT_META_MB` | `common/stage_limit.h:9` (efs_stage_cap_bytes) | 256 MiB staging-table cap (16..1 Mi MiB) | numeric tunable | portal (observed only) | `test_rollup_budget.py`; `orcd_mini_stage_evict_ab.sh`, `w125_evict_rmw.py` | Keep until A8: set by tests and W125 scripts; client memory sizing |
 | `EFS_CLIENT_VIEW_POLL_MS` | `client/node_cache.c:416` (efs_client_view_start) | 1000 ms membership view poll (50..60000) | numeric tunable | — | `test_member_view.c` | Keep until A8: set by `test_member_view.c` |

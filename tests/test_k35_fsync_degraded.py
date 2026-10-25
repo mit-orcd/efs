@@ -28,13 +28,17 @@ Four, then five members (additions through K33):
     interleaving that broke this is forced: node 3 is first marked "away"
     on the client (a write while it is stopped fails its fragment hard and
     is placed around on node 4, no mark), returns, and node 4 stops while
-    that mark is live (EFS_FAULT_AWAY_MARK_MS=600000 on the mount: the
-    window outlasts the test instead of its 10 s default; the hook exists in
-    EFS_FAULTS builds only, so a normal build runs this case timed). The client must
-    then place around node 4 onto node 3, the away member, rather than
+    that mark is live (the product's 10 s window: efs-fuse is a normal
+    build, so EFS_FAULT_AWAY_MARK_MS does not exist there and this case
+    runs timed; node 4 stops a few seconds after node 3's return). The
+    client must then place around node 4 onto node 3, the away member, rather than
     acknowledge on two fragments (it did, until the fix: 2 of 10 gate
     runs, whenever node 4 joined and stopped within 10 s of node 3's last
     hard failure).
+ 7b. K39: the leader of metadata group 2 stops (never node 1 at four
+    members): writes and fsync succeed. The client's put-ticket ADMIT to
+    the stopping leader lost its exchange and was NET at once, so the
+    write was EIO; it now re-picks another voter within the budget.
  8. Five members, node 2 down: the same, no degraded mark.
  9. A member that dies during COMMIT (node 5, EFS_FAULT_MEMBER_EXIT=
     data-commit): fsync succeeds with the stripes on node 5 marked
@@ -56,8 +60,7 @@ if not fuse_ok():
     sys.exit(0)
 work = Path(tempfile.mkdtemp(prefix='efs-k35-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200',
-           EFS_FAULT_AWAY_MARK_MS='600000')  # case 7: the away window never expires here
+env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200')
 SMALL = (1, 512, 4096, 16384)
 LARGE = 300000
 files = {}
@@ -284,6 +287,25 @@ try:
     up(c, 4, 4)
     c.wait_members([1, 2, 3, 4], 4)
     settle(a, 4)
+
+    # 7b. K39: the leader of metadata group 2 (voters 2, 3, 4 at four
+    # members, so never node 1) stops. Its tickets' lane shards are on it:
+    # the client's ADMIT lost its exchange with the stopping leader and
+    # returned NET at once, the write EIO (2 of 3 merge-gate runs).
+    led = c.leader_placement(1)
+    lead = led[2]
+    assert lead != 1, led
+    for name in list(files):
+        os.stat(a.path / name)  # fresh leader notes: the client asks `lead` first
+    c.stop(lead)
+    for k in range(6):
+        write(a, f'lead-{k}', LARGE)
+        fsync(a, f'lead-{k}')
+    print(f'7b. K39: group 2 leader (node {lead}) stopped: writes and fsync OK PASS')
+    c.restart(lead)
+    up(c, lead, 4)
+    c.wait_members([1, 2, 3, 4], 4)
+    settle(a, f'7b-{lead}')
 
     # 8. Five members, node 2 down.
     c.start(5, join=3)
