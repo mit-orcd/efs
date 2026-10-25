@@ -7,6 +7,7 @@
 #include "efs/batch_obs.h"
 #include "write_prof.h"
 #include "apply_ring.h"
+#include "apply_wait.h"
 #include "efs/raft_disk.h"
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
@@ -83,6 +84,9 @@ _Static_assert(EFS_RAFT_STATUS_PEERS == EFS_RAFT_MAX_PEERS,
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
+/* W159: the whole applied-wait, however much the apply progresses
+ * (apply_wait.h); the client's REPORT and resolve budgets are 8 s. */
+#define HOST_APPLY_WAIT_CAP_US 8000000ull
 #define HOST_CREATE_NAME_OFF 31
 static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
                           uint64_t gen, const uint8_t uuid[EFS_OPID_UUID_LEN],
@@ -544,6 +548,7 @@ struct efs_raft_host {
     /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
      * the last stats-dump timestamp (ms). */
     uint64_t obs_wait_timeouts;
+    uint64_t obs_wait_extends; /* W159: applied-wait grants renewed on progress */
     /* Raft frames a peer handler could not queue (inbox full): the frame
      * is lost and the peer still gets its RAFT_REPLY. Counted since Sep 30
      * 2026; before that a drop had no line and no counter. Not gated on
@@ -5521,12 +5526,19 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
 {
     struct timespec end;
     struct host_view v;
+    struct efs_apply_wait w;
 
-    /* Same overall budget as the old poll loop (HOST_READ_TRIES x
-     * HOST_TICK_US), but the pump's applied_cv broadcast wakes us the
-     * moment the index applies instead of up to 5 ms later. Lock-free
-     * predicate on the published view; sleeps under cv_mu, never h->mu. */
-    host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
+    /* One grant is the old poll loop's budget (HOST_READ_TRIES x
+     * HOST_TICK_US); the pump's applied_cv broadcast wakes us the moment
+     * the index applies instead of up to 5 ms later. Lock-free predicate
+     * on the published view; sleeps under cv_mu, never h->mu. W159: a
+     * grant is renewed while the applied index advances (apply_wait.h),
+     * so a slow disk lengthens the wait instead of turning it into BUSY
+     * and a client backoff ladder; a stalled apply still gets BUSY. */
+    host_view_get(h, group, &v);
+    efs_apply_wait_start(&w, now_us_(), v.has ? v.applied : 0,
+                         (uint64_t)HOST_READ_TRIES * HOST_TICK_US,
+                         HOST_APPLY_WAIT_CAP_US);
     for (;;) {
         host_view_get(h, group, &v);
         if (!v.has) {
@@ -5537,10 +5549,16 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
             *leader_hint = v.leader;
         if (v.applied >= idx)
             return EFS_OK;
-        if (host_past_deadline(&end)) {
-            __atomic_fetch_add(&h->obs_wait_timeouts, 1, __ATOMIC_RELAXED);
-            return EFS_ERR_BUSY;
+        {
+            unsigned before = w.extensions;
+            if (efs_apply_wait_expired(&w, now_us_(), v.applied)) {
+                __atomic_fetch_add(&h->obs_wait_timeouts, 1, __ATOMIC_RELAXED);
+                return EFS_ERR_BUSY;
+            }
+            if (w.extensions != before)
+                __atomic_fetch_add(&h->obs_wait_extends, 1, __ATOMIC_RELAXED);
         }
+        host_deadline_us(&end, (long)efs_apply_wait_remaining_us(&w, now_us_()));
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
         if (v.has && v.applied < idx) {
@@ -7856,13 +7874,14 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
             pub_p50 = psamp[pc / 2];
         }
         fprintf(stderr,
-                "raft-obs: wait_timeouts=%llu pump_hold_max=%lluus "
+                "raft-obs: wait_timeouts=%llu wait_extends=%llu pump_hold_max=%lluus "
                 "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
                 "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
                 "arc_miss=%llu arc_term_miss=%llu opid_replay=%llu "
                 "fin_q=%llu fin_done=%llu fin_drop=%llu fin_full=%llu "
                 "pub_p50=%lluus pub_max=%lluus inbox_drop=%llu\n",
                 (unsigned long long)h->obs_wait_timeouts,
+                (unsigned long long)__atomic_load_n(&h->obs_wait_extends, __ATOMIC_RELAXED),
                 (unsigned long long)h->obs_pump_hold_max_us,
                 (unsigned long long)h->obs_wait_max_us,
                 (unsigned long long)h->obs_drain_max_us,
