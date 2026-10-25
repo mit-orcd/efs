@@ -25,6 +25,15 @@ Pass server `--strace` after the positional storage/join arguments as an
 `efsd` option; the server wrapper only parses leading `--perf`. The client
 wrapper accepts leading `--perf` and `--strace`.
 
+`client.sh stop` follows the client after the unmount through its stop
+record, `/tmp/efs-control-<hash>.stop` beside the control endpoint, one line
+`pid= phase= step= total= rc= reason=`. The phases are `flushing`, `draining`,
+`settling`, `revoking` (the step counts revoked shards, fence then cleanup)
+and the verdict `done` or `failed`. `scripts/client_processes.py retire`
+waits while (phase, step) changes; 30 s without a change or 600 s in all is a
+failed stop (`--stall S`, `--deadline S` override them). It never signals a
+client it does not own and never escalates to SIGKILL.
+
 The bind address must be a **real local IP** (not `0.0.0.0`). Peers connect
 back to it.
 

@@ -25,6 +25,7 @@ static void sess_pack_hdr(uint8_t *p,uint8_t group,uint8_t sub,const uint8_t uui
 static int owned;
 static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs_reply *r){
  assert(rpc->ctx==&owned);memset(r,0,sizeof(*r));r->leader_hint=1;
+ if(p[1]==EFS_MD_REQ_SESSION_CLEANUP_PROBE){assert(n==34&&finished);return EFS_ERR_BUSY;} /* falls back per shard */
  if(p[2]==EFS_MD_SESS_BEGIN){assert(n==19);return 0;}
  if(p[2]==EFS_MD_SESS_ACK){assert(n==31&&read32(p+19)==0&&!read32(p+23)&&read32(p+27)==1u<<7&&barriers==2);return 0;}
  assert(p[2]==0&&n==23);uint32_t sh=read32(p+19);

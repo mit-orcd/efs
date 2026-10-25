@@ -599,6 +599,39 @@ static int retired_reservation_row(void *user,const uint8_t *key,uint32_t kl,
        efs_kv_inode_shard(ino)!=s->shard){s->rc=EFS_ERR_PROTO;return 1;}
     memcpy(s->key,key,kl);s->kl=kl;return 1;
 }
+/* The row efs_meta_retire_append_session would retire next: an exact
+ * receipt, else a DONE reservation of uuid/epoch (selected->kl 0: none).
+ * Read-only; requires the durable local floor. */
+static int retire_select(struct efs_kv *kv,struct receipt_selection *selected)
+{
+    int rc=efs_session_cleanup_floor(kv,selected->shard,selected->uuid,selected->epoch);
+    if(rc!=EFS_OK)return rc;
+    uint32_t shard=selected->shard;
+    uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_APPEND_RECEIPT};
+    rc=efs_kv_scan_prefix(kv,prefix,sizeof(prefix),receipt_row,selected);
+    if(rc!=EFS_OK && rc!=1)return rc;
+    if(selected->rc!=EFS_OK)return selected->rc;
+    if(selected->kl)return EFS_OK;
+    prefix[2]=EFS_KV_KIND_APPEND_RSV;
+    rc=efs_kv_scan_prefix(kv,prefix,sizeof(prefix),retired_reservation_row,selected);
+    if(rc!=EFS_OK && rc!=1)return rc;
+    return selected->rc;
+}
+
+int efs_meta_append_session_idle(struct efs_kv *kv,uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,int *idle)
+{
+    if(!kv || !uuid || !idle)return EFS_ERR_INVAL;
+    *idle=0;
+    efs_ino_t ino;uint64_t generation,offset;unsigned found=0;
+    int rc=efs_meta_append_session_next(kv,shard,uuid,epoch,&ino,&generation,&offset,&found);
+    if(rc!=EFS_OK || found)return rc;
+    struct receipt_selection selected={.shard=shard,.epoch=epoch,.uuid=uuid};
+    rc=retire_select(kv,&selected);
+    if(rc==EFS_OK)*idle=!selected.kl;
+    return rc;
+}
+
 int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
     const struct efs_txid *tx,const struct efs_meta_append_ops *ops,void *ctx,
@@ -607,20 +640,9 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     if(!kv || !uuid || !tx || !ops || !ops->prepare || !ops->decide ||
        !ops->resolve || !progress)return EFS_ERR_INVAL;
     *progress=0;
-    int rc=efs_session_cleanup_floor(kv,shard,uuid,epoch);
-    if(rc!=EFS_OK)return rc;
     struct receipt_selection selected={.shard=shard,.epoch=epoch,.uuid=uuid};
-    uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_APPEND_RECEIPT};
-    rc=efs_kv_scan_prefix(kv,prefix,sizeof(prefix),receipt_row,&selected);
-    if(rc!=EFS_OK && rc!=1)return rc;
-    if(selected.rc!=EFS_OK)return selected.rc;
-    if(!selected.kl) {
-        prefix[2]=EFS_KV_KIND_APPEND_RSV;
-        rc=efs_kv_scan_prefix(kv,prefix,sizeof(prefix),retired_reservation_row,&selected);
-        if(rc!=EFS_OK && rc!=1)return rc;
-        if(selected.rc!=EFS_OK)return selected.rc;
-        if(!selected.kl)return EFS_OK;
-    }
+    int rc=retire_select(kv,&selected);
+    if(rc!=EFS_OK || !selected.kl)return rc;
     efs_ino_t ino=0;for(unsigned i=3;i<11;i++)ino=ino<<8|selected.key[i];
     uint64_t watermark=0;uint32_t open=0;
     rc=efs_meta_apply_append_state(kv,ino,&watermark,NULL,&open);

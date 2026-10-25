@@ -252,6 +252,7 @@ static void passes(void)
 
 /* ---- the revocation coordinator's transport, applied to the same KV ---- */
 static unsigned rpcs;
+static unsigned probes;
 static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_raft_mkfs_reply *out)
 {
     (void)ctx;
@@ -260,6 +261,24 @@ static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_
     out->leader_hint = 0;
     struct efs_kv *kv = host.kv;
     if (p[1] == EFS_MD_REQ_SESSION_APPEND_NEXT) { assert(n == 26); out->salt = 1; return out->rc = EFS_OK; }
+    if (p[1] == EFS_MD_REQ_SESSION_CLEANUP_PROBE) {
+        /* A11: the masked shards either cleanup phase could still act on,
+         * from the same read-only selections the host probe uses. */
+        assert(n == 1 + EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN);
+        uint32_t epoch = rd32be(p + 18), word = rd32be(p + 22);
+        uint64_t mask = (uint64_t)rd32be(p + 26) << 32 | rd32be(p + 30);
+        for (unsigned b = 0; b < 64; b++) {
+            if (!(mask >> b & 1)) continue;
+            struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];
+            uint32_t found = 0; int idle = 0;
+            int rc = efs_session_cleanup_select(host.kv, word * 64 + b, p + 2, epoch, keys, &found);
+            if (rc == EFS_OK && !found)
+                rc = efs_meta_append_session_idle(host.kv, word * 64 + b, p + 2, epoch, &idle);
+            if (rc != EFS_OK || !idle) out->salt |= 1ull << b;
+        }
+        probes++;
+        return out->rc = EFS_OK;
+    }
     assert(p[1] == EFS_MD_CMD_SESSION && n >= 19);
     const uint8_t *uuid = p + 3;
     uint32_t f1 = n >= 23 ? rd32be(p + 19) : 0, f2 = n >= 27 ? rd32be(p + 23) : 0;
@@ -305,6 +324,7 @@ static void revoke(uint8_t uuid0)
     int rc = efs_session_revoke(&rpc, uuid, &res);
     if (rc) fprintf(stderr, "revoke rc=%d phase=%s\n", rc, res.phase);
     assert(rc == EFS_OK && res.epoch == 2 && res.state == EFS_SESSION_ACTIVE && res.ntouch);
+    assert(probes); /* cleanup asked the probe first (A11) */
 }
 
 /* ---- fixture ---- */

@@ -154,7 +154,12 @@ membership changes without a remount. `client.sh` returns once the mount
 serves (`stat` works). `client.sh stop` refuses while a process still uses
 the mount, then drains pending writes; if they cannot be resolved within
 60 s it keeps the mount and says so. Resolve the cause and keep the servers
-up. `client.sh stop --force-discard /mnt/efs` (or
+up. After the unmount the client flushes, settles and revokes its mount
+session; `client.sh stop` waits while the client reports progress (a phase
+or step change at least every 30 s, 600 s in all) and succeeds only when the
+client reports a clean finish. A stall, or a failed flush, settle or
+revoke, is reported with its reason and the client is not killed; a failed
+revoke is resumed by `efs-mgmt raft-session fence`. `client.sh stop --force-discard /mnt/efs` (or
 `efs-fuse --stop /mnt/efs --force-discard`) detaches and **loses** the
 unresolved writes; use it only when that loss is accepted. Signals and a
 plain `umount` bypass the drain.

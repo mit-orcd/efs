@@ -1280,6 +1280,12 @@ int efs_meta_append_session_next(struct efs_kv *, uint32_t shard,
 /* Bounded revoked append result retirement: at most eight DONE rows or one
  * exact receipt. Global revocation/fresh views are caller obligations. Local
  * rejection floor is retained. Foreign OPEN work defers, never gets discarded. */
+/* Read-only (A11 finding 1): *idle=1 when neither efs_meta_append_session_next
+ * nor efs_meta_retire_append_session has anything left for uuid/epoch on
+ * shard, exactly the state in which the APPEND_NEXT cleanup step answers
+ * empty. Same caller obligations as those two. */
+int efs_meta_append_session_idle(struct efs_kv *, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch, int *idle);
 int efs_meta_retire_append_session(struct efs_kv *, uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
     const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx,

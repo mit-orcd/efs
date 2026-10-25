@@ -10,6 +10,8 @@ Compiles src/common/session_revoke.c against a thread-safe fake owner with
   than serial when each step costs a commit latency; parallel=0 never
   leaves the calling thread;
 - progress reaches done == total for both stages;
+- cleanup asks one probe per word and group and cleans only the shards
+  it does not prove empty; a failed probe cleans every shard;
 - a failed FENCE_LOC stops the stage (no FINISH, phase participant-floor), a
   failed cleanup names its shard (phase cleanup), never a completed revoke.
 """
@@ -37,7 +39,7 @@ uint32_t efs_kv_session_shard(const uint8_t *u){(void)u;return 3;}
 static pthread_mutex_t mu=PTHREAD_MUTEX_INITIALIZER;
 static pthread_t caller;
 static unsigned fenced[EFS_SESSION_BITS],acked[EFS_SESSION_BITS],cleaned[EFS_SESSION_BITS][2];
-static unsigned inflight,maxflight,finished,foreign,step_us=10,fail_fence,fail_clean,progress_fence,progress_clean;
+static unsigned probe_fail,probes,inflight,maxflight,finished,foreign,step_us=10,fail_fence,fail_clean,progress_fence,progress_clean;
 static uint32_t shard_of(unsigned i){return (i*7u)%EFS_SESSION_BITS;}
 static int touched(uint32_t sh){for(unsigned i=0;i<N;i++)if(shard_of(i)==sh)return 1;return 0;}
 static uint32_t rd32(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
@@ -53,6 +55,15 @@ static void leave(void){pthread_mutex_lock(&mu);inflight--;pthread_mutex_unlock(
 static int submit(void *ctx,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs_reply *r)
 {
     (void)ctx;memset(r,0,sizeof(*r));r->leader_hint=-1;
+    if(p[1]==EFS_MD_REQ_SESSION_CLEANUP_PROBE) {
+        /* Shards with sh%5==0 still owe cleanup; the rest are proven empty. */
+        uint32_t word=rd32(p+22);uint64_t mask=(uint64_t)rd32(p+26)<<32|rd32(p+30);
+        assert(n==1+EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN&&rd32(p+18)==1&&mask);
+        enter();pthread_mutex_lock(&mu);assert(finished);probes++;pthread_mutex_unlock(&mu);leave();
+        if(probe_fail)return r->rc=EFS_ERR_BUSY;
+        for(unsigned b=0;b<64;b++)if(mask>>b&1&&(word*64+b)%5==0)r->salt|=1ull<<b;
+        return r->rc=EFS_OK;
+    }
     if(p[1]==EFS_MD_REQ_SESSION_APPEND_NEXT) {
         uint32_t sh=rd32(p+22);enter();pthread_mutex_lock(&mu);
         assert(finished&&touched(sh)&&cleaned[sh][0]==1&&!cleaned[sh][1]);cleaned[sh][1]++;
@@ -116,7 +127,7 @@ static void progress(void *ctx,const char *stage,uint32_t done,uint32_t total)
 static double run(unsigned parallel,int expect,const char *phase,uint32_t shard)
 {
     memset(fenced,0,sizeof(fenced));memset(acked,0,sizeof(acked));memset(cleaned,0,sizeof(cleaned));
-    inflight=maxflight=finished=foreign=progress_fence=progress_clean=0;caller=pthread_self();
+    inflight=maxflight=finished=foreign=progress_fence=progress_clean=probes=0;caller=pthread_self();
     uint8_t uuid[16]={9};
     const struct efs_session_rpc rpc={NULL,submit,parallel,progress};
     struct efs_session_revoke_result res;
@@ -128,7 +139,11 @@ static double run(unsigned parallel,int expect,const char *phase,uint32_t shard)
     if(phase)assert(!strcmp(res.phase,phase)&&res.shard==shard);
     if(!expect) {
         assert(res.state==EFS_SESSION_ACTIVE&&progress_fence==N&&progress_clean==N);
-        for(unsigned i=0;i<N;i++)assert(cleaned[shard_of(i)][0]==1&&cleaned[shard_of(i)][1]==1);
+        for(unsigned i=0;i<N;i++) {
+            unsigned want=probe_fail||shard_of(i)%5==0;
+            assert(cleaned[shard_of(i)][0]==want&&cleaned[shard_of(i)][1]==want);
+        }
+        assert(probes>=N/64&&probes<=2*(EFS_SESSION_BITS/64)); /* one per word and group */
     }
     if(parallel<=1)assert(!foreign&&maxflight==1);
     else assert(maxflight>1&&maxflight<=parallel);
@@ -141,11 +156,12 @@ int main(void)
     run(0,EFS_OK,NULL,0);
     fail_fence=1;run(16,EFS_ERR_IO,"participant-floor",0);assert(!finished);
     run(0,EFS_ERR_IO,"participant-floor",0);assert(!finished);fail_fence=0;
+    probe_fail=1;run(16,EFS_OK,NULL,0);run(0,EFS_OK,NULL,0);
     fail_clean=1;run(16,EFS_ERR_NET,"cleanup",shard_of(N/3));
-    run(0,EFS_ERR_NET,"cleanup",shard_of(N/3));fail_clean=0;
+    run(0,EFS_ERR_NET,"cleanup",shard_of(N/3));fail_clean=0;probe_fail=0;
     /* One commit latency per step: 100 us x 4 steps x 600 shards. */
     step_us=100;
-    double serial=run(1,EFS_OK,NULL,0),parallel=run(16,EFS_OK,NULL,0);
+    probe_fail=1;double serial=run(1,EFS_OK,NULL,0),parallel=run(16,EFS_OK,NULL,0);probe_fail=0;
     printf("serial %.2f s, parallel(16) %.2f s\n",serial,parallel);
     assert(parallel*4<serial);
     return 0;

@@ -36,6 +36,8 @@ static void wr32be_sess(uint8_t *p,uint32_t x){p[0]=x>>24;p[1]=x>>16;p[2]=x>>8;p
 static uint32_t read32(const uint8_t *p){return ((uint32_t)p[0]<<24)|((uint32_t)p[1]<<16)|((uint32_t)p[2]<<8)|p[3];}
 static int seed;
 static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t bytes,struct efs_msg_raft_mkfs_reply *r){
+ if(p[1]==EFS_MD_REQ_SESSION_CLEANUP_PROBE){assert(bytes==34&&!memcmp(p+2,identity,16)&&finishes>=3);
+  memset(r,0,sizeof(*r));r->salt=~0ull;return EFS_OK;} /* every shard still owes cleanup */
  assert(rpc->ctx==&seed&&!memcmp(p+3,identity,16));
  memset(r,0,sizeof(*r));r->leader_hint=-1;
  if(p[2]==EFS_MD_SESS_BEGIN){assert(bytes==19);begins++;}
