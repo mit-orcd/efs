@@ -6,7 +6,8 @@ The same cluster as tests/test_d4_progress.py (three efsd of the EFS_FAULTS
 build and two efs-fuse on loopback, private stores under TMPDIR, free ports,
 GC on; packer 1 s minimum age and 200 ms passes, `.efs` index refresh every
 2 s, 256 KiB memtables so the KV flushes and compacts), but the load has no
-net creation: every writer creates EFS_D4_SET files once (every eighth
+net creation: every writer creates EFS_D4_SET files (default 128; the F1
+measurement uses 256) before the timed load starts (every eighth
 192–512 KiB, two to four chunks, never packed; the rest 1 B–8 KiB, packed)
 and then overwrites (O_TRUNC), truncates and rewrites, or rewrites in place
 a random one of them with a new version, while the foreground rewrites a
@@ -48,7 +49,7 @@ if not fuse_ok():
     sys.exit(0)
 LOAD_S = float(os.environ.get('EFS_D4_LOAD_S', '75'))
 THREADS = int(os.environ.get('EFS_D4_THREADS', '8'))
-WORKING_SET = int(os.environ.get('EFS_D4_SET', '256'))
+WORKING_SET = int(os.environ.get('EFS_D4_SET', '128'))
 FG_SET = int(os.environ.get('EFS_D4_FG_SET', '32'))
 PLATEAU_MIN_S = float(os.environ.get('EFS_D4_PLATEAU_MIN_S', '600'))
 PLATEAU = bool(os.environ.get('EFS_D4_PLATEAU')) or LOAD_S >= PLATEAU_MIN_S
@@ -62,7 +63,7 @@ CLIENT_RSS_MIB = 1024 * RSS_SCALE
 SERVER_RSS_MIB = 2048 * RSS_SCALE
 PACK_BACKLOG = 50000
 INDEX_AGE_S = 60.0
-# Per-store quota: the population is small (8 × 256 files, about 90 MiB of
+# Per-store quota: the population is small (8 × 128 files, about 45 MiB of
 # large files) but every rewrite leaves a generation for reclaim; a
 # 30-minute run passes EFS_D4_QUOTA=8G.
 QUOTA = os.environ.get('EFS_D4_QUOTA', '2G')

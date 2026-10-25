@@ -206,8 +206,8 @@ def fixed(r):
     r.counts.update(created=20, overwritten=5, truncated=4, rewritten=3)
     r.live = {f'f{i}': 1 for i in range(20)}
 v, fails, m = run(a=args(working_set=10), edit=fixed)
-assert v == 'PASS' and m['working_set'] == {'files': 20, 'created': 20, 'live': 20, 'overwritten': 5,
-                                            'truncated': 4, 'rewritten': 3}, (fails, m)
+assert v == 'PASS' and m['working_set'] == {'files': 20, 'created': 20, 'live': 20, 'populate_s': None,
+                                            'overwritten': 5, 'truncated': 4, 'rewritten': 3}, (fails, m)
 
 
 def net_creation(r):

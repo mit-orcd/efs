@@ -258,38 +258,44 @@ class Run:
         return payload(key if not v else f'{key}#{v}', size)
 
     # load
-    def writer_fixed(self, t):
-        """--working-set: the population once, then rewrites of it only."""
-        rnd = random.Random(t)
+    def ws_names(self, t):
         d = self.dir / f'w{t}'
-        d.mkdir(parents=True, exist_ok=True)
-        names = []
-        for k in range(self.a.working_set):
-            sub = d / f's{k // 1000}'
-            if k % 1000 == 0:
-                sub.mkdir(exist_ok=True)
-            names.append(sub / f'f{k}')
+        return [d / f's{k // 1000}' / f'f{k}' for k in range(self.a.working_set)]
 
-        def size_of(i):
-            return rnd.randint(LARGE_MIN, LARGE_MAX) if i % 8 == 7 else rnd.randint(1, SMALL_MAX)
+    @staticmethod
+    def ws_size(rnd, i):
+        return rnd.randint(LARGE_MIN, LARGE_MAX) if i % 8 == 7 else rnd.randint(1, SMALL_MAX)
 
-        def key_of(name):
-            return str(name.relative_to(self.dir))
-
-        for i, name in enumerate(names):
-            if self.stop_load.is_set():
-                return
-            size = size_of(i)
+    def populate(self, t):
+        """--working-set: writer t's population, created before the timed
+        load starts (so the load and its RSS window are rewrites only, and
+        a slow host cannot spend the load creating)."""
+        rnd = random.Random(1000003 + t)
+        for i, name in enumerate(self.ws_names(t)):
+            name.parent.mkdir(parents=True, exist_ok=True)
+            size = self.ws_size(rnd, i)
             try:
                 with open(name, 'wb') as f:
-                    f.write(payload(key_of(name), size))
+                    f.write(payload(str(name.relative_to(self.dir)), size))
                 with self.lock:
                     self.live[name] = size
                     self.counts['created'] += 1
             except OSError as e:
                 with self.lock:
                     self.counts['create_errors'] += 1
-                    self.errors.append(f'load create {name}: {e}')
+                    self.errors.append(f'populate create {name}: {e}')
+
+    def writer_fixed(self, t):
+        """--working-set: rewrites of the population only."""
+        rnd = random.Random(t)
+        names = self.ws_names(t)
+
+        def size_of(i):
+            return self.ws_size(rnd, i)
+
+        def key_of(name):
+            return str(name.relative_to(self.dir))
+
         k = 0
         while not self.stop_load.is_set():
             i = rnd.randrange(len(names))
@@ -527,6 +533,15 @@ class Run:
         self.pids = {m: fuse_pid(m) for m in sorted({self.a.mount, self.a.fg_mount})}
         self.t0 = time.time()
         self.dir.mkdir(parents=True)
+        if self.a.working_set:
+            pop = [threading.Thread(target=self.populate, args=(t,), daemon=True)
+                   for t in range(self.a.threads)]
+            for p in pop:
+                p.start()
+            for p in pop:
+                p.join()
+            self.populate_s = round(time.time() - self.t0, 1)
+            self.t0 = time.time()  # the load, its samples and the RSS window start now
         first = self.sample('before')
         writers = [threading.Thread(target=self.writer, args=(t,), name=f'w{t}', daemon=True)
                    for t in range(self.a.threads)]
@@ -676,7 +691,8 @@ class Run:
         if a.working_set:
             want = a.threads * a.working_set
             ops = {k: self.counts[k] for k in ('overwritten', 'truncated', 'rewritten')}
-            m['working_set'] = dict(files=want, created=self.counts['created'], live=len(self.live), **ops)
+            m['working_set'] = dict(files=want, created=self.counts['created'], live=len(self.live),
+                                    populate_s=getattr(self, 'populate_s', None), **ops)
             if self.counts['created'] != want or len(self.live) != want:
                 fails.append(f'working set: {want} files wanted, created {self.counts["created"]}, '
                              f'live {len(self.live)} (net creation)')

@@ -189,6 +189,22 @@ the sanitized binaries. `make sanitize-check` runs both.
 - **Not in `make check`.** The daemon entries make each mode take tens of
   minutes; `make check` keeps `leak-check`. F1 runs all three
   ([evidence](../status/f1-memory-concurrency-gates-20261025.md)).
+- **RSS plateau (F1, fixed working set).** `tests/test_d4_plateau.py`
+  (`make test-long`) runs the D4 loopback cluster with
+  `scripts/d4_progress.py --working-set`: every writer creates its files
+  before the timed load starts (every eighth 192–512 KiB, never packed; the rest 1 B–8 KiB, packed)
+  and then only overwrites (`O_TRUNC`), truncates and rewrites, or rewrites
+  in place a random one with a new version, while the foreground rewrites a
+  ring of 1 MiB files (`--fg-set`); nothing is unlinked or created after
+  that, so created == live == threads × set is asserted (no net creation).
+  The driver samples every efs-fuse and efsd RSS once a second and
+  `scripts/rss_plateau.py` gives the verdict per process: PLATEAU when the
+  last third of the load grows by at most 5 % of the peak. The table is
+  printed on every run and enforced from a 600 s load (`EFS_D4_PLATEAU=1`
+  forces it); the gate's 75 s run checks the mode and the bounds only, since
+  the daemons are still warming up. The F1 measurement is
+  `EFS_D4_LOAD_S=1800 EFS_D4_SET=256 EFS_D4_QUOTA=8G python3 tests/test_d4_plateau.py`
+  ([evidence](../status/f1-followups-20261025.md)).
 
 ## Current release acceptance and local POSIX suites
 
