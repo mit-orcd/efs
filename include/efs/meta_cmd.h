@@ -93,7 +93,7 @@ static inline int efs_md_is_expiry(uint8_t op)
  * masked shards that still owe lease/lock or append cleanup for epoch; a
  * shard left out is proven empty for both phases. */
 #define EFS_MD_REQ_SESSION_CLEANUP_PROBE 94
-#define EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN 33u
+#define EFS_MD_SESSION_CLEANUP_PROBE_LEN 33u
 #define EFS_MD_REQ_CLOSE_APPEND_NEXT 37 /* RPC only: [ino:8][identity:36] */
 #define EFS_MD_CMD_CLOSE_STEP 36 /* [ino:8][identity:36][phase:1], 46 bytes */
 #define EFS_MD_REQ_SWEEP_NEXT 35 /* RPC only: leader selects exact keys; never log */

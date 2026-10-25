@@ -58,7 +58,7 @@ static int submit(void *ctx,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs
     if(p[1]==EFS_MD_REQ_SESSION_CLEANUP_PROBE) {
         /* Shards with sh%5==0 still owe cleanup; the rest are proven empty. */
         uint32_t word=rd32(p+22);uint64_t mask=(uint64_t)rd32(p+26)<<32|rd32(p+30);
-        assert(n==1+EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN&&rd32(p+18)==1&&mask);
+        assert(n==1+EFS_MD_SESSION_CLEANUP_PROBE_LEN&&rd32(p+18)==1&&mask);
         enter();pthread_mutex_lock(&mu);assert(finished);probes++;pthread_mutex_unlock(&mu);leave();
         if(probe_fail)return r->rc=EFS_ERR_BUSY;
         for(unsigned b=0;b<64;b++)if(mask>>b&1&&(word*64+b)%5==0)r->salt|=1ull<<b;

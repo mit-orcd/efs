@@ -264,7 +264,7 @@ static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_
     if (p[1] == EFS_MD_REQ_SESSION_CLEANUP_PROBE) {
         /* A11: the masked shards either cleanup phase could still act on,
          * from the same read-only selections the host probe uses. */
-        assert(n == 1 + EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN);
+        assert(n == 1 + EFS_MD_SESSION_CLEANUP_PROBE_LEN);
         uint32_t epoch = rd32be(p + 18), word = rd32be(p + 22);
         uint64_t mask = (uint64_t)rd32be(p + 26) << 32 | rd32be(p + 30);
         for (unsigned b = 0; b < 64; b++) {

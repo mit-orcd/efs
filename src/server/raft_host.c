@@ -14750,8 +14750,8 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->leader_hint=hint;return;
     }
     if(clen && cmd[0]==EFS_MD_REQ_SESSION_CLEANUP_PROBE) {
-        uint64_t mask=clen==EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN?rd64be(cmd+25):0;
-        uint32_t word=clen==EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN?rd32be(cmd+21):0;
+        uint64_t mask=clen==EFS_MD_SESSION_CLEANUP_PROBE_LEN?rd64be(cmd+25):0;
+        uint32_t word=clen==EFS_MD_SESSION_CLEANUP_PROBE_LEN?rd32be(cmd+21):0;
         int wrong=!mask || !rd32be(cmd+17) || word>=EFS_SESSION_BITS/64u;
         for(uint32_t b=0;b<64 && !wrong;b++)
             wrong=(mask>>b&1) && group!=efs_raft_shard_group(word*64u+b);

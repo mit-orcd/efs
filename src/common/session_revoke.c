@@ -155,7 +155,7 @@ static int sess_item_step(struct sess_stage *st, uint32_t i,
                           struct efs_msg_raft_mkfs_reply *r, const char **phase,
                           uint32_t *failed)
 {
-    _Static_assert(EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN <= EFS_MD_SESS_FENCE_LOC_LEN,
+    _Static_assert(EFS_MD_SESSION_CLEANUP_PROBE_LEN <= EFS_MD_SESS_FENCE_LOC_LEN,
                    "one payload buffer for both requests");
     uint8_t payload[1 + EFS_MD_SESS_FENCE_LOC_LEN];
     const struct sess_unit *u = &st->units[i];
@@ -173,7 +173,7 @@ static int sess_item_step(struct sess_stage *st, uint32_t i,
         wr32be_sess(payload + 2 + EFS_OPID_UUID_LEN, st->old_epoch);
         wr32be_sess(payload + 6 + EFS_OPID_UUID_LEN, u->word);
         wr64be_sess(payload + 10 + EFS_OPID_UUID_LEN, u->mask);
-        if (sess_rpc(st->rpc, payload, 1 + EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN, r) == EFS_OK)
+        if (sess_rpc(st->rpc, payload, 1 + EFS_MD_SESSION_CLEANUP_PROBE_LEN, r) == EFS_OK)
             pending &= r->salt;
         else
             __atomic_fetch_add(&st->probe_failed, 1, __ATOMIC_RELAXED);
