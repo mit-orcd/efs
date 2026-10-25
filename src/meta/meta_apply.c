@@ -4992,7 +4992,7 @@ static int publish_inner_as(struct efs_kv *kv, const struct efs_meta_pub *p,
     uint8_t v_dg[EFS_META_DEGRADED_VAL];
     uint32_t ndg = 0, dg_removed = 0, dg_anchor;
     int dg_added = 0;
-    uint8_t k_cand[EFS_PACK_CANDIDATE_KEY_BYTES], v_cand[8];
+    uint8_t k_cand[EFS_PACK_CANDIDATE_KEY_BYTES], v_cand[EFS_PACK_CANDIDATE_VAL_BYTES];
     uint32_t n = 0;
     uint32_t ch_wlen = CHUNK_VAL;
     uint32_t nd_old = 0;
@@ -5429,6 +5429,7 @@ static int publish_inner_as(struct efs_kv *kv, const struct efs_meta_pub *p,
         efs_pack_candidate_key(efs_kv_anchor_shard(lsh), p->now / 1000000000ull / EFS_PACK_EPOCH_S,
                                p->ino, k_cand) == EFS_OK) {
         be64(v_cand, inode_gen);
+        be64(v_cand + 8, ln.seq); /* the publish stamp */
         it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_cand, sizeof(k_cand), v_cand, sizeof(v_cand)};
     }
     if (got.coding_profile_id == EFS_META_PROFILE_PACK ||
@@ -10715,15 +10716,25 @@ int efs_meta_pack_candidate(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen
     return EFS_OK;
 }
 
-int efs_meta_apply_pack_unindex(struct efs_kv *kv, uint32_t group, const uint64_t *epochs,
-                                const efs_ino_t *inos, uint32_t n)
+int efs_meta_apply_pack_unindex(struct efs_kv *kv, uint32_t group,
+                                const struct efs_pack_unindex_item *items, uint32_t n)
 {
     uint32_t anchor = efs_pack_group_anchor(group);
-    if (!kv || !anchor || (n && (!epochs || !inos)) || n > EFS_PACK_UNINDEX_MAX) return EFS_ERR_INVAL;
+    if (!kv || !anchor || (n && !items) || n > EFS_PACK_UNINDEX_MAX) return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < n; i++)
+        if (items[i].epoch == EFS_PACK_CURSOR_EPOCH) return EFS_ERR_INVAL;
     for (uint32_t i = 0; i < n; i++) {
-        uint8_t key[EFS_PACK_CANDIDATE_KEY_BYTES];
-        int rc = efs_pack_candidate_key(anchor, epochs[i], inos[i], key);
-        if (rc == EFS_OK) rc = meta_write_del(kv, key, sizeof(key));
+        uint8_t key[EFS_PACK_CANDIDATE_KEY_BYTES], v[EFS_PACK_CANDIDATE_VAL_BYTES];
+        uint32_t vl = sizeof(v);
+        int rc = efs_pack_candidate_key(anchor, items[i].epoch, items[i].ino, key);
+        if (rc == EFS_OK) rc = efs_kv_get(kv, key, sizeof(key), v, &vl);
+        if (rc == EFS_ERR_NOT_FOUND) continue;
+        /* A longer value is INVAL with its size in vl (kv.h). */
+        if ((rc == EFS_OK || rc == EFS_ERR_INVAL) && vl != EFS_PACK_CANDIDATE_VAL_BYTES) rc = EFS_ERR_PROTO;
+        if (rc != EFS_OK) return rc;
+        /* A publication re-added the key after the packer read it. */
+        if (rd64(v) != items[i].inode_generation || rd64(v + 8) != items[i].stamp) continue;
+        rc = meta_write_del(kv, key, sizeof(key));
         if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) return rc;
     }
     return EFS_OK;
@@ -10737,13 +10748,14 @@ int efs_meta_apply_pack_index(struct efs_kv *kv, uint32_t group, uint32_t next_s
         next_shard > EFS_KV_SHARD_MASK + 1u) return EFS_ERR_INVAL;
     struct efs_kv_item *it = calloc(n + 1, sizeof(*it));
     uint8_t (*keys)[EFS_PACK_CANDIDATE_KEY_BYTES] = calloc(n + 1, EFS_PACK_CANDIDATE_KEY_BYTES);
-    uint8_t (*vals)[8] = calloc(n + 1, 8);
+    uint8_t (*vals)[EFS_PACK_CANDIDATE_VAL_BYTES] = calloc(n + 1, EFS_PACK_CANDIDATE_VAL_BYTES);
     int rc = it && keys && vals ? EFS_OK : EFS_ERR_NOMEM;
     for (uint32_t i = 0; rc == EFS_OK && i < n; i++) {
         if (items[i].epoch == EFS_PACK_CURSOR_EPOCH || items[i].ino <= EFS_ROOT_INO) { rc = EFS_ERR_INVAL; break; }
         rc = efs_pack_candidate_key(anchor, items[i].epoch, items[i].ino, keys[i]);
-        be64(vals[i], items[i].inode_generation);
-        it[i] = (struct efs_kv_item){EFS_KV_PUT, keys[i], EFS_PACK_CANDIDATE_KEY_BYTES, vals[i], 8};
+        be64(vals[i], items[i].inode_generation); /* stamp 0: calloc */
+        it[i] = (struct efs_kv_item){EFS_KV_PUT, keys[i], EFS_PACK_CANDIDATE_KEY_BYTES, vals[i],
+                                     EFS_PACK_CANDIDATE_VAL_BYTES};
     }
     if (rc == EFS_OK) rc = efs_pack_candidate_key(anchor, EFS_PACK_CURSOR_EPOCH, 1, keys[n]);
     if (rc == EFS_OK) {

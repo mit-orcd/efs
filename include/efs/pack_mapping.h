@@ -152,20 +152,31 @@ int efs_meta_apply_pack_degraded(struct efs_kv *, uint32_t group, uint32_t op, u
 /* Packing candidates. A publication of chunk zero that leaves a file of at
  * most EFS_PACK_THRESHOLD bytes records the file in its group's candidate
  * index, in the same batch: key [anchor:2][kind:1][epoch:8][ino:8], value
- * [inode generation:8], epoch = leader time / EFS_PACK_EPOCH_S. Iterating
- * the index visits files by creation epoch, which the packer then groups
- * by directory. Entries are hints: the packer re-validates each file and
- * UNINDEX removes packed, stale and refused ones. The epoch length is part
- * of the key format, never a runtime setting. */
+ * [inode generation:8][publish stamp:8], epoch = leader time /
+ * EFS_PACK_EPOCH_S. The stamp is the file's lane-0 sequence after that
+ * publication (always >= 1; a backfilled entry has 0), so a publication
+ * that re-adds an existing key writes a different value. Iterating the
+ * index visits files by creation epoch, which the packer then groups by
+ * directory. Entries are hints: the packer re-validates each file and
+ * UNINDEX removes packed, stale and refused ones, each only while the key
+ * still holds the exact value the packer read: an O_TRUNC rewrite whose
+ * publication re-added the key before the UNINDEX committed stays a
+ * candidate. The epoch length is part of the key format, never a runtime
+ * setting. */
 #define EFS_PACK_THRESHOLD 16384u
 /* 60 s: the packer scans the oldest epochs first, so an epoch must be short
  * against the minimum age or a sustained writer's young files (ordered by
  * inode inside one epoch) crowd the eligible ones out of the scan window. */
 #define EFS_PACK_EPOCH_S 60u
 #define EFS_PACK_CANDIDATE_KEY_BYTES 19u
+#define EFS_PACK_CANDIDATE_VAL_BYTES 16u
 #define EFS_PACK_UNINDEX_MAX 512u
 int efs_pack_candidate_key(uint32_t anchor, uint64_t epoch, efs_ino_t ino,
     uint8_t out[EFS_PACK_CANDIDATE_KEY_BYTES]);
+/* One UNINDEX member, wire [epoch:8][ino:8][inode generation:8][stamp:8]:
+ * the key and the value the packer read. */
+#define EFS_PACK_UNINDEX_ITEM_BYTES 32u
+struct efs_pack_unindex_item { uint64_t epoch; efs_ino_t ino; uint64_t inode_generation, stamp; };
 /* A candidate as the packer sees it on its local replica (not authority:
  * the switch re-checks the exact source). STALE when the generation does
  * not match or the inode is gone. */
@@ -184,10 +195,12 @@ struct efs_pack_candidate {
 };
 int efs_meta_pack_candidate(struct efs_kv *, efs_ino_t ino, uint64_t inode_generation,
     struct efs_pack_candidate *);
-int efs_meta_apply_pack_unindex(struct efs_kv *, uint32_t group, const uint64_t *epochs,
-    const efs_ino_t *inos, uint32_t n);
+/* Compare-and-delete: a key that is gone or holds another value is left
+ * alone; a stored value of another length is PROTO. */
+int efs_meta_apply_pack_unindex(struct efs_kv *, uint32_t group,
+    const struct efs_pack_unindex_item *, uint32_t n);
 /* Backfill of stores written before the packer: INDEX adds candidates
- * found by the leader's scan and advances the group's backfill cursor,
+ * found by the leader's scan (stamp 0) and advances the group's backfill cursor,
  * kept at the reserved candidate key (epoch UINT64_MAX, inode 1) as
  * [next shard:4][done:1]. Candidate scans skip that key. */
 #define EFS_PACK_CURSOR_EPOCH UINT64_MAX
