@@ -118,7 +118,7 @@ def foreign_jobs(owned=()):
 
 
 def owned_session(text):
-    found=re.findall(r'^session uuid=([0-9a-f]{32}) epoch=(\d+)$',text,re.M)
+    found=re.findall(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z session uuid=([0-9a-f]{32}) epoch=(\d+)$',text,re.M)
     assert len(found)==1, 'cannot identify exact owned mount session'
     return found[0][0],int(found[0][1])
 
