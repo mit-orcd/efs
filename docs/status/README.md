@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Task D: seeded member-churn endurance rehearsal](task-d-20261025.md):
+**IN PROGRESS, branch `agent/devel-task-d`, not merged or pushed.** New
+five-to-seven-member loopback harness, independent acknowledged-content and
+shared-append oracles, quiet-host guard, RSS interval checks and qualification
+plugin. NUC's corrected 15-minute rehearsal is running; four-hour completion
+and candidate/base code-gate comparison remain NOTRUN/queued. No acceptance
+or new product-fix claim yet.
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
