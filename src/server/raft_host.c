@@ -2190,16 +2190,15 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                                     rd64be(cmd + 25 + 24 * i)};
         rc = efs_meta_apply_pack_index(h->kv, cmd[1], rd32be(cmd + 4), cmd[8], items, n);
     } else if (cmd[0] == EFS_MD_CMD_PACK_UNINDEX) {
-        uint64_t epochs[EFS_PACK_UNINDEX_MAX];
-        efs_ino_t inos[EFS_PACK_UNINDEX_MAX];
+        struct efs_pack_unindex_item items[EFS_PACK_UNINDEX_MAX];
         if (clen < 4) return EFS_ERR_UNSUPPORTED;
         uint32_t n = ((uint32_t)cmd[2] << 8) | cmd[3];
-        if (n > EFS_PACK_UNINDEX_MAX || clen != 4u + 16u * n) return EFS_ERR_UNSUPPORTED;
+        if (n > EFS_PACK_UNINDEX_MAX || clen != 4u + EFS_PACK_UNINDEX_ITEM_BYTES * n) return EFS_ERR_UNSUPPORTED;
         for (uint32_t i = 0; i < n; i++) {
-            epochs[i] = rd64be(cmd + 4 + 16 * i);
-            inos[i] = rd64be(cmd + 12 + 16 * i);
+            const uint8_t *q = cmd + 4 + EFS_PACK_UNINDEX_ITEM_BYTES * i;
+            items[i] = (struct efs_pack_unindex_item){rd64be(q), rd64be(q + 8), rd64be(q + 16), rd64be(q + 24)};
         }
-        rc = efs_meta_apply_pack_unindex(h->kv, cmd[1], epochs, inos, n);
+        rc = efs_meta_apply_pack_unindex(h->kv, cmd[1], items, n);
     } else {
         uint64_t ids[EFS_PACK_RETIRE_MAX], gens[EFS_PACK_RETIRE_MAX];
         if (clen < 4) return EFS_ERR_UNSUPPORTED;

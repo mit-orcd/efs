@@ -27,6 +27,20 @@ static int gc_records(struct efs_kv *kv)
     }
     return n;
 }
+static uint64_t rd_be64(const uint8_t *p)
+{ uint64_t v = 0; for (int i = 0; i < 8; i++) v = v << 8 | p[i]; return v; }
+/* The candidate as the packer reads it, as an UNINDEX member. */
+static int cand_value(struct efs_kv *kv, uint64_t epoch, efs_ino_t ino, struct efs_pack_unindex_item *out)
+{
+    uint8_t k[EFS_PACK_CANDIDATE_KEY_BYTES], v[EFS_PACK_CANDIDATE_VAL_BYTES];
+    uint32_t vl = sizeof(v);
+    assert(efs_pack_candidate_key(efs_pack_group_anchor(EFS_RAFT_GROUP_SHARD), epoch, ino, k) == EFS_OK);
+    int rc = efs_kv_get(kv, k, sizeof(k), v, &vl);
+    if (rc != EFS_OK) return rc;
+    assert(vl == EFS_PACK_CANDIDATE_VAL_BYTES);
+    *out = (struct efs_pack_unindex_item){epoch, ino, rd_be64(v), rd_be64(v + 8)};
+    return EFS_OK;
+}
 static void publish(struct efs_kv *kv, efs_ino_t ino, uint64_t expected, uint64_t gen, uint64_t size)
 {
     struct efs_meta_pub p;
@@ -80,8 +94,12 @@ int main(void)
                c->base.generation == 0x100 && c->parent == EFS_ROOT_INO);
         assert(efs_meta_pack_candidate(kv, ino[0], gen[0] + 1, c) == EFS_ERR_STALE);
         free(c);
-        uint64_t ep = 0; /* publish() leaves the leader stamp at 0: epoch 0 */
-        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &ep, &ino[N - 1], 1) == EFS_OK);
+        /* publish() leaves the leader stamp at 0: epoch 0. UNINDEX carries
+         * the value the packer read: [inode gen][publish stamp]. */
+        struct efs_pack_unindex_item seen;
+        assert(cand_value(kv, 0, ino[N - 1], &seen) == EFS_OK);
+        assert(seen.inode_generation == gen[N - 1] && seen.stamp >= 1);
+        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &seen, 1) == EFS_OK);
         cand = 0;
         assert(efs_kv_scan_prefix(kv, p, 3, count_cb, &cand) >= 0 && cand == N - 1);
         /* Backfill: INDEX adds candidates and moves the cursor, which
@@ -319,8 +337,47 @@ int main(void)
         free(act);
     }
 
+    /* The O_TRUNC race (B6): the packer read a candidate, then a rewrite's
+     * publication re-added the same key (same inode generation) before the
+     * packer's UNINDEX committed. Compare-and-delete leaves the new one. */
+    {
+        efs_ino_t rx = 0;
+        for (int i = 0; !rx && i < 4096; i++) {
+            snprintf(name, sizeof(name), "race%d", i);
+            efs_ino_t x = create(kv, name);
+            if (efs_raft_shard_group(efs_kv_lane_shard(x, 0)) == EFS_RAFT_GROUP_SHARD) rx = x;
+        }
+        assert(rx);
+        publish(kv, rx, 0, 0xa00, 300);
+        struct efs_pack_unindex_item seen, cur, other;
+        assert(cand_value(kv, 0, rx, &seen) == EFS_OK && seen.stamp >= 1);
+        publish(kv, rx, 0xa00, 0xa01, 0);   /* the truncate: size 0, no candidate */
+        publish(kv, rx, 0xa01, 0xa02, 310); /* the rewrite re-adds the key */
+        assert(cand_value(kv, 0, rx, &cur) == EFS_OK);
+        assert(cur.inode_generation == seen.inode_generation && cur.stamp > seen.stamp);
+        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &seen, 1) == EFS_OK);
+        assert(cand_value(kv, 0, rx, &other) == EFS_OK && other.stamp == cur.stamp);
+        other.inode_generation++; /* another generation's value is no match either */
+        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &other, 1) == EFS_OK);
+        assert(cand_value(kv, 0, rx, &other) == EFS_OK);
+        /* The exact value deletes; a repeat finds no key and is a no-op. */
+        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &cur, 1) == EFS_OK);
+        assert(cand_value(kv, 0, rx, &other) == EFS_ERR_NOT_FOUND);
+        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &cur, 1) == EFS_OK);
+        /* Fail closed: a stored value of another length is PROTO and stays. */
+        uint8_t ck[EFS_PACK_CANDIDATE_KEY_BYTES], cv[EFS_PACK_CANDIDATE_VAL_BYTES + 8] = {0};
+        assert(efs_pack_candidate_key(efs_pack_group_anchor(EFS_RAFT_GROUP_SHARD), 0, rx, ck) == EFS_OK);
+        assert(efs_kv_put(kv, ck, sizeof(ck), cv, 8) == EFS_OK);
+        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &cur, 1) == EFS_ERR_PROTO);
+        assert(efs_kv_put(kv, ck, sizeof(ck), cv, sizeof(cv)) == EFS_OK);
+        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &cur, 1) == EFS_ERR_PROTO);
+        assert(efs_kv_del(kv, ck, sizeof(ck)) == EFS_OK);
+        cur.epoch = EFS_PACK_CURSOR_EPOCH; /* the backfill cursor is never a member */
+        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &cur, 1) == EFS_ERR_INVAL);
+    }
+
     free(image); free(o); free(sw); free(wire); free(back); free(cur);
     efs_kv_mem_free(kv);
-    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release, retire, candidate index, backfill cursor, K37 degraded marks PASS");
+    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release, retire, candidate index, compare-and-delete UNINDEX, backfill cursor, K37 degraded marks PASS");
     return 0;
 }

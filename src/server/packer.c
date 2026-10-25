@@ -208,14 +208,16 @@ static void pk_abandon(struct efs_kv *kv, uint8_t group, uint64_t term)
 }
 
 /* ---- 2. select ---- */
-struct pk_entry { uint64_t epoch; efs_ino_t ino; uint64_t gen; };
-struct pk_scan { struct pk_entry *e; uint32_t n; };
+/* gen and stamp: the candidate value as read, which UNINDEX compares. */
+struct pk_entry { uint64_t epoch; efs_ino_t ino; uint64_t gen, stamp; };
+struct pk_scan { struct pk_entry *e; uint32_t n; uint32_t bad_vl; int bad; };
 static int pk_scan_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, uint32_t vl)
 {
     struct pk_scan *sc = u;
-    if (kl != EFS_PACK_CANDIDATE_KEY_BYTES || k[2] != EFS_KV_KIND_PACK_CANDIDATE || vl != 8) return 0;
+    if (kl != EFS_PACK_CANDIDATE_KEY_BYTES || k[2] != EFS_KV_KIND_PACK_CANDIDATE) return 0;
     if (rd64(k + 3) == EFS_PACK_CURSOR_EPOCH) return 0; /* backfill cursor */
-    sc->e[sc->n++] = (struct pk_entry){rd64(k + 3), rd64(k + 11), rd64(v)};
+    if (vl != EFS_PACK_CANDIDATE_VAL_BYTES) { sc->bad = 1; sc->bad_vl = vl; return 1; } /* unknown encoding */
+    sc->e[sc->n++] = (struct pk_entry){rd64(k + 3), rd64(k + 11), rd64(v), rd64(v + 8)};
     return sc->n == PK_SCAN_MAX;
 }
 #define PK_COUNT_NS (30ull * 1000000000ull)
@@ -229,7 +231,7 @@ static int pk_count_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v,
 }
 struct pk_file {
     struct efs_pack_candidate c;
-    uint64_t epoch;
+    uint64_t epoch, stamp;
     uint8_t *data;
     int base_read, base_rc; /* packed base already read (pk_read_bases) */
 };
@@ -507,12 +509,15 @@ static void pk_unindex(uint8_t group, const struct pk_entry *e, uint32_t n)
 {
     while (n) {
         uint32_t m = n < EFS_PACK_UNINDEX_MAX ? n : EFS_PACK_UNINDEX_MAX;
-        uint8_t *cmd = malloc(4u + 16u * m);
+        uint8_t *cmd = malloc(4u + EFS_PACK_UNINDEX_ITEM_BYTES * m);
         if (!cmd) return;
         cmd[0] = EFS_MD_CMD_PACK_UNINDEX; cmd[1] = group;
         cmd[2] = (uint8_t)(m >> 8); cmd[3] = (uint8_t)m;
-        for (uint32_t i = 0; i < m; i++) { wr64(cmd + 4 + 16 * i, e[i].epoch); wr64(cmd + 12 + 16 * i, e[i].ino); }
-        if (pk_propose(group, cmd, 4u + 16u * m) == EFS_OK) STAT_ADD(unindexed, m);
+        for (uint32_t i = 0; i < m; i++) {
+            uint8_t *q = cmd + 4 + EFS_PACK_UNINDEX_ITEM_BYTES * i;
+            wr64(q, e[i].epoch); wr64(q + 8, e[i].ino); wr64(q + 16, e[i].gen); wr64(q + 24, e[i].stamp);
+        }
+        if (pk_propose(group, cmd, 4u + EFS_PACK_UNINDEX_ITEM_BYTES * m) == EFS_OK) STAT_ADD(unindexed, m);
         free(cmd);
         e += m;
         n -= m;
@@ -654,7 +659,8 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
             unsigned at;
             if (efs_pack_ledger_slot(&cur->ledger, &refs[i], &at) == EFS_OK &&
                 cur->ledger.state[at] == EFS_PACK_LIVE) {
-                if (done) done[(*ndone)++] = (struct pk_entry){files[i].epoch, files[i].c.ino, 0};
+                if (done) done[(*ndone)++] = (struct pk_entry){files[i].epoch, files[i].c.ino,
+                                                               files[i].c.inode_generation, files[i].stamp};
                 live_total++;
             }
         }
@@ -1066,6 +1072,11 @@ static int pk_group(uint8_t group, uint64_t term)
     uint32_t anchor = efs_pack_group_anchor(group);
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_CANDIDATE};
     if (efs_kv_lsm_scan_yield(kv, prefix, 3, 4096, pk_scan_cb, &sc) < 0) goto out;
+    if (sc.bad) {
+        fprintf(stderr, "packer: group=%u candidate value of %u bytes is not this format; packing stopped\n",
+                group, sc.bad_vl);
+        goto out;
+    }
     /* The whole index, for the unpacked-bytes signal: not every pass. */
     if (sc.n < PK_SCAN_MAX) {
         pk.g[pk_gi(group)].backlog = sc.n; /* the scan saw it all */
@@ -1120,6 +1131,7 @@ static int pk_group(uint8_t group, uint64_t term)
         if (f->c.mtime + pk.min_age_ns > now) continue; /* not quiet yet */
         if (efs_lease_any(kv, f->c.ino, f->c.inode_generation) != 0) continue; /* open */
         f->epoch = sc.e[i].epoch;
+        f->stamp = sc.e[i].stamp;
         if (!oldest || f->c.mtime < oldest) oldest = f->c.mtime;
         nfiles++;
     }
