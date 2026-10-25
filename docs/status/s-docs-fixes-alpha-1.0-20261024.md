@@ -7,7 +7,7 @@ commands) fails only the 11 commands that also fail on the untouched base
 does not compile on the base either (`read_reprobe_down` undeclared in the
 extracted `read.c` functions, from the READ_VERIFY and K34 merges). The new
 F14 test is red on the base (the 17th joiner never exits) and green on the
-branch. Branch `claude/devel-sdocs-fixes-f02c43`, not merged, not pushed.
+branch. Branch merged into devel (`77d937d27`), not pushed.
 
 Fixes for the open findings of the
 [alpha 1.0 docs review](s-docs-alpha-1.0-20261024.md) (F2–F6, F11, F13, F14,

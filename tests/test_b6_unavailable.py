@@ -101,6 +101,11 @@ def degraded(c, i=1):
     return int(m.group(1)) if m else None
 
 
+def degraded_segments(c, i=1):
+    m = re.search(r'^Degraded segments: (\d+) ', status(c, i), re.M)
+    return int(m.group(1)) if m else None
+
+
 def wait_degraded(c, pred, what, timeout):
     end, got = time.time() + timeout, None
     while time.time() < end:
@@ -407,10 +412,13 @@ def run_mode(mode):
             st = status(c)
             assert 'Protection: DEGRADED' in st, st
         r.out['degraded_during'] = n
-    # While the fault lasts no file is switched into a segment that misses
-    # node 3's fragment: the packer needs all three destinations.
+    # K37 policy: the packer may copy a segment while node 3 is unavailable,
+    # but such a segment is marked degraded before any file goes in, and
+    # rebuilt on return (checked after the restore below).
     r.out['packed_during_fault'] = packed_total(c) - pk_before
-    assert r.out['packed_during_fault'] == 0 or mode == 'slow', r.out
+    r.out['degraded_segments_during'] = degraded_segments(c)
+    assert (r.out['packed_during_fault'] == 0 or mode == 'slow' or
+            (r.out['degraded_segments_during'] or 0) > 0), r.out
 
     # 6. Orderly restore and restart.
     r.clear_fault()
@@ -421,6 +429,11 @@ def run_mode(mode):
     up(c, 3)
     c.wait_members([1, 2, 3], 3)
     wait_degraded(c, lambda n: n == 0, f'{mode}: W154 after the restore', REBUILD_BOUND_S)
+    # K37: segments copied during the fault are rebuilt and their marks clear.
+    end = time.time() + REBUILD_BOUND_S
+    while (degraded_segments(c) or 0) > 0 and time.time() < end:
+        time.sleep(0.5)
+    assert (degraded_segments(c) or 0) == 0, f'{mode}: K37 segments still degraded\n{status(c)}'
     assert 'Protection: full' in status(c), status(c)
     r.out['rebuild_s'] = round(time.time() - t, 1)
     r.out['rebuilt'] = sum(c.log(i).count('raft-host: rebuilt ino=') for i in (1, 2, 3))
