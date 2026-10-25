@@ -1623,6 +1623,21 @@ within 3 s per leader change crossed. Daemon test `tests/test_report_stepdown.py
 no recovery-scan stall, slowest REPORT 1.8 s (base: stalls in 4 of 5, 2 over
 the bound). Multi-host, RDMA and orcd-mini NOTRUN.
 
+[Stage 2 gates A13, C5, D1/D2, D3, E4 in `scripts/qualify.py`](../status/stage2-gates-20261024.md):
+**PASS (scoped, loopback), branch `claude/devel-stage2-gates-359865` on `merge-wave6`, not merged; no stub gate is left.**
+`a13-node-addition` grows its own cluster 3 → 4 (a killed join retried: the same member; SHARD2
+`{1,2,3}` → `{2,3,4}`) → 5 with the seed down under a client load; `c5-protocol-live` drives the
+W133 declaration gate and W140 tag refusal over the wire, removed settings, a session fence and the
+clean-unmount revoke; `d1-packing` packed rows, stored-object savings, D2 mutations and compaction,
+cold restart; `d3-efs-load` `.efs` queries exact under I/O with deadlines; `e4-scale` declared
+fixtures sized by member count, cold reads under queries, delete/reclaim. xorinox loopback-3 full
+run at `babc80ced`: the five new gates PASS (18 PASS, 1 FAIL `gc-reclamation`, 1 NOTRUN A4).
+xorinox `make -k test-all` at `babc80ced`: 420 commands, 1 FAIL, 12 NOTRUN host limits; the FAIL,
+`test_b6_unavailable.py` refuse mode (files packed while a member refuses), fails 3 of 3 on the base
+`646a43041`, as does `gc-reclamation`. FIXED: `test_get_integrity.py` did not compile on
+`merge-wave6`. Raw: xorinox `~/efs-artifacts/stage2-gates-20261024/`, `SHA256SUMS` `78ec26cc…d0a4`.
+Real hosts NOTRUN (parent).
+
 [Oct 24 merge: READ_VERIFY, K34, A7 removals, K35, K36](#d42--alpha-10-decisions-taken-oct-24-user-with-review-conditions):
 **merged into devel; merged-tree `make test-all` on intel2 at `0f0a79eac`: 459 commands, 0 FAIL, 14 NOTRUN host limits (1,839 s; raw: intel2 `~/efs-artifacts/merge-wave5-0f0a79eac-20261024/`, `SHA256SUMS` `01b2d681…dcd9`).** The intermediate gate at `376369aa8` had one FAIL (a missing K34 stub in `test_get_integrity.py`, fixed in `1898c4c63`). K36's recovery mark is Raft tag 248 beside K35's tag 249. devops `8bc872e` and cluster `1402762` drop the removed settings (not pushed). Every store needs a fresh format. Live gates stay NOTRUN.
 
@@ -1716,7 +1731,8 @@ tunables. Selector × transport × member count 1,376,256 → 28; qualified
 exhaustively: TCP/RDMA × 3, 4, 5 distinct hosts; 6–16 sampled. Every
 Stage 2 item mapped in `scripts/qualify_matrix.json`; `qualify.py run
 --matrix … --topology NAME` runs a topology (orcd-mini, intel, loopback,
-bare-metal 3/4/5). Seven NOTRUN stub gates. **A4 blocked:** no
+bare-metal 3/4/5). The seven NOTRUN stub gates are real gates now (B6/D4 merge,
+[Stage 2 gates](../status/stage2-gates-20261024.md)). **A4 blocked:** no
 distinct-host topology can form today (host firewalls, amd's network, no
 three-host RDMA). Driver fixes: the `b-checks` plugin called
 `b_checks.py` with options it rejects; E3 did not retry a step-down refused

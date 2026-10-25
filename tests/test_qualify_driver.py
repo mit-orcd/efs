@@ -219,16 +219,171 @@ try:
     rc, text = run('--cluster', str(desc), '--out', str(tmp / 'out-t0'), '--gates', 'topology')
     assert rc == 1 and 'alpha 1.0 needs at least 3' in load(tmp / 'out-t0/gates/topology/result.json')['reason']
 
-    # 7. Stub gates exist, are listed and report NOTRUN with their reason.
+    # 7. No stub gate is left: every Stage 2 gate has a harness. Against a
+    # description without nodes or mounts each says what it needs.
     names = [g.name for g in Q.gates(Q.default_plugins({}, []))]
-    stubs = [n for n, *_ in Q.STUBS]
-    # B6 (b6-member-down) and D4 (d4-progress) are real gates now, not stubs.
-    assert set(stubs) <= set(names) and 'e4-scale' in stubs and not {'d4-progress', 'b6-unavailable'} & set(stubs)
+    assert not hasattr(Q, 'STUBS') and not hasattr(Q, 'g_stub'), 'stub gates are gone'
     assert len(names) == len(set(names)), 'gate names must be unique'
-    rc, text = run('--cluster', str(desc), '--out', str(tmp / 'out-stubs'), '--gates', ','.join(stubs))
+    new = ['a13-node-addition', 'c5-protocol-live', 'd1-packing', 'd3-efs-load', 'e4-scale']
+    assert set(new) <= set(names) and not any(g.doc.startswith('STUB') for g in Q.gates(Q.default_plugins({}, [])))
+    rc, text = run('--cluster', str(desc), '--out', str(tmp / 'out-new'), '--gates', ','.join(new), '--allow', 'all')
     assert rc == 3, (rc, text)
-    for g in load(tmp / 'out-stubs/run.json')['gates']:
-        assert g['verdict'] == 'NOTRUN' and g['reason'].startswith('no harness yet: '), g
+    reasons = {g['gate']: g['reason'] for g in load(tmp / 'out-new/run.json')['gates']}
+    assert all('no harness' not in r for r in reasons.values()), reasons
+    assert reasons['a13-node-addition'].startswith('needs a driver-owned cluster'), reasons
+    assert reasons['c5-protocol-live'] == 'needs a mount and nodes' and reasons['d1-packing'] == 'no mount described'
+    assert reasons['d3-efs-load'] == 'no mount described' and reasons['e4-scale'] == 'needs a mount and nodes'
+    assert [g.needs for g in Q.gates({}) if g.name == 'a13-node-addition'] == [('restart',)]
+    # Plan commands of the new gates (the description of section 5).
+    joined7 = joined
+    assert "stage2_helpers.py wire --node 10.0.0.1:17432 --node 10.0.0.2:17432 --node 10.0.0.3:17432" in \
+        joined7['c5-protocol-live'], joined7['c5-protocol-live']
+    assert 'stage2_helpers.py smallfiles write --dir /mnt/a/qualify-out7/d1 --files 400' in joined7['d1-packing']
+    assert '--max-size 8192' in joined7['d1-packing']
+    assert 'stage2_helpers.py d3 --dir /mnt/a/qualify-out7/d3 --mount /mnt/a' in joined7['d3-efs-load']
+    assert '--peer /mnt/b' in joined7['d3-efs-load'] and '--load-s 300' in joined7['d3-efs-load']
+    assert '--small 15000 --large 6 --large-mib 256' in joined7['e4-scale'], joined7['e4-scale']
+    assert '/src/efs-mgmt status 10.0.0.1:17432' in joined7['e4-scale']
+    # Fixture defaults are declared in the matrix with the driver's values.
+    mfx = load(root / 'scripts/qualify_matrix.json')['fixture']
+    assert {k: v for k, v in mfx.items() if k != 'about'} == {k: Q.DEFAULT_FIXTURE[k] for k in mfx if k != 'about'}
+    assert {'a13_members', 'd1_files', 'd3_load_s', 'e4_small_per_member', 'e4_large_mib'} <= set(mfx)
+
+    # 7b. Status, raft-status and getchunks parsers.
+    st = ('Cluster nodes (2):\n  node 1: 10.0.0.1:1  up  used=0 B  quota=2.00 GiB (0.0%)  storage(1):\n'
+          '      bytes: used=5 quota=300 capacity=300 available=295 valid=1\n'
+          '  node 4: 10.0.0.4:1  DOWN\nUsable bytes: used=7 free=93 capacity=100\n')
+    assert Q.parse_status(st) == ({1: dict(addr='10.0.0.1:1', up=True, used=5, quota=300, capacity=300),
+                                   4: dict(addr='10.0.0.4:1', up=False)}, dict(used=7, free=93, capacity=100))
+    rs = ('node 3 root=1 salt=1 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=2 commit=8 applied=8 '
+          'voters=0x7 joint=0 retired=0\n  group 2 hosted=1 role=LEADER leader=2 term=3 commit=9 applied=9 '
+          'voters=0xe joint=1 retired=0\n  group 5 hosted=1 role=FOLLOWER leader=0 term=1 commit=3 applied=3 '
+          'voters=0x7 joint=1 retired=1\n')
+    assert Q.parse_raft(rs) == (3, {0: dict(role='FOLLOWER', voters=7, joint=0), 2: dict(role='LEADER', voters=14, joint=1)})
+    assert Q.mask({2, 3, 4}) == 0xe and Q.mask({1, 2, 3}) == 7
+    hspec = importlib.util.spec_from_file_location('stage2_helpers', root / 'scripts/stage2_helpers.py')
+    H = importlib.util.module_from_spec(hspec)
+    hspec.loader.exec_module(H)
+    gc = ('raft-getchunks status=0 primary=1 ino=9 count=2 cis=0\n'
+          '  ci=0 nodes=3,1,2 base_gen=5 obj_gen=5 ck0=424ef2fe spans=0 seq=0\n'
+          '    packed segment=77 gen=1 group=0 offset=1044 len=300\n'
+          '  ci=1 nodes=0,0,0 base_gen=0 obj_gen=0 ck0=00000000 spans=1 seq=1\n'
+          '    span off=0 len=300 gen=99 seq=1 nodes=1,2,3\n')
+    status, rows = H.parse_getchunks(gc)
+    assert status == 0 and rows[0]['packed'] == dict(segment=77, gen=1, group=0, offset=1044, len=300)
+    assert H.stored_objects(rows) == {('segment', 77, 1), ('span', 99, (1, 2, 3))}
+
+    # 7c. The wire probe against fake daemons: a correct gate (leader
+    # refuses the tags, follower redirects) passes every check; a daemon
+    # that serves undeclared requests and applies any tag fails them.
+    import socket as _s, struct as _st, threading as _th
+
+    def fake_daemon(leader, lax=False):
+        srv = _s.socket()
+        srv.setsockopt(_s.SOL_SOCKET, _s.SO_REUSEADDR, 1)
+        srv.bind(('127.0.0.1', 0))
+        srv.listen(16)
+
+        def serve(c):
+            ok = False
+            with c:
+                while True:
+                    head = c.recv(5, _s.MSG_WAITALL)
+                    if len(head) < 5:
+                        return
+                    n, t = _st.unpack('>IB', head)
+                    body = c.recv(n - 1, _s.MSG_WAITALL) if n > 1 else b''
+                    if t == 0:
+                        c.sendall(_st.pack('>IB', 1, 1))
+                    elif t == 165:
+                        good = body[:4] == b'EFSP' and _st.unpack('<I', body[4:8])[0] == 5
+                        c.sendall(_st.pack('>IB', 9, 166) + _st.pack('<iI', 0 if good else -7, 5))
+                        if not good:
+                            return
+                        ok = True
+                    elif not ok and not lax:
+                        return
+                    elif t == 95:
+                        rc, hint = (0, -1) if lax else ((-7, -1) if leader is None else (-15, leader))
+                        c.sendall(_st.pack('>IB', 33, 96) + _st.pack('<iiQQQ', rc, hint, 0, 0, 0))
+        def accept():
+            while True:
+                try:
+                    c, _ = srv.accept()
+                except OSError:
+                    return
+                _th.Thread(target=serve, args=(c,), daemon=True).start()
+        _th.Thread(target=accept, daemon=True).start()
+        return srv, f'127.0.0.1:{srv.getsockname()[1]}'
+
+    lead, ep0 = fake_daemon(None)
+    foll, ep1 = fake_daemon(0)
+    checks = [c for ep in (ep0, ep1) for c in H.wire_node(ep, [ep0, ep1], 2)]
+    assert checks and all(c['ok'] for c in checks), [c for c in checks if not c['ok']]
+    assert any(c.get('via') == [ep1, ep0] for c in checks), 'the follower redirect was followed'
+    lax, ep2 = fake_daemon(None, lax=True)
+    failed = {c['check'] for c in H.wire_node(ep2, [ep2], 2) if not c['ok']}
+    assert 'unknown-tag-254-group-0-refused' in failed and 'reserved-tag-46-group-2-refused' in failed, failed
+    for sock in (lead, foll, lax):
+        sock.close()
+
+    # 7d. Removed-settings probe against fake binaries: one that names the
+    # setting and exits passes; one that ignores it (and touches the store) fails.
+    for kind, script, want in (('strict', 'for v in EFS_COMMANDS EFS_MD_RAFT_N EFS_READ_VERIFY EFS_METADATA_BALANCE '
+                                          'EFS_UNMOUNT_REVOKE EFS_FUSE_EXPORT EFS_EXPIRY; do [ -n "${!v+x}" ] && '
+                                          '{ echo "x: $v was removed (A6)"; exit 1; }; done\nfor a; do case $a in '
+                                          '--no-direct-io|--direct-io|--no-persist|--node-id) echo "$a was removed"; '
+                                          'exit 1;; esac; done\nexit 0\n', 0),
+                               ('lax', 'mkdir -p "$2"; exit 0\n', 1)):
+        tree = tmp / f'refuse-{kind}'
+        tree.mkdir()
+        for prog in ('efsd', 'efs-fuse'):
+            (tree / prog).write_text('#!/bin/bash\n' + script)
+            (tree / prog).chmod(0o755)
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            assert H.main(['refuse', '--src', str(tree), '--scratch', str(tmp / f'scr-{kind}')]) == want
+        doc = json.loads(buf.getvalue().splitlines()[-1])
+        assert doc['total'] == len(H.REFUSALS) and (doc['passed'] == doc['total']) == (want == 0), doc
+
+    # 7e. Host helpers on a plain directory: the load, the D1 fixture and
+    # its D2 mutations and the E4 fixture all verify with _manifest verify.
+    def helper(*argv, stdin=None):
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            if stdin is not None:
+                saved_in, sys.stdin = sys.stdin, io.StringIO(json.dumps(stdin))
+            try:
+                rc = H.main(list(map(str, argv)))
+            finally:
+                if stdin is not None:
+                    sys.stdin = saved_in
+        return rc, json.loads(buf.getvalue().splitlines()[-1])
+
+    def verify(doc):
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            saved_in, sys.stdin = sys.stdin, io.StringIO(json.dumps(doc))
+            try:
+                rc = Q.main(['_manifest', 'verify'])
+            finally:
+                sys.stdin = saved_in
+        return rc, json.loads(buf.getvalue().splitlines()[-1])
+
+    stop = tmp / 'stop-load'
+    _th.Timer(0.6, stop.touch).start()
+    rc, doc = helper('load', '--dir', tmp / 'h/load', '--stop', stop, '--seed', 's', '--threads', 2, '--kib', 1)
+    assert rc == 0 and doc['acknowledged'] > 0 and doc['acknowledged'] == doc['ops'], doc
+    assert verify(dict(dir=doc['dir'], files=doc['files'], errors=[]))[0] == 0
+    rc, small = helper('smallfiles', 'write', '--dir', tmp / 'h/small', '--files', 40, '--seed', 's', '--max-size', 900)
+    assert rc == 0 and len(small['files']) == 40 and all(f['ino'] for f in small['files']), small
+    assert verify(small)[0] == 0
+    rc, mut = helper('smallfiles', 'mutate', '--seed', 's', stdin=small)
+    assert rc == 0 and mut['mutations'] == dict(overwritten=5, truncated=5, unlinked=5, retained=25), mut
+    assert verify(mut)[0] == 0 and verify(small)[0] == 1, 'mutations change what reads back'
+    assert any(f['size'] == 0 for f in mut['files']), 'one in sixteen truncated to 0'
+    rc, e4 = helper('e4', 'write', '--dir', tmp / 'h/e4', '--seed', 's', '--small', 30, '--large', 2,
+                    '--large-mib', 1, '--threads', 4)
+    assert rc == 0 and (e4['completed_small'], e4['completed_large']) == (30, 2) and verify(e4)[0] == 0, e4
+    rc, rest = helper('e4', 'delete', stdin=e4)
+    assert rc == 0 and rest['deleted'] == 2 + 15 and len(rest['files']) == 15 and verify(rest)[0] == 0, rest
 
     # 8. The b-checks plugin matches scripts/b_checks.py's CLI.
     host, cmd = Q.b_checks_command(dict(nodes=three['nodes'], mounts=[
@@ -278,6 +433,9 @@ try:
     deleted = {h for h, c in teardown if 'edelete --force --delete /home/maik/efs-qual-matrix/bare-metal-4-tcp' in c}
     assert deleted == {'nuc', 'intel1', 'intel2', 'xorinox'}, teardown
     assert load(tmp / 'm3/run.json')['allow'] == ['remount', 'restart', 'turnover']
+    a13 = [c['command'] for c in load(tmp / 'm3/gates/a13-node-addition/result.json')['commands']]
+    assert any('_node start --addr 10.1.0.204:19060 --store /home/maik/efs-qual-matrix/bare-metal-4-tcp/a13/n1'
+               in c and '--quota 2G' in c and '--join' not in c for c in a13), a13
 
     # 12. _node: start waits until the daemon listens, refuses a second
     # start, stop sends SIGTERM and waits (a stub efsd from a stub tree).
@@ -304,6 +462,10 @@ try:
             assert Q.pid_alive(pid)
             assert Q.main(['_node', 'stop', *node]) == 0
             assert Q.main(['_node', 'stop', *node]) == 0
+            # kill: an interrupted join (A13); --timeout 0 returns once spawned.
+            assert Q.main(['_node', 'start', *node[:4], '--timeout', '0']) == 0
+            pid = int((tmp / 'pc/n1.pid').read_text())
+            assert Q.main(['_node', 'kill', *node]) == 0 and not Q.pid_alive(pid)
         out = buf.getvalue()
         assert 'listening' in out and 'already running' in out and 'exited' in out and 'not running' in out, out
         assert f'efsd 127.0.0.1:{port} {tmp / "pc/n1"} --quota 4G --discovery-port 0' in (tmp / 'pc/n1.log').read_text()
@@ -314,5 +476,6 @@ try:
 finally:
     shutil.rmtree(tmp)
 print('qualify driver: stub pass/fail/not-run/deadline/liar verdicts, result fields, SHA256SUMS '
-      'and tamper control, summary and F3 row, refusals, --plan commands, topology gate, stub gates, '
+      'and tamper control, summary and F3 row, refusals, --plan commands, topology gate, no stub gates '
+      '(A13/C5/D1/D3/E4 plans, parsers, wire probe vs fake daemons, removed-settings probe, host helpers), '
       'b-checks CLI, ssh wrapper, A11 matrix validation and topologies, _node start/stop PASS')
