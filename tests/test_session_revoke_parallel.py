@@ -16,7 +16,9 @@ Compiles src/common/session_revoke.c against a thread-safe fake owner with
   failed cleanup names its shard (phase cleanup), never a completed revoke.
 """
 from pathlib import Path
-import os, shlex, subprocess, tempfile
+import os, shlex, subprocess, sys, tempfile
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sanitize_env import cflags, timeout, wrap  # noqa: E402
 root = Path(__file__).resolve().parents[1]
 code = r'''
 #include "efs/common.h"
@@ -173,10 +175,10 @@ with tempfile.TemporaryDirectory(prefix='efs-revoke-parallel-') as d:
     p = Path(d) / 'test.c'
     p.write_text(code)
     exe = p.with_suffix('')
-    subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror',
-                   '-I' + str(root / 'include'), str(p), str(root / 'src/common/session_revoke.c'),
+    subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
+                   *cflags(), '-I' + str(root / 'include'), str(p), str(root / 'src/common/session_revoke.c'),
                    '-pthread', '-o', str(exe)], check=True)
-    out = subprocess.run([str(exe)], check=True, capture_output=True, text=True, timeout=120).stdout
+    out = subprocess.run(wrap() + [str(exe)], check=True, capture_output=True, text=True, timeout=timeout(120)).stdout
 print(out.strip())
 print('session revoke: parallel per-shard stages keep FENCE_LOC<ACK<FINISH<cleanup, '
       'stop on the first failure and report progress PASS')

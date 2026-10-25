@@ -379,6 +379,21 @@ leak-check:
 	EFS_GIT_BRANCH='$(EFS_GIT_BRANCH)' EFS_BUILD_TIME='$(EFS_BUILD_TIME)' \
 	bash tests/leak_check.sh
 
+# F1 sanitizer gates: a copy of the tree built with ThreadSanitizer
+# (tsan-check: KV, Raft store, client data commit, member view, the K36
+# recovery thread, K37 rebuild, E2 revoke, W155 receipts, the D4 load) or with
+# AddressSanitizer + UBSan + LeakSanitizer (asan-check: the harnesses that
+# take a sanitizer switch, the parsers and decoders, the daemons). One
+# PASS/FAIL line per entry and a verdict; exit 1 on any report, 3 (NOTRUN)
+# without the runtime. See tests/sanitizer_check.sh and docs/how-it-works/testing.md.
+.PHONY: tsan-check asan-check sanitize-check
+tsan-check:
+	bash tests/sanitizer_check.sh tsan
+asan-check:
+	bash tests/sanitizer_check.sh asan
+sanitize-check:
+	@rc=0; $(MAKE) tsan-check || rc=1; $(MAKE) asan-check || rc=1; exit $$rc
+
 check:
 	@rc=0; $(MAKE) test-all || rc=1; $(MAKE) docs-check || rc=1; $(MAKE) leak-check || rc=1; exit $$rc
 
