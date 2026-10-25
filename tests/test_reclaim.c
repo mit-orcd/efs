@@ -237,7 +237,7 @@ static void t_torn(void)
     int fd=open(path,O_WRONLY|O_APPEND);assert(fd>=0);
     uint8_t junk[37];memset(junk,0x5a,sizeof(junk));assert(write(fd,junk,sizeof(junk))==(ssize_t)sizeof(junk));close(fd);
     boot();
-    assert(!S.reclaim_fail_closed);
+    assert(!__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE));
     struct stat st;assert(!stat(path,&st)&&st.st_size==(off_t)(RJ_HDR_BYTES+RJ_REC_BYTES));
     assert(put(9000,1,0)==EFS_ERR_STALE);
     wait_drained();
@@ -296,13 +296,13 @@ static void t_fail_closed(void)
     __atomic_store_n(&host_active,0,__ATOMIC_RELEASE);
     boot();
     uint64_t base=used()-3ull*EFS_FRAGMENT_SIZE; /* 9100, 9101, 9102 */
-    assert(S.reclaim_fail_closed);
+    assert(__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE));
     assert(put(9102,1,0)==EFS_ERR_IO); /* even a live inode is refused */
     int32_t rc;struct efs_reclaim_item it={.export_id=1,.ino=9200,.generation=1};
     (void)server_reclaim_accept(&S,&it,1,&rc);assert(rc==EFS_ERR_BUSY); /* leader retries later */
     __atomic_store_n(&host_active,1,__ATOMIC_RELEASE);
     wait_readmitted();
-    assert(!S.reclaim_fail_closed);
+    assert(!__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE));
     assert(!put(9102,1,0));
     assert(put(9100,1,0)==EFS_ERR_STALE && put(9101,1,0)==EFS_ERR_STALE);
     wait_drained();
@@ -338,7 +338,7 @@ static void t_state_rules_replay(void)
     assert(!access(path,F_OK));
     rj.hold=1; /* keep the record (no deletion, so no retirement): the journal stays non-empty */
     boot();
-    assert(!S.reclaim_fail_closed);
+    assert(!__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE));
     assert(access(path,F_OK)); /* leftover removed */
     assert(put(9300,1,0)==EFS_ERR_STALE);
     server_reclaim_shutdown(&S);
@@ -350,10 +350,10 @@ static void t_state_missing(void)
 {
     __atomic_store_n(&host_active,0,__ATOMIC_RELEASE);
     boot();
-    assert(S.reclaim_fail_closed); /* segments without a state record */
+    assert(__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE)); /* segments without a state record */
     assert(put(9301,0,0)==EFS_ERR_IO);
     server_reclaim_shutdown(&S);
-    assert(S.reclaim_fail_closed); /* an interrupted recovery never re-admits writes */
+    assert(__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE)); /* an interrupted recovery never re-admits writes */
 }
 
 /* 6b. Restoring an older, self-consistent copy of meta/ is detected: the
@@ -384,7 +384,7 @@ static void t_old_meta(void)
     }
     __atomic_store_n(&host_active,0,__ATOMIC_RELEASE);
     boot();
-    assert(S.reclaim_fail_closed);
+    assert(__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE));
     snprintf(cmd,sizeof(cmd),"test -e %s/meta/gc-journal.broken.%lld/seg",roots[0],(long long)now);
     assert(!system(cmd)); /* the earlier aside is kept */
     assert(put(9302,0,0)==EFS_ERR_IO);
@@ -681,7 +681,7 @@ static void t_segment_replay(void)
 {
     seg_setup(0x5e60002); seg_phase = 0;
     boot();
-    assert(!S.reclaim_fail_closed);
+    assert(!__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE));
     seg_phase = EFS_PACK_ACTIVE;
     assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_STALE); /* fence replayed */
     seg_phase = 0;
@@ -710,7 +710,7 @@ static void t_v1_prepare(void)
 static void t_v1_replay(void)
 {
     boot();
-    assert(!S.reclaim_fail_closed);
+    assert(!__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE));
     assert(put(9500,1,0) == EFS_ERR_STALE);
     wait_drained();
     assert(!inode_dir_exists(9500));
@@ -736,8 +736,8 @@ static void t_segment_recover(void)
     seg_setup(0x5e60004); /* ACTIVE; 0x5e60003 reads absent */
     __atomic_store_n(&host_active,1,__ATOMIC_RELEASE);
     boot();
-    for (int i = 0; i < 400 && S.reclaim_fail_closed; i++) usleep(25000);
-    assert(!S.reclaim_fail_closed);
+    for (int i = 0; i < 400 && __atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE); i++) usleep(25000);
+    assert(!__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE));
     wait_drained();
     assert(!seg_file(0x5e60003) && seg_file(0x5e60004));
     __atomic_store_n(&host_active,0,__ATOMIC_RELEASE);
@@ -799,7 +799,7 @@ static void t_superseded_crash(void)
 static void t_superseded_replay(void)
 {
     boot();
-    assert(!S.reclaim_fail_closed);
+    assert(!__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE));
     wait_drained();
     assert(!frag_file(9700, 0) && !inode_dir_exists(9700));
     assert(!put(9700, 1, 0)); /* never fenced */
