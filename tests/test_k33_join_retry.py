@@ -9,8 +9,11 @@ identity then decides (src/server/member_store.c, member_store_open):
 1. The seed ends with boot.bin written and identity.bin not
    (before-identity); started again with the same command it is node 1 of a
    new cluster, and two joiners form it.
-2. Node 4 ends the same way through node 2: its store holds boot.bin at
-   counter 0 and no identity.bin, and every member still lists 3 members.
+2. Node 4 through node 2: a new root holding unknown data is refused; one
+   holding only the O_DIRECT probe page of a start killed during the probe
+   starts (the page is removed) and ends like the seed: its store holds
+   boot.bin at counter 0 and no identity.bin, and every member still lists
+   3 members.
    Started again with the same --join, it initializes again (a new token),
    joins as member 4 and group 2 moves to {2,3,4}.
 3. Node 5 ends with its joining identity persisted, before its first HELLO
@@ -60,12 +63,22 @@ try:
         c.wait_log(i, r'raft-host: formed: 3 members')
     c.wait_members([1, 2, 3], 3)
 
-    # 2. Node 4's initialization interrupted: the cluster never hears of it.
+    # 2. Node 4's first start killed during the O_DIRECT probe (its page is
+    # left in data/), then again before identity.bin: the cluster never
+    # hears of it. Unknown data in a new root stays refused.
+    (c.dir / 'n4' / 'data').mkdir(parents=True)
+    (c.dir / 'n4' / 'data' / 'junk').write_bytes(b'x')
+    c.start(4, join=2)
+    assert c.wait_exit(4) == 1, c.last_run(4)[-2000:]
+    assert 'has fragment data but no root marker' in c.last_run(4), c.last_run(4)[-2000:]
+    (c.dir / 'n4' / 'data' / 'junk').unlink()
+    (c.dir / 'n4' / 'data' / '.efs-direct-io-probe.999999').write_bytes(b'\0' * 4096)
     c.start(4, join=2, extra_env=hook('before-identity'))
     c.wait_log(4, r'EFS_FAULT_MEMBER_EXIT at before-identity')
     assert c.wait_exit(4) == 86
     md = mdraft(c, 4)
     assert (md / 'boot.bin').exists() and not (md / 'identity.bin').exists(), sorted(os.listdir(md))
+    assert not (c.dir / 'n4' / 'data' / '.efs-direct-io-probe.999999').exists()
     time.sleep(1)
     c.wait_members([1, 2, 3], 3)
     ep4 = c.ep(4)
@@ -111,7 +124,7 @@ finally:
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)
-print('K33 join retry: seed and node 4 interrupted before identity.bin (boot counter 0) start '
-      'again with the same command (node 1, member 4); node 5 interrupted before its first '
+print('K33 join retry: a leftover O_DIRECT probe page is removed, unknown data refused; seed '
+      'and node 4 interrupted before identity.bin (boot counter 0) start again with the same command (node 1, member 4); node 5 interrupted before its first '
       'HELLO retries as member 5; lost identity and a wiped store stay refused: '
       f'PASS ({time.time() - t0:.1f} s)')
