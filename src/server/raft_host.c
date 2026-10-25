@@ -2623,8 +2623,34 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     default:
         return EFS_ERR_UNSUPPORTED;
     }
+#if EFS_FAULTS
+    if (rc == EFS_OK) {
+        /* Test hook (W130 gate): while the marker file exists, damage the
+         * target directory's stored row on THIS replica after a successful
+         * step — the next step's meta read then gets a row the decoder
+         * cannot accept (one-replica fault). One-shot per marker. */
+        const char *dmg = getenv("EFS_FAULT_DIR_CORRUPT_FILE");
+        if (dmg && access(dmg, F_OK) == 0) {
+            uint8_t key[EFS_KV_KEY_MAX], junk[16];
+            uint32_t kl = 0;
+            if (efs_kv_key_inode(efs_kv_inode_shard(dir), dir, key, &kl) == EFS_OK) {
+                memset(junk, 0xEE, sizeof(junk));
+                if (efs_kv_put(h->kv, key, kl, junk, sizeof(junk)) == EFS_OK)
+                    fprintf(stderr, "raft-host: fault dir-corrupt: damaged ino=%llu row\n",
+                            (unsigned long long)dir);
+            }
+            unlink(dmg);   /* one-shot per marker */
+        }
+    }
+#endif
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY)
         rc = EFS_OK;
+    /* W130: a stored row this build cannot decode (PROTO from the decoder)
+     * is a malformed encoding — refuse and halt the group (W127 route),
+     * never log-and-skip: skipping advances this replica past a
+     * split/migrate step it did not perform and diverges it. */
+    if (rc == EFS_ERR_PROTO)
+        return EFS_ERR_UNSUPPORTED;
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply dir rc=%d index=%llu ino=%llu kind=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)dir,
@@ -3916,6 +3942,23 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
     return EFS_ERR_BUSY;
 }
 
+static uint64_t host_snap_window_bytes(void)
+{
+#if EFS_FAULTS
+    /* Test hook (read once): shrink the snapshot cadence window so snapshot
+     * tests fit test budgets; unset/invalid means the production window. */
+    static uint64_t fault_window;
+    if (!fault_window) {
+        const char *v = getenv("EFS_FAULT_SNAP_BYTES");
+        uint64_t b = v && v[0] ? strtoull(v, NULL, 0) : 0;
+        fault_window = b ? b : UINT64_MAX;
+    }
+    if (fault_window != UINT64_MAX)
+        return fault_window;
+#endif
+    return EFS_RAFT_SNAP_BYTES;
+}
+
 static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
 {
     uint64_t applied, snap;
@@ -3935,7 +3978,7 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
      * snapshots once per EFS_RAFT_SNAP_BYTES of commands past snap_idx
      * and keeps that window for AppendEntries. */
     if (efs_raft_tracks_log_bytes(h->g[gi].r)) {
-        if (efs_raft_log_new_bytes(h->g[gi].r) < EFS_RAFT_SNAP_BYTES)
+        if (efs_raft_log_new_bytes(h->g[gi].r) < host_snap_window_bytes())
             return EFS_OK;
     } else if (applied < snap + HOST_SNAP_MIN) {
         return EFS_OK;
