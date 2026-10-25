@@ -223,6 +223,15 @@ Findings for the parent (candidate `376369aa8` code; not changed here):
    then reports "client remains alive … no forced kill". It passed when the
    session was small (r2) and on loopback-3. The mount is gone but the stop
    reports failure, so E2's clean-stop gate cannot pass on a busy client.
+   **Fixed (Oct 24, [E2 clean stop](e2-clean-stop-20261024.md), branch
+   `claude/devel-e2-clean-stop-a53dcb`):** the revoke runs its per-shard
+   work in parallel, fences and acknowledges a bitmap word per Raft entry,
+   seals the storage certificate's directories once and probes cleanup per
+   word; the stop tooling follows the client's stop phases instead of a
+   fixed 10 s and reports a stall or a failed revoke with its reason, never
+   killing. `nuc-private-3` rerun at `e6b3317fc`: posix-durability,
+   e1-manifest and e2-client-stop PASS; the busy mount (`touched=747`)
+   revoked in 1.9 s and stopped in 2.3 s.
 2. **One REPORT receive timeout under leader step-downs (C3/C4, K15 W52).**
    loopback-3 append-failover: 8,000 of 8,000 records exact in every view, 0
    missing or duplicated, but one REPORT RPC timed out after 30 s
@@ -350,8 +359,9 @@ addresses of a private topology).
   the host gaps above are closed; every cell is NOTRUN.
 - 7 stub gates must become harnesses before B6, D1, D3 (load), D4, E4, A13
   (real host) and C5 (per topology) can PASS.
-- D2 (`gc-reclamation`) live evidence is blocked by finding 1: the POSIX
-  phase passes, then `client.sh stop` is refused.
+- D2 (`gc-reclamation`) live evidence was blocked by finding 1 (the POSIX
+  phase passes, then `client.sh stop` is refused); finding 1 is fixed on
+  `claude/devel-e2-clean-stop-a53dcb`, D2 not rerun.
 - The live harnesses run on TCP loopback only; RDMA for them is not driven.
 - The orcd-mini and intel control lines have not run.
 - The E3 retry path is not exercised by a recorded run: in

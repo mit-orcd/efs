@@ -662,6 +662,14 @@ facts for A6, not decisions.
 - [ ] **E2** Cleanly stop clients and unmount without force or lost pending writes;
   drain and stop daemons, restart the same-format stores, establish readiness,
   remount and repeat full verification. Record all stop/readiness deadlines.
+  **Client stop on a busy client fixed (Oct 24, [evidence](e2-clean-stop-20261024.md),
+  branch `claude/devel-e2-clean-stop-a53dcb`, not merged):** the unmount's
+  session revoke is bounded and parallel (2,058 touched shards 63 s → 11 s,
+  ~870 shards 8.7 s → 1.5 s on nuc loopback), and `client.sh stop` waits on
+  the client's reported stop phases (30 s without progress or 600 s in all
+  fail; a failed flush, settle or revoke fails with its reason; no forced
+  kill). `nuc-private-3` posix-durability, e1-manifest and e2-client-stop
+  PASS (one host); the distinct-host E2 run remains open.
 - [ ] **E3** Exercise orderly leader turnover and client reconnect, including
   catch-up of returning members. No stuck stale leader, missing committed state
   or spurious readiness. This is not sudden-power-loss qualification.
