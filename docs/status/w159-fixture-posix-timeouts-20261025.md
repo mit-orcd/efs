@@ -166,7 +166,7 @@ renewals as `wait_extends=`. No wire, store or setting change; no new
 - `test_k33_payload.py`'s step-5 read EIO is a base intermittent (1 of 10
   on devel `ec3e09306` and on this tree with the flake-sweep client fix,
   table above); the earlier higher rate on the fixed trees went with the
-  away-mark defect that `fc79fe086` fixes. The `EFS_PUT_AWAY_MARK_MS`
+  away-mark defect that `fc79fe086` fixes. The `EFS_FAULT_AWAY_MARK_MS`
   inventory row belongs to that branch.
 - Single host, loopback, TCP, emulated barrier latency: regression
   evidence, not qualification (A4). The intel1 fixture logs could not be
