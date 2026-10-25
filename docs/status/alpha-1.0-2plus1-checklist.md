@@ -762,6 +762,26 @@ round says which physical or software limiter it hit.
 - [ ] **F1** Unit/integration, enabled-feature and applicable memory/concurrency
   checks have explicit PASS/FAIL/NOTRUN results. Docs and code tests both report;
   an unavailable diagnostic is disclosed, never silently counted as passed.
+  **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
+  `claude/devel-f1-gates-46ff64` on `merge-wave7`;
+  [evidence](f1-memory-concurrency-gates-20261025.md)):** `make leak-check`
+  PASS 41/41 (25 + 16 new unit binaries and harnesses), `make asan-check`
+  (new: ASan + UBSan + LeakSanitizer over the sanitizer-switch harnesses, the
+  new parsers and decoders, and the daemons) PASS 47/47, `make tsan-check` (new:
+  ThreadSanitizer over KV, Raft store, client data commit, member view, the
+  K36 recovery thread, K37 rebuild, E2 revoke, W155 receipts and the D4 load)
+  PASS 18/18 on the last code commit, `make test-all` PASS (exit 0, 861 commands, host NOTRUN lines only). 15 findings fixed: UB in the recovery
+  thread, a cookie leak at daemon exit, a misaligned read in `test_wire`, and
+  twelve data races (shutdown flags stored plainly and polled atomically, a
+  HELLO reading the member store while the member thread rewrote it, the
+  startup banner racing the rejoin thread, counters and lazy env flags written
+  under different locks or none; 21 W143 lazy flags made atomic), each with
+  the gate entry that found it as regression test. 20-minute D4 RSS: bounded
+  (client peak 247 MiB of 1 GiB, servers 134 MiB of 2 GiB), not flat while the
+  namespace grows; LSan at daemon exits finds no leak. NOTRUN: RDMA memcheck
+  (no device on xorinox). Open: `test_k36_recovery.py` step 4 under TSan is
+  intermittent (1 of 3 runs), and the 20-minute D4 load counts 3–7 packer put
+  errors (not memory; logs not retained; follow-up).
 - [ ] **F2** Triage each failure on the selected candidate and repeat affected
   acceptance after fixes. Retain failed evidence and explain harness corrections.
   No unresolved enabled-path corruption, lost acknowledged state, indefinite

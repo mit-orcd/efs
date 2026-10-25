@@ -194,9 +194,8 @@ static inline uint32_t server_frag_len(const struct efs_export *ex, efs_ino_t in
 {
     if (efs_ino_is_meta_table(ino))
         return EFS_META_FRAGMENT_SIZE;
-    uint32_t cs = (ex && efs_chunk_size_valid(ex->chunk_size))
-                      ? ex->chunk_size
-                      : EFS_DEFAULT_CHUNK_SIZE;
+    uint32_t got = ex ? __atomic_load_n(&ex->chunk_size, __ATOMIC_ACQUIRE) : 0;
+    uint32_t cs = (ex && efs_chunk_size_valid(got)) ? got : EFS_DEFAULT_CHUNK_SIZE;
     return efs_frag_size(cs);
 }
 

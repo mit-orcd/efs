@@ -472,9 +472,17 @@ static void test_node_tables_at_max(void)
     CHECK(efs_wire_frame_encode(EFS_MSG_HELLO_ACK, ack, (uint32_t)sizeof(*ack), NULL, 0,
                                 frame, cap, &out_len) == EFS_OK &&
           efs_wire_frame_decode(frame, out_len, &type, &pl, &plen) == EFS_OK &&
-          plen == sizeof(*ack) &&
-          ((const struct efs_msg_hello_ack *)(const void *)pl)->nodes[EFS_MAX_NODES - 1].id ==
-              EFS_MAX_NODES, "k28 hello_ack last slot");
+          plen == sizeof(*ack), "k28 hello_ack decode");
+    if (pl && plen == sizeof(*ack)) {
+        /* The payload sits behind the frame header, unaligned: copy it out
+         * (UBSan: a cast to the struct is a misaligned access). */
+        struct efs_msg_hello_ack *back = calloc(1, sizeof(*back));
+        if (back) {
+            memcpy(back, pl, plen);
+            CHECK(back->nodes[EFS_MAX_NODES - 1].id == EFS_MAX_NODES, "k28 hello_ack last slot");
+            free(back);
+        }
+    }
     {
         struct efs_raft_msg a, b;
         uint8_t buf[256], cmd_out[16];

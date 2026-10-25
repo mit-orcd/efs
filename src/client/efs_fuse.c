@@ -1412,11 +1412,11 @@ static void lookup_memo_put(const struct efs_inode *row)
  * change cache lifetime, mutation fencing, RPC or quorum decisions. */
 static void lookup_memo_observe(unsigned reason)
 {
-    static int env_rpc_prof = -1; /* W143: read once, per-op path */
-    if (env_rpc_prof < 0)
-        env_rpc_prof = getenv("EFS_RPC_PROF") != NULL;
+    static int env_rpc_prof = -1; /* W143: read once, per-op path; any thread may be first */
+    if (__atomic_load_n(&env_rpc_prof, __ATOMIC_ACQUIRE) < 0)
+        __atomic_store_n(&env_rpc_prof, getenv("EFS_RPC_PROF") != NULL, __ATOMIC_RELEASE);
     static uint64_t counts[7], total;
-    if (!env_rpc_prof)
+    if (!__atomic_load_n(&env_rpc_prof, __ATOMIC_RELAXED))
         return;
     __atomic_add_fetch(&counts[reason], 1, __ATOMIC_RELAXED);
     if (reason >= 4)
@@ -2044,9 +2044,14 @@ static int efs_close_note(efs_ino_t ino, int *leased)
  * ownership, preventing a fresh OPEN from racing its delayed release. */
 static int efs_open_release_pending_run(efs_ino_t ino)
 {
-    static int env_opid_trace = -1; /* W143: read once, per-op path */
-    if (env_opid_trace < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_trace_s = -1;
+    int env_opid_trace = __atomic_load_n(&env_opid_trace_s, __ATOMIC_ACQUIRE);
+    if (env_opid_trace < 0) {
         env_opid_trace = getenv("EFS_OPID_TRACE") != NULL;
+        __atomic_store_n(&env_opid_trace_s, env_opid_trace, __ATOMIC_RELEASE);
+    }
     struct efs_open_ref *owner = NULL;
     pthread_mutex_lock(&g_open_mu);
     owner = open_ref_find(ino);
@@ -3324,12 +3329,12 @@ static int efs_ino_has_unpublished(efs_ino_t ino)
 
 static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)
 {
-    static int env_rpc_prof = -1; /* W143: read once, per-op path */
-    if (env_rpc_prof < 0)
-        env_rpc_prof = getenv("EFS_RPC_PROF") != NULL;
+    static int env_rpc_prof = -1; /* W143: read once, per-op path; any thread may be first */
+    if (__atomic_load_n(&env_rpc_prof, __ATOMIC_ACQUIRE) < 0)
+        __atomic_store_n(&env_rpc_prof, getenv("EFS_RPC_PROF") != NULL, __ATOMIC_RELEASE);
     pthread_mutex_t *amu;
     int rc;
-    int profile = env_rpc_prof;
+    int profile = __atomic_load_n(&env_rpc_prof, __ATOMIC_RELAXED);
     uint64_t t0=profile?stats_now_ms():0,t1=0,t2=0,t3=0;
 
     (void)fi;
@@ -6348,11 +6353,9 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
             for (int i = 0; i < nr; i++)
                 efs_rdcache_unpin(refs[i].pin);
             {
-                static int logged;
-                if (!logged) {
-                    logged = 1;
+                static int logged; /* once, from any reader thread */
+                if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
                     fprintf(stderr, "efs: read reply zero-copy active (iov=%d size=%zu)\n", nr, size);
-                }
             }
             return;
         }

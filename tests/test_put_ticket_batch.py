@@ -13,6 +13,8 @@ another group are refused before any proposal and by apply, which changes
 nothing then. A group this host does not serve is forwarded unchanged."""
 from pathlib import Path
 import os, shlex, subprocess, sys, tempfile
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sanitize_env import cflags, timeout, wrap  # noqa: E402
 root = Path(__file__).resolve().parents[1]
 if not (root / 'libefs.a').exists():
     sys.exit('build libefs.a first (make libefs.a)')
@@ -214,7 +216,7 @@ int main(void)
 with tempfile.TemporaryDirectory(prefix='efs-ticket-batch-') as d:
     p = Path(d) / 't.c'
     p.write_text(code)
-    subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-Wall', '-Wextra', '-Werror',
-                   '-I' + str(root / 'include'), str(p), str(root / 'libefs.a'), '-pthread', '-lm', '-ldl',
+    subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-g', '-Wall', '-Wextra', '-Werror',
+                   *cflags(), '-I' + str(root / 'include'), str(p), str(root / 'libefs.a'), '-pthread', '-lm', '-ldl',
                    '-o', str(p.with_suffix(''))], check=True)
-    subprocess.run([str(p.with_suffix(''))], check=True, timeout=30)
+    subprocess.run(wrap() + [str(p.with_suffix(''))], check=True, timeout=timeout(30))

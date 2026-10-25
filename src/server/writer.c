@@ -239,6 +239,10 @@ static int run_job(struct writer_job *job)
     efs_tls_chunk_gen = saved_gen;
     return rc;
 }
+/* Read on the writer threads under their slot mutex, written under the
+ * pool lock at start and stop: atomic so the two never race (TSan). */
+#define POOL_RUNNING() __atomic_load_n(&g_pool.running, __ATOMIC_ACQUIRE)
+
 
 static void *writer_thread(void *arg)
 {
@@ -252,9 +256,9 @@ static void *writer_thread(void *arg)
         int saved_hint;
 
         pthread_mutex_lock(&sl->mu);
-        while (g_pool.running && sl->state != WSLOT_QUEUED)
+        while (POOL_RUNNING() && sl->state != WSLOT_QUEUED)
             pthread_cond_wait(&sl->cv_work, &sl->mu);
-        if (!g_pool.running && sl->state != WSLOT_QUEUED) {
+        if (!POOL_RUNNING() && sl->state != WSLOT_QUEUED) {
             pthread_mutex_unlock(&sl->mu);
             break;
         }
@@ -341,7 +345,7 @@ static int slot_handoff(struct writer_job *job, int nw, int *queued)
         int rc;
         if (pthread_mutex_trylock(&sl->mu) != 0)
             continue;
-        if (sl->state != WSLOT_EMPTY || sl->wait_head || !g_pool.running) {
+        if (sl->state != WSLOT_EMPTY || sl->wait_head || !POOL_RUNNING()) {
             pthread_mutex_unlock(&sl->mu);
             continue;
         }
@@ -371,7 +375,7 @@ static int slot_handoff(struct writer_job *job, int nw, int *queued)
         else sl->wait_head = &waiter;
         sl->wait_tail = &waiter;
         int timed_out = 0;
-        while (g_pool.running &&
+        while (POOL_RUNNING() &&
                (sl->state != WSLOT_EMPTY || sl->wait_head != &waiter)) {
             if (pthread_cond_timedwait(&waiter.ready, &sl->mu, &deadline) ==
                 ETIMEDOUT) {
@@ -384,7 +388,7 @@ static int slot_handoff(struct writer_job *job, int nw, int *queued)
         *link = waiter.next;
         if (sl->wait_tail == &waiter) sl->wait_tail = prev;
         pthread_cond_destroy(&waiter.ready);
-        if (!g_pool.running || timed_out) {
+        if (!POOL_RUNNING() || timed_out) {
             if (sl->state == WSLOT_EMPTY && sl->wait_head)
                 pthread_cond_signal(&sl->wait_head->ready);
             pthread_mutex_unlock(&sl->mu);
@@ -423,7 +427,7 @@ static int submit_and_wait_inner(struct writer_job *job)
                        __ATOMIC_RELAXED);
 
     nw = g_pool.nwriters;
-    if (!g_pool.running || nw <= 0) {
+    if (!POOL_RUNNING() || nw <= 0) {
         __atomic_fetch_sub(&g_pool.inflight[pi], 1, __ATOMIC_RELAXED);
         efs_tls_write_root = (int)pi;
         rc = run_job(job);
@@ -495,7 +499,7 @@ int server_writer_pool_start(struct efsd_server *s)
         server_writer_pool_stop(s);
         return -1;
     }
-    g_pool.running = 1;
+    __atomic_store_n(&g_pool.running, 1, __ATOMIC_RELEASE);
     for (int i = 0; i < nw; i++) {
         pthread_mutex_init(&g_slots[i].mu, NULL);
         pthread_cond_init(&g_slots[i].cv_work, NULL);
@@ -509,7 +513,7 @@ int server_writer_pool_start(struct efsd_server *s)
     for (int i = 0; i < nw; i++) {
         if (efsd_pthread_create(&g_pool.threads[i], writer_thread,
                                 (void *)(intptr_t)i) != 0) {
-            g_pool.running = 0;
+            __atomic_store_n(&g_pool.running, 0, __ATOMIC_RELEASE);
             g_pool.nwriters = i;
             server_writer_pool_stop(s);
             return -1;
@@ -526,7 +530,7 @@ void server_writer_pool_stop(struct efsd_server *s)
 
     if (g_pool.threads) {
         pthread_mutex_lock(&g_pool.lock);
-        g_pool.running = 0;
+        __atomic_store_n(&g_pool.running, 0, __ATOMIC_RELEASE);
         pthread_cond_broadcast(&g_pool.not_empty);
         pthread_cond_broadcast(&g_pool.not_full);
         pthread_mutex_unlock(&g_pool.lock);

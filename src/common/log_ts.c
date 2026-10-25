@@ -26,6 +26,10 @@
 
 struct ts_cookie {
     int fd;
+    /* stdio calls ts_write under the stream's own lock, so the writes
+     * are already serialised; the atomics only make that visible to
+     * ThreadSanitizer, which does not model glibc's internal FILE lock
+     * (F1 tsan gate reported every daemon log line as a race). */
     int at_line_start;
 };
 
@@ -81,7 +85,7 @@ static ssize_t ts_write(void *cookie, const char *buf, size_t size)
         size_t seg = nl ? (size_t)(nl - (buf + done)) + 1 : size - done;
         struct iovec iov[2];
         int n = 0;
-        if (c->at_line_start) {
+        if (__atomic_load_n(&c->at_line_start, __ATOMIC_RELAXED)) {
             if (!slen)
                 slen = ts_stamp(stamp, sizeof(stamp));
             iov[n].iov_base = stamp;
@@ -93,10 +97,25 @@ static ssize_t ts_write(void *cookie, const char *buf, size_t size)
         n++;
         if (write_all(c->fd, iov, n) != 0)
             return done ? (ssize_t)done : -1;
-        c->at_line_start = nl != NULL;
+        __atomic_store_n(&c->at_line_start, nl != NULL, __ATOMIC_RELAXED);
         done += seg;
     }
     return (ssize_t)size;
+}
+
+/* The two cookies live as long as the process: glibc keeps the cookie
+ * pointer inside the FILE in a form LeakSanitizer does not follow, so they
+ * are anchored here (F1 asan gate: `efsd` refusing a removed setting
+ * reported both as direct leaks), and freed if the stream is ever closed. */
+static struct ts_cookie *ts_cookies[3];
+
+static int ts_close(void *cookie)
+{
+    struct ts_cookie *c = cookie;
+    if (c->fd >= 0 && c->fd < 3)
+        ts_cookies[c->fd] = NULL;
+    free(c);
+    return 0;
 }
 
 static FILE *ts_wrap(int fd)
@@ -106,13 +125,15 @@ static FILE *ts_wrap(int fd)
         return NULL;
     c->fd = fd;
     c->at_line_start = 1;
-    cookie_io_functions_t fns = {.write = ts_write};
+    cookie_io_functions_t fns = {.write = ts_write, .close = ts_close};
     FILE *f = fopencookie(c, "w", fns);
     if (!f) {
         free(c);
         return NULL;
     }
     setvbuf(f, NULL, _IOLBF, 0);
+    if (fd >= 0 && fd < 3)
+        ts_cookies[fd] = c;
     return f;
 }
 

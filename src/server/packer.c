@@ -149,9 +149,12 @@ void server_pack_crash_point(const char *point)
 
 void server_packer_status(struct efs_packer_status *out)
 {
-    pthread_mutex_lock(&pk.mu);
-    *out = pk.st;
-    pthread_mutex_unlock(&pk.mu);
+    /* STAT_ADD bumps the counters atomically outside pk.mu: read each one
+     * the same way (the struct is uint64_t counters only; TSan, F1). */
+    const uint64_t *src = (const uint64_t *)&pk.st;
+    uint64_t *dst = (uint64_t *)out;
+    for (size_t i = 0; i < sizeof(pk.st) / sizeof(uint64_t); i++)
+        dst[i] = __atomic_load_n(&src[i], __ATOMIC_RELAXED);
 }
 
 /* The packer's owner identity for a group under a term. */
@@ -1079,12 +1082,12 @@ static int pk_group(uint8_t group, uint64_t term)
     }
     /* The whole index, for the unpacked-bytes signal: not every pass. */
     if (sc.n < PK_SCAN_MAX) {
-        pk.g[pk_gi(group)].backlog = sc.n; /* the scan saw it all */
-        pk.g[pk_gi(group)].count_ns = pk_now_ns();
+        __atomic_store_n(&pk.g[pk_gi(group)].backlog, sc.n, __ATOMIC_RELAXED); /* the scan saw it all */
+        __atomic_store_n(&pk.g[pk_gi(group)].count_ns, pk_now_ns(), __ATOMIC_RELAXED);
     } else if (pk_now_ns() >= pk.g[pk_gi(group)].count_ns + PK_COUNT_NS) {
         uint64_t n = 0;
-        if (efs_kv_lsm_scan_yield(kv, prefix, 3, 4096, pk_count_cb, &n) >= 0) pk.g[pk_gi(group)].backlog = n;
-        pk.g[pk_gi(group)].count_ns = pk_now_ns();
+        if (efs_kv_lsm_scan_yield(kv, prefix, 3, 4096, pk_count_cb, &n) >= 0) __atomic_store_n(&pk.g[pk_gi(group)].backlog, n, __ATOMIC_RELAXED);
+        __atomic_store_n(&pk.g[pk_gi(group)].count_ns, pk_now_ns(), __ATOMIC_RELAXED);
     }
     if (pk_now_ns() >= pk.g[pk_gi(group)].fsum_ns + PK_COUNT_NS) {
         struct pk_fsum *fs = calloc(1, sizeof(*fs));
@@ -1135,7 +1138,7 @@ static int pk_group(uint8_t group, uint64_t term)
         if (!oldest || f->c.mtime < oldest) oldest = f->c.mtime;
         nfiles++;
     }
-    pk.g[pk_gi(group)].lag_ns = oldest && now > oldest + pk.min_age_ns ? now - oldest - pk.min_age_ns : 0;
+    __atomic_store_n(&pk.g[pk_gi(group)].lag_ns, oldest && now > oldest + pk.min_age_ns ? now - oldest - pk.min_age_ns : 0, __ATOMIC_RELAXED);
     qsort(files, nfiles, sizeof(*files), pk_file_cmp);
     uint32_t flen = EFS_FRAGMENT_SIZE;
     uint32_t segs = 0, i = 0;
@@ -1321,8 +1324,8 @@ static void *pk_main(void *arg)
             uint64_t term = 0;
             pk.g[g].busy = busy;
             if (!server_raft_host_pack_leader(groups[g], &term, NULL)) {
-                pk.g[g].backlog = 0; /* counted by that group's leader */
-                pk.g[g].count_ns = 0;
+                __atomic_store_n(&pk.g[g].backlog, 0, __ATOMIC_RELAXED); /* counted by that group's leader */
+                __atomic_store_n(&pk.g[g].count_ns, 0, __ATOMIC_RELAXED);
                 continue;
             }
             if (measured) {

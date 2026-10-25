@@ -68,9 +68,18 @@ does the leak check instead.
   `kv_seg_bloom`, `kv_block_hash`, `kv_reader_gate`), Raft (`test_raft`,
   `raft_store`, `follower_bound`, `meta_apply`), store
   (`store_overwrite`, `store_durability`, `store_gc`, `reclaim`) and
-  `txn`, `txn_resolve_faults`, `txn_retire`, `session`, `lock`. Client,
-  wire and daemon leaks belong to `tests/run_tests.sh leaks`
-  (`tests/valgrind_leaks.sh`), which needs a node.
+  `txn`, `txn_resolve_faults`, `txn_retire`, `session`, `lock`. F1 (Oct 25)
+  added the unit binaries of the Oct 23–25 product code: `kv_lsm_concurrent`
+  (W126 readers, writer and peeks), `membership` (K33 record and discovery
+  datagrams), `member_view`, `data_commit`, `put_ticket`, `put_orphan`,
+  `put_orphan_server`, `append_receipt`, `frag_record`, `small_segment`,
+  `packed_segment`, `pack_ledger_recovery`, `retained_namespace_audit`, and
+  the Python harnesses `test_put_ticket_batch.py` (K32), `test_w155_receipt_table.py`
+  and `test_session_revoke_parallel.py` (E2), which take `EFS_LEAK_WRAP`
+  through `tests/sanitize_env.py`. The K36 recovery thread and the K37
+  rebuild run only inside efsd: their leak check is the LeakSanitizer half of
+  `make asan-check` below. Client, wire and daemon leaks on a node belong to
+  `tests/run_tests.sh leaks` (`tests/valgrind_leaks.sh`).
 - **Own build.** The gate copies the sources into its scratch directory
   and builds the listed binaries with a baseline `-march`. On the efs VMs
   `-march=native` emits LRCPC2 instructions that valgrind 3.26 cannot
@@ -96,6 +105,75 @@ does the leak check instead.
 - **Self-test.** `tests/test_leak_gate.py` runs under `make test`. A
   leaking fixture must FAIL, a clean one PASS, valgrind absent NOTRUN
   exit 3, and a run without a report must not pass.
+
+## `make tsan-check` and `make asan-check`
+
+The F1 concurrency and memory gates (`tests/sanitizer_check.sh tsan|asan`,
+Oct 25). Each copies the sources into its scratch directory, builds the whole
+tree (`make test-bins`) with the sanitizer in `EXTRA_DEFS` and `LDFLAGS`, and
+runs a bounded list from that tree: unit binaries, the Python-driven C
+harnesses, and the daemon tests, whose efsd, efs-mgmt and efs-fuse are then
+the sanitized binaries. `make sanitize-check` runs both.
+
+- **Output and exit.** One `PASS <name>` or `FAIL <name>: <reason>` line
+  per entry (`<n> ThreadSanitizer reports`, `<n> AddressSanitizer errors`,
+  `<n> LeakSanitizer reports`, `<n> UBSan errors`, `test rc=<n>`,
+  `timeout`), the first report of a failed entry, then `VERDICT: PASS|FAIL`.
+  Exit 0 PASS, 1 FAIL, 3 `NOTRUN: <mode> runtime missing` when the compiler
+  cannot build and run a sanitized threaded program (no libtsan/libasan),
+  2 on usage. An empty selection FAILs.
+- **Verdict source.** Every sanitized process writes its reports through
+  `log_path` into `<name>.tsan.<pid>` / `<name>.asan.<pid>` /
+  `<name>.ubsan.<pid>`, so a report inside a daemon that a harness started
+  counts too, and a daemon's own log cannot hide it; a harness binary that
+  prints to stderr is read from `<name>.out` as well. TSan runs with
+  `halt_on_error=0` so one entry shows all its races, `die_after_fork=0`
+  (the unit tests fork crash-simulation children that open a store) and
+  `detect_deadlocks=0`: libtsan's lock-order detector aborts when a thread
+  holds more than 64 mutexes (the efs-fuse metadata fetch holds every
+  inode lock stripe) and that abort self-deadlocks, so the tsan gate
+  reports data races, not lock-order inversions. UBSan with
+  `halt_on_error=1`.
+- **tsan list.** KV (`test_kv_lsm_concurrent 4`, `kv_lsm`, `kv_reader_gate`),
+  `raft_store`, `reclaim`, `query_disk_io`, `query_delta`, the client data
+  commit, the member view, the W138 harnesses (`test_apply_ring.py`,
+  `test_session_latch_tsan.py`), the E2 parallel revoke, the W155 receipt
+  table and the K32 ticket batch on the TSan `libefs.a`, and the daemons:
+  `test_k36_recovery.py` (recovery thread), `test_k36_segment_recovery.py`,
+  `test_k37_segment_rebuild.py` (audit and rebuild) and a 60 s
+  `test_d4_progress.py` (client read and write paths through efs-fuse).
+- **asan list.** The four tests that always built an ASan binary, every
+  harness with a sanitizer switch (`EFS_TEST_SANITIZE=1`, `EFS_SANITIZE=1`,
+  `--sanitize`), the parsers and decoders (`membership`: K33 record and
+  discovery datagrams; `member_view`, `frag_record`, `small_segment`,
+  `packed_segment`, `packed_reader`, `pack_ledger`, `pack_ledger_recovery`,
+  `append_receipt`, `put_ticket`, `put_orphan`, `put_orphan_server`,
+  `data_commit`, `retained_namespace_audit`, `wire`, `kv_lsm`, `raft`), and
+  the daemons: `test_env_removed.py` (the A6 removed-settings refusal),
+  the K36 and K37 tests (recovery scan pages, segment audit) and the short
+  D4 load. LeakSanitizer is on (Linux; it needs `ptrace_scope` < 2), so a
+  clean daemon exit is leak-checked too.
+- **Baseline ISA for asan.** As the leak gate: with `-march=native` on an
+  AVX-512 host gcc emits 64-byte-aligned vector stack accesses (BLAKE3),
+  which ASan's fake stack (`detect_stack_use_after_return`) does not give,
+  and every hashing binary died with SEGV. `EFS_SAN_ARCH` overrides.
+- **Harness switches.** `tests/sanitize_env.py` gives a Python harness its
+  compile flags (`EFS_TEST_TSAN=1`, `EFS_TEST_SANITIZE=1`), the memcheck
+  wrapper (`EFS_LEAK_WRAP`) and a scaled timeout. A harness that links
+  `libefs.a` must use them: the gate's tree is built with the sanitizer.
+- **Knobs.** `EFS_SAN_ONLY="kv_lsm raft_store"` selects entries,
+  `EFS_SAN_TIMEOUT` (default 3600 s), `EFS_SAN_LOGDIR` keeps reports and
+  the build (kept on FAIL, deleted on PASS), `EFS_SAN_BUILD` names a tree
+  already built with the mode's flags for reruns, `EFS_SAN_JOBS` the build
+  parallelism.
+- **Self-test.** `tests/test_sanitizer_gate.py` runs under `make test`: a
+  racy fixture FAILs tsan with its report shown, a heap overflow, a signed
+  overflow and (where LSan runs) a leak FAIL asan, a clean threaded fixture
+  PASSes, a failing test FAILs without a report, a missing runtime is
+  NOTRUN exit 3, and `VAR=value` prefixes and `.py` entries work.
+- **Not in `make check`.** The daemon entries make each mode take tens of
+  minutes; `make check` keeps `leak-check`. F1 runs all three
+  ([evidence](../status/f1-memory-concurrency-gates-20261025.md)).
 
 ## Current release acceptance and local POSIX suites
 
