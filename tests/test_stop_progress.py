@@ -47,7 +47,7 @@ def client(*args, timeout=900):
 def revoked(m):
     log = m.logp.read_text(errors='replace')
     found = re.findall(r'session revoked at unmount: epoch=\d+ touched=(\d+) rc=(-?\d+) ms=(\d+) '
-                       r'fence_ms=(\d+) cleanup_ms=(\d+)', log)
+                       r'fence_ms=(\d+) cleanup_ms=(\d+) cleaned=(\d+) probe_failed=(\d+)', log)
     assert found, log[-3000:]
     return tuple(int(x) for x in found[-1])
 
@@ -75,10 +75,11 @@ try:
     assert rc == 0 and f'Unmounted {a.path}' in out, out + a.logp.read_text(errors='replace')[-3000:]
     assert a.p.wait(timeout=30) == 0
     mounts.remove(a)
-    touched, vrc, ms, fence_ms, cleanup_ms = revoked(a)
+    touched, vrc, ms, fence_ms, cleanup_ms, cleaned, probe_failed = revoked(a)
     assert vrc == 0 and touched >= 1000, (touched, vrc)
     notes.append(f'busy: {DIRS} directories in {made:.1f} s, touched={touched}, revoke {ms} ms '
-                 f'(fence {fence_ms}, cleanup {cleanup_ms}), stop {took:.1f} s')
+                 f'(fence {fence_ms}, cleanup {cleanup_ms}; {cleaned} shards cleaned one by one, '
+                 f'{probe_failed} probes failed), stop {took:.1f} s')
 
     # 2. Small client.
     b = Mount(c, 2, 'mnt-b')
@@ -88,7 +89,7 @@ try:
     assert rc == 0 and f'Unmounted {b.path}' in out, out
     assert b.p.wait(timeout=30) == 0
     mounts.remove(b)
-    touched, vrc, ms, _, _ = revoked(b)
+    touched, vrc, ms = revoked(b)[:3]
     assert vrc == 0 and took < SMALL_STOP_S, (took, ms)
     notes.append(f'small: touched={touched}, revoke {ms} ms, stop {took:.1f} s')
 

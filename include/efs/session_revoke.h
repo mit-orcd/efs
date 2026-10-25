@@ -55,6 +55,8 @@ struct efs_session_revoke_result {
     const char *phase;             /* where an incomplete barrier stopped */
     struct efs_msg_raft_mkfs_reply last;
     uint64_t fence_ms, cleanup_ms, total_ms; /* wall time of the stages */
+    uint32_t cleaned;      /* shards the cleanup probe left to per-shard cleanup */
+    uint32_t probe_failed; /* probes that failed (their whole word was cleaned) */
 };
 /* The whole barrier. OK only when the owner reads ACTIVE at the new epoch
  * after FINISH and every cleanup phase; any other result leaves the barrier

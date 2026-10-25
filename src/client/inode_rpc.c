@@ -3620,9 +3620,10 @@ int efs_client_session_end(void)
     /* Latch: nothing may run under the revoked epoch from here on. */
     __atomic_store_n(&g_client.session_fenced,1,__ATOMIC_RELEASE);
     fprintf(stderr,"efs: session revoked at unmount: epoch=%u touched=%u rc=%d "
-            "ms=%llu fence_ms=%llu cleanup_ms=%llu%s%s\n",
+            "ms=%llu fence_ms=%llu cleanup_ms=%llu cleaned=%u probe_failed=%u%s%s\n",
             id.session_epoch,res.ntouch,rc,(unsigned long long)res.total_ms,
             (unsigned long long)res.fence_ms,(unsigned long long)res.cleanup_ms,
+            res.cleaned,res.probe_failed,
             rc==EFS_OK?"":" phase=",rc==EFS_OK?"":res.phase);
     if (rc!=EFS_OK)
         snprintf(g_session_end_reason,sizeof(g_session_end_reason),

@@ -144,6 +144,8 @@ static double run(unsigned parallel,int expect,const char *phase,uint32_t shard)
             assert(cleaned[shard_of(i)][0]==want&&cleaned[shard_of(i)][1]==want);
         }
         assert(probes>=N/64&&probes<=2*(EFS_SESSION_BITS/64)); /* one per word and group */
+        unsigned owed=0;for(unsigned i=0;i<N;i++)owed+=probe_fail||shard_of(i)%5==0;
+        assert(res.cleaned==owed&&res.probe_failed==(probe_fail?probes:0));
     }
     if(parallel<=1)assert(!foreign&&maxflight==1);
     else assert(maxflight>1&&maxflight<=parallel);

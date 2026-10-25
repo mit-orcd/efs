@@ -144,7 +144,7 @@ struct sess_stage {
     uint64_t deadline;
     const char *label;
     pthread_mutex_t mu;
-    uint32_t next, done;
+    uint32_t next, done, pending, probe_failed;
     int rc;
     uint32_t failed;
     const char *phase;
@@ -175,6 +175,9 @@ static int sess_item_step(struct sess_stage *st, uint32_t i,
         wr64be_sess(payload + 10 + EFS_OPID_UUID_LEN, u->mask);
         if (sess_rpc(st->rpc, payload, 1 + EFS_MD_REQ_SESSION_CLEANUP_PROBE_LEN, r) == EFS_OK)
             pending &= r->salt;
+        else
+            __atomic_fetch_add(&st->probe_failed, 1, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&st->pending, (uint32_t)__builtin_popcountll(pending), __ATOMIC_RELAXED);
         *phase = "cleanup";
         for (uint32_t b = 0; b < 64; b++) {
             uint32_t sh = u->word * 64u + b;
@@ -276,6 +279,7 @@ int efs_session_revoke(const struct efs_session_rpc *rpc,
     uint8_t payload[1 + 26];
     struct efs_msg_raft_mkfs_reply r = {.leader_hint = -1};
     uint32_t ssh, epoch = 0, old_epoch = 0, state = 0, word, ntouch = 0, nunit = 0, stopped = 0;
+    uint32_t cleaned = 0, probe_failed = 0;
     static __thread struct sess_unit units[2 * (EFS_SESSION_BITMAP / 8u)];
     struct sess_stage stage;
     uint64_t t0 = sess_now_ms(), t_fence = 0, t_cleanup = 0, mark;
@@ -362,6 +366,8 @@ int efs_session_revoke(const struct efs_session_rpc *rpc,
     rc = sess_stage_run(&stage);
     t_cleanup = sess_now_ms() - mark;
     r = stage.last;
+    cleaned = stage.pending;
+    probe_failed = stage.probe_failed;
     if (rc != EFS_OK) {
         stopped = stage.failed;
         goto out;
@@ -390,6 +396,8 @@ out:
         res->fence_ms = t_fence;
         res->cleanup_ms = t_cleanup;
         res->total_ms = sess_now_ms() - t0;
+        res->cleaned = cleaned;
+        res->probe_failed = probe_failed;
     }
     return rc;
 }
