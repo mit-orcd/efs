@@ -123,6 +123,69 @@ def owned_session(text):
     return found[0][0],int(found[0][1])
 
 
+def session_view(text):
+    rows=re.findall(r'^raft-session status=(\d+) rc=(-?\d+) primary=\d+ op=get ssh=\d+ shard=\d+ '
+                    r'epoch=(\d+) state=(\d+) touched=([01]) index=\d+$',text,re.M)
+    assert len(rows)==1, 'missing/ambiguous session GET proof: '+text
+    status,rc,epoch,state,touched=map(int,rows[0])
+    assert status==0 and rc==0, text
+    return epoch,state,touched
+
+
+def revoke_owned_session(invoke,uuid,old_epoch,bound,clock=time.monotonic,pause=time.sleep):
+    """One fence; resume only its explicit cleanup-BUSY at the same old epoch.
+
+    FINISH retains touched[], so enumerate the authority's bits, not just the
+    first failed shard: parallel cleanup may have left other units unfinished.
+    Never BEGIN again, advance the epoch, retry an ambiguous transport failure,
+    infer empty from BUSY, or grant another deadline to a resumed phase.
+    """
+    started=clock();end=started+bound
+    def call(op,*args):
+        remaining=end-clock()
+        assert remaining>0, 'owned session cleanup exceeded original bound'
+        return invoke(op,uuid,*args,timeout=min(60,remaining))
+    rc,text=call('fence')
+    if rc==0:
+        rows=re.findall(r'^raft-session status=0 rc=0 .*?op=fence .*?epoch=(\d+) state=1 ',text,re.M)
+        assert rows==[str(old_epoch+1)],text
+        return dict(resumed=False,seconds=clock()-started)
+    before=re.findall(r'^session cleanup incomplete: epoch=(\d+) shard=(\d+) rc=-13; '
+                      r'resume cleanup-leases and cleanup-appends for that epoch/shard$',text,re.M)
+    after=re.findall(r'^session fence incomplete: phase=cleanup epoch=(\d+) rc=-13$',text,re.M)
+    assert len(before)==1 and int(before[0][0])==old_epoch and after==[str(old_epoch+1)],text
+    assert 0<=int(before[0][1])<4096,text
+    rc,owner=call('get')
+    assert rc==0 and session_view(owner)[:2]==(old_epoch+1,1),owner
+    touched=[]
+    for shard in range(4096):
+        rc,view=call('get',str(shard))
+        assert rc==0,view
+        epoch,state,bit=session_view(view)
+        assert (epoch,state)==(old_epoch+1,1),view
+        if bit:touched.append(shard)
+    assert int(before[0][1]) in touched, 'failed cleanup shard missing from frozen touched set'
+    attempts=0
+    for shard in touched:
+        for op in ('cleanup-leases','cleanup-appends'):
+            while True:
+                rc,text=call(op,str(old_epoch),str(shard));attempts+=1
+                rows=re.findall(r'^raft-session op=('+op+r') epoch=(\d+) shard=(\d+) '
+                                r'rc=(-?\d+) index=\d+ salt=(\d+)$',text,re.M)
+                assert len(rows)==1, text
+                _,epoch,returned,code,salt=rows[0]
+                assert (int(epoch),int(returned))==(old_epoch,shard),text
+                if rc==0 and (int(code),int(salt))==(0,1):break
+                assert rc!=0 and int(code)==-13,text
+                # Documented bounded/incomplete cleanup, not permission to
+                # retry IO/NET or to forget an unknown result.
+                pause(min(.05,max(0,end-clock())))
+    rc,owner=call('get')
+    assert rc==0 and session_view(owner)[:2]==(old_epoch+1,1),owner
+    return dict(resumed=True,old_epoch=old_epoch,epoch=old_epoch+1,touched=touched,
+                cleanup_invocations=attempts,seconds=clock()-started)
+
+
 def digest(path):
     h = hashlib.sha256()
     size = 0
@@ -430,9 +493,11 @@ class Soak:
                 m.log.close()
                 # D31 deliberately requires operator revocation after client
                 # death. Revoke this exact owned UUID, never infer an expiry.
-                rc,text=self.command([str(MGMT),'raft-session',self.c.ep(1),'fence',uuid],
-                                     self.a.recovery_bound,'revoke-crashed-client')
-                assert rc==0 and re.search(r'epoch=%d\b' % (int(epoch)+1),text),text
+                def invoke(op,uuid,*args,timeout):
+                    return self.command([str(MGMT),'raft-session',self.c.ep(1),op,uuid,*args],
+                                        timeout,'crashed-session-'+op)
+                proof=revoke_owned_session(invoke,uuid,epoch,self.a.recovery_bound)
+                self.note('crashed-session-revoked',uuid=uuid,proof=proof)
                 # Preserve every client run in a separate log and mount path.
                 self.mounts[victim] = Mount(self.c, 1+victim, f'mnt-{victim}-r{len(self.events)}')
         elif kind == 'add':
