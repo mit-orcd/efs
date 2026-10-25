@@ -1797,7 +1797,7 @@ static int cmd_expiry(int argc,char **argv,int policy)
     }
     if(!n[0] || !n[1] || (policy && mutate && (n[5]>3 || n[3]>n[4])))goto usage;
     uint8_t payload[47]={0};payload[0]=efs_raft_shard_group(efs_kv_inode_shard(n[0]));
-    payload[1]=policy?(get?EFS_MD_REQ_EXPIRY_POLICY:EFS_MD_CMD_EXPIRY_POLICY):
+    payload[1]=policy?(get?EFS_MD_REQ_EXPIRY_POLICY:EFS_MD_REQ_EXPIRY_POLICY_SET):
                       (get?EFS_MD_REQ_EXPIRY_RECORD:EFS_MD_CMD_EXPIRY_RENEW);
     wr64be_mgmt(payload+2,n[0]);wr64be_mgmt(payload+10,n[1]);uint32_t length=18;
     if(mutate) {

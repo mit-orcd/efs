@@ -14623,7 +14623,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
         out->rc=rc;out->leader_hint=hint;return;
     }
-    if(clen && (cmd[0]==EFS_MD_CMD_EXPIRY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_RENEW ||
+    if(clen && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_SET || cmd[0]==EFS_MD_CMD_EXPIRY_RENEW ||
                  cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_RECORD ||
                  cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE || cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO ||
                  cmd[0]==EFS_MD_REQ_EXPIRY_ORIGIN)) {
@@ -14633,7 +14633,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             memchr(cmd+54,0,cmd[53]) || memchr(cmd+54,'/',cmd[53]) ||
             rd64be(cmd+21) || !rd64be(cmd+37))) {out->rc=EFS_ERR_INVAL;return;}
         uint32_t expected_len=cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE?clen:
-                              cmd[0]==EFS_MD_CMD_EXPIRY_POLICY?46u:
+                              cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_SET?46u:
                               cmd[0]==EFS_MD_CMD_EXPIRY_RENEW?45u:17u;
         if(clen!=expected_len || !rd64be(cmd+1) || !rd64be(cmd+9) ||
            group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1)))) {
@@ -14641,14 +14641,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
         struct host_view view;host_view_get(h,group,&view);
         if(cmd[0]==EFS_MD_CMD_EXPIRY_RENEW || cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE ||
-           cmd[0]==EFS_MD_CMD_EXPIRY_POLICY) {
+           cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_SET) {
             uint8_t both[2];host_need_both(both);
             if(!host_hosts_all(h,both,2)) {
                 pthread_mutex_lock(&h->mu);int peer=host_pick_peer(h,both,2,-1);pthread_mutex_unlock(&h->mu);
                 out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=peer;return;
             }
             rc=cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE?host_expiry_enable_txn(h,cmd,&hint):
-               cmd[0]==EFS_MD_CMD_EXPIRY_POLICY?host_expiry_policy_txn(h,cmd,&hint):
+               cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_SET?host_expiry_policy_txn(h,cmd,&hint):
                                                   host_expiry_renew_txn(h,cmd,&hint);
         } else if(!view.has || view.role!=EFS_RAFT_LEADER) {
             out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=view.has?view.leader:host_pick_peer(h,&group,1,-1);return;
@@ -14660,7 +14660,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             if(rc==EFS_OK && row.generation!=rd64be(cmd+9))rc=EFS_ERR_STALE;
             if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO) && !S_ISDIR(row.mode))rc=EFS_ERR_INVAL;
         }
-        if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO)) {
+        if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_SET || cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO)) {
             struct efs_expiry_policy p;rc=efs_expiry_policy_get(h->kv,rd64be(cmd+1),rd64be(cmd+9),&p);
             if(rc==EFS_OK){out->index=p.revision;out->salt=p.ttl_ns;out->term=p.max_ns;
                 if(cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO)hint=p.enabled|(p.allow_clear<<1);}

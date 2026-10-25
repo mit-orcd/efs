@@ -49,7 +49,7 @@ assert body.index('covered=submitted.status==EFS_INODE_RPC_OK?settled:0;')>body.
 assert body.count('host_retained_create_proof(h,request,out,&hint,&covered)')==2
 assert 'request->shard,1,covered,&out->rpc,&settled)' in body
 assert 'owner,q,0,0,0,out,NULL)' in s
-a=s.index('static void host_create(');b=s.index('\nvoid server_raft_host_create(',a);mutation=s[a:b]
+a=s.index('static void host_create_ex(');b=s.index('\nstatic void host_create(',a);mutation=s[a:b]
 assert mutation.index('if(settled)*settled=0;')<mutation.index('host_fwd_create(')
 assert mutation.index('if(rc==EFS_OK && settled)*settled=(uint8_t)(1u<<dg);')>mutation.index('rc = host_wait_verdict(h, dg, idx, term, &hint);')
 assert mutation.count('*settled=')==2

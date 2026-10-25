@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Daemon pending CREATE encoding/apply preserves identity and rejects malformed input."""
+"""Daemon pending CREATE encoding/apply preserves identity and rejects malformed input;
+the expiry fence bit refuses (AGAIN, before any create) while the group's anchor
+counts an enabled folder policy."""
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
@@ -10,6 +12,8 @@ code=r'''
 #include "efs/meta_apply.h"
 #include "efs/meta_cmd.h"
 #include "efs/opid.h"
+#include "efs/expiry.h"
+#include "efs/raft.h"
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
@@ -17,11 +21,13 @@ code=r'''
 #define HOST_CREATE_NAME_OFF 31
 #define HOST_CREATE_F_OPID 1
 #define HOST_CREATE_F_PENDING 2
+#define HOST_CREATE_F_FENCE 4
 #define HOST_OPID_TRAILER 36
 #define HOST_CMD_MAX 1024
 #define APPLY_LOG(...) ((void)0)
 struct efs_raft_host {struct efs_kv *kv;};
-static unsigned pending_calls,legacy_calls;
+static unsigned pending_calls,legacy_calls,fence_calls,fence_anchor;static int fence_rc;
+int efs_expiry_folders_fence(struct efs_kv *kv,uint32_t anchor){(void)kv;fence_calls++;fence_anchor=anchor;return fence_rc;}
 static uint64_t rd64be(const uint8_t *p){uint64_t v=0;for(unsigned i=0;i<8;i++)v=v<<8|p[i];return v;}
 static uint32_t rd32be(const uint8_t *p){return (uint32_t)rd64be((uint8_t[8]){0,0,0,0,p[0],p[1],p[2],p[3]});}
 static void wr64be(uint8_t *p,uint64_t v){for(int i=7;i>=0;i--){p[i]=v;v>>=8;}}
@@ -42,20 +48,25 @@ int main(void) {
  uint8_t bytes[1024],bad[1024];uint32_t n;struct efs_meta_attrs at={0};struct efs_raft_host host={0};
  struct efs_opid_req q={.id={.client_uuid={21,[15]=230},.session_epoch=7,.seq=10},.ack=9};
  assert(!pack_create_cmd(bytes,&n,1,S_IFREG|0600,"p",&at,0,4097,0,&q,1));
- assert(!apply_create_cmd(&host,bytes,n,1)&&pending_calls==1);
- assert(!apply_create_cmd(&host,bytes,n,2)&&pending_calls==2);
- for(uint32_t length=2;length<n;length++){int rc=apply_create_cmd(&host,bytes,length,3);assert(rc==EFS_ERR_PROTO||rc==EFS_ERR_UNSUPPORTED);}
- memcpy(bad,bytes,n);bad[1]|=128;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_UNSUPPORTED);
- memcpy(bad,bytes,n);bad[1]&=~HOST_CREATE_F_OPID;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_UNSUPPORTED);
- memcpy(bad,bytes,n);bad[32+19]=8;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_PROTO);
- memcpy(bad,bytes,n);bad[32+15]^=1;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_PROTO);
- assert(pending_calls==2);
+ assert(!apply_create_cmd(&host,bytes,n,1,EFS_RAFT_GROUP_SHARD)&&pending_calls==1);
+ assert(!apply_create_cmd(&host,bytes,n,2,EFS_RAFT_GROUP_SHARD)&&pending_calls==2);
+ for(uint32_t length=2;length<n;length++){int rc=apply_create_cmd(&host,bytes,length,3,EFS_RAFT_GROUP_SHARD);assert(rc==EFS_ERR_PROTO||rc==EFS_ERR_UNSUPPORTED);}
+ memcpy(bad,bytes,n);bad[1]|=128;assert(apply_create_cmd(&host,bad,n,3,EFS_RAFT_GROUP_SHARD)==EFS_ERR_UNSUPPORTED);
+ memcpy(bad,bytes,n);bad[1]&=~HOST_CREATE_F_OPID;assert(apply_create_cmd(&host,bad,n,3,EFS_RAFT_GROUP_SHARD)==EFS_ERR_UNSUPPORTED);
+ memcpy(bad,bytes,n);bad[32+19]=8;assert(apply_create_cmd(&host,bad,n,3,EFS_RAFT_GROUP_SHARD)==EFS_ERR_PROTO);
+ memcpy(bad,bytes,n);bad[32+15]^=1;assert(apply_create_cmd(&host,bad,n,3,EFS_RAFT_GROUP_SHARD)==EFS_ERR_PROTO);
+ assert(pending_calls==2 && !fence_calls);
+ /* Fenced: refused in the group's apply before any create effect. */
+ memcpy(bad,bytes,n);bad[1]|=HOST_CREATE_F_FENCE;fence_rc=EFS_ERR_AGAIN;
+ assert(apply_create_cmd(&host,bad,n,5,EFS_RAFT_GROUP_SHARD2)==EFS_ERR_AGAIN&&fence_calls==1&&fence_anchor==2&&pending_calls==2);
+ fence_rc=EFS_OK;
+ assert(!apply_create_cmd(&host,bad,n,6,EFS_RAFT_GROUP_SHARD)&&fence_calls==2&&fence_anchor==1&&pending_calls==3);
  assert(pack_create_cmd(bytes,&n,1,S_IFREG|0600,"p",&at,123,4097,0,&q,1)==EFS_ERR_INVAL);
  assert(pack_create_cmd(bytes,&n,1,S_IFREG|0600,"p",&at,0,4097,0,NULL,1)==EFS_ERR_INVAL);
  assert(!pack_create_cmd(bytes,&n,1,S_IFREG|0600,"p",&at,123,4097,0,&q,0));
- assert(!apply_create_cmd(&host,bytes,n,4)&&legacy_calls==1);
+ assert(!apply_create_cmd(&host,bytes,n,4,EFS_RAFT_GROUP_SHARD)&&legacy_calls==1&&fence_calls==2);
  assert(pack_create_cmd(bytes,&n,1,S_IFREG|0600,"p",&at,123,4097,0,NULL,0)==EFS_ERR_INVAL); /* no stand-in owner */
- puts("pending CREATE command: full UUID/epoch/token, strict truncation/identity rejection and session-bound CREATE lease PASS");
+ puts("pending CREATE command: full UUID/epoch/token, strict truncation/identity rejection, expiry fence refusal before effects and session-bound CREATE lease PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-pending-command-') as d:
