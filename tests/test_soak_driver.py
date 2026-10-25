@@ -180,3 +180,47 @@ with tempfile.TemporaryDirectory() as d:
  else:raise AssertionError('local backing directory accepted as an EFS mount')
  assert not (Path(d)/'must-not-exist').exists()
 print('failed client transition: stop before unlock and unmounted IO refusal PASS')
+
+# Compressed churn/readback is not a steady-load memory plateau. Keep the 5%
+# rule, reject bad samples and preserve real late growth in a long enough run.
+flat=[(t,1000) for t in range(0,601,10)]
+assert s.RSS.assess_points(flat)['verdict']=='PASS'
+assert s.RSS.assess_points([(t,1000+t*10) for t in range(0,601,10)])['verdict']=='FAIL'
+assert s.RSS.assess_points(flat[:17])['verdict']=='NOTRUN'
+assert s.RSS.assess_points([(0,1),(0,2)])['verdict']=='FAIL'
+assert s.RSS.assess_points([(0,-1)])['verdict']=='FAIL'
+# Allocation before the fixed warmup is excluded; a late cache/growth jump
+# during genuine write load is NOT silently excluded.
+warm=[(t,100 if t<120 else 1000) for t in range(0,601,10)]
+assert s.RSS.assess_points(warm)['verdict']=='PASS'
+jump=[(t,1000 if t<550 else 2000) for t in range(0,601,10)]
+assert s.RSS.assess_points(jump)['verdict']=='FAIL'
+with tempfile.TemporaryDirectory() as d:
+ h=s.Soak.__new__(s.Soak);h.out=Path(d);h.quiet=lambda begin:None
+ h.c=types.SimpleNamespace(procs={1:None});h.rss_roles={'1':'node-1','2':'client-0','3':'client-1'}
+ h.a=types.SimpleNamespace(profile='endurance');p=h.out/'rss-quiet-000.txt';h.quiet_files=[p]
+ p.write_text('\n'.join(f'{t} 1:1000 2:1000 3:1000' for t in range(0,601,10)))
+ assert h.plateau()['verdict']=='PASS'
+ h.c.procs[2]=None
+ try:h.plateau()
+ except AssertionError:pass
+ else:raise AssertionError('unmeasured joined node accepted')
+ h.a.profile='rehearsal'
+ assert h.plateau()['verdict']=='NOTRUN'
+ p.write_text('\n'.join(f'{t} 1:{1000+t*10} 2:1000 3:1000' for t in range(0,601,10)))
+ try:h.plateau()
+ except AssertionError:pass
+ else:raise AssertionError('genuine RSS growth hidden in rehearsal')
+# Read verification closes the writer window before touching any mount.
+h=s.Soak.__new__(s.Soak);h.rss_fp=object();steps=[];h.quiet=lambda begin:steps.append(begin)
+h.note=lambda *args,**kwargs:None
+class RefuseLock:
+ def __enter__(self):
+  assert steps==[False]
+  raise RuntimeError('fixture abort')
+ def __exit__(self,*args):pass
+h.mount_mu=[RefuseLock(),RefuseLock()]
+try:h.verify()
+except RuntimeError:pass
+else:raise AssertionError('fixture did not abort')
+print('RSS: long-window growth negative controls, per-role coverage, rehearsal NOTRUN, verification isolation PASS')

@@ -29,6 +29,8 @@ sys.path.insert(0, str(ROOT / 'tests'))
 from k33_daemons import Cluster, Mount, EFSD, MGMT, fuse_ok, payload, hold_port
 sys.path.insert(0, str(ROOT / 'tests/live'))
 import append_failover as APP
+sys.path.insert(0, str(ROOT / 'scripts'))
+import rss_plateau as RSS
 
 
 def schedule(seconds, seed=12345, scale=1):
@@ -279,6 +281,7 @@ class Soak:
         self.churning = False
         self.quiet_start = None
         self.quiet_files = []
+        self.rss_roles = {}
         self.rss_fp = None
         self.monitor_stop = threading.Event()
         self.c = None
@@ -339,10 +342,11 @@ class Soak:
 
     def sample(self):
         with self.mu:
-            procs = [p for p in self.c.procs.values() if p.poll() is None]
-            procs += [m.p for m in self.mounts if m.p.poll() is None]
+            roles = [(f'node-{i}',p) for i,p in self.c.procs.items() if p.poll() is None]
+            roles += [(f'client-{i}',m.p) for i,m in enumerate(self.mounts) if m.p.poll() is None]
             points = []
-            for p in procs:
+            for role,p in roles:
+                self.rss_roles[str(p.pid)] = role
                 try:
                     text = Path(f'/proc/{p.pid}/status').read_text()
                     rss = re.search(r'^VmRSS:\s+(\d+) kB', text, re.M)
@@ -462,6 +466,11 @@ class Soak:
             self.note('first-failure', worker=idx, trace=self.errors[-1])
 
     def verify(self):
+        # Full readback populates read caches and pauses writers: a different
+        # workload, never part of a write-load RSS plateau window.
+        measuring = self.rss_fp is not None
+        self.quiet(False)
+        self.note('verify-start')
         # Freeze only workload operations, never daemons or maintenance. An exact
         # manifest snapshot cannot race the overwrite it is checking.
         with self.mount_mu[0], self.mount_mu[1]:
@@ -474,6 +483,8 @@ class Soak:
             self.note('verified', files=len(manifest), mounts=2,
                       appends=sum(len(s) for s in self.appends.values()))
             (self.out / 'manifest.json').write_text(json.dumps(dict(files=manifest, appends=self.appends), indent=2))
+        if measuring and self.phase == 'load' and not self.stop.is_set():
+            self.quiet(True)
 
     @contextlib.contextmanager
     def changing_mount(self, victim):
@@ -536,14 +547,27 @@ class Soak:
         self.quiet(False)
         rows = []
         for path in self.quiet_files:
-            lines = path.read_text().splitlines()
-            if len(lines) < 4:
-                rows.append(dict(path=path.name, verdict='NOTRUN', reason='quiet stretch shorter than four RSS samples'))
-                continue
-            rc, text = self.command([sys.executable, str(ROOT/'scripts/rss_plateau.py'), str(path)], 30, 'rss-plateau')
-            rows.append(dict(path=path.name, verdict='PASS' if rc == 0 else 'FAIL', report=text))
-        (self.out/'plateau.json').write_text(json.dumps(rows, indent=2))
-        assert rows and all(r['verdict']=='PASS' for r in rows), rows
+            series=RSS.from_ps(path)
+            if not series:
+                rows.append(dict(path=path.name, verdict='NOTRUN', reason='no write-load samples'))
+            for pid,pts in series.items():
+                assert pid in self.rss_roles, f'unidentified RSS process {pid}'
+                rows.append(dict(path=path.name, pid=pid, role=self.rss_roles[pid],
+                                 **RSS.assess_points(pts)))
+        required={f'node-{i}' for i in self.c.procs} | {'client-0','client-1'}
+        covered={r['role'] for r in rows if r['verdict']=='PASS'}
+        failed=any(r['verdict']=='FAIL' for r in rows)
+        missing=sorted(required-covered)
+        verdict='FAIL' if failed else ('NOTRUN' if missing else 'PASS')
+        report=dict(verdict=verdict, missing_roles=missing, processes=self.rss_roles, windows=rows,
+                    method='per uninterrupted write-load window: 120s warmup, >=360s measured, last-third growth <=5% of peak')
+        (self.out/'plateau.json').write_text(json.dumps(report, indent=2))
+        # The compressed rehearsal qualifies lifecycle/correctness, not a memory
+        # plateau. Endurance cannot pass without every daemon/client role covered.
+        assert not failed, report
+        if self.a.profile != 'rehearsal':
+            assert verdict == 'PASS', report
+        return report
 
     def run(self):
         self.env = {k: v for k,v in os.environ.items() if not k.startswith(('EFS_', 'LD_PRELOAD'))}
@@ -647,9 +671,9 @@ class Soak:
             self.verify()
             self.stop.set()
             self.sample()
-            self.plateau()
+            result['rss'] = self.plateau()
             result.update(verdict='PASS', files=len(self.manifest), events=self.events,
-                          reason='every acknowledged current version and append exact on both mounts; all protection/recovery bounds and RSS checks passed')
+                          reason='every acknowledged current version and append exact on both mounts; protection/recovery bounds passed; RSS '+result['rss']['verdict'])
         except BaseException:
             result['reason'] = traceback.format_exc()
             self.note('failure', trace=result['reason'], phase=self.phase)
