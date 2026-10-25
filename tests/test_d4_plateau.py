@@ -27,7 +27,8 @@ of the peak) is printed always and enforced at 5 % when the load is at least
 EFS_D4_PLATEAU_MIN_S (default 600) seconds long or EFS_D4_PLATEAU=1: a
 gate-length run is still warming up. The F1 measurement is
 EFS_D4_LOAD_S=1800 EFS_D4_QUOTA=8G. EFS_D4_ARTIFACTS=DIR keeps the driver's
-JSON there; EFS_D4_THREADS, EFS_D4_REFRESH_MS and EFS_D4_KEEP as in
+JSON there; EFS_D4_DRAIN_S the drain bound (default 150 s); EFS_D4_THREADS,
+EFS_D4_REFRESH_MS and EFS_D4_KEEP as in
 test_d4_progress.py.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
@@ -55,7 +56,7 @@ PLATEAU_MIN_S = float(os.environ.get('EFS_D4_PLATEAU_MIN_S', '600'))
 PLATEAU = bool(os.environ.get('EFS_D4_PLATEAU')) or LOAD_S >= PLATEAU_MIN_S
 PLATEAU_PCT = 5.0
 FG_DEADLINE_S = 10.0
-DRAIN_S = 150.0
+DRAIN_S = float(os.environ.get('EFS_D4_DRAIN_S', '150'))
 # The D4 bounds; a sanitizer build (make asan-check / tsan-check) carries
 # shadow memory and redzones, so its bounds scale as in test_d4_progress.py.
 RSS_SCALE = 6 if cflags() else 1
