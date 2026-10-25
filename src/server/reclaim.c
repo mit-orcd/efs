@@ -1147,7 +1147,9 @@ void server_reclaim_shutdown(struct efsd_server *s)
     (void)s;
     if (!rj.threads) return;
     pthread_mutex_lock(&rj.mu);
-    rj.stop = 1;
+    /* The background, recovery and deleter loops poll stop with an atomic
+     * load outside rj.mu; the store must be atomic too (TSan, F1 gate). */
+    __atomic_store_n(&rj.stop, 1, __ATOMIC_RELEASE);
     pthread_cond_broadcast(&rj.work);
     pthread_mutex_unlock(&rj.mu);
     pthread_join(rj.bg, NULL);

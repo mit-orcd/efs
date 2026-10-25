@@ -26,6 +26,10 @@
 
 struct ts_cookie {
     int fd;
+    /* stdio calls ts_write under the stream's own lock, so the writes
+     * are already serialised; the atomics only make that visible to
+     * ThreadSanitizer, which does not model glibc's internal FILE lock
+     * (F1 tsan gate reported every daemon log line as a race). */
     int at_line_start;
 };
 
@@ -81,7 +85,7 @@ static ssize_t ts_write(void *cookie, const char *buf, size_t size)
         size_t seg = nl ? (size_t)(nl - (buf + done)) + 1 : size - done;
         struct iovec iov[2];
         int n = 0;
-        if (c->at_line_start) {
+        if (__atomic_load_n(&c->at_line_start, __ATOMIC_RELAXED)) {
             if (!slen)
                 slen = ts_stamp(stamp, sizeof(stamp));
             iov[n].iov_base = stamp;
@@ -93,7 +97,7 @@ static ssize_t ts_write(void *cookie, const char *buf, size_t size)
         n++;
         if (write_all(c->fd, iov, n) != 0)
             return done ? (ssize_t)done : -1;
-        c->at_line_start = nl != NULL;
+        __atomic_store_n(&c->at_line_start, nl != NULL, __ATOMIC_RELAXED);
         done += seg;
     }
     return (ssize_t)size;

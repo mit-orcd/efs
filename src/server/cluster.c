@@ -578,13 +578,13 @@ static void *heartbeat_thread(void *arg)
 void server_start_heartbeat(struct efsd_server *s)
 {
     pthread_t tid;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    /* Detached by intent: it runs until the process exits (the attr the
+     * wrapper could not take left it joinable and never joined: TSan
+     * thread leak). */
     if (efsd_pthread_create(&tid, heartbeat_thread, s) == 0) {
+        pthread_detach(tid);
         fprintf(stderr, "heartbeat: enabled (%d ms interval)\n", EFS_HEARTBEAT_MS);
     }
-    pthread_attr_destroy(&attr);
 }
 
 /* Rejoin thread: periodically retry joining until this server is part of a
@@ -594,7 +594,7 @@ static void *rejoin_thread(void *arg)
 {
     struct efsd_server *s = arg;
     int first = 1;
-    while (s->running) {
+    while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) {
         if (!first || !s->rejoin_announce)
             sleep(2);
         first = 0;

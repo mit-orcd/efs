@@ -87,7 +87,7 @@ class Cluster:
         return self.log(i).rsplit('==== start', 1)[-1]
 
     def wait_log(self, i, pattern, timeout=30, run=True):
-        end = time.time() + timeout
+        end = time.time() + timeout * SLOW
         while time.time() < end:
             if re.search(pattern, self.last_run(i) if run else self.log(i)):
                 return
@@ -113,7 +113,7 @@ class Cluster:
         return '\n'.join(out)
 
     def wait_exit(self, i, timeout=30):
-        rc = self.procs[i].wait(timeout=timeout)
+        rc = self.procs[i].wait(timeout=timeout * SLOW)
         self.procs.pop(i)
         return rc
 
@@ -136,7 +136,7 @@ class Cluster:
         if p and p.poll() is None:
             p.send_signal(sig)
             try:
-                p.wait(timeout=30)
+                p.wait(timeout=30 * SLOW)
             except subprocess.TimeoutExpired:
                 p.kill()
                 p.wait()
@@ -158,7 +158,7 @@ class Cluster:
         raise AssertionError(out)
 
     def wait_voters(self, ids, want, timeout=60):
-        end, got = time.time() + timeout, {}
+        end, got = time.time() + timeout * SLOW, {}
         while time.time() < end:
             got = {i: self.status(i) for i in ids}
             if all(want(i, got[i]) for i in ids):
@@ -176,7 +176,7 @@ class Cluster:
 
     def wait_any_exit(self, ids, timeout=60):
         """The first of ids whose daemon ends; returns (node, status)."""
-        end = time.time() + timeout
+        end = time.time() + timeout * SLOW
         while time.time() < end:
             for i in ids:
                 if i in self.procs and self.procs[i].poll() is not None:
@@ -199,7 +199,7 @@ class Cluster:
         """A9/D42: {group: leader node id} from the placement section of
         `efs-mgmt status` on node i, once every member reported and each
         group has exactly one self-reported leader."""
-        end, out = time.time() + timeout, ''
+        end, out = time.time() + timeout * SLOW, ''
         while time.time() < end:
             rc, out = mgmt(self.env, 'status', self.ep(i))
             m = re.search(r'leaders: (\d+)/(\d+) groups on (\d+) distinct node\(s\); '
@@ -218,7 +218,7 @@ class Cluster:
     def wait_members(self, ids, count, timeout=60):
         """Every node in ids reports the same `count` members: ids 1..count,
         distinct endpoints (no duplicate identity). Returns the table."""
-        end, last = time.time() + timeout, {}
+        end, last = time.time() + timeout * SLOW, {}
         while time.time() < end:
             try:
                 last = {i: self.members(i) for i in ids}
@@ -253,6 +253,14 @@ def fuse_ok():
         bool(shutil.which('fusermount3'))
 
 
+# Sanitizer builds (make tsan-check / asan-check) start and answer several
+# times slower: every wait here is scaled by SLOW (tests/sanitize_env.py).
+import sys  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sanitize_env import timeout as _san_timeout  # noqa: E402
+SLOW = _san_timeout(1)
+
+
 class Mount:
     def __init__(self, c, node, name, env=None):
         self.path = c.dir / name
@@ -262,7 +270,7 @@ class Mount:
         self.p = subprocess.Popen([str(FUSE), c.ep(node), str(self.path), '-f'],
                                   stdout=self.log, stderr=subprocess.STDOUT,
                                   env=env or c.env)
-        end = time.time() + 30
+        end = time.time() + 30 * SLOW
         while time.time() < end and not os.path.ismount(self.path):
             if self.p.poll() is not None:
                 raise AssertionError(self.logp.read_text()[-2000:])
@@ -272,7 +280,7 @@ class Mount:
     def close(self):
         subprocess.run(['fusermount3', '-u', str(self.path)], capture_output=True)
         try:
-            self.p.wait(timeout=30)
+            self.p.wait(timeout=30 * SLOW)
         except subprocess.TimeoutExpired:
             subprocess.run(['fusermount3', '-uz', str(self.path)], capture_output=True)
             self.p.kill()

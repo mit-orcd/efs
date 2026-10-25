@@ -271,7 +271,11 @@ while IFS='|' read -r name cmd; do
     done
     case "$MODE" in
     tsan)
-        envs+=("TSAN_OPTIONS=log_path=$LOGDIR/$name.tsan second_deadlock_stack=1 halt_on_error=0 exitcode=66 ${TSAN_OPTIONS:-}"
+        # die_after_fork=0: the KV, Raft and session unit tests fork
+        # crash-simulation children that open a store (and so start a
+        # compactor thread); TSan kills such a child by default and the
+        # parent's child-status checks fail without any race.
+        envs+=("TSAN_OPTIONS=log_path=$LOGDIR/$name.tsan second_deadlock_stack=1 halt_on_error=0 die_after_fork=0 exitcode=66 ${TSAN_OPTIONS:-}"
                "EFS_TEST_TSAN=1") ;;
     asan)
         envs+=("ASAN_OPTIONS=log_path=$LOGDIR/$name.asan $LSAN detect_stack_use_after_return=1 exitcode=66 ${ASAN_OPTIONS:-}"

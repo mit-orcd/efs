@@ -659,7 +659,7 @@ static void sigint_handler(int sig)
      * racing accept()/other threads on a closed fd has segfaulted on Engaging.
      * Without SA_RESTART, accept() returns EINTR and the loop exits. */
     if (g_server)
-        g_server->running = 0;
+        __atomic_store_n(&g_server->running, 0, __ATOMIC_RELEASE);
 }
 
 /* K33 discovery answer (discovery.h): this node's service endpoint and
@@ -679,7 +679,7 @@ static int discovery_info(struct efs_disc_answer *a)
 /* Sleep up to ms, returning early when a stop signal arrived. */
 static void join_pause(struct efsd_server *s, int ms)
 {
-    for (int t = 0; t < ms && s->running; t += 100)
+    for (int t = 0; t < ms && __atomic_load_n(&s->running, __ATOMIC_ACQUIRE); t += 100)
         poll(NULL, 0, 100);
 }
 
@@ -790,8 +790,8 @@ static int join_as_new(struct efsd_server *s, const char *seed_host, uint16_t se
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
-    s->running = 1;
-    while (s->running) {
+    __atomic_store_n(&s->running, 1, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) {
         char host[64];
         uint16_t port;
         if (cur >= 0) {
@@ -1374,7 +1374,10 @@ int main(int argc, char **argv)
     }
     server_put_sync_serving();
     /* A stop signal caught while joining (join_as_new) still stops. */
-    server.running = !__atomic_load_n(&g_stop_signal_ms, __ATOMIC_ACQUIRE);
+    /* Every reader of `running` on another thread (heartbeat, rejoin, the
+     * host) loads it atomically; the signal handler stores it so too. */
+    __atomic_store_n(&server.running, !__atomic_load_n(&g_stop_signal_ms, __ATOMIC_ACQUIRE),
+                     __ATOMIC_RELEASE);
     if (server_writer_pool_start(&server) != 0) {
         fprintf(stderr, "Failed to start writer pool (%d threads, %u paths)\n",
                 server.nwriters, server.storage_path_count);
@@ -1441,10 +1444,10 @@ int main(int argc, char **argv)
             fprintf(stderr, "efsd strace pid=%d -> %s\n", (int)g_strace_pid, strace_path);
     }
 
-    while (server.running) {
+    while (__atomic_load_n(&server.running, __ATOMIC_ACQUIRE)) {
         struct pollfd listener = { .fd = server.listen_fd, .events = POLLIN };
         int ready = poll(&listener, 1, 250);
-        if (!server.running)
+        if (!__atomic_load_n(&server.running, __ATOMIC_ACQUIRE))
             break;
         if (ready < 0) {
             if (errno == EINTR) continue;
@@ -1461,7 +1464,7 @@ int main(int argc, char **argv)
                 /* SIGINT/SIGTERM clear running. Leaving the loop is
                  * what runs the bounded stop; staying here left efsd
                  * up and the perf file without a footer. */
-                if (!server.running)
+                if (!__atomic_load_n(&server.running, __ATOMIC_ACQUIRE))
                     break;
                 continue;
             }
@@ -1524,7 +1527,9 @@ int main(int argc, char **argv)
     int exit_rc = shutdown_bounded(&server, stop_t0);
     if (!exit_rc && __atomic_load_n(&server.join_refused, __ATOMIC_ACQUIRE))
         exit_rc = 1; /* K33: refused by the cluster, as at the first HELLO */
-    pthread_mutex_destroy(&server.lock);
+    /* server.lock lives as long as the process: the detached heartbeat
+     * thread (cluster.c) may still take it between here and exit, and
+     * destroying it bought nothing (TSan: use of a destroyed mutex). */
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);
     return exit_rc;

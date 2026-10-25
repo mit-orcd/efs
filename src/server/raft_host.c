@@ -862,10 +862,18 @@ static int membership_copy(struct efs_membership *out)
     if (formed && out)
         *out = mview;
     pthread_mutex_unlock(&mview_mu);
-    if (!formed && g_server && g_server->mstore.state == EFS_MEMBER_FORMED) {
-        formed = 1;
-        if (out)
-            *out = g_server->mstore.members;
+    if (!formed && g_server) {
+        /* The member thread rewrites the store (promise, learn) under
+         * h->mu; read it under the same lock (TSan: a HELLO on a
+         * connection thread read a half-copied store). */
+        struct efs_raft_host *h = g_host;
+        if (h) pthread_mutex_lock(&h->mu);
+        if (g_server->mstore.state == EFS_MEMBER_FORMED) {
+            formed = 1;
+            if (out)
+                *out = g_server->mstore.members;
+        }
+        if (h) pthread_mutex_unlock(&h->mu);
     }
     return formed;
 }
@@ -4874,9 +4882,12 @@ static struct {
 static int read_prof_on(void)
 {
     static int v = -1;
-    if (v < 0)
-        v = env_on("EFS_READ_PROF");
-    return v;
+    int x = __atomic_load_n(&v, __ATOMIC_ACQUIRE);
+    if (x < 0) { /* idempotent first read on any thread */
+        x = env_on("EFS_READ_PROF");
+        __atomic_store_n(&v, x, __ATOMIC_RELEASE);
+    }
+    return x;
 }
 
 static void read_prof_add(struct read_prof_acc *a, uint64_t us)
@@ -8275,7 +8286,7 @@ static void *host_pump(void *arg)
     if(host_kv_start(&kv_worker,h,&checkpoint)!=EFS_OK)
         fprintf(stderr,"raft-host: KV worker unavailable; using synchronous persistence\n");
 
-    while (h->running) {
+    while (HOST_RUNNING(h)) {
         struct pollfd pfd;
         uint64_t sink;
         uint64_t c0 = 0;
@@ -9973,7 +9984,7 @@ static uint32_t host_txn_decision_sweep(struct efs_raft_host *h, uint32_t shard,
         free(recs);
         return 1; /* retried next pass */
     }
-    for (i = 0; i < n && h->gc_running && h->running; i++) {
+    for (i = 0; i < n && h->gc_running && HOST_RUNNING(h); i++) {
         uint64_t born = txid_ns(&recs[i].t);
         uint32_t coord = efs_txn_coordinator(&recs[i].t, &recs[i].parts);
 
@@ -10015,7 +10026,7 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
     if (!lead[0] && !lead[1])
         return;
     for (shard = 0; shard <= EFS_KV_SHARD_MASK && done < HOST_REC_SHARDS &&
-                    __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && h->running; shard++) {
+                    __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && HOST_RUNNING(h); shard++) {
         uint64_t mark;
 
         if (!lead[(shard & 1u) ? 0 : 1])
@@ -10030,7 +10041,7 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
         n = 0;
         if (efs_txn_scan_pending(h->kv, shard, recs, HOST_REC_MAX, &n) != EFS_OK)
             continue; /* mark stays; retried next pass */
-        for (i = 0; i < n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && h->running; i++) {
+        for (i = 0; i < n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && HOST_RUNNING(h); i++) {
             uint64_t born = txid_ns(&recs[i].t);
 
             if (born > now || now - born < HOST_REC_AGE_NS)
@@ -10297,7 +10308,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     int prc, src;
     uint64_t started = now_us_();
     unsigned gi = group == 0 ? 0 : 1;
-    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running) return;
+    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !HOST_RUNNING(h)) return;
     struct reap_scan_ctx *cp = &host_reap_ctx[gi];
     memset(cp, 0, sizeof(*cp));
     cp->skip_len = h->reap_cursor_len[gi];
@@ -10323,7 +10334,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
             memcpy(cp->skip, resume, rlen);
             cp->skip_len = rlen;
             if (now_us_() - started >= GC_FRAG_BUDGET_US ||
-                !__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running)
+                !__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !HOST_RUNNING(h))
                 break;
         }
     }
@@ -10377,7 +10388,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         for (int i = 0; i < n; i++) {
             for (int lane = 0; lane < EFS_META_LANES; lane++) {
                 if (!(host_reap_left[i] & (1ull << lane))) continue;
-                if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running) return;
+                if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !HOST_RUNNING(h)) return;
                 uint8_t lg = efs_raft_shard_group(efs_kv_lane_shard(cp->ino[i], (uint8_t)lane));
                 if (host_hosts(h, lg)) {
                     uint32_t indices[EFS_META_SWEEP_BATCH_MAX], cnt = 0;
@@ -10429,7 +10440,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     times->sweep += now_us_() - started;
 
     /* 2. Storage acceptance by every member. */
-    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running) return;
+    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !HOST_RUNNING(h)) return;
     started = now_us_();
     uint32_t m = 0;
     for (int i = 0; i < n; i++) {
@@ -10447,7 +10458,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     }
 
     /* 3. REAP completion for accepted inodes only. */
-    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running) return;
+    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !HOST_RUNNING(h)) return;
     started = now_us_();
     for (unsigned g = 0; g < HOST_NGROUPS; g++)
         reap_multi_init(&host_reap_done[g], (uint8_t)(g << 1), EFS_MD_CMD_REAP_MULTI);
@@ -10602,7 +10613,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
          * one batch per node per window, each window's acks fitting one
          * GC_ACK entry. */
         i=0;
-        while(i<c.n && __atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && h->running){
+        while(i<c.n && __atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && HOST_RUNNING(h)){
             if(recs && now_us_()-t0>=GC_FRAG_BUDGET_US){budget_capped=1;break;}
             int w=(GC_ACK_MAX-nack)/EFS_NUM_FRAGMENTS;
             if(w<=0){
@@ -10629,7 +10640,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
          * applies; a rescan from the cursor starts after them. Stop
          * when the scan was not full, the budget is spent, or the
          * host is going down; otherwise yield the KV lock and rescan. */
-        if (budget_capped || !c.full || !__atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) || !h->running)
+        if (budget_capped || !c.full || !__atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) || !HOST_RUNNING(h))
             break;
         if (now_us_() - t0 > GC_FRAG_BUDGET_US) {
             budget_capped = 1;
@@ -11529,7 +11540,7 @@ static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t a
             struct efs_meta_degraded d;
             if ((uint64_t)done >= per_pass || (uint64_t)seen >= 4 * per_pass ||
                 now_us_() - t0 > DG_BUDGET_US ||
-                !__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running)
+                !__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !HOST_RUNNING(h))
                 break;
             seen++;
             if (efs_meta_unpack_degraded(c.keys[i], DG_KEY_LEN, c.vals[i],
@@ -13113,7 +13124,7 @@ int server_raft_host_start(struct efsd_server *s)
         return rc;
     }
     h->tx_running = 1;
-    h->running = 1;
+    __atomic_store_n(&h->running, 1, __ATOMIC_RELEASE);
     /* .efs: the versioned commands policy (efs_query_policy) is the only
      * authority (D42). Tracking and the catalog worker always run; the
      * worker idles on its poll while the policy is off or nothing changed. */
@@ -13122,7 +13133,7 @@ int server_raft_host_start(struct efsd_server *s)
     if (efsd_pthread_create(&h->tid, host_pump, h) != 0) {
         fprintf(stderr, "raft-host: pump thread failed\n");
         g_host = NULL;
-        h->running = 0;
+        __atomic_store_n(&h->running, 0, __ATOMIC_RELEASE);
         host_stop_senders(h);
         efs_raft_free(h->g[0].r);
         efs_raft_free(h->g[1].r);
@@ -13246,7 +13257,9 @@ void server_raft_host_stop(void)
         pthread_join(h->fin_tid, NULL);
     free(h->fin);
     h->fin = NULL;
-    h->running = 0;
+    /* Every reader polls it atomically (HOST_RUNNING); the pump thread
+     * saw this plain store as a race (F1 tsan gate). */
+    __atomic_store_n(&h->running, 0, __ATOMIC_RELEASE);
     /* Wake the pump so shutdown does not wait out a 5 ms tick. */
     host_pump_kick(h);
     pthread_mutex_lock(&h->wait_mu);
@@ -13368,7 +13381,7 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
 {
     struct efs_raft_host *h = g_host;
     uint8_t *copy;
-    if (!h || !h->running) return EFS_ERR_INVAL;
+    if (!h || !HOST_RUNNING(h)) return EFS_ERR_INVAL;
     if (!payload || plen < EFS_WIRE_RAFT_HDR_LEN) return EFS_ERR_PROTO;
     if (plen > HOST_FRAME_MAX) {
         /* W145: a refused Raft frame used to vanish without a trace. */
@@ -13699,7 +13712,7 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
 
     memset(out, 0, sizeof(*out));
     out->leader_hint = -1;
-    if (!h || !h->running) {
+    if (!h || !HOST_RUNNING(h)) {
         out->rc = EFS_ERR_INVAL;
         return;
     }
@@ -13860,7 +13873,7 @@ static int host_member_add(struct efs_raft_host *h, const struct efs_member *j)
 static void host_member_kick(struct efs_raft_host *h)
 {
     pthread_mutex_lock(&h->mb_mu);
-    h->mb_kick = 1;
+    __atomic_store_n(&h->mb_kick, 1, __ATOMIC_RELEASE);
     pthread_cond_signal(&h->mb_cv);
     pthread_mutex_unlock(&h->mb_mu);
 }
@@ -14058,10 +14071,12 @@ static void *host_member_thread(void *arg)
             ts.tv_nsec -= 1000000000L;
         }
         pthread_mutex_lock(&h->mb_mu);
-        if (!h->mb_kick && !h->mb_njoin && __atomic_load_n(&h->mb_running, __ATOMIC_ACQUIRE))
+        /* mb_kick is also set by the apply thread (MKFS, SALT, membership)
+         * without mb_mu: atomic, and taken with an exchange. */
+        if (!__atomic_load_n(&h->mb_kick, __ATOMIC_ACQUIRE) && !h->mb_njoin &&
+            __atomic_load_n(&h->mb_running, __ATOMIC_ACQUIRE))
             pthread_cond_timedwait(&h->mb_cv, &h->mb_mu, &ts);
-        kick = h->mb_kick;
-        h->mb_kick = 0;
+        kick = __atomic_exchange_n(&h->mb_kick, 0, __ATOMIC_ACQ_REL);
         if (h->mb_njoin) {
             j = h->mb_join[0];
             memmove(h->mb_join, h->mb_join + 1, (size_t)(h->mb_njoin - 1) * sizeof(j));
@@ -14335,6 +14350,11 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
 
 #include "publication_session_fast.h"
 
+/* The host's running flag is set once at start, cleared once at stop and
+ * polled by every other host thread and request path: atomic loads, so
+ * the stop store never races a poll (F1 tsan gate). */
+#define HOST_RUNNING(h) __atomic_load_n(&(h)->running, __ATOMIC_ACQUIRE)
+
 /* Payload: group byte, then command bytes (empty command = ReadIndex).
  * A hosted replica proposes (or ReadIndexes) even when it is not the
  * leader; an unhosted node forwards a non-empty command to a voter.
@@ -14419,7 +14439,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
 
     memset(out, 0, sizeof(*out));
     out->leader_hint = -1;
-    if (!h || !h->running || !payload || plen < 1) {
+    if (!h || !HOST_RUNNING(h) || !payload || plen < 1) {
         out->rc = EFS_ERR_INVAL;
         return;
     }
@@ -14965,7 +14985,7 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
     struct efs_msg_storage_session_fence_reply *out)
 {
     memset(out,0,sizeof(*out));out->rc=EFS_ERR_INVAL;
-    if(!request || !g_host || !g_host->running || request->floor<2 || request->check_only>1)return;
+    if(!request || !g_host || !HOST_RUNNING(g_host) || request->floor<2 || request->check_only>1)return;
     memcpy(out->uuid,request->uuid,16);out->floor=request->floor;
     unsigned nonzero=0;for(unsigned i=0;i<16;i++)nonzero|=request->uuid[i];if(!nonzero)return;
     uint32_t ssh=efs_kv_session_shard(request->uuid);
@@ -14989,7 +15009,7 @@ void server_raft_host_expiry_status(struct efs_expiry_status *out)
 {
     memset(out,0,sizeof(*out));
     struct efs_raft_host *h=g_host;
-    if(!h || !h->running)return;
+    if(!h || !HOST_RUNNING(h))return;
     out->available=1;out->enabled=h->expiry_enabled;
     if(h->expiry_enabled)(void)host_expiry_clock_read(h,NULL);
     pthread_mutex_lock(&h->mu);
@@ -15024,7 +15044,7 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
     int src;
 
     memset(out, 0, sizeof(*out));
-    if (!h || !h->running) {
+    if (!h || !HOST_RUNNING(h)) {
         out->rc = EFS_ERR_INVAL;
         return;
     }
@@ -15129,7 +15149,7 @@ void server_raft_host_resync(const struct efs_msg_raft_resync *in,
 
     memset(out, 0, sizeof(*out));
     out->rc = EFS_ERR_INVAL;
-    if (!h || !h->running || !in)
+    if (!h || !HOST_RUNNING(h) || !in)
         return;
     pthread_mutex_lock(&h->mu);
     for (i = 0; i < HOST_NGROUPS; i++)
@@ -15151,7 +15171,7 @@ void server_raft_host_resync(const struct efs_msg_raft_resync *in,
 int server_raft_host_recovery_group(int gi, uint8_t *group, int *hosted)
 {
     struct efs_raft_host *h = g_host;
-    if (!h || !h->running || gi < 0 || gi >= HOST_NGROUPS)
+    if (!h || !HOST_RUNNING(h) || gi < 0 || gi >= HOST_NGROUPS)
         return EFS_ERR_BUSY;
     *group = (uint8_t)(gi << 1);
     *hosted = host_hosts(h, *group);
@@ -15162,7 +15182,7 @@ int server_raft_host_recovery_prove(uint8_t group, char *why, size_t n)
 {
     struct efs_raft_host *h = g_host;
     int hint = -1, rc;
-    if (!h || !h->running) {
+    if (!h || !HOST_RUNNING(h)) {
         snprintf(why, n, "raft host not running");
         return EFS_ERR_BUSY;
     }
@@ -15399,7 +15419,7 @@ int server_raft_host_recovery_scan(uint8_t group, uint32_t what, efs_node_id_t n
                                    struct efs_recovery_cursor *cur, uint8_t *recs, uint32_t *n)
 {
     struct efs_raft_host *h = g_host;
-    if (!h || !h->running)
+    if (!h || !HOST_RUNNING(h))
         return EFS_ERR_BUSY;
     if ((what != EFS_RECOVERY_SCAN_CHUNKS && what != EFS_RECOVERY_SCAN_TICKETS &&
          what != EFS_RECOVERY_SCAN_SEGMENTS) || !node ||
@@ -15425,7 +15445,7 @@ void server_raft_host_recovery_scan_serve(const uint8_t *payload, uint32_t len,
     if (len == sizeof(req)) {
         memcpy(&req, payload, sizeof(req));
         hdr.next = req.at;
-        if (!h || !h->running || req.group > 255 || !host_hosts(h, (uint8_t)req.group))
+        if (!h || !HOST_RUNNING(h) || req.group > 255 || !host_hosts(h, (uint8_t)req.group))
             hdr.rc = EFS_ERR_NOT_PRIMARY;
         else if (req.at.len <= EFS_RECOVERY_CURSOR_MAX && req.at.shard <= EFS_RECOVERY_SHARD_END &&
                  (req.what == EFS_RECOVERY_SCAN_CHUNKS || req.what == EFS_RECOVERY_SCAN_TICKETS ||
@@ -15447,7 +15467,7 @@ int server_raft_host_recovery_mark(const struct efs_meta_degraded *d)
 {
     struct efs_raft_host *h = g_host;
     uint8_t cmd[EFS_MD_RECOVERY_MARK_LEN];
-    if (!h || !h->running)
+    if (!h || !HOST_RUNNING(h))
         return EFS_ERR_BUSY;
     cmd[0] = EFS_MD_CMD_RECOVERY_MARK;
     server_degraded_mark_encode(cmd + 1, d);
@@ -15469,7 +15489,7 @@ void server_raft_host_step_down(const struct efs_msg_raft_step_down *in,
     memset(out, 0, sizeof(*out));
     out->rc = EFS_ERR_INVAL;
     out->raft_id = -1;
-    if (!h || !h->running || !in)
+    if (!h || !HOST_RUNNING(h) || !in)
         return;
     pthread_mutex_lock(&h->mu);
     out->raft_id = h->raft_id;
@@ -15494,7 +15514,7 @@ void server_raft_host_step_down(const struct efs_msg_raft_step_down *in,
 int server_raft_host_active(void)
 {
     struct efs_raft_host *h = g_host;
-    return h && h->running;
+    return h && HOST_RUNNING(h);
 }
 
 int server_raft_host_formed(void)
@@ -15728,7 +15748,7 @@ int server_raft_host_inode_reaped(efs_ino_t ino, int *dead)
     uint64_t version = 0;
     int hint = -1, rc;
     *dead = 0;
-    if (!h || !h->running || !h->kv || ino <= EFS_ROOT_INO) return EFS_ERR_NOT_PRIMARY;
+    if (!h || !HOST_RUNNING(h) || !h->kv || ino <= EFS_ROOT_INO) return EFS_ERR_NOT_PRIMARY;
     uint8_t group = efs_raft_shard_group(efs_kv_inode_shard(ino));
     if (!host_hosts(h, group)) return EFS_ERR_INVAL; /* cannot judge here */
     rc = host_read_index(h, group, &hint);
@@ -15810,7 +15830,7 @@ void server_raft_host_pack_object_serve(const struct efs_msg_pack_object_read *q
     int hint = -1, rc;
     size_t len = 0;
     r->group = q->group; r->id = q->id; r->generation = q->generation; r->len = 0;
-    if (!h || !h->running || !h->kv) { r->rc = EFS_ERR_NOT_PRIMARY; return; }
+    if (!h || !HOST_RUNNING(h) || !h->kv) { r->rc = EFS_ERR_NOT_PRIMARY; return; }
     if (q->reserved || q->group > 0xffu || !efs_pack_group_anchor(q->group) || !q->id ||
         !q->generation) { r->rc = EFS_ERR_INVAL; return; }
     /* Never forward: only a hosting voter's read is linearizable here. */
@@ -15834,7 +15854,7 @@ int server_raft_host_pack_state(uint32_t group, uint64_t id, uint64_t gen,
     struct efs_raft_host *h = g_host;
     int hint = -1;
     if (degraded) *degraded = EFS_PACK_READ_DEGRADED_BAD;
-    if (!h || !h->running || !h->kv) return EFS_ERR_NOT_PRIMARY;
+    if (!h || !HOST_RUNNING(h) || !h->kv) return EFS_ERR_NOT_PRIMARY;
     if (!efs_pack_group_anchor(group)) return EFS_ERR_INVAL;
     if (!host_hosts(h, (uint8_t)group))
         return host_pack_object_remote(h, group, id, gen, out, degraded);
@@ -15857,7 +15877,7 @@ int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
 int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit)
 {
     struct efs_raft_host *h = g_host;
-    if (!h || !h->running || !h->kv || !efs_pack_group_anchor(group)) return 0;
+    if (!h || !HOST_RUNNING(h) || !h->kv || !efs_pack_group_anchor(group)) return 0;
     pthread_mutex_lock(&h->mu);
     struct efs_raft *r = group_raft(h, group);
     int lead = r && efs_raft_role(r) == EFS_RAFT_LEADER;
@@ -15871,7 +15891,7 @@ uint64_t server_raft_host_group_commit(uint8_t group)
 {
     struct efs_raft_host *h = g_host;
     uint64_t c = 0;
-    if (!h || !h->running) return 0;
+    if (!h || !HOST_RUNNING(h)) return 0;
     pthread_mutex_lock(&h->mu);
     struct efs_raft *r = group_raft(h, group);
     if (r) c = efs_raft_commit(r);
@@ -15883,7 +15903,7 @@ uint32_t server_raft_host_group_voters(uint8_t group)
 {
     struct efs_raft_host *h = g_host;
     uint32_t v = 0;
-    if (!h || !h->running) return 0;
+    if (!h || !HOST_RUNNING(h)) return 0;
     pthread_mutex_lock(&h->mu);
     struct efs_raft *r = group_raft(h, group);
     if (r) v = efs_raft_voters(r);
@@ -15895,19 +15915,19 @@ uint32_t server_raft_host_group_voters(uint8_t group)
 int server_raft_host_gc_running(void)
 {
     struct efs_raft_host *h = g_host;
-    return h && h->running && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE);
+    return h && HOST_RUNNING(h) && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE);
 }
 struct efs_kv *server_raft_host_kv(void)
 {
     struct efs_raft_host *h = g_host;
-    return h && h->running ? h->kv : NULL;
+    return h && HOST_RUNNING(h) ? h->kv : NULL;
 }
 static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen, int verdict);
 int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t len)
 {
     struct efs_raft_host *h = g_host;
-    if (!h || !h->running) return EFS_ERR_NOT_PRIMARY;
+    if (!h || !HOST_RUNNING(h)) return EFS_ERR_NOT_PRIMARY;
     return host_bg_propose(h, group, cmd, len, 1);
 }
 
@@ -15931,7 +15951,7 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running) {
+    if (!h || !HOST_RUNNING(h)) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -16007,7 +16027,7 @@ void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running) {
+    if (!h || !HOST_RUNNING(h)) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -16172,7 +16192,7 @@ static int host_lock_wait(struct efs_raft_host *h, uint8_t ig,
     pthread_mutex_unlock(&h->wait_mu);
 
     for (;;) {
-        if (!h->running || !host_is_leader(h, ig))
+        if (!HOST_RUNNING(h) || !host_is_leader(h, ig))
             w.abort = 1;
         pthread_mutex_lock(&h->wait_mu);
         if (w.fenced) {
@@ -16294,7 +16314,7 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
     memset(out, 0, sizeof(*out));
     memset(&hit, 0, sizeof(hit));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running) {
+    if (!h || !HOST_RUNNING(h)) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -16452,7 +16472,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || !name || parent == 0) {
+    if (!h || !HOST_RUNNING(h) || !name || parent == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -16947,7 +16967,7 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
     if(settled)*settled=0;
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || !name || parent == 0) {
+    if (!h || !HOST_RUNNING(h) || !name || parent == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -17179,7 +17199,7 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
 {
     struct efs_raft_host *h=g_host;int hint=-1,rc;
     memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
-    if(!h || !h->running || !request || request->probe>1 || request->routed>1 ||
+    if(!h || !HOST_RUNNING(h) || !request || request->probe>1 || request->routed>1 ||
        request->create.flags!=EFS_CREATE_F_PENDING || request->create.owner ||
        !request->create.parent || !request->create.name[0] ||
        !memchr(request->create.name,0,sizeof(request->create.name)) ||
@@ -17522,7 +17542,7 @@ static void host_txn_fault_barrier(struct efs_raft_host *h,
     }
     close(fd);
     uint64_t end = now_us_() + 15000000;
-    while (h->running && h->s->running && access(path, F_OK) == 0 && now_us_() < end)
+    while (HOST_RUNNING(h) && __atomic_load_n(&h->s->running, __ATOMIC_ACQUIRE) && access(path, F_OK) == 0 && now_us_() < end)
         usleep(1000);
 }
 #endif
@@ -17599,7 +17619,7 @@ static int host_pub_fault(struct efs_raft_host *h, const char *stage)
         close(fd);
     fprintf(stderr, "raft-host: W77 fault: publication unit parked at %s\n", stage);
     uint64_t end = now_us_() + 15000000;
-    while (h->running && h->s->running && access(path, F_OK) == 0 && now_us_() < end)
+    while (HOST_RUNNING(h) && __atomic_load_n(&h->s->running, __ATOMIC_ACQUIRE) && access(path, F_OK) == 0 && now_us_() < end)
         usleep(1000);
     unlink(ready);
     return 0;
@@ -18651,7 +18671,7 @@ int server_raft_host_lane_bootstrap(efs_ino_t ino, uint64_t gen,
     int ng = groups[0] == groups[1] ? 1 : 2;
     if (leader_hint)
         *leader_hint = -1;
-    if (!h || !h->running || !ino || !gen || !efs_chunk_size_valid(cs))
+    if (!h || !HOST_RUNNING(h) || !ino || !gen || !efs_chunk_size_valid(cs))
         return rc;
     if (!host_hosts(h, groups[0]) || !host_hosts(h, groups[ng - 1])) {
         hint = host_pick_peer(h, groups, ng, -1);
@@ -19327,7 +19347,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || !name || parent == 0 || name[0] == '\0') {
+    if (!h || !HOST_RUNNING(h) || !name || parent == 0 || name[0] == '\0') {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -19651,7 +19671,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     memset(out, 0, sizeof(*out));
     memset(&drop, 0, sizeof(drop));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || !name || parent == 0 || name[0] == '\0') {
+    if (!h || !HOST_RUNNING(h) || !name || parent == 0 || name[0] == '\0') {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -20016,7 +20036,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     memset(out, 0, sizeof(*out));
     memset(&drop, 0, sizeof(drop));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || !name || parent == 0 || name[0] == '\0') {
+    if (!h || !HOST_RUNNING(h) || !name || parent == 0 || name[0] == '\0') {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -20283,7 +20303,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || !name || parent == 0) {
+    if (!h || !HOST_RUNNING(h) || !name || parent == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -20458,7 +20478,7 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || ino == 0) {
+    if (!h || !HOST_RUNNING(h) || ino == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -20570,7 +20590,7 @@ static void host_truncate_lazy(efs_ino_t ino, uint64_t size, uint64_t mtime,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || ino == 0 || !q || !efs_opid_req_valid(q) ||
+    if (!h || !HOST_RUNNING(h) || ino == 0 || !q || !efs_opid_req_valid(q) ||
         q->ack >= q->id.seq) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
@@ -20682,7 +20702,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || ino == 0) {
+    if (!h || !HOST_RUNNING(h) || ino == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -20785,7 +20805,7 @@ void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
     out->status = EFS_INODE_RPC_ERROR;
     if (out_len)
         *out_len = hdr;
-    if (!h || !h->running || ino == 0 || !out_len) {
+    if (!h || !HOST_RUNNING(h) || ino == 0 || !out_len) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -20891,7 +20911,7 @@ static void host_append_owner(struct efs_raft_host *h, efs_ino_t ino,
     uint64_t reserved = 0;
     int hint = -1, rc;
 
-    if (!h->running) {
+    if (!HOST_RUNNING(h)) {
         out->status = EFS_INODE_RPC_BUSY;
         return;
     }
@@ -20927,7 +20947,7 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || ino == 0 || len == 0) {
+    if (!h || !HOST_RUNNING(h) || ino == 0 || len == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -21002,7 +21022,7 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || !new_name || src_ino == 0 || new_parent == 0 ||
+    if (!h || !HOST_RUNNING(h) || !new_name || src_ino == 0 || new_parent == 0 ||
         new_name[0] == '\0') {
         out->status = EFS_INODE_RPC_INVAL;
         return;
@@ -21269,7 +21289,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     memset(out, 0, sizeof(*out));
     memset(&drop, 0, sizeof(drop));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || !old_name || !new_name || old_parent == 0 ||
+    if (!h || !HOST_RUNNING(h) || !old_name || !new_name || old_parent == 0 ||
         new_parent == 0 || old_name[0] == '\0' || new_name[0] == '\0') {
         out->status = EFS_INODE_RPC_INVAL;
         return;
@@ -22982,7 +23002,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running) {
+    if (!h || !HOST_RUNNING(h)) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -23747,7 +23767,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
     struct efs_raft_host *h=g_host;struct efs_meta_pub p;int hint=-1,verdict;
     memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
     /* K13: no unticketed publication is accepted, submitted or answered. */
-    if(query_only<0 || query_only>2 || !h || !h->running || !req ||
+    if(query_only<0 || query_only>2 || !h || !HOST_RUNNING(h) || !req ||
        efs_publication_from_request(req,&p)!=EFS_OK || !p.ticketed)return;
     if(efs_publication_digest(&p,out->digest)!=EFS_OK)return;
     uint32_t shard=efs_kv_lane_shard(p.ino,p.chunk_index%EFS_META_LANES);
@@ -23850,7 +23870,7 @@ void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *re
     struct efs_raft_host *h = g_host;
     memset(out, 0, sizeof(*out));
     out->view.status = EFS_INODE_RPC_INVAL;
-    if (!h || !h->running || !req->export_id || !req->ino || !req->generation ||
+    if (!h || !HOST_RUNNING(h) || !req->export_id || !req->ino || !req->generation ||
         !efs_chunk_size_valid(req->chunk_size))
         return;
     uint8_t groups[2] = {efs_raft_shard_group(efs_kv_inode_shard(req->ino)),
@@ -23910,7 +23930,7 @@ void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *re
     int hint = -1;
     memset(out, 0, sizeof(*out));
     out->view.status = EFS_INODE_RPC_INVAL;
-    if (!h || !h->running || !req->ino || !req->generation ||
+    if (!h || !HOST_RUNNING(h) || !req->ino || !req->generation ||
         !efs_chunk_size_valid(req->chunk_size))
         return;
     uint8_t group = efs_raft_shard_group(efs_kv_lane_shard(req->ino,
@@ -23957,7 +23977,7 @@ void server_raft_host_writer_view_reuse(const struct efs_msg_inode_writer_view *
     int hint = -1, rc;
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_INVAL;
-    if (!h || !h->running || !req->ino || req->reserved)
+    if (!h || !HOST_RUNNING(h) || !req->ino || req->reserved)
         return;
     uint8_t groups[2] = {
         efs_raft_shard_group(efs_kv_inode_shard(req->ino)),
@@ -24174,7 +24194,7 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || ino == 0) {
+    if (!h || !HOST_RUNNING(h) || ino == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -24331,7 +24351,7 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || parent == 0) {
+    if (!h || !HOST_RUNNING(h) || parent == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -24462,7 +24482,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
     memset(last_name, 0, sizeof(last_name));
-    if (!h || !h->running) {
+    if (!h || !HOST_RUNNING(h)) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }

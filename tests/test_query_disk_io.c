@@ -75,7 +75,8 @@ static int fault_thread_create(pthread_t *thread,const pthread_attr_t *attr,void
 }
 static char fail_sync_kind,fail_write_kind;
 static unsigned write_faults,fail_derived_after;
-static char descriptor_kind[4096];
+static char descriptor_kind[4096]; /* persist workers share it: atomic accesses (TSan) */
+#define DK(fd) __atomic_load_n(&descriptor_kind[fd], __ATOMIC_RELAXED)
 static unsigned char writing_raw[4096];
 static unsigned raw_handles,raw_handles_high;
 #ifdef __linux__
@@ -103,7 +104,7 @@ static int tracked_open(const char *path,int flags,...)
             const char *name=strrchr(path,'/');if(name && !strcmp(name+1,"manifest"))kind='m';
         }
         if(strstr(path,".tmp"))kind='T';
-        descriptor_kind[fd]=kind;
+        __atomic_store_n(&descriptor_kind[fd],kind,__ATOMIC_RELAXED);
         if(kind=='a')__atomic_add_fetch(&alias_opens,1,__ATOMIC_RELAXED);
         if(kind=='n')__atomic_add_fetch(&name_opens,1,__ATOMIC_RELAXED);
         if((flags&O_CREAT) && (kind=='r' || kind=='i')){
@@ -115,10 +116,10 @@ static int tracked_open(const char *path,int flags,...)
 }
 static int tracked_close(int fd)
 {
-    int fail=fd>=0 && fd<(int)sizeof(descriptor_kind) && descriptor_kind[fd]=='T' && fail_sort_close && !--fail_sort_close;
+    int fail=fd>=0 && fd<(int)sizeof(descriptor_kind) && DK(fd)=='T' && fail_sort_close && !--fail_sort_close;
     if(fd>=0 && fd<(int)sizeof(writing_raw)){
         if(writing_raw[fd]){writing_raw[fd]=0;raw_handles--;}
-        descriptor_kind[fd]=0;
+        __atomic_store_n(&descriptor_kind[fd],0,__ATOMIC_RELAXED);
     }
     int rc=close(fd);
     if(fail || (peak_enabled && sort_close_fault && !--sort_close_fault)){errno=EIO;return -1;}
@@ -126,7 +127,7 @@ static int tracked_close(int fd)
 }
 static int fault_fsync(int fd)
 {
-    char kind=fd>=0 && fd<(int)sizeof(descriptor_kind)?descriptor_kind[fd]:0;
+    char kind=fd>=0 && fd<(int)sizeof(descriptor_kind)?DK(fd):0;
     if(kind=='r')__atomic_add_fetch(&raw_syncs,1,__ATOMIC_RELAXED);
     if(kind=='i')__atomic_add_fetch(&index_syncs,1,__ATOMIC_RELAXED);
     if(kind && kind==fail_sync_kind){__atomic_add_fetch(&sync_faults,1,__ATOMIC_RELAXED);errno=EIO;return -1;}
@@ -137,10 +138,10 @@ static ssize_t counted_pread(int fd,void *buf,size_t size,off_t offset)
 static ssize_t fault_pwrite_impl(int fd,const void *buf,size_t size,off_t offset)
 {
     write_calls++;
-    if(fail_derived_after && fd>=0 && fd<(int)sizeof(descriptor_kind) && descriptor_kind[fd]=='d' && !--fail_derived_after){
+    if(fail_derived_after && fd>=0 && fd<(int)sizeof(descriptor_kind) && DK(fd)=='d' && !--fail_derived_after){
         write_faults++;partial_write=1;
     }
-    if(fail_write_kind && fd>=0 && fd<(int)sizeof(descriptor_kind) && descriptor_kind[fd]==fail_write_kind){
+    if(fail_write_kind && fd>=0 && fd<(int)sizeof(descriptor_kind) && DK(fd)==fail_write_kind){
         fail_write_kind=0;write_faults++;partial_write=1;
     }
     if(partial_write==2){partial_write=0;errno=ENOSPC;return -1;}
