@@ -36,7 +36,7 @@ Four, then five members (additions through K33):
     runs, whenever node 4 joined and stopped within 10 s of node 3's last
     hard failure).
  7b. K39: the leader of metadata group 2 stops (never node 1 at four
-    members): writes and fsync succeed. The client's put-ticket ADMIT to
+    members) while a writer keeps writing and syncing: no EIO. The client's put-ticket ADMIT to
     the stopping leader lost its exchange and was NET at once, so the
     write was EIO; it now re-picks another voter within the budget.
  8. Five members, node 2 down: the same, no degraded mark.
@@ -47,7 +47,7 @@ Four, then five members (additions through K33):
 Every file written in the run reads back exactly at the end.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
-import errno, os, re, shutil, sys, tempfile, time
+import errno, os, re, shutil, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload, voters_ok  # noqa: E402
@@ -289,19 +289,34 @@ try:
     settle(a, 4)
 
     # 7b. K39: the leader of metadata group 2 (voters 2, 3, 4 at four
-    # members, so never node 1) stops. Its tickets' lane shards are on it:
-    # the client's ADMIT lost its exchange with the stopping leader and
-    # returned NET at once, the write EIO (2 of 3 merge-gate runs).
+    # members, so never node 1) stops while a writer keeps writing and
+    # syncing. Tickets of its lane shards are in flight to it: the client's
+    # ADMIT lost its exchange with the stopping leader and returned NET at
+    # once, the write EIO (2 of 3 merge-gate runs, cases 7 and 8).
     led = c.leader_placement(1)
     lead = led[2]
     assert lead != 1, led
-    for name in list(files):
-        os.stat(a.path / name)  # fresh leader notes: the client asks `lead` first
+    errs, stop_writer = [], threading.Event()
+
+    def writer():
+        k = 0
+        try:
+            while not stop_writer.is_set():
+                write(a, f'lead-{k}', LARGE)
+                fsync(a, f'lead-{k}')
+                k += 1
+        except OSError as e:
+            errs.append(f'lead-{k}: {e!r}')
+
+    t = threading.Thread(target=writer)
+    t.start()
+    time.sleep(1)
     c.stop(lead)
-    for k in range(6):
-        write(a, f'lead-{k}', LARGE)
-        fsync(a, f'lead-{k}')
-    print(f'7b. K39: group 2 leader (node {lead}) stopped: writes and fsync OK PASS')
+    time.sleep(4)
+    stop_writer.set()
+    t.join(timeout=120)
+    assert not t.is_alive() and not errs, (errs, client_log(a)[-3000:])
+    print(f'7b. K39: group 2 leader (node {lead}) stopped under a writer: writes and fsync OK PASS')
     c.restart(lead)
     up(c, lead, 4)
     c.wait_members([1, 2, 3, 4], 4)

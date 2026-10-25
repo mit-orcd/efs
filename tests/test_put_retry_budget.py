@@ -46,8 +46,9 @@ static int degrade,note_rc=EFS_OK;static unsigned notes,logs;static uint32_t not
 static int busy_third;
 static int dgobj_note(efs_ino_t ino,uint32_t ci,uint64_t gen,uint32_t mask)
 {(void)ino;(void)ci;assert(gen==77);notes++;noted_mask=mask;return note_rc;}
-static void degraded_ack_log(efs_ino_t ino,uint32_t ci,uint64_t gen,const efs_node_id_t *nodes,int fi)
-{(void)ino;(void)ci;(void)gen;(void)nodes;assert(fi==2);logs++;}
+static void degraded_ack_log(efs_ino_t ino,uint32_t ci,uint64_t gen,const efs_node_id_t *nodes,int fi,const char *why)
+{(void)ino;(void)ci;(void)gen;(void)nodes;assert(fi==2&&why&&!strncmp(why,"why=",4));logs++;}
+static void degraded_why(int failed,char *buf,size_t cap){snprintf(buf,cap,"why=%d",failed);}
 static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint8_t **fragments,int *failed,int *acked,int *quota,uint64_t *seq,uint64_t *epoch)
 {(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline&&acked&&quota&&seq&&epoch);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail||(degrade_hard&&i==2&&t->nodes[2]==3)?1:2;usleep(5000);
  int rc=recover_busy && calls>2 ? EFS_OK : terminal;

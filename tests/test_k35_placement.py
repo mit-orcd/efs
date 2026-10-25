@@ -9,7 +9,15 @@ from src/client/write.c) on 3, 4 and 5 members, every member down in turn,
 over 4096 (inode, chunk) pairs: on 4 and 5 every stripe has three distinct
 available members and every available member takes a share; on 3 the down
 member stays in the stripe (no spare: a degraded acknowledgement, W154).
-An away mark expires after PUT_AWAY_MARK_MS. Fast (`make test`).
+An away mark expires after PUT_AWAY_MARK_MS.
+
+K39: on 4 and 5 members, one member really down and another only marked
+down by this client (it returned; the 30 s cooldown has not ended): the
+returned member is probed (spare_reprobe) and takes the down member's
+fragments, so no stripe keeps the down member; each marked member is
+probed at most once per PUT_SPARE_PROBE_MS, not per stripe. Negative control: when the marked
+member is really down too, the probe fails, the down member stays (no
+spare, as before) and the probe is still rate-limited. Fast (`make test`).
 """
 from pathlib import Path
 import subprocess, tempfile
@@ -38,12 +46,30 @@ code = r'''
 static struct { struct efs_node nodes[EFS_MAX_NODES]; uint32_t node_count; } g_client;
 static uint64_t now_ms = 1000000;
 static uint64_t report_clock_ms(void) { return now_ms; }
-static efs_node_id_t down_id;
-static int efs_client_node_is_down(efs_node_id_t id) { return id == down_id; }
+static efs_node_id_t down_id, stale_id;
+static int stale_back;
+static unsigned probes;
+static uint64_t deadline;
+static int efs_client_node_is_down(efs_node_id_t id) { return id == down_id || id == stale_id; }
+/* The real probe connects; here the marked member answers when stale_back. */
+static int efs_client_node_reprobe(efs_node_id_t id)
+{
+    assert(id == stale_id || id == down_id);
+    probes++;
+    if (id == stale_id && stale_back) {
+        stale_id = 0;
+        return 1;
+    }
+    return 0;
+}
+static uint64_t efs_client_rpc_deadline_ms(void) { return deadline; }
+static void efs_client_rpc_set_deadline_ms(uint64_t d) { deadline = d; }
+static int efs_client_rpc_past_deadline(void) { return deadline && now_ms >= deadline; }
 ''' + macro('PUT_FULL_MARK_MS') + macro('PUT_AWAY_MARK_MS') + \
     'static uint64_t g_node_full_until_ms[EFS_MAX_NODES + 1];\n' + \
     'static uint64_t g_node_away_until_ms[EFS_MAX_NODES + 1];\n' + \
-    fn('static int node_is_full') + fn('static uint64_t put_away_mark_ms') + fn('static void node_note_away') + \
+    macro('PUT_SPARE_PROBE_MS') + 'static uint64_t g_node_spare_probe_ms[EFS_MAX_NODES + 1];\n' + \
+    fn('static int spare_reprobe') + fn('static int node_is_full') + fn('static uint64_t put_away_mark_ms') + fn('static void node_note_away') + \
     fn('static int node_is_away') + fn('static void reroute_untried_fragments') + r'''
 static void place(efs_ino_t ino, uint32_t ci, efs_node_id_t out[3])
 {
@@ -103,6 +129,60 @@ int main(void)
             }
             assert(back > 0);
         }
+        /* K39: member d really down, member m only stale-marked down. */
+        if (n >= 4) {
+            for (int back = 1; back >= 0; back--) {
+                for (efs_node_id_t d = 1; d <= n; d++) {
+                    efs_node_id_t m = d % n + 1;
+                    unsigned with_down = 0, on_m = 0;
+                    down_id = d;
+                    stale_id = m;
+                    stale_back = back;
+                    probes = 0;
+                    deadline = 0;
+                    now_ms += PUT_SPARE_PROBE_MS;
+                    memset(g_node_spare_probe_ms, 0, sizeof(g_node_spare_probe_ms));
+                    for (efs_ino_t ino = 2; ino < 2 + 512; ino++)
+                        for (uint32_t ci = 0; ci < 8; ci++) {
+                            efs_node_id_t f[3];
+                            place(ino, ci, f);
+                            assert(f[0] != f[1] && f[1] != f[2] && f[0] != f[2]);
+                            for (int k = 0; k < 3; k++) {
+                                with_down += f[k] == d;
+                                on_m += f[k] == m;
+                            }
+                        }
+                    assert(!deadline); /* the probe's bound is restored */
+                    if (back) {
+                        /* at most one probe per marked member per window;
+                         * on five a live spare is always left: no probe */
+                        assert(!with_down && probes <= 2);
+                        if (n == 4)
+                            assert(on_m > 0 && probes >= 1 && !stale_id);
+                        else
+                            assert(!probes && stale_id == m);
+                    } else {
+                        /* both really down: on 4 members a stripe holding
+                         * both keeps one (no spare); one probe per window */
+                        assert(probes <= 2 && stale_id == m && (n == 5 || probes >= 1));
+                        if (n == 4)
+                            assert(with_down > 0);
+                        else
+                            assert(!with_down); /* five: a third spare is left */
+                        now_ms += PUT_SPARE_PROBE_MS;
+                        efs_node_id_t f[3];
+                        unsigned before = probes;
+                        for (efs_ino_t ino = 2; ino < 2 + 64 && probes == before; ino++)
+                            for (uint32_t ci = 0; ci < 8; ci++)
+                                place(ino, ci, f);
+                        assert(n == 5 || probes > before);
+                    }
+                    printf("K39 members=%u down=%u stale=%u back=%d probes=%u on_stale=%u with_down=%u\n",
+                           n, d, m, back, probes, on_m, with_down);
+                }
+            }
+            down_id = stale_id = 0;
+        }
     }
     return 0;
 }
@@ -118,4 +198,5 @@ with tempfile.TemporaryDirectory(prefix='efs-k35-place-') as d:
 print(out, end='')
 print('K35 placement: on 4 and 5 members every stripe goes to three available members '
       '(down or away member avoided, every available member takes a share); on 3 the '
-      'down member stays (degraded, W154); away marks expire PASS')
+      'down member stays (degraded, W154); away marks expire; K39: a member only stale-marked '
+      'down is probed and takes the down member\'s share, once per window PASS')

@@ -2745,7 +2745,8 @@ uint64_t efs_client_degraded_pending(void)
 /* One line per degraded acknowledgement; past 100 in a second the rest of
  * that second are counted and summarized. */
 static void degraded_ack_log(efs_ino_t ino, uint32_t ci, uint64_t gen,
-                             const efs_node_id_t nodes[EFS_NUM_FRAGMENTS], int fi)
+                             const efs_node_id_t nodes[EFS_NUM_FRAGMENTS], int fi,
+                             const char *why)
 {
     static uint64_t sec, n, suppressed;
     uint64_t now = report_clock_ms() / 1000u;
@@ -2766,10 +2767,10 @@ static void degraded_ack_log(efs_ino_t ino, uint32_t ci, uint64_t gen,
     fprintf(stderr,
             "put_fragments ino=%llu chunk=%u gen=%llx nodes=%u,%u,%u: degraded "
             "acknowledgement, fragment %d for node %u not acknowledged; published "
-            "degraded for rebuild on return\n",
+            "degraded for rebuild on return (%s)\n",
             (unsigned long long)ino, ci, (unsigned long long)gen,
             (unsigned)nodes[0], (unsigned)nodes[1], (unsigned)nodes[2], fi,
-            (unsigned)nodes[fi]);
+            (unsigned)nodes[fi], why ? why : "-");
     fflush(stderr);
 }
 
@@ -3318,6 +3319,37 @@ static int node_is_away(efs_node_id_t id)
            __atomic_load_n(&g_node_away_until_ms[id], __ATOMIC_RELAXED) > report_clock_ms();
 }
 
+/* K39: a member this client marks down may be back: the mark is a 30 s
+ * cooldown that its background probe ends about a second after the
+ * member returns. When no other spare is left, placement probes the
+ * marked members outside the stripe itself before the stripe stays on two
+ * fragments (or goes to an away member), each at
+ * most once per PUT_SPARE_PROBE_MS and each connect bounded by that (a
+ * blackholed member costs one short wait, not the connect timeout). Found
+ * by tests/test_k35_fsync_degraded.py case 7: node 3 returned 0.3 s before
+ * node 4 stopped and every stripe touching node 4 was acknowledged
+ * degraded, the only spare still marked down. */
+#define PUT_SPARE_PROBE_MS 250u
+static uint64_t g_node_spare_probe_ms[EFS_MAX_NODES + 1];
+
+static int spare_reprobe(efs_node_id_t id)
+{
+    if (!id || id > EFS_MAX_NODES || efs_client_rpc_past_deadline())
+        return 0;
+    uint64_t now = report_clock_ms();
+    uint64_t last = __atomic_load_n(&g_node_spare_probe_ms[id], __ATOMIC_RELAXED);
+    if ((last && now < last + PUT_SPARE_PROBE_MS) ||
+        !__atomic_compare_exchange_n(&g_node_spare_probe_ms[id], &last, now, 0,
+                                     __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+        return 0;
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    if (!previous || previous > now + PUT_SPARE_PROBE_MS)
+        efs_client_rpc_set_deadline_ms(now + PUT_SPARE_PROBE_MS);
+    int back = efs_client_node_reprobe(id);
+    efs_client_rpc_set_deadline_ms(previous);
+    return back;
+}
+
 /* If a stripe member is down or full (or failed the last attempt), put
  * that fragment on an unused live member that is not full. Four-node
  * cluster, one down or full: the remaining three still take a full 2+1
@@ -3327,9 +3359,9 @@ static int node_is_away(efs_node_id_t id)
 static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
                                       efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
 {
-    efs_node_id_t live[EFS_MAX_NODES], away[EFS_MAX_NODES];
-    uint32_t nlive = 0, naway = 0;
-    int built = 0;
+    efs_node_id_t live[EFS_MAX_NODES], away[EFS_MAX_NODES], down[EFS_MAX_NODES];
+    uint32_t nlive = 0, naway = 0, ndown = 0;
+    int built = 0, probed = 0;
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         int bad = (nodes[i] == 0) || efs_client_node_is_down(nodes[i]) ||
@@ -3338,12 +3370,15 @@ static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
             continue;
         if (!built) {
             /* away[] holds the members that are only away-marked: the
-             * spares of last resort before a degraded acknowledgement. */
+             * spares of last resort before a degraded acknowledgement;
+             * down[] the down-marked ones, probed before that (K39). */
             for (uint32_t n = 0; n < g_client.node_count && nlive < EFS_MAX_NODES; n++) {
                 efs_node_id_t id = g_client.nodes[n].id;
-                if (id == 0 || efs_client_node_is_down(id) || node_is_full(id))
+                if (id == 0 || node_is_full(id))
                     continue;
-                if (!node_is_away(id))
+                if (efs_client_node_is_down(id))
+                    down[ndown++] = id;
+                else if (!node_is_away(id))
                     live[nlive++] = id;
                 else
                     away[naway++] = id;
@@ -3351,6 +3386,24 @@ static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
             built = 1;
         }
         efs_node_id_t spare = efs_place_spare(live, nlive, ino, chunk_index, i, nodes);
+        if (!spare && ndown && !probed) {
+            /* Spare candidates only: a stripe member's own mark is probed
+             * by the PUT (put_fragments_parallel_run), so three members
+             * with one down never probe here. */
+            probed = 1;
+            for (uint32_t k = 0; k < ndown; k++) {
+                int in_stripe = 0;
+                for (int j = 0; j < EFS_NUM_FRAGMENTS; j++)
+                    in_stripe |= nodes[j] == down[k];
+                if (in_stripe || !spare_reprobe(down[k]))
+                    continue;
+                if (node_is_away(down[k]))
+                    away[naway++] = down[k];
+                else
+                    live[nlive++] = down[k];
+            }
+            spare = efs_place_spare(live, nlive, ino, chunk_index, i, nodes);
+        }
         /* No other member left: an away member outside the stripe is
          * better than a two-fragment acknowledgement. */
         if (!spare)
@@ -3360,10 +3413,33 @@ static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
     }
 }
 
+/* K39: why a stripe stays on two fragments, for its log line: what the
+ * missing slot's member did (`failed`: 1 hard, 2 budget or refusal, 3 BUSY,
+ * -1 no spare to place around it) and every member this client holds a
+ * down, away or full mark on. */
+static void degraded_why(int failed, char *buf, size_t cap)
+{
+    static const char *what[] = {"no-spare", "none", "hard", "budget", "busy"};
+    int at = snprintf(buf, cap, "why=%s marks=", what[failed >= -1 && failed <= 3 ? failed + 1 : 1]);
+    int any = 0;
+    for (uint32_t n = 0; n < g_client.node_count && at > 0 && (size_t)at < cap; n++) {
+        efs_node_id_t id = g_client.nodes[n].id;
+        int d = efs_client_node_is_down(id), a = node_is_away(id), f = node_is_full(id);
+        if (!d && !a && !f)
+            continue;
+        at += snprintf(buf + at, cap - (size_t)at, "%s%u:%s%s%s", any ? "," : "", (unsigned)id,
+                       d ? "D" : "", a ? "A" : "", f ? "F" : "");
+        any = 1;
+    }
+    if (!any && at > 0 && (size_t)at < cap)
+        snprintf(buf + at, cap - (size_t)at, "none");
+}
+
 /* Two acks (the quorum loop) leave exactly one missing. Write availability
  * is kept (D40): record and announce it, or refuse the write. */
 static int degraded_record(efs_ino_t ino, uint32_t chunk_index, uint64_t object,
-                           const efs_node_id_t nodes[EFS_NUM_FRAGMENTS], uint32_t missing)
+                           const efs_node_id_t nodes[EFS_NUM_FRAGMENTS], uint32_t missing,
+                           int failed)
 {
     if (dgobj_note(ino, chunk_index, object, missing) != EFS_OK) {
         fprintf(stderr,
@@ -3373,7 +3449,9 @@ static int degraded_record(efs_ino_t ino, uint32_t chunk_index, uint64_t object,
         fflush(stderr);
         return EFS_ERR_NOMEM;
     }
-    degraded_ack_log(ino, chunk_index, object, nodes, __builtin_ctz(missing));
+    char why[160];
+    degraded_why(failed, why, sizeof(why));
+    degraded_ack_log(ino, chunk_index, object, nodes, __builtin_ctz(missing), why);
     return EFS_OK;
 }
 
@@ -3472,7 +3550,8 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
              * caller records the degraded acknowledgement if it is not. */
             if (*unreachable_mask)
                 return rc;
-            return degraded_record(ino, chunk_index, ticket->object, nodes, missing);
+            return degraded_record(ino, chunk_index, ticket->object, nodes, missing,
+                                   failed[mi]);
         }
         if (rc == EFS_ERR_QUOTA || rc == EFS_ERR_STALE)
             return rc;
@@ -3623,7 +3702,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
             memcpy(nodes, before, sizeof(before));
         }
         if (rc == EFS_OK && away_mask) /* stays on two fragments */
-            rc = degraded_record(ino, chunk_index, ticket->object, ticket->nodes, away_mask);
+            rc = degraded_record(ino, chunk_index, ticket->object, ticket->nodes, away_mask, -1);
         if (rc == EFS_OK) {
             /* K35: fsync proves this object from its acknowledgements. */
             rc = efs_client_stripe_note(ticket, ack_seq, ack_epoch);

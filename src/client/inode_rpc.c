@@ -2140,7 +2140,10 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,uint32_t n,int pro
             if(conn)efs_client_conn_drop(nid,conn);
             rpc_retry_peer(shard,nid,&target,&skip,conn!=NULL);
             lost=1;
-            if(attempt+1==8 || rpc_writer_retry_pause(attempt)!=EFS_OK)return EFS_ERR_NET;
+            int last=attempt+1==8 || rpc_writer_retry_pause(attempt)!=EFS_OK;
+            fprintf(stderr,"put-ticket: lost exchange op=%d shard=%u nid=%u attempt=%u%s\n",
+                    probe_only,shard,nid,attempt,last?" -> NET":"; another voter");
+            if(last)return EFS_ERR_NET;
             continue;
         }
         efs_client_conn_release(nid,conn);
@@ -2231,7 +2234,10 @@ int efs_client_rpc_degraded_mark(efs_ino_t ino,uint64_t inode_gen,uint64_t objec
             if(conn)efs_client_conn_drop(nid,conn);
             rpc_retry_peer(shard,nid,&target,&skip,conn!=NULL);
             lost=1;
-            if(attempt+1==8 || rpc_writer_retry_pause(attempt)!=EFS_OK)return EFS_ERR_NET;
+            int last=attempt+1==8 || rpc_writer_retry_pause(attempt)!=EFS_OK;
+            fprintf(stderr,"degraded-mark: lost exchange ino=%llu ci=%u nid=%u attempt=%u%s\n",
+                    (unsigned long long)ino,ci,nid,attempt,last?" -> NET":"; another voter");
+            if(last)return EFS_ERR_NET;
             continue;
         }
         efs_client_conn_release(nid,conn);
