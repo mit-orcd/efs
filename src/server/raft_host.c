@@ -609,7 +609,11 @@ static struct efs_raft_host *g_host;
 /* W155: what one REPORT attempt did, for its receipt. proposed is set once
  * the attempt may have proposed anything (forwarded, or past the ReadIndex
  * and session admission); before that a failure published nothing. */
-static __thread struct { int proposed; const char *phase; } host_report_note;
+static __thread struct {
+    int proposed;
+    const char *phase;
+    struct efs_receipt_stale stale; /* K38: this attempt's first CAS loser */
+} host_report_note;
 
 
 static void wr64be(uint8_t *p, uint64_t v)
@@ -15097,6 +15101,26 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
          * 2-byte gap per forwarded reserve). It also let a forwarded txn
          * PREP's BUSY/STALE verdict read as OK. */
         rc = host_propose_wait_idx(h, group, cmd, clen, &hint, &idx);
+#if EFS_FAULTS
+        /* EFS_FAULT_FWD_TXN_STALE=<dir>: while <dir>/stale-<node id> exists,
+         * the next forwarded TXN_BATCH this leader applied with verdict OK
+         * is answered STALE (the flag is consumed): a forwarded PREPARE
+         * batch whose answer is a refusal although its intents applied, as
+         * a conflict in one PREPARE of the batch leaves the others'
+         * (tests/test_pub_unit_forward_abort.py). */
+        if (rc == EFS_OK && clen && cmd[0] == EFS_MD_CMD_TXN_BATCH) {
+            const char *d = getenv("EFS_FAULT_FWD_TXN_STALE");
+            char flag[4096];
+            if (d && *d && h->s &&
+                snprintf(flag, sizeof(flag), "%s/stale-%u", d, h->s->id) < (int)sizeof(flag) &&
+                !unlink(flag)) {
+                fprintf(stderr, "fault: EFS_FAULT_FWD_TXN_STALE answered a forwarded TXN_BATCH "
+                        "group=%u idx=%llu STALE after it applied\n", group,
+                        (unsigned long long)idx);
+                rc = EFS_ERR_STALE;
+            }
+        }
+#endif
         if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
            (cmd[1]==EFS_MD_SESS_LEASE_EDGE || cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED))
             rc=host_lease_submission_result(h,cmd,clen,group,&hint,&salt,rc);
@@ -17759,6 +17783,10 @@ struct host_txn_batch {
     int cohort;
     struct host_idx_ref *refs;
     int *nrefs, max;
+    /* An entry was handed to Raft (or a leader), whatever the answer: a
+     * forwarded entry's verdict comes back as the submit's rc, so a refused
+     * or ambiguous entry has no ref and may still have applied in part. */
+    int submitted;
     struct {
         uint8_t group;
         uint32_t n, len, size;
@@ -17822,6 +17850,7 @@ static int host_txn_batch_close(struct efs_raft_host *h, struct host_txn_batch *
     ref->group = b->open[slot].group;
     cmd[2] = (uint8_t)(n >> 8);
     cmd[3] = (uint8_t)n;
+    b->submitted = 1;
     rc = n == 1 ? host_txn_batch_submit(h, b, ref, cmd + 6, b->open[slot].len - 6, hint)
                 : host_txn_batch_submit(h, b, ref, cmd, b->open[slot].len, hint);
     free(cmd);
@@ -22177,6 +22206,18 @@ static void host_pub_stale_note(const char *why, const struct efs_chunk_rec *rec
     uint64_t now = now_ns() / 1000000000ull;
     uint64_t was = __atomic_load_n(&sec, __ATOMIC_RELAXED);
 
+    /* K38: the receipt keeps the first loser, so report-resolve can name a
+     * stuck record without this (rate-limited) line. */
+    if (!host_report_note.stale.ino) {
+        struct efs_receipt_stale *s = &host_report_note.stale;
+        s->ino = rec->ino;
+        s->ci = rec->chunk_index;
+        s->span_off = rec->delta_off;
+        s->span_len = rec->delta_len;
+        s->want = want;
+        s->have = have;
+        snprintf(s->why, sizeof(s->why), "%s", why);
+    }
     if (was != now && __atomic_compare_exchange_n(&sec, &was, now, 0,
                                                   __ATOMIC_RELAXED, __ATOMIC_RELAXED))
         __atomic_store_n(&n, 0, __ATOMIC_RELAXED);
@@ -23054,8 +23095,17 @@ static int host_pub_unit_commit(struct efs_raft_host *h, const struct host_pub_u
 #endif
     __atomic_fetch_add(&h->obs_pub_unit_aborts, 1, __ATOMIC_RELAXED);
     /* Nothing is decided: every prepared record goes with an ABORT. A proposal
-     * whose verdict is unknown is covered the same way (recovery otherwise). */
-    if (k)
+     * whose verdict is unknown is covered the same way (recovery otherwise).
+     * That includes a PREPARE entry forwarded to the other group's leader
+     * and answered BUSY or STALE: the leader applied it (a TXN_BATCH applies
+     * each PREPARE on its own, so a conflict in one still installs the
+     * others' intents) but the answer came back as the submit's rc, so it
+     * holds no ref and k can be 0. Gating the ABORT on k left those intents
+     * undecided until the 5 s recovery scan, and the client's next
+     * publication of the inode (a new id after STALE) was BUSY all that
+     * time: EIO at its 8 s budget under the D4 plateau load (F1 follow-up,
+     * tests/test_pub_unit_forward_abort.py). */
+    if (k || batch.submitted)
         host_pub_unit_abort(h, &t, &parts, ish, hint);
     if (raft_dbg_on() || (rc != EFS_OK && rc != EFS_ERR_BUSY))
         fprintf(stderr, "raft-host: publication unit ino=%llu ci=%u n=%u units=%u rc=%d verdict=%d\n",
@@ -23685,17 +23735,20 @@ static int host_report_status_rc(uint8_t status)
     }
 }
 
-static int host_report_exec(void *ctx, int *proposed, const char **phase)
+static int host_report_exec(void *ctx, int *proposed, const char **phase,
+                            struct efs_receipt_stale *stale)
 {
     struct host_report_call *c = ctx;
     int rc;
 
     host_report_note.proposed = 0;
     host_report_note.phase = NULL;
+    memset(&host_report_note.stale, 0, sizeof(host_report_note.stale));
     server_raft_host_report(c->recs, c->count, c->irecs, c->ino_count, c->flags,
                             c->session, c->pubid, c->out);
     *proposed = host_report_note.proposed;
     *phase = host_report_note.phase;
+    *stale = host_report_note.stale;
     rc = host_report_status_rc(c->out->status);
     return rc;
 }
@@ -23772,13 +23825,21 @@ void server_raft_host_report_receipt(const struct efs_opid *session,
         out->rc = r.rc;
         out->attempts = r.attempts;
         out->age_ms = r.state == EFS_RECEIPT_STATE_DONE && now > r.end_ms ? now - r.end_ms : 0;
+        out->stale_ino = r.stale.ino;
+        out->stale_ci = r.stale.ci;
+        out->stale_span_off = r.stale.span_off;
+        out->stale_span_len = r.stale.span_len;
+        out->stale_want = r.stale.want;
+        out->stale_have = r.stale.have;
+        memcpy(out->stale_why, r.stale.why, sizeof(out->stale_why));
     } else {
         out->state = EFS_RECEIPT_STATE_ABSENT;
     }
     efs_receipt_key_format(&k, id, sizeof(id));
     fprintf(stderr, "report-receipt query id=%s state=%u outcome=%s rc=%d attempts=%u "
-            "age_ms=%llu\n", id, out->state, efs_receipt_outcome_name(out->outcome),
-            out->rc, out->attempts, (unsigned long long)out->age_ms);
+            "age_ms=%llu stuck=%llu:%u\n", id, out->state, efs_receipt_outcome_name(out->outcome),
+            out->rc, out->attempts, (unsigned long long)out->age_ms,
+            (unsigned long long)out->stale_ino, out->stale_ci);
 }
 
 /* A fresh quorum round proves current leadership and the committed prefix,

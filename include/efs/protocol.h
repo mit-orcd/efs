@@ -1764,6 +1764,11 @@ struct efs_msg_report_receipt_reply {
     int32_t rc;        /* the last attempt's rc on this host */
     uint32_t attempts; /* attempts executed on this host */
     uint64_t age_ms;   /* since the last attempt ended (0 while pending) */
+    /* K38: a PARTIAL receipt's first CAS loser (stale_ino 0: none recorded). */
+    uint64_t stale_ino;
+    uint64_t stale_want, stale_have;
+    uint32_t stale_ci, stale_span_off, stale_span_len;
+    char stale_why[12];
 };
 static inline int efs_report_session_valid(const struct efs_opid *id)
 {

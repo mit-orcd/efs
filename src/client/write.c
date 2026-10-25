@@ -197,6 +197,9 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen,
                                   uint64_t object_gen, uint64_t object_seq);
 static int dcache_replay_stale_ex(efs_ino_t ino, uint32_t ci, int absent);
 static int report_replay_stale(efs_ino_t ino);
+static uint64_t dcache_object_seq_of(efs_ino_t ino, uint32_t ci);
+static void dcache_identity_abandon(efs_ino_t ino, uint32_t ci, uint64_t gen,
+                                    uint64_t seq);
 
 static int dcache_pending_of(efs_ino_t ino, uint32_t ci);
 struct unit_sent;
@@ -369,6 +372,15 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
 
     if (!ino || !gen || ino == PUTID_TOMB || !ticket || ticket->object != gen)
         return;
+    /* K38: the slot refuses an older snapshot whose PUT lands last
+     * (put-SKIP-old). Once the newer snapshot's REPORT had dropped its
+     * entry, this table took the older span back, with a span base the
+     * newer commit had superseded, and every REPORT re-sent it STALE
+     * (orcd-mini ior hard, Oct 25). The newer snapshot carries its bytes. */
+    if (seq && dcache_object_seq_of(ino, ci) > seq) {
+        efs_client_put_done(ino, ci, gen);
+        return;
+    }
     pthread_mutex_lock(&g_putid_mu);
     p = putid_find(ino, ci);
     if (p && seq && p->seq && seq < p->seq) {
@@ -1487,9 +1499,36 @@ static int replay_fan_run(struct stale_pair *rp, uint64_t n)
     return f.error;
 }
 
-static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
+/* A record the STALE round sent, by chunk (K38: the classifier's identity). */
+struct stale_sent {
+    efs_ino_t ino;
+    uint32_t ci, idx;
+};
+
+static int stale_sent_cmp(const void *a, const void *b)
+{
+    const struct stale_sent *x = a, *y = b;
+
+    if (x->ino != y->ino)
+        return x->ino < y->ino ? -1 : 1;
+    return x->ci < y->ci ? -1 : x->ci > y->ci;
+}
+
+/* sent[0..nsent) and sent_seq: the records the STALE round carried and their
+ * snapshot seqs. A chunk is done only when the host holds the object that
+ * round SENT. The putid and the local table can already name a newer PUT
+ * of the chunk that landed after the pull: its PUT sets the table's
+ * generation (and span list) to its own unpublished object, which then read
+ * as committed, its identity was dropped and its body freed, and the host
+ * kept the older image (K38 loopback test, Oct 25: two records of one chunk
+ * read back as zeros). A chunk the round did not send is left to the
+ * rebuild. */
+static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
+                               const struct efs_chunk_rec *sent,
+                               const uint64_t *sent_seq, uint32_t nsent)
 {
     struct stale_pair *pp, *rp = NULL;
+    struct stale_sent *sx = NULL;
     uint64_t n = 0, i, runs = 0, replayed = 0, committed = 0;
     uint64_t t_start = report_mono_ms();
     int error = EFS_OK;
@@ -1508,8 +1547,17 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
         free(pp);
         pp = NULL;
     }
+    if (pp && nsent && !(sx = malloc((size_t)nsent * sizeof(*sx)))) {
+        free(rp);
+        free(pp);
+        pp = NULL;
+    }
     if (!pp)
         return EFS_ERR_NOMEM; /* retain snapshot; no unverifiable replay */
+    for (uint32_t k = 0; k < nsent; k++)
+        sx[k] = (struct stale_sent){sent[k].ino, sent[k].chunk_index, k};
+    if (nsent)
+        qsort(sx, nsent, sizeof(*sx), stale_sent_cmp);
     for (i = 0; i < ds->chunk_count; i++) {
         if (!ds->chunk_inos[i])
             continue;
@@ -1570,22 +1618,28 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
             i = j;
             continue;
         }
+        struct stale_sent key = {pp[i].ino, pp[i].ci, 0};
+        const struct stale_sent *was =
+            nsent ? bsearch(&key, sx, nsent, sizeof(*sx), stale_sent_cmp) : NULL;
+        if (!was) {
+            i = j;
+            continue; /* not in this round: the rebuild sends it */
+        }
         if (export_chunk_copy(pp[i].ino, pp[i].ci, &ce) != 0) {
             i = j;
             continue; /* truncated away; the rec rebuild skips it */
         }
-        /* Committed gen is OUR object (same identity source as the rec
-         * builder: putid, then the dcache slot): the host took this rec.
+        /* Committed gen is the object this round sent: the host took
+         * this rec (not a newer PUT that landed since, see above).
          * A span does not move the base generation; it shows up in the
          * chunk's delta list instead — and only as OUR range: the object
          * name is a content hash, so two clients that merged to the same
          * image name one object under two ranges (IOR hard, Sep 30).
          * A chunk the host has no row for is never done: the table's
          * generation there is our own unreported PUT. */
-            memset(&obj, 0, sizeof(obj));
-            if ((putid_fill(pp[i].ino, pp[i].ci, &obj, &object_seq) ||
-                 dcache_object_of(pp[i].ino, pp[i].ci, &obj, &object_seq)) &&
-                !pp[i].absent) {
+            obj = sent[was->idx];
+            object_seq = sent_seq ? sent_seq[was->idx] : 0;
+            if (!pp[i].absent) {
                 uint32_t di;
 
                 if (!obj.delta_len && obj.chunk_generation &&
@@ -1652,6 +1706,7 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
                     (unsigned long long)(t1 - t_start),
                     (unsigned long long)(report_mono_ms() - t1));
     }
+    free(sx);
     free(rp);
     free(pp);
     return error;
@@ -1729,7 +1784,6 @@ static int report_send_records(const struct efs_chunk_rec *records, uint32_t n,
                                            n, inodes, ni, sync, pubid);
 }
 
-
 static int report_retry_pause(unsigned delay_us)
 {
     uint64_t deadline = efs_client_rpc_deadline_ms();
@@ -1773,6 +1827,84 @@ static void report_snapshot_unlock(efs_ino_t ino)
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
     pthread_mutex_unlock(&g_client.lock);
+}
+
+/* K38 bound: what one REPORT sent in its last STALE rounds. `stale` counts
+ * the consecutive STALE rounds that sent this exact record. */
+struct report_streak {
+    efs_ino_t ino;
+    uint32_t ci;
+    uint32_t stale;
+    uint64_t gen, base;
+    uint32_t off, len;
+};
+
+static int report_streak_cmp(const void *a, const void *b)
+{
+    const struct report_streak *x = a, *y = b;
+
+    if (x->ino != y->ino)
+        return x->ino < y->ino ? -1 : 1;
+    return x->ci < y->ci ? -1 : x->ci > y->ci;
+}
+
+static const struct report_streak *report_streak_find(const struct report_streak *st,
+                                                      uint32_t n, efs_ino_t ino,
+                                                      uint32_t ci)
+{
+    struct report_streak key = {.ino = ino, .ci = ci};
+
+    return n ? bsearch(&key, st, n, sizeof(*st), report_streak_cmp) : NULL;
+}
+
+static int report_streak_same(const struct report_streak *s,
+                              const struct efs_chunk_rec *r)
+{
+    return s->gen == r->chunk_generation && s->base == r->base_gen &&
+           s->off == r->delta_off && s->len == r->delta_len;
+}
+
+/* The round that sent crecs[0..cn) got STALE. On NOMEM the previous streaks
+ * stay (the bound may come one round late; the REPORT budget still holds). */
+static void report_streak_note(struct report_streak **st, uint32_t *n,
+                               const struct efs_chunk_rec *crecs, uint32_t cn)
+{
+    struct report_streak *next = cn ? malloc((size_t)cn * sizeof(*next)) : NULL;
+
+    if (cn && !next)
+        return;
+    for (uint32_t k = 0; k < cn; k++) {
+        const struct report_streak *was =
+            report_streak_find(*st, *n, crecs[k].ino, crecs[k].chunk_index);
+        next[k] = (struct report_streak){
+            .ino = crecs[k].ino, .ci = crecs[k].chunk_index,
+            .stale = was && report_streak_same(was, &crecs[k]) ? was->stale + 1 : 1,
+            .gen = crecs[k].chunk_generation, .base = crecs[k].base_gen,
+            .off = crecs[k].delta_off, .len = crecs[k].delta_len};
+    }
+    if (cn)
+        qsort(next, cn, sizeof(*next), report_streak_cmp);
+    free(*st);
+    *st = next;
+    *n = cn;
+}
+
+/* A rebuilt record that two consecutive STALE rounds already sent unchanged,
+ * on a CAS base other than the chunk's committed generation, can only lose
+ * again (the base never comes back) and takes its K32 unit with it. Its
+ * replay changed nothing: stop sending it. A record on the committed base
+ * lost with its unit, not on its own, and stays. */
+static const struct report_streak *report_rec_stuck(const struct report_streak *st,
+                                                    uint32_t n,
+                                                    const struct efs_chunk_rec *r,
+                                                    uint64_t committed)
+{
+    const struct report_streak *was;
+
+    if (r->base_gen == EFS_CHUNK_BASE_UNCOND || r->base_gen == committed)
+        return NULL;
+    was = report_streak_find(st, n, r->ino, r->chunk_index);
+    return was && was->stale >= 2 && report_streak_same(was, r) ? was : NULL;
 }
 
 static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
@@ -2080,6 +2212,8 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
     uint64_t outer = efs_client_rpc_deadline_ms();
     int hit_budget = 0, nstale = 0, nbusy = 0, rounds = 0;
     uint64_t t_rpc_ms = 0, t_replay_ms = 0, t_sleep_ms = 0;
+    struct report_streak *streaks = NULL; /* K38 */
+    uint32_t nstreaks = 0, nstuck = 0;
     if (sync) {
         clock_gettime(CLOCK_MONOTONIC, &ts_budget);
         budget0 = (uint64_t)ts_budget.tv_sec * 1000ull +
@@ -2131,6 +2265,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
              * fsync/close retries. */
             if (!sync && attempt >= 2)
                 break;
+            report_streak_note(&streaks, &nstreaks, crecs, cn);
             for (k = 0; k < in; k++) {
                 if (irecs[k].ino)
                     (void)report_replay_stale(irecs[k].ino);
@@ -2138,7 +2273,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             {
                 uint64_t t0 = report_mono_ms();
 
-                int replay_rc = stale_repull_replay(&ds, only_ino);
+                int replay_rc = stale_repull_replay(&ds, only_ino, crecs, cseq, cn);
                 if (replay_rc != EFS_OK) {
                     rc = replay_rc;
                     break;
@@ -2189,6 +2324,28 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
                     ds.chunk_inos[i] = 0;
                     continue;
                 }
+                const struct report_streak *stuck =
+                    report_rec_stuck(streaks, nstreaks, &crecs[cn], ce.generation);
+                if (stuck) {
+                    /* Fail this record closed: the inode's writeback error
+                     * reaches write/fsync/close; the rest of the unit goes. */
+                    fprintf(stderr, "report-stuck ino=%llu ci=%u gen=%llx base=%llx "
+                            "committed=%llx span=%u+%u stale_rounds=%u: not re-sent, "
+                            "writeback error\n", (unsigned long long)crecs[cn].ino,
+                            crecs[cn].chunk_index,
+                            (unsigned long long)crecs[cn].chunk_generation,
+                            (unsigned long long)crecs[cn].base_gen,
+                            (unsigned long long)ce.generation, crecs[cn].delta_off,
+                            crecs[cn].delta_len, stuck->stale);
+                    (void)wb_error_record_add(crecs[cn].ino);
+                    dcache_identity_abandon(crecs[cn].ino, crecs[cn].chunk_index,
+                                            crecs[cn].chunk_generation, cseq[cn]);
+                    putid_drop_snapshot(crecs[cn].ino, crecs[cn].chunk_index,
+                                        crecs[cn].chunk_generation, cseq[cn]);
+                    ds.chunk_inos[i] = 0;
+                    nstuck++;
+                    continue;
+                }
                 cn++;
             }
             /* A rebuilt REPORT is a new publication with its own units. */
@@ -2233,12 +2390,12 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         /* G3: the publication id joins this line to report-resolve and
          * the server's report-receipt lines. */
         fprintf(stderr, "report-loop ino=%llu rounds=%d stale=%d busy=%d "
-                "ms=%llu rpc_ms=%llu replay_ms=%llu sleep_ms=%llu recs=%u rc=%d "
+                "ms=%llu rpc_ms=%llu replay_ms=%llu sleep_ms=%llu recs=%u stuck=%u rc=%d "
                 "pub=%llx:%llu sent=%llx\n",
                 (unsigned long long)only_ino, rounds, nstale, nbusy,
                 (unsigned long long)ms, (unsigned long long)t_rpc_ms,
                 (unsigned long long)t_replay_ms,
-                (unsigned long long)t_sleep_ms, cn, rc,
+                (unsigned long long)t_sleep_ms, cn, nstuck, rc,
                 (unsigned long long)pubid.mint_ns, (unsigned long long)pubid.seq,
                 (unsigned long long)report_sent);
         if (rc == EFS_OK)
@@ -2289,6 +2446,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
     free(crecs);
     free(cseq);
     free(irecs);
+    free(streaks);
     if (rc == EFS_OK || rc == EFS_ERR_AGAIN) {
         /* The owner now has these sizes: stop reporting them as
          * in-flight. */
@@ -6429,7 +6587,13 @@ static void dcache_install_image(struct dcache_ent *e, uint8_t *img,
     DTRACE(e, "install len=%u seq=%llu", len, (unsigned long long)seq);
     if (seq)
         e->img_seq = seq;
-    if (e->dirty) {
+    /* A newer snapshot already cleared dirty: bytes patched after this
+     * image's copy are in the body and its ranges (kept until commit), not
+     * in img. Replacing them left the body without them until the newer
+     * PUT installed, and a STALE replay that copied the body in between
+     * published the chunk without them (K38 loopback test, Oct 25: a whole
+     * 47008-byte record read back as zeros). */
+    if (e->dirty || (seq && e->snap_seq > seq)) {
         for (uint8_t i = 0; i < e->nrange; i++) {
             uint32_t a = e->roff[i], n = e->rlen[i];
 
@@ -7323,6 +7487,26 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
     return hit;
 }
 
+/* Newest snapshot of the chunk whose PUT landed in its slot or whose REPORT
+ * committed; 0 = no slot. */
+static uint64_t dcache_object_seq_of(efs_ino_t ino, uint32_t ci)
+{
+    uint32_t s;
+    struct dcache_ent *e;
+    uint64_t seq = 0;
+
+    if (!ino)
+        return 0;
+    dcache_ensure();
+    s = dcache_slot(ino, ci);
+    pthread_mutex_lock(dcache_mu(s));
+    e = dcache_find_meta(s, ino, ci);
+    if (e)
+        seq = e->object_seq > e->committed_seq ? e->object_seq : e->committed_seq;
+    pthread_mutex_unlock(dcache_mu(s));
+    return seq;
+}
+
 /* K13 ledger sweep: 1 while putid or the dcache slot still names object, so
  * a REPORT may still carry its ticket. Takes the table locks itself. */
 int efs_client_put_referenced(efs_ino_t ino, uint32_t ci, uint64_t object)
@@ -7899,6 +8083,131 @@ static void export_forget_unreported(efs_ino_t ino, uint32_t ci)
     efs_client_unlock_dir(ino);
 }
 
+/* A span that failed closed has its verdict: the slot stops naming it as
+ * unpublished (no pin, no REPORT fallback, its unit can settle). The
+ * inode's writeback error carries the loss. */
+static void dcache_identity_abandon(efs_ino_t ino, uint32_t ci, uint64_t gen,
+                                    uint64_t seq)
+{
+    uint32_t s = dcache_slot(ino, ci);
+    struct dcache_ent *e;
+
+    pthread_mutex_lock(dcache_mu(s));
+    e = dcache_find_meta(s, ino, ci);
+    if (e && e->object_gen == gen && e->object_seq == seq) {
+        e->committed_object = gen;
+        e->committed_seq = seq;
+        if (!e->dirty && !e->data && e->pin_held)
+            dcache_pin_release(e);
+    }
+    pthread_mutex_unlock(dcache_mu(s));
+}
+
+/* K38: STALE replay of a chunk whose dcache body is gone. Its putid can
+ * still name a span PUT whose CAS base the host has moved past. Returning
+ * OK without a change rebuilt that record unchanged every round, and its
+ * K32 unit lost every other chunk with it until the REPORT budget ran out
+ * (orcd-mini ior hard, Oct 25: 216 chunks replayed ~80 times, then EIO).
+ * Never leave the putid naming the old base:
+ *  - a newer snapshot of the chunk landed or committed: it carries this
+ *    span's bytes; drop the older identity;
+ *  - otherwise the span is the only publication of acknowledged bytes:
+ *    rebuild it on the committed image from its own landed object;
+ *  - that object is unreadable as named: fail closed (writeback error on
+ *    the inode, write/fsync/close see EIO) and release the identity so
+ *    the rest of the REPORT commits.
+ * Transient failures are retained for the next round, like a body replay.
+ * Caller holds the slot's io lock. */
+static int replay_span_without_body(efs_ino_t ino, uint32_t ci, int absent)
+{
+    struct put_id p;
+    struct dcache_ent *e;
+    struct efs_chunk_entry obs;
+    struct efs_chunk_delta d;
+    uint32_t s = dcache_slot(ino, ci), len = data_chunk_size();
+    uint64_t newer = 0, committed = 0, seq;
+    uint8_t *img;
+    int have = 0, have_obs = 0, rc;
+
+    pthread_mutex_lock(&g_putid_mu);
+    struct put_id *q = putid_find(ino, ci);
+    if (q && q->gen) {
+        p = *q;
+        have = 1;
+    }
+    pthread_mutex_unlock(&g_putid_mu);
+    if (!have || !p.delta_len)
+        return EFS_OK; /* no span identity: nothing rests on a span base */
+    pthread_mutex_lock(dcache_mu(s));
+    e = dcache_find_meta(s, ino, ci);
+    if (e)
+        newer = e->object_seq > e->committed_seq ? e->object_seq : e->committed_seq;
+    pthread_mutex_unlock(dcache_mu(s));
+    if (p.seq && newer > p.seq) {
+        fprintf(stderr, "report-replay ino=%llu ci=%u span=%llx+%u+%u base=%llx "
+                "seq=%llu superseded by seq=%llu\n", (unsigned long long)ino, ci,
+                (unsigned long long)p.gen, p.delta_off, p.delta_len,
+                (unsigned long long)p.span_base_gen, (unsigned long long)p.seq,
+                (unsigned long long)newer);
+        putid_drop_snapshot(ino, ci, p.gen, p.seq);
+        return EFS_OK;
+    }
+    img = efs_buf_alloc(len);
+    if (!img)
+        return EFS_ERR_NOMEM;
+    memset(&obs, 0, sizeof(obs));
+    if (absent) {
+        memset(img, 0, len);
+        have_obs = 1;
+        rc = EFS_OK;
+    } else {
+        rc = efs_client_fetch_published_chunk_obs(ino, ci, img, len, &obs, &have_obs);
+        committed = rc == EFS_OK && have_obs ? obs.generation : 0;
+    }
+    if (rc == EFS_OK) {
+        memset(&d, 0, sizeof(d));
+        d.off = p.delta_off;
+        d.len = p.delta_len;
+        d.generation = p.gen;
+        memcpy(d.nodes, p.nodes, sizeof(d.nodes));
+        memcpy(d.checksums, p.cks, sizeof(d.checksums));
+        rc = efs_client_overlay_span(ino, ci, img, len, &d);
+        if (rc == EFS_ERR_DECODE || rc == EFS_ERR_CHECKSUM ||
+            rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL) {
+            fprintf(stderr, "report-span-lost ino=%llu ci=%u span=%llx+%u+%u base=%llx "
+                    "committed=%llx rc=%d: own object unreadable, writeback error\n",
+                    (unsigned long long)ino, ci, (unsigned long long)p.gen,
+                    p.delta_off, p.delta_len, (unsigned long long)p.span_base_gen,
+                    (unsigned long long)committed, rc);
+            (void)wb_error_record_add(ino);
+            dcache_identity_abandon(ino, ci, p.gen, p.seq);
+            putid_drop_snapshot(ino, ci, p.gen, p.seq);
+            efs_buf_free(img, len);
+            return EFS_OK;
+        }
+    }
+    if (rc != EFS_OK) {
+        efs_buf_free(img, len);
+        return rc;
+    }
+    seq = p.seq;
+    pthread_mutex_lock(dcache_mu(s));
+    e = dcache_find_meta(s, ino, ci);
+    if (e)
+        seq = dcache_seq_next(e);
+    pthread_mutex_unlock(dcache_mu(s));
+    if (dcache_trace_on())
+        fprintf(stderr, "dcache ino=%llu ci=%u replay-span span=%llx+%u+%u base=%llx "
+                "committed=%llx seq=%llu\n", (unsigned long long)ino, ci,
+                (unsigned long long)p.gen, p.delta_off, p.delta_len,
+                (unsigned long long)p.span_base_gen, (unsigned long long)committed,
+                (unsigned long long)seq);
+    rc = dcache_put_now(ino, ci, img, len, committed, seq, p.delta_off, p.delta_len,
+                        have_obs ? &obs : NULL);
+    efs_buf_free(img, len);
+    return rc;
+}
+
 /* absent=1: the STALE classifier's repull found no row on the host. The
  * committed image is then empty, whatever the table holds (our own PUT,
  * see stale_repull_replay). The slot's whole buffer is this client's
@@ -7932,8 +8241,9 @@ static int dcache_replay_stale_ex_budgeted(efs_ino_t ino, uint32_t ci, int absen
     e = dcache_find(s, ino, ci);
     if (!e || !e->data || !e->len) {
         pthread_mutex_unlock(dcache_mu(s));
+        rc = replay_span_without_body(ino, ci, absent);
         pthread_mutex_unlock(io);
-        return EFS_OK;
+        return rc;
     }
     bg = e->base_gen;
     len = e->len;

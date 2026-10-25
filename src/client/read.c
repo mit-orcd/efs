@@ -1128,8 +1128,11 @@ static uint64_t rdcache_map_gen(efs_ino_t ino, uint32_t ci)
  * O_DIRECT stores it). Only the published range is copied; the rest
  * of that generation is not the base. A failure fails the read:
  * dropping the span would return a hole where a writer committed. */
-static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
-                             uint32_t chunk_len, const struct efs_chunk_delta *d)
+/* *transient (may be NULL): a fragment GET failed with NET/BUSY, so a
+ * DECODE result says nothing about whether the object exists. */
+static int overlay_one_delta_ex(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                                uint32_t chunk_len, const struct efs_chunk_delta *d,
+                                int *transient)
 {
     uint32_t frag_len, i, ngood;
     uint8_t *decoded, *fbuf;
@@ -1165,6 +1168,8 @@ static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
             ngood++;
         } else if (grc == EFS_ERR_CHECKSUM || grc == EFS_OK) {
             integrity = 1;
+        } else if (transient && (grc == EFS_ERR_NET || grc == EFS_ERR_BUSY)) {
+            *transient = 1;
         }
     }
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
@@ -1188,6 +1193,24 @@ static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
     free(decoded);
     free(fbuf);
     return EFS_OK;
+}
+
+static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                             uint32_t chunk_len, const struct efs_chunk_delta *d)
+{
+    return overlay_one_delta_ex(ino, ci, buf, chunk_len, d, NULL);
+}
+
+/* K38: paint span d from its own object (this client's landed PUT) onto
+ * buf. EFS_ERR_NET when a fragment could not be reached; DECODE,
+ * CHECKSUM and INVAL mean the object is not readable as named. */
+int efs_client_overlay_span(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                            uint32_t len, const struct efs_chunk_delta *d)
+{
+    int transient = 0;
+    int rc = overlay_one_delta_ex(ino, ci, buf, len, d, &transient);
+
+    return rc == EFS_ERR_DECODE && transient ? EFS_ERR_NET : rc;
 }
 
 static int overlay_chunk_deltas_ce(efs_ino_t ino, uint32_t ci, uint8_t *buf,

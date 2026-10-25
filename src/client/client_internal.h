@@ -579,6 +579,10 @@ int efs_client_fetch_published_chunk_obs(efs_ino_t ino, uint32_t ci,
                                          uint8_t *buf, uint32_t len,
                                          struct efs_chunk_entry *obs,
                                          int *have_obs);
+/* K38: paint span d from its own object onto buf (STALE replay of a span
+ * whose dcache body is gone). EFS_ERR_NET: a fragment was unreachable. */
+int efs_client_overlay_span(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                            uint32_t len, const struct efs_chunk_delta *d);
 /* Overlay dirty dcache bytes onto a fetched/zero chunk (have_base=0 ranges). */
 void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
 int efs_dcache_flush_all(void);

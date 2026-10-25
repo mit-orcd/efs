@@ -42,6 +42,16 @@ struct efs_receipt_key {
     uint64_t mint_ns, seq;
 };
 
+/* K38: the first record an attempt lost on its own CAS base (a precheck
+ * STALE), so a PARTIAL verdict names what stayed behind. ino 0: none was
+ * recorded (no loser, or a loser found only at apply). */
+struct efs_receipt_stale {
+    efs_ino_t ino;
+    uint64_t want, have; /* the record's base, the committed generation */
+    uint32_t ci, span_off, span_len;
+    char why[12];
+};
+
 struct efs_receipt {
     struct efs_receipt_key key;
     uint32_t state, outcome;
@@ -53,6 +63,7 @@ struct efs_receipt {
     uint32_t nrec;
     uint64_t begin_ms, end_ms; /* monotonic, last attempt */
     char phase[16];      /* failing stage of the last attempt, "-" if none */
+    struct efs_receipt_stale stale; /* last STALE attempt's first loser */
 };
 
 struct efs_receipt_table {
@@ -76,12 +87,13 @@ int efs_receipt_lookup(struct efs_receipt_table *t, const struct efs_receipt_key
 
 /* The attempt this host executes for k. exec returns the reply rc and sets
  * *proposed when anything may have been proposed, *phase to its failing
- * stage (or NULL). A duplicate of a request whose receipt is APPLIED is
+ * stage (or NULL), *stale to its first CAS loser (zeroed on entry). A duplicate of a request whose receipt is APPLIED is
  * answered OK without running. A duplicate of a running attempt waits up to
  * join_ms for it: APPLIED/PARTIAL take that rc; any other end runs again
  * (same identity, idempotent); still running answers EFS_ERR_BUSY.
  * *how is one of EFS_RECEIPT_RAN..WAITING; *out the receipt afterwards. */
-typedef int (*efs_receipt_exec_fn)(void *ctx, int *proposed, const char **phase);
+typedef int (*efs_receipt_exec_fn)(void *ctx, int *proposed, const char **phase,
+                                   struct efs_receipt_stale *stale);
 int efs_receipt_run(struct efs_receipt_table *t, const struct efs_receipt_key *k,
                     efs_ino_t ino, uint32_t nrec, uint32_t join_ms,
                     efs_receipt_exec_fn exec, void *ctx, int *how,

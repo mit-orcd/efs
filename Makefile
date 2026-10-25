@@ -339,6 +339,9 @@ test-wb-runtime:
 	python3 tests/test_w155_report_resolve.py
 	python3 tests/test_w155_identified_resolve.py
 	python3 tests/test_report_span_base.py
+	python3 tests/test_k38_stale_span_replay.py
+	python3 tests/test_k38_report_bound.py
+	python3 tests/test_k38_install_order.py
 	python3 tests/test_inode_pending_eof.py
 	python3 tests/test_report_session_apply.py
 	python3 tests/test_report_activation.py
@@ -1057,6 +1060,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_seed_loss.py
 	python3 tests/test_k33_bookkeeping.py
 	python3 tests/test_k34_stop_put.py
+	python3 tests/test_k38_shared_chunk_pressure.py
 	python3 tests/test_stop_progress.py
 	python3 tests/test_operator_workflows.py
 	python3 tests/test_member_limit.py
@@ -1065,6 +1069,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	EFS_B6_MODES=slow python3 tests/test_b6_unavailable.py
 	EFS_B6_MODES=full python3 tests/test_b6_unavailable.py
 	python3 tests/test_d4_progress.py
+	python3 tests/test_pub_unit_forward_abort.py
 	python3 tests/test_report_stepdown.py
 	python3 tests/test_w159_apply_wait.py
 	python3 tests/test_query_first_catalog.py

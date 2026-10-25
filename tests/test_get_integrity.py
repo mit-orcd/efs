@@ -42,7 +42,7 @@ names = ('data_chunk_size', 'data_frag_size', 'frag_ptrs', 'frag_get_thread',
          'get_pair_start', 'get_two_parallel_run', 'get_two_parallel',
          'read_peer_now_ms', 'packed_fetch_run', 'packed_fetch', 'read_reprobe_down',
          'efs_client_decode_placed_chunk_attempts', 'fetch_published_once',
-         'get_fragment_run', 'efs_client_get_fragment', 'overlay_one_delta',
+         'get_fragment_run', 'efs_client_get_fragment', 'overlay_one_delta_ex', 'overlay_one_delta',
          'overlay_chunk_deltas_ce')
 parts = [function(n) for n in names]
 parts.append(block('struct frag_get_job {', '\n};\n'))

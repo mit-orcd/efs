@@ -3270,6 +3270,8 @@ int efs_client_rpc_report_resolve(efs_export_id_t export_id,
     const char *outcome = "unknown";
     efs_node_id_t from = 0;
     int first = rc, last_asked = 0, last_none = 0;
+    struct efs_msg_report_receipt_reply partial;
+    char stuck[192] = "";
 
     if (!pubid || !sent || !bound || !report_rc_transient(rc))
         return rc;
@@ -3277,6 +3279,7 @@ int efs_client_rpc_report_resolve(efs_export_id_t export_id,
         !efs_report_session_valid(&session))
         return rc;
     memset(&key, 0, sizeof(key));
+    memset(&partial, 0, sizeof(partial));
     memcpy(key.uuid, session.client_uuid, sizeof(key.uuid));
     key.epoch = session.session_epoch;
     key.mint_ns = pubid->mint_ns;
@@ -3314,6 +3317,7 @@ int efs_client_rpc_report_resolve(efs_export_id_t export_id,
                     rc = EFS_ERR_STALE;
                     outcome = "partial";
                     from = nid;
+                    partial = rr;
                     goto done;
                 }
                 if (rr.outcome == EFS_RECEIPT_OUT_NONE)
@@ -3345,13 +3349,32 @@ int efs_client_rpc_report_resolve(efs_export_id_t export_id,
     }
 done:
     efs_client_rpc_set_deadline_ms(previous);
+    /* K38: name the record that stayed behind (the host's first CAS loser,
+     * with this REPORT's object for it), so the error is traceable from
+     * this line alone. */
+    if (!strcmp(outcome, "partial")) {
+        uint64_t gen = 0;
+        for (uint32_t i = 0; i < count && partial.stale_ino; i++)
+            if (recs[i].ino == partial.stale_ino && recs[i].chunk_index == partial.stale_ci)
+                gen = recs[i].chunk_generation;
+        if (partial.stale_ino)
+            snprintf(stuck, sizeof(stuck), " stuck=%llu:%u gen=%llx span=%u+%u base=%llx "
+                     "committed=%llx why=%.*s", (unsigned long long)partial.stale_ino,
+                     partial.stale_ci, (unsigned long long)gen, partial.stale_span_off,
+                     partial.stale_span_len, (unsigned long long)partial.stale_want,
+                     (unsigned long long)partial.stale_have,
+                     (int)strnlen(partial.stale_why, sizeof(partial.stale_why)),
+                     partial.stale_why);
+        else
+            snprintf(stuck, sizeof(stuck), " stuck=unrecorded (an apply-time CAS loser)");
+    }
     /* none=a/b: of the b hosts asked last, a held a receipt saying nothing
      * was proposed. That is not proof (a host can restart or evict), so an
      * unresolved request stays unknown. */
     fprintf(stderr, "report-resolve id=%s ino=%llu outcome=%s rc=%d first_rc=%d from=%u "
-            "queries=%u resends=%u none=%d/%d ms=%llu%s\n", ident, (unsigned long long)ino,
+            "queries=%u resends=%u none=%d/%d ms=%llu%s%s\n", ident, (unsigned long long)ino,
             outcome, rc, first, from, queries, resends, last_none, last_asked,
-            (unsigned long long)(rpc_prof_now_us() / 1000ull - start),
+            (unsigned long long)(rpc_prof_now_us() / 1000ull - start), stuck,
             strcmp(outcome, "unknown") ? "" : " -> EIO, outcome unknown after the bound");
     if (!strcmp(outcome, "unknown"))
         return EFS_ERR_IO;
