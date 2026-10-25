@@ -72,7 +72,15 @@ try:
         for g in (0,2):
             with connect(i)[0] as s:
                 frame(s,95,bytes([g,200]));tag,body=recv(s)
-                assert tag==96 and struct.unpack_from('@i',body)[0]==-7,(tag,body)
+                assert tag==96,(tag,body)
+                rc,hint=struct.unpack_from('@ii',body)
+                if rc==-15:  # documented follower redirect, not a log append
+                    assert hint in (0,1,2),(rc,hint)
+                    with connect(hint+1)[0] as leader:
+                        frame(leader,95,bytes([g,200]));tag,body=recv(leader)
+                        assert tag==96,(tag,body)
+                        rc=struct.unpack_from('@i',body)[0]
+                assert rc==-7,(g,i,rc,body)
         after=status(i);assert before==after,(i,before,after)
         assert c.alive(i)
         c.wait_log(i,'handler: refused declaration of protocol 0')
