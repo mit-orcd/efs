@@ -15092,7 +15092,29 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             struct host_view v;host_view_get(h,group,&v);
             out->rc=EFS_OK;out->salt=1;out->index=v.applied;return;
         }
-        cmd=cleanup_cmd;clen=packed;
+        /* K42: the batch's apply refuses with BUSY, changing nothing, while
+         * another transaction holds an exclusive intent on one of its keys
+         * (a close-step marker of an inode another client is appending
+         * to). That applied verdict of this exact entry is definite: it
+         * gets the lease certificate. A wait timeout, a ring miss or any
+         * other verdict keeps the entry's index (uncertain). */
+        uint64_t batch_idx=0,batch_term=0;
+        rc=host_propose_mode(h,group,cleanup_cmd,packed,&batch_idx,&batch_term,&hint,1);
+        if (rc==EFS_OK) rc=host_wait_verdict(h,group,batch_idx,batch_term,&hint);
+        out->rc=rc;out->leader_hint=hint;
+        struct efs_arc_view av;
+        if (rc==EFS_ERR_BUSY && batch_term && host_arc_read(h,group,batch_idx,&av) &&
+            av.idx==batch_idx && av.term==batch_term && av.rc==EFS_ERR_BUSY) {
+            static unsigned locked;
+            unsigned n=__atomic_fetch_add(&locked,1,__ATOMIC_RELAXED);
+            if (!(n&63))
+                fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u applied BUSY "
+                        "(key under another transaction's intent), retry certified (%u)\n",
+                        rd32be(cmd+22),rd32be(cmd+18),n+1);
+            out->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return;
+        }
+        out->index=batch_idx;
+        return;
     } else if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH) {
         rc=host_session_cleanup_admit(h,cmd,clen,group,&hint);
         if (rc!=EFS_OK) {out->rc=rc;out->leader_hint=hint;return;}

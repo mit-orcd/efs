@@ -70,9 +70,10 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
  if(mode>=20 && mode<=23 && calls<13) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN+(mode-20);return EFS_ERR_BUSY;}
  if(mode==24) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN;return EFS_ERR_BUSY;}
  if(mode==25 && calls<13) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN;r->index=5;return EFS_ERR_BUSY;}
+ if(mode==26 && calls<13) {r->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return EFS_ERR_BUSY;}
  if(mode==1)return EFS_ERR_IO; /* ambiguous submission: do not reselect */
  if(mode==2)return EFS_ERR_BUSY; /* active or incomplete global barrier */
- r->salt=mode==19?EFS_MD_SESSION_APPEND_RETRY_SALT:mode==3?2:mode==4?0:((mode==6 || mode==10 || mode==14 || (mode>=20 && mode<=23))?calls==16:calls==4)?1:0;
+ r->salt=mode==19?EFS_MD_SESSION_APPEND_RETRY_SALT:mode==3?2:mode==4?0:((mode==6 || mode==10 || mode==14 || (mode>=20 && mode<=23) || mode==26)?calls==16:calls==4)?1:0;
  if(mode==5)tick=30;
  return EFS_OK;
 }
@@ -139,6 +140,12 @@ int main(void) {
  /* A wait salt on a submitted (indexed) reply is not a certificate. */
  mode=25;calls=waits=0;tick=0;
  assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits);
+ /* K42: a lease batch applied as a no-op BUSY is retried in the lease phase only. */
+ mode=26;append_mode=0;calls=waits=0;tick=0;
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+ append_mode=1;calls=waits=0;tick=0;
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits);
+ assert(!strcmp(efs_session_cleanup_reason(EFS_MD_SESSION_CLEANUP_WAIT_LOCKED,EFS_ERR_BUSY),"lease-key-locked"));
  assert(!strcmp(efs_session_cleanup_reason(0,EFS_ERR_BUSY),"uncertified-busy") && !*efs_session_cleanup_reason(4,EFS_OK));
  puts("session CLI: K42 append waits retried within the budget, fail closed with reason");
  puts("session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS");
@@ -152,17 +159,26 @@ server_c=r'''
 #include <stdio.h>
 #define HOST_SESS_REG_LEN 26
 struct host_view {uint64_t applied;};
-static int verdict, nonempty, selections, proposals;
+struct efs_arc_view {uint64_t idx,term;int rc;};
+static uint32_t rd32be(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
+static int verdict, nonempty, selections, proposals, applied, ring_hit=1, ring_term=1;
+static const uint8_t *proposed;
 static int host_pack_session_cleanup(void *h,const uint8_t *cmd,uint32_t len,
  uint8_t group,int *hint,uint8_t *packed,uint32_t *size)
 {assert(!h && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT && len==26 && group==0);selections++;*hint=2;*size=nonempty?26:0;memcpy(packed,cmd,26);packed[1]=EFS_MD_SESS_LEASE_LOCK_BATCH;return verdict;}
 static void host_view_get(void *h,uint8_t group,struct host_view *v)
 {assert(!h && !group);v->applied=17;}
+static int host_propose_mode(void *h,uint8_t group,const uint8_t *cmd,uint32_t len,
+ uint64_t *idx,uint64_t *term,int *hint,int local)
+{assert(!h && !group && len==26 && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH && hint && local==1);proposals++;proposed=cmd;*idx=40;*term=3;return EFS_OK;}
+static int host_wait_verdict(void *h,uint8_t group,uint64_t idx,uint64_t term,int *hint)
+{assert(!h && !group && idx==40 && term==3 && hint);return applied;}
+static int host_arc_read(void *h,uint8_t group,uint64_t idx,struct efs_arc_view *v)
+{assert(!h && !group && idx==40);v->idx=ring_hit?40:41;v->term=ring_term?3:4;v->rc=applied;return 1;}
 static void dispatch(const uint8_t *cmd,uint32_t clen,struct efs_msg_raft_mkfs_reply *out)
 {void *h=NULL;uint8_t group=0,cleanup_cmd[128];int hint=-1,rc;memset(out,0,sizeof(*out));
 '''+route+r'''
- assert(cmd==cleanup_cmd && clen==26 && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH);
- proposals++;
+ assert(0 && "the cleanup route answers every LEASE_LOCK_NEXT");(void)cleanup_cmd;(void)clen;(void)cmd;
 }
 int main(void) {
  uint8_t cmd[26]={EFS_MD_CMD_SESSION,EFS_MD_SESS_LEASE_LOCK_NEXT};struct efs_msg_raft_mkfs_reply out;
@@ -174,9 +190,24 @@ int main(void) {
  }
  verdict=EFS_OK;nonempty=0;selections=proposals=0;dispatch(cmd,26,&out);
  assert(selections==1 && !proposals && out.rc==EFS_OK && out.salt==1 && out.index==17);
- nonempty=1;selections=proposals=0;dispatch(cmd,26,&out);
- assert(selections==1 && proposals==1 && !out.salt && !out.index && !out.term);
- puts("session server: admission-only retry certificate; no submitted-batch certificate PASS");
+ nonempty=1;applied=EFS_OK;selections=proposals=0;dispatch(cmd,26,&out);
+ assert(selections==1 && proposals==1 && proposed[1]==EFS_MD_SESS_LEASE_LOCK_BATCH);
+ assert(out.rc==EFS_OK && !out.salt && out.index==40 && !out.term);
+ /* K42: an applied BUSY verdict of this exact entry changed nothing. */
+ applied=EFS_ERR_BUSY;selections=proposals=0;dispatch(cmd,26,&out);
+ assert(proposals==1 && out.rc==EFS_ERR_BUSY && out.salt==EFS_MD_SESSION_CLEANUP_WAIT_LOCKED && !out.index && !out.term);
+ /* A ring miss or another term's entry is no proof: index kept, no certificate. */
+ for(int c=0;c<2;c++) {
+   ring_hit=c;ring_term=!c;selections=proposals=0;dispatch(cmd,26,&out);
+   assert(out.rc==EFS_ERR_BUSY && !out.salt && out.index==40);
+ }
+ ring_hit=ring_term=1;
+ int other[]={EFS_ERR_STALE,EFS_ERR_IO,EFS_ERR_NOT_PRIMARY,EFS_ERR_INVAL};
+ for(unsigned i=0;i<sizeof(other)/sizeof(other[0]);i++) {
+   applied=other[i];selections=proposals=0;dispatch(cmd,26,&out);
+   assert(out.rc==other[i] && !out.salt && out.index==40);
+ }
+ puts("session server: admission certificate; an applied no-op BUSY batch certified (K42); no other submitted-batch certificate PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-cleanup-cli-') as tmp:

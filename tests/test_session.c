@@ -1055,6 +1055,23 @@ static void test_bounded_session_cleanup(void)
     CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,first,n)==EFS_ERR_BUSY,
           "prepared row refuses cleanup before any deletion");
     CHECK(efs_txn_resolve(kv,&tx,shard,EFS_TXN_ABORT)==EFS_OK,"later resolution releases cleanup");
+    /* K42: another client's close-step transaction holds the inode's
+     * last-close marker (the cleanup batch must create it): the applied
+     * batch refuses with BUSY and deletes nothing, a definite no-op the
+     * server certifies for a retry. */
+    {
+        uint32_t anchor=efs_kv_anchor_shard(shard),ml=0;uint8_t marker[EFS_KV_KEY_MAX];
+        CHECK(efs_kv_key_reap(anchor,ino,marker,&ml)==EFS_OK,"marker intent key");
+        marker[2]=EFS_KV_KIND_CLOSE_STEP;
+        struct efs_txid mt={{98}};struct efs_txn_parts mp={.n=1,.shard={anchor}};
+        CHECK(efs_txn_prepare_excl_value(kv,&mt,&mp,marker,ml,NULL,EFS_TXN_ABSENT,
+              EFS_TXN_PUT,&one,1)==EFS_OK,"foreign close-step intent fixture");
+        CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,first,n)==EFS_ERR_BUSY,
+              "marker under a foreign intent refuses cleanup (K42)");
+        CHECK(efs_session_cleanup_select(kv,shard,uuid,1,again,&m)==EFS_OK && m==n,
+              "refused cleanup deleted nothing");
+        CHECK(efs_txn_resolve(kv,&mt,anchor,EFS_TXN_ABORT)==EFS_OK,"foreign intent resolves");
+    }
     struct efs_kv_ops ops=*kv->ops;
     guarded_batch_original=ops.batch;ops.batch=guarded_batch_fault;kv->ops=&ops;
     guarded_batch_fail=1;

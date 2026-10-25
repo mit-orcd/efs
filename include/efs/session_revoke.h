@@ -40,10 +40,11 @@ static inline int efs_session_busy_retry_ok(const uint8_t *payload, uint32_t ple
             (payload[2] == EFS_MD_SESS_STORAGE_FENCE && plen == 23));
 }
 /* A cleanup step's BUSY that the server certified as a no-op (zero
- * index/term): LEASE_LOCK_NEXT's refused selection, or SESSION_APPEND_NEXT's
- * refused selection and K42 waits (another session's OPEN append on the
- * inode, the frontier, an aborted PREPARE, REAP owed). Any other BUSY may
- * follow a submitted transaction and stays the step's one result. */
+ * index/term): LEASE_LOCK_NEXT's refused selection or (K42) its batch
+ * applied with BUSY and no effect, or SESSION_APPEND_NEXT's refused
+ * selection and K42 waits (another session's OPEN append on the inode, the
+ * frontier, an aborted PREPARE, REAP owed). Any other BUSY may follow a
+ * submitted transaction and stays the step's one result. */
 static inline int efs_session_cleanup_retry_ok(const struct efs_msg_raft_mkfs_reply *r,
                                                int appends)
 {
@@ -51,7 +52,8 @@ static inline int efs_session_cleanup_retry_ok(const struct efs_msg_raft_mkfs_re
         return 0;
     return appends ? r->salt >= EFS_MD_SESSION_APPEND_RETRY_SALT &&
                      r->salt <= EFS_MD_SESSION_APPEND_WAIT_GONE
-                   : r->salt == EFS_MD_SESSION_CLEANUP_RETRY_SALT;
+                   : r->salt == EFS_MD_SESSION_CLEANUP_RETRY_SALT ||
+                     r->salt == EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;
 }
 /* The server's reason for a cleanup step that failed with rc ("" if none):
  * what a client logs with the shard where its revoke stopped. */
@@ -61,6 +63,7 @@ static inline const char *efs_session_cleanup_reason(uint64_t salt, int rc)
         return "";
     switch (salt) {
     case EFS_MD_SESSION_CLEANUP_RETRY_SALT: return "lease-selection-refused";
+    case EFS_MD_SESSION_CLEANUP_WAIT_LOCKED: return "lease-key-locked";
     case EFS_MD_SESSION_APPEND_RETRY_SALT: return "append-selection-refused";
     case EFS_MD_SESSION_APPEND_WAIT_OPEN: return "append-open-by-other-session";
     case EFS_MD_SESSION_APPEND_WAIT_FRONTIER: return "append-frontier";

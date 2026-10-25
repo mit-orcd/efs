@@ -327,6 +327,9 @@
 #define EFS_MD_SESSION_APPEND_WAIT_FRONTIER 5ull
 #define EFS_MD_SESSION_APPEND_WAIT_ABORTED  6ull
 #define EFS_MD_SESSION_APPEND_WAIT_GONE     7ull
+/* K42: a LEASE_LOCK_BATCH this leader proposed applied with BUSY and no
+ * effect (a key under another transaction's exclusive intent). */
+#define EFS_MD_SESSION_CLEANUP_WAIT_LOCKED  8ull
 
 /* W140: the log commands this build applies. host_apply_dispatch
  * (src/server/raft_host.c) handles exactly these tags, and every proposal
