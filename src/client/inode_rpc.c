@@ -387,9 +387,14 @@ static int opid_take_locked(struct efs_opid_req *q, const void *who)
 /* Fill q and take a slot (returned; -1 = none, q left invalid). */
 static int opid_begin(struct efs_opid_req *q)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     memset(q,0,sizeof(*q));
     /* A later known reply still occupies the server cache until the oldest
      * unresolved identity finishes. Reserve space for that oldest identity:
@@ -450,9 +455,14 @@ static int opid_begin(struct efs_opid_req *q)
 
 static void opid_end(int slot)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     if (slot < 0)
         return;
     pthread_mutex_lock(&opid_mu);
@@ -486,9 +496,14 @@ void efs_client_opid_wait(unsigned max_ms)
  * mount UUID is shared with lease and lock ownership. */
 int efs_client_append_begin(struct efs_opid_req *q)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     int slot = opid_begin(q);
     if (slot >= 0 && env_opid_verbose)
         fprintf(stderr,"opid-owner: seq=%llu kind=APPEND\n",(unsigned long long)q->id.seq);
@@ -1223,12 +1238,22 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                           uint32_t flags, efs_ino_t *out_ino,
                           struct efs_inode *out)
 {
-    static int env_opid_trace = -1; /* W143: read once, per-op path */
-    if (env_opid_trace < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_trace_s = -1;
+    int env_opid_trace = __atomic_load_n(&env_opid_trace_s, __ATOMIC_ACQUIRE);
+    if (env_opid_trace < 0) {
         env_opid_trace = getenv("EFS_OPID_TRACE") != NULL;
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+        __atomic_store_n(&env_opid_trace_s, env_opid_trace, __ATOMIC_RELEASE);
+    }
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     uint8_t buf[sizeof(struct efs_msg_inode_create) + EFS_OPID_WIRE_LEN];
     struct efs_msg_inode_create *req = (struct efs_msg_inode_create *)buf;
     struct efs_opid_req q;
@@ -1330,9 +1355,14 @@ int efs_client_session_admit(uint32_t shard,const struct efs_opid *identity)
 int efs_client_create_begin(struct efs_client_create_request *r,efs_ino_t parent,
                              const char *name,uint32_t mode,uid_t uid,gid_t gid)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     if(!r || !parent || !name || !name[0] ||
        strnlen(name,EFS_MAX_NAME)>=EFS_MAX_NAME || !S_ISREG(mode))return EFS_ERR_INVAL;
     if(r->active)return EFS_ERR_BUSY;
@@ -1352,9 +1382,14 @@ int efs_client_create_begin(struct efs_client_create_request *r,efs_ino_t parent
 
 static int create_request_rpc(struct efs_client_create_request *r,int probe)
 {
-    static int env_opid_trace = -1; /* W143: read once, per-op path */
-    if (env_opid_trace < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_trace_s = -1;
+    int env_opid_trace = __atomic_load_n(&env_opid_trace_s, __ATOMIC_ACQUIRE);
+    if (env_opid_trace < 0) {
         env_opid_trace = getenv("EFS_OPID_TRACE") != NULL;
+        __atomic_store_n(&env_opid_trace_s, env_opid_trace, __ATOMIC_RELEASE);
+    }
     struct efs_msg_create_retained request=r->wire;
     request.probe=probe;
     struct efs_msg_create_retained_reply reply={0};
@@ -1909,9 +1944,14 @@ int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *ide
  * This changes no identity, ACK, capacity or inherited deadline. */
 static int opid_try_begin(struct efs_opid_req *q)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     memset(q,0,sizeof(*q));
     if(efs_client_rpc_past_deadline())return -1;
     pthread_mutex_lock(&opid_mu);
@@ -1927,9 +1967,14 @@ static int opid_try_begin(struct efs_opid_req *q)
 int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
                            uint64_t generation,unsigned flags,uint64_t token)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     if (!r || !ino || !generation || !flags || (flags & ~7u) ||
         (flags & 3u) == 3u ||
         !!(flags & EFS_LEASE_EDGE_CLEAR_PENDING) != !!token)
@@ -1961,9 +2006,14 @@ int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
 static int lease_request_result(struct efs_client_lease_request *r,int rc,
                                  uint64_t known)
 {
-    static int env_opid_trace = -1; /* W143: read once, per-op path */
-    if (env_opid_trace < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_trace_s = -1;
+    int env_opid_trace = __atomic_load_n(&env_opid_trace_s, __ATOMIC_ACQUIRE);
+    if (env_opid_trace < 0) {
         env_opid_trace = getenv("EFS_OPID_TRACE") != NULL;
+        __atomic_store_n(&env_opid_trace_s, env_opid_trace, __ATOMIC_RELEASE);
+    }
     if(!known && env_opid_trace)
         fprintf(stderr,"opid-lease: unresolved seq=%llu ino=%llu flags=%u rc=%d\n",
             (unsigned long long)r->q.id.seq,(unsigned long long)r->ino,r->flags,rc);
@@ -2523,9 +2573,14 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     uint8_t buf[sizeof(struct efs_msg_inode_unlink) + EFS_OPID_WIRE_LEN];
     struct efs_msg_inode_unlink *req = (struct efs_msg_inode_unlink *)buf;
     struct efs_opid_req q;
@@ -2559,9 +2614,14 @@ int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
                              const char *old_name, efs_ino_t new_parent,
                              const char *new_name, struct efs_inode *out)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     uint8_t buf[sizeof(struct efs_msg_inode_rename_at) + EFS_OPID_WIRE_LEN];
     struct efs_msg_inode_rename_at *req = (struct efs_msg_inode_rename_at *)buf;
     struct efs_opid_req q;
@@ -2695,9 +2755,14 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
                                   uint64_t len, const struct efs_opid_req *q,
                                   uint64_t *new_size_out, uint64_t *start_out)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     uint8_t buf[sizeof(struct efs_msg_inode_append) + EFS_APPEND_ACK_LEN];
     struct efs_msg_inode_append *req = (struct efs_msg_inode_append *)buf;
     uint8_t *su = buf + sizeof(*req);
@@ -2855,9 +2920,14 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
                         efs_ino_t new_parent, const char *new_name,
                         struct efs_inode *out)
 {
-    static int env_opid_verbose = -1; /* W143: read once, per-op path */
-    if (env_opid_verbose < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_verbose_s = -1;
+    int env_opid_verbose = __atomic_load_n(&env_opid_verbose_s, __ATOMIC_ACQUIRE);
+    if (env_opid_verbose < 0) {
         env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
+        __atomic_store_n(&env_opid_verbose_s, env_opid_verbose, __ATOMIC_RELEASE);
+    }
     uint8_t buf[sizeof(struct efs_msg_inode_link) + EFS_OPID_WIRE_LEN];
     struct efs_msg_inode_link *req = (struct efs_msg_inode_link *)buf;
     struct efs_opid_req q;

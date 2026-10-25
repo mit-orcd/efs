@@ -2044,9 +2044,14 @@ static int efs_close_note(efs_ino_t ino, int *leased)
  * ownership, preventing a fresh OPEN from racing its delayed release. */
 static int efs_open_release_pending_run(efs_ino_t ino)
 {
-    static int env_opid_trace = -1; /* W143: read once, per-op path */
-    if (env_opid_trace < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_opid_trace_s = -1;
+    int env_opid_trace = __atomic_load_n(&env_opid_trace_s, __ATOMIC_ACQUIRE);
+    if (env_opid_trace < 0) {
         env_opid_trace = getenv("EFS_OPID_TRACE") != NULL;
+        __atomic_store_n(&env_opid_trace_s, env_opid_trace, __ATOMIC_RELEASE);
+    }
     struct efs_open_ref *owner = NULL;
     pthread_mutex_lock(&g_open_mu);
     owner = open_ref_find(ino);
