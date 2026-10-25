@@ -55,6 +55,7 @@ static void putid_miss_note(efs_ino_t ino,uint32_t ci,const efs_node_id_t *nodes
  (void)ino;(void)ci;(void)nodes;missed++;
 }
 static void report_retry_without_identity(efs_ino_t ino,uint32_t ci) {(void)ino;(void)ci;}
+static uint64_t dcache_object_seq_of(efs_ino_t ino,uint32_t ci) {(void)ino;(void)ci;return 0;}
 static unsigned done_calls;static uint64_t done_object;
 void efs_client_put_done(efs_ino_t ino,uint32_t ci,uint64_t object) {(void)ino;(void)ci;if(object){done_calls++;done_object=object;}}
 ''' + '\n'.join([fn(current,'rec_ticket'), fn(current,'putid_note'), fn(readers,'putid_fill'),

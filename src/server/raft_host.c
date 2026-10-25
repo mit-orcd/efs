@@ -594,7 +594,11 @@ static struct efs_raft_host *g_host;
 /* W155: what one REPORT attempt did, for its receipt. proposed is set once
  * the attempt may have proposed anything (forwarded, or past the ReadIndex
  * and session admission); before that a failure published nothing. */
-static __thread struct { int proposed; const char *phase; } host_report_note;
+static __thread struct {
+    int proposed;
+    const char *phase;
+    struct efs_receipt_stale stale; /* K38: this attempt's first CAS loser */
+} host_report_note;
 
 
 static void wr64be(uint8_t *p, uint64_t v)
@@ -22065,6 +22069,18 @@ static void host_pub_stale_note(const char *why, const struct efs_chunk_rec *rec
     uint64_t now = now_ns() / 1000000000ull;
     uint64_t was = __atomic_load_n(&sec, __ATOMIC_RELAXED);
 
+    /* K38: the receipt keeps the first loser, so report-resolve can name a
+     * stuck record without this (rate-limited) line. */
+    if (!host_report_note.stale.ino) {
+        struct efs_receipt_stale *s = &host_report_note.stale;
+        s->ino = rec->ino;
+        s->ci = rec->chunk_index;
+        s->span_off = rec->delta_off;
+        s->span_len = rec->delta_len;
+        s->want = want;
+        s->have = have;
+        snprintf(s->why, sizeof(s->why), "%s", why);
+    }
     if (was != now && __atomic_compare_exchange_n(&sec, &was, now, 0,
                                                   __ATOMIC_RELAXED, __ATOMIC_RELAXED))
         __atomic_store_n(&n, 0, __ATOMIC_RELAXED);
@@ -23573,17 +23589,20 @@ static int host_report_status_rc(uint8_t status)
     }
 }
 
-static int host_report_exec(void *ctx, int *proposed, const char **phase)
+static int host_report_exec(void *ctx, int *proposed, const char **phase,
+                            struct efs_receipt_stale *stale)
 {
     struct host_report_call *c = ctx;
     int rc;
 
     host_report_note.proposed = 0;
     host_report_note.phase = NULL;
+    memset(&host_report_note.stale, 0, sizeof(host_report_note.stale));
     server_raft_host_report(c->recs, c->count, c->irecs, c->ino_count, c->flags,
                             c->session, c->pubid, c->out);
     *proposed = host_report_note.proposed;
     *phase = host_report_note.phase;
+    *stale = host_report_note.stale;
     rc = host_report_status_rc(c->out->status);
     return rc;
 }
@@ -23660,13 +23679,21 @@ void server_raft_host_report_receipt(const struct efs_opid *session,
         out->rc = r.rc;
         out->attempts = r.attempts;
         out->age_ms = r.state == EFS_RECEIPT_STATE_DONE && now > r.end_ms ? now - r.end_ms : 0;
+        out->stale_ino = r.stale.ino;
+        out->stale_ci = r.stale.ci;
+        out->stale_span_off = r.stale.span_off;
+        out->stale_span_len = r.stale.span_len;
+        out->stale_want = r.stale.want;
+        out->stale_have = r.stale.have;
+        memcpy(out->stale_why, r.stale.why, sizeof(out->stale_why));
     } else {
         out->state = EFS_RECEIPT_STATE_ABSENT;
     }
     efs_receipt_key_format(&k, id, sizeof(id));
     fprintf(stderr, "report-receipt query id=%s state=%u outcome=%s rc=%d attempts=%u "
-            "age_ms=%llu\n", id, out->state, efs_receipt_outcome_name(out->outcome),
-            out->rc, out->attempts, (unsigned long long)out->age_ms);
+            "age_ms=%llu stuck=%llu:%u\n", id, out->state, efs_receipt_outcome_name(out->outcome),
+            out->rc, out->attempts, (unsigned long long)out->age_ms,
+            (unsigned long long)out->stale_ino, out->stale_ci);
 }
 
 /* A fresh quorum round proves current leadership and the committed prefix,

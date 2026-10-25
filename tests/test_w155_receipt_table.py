@@ -26,10 +26,11 @@ static int execs;
 static int next_rc=EFS_OK,next_proposed=1;
 struct arg{struct efs_receipt_key k;uint32_t join;int hold,entered,how,rc;struct efs_receipt r;};
 /* ctx: the runner's arg; a held runner waits in exec until released. */
-static int exec_fn(void *ctx,int *proposed,const char **phase){struct arg *a=ctx;
+static int exec_fn(void *ctx,int *proposed,const char **phase,struct efs_receipt_stale *stale){struct arg *a=ctx;
  pthread_mutex_lock(&mu);execs++;
  if(a){a->entered=1;pthread_cond_broadcast(&cv);while(a->hold)pthread_cond_wait(&cv,&mu);}
  int rc=next_rc;*proposed=next_proposed;pthread_mutex_unlock(&mu);
+ assert(!stale->ino);if(rc==EFS_ERR_STALE){stale->ino=4642;stale->ci=2033;stale->want=0xc289;stale->have=0x244b;}
  *phase=rc?"wait":NULL;return rc;}
 static struct efs_receipt_key key(uint64_t seq){struct efs_receipt_key k;memset(&k,0,sizeof(k));k.uuid[0]=0xab;k.epoch=2;k.mint_ns=99;k.seq=seq;return k;}
 static void *runner(void *p){struct arg *a=p;a->rc=efs_receipt_run(&t,&a->k,42,3,a->join,exec_fn,a,&a->how,&a->r);return NULL;}
@@ -82,6 +83,9 @@ int main(void){
  assert(!pthread_create(&a1,NULL,runner,&x));wait_entered(&x);
  assert(!pthread_create(&a2,NULL,runner,&y));usleep(20000);release(&x);pthread_join(a1,NULL);pthread_join(a2,NULL);
  assert(x.rc==EFS_ERR_STALE && (y.how==EFS_RECEIPT_JOINED ? y.rc==EFS_ERR_STALE && execs==1 : y.how==EFS_RECEIPT_RAN));
+ /* K38: a STALE attempt keeps its first CAS loser; a later OK attempt does not erase it */
+ assert(x.r.stale.ino==4642 && x.r.stale.ci==2033 && x.r.stale.want==0xc289 && x.r.stale.have==0x244b);
+ { struct efs_receipt_key e=key(6);assert(efs_receipt_lookup(&t,&e,&r) && r.stale.ino==4642); }
  /* bounded: 1000 identities in 16 slots evict the oldest finished ones */
  reset();for(uint64_t s=100;s<1100;s++){struct efs_receipt_key e=key(s);assert(!efs_receipt_run(&t,&e,1,1,10,exec_fn,NULL,&how,&r));}
  { struct efs_receipt_key e=key(1099),o=key(100);assert(efs_receipt_lookup(&t,&e,&r));assert(!efs_receipt_lookup(&t,&o,&r));assert(t.evictions>0); }

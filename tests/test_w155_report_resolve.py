@@ -133,7 +133,7 @@ static pthread_t bg;
 static pthread_mutex_t bg_mu=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t bg_cv=PTHREAD_COND_INITIALIZER;
 static int bg_release, bg_started;
-static __thread struct { int proposed; const char *phase; } host_report_note;
+static __thread struct { int proposed; const char *phase; struct efs_receipt_stale stale; } host_report_note;
 static void set_inode_rc(struct efs_msg_inode_reply *out,int rc,int hint){
  (void)hint;out->primary_id=0;
  out->status=rc==EFS_OK?EFS_INODE_RPC_OK:rc==EFS_ERR_BUSY?EFS_INODE_RPC_BUSY:rc==EFS_ERR_STALE?EFS_INODE_RPC_STALE:
@@ -155,6 +155,10 @@ static void fake_exec(int node,const struct efs_chunk_rec *recs,uint32_t count,c
   uint32_t ci=recs[i].chunk_index;
   if(committed[ci]==recs[i].chunk_generation){skips++;continue;}
   if(committed[ci]==recs[i].base_gen){committed[ci]=recs[i].chunk_generation;applies++;continue;}
+  /* the production precheck's first loser (host_pub_stale_note) */
+  if(!stale){host_report_note.stale.ino=recs[i].ino;host_report_note.stale.ci=ci;
+   host_report_note.stale.want=recs[i].base_gen;host_report_note.stale.have=committed[ci];
+   snprintf(host_report_note.stale.why,sizeof(host_report_note.stale.why),"span-base");}
   stale=1;
  }
  set_inode_rc(out,busy_after_apply&&phase==1?EFS_ERR_BUSY:stale?EFS_ERR_STALE:EFS_OK,-1);
@@ -313,6 +317,8 @@ with tempfile.TemporaryDirectory(prefix='efs-w155-report-') as d:
     assert 'outcome=resent rc=0' in log, log
     assert re.search(r'outcome=unknown rc=-?\d+ .* -> EIO, outcome unknown after the bound', log), log
     assert 'outcome=partial rc=-14' in log, log
+    # K38: the PARTIAL verdict names the record that stayed behind
+    assert re.search(r'outcome=partial rc=-14 .* stuck=\d+:1 gen=[0-9a-f]+ span=\d+\+\d+ base=5 committed=4d why=span-base', log), log
     assert re.search(r'report-receipt query id=5515\w*/7/\w+:\d+ state=2 outcome=applied', log), log
     assert re.search(r'report-receipt query id=\S+ state=1 ', log), log
     assert re.search(r'report-receipt id=\S+ ino=4242 nrec=2 how=replay rc=0 outcome=applied', log), log

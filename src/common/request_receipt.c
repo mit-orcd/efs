@@ -192,6 +192,7 @@ int efs_receipt_run(struct efs_receipt_table *t, const struct efs_receipt_key *k
     struct timespec until;
     int waited = 0, proposed = 0, rc;
     const char *phase = NULL;
+    struct efs_receipt_stale stale;
 
     if (how)
         *how = EFS_RECEIPT_RAN;
@@ -252,7 +253,8 @@ int efs_receipt_run(struct efs_receipt_table *t, const struct efs_receipt_key *k
     r->end_ms = 0;
     pthread_mutex_unlock(&t->mu);
 
-    rc = exec(ctx, &proposed, &phase);
+    memset(&stale, 0, sizeof(stale));
+    rc = exec(ctx, &proposed, &phase, &stale);
 
     pthread_mutex_lock(&t->mu);
     r = receipt_find(t, k);
@@ -268,6 +270,8 @@ int efs_receipt_run(struct efs_receipt_table *t, const struct efs_receipt_key *k
     r->outcome = efs_receipt_merge(r->outcome, efs_receipt_outcome(rc, proposed));
     r->end_ms = receipt_now_ms();
     snprintf(r->phase, sizeof(r->phase), "%s", phase && *phase ? phase : "-");
+    if (rc == EFS_ERR_STALE)
+        r->stale = stale;
     if (out)
         *out = *r;
     pthread_cond_broadcast(&t->cv);

@@ -153,6 +153,8 @@ void efs_client_put_release(uint64_t seq,int landed) { assert(seq && seq<=puts_s
 void efs_client_put_done(efs_ino_t ino,uint32_t ci,uint64_t object) { (void)ino;(void)ci;(void)object; }
 void efs_client_mark_ino_dirty(efs_ino_t ino) { (void)ino; }
 static void report_landed_note(efs_ino_t ino) { (void)ino; }
+/* K38 body-less span replay: covered by test_k38_stale_span_replay.py. */
+static int replay_span_without_body(efs_ino_t ino,uint32_t ci,int absent) { (void)ino;(void)ci;(void)absent;return EFS_OK; }
 ''' + "\n".join(function(name) for name in (["dcache_index_set"] if "static void dcache_index_set(" in write else []) + ["chunk_obs_has_live_spans", "chunk_obs_masked",
     "dcache_install_image", "dcache_flush_keep", "dcache_replay_stale_ex_budgeted",
     "dcache_put_now_budgeted"]) + r'''
