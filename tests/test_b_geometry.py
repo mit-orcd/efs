@@ -302,17 +302,27 @@ def grow_to(c, m1, first, last):
             assert abs(caps[n] - caps[n - 1] - 2 * G // 3) <= 2, (n, caps)
         else:
             # Automatic quota: the startup budget on the store's filesystem
-            # (20 % reserve, at least 1 GiB, 7/8 of the rest).
-            fs = os.statvfs(c.dir / f'n{n}')
-            total = fs.f_blocks * fs.f_frsize
+            # (20 % reserve, at least 1 GiB, 7/8 of the rest). The estimate
+            # is a function of the statvfs sample the daemon took at
+            # startup, which it logs (`storage-budget:`); a sample taken
+            # here would differ by whatever unrelated writers (the other
+            # tests of a parallel gate) moved in between.
+            m_b = re.search(r'storage-budget: fs=0 total=(\d+) available=(\d+) used=(\d+) '
+                            r'budget=(\d+)$', c.last_run(n), re.M)
+            assert m_b, c.last_run(n)[-2000:]
+            total, avail, used, budget = (int(x) for x in m_b.groups())
             reserve = max(total // 5, G)
             ceiling = total - reserve
             ceiling -= ceiling // 8 + (ceiling % 8 != 0)
+            room = avail - reserve
+            additional = room - room // 8 - (room % 8 != 0)
+            want = ceiling if additional > ceiling - used else used + additional
             q = mem[n]['quota']
+            assert q == budget == want, (q, budget, want, total, avail, used)
             assert 0 < q <= ceiling, (q, ceiling)
-            avail_now = fs.f_bavail * fs.f_frsize
-            assert q >= min(ceiling, (avail_now - reserve) * 7 // 8) - (256 << 20), (q, avail_now, reserve)
-            summary['auto_quota'] = {'quota': q, 'fs_total': total, 'ceiling': ceiling}
+            assert used < (64 << 20), used  # a fresh store
+            summary['auto_quota'] = {'quota': q, 'fs_total': total, 'fs_available': avail,
+                                     'ceiling': ceiling}
     summary['capacity_by_members'] = caps
 
 

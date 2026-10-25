@@ -63,10 +63,10 @@ t0 = time.time()
 
 
 def writer(index, path, count, q):
-    acked, errors, wmax, fmax = [], [], 0.0, 0.0
+    acked, errors, wmax, fmax, slow = [], [], 0.0, 0.0, []
     fd = os.open(path, os.O_WRONLY | os.O_APPEND)
     for seq in range(count):
-        b = time.monotonic()
+        b, w0 = time.monotonic(), time.time()
         try:
             if os.write(fd, body(index, seq)) == REC:
                 acked.append(seq)
@@ -74,16 +74,53 @@ def writer(index, path, count, q):
                 errors.append(f'short write seq={seq}')
         except OSError as e:
             errors.append(f'write seq={seq} errno={e.errno}')
-        wmax = max(wmax, time.monotonic() - b)
+        d = time.monotonic() - b
+        wmax = max(wmax, d)
+        if d > 1.0:
+            slow.append(('write', seq, round(d, 2), w0))
         if (seq + 1) % FSYNC_EVERY == 0 or seq + 1 == count:
-            b = time.monotonic()
+            b, w0 = time.monotonic(), time.time()
             try:
                 os.fsync(fd)
             except OSError as e:
                 errors.append(f'fsync seq={seq} errno={e.errno}')
-            fmax = max(fmax, time.monotonic() - b)
+            d = time.monotonic() - b
+            fmax = max(fmax, d)
+            if d > 1.0:
+                slow.append(('fsync', seq, round(d, 2), w0))
     os.close(fd)
-    q.put(dict(writer=index, acked=acked, errors=errors, write_max_s=wmax, fsync_max_s=fmax))
+    q.put(dict(writer=index, acked=acked, errors=errors, write_max_s=wmax, fsync_max_s=fmax, slow=slow))
+
+
+def stamp(t):
+    return time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(t)) + '.%03dZ' % int(t % 1 * 1000)
+
+
+def slow_report(results, c, mnt):
+    """What the slow operations crossed: the writers' operations over 1 s
+    with their wall-clock start, then every line the daemons and the
+    client logged from one second before the first slow operation began
+    to one second after the last one ended (periodic counters left out).
+    Printed with a timing failure so one occurrence is attributable (the
+    flake sweep of Oct 25 saw 5.7 s writes across a group-2 step-down and
+    had only the bound and a rate-limited election log to show for it)."""
+    out, lo, hi = [], None, None
+    for r in results:
+        for kind, seq, d, w0 in r['slow']:
+            out.append(f'writer {r["writer"]}: {kind} seq={seq} {d} s at {stamp(w0)}')
+            if d >= BOUND_S:
+                lo = w0 if lo is None else min(lo, w0)
+                hi = w0 + d if hi is None else max(hi, w0 + d)
+    if lo is None:
+        return '\n'.join(out)
+    a, b = stamp(lo - 1.0), stamp(hi + 1.0)
+    noise = re.compile(r'kv-obs|iostats|gc-health|packer: segments')
+    for name, text in [(f'n{i}', c.log(i)) for i in (1, 2, 3)] + \
+            [('client', mnt.logp.read_text(errors='replace'))]:
+        lines = [l for l in text.splitlines() if a <= l[:24] <= b and not noise.search(l)]
+        out.append(f'--- {name}: {len(lines)} lines in [{a}, {b}]')
+        out += [f'{name}: {l[:220]}' for l in lines[:150]]
+    return '\n'.join(out)
 
 
 def leaders(c):
@@ -101,6 +138,10 @@ work = Path(tempfile.mkdtemp(prefix='efs-rsd-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items()
        if not k.startswith('EFS_FAULT_') and not k.startswith('EFS_TEST_')}
 env['EFS_TRANSPORT'] = 'tcp'
+# A failure must be attributable from the logs: every Raft election line
+# (not one per 10 s) and the client's per-receive timing.
+env['EFS_FAULT_RAFT_ELECT_LOG'] = '1'
+env['EFS_RPC_PROF'] = '1'
 client_env = dict(env)
 fault = work / 'decide-lost'
 env['EFS_FAULT_DECIDE_LOST'] = str(fault)
@@ -151,7 +192,8 @@ try:
     assert not errors, f'writer errors: {errors[:10]}'
     wmax = max(r['write_max_s'] for r in results)
     fmax = max(r['fsync_max_s'] for r in results)
-    assert wmax <= BOUND_S and fmax <= BOUND_S, f'write max {wmax:.2f} s, fsync max {fmax:.2f} s > {BOUND_S} s'
+    assert wmax <= BOUND_S and fmax <= BOUND_S, \
+        f'write max {wmax:.2f} s, fsync max {fmax:.2f} s > {BOUND_S} s\n' + slow_report(results, c, mnt)
     assert sum(1 for e in events if e[2] == 0) >= STEPDOWNS, f'step-downs: {events}'
 
     # The lost DECIDE went to the finisher, never to the recovery scan.
@@ -171,7 +213,8 @@ try:
     slow = [(int(t), int(us)) for t, us in re.findall(r'slow-ok type=(\d+) .*us=(\d+)', clog)]
     slow_max = max((us for _, us in slow), default=0) / 1e6
     assert not recv67 and not budget, f'REPORT stalls: {(recv67 + budget)[:5]}'
-    assert slow_max <= BOUND_S, f'slowest inode RPC {slow_max:.2f} s > {BOUND_S} s: {slow[:10]}'
+    assert slow_max <= BOUND_S, \
+        f'slowest inode RPC {slow_max:.2f} s > {BOUND_S} s: {slow[:10]}\n' + slow_report(results, c, mnt)
 
     ok, summary = verify(path, {r['writer']: r['acked'] for r in results}, {})
     assert ok, f'record set: {summary}'

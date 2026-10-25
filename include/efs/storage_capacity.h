@@ -25,10 +25,18 @@ static inline int efs_storage_quota_budget(uint64_t total, uint64_t available,
     return *budget ? 0 : -1;
 }
 
-/* Aggregate budgets only after grouping roots by backing filesystem. */
-static inline int efs_storage_safe_quota(
+/* One backing filesystem's budget inputs, as the startup estimate saw
+ * them. efsd logs them (`storage-budget:`), so a test can check the
+ * automatic quota against the very statvfs sample it came from instead of
+ * a later sample that unrelated writers have moved. */
+struct efs_storage_fs_budget { uint64_t total, available, used, budget; };
+
+/* Aggregate budgets only after grouping roots by backing filesystem.
+ * detail (optional, EFS_MAX_STORAGE_PATHS entries) gets one row per
+ * filesystem and *ndetail their count. */
+static inline int efs_storage_safe_quota_detail(
     const char paths[][EFS_MAX_PATH], const uint64_t *usage, uint32_t count,
-    uint64_t *maximum)
+    uint64_t *maximum, struct efs_storage_fs_budget *detail, uint32_t *ndetail)
 {
     dev_t devices[EFS_MAX_STORAGE_PATHS];
     uint64_t totals[EFS_MAX_STORAGE_PATHS], available[EFS_MAX_STORAGE_PATHS];
@@ -59,10 +67,20 @@ static inline int efs_storage_safe_quota(
         uint64_t budget;
         if (efs_storage_quota_budget(totals[j], available[j], used[j], &budget)
             || sum > UINT64_MAX - budget) return -1;
+        if (detail)
+            detail[j] = (struct efs_storage_fs_budget){totals[j], available[j], used[j], budget};
         sum += budget;
     }
+    if (ndetail) *ndetail = seen;
     *maximum = sum;
     return 0;
+}
+
+static inline int efs_storage_safe_quota(
+    const char paths[][EFS_MAX_PATH], const uint64_t *usage, uint32_t count,
+    uint64_t *maximum)
+{
+    return efs_storage_safe_quota_detail(paths, usage, count, maximum, NULL, NULL);
 }
 
 /* Count a filesystem once even when several roots share it. Failure leaves

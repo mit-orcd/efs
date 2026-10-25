@@ -266,6 +266,19 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
             snprintf(flag, sizeof(flag), "%s/refuse-%u", d, s->id);
             if (!access(flag, F_OK)) return EFS_ERR_IO;
         }
+        /* EFS_FAULT_SEGMENT_PUT_TRANSIENT=<dir>: while <dir>/transient-<node
+         * id> exists, one PUT is refused NOT_PRIMARY (the flag is consumed),
+         * as a follower under load refuses the authority read. */
+        d = getenv("EFS_FAULT_SEGMENT_PUT_TRANSIENT");
+        if (d && !rebuild) {
+            snprintf(flag, sizeof(flag), "%s/transient-%u", d, s->id);
+            if (!unlink(flag)) {
+                fprintf(stderr, "fault: EFS_FAULT_SEGMENT_PUT_TRANSIENT refused segment "
+                        "g%u id=%016llx gen=%llx fragment %u once (NOT_PRIMARY)\n",
+                        group, (unsigned long long)id, (unsigned long long)gen, fi);
+                return EFS_ERR_NOT_PRIMARY;
+            }
+        }
     }
 #endif
     /* Linearizable authority: the object must be admitted, still ACTIVE,

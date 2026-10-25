@@ -33,6 +33,7 @@ code = r'''
 #include "efs/protocol.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 static struct { struct efs_node nodes[EFS_MAX_NODES]; uint32_t node_count; } g_client;
 static uint64_t now_ms = 1000000;
@@ -42,7 +43,7 @@ static int efs_client_node_is_down(efs_node_id_t id) { return id == down_id; }
 ''' + macro('PUT_FULL_MARK_MS') + macro('PUT_AWAY_MARK_MS') + \
     'static uint64_t g_node_full_until_ms[EFS_MAX_NODES + 1];\n' + \
     'static uint64_t g_node_away_until_ms[EFS_MAX_NODES + 1];\n' + \
-    fn('static int node_is_full') + fn('static void node_note_away') + \
+    fn('static int node_is_full') + fn('static uint64_t put_away_mark_ms') + fn('static void node_note_away') + \
     fn('static int node_is_away') + fn('static void reroute_untried_fragments') + r'''
 static void place(efs_ino_t ino, uint32_t ci, efs_node_id_t out[3])
 {

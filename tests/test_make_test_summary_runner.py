@@ -140,4 +140,4 @@ try:
     assert {l.split('\t')[4] for l in tsv[1:]} == {'100', '90', '0.1', ''}, tsv
 finally:
     for d in dirs: shutil.rmtree(d, ignore_errors=True)
-print('make_test_summary runner: pass 0, failure 1, timeout 1, NOTRUN 3, empty 1, parallel pool exactly-once/TMPDIR/exclusive, budgets largest-first/slots/OVERBUDGET, full failure logs PASS')
+print('make_test_summary runner: pass 0, failure 1, timeout 1, incomplete 3, empty 1, parallel pool exactly-once/TMPDIR/exclusive, budgets largest-first/slots/OVERBUDGET, full failure logs PASS')

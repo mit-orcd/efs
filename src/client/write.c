@@ -3286,15 +3286,43 @@ static int node_is_full(efs_node_id_t id)
 /* K35 (D42): a member that failed a PUT hard takes no new placement for
  * PUT_AWAY_MARK_MS, before the four failures that mark it down. With four
  * or more members its fragment goes to an available one instead of being
- * acknowledged degraded. */
+ * acknowledged degraded. The mark is a preference among spares, never a
+ * reason for protection debt: an acknowledgement from the member clears it
+ * (it is demonstrably back), and when every other member is unavailable
+ * an away member is still placed on before a stripe is acknowledged on
+ * two fragments. Found by tests/test_k35_fsync_degraded.py case 7: node 3
+ * marked away by a write during its restart kept a 4-member cluster from
+ * placing around node 4, stopped a few seconds later, so every stripe
+ * touching node 4 was acknowledged degraded. EFS_PUT_AWAY_MARK_MS
+ * (milliseconds) overrides the window; tests make it long so the
+ * interleaving is forced, not timed. */
 #define PUT_AWAY_MARK_MS 10000u
 static uint64_t g_node_away_until_ms[EFS_MAX_NODES + 1];
+
+static uint64_t put_away_mark_ms(void)
+{
+    static uint64_t ms;
+    if (!ms) {
+        const char *v = getenv("EFS_PUT_AWAY_MARK_MS");
+        unsigned long long n = v && *v ? strtoull(v, NULL, 10) : 0;
+        ms = n ? (uint64_t)n : PUT_AWAY_MARK_MS;
+    }
+    return ms;
+}
 
 static void node_note_away(efs_node_id_t id)
 {
     if (id && id <= EFS_MAX_NODES)
-        __atomic_store_n(&g_node_away_until_ms[id], report_clock_ms() + PUT_AWAY_MARK_MS,
+        __atomic_store_n(&g_node_away_until_ms[id], report_clock_ms() + put_away_mark_ms(),
                          __ATOMIC_RELAXED);
+}
+
+/* An acknowledged fragment proves the member back. */
+static void node_note_back(efs_node_id_t id)
+{
+    if (id && id <= EFS_MAX_NODES &&
+        __atomic_load_n(&g_node_away_until_ms[id], __ATOMIC_RELAXED))
+        __atomic_store_n(&g_node_away_until_ms[id], 0, __ATOMIC_RELAXED);
 }
 
 static int node_is_away(efs_node_id_t id)
@@ -3312,8 +3340,8 @@ static int node_is_away(efs_node_id_t id)
 static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
                                       efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
 {
-    efs_node_id_t live[EFS_MAX_NODES];
-    uint32_t nlive = 0;
+    efs_node_id_t live[EFS_MAX_NODES], away[EFS_MAX_NODES];
+    uint32_t nlive = 0, naway = 0;
     int built = 0;
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
@@ -3322,15 +3350,24 @@ static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
         if (!bad)
             continue;
         if (!built) {
+            /* away[] holds the members that are only away-marked: the
+             * spares of last resort before a degraded acknowledgement. */
             for (uint32_t n = 0; n < g_client.node_count && nlive < EFS_MAX_NODES; n++) {
                 efs_node_id_t id = g_client.nodes[n].id;
-                if (id != 0 && !efs_client_node_is_down(id) && !node_is_full(id) &&
-                    !node_is_away(id))
+                if (id == 0 || efs_client_node_is_down(id) || node_is_full(id))
+                    continue;
+                if (!node_is_away(id))
                     live[nlive++] = id;
+                else
+                    away[naway++] = id;
             }
             built = 1;
         }
         efs_node_id_t spare = efs_place_spare(live, nlive, ino, chunk_index, i, nodes);
+        /* No other member left: an away member outside the stripe is
+         * better than a two-fragment acknowledgement. */
+        if (!spare)
+            spare = efs_place_spare(away, naway, ino, chunk_index, i, nodes);
         if (spare)
             nodes[i] = spare;
     }
@@ -3384,9 +3421,12 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
     int reprobed = 0;
     for (int attempt = 1; attempt <= 128; attempt++) {
         rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota, seq, epoch);
-        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (acked[i])
+                node_note_back(nodes[i]);
             if (quota[i] && !acked[i])
                 *quota_mask |= 1u << i;
+        }
         if (rc == EFS_OK) {
             uint32_t missing = 0;
             for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)

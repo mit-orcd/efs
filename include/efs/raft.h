@@ -239,6 +239,10 @@ struct efs_raft_cfg {
      * retire that newer window. The server host enables it; 0 keeps the
      * original retirement for the core tests. */
     int preserve_ack_window;
+    /* Log every election event (vote, pre-vote, leader, step-down) instead
+     * of one per 10 s per group: fault builds set it from
+     * EFS_FAULT_RAFT_ELECT_LOG so a test's leader timeline is complete. */
+    int elect_log_all;
     void *net;
     efs_raft_apply_fn apply;
     void *app;

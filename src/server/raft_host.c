@@ -82,6 +82,8 @@ _Static_assert(EFS_RAFT_STATUS_PEERS == EFS_RAFT_MAX_PEERS,
 #define HOST_OUTBOX_MAX    2048
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
+/* High bit of a member-forwarded submit's group byte (host_rpc_submit). */
+#define HOST_SUBMIT_FORWARDED 0x80u
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
 #define HOST_CREATE_NAME_OFF 31
 static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
@@ -4675,7 +4677,7 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
         if (!payload)
             return EFS_ERR_NOMEM;
     }
-    payload[0] = group;
+    payload[0] = (uint8_t)(group | HOST_SUBMIT_FORWARDED);
     if (clen)
         memcpy(payload + 1, cmd, clen);
     if (peer_addr(h, rid, host, sizeof(host), &port) != 0) {
@@ -4791,6 +4793,7 @@ static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
         prefer_rid = -1;
     }
 }
+
 
 /* A read-only forwarded proof must not borrow the mutation RPC's 30-second
  * transport wait. One absolute budget covers pool admission, connection,
@@ -5695,6 +5698,43 @@ busy:
     return EFS_ERR_BUSY;
 }
 
+/* Set while this thread serves a command another member forwarded
+ * (server_raft_host_submit). Such a command is answered here, by this
+ * group's leader, or refused NOT_PRIMARY with the leader hint; it is never
+ * forwarded again. The generic submit path had this rule (Sep 21: under a
+ * leaderless group every hop parked a thread and a peer-pool slot), but
+ * the put-ticket admission branches propose before reaching it, so a
+ * forwarded admission that landed on a follower during an election was
+ * forwarded on, hop after hop, until the peer pools were full and every
+ * forward waited out the 5 s checkout (flake sweep, Oct 25:
+ * test_report_stepdown.py 5.2-6.0 s writes in 5 of 28 runs under load). */
+static __thread int host_serving_forward;
+
+/* A submit's group byte, and whether this thread then serves a member's
+ * forward: marked by host_rpc_submit, except DIR_MIGRATE (see
+ * server_raft_host_submit). */
+static int host_submit_serves_forward(const uint8_t *payload, uint32_t plen, uint8_t *group)
+{
+    *group = plen >= 1 ? (uint8_t)(payload[0] & ~HOST_SUBMIT_FORWARDED) : 0;
+    if (plen < 1 || !(payload[0] & HOST_SUBMIT_FORWARDED))
+        return 0;
+    return !(plen >= 1u + HOST_DIR_LEN && payload[1] == EFS_MD_CMD_DIR &&
+             payload[2] == EFS_MD_DIR_MIGRATE);
+}
+
+/* A proposal on a member that is not the group's leader is forwarded to
+ * it, unless this thread serves a member's forward: then it is refused
+ * NOT_PRIMARY with the leader it knows (never itself), for the forwarder
+ * to retry. Returns 1 when refused. */
+static int host_forward_refused(int serving_forward, int lid, int self, int *leader_hint)
+{
+    if (!serving_forward)
+        return 0;
+    if (leader_hint)
+        *leader_hint = lid >= 0 && lid != self ? lid : -1;
+    return 1;
+}
+
 static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
                         uint64_t *term, int *leader_hint, int local_only)
@@ -5880,6 +5920,11 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
     if (quiet)
         (void)efs_raft_disk_sync_release(h->disk);
     if (local_only) return EFS_ERR_NOT_PRIMARY;
+    /* Already one hop from the caller: answer, never forward again. The
+     * forwarder's host_remote_cmd retries the hinted leader (lid, -1 while
+     * the group elects) within its own budget. */
+    if (host_forward_refused(host_serving_forward, lid, h->raft_id, leader_hint))
+        return EFS_ERR_NOT_PRIMARY;
     /* Not the leader: forward to it. host_remote_cmd is a blocking peer
      * RPC; no host lock is held across it. The command is already fully
      * formed and the Raft log + apply-side validation order it against
@@ -5905,6 +5950,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
         *leader_hint = rep.leader_hint;
     return EFS_OK;
 }
+
 
 /* Bounded lock-free attempts before a verdict read takes h->mu. */
 #define HOST_ARC_READ_TRIES 64
@@ -8604,6 +8650,11 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.voters = cfg_voters;
     cfg.election_ticks = HOST_ELECT_BASE;
     cfg.heartbeat_ticks = HOST_HB_TICKS;
+#if EFS_FAULTS
+    /* Every election line (daemon tests): the one-per-10-s limiter hid a
+     * test's whole leader timeline (flake sweep, Oct 25). */
+    cfg.elect_log_all = env_on("EFS_FAULT_RAFT_ELECT_LOG");
+#endif
     cfg.boot_id = h->boot_id;
     /* Entropy-seeded (h->salt reads /dev/urandom) per-(node,group) so the
      * randomized election timeout is actually de-synchronized in production. */
@@ -12357,6 +12408,17 @@ static void *host_query_thread(void *ctx)
         if(work_enabled){work.dirty=dirty;uint64_t admitted=query_mono_ms();
             work.spacing_ms=work_completed?admitted-work_completed:0;}
         uint64_t source_start=work_enabled?query_mono_ms():0;
+#if EFS_FAULTS
+        /* EFS_FAULT_QUERY_FIRST_UNFORMED (daemon tests): the first capture
+         * is refused UNFORMED, once, as when the commands-policy row lands
+         * just before the member counts itself formed (D4's formation
+         * race); the retry after about a second is what the test checks. */
+        static int first_unformed_fired;
+        if(initial && !first_unformed_fired && env_on("EFS_FAULT_QUERY_FIRST_UNFORMED")){
+            first_unformed_fired=1;source=NULL;rc=EFS_ERR_UNFORMED;
+            fprintf(stderr,"fault: EFS_FAULT_QUERY_FIRST_UNFORMED refused the first catalog capture\n");
+        } else
+#endif
         rc=host_query_source(h,&source,&view,revisions,import_generation,&final_transaction_changed,work_enabled?&work:NULL);
         uint64_t capture_done=query_mono_ms();
         cut_retry=efs_query_refresh_cut_retry(rc,final_transaction_changed,capture_done-now);
@@ -14426,11 +14488,24 @@ static void host_put_ticket_batch_submit(struct efs_raft_host *h, uint8_t group,
     out->leader_hint=hint;
 }
 
+static void host_serving_forward_restore(const int *previous)
+{
+    host_serving_forward = *previous;
+}
+
+/* payload[0] is the group; HOST_SUBMIT_FORWARDED in it marks a command a
+ * member forwarded (host_rpc_submit), as opposed to one a client or this
+ * process submits. A forwarded command is served without a further forward
+ * (host_serving_forward, restored on every return), except DIR_MIGRATE: it
+ * is bounced to a dual-host because the parent group's leader may not host
+ * the destination group, and its own proposals each forward one hop to a
+ * leader that answers. */
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out)
 {
-    struct efs_raft_host *h = g_host;
+    __attribute__((cleanup(host_serving_forward_restore))) int serving_outer = host_serving_forward;
     uint8_t group;
+    struct efs_raft_host *h = g_host;
     const uint8_t *cmd;
     uint8_t storage_finish_cmd[HOST_SESS_CREATE_LEN];
     uint8_t sweep_cmd[21+4*EFS_META_SWEEP_BATCH_MAX];
@@ -14447,7 +14522,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->rc = EFS_ERR_INVAL;
         return;
     }
-    group = payload[0];
+    host_serving_forward = host_submit_serves_forward(payload, plen, &group);
     cmd = payload + 1;
     clen = plen - 1;
     /* Never propose reserved commands/requests. Any other tag this build
