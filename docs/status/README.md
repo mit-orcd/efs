@@ -18,6 +18,16 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Oct 25 user-docs audit against `ec3e09306`: every command, option, workflow and failure case exercised on a loopback cluster](docs-audit-20261025.md):
+**docs updated, PASS (docs gate; nuc `make test-all` see the page); no product code changed.**
+The guide, surface list, POSIX subset, release notes, operations, power-user, quick start and
+`efs-commands` pages now match the binaries (K34–K37, E2, `status` output and exit status,
+restart after a forced, failed-barrier or killed daemon, `.efs` by policy only, `O_DIRECT` only).
+New `make test` check `tests/test_cli_docs.py`: every `efs-mgmt` command and `efsd`/`efs-fuse`
+option in `cli_help.h` is named in the user docs, and the docs name no command or flag the help
+lacks. Open for the user: U4, a clean client stop fails at the session revoke
+(`storage-fence`, `EFS_ERR_BUSY`) while any member is down; S4/W122 and F12 unchanged.
+
 [Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `0b01a2a1e`: 471 commands, 0 FAIL, 15 NOTRUN host limits (2,604 s; raw: intel2 `~/efs-artifacts/merge-wave7-20261025/`, `SHA256SUMS` in that directory).** A11 findings 1 and 2 are fixed; every Stage 2 item now maps to a real `scripts/qualify.py` gate; live and real-host runs stay NOTRUN; every store needs a fresh format.
 

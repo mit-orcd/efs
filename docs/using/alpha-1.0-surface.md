@@ -1,8 +1,10 @@
 # Alpha 1.0 — supported surface and effective settings (draft)
 
-**Draft for user approval, October 24, 2026; checklist items S1 and S4 of
-the [alpha 1.0 checklist](../status/alpha-1.0-2plus1-checklist.md#s-stage-2-functional-scope).
-Checked against the code at `a2326a369`.** "In" marks a surface the alpha
+**Draft for user approval, October 24, 2026, revised October 25; checklist
+items S1 and S4 of the [alpha 1.0 checklist](../status/alpha-1.0-2plus1-checklist.md#s-stage-2-functional-scope).
+Checked against the code and the binaries at `ec3e09306`
+([audit](../status/docs-audit-20261025.md)); `tests/test_cli_docs.py`
+(`make test`) keeps this page and the CLI help in step.** "In" marks a surface the alpha
 release supports and qualifies; "out" marks one the release does not
 support, with the reason. Rows marked *proposed* are this draft's
 recommendation and wait for the user; the others follow a recorded
@@ -67,10 +69,10 @@ expiry is compiled out of the product (findings F7 and F8 closed).
 
 | Command | Alpha | Reason |
 | --- | --- | --- |
-| `status` | in | Members, reachability, quota/usage, usable 2+1 capacity, cluster state, degraded chunks, abandoned uploads |
+| `status` | in | Members, reachability, quota/usage, usable 2+1 capacity, cluster state, degraded chunks and packed segments, `Protection:`, abandoned uploads, build identity of every member, metadata leader placement; exits 1 with a member down |
 | `raft-status` | in | Per-group term, commit, applied, voters and follower bound |
 | `version`, `io-stats`, `gc-status` | in | Read-only diagnostics |
-| `sync-status` | in, *proposed* | Read-only durability state per root |
+| `sync-status` | in, *proposed* | Read-only durability state per root, and the phase and result of a verified recovery after an unclean stop (K36) |
 | `mkfs` / `raft-mkfs` | in | Optional: forms at once before automatic formation; afterwards a no-op |
 | `commands-policy` | in | `.efs` is in the alpha profile; the durable versioned mask |
 | `pack-compact` | in, *proposed* | Packing control: summary (`0`) or on-demand compaction of shared segments |
@@ -79,20 +81,24 @@ expiry is compiled out of the product (findings F7 and F8 closed).
 | `raft-step-down` | out, *proposed* | Leader transfer used by the failover harness; no operator workflow |
 | `data-commit` | out, *proposed* | Durability barrier; the orderly stop already runs it |
 | `raft-change` | out | Manual voter change; K33 changes the voters itself, and a manual change leaves the default layout |
-| `raft-dir`, `raft-session` and every `raft-<op>` (`raft-create`, `raft-lookup`, `raft-rename`, `raft-publish`, `raft-flock`, …) | out | Debug commands that bypass FUSE and change metadata directly |
+| `raft-dir`, `raft-session` and every `raft-<op>`: `raft-getattr`, `raft-lookup`, `raft-lookup-path`, `raft-create`, `raft-unlink`, `raft-rmdir`, `raft-link`, `raft-setattr`, `raft-rename`, `raft-readdir`, `raft-publish`, `raft-getchunks`, `raft-append`, `raft-hold`, `raft-flock`, `raft-fcntl` | out | Debug commands that bypass FUSE and read or change metadata directly; `raft-session fence` is also the way to resume a failed mount-session revoke |
 | `add-node` | removed | Refused, naming `efsd --join`: one way to add a node (K33, finding F4) |
 | `add-storage` | removed | Refused: a node's storage roots are fixed when its store is created; a restart with other roots is refused (finding F11) |
 | `expiry`, `expiry-policy`, `expiry-status`, `expiry-clock`, `expiry-enable`, `expiry-id` | removed | Compiled out of the product (D42); only an `EFS_BUILD_EXPIRY` development build has them |
 
 `efs-mgmt` has no authentication: any host that reaches a daemon port can
-run every command, including the mutating ones (finding F12). Keep the
-cluster ports on a trusted network.
+run every command, including the mutating ones (finding F12; the user's
+scope decision is still open, so this is the current state, not a
+decision). Keep the cluster ports on a trusted network. A command the
+build does not have (`expiry-*` in the product build, a misspelt name)
+answers `Unknown command: NAME` and exits 1; the removed `add-node` and
+`add-storage` are refused by name with the replacement and exit 2.
 
 ## `.efs` commands
 
 | Command | Alpha | Reason |
 | --- | --- | --- |
-| `.efs/ls`, `.efs/find`, `.efs/stats`, `.efs/help` | in | D34/W91–W92; needs `EFS_COMMANDS=1` on the mount, server policy, and Python 3 on the client ([commands](efs-commands.md)) |
+| `.efs/ls`, `.efs/find`, `.efs/stats`, `.efs/help` | in | D34/W91–W92; present on every mount while the cluster commands-policy allows it (mask 3, the default) and needs Python 3 on the client ([commands](efs-commands.md)); `EFS_COMMANDS` is removed (D42) |
 | Expiry options of the commands | out | Rejected by the commands; expiry is off |
 | The former `.stats`/`.find` lookup-only files | removed | Replaced by `.efs/stats` and `.efs/find` (W92); `operations.md` still described `.stats` (finding F9, corrected) |
 
@@ -123,26 +129,31 @@ descriptions are not a support statement.
 
 ## S4 — effective settings
 
-**Status: structure only; depends on the A6 inventory**
-(`docs/status/a6-settings-inventory-20261024.md`, being written in another
-session) **and on a user decision whether W122 is in alpha.** Until then
-an operator sees effective settings only through the channels below.
+**Status: structure only. The A6 inventory exists**
+([settings inventory](../status/a6-settings-inventory-20261024.md): every
+setting the binaries read, its kind, default and disposition) **and the
+A7 removals are done; the user's decision whether W122 (an
+effective-settings listing) is in alpha is still open.** Until then an
+operator sees effective settings only through the channels below; no
+command lists them.
 
 | Setting | Where the operator sees the effective value today |
 | --- | --- |
 | Endpoint, node id, storage roots, quota (automatic or explicit, with the safe maximum), direct I/O, writer count | `efsd` startup lines in `log/efsd.log` (`Storage quota: …`, `node N listening on …`, `direct_io=…`); roots, quota and usage also in `efs-mgmt status` |
 | Membership, member count, metadata voters, formation | `efs-mgmt status` (members), `efs-mgmt raft-status` (voters per group), log line `raft-host: formed: N members, g0 voters …, g2 voters …` |
 | Build identity | `--version` on each binary, `efs-mgmt version NODE:PORT` |
-| Durability mode per root | `efs-mgmt sync-status NODE:PORT` |
-| `.efs` policy | `efs-mgmt commands-policy NODE:PORT get`; the mount's `EFS_COMMANDS` is visible only in the client's environment |
+| Durability window per root | `efs-mgmt sync-status NODE:PORT` (`window 200 ms / 256 MiB`, unsynced bytes, barriers) |
+| `.efs` policy | `efs-mgmt commands-policy NODE:PORT get` (the only switch; `EFS_COMMANDS` is removed) |
+| Recovery state after an unclean stop | `efs-mgmt sync-status NODE:PORT` (`recovery running\|verified\|FAILED`) |
 | Transport | Daemon and client logs; not in any status command |
 | Environment tunables and A/B selectors | Not shown. An unset variable gives the built-in default; a set one is visible only in the process environment. Some invalid values are logged (`query-config: …`) |
 
-Structure for the S4 page once A6 lands: one row per inventoried setting,
-with its A6 disposition (deployment input, justified tuning, observability,
-removed), its default, whether its effective value is visible and where,
-and the A11 configuration dimension it belongs to. If W122 is taken into
-alpha, its listing replaces the last three rows of the table above; if not,
-F4 lists "no effective-settings listing" as a limitation.
+Structure for the S4 page once W122 is decided: one row per inventoried
+setting (the A6 inventory already has the rows), with its disposition
+(deployment input, justified tuning, observability, removed), its default,
+whether its effective value is visible and where, and the A11 configuration
+dimension it belongs to. If W122 is taken into alpha, its listing replaces
+the last three rows of the table above; if not, F4 keeps "no
+effective-settings listing" as limitation L24.
 
 Removed settings (A6, `docs/status/a6-settings-inventory-20261024.md`) such as `EFS_FEATURES_TTL_MS`, `EFS_QUERY_CATALOG_MIB`, `EFS_GC_DISABLE` and `EFS_KV_COMPACT_DIE` are not settings any more: efsd and efs-fuse stop with a message naming one that is still set.

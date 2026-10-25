@@ -96,9 +96,7 @@ watermark and generation.
 
 For `kind: "restore"`, `restore_ns` measures the current process's validated
 restore; the three build-phase fields are zero. Original build timings are not
-persisted or reconstructed. Older daemon builds omit this additive object.
-The phase-diagnostic rollout is tracked in the
-[W92 closure ledger](../status/query-cache-closure-20261010.md).
+persisted or reconstructed.
 
 
 Dates, sizes and filters use the published **server metadata snapshot**. They
@@ -122,9 +120,13 @@ For activation and restart/catch-up behavior, see
 Human status on stderr uses relative freshness, for example:
 
 ```text
-Results as of 15 seconds ago; complete for this snapshot. Background refresh may lag recent writes.
+Results as of 15 seconds ago; validated against this snapshot. Background refresh may lag recent writes.
 Snapshot 17444155377256343:280; no refresh error recorded; expiry unavailable.
 ```
+
+A file written seconds ago is not in the snapshot yet (the catalog refreshes
+at most every `EFS_QUERY_REFRESH_MS`, 60 s by default), so `.efs/ls` on a
+fresh mount can show `0 results` while `ls` shows the file.
 
 The first snapshot number identifies the server instance; the second is its
 published catalog generation. Freshness measures time since source metadata was
@@ -136,8 +138,7 @@ rather than a misleading zero age. JSON keeps the exact timestamp and identity.
 
 ## Local server cache backend
 
-On `devel-find-stats`, publishers use a disk catalog under
-`<storage>/mdraft/query-cache`. Command syntax and permission checks are unchanged;
+Publishers use a disk catalog under `<storage>/mdraft/query-cache`. Command syntax and permission checks are unchanged;
 the cache is local derived metadata, not a user-visible directory or an additional
 copy of file contents. Only hosts with both metadata groups can publish complete
 catalogs. Adding storage nodes does not automatically add full publishers.

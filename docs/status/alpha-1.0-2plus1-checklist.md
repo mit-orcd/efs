@@ -515,6 +515,15 @@ facts for A6, not decisions.
   Rows marked *proposed* (for example `--no-direct-io`, `--writers`,
   `--no-persist`, `add-node`, `shrink-quota`, `raft-step-down`) wait for the
   user; findings F2–F8, F11, F12 list help-text gaps and profile defaults.
+  **Audited Oct 25 against `ec3e09306` ([audit](docs-audit-20261025.md)):**
+  every binary, option, `efs-mgmt` and `.efs` command and refusal exercised
+  on a loopback cluster of that build; the page lists every `raft-<op>`,
+  `status`'s sections and exit status, and the removed `EFS_COMMANDS`;
+  `tests/test_cli_docs.py` (`make test`) fails when `cli_help.h` and the
+  user pages name different commands or options. Still *proposed*:
+  `--writers`, `sync-status`, `pack-compact`, `raft-resync`, `shrink-quota`,
+  `raft-step-down`, `data-commit`; F12 (port authentication) waits for the
+  user.
 - [ ] **S2 — POSIX subset.** Publish the supported operations and every known
   gap (for example, mmap is skipped in the extras suite). Each gap is either
   fixed or justified as a limitation (F4). No gap counts as PASS.
@@ -524,6 +533,11 @@ facts for A6, not decisions.
   mmap W104, K10 fork readback, `renameat2` flags, `fallocate` modes,
   non-`user.` xattrs, `mknod`, D28, D32, W159 open). Recorded runs are on
   `cb970ca7c` and `163241584`; none on the base; C1 per topology NOTRUN.
+  **Audited Oct 25 ([audit](docs-audit-20261025.md)):** case counts match
+  the suites at `ec3e09306` (218 core, 5 extras, 68 two-client, 27
+  durability); P15 no longer says COMMIT is fenced until a fresh format
+  (K36); P13 (W159) records the Oct 25 diagnosis; `.efs` extras depend on
+  the commands-policy, not on the removed `EFS_COMMANDS`.
 - [ ] **S3 — Operator workflows.** Format, start, stop, status, `df`,
   quotas, `raft-status`, `raft-resync`, packing control, and failure
   messages. Each one is documented and covered by a test.
@@ -531,22 +545,37 @@ facts for A6, not decisions.
   (automatic at three members, optional `mkfs`), start, status, mount and
   unmount, `df`, quotas, adding a node, adding storage, stop, restart and
   orderly shutdown with the current CLI. Test coverage gaps: `add-storage`
-  and `add-node` have no test, `raft-resync` only a gate script (F11, F20).
+  and `add-node` have no test, `raft-resync` only a gate script (F11, F20;
+  fixed Oct 24). **Audited Oct 25 ([audit](docs-audit-20261025.md)):**
+  every workflow run on a loopback cluster at `ec3e09306`; the guide now
+  describes `status`'s full output and exit status, the clean-stop output
+  and stop record, the restart rules after a forced, failed-barrier or
+  killed daemon (verified recovery, K36), K34, K37 and `Protection: LOST`.
+  Open finding U4: a clean client stop fails at the session revoke
+  (`revoke rc=-13 phase=storage-fence`) while any member is down, because
+  the storage fence must reach every configured member; the user decides
+  whether that is an alpha limitation or a fix.
 - [ ] **S4 — Effective settings.** Decide whether **W122**, the listing of
   effective settings, is in alpha. It supports A8 and A10.
   **STRUCTURE Oct 24 ([effective settings](../using/alpha-1.0-surface.md#s4--effective-settings)):**
   where each effective value is visible today (startup log, `status`,
   `raft-status`, `version`, `sync-status`, `commands-policy get`; tunables
-  not at all) and the page layout once A6 lands. **Waits for** the A6
-  inventory (`a6-settings-inventory-20261024.md`) and the user's W122
-  decision.
+  not at all) and the page layout once A6 lands. The A6 inventory exists
+  and the A7 removals are done (D42); **waits for** the user's W122
+  decision only (described, not decided, in the Oct 25
+  [audit](docs-audit-20261025.md)).
 - [ ] **S5 — User documentation.** Install, configuration, supported
   topologies, the reduced configuration matrix (A11) and the published
   limitations.
   **DRAFT Oct 24 ([alpha guide](../using/alpha-1.0-guide.md)):** install,
   configuration, topology (3–16 nodes, 2+1, distinct hosts), transport and
   direct I/O, quotas, failure behavior (one node down, rebuild on return,
-  two down). The A11 matrix waits for A11.
+  two down). The A11 matrix waits for A11. **Revised Oct 25
+  ([audit](docs-audit-20261025.md)):** failure behavior brought up to K34,
+  K35, K36 and K37 and checked on a loopback cluster; `operations.md`,
+  `power-user.md`, `quickstart.md`, `efs-commands.md` and the README no
+  longer describe buffered I/O, `EFS_COMMANDS`, splice or `add-storage` as
+  current; `v030-candidate.md` is marked historical.
 
 ## B. Verify geometry, placement and usable capacity
 
@@ -778,6 +807,11 @@ round says which physical or software limiter it hit.
   **DRAFT Oct 24 ([release notes](../release-notes/alpha-1.0.md)):**
   limitations L1–L28 with trigger, what the user sees and reference, and
   the open K rows that must close or be added before release.
+  **Revised Oct 25 ([audit](docs-audit-20261025.md)):** checked against
+  D40–D42 and the K rows at `ec3e09306`: L6, L7, L8 and L28 now describe
+  verified recovery and segment rebuild (K36, K37) instead of "deferred";
+  the open-items paragraph lists K34–K37 as fixed on loopback with live
+  runs NOTRUN; L22 and L24 are marked as open user decisions (F12, W122).
   Release-notes entries decided so far (D40, Oct 23), one each:
   - **K10/W121 readback after fsync:** a read issued right after a
     successful fsync can return the previous file's payload; triggered by

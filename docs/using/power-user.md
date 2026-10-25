@@ -28,9 +28,9 @@ does. The normative text is the linked section, never this page.
   port/LID; RoCE uses an active Ethernet verbs device and nonzero GID.
   `EFS_RDMA_GID_INDEX=<index>` pins a valid local GID; otherwise discovery
   chooses the first nonzero GID. Set these variables for servers and clients.
-- Splice measurement runs may need a larger `fs.pipe-max-size`; splice is
-  disabled by default, so 8 MiB is not a default-mount prerequisite.
-  Enable only for explicit measurement; the recorded profile found no gain.
+- FUSE splice reads are off and the switch is gone (`EFS_FUSE_SPLICE_READ`
+  was removed, D42; efs-fuse refuses it), so no `fs.pipe-max-size` tuning
+  is needed.
 - Supported FUSE surface (`chmod`/`chown`/`truncate`/`rename`/`utimens`,
   the lookup-only `.efs/` command directory):
   [operations.md § FUSE surface](../operations/operations.md#fuse-surface);
@@ -93,11 +93,15 @@ message naming it.
 
 ## efs-mgmt
 
-`status`, `mkfs`, `shrink-quota`, `raft-status`, `raft-resync`,
-`raft-change`, `raft-dir`, and a `raft-<op>` for every metadata operation
-(`add-node` and `add-storage` were removed: nodes join with `efsd --join`,
-storage roots are fixed per node):
-[operations.md § Cluster management](../operations/operations.md#cluster-management).
+`status`, `raft-status`, `version`, `io-stats`, `gc-status`, `sync-status`,
+`data-commit`, `pack-compact`, `commands-policy`, `mkfs` (`raft-mkfs`),
+`shrink-quota`, `raft-resync`, `raft-step-down`, `raft-change`, `raft-dir`,
+`raft-session` and a `raft-<op>` for every metadata operation (`add-node`
+and `add-storage` were removed: nodes join with `efsd --join`, storage
+roots are fixed per node; `efs-mgmt COMMAND --help` gives each syntax):
+[operations.md § Cluster management](../operations/operations.md#cluster-management);
+which of them alpha supports is in the
+[surface list](alpha-1.0-surface.md#efs-mgmt-commands).
 
 ## `df` / `du` semantics
 

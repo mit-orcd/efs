@@ -393,6 +393,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_env_inventory.py
 	python3 tests/test_env_removed.py
 	python3 tests/test_cli_surface.py
+	python3 tests/test_cli_docs.py
 	python3 tests/test_direct_io_required.py
 	python3 tests/test_rdma_trace.py
 	python3 tests/test_transport_select.py
