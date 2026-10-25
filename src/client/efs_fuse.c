@@ -1412,11 +1412,11 @@ static void lookup_memo_put(const struct efs_inode *row)
  * change cache lifetime, mutation fencing, RPC or quorum decisions. */
 static void lookup_memo_observe(unsigned reason)
 {
-    static int env_rpc_prof = -1; /* W143: read once, per-op path */
-    if (env_rpc_prof < 0)
-        env_rpc_prof = getenv("EFS_RPC_PROF") != NULL;
+    static int env_rpc_prof = -1; /* W143: read once, per-op path; any thread may be first */
+    if (__atomic_load_n(&env_rpc_prof, __ATOMIC_ACQUIRE) < 0)
+        __atomic_store_n(&env_rpc_prof, getenv("EFS_RPC_PROF") != NULL, __ATOMIC_RELEASE);
     static uint64_t counts[7], total;
-    if (!env_rpc_prof)
+    if (!__atomic_load_n(&env_rpc_prof, __ATOMIC_RELAXED))
         return;
     __atomic_add_fetch(&counts[reason], 1, __ATOMIC_RELAXED);
     if (reason >= 4)
@@ -3324,12 +3324,12 @@ static int efs_ino_has_unpublished(efs_ino_t ino)
 
 static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)
 {
-    static int env_rpc_prof = -1; /* W143: read once, per-op path */
-    if (env_rpc_prof < 0)
-        env_rpc_prof = getenv("EFS_RPC_PROF") != NULL;
+    static int env_rpc_prof = -1; /* W143: read once, per-op path; any thread may be first */
+    if (__atomic_load_n(&env_rpc_prof, __ATOMIC_ACQUIRE) < 0)
+        __atomic_store_n(&env_rpc_prof, getenv("EFS_RPC_PROF") != NULL, __ATOMIC_RELEASE);
     pthread_mutex_t *amu;
     int rc;
-    int profile = env_rpc_prof;
+    int profile = __atomic_load_n(&env_rpc_prof, __ATOMIC_RELAXED);
     uint64_t t0=profile?stats_now_ms():0,t1=0,t2=0,t3=0;
 
     (void)fi;
