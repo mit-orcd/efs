@@ -118,6 +118,11 @@ static void parsing(void)
     CHECK(efs_member_view_parse_reply(&r, EFS_MEMBERSHIP_REPLY_HDR + r.len, &out) != EFS_OK,
           "another record version");
     r.rc = EFS_ERR_UNFORMED;
+    CHECK(efs_member_view_parse_reply(&r, EFS_MEMBERSHIP_REPLY_HDR, &out) == EFS_ERR_DECODE,
+          "server error with a nonzero record length is malformed");
+    r.len = 0;
+    CHECK(efs_member_view_parse_reply(&r, EFS_MEMBERSHIP_REPLY_HDR + 1, &out) == EFS_ERR_DECODE,
+          "server error with a trailing byte is malformed");
     CHECK(efs_member_view_parse_reply(&r, EFS_MEMBERSHIP_REPLY_HDR, &out) == EFS_ERR_UNFORMED,
           "server rc");
     r.rc = EFS_OK;
