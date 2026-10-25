@@ -129,7 +129,7 @@ with tempfile.TemporaryDirectory(prefix='efs-san-gate-') as td:
             assert 'WARNING: ThreadSanitizer: data race' in out and 'inc' in out, 'report not shown: ' + out
             print('sanitizer gate (tsan): racy fixture -> FAIL with the report, clean sibling PASS')
         else:
-            over = build(d, 'overflow', OVERFLOW, flags)
+            over = build(d, 'overflow', OVERFLOW, ['-fsanitize=address'])  # UBSan's object-size check must not get there first
             ub = build(d, 'ub', UB, flags)
             rc, out = run_gate(d, mode, [('overflow', str(over)), ('ub', str(ub)), ('clean', str(clean))])
             assert rc == 1 and 'FAIL overflow: 1 AddressSanitizer errors' in out, (rc, out)

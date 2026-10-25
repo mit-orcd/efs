@@ -232,13 +232,13 @@ classify() {   # $1 name, $2 rc
         n=$(cat "$LOGDIR/$name".tsan.* 2>/dev/null | grep -c '^WARNING: ThreadSanitizer:')
         [ "$n" -gt 0 ] && { echo "$n ThreadSanitizer reports"; return; } ;;
     asan)
-        n=$(cat "$LOGDIR/$name".asan.* 2>/dev/null | grep -c '^==[0-9]*==ERROR: AddressSanitizer')
+        # Which log_path a report lands in depends on the toolchain (gcc has
+        # two runtimes, clang one that takes the last parsed option set),
+        # and a binary without log_path prints to stderr (.out): read all.
+        n=$(cat "$LOGDIR/$name".asan.* "$LOGDIR/$name".ubsan.* "$LOGDIR/$name.out" 2>/dev/null | grep -c '^==[0-9]*==ERROR: AddressSanitizer')
         [ "$n" -gt 0 ] && { echo "$n AddressSanitizer errors"; return; }
-        n=$(cat "$LOGDIR/$name".asan.* 2>/dev/null | grep -c '^==[0-9]*==ERROR: LeakSanitizer')
+        n=$(cat "$LOGDIR/$name".asan.* "$LOGDIR/$name".ubsan.* "$LOGDIR/$name.out" 2>/dev/null | grep -c '^==[0-9]*==ERROR: LeakSanitizer')
         [ "$n" -gt 0 ] && { echo "$n LeakSanitizer reports"; return; }
-        # gcc routes UBSan reports through the ASan runtime's log, clang
-        # through UBSAN_OPTIONS' log_path, and a harness-built binary without
-        # log_path prints to stderr (the .out file).
         n=$(cat "$LOGDIR/$name".asan.* "$LOGDIR/$name".ubsan.* "$LOGDIR/$name.out" 2>/dev/null | grep -c 'runtime error:')
         [ "$n" -gt 0 ] && { echo "$n UBSan errors"; return; } ;;
     esac
