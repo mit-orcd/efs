@@ -84,6 +84,7 @@ def run(a=None, edit=None, drained=5.0, bad=()):
     r.fg_files = {'g0': 1}
     r.members = {1: 'a:1', 2: 'b:2'}
     r.index_ready, r.index_not_ready = 0.5, [0.1]
+    r.uncertain = set()
     r.lock = __import__('threading').Lock()
     r.t0 = __import__('time').time()
     if edit:

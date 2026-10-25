@@ -240,6 +240,7 @@ class Run:
         self.live = {}          # load file -> size (acknowledged, not unlinked)
         self.fg_files = {}      # foreground file -> size
         self.ver = {}           # file -> version of its last rewrite (working set, foreground ring)
+        self.uncertain = set()  # load files whose last rewrite failed: content unspecified, not acknowledged
         self.counts = {'created': 0, 'unlinked': 0, 'create_errors': 0,
                        'overwritten': 0, 'truncated': 0, 'rewritten': 0}
         self.ops = {}           # kind -> [latencies]
@@ -326,9 +327,15 @@ class Run:
                 with self.lock:
                     self.ver[name] = v
                     self.live[name] = size
+                    self.uncertain.discard(name)
                     self.counts[('overwritten', 'truncated', 'rewritten')[op]] += 1
             except OSError as e:
+                # A failed write leaves the file's content unspecified (old,
+                # new or in between): it is no longer acknowledged state, so
+                # it leaves the exactness check until a rewrite succeeds.
+                # The error itself fails the run.
                 with self.lock:
+                    self.uncertain.add(name)
                     self.errors.append(f'load {("overwrite", "truncate", "rewrite")[op]} {name}: {e}')
             k += 1
 
@@ -588,7 +595,8 @@ class Run:
         # Every acknowledged file exact: whole reads through VERIFY_THREADS
         # at once (the live set is hundreds to thousands of small files).
         t = time.time()
-        items = [(name, str(name.relative_to(self.dir)), size) for name, size in sorted(self.live.items())]
+        items = [(name, str(name.relative_to(self.dir)), size) for name, size in sorted(self.live.items())
+                 if name not in self.uncertain]
         items += [(name, name.name, size) for name, size in sorted(self.fg_files.items())]
 
         def check(item):
@@ -652,7 +660,9 @@ class Run:
              'load_created': self.counts['created'], 'load_unlinked': self.counts['unlinked'],
              'load_create_errors': self.counts['create_errors'], 'load_live_files': len(self.live),
              'fg_files': len(self.fg_files), 'verify_s': round(verify_s, 1), 'verify_bad': bad[:20],
-             'errors': self.errors[:20], 'stalls_dumped': self.stalls, 'samples': len(self.samples)}
+             'errors': self.errors[:20], 'error_count': len(self.errors),
+             'verify_skipped_failed_last_write': len(self.uncertain),
+             'stalls_dumped': self.stalls, 'samples': len(self.samples)}
         if self.overdue:
             fails.append(f'{len(self.overdue)} foreground operations over {a.fg_deadline_s} s: '
                          f'{self.overdue[:5]}')
