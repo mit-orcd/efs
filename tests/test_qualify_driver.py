@@ -32,6 +32,9 @@ def load(path):
 
 
 # Pure helpers.
+assert 'edelete --force --delete' in Q.delete_command('/tmp/private tree')
+assert "'/tmp/private tree'" in Q.delete_command('/tmp/private tree')
+assert 'rm -rf' not in (root / 'scripts/qualify.py').read_text()
 assert Q.identity_key('efsd v1-g123 (branch devel, built today on n1)') == 'v1-g123 (branch devel)'
 assert Q.identity_key('efs-fuse v1-g123 (branch devel, built now on n2)') == 'v1-g123 (branch devel)'
 assert Q.identity_key('efsd v1-g123-dirty (branch devel, built x)') != 'v1-g123 (branch devel)'
@@ -555,9 +558,10 @@ try:
     # start, stop sends SIGTERM and waits (a stub efsd from a stub tree).
     tree = tmp / 'tree'
     tree.mkdir()
-    (tree / 'efsd').write_text('#!/usr/bin/env python3\nimport socket, sys, signal, time\n'
+    (tree / 'efsd').write_text('#!/usr/bin/env python3\nimport socket, sys, signal, time\nfrom pathlib import Path\n'
                                'addr = next(a for a in sys.argv[1:] if a.count(":") == 1 and not a.startswith("-"))\n'
-                               'h, p = addr.rsplit(":", 1)\ntime.sleep(0.5)\ns = socket.socket()\n'
+                               'h, p = addr.rsplit(":", 1)\n'
+                               'time.sleep(60 if Path(__file__).with_name("hold-listen").exists() else 0.5)\ns = socket.socket()\n'
                                's.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\ns.bind((h, int(p)))\n'
                                's.listen()\nsignal.signal(signal.SIGTERM, lambda *a: sys.exit(0))\n'
                                'while True:\n    time.sleep(1)\n')
@@ -611,8 +615,12 @@ try:
             assert Q.main(['_node', 'start', *node[:4], '--timeout', '0']) == 0
             pid = int((tmp / 'pc/n1.pid').read_text())
             assert Q.main(['_node', 'kill', *node]) == 0 and not Q.pid_alive(pid), buf.getvalue()
-            assert Q.main(['_node', 'start', *node[:4], '--timeout', '0.05']) == 1
-            assert Q.main(['_node', 'stop', *node]) == 0
+            (tree / 'hold-listen').touch()
+            try:
+                assert Q.main(['_node', 'start', *node[:4], '--timeout', '0.05']) == 1
+                assert Q.main(['_node', 'stop', *node]) == 0
+            finally:
+                (tree / 'hold-listen').unlink()
             refused = tmp / 'reserved-node'
             assert Q.main(['_node', 'start', '--addr', '127.0.0.1:17432', '--store', str(refused)]) == 2
             assert Q.main(['_node', 'start', '--addr', f'127.0.0.1:{port}', '--store', str(refused),

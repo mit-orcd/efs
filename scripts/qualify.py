@@ -109,6 +109,13 @@ DEFAULT_FIXTURE = dict(
     e4_query_deadline_s=30, e4_refresh_s=60, e4_reclaim_s=900)
 
 
+def delete_command(path):
+    """Use the host's explicit tree-deletion tool; never substitute rm."""
+    quoted = shlex.quote(str(path))
+    return (f'export PATH="$HOME/bin:$PATH"; test -e {quoted} || exit 0; '
+            f'edelete --force --delete {quoted}')
+
+
 def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds')
 
@@ -627,10 +634,9 @@ class PrivateCluster(Controller):
         for m in self.q.cluster.get('mounts', []):
             mount = Path(m['path'])
             g.fetch(m['host'], f'{mount.parent}/efs-fuse-{mount.name}.log', f'efs-fuse-{m["host"]}-{mount.name}.log')
-        root = shlex.quote(self.pc['root'])
+        root = self.pc['root']
         for host in sorted({n['host'] for n in self.nodes} | {m['host'] for m in self.q.cluster.get('mounts', [])}):
-            g.run('teardown-delete', host, f'test -e {root} || exit 0; if command -v edelete >/dev/null; '
-                  f'then edelete --force --delete {root}; else rm -rf -- {root}; fi', 900)
+            g.run('teardown-delete', host, delete_command(root), 900)
 
 
 def check_private_cluster(cluster):
@@ -883,8 +889,7 @@ class Qualify:
         if not self.control.owned:  # an owned cluster's mounts go with it
             trees += [(m['host'], f'{m["path"]}/qualify-{self.runid}') for m in self.cluster.get('mounts', [])]
         for host, path in trees:
-            cmd = (f'test -e {shlex.quote(path)} || exit 0; if command -v edelete >/dev/null; then '
-                   f'edelete --force --delete {shlex.quote(path)}; else rm -rf -- {shlex.quote(path)}; fi')
+            cmd = delete_command(path)
             try:
                 subprocess.run(self.runner.argv(host, cmd, 600), capture_output=True, timeout=660)
             except subprocess.TimeoutExpired:
@@ -1883,8 +1888,7 @@ def g_a13(q, g):
         g.fetch(mnt['host'], f'{Path(mnt["path"]).parent}/efs-fuse-{Path(mnt["path"]).name}.log', 'efs-fuse-a13.log')
         if not q.args.keep_work:
             for host in sorted({n['host'] for n in nodes} | {mnt['host']}):
-                g.run('delete-a13', host, f'test -e {shlex.quote(root)} || exit 0; if command -v edelete >/dev/null; '
-                      f'then edelete --force --delete {shlex.quote(root)}; else rm -rf -- {shlex.quote(root)}; fi', 900)
+                g.run('delete-a13', host, delete_command(root), 900)
     shared = g.fixture['distinct_hosts'] < len(nodes)
     return PASS, (f'3 -> 4 (join killed {interrupted}, retried: same member 4; SHARD2 {{1,2,3}} -> {{2,3,4}}) -> 5 through '
                   f'member 3 with the seed down (member 5 storage only); usable {cap3} -> {cap5} B; '
@@ -3318,10 +3322,9 @@ def main(argv=None):
         if loop:
             loop.teardown()
         if not a.keep_work and not a.plan:
-            subprocess.run(f'if command -v edelete >/dev/null; then edelete --force --delete {shlex.quote(str(work))};'
-                           f' else rm -rf -- {shlex.quote(str(work))}; fi', shell=True, capture_output=True)
+            subprocess.run(delete_command(work), shell=True, capture_output=True)
         elif a.plan:
-            subprocess.run(['rm', '-rf', '--', str(work)])
+            subprocess.run(delete_command(work), shell=True, capture_output=True)
     print(f'qualify: {verdict}; raw {out}; summary {out / "summary-draft.md"}', flush=True)
     return {PASS: 0, FAIL: 1, NOTRUN: 3}[verdict]
 
