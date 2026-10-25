@@ -35,7 +35,10 @@ int main(void) { pthread_t a, b; pthread_create(&a, 0, inc, 0); pthread_create(&
 OVERFLOW = r'''
 #include <stdlib.h>
 #include <string.h>
-int main(int argc, char **argv) { (void)argv; char *p = malloc(16); volatile char *v = p; v[15 + argc] = 1; int r = v[15 + argc]; free(p); return r != 1; }
+/* The size is opaque so UBSan's object-size check (gcc) does not fire
+ * first and the overflow reaches AddressSanitizer. */
+int main(int argc, char **argv) { (void)argv; volatile size_t sz = 16; char *p = malloc(sz);
+    volatile char *v = p; v[sz + argc - 1] = 1; int r = v[sz + argc - 1]; free(p); return r != 1; }
 '''
 UB = r'''
 #include <limits.h>
