@@ -21,6 +21,12 @@ assert [e['kind'] for e in short]==[e['kind'] for e in s.schedule(18000)]
 assert len({e['victim'] for e in ev[:5] if e['kind']=='clean'})==5
 clean='Cluster state: OK (5 up, 0 down)\nDegraded chunks: 0 x\nDegraded segments: 0 x; unrecoverable=0\nProtection: full\nAbandoned uploads: pending=0' 
 assert s.clean_protection(s.protection(clean))
+# D31 retains active-session tickets until revocation, not until a timer.
+assert s.clean_protection(s.protection(clean.replace('pending=0','pending=2')))
+assert s.protection(clean.replace('pending=0','pending=2'))['orphans']==2
+assert s.clean_protection(s.protection(clean),orphans_revoked=True)
+assert not s.clean_protection(s.protection(clean.replace('pending=0','pending=2')),orphans_revoked=True)
+assert not s.clean_protection(s.protection(clean.replace('pending=0','pending=unknown')),orphans_revoked=True)
 for text in ('',clean.replace('Degraded chunks: 0','Degraded chunks: unknown'),clean.replace('unrecoverable=0','unrecoverable=1'),clean.replace('5 up, 0 down','4 up, 1 down')):
  assert not s.clean_protection(s.protection(text)), text
 assert s.recovery_clean('recovery verified missing=2 marked=2 rebuilt=2 rebuild_waiting=0 waiting=0 unrecoverable=0')
@@ -75,3 +81,11 @@ assert sorted(e['victim'] for e in short if e['kind']=='clean')==[1,2,3,4,5]
 assert {e['kind'] for e in short}=={'clean','crash','client','add'}
 assert len({e['at'] for e in short})==len(short)
 print('15-minute representative lifecycle schedule PASS')
+
+u='ab'*16
+assert s.owned_session(f'session uuid={u} epoch=12\n')==(u,12)
+for text in ('',f'session uuid={u[:-1]} epoch=1\n',f'xsession uuid={u} epoch=1',f'session uuid={u} epoch=1\nsession uuid={u} epoch=2\n'):
+ try:s.owned_session(text)
+ except AssertionError:pass
+ else:raise AssertionError('ambiguous/unowned session accepted')
+print('D31 owned-session identity and active-versus-revoked collection controls PASS')

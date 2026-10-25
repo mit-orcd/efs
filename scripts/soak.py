@@ -75,8 +75,9 @@ def protection(text):
                 full='Protection: full' in text, ok='Cluster state: OK ' in text)
 
 
-def clean_protection(p):
-    return p == dict(chunks=0, segments=0, lost=0, down=0, orphans=0, full=True, ok=True)
+def clean_protection(p, orphans_revoked=False):
+    return (all(p.get(k)==v for k,v in dict(chunks=0, segments=0, lost=0, down=0, full=True, ok=True).items())
+            and (not orphans_revoked or p.get('orphans')==0))
 
 
 def recovery_clean(text):
@@ -114,6 +115,12 @@ def foreign_jobs(owned=()):
         except (OSError, ValueError):
             continue
     return found
+
+
+def owned_session(text):
+    found=re.findall(r'^session uuid=([0-9a-f]{32}) epoch=(\d+)$',text,re.M)
+    assert len(found)==1, 'cannot identify exact owned mount session'
+    return found[0][0],int(found[0][1])
 
 
 def digest(path):
@@ -302,23 +309,23 @@ class Soak:
             self.stop.set()
             self.note('monitor-failure', trace=self.errors[-1])
 
-    def status(self, require_clean=False):
+    def status(self, require_clean=False, orphans_revoked=False):
         rc, text = self.mgmt('status')
         p = protection(text)
         self.note('status', rc=rc, protection=p)
         assert p['lost'] in (None, 0), f'lost segments: {p}'
         if require_clean:
-            return rc == 0 and clean_protection(p)
+            return rc == 0 and clean_protection(p, orphans_revoked)
         if not self.churning and not require_clean:
             assert rc == 0 and clean_protection(p), f'not protected outside churn: {p}'
         return False
 
-    def settle(self, recovery=None):
+    def settle(self, recovery=None, orphans_revoked=False):
         start = time.monotonic()
         while time.monotonic()-start < self.a.recovery_bound:
             if self.stop.is_set():
                 raise AssertionError('workload failed while waiting for recovery')
-            ready = self.status(require_clean=True)
+            ready = self.status(require_clean=True, orphans_revoked=orphans_revoked)
             if recovery is not None:
                 rc, text = self.mgmt('sync-status', recovery)
                 ready = ready and rc == 0 and recovery_clean(text)
@@ -396,11 +403,17 @@ class Soak:
             # application call interrupted by SIGKILL (covered by K15/K29 gates).
             with self.mount_mu[victim]:
                 m = self.mounts[victim]
+                uuid,epoch=owned_session(m.logp.read_text())
                 m.p.kill()
                 m.p.wait(timeout=30)
                 rc, text = self.command(['fusermount3', '-u', str(m.path)], 30, 'dead-client-unmount')
                 assert rc == 0, text
                 m.log.close()
+                # D31 deliberately requires operator revocation after client
+                # death. Revoke this exact owned UUID, never infer an expiry.
+                rc,text=self.command([str(MGMT),'raft-session',self.c.ep(1),'fence',uuid],
+                                     self.a.recovery_bound,'revoke-crashed-client')
+                assert rc==0 and re.search(r'epoch=%d\b' % (int(epoch)+1),text),text
                 # Preserve every client run in a separate log and mount path.
                 self.mounts[victim] = Mount(self.c, 1+victim, f'mnt-{victim}-r{len(self.events)}')
         elif kind == 'add':
@@ -526,8 +539,15 @@ class Soak:
             # No extra events launched after the declared duration.
             self.phase='final'
             self.verify()
+            self.quiet(False)
             self.stop.clear()
-            self.settle()
+            # Live sessions can legitimately retain orphan tickets. Collection
+            # is required after their documented revocation, never from age.
+            for idx,m in enumerate(self.mounts):
+                m.close()
+                self.mounts[idx]=Mount(self.c,1+idx,f'mnt-final-{idx}')
+            self.settle(orphans_revoked=True)
+            self.verify()
             self.stop.set()
             self.sample()
             self.plateau()
