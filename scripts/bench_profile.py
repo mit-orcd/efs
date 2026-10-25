@@ -204,11 +204,12 @@ def cases_for(a, cpus):
                 ['--bench', 'blake3', '--time', duration, '--size', str(size), '--threads', str(nt), f'--{style}'])
     if 'data' in modes:
         phases = ['write', 'read'] if a.data_rw == 'split' else [a.data_rw]
-        for direct, writer, qd, rw in itertools.product([False, True], a.writers, a.qds, phases):
+        # The store is O_DIRECT only (D42): efs-bench --bench data refuses an I/O flag.
+        for writer, qd, rw in itertools.product(a.writers, a.qds, phases):
             suffix = ('' if rw == 'both' else f'-{rw}') + ('-sync' if a.data_sync else '')
-            add(f'data-{"direct" if direct else "buffered"}-w{writer}-qd{qd}{suffix}', 'data',
+            add(f'data-direct-w{writer}-qd{qd}{suffix}', 'data',
                 ['--bench', 'data', '--time', duration, '--qd', str(qd), '--window', str(a.data_size[0] // (65536 * qd)),
-                 '--rw', rw, '--direct-io' if direct else '--no-direct-io'] +
+                 '--rw', rw] +
                 ([] if writer == 'auto' else ['--writers', str(writer)]) +
                 (['--full-paths'] if a.data_full_paths else []) +
                 (['--writer-stats'] if a.writer_stats else []) +

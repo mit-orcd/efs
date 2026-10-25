@@ -166,7 +166,7 @@ try:
     assert rc == 2 and 'reserved ports' in text, text
 
     # 5. --plan: the real gates' command lines, nothing executed.
-    real = dict(name='plan', source='/src', seed='10.0.0.1:17432', transport='tcp', direct_io=True,
+    real = dict(name='plan', source='/src', seed='10.0.0.1:17432', transport='tcp',
                 nodes=[dict(addr=f'10.0.0.{i}:17432', host='local') for i in (1, 2, 3)],
                 mounts=[dict(path='/mnt/a', host='local'), dict(path='/mnt/b', host='local')],
                 private=dict(host='local', root=str(tmp / 'live'), port_base=18700))
@@ -183,7 +183,7 @@ try:
     assert '--suite core' in joined['posix-core']
     assert 'posix_2client.py --local /mnt/a /mnt/b' in joined['posix-2client']
     assert '--port 18710' in joined['k13-tickets'] and '--rel /src' in joined['append-failover']
-    assert '--direct' not in joined['append-failover'] and '--mode direct' in joined['gc-reclamation']
+    assert '--direct' not in joined['append-failover'] and '--mode' not in joined['gc-reclamation']
     assert "K14_PHASES='1 2 3 7' scripts/k14_atomic_cluster.sh run /src" in joined['k14-torn-read']
     assert '/src/efs-mgmt version 10.0.0.2:17432' in joined['identity']
     assert joined['e2-client-stop'] == '' and joined['posix-durability'] == ''
@@ -204,7 +204,7 @@ try:
     def topo(name, st, hosts, rc_want, verdict, reason):
         (fake / 'efs-mgmt').write_text(f'#!/bin/sh\ncat <<\'X\'\n{st}X\n')
         (fake / 'efs-mgmt').chmod(0o755)
-        c = dict(name=name, source=str(fake), seed='10.0.0.1:17432', transport='tcp', direct_io=True,
+        c = dict(name=name, source=str(fake), seed='10.0.0.1:17432', transport='tcp',
                  nodes=[dict(addr=f'10.0.0.{i}:17432', host=h) for i, h in zip((1, 2, 3), hosts)], mounts=[])
         (tmp / f'{name}.json').write_text(json.dumps(c))
         rc, text = run('--cluster', str(tmp / f'{name}.json'), '--out', str(tmp / f'out-{name}'), '--gates', 'topology')

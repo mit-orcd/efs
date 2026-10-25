@@ -5,9 +5,12 @@
 
 /* I25 identity-bound fragment record (fragment format 2).
  *
- * Every fragment file on a storage root is
- *     payload || record            (buffered: the record is 128 bytes)
- *     payload || 4 KiB tail page   (O_DIRECT: the record starts the page)
+ * Every fragment file on a storage root is written and read with O_DIRECT
+ * (D42) and laid out as
+ *     payload padded to 4 KiB || 4 KiB tail page (the record starts the page)
+ * This is the only layout. A file of any other size, such as the removed
+ * buffered layout (payload || bare 128-byte record), is refused: GET answers
+ * INTEGRITY and GC will not touch it (tests/test_store_gc.c).
  * The record names the immutable object the payload belongs to and carries
  * two digests:
  *     payload_digest = BLAKE3(payload)                 (the wire digest)

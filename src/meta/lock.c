@@ -66,9 +66,7 @@ struct scan_acc {
     uint32_t klen[SCAN_MAX];
     int n;
     int full;
-    struct efs_lock_owner by;
     int blocked;
-    int owner_hit;
 };
 
 static int scan_cb(void *user, const uint8_t *key, uint32_t klen,

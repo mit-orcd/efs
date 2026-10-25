@@ -14,7 +14,6 @@ source=Path(__file__).resolve().parents[2]
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('work',type=Path)
 p.add_argument('--apply-pending',action='store_true')
-p.add_argument('--mode',choices=('direct','buffered'),default='direct')
 a=p.parse_args();work=a.work.resolve();work.mkdir(parents=True,exist_ok=False)
 env=dict(os.environ,EFS_TRANSPORT='tcp')
 gate=work/'park-publication-apply'
@@ -49,7 +48,7 @@ def start(suffix):
     for n in range(4):
         f=(work/f'n{n+1}{suffix}.log').open('w');logs.append(f)
         cmd=[str(source/'efsd'),'--node-id',str(n+1),'--addr','127.0.0.1','--port',str(base+n),
-             '--storage',str(work/f'n{n+1}'),'--quota','1G','--writers','0','--direct-io' if a.mode=='direct' else '--no-direct-io']
+             '--storage',str(work/f'n{n+1}'),'--quota','1G','--writers','0']
         if n:cmd+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(cmd,env=env,stdout=f,stderr=f))
         wait(lambda:'listening' in (work/f'n{n+1}{suffix}.log').read_text())
@@ -90,7 +89,7 @@ try:
         stop(crash=True);gate.unlink();start('-mapping-restart');time.sleep(3)
         subprocess.run([str(probe),str(base),str(source/'efs-mgmt'),'resolve',str(work/'request.bin'),created[0]],env=env,check=True,timeout=90)
     stop()
-    print(f'publication pending: {a.mode}/TCP lost ACK, four-daemon crash and cold recovery PASS',flush=True)
+    print(f'publication pending: direct/TCP lost ACK, four-daemon crash and cold recovery PASS',flush=True)
 finally:
     for proc in procs:
         if proc.poll() is None:proc.terminate()

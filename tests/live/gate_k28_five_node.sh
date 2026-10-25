@@ -26,7 +26,7 @@ start_node() {
   [ "$i" -gt 1 ] && join="--join $ADDR:$((PORT+1))"
   ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; return 1; }
   nohup "$REL/efsd" --node-id "$i" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
-    --quota "${EFS_K28_QUOTA:-8G}" --no-direct-io $join >> "$D/logs/efsd-n$i.log" 2>&1 &
+    --quota "${EFS_K28_QUOTA:-8G}" $join >> "$D/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$D/logs/n$i.pid"; touch "$D/logs/started-$i"
   for t in $(seq 120); do ss -ltnH "sport = :$((PORT+i))" | grep -q . && return 0; sleep 0.5; done
   echo "node $i not listening"; return 1

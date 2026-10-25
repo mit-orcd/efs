@@ -37,7 +37,7 @@ def command(argv):
         parser.error('primary and peer mount paths must differ')
     source = Path(__file__).resolve().parents[2]
     cmd = [sys.executable, str(source / 'tests/live/gc_reclamation.py'),
-           '--expiry', '--mode', 'direct', '--transport', 'tcp',
+           '--expiry', '--transport', 'tcp',
            '--disable-efs-commands', '--mount', str(args.mount.resolve()),
            '--peer-mount', str(args.peer_mount.resolve()), '--port', str(args.port),
            '--posix', '--posix-jobs', str(args.jobs)]

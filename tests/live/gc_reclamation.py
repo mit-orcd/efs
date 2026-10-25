@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Isolated four-node physical reclamation gate (Linux/FUSE; no existing stores).
 
-Run on the NUC: python3 tests/live/gc_reclamation.py --mode direct
+Run on the NUC: python3 tests/live/gc_reclamation.py
 The two root parents must already exist. Only unique harness-owned directories
 and processes are used; failed fixtures/logs are retained for diagnosis.
 """
@@ -110,7 +110,6 @@ p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing p
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
 p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
 p.add_argument('--mount-sync',action='store_true',help='run only mount-wide sync acceptance: ordinary writes, peer-before-close, cold bytes and deletion')
-p.add_argument('--mode', choices=('direct',), default='direct', help='fragment I/O is O_DIRECT only (D42)')
 p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
                help='TCP by default; use RDMA only for transport-specific gates')
 p.add_argument('--root', action='append', default=[])
@@ -243,8 +242,8 @@ for port in range(a.port, a.port+4):
     with socket.socket() as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(('127.0.0.1', port))
-work = Path(tempfile.mkdtemp(prefix='gc-'+a.mode+'-', dir=parents[0]))
-other = Path(tempfile.mkdtemp(prefix='gc-'+a.mode+'-', dir=parents[1]))
+work = Path(tempfile.mkdtemp(prefix='gc-', dir=parents[0]))
+other = Path(tempfile.mkdtemp(prefix='gc-', dir=parents[1]))
 roots = [work/'n1',work/'n2',other/'n3',other/'n4']
 data_roots=[root/('storage'+str(i)) for root in roots for i in range(2)] if a.storage_roots==2 else roots
 mount = a.mount.resolve() if a.mount else work/'mnt'
@@ -256,7 +255,7 @@ inputs=[source/'Makefile'] + [x for folder in ('src','include') for x in (source
 for path in sorted(inputs):
     digest.update(str(path.relative_to(source)).encode()+b'\0'+path.read_bytes())
 (work/"manifest.json").write_text(json.dumps({
-    "mode":a.mode,"roots":[str(x) for x in roots],
+    "roots":[str(x) for x in roots],
     "real_roots":[str(x.resolve()) for x in roots],"port":a.port,
     "gates":{key:str(value) if isinstance(value,Path) else value for key,value in vars(a).items()},"source_tree_sha256":digest.hexdigest(),
     "test_script_sha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -272,7 +271,7 @@ if a.expiry_backlog_files:
 if a.expiry_soak_seconds:
     assert a.expiry and 60 <= a.expiry_soak_seconds <= 7200
 if a.expiry:
-    assert a.mode=='direct' and a.transport=='tcp' and a.disable_efs_commands
+    assert a.transport=='tcp' and a.disable_efs_commands
     # D42: expiry needs an EFS_BUILD_EXPIRY build (--server-binary); no variable.
     if a.expiry_clock_fault:env['EFS_FAULT_EXPIRY_CLOCK_FILE']=str(work/'expiry-clock-uncertain')
 if a.replication_pressure:
@@ -3215,7 +3214,7 @@ int main(int argc,char**argv){assert(argc==3);port=atoi(argv[1]);
         (work/'memory-envelope.json').write_text(json.dumps(record,indent=2))
         print('small-memory whole-fixture envelope '+json.dumps(record)+' PASS',flush=True)
     if posix_failure:raise posix_failure
-    print('GC reclamation '+a.mode+' PASS',flush=True)
+    print('GC reclamation PASS',flush=True)
 finally:
     if a.storage_session_fence_fault:(work/'put-fence-armed').unlink(missing_ok=True)
     for proc,target in extra_clients:

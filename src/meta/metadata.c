@@ -2131,7 +2131,6 @@ void efs_export_init(struct efs_export *ex, efs_export_id_t id, const char *name
     strncpy(ex->name, name, EFS_MAX_NAME - 1);
     ex->chunk_size = EFS_DEFAULT_CHUNK_SIZE;
     ex->features = EFS_FEATURES_DEFAULT;
-    ex->next_ino = EFS_ROOT_INO + 1;
 
     if (inode_ensure_cap(ex, 16) != EFS_OK)
         return;
@@ -2204,7 +2203,7 @@ void efs_export_free(struct efs_export *ex)
 
 static void efs_export_init_empty_table(struct efs_export *ex, efs_export_id_t id,
                                         const char *name, uint32_t shard_bits,
-                                        uint32_t shard_count, uint32_t shard)
+                                        uint32_t shard_count)
 {
     memset(ex, 0, sizeof(*ex));
     ex->id = id;
@@ -2218,8 +2217,6 @@ static void efs_export_init_empty_table(struct efs_export *ex, efs_export_id_t i
     ex->chunks = calloc(ex->chunk_capacity, sizeof(struct efs_chunk_entry));
     ex->root.shard_count = shard_count;
     ex->root.shard_bits = shard_bits;
-    if (shard_bits)
-        ex->next_ino = shard; /* low-bits: this shard's congruence-class base */
     export_reindex(ex);
     child_idx_rebuild(ex);
 }
@@ -2248,7 +2245,7 @@ static struct efs_export *shard_tab_get_or_create(struct efs_export *ex,
         if (!tab)
             return NULL;
         efs_export_init_empty_table(tab, ex->id, ex->name, ex->root.shard_bits,
-                                    sc, shard);
+                                    sc);
         tab->chunk_size = ex->chunk_size;
         tab->features = ex->features;
         tab->shard_id = shard;
