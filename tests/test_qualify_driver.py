@@ -332,6 +332,27 @@ try:
     assert not ready(''.join(reports).replace('root: async', 'root: async ERROR(barrier)'), eps)
     assert not ready(''.join(reports) + '    recovery uncertain: fenced\n', eps)
 
+    # The offline-member GC case is an intentional crash, not an E2
+    # clean-stop gate. It signals only its held child and detaches its own
+    # mount. Missing ownership refuses before signalling or detaching.
+    from unittest.mock import Mock
+    crash_fn = next(n for n in gc_tree.body if isinstance(n, ast.FunctionDef) and n.name == 'crash_unmount')
+    child = Mock()
+    child.poll.return_value = None
+    detach = Mock()
+    ns = dict(client=child, mount=Path('/tmp/owned-gc-mount'), run=detach, print=Mock())
+    exec(compile(ast.Module(body=[crash_fn], type_ignores=[]), 'gc-crash-unmount', 'exec'), ns)
+    ns['crash_unmount']()
+    child.kill.assert_called_once_with()
+    child.wait.assert_called_once_with(timeout=15)
+    detach.assert_called_once_with(['fusermount3', '-uz', Path('/tmp/owned-gc-mount')])
+    assert ns['client'] is None
+    try:ns['crash_unmount']()
+    except AssertionError:pass
+    else:raise AssertionError('crash detach without a held child accepted')
+    assert detach.call_count == 1
+    assert "crash_unmount();stop(crash=True)\n    inspector=" in (root / 'tests/live/gc_reclamation.py').read_text()
+
     # 7c. The wire probe against fake daemons: a correct gate (leader
     # refuses the tags, follower redirects) passes every check; a daemon
     # that serves undeclared requests and applies any tag fails them.

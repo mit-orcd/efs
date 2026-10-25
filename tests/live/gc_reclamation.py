@@ -524,6 +524,21 @@ def unmount(timeout=15):
     if client:
         client.wait(timeout=timeout);client=None
 
+def crash_unmount():
+    """Crash only this fixture's held FUSE child at a planned crash boundary.
+
+    With a storage member killed, clean revoke cannot establish its storage
+    fence. This case tests durable GC ownership after a crash, not E2 clean
+    shutdown. Never substitute this for unmount() in a clean-stop assertion.
+    """
+    global client
+    assert client is not None, 'no owned fixture client to crash'
+    if client.poll() is None:client.kill()
+    client.wait(timeout=15)
+    client=None
+    run(['fusermount3','-uz',mount])
+    print('owned fixture client SIGKILL/detach at offline-member crash boundary',flush=True)
+
 def files(ino):
     seg=[]
     for _ in range(5):seg.append(f'{ino%10000:04d}');ino//=10000
@@ -3152,7 +3167,7 @@ int main(int argc,char**argv){assert(argc==3);port=atoi(argv[1]);
     # Keep the original three-second interval, then use the already-planned
     # crash to inspect only copies of the stopped surviving replicas' KV.
     # The exact inode must retain durable REAP ownership, not another fixture.
-    unmount();stop(crash=True)
+    crash_unmount();stop(crash=True)
     inspector=work/'inspect-reap-retention'
     run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
          source/'tests/live/inspect_reap_retention.c',source/'libefs.a',
