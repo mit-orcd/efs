@@ -45,6 +45,7 @@ import errno, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload  # noqa: E402
+from k37_events import degraded_write_events
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -139,11 +140,8 @@ def seg_path(c, i, group, sid, gen, fi):
             f'{sid:016x}.{gen:x}.{fi}')
 
 
-def degraded_writes(c, since=0):
-    """(group, id, gen, fragment, node) of each `written degraded` line."""
-    return [(int(g), int(i, 16), int(n, 16), int(f), int(node)) for g, i, n, f, node in
-            re.findall(r'packer: segment g(\d+) id=([0-9a-f]+) gen=([0-9a-f]+) written degraded: '
-                       r'fragment (\d+) for node (\d+)', logs(c))][since:]
+def degraded_writes(c, since=()):
+    return degraded_write_events(logs(c), since)
 
 
 def verify(c, node, what, skip=()):
@@ -229,7 +227,7 @@ try:
     # 3. Written with a member down.
     wait_up_status(c)
     c.stop(3)
-    seen = len(degraded_writes(c))
+    seen = degraded_writes(c)
     base = packed_total(c)
     batch(a, 'down')
     wait_packed(c, base, len(SIZES), 'member down')
@@ -268,7 +266,7 @@ try:
     time.sleep(2)
     wait_up_status(c)
     c.stop(3)
-    seen = len(degraded_writes(c))
+    seen = degraded_writes(c)
     compacted = count(c, r'packer: compact')
     for i in (1, 2):
         rc, out = mgmt(c.env, 'pack-compact', c.ep(i), '64')
@@ -294,7 +292,7 @@ try:
     wait_up_status(c)
     c.stop(3)
     (flags / 'refuse-2').touch()
-    seen = len(degraded_writes(c))
+    seen = degraded_writes(c)
     base, cancelled, put_errors = packer_stats(c)
     batch(a, 'one', 4)
     end = time.time() + 60
@@ -334,7 +332,7 @@ try:
     # 7. A second loss before the rebuild: every segment of this batch is
     # written without node 3, then loses its node 2 fragment too.
     c.stop(3)
-    seen = len(degraded_writes(c))
+    seen = degraded_writes(c)
     base = packed_total(c)
     batch(a, 'loss', 4)
     wait_packed(c, base, 4, 'loss')
@@ -385,7 +383,7 @@ finally:
     for mt in mounts:
         mt.close()
     c.stop_all()
-    if os.environ.get('EFS_K37_KEEP'):
+    if os.environ.get('EFS_K37_KEEP') or sys.exc_info()[0] is not None:
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)

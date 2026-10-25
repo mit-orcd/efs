@@ -406,6 +406,7 @@ test-bins: all $(TEST_SPECIAL_BINS) decoder-bins
 # under a second; about a minute in all). Slow tests belong in test-long.
 test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_decoder_inputs.py
+	python3 tests/test_k37_events.py
 	python3 tests/test_env_inventory.py
 	python3 tests/test_env_removed.py
 	python3 tests/test_cli_surface.py
