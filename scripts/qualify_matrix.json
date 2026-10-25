@@ -71,6 +71,36 @@
    "rdma": "not driven: no RDMA live harness"
   }
  },
+ "fixture": {
+  "about": "Stage 2 gate fixture defaults (scripts/qualify.py DEFAULT_FIXTURE holds the same values); a topology fixture overrides them. E4 scales with the member count: N x e4_small_per_member small files (1 B-16 KiB) and N x e4_large_per_member files of e4_large_mib MiB.",
+  "a13_members": 5,
+  "a13_quota": "2G",
+  "a13_port_offset": 100,
+  "a13_files": 60,
+  "a13_threads": 4,
+  "a13_op_deadline_s": 30,
+  "a13_join_timeout_s": 180,
+  "a13_interrupt_s": 0.5,
+  "c5_fence_attempts": 12,
+  "d1_files": 400,
+  "d1_max_size": 8192,
+  "d1_pack_wait_s": 600,
+  "d1_compact_wait_s": 300,
+  "d3_static_files": 200,
+  "d3_writers": 8,
+  "d3_queriers": 4,
+  "d3_load_s": 300,
+  "d3_io_deadline_s": 10,
+  "d3_query_deadline_s": 30,
+  "d3_index_wait_s": 600,
+  "e4_small_per_member": 5000,
+  "e4_large_per_member": 2,
+  "e4_large_mib": 256,
+  "e4_threads": 16,
+  "e4_query_deadline_s": 30,
+  "e4_refresh_s": 60,
+  "e4_reclaim_s": 900
+ },
  "topologies": {
   "loopback-3": {
    "loopback": 3,
@@ -78,7 +108,10 @@
    "private_port_base": 18900,
    "transport": "tcp",
    "fixture": {
-    "posix_timeout_s": 150
+    "posix_timeout_s": 150,
+    "e4_small_per_member": 2000,
+    "e4_large_per_member": 2,
+    "e4_large_mib": 32
    },
    "purpose": "driver dry run and the topology-independent live harnesses, once per candidate",
    "host": "nuc (ports 18900-18999) or any host with its own range: pass --port-base/--private-port-base",
@@ -97,7 +130,12 @@
     "gc-reclamation",
     "e1-manifest",
     "e2-client-stop",
-    "e3-turnover"
+    "e3-turnover",
+    "a13-node-addition",
+    "c5-protocol-live",
+    "d1-packing",
+    "d3-efs-load",
+    "e4-scale"
    ],
    "allow": [
     "restart",
@@ -107,7 +145,8 @@
    "duration": "about 26 minutes measured on nuc (append-failover 19 minutes; k14 3 minutes, k13 1 minute, fragment-integrity 10 s and gc-reclamation 4 minutes to its FAIL measured on amd); up to about 3 hours (deadlines 1 h, gc 2 h)",
    "covers": [
     "C4, B2, D2 live harnesses (TCP, one host)",
-    "driver regression"
+    "driver regression",
+    "A13 (own 5-member loopback cluster), C5, D1/D2, D3, E4 gate regression on one host"
    ],
    "cannot_cover": [
     "A4 (one host)",
@@ -287,6 +326,7 @@
     "e1-manifest",
     "e2-client-stop",
     "e3-turnover",
+    "c5-protocol-live",
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
@@ -390,6 +430,7 @@
     "e1-manifest",
     "e2-client-stop",
     "e3-turnover",
+    "c5-protocol-live",
     "d1-packing",
     "d3-efs-load",
     "d4-progress",
@@ -850,13 +891,13 @@
     "tcp",
     "rdma"
    ],
-   "duration": "about 30 minutes (estimate)",
+   "duration": "about 5-10 minutes",
    "prerequisites": [
     "driver-owned cluster (membership changes)",
     "spare distinct hosts for 3->4->5",
     "fresh format when the candidate changes a store, log or fragment format since the cluster was formatted (driver-owned clusters are fresh every run)"
    ],
-   "note": "STUB: loopback K33 tests only"
+   "note": "real gate: a13-node-addition forms its own 3-member cluster (seed + --join) on the topology hosts and grows it to 4 (interrupted join retried) and 5 (seed down) under a client load; loopback K33 tests in the code gate"
   },
   "B1": {
    "checks": [
@@ -976,7 +1017,7 @@
     "K34, K35 merged; K36 (verified recovery) open",
     "per-member stop/start control (driver-owned clusters)"
    ],
-   "note": "STUB: loopback test_k33_payload, test_k34_stop_put, test_k35_fsync_degraded"
+   "note": "real gate: b6-member-down (one member stopped in order); refusing, full and slow members in the code gate (test_k33_payload, test_k34_stop_put, test_k35_fsync_degraded)"
   },
   "C1": {
    "checks": [
@@ -1076,11 +1117,11 @@
     "tcp",
     "rdma"
    ],
-   "duration": "make test-all about 25 minutes",
+   "duration": "live gate about 2 minutes; make test-all about 30 minutes",
    "prerequisites": [
     "candidate tree on the code-gate host"
    ],
-   "note": "STUB for the per-topology part"
+   "note": "real gate: c5-protocol-live (wire declaration gate and fail-closed tags on every member, removed settings refused on every host, session fence of an extra mount, clean-unmount revoke); unit and private gates in the code gate"
   },
   "D1": {
    "checks": [
@@ -1096,15 +1137,16 @@
     "tcp",
     "rdma"
    ],
-   "duration": "about 20 minutes (estimate)",
+   "duration": "about 10 minutes plus an orderly restart (pack wait up to 600 s, compaction up to 300 s)",
    "prerequisites": [
     "--allow restart (cold restart)"
    ],
-   "note": "STUB; b-checks B4 shows packed segments exist"
+   "note": "real gate: d1-packing (packed rows, stored-object savings, exact reads before/after packing, cold restart with --allow restart)"
   },
   "D2": {
    "checks": [
     "qualify:gc-reclamation",
+    "qualify:d1-packing",
     "live:tests/live/gc_reclamation.py"
    ],
    "topologies": [
@@ -1116,7 +1158,8 @@
    "duration": "up to 2 hours",
    "prerequisites": [
     "a clean client.sh stop after a long unmount revoke (A11 finding 1)"
-   ]
+   ],
+   "note": "d1-packing overwrites, truncates and unlinks packed files and requests compaction of the shared segments on every topology; gc-reclamation once"
   },
   "D3": {
    "checks": [
@@ -1133,11 +1176,11 @@
     "tcp",
     "rdma"
    ],
-   "duration": "extras about 3 minutes; load gate about 30 minutes (estimate)",
+   "duration": "extras about 3 minutes; load gate about 10 minutes (index wait, 300 s load, convergence)",
    "prerequisites": [
     ".efs catalog indexed (posix_timeout_s 150 on a fresh directory)"
    ],
-   "note": "STUB for the load part"
+   "note": "real gate: d3-efs-load (.efs find/ls/stats and an invalid request in loops under create/fsync/rename I/O; fresh fixture = initial catalog creation)"
   },
   "D4": {
    "checks": [
@@ -1156,7 +1199,7 @@
    "prerequisites": [
     "E4 fixture running"
    ],
-   "note": "STUB"
+   "note": "real gate: d4-progress (scripts/d4_progress.py)"
   },
   "E1": {
    "checks": [
@@ -1230,11 +1273,11 @@
     "tcp",
     "rdma"
    ],
-   "duration": "several hours (estimate; declared counts)",
+   "duration": "about 15-40 minutes at the defaults (5000 small + 2 x 256 MiB per member); scales with the declared counts",
    "prerequisites": [
     "quota sized for the declared counts"
    ],
-   "note": "STUB"
+   "note": "real gate: e4-scale (fixture sized by the member count: e4_small_per_member, e4_large_per_member x e4_large_mib)"
   }
  }
 }

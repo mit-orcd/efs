@@ -69,8 +69,8 @@ With private_cluster the driver owns the cluster: every node names its
 starts one efsd per node there (`_node start`: the first node is the seed,
 the others --join it), mounts the clients, and at the end unmounts, stops
 those daemons and deletes the root on every host (unless --keep-work).
-Gates named STUB in `list` exist so the A11 plan can name them; they report
-NOTRUN with the missing harness until one replaces them.
+Every gate the A11 plan names is a real gate (no stubs); the A13, C5, D1,
+D3 and E4 gates run their host-side work as scripts/stage2_helpers.py.
 
 Plugins (the B checks and anything later) are commands run with the same
 placeholders plus {cluster} (the description copy in DIR) and {gate_dir}.
@@ -98,7 +98,15 @@ DEFAULT_FIXTURE = dict(
     turnover_timeout_s=60, catchup_timeout_s=180,
     append_failover_args='--records 8000 --writers 4 --failover step-down --interval 4 --first-event 3',
     k14_phases='1 2 3 7', gc_args='--posix', remote_tmp='/tmp',
-    b6_pack_wait_s=600, b6_rebuild_s=900, b6_read_s=30, b6_write_s=90, b6_fsync_s=75)
+    b6_pack_wait_s=600, b6_rebuild_s=900, b6_read_s=30, b6_write_s=90, b6_fsync_s=75,
+    a13_members=5, a13_quota='2G', a13_port_offset=100, a13_files=60, a13_threads=4, a13_op_deadline_s=30,
+    a13_join_timeout_s=180, a13_interrupt_s=0.5,
+    c5_fence_attempts=12,
+    d1_files=400, d1_max_size=8192, d1_pack_wait_s=600, d1_compact_wait_s=300,
+    d3_static_files=200, d3_writers=8, d3_queriers=4, d3_load_s=300, d3_io_deadline_s=10,
+    d3_query_deadline_s=30, d3_index_wait_s=600,
+    e4_small_per_member=5000, e4_large_per_member=2, e4_large_mib=256, e4_threads=16,
+    e4_query_deadline_s=30, e4_refresh_s=60, e4_reclaim_s=900)
 
 
 def now():
@@ -190,11 +198,10 @@ class Runner:
 
 
 class Gate:
-    def __init__(self, name, fn, items, ledger, needs=(), deadline_s=3600, partial_needs=(),
-                 doc='', stub=False):
+    def __init__(self, name, fn, items, ledger, needs=(), deadline_s=3600, partial_needs=(), doc=''):
         self.name, self.fn, self.items, self.ledger = name, fn, items, ledger
         self.needs, self.partial_needs = tuple(needs), tuple(partial_needs)
-        self.deadline_s, self.doc, self.stub = deadline_s, doc, stub
+        self.deadline_s, self.doc = deadline_s, doc
 
 
 class GateRun:
@@ -918,13 +925,6 @@ def g_topology(q, g):
     return PASS, f'{len(nodes)} members up on {len(hosts)} distinct hosts'
 
 
-def g_stub(reason):
-    """A gate the plan needs and no harness implements yet."""
-    def gate(q, g):
-        return NOTRUN, 'no harness yet: ' + reason
-    return gate
-
-
 def g_posix(script, extra=''):
     def gate(q, g):
         m = q.mount(0)
@@ -1121,37 +1121,11 @@ def g_e1(q, g):
         return FAIL, f'manifest verify before restart: {result}'[:400]
     if doc['errors']:
         return FAIL, f'{len(doc["errors"])} writes failed: {doc["errors"][0]}'[:400]
-    if 'restart' not in q.allow:
-        return NOTRUN, ('manifest of %d acknowledged files verified; orderly restart not '
-                        'allowed (needs --allow restart)' % len(doc['files']))
-    if not q.control.has('stop_cluster', 'start_cluster'):
-        return NOTRUN, 'manifest verified; control.stop_cluster/start_cluster not described'
-    mounts = q.cluster.get('mounts', [])
-    for mm in mounts:
-        rc, text = g.run('fuser-before-stop', mm['host'], f'fuser -m {shlex.quote(mm["path"])} 2>/dev/null', 60)
-        if rc == 0 and text.strip():
-            return NOTRUN, f'{mm["host"]}:{mm["path"]} in use ({text.strip()[:120]}); not stopping it'
-    g.step('restart', 'client stops (no force), orderly cluster stop, start, readiness, remount')
-    for mm in mounts:
-        rc, text = q.control.client_stop(g, mm)
-        if rc:
-            return FAIL, f'clean client stop of {mm["path"]} failed: {outcome_from_rc(rc, text)[1]}'
-    t0 = time.monotonic()
-    rc, text = q.control.stop_cluster(g)
-    g.fixture['stop_seconds'] = round(time.monotonic() - t0, 3)
-    if rc:
-        return FAIL, 'orderly cluster stop failed: ' + outcome_from_rc(rc, text)[1]
-    t0 = time.monotonic()
-    rc, text = q.control.start_cluster(g)
-    ready_deadline = q.cluster.get('control', {}).get('ready_timeout_s', 300)
-    if rc or not wait_cluster_ready(q, g, ready_deadline):
-        return FAIL, f'cluster not ready within {ready_deadline}s after restart'
-    g.fixture.update(ready_seconds=round(time.monotonic() - t0, 3), ready_deadline_s=ready_deadline,
-                     stop_deadline_s=q.cluster.get('control', {}).get('stop_timeout_s', 300))
-    for mm in mounts:
-        rc, text = q.control.client_start(g, mm)
-        if rc:
-            return FAIL, f'remount of {mm["path"]} failed: {outcome_from_rc(rc, text)[1]}'
+    res = orderly_restart(q, g, 'client stops (no force), orderly cluster stop, start, readiness, remount')
+    if res:
+        if res[0] == NOTRUN:
+            return NOTRUN, f'manifest of {len(doc["files"])} acknowledged files verified; {res[1]}'
+        return res
     ok, result = manifest_verify(q, g, m, manifest, 'verify-after')
     g.fixture['after'] = result
     ident = q.read_identity(g, 'after-restart')
@@ -1501,6 +1475,839 @@ def g_b6(q, g):
                   f'{len(acked)} files exact (refusing, full and slow members: loopback test only)')
 
 
+# --------------------------------------------------------------------------
+# A13, C5, D1/D2, D3 and E4. Host-side work runs from the candidate tree as
+# scripts/stage2_helpers.py (one JSON line out); see that file.
+
+def helper2(q, host, *args):
+    return ' '.join(['python3', shlex.quote(f'{q.source(host)}/scripts/stage2_helpers.py'),
+                     *map(shlex.quote, map(str, args))])
+
+
+def json_tail(text):
+    try:
+        return json.loads(text.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return dict(error=text.strip()[-300:] or 'no output')
+
+
+class Background:
+    """A command left running on a host while the gate goes on (a client
+    load under joins, queries during reads); recorded like g.run."""
+
+    def __init__(self, q, g, label, host, cmd, deadline):
+        self.g = g
+        index = len(g.commands) + 1
+        self.log = g.raw_file(f'{index:02d}-{label}.log')
+        self.entry = dict(label=label, host=host or 'local', command=cmd, deadline_s=round(deadline, 1),
+                          start=now(), output=self.log.name, background=True)
+        g.commands.append(self.entry)
+        self.t0, self.p = time.monotonic(), None
+        if q.plan:
+            self.entry.update(end=self.entry['start'], rc=None, timed_out=False)
+            return
+        self.p = subprocess.Popen(q.runner.argv(host, cmd, deadline), stdout=open(self.log, 'wb'),
+                                  stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+
+    def wait(self, timeout):
+        if self.p is None:
+            return 0, ''
+        timed_out = False
+        try:
+            rc = self.p.wait(timeout=max(1, timeout))
+        except subprocess.TimeoutExpired:
+            timed_out, rc = True, 124
+            os.killpg(self.p.pid, signal.SIGKILL)
+            self.p.wait()
+        self.entry.update(end=now(), seconds=round(time.monotonic() - self.t0, 3), rc=rc, timed_out=timed_out)
+        return rc, self.log.read_text(errors='replace')
+
+
+def parse_status(text):
+    """`efs-mgmt status` -> ({id: {addr, up, used, quota, capacity}}, usable {used, free, capacity})."""
+    nodes, cur = {}, None
+    for line in text.splitlines():
+        m = re.match(r'^\s+node (\d+): (\S+)\s+(up|DOWN)\b', line)
+        if m:
+            cur = int(m.group(1))
+            nodes[cur] = dict(addr=m.group(2), up=m.group(3) == 'up')
+            continue
+        b = re.match(r'^\s+bytes: used=(\d+) quota=(\d+) capacity=(\d+) available=(\d+)', line)
+        if b and cur in nodes:
+            nodes[cur].update(used=int(b.group(1)), quota=int(b.group(2)), capacity=int(b.group(3)))
+    u = re.search(r'^Usable bytes: used=(\d+) free=(\d+) capacity=(\d+)', text, re.M)
+    usable = dict(used=int(u.group(1)), free=int(u.group(2)), capacity=int(u.group(3))) if u else None
+    return nodes, usable
+
+
+def parse_raft(text):
+    """`efs-mgmt raft-status` of one node -> (node id, {group: {role, voters, joint}}) for hosted groups."""
+    m = re.search(r'^node (\d+) root=', text, re.M)
+    groups = {int(gr): dict(role=role, voters=int(v, 16), joint=int(j)) for gr, role, v, j in
+              re.findall(r'group (\d+) hosted=1 role=(\w+) leader=-?\d+ term=\d+ .*?voters=0x([0-9a-f]+) '
+                         r'joint=(\d+)', text)}
+    return (int(m.group(1)) if m else None), groups
+
+
+def mask(ids):
+    return sum(1 << (i - 1) for i in ids)
+
+
+def client_exports(q):
+    env = dict(EFS_TRANSPORT=q.cluster.get('transport') or 'tcp')
+    env.update((q.cluster.get('private_cluster') or {}).get('env', {}))
+    return ' '.join(f'export {k}={shlex.quote(str(v))};' for k, v in sorted(env.items()))
+
+
+def a13_layout(q):
+    """The five members the A13 gate forms and grows: the description's
+    `a13` block, else derived (driver-owned clusters only): member i on the
+    host of topology node i mod N, at that node's port + a13_port_offset
+    (+1 per wrap), its store and the gate mount under the cluster root."""
+    c, fx = q.cluster, q.fixture
+    if c.get('a13'):
+        return c['a13']['nodes'], c['a13']['mount'], c['a13']['root']
+    count = int(fx['a13_members'])
+    if isinstance(q.control, Loopback):
+        root = str(q.work / 'a13')
+        base = int(q.private['port_base']) + int(fx['a13_port_offset'])
+        return ([dict(addr=f'127.0.0.1:{base + i}', host='local', store=f'{root}/n{i + 1}') for i in range(count)],
+                dict(host='local', path=f'{root}/mnt'), root)
+    if not c.get('private_cluster') or not c.get('nodes') or not c.get('mounts'):
+        return None
+    topo, root = c['nodes'], c['private_cluster']['root'].rstrip('/') + '/a13'
+    nodes = []
+    for i in range(count):
+        t = topo[i % len(topo)]
+        h, p = t['addr'].rsplit(':', 1)
+        nodes.append(dict(addr=f'{h}:{int(p) + int(fx["a13_port_offset"]) + i // len(topo)}', host=t['host'],
+                          store=f'{root}/n{i + 1}'))
+    return nodes, dict(host=c['mounts'][0]['host'], path=f'{root}/mnt'), root
+
+
+def g_a13(q, g):
+    """A13 on real daemons: form 3 (seed + --join), grow to 4 under a client
+    load with an interrupted join retried (SIGKILL mid-join, same store and
+    command: the same member), then to 5 through another member while the
+    seed is stopped (seed loss). Checks the SHARD2 voter transition
+    {1,2,3} -> {2,3,4} (no joint left), member 5 storage-only, usable
+    capacity of the added quotas, new fragments on the added members, and
+    every acknowledged payload exact."""
+    layout = a13_layout(q)
+    if not layout:
+        return NOTRUN, ('needs a driver-owned cluster (loopback or private_cluster) or an `a13` block naming '
+                        'five member endpoints, hosts and stores')
+    nodes, mnt, root = layout
+    fx = q.fixture
+    if len(nodes) < 5:
+        return NOTRUN, f'a13 names {len(nodes)} members; the gate grows 3 -> 4 -> 5'
+    bad = [n['addr'] for n in nodes if int(n['addr'].rsplit(':', 1)[1]) in RESERVED_PORTS or
+           n['store'].startswith('/data1/efs')]
+    if bad or mnt['path'].startswith('/data1/efs'):
+        return FAIL, f'a13 layout uses reserved ports or /data1/efs: {bad or mnt["path"]}'
+    seed = nodes[0]['addr']
+    g.fixture.update(members=[f'{n["addr"]} ({n["host"]})' for n in nodes], mount=f'{mnt["host"]}:{mnt["path"]}',
+                     distinct_hosts=len({n['host'] for n in nodes}), quota=fx['a13_quota'],
+                     load_threads=fx['a13_threads'], op_deadline_s=fx['a13_op_deadline_s'],
+                     join_timeout_s=fx['a13_join_timeout_s'], interrupt_after_s=fx['a13_interrupt_s'])
+    envs = [f'--env=EFS_TRANSPORT={q.cluster.get("transport") or "tcp"}'] + \
+        [f'--env={k}={v}' for k, v in sorted((q.cluster.get('private_cluster') or {}).get('env', {}).items())]
+
+    def node_cmd(n, op, join=None, timeout=120):
+        args = ['_node', op, '--addr', n['addr'], '--store', n['store'], '--timeout', timeout]
+        if op == 'start':
+            args += ['--quota', fx['a13_quota'], *envs] + (['--join', join] if join else [])
+        return q.helper(n['host'], *args)
+
+    def start(i, join=None, label=None):
+        return g.run(label or f'start-n{i + 1}', nodes[i]['host'], node_cmd(nodes[i], 'start', join), 300)
+
+    def status(via):
+        rc, text = q.mgmt(g, 'status', 'status', via, deadline=60)
+        return parse_status(text) if rc == 0 else ({}, None)
+
+    def raft(i):
+        rc, text = q.mgmt(g, 'raft-status', 'raft-status', nodes[i]['addr'], deadline=30)
+        return parse_raft(text) if rc == 0 else (None, {})
+
+    def wait_members(count, via, label, deadline=None):
+        end = time.monotonic() + (deadline or fx['a13_join_timeout_s'])
+        while True:
+            members, usable = status(via)
+            if len(members) == count and all(v['up'] for v in members.values()):
+                return members, usable
+            if time.monotonic() > end:
+                return None, f'{label}: {len(members)} members ({sum(v["up"] for v in members.values())} up) after ' \
+                    f'{deadline or fx["a13_join_timeout_s"]} s, want {count} up'
+            time.sleep(2)
+
+    def wait_voters(want, label):
+        """Every member that hosts a group agrees on its voters, no joint
+        configuration left; want = {group: id set}; returns the views."""
+        end = time.monotonic() + fx['a13_join_timeout_s']
+        while True:
+            views = {i: raft(i) for i in up}
+            ok = all(any(gr in v[1] for v in views.values()) for gr in want) and \
+                all(v[1][gr]['voters'] == mask(ids) and not v[1][gr]['joint']
+                    for v in views.values() for gr, ids in want.items() if gr in v[1])
+            hosts = {gr: sorted(v[0] for v in views.values() if gr in v[1]) for gr in want}
+            if ok and all(hosts[gr] == sorted(ids) for gr, ids in want.items()):
+                return views, None
+            if time.monotonic() > end:
+                return views, (f'{label}: voters/hosts not {dict((k, sorted(v)) for k, v in want.items())} '
+                               f'within {fx["a13_join_timeout_s"]} s: ' +
+                               json.dumps({i: v[1] for i, v in views.items()})[:300])
+            time.sleep(2)
+
+    m_src = shlex.quote(q.source(mnt['host']))
+    mpath = shlex.quote(mnt['path'])
+    g.step('restart', f'A13 gate cluster: format {len(nodes)} private stores under {root} (seed {seed})')
+    for i in range(3):
+        rc, text = start(i, join=seed if i else None)
+        if rc:
+            return FAIL, f'start of member {i + 1} failed: ' + text.strip()[-200:]
+        if q.plan:
+            break
+    if q.plan:
+        return NOTRUN, 'plan'
+    up = [0, 1, 2]
+    try:
+        members, usable3 = wait_members(3, seed, 'formation', fx['a13_join_timeout_s'])
+        if members is None:
+            return FAIL, usable3
+        views, why = wait_voters({0: {1, 2, 3}, 2: {1, 2, 3}}, 'formation')
+        if why:
+            return FAIL, why
+        ids = {v['addr']: k for k, v in members.items()}
+        if [ids.get(n['addr']) for n in nodes[:3]] != [1, 2, 3]:
+            return FAIL, f'formation ids {ids}: want 1, 2, 3 in start order'
+        g.fixture['capacity_3'] = usable3
+        rc, text = g.run('mount', mnt['host'], f'mkdir -p {mpath} && cd {m_src} && {client_exports(q)} '
+                         f'scripts/client.sh {shlex.quote(seed)} {mpath}', 300)
+        if rc:
+            return FAIL, 'gate mount failed: ' + text.strip()[-200:]
+        before = f'{mnt["path"]}/qualify-{q.runid}/before'
+        rc, text = g.run('write-before', mnt['host'], q.helper(mnt['host'], '_manifest', 'write', '--dir', before,
+                                                                '--files', fx['a13_files'], '--sizes',
+                                                                ','.join(map(str, fx['e1_sizes'])), '--seed', q.runid))
+        doc = json_tail(text)
+        if rc or 'files' not in doc:
+            return FAIL, 'writes at 3 members failed: ' + str(doc)[:300]
+        manifest = g.raw_file('manifest-before.json')
+        manifest.write_text(json.dumps(doc) + '\n')
+        scratch = q.remote_dir(g, mnt['host'], 'a13')
+        stop_file = f'{scratch}/stop-load'
+        load_dir = f'{mnt["path"]}/qualify-{q.runid}/load'
+        load = Background(q, g, 'client-load', mnt['host'], helper2(
+            q, mnt['host'], 'load', '--dir', load_dir, '--stop', stop_file, '--seed', q.runid,
+            '--threads', fx['a13_threads'], '--kib', 64, '--max-s', g.remaining(),
+            '--deadline-s', fx['a13_op_deadline_s']), g.remaining())
+        time.sleep(3)
+        try:
+            # 3 -> 4 through member 2, interrupted: SIGKILL shortly after the
+            # joiner starts; then the same command again (a retried join).
+            g.step('restart', f'join {nodes[3]["addr"]} through {nodes[1]["addr"]}, SIGKILL after '
+                              f'{fx["a13_interrupt_s"]} s (interrupted join), then the same join again')
+            rc, text = g.run('join-n4-interrupted', nodes[3]['host'],
+                             f'{node_cmd(nodes[3], "start", nodes[1]["addr"], timeout=0)} && sleep '
+                             f'{float(fx["a13_interrupt_s"])} && {node_cmd(nodes[3], "kill")}', 120)
+            if rc:
+                return FAIL, 'interrupted join of member 4 could not be started/killed: ' + text.strip()[-200:]
+            mid, _ = status(nodes[1]['addr'])
+            g.fixture['members_after_interrupt'] = len(mid)
+            rc, text = start(3, join=nodes[1]['addr'], label='join-n4-retry')
+            if rc:
+                return FAIL, 'retried join of member 4 failed: ' + text.strip()[-200:]
+            up.append(3)
+            members, usable4 = wait_members(4, nodes[1]['addr'], 'retried join to 4')
+            if members is None:
+                return FAIL, usable4
+            ids = {v['addr']: k for k, v in members.items()}
+            if ids.get(nodes[3]['addr']) != 4:
+                return FAIL, f'retried join: member 4 endpoint has id {ids.get(nodes[3]["addr"])} ({ids})'
+            views, why = wait_voters({0: {1, 2, 3}, 2: {2, 3, 4}}, 'SHARD2 transition at 4')
+            if why:
+                return FAIL, why
+            g.fixture.update(capacity_4=usable4, shard2_voters_4='0x%x' % mask({2, 3, 4}))
+            # 4 -> 5 while the seed is down: join through member 3.
+            g.step('restart', f'orderly stop of the seed {seed} (seed loss)')
+            rc, text = g.run('stop-seed', nodes[0]['host'], node_cmd(nodes[0], 'stop'), 300)
+            if rc:
+                return FAIL, 'orderly stop of the seed failed: ' + text.strip()[-200:]
+            up.remove(0)
+            g.step('restart', f'join {nodes[4]["addr"]} through {nodes[2]["addr"]} with the seed down')
+            rc, text = start(4, join=nodes[2]['addr'], label='join-n5-seed-down')
+            if rc:
+                return FAIL, 'join of member 5 with the seed down failed: ' + text.strip()[-200:]
+            up.append(4)
+            end = time.monotonic() + fx['a13_join_timeout_s']
+            while True:
+                members, _ = status(nodes[1]['addr'])
+                ids = {v['addr']: k for k, v in members.items()}
+                if len(members) == 5 and members.get(ids.get(nodes[4]['addr'], 0), {}).get('up'):
+                    break
+                if time.monotonic() > end:
+                    return FAIL, f'member 5 not added with the seed down within {fx["a13_join_timeout_s"]} s: {ids}'
+                time.sleep(2)
+            if ids.get(nodes[4]['addr']) != 5:
+                return FAIL, f'member 5 endpoint has id {ids.get(nodes[4]["addr"])}'
+            g.step('restart', f'start of the seed {seed} again')
+            rc, text = start(0, label='restart-seed')
+            if rc:
+                return FAIL, 'restart of the seed failed: ' + text.strip()[-200:]
+            up.insert(0, 0)
+            members, usable5 = wait_members(5, seed, 'seed return at 5')
+            if members is None:
+                return FAIL, usable5
+            views, why = wait_voters({0: {1, 2, 3}, 2: {2, 3, 4}}, 'voters at 5')
+            if why:
+                return FAIL, why
+            if views[4][1]:
+                return FAIL, f'member 5 hosts metadata groups {sorted(views[4][1])}; want storage only'
+            g.fixture['capacity_5'] = usable5
+        finally:
+            g.run('stop-load', mnt['host'], f'touch {shlex.quote(stop_file)}', 60)
+            rc, text = load.wait(max(300, fx['a13_op_deadline_s'] * 4))
+        wl = json_tail(text)
+        g.fixture['load'] = {k: v for k, v in wl.items() if k not in ('files', 'failed')}
+        if 'files' not in wl:
+            return FAIL, 'client load produced no report: ' + str(wl)[:300]
+        # Usable capacity: 2/3 of every member's quota, the added ones included.
+        quota = sum(v.get('quota', 0) for v in members.values())
+        want_cap = quota * 2 // 3
+        cap3, cap5 = usable3['capacity'], usable5['capacity']
+        g.fixture.update(quota_bytes_5=quota, usable_capacity_3=cap3, usable_capacity_5=cap5)
+        if cap5 < 0.99 * want_cap or cap5 <= cap3:
+            return FAIL, f'usable capacity {cap5} at 5 members; want 2/3 of {quota} = {want_cap} (was {cap3} at 3)'
+        rc, text = g.run('statfs', mnt['host'], f'python3 -c "import os; s = os.statvfs({mnt["path"]!r}); '
+                         f'print(s.f_blocks * s.f_frsize)"', 60)
+        df = int(text.strip().splitlines()[-1]) if rc == 0 and text.strip().splitlines()[-1].isdigit() else 0
+        g.fixture['client_df_bytes'] = df
+        if df < 0.99 * want_cap:
+            return FAIL, f'the client reports {df} bytes total; want the grown {want_cap}'
+        # New writes reach the added members (usable, not just reported).
+        used0 = {k: v.get('used', 0) for k, v in members.items()}
+        after = f'{mnt["path"]}/qualify-{q.runid}/after'
+        rc, text = g.run('write-after', mnt['host'], q.helper(mnt['host'], '_manifest', 'write', '--dir', after,
+                                                               '--files', 48, '--sizes', 262144, '--seed', q.runid))
+        doc_after = json_tail(text)
+        if rc or 'files' not in doc_after:
+            return FAIL, 'writes at 5 members failed: ' + str(doc_after)[:300]
+        end = time.monotonic() + 120
+        while True:
+            members, _ = status(seed)
+            grown = {k: members.get(k, {}).get('used', 0) - used0.get(k, 0) for k in (4, 5)}
+            if all(v > 0 for v in grown.values()) or time.monotonic() > end:
+                break
+            time.sleep(5)
+        g.fixture['used_growth_added_members'] = grown
+        if not all(v > 0 for v in grown.values()):
+            return FAIL, f'new writes placed nothing on the added members: used growth {grown}'
+        for label, path, d in (('verify-before', manifest, None), ('verify-after', None, doc_after),
+                               ('verify-load', None, dict(dir=wl['dir'], files=wl['files'],
+                                                          errors=[dict(name=n) for n in wl.get('failed', [])]))):
+            if path is None:
+                path = g.raw_file(f'manifest-{label[7:]}.json')
+                path.write_text(json.dumps(d) + '\n')
+            ok, result = manifest_verify(q, g, mnt, path, label)
+            g.fixture[label] = result
+            if not ok:
+                return FAIL, f'{label}: {result}'[:400]
+        if wl.get('nerrors') or wl.get('nover'):
+            return FAIL, (f'client load: {wl.get("nerrors")} of {wl.get("ops")} ops failed, {wl.get("nover")} over '
+                          f'{fx["a13_op_deadline_s"]} s (max gap {wl.get("max_gap_s")} s): '
+                          f'{(wl.get("errors") or wl.get("over_deadline"))[:1]}')[:400]
+    finally:
+        g.run('unmount', mnt['host'], f'mountpoint -q {mpath} || exit 0; cd {m_src} && scripts/client.sh stop '
+              f'{mpath} || fusermount3 -uz {mpath}', 300)
+        for n in reversed(nodes):
+            g.run(f'stop-{n["addr"]}', n['host'], node_cmd(n, 'stop'), 300)
+        for i, n in enumerate(nodes):
+            store = Path(n['store'])
+            g.fetch(n['host'], f'{store.parent}/{store.name}.log', f'efsd-a13-n{i + 1}.log')
+        g.fetch(mnt['host'], f'{Path(mnt["path"]).parent}/efs-fuse-{Path(mnt["path"]).name}.log', 'efs-fuse-a13.log')
+        if not q.args.keep_work:
+            for host in sorted({n['host'] for n in nodes} | {mnt['host']}):
+                g.run('delete-a13', host, f'test -e {shlex.quote(root)} || exit 0; if command -v edelete >/dev/null; '
+                      f'then edelete --force --delete {shlex.quote(root)}; else rm -rf -- {shlex.quote(root)}; fi', 900)
+    shared = g.fixture['distinct_hosts'] < len(nodes)
+    return PASS, ('3 -> 4 (interrupted join retried: same member 4; SHARD2 {1,2,3} -> {2,3,4}) -> 5 through '
+                  f'member 3 with the seed down (member 5 storage only); usable {cap3} -> {cap5} B; '
+                  f'{wl["acknowledged"]} load files and every manifest exact' +
+                  (f'; members share {g.fixture["distinct_hosts"]} host(s) (A4: regression evidence)' if shared else ''))
+
+
+def session_uuid(q, g, m, log):
+    rc, text = g.run('session-uuid', m['host'], f'grep -o "session uuid=[0-9a-f]* epoch=[0-9]*" '
+                     f'{shlex.quote(log)} | tail -1', 60)
+    found = re.search(r'uuid=([0-9a-f]{32}) epoch=(\d+)', text)
+    return (found.group(1), int(found.group(2))) if found else (None, None)
+
+
+def session_get(q, g, uuid, label):
+    rc, text = q.mgmt(g, label, 'raft-session', q.cluster['seed'], 'get', uuid, deadline=60)
+    found = re.search(r'rc=(-?\d+) .*?epoch=(\d+) state=(\d+)', text)
+    return (int(found.group(1)), int(found.group(2)), int(found.group(3))) if found else (None, None, None)
+
+
+def g_c5(q, g):
+    """C5 against the topology cluster with real clients and mgmt calls:
+    W133 declaration gate and W140 fail-closed log tags over the wire on
+    every member; removed settings (A6/A7) refused by the candidate's efsd
+    and efs-fuse on every host; K5/W134 session fence of an extra mount
+    (mutations EIO, reads answer, a peer mount unaffected); W72 clean
+    unmount revoke (the session's epoch advances, the data stays)."""
+    m = q.mount(0)
+    nodes = q.cluster.get('nodes', [])
+    if not m or not nodes:
+        return NOTRUN, 'needs a mount and nodes'
+    fx, out = q.fixture, g.fixture
+    mhost = q.cluster.get('mgmt_host')
+    rc, text = g.run('wire', mhost, helper2(q, mhost, 'wire', *[x for n in nodes for x in ('--node', n['addr'])]), 300)
+    if q.plan:
+        return NOTRUN, 'plan'
+    wire = json_tail(text)
+    out['wire'] = dict(passed=wire.get('passed'), total=wire.get('total'),
+                       failed=[c for c in wire.get('checks', []) if not c.get('ok')][:10])
+    if rc or not wire.get('total'):
+        return FAIL, f'wire gate: {out["wire"]}'[:400]
+    rc, text = q.mgmt(g, 'serving-after-wire', 'raft-getattr', q.cluster['seed'], 1, deadline=60)
+    if rc:
+        return FAIL, 'the cluster stopped serving after the wire probes: ' + text.strip()[-200:]
+    hosts = sorted({n.get('host') or 'local' for n in nodes} | {mm['host'] or 'local' for mm in q.cluster['mounts']})
+    out['refusals'] = {}
+    for host in hosts:
+        scratch = q.remote_dir(g, host, 'c5-refuse')
+        rc, text = g.run(f'refuse-{host}', host, helper2(q, host, 'refuse', '--src', q.source(host),
+                                                         '--scratch', scratch), 600)
+        doc = json_tail(text)
+        out['refusals'][host] = dict(passed=doc.get('passed'), total=doc.get('total'),
+                                     failed=[c for c in doc.get('checks', []) if not c.get('ok')][:5])
+        if rc or not doc.get('total'):
+            return FAIL, f'removed settings on {host}: {out["refusals"][host]}'[:400]
+    # K5: fence an extra mount's session; then the clean-unmount revoke (W72).
+    src = shlex.quote(q.source(m['host']))
+    scratch = q.remote_dir(g, m['host'], 'c5')
+    fdir = f'qualify-{q.runid}/c5'
+    rc, text = g.run('fixtures', m['host'], helper2(q, m['host'], 'c5-prepare', '--dir', f'{m["path"]}/{fdir}'), 120)
+    if rc:
+        return FAIL, 'fixtures failed: ' + text.strip()[-200:]
+    extra = {name: dict(host=m['host'], path=f'{scratch}/mnt-{name}') for name in ('fence', 'revoke')}
+    mounted = []
+    try:
+        for name, em in extra.items():
+            g.step('session', f'extra mount {em["host"]}:{em["path"]} of the topology cluster ({name})')
+            g.run('mkdir-extra-mount', em['host'], f'mkdir -p {shlex.quote(em["path"])}', 60)
+            rc, text = q.control.client_start(g, dict(em))
+            if rc:
+                return FAIL, f'extra mount for {name} failed: ' + outcome_from_rc(rc, text)[1]
+            mounted.append(em)
+            em['uuid'], em['epoch'] = session_uuid(q, g, em, f'{scratch}/efs-fuse-mnt-{name}.log')
+            if not em['uuid']:
+                return FAIL, f'no session uuid in the {name} mount log'
+            rc0, epoch, state = session_get(q, g, em['uuid'], f'session-{name}-at-mount')
+            out[f'{name}_session_at_mount'] = dict(uuid=em['uuid'], rc=rc0, epoch=epoch, state=state)
+            if (rc0, epoch, state) != (0, em['epoch'], 1):
+                return FAIL, f'{name} mount session not active at its epoch: {out[f"{name}_session_at_mount"]}'
+        f = extra['fence']
+        g.step('session', f'raft-session fence of the extra mount session {f["uuid"]}')
+        fenced = None
+        for attempt in range(1, int(fx['c5_fence_attempts']) + 1):
+            rc, text = q.mgmt(g, 'fence', 'raft-session', q.cluster['seed'], 'fence', f['uuid'], deadline=120)
+            if re.search(r'status=0\b', text) and re.search(r'epoch=%d\b' % (f['epoch'] + 1), text) and \
+                    'state=1' in text:
+                fenced = attempt
+                break
+            time.sleep(10)
+        out['fence_attempts'] = fenced
+        if not fenced:
+            return FAIL, f'raft-session fence not completed in {fx["c5_fence_attempts"]} attempts: ' + text.strip()[-200:]
+        rc, text = g.run('fenced-mutations', f['host'], helper2(q, f['host'], 'c5-mutate', '--dir',
+                                                                f'{f["path"]}/{fdir}', '--expect', 'eio'), 300)
+        doc = json_tail(text)
+        out['fenced'] = [f'{c["check"]}:{c["got"]}' for c in doc.get('checks', [])]
+        if rc:
+            return FAIL, 'fenced mount: ' + '; '.join(c['check'] + ' ' + str(c['got'])
+                                                      for c in doc.get('checks', []) if not c['ok'])[:300]
+        rc, text = g.run('peer-mutations', m['host'], helper2(q, m['host'], 'c5-mutate', '--dir',
+                                                              f'{m["path"]}/{fdir}', '--expect', 'ok'), 300)
+        if rc:
+            return FAIL, 'peer mount after the fence: ' + str(json_tail(text))[:300]
+        rc, text = g.run('fenced-log', f['host'], f'grep -m1 "fenced" {shlex.quote(scratch)}/efs-fuse-mnt-fence.log', 60)
+        out['fence_latched_in_client_log'] = rc == 0
+        if rc:
+            return FAIL, 'the fenced client never logged the fence'
+        rc, text = g.run('stop-fenced', f['host'], f'cd {src} && scripts/client.sh stop --force-discard '
+                                                    f'{shlex.quote(f["path"])}', 300)
+        if rc == 0:
+            mounted.remove(f)
+        # W72: a clean stop settles, then revokes its own session.
+        r = extra['revoke']
+        pend = f'{r["path"]}/{fdir}/revoke.bin'
+        rc, text = g.run('revoke-write', r['host'], q.helper(r['host'], '_pending', 'write', pend, q.runid), 120)
+        if rc:
+            return FAIL, 'write through the revoke mount failed: ' + text.strip()[-200:]
+        t0 = time.monotonic()
+        rc, text = q.control.client_stop(g, r)
+        out['revoke_stop_s'] = round(time.monotonic() - t0, 3)
+        if rc:
+            return FAIL, 'clean stop (no force) of the revoke mount refused or failed: ' + outcome_from_rc(rc, text)[1]
+        mounted.remove(r)
+        rc0, epoch, state = session_get(q, g, r['uuid'], 'session-after-unmount')
+        out['revoke_session_after_unmount'] = dict(rc=rc0, epoch=epoch, state=state)
+        if rc0 != 0 or epoch is None or epoch <= r['epoch']:
+            return FAIL, f'unmount did not revoke its session: {out["revoke_session_after_unmount"]}'
+        rc, text = g.run('revoke-verify', m['host'], q.helper(m['host'], '_pending', 'verify',
+                                                              f'{m["path"]}/{fdir}/revoke.bin', q.runid), 120)
+        if rc:
+            return FAIL, 'data written before the revoking unmount is wrong: ' + text.strip()[-200:]
+    finally:
+        for em in mounted:
+            g.run('cleanup-extra-mount', em['host'], f'mountpoint -q {shlex.quote(em["path"])} || exit 0; cd {src} && '
+                  f'scripts/client.sh stop --force-discard {shlex.quote(em["path"])} || '
+                  f'fusermount3 -uz {shlex.quote(em["path"])}', 300)
+    return PASS, (f'wire {wire["passed"]}/{wire["total"]} on {len(nodes)} members; removed settings refused on '
+                  f'{len(hosts)} host(s); fence in {fenced} attempt(s), mutations EIO, peer unaffected; '
+                  f'clean unmount revoked its session in {out["revoke_stop_s"]} s')
+
+
+def compaction(q, g, label):
+    rc, text = q.mgmt(g, label, 'pack-compact', q.cluster['seed'], 0, deadline=120)
+    totals = [int(x) for x in re.findall(r'compacted_total=(\d+)', text)]
+    packed = [int(x) for x in re.findall(r'files_packed=(\d+)', text)]
+    return dict(compacted_total=sum(totals), files_packed=sum(packed),
+                segments=sum(int(x) for x in re.findall(r' segments=(\d+) live', text)),
+                holed=sum(int(x) for x in re.findall(r'holed=(\d+)', text)))
+
+
+def orderly_restart(q, g, what):
+    """Client stops (no force), orderly cluster stop, start, readiness,
+    remount (E1, D1). Returns a FAIL/NOTRUN reason or None."""
+    if 'restart' not in q.allow:
+        return NOTRUN, 'orderly restart not allowed (needs --allow restart)'
+    if not q.control.has('stop_cluster', 'start_cluster'):
+        return NOTRUN, 'control.stop_cluster/start_cluster not described'
+    mounts = q.cluster.get('mounts', [])
+    for mm in mounts:
+        rc, text = g.run('fuser-before-stop', mm['host'], f'fuser -m {shlex.quote(mm["path"])} 2>/dev/null', 60)
+        if rc == 0 and text.strip():
+            return NOTRUN, f'{mm["host"]}:{mm["path"]} in use ({text.strip()[:120]}); not stopping it'
+    g.step('restart', what)
+    for mm in mounts:
+        rc, text = q.control.client_stop(g, mm)
+        if rc:
+            return FAIL, f'clean client stop of {mm["path"]} failed: {outcome_from_rc(rc, text)[1]}'
+    t0 = time.monotonic()
+    rc, text = q.control.stop_cluster(g)
+    g.fixture['stop_seconds'] = round(time.monotonic() - t0, 3)
+    if rc:
+        return FAIL, 'orderly cluster stop failed: ' + outcome_from_rc(rc, text)[1]
+    t0 = time.monotonic()
+    rc, text = q.control.start_cluster(g)
+    ready_deadline = q.cluster.get('control', {}).get('ready_timeout_s', 300)
+    if rc or not wait_cluster_ready(q, g, ready_deadline):
+        return FAIL, f'cluster not ready within {ready_deadline}s after restart'
+    g.fixture.update(ready_seconds=round(time.monotonic() - t0, 3), ready_deadline_s=ready_deadline,
+                     stop_deadline_s=q.cluster.get('control', {}).get('stop_timeout_s', 300))
+    for mm in mounts:
+        rc, text = q.control.client_start(g, mm)
+        if rc:
+            return FAIL, f'remount of {mm["path"]} failed: {outcome_from_rc(rc, text)[1]}'
+    return None
+
+
+def g_d1(q, g):
+    """D1 (and D2 on the same segments): small files packed for real
+    (every row a packed reference of the file's length), fewer stored
+    objects than files (inventory savings), exact reads before and after
+    packing through every mount; then overwrite, truncate and unlink one
+    in eight each, an explicit compaction, the rest exact and repacked;
+    exact and still packed after an orderly cold restart."""
+    m = q.mount(0)
+    if not m:
+        return NOTRUN, 'no mount described'
+    fx, out = q.fixture, g.fixture
+    r = q.mount(1)
+    host = m['host']
+    d = f'{m["path"]}/qualify-{q.runid}/d1'
+    mgmt = f'{q.source(host)}/efs-mgmt'
+    eps = [x for n in q.cluster.get('nodes', []) for x in ('--node', n['addr'])]
+    rc, text = g.run('write', host, helper2(q, host, 'smallfiles', 'write', '--dir', d, '--files', fx['d1_files'],
+                                            '--seed', q.runid, '--max-size', fx['d1_max_size']), 1800)
+    if q.plan:
+        return NOTRUN, 'plan'
+    doc = json_tail(text)
+    if rc or 'files' not in doc:
+        return FAIL, 'small-file writes failed: ' + str(doc.get('errors') or doc)[:300]
+    manifest = g.raw_file('manifest.json')
+    manifest.write_text(json.dumps(doc) + '\n')
+    out.update(files=len(doc['files']), max_size=fx['d1_max_size'], bytes=sum(f['size'] for f in doc['files']),
+               pack_wait_s=fx['d1_pack_wait_s'])
+
+    def rows(path, label):
+        rc, text = g.run(label, host, f'{helper2(q, host, "smallfiles", "rows", "--mgmt", mgmt, *eps)}', 1800,
+                         stdin_path=path)
+        return json_tail(text)
+
+    def verify_all(path, label):
+        for i, mm in enumerate([m] + ([r] if r else [])):
+            p = path
+            if i:
+                other = json.loads(path.read_text())
+                other['dir'] = other['dir'].replace(m['path'], mm['path'], 1)
+                p = g.raw_file(f'{path.stem}-{label}-peer.json')
+                p.write_text(json.dumps(other) + '\n')
+            ok, result = manifest_verify(q, g, mm, p, f'{label}-{"peer" if i else "writer"}')
+            out[f'{label}{"_peer" if i else ""}'] = result
+            if not ok:
+                return f'{label} through {mm["host"]}:{mm["path"]}: {result}'[:400]
+        return None
+
+    def wait_packed(path, label, allow):
+        end = time.monotonic() + fx['d1_pack_wait_s']
+        while True:
+            res = rows(path, label)
+            if res.get('nbad'):
+                return res, f'{label}: bad packed rows: {res.get("bad")}'[:400]
+            if res.get('unpacked') == 0 and res.get('packed'):
+                return res, None
+            if time.monotonic() > end:
+                return res, f'{label}: {res.get("unpacked")} of {res.get("files")} not packed after {allow} s'
+            time.sleep(10)
+
+    first = rows(manifest, 'rows-before')
+    out['before_packing'] = {k: first.get(k) for k in ('packed', 'unpacked', 'stored_objects')}
+    why = verify_all(manifest, 'verify-before-packing')
+    if why:
+        return FAIL, why
+    c0 = compaction(q, g, 'pack-summary-before')
+    packed, why = wait_packed(manifest, 'rows-packing', fx['d1_pack_wait_s'])
+    out['after_packing'] = {k: packed.get(k) for k in ('packed', 'unpacked', 'stored_objects', 'segments')}
+    if why:
+        return FAIL, why
+    saved = first['stored_objects'] - packed['stored_objects']
+    out['inventory_objects_saved'] = saved
+    if packed['segments'] < 1 or packed['stored_objects'] >= first['stored_objects']:
+        return FAIL, (f'no inventory saving: {first["stored_objects"]} stored objects before packing, '
+                      f'{packed["stored_objects"]} after')
+    why = verify_all(manifest, 'verify-after-packing')
+    if why:
+        return FAIL, why
+    # D2 on the shared segments.
+    rc, text = g.run('mutate', host, helper2(q, host, 'smallfiles', 'mutate', '--seed', q.runid), 600,
+                     stdin_path=manifest)
+    doc2 = json_tail(text)
+    if rc or 'files' not in doc2:
+        return FAIL, 'overwrite/truncate/unlink of packed files failed: ' + str(doc2.get('errors') or doc2)[:300]
+    manifest2 = g.raw_file('manifest-mutated.json')
+    manifest2.write_text(json.dumps(doc2) + '\n')
+    out['mutations'] = doc2['mutations']
+    why = verify_all(manifest2, 'verify-after-mutation')
+    if why:
+        return FAIL, why
+    c1 = compaction(q, g, 'pack-summary-mutated')
+    q.mgmt(g, 'compact-request', 'pack-compact', q.cluster['seed'], 64, deadline=120)
+    end = time.monotonic() + fx['d1_compact_wait_s']
+    while True:
+        c2 = compaction(q, g, 'pack-summary-compacting')
+        if c2['compacted_total'] > c1['compacted_total']:
+            break
+        if time.monotonic() > end:
+            out['compaction'] = dict(before=c1, after=c2)
+            return FAIL, (f'requested compaction of the holed segments moved nothing within '
+                          f'{fx["d1_compact_wait_s"]} s (compacted_total {c1["compacted_total"]})')
+        time.sleep(5)
+    out['compaction'] = dict(start=c0, mutated=c1, compacted=c2)
+    repacked, why = wait_packed(manifest2, 'rows-repacked', fx['d1_pack_wait_s'])
+    out['after_compaction'] = {k: repacked.get(k) for k in ('packed', 'unpacked', 'stored_objects', 'segments')}
+    if why:
+        return FAIL, why
+    why = verify_all(manifest2, 'verify-after-compaction')
+    if why:
+        return FAIL, why
+    res = orderly_restart(q, g, 'D1 cold restart: client stops (no force), orderly cluster stop, start, remount')
+    if res:
+        if res[0] == FAIL:
+            return res
+        return NOTRUN, (f'packed {packed["packed"]} files into {packed["segments"]} segments, {saved} stored objects '
+                        f'saved, D2 mutations and compaction exact; cold restart NOTRUN: {res[1]}')
+    after = rows(manifest2, 'rows-after-restart')
+    out['after_restart'] = {k: after.get(k) for k in ('packed', 'unpacked', 'stored_objects', 'segments')}
+    why = verify_all(manifest2, 'verify-after-restart')
+    if why:
+        return FAIL, why
+    if after.get('unpacked') or after.get('nbad'):
+        return FAIL, f'after the cold restart: {after.get("unpacked")} files unpacked, bad {after.get("bad")}'[:400]
+    return PASS, (f'{packed["packed"]} small files in {packed["segments"]} segments ({first["stored_objects"]} -> '
+                  f'{packed["stored_objects"]} stored objects); {doc2["mutations"]} on packed files, compaction '
+                  f'moved {c2["compacted_total"] - c1["compacted_total"]} records; exact through '
+                  f'{1 + bool(r)} mount(s) before/after packing, after compaction and after a cold restart')
+
+
+def g_d3(q, g):
+    """D3 under load: `.efs` find/ls/stats and an invalid request in
+    concurrent loops on a fresh fixture (initial catalog creation) while
+    writers do create/fsync/read/rename/list; exact answers, every op
+    within its deadline, new generations published, the load tree
+    converges to its exact count, payloads exact."""
+    m = q.mount(0)
+    if not m:
+        return NOTRUN, 'no mount described'
+    fx = q.fixture
+    r = q.mount(1)
+    peer = r['path'] if r and (r['host'] or 'local') == (m['host'] or 'local') else None
+    d = f'{m["path"]}/qualify-{q.runid}/d3'
+    args = ['d3', '--dir', d, '--mount', m['path'], '--seed', q.runid, '--static-files', fx['d3_static_files'],
+            '--writers', fx['d3_writers'], '--queriers', fx['d3_queriers'], '--load-s', fx['d3_load_s'],
+            '--io-deadline-s', fx['d3_io_deadline_s'], '--query-deadline-s', fx['d3_query_deadline_s'],
+            '--index-wait-s', fx['d3_index_wait_s']] + (['--peer', peer] if peer else [])
+    rc, text = g.run('efs-load', m['host'], helper2(q, m['host'], *args))
+    if q.plan:
+        return NOTRUN, 'plan'
+    doc = json_tail(text)
+    g.fixture.update({k: v for k, v in doc.items() if k not in ('bad_payloads',)})
+    if g.commands[-1].get('timed_out'):
+        return FAIL, 'deadline exceeded'
+    if rc:
+        why = doc.get('error') or '; '.join(
+            f'{k}: {doc.get(k)[:2]}' for k in ('io_errors', 'io_over_deadline', 'query_errors',
+                                               'query_over_deadline', 'bad_payloads') if doc.get(k))
+        if not why and not doc.get('load_converged'):
+            why = f'load tree never converged: {doc.get("load_stats")} want {doc.get("load_files")} files'
+        return FAIL, (why or str(doc))[:400]
+    return PASS, (f'{doc["query_ops"]} `.efs` queries (p99 {doc["query_p99_s"]} s, max {doc["query_max_s"]} s) '
+                  f'exact over {doc["generations"]} generations while {doc["io_ops"]} I/O ops ran (max '
+                  f'{doc["io_max_s"]} s <= {fx["d3_io_deadline_s"]} s); {doc["load_files"]} files converged in '
+                  f'{doc["load_converge_s"]} s and read back exact')
+
+
+def g_e4(q, g):
+    """E4: declared small- and large-file fixtures sized by the member
+    count, completed vs target, every file exact on a cold reader (another
+    mount, or this one remounted) under concurrent `.efs` queries, the
+    catalog converges to the exact count, then delete and reclaim (usable
+    bytes fall by the deleted payload) with the rest exact."""
+    m = q.mount(0)
+    nodes = q.cluster.get('nodes', [])
+    if not m or not nodes:
+        return NOTRUN, 'needs a mount and nodes'
+    fx, out = q.fixture, g.fixture
+    n = len(nodes)
+    small, large = n * int(fx['e4_small_per_member']), n * int(fx['e4_large_per_member'])
+    logical = small * 4500 + large * int(fx['e4_large_mib']) * (1 << 20)
+    out.update(members=n, target_small=small, target_large=large, large_mib=fx['e4_large_mib'],
+               threads=fx['e4_threads'], declared_logical_bytes=logical)
+    rc, text = q.mgmt(g, 'status-before', 'status', q.cluster['seed'], deadline=60)
+    if q.plan:
+        g.run('write', m['host'], helper2(q, m['host'], 'e4', 'write', '--dir', f'{m["path"]}/qualify-{q.runid}/e4',
+                                          '--seed', q.runid, '--small', small, '--large', large,
+                                          '--large-mib', fx['e4_large_mib'], '--threads', fx['e4_threads']))
+        return NOTRUN, 'plan'
+    _, usable = parse_status(text)
+    if not usable:
+        return FAIL, 'status reports no usable bytes: ' + text.strip()[-200:]
+    out['usable_before'] = usable
+    if usable['free'] < 2 * logical:
+        return NOTRUN, (f'declared fixture ({small} small, {large} x {fx["e4_large_mib"]} MiB, ~{logical >> 20} MiB) '
+                        f'needs twice its size free; {usable["free"] >> 20} MiB usable free')
+    d = f'{m["path"]}/qualify-{q.runid}/e4'
+    rc, text = g.run('write', m['host'], helper2(q, m['host'], 'e4', 'write', '--dir', d, '--seed', q.runid,
+                                                 '--small', small, '--large', large, '--large-mib',
+                                                 fx['e4_large_mib'], '--threads', fx['e4_threads']))
+    doc = json_tail(text)
+    if 'files' not in doc:
+        return FAIL, 'fixture writer produced no manifest: ' + str(doc)[:300]
+    manifest = g.raw_file('manifest.json')
+    manifest.write_text(json.dumps(doc) + '\n')
+    out.update({k: doc.get(k) for k in ('completed_small', 'completed_large', 'bytes', 'seconds', 'small_per_s',
+                                        'nerrors')})
+    if rc or doc.get('nerrors'):
+        return FAIL, (f'completed {doc.get("completed_small")}/{small} small and {doc.get("completed_large")}/{large} '
+                      f'large files; first error {(doc.get("errors") or [None])[0]}')[:400]
+    # Cold reader: the second mount (never read these files), else this one remounted.
+    reader = q.mount(1)
+    if not reader:
+        if 'remount' not in q.allow:
+            return NOTRUN, f'{small} + {large} files written; cold read needs a second mount or --allow remount'
+        g.step('remount', f'client stop (no force) and remount of {m["host"]}:{m["path"]} (E4 cold reads)')
+        rc, text = q.control.client_stop(g, m)
+        if rc:
+            return FAIL, 'clean client stop failed: ' + outcome_from_rc(rc, text)[1]
+        rc, text = q.control.client_start(g, m)
+        if rc:
+            return FAIL, 'remount failed: ' + outcome_from_rc(rc, text)[1]
+        reader = m
+    rdir = d.replace(m['path'], reader['path'], 1)
+    cold = g.raw_file('manifest-reader.json')
+    cold.write_text(json.dumps(dict(doc, dir=rdir)) + '\n')
+    scratch = q.remote_dir(g, reader['host'], 'e4')
+    stop_file = f'{scratch}/stop-queries'
+    queries = Background(q, g, 'query-load', reader['host'], helper2(
+        q, reader['host'], 'e4', 'queries', '--dir', rdir, '--stop', stop_file,
+        '--deadline-s', fx['e4_query_deadline_s'], '--max-s', g.remaining()), g.remaining())
+    t0 = time.monotonic()
+    try:
+        ok, result = manifest_verify(q, g, reader, cold, 'verify-cold')
+    finally:
+        g.run('stop-queries', reader['host'], f'touch {shlex.quote(stop_file)}', 60)
+        qrc, qtext = queries.wait(fx['e4_query_deadline_s'] * 3 + 60)
+    out.update(cold_verify=result, cold_verify_s=round(time.monotonic() - t0, 3))
+    qdoc = json_tail(qtext)
+    out['queries'] = qdoc
+    if not ok:
+        return FAIL, f'cold verify: {result}'[:400]
+    if qrc:
+        return FAIL, f'concurrent `.efs` queries: {qdoc}'[:400]
+    # The catalog converges to the exact fixture.
+    settle = max(30, 2 * int(fx['e4_refresh_s']) + 60)
+    end, last = time.monotonic() + settle, None
+    while True:
+        rc, text = g.run('stats', reader['host'], f'cd / && python3 {shlex.quote(rdir)}/.efs/stats --json 2>/dev/null', 120)
+        try:
+            last = json.loads(text.strip().splitlines()[0])['stats'] if rc == 0 else last
+        except (ValueError, IndexError, KeyError):
+            pass
+        if last and last['tree_files'] == len(doc['files']) and last['tree_bytes'] == doc['bytes']:
+            break
+        if time.monotonic() > end:
+            return FAIL, f'catalog never converged within {settle} s: {last}, want {len(doc["files"])} files'
+        time.sleep(5)
+    out['catalog'] = last
+    rc, text = q.mgmt(g, 'status-full', 'status', q.cluster['seed'], deadline=60)
+    _, full = parse_status(text)
+    out['usable_with_fixture'] = full
+    rc, text = g.run('delete', m['host'], helper2(q, m['host'], 'e4', 'delete'), 1800, stdin_path=manifest)
+    ddoc = json_tail(text)
+    if rc or 'files' not in ddoc:
+        return FAIL, 'deletes failed: ' + str(ddoc.get('errors') or ddoc)[:300]
+    rest = g.raw_file('manifest-after-delete.json')
+    rest.write_text(json.dumps(ddoc) + '\n')
+    out.update(deleted=ddoc['deleted'], deleted_bytes=ddoc['deleted_bytes'])
+    end = time.monotonic() + fx['e4_reclaim_s']
+    while True:
+        rc, text = q.mgmt(g, 'status-reclaim', 'status', q.cluster['seed'], deadline=60)
+        _, now_usable = parse_status(text)
+        dropped = usable_used = None
+        if now_usable:
+            usable_used = now_usable['used']
+            dropped = (full or now_usable)['used'] - usable_used
+        if dropped is not None and dropped >= 0.8 * ddoc['deleted_bytes']:
+            break
+        if time.monotonic() > end:
+            out['usable_after_delete'] = now_usable
+            return FAIL, (f'reclaim: usable used fell {dropped} B from {(full or {}).get("used")} B; want at '
+                          f'least 0.8 x the {ddoc["deleted_bytes"]} B deleted within {fx["e4_reclaim_s"]} s')
+        time.sleep(10)
+    out['usable_after_delete'] = now_usable
+    ok, result = manifest_verify(q, g, m, rest, 'verify-after-delete')
+    out['after_delete'] = result
+    if not ok:
+        return FAIL, f'files left after the deletes: {result}'[:400]
+    return PASS, (f'{doc["completed_small"]}/{small} small + {doc["completed_large"]}/{large} x '
+                  f'{fx["e4_large_mib"]} MiB exact on a cold reader under {qdoc.get("queries")} queries (p99 '
+                  f'{qdoc.get("p99_s")} s); catalog exact; {ddoc["deleted"]} deleted, reclaimed, rest exact')
+
+
 def g_plugin(name, spec):
     def gate(q, g):
         host = spec.get('host', 'local')
@@ -1576,36 +2383,18 @@ def gates(plugins):
         Gate('e3-turnover', g_e3, 'E3', 'Full payloads + orderly restart', needs=('turnover',),
              partial_needs=('restart',), deadline_s=1800,
              doc='raft-step-down of every group leader under client load; member catch-up'),
+        Gate('a13-node-addition', g_a13, 'A13', 'Placement/capacity and decode', needs=('restart',),
+             deadline_s=3600, doc='own 3-member cluster grown to 4 (interrupted join) and 5 (seed down) under load'),
+        Gate('c5-protocol-live', g_c5, 'C5', 'POSIX and concurrent I/O', deadline_s=1800,
+             doc='W133 declaration gate, W140 tags, A7 removed settings, K5 fence, W72 unmount revoke'),
+        Gate('d1-packing', g_d1, 'D1, D2', 'Packing/shared-fragment GC', partial_needs=('restart',),
+             deadline_s=3600, doc='packed mappings, inventory savings, D2 mutations + compaction, cold restart'),
+        Gate('d3-efs-load', g_d3, 'D3', 'Enabled `.efs` under load', deadline_s=2400,
+             doc='.efs find/ls/stats and refusals in loops under create/fsync/rename I/O'),
+        Gate('e4-scale', g_e4, 'E4', 'Scale/progress evidence (E4, D4)', partial_needs=('remount',),
+             deadline_s=14400, doc='declared small/large fixtures, cold reads under queries, delete/reclaim'),
     ]
-    out += [Gate(name, g_stub(reason), items, ledger, partial_needs=needs, deadline_s=60, doc='STUB (NOTRUN): ' + doc,
-                 stub=True) for name, items, ledger, needs, doc, reason in STUBS]
     return out
-
-
-# Gates the A11 plan needs that no harness implements yet: each reports
-# NOTRUN with its reason until a harness replaces the stub.
-STUBS = (
-    ('a13-node-addition', 'A13', 'Placement/capacity and decode', (),
-     'live 3->4->5 addition with usable capacity and interrupted join',
-     'loopback evidence only (tests/test_k33_growth.py, test_k33_interrupt.py, test_w153_formation.py); '
-     'a real-host add-node/interrupted-join gate on distinct hosts is not written'),
-    ('c5-protocol-live', 'C5 (W127-W134, W72, D25)', 'POSIX and concurrent I/O', (),
-     'apply/protocol/session gates on the integrated candidate cluster',
-     'covered by unit and private gates in make test-all on the candidate; no gate drives them against '
-     'the topology cluster (K6 VERIFY multi-host)'),
-    ('d1-packing', 'D1', 'Packing/shared-fragment GC', ('restart',),
-     'packed mappings, inventory savings, exact reads before/after packing and cold restart',
-     'b-checks B4 shows packed segments exist; the inventory-savings count and the read-back across an '
-     'orderly cold restart are not driven'),
-    ('d3-efs-load', 'D3', 'Enabled `.efs` under load', (),
-     '.efs commands and concurrent queries while ordinary I/O continues',
-     'tests/live/efs_commands_load.py is a private-fixture harness not yet wired to a described cluster; '
-     'posix-extras covers .efs commands without load'),
-    ('e4-scale', 'E4', 'Scale/progress evidence (E4, D4)', (),
-     'declared small-file and large-file fixtures, cold reads, query load, delete/reclaim',
-     'no harness with declared target counts runs on a described cluster (tiny_files-style loads are '
-     'hand-run on orcd-mini)'),
-)
 
 
 def b_checks_command(cluster):
@@ -1786,8 +2575,7 @@ def write_summary(q, run, results, sums):
             L.append(f'- {r["gate"]} NOTRUN: {r["reason"]}')
     if len(hosts) < len(c.get('nodes', [])) or c.get('owned'):
         L.append('- Daemons share hosts: not distinct failure domains (A4).')
-    L.append('- Stub gates (NOTRUN until a harness exists): ' + ', '.join(n for n, *_ in STUBS) +
-             '; the live harnesses run on TCP loopback only (no RDMA live harness).')
+    L.append('- The live harnesses run on TCP loopback only (no RDMA live harness).')
     L.append('- TODO: other limitations.\n')
     L.append('## Raw evidence\n')
     L.append(f'- `{run["driver_host"]}:{out}` — {sums["files"]} files listed in `SHA256SUMS` '
@@ -2020,14 +2808,23 @@ def h_node(a):
     """One efsd of a driver-owned private cluster, on this host from this
     tree: `start` launches it detached (seed: ADDR STORE; joiner: --join
     SEED --listen ADDR STORE; a restart uses the persisted identity) and
-    waits until it listens; `stop` sends SIGTERM to the recorded pid and
-    waits, SIGKILL only after --timeout (exit 124)."""
+    waits until it listens (--timeout 0: returns once spawned); `stop`
+    sends SIGTERM to the recorded pid and waits, SIGKILL only after
+    --timeout (exit 124); `kill` sends SIGKILL at once (an interrupted join)."""
     store = Path(a.store)
     pidfile, logfile = store.parent / f'{store.name}.pid', store.parent / f'{store.name}.log'
     if str(store.resolve()).startswith('/data1/efs'):
         print('_node: stores may not live under /data1/efs')
         return 2
     old = int(pidfile.read_text()) if pidfile.exists() and pidfile.read_text().strip().isdigit() else None
+    if a.op == 'kill':  # A13: an interrupted join (no orderly stop)
+        if old and pid_alive(old):
+            os.kill(old, signal.SIGKILL)
+            end = time.monotonic() + 30
+            while time.monotonic() < end and pid_alive(old):
+                time.sleep(0.1)
+        print(f'_node kill {a.addr}: pid {old} ' + ('still alive' if old and pid_alive(old) else 'gone'))
+        return 1 if old and pid_alive(old) else 0
     if a.op == 'stop':
         if not old or not pid_alive(old):
             print(f'_node stop {a.addr}: not running')
@@ -2096,6 +2893,15 @@ def matrix_errors(matrix):
     for item in STAGE2_ITEMS:
         if item not in items:
             errors.append(f'item {item}: not in the plan')
+        elif not any(c.startswith('qualify:') for c in items[item].get('checks', [])):
+            errors.append(f'item {item}: no qualify gate decides it')
+    for key, value in matrix.get('fixture', {}).items():
+        if key != 'about' and DEFAULT_FIXTURE.get(key) != value:
+            errors.append(f'fixture {key}: {value!r} differs from the driver default {DEFAULT_FIXTURE.get(key)!r}')
+    for name, topo in matrix.get('topologies', {}).items():
+        for key in topo.get('fixture', {}):
+            if key not in DEFAULT_FIXTURE:
+                errors.append(f'topology {name}: fixture {key!r} is not a driver fixture key')
     topologies = matrix.get('topologies', {})
     for item, spec in items.items():
         for check in spec.get('checks', []):
@@ -2164,8 +2970,7 @@ def print_plan(matrix, only=None):
             print(f'   blocked: {b}')
         names = topo.get('gates') or list(known)
         names = [g for g in names if g not in topo.get('skip', [])]
-        stubs = [g for g in names if known[g].stub]
-        print(f'   gates ({len(names)}, {len(stubs)} stubs): {", ".join(names)}')
+        print(f'   gates ({len(names)}): {", ".join(names)}')
         print(f'   allow: {",".join(topo.get("allow", [])) or "none"}; '
               f'estimated duration: {topo.get("duration", "?")}')
         for key in ('covers', 'cannot_cover'):
@@ -2200,7 +3005,10 @@ def matrix_topology(a, p):
     a.allow = a.allow or list(topo.get('allow', []))
     for gate, sec in topo.get('deadlines', {}).items():
         a.deadline.setdefault(gate, float(sec))
-    a.matrix_fixture = topo.get('fixture', {})
+    a.matrix_fixture = dict({k: v for k, v in matrix.get('fixture', {}).items() if k != 'about'},
+                            **topo.get('fixture', {}))
+    if 'loopback' not in topo:
+        topo['cluster'] = dict(topo['cluster'], fixture=dict(a.matrix_fixture, **topo['cluster'].get('fixture', {})))
     if 'loopback' in topo:
         a.loopback = topo['loopback']
         # The command line wins: another host passes its own port range.
@@ -2252,7 +3060,7 @@ def main(argv=None):
     pl.add_argument('--topology')
     pl.add_argument('--check', action='store_true', help='validate only')
     nd = sub.add_parser('_node')
-    nd.add_argument('op', choices=('start', 'stop'))
+    nd.add_argument('op', choices=('start', 'stop', 'kill'))
     nd.add_argument('--addr', required=True)
     nd.add_argument('--store', required=True)
     nd.add_argument('--join', default='')
