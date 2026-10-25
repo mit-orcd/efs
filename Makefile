@@ -1026,12 +1026,12 @@ test-rdma-message:
 test: test-rdma-message
 
 # make test-long: tests that wait on real deadlines, start daemons or
-	python3 tests/test_decoder_refusal.py
 # processes, inject faults or carry heavy workloads (1 s or more each on an
 # 8-core host). Not part of `make test`, the fast unit suite; `make test-all`
 # runs both and is what the gates run.
 .PHONY: test-long test-all
 test-long: all $(TEST_SPECIAL_BINS)
+	python3 tests/test_decoder_refusal.py
 	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_w153_formation.py
 	python3 tests/test_k33_growth.py

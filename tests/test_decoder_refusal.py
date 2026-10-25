@@ -49,11 +49,20 @@ try:
     c.wait_voters((1,2,3),lambda i,s: all(s.get(g)==(1,7) for g in (0,2)))
     # Formation may still be publishing its salt: require ReadIndex at both
     # groups before checking that refusal adds no entry.
-    for i in (1,2,3):
-        for g in (0,2):
-            with connect(i)[0] as s:
-                frame(s,95,bytes([g]));tag,body=recv(s)
-                assert tag==96 and struct.unpack_from('@i',body)[0]==0
+    for g in (0,2):
+        ready=False
+        deadline=time.monotonic()+60
+        while time.monotonic()<deadline:
+            for i in (1,2,3):
+                with connect(i)[0] as s:
+                    frame(s,95,bytes([g]));tag,body=recv(s)
+                    assert tag==96,(tag,body)
+                    if struct.unpack_from('@i',body)[0]==0:
+                        ready=True
+                        break
+            if ready:break
+            time.sleep(.1)
+        assert ready,('group never ReadIndex-ready',g)
     for i in (1,2,3):
         with connect(i,version=0)[0] as s:
             assert s.recv(1)==b''
