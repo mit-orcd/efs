@@ -1184,6 +1184,9 @@ int main(int argc, char **argv)
         char mdraft[EFS_MAX_PATH + 16], err[1024];
         const char *meta_root = server.meta_storage[0] ? server.meta_storage : server.storage_path;
         snprintf(mdraft, sizeof(mdraft), "%s/mdraft", meta_root);
+#if EFS_FAULTS
+        member_store_fault_exit = server_test_member_exit;
+#endif
         if (member_store_open(&server.mstore, mdraft, !join, server.addr, server.port, err,
                               sizeof(err)) != EFS_OK) {
             fprintf(stderr, "member store refused: %s\n", err);
@@ -1234,6 +1237,8 @@ int main(int argc, char **argv)
                     "%llu%s\n", mdraft, (unsigned long long)ms->token,
                     (unsigned long long)server.incarnation,
                     ms->created ? " (initialized now)" : "");
+            /* K33 test hook: a joining identity persisted, no HELLO sent. */
+            server_test_member_exit("before-hello");
             int jr = join_as_new(&server, seed_host[0] ? seed_host : NULL, seed_port,
                                  listen_ep != NULL);
             /* The rest of startup runs as for any node: a signal before

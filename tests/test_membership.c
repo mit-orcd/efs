@@ -464,13 +464,38 @@ static void store(void)
         member_store_close(&ms2);
     }
 
-    /* Interrupted initialization and another build's store are refused. */
+    /* A store that started before and lost its identity, and another
+     * build's store, are refused; an initialization interrupted before
+     * identity.bin (boot counter still 0) initializes again. */
     {
         char p[4300];
+        uint8_t zero[EFS_BOOT_FILE_LEN];
         snprintf(p, sizeof(p), "%s/identity.bin", dir);
         unlink(p);
         CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
-              strstr(err, "interrupted"), err);
+              strstr(err, "lost identity.bin"), err);
+        write_file(dir, "boot.bin", good, 12);
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
+              strstr(err, "unreadable"), err);
+        member_store_boot_encode(0, zero);
+        write_file(dir, "boot.bin", zero, sizeof(zero));
+        write_file(dir, ".identity.bin.tmp", ident, 40); /* the half-written temp */
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_OK && ms2.created &&
+              ms2.state == EFS_MEMBER_JOINING && ms2.token && ms2.token != token, err);
+        CHECK(member_store_boot(&ms2, 7, &inc, err, sizeof(err)) == EFS_OK && inc == 7, err);
+        member_store_close(&ms2);
+        unlink(p);
+        write_file(dir, "boot.bin", zero, sizeof(zero));
+        CHECK(member_store_open(&ms2, dir, 1, "10.0.0.2", 18600, err, sizeof(err)) == EFS_OK &&
+              ms2.created && ms2.state == EFS_MEMBER_SEED && ms2.member_id == 1, err);
+        member_store_close(&ms2);
+        unlink(p);
+        write_file(dir, "boot.bin", zero, sizeof(zero));
+        snprintf(p, sizeof(p), "%s/log", dir);
+        mkdir(p, 0755);
+        CHECK(member_store_open(&ms2, dir, 0, NULL, 0, err, sizeof(err)) == EFS_ERR_UNSUPPORTED &&
+              strstr(err, "another build"), err);
+        rmdir(p);
         snprintf(p, sizeof(p), "%s/boot.bin", dir);
         unlink(p);
         snprintf(p, sizeof(p), "%s/kv", dir);

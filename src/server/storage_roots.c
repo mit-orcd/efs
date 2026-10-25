@@ -285,13 +285,23 @@ int server_storage_roots_init(struct efsd_server *s)
             /* No marker: a fresh root, unless fragment data already exists
              * (written by a build that predates markers, format unknown). */
             /* efsd creates an empty data/ before this; any entry in it is
-             * data of an unknown format. */
+             * data of an unknown format, except the O_DIRECT probe page of a
+             * start killed during server_storage_direct_io_check (K33: an
+             * interrupted first start is retried), which is removed. */
             snprintf(p,sizeof(p),"%s/data",t->root);
             DIR *dd=opendir(p);
             int has_data=0;
             if(dd){
                 struct dirent *de;
-                while((de=readdir(dd)))if(strcmp(de->d_name,".")&&strcmp(de->d_name,"..")){has_data=1;break;}
+                static const char probe[]=".efs-direct-io-probe.";
+                while((de=readdir(dd))){
+                    const char *d=de->d_name;
+                    if(!strcmp(d,".")||!strcmp(d,".."))continue;
+                    if(!strncmp(d,probe,sizeof(probe)-1)&&d[sizeof(probe)-1]&&
+                       strspn(d+sizeof(probe)-1,"0123456789")==strlen(d+sizeof(probe)-1)&&
+                       !unlinkat(dirfd(dd),d,0))continue;
+                    has_data=1;break;
+                }
                 closedir(dd);
             } else if(errno!=ENOENT)goto fail;
             if(has_data){

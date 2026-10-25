@@ -1048,6 +1048,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_autoid.py
 	python3 tests/test_k33_client_view.py
 	python3 tests/test_k33_interrupt.py
+	python3 tests/test_k33_join_retry.py
 	python3 tests/test_k33_payload.py
 	python3 tests/test_k35_fsync_degraded.py
 	python3 tests/test_k37_segment_rebuild.py
