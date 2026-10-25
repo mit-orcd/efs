@@ -22,7 +22,7 @@ full acceptance are separate states.
 **OPEN; branch `agent/devel-task-a`, corrected frozen candidate `c3c4fa2bd`,
 private AMD loopback runs in screen.** Driver/gate corrections include complete
 selection, identity accounting, owned-process controls and verified recovery.
-First runs found interrupted-join refusal and O_TRUNC rewrite fsync EIO;
+Runs found interrupted-join refusal, rewrite/degraded-read EIO and clean-revoke BUSY;
 product fixes belong to the coordinator. Real-host/RDMA qualification remains
 NOTRUN. Raw logs remain outside Git on AMD.
 
