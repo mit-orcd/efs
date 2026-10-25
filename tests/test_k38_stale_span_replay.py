@@ -23,6 +23,7 @@ import os, re, shlex, subprocess, tempfile
 
 root = Path(__file__).resolve().parents[1]
 src = Path(os.environ.get('K38_WRITE_SOURCE', root/'src/client/write.c')).read_text()
+SENT = 'struct stale_sent {' in src  # the classifier takes the round's sent records
 
 
 def fn(name, optional=False):
@@ -48,7 +49,8 @@ code = r'''
 #define DCACHE_NR 32
 #define DTRACE(e, ...) do { (void)(e); } while (0)
 ''' + block('struct put_id {', 'static pthread_mutex_t g_putid_mu = PTHREAD_MUTEX_INITIALIZER;') + '\n' + \
-    block('struct dcache_ent {', '\n};') + '\n' + block('struct stale_pair {', '\n};') + r'''
+    block('struct dcache_ent {', '\n};') + '\n' + block('struct stale_pair {', '\n};') + \
+    (block('struct stale_sent {', '\n};') if SENT else '') + r'''
 struct dirty_snap {uint64_t chunk_count;efs_ino_t *chunk_inos;uint32_t *chunk_idxs;};
 #define INO 4642
 #define CI 2033
@@ -138,6 +140,7 @@ static int dcache_put_now(efs_ino_t ino,uint32_t ci,const uint8_t *chunk,uint32_
     fn('putid_note') + fn('rec_ticket') + fn('putid_fill') + fn('putid_drop_snapshot') + \
     fn('dcache_unpublished') + fn('dcache_object_of') + fn('report_fill_owned') + \
     fn('chunk_obs_has_live_spans') + fn('chunk_obs_masked') + fn('stale_pair_cmp') + \
+    (fn('stale_sent_cmp') if SENT else '') + \
     fn('stale_repull_replay') + fn('dcache_identity_abandon', True) + \
     fn('replay_span_without_body', True) + fn('dcache_replay_stale_ex_budgeted') + \
     (fn('dcache_object_seq_of', True) or
@@ -160,8 +163,11 @@ static void land_span_a(void)
 static int round_after_stale(int *replay_rc,struct efs_chunk_rec *rec)
 {
  efs_ino_t inos[1]={INO};uint32_t cis[1]={CI};struct dirty_snap ds={1,inos,cis};
- uint64_t seq=0;
- *replay_rc=stale_repull_replay(&ds,INO);
+ uint64_t seq=0,sent_seq=0;
+ /* the record the STALE round sent, built as report_dirty_ino_run builds it */
+ struct efs_chunk_rec sent={.ino=INO,.chunk_index=CI,.base_gen=dcache_base_gen_of(INO,CI,0)};
+ if(!report_fill_owned(INO,CI,&sent,&sent_seq,nodes)){*replay_rc=EFS_OK;return 0;}
+ *replay_rc=''' + ('stale_repull_replay(&ds,INO,&sent,&sent_seq,1)' if SENT else 'stale_repull_replay(&ds,INO)') + r''';
  memset(rec,0,sizeof(*rec));rec->ino=INO;rec->chunk_index=CI;rec->base_gen=dcache_base_gen_of(INO,CI,0);
  return report_fill_owned(INO,CI,rec,&seq,nodes);
 }

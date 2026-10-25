@@ -1515,9 +1515,36 @@ static int replay_fan_run(struct stale_pair *rp, uint64_t n)
     return f.error;
 }
 
-static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
+/* A record the STALE round sent, by chunk (K38: the classifier's identity). */
+struct stale_sent {
+    efs_ino_t ino;
+    uint32_t ci, idx;
+};
+
+static int stale_sent_cmp(const void *a, const void *b)
+{
+    const struct stale_sent *x = a, *y = b;
+
+    if (x->ino != y->ino)
+        return x->ino < y->ino ? -1 : 1;
+    return x->ci < y->ci ? -1 : x->ci > y->ci;
+}
+
+/* sent[0..nsent) and sent_seq: the records the STALE round carried and their
+ * snapshot seqs. A chunk is done only when the host holds the object that
+ * round SENT. The putid and the local table can already name a newer PUT
+ * of the chunk that landed after the pull: its PUT sets the table's
+ * generation (and span list) to its own unpublished object, which then read
+ * as committed, its identity was dropped and its body freed, and the host
+ * kept the older image (K38 loopback test, Oct 25: two records of one chunk
+ * read back as zeros). A chunk the round did not send is left to the
+ * rebuild. */
+static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
+                               const struct efs_chunk_rec *sent,
+                               const uint64_t *sent_seq, uint32_t nsent)
 {
     struct stale_pair *pp, *rp = NULL;
+    struct stale_sent *sx = NULL;
     uint64_t n = 0, i, runs = 0, replayed = 0, committed = 0;
     uint64_t t_start = report_mono_ms();
     int error = EFS_OK;
@@ -1536,8 +1563,17 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
         free(pp);
         pp = NULL;
     }
+    if (pp && nsent && !(sx = malloc((size_t)nsent * sizeof(*sx)))) {
+        free(rp);
+        free(pp);
+        pp = NULL;
+    }
     if (!pp)
         return EFS_ERR_NOMEM; /* retain snapshot; no unverifiable replay */
+    for (uint32_t k = 0; k < nsent; k++)
+        sx[k] = (struct stale_sent){sent[k].ino, sent[k].chunk_index, k};
+    if (nsent)
+        qsort(sx, nsent, sizeof(*sx), stale_sent_cmp);
     for (i = 0; i < ds->chunk_count; i++) {
         if (!ds->chunk_inos[i])
             continue;
@@ -1598,22 +1634,28 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
             i = j;
             continue;
         }
+        struct stale_sent key = {pp[i].ino, pp[i].ci, 0};
+        const struct stale_sent *was =
+            nsent ? bsearch(&key, sx, nsent, sizeof(*sx), stale_sent_cmp) : NULL;
+        if (!was) {
+            i = j;
+            continue; /* not in this round: the rebuild sends it */
+        }
         if (export_chunk_copy(pp[i].ino, pp[i].ci, &ce) != 0) {
             i = j;
             continue; /* truncated away; the rec rebuild skips it */
         }
-        /* Committed gen is OUR object (same identity source as the rec
-         * builder: putid, then the dcache slot): the host took this rec.
+        /* Committed gen is the object this round sent: the host took
+         * this rec (not a newer PUT that landed since, see above).
          * A span does not move the base generation; it shows up in the
          * chunk's delta list instead — and only as OUR range: the object
          * name is a content hash, so two clients that merged to the same
          * image name one object under two ranges (IOR hard, Sep 30).
          * A chunk the host has no row for is never done: the table's
          * generation there is our own unreported PUT. */
-            memset(&obj, 0, sizeof(obj));
-            if ((putid_fill(pp[i].ino, pp[i].ci, &obj, &object_seq) ||
-                 dcache_object_of(pp[i].ino, pp[i].ci, &obj, &object_seq)) &&
-                !pp[i].absent) {
+            obj = sent[was->idx];
+            object_seq = sent_seq ? sent_seq[was->idx] : 0;
+            if (!pp[i].absent) {
                 uint32_t di;
 
                 if (!obj.delta_len && obj.chunk_generation &&
@@ -1680,6 +1722,7 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
                     (unsigned long long)(t1 - t_start),
                     (unsigned long long)(report_mono_ms() - t1));
     }
+    free(sx);
     free(rp);
     free(pp);
     return error;
@@ -2246,7 +2289,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             {
                 uint64_t t0 = report_mono_ms();
 
-                int replay_rc = stale_repull_replay(&ds, only_ino);
+                int replay_rc = stale_repull_replay(&ds, only_ino, crecs, cseq, cn);
                 if (replay_rc != EFS_OK) {
                     rc = replay_rc;
                     break;
