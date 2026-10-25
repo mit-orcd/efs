@@ -123,7 +123,7 @@ static struct host_group *group_slot(struct efs_raft_host *h, uint8_t group) {
 /* Count every h->mu acquisition by the code under test. */
 static int counted_lock(pthread_mutex_t *m) { if (__atomic_load_n(&fast_path, __ATOMIC_RELAXED)) abort(); __atomic_fetch_add(&locked, 1, __ATOMIC_RELAXED); return pthread_mutex_lock(m); }
 #define pthread_mutex_lock counted_lock
-static int host_wait_applied(struct efs_raft_host *h, uint8_t group, uint64_t idx, int *hint) {
+static int host_wait_applied_own(struct efs_raft_host *h, uint8_t group, uint64_t idx, int *hint) {
     (void)h; (void)group; (void)idx; (void)hint; return EFS_OK;
 }
 static int write_prof_on(void) { return 0; }
