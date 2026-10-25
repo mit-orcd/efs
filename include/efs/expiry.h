@@ -45,6 +45,33 @@ struct efs_expiry_clock { uint64_t wall, mono; uint8_t initialized, healthy, unc
  * 0, off). Apply only from serialized Raft apply; CAS on the version. */
 int efs_expiry_switch_get(struct efs_kv *, uint64_t *version, uint8_t *enabled);
 int efs_expiry_switch_apply(struct efs_kv *, uint64_t expected, uint8_t enabled);
+/* Enabled folder policies, cluster-wide: one row on each group anchor
+ * (shards 1 and 2), absent = 0. Both rows change only in the transaction
+ * that flips a folder policy's enabled flag, so they are always equal; a
+ * create in a group reads its own anchor's row in serialized apply. */
+#define EFS_EXPIRY_FOLDERS_KEY_BYTES 3u
+void efs_expiry_folders_key(uint32_t anchor, uint8_t out[EFS_EXPIRY_FOLDERS_KEY_BYTES]);
+int efs_expiry_folders_get(struct efs_kv *, uint32_t anchor, uint64_t *count);
+/* Ordinary-path admission of a regular-file create while the cluster
+ * policy is on: EFS_OK when the anchor's count is 0 and no transaction
+ * holds the row; EFS_ERR_AGAIN when a create must take the expiry path. */
+int efs_expiry_folders_fence(struct efs_kv *, uint32_t anchor);
+/* A folder policy write: the policy row CAS and, when its enabled flag
+ * flips, both anchors' counts. Validation matches efs_expiry_policy_set. */
+struct efs_expiry_policy_change {
+    uint8_t key[EFS_EXPIRY_KEY_BYTES];
+    uint8_t old_value[EFS_EXPIRY_POLICY_BYTES], value[EFS_EXPIRY_POLICY_BYTES];
+    uint32_t old_len; /* EFS_TXN_ABSENT: no row yet */
+    int delta;        /* -1, 0 or +1 enabled folder policies */
+    uint64_t folders; /* count after the change */
+    uint8_t folders_key[2][EFS_EXPIRY_FOLDERS_KEY_BYTES];
+    uint8_t folders_old[2][8], folders_new[2][8];
+    uint32_t folders_old_len[2]; /* EFS_TXN_ABSENT: no row yet */
+};
+int efs_expiry_policy_plan(struct efs_kv *, uint64_t root, uint64_t gen,
+                           uint32_t uid, uint64_t expected,
+                           const struct efs_expiry_policy *,
+                           struct efs_expiry_policy_change *);
 /* 1 when these stored policy bytes (the record's source folder) are an
  * enabled policy: a deadline is acted on only while its source covers it. */
 int efs_expiry_covered(const uint8_t *policy, uint32_t policy_len);

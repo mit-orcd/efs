@@ -433,6 +433,7 @@ struct efs_raft_host {
     pthread_t query_tid;
     int query_running,query_started,query_error;
     int expiry_enabled; /* D43 cluster expiry policy, cached; atomic */
+    int expiry_folders; /* some folder policy enabled, cached hint; atomic */
     int expiry_peer_skip; /* last failed coordinator; protected by mu */
     struct efs_expiry_clock expiry_clock;
     uint8_t expiry_resume[HOST_NGROUPS][EFS_EXPIRY_INDEX_BYTES];
@@ -634,6 +635,9 @@ static uint32_t rd32be(const uint8_t *p)
  * lease holder's identity, not the requester's. */
 #define HOST_CREATE_F_OPID 0x01
 #define HOST_CREATE_F_PENDING 0x02
+/* Expiry on, no folder policy believed enabled: apply admits this regular
+ * file only while the dentry group's anchor counts none (no birth needed). */
+#define HOST_CREATE_F_FENCE 0x04
 #define HOST_OPID_TRAILER (EFS_OPID_UUID_LEN + 4u + 8u + 8u)
 
 static uint32_t pack_opid_trailer(uint8_t *p, const struct efs_opid_req *q)
@@ -661,8 +665,17 @@ static int host_expiry_on(struct efs_raft_host *h)
 {
     return __atomic_load_n(&h->expiry_enabled,__ATOMIC_ACQUIRE);
 }
+/* Regular-file creates collect a birth only while some folder policy is
+ * enabled. The folder count is a hint: an ordinary create carries a fence
+ * that the dentry group's apply checks against its anchor row, so a stale
+ * zero is refused (and corrected here), never trusted. */
+static int host_expiry_births(struct efs_raft_host *h)
+{
+    return host_expiry_on(h) && __atomic_load_n(&h->expiry_folders,__ATOMIC_ACQUIRE);
+}
 static int host_expiry_renew_txn(struct efs_raft_host *,const uint8_t *,int *);
 static int host_expiry_enable_txn(struct efs_raft_host *,const uint8_t *,int *);
+static int host_expiry_policy_txn(struct efs_raft_host *,const uint8_t *,int *);
 static void host_stop_senders(struct efs_raft_host *h);
 static void host_rec_mark(struct efs_raft_host *h, uint32_t shard);
 
@@ -1607,7 +1620,7 @@ static int apply_members_cmd(struct efs_raft_host *h, uint8_t group, const uint8
  * O_EXCL racers win. host_apply still returns OK to the raft core for
  * CREATE, so the verdict does not stall the log. */
 static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
-                            uint32_t clen, uint64_t index)
+                            uint32_t clen, uint64_t index, uint8_t group)
 {
     efs_ino_t parent, ino = 0;
     uint32_t mode;
@@ -1619,8 +1632,8 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (clen < HOST_CREATE_NAME_OFF)
         return EFS_ERR_UNSUPPORTED;
     int pending=!!(cmd[1]&HOST_CREATE_F_PENDING);
-    if (pending && ((cmd[1]&~(HOST_CREATE_F_OPID|HOST_CREATE_F_PENDING)) ||
-                    !(cmd[1]&HOST_CREATE_F_OPID))) return EFS_ERR_UNSUPPORTED;
+    if ((cmd[1]&~(HOST_CREATE_F_OPID|HOST_CREATE_F_PENDING|HOST_CREATE_F_FENCE)) ||
+        (pending && !(cmd[1]&HOST_CREATE_F_OPID))) return EFS_ERR_UNSUPPORTED;
     parent = rd64be(cmd + 2);
     mode = rd32be(cmd + 10);
     memset(&at, 0, sizeof(at));
@@ -1661,6 +1674,15 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         } else {
             const uint8_t *uuid = cmd + HOST_CREATE_NAME_OFF + nl;
             int nonzero = 0;
+            /* Before replay and ownership: a refused fence records nothing,
+             * so the proposer's expiry-path retry keeps the same op-id. A
+             * folder-policy change reaches this group's anchor row (or its
+             * intent) before it commits, so this create either applies
+             * first or is refused. */
+            if ((cmd[1] & HOST_CREATE_F_FENCE) && S_ISREG(mode)) {
+                rc = efs_expiry_folders_fence(h->kv, group == EFS_RAFT_GROUP_SHARD ? 1u : 2u);
+                if (rc != EFS_OK) return rc;
+            }
             for (int i = 0; i < EFS_OPID_UUID_LEN; i++) nonzero |= uuid[i];
             if (pending) {
                 uint32_t epoch=rd32be(uuid+EFS_OPID_UUID_LEN);
@@ -3537,7 +3559,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * their core error and retry; the policy did not become visible. */
     if((cmd[0]==EFS_MD_CMD_QUERY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_SWITCH) &&
        (rc==EFS_ERR_STALE || rc==EFS_ERR_INVAL || rc==EFS_ERR_PROTO))ret=EFS_OK;
-    if((cmd[0]==EFS_MD_CMD_CREATE_REFUSAL || cmd[0]==EFS_MD_CMD_EXPIRY_POLICY || cmd[0]==EFS_MD_CMD_EXPIRY_RENEW) &&
+    if((cmd[0]==EFS_MD_CMD_CREATE_REFUSAL || cmd[0]==EFS_MD_CMD_EXPIRY_RENEW) &&
        (rc==EFS_ERR_STALE || rc==EFS_ERR_INVAL || rc==EFS_ERR_PROTO ||
         rc==EFS_ERR_EXIST || rc==EFS_ERR_ACCES || rc==EFS_ERR_NODATA || rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_BUSY))
         ret=EFS_OK;
@@ -3976,14 +3998,6 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         struct efs_opid_req q;unpack_opid_trailer(cmd+5,&q);
         return efs_meta_apply_create_refusal(h->kv,rd32be(cmd+1),&q);
     }
-    if(cmd[0]==EFS_MD_CMD_EXPIRY_POLICY) {
-        if(clen!=46 || (cmd[45]&~3u))return EFS_ERR_UNSUPPORTED;
-        struct efs_expiry_policy p={.ttl_ns=rd64be(cmd+29),.max_ns=rd64be(cmd+37),
-            .enabled=cmd[45]&1u,.allow_clear=(cmd[45]>>1)&1u};
-        if(group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))return EFS_ERR_PROTO;
-        return efs_meta_apply_expiry_policy(h->kv,rd64be(cmd+1),rd64be(cmd+9),
-                                             rd32be(cmd+17),rd64be(cmd+21),&p);
-    }
     if(cmd[0]==EFS_MD_CMD_EXPIRY_RENEW) {
         if(clen!=45 || group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))return EFS_ERR_PROTO;
         return efs_meta_apply_expiry_renew(h->kv,rd64be(cmd+1),rd64be(cmd+9),
@@ -4015,7 +4029,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_MEMBERS)
         return apply_members_cmd(h, group, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_CREATE)
-        return apply_create_cmd(h, cmd, clen, index);
+        return apply_create_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_UNLINK)
         return apply_unlink_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_RMDIR)
@@ -10943,7 +10957,7 @@ static unsigned host_gc_backlog_idle(unsigned configured, int capped,
 
 /* D43: the cluster expiry policy decides whether expiry acts at all. The
  * authority is a ReadIndex on the leader of shard 1's group. */
-static int host_expiry_switch_authority(uint8_t *on)
+static int host_expiry_switch_authority(uint8_t *on,uint64_t *folders)
 {
     uint8_t request[2]={efs_raft_shard_group(1),EFS_MD_REQ_EXPIRY_SWITCH};
     struct efs_msg_raft_mkfs_reply reply;
@@ -10953,7 +10967,9 @@ static int host_expiry_switch_authority(uint8_t *on)
         server_raft_host_submit(request,sizeof(request),&reply);
     else rc=host_remote_cmd(g_host,request[0],request+1,1,&reply,-1);
     if(rc){*on=0;return rc;}
-    *on=reply.rc?0:(uint8_t)reply.salt;return reply.rc;
+    *on=reply.rc?0:(uint8_t)reply.salt;
+    if(folders)*folders=reply.rc?1:reply.term;
+    return reply.rc;
 }
 
 /* One policy read per GC pass: the local applied row where this node holds
@@ -10961,10 +10977,15 @@ static int host_expiry_switch_authority(uint8_t *on)
 static void host_expiry_refresh(struct efs_raft_host *h)
 {
     if(!__atomic_load_n(&h->formed,__ATOMIC_ACQUIRE) || !h->kv)return;
-    uint64_t version=0;uint8_t on=0;int rc;
-    if(host_hosts(h,efs_raft_shard_group(1)))rc=efs_expiry_switch_get(h->kv,&version,&on);
-    else rc=host_expiry_switch_authority(&on);
-    if(rc==EFS_OK)__atomic_store_n(&h->expiry_enabled,on,__ATOMIC_RELEASE);
+    uint64_t version=0,folders=0;uint8_t on=0;int rc;
+    if(host_hosts(h,efs_raft_shard_group(1))) {
+        rc=efs_expiry_switch_get(h->kv,&version,&on);
+        if(rc==EFS_OK)rc=efs_expiry_folders_get(h->kv,1,&folders);
+    } else rc=host_expiry_switch_authority(&on,&folders);
+    if(rc==EFS_OK) {
+        __atomic_store_n(&h->expiry_folders,folders!=0,__ATOMIC_RELEASE);
+        __atomic_store_n(&h->expiry_enabled,on,__ATOMIC_RELEASE);
+    }
 }
 
 /* A due row whose source folder policy no longer covers it is skipped
@@ -13064,7 +13085,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->gc_backlog_idle_ms = gc_backlog_idle_ms;
     h->s = s;
     /* D43: off until the cluster expiry policy says on (GC refresh/apply). */
-    h->expiry_enabled=0;h->expiry_peer_skip=-1;
+    h->expiry_enabled=0;h->expiry_folders=0;h->expiry_peer_skip=-1;
     h->raft_id = (int)s->id - 1;
     h->n = n;
     h->formed = formed;
@@ -14559,7 +14580,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if(!host_expiry_on(h)){out->rc=EFS_ERR_ACCES;return;}
         /* A deletion needs the current policy, not this node's cache. */
         uint8_t on=0;
-        if(host_expiry_switch_authority(&on)!=EFS_OK){out->rc=EFS_ERR_BUSY;return;}
+        if(host_expiry_switch_authority(&on,NULL)!=EFS_OK){out->rc=EFS_ERR_BUSY;return;}
         if(!on){__atomic_store_n(&h->expiry_enabled,0,__ATOMIC_RELEASE);out->rc=EFS_ERR_ACCES;return;}
         if(clen<43 || !cmd[41] || clen!=42u+cmd[41] ||
            memchr(cmd+42,0,cmd[41]) || memchr(cmd+42,'/',cmd[41])) {
@@ -14619,19 +14640,19 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             out->rc=EFS_ERR_INVAL;return;
         }
         struct host_view view;host_view_get(h,group,&view);
-        if(cmd[0]==EFS_MD_CMD_EXPIRY_RENEW || cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE) {
+        if(cmd[0]==EFS_MD_CMD_EXPIRY_RENEW || cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE ||
+           cmd[0]==EFS_MD_CMD_EXPIRY_POLICY) {
             uint8_t both[2];host_need_both(both);
             if(!host_hosts_all(h,both,2)) {
                 pthread_mutex_lock(&h->mu);int peer=host_pick_peer(h,both,2,-1);pthread_mutex_unlock(&h->mu);
                 out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=peer;return;
             }
             rc=cmd[0]==EFS_MD_REQ_EXPIRY_ENABLE?host_expiry_enable_txn(h,cmd,&hint):
+               cmd[0]==EFS_MD_CMD_EXPIRY_POLICY?host_expiry_policy_txn(h,cmd,&hint):
                                                   host_expiry_renew_txn(h,cmd,&hint);
         } else if(!view.has || view.role!=EFS_RAFT_LEADER) {
             out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=view.has?view.leader:host_pick_peer(h,&group,1,-1);return;
-        } else if(cmd[0]==EFS_MD_CMD_EXPIRY_POLICY)
-            rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
-        else rc=EFS_OK;
+        } else rc=EFS_OK;
         if(rc==EFS_OK)rc=host_read_index(h,group,&hint);
         if(rc==EFS_OK && (cmd[0]==EFS_MD_REQ_EXPIRY_POLICY || cmd[0]==EFS_MD_REQ_EXPIRY_RECORD ||
                           cmd[0]==EFS_MD_REQ_EXPIRY_POLICY_INFO || cmd[0]==EFS_MD_REQ_EXPIRY_ORIGIN)) {
@@ -14662,10 +14683,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if(cmd[0]==EFS_MD_CMD_EXPIRY_SWITCH)
             rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
         else rc=EFS_OK;
-        uint64_t version=0;uint8_t on=0;
+        uint64_t version=0,folders=0;uint8_t on=0;
         if(!rc)rc=host_read_index(h,group,&hint);
         if(!rc)rc=efs_expiry_switch_get(h->kv,&version,&on);
-        out->rc=rc;out->leader_hint=hint;out->index=version;out->salt=on;return;
+        if(!rc)rc=efs_expiry_folders_get(h->kv,1,&folders);
+        out->rc=rc;out->leader_hint=hint;out->index=version;out->salt=on;out->term=folders;return;
     }
     if(clen && (cmd[0]==EFS_MD_CMD_QUERY_POLICY || cmd[0]==EFS_MD_REQ_QUERY_POLICY)) {
         if(group!=efs_raft_shard_group(1) ||
@@ -16689,7 +16711,8 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const struct efs_meta_attrs *at,
                                   struct efs_meta_row *prow, uint32_t dsh,
                                   const struct efs_opid_req *q, uint64_t hold,
-                                  int pending, const struct host_expiry_birth *birth, int *hint);
+                                  int pending, const struct host_expiry_birth *birth,
+                                  int fence, int *hint);
 
 /* First mutation on a namespace shard registers the full identity before
  * any effect. Established shards use their authoritative local floor; the
@@ -16995,11 +17018,11 @@ static void host_opid_reply_ino(struct efs_raft_host *h, efs_ino_t parent,
     strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
 }
 
-static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
+static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
                              uint32_t uid, uint32_t gid, uint32_t flags,
                              uint64_t owner, const struct efs_opid_req *q,
                              uint32_t expected_shard, int pinned_route, uint8_t covered,
-                             struct efs_msg_inode_reply *out,uint8_t *settled)
+                             struct efs_msg_inode_reply *out,uint8_t *settled,int births)
 {
     struct efs_raft_host *h = g_host;
     struct efs_meta_row prow;
@@ -17040,6 +17063,11 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
     at.uid = uid;
     at.gid = gid;
     at.now = now_ns();
+    /* births: collect an expiry birth; fence: ordinary path, admitted only
+     * while no folder policy is enabled (an AGAIN verdict retries here
+     * with births). */
+    births = S_ISREG(mode) && (births || host_expiry_births(h));
+    int fence = !births && S_ISREG(mode) && host_expiry_on(h);
     rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at, hold, 0, 0, q, pending);
     if (rc != EFS_OK) {
         set_inode_rc(out, rc, -1);
@@ -17109,7 +17137,7 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
             set_inode_rc(out, EFS_ERR_EXIST, hint);
             return;
         }
-        if(rc==EFS_OK && host_expiry_on(h) && S_ISREG(mode)) {
+        if(rc==EFS_OK && births) {
             uint8_t refusal[5+HOST_OPID_TRAILER]={EFS_MD_CMD_CREATE_REFUSAL};
             wr32be(refusal+1,dsh);pack_opid_trailer(refusal+5,q);
             rc=host_propose_wait(h,dg,refusal,sizeof(refusal),&hint);
@@ -17120,7 +17148,7 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
         if (rc == EFS_ERR_NOT_FOUND)
             rc = EFS_OK;
     }
-    if(rc==EFS_OK && host_expiry_on(h) && S_ISREG(mode)) {
+    if(rc==EFS_OK && births) {
         if(!host_hosts(h,EFS_RAFT_GROUP_SHARD) || !host_hosts(h,EFS_RAFT_GROUP_SHARD2)) {
             uint8_t need[2];host_need_both(need);
             host_fwd_create(h,parent,name,mode,uid,gid,flags,owner,q,out,need,2);return;
@@ -17132,7 +17160,7 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
             birth->record.parent=parent;memcpy(birth->record.name,name,strlen(name)+1);
         }
         if(rc==EFS_OK)rc=host_hashed_create_txn(h,parent,name,mode,&at,&prow,dsh,q,
-                                               hold,pending,birth,&hint);
+                                               hold,pending,birth,0,&hint);
         free(birth);hashed=1;
     } else
     if (rc == EFS_OK &&
@@ -17142,7 +17170,7 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
         pg != dg) {
         hashed = 1;
         rc = host_hashed_create_txn(h, parent, name, mode, &at, &prow, dsh, q,
-                                    hold, pending, NULL, &hint);
+                                    hold, pending, NULL, fence, &hint);
     } else if (rc == EFS_OK) {
         efs_ino_t next = 0;
 
@@ -17150,6 +17178,8 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
         if (rc == EFS_OK)
             rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at, hold,
                                  next, prow.layout, q, pending);
+        if (rc == EFS_OK && fence)
+            cmd[1] |= HOST_CREATE_F_FENCE;
         if (rc == EFS_OK)
             rc = host_propose(h, dg, cmd, clen, &idx, &term, &hint);
         if (rc == EFS_OK)
@@ -17158,6 +17188,12 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
          * forwarded early return or cross-group transaction keeps zero and
          * therefore retains the independent post-submission quorum proof. */
         if(rc==EFS_OK && settled)*settled=(uint8_t)(1u<<dg);
+    }
+    if (rc == EFS_ERR_AGAIN && fence) {
+        __atomic_store_n(&h->expiry_folders, 1, __ATOMIC_RELEASE);
+        host_create_ex(parent, name, mode, uid, gid, flags, owner, q,
+                       expected_shard, pinned_route, covered, out, settled, 1);
+        return;
     }
     if (rc == EFS_OK) {
         int lrc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_read_coord,
@@ -17187,6 +17223,16 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
         out->inode.parent = parent;
         strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
     }
+}
+
+static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
+                        uint32_t uid, uint32_t gid, uint32_t flags,
+                        uint64_t owner, const struct efs_opid_req *q,
+                        uint32_t expected_shard, int pinned_route, uint8_t covered,
+                        struct efs_msg_inode_reply *out,uint8_t *settled)
+{
+    host_create_ex(parent,name,mode,uid,gid,flags,owner,q,expected_shard,
+                   pinned_route,covered,out,settled,0);
 }
 
 void server_raft_host_create(efs_ino_t parent,const char *name,uint32_t mode,
@@ -19125,12 +19171,65 @@ static int host_expiry_enable_txn(struct efs_raft_host *h,const uint8_t *cmd,int
     free(birth);return rc;
 }
 
+/* A folder policy write is one transaction: the policy row CAS, a guard
+ * on the folder, and, when its enabled flag flips, both anchors' folder
+ * counts. Each count row is the create fence of its group (an ordinary
+ * create applied before the count's PREPARE precedes this decision; one
+ * after it is refused), so enabling a policy needs no node's cache. */
+static int host_expiry_policy_txn(struct efs_raft_host *h,const uint8_t *cmd,int *hint)
+{
+    if(cmd[45]&~3u)return EFS_ERR_INVAL;
+    efs_ino_t root=rd64be(cmd+1);uint64_t gen=rd64be(cmd+9);
+    uint32_t shard=efs_kv_inode_shard(root);
+    struct efs_expiry_policy p={.ttl_ns=rd64be(cmd+29),.max_ns=rd64be(cmd+37),
+        .enabled=cmd[45]&1u,.allow_clear=(cmd[45]>>1)&1u};
+    int rc=EFS_ERR_BUSY;
+    /* Shared create guards on a count row hold off its EXCL briefly. */
+    for(int attempt=0;attempt<50 && rc==EFS_ERR_BUSY;attempt++) {
+        if(attempt)usleep(20000);
+        uint8_t pver_key[EFS_KV_KEY_MAX];uint32_t pver_len=0;uint64_t pver=0,after=0;
+        struct efs_meta_row row;struct efs_expiry_policy_change c;
+        rc=host_read_index(h,EFS_RAFT_GROUP_SHARD,hint);
+        if(rc==EFS_OK)rc=host_read_index(h,EFS_RAFT_GROUP_SHARD2,hint);
+        if(rc==EFS_OK)rc=efs_kv_key_pver(shard,root,pver_key,&pver_len);
+        if(rc==EFS_OK)rc=efs_txn_ver_get(h->kv,pver_key,pver_len,&pver);
+        if(rc==EFS_OK)rc=efs_meta_apply_get_inode(h->kv,root,&row);
+        if(rc==EFS_OK)rc=efs_txn_ver_get(h->kv,pver_key,pver_len,&after);
+        if(rc==EFS_OK && after!=pver)rc=EFS_ERR_BUSY;
+        if(rc==EFS_OK && row.generation!=gen)rc=EFS_ERR_STALE;
+        if(rc==EFS_OK && !S_ISDIR(row.mode))rc=EFS_ERR_INVAL;
+        if(rc==EFS_OK)rc=efs_expiry_policy_plan(h->kv,root,gen,rd32be(cmd+17),rd64be(cmd+21),&p,&c);
+        if(rc!=EFS_OK)continue;
+        struct efs_txn_parts parts={0};struct efs_txid tx;
+        rc=host_parts_add(&parts,shard);
+        for(unsigned i=0;i<2 && c.delta && rc==EFS_OK;i++)rc=host_parts_add(&parts,i+1);
+        if(rc!=EFS_OK)return rc;
+        fill_txid(h,&tx);
+        rc=host_prep(h,shard,EFS_TXN_GUARD,&tx,&parts,pver_key,pver_len,pver,0,NULL,0,hint);
+        if(rc==EFS_OK)rc=host_prep_value(h,shard,&tx,&parts,c.key,sizeof(c.key),
+            c.old_len==EFS_TXN_ABSENT?NULL:c.old_value,c.old_len,EFS_TXN_PUT,c.value,sizeof(c.value),hint);
+        for(unsigned i=0;i<2 && c.delta && rc==EFS_OK;i++)
+            rc=host_prep_value(h,i+1,&tx,&parts,c.folders_key[i],EFS_EXPIRY_FOLDERS_KEY_BYTES,
+                c.folders_old_len[i]==EFS_TXN_ABSENT?NULL:c.folders_old[i],c.folders_old_len[i],
+                EFS_TXN_PUT,c.folders_new[i],8,hint);
+        if(rc!=EFS_OK) {
+            int aborted=host_drop_parts(h,&tx,&parts,hint);
+            if(rc==EFS_ERR_STALE && aborted==EFS_OK)rc=EFS_ERR_BUSY;
+            continue;
+        }
+        rc=host_txn_commit(h,&tx,&parts,efs_txn_coordinator(&tx,&parts),hint);
+        if(rc==EFS_OK && c.delta)__atomic_store_n(&h->expiry_folders,c.folders!=0,__ATOMIC_RELEASE);
+    }
+    return rc;
+}
+
 static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const char *name, uint32_t mode,
                                   const struct efs_meta_attrs *at,
                                   struct efs_meta_row *prow, uint32_t dsh,
                                   const struct efs_opid_req *q, uint64_t hold,
-                                  int pending, const struct host_expiry_birth *birth, int *hint)
+                                  int pending, const struct host_expiry_birth *birth,
+                                  int fence, int *hint)
 {
     struct efs_meta_row crow;
     struct efs_meta_dentry dent;
@@ -19156,10 +19255,22 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     efs_ino_t next = 0, ino = 0;
     int rc, i;
     struct efs_expiry_change expiry_change;
-    uint32_t expiry_anchor=0;
+    uint32_t expiry_anchor=0,fence_anchor=0;
+    uint8_t fence_key[EFS_EXPIRY_FOLDERS_KEY_BYTES];
+    uint64_t fence_ver=0;
 
     if (pending && (!q || !efs_opid_req_valid(q) || !q->id.session_epoch ||
                     q->ack>=q->id.seq || hold)) return EFS_ERR_INVAL;
+    /* The ordinary-path fence as a shared guard on the dentry group's
+     * folder count: a policy change bumps its version, so this create
+     * commits only if no folder policy was enabled at its decision. */
+    if (fence && !birth) {
+        fence_anchor=efs_kv_anchor_shard(dsh);
+        efs_expiry_folders_key(fence_anchor,fence_key);
+        rc=efs_expiry_folders_fence(h->kv,fence_anchor);
+        if(rc==EFS_OK)rc=efs_txn_ver_get(h->kv,fence_key,sizeof(fence_key),&fence_ver);
+        if(rc!=EFS_OK)return rc;
+    }
     psh = efs_kv_inode_shard(parent);
     lane = prow->layout==EFS_META_LAYOUT_LOCAL?0:efs_kv_dir_lane(name);
     bit = 1ull << lane;
@@ -19240,6 +19351,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
         if(rc==EFS_OK)rc=host_parts_add(&parts,dsh);
         if(birth)for(uint32_t j=0;j<birth->count && rc==EFS_OK;j++)
             rc=host_parts_add(&parts,birth->source[j].shard);
+        if(rc==EFS_OK && fence_anchor)rc=host_parts_add(&parts,fence_anchor);
         if(rc==EFS_OK && birth && birth->record.deadline_ns) {
             expiry_anchor=efs_kv_anchor_shard(dsh);
             rc=host_parts_add(&parts,expiry_anchor);
@@ -19261,6 +19373,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                      v->policy_len==EFS_TXN_ABSENT?NULL:v->policy_value,
                      v->policy_len==EFS_TXN_ABSENT?0:v->policy_len,hint);
             }
+            if(rc==EFS_OK && fence_anchor && sh==fence_anchor)
+                rc=host_prep(h,sh,EFS_TXN_GUARD,&t,&parts,fence_key,sizeof(fence_key),
+                             fence_ver,0,NULL,0,hint);
             if(rc==EFS_OK && expiry_anchor && sh==dsh)
                 rc=host_prep_value(h,sh,&t,&parts,expiry_change.record_key,EFS_EXPIRY_KEY_BYTES,
                      NULL,EFS_TXN_ABSENT,EFS_TXN_PUT,expiry_change.value,EFS_EXPIRY_RECORD_BYTES,hint);
@@ -19313,6 +19428,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
              * collection conflict, not a revoked FileID. Only certify this
              * after ABORT resolution; never translate uncertain COMMIT. */
             if(birth && rc==EFS_ERR_STALE && aborted==EFS_OK)rc=EFS_ERR_BUSY;
+            /* A changed folder count (or any certified-aborted conflict on
+             * the fenced path) retries as a birth. */
+            else if(fence_anchor && rc==EFS_ERR_STALE && aborted==EFS_OK)rc=EFS_ERR_AGAIN;
         } else {
             coord = efs_txn_coordinator(&t, &parts);
             rc = host_txn_commit(h, &t, &parts, coord, hint);

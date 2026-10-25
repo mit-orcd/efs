@@ -60,7 +60,8 @@
 #define EFS_MD_REQ_EXPIRY_ENABLE 66 /* renewal prefix + parent/name; absent-record CAS */
 #define EFS_MD_REQ_EXPIRY_DELETE 65 /* guarded due FileID/name; receiver owns clock */
 #define EFS_MD_CMD_CREATE_REFUSAL 62 /* shard4 + existing op-id trailer; EEXIST receipt */
-#define EFS_MD_CMD_EXPIRY_POLICY 58 /* root/gen/uid/expected/TTL/max/flags:46 */
+#define EFS_MD_CMD_EXPIRY_POLICY 58 /* root/gen/uid/expected/TTL/max/flags:46; a request served as a
+                                    * cross-group transaction (folder counts), never logged */
 #define EFS_MD_CMD_EXPIRY_RENEW 59 /* ino/gen/uid/expected/leader-now/deadline:45 */
 #define EFS_MD_REQ_EXPIRY_POLICY 60 /* root/gen:17; fresh revision/TTL/max */
 #define EFS_MD_REQ_EXPIRY_RECORD 61 /* ino/gen:17; fresh revision/deadline/root */
@@ -337,7 +338,7 @@
     X(PUBLICATION_ADMIT) X(CLOSE_CLEANUP) X(CLOSE_STEP) X(PUT_TICKET_ADMIT) \
     X(REPORT_PUBLISH) X(PUT_TICKET_SETTLE) X(QUERY_POLICY) \
     X(APPEND_CATCHUP) X(APPEND_ATOMIC) X(APPEND_COMPLETE_ATOMIC) \
-    X(EXPIRY_POLICY) X(EXPIRY_RENEW) X(CREATE_REFUSAL) X(EXPIRY_SWITCH) \
+    X(EXPIRY_RENEW) X(CREATE_REFUSAL) X(EXPIRY_SWITCH) \
     X(LANE_SWEEP_MULTI) X(REAP_MULTI) \
     X(PACK_ADMIT) X(PACK_SWITCH) X(PACK_CANCEL) X(PACK_RETIRE) \
     X(PACK_UNINDEX) X(PACK_INDEX) \

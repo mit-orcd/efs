@@ -10,13 +10,18 @@ ports, discovery off) and efs-fuse:
    expiry_passes=0 (the worker only read the policy); folder policies and
    deadline reads are refused; files created while off never get a record.
 3. On at runtime (no restart): every node reports expiry_enabled=1 within a
-   few GC passes; a file born under an enabled folder policy is removed
-   after its deadline; files created while off still have no record.
+   few GC passes; with no folder policy enabled the cluster counts 0
+   (`folder_policies=0`) and a new file has no record (the ordinary create
+   path); enabling one counts 1, and files born right after it, through
+   each node's mount (caches still at 0: the create fence), get deadlines;
+   a file born under the policy is removed after its deadline; files
+   created while off still have no record.
 4. Off at runtime: a due deadline does not act while off (the file stays,
    expiry_passes stops); on again, it is removed.
-5. Coverage: a due file whose source folder policy is disabled stays; the
-   folder policy enabled again, it is removed.
-6. The cluster policy survives an orderly restart of every daemon.
+5. Coverage: a due file whose source folder policy is disabled stays (the
+   count drops to 0); the folder policy enabled again, it is removed.
+6. The cluster policy and the folder count survive an orderly restart of
+   every daemon.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, socket, struct, subprocess, sys, tempfile, time
@@ -52,13 +57,14 @@ def exact(s, n):
 HELLO = struct.pack('>IB', 17, 165) + b'EFSP' + struct.pack('=IQ', 5, 0)
 
 
-def rpc(c, tag, ino, gen=1, extra=b'', accepted=(0,)):
+def rpc(c, tag, ino, gen=1, extra=b'', accepted=(0,), first=None):
     """One metadata request (MSG 95) on the inode's group; follows
-    NOT_PRIMARY/BUSY by trying every member. Returns (rc, index, salt, term)."""
+    NOT_PRIMARY/BUSY by trying every member (`first` first). Returns (rc,
+    index, salt, term)."""
     payload = bytes((0 if ino & 1 else 2, tag)) + struct.pack('>QQ', ino, gen) + extra
     end = time.time() + 20 * SLOW
     while True:
-        for i in sorted(c.ports):
+        for i in sorted(c.ports, key=lambda i: (i != first, i)):
             with socket.create_connection(('127.0.0.1', c.ports[i]), timeout=15) as s:
                 s.sendall(HELLO)
                 n = struct.unpack('>I', exact(s, 4))[0]
@@ -75,14 +81,14 @@ def rpc(c, tag, ino, gen=1, extra=b'', accepted=(0,)):
         time.sleep(0.1)
 
 
-def folder_policy(c, ino, ttl_s, flags, accepted=(0,)):
+def folder_policy(c, ino, ttl_s, flags, accepted=(0,), via=None):
     """Operator (uid 0) folder policy through the trusted-client RPC, as
     tests/live/expiry_lifecycle.py does."""
     rc, rev, _, _ = rpc(c, 60, ino, accepted=(0, ACCES))
     if rc:
         return rc
     extra = struct.pack('>IQQQB', 0, rev, int(ttl_s * 1e9), int(max(ttl_s, 1) * 10 * 1e9), flags)
-    return rpc(c, 58, ino, extra=extra, accepted=accepted)[0]
+    return rpc(c, 58, ino, extra=extra, accepted=accepted, first=via)[0]
 
 
 def record(c, path, accepted=(0,)):
@@ -96,6 +102,13 @@ def cluster_policy(c, *args):
     m = re.search(r'rc=(-?\d+) version=(\d+) expiry=(on|off|unknown)', out)
     assert rc == 0 and m and m.group(1) == '0', out
     return int(m.group(2)), m.group(3)
+
+
+def folder_count(c):
+    rc, out = mgmt(env, 'expiry-policy', c.ep(1), 'cluster', 'get')
+    m = re.search(r'rc=0 .*folder_policies=(\d+)', out)
+    assert rc == 0 and m, out
+    return int(m.group(1))
 
 
 def gc(c, i):
@@ -155,7 +168,23 @@ try:
     assert cluster_policy(c, 'set', 'on', '0') == (1, 'on')
     wait('every node sees the policy on', lambda: all(gc(c, i)['expiry_enabled'] == 1 for i in (1, 2, 3)))
     assert record(c, plain) == (0, 0, 0), 'a file born while off has a record'
-    assert folder_policy(c, base.stat().st_ino, 4, 1) == 0
+    assert folder_count(c) == 0
+    unpoliced = create(base / 'born-on-no-folder-policy')
+    assert record(c, unpoliced) == (0, 0, 0), 'a file born with no folder policy has a record'
+    others = [Mount(c, i, f'mnt{i}') for i in (2, 3)]
+    try:
+        # Coordinated on node 3: nodes 1 and 2 still cache no folder policy.
+        assert folder_policy(c, base.stat().st_ino, 4, 1, via=3) == 0
+        assert folder_count(c) == 1
+        # Immediately, through every node: no cache may admit a plain create.
+        for i, mm in enumerate([m] + others, 1):
+            f = create(mm.path / 'scratch' / f'fenced-{i}')
+            _, rev, deadline = record(c, base / f'fenced-{i}')
+            assert rev == 1 and deadline > 0, (i, rev, deadline)
+    finally:
+        for mm in others:
+            mm.close()
+    print('on, no folder policy: count 0, ordinary create; enabled: count 1, every node births deadlines at once PASS')
     born = create(base / 'born-on')
     _, rev, deadline = record(c, born)
     assert rev == 1 and deadline > time.time_ns(), (rev, deadline)
@@ -180,10 +209,12 @@ try:
     covered = create(base / 'uncovered')
     assert record(c, covered)[1] == 1
     assert folder_policy(c, base.stat().st_ino, 4, 0) == 0
+    assert folder_count(c) == 0
     time.sleep(7 * SLOW)
     assert covered.exists(), 'a deadline acted after its folder policy was disabled'
     assert record(c, covered)[2] > 0  # the deadline is kept, not acted on
     assert folder_policy(c, base.stat().st_ino, 4, 1) == 0
+    assert folder_count(c) == 1
     wait('covered again: removed', lambda: not covered.exists(), 40)
     print('coverage: disabled folder policy keeps the file; enabled again, removed PASS')
 
@@ -198,6 +229,7 @@ try:
         c.wait_log(i, r'raft-host: up raft_id=\d+ n=3 formed', timeout=60)
     wait('policy readable after restart', lambda: mgmt(env, 'expiry-policy', c.ep(1), 'cluster', 'get')[0] == 0, 60)
     assert cluster_policy(c, 'get') == (3, 'on')
+    assert folder_count(c) == 1
     wait('every node on after restart', lambda: all(gc(c, i)['expiry_enabled'] == 1 for i in (1, 2, 3)), 60)
     print('cluster expiry policy survives an orderly restart PASS')
     ok = True

@@ -1761,8 +1761,9 @@ static int cmd_expiry_cluster(int argc,char **argv)
         payload[10]=!strcmp(argv[3],"on");length=11;
     }
     struct efs_msg_raft_mkfs_reply reply;int rc=sess_rpc(host,port,payload,length,&reply);
-    printf("expiry-policy cluster rc=%d version=%llu expiry=%s leader_hint=%d\n",rc,
-           (unsigned long long)reply.index,rc?"unknown":reply.salt?"on":"off",reply.leader_hint);
+    printf("expiry-policy cluster rc=%d version=%llu expiry=%s leader_hint=%d folder_policies=%llu\n",rc,
+           (unsigned long long)reply.index,rc?"unknown":reply.salt?"on":"off",reply.leader_hint,
+           (unsigned long long)(rc?0:reply.term));
     return rc?1:0;
 }
 

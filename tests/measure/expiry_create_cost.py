@@ -7,8 +7,12 @@ files (O_CREAT|O_EXCL, 4 KiB write, fsync, close) in a fresh directory and
 records the wall time of each create+write+fsync+close. Modes, measured in
 turn ROUNDS times (off, on, on+folder, off, ...):
   off         cluster expiry policy off (the default)
-  on          policy on, no folder policy above the directory
+  on          policy on, no folder policy enabled anywhere
   on+folder   policy on, an enabled folder policy (1 h) on the directory
+  on+elsewhere  policy on, an enabled folder policy on a sibling directory
+              only (none above the measured one)
+Each folder policy is disabled after its sample, so every "on" sample runs
+with no enabled folder policy in the cluster.
 Prints one JSON object: per mode count, mean, p50, p90, p99 and max in ms.
 Not part of make test: a measurement for the D43 evidence page.
 
@@ -96,7 +100,7 @@ def main():
     env = {k: v for k, v in os.environ.items() if not k.startswith(('EFS_FAULT', 'EFS_EXPIRY'))}
     c = Cluster(work, 'x', [1, 2, 3], env)
     m = None
-    results = {'off': [], 'on': [], 'on+folder': []}
+    results = {'off': [], 'on': [], 'on+folder': [], 'on+elsewhere': []}
     try:
         c.start(1)
         c.start(2, join=1)
@@ -110,11 +114,16 @@ def main():
                 set_cluster(c, env, mode != 'off')
                 d = m.path / f'{mode}-{r}'
                 d.mkdir()
-                if mode == 'on+folder':
-                    ino = d.stat().st_ino
+                policy = None
+                if mode in ('on+folder', 'on+elsewhere'):
+                    policy = d if mode == 'on+folder' else m.path / f'{mode}-{r}-sibling'
+                    policy.mkdir(exist_ok=True)
+                    ino = policy.stat().st_ino
                     rev = rpc(c, 60, ino)
                     rpc(c, 58, ino, struct.pack('>IQQQB', 0, rev, 3600 * 10**9, 7200 * 10**9, 1))
                 results[mode] += sample(d, a.files)
+                if policy:
+                    rpc(c, 58, ino, struct.pack('>IQQQB', 0, rev + 1, 3600 * 10**9, 7200 * 10**9, 0))
         print(json.dumps({'files_per_sample': a.files, 'rounds': a.rounds, 'host': socket.gethostname(),
                           'ms': {k: summary(v) for k, v in results.items()}}, indent=1))
     finally:
