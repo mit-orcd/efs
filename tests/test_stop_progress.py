@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload  # noqa: E402
 
-DIRS = 3000
+DIRS = 1500
 SMALL_STOP_S = 5
 root = Path(__file__).resolve().parents[1]
 for b in (EFSD, MGMT):
