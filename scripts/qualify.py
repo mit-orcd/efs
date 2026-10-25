@@ -127,6 +127,26 @@ def identity_key(version):
     return re.sub(r', built [^)]*\)', ')', text)
 
 
+def identity_change_reason(start, end):
+    """The final read is evidence only if it still matches the frozen run."""
+    if not start:
+        return 'starting build identity was not recorded'
+    for role in ('daemons', 'clients', 'harness'):
+        before = start.get(role, [])
+        if not before:
+            continue
+        after = end.get(role, [])
+        if len(before) != len(after):
+            return f'{role}: identity count changed ({len(before)} -> {len(after)})'
+        if any(not e.get('key') for e in after):
+            return f'{role}: final build identity unreadable'
+        if any(e.get('exe_deleted') for e in after):
+            return f'{role}: final executable was replaced'
+        if sorted(e.get('key') or '' for e in before) != sorted(e['key'] for e in after):
+            return f'{role}: build identity changed at the end of the run'
+    return ''
+
+
 def is_local(host):
     if host in (None, '', 'local', 'localhost', '127.0.0.1'):
         return True
@@ -345,13 +365,14 @@ class Loopback(Controller):
 
     def __init__(self, args, work):
         self.n, self.work, self.quota = args.loopback, work, args.loopback_quota
+        self.candidate = getattr(args, "candidate", None)
         self.base = args.port_base
         ports = list(range(self.base, self.base + self.n))
         if any(p in RESERVED_PORTS for p in ports + [self.base + 9]) or not 1024 < self.base < 65000:
             raise SystemExit(f'--port-base {self.base}: reserved or invalid ports')
         if str(work.resolve()).startswith('/data1/efs'):
             raise SystemExit('loopback stores may not live under /data1/efs')
-        for port in ports:
+        for port in ([] if args.plan else ports):
             with socket.socket() as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 try:
@@ -366,7 +387,7 @@ class Loopback(Controller):
         self.env = dict(os.environ, EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'))
 
     def description(self, private_base):
-        return dict(name=f'loopback-{self.n}', candidate=None, source=str(ROOT),
+        return dict(name=f'loopback-{self.n}', candidate=self.candidate, source=str(ROOT),
                     seed=self.addrs[0], owned=True,
                     nodes=[dict(addr=a, host='local', id=i + 1) for i, a in enumerate(self.addrs)],
                     mounts=[dict(path=str(m), host='local') for m in self.mounts],
@@ -487,8 +508,11 @@ class Loopback(Controller):
                      300)
 
     def stop_cluster(self, g):
-        return self._logged(g, 'stop-cluster', lambda: all(self.stop_daemon(i) == 0
-                                                          for i in sorted(self.procs)))
+        def stop():
+            # A failed stop must not short-circuit retirement of other owned nodes.
+            results = [self.stop_daemon(i) for i in sorted(self.procs)]
+            return all(rc == 0 for rc in results)
+        return self._logged(g, 'stop-cluster', stop)
 
     def start_cluster(self, g):
         def start():
@@ -718,6 +742,7 @@ class Qualify:
         return [g for g in gates if g.name in chosen and g.name not in self.args.skip]
 
     def run(self, gates):
+        tick = time.monotonic()
         started = now()
         (self.out / 'gates').mkdir(parents=True)
         (self.out / 'cluster.json').write_text(json.dumps(self.cluster, indent=2) + '\n')
@@ -734,6 +759,7 @@ class Qualify:
         run = dict(driver='scripts/qualify.py', argv=sys.argv, cwd=os.getcwd(),
                    driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                    driver_host=socket.gethostname(), start=started, end=now(),
+                   seconds=round(time.monotonic() - tick, 3),
                    allow=sorted(self.allow), owned_cluster=self.control.owned,
                    verdict=verdict, counts={v: sum(r['verdict'] == v for r in results)
                                             for v in (PASS, FAIL, NOTRUN)},
@@ -804,10 +830,17 @@ class Qualify:
             print(f'[{now()}] gate {gate.name} {verdict} {reason}', flush=True)
             results.append(g.record)
         if not self.plan and self.cluster.get('nodes'):
-            end = GateRun(self, Gate('_identity-end', None, '', ''), 600)
+            end = GateRun(self, Gate('_identity-end', None, 'A1, A2', 'Candidate and profile'), 600)
             self.identity_end = self.read_identity(end, 'end')
             end.raw_file('identity-end.json').write_text(json.dumps(self.identity_end, indent=2) + '\n')
-            (end.dir / 'result.json').write_text(json.dumps(dict(end.record, commands=end.commands)) + '\n')
+            why = identity_change_reason(self.identity_start, self.identity_end)
+            verdict = (FAIL if self.identity_start else NOTRUN) if why else PASS
+            end.record.update(verdict=verdict, reason=why, end=now(),
+                              seconds=round(time.monotonic() - end.start, 3),
+                              commands=end.commands, fixture=end.fixture,
+                              destructive_steps=end.steps, raw=end.raw)
+            (end.dir / 'result.json').write_text(json.dumps(end.record, indent=2) + '\n')
+            results.append(end.record)
 
     def gate_identity(self, g):
         """Daemon and client identity read live before this gate."""
@@ -1209,11 +1242,13 @@ def leaders(q, g, label):
     views, out = {}, {}
     for node in q.cluster.get('nodes', []):
         rc, text = q.mgmt(g, label, 'raft-status', node['addr'], deadline=30)
-        for m in re.finditer(r'group (\d+) hosted=1 role=(\w+) leader=(-?\d+) term=(\d+)'
-                             r'(?:.*? voters=0x([0-9a-f]+))?', text):
+        for m in re.finditer(r'group (\d+) hosted=1 role=(\w+) leader=(-?\d+) term=(\d+)([^\n]*)', text):
+            if re.search(r'\bretired=1\b', m.group(5)):
+                continue  # retained old Raft state is not an active hosting view
             group, role, lid, term = int(m.group(1)), m.group(2), int(m.group(3)), int(m.group(4))
             views.setdefault(group, []).append((node['addr'], role, lid, term))
-            voters = [b for b in range(64) if int(m.group(5) or '0', 16) >> b & 1]
+            match = re.search(r'\bvoters=0x([0-9a-f]+)', m.group(5))
+            voters = [b for b in range(64) if int(match.group(1) if match else '0', 16) >> b & 1]
             if role == 'LEADER' and term >= out.get(group, ('', -1))[1]:
                 out[group] = (node['addr'], term, lid, voters)
     return out, views
@@ -1228,8 +1263,8 @@ def agreed(views, lid, term):
 def applied(q, g, addr, label):
     rc, text = q.mgmt(g, label, 'raft-status', addr, deadline=30)
     return {int(m.group(1)): (int(m.group(2)), int(m.group(3))) for m in
-            re.finditer(r'group (\d+) hosted=1 role=\w+ leader=-?\d+ term=\d+ commit=(\d+) applied=(\d+)',
-                        text)}
+            re.finditer(r'group (\d+) hosted=1 role=\w+ leader=-?\d+ term=\d+ commit=(\d+) applied=(\d+)([^\n]*)',
+                        text) if not re.search(r'\bretired=1\b', m.group(4))}
 
 
 def g_e3(q, g):
@@ -2503,7 +2538,7 @@ def write_summary(q, run, results, sums):
         verdict, rs = cells.get(row, ('NOTRUN', []))
         gates_txt = ', '.join(f'{r["gate"]} {r["verdict"]}' for r in rs) or \
             ('no gate selected in this run' if row in covered else 'not covered by this driver')
-        f3.append(f'| {row} | {verdict} ({gates_txt}; [summary](TODO-summary.md)) |')
+        f3.append(f'| {row} | {verdict} ({gates_txt}; [summary](summary-draft.md)) |')
     (out / 'f3-row.md').write_text(
         f'<!-- scripts/qualify.py {run["end"]}: F3 ledger column for {c.get("name")}; '
         f'raw {out} SHA256SUMS {sums["sha256"]} -->\n' + '\n'.join(f3) + '\n')
@@ -2517,7 +2552,8 @@ def write_summary(q, run, results, sums):
              'planned in [A11](a11-qualification-matrix-20261024.md); F3 topology ledger).')
     L.append(f'- Verdict: **{run["verdict"]}** ({run["counts"]["PASS"]} PASS, {run["counts"]["FAIL"]} FAIL, '
              f'{run["counts"]["NOTRUN"]} NOTRUN of {len(results)} gates).')
-    L.append(f'- F3 column: {column}.\n')
+    L.append(f'- F3 column: {column}.')
+    L.append(f'- Gate-sequence wall time (setup/cleanup included when controlled here): {run["seconds"]} s.\n')
     L.append('## Candidate and build identity\n')
     L.append(f'- Candidate commit: `{c.get("candidate") or "TODO (description gives none)"}`; '
              f'source tree `{c.get("source")}`; driver sha256 `{run["driver_sha256"][:16]}`.')
@@ -3042,6 +3078,7 @@ def main(argv=None):
     sub = p.add_subparsers(dest='cmd', required=True)
     r = sub.add_parser('run')
     r.add_argument('--cluster', type=Path)
+    r.add_argument('--candidate', help='exact frozen source commit for the evidence (9-40 hexadecimal characters)')
     r.add_argument('--loopback', type=int, default=0, help='start an owned private N-daemon cluster')
     r.add_argument('--port-base', type=int, help='loopback daemon ports (N of them; default 18740 '
                    'or the topology\'s)')
@@ -3141,6 +3178,8 @@ def main(argv=None):
             print(f'{gate.name:20} {gate.items:18} needs: {needs:34} {gate.doc}')
         return 0
 
+    if a.candidate and not re.fullmatch(r'[0-9a-f]{9,40}', a.candidate):
+        p.error('--candidate must be a 9-40 digit hexadecimal commit')
     a.deadline = parse_deadlines(a.deadline)
     described = None
     if a.matrix or a.topology:
@@ -3180,6 +3219,11 @@ def main(argv=None):
         for node in cluster.get('nodes', []):
             if not re.fullmatch(r'[^\s:]+:\d+', node.get('addr', '')):
                 p.error(f'node address {node.get("addr")!r} is not HOST:PORT')
+    if a.candidate:
+        described_candidate = cluster.get('candidate')
+        if described_candidate and not (described_candidate.startswith(a.candidate) or a.candidate.startswith(described_candidate)):
+            p.error('--candidate disagrees with the cluster description')
+        cluster['candidate'] = a.candidate
     base = int(cluster.get('private', {}).get('port_base', 18700))
     if any(port in RESERVED_PORTS for port in range(base, base + 40)):
         p.error(f'private port base {base} overlaps reserved ports')

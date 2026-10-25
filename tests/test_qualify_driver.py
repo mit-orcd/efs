@@ -42,6 +42,16 @@ assert Q.outcome_from_rc(124, '', timed_out=True) == ('FAIL', 'deadline exceeded
 assert Q.count_marks('test\tresult\tdetail\na\tPASS\t\nb\tFAIL\tx\nc\tSKIP\t\nd\tPASS\t\n') == \
     {'PASS': 2, 'FAIL': 1, 'SKIP': 1}
 assert Q.worst(['PASS', 'NOTRUN']) == 'NOTRUN' and Q.worst(['NOTRUN', 'FAIL', 'PASS']) == 'FAIL'
+start_identity = dict(daemons=[dict(key='candidate')], clients=[dict(key='candidate')])
+assert Q.identity_change_reason(start_identity, start_identity) == ''
+assert 'not recorded' in Q.identity_change_reason(None, start_identity)
+assert 'unreadable' in Q.identity_change_reason(start_identity,
+    dict(daemons=[dict(key=None)], clients=[dict(key='candidate')]))
+assert 'changed at the end' in Q.identity_change_reason(start_identity,
+    dict(daemons=[dict(key='replacement')], clients=[dict(key='candidate')]))
+assert 'replaced' in Q.identity_change_reason(start_identity,
+    dict(daemons=[dict(key='candidate')], clients=[dict(key='candidate', exe_deleted=True)]))
+assert 'count changed' in Q.identity_change_reason(start_identity, dict(daemons=[], clients=[]))
 views = [('a', 'FOLLOWER', 1, 3), ('b', 'LEADER', 1, 3), ('c', 'FOLLOWER', 1, 3)]
 assert Q.agreed(views, 1, 3) and not Q.agreed(views, 2, 3) and not Q.agreed(views, 1, 4)
 assert not Q.agreed(views[:2] + [('c', 'CANDIDATE', 1, 3)], 1, 3) and not Q.agreed([], 1, 3)
@@ -70,6 +80,21 @@ try:
     desc = tmp / 'cluster.json'
     desc.write_text(json.dumps(cluster))
     stubs = ','.join(cluster['plugins'])
+
+    # A failed final identity read must lower the aggregate verdict, not be
+    # an unconsumed artifact after the last passing gate.
+    end_out = tmp / 'end-identity'
+    (end_out / 'gates').mkdir(parents=True)
+    q = object.__new__(Q.Qualify)
+    q.out, q.plan, q.cluster = end_out, False, dict(nodes=[dict(addr='stub')])
+    q.identity_start = start_identity
+    q.selected = lambda _: []
+    q.read_identity = lambda *a, **k: dict(daemons=[dict(key='new-build')], clients=[dict(key='candidate')])
+    results = []
+    q.run_gates([], results, None)
+    assert len(results) == 1 and results[0]['gate'] == '_identity-end'
+    assert results[0]['verdict'] == 'FAIL' and 'changed at the end' in results[0]['reason']
+    assert load(end_out / 'gates/_identity-end/result.json')['verdict'] == 'FAIL'
 
     # 1. Every outcome; no destructive step allowed.
     out1 = tmp / 'out1'
@@ -129,6 +154,7 @@ try:
     sums = __import__('hashlib').sha256(listed.encode()).hexdigest()
     assert sums in summary and sums in (out1 / 'f3-row.md').read_text()
     f3 = (out1 / 'f3-row.md').read_text()
+    assert 'TODO-summary' not in f3 and '(summary-draft.md)' in f3
     assert '| Placement/capacity and decode | FAIL (stub-pass PASS, stub-fail FAIL' in f3, f3
     assert '| Full payloads + orderly restart | NOTRUN (no gate selected in this run' in f3
     # D4 is a gate now (d4-progress); this run did not select it.
@@ -261,6 +287,19 @@ try:
           'voters=0x7 joint=1 retired=1\n')
     assert Q.parse_raft(rs) == (3, {0: dict(role='FOLLOWER', voters=7, joint=0), 2: dict(role='LEADER', voters=14, joint=1)})
     assert Q.mask({2, 3, 4}) == 0xe and Q.mask({1, 2, 3}) == 7
+    # Five-member membership retains retired lane state for diagnostics.
+    # Its stale leader/term/index must not enter turnover or catch-up proofs.
+    class RetiredViews:
+        cluster = dict(nodes=[dict(addr='retired'), dict(addr='active')])
+        def mgmt(self, g, label, op, addr, deadline=30):
+            if addr == 'retired':
+                return 0, 'group 2 hosted=1 role=LEADER leader=0 term=99 commit=10 applied=10 voters=0x7 joint=0 retired=1\n'
+            return 0, 'group 2 hosted=1 role=LEADER leader=1 term=3 commit=20 applied=20 voters=0xe joint=0 retired=0\n'
+    led, active_views = Q.leaders(RetiredViews(), None, 'probe')
+    assert led == {2: ('active', 3, 1, [1, 2, 3])}, led
+    assert Q.agreed(active_views[2], 1, 3)
+    assert Q.applied(RetiredViews(), None, 'retired', 'probe') == {}
+    assert Q.applied(RetiredViews(), None, 'active', 'probe') == {2: (20, 20)}
     hspec = importlib.util.spec_from_file_location('stage2_helpers', root / 'scripts/stage2_helpers.py')
     H = importlib.util.module_from_spec(hspec)
     hspec.loader.exec_module(H)
@@ -401,6 +440,24 @@ try:
         assert Q.main(['plan', '--check']) == 0, buf.getvalue()
     matrix = load(root / 'scripts/qualify_matrix.json')
     assert Q.matrix_errors(matrix) == []
+    # Plan generation is read-only and must work when the real topology's
+    # ports are occupied. It must never claim those ports or need a daemon.
+    from unittest.mock import patch
+    with patch.object(Q.socket, 'socket', side_effect=AssertionError('plan must not bind')):
+        rc, text = run('--loopback', '5', '--out', str(tmp / 'occupied-plan'), '--plan',
+                       '--candidate', '123456789')
+    assert rc == 3, text
+    assert load(tmp / 'occupied-plan/cluster.json')['candidate'] == '123456789'
+    assert load(tmp / 'occupied-plan/run.json')['seconds'] >= 0
+    rc, text = run('--loopback', '3', '--out', str(tmp / 'bad-candidate'), '--plan', '--candidate', 'HEAD')
+    assert rc == 2 and '--candidate must' in text, text
+    # All owned members are stopped even if the first one fails.
+    loop = object.__new__(Q.Loopback)
+    loop.procs = {0: object(), 1: object(), 2: object()}
+    called = []
+    loop.stop_daemon = lambda i: called.append(i) or (1 if i == 0 else 0)
+    loop._logged = lambda g, label, fn: fn()
+    assert loop.stop_cluster(None) is False and called == [0, 1, 2]
     five = matrix['topologies']['loopback-5']
     assert five['loopback'] == 5 and five['transport'] == 'tcp'
     assert five['gates'] == matrix['topologies']['loopback-3']['gates']
