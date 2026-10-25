@@ -337,11 +337,14 @@ static int opid_take_locked(struct efs_opid_req *q, const void *who)
         uint64_t taken, refused_slot, refused_window, last_report_ms, age_max_ms;
         const void *age_max_who;
     } st;
-    static int st_on = -1;
+    static int st_on_s = -1; /* any thread may be first: atomic, local copy (TSan) */
+    int st_on = __atomic_load_n(&st_on_s, __ATOMIC_ACQUIRE);
     int slot=-1,low_slot=-1;uint64_t low=0,now_ms=0;
     opid_seed_locked();
-    if (st_on < 0)
+    if (st_on < 0) {
         st_on = getenv("EFS_OPID_STATS") != NULL;
+        __atomic_store_n(&st_on_s, st_on, __ATOMIC_RELEASE);
+    }
     if (st_on) {
         struct timespec t;
         clock_gettime(CLOCK_MONOTONIC, &t);

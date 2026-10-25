@@ -1509,10 +1509,12 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
     uint64_t n = 0, i, runs = 0, replayed = 0, committed = 0;
     uint64_t t_start = report_mono_ms();
     int error = EFS_OK;
-    static int dbg = -1;
-
-    if (dbg < 0)
+    static int dbg_s = -1; /* any thread may be first: atomic, local copy (TSan) */
+    int dbg = __atomic_load_n(&dbg_s, __ATOMIC_ACQUIRE);
+    if (dbg < 0) {
         dbg = getenv("EFS_REPORT_DBG") != NULL;
+        __atomic_store_n(&dbg_s, dbg, __ATOMIC_RELEASE);
+    }
     if (!ds->chunk_count)
         return EFS_OK;
     pp = malloc((size_t)ds->chunk_count * sizeof(*pp));
@@ -3934,10 +3936,12 @@ static uint64_t dcache_seq_now(void)
  * PUT record, replay, install, take). Off by default. */
 static int dcache_trace_on(void)
 {
-    static int on = -1;
-
-    if (on < 0)
+    static int on_s = -1; /* any thread may be first: atomic, local copy (TSan) */
+    int on = __atomic_load_n(&on_s, __ATOMIC_ACQUIRE);
+    if (on < 0) {
         on = getenv("EFS_DCACHE_TRACE") != NULL;
+        __atomic_store_n(&on_s, on, __ATOMIC_RELEASE);
+    }
     return on;
 }
 

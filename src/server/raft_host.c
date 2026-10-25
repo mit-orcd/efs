@@ -684,9 +684,12 @@ static int env_on(const char *name)
  * thread (mkdir was ~250 ms). Errors stay unconditional. */
 static int raft_dbg_on(void)
 {
-    static int v = -1;
-    if (v < 0)
+    static int v_s = -1; /* any thread may be first: atomic, local copy (TSan) */
+    int v = __atomic_load_n(&v_s, __ATOMIC_ACQUIRE);
+    if (v < 0) {
         v = env_on("EFS_RAFT_DBG");
+        __atomic_store_n(&v_s, v, __ATOMIC_RELEASE);
+    }
     return v;
 }
 
@@ -796,9 +799,12 @@ static int dirop_fail_on(int rc)
 
 static int raft_obs_on(void)
 {
-    static int v = -1;
-    if (v < 0)
+    static int v_s = -1; /* any thread may be first: atomic, local copy (TSan) */
+    int v = __atomic_load_n(&v_s, __ATOMIC_ACQUIRE);
+    if (v < 0) {
         v = env_on("EFS_RAFT_OBS");
+        __atomic_store_n(&v_s, v, __ATOMIC_RELEASE);
+    }
     return v;
 }
 

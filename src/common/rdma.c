@@ -98,7 +98,8 @@ static int64_t now_us(void)
 
 int efs_rdma_transport(void)
 {
-    static int mode = -1;
+    static int mode_s = -1; /* any thread may be first: atomic, local copy (TSan) */
+    int mode = __atomic_load_n(&mode_s, __ATOMIC_ACQUIRE);
     if (mode < 0) {
         const char *v = getenv("EFS_TRANSPORT");
         if (v && strcmp(v, "tcp") == 0)
@@ -107,6 +108,7 @@ int efs_rdma_transport(void)
             mode = EFS_TRANSPORT_RDMA;
         else
             mode = EFS_TRANSPORT_AUTO;
+        __atomic_store_n(&mode_s, mode, __ATOMIC_RELEASE);
     }
     return mode;
 }
@@ -132,11 +134,13 @@ static void cq_unmoderate(struct ibv_cq *cq)
 
 static int nrecv_bufs(void)
 {
-    static int v=-1;
+    static int v_s=-1; /* any thread may be first: atomic, local copy (TSan) */
+    int v=__atomic_load_n(&v_s,__ATOMIC_ACQUIRE);
     if (v<0) {
         const char *e=getenv("EFS_RDMA_BUFS"); char *end=NULL;
         long n=(e&&*e)?strtol(e,&end,10):EFS_RDMA_NRECV_DEFAULT;
         v=(n<2 || n>64 || (end&&*end))?0:(int)n;
+        __atomic_store_n(&v_s,v,__ATOMIC_RELEASE);
     }
     return v;
 }
@@ -233,12 +237,14 @@ int efs_rdma_live_conns(void)
 
 static int rdma_port_no(void)
 {
-    static int v = -1;
+    static int v_s = -1; /* any thread may be first: atomic, local copy (TSan) */
+    int v = __atomic_load_n(&v_s, __ATOMIC_ACQUIRE);
     if (v < 0) {
         const char *e = getenv("EFS_RDMA_PORT");
         v = (e && *e) ? atoi(e) : 1;
         if (v < 1)
             v = 1;
+        __atomic_store_n(&v_s, v, __ATOMIC_RELEASE);
     }
     return v;
 }
@@ -550,11 +556,14 @@ static struct efs_rdma_dev *dev_default(void)
 
 int efs_rdma_available(void)
 {
-    static int avail = -1;
+    static int avail_s = -1; /* any thread may be first: atomic, local copy (TSan) */
     if (efs_rdma_transport() == EFS_TRANSPORT_TCP)
         return 0;
-    if (avail < 0)
+    int avail = __atomic_load_n(&avail_s, __ATOMIC_ACQUIRE);
+    if (avail < 0) {
         avail = (dev_default() != NULL) ? 1 : 0;
+        __atomic_store_n(&avail_s, avail, __ATOMIC_RELEASE);
+    }
     return avail;
 }
 
