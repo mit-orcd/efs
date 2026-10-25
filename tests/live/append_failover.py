@@ -45,6 +45,15 @@ Checks (each one recorded in the JSON report, the run fails on any miss):
   * final fsync per writer returns 0 within --report-bound seconds
     (W52: the client's REPORT receive bound, EFS_IO_TIMEOUT_MS = 30 s)
   * no REPORT (type 67) receive-timeout retry in the client log
+  * A11 finding 2: every REPORT within B = --report-latency-bound seconds
+    (3 s, three maximum election timeouts) per leader change it crossed,
+    and no exhausted 8 s REPORT budget (`report-loop`). Each successful
+    REPORT the client logs from 1 s (`slow-ok type=67 ... us=`) may take
+    B x max(1, n), n = the step-down/kill events issued from B before it
+    started to its end (step-down mode issues both groups' events 3 s apart,
+    so one REPORT can cross two). Recovery-scan resolutions on the daemons
+    (`txn-recover ... ->`: a transaction nothing finished for 5 s) are
+    counted and listed, not a verdict of their own
   * warm primary, warm peer and cold (all daemons + clients restarted) reads
     contain every acknowledged record exactly once, no unacknowledged record,
     per-writer order preserved, no torn or foreign block, size = 4 KiB x count
@@ -54,7 +63,7 @@ Checks (each one recorded in the JSON report, the run fails on any miss):
 
 Raw logs stay under ROOT (outside Git). Usage: see docs/status/k15-w52-w64-20261022.md.
 """
-import argparse, hashlib, json, multiprocessing as mp, os, re, signal, socket
+import argparse, calendar, hashlib, json, multiprocessing as mp, os, re, signal, socket
 import struct, subprocess, sys, time
 from pathlib import Path
 
@@ -383,6 +392,8 @@ def main():
     p.add_argument('--writers', type=int, default=4)
     p.add_argument('--fsync-every', type=int, default=0, help='also fsync every N records per writer')
     p.add_argument('--report-bound', type=float, default=30.0)
+    p.add_argument('--report-latency-bound', type=float, default=3.0,
+                   help='per-REPORT bound across leader changes (A11 finding 2)')
     p.add_argument('--quota', default='8G')
     p.add_argument('--failover', choices=('none', 'step-down', 'kill'), default='none')
     p.add_argument('--interval', type=float, default=20.0)
@@ -483,6 +494,26 @@ def main():
         n67, first67 = grep_count(flog, r'inode-rpc: retry type=67 .*why=recv')
         report['checks']['report_recv_timeouts'] = n67
         report['checks']['report_recv_timeout_lines'] = first67
+        ftext = flog.read_text(errors='replace') if flog.exists() else ''
+        slow67, over = [], []
+        for stamp, us in re.findall(r'^(\S+)Z inode-rpc: slow-ok type=67 .*us=(\d+)', ftext, re.M):
+            end = calendar.timegm(time.strptime(stamp[:19], '%Y-%m-%dT%H:%M:%S')) + float('0' + stamp[19:])
+            start, us = end - int(us) / 1e6, int(us)
+            crossed = sum(1 for e in events if start - a.report_latency_bound <= e['t'] <= end)
+            slow67.append(us)
+            if us > a.report_latency_bound * 1e6 * max(1, crossed):
+                over.append(dict(end=stamp, ms=us // 1000, leader_changes=crossed))
+        loops = re.findall(r'.*report-loop .*', ftext)
+        report['checks']['report_slow_ok'] = len(slow67)
+        report['checks']['report_max_ms'] = max(slow67, default=0) // 1000
+        report['checks']['report_budget_exhausted'] = len(loops)
+        report['checks']['report_budget_lines'] = [l[:240] for l in loops[:5]]
+        report['checks']['report_over_latency_bound'] = over[:10]
+        report_lat_ok = not over and not loops
+        report['checks']['report_within_latency_bound'] = report_lat_ok
+        rec = [grep_count(root / 'logs' / f'efsd-n{i}.log', r'txn-recover .*-> ') for i in (1, 2, 3)]
+        report['checks']['recovery_scan_resolutions'] = sum(n for n, _ in rec)
+        report['checks']['recovery_scan_lines'] = [l for _, ls in rec for l in ls][:5]
         report['checks']['fsync_split_lines'] = grep_count(flog, r'fsync-split')[1]
         srv = [grep_count(root / 'logs' / f'efsd-n{i}.log', r'report resolve .*rc=') for i in (1, 2, 3)]
         report['checks']['server_report_resolve_retries'] = sum(n for n, _ in srv)
@@ -525,7 +556,8 @@ def main():
         same = len({report['checks'][v]['sha256'] for v in ('warm_primary', 'warm_peer', 'cold')}) == 1
         report['checks']['views_identical'] = same
         all_fsync_ok = report['checks']['final_fsync_zero'] and report['checks']['final_fsync_within_bound']
-        report['verdict'] = 'PASS' if (ok_w and ok_p and ok_c and same and ok_l and all_fsync_ok and n67 == 0) else 'FAIL'
+        report['verdict'] = 'PASS' if (ok_w and ok_p and ok_c and same and ok_l and all_fsync_ok and n67 == 0
+                                       and report_lat_ok) else 'FAIL'
         # Accounted failures never fail the integrity verdict; they are listed.
         report['integrity'] = 'PASS' if (ok_w and ok_p and ok_c and same and acct['ok']) else 'FAIL'
         report['accounted_failures'] = acct['accounted_failures']

@@ -9574,6 +9574,10 @@ static void host_gc_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_t
  * send, so racing recovery is harmless (RESOLVE is idempotent). No
  * decision within HOST_FIN_MAX_NS → drop; recovery ABORTs. */
 #define HOST_FIN_MAX_NS (10ull * 1000000000ull)
+/* A BUSY DECIDE with no decision this long after hand-off is decided ABORT
+ * by the finisher: one maximum election timeout (2 * HOST_ELECT_BASE ticks
+ * of HOST_TICK_US, 1 s) for a new coordinator-group leader to commit. */
+#define HOST_FIN_DECIDE_NS (2ull * HOST_ELECT_BASE * HOST_TICK_US * 1000ull)
 #define HOST_FIN_POLL_US 5000
 
 static void host_fin_add(struct efs_raft_host *h, const struct efs_txid *t,
@@ -9684,6 +9688,26 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
             rc = efs_txn_decision_get(h->kv, it->coord, &it->t, &dec);
         if (rc == EFS_OK)
             break;
+        /* No decision HOST_FIN_DECIDE_NS after a BUSY DECIDE: the COMMIT
+         * entry was most likely truncated by a leader change. DECIDE ABORT
+         * at the current leader (decide-once: a COMMIT still ahead of it in
+         * the log wins with PROTO, read on the next round) instead of
+         * waiting out HOST_FIN_MAX_NS for the recovery scan. */
+        if (rc == EFS_ERR_NOT_FOUND && now_ns() - it->born_ns > HOST_FIN_DECIDE_NS) {
+            uint8_t dcmd[HOST_DECIDE_MAX];
+            uint32_t dn = pack_decide(dcmd, &it->t, it->coord, EFS_TXN_ABORT, &it->parts);
+            int arc = host_bg_propose(h, cg, dcmd, dn, 1);
+
+            if (arc == EFS_OK) {
+                h->fin_aborted++;
+                fprintf(stderr, "raft-host: txn-finish coord=%u no decision after %llu ms: abort decided\n",
+                        it->coord, (unsigned long long)((now_ns() - it->born_ns) / 1000000ull));
+                dec = EFS_TXN_ABORT;
+                break;
+            }
+            if (arc == EFS_ERR_STALE)
+                return; /* retired and reclaimed: every RESOLVE applied */
+        }
         /* STALE: retired and reclaimed, so every RESOLVE already applied;
          * nothing is left to finish. */
         if (rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_BUSY &&
@@ -17449,6 +17473,44 @@ static void host_txn_fault_barrier(struct efs_raft_host *h,
 #endif
 
 #if EFS_FAULTS
+/* A11 finding 2 gate: while EFS_FAULT_DECIDE_LOST names an existing file
+ * and <file>.ready does not exist, the next DECIDE COMMIT of a transaction
+ * with at least two participants steps this node down from the coordinator
+ * group (if it leads it) and is not proposed, as if the entry had been
+ * truncated with the deposed leader's log; the caller sees NOT_PRIMARY.
+ * <file>.ready records the firing (one-shot until it is removed). */
+static int host_decide_lost_fault(struct efs_raft_host *h, const struct efs_txid *t,
+                                  const struct efs_txn_parts *parts, uint32_t coord)
+{
+    const char *path = getenv("EFS_FAULT_DECIDE_LOST");
+    char ready[4096], record[128];
+    uint8_t group = efs_raft_shard_group(coord);
+    int fd, size, led = 0;
+
+    if (!path || parts->n < 2 || access(path, F_OK) != 0 ||
+        snprintf(ready, sizeof(ready), "%s.ready", path) >= (int)sizeof(ready))
+        return 0;
+    fd = open(ready, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0)
+        return 0;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    if (r && efs_raft_role(r) == EFS_RAFT_LEADER)
+        led = efs_raft_step_down(r) == EFS_OK;
+    pthread_mutex_unlock(&h->mu);
+    size = snprintf(record, sizeof(record), "pid=%ld coord=%u parts=%u group=%u stepped=%d ns=%llu\n",
+                    (long)getpid(), coord, (unsigned)parts->n, group, led,
+                    (unsigned long long)efs_txid_ns(t));
+    if (write(fd, record, (size_t)size) != size)
+        fprintf(stderr, "raft-host: decide-lost fault: ready record write failed\n");
+    close(fd);
+    fprintf(stderr, "raft-host: decide-lost fault: coord=%u parts=%u group=%u stepped=%d\n",
+            coord, (unsigned)parts->n, group, led);
+    return 1;
+}
+#endif
+
+#if EFS_FAULTS
 /* Owned W77 gate: EFS_FAULT_PUB_BARRIER names a file holding one stage.
  * "prepare" parks a publication unit after its PREPAREs (undecided),
  * "commit" after its DECIDE COMMIT and before RESOLVE, until the file is
@@ -17660,14 +17722,31 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
     host_txn_fault_barrier(h, parts, "prepare");
 #endif
     n = (int)pack_decide(cmd, t, coord, EFS_TXN_COMMIT, parts);
+#if EFS_FAULTS
+    if (host_decide_lost_fault(h, t, parts, coord))
+        rc = EFS_ERR_NOT_PRIMARY;
+    else
+#endif
     rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, (uint32_t)n, hint);
     n = 0;
     if (rc != EFS_OK) {
-        /* BUSY = the wait ran out; the entry may well commit. Any other
-         * verdict means it was decided differently (recovery ABORT) or
-         * never proposed — nothing to finish. */
+        /* BUSY = the wait ran out; the entry may well commit. PROTO/STALE:
+         * decided differently (recovery ABORT) or retired — nothing to
+         * finish. Anything else (NOT_PRIMARY, NO_QUORUM, NET: the
+         * coordinator group's leader stepped down under the DECIDE) leaves
+         * the outcome to the log: the COMMIT may or may not survive the
+         * leader change. Hand it off as an ABORT at the new leader, which
+         * is decide-once — a surviving COMMIT answers PROTO and is finished
+         * as COMMIT — instead of leaving every PREPARE to the
+         * HOST_REC_AGE_NS recovery scan (A11 finding 2: a W77 unit's 64
+         * PREPAREs held its inode BUSY for 7.5 s per step-down). */
         if (rc == EFS_ERR_BUSY)
             host_fin_add(h, t, parts, coord, 0);
+        else if (rc != EFS_ERR_PROTO && rc != EFS_ERR_STALE) {
+            fprintf(stderr, "raft-host: txn-commit coord=%u parts=%u decide rc=%d "
+                    "(finisher abort)\n", coord, (unsigned)parts->n, rc);
+            host_fin_add(h, t, parts, coord, HOST_FIN_ABORT);
+        }
         return rc;
     }
 #if EFS_FAULTS
@@ -17953,6 +18032,14 @@ static int host_drop_parts(struct efs_raft_host *h, const struct efs_txid *t,
         if (one != EFS_OK && rc == EFS_OK)
             rc = one;
     }
+    /* A DROP lost to a leader change leaves that shard's PREPAREs for the
+     * recovery scan; nothing is decided, so ABORT (what recovery decides)
+     * at the new leaders now. */
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: txn-drop coord=%u parts=%u rc=%d (finisher abort)\n",
+                efs_txn_coordinator(t, p), (unsigned)p->n, rc);
+        host_fin_add(h, t, p, efs_txn_coordinator(t, p), HOST_FIN_ABORT);
+    }
     return rc;
 }
 
@@ -17970,15 +18057,29 @@ static int host_resize_decide(void *user, const struct efs_txid *t,
     uint8_t cmd[HOST_DECIDE_MAX];
     uint32_t coord = efs_txn_coordinator(t, parts);
     uint32_t n = pack_decide(cmd, t, coord, decision, parts);
-    int rc = host_propose_wait(ctx->host, efs_raft_shard_group(coord), cmd,
-                                n, ctx->hint);
+    int rc;
+#if EFS_FAULTS
+    if (decision == EFS_TXN_COMMIT && host_decide_lost_fault(ctx->host, t, parts, coord))
+        rc = EFS_ERR_NOT_PRIMARY;
+    else
+#endif
+    rc = host_propose_wait(ctx->host, efs_raft_shard_group(coord), cmd,
+                           n, ctx->hint);
     /* ABORT is only ever requested before any COMMIT was proposed, so a
      * failed or unconfirmed ABORT is handed off to be re-proposed promptly
-     * (W64 leader change); a BUSY COMMIT keeps the decision-reading finish. */
-    if (rc != EFS_OK && decision == EFS_TXN_ABORT &&
-        rc != EFS_ERR_PROTO && rc != EFS_ERR_STALE)
+     * (W64 leader change); a BUSY COMMIT keeps the decision-reading finish.
+     * A COMMIT that failed otherwise (NOT_PRIMARY: the coordinator group's
+     * leader stepped down under it) is handed off as an ABORT too, as in
+     * host_txn_commit: decide-once keeps a COMMIT that survived the leader
+     * change (PROTO, finished as COMMIT), and one that did not stops
+     * holding the append/mtime PREPAREs for the recovery scan. */
+    if (rc != EFS_OK && rc != EFS_ERR_PROTO && rc != EFS_ERR_STALE &&
+        (decision == EFS_TXN_ABORT || rc != EFS_ERR_BUSY)) {
+        if (decision == EFS_TXN_COMMIT)
+            fprintf(stderr, "raft-host: txn-commit coord=%u parts=%u decide rc=%d "
+                    "(finisher abort)\n", coord, (unsigned)parts->n, rc);
         host_fin_add(ctx->host, t, parts, coord, HOST_FIN_ABORT);
-    else if (rc == EFS_ERR_BUSY)
+    } else if (rc == EFS_ERR_BUSY)
         host_fin_add(ctx->host, t, parts, coord, 0);
     return rc;
 }
@@ -21763,23 +21864,32 @@ static int host_complete_single_append(struct efs_raft_host *h,efs_ino_t ino,
     return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
 }
 
+/* Stage of the last non-OK host_resolve_caught_up on this thread, for the
+ * REPORT's `report resolve ... (retry)` line. */
+static __thread const char *host_resolve_why;
+
 static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                                   uint64_t sz, const struct efs_opid *session, int *hint)
 {
     uint64_t watermark=0;uint32_t open=0;
+    host_resolve_why="state";
     int rc=efs_meta_apply_append_state(h->kv,ino,&watermark,NULL,&open);
     if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
     if(rc!=EFS_OK || !watermark)return rc;
+    host_resolve_why="authority";
     rc=host_append_authority(h,hint);
     if(rc!=EFS_OK)return rc;
     struct efs_meta_row row;
+    host_resolve_why="inode";
     rc=efs_meta_apply_get_inode(h->kv,ino,&row);
     if(rc!=EFS_OK)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
+    host_resolve_why="state";
     rc=efs_meta_apply_append_state(h->kv,ino,&watermark,NULL,&open);
     if(rc!=EFS_OK)return rc;
     if(open) {
         if(open==1) {
             int handled=0;
+            host_resolve_why="complete";
             rc=host_complete_single_append(h,ino,sz,&row,session,hint,&handled);
             if(rc || handled)return rc;
         }
@@ -21792,17 +21902,20 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
             memcpy(cmd+38,session->client_uuid,EFS_OPID_UUID_LEN);
             wr32be(cmd+54,session->session_epoch);
         }
+        host_resolve_why="catchup";
         rc=host_propose_wait(h,efs_raft_shard_group(efs_kv_inode_shard(ino)),
                              cmd,session?58:38,hint);
         if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
     }
     /* A partial REPORT leaves the remaining reservation barriers intact.
      * A crash/lost reply after completion retries only barrier retirement. */
+    host_resolve_why="state";
     rc=efs_meta_apply_append_state(h->kv,ino,&watermark,NULL,&open);
     if(rc!=EFS_OK)return rc;
     if(open || !watermark)return EFS_OK;
     struct efs_txid tx;fill_txid(h,&tx);
     struct host_append_reserve_ctx batch={.base={h,hint},.leading=session?2:1};
+    host_resolve_why="retire";
     rc=efs_meta_retire_append_barriers(h->kv,ino,session,&tx,&host_append_reserve_ops,&batch);
     return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
 }
@@ -23279,8 +23392,9 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
 
             if (rrc != EFS_OK) {
                 fprintf(stderr,
-                        "raft-host: report resolve ino=%llu rc=%d (retry)\n",
-                        (unsigned long long)uino[k], rrc);
+                        "raft-host: report resolve ino=%llu rc=%d why=%s (retry)\n",
+                        (unsigned long long)uino[k], rrc,
+                        host_resolve_why ? host_resolve_why : "-");
                 rc=rrc;
             }
         }

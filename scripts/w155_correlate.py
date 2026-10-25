@@ -21,7 +21,7 @@ Inputs, all under OUT unless given:
 
 Per failure the window is the failing stage's [start - PAD, end + PAD]
 (default PAD 5 s); a receive retry belongs to it when the request it
-retried was sent inside the window (log time - recv_ms) or the retry was
+retried was sent inside the window (log time - wait_ms, else recv_ms) or the retry was
 logged inside it. Client lines: inode-rpc retries (type and name from
 include/efs/protocol.h, attempt, why, rc, req_len, recv_ms) and slow-oks,
 opid-admission BUSY, report-loop and efs-fuse error lines for this inode,
@@ -39,7 +39,8 @@ import argparse, calendar, glob, importlib.util, json, os, re, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 TS = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z (.*)$")
 RETRY = re.compile(r"inode-rpc: retry type=(\d+) attempt=(\d+) why=([\w-]+)(?: rc=(-?\d+))?"
-                   r"(?: req_len=(\d+) recv_ms=(\d+))?(?: from=(\d+))?(?: nid=(\d+))?(?: id=(\S+))?")
+                   r"(?: req_len=(\d+) recv_ms=(\d+))?(?: wait_ms=(\d+) cut=\w+)?(?: from=(\d+))?"
+                   r"(?: nid=(\d+))?(?: id=(\S+))?")
 # W155 product lines (closing G1-G6): request identities and receipts.
 IDENT = re.compile(r"\bid=([0-9a-f]{8}/\d+/[0-9a-f]+(?::\d+)?)")
 PUB = re.compile(r"\bpub=([0-9a-f]+:\d+)")
@@ -175,12 +176,14 @@ def correlate(r, client, servers, names, pad):
         m = RETRY.search(x)
         if not m: continue
         recv = int(m.group(6)) if m.group(6) else None
-        sent = t - recv / 1000.0 if recv else None
+        # wait_ms (what the receive waited) when logged; recv_ms is the bound.
+        waited = int(m.group(7)) if m.group(7) else recv
+        sent = t - waited / 1000.0 if waited is not None else None
         if lo <= t <= hi or (sent is not None and lo <= sent <= hi):
             ty = int(m.group(1))
             retries.append(dict(time=t, type=ty, type_name=names.get(ty, "?"), attempt=int(m.group(2)),
                                 why=m.group(3), rc=m.group(4), req_len=m.group(5), recv_ms=recv, sent=sent,
-                                nid=m.group(8), id=m.group(9)))
+                                nid=m.group(9), id=m.group(10)))
     c = res["client"]
     c["retries"] = retries
     slow = [SLOW.search(x) for t, x in inw]; slow = [m for m in slow if m]

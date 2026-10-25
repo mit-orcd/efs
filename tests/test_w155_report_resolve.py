@@ -316,7 +316,7 @@ with tempfile.TemporaryDirectory(prefix='efs-w155-report-') as d:
     assert re.search(r'report-receipt query id=5515\w*/7/\w+:\d+ state=2 outcome=applied', log), log
     assert re.search(r'report-receipt query id=\S+ state=1 ', log), log
     assert re.search(r'report-receipt id=\S+ ino=4242 nrec=2 how=replay rc=0 outcome=applied', log), log
-    assert re.search(r'inode-rpc: retry type=67 attempt=0 why=recv rc=-?\d+ req_len=\d+ recv_ms=\d+ nid=1 id=5515', log), log
+    assert re.search(r'inode-rpc: retry type=67 attempt=0 why=recv rc=-?\d+ req_len=\d+ recv_ms=\d+ wait_ms=\d+ cut=\w+ nid=1 id=5515', log), log
     # EIO comes from exactly one case: the all-down E.
     assert log.count('-> EIO') == 1, log
     print(out.stdout.strip())

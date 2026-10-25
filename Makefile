@@ -1031,6 +1031,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_member_limit.py
 	python3 tests/test_b6_unavailable.py
 	python3 tests/test_d4_progress.py
+	python3 tests/test_report_stepdown.py
 	python3 tests/test_query_first_catalog.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
