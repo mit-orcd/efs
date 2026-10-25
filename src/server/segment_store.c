@@ -44,6 +44,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #define SG_TAIL 4096u
@@ -269,14 +270,28 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
         }
         /* EFS_FAULT_SEGMENT_PUT_TRANSIENT=<dir>: while <dir>/transient-<node
          * id> exists, one PUT is refused NOT_PRIMARY (the flag is consumed),
-         * as a follower under load refuses the authority read. */
+         * as a follower under load refuses the authority read. A flag
+         * holding a number N refuses every PUT for N ms after the first
+         * refusal, then is consumed (a ReadIndex refusing for longer). */
         d = getenv("EFS_FAULT_SEGMENT_PUT_TRANSIENT");
         if (d && !rebuild) {
             snprintf(flag, sizeof(flag), "%s/transient-%u", d, s->id);
+            static uint64_t refuse_until_ns; /* test hook: one member's PUTs */
+            struct timespec ts;
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            uint64_t now = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+            uint64_t until = __atomic_load_n(&refuse_until_ns, __ATOMIC_RELAXED);
+            if (until && now < until) return EFS_ERR_NOT_PRIMARY;
+            FILE *ff = until ? NULL : fopen(flag, "r");
+            unsigned long ms = 0;
+            if (ff) { if (fscanf(ff, "%lu", &ms) != 1) ms = 0; fclose(ff); }
+            if (ms) __atomic_store_n(&refuse_until_ns, now + ms * 1000000ull, __ATOMIC_RELAXED);
+            else if (until) __atomic_store_n(&refuse_until_ns, 0, __ATOMIC_RELAXED);
             if (!unlink(flag)) {
                 fprintf(stderr, "fault: EFS_FAULT_SEGMENT_PUT_TRANSIENT refused segment "
-                        "g%u id=%016llx gen=%llx fragment %u once (NOT_PRIMARY)\n",
-                        group, (unsigned long long)id, (unsigned long long)gen, fi);
+                        "g%u id=%016llx gen=%llx fragment %u %s (NOT_PRIMARY)\n",
+                        group, (unsigned long long)id, (unsigned long long)gen, fi,
+                        ms ? "for the flag's ms" : "once");
                 return EFS_ERR_NOT_PRIMARY;
             }
         }

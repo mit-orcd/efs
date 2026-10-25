@@ -75,8 +75,11 @@
 #define PK_SCAN_MAX 4096u
 #define PK_FAIL_BACKOFF_NS (30ull * 1000000000ull) /* after a failed admission or upload */
 /* A fragment PUT refused with a transient authority code is sent again,
- * PK_PUT_RETRIES times PK_PUT_RETRY_US apart, before it counts as missing. */
-#define PK_PUT_RETRIES 4
+ * PK_PUT_RETRY_US apart, until PK_PUT_RETRY_NS after the first round (one
+ * deadline for the segment's fragments, the client's per-fragment bound)
+ * before it counts as missing. Four tries over 200 ms were too few: a
+ * follower's ReadIndex refused for longer under a high rewrite rate. */
+#define PK_PUT_RETRY_NS (2000ull * 1000000ull)
 #define PK_PUT_RETRY_US 50000
 
 static struct {
@@ -249,6 +252,12 @@ static int pk_file_cmp(const void *a, const void *b)
     if (x->epoch != y->epoch) return x->epoch < y->epoch ? -1 : 1;
     if (x->c.parent != y->c.parent) return x->c.parent < y->c.parent ? -1 : 1;
     return x->c.ino < y->c.ino ? -1 : x->c.ino > y->c.ino;
+}
+static int pk_file_ino_cmp(const void *a, const void *b)
+{
+    const struct pk_file *x = a, *y = b;
+    if (x->c.ino != y->c.ino) return x->c.ino < y->c.ino ? -1 : 1;
+    return x->epoch < y->epoch ? -1 : x->epoch > y->epoch;
 }
 
 /* ---- 4. copy ---- */
@@ -609,7 +618,11 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
             .record_generation = id ^ ((uint64_t)(i + 1) << 56) ^ files[i].c.ino,
             .len = (uint32_t)files[i].c.size, .data = files[i].data};
     size_t geometry;
-    if (efs_pack_build(id, gen, group, rec, n, image, EFS_SEGMENT_MAX_SIZE, &geometry, refs) != EFS_OK) goto out;
+    int brc = efs_pack_build(id, gen, group, rec, n, image, EFS_SEGMENT_MAX_SIZE, &geometry, refs);
+    if (brc != EFS_OK) {
+        fprintf(stderr, "packer: segment g%u of %u files not built (rc=%d)\n", group, n, brc);
+        goto out;
+    }
     uint32_t flen = (uint32_t)geometry / 2;
     uint8_t *f[EFS_NUM_FRAGMENTS] = {frag, frag + flen, frag + 2 * flen};
     if (efs_encode_segment(image, geometry, geometry, f) != EFS_OK) goto out;
@@ -661,16 +674,21 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
      * Found by tests/test_d4_progress.py under the parallel gate: one
      * NOT_PRIMARY from a follower wrote a degraded segment (put_errors=1)
      * and a rebuild of it a second later. */
+    uint64_t put_deadline = pk_now_ns() + PK_PUT_RETRY_NS;
     for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         int first = puts[i].rc;
-        for (int k = 0; k < PK_PUT_RETRIES && pk_put_transient(puts[i].rc); k++) {
+        uint32_t tries = 0;
+        uint64_t t_first = pk_now_ns();
+        while (pk_put_transient(puts[i].rc) && pk_now_ns() < put_deadline) {
             usleep(PK_PUT_RETRY_US);
             puts[i].rc = pk_put_fragment(nodes, count, o->nodes[i], puts[i].body, puts[i].len);
+            tries++;
         }
-        if (first != puts[i].rc)
+        if (tries)
             fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx fragment %u for node %u resent "
-                    "after rc=%d: rc=%d\n", group, (unsigned long long)id, (unsigned long long)gen,
-                    i, o->nodes[i], first, puts[i].rc);
+                    "after rc=%d: rc=%d tries=%u ms=%llu\n", group, (unsigned long long)id,
+                    (unsigned long long)gen, i, o->nodes[i], first, puts[i].rc, tries,
+                    (unsigned long long)((pk_now_ns() - t_first) / 1000000ull));
     }
     uint32_t nok = 0, missing = 0;
     for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
@@ -1205,6 +1223,17 @@ static int pk_group(uint8_t group, uint64_t term)
         nfiles++;
     }
     __atomic_store_n(&pk.g[pk_gi(group)].lag_ns, oldest && now > oldest + pk.min_age_ns ? now - oldest - pk.min_age_ns : 0, __ATOMIC_RELAXED);
+    /* One entry per file, its oldest. A file republished in a later epoch
+     * before it packed has a key per epoch, all valid, and a segment
+     * cannot hold one inode twice (efs_pack_build refuses it): two keys in
+     * one segment failed that segment every pass, which held 28 files for
+     * 346 s after a rewrite load. Once the file is packed its other keys
+     * are no longer candidates and are unindexed. */
+    qsort(files, nfiles, sizeof(*files), pk_file_ino_cmp);
+    uint32_t uniq = 0;
+    for (uint32_t x = 0; x < nfiles; x++)
+        if (!uniq || files[x].c.ino != files[uniq - 1].c.ino) files[uniq++] = files[x];
+    nfiles = uniq;
     qsort(files, nfiles, sizeof(*files), pk_file_cmp);
     uint32_t flen = EFS_FRAGMENT_SIZE;
     uint32_t segs = 0, i = 0;

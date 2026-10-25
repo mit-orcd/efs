@@ -2,11 +2,10 @@
 """D4 with a fixed working set and the F1 RSS plateau (alpha 1.0 checklist
 D4 and F1), loopback version.
 
-Not in `make test-long`: a measurement driver (docs/status/f1-followups-20261025.md).
-Beside the 8-job gate pool its drain missed 150 s after a 75 s load (pack
-candidates left for up to 158 s, an open D4 finding), and efsd RSS is not
-flat over 60 minutes (open F1 finding). tests/test_d4_driver.py (`make test`)
-covers the driver's working-set and plateau verdicts.
+In `make test-long` (75 s load, 150 s drain). Its drain once missed 150 s:
+a file rewritten in a later pack epoch before it packed had two candidate
+entries, and a segment holding both failed every pass (fixed in the packer's
+selection, tests/test_pack_dup_candidate.py; docs/status/d4-pack-drain-20261025.md).
 
 The same cluster as tests/test_d4_progress.py (three efsd of the EFS_FAULTS
 build and two efs-fuse on loopback, private stores under TMPDIR, free ports,

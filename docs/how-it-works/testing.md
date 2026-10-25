@@ -190,8 +190,7 @@ the sanitized binaries. `make sanitize-check` runs both.
   minutes; `make check` keeps `leak-check`. F1 runs all three
   ([evidence](../status/f1-memory-concurrency-gates-20261025.md)).
 - **RSS plateau (F1, fixed working set).** `tests/test_d4_plateau.py`
-  (a measurement driver, not in `make test-long`: its drain and efsd's RSS
-  are open findings) runs the D4 loopback cluster with
+  (`make test-long`: a 75 s load, then the 150 s drain bound) runs the D4 loopback cluster with
   `scripts/d4_progress.py --working-set`: every writer creates its files
   before the timed load starts (every eighth 192–512 KiB, never packed; the rest 1 B–8 KiB, packed)
   and then only overwrites (`O_TRUNC`), truncates and rewrites, or rewrites
@@ -204,8 +203,13 @@ the sanitized binaries. `make sanitize-check` runs both.
   at most 5 % of the peak. The table is
   printed on every run and enforced from a 600 s load (`EFS_D4_PLATEAU=1`
   forces it). The F1 measurement is
-  `EFS_D4_LOAD_S=3600 EFS_D4_SET=256 EFS_D4_DRAIN_S=900 EFS_D4_QUOTA=8G python3 tests/test_d4_plateau.py`
-  ([evidence](../status/f1-followups-20261025.md)).
+  `EFS_D4_LOAD_S=3600 EFS_D4_SET=256 EFS_D4_QUOTA=8G python3 tests/test_d4_plateau.py`
+  ([evidence](../status/f1-followups-20261025.md); drain within the default
+  150 s since the duplicate-candidate fix, [evidence](../status/d4-pack-drain-20261025.md)).
+- **Pack duplicate candidate (D4).** `tests/test_pack_dup_candidate.py`
+  rewrites small files in place across a pack-epoch boundary inside the
+  minimum age, so each has two candidate entries, and requires the backlog
+  to reach 0 within 20 s of the files becoming quiet.
 
 ## Current release acceptance and local POSIX suites
 

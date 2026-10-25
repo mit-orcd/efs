@@ -13,7 +13,8 @@ work directory so each step is deterministic:
                                     DIR/refuse-N exists;
   EFS_FAULT_SEGMENT_PUT_TRANSIENT=DIR  node N refuses one segment PUT
                                     NOT_PRIMARY while DIR/transient-N exists
-                                    (consumed);
+                                    (consumed); a flag holding N refuses
+                                    every PUT for N ms;
   EFS_FAULT_SEGMENT_REBUILD_HOLD=F  marks wait while F exists.
 
  1. Baseline: two batches packed with all members up; no segment mark,
@@ -24,6 +25,10 @@ work directory so each step is deterministic:
     sends the fragment again (`resent after rc=-15: rc=0`), the segment
     has three fragments, no `written degraded`, no put error (D4's gate
     saw one such refusal per failing run: 1 of 10 parallel gate runs).
+ 1c. A longer refusal: node 3 refuses every segment PUT for 800 ms (a
+    follower's ReadIndex under a high rewrite rate refused past the old
+    4 x 50 ms resend, F1 follow-ups Open 2); the packer resends until its
+    2 s deadline, so the segment still has three fragments and no mark.
  2. Fragments deleted and torn while their member is down: node 2 stops, one
     of its segment fragments is deleted and another truncated; on its return
     the group leaders' audit marks both (missing, torn), the rebuild restores
@@ -233,6 +238,24 @@ try:
     assert n3 == len(seg_files(c, 1)) == len(seg_files(c, 2)), (n3, len(seg_files(c, 1)), len(seg_files(c, 2)))
     print('1b. one segment PUT refused NOT_PRIMARY by node 3: resent, three fragments, no mark, '
           'no put error PASS')
+
+    # 1c. A refusal that lasts 800 ms (beyond the old 4 x 50 ms, inside
+    # the packer's 2 s deadline): resent until accepted, never degraded.
+    put_errors0 = packer_stats(c)[2]
+    (flags / 'transient-3').write_text('800\n')
+    base = packed_total(c)
+    batch(a, 'transient-long', 4)
+    wait_packed(c, base, 4, 'transient-long')
+    assert not (flags / 'transient-3').exists(), 'the refusal never fired'
+    tries = [(int(t), int(ms)) for t, ms in re.findall(
+        r'packer: segment g\d+ id=[0-9a-f]+ gen=[0-9a-f]+ fragment \d for node 3 resent '
+        r'after rc=-15: rc=0 tries=(\d+) ms=(\d+)', logs(c))]
+    assert any(ms >= 600 for t, ms in tries), (tries, logs(c)[-3000:])
+    assert not degraded_writes(c), degraded_writes(c)
+    assert packer_stats(c)[2] == put_errors0, packer_stats(c)
+    wait_segs(c, 1, lambda n, u: n == 0, 'after the long transient refusal')
+    print(f'1c. segment PUTs refused NOT_PRIMARY by node 3 for 800 ms: resent {max(tries)} '
+          f'(tries, ms), no mark, no put error PASS')
 
     # 2. Deleted and torn while the member is down.
     c.stop(2)
