@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[D43 follow-up: creates keep the ordinary path until a folder policy is enabled](d43-expiry-fast-create-20261025.md):
+**PASS (scoped, one shared host), not merged, not pushed; branch `claude/funny-blackburn-010f41` on the D43 tip, code `b5b9ffc03`. Expiry on with no folder policy now costs as much as off (amd 0.93x/1.01x, baseline 2.2x); amd `make test-all` at 8 jobs: 11 FAIL, all failing on the baseline there too (RDMA, LeakSanitizer fixture, one pool timeout); 0 FAIL on a limit-free host not run. Raw: amd `~/efs-artifacts/d43-fast-20261025/` (`SHA256SUMS` `37bf20b4…9035`).**
+A folder-policy count (KV kind 57, both anchors) moves in the policy
+write's transaction; with expiry on and no folder policy enabled, creates
+take the ordinary path behind a per-group apply fence (no cache window).
+
 [D43: expiry ships under the cluster expiry policy](d43-expiry-20261025.md):
 **PASS (scoped, one host), not merged, not pushed; branch `claude/ecstatic-mccarthy-911369`, code `6b731298d`. nuc `make test-all` at 8 jobs: 484 commands, 0 FAIL, 15 NOTRUN host limits (earlier runs: one known intermittent each, D4 `put_errors=1` twice beside the new fixture before its budget fix); `d5-expiry` loopback dry run PASS (POSIX 218/218 with expiry on). Raw: nuc `~/efs-artifacts/d43-expiry-20261025/` (`SHA256SUMS` `6d6d768e…3d63`).**
 No build switch (`EFS_BUILD_EXPIRY` and `make test-expiry` removed) and no

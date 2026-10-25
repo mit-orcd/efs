@@ -242,7 +242,7 @@ changed at runtime without a restart. No environment variable or flag turns
 it on or off; efsd refuses a leftover `EFS_EXPIRY` and names the command.
 
 ```bash
-efs-mgmt expiry-policy 10.0.0.11:17432 cluster get           # version=0 expiry=off
+efs-mgmt expiry-policy 10.0.0.11:17432 cluster get           # version=0 expiry=off ... folder_policies=0
 efs-mgmt expiry-policy 10.0.0.11:17432 cluster set on 0      # version=1 expiry=on
 efs-mgmt expiry-policy 10.0.0.11:17432 set ROOT_INO GENERATION EXPECTED_REV \
     --expire-after 24h --renewal-limit 7d --flags 3          # folder policy, uid 0
@@ -259,6 +259,14 @@ efs-mgmt expiry-policy 10.0.0.11:17432 cluster set off 1     # pause everywhere
   moves it within `--renewal-limit`; a file with a deadline cannot get a
   second hard link. Every node sees a change within about a second (one GC
   pass); the replicas of the policy group at once.
+- **Create cost**: while no folder policy is enabled anywhere
+  (`folder_policies=0` in `cluster get`), creates take the ordinary path
+  even with expiry on. Once any folder policy is enabled, every
+  regular-file create looks up its folders' policies in a cross-group
+  transaction, about twice the time of an ordinary create on one disk.
+  Disable a folder policy before removing its folder: the count only drops
+  when a policy is disabled, and a removed folder's policy can no longer be
+  changed.
 - **A deadline acts only while it is covered**: the cluster policy on, and
   the folder policy it came from still enabled on a live folder. Turning
   either off keeps every file; turning it on again lets the overdue
