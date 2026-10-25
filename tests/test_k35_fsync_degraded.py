@@ -297,6 +297,7 @@ try:
     lead = led[2]
     assert lead != 1, led
     errs, stop_writer = [], threading.Event()
+    log_at = len(client_log(a))
 
     def writer():
         k = 0
@@ -316,14 +317,24 @@ try:
     stop_writer.set()
     t.join(timeout=120)
     assert not t.is_alive() and not errs, (errs, client_log(a)[-3000:])
-    print(f'7b. K39: group 2 leader (node {lead}) stopped under a writer: writes and fsync OK PASS')
+    # Stripes written before the stop and synced after it are marked
+    # degraded (case 3's rule), and one acknowledged while the leader was
+    # going away may be published degraded. Case 8 stops another member,
+    # so they must be rebuilt on the leader's return first. The leaders
+    # report the count periodically: wait until it includes every stripe
+    # the client named (none is rebuilt while the leader is down), then
+    # for zero after the return.
+    named = set(re.findall(r'ino=(\d+) chunk=(\d+) gen=([0-9a-f]+) nodes=[\d,]+(?: fragments=\S+)?: '
+                           r'(?:degraded acknowledgement|2 of 3 durable; marked degraded)',
+                           client_log(a)[log_at:]))
+    if named:
+        wait_degraded(c, 1, lambda n: n >= len(named), f'7b: {len(named)} stripes counted')
+    print(f'7b. K39: group 2 leader (node {lead}) stopped under a writer: writes and fsync OK, '
+          f'{len(named)} stripes degraded PASS')
     c.restart(lead)
     up(c, lead, 4)
     c.wait_members([1, 2, 3, 4], 4)
     settle(a, f'7b-{lead}')
-    # Stripes written before the stop and synced after it are marked
-    # degraded (case 3's rule); case 8 stops another member, so they must
-    # be rebuilt on the leader's return first.
     wait_degraded(c, 1, lambda n: n == 0, '7b rebuild on return', timeout=180)
 
     # 8. Five members, node 2 down.
