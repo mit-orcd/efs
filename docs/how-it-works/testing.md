@@ -10,8 +10,8 @@ The code tests come in two groups, so that the everyday suite stays fast:
 | Target | What runs | Typical time (8-core host) | When |
 | --- | --- | --- | --- |
 | `make test` | Fast, CPU-bound unit tests; each command well under a second | about 45 s | Every edit |
-| `make test-long` | Tests that wait on real deadlines, start daemons or processes, inject faults, or carry heavy workloads (1 s or more each) | about 3 min | Before merging and in gates |
-| `make test-all` | Both | about 3.5 min | Gates, release checks, `make check` |
+| `make test-long` | Tests that wait on real deadlines, start daemons or processes, inject faults, or carry heavy workloads (1 s or more each) | under 15 min at `EFS_TEST_JOBS=8` (W160) | Before merging and in gates |
+| `make test-all` | Both | under 15 min at `EFS_TEST_JOBS=8` | Gates, release checks, `make check` |
 
 A new test goes into `test` only if it is CPU-bound and finishes in well
 under a second; anything slower goes into `test-long`.
@@ -20,19 +20,34 @@ binary and Python test, and that no command runs in both groups.
 `scripts/make_test_summary.sh` runs `test-all` by default; set
 `EFS_TEST_TARGET=test` or `test-long` to run one group. It writes
 `timings.tsv`, slowest first, to keep the split honest. With
-`EFS_TEST_JOBS=4` it runs tests in a bounded pool, each with its own
+`EFS_TEST_JOBS=8` it runs tests in a bounded pool, each with its own
 `TMPDIR`. Tests that use real processes, shutdown, RDMA, timing,
 sanitizers, benchmarks or build introspection still run one at a time,
-after the pool. The exclusive group, about 59 s, sets the floor for `test-all`.
-Measured on intel2 (8 cores, October 23):
+after the pool.
 
-| Target | Serial | `EFS_TEST_JOBS=4` |
-| --- | --- | --- |
-| `test` | 43 s | 13 s |
-| `test-all` | 185 s | 95–96 s |
+Every `test-long` command has a row in `tests/budgets.tsv` (W160): the
+seconds it may take at `EFS_TEST_JOBS=8` on an 8-CPU host, the pool slots
+it occupies and, above the per-command bound, why. Slots weigh disk use,
+not CPU (the daemon tests use 0.15–0.3 CPU each, but their stores fsync on
+one disk, so eight at once only slow each other down and fail on
+deadlines): 6 for a test with a latency bound that needs a quiet disk
+(report step-down), 5 for one whose driver fsyncs for most of its run (B
+growth, stop progress; two of those never overlap), 2 for a daemon test
+that writes a moderate set, 1 for one that mostly waits on daemon timers
+or is CPU-bound. The pool starts the commands with the most slots first,
+then the largest budgets, and admits a command only while its slots are
+free, skipping to the next that fits. A command that runs past its budget
+is listed `OVERBUDGET` in `summary.txt` (the verdict does not change). `tests/test_make_test_recipe.py` requires a row for
+every `test-long` command, a reason for a budget above 300 s, and keeps
+the gate the budgets add up to (the pool's schedule plus the exclusive
+commands) under 780 s, so a new or slower test must raise its budget in
+the same change or fail the recipe test. Measured on nuc (8 CPUs, one
+NVMe, October 25; docs/status/gate-speed-20261025.md): see that page for
+the serial and 8-job times before and after the budgets.
 
-Verdicts were identical in both modes. A test that fails only in the
-pool belongs in the runner's `EXCLUSIVE` pattern. Do not retry it.
+Verdicts must be identical in serial and pooled runs. A test that fails
+only in the pool belongs in the runner's `EXCLUSIVE` pattern, or takes
+more slots. Do not retry it.
 
 Together they run the suites listed in the current Makefile, including the
 simulator, metadata/session/transaction, store, buffer, publication and
