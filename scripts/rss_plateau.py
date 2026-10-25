@@ -3,16 +3,23 @@
 
 Input: the `ps` sample file a loopback D4 run writes beside the driver
 (one line per sample: `<epoch> <pid>:<rss_kib> ...`), or the driver's own
-`d4_progress.json` (`samples[].client_rss_kib` / `nodes.*.rss_kib`). For
-every process it prints first, peak and last RSS, the growth over the last
-third of the run and the verdict: PLATEAU when the last third grows by at
-most --slope-pct of the peak (default 5 %), else GROWING.
+`d4-samples.json` (a list of samples, or a document with a `samples` list,
+each with `client_rss_kib` per mount and `nodes.*.rss_kib`). For every
+process it prints first, peak and last RSS, the growth over the last third
+of the run and the verdict: PLATEAU when the last third grows by at most
+--slope-pct of the peak (default 5 %), else GROWING. The growth is the
+least-squares slope over the last third times its span: a single sample at
+either end does not decide it (efsd's RSS swings by a few MiB from sample to
+sample when its allocator returns pages). The endpoint difference is printed
+beside it.
 
     python3 scripts/rss_plateau.py ps-samples.txt [--load-s 1200] [--slope-pct 5]
 
 Exit 0 PLATEAU for every process, 1 otherwise, 2 on bad input. Samples
 after --load-s seconds (the drain and verify phases) are not counted in the
 slope: RSS may still rise there with the read-verify cache and fall after.
+`evaluate()` is the same verdict for scripts/d4_progress.py (--plateau-pct)
+and tests/test_d4_plateau.py.
 """
 import argparse, json, sys
 from collections import OrderedDict
@@ -37,21 +44,71 @@ def from_ps(path):
     return series
 
 
-def from_json(path):
-    doc = json.loads(Path(path).read_text())
+def from_samples(samples):
+    """{name: [(seconds, kib), ...]} from the D4 driver's samples: one
+    series per efs-fuse (`efs-fuse:<mount>`) and per efsd (`efsd:<node>`)."""
     series = OrderedDict()
     t0 = None
-    for s in doc.get('samples', []):
+    for s in samples:
         t = s.get('t') or s.get('elapsed_s') or 0
         t0 = t if t0 is None else t0
         for m, kib in (s.get('client_rss_kib') or {}).items():
             if kib is not None:
-                series.setdefault('client:' + m, []).append((t - t0, kib))
+                series.setdefault('efs-fuse:' + str(m), []).append((t - t0, kib))
         for n, b in (s.get('nodes') or {}).items():
             kib = (b or {}).get('rss_kib')
             if kib is not None:
-                series.setdefault('efsd:' + n, []).append((t - t0, kib))
+                series.setdefault('efsd:' + str(n), []).append((t - t0, kib))
     return series
+
+
+def from_json(path):
+    doc = json.loads(Path(path).read_text())
+    return from_samples(doc if isinstance(doc, list) else doc.get('samples', []))
+
+
+def evaluate(series, load_s=None, slope_pct=5.0):
+    """One row per process: first, peak and last RSS (MiB), the RSS at the
+    start of the last third, the growth over the last third as a share of
+    the peak, and the verdict (PLATEAU, GROWING, or 'too few' under four
+    samples). Only samples up to load_s seconds count when it is given."""
+    rows = []
+    for name, pts in series.items():
+        if load_s is not None:
+            pts = [x for x in pts if x[0] <= load_s] or pts
+        if len(pts) < 4:
+            rows.append({'process': name, 'samples': len(pts), 'verdict': 'too few'})
+            continue
+        kib = [k for _, k in pts]
+        third = pts[len(pts) * 2 // 3:]
+        n = len(third)
+        mt = sum(t for t, _ in third) / n
+        mk = sum(k for _, k in third) / n
+        var = sum((t - mt) ** 2 for t, _ in third)
+        slope = sum((t - mt) * (k - mk) for t, k in third) / var if var else 0.0
+        growth = slope * (third[-1][0] - third[0][0])
+        peak = max(kib)
+        pct = 100.0 * growth / peak if peak else 0.0
+        end_pct = 100.0 * (third[-1][1] - third[0][1]) / peak if peak else 0.0
+        rows.append({'process': name, 'first_mib': round(kib[0] / 1024, 1), 'peak_mib': round(peak / 1024, 1),
+                     'last_mib': round(kib[-1] / 1024, 1), 'last_third_start_mib': round(third[0][1] / 1024, 1),
+                     'growth_pct': round(pct, 2), 'endpoint_pct': round(end_pct, 2),
+                     'verdict': 'PLATEAU' if pct <= slope_pct else 'GROWING',
+                     'samples': len(pts), 'span_s': pts[-1][0] - pts[0][0]})
+    return rows
+
+
+def format_rows(rows):
+    out = ['%-28s %9s %9s %9s %9s %9s %9s  %s' % ('process', 'first', 'peak', 'last', 'lastthird', 'growth', 'endpoint',
+                                                    'verdict')]
+    for r in rows:
+        if r['verdict'] == 'too few':
+            out.append('%-28s %d samples: too few' % (r['process'], r['samples']))
+            continue
+        out.append('%-28s %7.1fMi %7.1fMi %7.1fMi %7.1fMi %+7.1f%% %+7.1f%%  %s (%d samples over %ds)'
+                   % (r['process'], r['first_mib'], r['peak_mib'], r['last_mib'], r['last_third_start_mib'],
+                      r['growth_pct'], r['endpoint_pct'], r['verdict'], r['samples'], r['span_s']))
+    return '\n'.join(out)
 
 
 def main():
@@ -63,26 +120,9 @@ def main():
     series = from_json(a.path) if a.path.endswith('.json') else from_ps(a.path)
     if not series:
         sys.exit('no samples in %s' % a.path)
-    rc = 0
-    print('%-16s %9s %9s %9s %9s %9s  %s' % ('process', 'first', 'peak', 'last', 'lastthird', 'growth', 'verdict'))
-    for name, pts in series.items():
-        if a.load_s is not None:
-            pts = [x for x in pts if x[0] <= a.load_s] or pts
-        if len(pts) < 4:
-            print('%-16s %d samples: too few' % (name, len(pts)))
-            rc = 1
-            continue
-        kib = [k for _, k in pts]
-        third = pts[len(pts) * 2 // 3:]
-        growth = third[-1][1] - third[0][1]
-        peak = max(kib)
-        pct = 100.0 * growth / peak if peak else 0.0
-        verdict = 'PLATEAU' if pct <= a.slope_pct else 'GROWING'
-        if verdict != 'PLATEAU':
-            rc = 1
-        print('%-16s %7.1fMi %7.1fMi %7.1fMi %7.1fMi %+7.1f%%  %s (%d samples over %ds)'
-              % (name, kib[0] / 1024, peak / 1024, kib[-1] / 1024, third[0][1] / 1024, pct, verdict,
-                 len(pts), pts[-1][0] - pts[0][0]))
+    rows = evaluate(series, a.load_s, a.slope_pct)
+    print(format_rows(rows))
+    rc = 0 if all(r['verdict'] == 'PLATEAU' for r in rows) else 1
     print('VERDICT:', 'PLATEAU' if rc == 0 else 'GROWING')
     return rc
 

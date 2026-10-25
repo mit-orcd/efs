@@ -48,6 +48,7 @@
  * recovery leaves the record unclean and the next start recovers again. */
 #include "server_internal.h"
 #include "efs/frag_record.h"
+#include "efs/fault_exit.h"
 #include "efs/meta_apply.h"
 #include "efs/pack_mapping.h"
 #include "efs/put_ticket.h"
@@ -114,7 +115,7 @@ void server_fault_crash(const char *point)
         return;
     fprintf(stderr, "fault: injected crash at %s\n", point);
     fflush(stderr);
-    _exit(137);
+    efs_fault_exit(137);
 }
 
 /* Test-only: EFS_FAULT_RECOVERY_HOLD_FILE names a file; while it exists

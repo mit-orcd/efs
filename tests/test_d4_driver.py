@@ -55,7 +55,8 @@ assert d.rss_kib('Name:\tx\n') is None
 
 def args(**kw):
     a = dict(index_ready_s=60.0, fg_deadline_s=10.0, client_rss_mib=1024.0, server_rss_mib=2048.0, pack_backlog=1000,
-             index_age_s=60.0, drain_s=100.0, no_l0_check=False, threads=2)
+             index_age_s=60.0, drain_s=100.0, no_l0_check=False, threads=2, load_s=3.0, working_set=0, fg_set=0,
+             plateau_pct=None)
     a.update(kw)
     return argparse.Namespace(**a)
 
@@ -83,6 +84,7 @@ def run(a=None, edit=None, drained=5.0, bad=()):
     r.fg_files = {'g0': 1}
     r.members = {1: 'a:1', 2: 'b:2'}
     r.index_ready, r.index_not_ready = 0.5, [0.1]
+    r.uncertain = set()
     r.lock = __import__('threading').Lock()
     r.t0 = __import__('time').time()
     if edit:
@@ -197,7 +199,62 @@ def unsampled(r):
     for s in r.samples:
         s['client_rss_kib'] = {'/m': None}
 fails_with('client RSS', edit=unsampled)
+
+
+# Fixed working set (tests/test_d4_plateau.py): created == live == threads x
+# set, every operation kind ran; net creation or a missing kind fails.
+def fixed(r):
+    r.counts.update(created=20, overwritten=5, truncated=4, rewritten=3)
+    r.live = {f'f{i}': 1 for i in range(20)}
+v, fails, m = run(a=args(working_set=10), edit=fixed)
+assert v == 'PASS' and m['working_set'] == {'files': 20, 'created': 20, 'live': 20, 'populate_s': None,
+                                            'overwritten': 5, 'truncated': 4, 'rewritten': 3}, (fails, m)
+
+
+def net_creation(r):
+    fixed(r)
+    r.counts['created'] = 21
+    r.live['f20'] = 1
+fails_with('net creation', a=args(working_set=10), edit=net_creation)
+
+
+def no_truncate(r):
+    fixed(r)
+    r.counts['truncated'] = 0
+fails_with('not overwritten, truncated and rewritten', a=args(working_set=10), edit=no_truncate)
+
+
+# RSS plateau (scripts/rss_plateau.py over the driver's own samples): flat
+# over the last third of the load passes, growth over 5 % of the peak fails,
+# and samples after the load (drain, verify) do not count.
+def flat(r):
+    r.samples = [sample(t, 'load', comp=t + 1, packed=t + 1, gen=t + 1, crss=100000 + min(t, 4) * 10000,
+                        srss=50000 + min(t, 4) * 1000) for t in range(12)]
+    r.samples.append(sample(12.5, 'drain', comp=13, packed=13, gen=13, crss=300000, srss=90000))
+v, fails, m = run(a=args(load_s=12.0, plateau_pct=5.0), edit=flat)
+assert v == 'PASS', fails
+assert [x['verdict'] for x in m['rss_plateau']] == ['PLATEAU'] * 3 and m['rss_plateau'][0]['samples'] == 12, m['rss_plateau']
+
+
+def growing(r):
+    r.samples = [sample(t, 'load', comp=t + 1, packed=t + 1, gen=t + 1, crss=100000 + t * 10000) for t in range(12)]
+fails_with('not at a plateau', a=args(load_s=12.0, plateau_pct=5.0), edit=growing)
+rows = d.rss_plateau.evaluate({'p': [(t, 1000 + t * 100) for t in range(9)]}, None, 5.0)
+assert rows[0]['verdict'] == 'GROWING' and rows[0]['growth_pct'] > 5, rows
+rows = d.rss_plateau.evaluate({'p': [(t, 1000 + min(t, 5) * 100) for t in range(9)], 'q': [(0, 1)]}, None, 5.0)
+assert [x['verdict'] for x in rows] == ['PLATEAU', 'too few'], rows
+# The growth is the least-squares slope over the last third, not its two end
+# samples: a flat series that swings +-5 % between samples (efsd returning
+# pages to the OS) is a plateau although its end points differ by 9.5 %; a
+# steady ramp of 6.9 % over the last third is not.
+noisy = {'p': [(t, 100000 + (5000 if t % 2 else -5000)) for t in range(90)]}
+row = d.rss_plateau.evaluate(noisy, None, 5.0)[0]
+assert row['verdict'] == 'PLATEAU' and row['endpoint_pct'] > 5 and abs(row['growth_pct']) < 2, row
+row = d.rss_plateau.evaluate({'p': [(t, 100000 + t * 300) for t in range(90)]}, None, 5.0)[0]
+assert row['verdict'] == 'GROWING' and 6 < row['growth_pct'] < 8, row
+
 print('D4 driver: raft-status, pack-compact and .efs/stats parsers; PASS and one negative control per '
+
       'bound (deadline, errors, client/server RSS, memtable, L0, pack backlog, index age, packing, index, '
       'flush and compaction progress, index readiness, '
-      'drain, exact files) PASS')
+      'drain, exact files, fixed working set, RSS plateau slope) PASS')

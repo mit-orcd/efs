@@ -26,6 +26,20 @@ directory, run `.efs/stats --json`. Every operation must finish within
 --fg-deadline-s; an operation still running at the deadline is a FAIL
 (recorded as such, never waited out silently).
 
+Fixed working set (--working-set N, the F1 RSS plateau measurement): each
+writer creates N files once (every eighth 192–512 KiB, two to four chunks,
+never packed; the rest 1 B–8 KiB, packed) and then, for the rest of the
+load, overwrites (O_TRUNC), truncates and rewrites, or rewrites in place a
+random one of them with a new version; nothing is unlinked and nothing
+else is created, so the namespace is fixed while the packer unindexes and
+repacks, segments get holes, old generations go to reclaim, the index
+refreshes and the KV flushes and compacts. The foreground then rewrites a
+ring of --fg-set 1 MiB files instead of new ones. The verdict also needs
+created == live == threads × N (no net creation) and every operation kind
+to have run; with --plateau-pct P every efs-fuse and efsd RSS must be at a
+plateau over the load: the last third grows by at most P % of the peak
+(scripts/rss_plateau.py, the same rows in the result's `rss_plateau`).
+
 Sampled every --sample-s (default 1 s) and recorded with the maximum:
 - client RSS of the efs-fuse process of each mount (this host, /proc);
 - server RSS of every efsd (/proc on this host, or `ps` over ssh through
@@ -70,6 +84,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 NOTRUN_RC = 77
 MIB = 1 << 20
+SMALL_MAX = 8192                                  # under the 16 KiB packing payload: packed
+LARGE_MIN, LARGE_MAX = 192 * 1024, 512 * 1024     # two to four 128 KiB chunks: never packed
+
+import importlib.util  # noqa: E402
+_spec = importlib.util.spec_from_file_location('rss_plateau', Path(__file__).resolve().parent / 'rss_plateau.py')
+rss_plateau = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(rss_plateau)
 
 
 # ---- parsing (pure; tests/test_d4_driver.py) -------------------------------
@@ -218,7 +239,10 @@ class Run:
         self.lock = threading.Lock()
         self.live = {}          # load file -> size (acknowledged, not unlinked)
         self.fg_files = {}      # foreground file -> size
-        self.counts = {'created': 0, 'unlinked': 0, 'create_errors': 0}
+        self.ver = {}           # file -> version of its last rewrite (working set, foreground ring)
+        self.uncertain = set()  # load files whose last rewrite failed: content unspecified, not acknowledged
+        self.counts = {'created': 0, 'unlinked': 0, 'create_errors': 0,
+                       'overwritten': 0, 'truncated': 0, 'rewritten': 0}
         self.ops = {}           # kind -> [latencies]
         self.overdue = []       # (kind, seconds) over the deadline
         self.errors = []
@@ -228,8 +252,96 @@ class Run:
         self.index_ready = None  # seconds from the start to the first .efs answer
         self.index_not_ready = []  # "not indexed yet" before that, tolerated
 
+    def content(self, key, name, size):
+        """The payload of a load or foreground file at its last acknowledged
+        version: a stale version never reads exact."""
+        v = self.ver.get(name)
+        return payload(key if not v else f'{key}#{v}', size)
+
     # load
+    def ws_names(self, t):
+        d = self.dir / f'w{t}'
+        return [d / f's{k // 1000}' / f'f{k}' for k in range(self.a.working_set)]
+
+    @staticmethod
+    def ws_size(rnd, i):
+        return rnd.randint(LARGE_MIN, LARGE_MAX) if i % 8 == 7 else rnd.randint(1, SMALL_MAX)
+
+    def populate(self, t):
+        """--working-set: writer t's population, created before the timed
+        load starts (so the load and its RSS window are rewrites only, and
+        a slow host cannot spend the load creating)."""
+        rnd = random.Random(1000003 + t)
+        for i, name in enumerate(self.ws_names(t)):
+            name.parent.mkdir(parents=True, exist_ok=True)
+            size = self.ws_size(rnd, i)
+            try:
+                with open(name, 'wb') as f:
+                    f.write(payload(str(name.relative_to(self.dir)), size))
+                with self.lock:
+                    self.live[name] = size
+                    self.counts['created'] += 1
+            except OSError as e:
+                with self.lock:
+                    self.counts['create_errors'] += 1
+                    self.errors.append(f'populate create {name}: {e}')
+
+    def writer_fixed(self, t):
+        """--working-set: rewrites of the population only."""
+        rnd = random.Random(t)
+        names = self.ws_names(t)
+
+        def size_of(i):
+            return self.ws_size(rnd, i)
+
+        def key_of(name):
+            return str(name.relative_to(self.dir))
+
+        k = 0
+        while not self.stop_load.is_set():
+            i = rnd.randrange(len(names))
+            name, op = names[i], k % 3
+            with self.lock:
+                old = self.live.get(name)
+                v = self.ver.get(name, 0) + 1
+            if old is None:
+                k += 1
+                continue
+            size = old if op == 2 else size_of(i)
+            data = payload(f'{key_of(name)}#{v}', size)
+            try:
+                if op == 0:
+                    # overwrite: O_TRUNC, a new length and content
+                    with open(name, 'wb') as f:
+                        f.write(data)
+                elif op == 1:
+                    # truncate to half the old length, then the new content from 0
+                    with open(name, 'r+b') as f:
+                        os.ftruncate(f.fileno(), old // 2)
+                        f.write(data)
+                        f.truncate()
+                else:
+                    # rewrite in place: the same length, new content, no truncation
+                    with open(name, 'r+b') as f:
+                        f.write(data)
+                with self.lock:
+                    self.ver[name] = v
+                    self.live[name] = size
+                    self.uncertain.discard(name)
+                    self.counts[('overwritten', 'truncated', 'rewritten')[op]] += 1
+            except OSError as e:
+                # A failed write leaves the file's content unspecified (old,
+                # new or in between): it is no longer acknowledged state, so
+                # it leaves the exactness check until a rewrite succeeds.
+                # The error itself fails the run.
+                with self.lock:
+                    self.uncertain.add(name)
+                    self.errors.append(f'load {("overwrite", "truncate", "rewrite")[op]} {name}: {e}')
+            k += 1
+
     def writer(self, t):
+        if self.a.working_set:
+            return self.writer_fixed(t)
         rnd = random.Random(t)
         d = self.dir / f'w{t}'
         d.mkdir(parents=True, exist_ok=True)
@@ -286,26 +398,31 @@ class Run:
 
     def foreground(self):
         self.fg_dir.mkdir(parents=True, exist_ok=True)
+        ring = self.a.fg_set
         k = 0
         while not self.stop_all.is_set():
-            name = self.fg_dir / f'g{k}'
+            # With a ring the foreground rewrites g0..g(ring-1) in turn, each
+            # time a new version, instead of creating g{k}.
+            name = self.fg_dir / f'g{k % ring if ring else k}'
+            written = min(k, ring) if ring else k
             if self.stop_load.is_set():
                 # Drain: no new foreground changes, only reads and queries,
                 # so the backlogs measured are background work alone.
-                old = self.fg_dir / f'g{random.randrange(k)}' if k else None
+                old = self.fg_dir / f'g{random.randrange(written)}' if written else None
 
                 def read_only():
                     with self.lock:
                         size = self.fg_files.get(old)
                     if size is not None:
-                        assert old.read_bytes() == payload(old.name, size), f'{old} differs'
+                        assert old.read_bytes() == self.content(old.name, old, size), f'{old} differs'
                 self.timed('read 1 MiB', read_only)
                 self.timed('.efs/stats', lambda: self.index_sample(record=False))
                 time.sleep(self.a.fg_pause_s)
                 continue
 
             def write():
-                data = payload(name.name, MIB)
+                v = self.ver.get(name, 0) + 1 if ring else 0
+                data = payload(f'{name.name}#{v}' if v else name.name, MIB)
                 fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
                 try:
                     off = 0
@@ -316,9 +433,11 @@ class Run:
                     os.close(fd)
                 with self.lock:
                     self.fg_files[name] = MIB
+                    if v:
+                        self.ver[name] = v
             self.timed('write+fsync 1 MiB', write)
-            if k:
-                old = self.fg_dir / f'g{random.randrange(k)}'
+            if written:
+                old = self.fg_dir / f'g{random.randrange(written)}'
 
                 def read():
                     with self.lock:
@@ -326,7 +445,7 @@ class Run:
                     if size is None:
                         return
                     got = old.read_bytes()
-                    assert got == payload(old.name, size), f'{old} differs ({len(got)} B)'
+                    assert got == self.content(old.name, old, size), f'{old} differs ({len(got)} B)'
                 self.timed('read 1 MiB', read)
 
             def meta():
@@ -421,6 +540,15 @@ class Run:
         self.pids = {m: fuse_pid(m) for m in sorted({self.a.mount, self.a.fg_mount})}
         self.t0 = time.time()
         self.dir.mkdir(parents=True)
+        if self.a.working_set:
+            pop = [threading.Thread(target=self.populate, args=(t,), daemon=True)
+                   for t in range(self.a.threads)]
+            for p in pop:
+                p.start()
+            for p in pop:
+                p.join()
+            self.populate_s = round(time.time() - self.t0, 1)
+            self.t0 = time.time()  # the load, its samples and the RSS window start now
         first = self.sample('before')
         writers = [threading.Thread(target=self.writer, args=(t,), name=f'w{t}', daemon=True)
                    for t in range(self.a.threads)]
@@ -467,13 +595,14 @@ class Run:
         # Every acknowledged file exact: whole reads through VERIFY_THREADS
         # at once (the live set is hundreds to thousands of small files).
         t = time.time()
-        items = [(name, str(name.relative_to(self.dir)), size) for name, size in sorted(self.live.items())]
+        items = [(name, str(name.relative_to(self.dir)), size) for name, size in sorted(self.live.items())
+                 if name not in self.uncertain]
         items += [(name, name.name, size) for name, size in sorted(self.fg_files.items())]
 
         def check(item):
             name, label, size = item
             try:
-                return None if name.read_bytes() == payload(label, size) else str(name)
+                return None if name.read_bytes() == self.content(label, name, size) else str(name)
             except OSError as e:
                 return f'{name}: {e}'
         from concurrent.futures import ThreadPoolExecutor
@@ -531,7 +660,9 @@ class Run:
              'load_created': self.counts['created'], 'load_unlinked': self.counts['unlinked'],
              'load_create_errors': self.counts['create_errors'], 'load_live_files': len(self.live),
              'fg_files': len(self.fg_files), 'verify_s': round(verify_s, 1), 'verify_bad': bad[:20],
-             'errors': self.errors[:20], 'stalls_dumped': self.stalls, 'samples': len(self.samples)}
+             'errors': self.errors[:20], 'error_count': len(self.errors),
+             'verify_skipped_failed_last_write': len(self.uncertain),
+             'stalls_dumped': self.stalls, 'samples': len(self.samples)}
         if self.overdue:
             fails.append(f'{len(self.overdue)} foreground operations over {a.fg_deadline_s} s: '
                          f'{self.overdue[:5]}')
@@ -567,6 +698,23 @@ class Run:
             fails.append(f'{len(bad)} acknowledged files not exact: {bad[:3]}')
         if self.counts['created'] < a.threads:
             fails.append(f'load created only {self.counts["created"]} files')
+        if a.working_set:
+            want = a.threads * a.working_set
+            ops = {k: self.counts[k] for k in ('overwritten', 'truncated', 'rewritten')}
+            m['working_set'] = dict(files=want, created=self.counts['created'], live=len(self.live),
+                                    populate_s=getattr(self, 'populate_s', None), **ops)
+            if self.counts['created'] != want or len(self.live) != want:
+                fails.append(f'working set: {want} files wanted, created {self.counts["created"]}, '
+                             f'live {len(self.live)} (net creation)')
+            if not all(ops.values()):
+                fails.append(f'the working set was not overwritten, truncated and rewritten: {ops}')
+        if a.plateau_pct is not None:
+            rows = rss_plateau.evaluate(rss_plateau.from_samples(self.samples), a.load_s, a.plateau_pct)
+            m['rss_plateau'] = rows
+            growing = [r['process'] for r in rows if r['verdict'] != 'PLATEAU']
+            if growing or not rows:
+                fails.append(f'RSS not at a plateau (the last third of the load grows by more than '
+                             f'{a.plateau_pct} % of the peak): {growing or "no samples"}')
         return ('FAIL' if fails else 'PASS'), fails, m
 
     def cleanup(self):
@@ -587,9 +735,11 @@ def from_cluster(a):
     a.fg_mount = a.fg_mount or (mounts[1] if len(mounts) > 1 else mounts[0])['path']
     fx = doc.get('fixture', {})
     for k in ('load_s', 'threads', 'fg_deadline_s', 'drain_s', 'client_rss_mib', 'server_rss_mib',
-              'pack_backlog', 'index_age_s'):
+              'pack_backlog', 'index_age_s', 'working_set', 'fg_set'):
         if f'd4_{k}' in fx:
             setattr(a, k, type(getattr(a, k))(fx[f'd4_{k}']))
+    if fx.get('d4_plateau_pct') is not None:
+        a.plateau_pct = float(fx['d4_plateau_pct'])
     hosts = {}
     for i, n in enumerate(doc.get('nodes', []), 1):
         hosts[i] = n.get('host')
@@ -623,6 +773,14 @@ def main(argv=None):
                    help='"not indexed yet" is tolerated only this long after the start')
     p.add_argument('--no-l0-check', action='store_true',
                    help='do not require a KV compaction during the load (large memtables, short load)')
+    p.add_argument('--working-set', type=int, default=0,
+                   help='files per writer, created once and then overwritten, truncated and rewritten '
+                        '(no net creation; the F1 plateau measurement)')
+    p.add_argument('--fg-set', type=int, default=0,
+                   help='foreground 1 MiB files rewritten as a ring instead of created (0: create)')
+    p.add_argument('--plateau-pct', type=float, default=None,
+                   help='FAIL unless every efs-fuse and efsd RSS is at a plateau: the last third of the '
+                        'load grows by at most this share of the peak')
     p.add_argument('--keep', action='store_true')
     a = p.parse_args(argv)
     out = Path(a.out)
@@ -630,7 +788,8 @@ def main(argv=None):
 
     def finish(verdict, reason, metrics=None, rc=None):
         doc = {'verdict': verdict, 'reason': reason, 'fixture': {
-            'd4_load_s': a.load_s, 'd4_threads': a.threads, 'd4_fg_deadline_s': a.fg_deadline_s},
+            'd4_load_s': a.load_s, 'd4_threads': a.threads, 'd4_fg_deadline_s': a.fg_deadline_s,
+            'd4_working_set': a.working_set, 'd4_fg_set': a.fg_set, 'd4_plateau_pct': a.plateau_pct},
             'bounds': {'fg_deadline_s': a.fg_deadline_s, 'client_rss_mib': a.client_rss_mib,
                        'server_rss_mib': a.server_rss_mib, 'pack_backlog': a.pack_backlog,
                        'index_age_s': a.index_age_s, 'drain_s': a.drain_s,
