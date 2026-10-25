@@ -36,7 +36,7 @@ every size), grow-b (a fresh cluster grown to five without the driver, then
 six to eight with it) and full. EFS_B_ARTIFACTS=DIR keeps the driver's JSON
 results there.
 """
-import errno, json, os, re, shutil, sys, tempfile, time
+import errno, json, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import (Cluster as _Cluster, Mount, EFSD, MGMT, HOST, fuse_ok, mgmt as _mgmt,  # noqa: E402

@@ -32,6 +32,9 @@ def load(path):
 
 
 # Pure helpers.
+assert 'edelete --force --delete' in Q.delete_command('/tmp/private tree')
+assert "'/tmp/private tree'" in Q.delete_command('/tmp/private tree')
+assert 'rm -rf' not in (root / 'scripts/qualify.py').read_text()
 assert Q.identity_key('efsd v1-g123 (branch devel, built today on n1)') == 'v1-g123 (branch devel)'
 assert Q.identity_key('efs-fuse v1-g123 (branch devel, built now on n2)') == 'v1-g123 (branch devel)'
 assert Q.identity_key('efsd v1-g123-dirty (branch devel, built x)') != 'v1-g123 (branch devel)'
@@ -42,6 +45,16 @@ assert Q.outcome_from_rc(124, '', timed_out=True) == ('FAIL', 'deadline exceeded
 assert Q.count_marks('test\tresult\tdetail\na\tPASS\t\nb\tFAIL\tx\nc\tSKIP\t\nd\tPASS\t\n') == \
     {'PASS': 2, 'FAIL': 1, 'SKIP': 1}
 assert Q.worst(['PASS', 'NOTRUN']) == 'NOTRUN' and Q.worst(['NOTRUN', 'FAIL', 'PASS']) == 'FAIL'
+start_identity = dict(daemons=[dict(key='candidate')], clients=[dict(key='candidate')])
+assert Q.identity_change_reason(start_identity, start_identity) == ''
+assert 'not recorded' in Q.identity_change_reason(None, start_identity)
+assert 'unreadable' in Q.identity_change_reason(start_identity,
+    dict(daemons=[dict(key=None)], clients=[dict(key='candidate')]))
+assert 'changed at the end' in Q.identity_change_reason(start_identity,
+    dict(daemons=[dict(key='replacement')], clients=[dict(key='candidate')]))
+assert 'replaced' in Q.identity_change_reason(start_identity,
+    dict(daemons=[dict(key='candidate')], clients=[dict(key='candidate', exe_deleted=True)]))
+assert 'count changed' in Q.identity_change_reason(start_identity, dict(daemons=[], clients=[]))
 views = [('a', 'FOLLOWER', 1, 3), ('b', 'LEADER', 1, 3), ('c', 'FOLLOWER', 1, 3)]
 assert Q.agreed(views, 1, 3) and not Q.agreed(views, 2, 3) and not Q.agreed(views, 1, 4)
 assert not Q.agreed(views[:2] + [('c', 'CANDIDATE', 1, 3)], 1, 3) and not Q.agreed([], 1, 3)
@@ -70,6 +83,21 @@ try:
     desc = tmp / 'cluster.json'
     desc.write_text(json.dumps(cluster))
     stubs = ','.join(cluster['plugins'])
+
+    # A failed final identity read must lower the aggregate verdict, not be
+    # an unconsumed artifact after the last passing gate.
+    end_out = tmp / 'end-identity'
+    (end_out / 'gates').mkdir(parents=True)
+    q = object.__new__(Q.Qualify)
+    q.out, q.plan, q.cluster = end_out, False, dict(nodes=[dict(addr='stub')])
+    q.identity_start = start_identity
+    q.selected = lambda _: []
+    q.read_identity = lambda *a, **k: dict(daemons=[dict(key='new-build')], clients=[dict(key='candidate')])
+    results = []
+    q.run_gates([], results, None)
+    assert len(results) == 1 and results[0]['gate'] == '_identity-end'
+    assert results[0]['verdict'] == 'FAIL' and 'changed at the end' in results[0]['reason']
+    assert load(end_out / 'gates/_identity-end/result.json')['verdict'] == 'FAIL'
 
     # 1. Every outcome; no destructive step allowed.
     out1 = tmp / 'out1'
@@ -129,6 +157,7 @@ try:
     sums = __import__('hashlib').sha256(listed.encode()).hexdigest()
     assert sums in summary and sums in (out1 / 'f3-row.md').read_text()
     f3 = (out1 / 'f3-row.md').read_text()
+    assert 'TODO-summary' not in f3 and '(summary-draft.md)' in f3
     assert '| Placement/capacity and decode | FAIL (stub-pass PASS, stub-fail FAIL' in f3, f3
     assert '| Full payloads + orderly restart | NOTRUN (no gate selected in this run' in f3
     # D4 is a gate now (d4-progress); this run did not select it.
@@ -261,6 +290,19 @@ try:
           'voters=0x7 joint=1 retired=1\n')
     assert Q.parse_raft(rs) == (3, {0: dict(role='FOLLOWER', voters=7, joint=0), 2: dict(role='LEADER', voters=14, joint=1)})
     assert Q.mask({2, 3, 4}) == 0xe and Q.mask({1, 2, 3}) == 7
+    # Five-member membership retains retired lane state for diagnostics.
+    # Its stale leader/term/index must not enter turnover or catch-up proofs.
+    class RetiredViews:
+        cluster = dict(nodes=[dict(addr='retired'), dict(addr='active')])
+        def mgmt(self, g, label, op, addr, deadline=30):
+            if addr == 'retired':
+                return 0, 'group 2 hosted=1 role=LEADER leader=0 term=99 commit=10 applied=10 voters=0x7 joint=0 retired=1\n'
+            return 0, 'group 2 hosted=1 role=LEADER leader=1 term=3 commit=20 applied=20 voters=0xe joint=0 retired=0\n'
+    led, active_views = Q.leaders(RetiredViews(), None, 'probe')
+    assert led == {2: ('active', 3, 1, [1, 2, 3])}, led
+    assert Q.agreed(active_views[2], 1, 3)
+    assert Q.applied(RetiredViews(), None, 'retired', 'probe') == {}
+    assert Q.applied(RetiredViews(), None, 'active', 'probe') == {2: (20, 20)}
     hspec = importlib.util.spec_from_file_location('stage2_helpers', root / 'scripts/stage2_helpers.py')
     H = importlib.util.module_from_spec(hspec)
     hspec.loader.exec_module(H)
@@ -272,6 +314,44 @@ try:
     status, rows = H.parse_getchunks(gc)
     assert status == 0 and rows[0]['packed'] == dict(segment=77, gen=1, group=0, offset=1044, len=300)
     assert H.stored_objects(rows) == {('segment', 77, 1), ('span', 99, (1, 2, 3))}
+
+    # The GC crash gate must follow K36 verified recovery, never demand a
+    # permanent crash fence after legitimate automatic recovery completed.
+    import ast, re
+    gc_tree = ast.parse((root / 'tests/live/gc_reclamation.py').read_text())
+    ready_fn = next(n for n in gc_tree.body if isinstance(n, ast.FunctionDef) and n.name == 'recovery_fsync_ready')
+    namespace = {'re': re}
+    exec(compile(ast.Module(body=[ready_fn], type_ignores=[]), 'gc-readiness', 'exec'), namespace)
+    ready = namespace['recovery_fsync_ready']
+    eps = ['127.0.0.1:19001', '127.0.0.1:19002']
+    reports = [ep + ': window 100 ms / 8 MiB\n  root: async\n  recovery verified phase=rebuild 50 ms: groups proven=2/2\n' for ep in eps]
+    assert ready(''.join(reports), eps)
+    assert not ready(reports[0], eps)
+    assert not ready(reports[0] * 2, eps)
+    assert not ready(''.join(reports).replace('verified', 'running'), eps)
+    assert not ready(''.join(reports).replace('root: async', 'root: async ERROR(barrier)'), eps)
+    assert not ready(''.join(reports) + '    recovery uncertain: fenced\n', eps)
+
+    # The offline-member GC case is an intentional crash, not an E2
+    # clean-stop gate. It signals only its held child and detaches its own
+    # mount. Missing ownership refuses before signalling or detaching.
+    from unittest.mock import Mock
+    crash_fn = next(n for n in gc_tree.body if isinstance(n, ast.FunctionDef) and n.name == 'crash_unmount')
+    child = Mock()
+    child.poll.return_value = None
+    detach = Mock()
+    ns = dict(client=child, mount=Path('/tmp/owned-gc-mount'), run=detach, print=Mock())
+    exec(compile(ast.Module(body=[crash_fn], type_ignores=[]), 'gc-crash-unmount', 'exec'), ns)
+    ns['crash_unmount']()
+    child.kill.assert_called_once_with()
+    child.wait.assert_called_once_with(timeout=15)
+    detach.assert_called_once_with(['fusermount3', '-uz', Path('/tmp/owned-gc-mount')])
+    assert ns['client'] is None
+    try:ns['crash_unmount']()
+    except AssertionError:pass
+    else:raise AssertionError('crash detach without a held child accepted')
+    assert detach.call_count == 1
+    assert "crash_unmount();stop(crash=True)\n    inspector=" in (root / 'tests/live/gc_reclamation.py').read_text()
 
     # 7c. The wire probe against fake daemons: a correct gate (leader
     # refuses the tags, follower redirects) passes every check; a daemon
@@ -401,6 +481,52 @@ try:
         assert Q.main(['plan', '--check']) == 0, buf.getvalue()
     matrix = load(root / 'scripts/qualify_matrix.json')
     assert Q.matrix_errors(matrix) == []
+    # Plan generation is read-only and must work when the real topology's
+    # ports are occupied. It must never claim those ports or need a daemon.
+    from unittest.mock import patch
+    with patch.object(Q.socket, 'socket', side_effect=AssertionError('plan must not bind')):
+        rc, text = run('--loopback', '5', '--out', str(tmp / 'occupied-plan'), '--plan',
+                       '--candidate', '123456789')
+    assert rc == 3, text
+    assert load(tmp / 'occupied-plan/cluster.json')['candidate'] == '123456789'
+    assert load(tmp / 'occupied-plan/run.json')['seconds'] >= 0
+    rc, text = run('--loopback', '3', '--out', str(tmp / 'bad-candidate'), '--plan', '--candidate', 'HEAD')
+    assert rc == 2 and '--candidate must' in text, text
+    # All owned members are stopped even if the first one fails.
+    loop = object.__new__(Q.Loopback)
+    loop.procs = {0: object(), 1: object(), 2: object()}
+    called = []
+    loop.stop_daemon = lambda i: called.append(i) or (1 if i == 0 else 0)
+    loop._logged = lambda g, label, fn: fn()
+    assert loop.stop_cluster(None) is False and called == [0, 1, 2]
+    # False compares equal to integer 0 in Python, but is a failed controller
+    # operation, not a successful stop or a successful readiness predicate.
+    from types import SimpleNamespace
+    private_q = SimpleNamespace(control=SimpleNamespace(owned=True))
+    observed = 'ERROR: /private/mnt is in use by: localsearch-3(123), gvfs-udisks2-vo(456); stop refused (no force)'
+    assert Q.stop_failure(private_q, observed, 'stop: ')[0] == 'NOTRUN'
+    assert 'desktop mount observer' in Q.stop_failure(private_q, observed, 'stop: ')[1]
+    assert Q.stop_failure(private_q, observed.replace('localsearch-3', 'python3'), 'stop: ')[0] == 'FAIL'
+    assert Q.stop_failure(private_q, 'ERROR: drain timed out', 'stop: ')[0] == 'FAIL'
+    assert Q.stop_failure(private_q, observed, 'stop: ', 124) == ('FAIL', 'stop: deadline exceeded')
+    assert Q.stop_failure(SimpleNamespace(control=SimpleNamespace(owned=False)), observed, 'stop: ')[0] == 'FAIL'
+    for value, expected in ((False, 1), (True, 0), (None, 0), (0, 0), (1, 1)):
+        commands = SimpleNamespace(commands=[])
+        rc, why = Q.Loopback._logged(loop, commands, 'controller-result', lambda: value)
+        assert rc == expected and commands.commands[-1]['rc'] == expected, (value, rc)
+    five = matrix['topologies']['loopback-5']
+    assert five['loopback'] == 5 and five['transport'] == 'tcp'
+    assert five['gates'] == matrix['topologies']['loopback-3']['gates']
+    assert {'a13-node-addition', 'e3-turnover', 'e4-scale'} <= set(five['gates'])
+    assert five['fixture'] == matrix['topologies']['loopback-3']['fixture']
+    assert five['port_base'] >= five['private_port_base'] + 140
+    rc, text = run('--matrix', str(root / 'scripts/qualify_matrix.json'), '--topology', 'loopback-5',
+                   '--out', str(tmp / 'five-plan'), '--plan')
+    assert rc == 3, text
+    five_cluster = load(tmp / 'five-plan/cluster.json')
+    assert len(five_cluster['nodes']) == 5
+    assert len(five_cluster['mounts']) == 2
+    assert set(five['gates']) == {g.name for g in Q.gates(Q.default_plugins(five_cluster, []))}
     assert set(matrix['items']) == set(Q.STAGE2_ITEMS)
     broken = json.loads(json.dumps(matrix))
     del broken['items']['E4']
@@ -437,13 +563,26 @@ try:
     assert any('_node start --addr 10.1.0.204:19060 --store /home/maik/efs-qual-matrix/bare-metal-4-tcp/a13/n1'
                in c and '--quota 2G' in c and '--join' not in c for c in a13), a13
 
+    # The owned loopback tree excludes desktop crawlers before formation,
+    # without adding a marker inside the mounted filesystem or bypassing stop.
+    seen_marker = []
+    def formation_failure(loop):
+        seen_marker.append((loop.work / '.nomedia').is_file())
+        raise RuntimeError('test formation failure')
+    with patch.object(Q.Loopback, 'start', formation_failure), patch.object(Q.Loopback, 'teardown'):
+        try:run('--loopback', '3', '--out', str(tmp / 'marker-out'), '--work', str(tmp / 'marker-work'))
+        except RuntimeError as exc:assert str(exc) == 'test formation failure'
+        else:raise AssertionError('formation failure hidden')
+    assert seen_marker == [True]
+
     # 12. _node: start waits until the daemon listens, refuses a second
     # start, stop sends SIGTERM and waits (a stub efsd from a stub tree).
     tree = tmp / 'tree'
     tree.mkdir()
-    (tree / 'efsd').write_text('#!/usr/bin/env python3\nimport socket, sys, signal, time\n'
+    (tree / 'efsd').write_text('#!/usr/bin/env python3\nimport socket, sys, signal, time\nfrom pathlib import Path\n'
                                'addr = next(a for a in sys.argv[1:] if a.count(":") == 1 and not a.startswith("-"))\n'
-                               'h, p = addr.rsplit(":", 1)\ntime.sleep(0.5)\ns = socket.socket()\n'
+                               'h, p = addr.rsplit(":", 1)\n'
+                               'time.sleep(60 if Path(__file__).with_name("hold-listen").exists() else 0.5)\ns = socket.socket()\n'
                                's.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\ns.bind((h, int(p)))\n'
                                's.listen()\nsignal.signal(signal.SIGTERM, lambda *a: sys.exit(0))\n'
                                'while True:\n    time.sleep(1)\n')
@@ -462,10 +601,52 @@ try:
             assert Q.pid_alive(pid)
             assert Q.main(['_node', 'stop', *node]) == 0
             assert Q.main(['_node', 'stop', *node]) == 0
+            # A private pidfile alone does not own another process. Neither
+            # a missing record nor a forged identity may signal the child.
+            import subprocess
+            unrelated = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(60)'])
+            pidfile = tmp / 'pc/n1.pid'
+            identity = tmp / 'pc/n1.identity.json'
+            saved_identity = identity.read_text()
+            try:
+                pidfile.write_text(str(unrelated.pid))
+                identity.unlink()
+                assert Q.main(['_node', 'kill', *node]) == 2 and unrelated.poll() is None
+                forged = Q.node_identity(unrelated.pid, f'127.0.0.1:{port}', tmp / 'pc/n1')
+                forged['start'] = str(int(forged['start']) + 1)
+                identity.write_text(json.dumps(forged))
+                assert Q.main(['_node', 'stop', *node]) == 2 and unrelated.poll() is None
+                forged['start'] = Q.node_identity(unrelated.pid, f'127.0.0.1:{port}', tmp / 'pc/n1')['start']
+                identity.write_text(json.dumps(forged))
+                assert Q.main(['_node', 'kill', *node]) == 2 and unrelated.poll() is None
+                # Empty /proc cmdline during exec is never permission to
+                # signal. Wait for a readable command, retaining the pidfd.
+                command = b'python3\0-u\0' + os.fsencode(str(tree / 'efsd')) + b'\0' + os.fsencode(f'127.0.0.1:{port}') + b'\0' + os.fsencode(str(tmp / 'pc/n1')) + b'\0'
+                with patch.object(Path, 'read_bytes', side_effect=[b'', command]) as read, \
+                     patch.object(Q.time, 'sleep') as pause, \
+                     patch.object(Q.signal, 'pidfd_send_signal') as send:
+                    Q.signal_owned_node(unrelated.pid, Q.signal.SIGTERM, f'127.0.0.1:{port}', tmp / 'pc/n1', identity)
+                    assert read.call_count == 2 and pause.call_count == 1
+                    send.assert_called_once()
+                assert unrelated.poll() is None
+            finally:
+                unrelated.terminate();unrelated.wait()
+                identity.write_text(saved_identity)
             # kill: an interrupted join (A13); --timeout 0 returns once spawned.
             assert Q.main(['_node', 'start', *node[:4], '--timeout', '0']) == 0
             pid = int((tmp / 'pc/n1.pid').read_text())
-            assert Q.main(['_node', 'kill', *node]) == 0 and not Q.pid_alive(pid)
+            assert Q.main(['_node', 'kill', *node]) == 0 and not Q.pid_alive(pid), buf.getvalue()
+            (tree / 'hold-listen').touch()
+            try:
+                assert Q.main(['_node', 'start', *node[:4], '--timeout', '0.05']) == 1
+                assert Q.main(['_node', 'stop', *node]) == 0
+            finally:
+                (tree / 'hold-listen').unlink()
+            refused = tmp / 'reserved-node'
+            assert Q.main(['_node', 'start', '--addr', '127.0.0.1:17432', '--store', str(refused)]) == 2
+            assert Q.main(['_node', 'start', '--addr', f'127.0.0.1:{port}', '--store', str(refused),
+                           '--join', '127.0.0.1:27432']) == 2
+            assert not refused.exists()
         out = buf.getvalue()
         assert 'listening' in out and 'already running' in out and 'exited' in out and 'not running' in out, out
         assert f'efsd 127.0.0.1:{port} {tmp / "pc/n1"} --quota 4G --discovery-port 0' in (tmp / 'pc/n1.log').read_text()

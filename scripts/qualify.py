@@ -109,6 +109,13 @@ DEFAULT_FIXTURE = dict(
     e4_query_deadline_s=30, e4_refresh_s=60, e4_reclaim_s=900, soak_hours=4)
 
 
+def delete_command(path):
+    """Use the host's explicit tree-deletion tool; never substitute rm."""
+    quoted = shlex.quote(str(path))
+    return (f'export PATH="$HOME/bin:$PATH"; test -e {quoted} || exit 0; '
+            f'edelete --force --delete {quoted}')
+
+
 def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds')
 
@@ -125,6 +132,26 @@ def identity_key(version):
     text = version.strip().splitlines()[0] if version.strip() else ''
     text = re.sub(r'^\S+\s+', '', text, count=1)
     return re.sub(r', built [^)]*\)', ')', text)
+
+
+def identity_change_reason(start, end):
+    """The final read is evidence only if it still matches the frozen run."""
+    if not start:
+        return 'starting build identity was not recorded'
+    for role in ('daemons', 'clients', 'harness'):
+        before = start.get(role, [])
+        if not before:
+            continue
+        after = end.get(role, [])
+        if len(before) != len(after):
+            return f'{role}: identity count changed ({len(before)} -> {len(after)})'
+        if any(not e.get('key') for e in after):
+            return f'{role}: final build identity unreadable'
+        if any(e.get('exe_deleted') for e in after):
+            return f'{role}: final executable was replaced'
+        if sorted(e.get('key') or '' for e in before) != sorted(e['key'] for e in after):
+            return f'{role}: build identity changed at the end of the run'
+    return ''
 
 
 def is_local(host):
@@ -345,13 +372,14 @@ class Loopback(Controller):
 
     def __init__(self, args, work):
         self.n, self.work, self.quota = args.loopback, work, args.loopback_quota
+        self.candidate = getattr(args, "candidate", None)
         self.base = args.port_base
         ports = list(range(self.base, self.base + self.n))
         if any(p in RESERVED_PORTS for p in ports + [self.base + 9]) or not 1024 < self.base < 65000:
             raise SystemExit(f'--port-base {self.base}: reserved or invalid ports')
         if str(work.resolve()).startswith('/data1/efs'):
             raise SystemExit('loopback stores may not live under /data1/efs')
-        for port in ports:
+        for port in ([] if args.plan else ports):
             with socket.socket() as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 try:
@@ -366,7 +394,7 @@ class Loopback(Controller):
         self.env = dict(os.environ, EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'))
 
     def description(self, private_base):
-        return dict(name=f'loopback-{self.n}', candidate=None, source=str(ROOT),
+        return dict(name=f'loopback-{self.n}', candidate=self.candidate, source=str(ROOT),
                     seed=self.addrs[0], owned=True,
                     nodes=[dict(addr=a, host='local', id=i + 1) for i, a in enumerate(self.addrs)],
                     mounts=[dict(path=str(m), host='local') for m in self.mounts],
@@ -468,7 +496,7 @@ class Loopback(Controller):
         t0 = time.monotonic()
         try:
             ok = fn()
-            rc = 0 if ok in (None, True, 0) else 1
+            rc = 0 if ok is None or ok is True or (type(ok) is int and ok == 0) else 1
         except Exception as exc:  # recorded as the step's failure
             rc, ok = 1, exc
         entry.update(end=now(), seconds=round(time.monotonic() - t0, 3), rc=rc, timed_out=False)
@@ -487,8 +515,11 @@ class Loopback(Controller):
                      300)
 
     def stop_cluster(self, g):
-        return self._logged(g, 'stop-cluster', lambda: all(self.stop_daemon(i) == 0
-                                                          for i in sorted(self.procs)))
+        def stop():
+            # A failed stop must not short-circuit retirement of other owned nodes.
+            results = [self.stop_daemon(i) for i in sorted(self.procs)]
+            return all(rc == 0 for rc in results)
+        return self._logged(g, 'stop-cluster', stop)
 
     def start_cluster(self, g):
         def start():
@@ -603,10 +634,9 @@ class PrivateCluster(Controller):
         for m in self.q.cluster.get('mounts', []):
             mount = Path(m['path'])
             g.fetch(m['host'], f'{mount.parent}/efs-fuse-{mount.name}.log', f'efs-fuse-{m["host"]}-{mount.name}.log')
-        root = shlex.quote(self.pc['root'])
+        root = self.pc['root']
         for host in sorted({n['host'] for n in self.nodes} | {m['host'] for m in self.q.cluster.get('mounts', [])}):
-            g.run('teardown-delete', host, f'test -e {root} || exit 0; if command -v edelete >/dev/null; '
-                  f'then edelete --force --delete {root}; else rm -rf -- {root}; fi', 900)
+            g.run('teardown-delete', host, delete_command(root), 900)
 
 
 def check_private_cluster(cluster):
@@ -718,6 +748,7 @@ class Qualify:
         return [g for g in gates if g.name in chosen and g.name not in self.args.skip]
 
     def run(self, gates):
+        tick = time.monotonic()
         started = now()
         (self.out / 'gates').mkdir(parents=True)
         (self.out / 'cluster.json').write_text(json.dumps(self.cluster, indent=2) + '\n')
@@ -734,6 +765,7 @@ class Qualify:
         run = dict(driver='scripts/qualify.py', argv=sys.argv, cwd=os.getcwd(),
                    driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                    driver_host=socket.gethostname(), start=started, end=now(),
+                   seconds=round(time.monotonic() - tick, 3),
                    allow=sorted(self.allow), owned_cluster=self.control.owned,
                    verdict=verdict, counts={v: sum(r['verdict'] == v for r in results)
                                             for v in (PASS, FAIL, NOTRUN)},
@@ -804,10 +836,17 @@ class Qualify:
             print(f'[{now()}] gate {gate.name} {verdict} {reason}', flush=True)
             results.append(g.record)
         if not self.plan and self.cluster.get('nodes'):
-            end = GateRun(self, Gate('_identity-end', None, '', ''), 600)
+            end = GateRun(self, Gate('_identity-end', None, 'A1, A2', 'Candidate and profile'), 600)
             self.identity_end = self.read_identity(end, 'end')
             end.raw_file('identity-end.json').write_text(json.dumps(self.identity_end, indent=2) + '\n')
-            (end.dir / 'result.json').write_text(json.dumps(dict(end.record, commands=end.commands)) + '\n')
+            why = identity_change_reason(self.identity_start, self.identity_end)
+            verdict = (FAIL if self.identity_start else NOTRUN) if why else PASS
+            end.record.update(verdict=verdict, reason=why, end=now(),
+                              seconds=round(time.monotonic() - end.start, 3),
+                              commands=end.commands, fixture=end.fixture,
+                              destructive_steps=end.steps, raw=end.raw)
+            (end.dir / 'result.json').write_text(json.dumps(end.record, indent=2) + '\n')
+            results.append(end.record)
 
     def gate_identity(self, g):
         """Daemon and client identity read live before this gate."""
@@ -850,8 +889,7 @@ class Qualify:
         if not self.control.owned:  # an owned cluster's mounts go with it
             trees += [(m['host'], f'{m["path"]}/qualify-{self.runid}') for m in self.cluster.get('mounts', [])]
         for host, path in trees:
-            cmd = (f'test -e {shlex.quote(path)} || exit 0; if command -v edelete >/dev/null; then '
-                   f'edelete --force --delete {shlex.quote(path)}; else rm -rf -- {shlex.quote(path)}; fi')
+            cmd = delete_command(path)
             try:
                 subprocess.run(self.runner.argv(host, cmd, 600), capture_output=True, timeout=660)
             except subprocess.TimeoutExpired:
@@ -977,6 +1015,20 @@ def g_two_client(q, g):
     return scoped(g, outcome_from_rc(rc, text, g.commands[-1].get('timed_out')))
 
 
+def stop_failure(q, text, context, rc=1):
+    """A desktop observer makes a private clean-stop gate untestable, not PASS.
+
+    Never ignore an owned writer, arbitrary holder or another stop error, and
+    never change the client's refusal or send a signal to the observer.
+    """
+    match = re.search(r'is in use by: ([^\n;]+); stop refused', text)
+    if rc == 1 and getattr(q.control, 'owned', False) and match:
+        holders = re.findall(r'([^ ,()]+)\(\d+\)', match.group(1))
+        if holders and all(re.fullmatch(r'localsearch(?:-3)?|gvfs-[A-Za-z0-9_-]+', h) for h in holders):
+            return NOTRUN, 'environment: desktop mount observer holds the private fixture; clean stop was refused: ' + ', '.join(holders)
+    return FAIL, context + outcome_from_rc(rc, text, rc == 124)[1]
+
+
 def g_durability(q, g):
     m = q.mount(0)
     if not m:
@@ -991,7 +1043,7 @@ def g_durability(q, g):
     g.step('remount', f'client stop (no force) and remount of {m["host"]}:{m["path"]}')
     rc, text = q.control.client_stop(g, m)
     if rc:
-        return FAIL, 'clean client stop refused or failed: ' + outcome_from_rc(rc, text)[1]
+        return stop_failure(q, text, 'clean client stop refused or failed: ', rc)
     rc, text = q.control.client_start(g, m)
     if rc:
         return FAIL, 'remount failed: ' + outcome_from_rc(rc, text)[1]
@@ -1198,7 +1250,7 @@ def g_e2(q, g):
     g.fixture.update(stop_seconds=round(time.monotonic() - t0, 3),
                      stop_deadline_s=q.cluster.get('control', {}).get('stop_timeout_s', 300))
     if rc:
-        return FAIL, 'clean client stop failed with the mount idle: ' + outcome_from_rc(rc, text)[1]
+        return stop_failure(q, text, 'clean client stop failed with the mount idle: ', rc)
     rc, text = g.run('unmounted', host, f'! mountpoint -q {shlex.quote(path)}', 30)
     if rc:
         q.control.client_start(g, m)
@@ -1224,11 +1276,13 @@ def leaders(q, g, label):
     views, out = {}, {}
     for node in q.cluster.get('nodes', []):
         rc, text = q.mgmt(g, label, 'raft-status', node['addr'], deadline=30)
-        for m in re.finditer(r'group (\d+) hosted=1 role=(\w+) leader=(-?\d+) term=(\d+)'
-                             r'(?:.*? voters=0x([0-9a-f]+))?', text):
+        for m in re.finditer(r'group (\d+) hosted=1 role=(\w+) leader=(-?\d+) term=(\d+)([^\n]*)', text):
+            if re.search(r'\bretired=1\b', m.group(5)):
+                continue  # retained old Raft state is not an active hosting view
             group, role, lid, term = int(m.group(1)), m.group(2), int(m.group(3)), int(m.group(4))
             views.setdefault(group, []).append((node['addr'], role, lid, term))
-            voters = [b for b in range(64) if int(m.group(5) or '0', 16) >> b & 1]
+            match = re.search(r'\bvoters=0x([0-9a-f]+)', m.group(5))
+            voters = [b for b in range(64) if int(match.group(1) if match else '0', 16) >> b & 1]
             if role == 'LEADER' and term >= out.get(group, ('', -1))[1]:
                 out[group] = (node['addr'], term, lid, voters)
     return out, views
@@ -1243,8 +1297,8 @@ def agreed(views, lid, term):
 def applied(q, g, addr, label):
     rc, text = q.mgmt(g, label, 'raft-status', addr, deadline=30)
     return {int(m.group(1)): (int(m.group(2)), int(m.group(3))) for m in
-            re.finditer(r'group (\d+) hosted=1 role=\w+ leader=-?\d+ term=\d+ commit=(\d+) applied=(\d+)',
-                        text)}
+            re.finditer(r'group (\d+) hosted=1 role=\w+ leader=-?\d+ term=\d+ commit=(\d+) applied=(\d+)([^\n]*)',
+                        text) if not re.search(r'\bretired=1\b', m.group(4))}
 
 
 def g_e3(q, g):
@@ -1849,8 +1903,7 @@ def g_a13(q, g):
         g.fetch(mnt['host'], f'{Path(mnt["path"]).parent}/efs-fuse-{Path(mnt["path"]).name}.log', 'efs-fuse-a13.log')
         if not q.args.keep_work:
             for host in sorted({n['host'] for n in nodes} | {mnt['host']}):
-                g.run('delete-a13', host, f'test -e {shlex.quote(root)} || exit 0; if command -v edelete >/dev/null; '
-                      f'then edelete --force --delete {shlex.quote(root)}; else rm -rf -- {shlex.quote(root)}; fi', 900)
+                g.run('delete-a13', host, delete_command(root), 900)
     shared = g.fixture['distinct_hosts'] < len(nodes)
     return PASS, (f'3 -> 4 (join killed {interrupted}, retried: same member 4; SHARD2 {{1,2,3}} -> {{2,3,4}}) -> 5 through '
                   f'member 3 with the seed down (member 5 storage only); usable {cap3} -> {cap5} B; '
@@ -1972,7 +2025,7 @@ def g_c5(q, g):
         rc, text = q.control.client_stop(g, r)
         out['revoke_stop_s'] = round(time.monotonic() - t0, 3)
         if rc:
-            return FAIL, 'clean stop (no force) of the revoke mount refused or failed: ' + outcome_from_rc(rc, text)[1]
+            return stop_failure(q, text, 'clean stop (no force) of the revoke mount refused or failed: ', rc)
         mounted.remove(r)
         rc0, epoch, state = session_get(q, g, r['uuid'], 'session-after-unmount')
         out['revoke_session_after_unmount'] = dict(rc=rc0, epoch=epoch, state=state)
@@ -2017,7 +2070,7 @@ def orderly_restart(q, g, what):
     for mm in mounts:
         rc, text = q.control.client_stop(g, mm)
         if rc:
-            return FAIL, f'clean client stop of {mm["path"]} failed: {outcome_from_rc(rc, text)[1]}'
+            return stop_failure(q, text, f'clean client stop of {mm["path"]} failed: ', rc)
     t0 = time.monotonic()
     rc, text = q.control.stop_cluster(g)
     g.fixture['stop_seconds'] = round(time.monotonic() - t0, 3)
@@ -2254,7 +2307,7 @@ def g_e4(q, g):
         g.step('remount', f'client stop (no force) and remount of {m["host"]}:{m["path"]} (E4 cold reads)')
         rc, text = q.control.client_stop(g, m)
         if rc:
-            return FAIL, 'clean client stop failed: ' + outcome_from_rc(rc, text)[1]
+            return stop_failure(q, text, 'clean client stop failed: ', rc)
         rc, text = q.control.client_start(g, m)
         if rc:
             return FAIL, 'remount failed: ' + outcome_from_rc(rc, text)[1]
@@ -2528,7 +2581,7 @@ def write_summary(q, run, results, sums):
         verdict, rs = cells.get(row, ('NOTRUN', []))
         gates_txt = ', '.join(f'{r["gate"]} {r["verdict"]}' for r in rs) or \
             ('no gate selected in this run' if row in covered else 'not covered by this driver')
-        f3.append(f'| {row} | {verdict} ({gates_txt}; [summary](TODO-summary.md)) |')
+        f3.append(f'| {row} | {verdict} ({gates_txt}; [summary](summary-draft.md)) |')
     (out / 'f3-row.md').write_text(
         f'<!-- scripts/qualify.py {run["end"]}: F3 ledger column for {c.get("name")}; '
         f'raw {out} SHA256SUMS {sums["sha256"]} -->\n' + '\n'.join(f3) + '\n')
@@ -2542,7 +2595,8 @@ def write_summary(q, run, results, sums):
              'planned in [A11](a11-qualification-matrix-20261024.md); F3 topology ledger).')
     L.append(f'- Verdict: **{run["verdict"]}** ({run["counts"]["PASS"]} PASS, {run["counts"]["FAIL"]} FAIL, '
              f'{run["counts"]["NOTRUN"]} NOTRUN of {len(results)} gates).')
-    L.append(f'- F3 column: {column}.\n')
+    L.append(f'- F3 column: {column}.')
+    L.append(f'- Gate-sequence wall time (setup/cleanup included when controlled here): {run["seconds"]} s.\n')
     L.append('## Candidate and build identity\n')
     L.append(f'- Candidate commit: `{c.get("candidate") or "TODO (description gives none)"}`; '
              f'source tree `{c.get("source")}`; driver sha256 `{run["driver_sha256"][:16]}`.')
@@ -2836,6 +2890,39 @@ def pid_alive(pid):
         return True
 
 
+def node_identity(pid, addr, store):
+    return dict(pid=pid, start=Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19],
+                uid=os.getuid(), source=str(ROOT.resolve()), addr=addr, store=str(store.resolve()))
+
+
+def signal_owned_node(pid, sig, addr, store, identity_path):
+    """A stale/reused numeric pid is never authority to stop a process."""
+    expected = json.loads(identity_path.read_text())
+    if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
+        raise RuntimeError('owned node signalling requires Linux pidfd support')
+    fd = os.pidfd_open(pid)
+    try:
+        actual = node_identity(pid, addr, store)
+        if expected != actual or Path(f'/proc/{pid}').stat().st_uid != os.getuid():
+            raise RuntimeError('recorded node identity does not match live process')
+        # /proc cmdline can be empty briefly during exec. This matters for an
+        # interrupted join (--timeout 0); an empty read is not an identity.
+        end = time.monotonic() + 1
+        while True:
+            args = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
+            if args[0]:break
+            if time.monotonic() >= end:raise RuntimeError('node command identity remained unreadable')
+            time.sleep(.005)
+        binary = os.fsencode(str(ROOT / 'efsd'))
+        # A shebang launcher may prepend interpreter arguments. The recorded
+        # boot tick and pidfd still bind this to the child we started.
+        if binary not in args or os.fsencode(str(store)) not in args or os.fsencode(addr) not in args:
+            raise RuntimeError('recorded node command does not match live process')
+        signal.pidfd_send_signal(fd, sig)
+    finally:
+        os.close(fd)
+
+
 def h_node(a):
     """One efsd of a driver-owned private cluster, on this host from this
     tree: `start` launches it detached (seed: ADDR STORE; joiner: --join
@@ -2844,14 +2931,31 @@ def h_node(a):
     sends SIGTERM to the recorded pid and waits, SIGKILL only after
     --timeout (exit 124); `kill` sends SIGKILL at once (an interrupted join)."""
     store = Path(a.store)
+    for endpoint in (a.addr, a.join):
+        if not endpoint:continue
+        if not re.fullmatch(r'[^\s:]+:\d+', endpoint) or \
+                not 1024 < int(endpoint.rsplit(':', 1)[1]) < 65536 or \
+                int(endpoint.rsplit(':', 1)[1]) in RESERVED_PORTS:
+            print(f'_node: reserved or invalid endpoint {endpoint}')
+            return 2
     pidfile, logfile = store.parent / f'{store.name}.pid', store.parent / f'{store.name}.log'
     if str(store.resolve()).startswith('/data1/efs'):
         print('_node: stores may not live under /data1/efs')
         return 2
+    identity_path = pidfile.with_suffix('.identity.json')
     old = int(pidfile.read_text()) if pidfile.exists() and pidfile.read_text().strip().isdigit() else None
+    def send(sig):
+        try:
+            signal_owned_node(old, sig, a.addr, store, identity_path)
+            return True
+        except ProcessLookupError:
+            return True
+        except (OSError, ValueError, RuntimeError, KeyError, IndexError) as exc:
+            print(f'_node {a.op} {a.addr}: refusing signal: {exc}')
+            return False
     if a.op == 'kill':  # A13: an interrupted join (no orderly stop)
         if old and pid_alive(old):
-            os.kill(old, signal.SIGKILL)
+            if not send(signal.SIGKILL):return 2
             end = time.monotonic() + 30
             while time.monotonic() < end and pid_alive(old):
                 time.sleep(0.1)
@@ -2861,12 +2965,12 @@ def h_node(a):
         if not old or not pid_alive(old):
             print(f'_node stop {a.addr}: not running')
             return 0
-        os.kill(old, signal.SIGTERM)
+        if not send(signal.SIGTERM):return 2
         end = time.monotonic() + a.timeout
         while time.monotonic() < end and pid_alive(old):
             time.sleep(0.2)
         if pid_alive(old):
-            os.kill(old, signal.SIGKILL)
+            if not send(signal.SIGKILL):return 2
             print(f'_node stop {a.addr}: pid {old} ignored SIGTERM for {a.timeout}s; SIGKILL')
             return 124
         print(f'_node stop {a.addr}: pid {old} exited')
@@ -2886,6 +2990,7 @@ def h_node(a):
         log.flush()
         proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 env=env, start_new_session=True)
+    identity_path.write_text(json.dumps(node_identity(proc.pid, a.addr, store)))
     pidfile.write_text(f'{proc.pid}\n')
     host, port = a.addr.rsplit(':', 1)
     end = time.monotonic() + a.timeout
@@ -2901,7 +3006,7 @@ def h_node(a):
         except OSError:
             time.sleep(0.5)
     print(f'_node start {a.addr}: pid {proc.pid} alive, not listening after {a.timeout}s')
-    return 0
+    return 0 if a.timeout == 0 else 1
 
 
 # --------------------------------------------------------------------------
@@ -3067,6 +3172,7 @@ def main(argv=None):
     sub = p.add_subparsers(dest='cmd', required=True)
     r = sub.add_parser('run')
     r.add_argument('--cluster', type=Path)
+    r.add_argument('--candidate', help='exact frozen source commit for the evidence (9-40 hexadecimal characters)')
     r.add_argument('--loopback', type=int, default=0, help='start an owned private N-daemon cluster')
     r.add_argument('--port-base', type=int, help='loopback daemon ports (N of them; default 18740 '
                    'or the topology\'s)')
@@ -3166,6 +3272,8 @@ def main(argv=None):
             print(f'{gate.name:20} {gate.items:18} needs: {needs:34} {gate.doc}')
         return 0
 
+    if a.candidate and not re.fullmatch(r'[0-9a-f]{9,40}', a.candidate):
+        p.error('--candidate must be a 9-40 digit hexadecimal commit')
     a.deadline = parse_deadlines(a.deadline)
     described = None
     if a.matrix or a.topology:
@@ -3205,6 +3313,11 @@ def main(argv=None):
         for node in cluster.get('nodes', []):
             if not re.fullmatch(r'[^\s:]+:\d+', node.get('addr', '')):
                 p.error(f'node address {node.get("addr")!r} is not HOST:PORT')
+    if a.candidate:
+        described_candidate = cluster.get('candidate')
+        if described_candidate and not (described_candidate.startswith(a.candidate) or a.candidate.startswith(described_candidate)):
+            p.error('--candidate disagrees with the cluster description')
+        cluster['candidate'] = a.candidate
     base = int(cluster.get('private', {}).get('port_base', 18700))
     if any(port in RESERVED_PORTS for port in range(base, base + 40)):
         p.error(f'private port base {base} overlaps reserved ports')
@@ -3217,6 +3330,11 @@ def main(argv=None):
             p.error(f'unknown gate {name!r}; known: {", ".join(names)}')
     out.mkdir(parents=True, exist_ok=True)
     work.mkdir(parents=True, exist_ok=True)
+    if controller is not None and not a.plan:
+        # Tracker/LocalSearch must not crawl driver-owned FUSE fixtures.
+        # Its documented exclusion marker lives on the host, never in EFS.
+        # Busy mount checks still refuse every external holder they observe.
+        (work / '.nomedia').touch()
     q = Qualify(a, cluster, out, work, None, plugins)
     q.control = controller or (PrivateCluster(q) if cluster.get('private_cluster') else Controller(q))
     if loop:
@@ -3229,10 +3347,9 @@ def main(argv=None):
         if loop:
             loop.teardown()
         if not a.keep_work and not a.plan:
-            subprocess.run(f'if command -v edelete >/dev/null; then edelete --force --delete {shlex.quote(str(work))};'
-                           f' else rm -rf -- {shlex.quote(str(work))}; fi', shell=True, capture_output=True)
+            subprocess.run(delete_command(work), shell=True, capture_output=True)
         elif a.plan:
-            subprocess.run(['rm', '-rf', '--', str(work)])
+            subprocess.run(delete_command(work), shell=True, capture_output=True)
     print(f'qualify: {verdict}; raw {out}; summary {out / "summary-draft.md"}', flush=True)
     return {PASS: 0, FAIL: 1, NOTRUN: 3}[verdict]
 

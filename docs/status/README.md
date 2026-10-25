@@ -60,6 +60,16 @@ plugin. NUC's corrected 15-minute rehearsal is running (first clean return passe
 and candidate/base code-gate comparison remain NOTRUN/queued. No acceptance
 or new product-fix claim yet.
 
+[Task A: full three- and five-member Stage 2 rehearsal](task-a-20261025.md):
+**rehearsal complete with product findings; branch `agent/devel-task-a`,
+full matrices `c3c4fa2bd`, affected GC and final code gate `a6ba11c3a`.
+Final `make test-all`: 479 commands, 11 FAIL (all among the base's 12),
+6 NOTRUN.** Both full loopback runs: 21 PASS / 1 harness FAIL / 1 NOTRUN,
+about 66/61 minutes; GC sequencing corrected, affected GC PASS on one run,
+healthy cleanup BUSY on the other. Join retry refusal and rewrite/degraded-read
+EIO remain product findings. Real-host/RDMA qualification stays NOTRUN.
+Raw evidence remains external; private AMD test tree removed.
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
