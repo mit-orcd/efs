@@ -9,6 +9,7 @@ preserve logs, and refuse to reuse either output directory. No extra EFS syncs:
 fsync belongs only to the workload's application acknowledgement contract.
 """
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -144,7 +145,7 @@ def revoke_owned_session(invoke,uuid,old_epoch,bound,clock=time.monotonic,pause=
     def call(op,*args):
         remaining=end-clock()
         assert remaining>0, 'owned session cleanup exceeded original bound'
-        return invoke(op,uuid,*args,timeout=min(60,remaining))
+        return invoke(op,uuid,*args,timeout=remaining if op=='fence' else min(60,remaining))
     rc,text=call('fence')
     if rc==0:
         rows=re.findall(r'^raft-session status=0 rc=0 .*?op=fence .*?epoch=(\d+) state=1 ',text,re.M)
@@ -311,6 +312,7 @@ class Soak:
         return p.returncode, text
 
     def op(self, mount, req, timeout=None):
+        assert os.path.ismount(self.mounts[mount].path), 'refusing IO through an unmounted client path'
         req = dict(req, mount=str(self.mounts[mount].path))
         deadline = timeout or (self.a.churn_deadline if self.churning else self.a.io_deadline)
         rc, text = self.command([sys.executable, str(Path(__file__).resolve()), '--io'],
@@ -473,6 +475,17 @@ class Soak:
                       appends=sum(len(s) for s in self.appends.values()))
             (self.out / 'manifest.json').write_text(json.dumps(dict(files=manifest, appends=self.appends), indent=2))
 
+    @contextlib.contextmanager
+    def changing_mount(self, victim):
+        with self.mount_mu[victim]:
+            try:
+                yield
+            except BaseException:
+                # A failed revoke/remount must stop the writer before releasing
+                # its lock: otherwise it can fsync an ordinary local directory.
+                self.stop.set()
+                raise
+
     def churn(self, event):
         self.quiet(False)
         self.churning = True
@@ -483,7 +496,7 @@ class Soak:
             # Other mount continues writing; this mount drains before killing its
             # FUSE process. This tests session revoke/remount, not replay of an
             # application call interrupted by SIGKILL (covered by K15/K29 gates).
-            with self.mount_mu[victim]:
+            with self.changing_mount(victim):
                 m = self.mounts[victim]
                 uuid,epoch=owned_session(m.logp.read_text())
                 m.p.kill()

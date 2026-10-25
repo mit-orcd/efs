@@ -128,7 +128,7 @@ calls=[];counts={};tick=[0.]
 def clock():return tick[0]
 def pause(n):tick[0]+=n
 def invoke(op,uuid,*args,timeout):
- assert uuid==u and 0<timeout<=60
+ assert uuid==u and 0<timeout<=(300 if op=='fence' else 60)
  calls.append((op,args));tick[0]+=.0001
  if op=='fence':return 1,busy
  if op=='get':return 0,view(int(args[0]) if args else 4,bit=int(bool(args) and int(args[0]) in (1,7,2049)))
@@ -160,3 +160,23 @@ for mode in ('deadline','epoch','wrong-shard','io','not-empty'):
  except AssertionError:pass
  else:raise AssertionError(f'unsafe cleanup accepted: {mode}')
 print('owned session resume: frozen epoch, all touched shards, BUSY completion, no re-fence and negative controls PASS')
+
+# A failed mount transition must publish stop while still holding its lock.
+h=s.Soak.__new__(s.Soak);h.mount_mu=[threading.Lock()];h.stop=threading.Event()
+released=[]
+class ObservedLock:
+ def __enter__(self):return self
+ def __exit__(self,*args):released.append(h.stop.is_set())
+h.mount_mu=[ObservedLock()]
+try:
+ with h.changing_mount(0):raise AssertionError('simulated cleanup refusal')
+except AssertionError:pass
+assert released==[True] and h.stop.is_set(), 'writer could enter the unmounted path before stop'
+with tempfile.TemporaryDirectory() as d:
+ h.mounts=[types.SimpleNamespace(path=Path(d))]
+ h.command=lambda *a,**kw:(_ for _ in ()).throw(AssertionError('unmounted operation launched'))
+ try:h.op(0,dict(op='create',name='must-not-exist',token='x',size=1))
+ except AssertionError as e:assert 'unmounted client path' in str(e)
+ else:raise AssertionError('local backing directory accepted as an EFS mount')
+ assert not (Path(d)/'must-not-exist').exists()
+print('failed client transition: stop before unlock and unmounted IO refusal PASS')
