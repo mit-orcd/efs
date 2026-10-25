@@ -364,7 +364,8 @@ diagnostic build), `~/efs-trim*`, `~/efs-plat*` and `~/efs-final*`. The
 `~/efs-plat*` trees and the item-3 after-run tree carry `fc79fe086` merged
 into a temporary commit that is not on the branch. `TMPDIR=$HOME/efs-tmp`
 (XFS); loopback ports the tests choose. The host's live cluster mount, the
-17xxx ports and other users' processes were not touched. Some runs shared
+17xxx ports and other users' processes were not touched. The private
+trees and `~/efs-tmp` were deleted at the end of the session. Some runs shared
 the host, and the run table says which (load average 4–19 when they
 overlapped).
 
