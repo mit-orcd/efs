@@ -193,6 +193,19 @@ no serializable history even though each commits atomically.
 - **Crash recovery.** A recovering participant or a reader that finds an
   intent queries the coordinator's durable decision and drives the
   transaction to completion (L5).
+- **Leader change under the decision.** A coordinator whose DECIDE (COMMIT
+  or ABORT) or DROP fails because the coordinator group's leader stepped
+  down or lost quorum does not leave its PREPAREs to the 5 s recovery scan.
+  It hands the transaction to the host's finisher, which proposes DECIDE
+  ABORT at the group's next leader and RESOLVEs every participant. DECIDE is
+  decide-once in log order, so a COMMIT that survived the leader change is
+  ahead of that ABORT, answers it with PROTO, and is finished as COMMIT; a
+  COMMIT lost with the deposed leader's log is aborted, which is what
+  recovery would decide. A DECIDE that only ran out of its apply wait (BUSY)
+  is finished from the decision record; if none appears within one maximum
+  election timeout (1 s), the finisher decides ABORT the same way. The
+  intents are therefore resolved about one election after the step-down, not
+  after the recovery age (A11 finding 2).
 - **GC.** Resolved intents are reclaimed (L7-class). A **decision record**
   outlives its intents — a recovering participant must still be able to ask
   what happened — so it has its own explicit retirement rule

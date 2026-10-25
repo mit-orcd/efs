@@ -21,6 +21,20 @@ full acceptance are separate states.
 [Oct 24 merge: docs-review fixes, B6/D4, K37, A11 and the K33 live-harness port](a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `646a43041`: 467 commands, 2 FAIL from the merge (a duplicate `read_reprobe_down` stub in `test_get_integrity.py`; `test_b6_unavailable.py` still asserting no packing during a fault, which K37's policy allows with a degraded mark), both fixed in `12d2a7957` and rerun PASS on intel2; 15 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave6-20261024/`, `SHA256SUMS` `fd750fd9…d662`).** `add-node` and `add-storage` are gone (JOIN/ADD_STORAGE wire types removed). Live gates stay NOTRUN; every store needs a fresh format.
 
+[A11 finding 2: REPORT across a metadata leader step-down](a11-f2-report-stepdown-20261024.md):
+**FIXED, PASS (scoped, loopback), branch `claude/devel-report-stepdown-36888a` (`6654d5f15`), not merged; amd `make test-all` at `04562f14a`: 468 commands, 12 FAIL, all also failing on the base, 6 NOTRUN host limits; raw: amd `~/efs-artifacts/report-stepdown-20261024/`, `SHA256SUMS` `3857346d…41a6d6`.**
+The nuc "30 s REPORT timeout" was an 8 s BUSY stall (`recv_ms` printed the
+configured bound): a DECIDE COMMIT that failed NOT_PRIMARY at the step-down
+was handed to nobody, so its PREPAREs held the inode until the 5 s recovery
+scan. Such a DECIDE, and a failed DROP, now go to the finisher as ABORT at
+the new leader (decide-once keeps a COMMIT that survived); a BUSY DECIDE with
+no decision after 1 s is aborted the same way. Bound: a REPORT completes
+within 3 s per leader change crossed. Daemon test `tests/test_report_stepdown.py`
+(fault `EFS_FAULT_DECIDE_LOST`) 5 of 5 PASS, control FAIL (6.1 s);
+`append_failover.py` step-down reruns 5 of 5 PASS with 0 REPORT timeouts and
+no recovery-scan stall, slowest REPORT 1.8 s (base: stalls in 4 of 5, 2 over
+the bound). Multi-host, RDMA and orcd-mini NOTRUN.
+
 [Oct 24 merge: READ_VERIFY, K34, A7 removals, K35, K36](decisions.md#d42--alpha-10-decisions-taken-oct-24-user-with-review-conditions):
 **merged into devel; merged-tree `make test-all` on intel2 at `0f0a79eac`: 459 commands, 0 FAIL, 14 NOTRUN host limits (1,839 s; raw: intel2 `~/efs-artifacts/merge-wave5-0f0a79eac-20261024/`, `SHA256SUMS` `01b2d681…dcd9`).** The intermediate gate at `376369aa8` had one FAIL (a missing K34 stub in `test_get_integrity.py`, fixed in `1898c4c63`). K36's recovery mark is Raft tag 248 beside K35's tag 249. devops `8bc872e` and cluster `1402762` drop the removed settings (not pushed). Every store needs a fresh format. Live gates stay NOTRUN.
 
@@ -86,7 +100,8 @@ three-host RDMA). Driver fixes: the `b-checks` plugin called
 `b_checks.py` with options it rejects; E3 did not retry a step-down refused
 with "retry". Findings on nuc: a clean `client.sh stop` is refused when the
 unmount session revoke takes over 10 s (2 of 2 full private runs); one
-30 s REPORT timeout in append failover (8,000/8,000 records exact). The four
+30 s REPORT timeout in append failover (8,000/8,000 records exact; an 8 s
+BUSY stall behind a DECIDE lost to the step-down, [fixed](a11-f2-report-stepdown-20261024.md)). The four
 live harnesses now use the K33 CLI: on amd k14, k13 and fragment-integrity
 PASS, gc-reclamation FAIL on the same refused client stop. nuc `make test-all` at `8d858a791`:
 458 commands, 1 FAIL, 14 NOTRUN host limits; the FAIL,

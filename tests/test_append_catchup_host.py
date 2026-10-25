@@ -90,6 +90,7 @@ static int host_complete_single_append(struct efs_raft_host *h,efs_ino_t ino,uin
  const struct efs_meta_row *row,const struct efs_opid *owner,int *hint,int *handled){
  (void)h;(void)ino;(void)sz;(void)row;(void)owner;(void)hint;*handled=0;return 0;
 }
+static __thread const char *host_resolve_why;
 ''' + function('host_resolve_caught_up') + '\n' + function('apply_append_catchup_cmd') + r'''
 static void reset(void){
  watermark=80000;remaining=20000;completed=proposals=retirements=authorities=apply_calls=0;
@@ -108,12 +109,13 @@ int main(void){
   metadata_error=EFS_ERR_IO;assert(apply_append_catchup_cmd(&h,captured,captured_length,2)==EFS_ERR_IO&&apply_calls==2);
   reset();assert(!host_resolve_caught_up(&h,11,40000,owned?&id:NULL,&hint));
   assert(proposals==1&&completed==10000&&remaining==10000&&!retirements);
-  reset();proposal_error=EFS_ERR_STALE;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_BUSY&&!completed&&!retirements);
+  reset();proposal_error=EFS_ERR_STALE;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_BUSY&&!completed&&!retirements&&!strcmp(host_resolve_why,"catchup"));
   reset();proposal_error=EFS_ERR_IO;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_IO&&!completed&&!retirements);
-  reset();retirement_error=EFS_ERR_IO;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_IO&&completed==20000&&proposals==1);
+  reset();retirement_error=EFS_ERR_IO;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_IO&&completed==20000&&proposals==1&&!strcmp(host_resolve_why,"retire"));
   retirement_error=0;assert(!host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)&&proposals==1&&retirements==2);
-  reset();authority_error=EFS_ERR_BUSY;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_BUSY&&!proposals);
-  reset();inode_error=EFS_ERR_NOT_FOUND;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_BUSY&&!proposals);
+  /* A11 finding 2: the refusing stage is named for the report resolve line. */
+  reset();authority_error=EFS_ERR_BUSY;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_BUSY&&!proposals&&!strcmp(host_resolve_why,"authority"));
+  reset();inode_error=EFS_ERR_NOT_FOUND;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_BUSY&&!proposals&&!strcmp(host_resolve_why,"inode"));
   reset();state_error=EFS_ERR_IO;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_IO&&!proposals);
   reset();watermark=0;assert(!host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)&&!proposals&&!authorities);
  }

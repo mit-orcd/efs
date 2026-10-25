@@ -2,7 +2,11 @@
 """W64: a coordinator whose DECIDE ABORT fails across a leader change hands the
 transaction to the finisher, which re-proposes ABORT at the new leader and
 RESOLVEs it promptly instead of leaving PREPAREs for the 5 s recovery scan.
-COMMIT decisions are never converted; a BUSY COMMIT keeps the read-only finish."""
+A11 finding 2: a COMMIT whose DECIDE failed across a leader change
+(NOT_PRIMARY) is handed off the same way; decide-once keeps a COMMIT that
+survived (PROTO, resolved as COMMIT). A BUSY COMMIT keeps the read-only
+finish, which decides ABORT itself once no decision appeared within
+HOST_FIN_DECIDE_NS (the COMMIT entry was truncated)."""
 import os, shlex, subprocess, tempfile
 from pathlib import Path
 root = Path(__file__).resolve().parents[1]
@@ -29,6 +33,7 @@ code = r'''
 #define HOST_DECIDE_MAX 64
 #define HOST_FIN_ABORT 2
 #define HOST_FIN_MAX_NS (10ull*1000000000ull)
+#define HOST_FIN_DECIDE_NS (1000000000ull)
 #define HOST_FIN_POLL_US 5000
 #define EFS_MD_CMD_DECIDE 9
 #define EFS_MD_CMD_RESOLVE 10
@@ -75,9 +80,14 @@ int main(void){
  /* Decided elsewhere / reclaimed: nothing to hand off. */
  reset();propose_wait_rc=EFS_ERR_PROTO;host_resize_decide(&ctx,&t,&parts,EFS_TXN_ABORT);assert(finished_kind==-1);
  reset();propose_wait_rc=EFS_ERR_STALE;host_resize_decide(&ctx,&t,&parts,EFS_TXN_ABORT);assert(finished_kind==-1);
- /* COMMIT is never turned into ABORT: BUSY keeps the read-only finish, other errors nothing. */
+ /* A BUSY COMMIT keeps the read-only finish; a COMMIT lost to the step-down
+  * (NOT_PRIMARY, IO) is handed off as ABORT; decided or reclaimed: nothing. */
  reset();propose_wait_rc=EFS_ERR_BUSY;host_resize_decide(&ctx,&t,&parts,EFS_TXN_COMMIT);assert(finished_kind==0);
- reset();propose_wait_rc=EFS_ERR_NOT_PRIMARY;host_resize_decide(&ctx,&t,&parts,EFS_TXN_COMMIT);assert(finished_kind==-1);
+ reset();propose_wait_rc=EFS_ERR_NOT_PRIMARY;host_resize_decide(&ctx,&t,&parts,EFS_TXN_COMMIT);assert(finished_kind==HOST_FIN_ABORT);
+ reset();propose_wait_rc=EFS_ERR_IO;host_resize_decide(&ctx,&t,&parts,EFS_TXN_COMMIT);assert(finished_kind==HOST_FIN_ABORT);
+ reset();propose_wait_rc=EFS_ERR_PROTO;host_resize_decide(&ctx,&t,&parts,EFS_TXN_COMMIT);assert(finished_kind==-1);
+ reset();propose_wait_rc=EFS_ERR_STALE;host_resize_decide(&ctx,&t,&parts,EFS_TXN_COMMIT);assert(finished_kind==-1);
+ reset();propose_wait_rc=EFS_OK;host_resize_decide(&ctx,&t,&parts,EFS_TXN_COMMIT);assert(finished_kind==-1);
  reset();propose_wait_rc=EFS_OK;host_resize_decide(&ctx,&t,&parts,EFS_TXN_ABORT);assert(finished_kind==-1);
  /* Finisher: ABORT survives a ~1 s election and resolves every participant well inside 5 s. */
  struct host_fin_item it={.t=t,.parts=parts,.coord=1,.born_ns=0,.retire_only=HOST_FIN_ABORT};
@@ -86,7 +96,7 @@ int main(void){
  assert(clock_ns<2000000000ull);
  /* Already decided ABORT by recovery: idempotent, still resolves. */
  reset();decided=EFS_TXN_ABORT;host_fin_one(&h,&it);assert(resolved[5]==1&&retired==1);
- /* Already decided COMMIT (impossible from this coordinator): resolve COMMIT, never ABORT. */
+ /* Already decided COMMIT (a COMMIT that survived the step-down): resolve COMMIT, never ABORT. */
  reset();decided=EFS_TXN_COMMIT;host_fin_one(&h,&it);assert(decided==EFS_TXN_COMMIT&&resolved[1]==1);
  /* Reclaimed: stop without resolving. */
  reset();forced_rc=EFS_ERR_STALE;host_fin_one(&h,&it);assert(!retired&&!resolved[1]);
@@ -96,7 +106,15 @@ int main(void){
  /* Retire-only and ordinary modes unchanged. */
  reset();it.retire_only=1;host_fin_one(&h,&it);assert(retired==1&&!propose_calls);
  reset();it.retire_only=0;decided=EFS_TXN_COMMIT;host_fin_one(&h,&it);assert(resolved[2]==1&&retired==1);
- puts("finisher ABORT handoff: coordinator leader change aborts promptly, COMMIT never converted, idempotent with recovery PASS");
+ /* BUSY COMMIT truncated by a leader change: no decision appears, so the
+  * read-only finish decides ABORT itself after HOST_FIN_DECIDE_NS (plus a
+  * ~1 s election) and resolves, well inside 5 s; never before the grace. */
+ reset();it.retire_only=0;election=200;host_fin_one(&h,&it);
+ assert(decided==EFS_TXN_ABORT&&resolved[1]==1&&resolved[2]==1&&resolved[5]==1&&retired==1);
+ assert(clock_ns>HOST_FIN_DECIDE_NS&&clock_ns<3000000000ull);
+ /* Reclaimed while waiting: stop. */
+ reset();it.retire_only=0;forced_rc=EFS_ERR_STALE;host_fin_one(&h,&it);assert(!retired&&!resolved[1]);
+ puts("finisher ABORT handoff: coordinator leader change aborts promptly, a surviving COMMIT stays COMMIT, idempotent with recovery PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-fin-abort-') as d:

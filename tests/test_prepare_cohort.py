@@ -37,7 +37,8 @@ static unsigned record(const uint8_t *cmd,uint32_t n,uint8_t group){
   assert(efs_raft_shard_group(rd32(cmd+at+17))==group);record(cmd+at,len,group);at+=len;}
  assert(at==n && n<=EFS_TXN_PREPARE_MAX);return count;
 }
-static int decide_rc,wait_rc;static unsigned decided,finished,waited,retired;
+#define HOST_FIN_ABORT 2
+static int decide_rc,wait_rc;static unsigned decided,finished,waited,retired,aborted;
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){return &h->r[g];}
 int efs_raft_role(const struct efs_raft *r){return r->role;}
 uint32_t efs_raft_voters(const struct efs_raft *r){return r->voters;}
@@ -60,7 +61,7 @@ static uint32_t pack_decide(uint8_t *cmd,const struct efs_txid *t,uint32_t sh,in
 static void pack_resolve(uint8_t *cmd,const struct efs_txid *t,uint32_t sh,int state){(void)t;assert(state==EFS_TXN_COMMIT);memset(cmd,0,22);
  cmd[0]=EFS_MD_CMD_RESOLVE;cmd[17]=(uint8_t)(sh>>24);cmd[18]=(uint8_t)(sh>>16);cmd[19]=(uint8_t)(sh>>8);cmd[20]=(uint8_t)sh;cmd[21]=(uint8_t)state;assert(decided);}
 static int host_propose_wait(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,uint32_t n,int *hint){(void)h;(void)group;(void)cmd;(void)hint;assert(n==22 && !sequence);if(!decide_rc)decided++;return decide_rc;}
-static void host_fin_add(struct efs_raft_host *h,const struct efs_txid *t,const struct efs_txn_parts *p,uint32_t coord,int retire_only){(void)h;(void)t;(void)p;(void)coord;if(retire_only)retired++;else finished++;}
+static void host_fin_add(struct efs_raft_host *h,const struct efs_txid *t,const struct efs_txn_parts *p,uint32_t coord,int retire_only){(void)h;(void)t;(void)p;(void)coord;if(retire_only==HOST_FIN_ABORT)aborted++;else if(retire_only)retired++;else finished++;}
 static int host_wait_refs(struct efs_raft_host *h,struct host_idx_ref *refs,int n,int *hint){(void)h;(void)hint;assert(decided);waited++;for(int i=0;i<n;i++)assert(refs[i].idx==(uint64_t)i+1 && refs[i].term==7);return wait_rc;}
 '''+s[ba:bb]+s[ca:cb]+r'''
 struct host_resize_ctx {struct efs_raft_host *host;int *hint;};
@@ -69,7 +70,7 @@ uint32_t efs_txn_coordinator(const struct efs_txid*t,const struct efs_txn_parts*
 static int host_report_release(struct efs_raft_host *h,int held){
  assert(held && h->disk->depth==1);h->disk->depth--;releases++;return sync_fail?EFS_ERR_IO:0;
 }
-static void reset(void){sequence=holds=releases=fail_call=sync_fail=decided=finished=waited=retired=commands=0;decide_rc=wait_rc=0;}
+static void reset(void){sequence=holds=releases=fail_call=sync_fail=decided=finished=waited=retired=aborted=commands=0;decide_rc=wait_rc=0;}
 /* Every shard resolved exactly once, each group's shards in part order. */
 static void resolved_in_order(const struct efs_txn_parts *parts){
  assert(commands==parts->n);
@@ -133,7 +134,11 @@ int main(void){
  reset();assert(!host_txn_commit(&h,&tx,&two,7,&hint) && sequence==2 && entry_commands[0]==1 && entry_commands[1]==1);
  resolved_in_order(&two);
  reset();decide_rc=EFS_ERR_BUSY;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_BUSY && !sequence && finished==1);
- reset();decide_rc=EFS_ERR_STALE;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_STALE && !sequence && !finished);
+ reset();decide_rc=EFS_ERR_STALE;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_STALE && !sequence && !finished && !aborted);
+ /* A11 finding 2: a DECIDE lost to a step-down goes to the finisher as ABORT
+  * (decide-once keeps a surviving COMMIT); decided elsewhere: nothing. */
+ reset();decide_rc=EFS_ERR_NOT_PRIMARY;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_NOT_PRIMARY && !sequence && !finished && aborted==1);
+ reset();decide_rc=EFS_ERR_PROTO;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_PROTO && !sequence && !finished && !aborted);
  reset();fail_call=2;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_NOT_PRIMARY && finished==1 && !waited && !disk.depth);
  reset();sync_fail=1;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_IO && finished==1 && !waited && !disk.depth);
  reset();wait_rc=EFS_ERR_STALE;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_STALE && finished==1 && waited==1 && !disk.depth);

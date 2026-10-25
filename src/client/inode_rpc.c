@@ -2990,6 +2990,7 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
         uint32_t plen = 0;
         if (recv_ms > 0)
             efs_conn_set_recv_timeout(conn, recv_ms);
+        unsigned long long t_recv = rpc_prof_now_us();
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
@@ -2998,10 +2999,18 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
             rpc_tl_lost++;
             efs_client_conn_drop(nid, conn);
             if (attempt + 1 < attempts) {
+                /* recv_ms is the configured bound and wait_ms what this
+                 * receive waited; cut= says what ended it: the call's
+                 * deadline (a sync REPORT's 8 s budget), the bound, or the
+                 * connection. A11 finding 2 read recv_ms=30001 on a receive
+                 * the 8 s budget had cut. */
+                int bound = recv_ms > 0 ? recv_ms : EFS_IO_TIMEOUT_MS;
+                unsigned long long waited = (rpc_prof_now_us() - t_recv) / 1000ull;
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
-                        "req_len=%u recv_ms=%d nid=%u id=%s\n",
-                        type, attempt, rc, req_len,
-                        recv_ms > 0 ? recv_ms : EFS_IO_TIMEOUT_MS, nid,
+                        "req_len=%u recv_ms=%d wait_ms=%llu cut=%s nid=%u id=%s\n",
+                        type, attempt, rc, req_len, bound, waited,
+                        rpc_past_deadline() ? "deadline" :
+                        waited + 50u >= (unsigned long long)bound ? "bound" : "conn", nid,
                         rpc_req_ident(type, req, req_len, ident, sizeof(ident)));
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                     return EFS_ERR_BUSY;
