@@ -339,6 +339,12 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
   capacity, stable existing data placement, interrupted-join recovery and
   single-loss verification. Always 2+1. Online removal remains deferred.
   Current D39 fixed-membership code/model does not close this gate.
+  **Oct 25: real-host gate `a13-node-addition` in `scripts/qualify.py`
+  ([Stage 2 gates](stage2-gates-20261024.md)); loopback dry run PASS on xorinox,
+  real hosts NOTRUN (parent). It grows its own
+  cluster 3 → 4 (a join killed and retried: the same member) → 5 with the seed
+  down, under a client load: SHARD2 `{1,2,3}` → `{2,3,4}`, usable capacity
+  of the added quotas, new bytes on the added members, payloads exact.**
 
 ## A6–A12. One supported behavior: audit and remove A/B modes
 
@@ -444,8 +450,9 @@ alternatives reduces both product complexity and the supported test matrix.
   distinct hosts (six full runs); 6–16 sampled (loopback 6–8 only). Every
   Stage 2 item is mapped to its gates, cells, duration and prerequisites in
   `scripts/qualify_matrix.json`; `qualify.py run --matrix … --topology NAME`
-  runs one topology. Seven gates are NOTRUN stubs (A13 real host, B6, C5
-  live, D1, D3 load, D4, E4). **Blocks A4:** no distinct-host topology can
+  runs one topology. No stub gate is left (Oct 25: A13, C5, D1/D2, D3 and E4
+  are [real gates](stage2-gates-20261024.md), loopback-3 PASS; B6 and D4 since
+  their merge). **Blocks A4:** no distinct-host topology can
   form today (firewalld on the Rocky hosts allows only ssh; amd has no wired
   link; no RDMA fabric across three hosts).
 - [ ] **A12 — Closure.** Every A/B selector has either been removed with its
@@ -622,17 +629,32 @@ facts for A6, not decisions.
 - [ ] **C5** Run the current apply/protocol/session correctness gates associated
   with W127–W134/W72 and D25 where applicable. Carry forward scoped PASS evidence,
   but verify the integrated candidate and retain remaining limitations.
+  **Oct 25: real-host gate `c5-protocol-live` in `scripts/qualify.py`
+  ([Stage 2 gates](stage2-gates-20261024.md)); loopback dry run PASS on xorinox,
+  real hosts NOTRUN (parent): W133
+  declaration gate and W140 tags over the wire on every member, removed
+  settings refused on every host, K5 session fence and W72 unmount revoke.**
 
 ## D. Packing, reclaim and enabled `.efs`
 
 - [ ] **D1** Verify small-file packing produces real packed mappings and inventory
   savings, with exact reads before/after packing and after orderly cold restart.
+  **Oct 25: real-host gate `d1-packing` in `scripts/qualify.py`
+  ([Stage 2 gates](stage2-gates-20261024.md)); loopback dry run PASS on xorinox,
+  real hosts NOTRUN (parent).**
 - [ ] **D2** Exercise overwrite/truncate/unlink and compaction of shared segments;
   retained files stay intact, retired references are reclaimed exactly once and
   space eventually becomes reusable without deleting live fragments.
+  **Oct 25: `d1-packing` overwrites, truncates and unlinks packed files and
+  requests compaction on every topology ([Stage 2 gates](stage2-gates-20261024.md),
+  loopback PASS); `gc-reclamation` FAILs on `merge-wave6` and its base
+  (`fsync acknowledged after unclean stop`).**
 - [ ] **D3** Run `.efs` commands/options and concurrent query suites while ordinary
   I/O continues. Check result correctness, authorization, freshness and bounded
   refusal/retry behavior, including initial catalog creation and restart.
+  **Oct 25: real-host gate `d3-efs-load` in `scripts/qualify.py`
+  ([Stage 2 gates](stage2-gates-20261024.md)); loopback dry run PASS on xorinox,
+  real hosts NOTRUN (parent).**
 - [ ] **D4** Demonstrate bounded progress with packing, indexing and KV maintenance
   active: foreground deadlines pass, memory/queues remain bounded and background
   work progresses. Diagnose repeated stalls, rather than relaxing tests to pass.
@@ -668,6 +690,10 @@ facts for A6, not decisions.
 - [ ] **E4** Run small-file scale and large-file fixtures with declared counts,
   quotas and concurrency; report actual completed versus target counts. Include
   cold reads, concurrent query load and delete/reclaim checks.
+  **Oct 25: real-host gate `e4-scale` in `scripts/qualify.py`
+  ([Stage 2 gates](stage2-gates-20261024.md)); loopback dry run PASS on xorinox,
+  real hosts NOTRUN (parent); the
+  defaults (5,000 small and 2 × 256 MiB files per member) have not run.**
 - [ ] **E5** Moved to Stage 3 as **P1**.
 
 ## P. Stage 3: performance

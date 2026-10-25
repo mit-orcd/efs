@@ -3,8 +3,10 @@
 **Verdict: plan PASS (scoped): the matrix, the Stage 2 item plan and the
 runnable topologies are published; every gate the plan names exists and
 `qualify.py plan` checks that it does. Qualification itself NOTRUN: no
-distinct-host topology can run today (A4 blocked by host networking), and 7 of
-the planned gates are NOTRUN stubs.** Branch `claude/devel-a11-matrix-2bfd14`
+distinct-host topology can run today (A4 blocked by host networking). The
+NOTRUN stubs are gone: B6 and D4 became gates in the B6/D4 merge and A13, C5,
+D1, D3 and E4 in the [Stage 2 gates](stage2-gates-20261024.md) branch
+(loopback-3 PASS end to end, not merged).** Branch `claude/devel-a11-matrix-2bfd14`
 on `merge-wave5` (`376369aa8`); not merged, not pushed.
 
 ## Purpose
@@ -91,7 +93,7 @@ item that does not exist.
 | A3 | `topology` | same | under 1 min | K28 (merged); clusters of 3, 4, 5 |
 | A4 | `topology` | same | under 1 min | one efsd per distinct host: **blocked today** (below) |
 | A5 | `topology` (profile, members, storage roots), every gate's fixture | same | recorded by every run | fresh format when the candidate changed a store, log or fragment format since the cluster was formatted |
-| A13 | `a13-node-addition` **(stub)**, code | 3→4→5 × TCP, RDMA | about 30 min (estimate) | driver-owned cluster (membership changes), spare hosts, fresh format |
+| A13 | `a13-node-addition` (real gate since [Stage 2 gates](stage2-gates-20261024.md); was a stub: own 3-member cluster grown to 4 with an interrupted join retried and to 5 with the seed down, under a client load), code | 3→4→5 × TCP, RDMA | about 1 min on loopback; 5–10 min on hosts (estimate) | driver-owned cluster (or an `a13` block), `--allow restart`, fresh format |
 | B1–B4 | `b-checks` (`scripts/b_checks.py`) | 3/4/5 × TCP, RDMA | about 2–10 min (pack wait up to 300 s) | quiet cluster; mounts on one host; `--store` only where stores are local |
 | B2 | also `fragment-integrity` (`tests/live/fragment_integrity.py`) | once (TCP) | up to 1 h | none |
 | B5 | `b-checks`, code (`tests/test_b_geometry.py`: full member, growth) | 3/4/5 × TCP, RDMA | within `b-checks` | quiet cluster (cost figures count every writer) |
@@ -100,22 +102,24 @@ item that does not exist.
 | C2 | `posix-core`, `posix-durability` | same | plus 1 min | `--allow remount` |
 | C3 | `posix-2client`, `posix-core`, `append-failover` | same; append-failover once | append-failover about 17 min | — |
 | C4 | `append-failover`, `k14-torn-read`, `k13-tickets` | once (TCP) | up to 3 h (deadlines) | an `EFS_FAULTS` build for K14 phases beyond 1 2 3 7 |
-| C5 | code; `c5-protocol-live` **(stub)** | once; stub per cell | `make test-all` about 30 min | candidate tree on the code-gate host |
-| D1 | `d1-packing` **(stub)**; `b-checks` B4 shows packed segments | 3/4/5 × TCP, RDMA | about 20 min (estimate) | `--allow restart` |
-| D2 | `gc-reclamation` (`tests/live/gc_reclamation.py`) | once (TCP) | up to 2 h | a clean `client.sh stop` after a long unmount revoke (finding 1) |
-| D3 | `posix-extras`; `d3-efs-load` **(stub)** for the load part (`tests/live/efs_commands_load.py` exists, not wired) | 3/4/5 × TCP, RDMA | extras under 1 min; load about 30 min (estimate) | `.efs` catalog indexed (per-case timeout 150 s on a fresh directory) |
+| C5 | code; `c5-protocol-live` (real gate since [Stage 2 gates](stage2-gates-20261024.md); was a stub: wire declaration gate and fail-closed tags on every member, removed settings refused on every host, session fence, clean-unmount revoke) | once; live gate per cell | `make test-all` about 30 min; live gate under 1 min | candidate tree on every host |
+| D1 | `d1-packing` (real gate since [Stage 2 gates](stage2-gates-20261024.md); was a stub: packed rows, stored-object savings, exact before/after packing and after a cold restart); `b-checks` B4 | 3/4/5 × TCP, RDMA | about 3 min plus an orderly restart | `--allow restart` |
+| D2 | `d1-packing` (overwrite/truncate/unlink of packed files and compaction, every cell); `gc-reclamation` (`tests/live/gc_reclamation.py`) | every cell; gc once (TCP) | up to 2 h | a clean `client.sh stop` after a long unmount revoke (finding 1) |
+| D3 | `posix-extras`; `d3-efs-load` (real gate since [Stage 2 gates](stage2-gates-20261024.md); was a stub: `.efs` find/ls/stats and an invalid request in loops under create/fsync/rename I/O) | 3/4/5 × TCP, RDMA | extras under 1 min; load about 10 min | `.efs` catalog indexed (per-case timeout 150 s on a fresh directory) |
 | D4 | `d4-progress` (real gate since the B6/D4 merge; was a stub) | same | about 1 h (estimate) | E4 fixture running |
 | E1 | `e1-manifest` | same | about 1 min plus an orderly restart | `--allow restart`; stop/start control |
 | E2 | `e2-client-stop`, `posix-durability`, `e1-manifest` | same | under 1 min | `--allow remount`; mounts idle |
 | E3 | `e3-turnover` | same | about 1 min | `--allow turnover,restart`; member stop/start for catch-up (driver-owned clusters only) |
-| E4 | `e4-scale` **(stub)** | same | hours (declared counts) | quota for the declared counts |
+| E4 | `e4-scale` (real gate since [Stage 2 gates](stage2-gates-20261024.md); was a stub: N × 5,000 small and N × 2 × 256 MiB files, cold reads under queries, delete/reclaim) | same | 15–40 min at the defaults (estimate) | quota for the declared counts (twice free) |
 
-### Gates the plan names that did not exist: stubs added
+### Gates the plan names that did not exist: stubs added, now replaced
 
-Each reports NOTRUN with its reason (`no harness yet: …`) until a harness
-replaces it, so a run can never count the item as PASS:
-`a13-node-addition`, `c5-protocol-live`, `d1-packing`,
-`d3-efs-load`, `e4-scale`.
+This page added NOTRUN stubs (`no harness yet: …`) for `a13-node-addition`,
+`b6-unavailable`, `c5-protocol-live`, `d1-packing`, `d3-efs-load`,
+`d4-progress` and `e4-scale`, so a run could never count the item as PASS.
+All are real gates now ([B6/D4](b6-d4-unavailable-progress-20261024.md),
+[Stage 2 gates](stage2-gates-20261024.md)); `qualify.py plan` fails an item
+that no `qualify:` gate decides.
 
 New real gate: `topology` (A3, A4, A5) compares the members `efs-mgmt status`
 reports with the description, requires all up, counts distinct hosts (NOTRUN
@@ -348,8 +352,8 @@ addresses of a private topology).
 
 - A11's qualification part stays open: no distinct-host run is possible until
   the host gaps above are closed; every cell is NOTRUN.
-- 7 stub gates must become harnesses before B6, D1, D3 (load), D4, E4, A13
-  (real host) and C5 (per topology) can PASS.
+- The 7 stub gates are real gates now (B6/D4 merge; [Stage 2
+  gates](stage2-gates-20261024.md)); their real-host runs are NOTRUN.
 - D2 (`gc-reclamation`) live evidence is blocked by finding 1: the POSIX
   phase passes, then `client.sh stop` is refused.
 - The live harnesses run on TCP loopback only; RDMA for them is not driven.
