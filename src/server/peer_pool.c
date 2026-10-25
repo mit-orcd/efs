@@ -53,12 +53,11 @@ static pthread_mutex_t g_peers_mu = PTHREAD_MUTEX_INITIALIZER;
 /* Read without g_peers_mu by peer_slot_for and server_peer_note_up, written
  * under it: atomic (TSan, F1 gate). */
 static int g_peers_inited;
-#define PEERS_INITED() __atomic_load_n(&g_peers_inited, __ATOMIC_ACQUIRE)
 
 void server_peer_pool_init(void)
 {
     pthread_mutex_lock(&g_peers_mu);
-    if (PEERS_INITED()) {
+    if (__atomic_load_n(&g_peers_inited, __ATOMIC_ACQUIRE)) {
         pthread_mutex_unlock(&g_peers_mu);
         return;
     }
@@ -75,7 +74,7 @@ void server_peer_pool_init(void)
 void server_peer_pool_shutdown(void)
 {
     pthread_mutex_lock(&g_peers_mu);
-    if (!PEERS_INITED()) {
+    if (!__atomic_load_n(&g_peers_inited, __ATOMIC_ACQUIRE)) {
         pthread_mutex_unlock(&g_peers_mu);
         return;
     }
@@ -102,7 +101,7 @@ static struct peer_slot *peer_slot_for(const char *host, uint16_t port)
 {
     if (!host || !*host || port == 0)
         return NULL;
-    if (!PEERS_INITED())
+    if (!__atomic_load_n(&g_peers_inited, __ATOMIC_ACQUIRE))
         server_peer_pool_init();
 
     pthread_mutex_lock(&g_peers_mu);
@@ -137,7 +136,7 @@ void server_peer_note_up(const char *host, uint16_t port)
 {
     struct peer_slot *p = NULL;
 
-    if (!host || !*host || port == 0 || !PEERS_INITED())
+    if (!host || !*host || port == 0 || !__atomic_load_n(&g_peers_inited, __ATOMIC_ACQUIRE))
         return;
     pthread_mutex_lock(&g_peers_mu);
     for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
