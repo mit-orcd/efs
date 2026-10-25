@@ -8,7 +8,7 @@ case on a loopback cluster, record each disagreement, fix the docs (never
 the code), and add a `make test` check that keeps the CLI help and the
 user docs from drifting apart again.
 
-**Verdict: docs updated; docs gate PASS; nuc `make test-all` GATE_RESULT.**
+**Verdict: docs updated; docs gate PASS; nuc `make test-all` FAIL 4 at 8 jobs, of which 3 PASS alone and 1 (`test_report_stepdown.py`, untouched code) is intermittent (2 of 4 alone); no failure is in what this branch changed.**
 No product code was changed. The pages follow the user's Oct 25 scope
 change D43 (expiry and `.efs` ship in alpha 1.0); at this base expiry is
 still compiled out and being re-enabled (U19). Two findings need the user:
@@ -53,7 +53,7 @@ cosmetic script behavior recorded for a later change.
   `tests/test_cli_docs.py`.
 - **Raw output:** nuc `~/efs-artifacts/docs-audit-20261025/` (`audit.log`,
   `audit2.log`, the two scripts, the daemon and client logs; `SHA256SUMS`,
-  sha256 `8fb80bf4677b722fc5fa8657dca659922f7433dc8c4ac19ec4f281e948ff3e98`, 16 files, 2.8 MB). The stores and the trees were deleted.
+  sha256 `51666fda2beac092869fc7894e01f33f0335c005f5621000fa6e31326e805bf5`, 32 files, 3.3 MB, including the gate's `summary.txt`, `timings.tsv`, the four failure logs and the reruns under `gate/`). The stores and the trees were deleted.
 
 ## Findings
 
@@ -116,7 +116,35 @@ change when the re-enabling removes the switch.
 
 - **Docs gate:** `cd docs && python3 gen-architecture-full.py`, then
   `python3 docs/check-architecture.py`: all 5 checks pass.
-- **`make test-all` on nuc:** GATE_DETAILS.
+- **`make test-all` on nuc** at `e1ce4a4d4` (this branch's first commit;
+  `git archive` under `$HOME`, `EFS_GIT_ID=e1ce4a4d4 EFS_TEST_JOBS=8 bash
+  scripts/make_test_summary.sh` in `screen`): `TOTAL 472 FAIL 4 NOTRUN 14
+  STATUS FAIL (990s) BUILD 37s`. The 14 NOTRUN are host limits (no RDMA
+  device: `test_rdma_xprt`, `test_rdma_segmented` ×7, the RDMA path of
+  `test_declaration_gate`; no valgrind: `test_rdma_memcheck.py`,
+  `test_leak_gate.py`; `~/git/cluster` absent: `test_cluster_stop.py`;
+  `test_stalled_compactor` needs `EFS_FAULTS=1`; the runner's own self-test
+  prints NOTRUN by design). The four failures, each rerun alone on the same
+  tree:
+
+  | Test | In the gate (8 jobs) | Alone |
+  | --- | --- | --- |
+  | `tests/test_b_geometry.py` | timeout after 900 s | PASS (435 s) |
+  | `tests/test_b6_unavailable.py` | `W154 after the restore: degraded count 10` | PASS (368 s) |
+  | `tests/test_d4_progress.py` | two `write+fsync 1 MiB` over 10 s (39.9 s, 10.5 s) | PASS (110 s) |
+  | `tests/test_report_stepdown.py` | `_queue.Empty` after 600 s | 2 of 4 PASS; the 2 FAIL exceed its 3 s bound (write max 5.86 s and 5.42 s) |
+
+  None of them involves the docs or `tests/test_cli_docs.py`; the branch
+  changes no product code, so they run the same code as devel. The first
+  three are the disk-bound daemon tests that slow down beside other
+  fsync-heavy tests on nuc's single disk; `test_report_stepdown.py`'s
+  bound is a known intermittent on loaded hosts (a separate session works on
+  flaky tests). `make test` alone on the same tree: PASS (about 3.5 min with
+  the relink), `tests/test_cli_docs.py` 0.1 s.
+- **D43 commit `19f159154`** (expiry in the drift check): on nuc,
+  `tests/test_cli_docs.py` PASS (39 commands), `tests/test_make_test_recipe.py`
+  PASS, `docs/check-architecture.py` PASS. The full gate was not repeated
+  for this docs-and-test-only commit.
 
 ## Limitations of this audit
 

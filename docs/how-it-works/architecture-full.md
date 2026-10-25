@@ -1599,7 +1599,7 @@ full acceptance are separate states.
 ### Recent evidence and remaining acceptance
 
 [Oct 25 user-docs audit against `ec3e09306`: every command, option, workflow and failure case exercised on a loopback cluster](../status/docs-audit-20261025.md):
-**docs updated, PASS (docs gate; nuc `make test-all` see the page); no product code changed.**
+**docs updated; docs gate PASS; nuc `make test-all` at `e1ce4a4d4`: 472 commands, 4 FAIL at 8 jobs (3 PASS alone, `test_report_stepdown.py` intermittent, 2 of 4 alone), 14 NOTRUN host limits (raw: nuc `~/efs-artifacts/docs-audit-20261025/`, `SHA256SUMS` `51666fda…05bf5`); no product code changed.**
 The guide, surface list, POSIX subset, release notes, operations, power-user, quick start and
 `efs-commands` pages now match the binaries (K34–K37, E2, `status` output and exit status,
 restart after a forced, failed-barrier or killed daemon, `.efs` by policy only, `O_DIRECT` only).
