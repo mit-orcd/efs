@@ -34,6 +34,19 @@ void efs_place_fragments(const struct efs_node *nodes, uint32_t node_count,
 int efs_pack_destinations(const struct efs_node *members, uint32_t count,
                           efs_node_id_t self, uint64_t segment_id,
                           efs_node_id_t out[EFS_NUM_FRAGMENTS]);
+/* K41: the same ring without the members in skip (bit id - 1): the
+ * packer drops destinations its probe or PUT found unreachable. */
+int efs_pack_destinations_skip(const struct efs_node *members, uint32_t count,
+                               efs_node_id_t self, uint64_t segment_id, uint32_t skip,
+                               efs_node_id_t out[EFS_NUM_FRAGMENTS]);
+/* K41: spare for a segment destination that failed: the next live member
+ * after `after` on the ring (ascending ids, wrapping), not in skip and not
+ * already in stripe[]. Deterministic for one live set; the chosen holders
+ * are recorded in the pack object, which readers and reclaim use (B1), so
+ * a spare never moves existing data. 0 when none is left. */
+efs_node_id_t efs_pack_spare(const struct efs_node *members, uint32_t count,
+                             efs_node_id_t self, efs_node_id_t after, uint32_t skip,
+                             const efs_node_id_t stripe[EFS_NUM_FRAGMENTS]);
 
 /* B1: a recorded stripe is usable only as exactly three non-zero, distinct
  * node ids in 1..EFS_MAX_NODES (D1, D2, P). Readers take fragment nodes from

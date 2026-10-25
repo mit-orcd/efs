@@ -169,6 +169,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         local->token = s->mstore.token;
     }
     server_dedupe_nodes_locked(s);
+    server_heartbeat_apply_locked(s);
     joined = s->node_count;
     server_nodes_mark_dirty(s);
     pthread_mutex_unlock(&s->lock);
@@ -368,6 +369,7 @@ void server_nodes_keep_members(struct efsd_server *s, const struct efs_membershi
         fprintf(stderr, "membership: member %u (%s:%u) added to the node table\n", n->id,
                 n->addr, n->port);
     }
+    server_heartbeat_apply_locked(s);
     if (dirty)
         server_nodes_mark_dirty(s);
     pthread_mutex_unlock(&s->lock);
@@ -426,7 +428,8 @@ void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello 
  * not the bounded pool: when forwarded client commands filled the pool the
  * heartbeat queued behind them and marked healthy peers down ("unresponsive
  * — marked down for 30s" on every node, Sep 21). Only the heartbeat thread
- * touches hb_conn[]. */
+ * and its per-cycle probe threads touch hb_conn[]; slot = node id - 1, one
+ * probe per slot per cycle. */
 static struct efs_conn *hb_conn[EFS_MAX_NODES];
 static char hb_host[EFS_MAX_NODES][64];
 static uint16_t hb_port[EFS_MAX_NODES];
@@ -439,8 +442,7 @@ static void hb_conn_drop(uint32_t slot)
     }
 }
 
-/* Slot = index in the node table; indices may shift on membership
- * change, so a cached conn is reused only for the same host:port. */
+/* A cached conn is reused only for the same host:port (a member may move). */
 static struct efs_conn *hb_conn_for(uint32_t slot, const char *host,
                                     uint16_t port)
 {
@@ -494,19 +496,76 @@ static uint64_t hb_now_ms(void)
     return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
 }
 
-/* Heartbeat thread: ping peers on the pooled conn, track fail streaks, and
- * mark unresponsive nodes down (excluded from placement) with a cooldown so a
- * dead node does not keep absorbing PUT/placement forever. No usage flush here. */
+/* Heartbeat thread: ping peers, track fail streaks, and mark unresponsive
+ * nodes down (excluded from placement) so a dead node does not keep
+ * absorbing PUT/placement forever. No usage flush here.
+ *
+ * K41: every probe of a cycle runs in its own thread under a network
+ * deadline of EFS_HB_PROBE_MS. Probes used to run one after another with
+ * the 30 s connection timeouts: a committed member still in its join loop
+ * (listening, not yet accepting) held each probe for 30 s, so the group-0
+ * leader probed a stopped member once a minute and never marked it down
+ * while the others did within 7 s; its packer placed a fragment there
+ * (tests/test_k33_growth.py). The streak and the mark are kept per node id
+ * here and written into every row with that id after each cycle, so a
+ * table rebuilt in between (join adopt, membership revision, HELLO) cannot
+ * reset or drop them: EFS_HB_DOWN_FAILS missed heartbeats mark a member
+ * down on every node within EFS_HB_DOWN_FAILS cycles of at most
+ * EFS_HEARTBEAT_MS + EFS_HB_PROBE_MS each. */
 #define EFS_HB_DOWN_FAILS 3
 #define EFS_HB_DOWN_MS    30000
+#define EFS_HB_PROBE_MS   EFS_HEARTBEAT_MS
+struct hb_peer {
+    uint32_t streak;
+    uint64_t down_until_ms; /* 0 = up; otherwise down (the deadline only spaces the log) */
+};
+static struct hb_peer hb_peer[EFS_MAX_NODES + 1]; /* by node id, under s->lock */
+
+struct hb_probe {
+    efs_node_id_t id;
+    char addr[64];
+    uint16_t port;
+    int ok;
+};
+
+static void *hb_probe_run(void *arg)
+{
+    struct hb_probe *p = arg;
+    efs_net_set_deadline_ms(hb_now_ms() + EFS_HB_PROBE_MS);
+    p->ok = send_heartbeat(p->id - 1u, p->addr, p->port) == 0;
+    efs_net_set_deadline_ms(0);
+    return NULL;
+}
+
+/* Write the per-id liveness into the node table (s->lock held, which also
+ * guards hb_peer[]). Every path that rebuilds or extends the table calls
+ * it, so a row never carries another process's (or boot's) monotonic
+ * deadline nor loses this node's mark. */
+void server_heartbeat_apply_locked(struct efsd_server *s)
+{
+    for (uint32_t j = 0; j < s->node_count && j < EFS_MAX_NODES; j++) {
+        efs_node_id_t id = s->nodes[j].id;
+        if (!id || id > EFS_MAX_NODES || id == s->id)
+            continue;
+        s->nodes[j].hb_fail_streak = hb_peer[id].streak;
+        s->nodes[j].down_until_ms = hb_peer[id].down_until_ms;
+    }
+}
+
 static void *heartbeat_thread(void *arg)
 {
     struct efsd_server *s = arg;
     /* Heap: efs_node is ~4 KiB (storage_path); EFS_MAX_NODES of them on the
      * stack plus usage_save path buffers blew the ASAN-instrumented stack. */
     struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
-    if (!nodes)
+    struct hb_probe *probe = calloc(EFS_MAX_NODES, sizeof(*probe));
+    pthread_t tid[EFS_MAX_NODES];
+    int started[EFS_MAX_NODES];
+    if (!nodes || !probe) {
+        free(nodes);
+        free(probe);
         return NULL;
+    }
 
     uint64_t gc_log_ms = 0;
     while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) {
@@ -538,40 +597,59 @@ static void *heartbeat_thread(void *arg)
                     (unsigned long long)gc.ack_errors, (unsigned long long)gc.missing_exports);
             gc_log_ms = now;
         }
+        /* One probe per member id (the table is deduplicated; a repeated
+         * id is probed once). */
+        uint32_t np = 0;
         for (uint32_t i = 0; i < node_count; i++) {
-            if (nodes[i].id == self)
+            efs_node_id_t id = nodes[i].id;
+            int dup = !id || id > EFS_MAX_NODES || id == self;
+            for (uint32_t k = 0; k < np && !dup; k++)
+                dup = probe[k].id == id;
+            if (dup)
                 continue;
-            int ok = (send_heartbeat(i, nodes[i].addr, nodes[i].port) == 0);
-            if (ok)
-                server_peer_note_up(nodes[i].addr, nodes[i].port);
-
-            /* Record outcome under the lock by node id (indices may shift). */
-            pthread_mutex_lock(&s->lock);
-            for (uint32_t j = 0; j < s->node_count; j++) {
-                if (s->nodes[j].id != nodes[i].id)
-                    continue;
-                if (ok) {
-                    s->nodes[j].hb_fail_streak = 0;
-                    s->nodes[j].down_until_ms = 0;
-                } else {
-                    if (s->nodes[j].hb_fail_streak < 1000)
-                        s->nodes[j].hb_fail_streak++;
-                    if (s->nodes[j].hb_fail_streak >= EFS_HB_DOWN_FAILS &&
-                        s->nodes[j].down_until_ms <= now) {
-                        s->nodes[j].down_until_ms = now + EFS_HB_DOWN_MS;
-                        fprintf(stderr,
-                                "heartbeat: node %u (%s:%u) unresponsive — "
-                                "marked down for %ds\n",
-                                s->nodes[j].id, s->nodes[j].addr,
-                                s->nodes[j].port, EFS_HB_DOWN_MS / 1000);
-                    }
-                }
-                break;
-            }
-            pthread_mutex_unlock(&s->lock);
+            probe[np].id = id;
+            snprintf(probe[np].addr, sizeof(probe[np].addr), "%s", nodes[i].addr);
+            probe[np].port = nodes[i].port;
+            probe[np].ok = 0;
+            np++;
         }
+        for (uint32_t k = 0; k < np; k++)
+            started[k] = efsd_pthread_create(&tid[k], hb_probe_run, &probe[k]) == 0;
+        for (uint32_t k = 0; k < np; k++) {
+            if (started[k])
+                pthread_join(tid[k], NULL);
+            else
+                hb_probe_run(&probe[k]);
+        }
+
+        for (uint32_t k = 0; k < np; k++)
+            if (probe[k].ok)
+                server_peer_note_up(probe[k].addr, probe[k].port);
+        now = hb_now_ms();
+        pthread_mutex_lock(&s->lock);
+        for (uint32_t k = 0; k < np; k++) {
+            struct hb_peer *hp = &hb_peer[probe[k].id];
+            if (probe[k].ok) {
+                hp->streak = 0;
+                hp->down_until_ms = 0;
+                continue;
+            }
+            if (hp->streak < 1000)
+                hp->streak++;
+            if (hp->streak >= EFS_HB_DOWN_FAILS && hp->down_until_ms <= now) {
+                hp->down_until_ms = now + EFS_HB_DOWN_MS;
+                fprintf(stderr,
+                        "heartbeat: node %u (%s:%u) unresponsive — "
+                        "marked down for %ds\n",
+                        probe[k].id, probe[k].addr, probe[k].port,
+                        EFS_HB_DOWN_MS / 1000);
+            }
+        }
+        server_heartbeat_apply_locked(s);
+        pthread_mutex_unlock(&s->lock);
     }
     free(nodes);
+    free(probe);
     return NULL;
 }
 

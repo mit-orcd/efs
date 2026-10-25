@@ -155,6 +155,28 @@ void server_peer_note_up(const char *host, uint16_t port)
     pthread_mutex_unlock(&p->lock);
 }
 
+/* K41: 1 while the pool's connect cooldown refuses host:port (repeated
+ * connect failures, not yet ended by an answered heartbeat). Never creates
+ * a slot. */
+int server_peer_is_down(const char *host, uint16_t port)
+{
+    int down = 0;
+    if (!host || !*host || port == 0 || !__atomic_load_n(&g_peers_inited, __ATOMIC_ACQUIRE))
+        return 0;
+    pthread_mutex_lock(&g_peers_mu);
+    for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
+        struct peer_slot *p = &g_peers[i];
+        if (p->in_use && p->port == port && strcmp(p->host, host) == 0) {
+            pthread_mutex_lock(&p->lock);
+            down = p->down_until_ms > peer_now_ms();
+            pthread_mutex_unlock(&p->lock);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_peers_mu);
+    return down;
+}
+
 static struct efs_conn *peer_connect(const char *host, uint16_t port)
 {
     int fd = efs_connect_tcp(host, port);

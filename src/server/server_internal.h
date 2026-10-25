@@ -25,6 +25,8 @@ struct efs_conn *server_peer_conn_get(const char *host, uint16_t port);
 void server_peer_note_up(const char *host, uint16_t port);
 struct efs_conn *server_peer_read_conn_get(const char *host, uint16_t port);
 /* Unpooled connection owned by the caller (destroy with efs_conn_destroy). */
+/* K41: 1 while the peer pool's connect cooldown refuses host:port. */
+int server_peer_is_down(const char *host, uint16_t port);
 struct efs_conn *server_peer_conn_new(const char *host, uint16_t port);
 /* Return conn to the pool after a successful request/response. */
 void server_peer_conn_release(const char *host, uint16_t port, struct efs_conn *c);
@@ -396,6 +398,9 @@ void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello 
 
 /* Start the background heartbeat thread. */
 void server_start_heartbeat(struct efsd_server *s);
+/* K41: write the heartbeat's per-node-id streak and down mark into every
+ * node-table row (s->lock held); called after any table rebuild. */
+void server_heartbeat_apply_locked(struct efsd_server *s);
 
 
 /* Production Raft host (architecture.md §10 10.5c). Starts unconditionally
@@ -779,6 +784,8 @@ int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
 int server_raft_host_pack_state(uint32_t group, uint64_t id, uint64_t gen,
                                 struct efs_pack_object *out, uint32_t *degraded);
 /* 1 = this node leads the group; term and commit index (optional). */
+/* K41: voters of a group led here that stopped acknowledging (bit id - 1). */
+uint32_t server_raft_host_unresponsive_voters(uint8_t group);
 int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit);
 struct efs_kv *server_raft_host_kv(void);
 int server_raft_host_gc_running(void);

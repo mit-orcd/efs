@@ -407,6 +407,7 @@ void server_handle_conn(struct efs_conn *conn)
                 }
 
                 server_dedupe_nodes_locked(g_server);
+                server_heartbeat_apply_locked(g_server);
                 /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~68 KiB at 16). */
                 struct efs_msg_hello_ack *ack = calloc(1, sizeof(*ack));
                 if (!ack) {

@@ -553,6 +553,74 @@ static void *pk_put_run(void *arg)
     p->rc = pk_put_fragment(p->nodes, p->count, p->id, p->body, p->len);
     return NULL;
 }
+/* K41: before a segment is admitted each destination answers a heartbeat
+ * on a new connection within PK_PROBE_MS, as K35's spare_reprobe probes a
+ * client PUT spare. A member that fails is replaced by the next live ring
+ * member (efs_pack_spare); a fragment the packer could still not place
+ * stays on its first member only when no live member is left, and its
+ * PUT then fails into K37's degraded write. Found by the wave-9 gate
+ * (K41): the group-0 leader placed fragment 0 on a member stopped 27 s
+ * earlier, wrote the segment degraded, and the loss of its second holder
+ * left one fragment. */
+#define PK_PROBE_MS 1000u
+#define PK_PLACE_ATTEMPTS 3u
+static uint64_t pk_mono_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
+}
+static int pk_probe(const struct efs_node *nodes, uint32_t count, uint32_t id)
+{
+    if (id == pk.s->id) return 1;
+    const struct efs_node *n = pk_node(nodes, count, id);
+    if (!n) return 0;
+    uint64_t prev = efs_net_deadline_ms(), dl = pk_mono_ms() + PK_PROBE_MS;
+    if (!prev || prev > dl) efs_net_set_deadline_ms(dl);
+    struct efs_conn *c = server_peer_conn_new(n->addr, n->port);
+    int ok = 0;
+    if (c) {
+        uint8_t type = 0;
+        void *reply = NULL;
+        uint32_t rlen = 0;
+        ok = !efs_conn_send_msg(c, EFS_MSG_HEARTBEAT, NULL, 0) &&
+             !efs_conn_recv_msg(c, &type, &reply, &rlen) && type == EFS_MSG_HEARTBEAT_ACK;
+        free(reply);
+        efs_conn_destroy(c);
+    }
+    efs_net_set_deadline_ms(prev);
+    return ok;
+}
+/* Destinations for segment id over the live ring without *skip, each
+ * probed. Returns 0 when all three answered, 1 when a fragment stays on a
+ * member that failed (no live spare: the K37 last resort), -1 with fewer
+ * than three members to place on. Failed members join *skip. */
+static int pk_place(const struct efs_node *nodes, uint32_t count, uint8_t group, uint64_t id,
+                    uint32_t *skip, efs_node_id_t dest[EFS_NUM_FRAGMENTS])
+{
+    int last_resort = 0;
+    if (efs_pack_destinations_skip(nodes, count, pk.s->id, id, *skip, dest) != EFS_OK) return -1;
+    for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        efs_node_id_t first = dest[i];
+        while (!pk_probe(nodes, count, dest[i])) {
+            efs_node_id_t bad = dest[i], spare;
+            *skip |= 1u << (bad - 1);
+            spare = efs_pack_spare(nodes, count, pk.s->id, bad, *skip, dest);
+            fprintf(stderr, "packer: segment g%u id=%016llx fragment %u: node %u failed the placement "
+                    "probe; %s %u\n", group, (unsigned long long)id, i, bad,
+                    spare ? "placed on spare node" : "no live spare, stays on node",
+                    spare ? spare : first);
+            if (!spare) {
+                dest[i] = first;
+                last_resort = 1;
+                break;
+            }
+            dest[i] = spare;
+            STAT_ADD(spares, 1);
+        }
+    }
+    return last_resort;
+}
 static void pk_unindex(uint8_t group, const struct pk_entry *e, uint32_t n)
 {
     while (n) {
@@ -601,94 +669,129 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
     struct efs_pack_switch *sw = calloc(1, sizeof(*sw));
     uint8_t *swire = malloc(1u + 19u + EFS_PACK_SWITCH_MAX * EFS_MD_PACK_SWITCH_MEMBER_BYTES);
     if (!rec || !refs || !image || !o || !frag || !body || !cmd || !sw || !swire) goto out;
-    uint64_t id = pk_segment_id(), gen = 1;
-    for (uint32_t i = 0; i < n; i++)
-        rec[i] = (struct efs_pack_record){.ino = files[i].c.ino, .inode_generation = files[i].c.inode_generation,
-            .content_epoch = files[i].c.content_epoch,
-            .record_generation = id ^ ((uint64_t)(i + 1) << 56) ^ files[i].c.ino,
-            .len = (uint32_t)files[i].c.size, .data = files[i].data};
-    size_t geometry;
-    if (efs_pack_build(id, gen, group, rec, n, image, EFS_SEGMENT_MAX_SIZE, &geometry, refs) != EFS_OK) goto out;
-    uint32_t flen = (uint32_t)geometry / 2;
-    uint8_t *f[EFS_NUM_FRAGMENTS] = {frag, frag + flen, frag + 2 * flen};
-    if (efs_encode_segment(image, geometry, geometry, f) != EFS_OK) goto out;
-    struct efs_opid owner;
-    pk_owner(group, term, &owner);
-    owner.seq = id;
-    uint32_t members = 0;
-    efs_node_id_t dest[EFS_NUM_FRAGMENTS];
-    if (efs_pack_destinations(nodes, count, pk.s->id, id, dest) != EFS_OK) goto out;
-    for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        o->nodes[i] = dest[i];
-        members |= 1u << (dest[i] - 1);
-        efs_hash(f[i], flen, o->checksums[i]);
-    }
-    if (efs_pack_ledger_init(image, geometry, refs, n, &owner, members, flags, &o->ledger) != EFS_OK) goto out;
-    size_t olen;
-    cmd[0] = EFS_MD_CMD_PACK_ADMIT; cmd[1] = group;
-    if (efs_pack_object_encode(o, cmd + 2, EFS_PACK_OBJECT_MAX_BYTES, &olen) != EFS_OK ||
-        pk_propose(group, cmd, (uint32_t)(2 + olen)) != EFS_OK) {
-        STAT_ADD(admit_errors, 1);
-        pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
-        goto out;
-    }
-    server_pack_crash_point("admitted");
-    /* The three fragments go out in parallel; all must be durable. */
-    struct pk_put puts[EFS_NUM_FRAGMENTS];
-    pthread_t pt[EFS_NUM_FRAGMENTS];
-    int pstarted[EFS_NUM_FRAGMENTS] = {0}, put_ok = 1;
-    for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        uint8_t *b = body + (size_t)i * (EFS_SEGMENT_PUT_HEADER + EFS_SEGMENT_MAX_SIZE / 2);
-        memset(b, 0, EFS_SEGMENT_PUT_HEADER);
-        b[0] = group; b[1] = (uint8_t)i;
-        b[4] = (uint8_t)(geometry >> 24); b[5] = (uint8_t)(geometry >> 16);
-        b[6] = (uint8_t)(geometry >> 8); b[7] = (uint8_t)geometry;
-        wr64(b + 8, id); wr64(b + 16, gen);
-        memcpy(b + 24, o->checksums[i], EFS_HASH_SIZE);
-        memcpy(b + EFS_SEGMENT_PUT_HEADER, f[i], flen);
-        puts[i] = (struct pk_put){nodes, count, o->nodes[i], b, EFS_SEGMENT_PUT_HEADER + flen, EFS_ERR_IO};
-        pstarted[i] = i > 0 && pthread_create(&pt[i], NULL, pk_put_run, &puts[i]) == 0;
-    }
-    for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        if (!pstarted[i]) pk_put_run(&puts[i]);
-        else pthread_join(pt[i], NULL);
-    }
-    /* K34 for the packer: a live member's transient refusal (BUSY,
-     * NOT_PRIMARY or AGAIN from its linearizable read of the object
-     * admitted a moment ago, under load) is not a missing fragment. The
-     * fragment is sent again before the segment is written degraded.
-     * Found by tests/test_d4_progress.py under the parallel gate: one
-     * NOT_PRIMARY from a follower wrote a degraded segment (put_errors=1)
-     * and a rebuild of it a second later. */
-    for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        int first = puts[i].rc;
-        for (int k = 0; k < PK_PUT_RETRIES && pk_put_transient(puts[i].rc); k++) {
-            usleep(PK_PUT_RETRY_US);
-            puts[i].rc = pk_put_fragment(nodes, count, o->nodes[i], puts[i].body, puts[i].len);
+    uint64_t id = 0, gen = 1;
+    uint32_t skip = 0;
+    int put_ok = 0;
+    for (uint32_t attempt = 0;; attempt++) {
+        id = pk_segment_id();
+        memset(o, 0, sizeof(*o));
+        for (uint32_t i = 0; i < n; i++)
+            rec[i] = (struct efs_pack_record){.ino = files[i].c.ino, .inode_generation = files[i].c.inode_generation,
+                .content_epoch = files[i].c.content_epoch,
+                .record_generation = id ^ ((uint64_t)(i + 1) << 56) ^ files[i].c.ino,
+                .len = (uint32_t)files[i].c.size, .data = files[i].data};
+        size_t geometry;
+        if (efs_pack_build(id, gen, group, rec, n, image, EFS_SEGMENT_MAX_SIZE, &geometry, refs) != EFS_OK) goto out;
+        uint32_t flen = (uint32_t)geometry / 2;
+        uint8_t *f[EFS_NUM_FRAGMENTS] = {frag, frag + flen, frag + 2 * flen};
+        if (efs_encode_segment(image, geometry, geometry, f) != EFS_OK) goto out;
+        struct efs_opid owner;
+        pk_owner(group, term, &owner);
+        owner.seq = id;
+        uint32_t members = 0;
+        efs_node_id_t dest[EFS_NUM_FRAGMENTS];
+        if (pk_place(nodes, count, group, id, &skip, dest) < 0) {
+            pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
+            goto out;
         }
-        if (first != puts[i].rc)
-            fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx fragment %u for node %u resent "
-                    "after rc=%d: rc=%d\n", group, (unsigned long long)id, (unsigned long long)gen,
-                    i, o->nodes[i], first, puts[i].rc);
-    }
-    uint32_t nok = 0, missing = 0;
-    for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        if (puts[i].rc != EFS_OK) { put_ok = 0; missing = i; }
-        else nok++;
-    }
-    /* K37: two fragments durable (each fsynced before its acknowledgement)
-     * and the third not: the segment may hold files only once its degraded
-     * mark is committed, so the rebuild on return restores the third. One
-     * durable fragment, or no mark, cancels as before. */
-    if (!put_ok && nok == EFS_NUM_FRAGMENTS - 1 &&
-        server_segment_mark(group, id, gen, missing, EFS_PACK_DEGRADED_R_WRITE) == EFS_OK) {
-        fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx written degraded: fragment %u "
-                "for node %u not acknowledged (rc=%d); marked for rebuild on return\n", group,
-                (unsigned long long)id, (unsigned long long)gen, missing, o->nodes[missing],
-                puts[missing].rc);
-        STAT_ADD(put_errors, 1);
-        pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
+        for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            o->nodes[i] = dest[i];
+            members |= 1u << (dest[i] - 1);
+            efs_hash(f[i], flen, o->checksums[i]);
+        }
+        if (efs_pack_ledger_init(image, geometry, refs, n, &owner, members, flags, &o->ledger) != EFS_OK) goto out;
+        size_t olen;
+        cmd[0] = EFS_MD_CMD_PACK_ADMIT; cmd[1] = group;
+        if (efs_pack_object_encode(o, cmd + 2, EFS_PACK_OBJECT_MAX_BYTES, &olen) != EFS_OK ||
+            pk_propose(group, cmd, (uint32_t)(2 + olen)) != EFS_OK) {
+            STAT_ADD(admit_errors, 1);
+            pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
+            goto out;
+        }
+        server_pack_crash_point("admitted");
+        /* The three fragments go out in parallel; all must be durable. */
+        struct pk_put puts[EFS_NUM_FRAGMENTS];
+        pthread_t pt[EFS_NUM_FRAGMENTS];
+        int pstarted[EFS_NUM_FRAGMENTS] = {0};
         put_ok = 1;
+        for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            uint8_t *b = body + (size_t)i * (EFS_SEGMENT_PUT_HEADER + EFS_SEGMENT_MAX_SIZE / 2);
+            memset(b, 0, EFS_SEGMENT_PUT_HEADER);
+            b[0] = group; b[1] = (uint8_t)i;
+            b[4] = (uint8_t)(geometry >> 24); b[5] = (uint8_t)(geometry >> 16);
+            b[6] = (uint8_t)(geometry >> 8); b[7] = (uint8_t)geometry;
+            wr64(b + 8, id); wr64(b + 16, gen);
+            memcpy(b + 24, o->checksums[i], EFS_HASH_SIZE);
+            memcpy(b + EFS_SEGMENT_PUT_HEADER, f[i], flen);
+            puts[i] = (struct pk_put){nodes, count, o->nodes[i], b, EFS_SEGMENT_PUT_HEADER + flen, EFS_ERR_IO};
+            pstarted[i] = i > 0 && pthread_create(&pt[i], NULL, pk_put_run, &puts[i]) == 0;
+        }
+        for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (!pstarted[i]) pk_put_run(&puts[i]);
+            else pthread_join(pt[i], NULL);
+        }
+        /* K34 for the packer: a live member's transient refusal (BUSY,
+         * NOT_PRIMARY or AGAIN from its linearizable read of the object
+         * admitted a moment ago, under load) is not a missing fragment. The
+         * fragment is sent again before the segment is written degraded.
+         * Found by tests/test_d4_progress.py under the parallel gate: one
+         * NOT_PRIMARY from a follower wrote a degraded segment (put_errors=1)
+         * and a rebuild of it a second later. */
+        for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            int first = puts[i].rc;
+            for (int k = 0; k < PK_PUT_RETRIES && pk_put_transient(puts[i].rc); k++) {
+                usleep(PK_PUT_RETRY_US);
+                puts[i].rc = pk_put_fragment(nodes, count, o->nodes[i], puts[i].body, puts[i].len);
+            }
+            if (first != puts[i].rc)
+                fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx fragment %u for node %u resent "
+                        "after rc=%d: rc=%d\n", group, (unsigned long long)id, (unsigned long long)gen,
+                        i, o->nodes[i], first, puts[i].rc);
+        }
+        uint32_t nok = 0, missing = 0, refused = skip;
+        for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (puts[i].rc != EFS_OK) { put_ok = 0; missing = i; refused |= 1u << (o->nodes[i] - 1); }
+            else nok++;
+        }
+        /* K41: a destination that refused at write time is replaced by a live
+         * spare: this admission is cancelled (its fragments are reclaimed as
+         * any cancelled segment's) and the files are placed again, under a new
+         * segment id, without the members that failed. */
+        efs_node_id_t again[EFS_NUM_FRAGMENTS];
+        if (!put_ok && efs_pack_destinations_skip(nodes, count, pk.s->id, id, refused, again) == EFS_OK) {
+            for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++)
+                if (puts[i].rc != EFS_OK)
+                    fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx fragment %u for node %u not "
+                            "acknowledged (rc=%d); %s\n", group, (unsigned long long)id,
+                            (unsigned long long)gen, i, o->nodes[i], puts[i].rc,
+                            attempt + 1 < PK_PLACE_ATTEMPTS ? "cancelled, placed again on live spares"
+                                                            : "cancelled, attempts used up");
+            pk_cancel(group, id, gen);
+            if (attempt + 1 < PK_PLACE_ATTEMPTS) {
+                STAT_ADD(spares, EFS_NUM_FRAGMENTS - nok);
+                skip = refused;
+                continue;
+            }
+            STAT_ADD(put_errors, 1);
+            pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
+            goto out;
+        }
+        /* K37: two fragments durable (each fsynced before its acknowledgement)
+         * and the third not: the segment may hold files only once its degraded
+         * mark is committed, so the rebuild on return restores the third. One
+         * durable fragment, or no mark, cancels as before. */
+        if (!put_ok && nok == EFS_NUM_FRAGMENTS - 1 &&
+            server_segment_mark(group, id, gen, missing, EFS_PACK_DEGRADED_R_WRITE) == EFS_OK) {
+            fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx written degraded: fragment %u "
+                    "for node %u not acknowledged (rc=%d); marked for rebuild on return\n", group,
+                    (unsigned long long)id, (unsigned long long)gen, missing, o->nodes[missing],
+                    puts[missing].rc);
+            STAT_ADD(put_errors, 1);
+            STAT_ADD(degraded, 1);
+            pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
+            put_ok = 1;
+        }
+        break;
     }
     if (!put_ok) {
         STAT_ADD(put_errors, 1);
@@ -1102,6 +1205,19 @@ static int pk_group(uint8_t group, uint64_t term)
     count = pk.s->node_count;
     memcpy(nodes, pk.s->nodes, count * sizeof(nodes[0]));
     pthread_mutex_unlock(&pk.s->lock);
+    /* K41: every liveness signal this leader has, not the heartbeat's
+     * mark alone: the peer pool's connect cooldown, and the group's voters
+     * that stopped acknowledging this leader's AppendEntries. Each counts
+     * a member as down for this pass; pk_place then probes the rest. */
+    {
+        uint32_t quiet = server_raft_host_unresponsive_voters(group);
+        for (uint32_t i = 0; i < count; i++) {
+            efs_node_id_t id = nodes[i].id;
+            if (!id || id > EFS_MAX_NODES || id == pk.s->id || nodes[i].down_until_ms) continue;
+            if ((quiet & (1u << (id - 1))) || server_peer_is_down(nodes[i].addr, nodes[i].port))
+                nodes[i].down_until_ms = 1;
+        }
+    }
 #if EFS_FAULTS
     /* K37 tests: EFS_FAULT_PACK_PLACE_DOWN=<node id> places segments on
      * that node even while the heartbeat marks it down, as in the window
