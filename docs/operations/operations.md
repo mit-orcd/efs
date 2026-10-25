@@ -190,6 +190,13 @@ store keeps its cluster, node id and endpoint (another endpoint is refused):
 If peers are down it starts standalone and retries in the background. Local
 data is kept.
 
+A first start that was killed before it finished (a seed or a `--join`) is
+retried with the same command and storage: a store whose initialization
+stopped before `identity.bin` initializes again, and a joining store the
+cluster never committed is added now (it gets the next node id). A store
+that started before and lost `identity.bin`, or a wiped store at a member's
+endpoint, is refused.
+
 Membership is always persisted (`--no-persist` was removed, D42; efsd
 refuses it).
 
