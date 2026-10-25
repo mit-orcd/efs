@@ -27,11 +27,16 @@
  *              missing or mismatching fragment is dropped and its stripe
  *              gets a W154 degraded mark (EFS_MD_CMD_RECOVERY_MARK), so the
  *              group leader rebuilds it from the two peers. Every packed
- *              segment holding switched files is checked the same way; one
- *              not proven is dropped and counted (no segment rebuild);
- * then the fence clears (COMMIT allowed again). The thread goes on to wait
- * for each remembered ticket to leave ADMITTED (a published one is marked
- * as above) and counts the marked fragments W154 rebuilds here.
+ *              segment holding switched files is checked the same way; a
+ *              fragment not proven is dropped and its segment gets a K37
+ *              degraded mark (EFS_MD_CMD_PACK_DEGRADED, reason RECOVERY),
+ *              the row the segment audit and rebuild use, so the group
+ *              leader rebuilds it from the two peers. A segment already
+ *              missing another fragment is reported unrecoverable;
+ * then the fence clears (COMMIT allowed again): every dropped fragment of
+ * a live object is durably marked first. The thread goes on to wait for
+ * each remembered ticket to leave ADMITTED (a published one is marked as
+ * above) and counts the marked fragments W154 and K37 rebuild here.
  *
  * What recovery cannot prove is dropped, never served. It does not prove
  * an earlier ambiguous write: the PUT verifier changed with this boot, so
@@ -44,6 +49,7 @@
 #include "server_internal.h"
 #include "efs/frag_record.h"
 #include "efs/meta_apply.h"
+#include "efs/pack_mapping.h"
 #include "efs/put_ticket.h"
 #include "efs/protocol.h"
 #include <dirent.h>
@@ -62,6 +68,13 @@
 #define RV_RETRY_MS 500u
 #define RV_WATCH_MS 2000u
 
+/* One fragment of a packed segment this store should hold. */
+struct rv_seg {
+    uint32_t group, fi, geometry;
+    uint64_t id, gen;
+    uint8_t sum[EFS_HASH_SIZE];
+};
+
 static struct {
     pthread_mutex_t mu;
     pthread_cond_t cv;
@@ -75,6 +88,8 @@ static struct {
     uint32_t nmarks, capmarks;
     struct efs_put_ticket *waiting;  /* ADMITTED tickets whose fragment is not here */
     uint32_t nwaiting, capwaiting;
+    struct rv_seg *segs;             /* segment fragments marked by this run */
+    uint32_t nsegs, capsegs;
 } rv = {.mu = PTHREAD_MUTEX_INITIALIZER, .cv = PTHREAD_COND_INITIALIZER};
 
 static uint64_t rv_now_ms(void)
@@ -501,32 +516,122 @@ static uint32_t rv_rd32(const uint8_t *p)
     return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
 }
 
+/* The segment at a linearizable point: EFS_OK with its degraded-mark mask
+ * while ACTIVE with switched files, NOT_FOUND when nothing is left there to
+ * protect (rewritten, removed, compacted), PROTO for an unreadable mark. */
+static int rv_seg_state(const struct rv_seg *g, uint32_t *mask)
+{
+    struct efs_pack_object *o = malloc(sizeof(*o));
+    if (!o)
+        return EFS_ERR_NOMEM;
+    int rc = server_raft_host_pack_state(g->group, g->id, g->gen, o, mask);
+    if (rc == EFS_OK) {
+        struct efs_pack_ledger_usage u;
+        efs_pack_ledger_usage(&o->ledger, &u);
+        if (*mask & EFS_PACK_READ_DEGRADED_BAD)
+            rc = EFS_ERR_PROTO;
+        else if (o->ledger.phase != EFS_PACK_ACTIVE || !u.live)
+            rc = EFS_ERR_NOT_FOUND;
+    }
+    free(o);
+    return rc;
+}
+
+static void rv_seg_unrecoverable(const struct rv_seg *g, uint32_t mask, int later)
+{
+    RV_ADD(segments_unrecoverable, 1);
+    fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u lost here %s "
+            "(mask=%x): UNRECOVERABLE, its files read EIO; never healed\n", g->group,
+            (unsigned long long)g->id, (unsigned long long)g->gen, g->fi,
+            later ? "and another fragment was lost before the rebuild"
+                  : "while another fragment is already marked missing", mask);
+}
+
+/* Record a segment fragment this store does not hold: its K37 mark is
+ * there afterwards (written here, or already present), read back at a
+ * linearizable point. Retries a transient verdict. */
+static int rv_seg_mark(const struct rv_seg *g)
+{
+    uint32_t bit = 1u << g->fi;
+    int wrote = 0;
+    for (;;) {
+        uint32_t mask = 0;
+        int rc = rv_seg_state(g, &mask);
+        if (rc == EFS_ERR_NOT_FOUND) {
+            RV_ADD(segments_superseded, 1);
+            return 0;
+        }
+        if (rc == EFS_OK && (mask & bit)) {
+            RV_ADD(segments_marked, wrote);
+            RV_ADD(segments_already_marked, !wrote);
+            if (mask & ~bit) {
+                rv_seg_unrecoverable(g, mask, 0);
+                return 0;
+            }
+            fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u %s degraded "
+                    "for rebuild\n", g->group, (unsigned long long)g->id,
+                    (unsigned long long)g->gen, g->fi, wrote ? "marked" : "already marked");
+            pthread_mutex_lock(&rv.mu);
+            int grc = rv_grow((void **)&rv.segs, rv.nsegs, &rv.capsegs, sizeof(*g));
+            if (!grc)
+                rv.segs[rv.nsegs++] = *g;
+            rv.st.segments_waiting = rv.nsegs;
+            pthread_mutex_unlock(&rv.mu);
+            return grc ? rv_fail("out of memory") : 0;
+        }
+        if (rc == EFS_OK) {
+            rc = server_segment_mark_commit((uint8_t)g->group, g->id, g->gen, g->fi,
+                                            EFS_PACK_DEGRADED_R_RECOVERY);
+            if (rc == EFS_OK) {
+                wrote = 1;
+                server_fault_crash_point("recovery-segment-marked");
+                continue; /* read the mark back */
+            }
+            if (rc == EFS_ERR_STALE)
+                rc = EFS_ERR_AGAIN; /* no longer ACTIVE: the next read says so */
+        }
+        if (!rv_transient(rc))
+            return rv_fail("segment mark g%u id=%016llx gen=%llx fragment %u: %s", g->group,
+                           (unsigned long long)g->id, (unsigned long long)g->gen, g->fi,
+                           efs_strerror(rc));
+        rv_reason("segment mark g%u id=%016llx: %s", g->group, (unsigned long long)g->id,
+                  efs_strerror(rc));
+        if (rv_wait(RV_RETRY_MS))
+            return 1;
+    }
+}
+
 /* A packed segment fragment the metadata places here (the object holds
  * switched files, so the copy was durable before the switch). One that is
- * not proven is dropped and counted: the two peers still serve it, and
- * W154 has no segment rebuild. */
+ * not proven is dropped and marked: the two peers serve it meanwhile, and
+ * the K37 rebuild restores it. */
 static int rv_segment_ref(const uint8_t *rec)
 {
-    uint32_t group = rv_rd32(rec), fi = rv_rd32(rec + 20);
-    uint64_t id = ((uint64_t)rv_rd32(rec + 4) << 32) | rv_rd32(rec + 8);
-    uint64_t gen = ((uint64_t)rv_rd32(rec + 12) << 32) | rv_rd32(rec + 16);
+    struct rv_seg g;
+    g.group = rv_rd32(rec);
+    g.id = ((uint64_t)rv_rd32(rec + 4) << 32) | rv_rd32(rec + 8);
+    g.gen = ((uint64_t)rv_rd32(rec + 12) << 32) | rv_rd32(rec + 16);
+    g.fi = rv_rd32(rec + 20);
+    g.geometry = rv_rd32(rec + 24);
+    memcpy(g.sum, rec + 28, EFS_HASH_SIZE);
     struct server_recovery_files c = {0};
-    if (fi >= EFS_NUM_FRAGMENTS || !id || !gen)
+    if (g.fi >= EFS_NUM_FRAGMENTS || !g.id || !g.gen)
         return rv_fail("malformed segment inventory record");
     RV_ADD(segments_checked, 1);
-    int rc = server_segment_recovery_check(rv.s, group, id, gen, fi, rec + 28, &c);
+    int rc = server_segment_recovery_check(rv.s, g.group, g.id, g.gen, g.fi, g.sum, &c);
     __atomic_fetch_add(&rv.files.dropped, c.dropped, __ATOMIC_RELAXED);
     __atomic_fetch_add(&rv.files.bytes_dropped, c.bytes_dropped, __ATOMIC_RELAXED);
     if (rc == EFS_OK)
         return 0;
     if (rc != EFS_ERR_NOT_FOUND)
-        return rv_fail("segment g%u id=%016llx gen=%llx fragment %u: %s", group,
-                       (unsigned long long)id, (unsigned long long)gen, fi, efs_strerror(rc));
+        return rv_fail("segment g%u id=%016llx gen=%llx fragment %u: %s", g.group,
+                       (unsigned long long)g.id, (unsigned long long)g.gen, g.fi,
+                       efs_strerror(rc));
     RV_ADD(segments_missing, 1);
     fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u not proven here; "
-            "its two peers serve it, no rebuild path for segments\n", group,
-            (unsigned long long)id, (unsigned long long)gen, fi);
-    return 0;
+            "dropped, marking it for rebuild\n", g.group, (unsigned long long)g.id,
+            (unsigned long long)g.gen, g.fi);
+    return rv_seg_mark(&g);
 }
 
 static void rv_ticket_mark(const struct efs_put_ticket *t, struct efs_meta_degraded *d)
@@ -655,8 +760,53 @@ static void rv_watch_pass(void)
     pthread_mutex_unlock(&rv.mu);
 }
 
-/* After the fence: settle the remembered tickets and count what W154
- * rebuilt here, until both are done or the daemon stops. */
+/* One pass over the segment marks this run wrote or found: a cleared one
+ * was rebuilt here (the local copy verifies) or the segment is gone; one
+ * that gained another bit is unrecoverable. */
+static void rv_seg_watch_pass(void)
+{
+    uint32_t keep = 0, n = rv.nsegs;
+    for (uint32_t i = 0; i < n; i++) {
+        struct rv_seg g = rv.segs[i];
+        uint32_t mask = 0, bit = 1u << g.fi;
+        int rc = rv_stopping() ? EFS_ERR_BUSY : rv_seg_state(&g, &mask);
+        if (rc == EFS_ERR_NOT_FOUND) {
+            RV_ADD(segments_superseded, 1);
+            continue;
+        }
+        if (rc != EFS_OK || (mask == bit)) {
+            rv.segs[keep++] = g;
+            continue;
+        }
+        if (mask & bit) {
+            rv_seg_unrecoverable(&g, mask, 1);
+            continue;
+        }
+        if (server_segment_check(rv.s, g.group, g.id, g.gen, g.fi, g.geometry, g.sum) ==
+            EFS_SEGMENT_AUDIT_OK) {
+            RV_ADD(segments_rebuilt, 1);
+            fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u rebuilt here "
+                    "and verified\n", g.group, (unsigned long long)g.id,
+                    (unsigned long long)g.gen, g.fi);
+            continue;
+        }
+        /* Cleared, yet no verified copy here: record it missing again. */
+        fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u mark cleared "
+                "without a verified copy here; marking again\n", g.group,
+                (unsigned long long)g.id, (unsigned long long)g.gen, g.fi);
+        server_segment_mark_commit((uint8_t)g.group, g.id, g.gen, g.fi,
+                                   EFS_PACK_DEGRADED_R_RECOVERY);
+        rv.segs[keep++] = g;
+    }
+    pthread_mutex_lock(&rv.mu);
+    memmove(rv.segs + keep, rv.segs + n, (size_t)(rv.nsegs - n) * sizeof(*rv.segs));
+    rv.nsegs = keep + (rv.nsegs - n);
+    rv.st.segments_waiting = rv.nsegs;
+    pthread_mutex_unlock(&rv.mu);
+}
+
+/* After the fence: settle the remembered tickets and count what W154 and
+ * K37 rebuilt here, until all are done or the daemon stops. */
 static void rv_after(void)
 {
     rv_phase(EFS_RECOVERY_PHASE_REBUILD);
@@ -667,7 +817,8 @@ static void rv_after(void)
             fprintf(stderr, "recovery: every remembered ticket settled\n");
         }
         rv_watch_pass();
-        if (settled && !rv.nmarks)
+        rv_seg_watch_pass();
+        if (settled && !rv.nmarks && !rv.nsegs)
             break;
         if (rv.nwaiting)
             rv_reason("%u ADMITTED tickets name a fragment this store does not hold",
@@ -679,8 +830,12 @@ static void rv_after(void)
     pthread_mutex_lock(&rv.mu);
     rv.st.phase = 0;
     rv.st.reason[0] = 0;
-    fprintf(stderr, "recovery: rebuild complete: rebuilt=%llu superseded=%llu\n",
-            (unsigned long long)rv.st.rebuilt, (unsigned long long)rv.st.superseded);
+    fprintf(stderr, "recovery: rebuild complete: rebuilt=%llu superseded=%llu segments "
+            "rebuilt=%llu superseded=%llu unrecoverable=%llu\n",
+            (unsigned long long)rv.st.rebuilt, (unsigned long long)rv.st.superseded,
+            (unsigned long long)rv.st.segments_rebuilt,
+            (unsigned long long)rv.st.segments_superseded,
+            (unsigned long long)rv.st.segments_unrecoverable);
     pthread_mutex_unlock(&rv.mu);
 }
 
@@ -719,7 +874,8 @@ static void *rv_main(void *arg)
         fprintf(stderr, "recovery: verified in %llu ms; fence cleared, COMMIT allowed: "
                 "files checked=%llu dropped=%llu refs checked=%llu missing=%llu marked=%llu "
                 "already_marked=%llu superseded=%llu unrecoverable=%llu tickets checked=%llu "
-                "segments checked=%llu missing=%llu groups proven=%u/%u\n",
+                "segments checked=%llu missing=%llu marked=%llu already_marked=%llu "
+                "unrecoverable=%llu groups proven=%u/%u\n",
                 (unsigned long long)st.elapsed_ms,
                 (unsigned long long)__atomic_load_n(&rv.files.checked, __ATOMIC_RELAXED),
                 (unsigned long long)__atomic_load_n(&rv.files.dropped, __ATOMIC_RELAXED),
@@ -727,7 +883,9 @@ static void *rv_main(void *arg)
                 (unsigned long long)st.marked, (unsigned long long)st.already_marked,
                 (unsigned long long)st.superseded, (unsigned long long)st.unrecoverable,
                 (unsigned long long)st.tickets_checked, (unsigned long long)st.segments_checked,
-                (unsigned long long)st.segments_missing, st.groups_proven, st.groups);
+                (unsigned long long)st.segments_missing, (unsigned long long)st.segments_marked,
+                (unsigned long long)st.segments_already_marked,
+                (unsigned long long)st.segments_unrecoverable, st.groups_proven, st.groups);
         rv_after();
     } else if (r > 0) {
         fprintf(stderr, "recovery: interrupted by stop in phase %s; the store stays fenced\n",

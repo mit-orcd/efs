@@ -944,10 +944,14 @@ struct efs_recovery_stats {
     uint64_t unrecoverable;         /* another fragment of the stripe already lost */
     uint64_t tickets_checked, tickets_waiting;
     uint64_t segments_checked;      /* referenced packed-segment fragments */
-    uint64_t segments_missing;      /* of those, no proven copy: readable from
-                                     * the peers, no rebuild path (W154 covers
-                                     * chunk stripes only) */
-    uint64_t rebuilt;               /* marked fragments rebuilt here by W154 */
+    uint64_t segments_missing;      /* of those, no proven copy here: dropped */
+    uint64_t segments_marked;       /* K37 segment marks this recovery wrote */
+    uint64_t segments_already_marked; /* fragment already marked missing */
+    uint64_t segments_superseded;   /* segment no longer live: nothing to rebuild */
+    uint64_t segments_unrecoverable; /* another fragment of the segment lost too */
+    uint64_t segments_rebuilt;      /* marked fragments K37 rebuilt here */
+    uint64_t segments_waiting;      /* segment marks not yet cleared */
+    uint64_t rebuilt;              /* marked fragments rebuilt here by W154 */
     uint64_t rebuild_waiting;       /* marks not yet retired */
     uint32_t groups_proven, groups;
     uint64_t incarnation;

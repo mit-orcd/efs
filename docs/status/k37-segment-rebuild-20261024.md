@@ -196,7 +196,9 @@ client).
 
 Multi-host, RDMA, orcd-mini, five or more members (segments on
 storage-only members), scale (many degraded segments, long outages), leader
-crash during a rebuild, K36 integration (merged later).
+crash during a rebuild. K36 integration: done Oct 24, see
+[k36-k37-segment-recovery-20261024.md](k36-k37-segment-recovery-20261024.md)
+(recovery marks dropped fragments itself, before its fence clears).
 
 ## Reproduce
 

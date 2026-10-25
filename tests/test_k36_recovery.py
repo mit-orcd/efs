@@ -48,8 +48,9 @@ store, since a process kill keeps the page cache.
     from a hosting member (groups proven=1/2) and verifies.
 11. Packed segments: small files are packed; a member holding segment
     fragments is killed and one of them deleted; its recovery reports the
-    referenced segment fragment missing (no segment rebuild exists), verifies,
-    and every file still reads exact from the peers.
+    referenced segment fragment missing and marks it (K37), verifies, every
+    file still reads exact, and the K37 rebuild clears the mark
+    (tests/test_k36_segment_recovery.py covers this path in depth).
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import errno, os, re, shutil, signal, sys, tempfile, time
@@ -487,10 +488,15 @@ try:
     assert st['segments'][0] >= 1 and st['segments'][1] >= 1, st
     assert re.search(r'recovery: segment g\d+ id=\S+ gen=\S+ fragment \d not proven here',
                      c.last_run(holder)), c.last_run(holder)[-2000:]
+    assert re.search(r'recovery: segment g\d+ id=\S+ gen=\S+ fragment \d (?:already )?marked '
+                     r'degraded for rebuild', c.last_run(holder)), c.last_run(holder)[-2000:]
     verify(b, 'segment fragment lost on one member')
-    print(f'11. node {holder}: a referenced segment fragment deleted; recovery counted it '
-          f'missing (segments checked={st["segments"][0]} missing={st["segments"][1]}), '
-          f'verified; files exact PASS', flush=True)
+    st = wait_status(c, holder, lambda s: re.search(r'segments .*? rebuilt=[1-9]\d* waiting=0;',
+                                                     status(c, holder)[1]) is not None,
+                     timeout=180)
+    print(f'11. node {holder}: a referenced segment fragment deleted; recovery found it '
+          f'missing and marked it (segments checked={st["segments"][0]} '
+          f'missing={st["segments"][1]}), verified; rebuilt by K37; files exact PASS', flush=True)
 finally:
     for m in mounts:
         m.close()

@@ -94,6 +94,22 @@ counts degraded segments and the cluster stays DEGRADED until they clear.
 Daemon test `tests/test_k37_segment_rebuild.py` PASS. intel2 `make test-all` at `b205cb9db`: 459 commands, 1 FAIL that also fails on the base (`tests/test_get_integrity.py`, a READ_VERIFY test / K34 merge interaction), 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/k37-20261024/`, `SHA256SUMS` `61fbd81d…98f0`). Live
 multi-host, RDMA and orcd-mini NOTRUN (parent).
 
+[K36 + K37: segment fragments dropped by verified recovery are rebuilt](k36-k37-segment-recovery-20261024.md):
+**PASS (scoped, loopback), branch `claude/devel-k36-k37-segments-5885d9`,
+code `ad7fe1ded`, not merged.** A referenced packed-segment fragment that
+K36 recovery drops is now marked through K37's one authority
+(`EFS_MD_CMD_PACK_DEGRADED`, reason `R_RECOVERY`, forwarded to the group
+leader and read back) before the recovery fence clears; the audit sweeps
+only settled stores and skips marked fragments, so the two cannot disagree.
+K37 rebuilds and verifies the fragment and clears the mark; a second loss
+before the rebuild is reported unrecoverable, never healed. Daemon test
+`tests/test_k36_segment_recovery.py` PASS. intel1 `make test-all` at
+`ad7fe1ded`: 468 commands, 2 FAIL that also fail on the base
+(`test_get_integrity.py` stub, `test_b6_unavailable.py` packing during a
+fault), 15 NOTRUN host limits (raw: intel1
+`~/efs-artifacts/k36-k37-segments-20261024/`, `SHA256SUMS` `9817196b…b7fd`).
+Live multi-host, RDMA and orcd-mini NOTRUN (parent).
+
 [A11: reduced qualification matrix and the Stage 2 run plan](a11-qualification-matrix-20261024.md):
 **plan PASS (scoped), qualification NOTRUN; merged into devel (`646a43041`).**
 Dimensions left after A6/A7/D42: transport (`tcp`, `rdma`), 3–16 members,
