@@ -169,7 +169,7 @@ static int fence_insert_locked(uint32_t eid, efs_ino_t ino)
             if (fence_keys[i] == 0) fence_used++;
             fence_keys[i] = ino + 2;
             fence_eids[i] = eid;
-            fence_live++;
+            __atomic_fetch_add(&fence_live, 1, __ATOMIC_RELAXED); /* read lock-free */
             return 1;
         }
     }
@@ -179,7 +179,7 @@ static void fence_remove_locked(uint32_t eid, efs_ino_t ino)
     uint64_t slot;
     if (fence_find_locked(eid, ino, &slot)) {
         fence_keys[slot] = 1;
-        fence_live--;
+        __atomic_fetch_sub(&fence_live, 1, __ATOMIC_RELAXED);
     }
 }
 int server_reclaim_fenced(efs_export_id_t eid, efs_ino_t ino)
@@ -1147,7 +1147,9 @@ void server_reclaim_shutdown(struct efsd_server *s)
     (void)s;
     if (!rj.threads) return;
     pthread_mutex_lock(&rj.mu);
-    rj.stop = 1;
+    /* The background, recovery and deleter loops poll stop with an atomic
+     * load outside rj.mu; the store must be atomic too (TSan, F1 gate). */
+    __atomic_store_n(&rj.stop, 1, __ATOMIC_RELEASE);
     pthread_cond_broadcast(&rj.work);
     pthread_mutex_unlock(&rj.mu);
     pthread_join(rj.bg, NULL);
@@ -1164,7 +1166,7 @@ void server_reclaim_status(struct efsd_server *s, struct efs_reclaim_status *out
 {
     memset(out, 0, sizeof(*out));
     pthread_mutex_lock(&rj.mu);
-    out->accepted = rj.accepted;
+    out->accepted = __atomic_load_n(&rj.accepted, __ATOMIC_RELAXED); /* bumped outside rj.mu */
     out->deleted = rj.deleted;
     out->checkpointed = rj.checkpointed;
     out->retired = rj.retired;

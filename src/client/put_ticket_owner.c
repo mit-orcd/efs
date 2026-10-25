@@ -36,8 +36,12 @@ static uint32_t ticket_shard(const struct efs_put_ticket *t)
 /* EFS_PUT_TICKET_DBG=1: log refused admissions and settle batches. */
 static int ticket_debug(void)
 {
-    static int on = -1;
-    if (on < 0) on = getenv("EFS_PUT_TICKET_DBG") != NULL;
+    static int on_s = -1; /* any thread may be first: atomic, local copy (TSan) */
+    int on = __atomic_load_n(&on_s, __ATOMIC_ACQUIRE);
+    if (on < 0) {
+        on = getenv("EFS_PUT_TICKET_DBG") != NULL;
+        __atomic_store_n(&on_s, on, __ATOMIC_RELEASE);
+    }
     return on;
 }
 

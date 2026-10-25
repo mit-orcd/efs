@@ -2276,7 +2276,8 @@ struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard)
         return NULL;
     /* LRU tick. Atomic so a (future) shard-lock-holding read path can bump it
      * without the global lock; the value only guides cold-shard eviction. */
-    tab->shard_tick = __atomic_add_fetch(&ex->shard_tick, 1, __ATOMIC_RELAXED);
+    __atomic_store_n(&tab->shard_tick, __atomic_add_fetch(&ex->shard_tick, 1, __ATOMIC_RELAXED),
+                     __ATOMIC_RELAXED);
     return tab;
 }
 
@@ -2929,8 +2930,8 @@ static struct efs_export *shard_route(struct efs_export *ex, efs_ino_t ino)
         struct efs_export *tab = efs_export_shard_tab(
             ex, efs_export_shard_of(ino, ex->root.shard_bits));
         if (tab && tab != ex)
-            tab->shard_tick = __atomic_add_fetch(&ex->shard_tick, 1,
-                                                 __ATOMIC_RELAXED);
+            __atomic_store_n(&tab->shard_tick, __atomic_add_fetch(&ex->shard_tick, 1, __ATOMIC_RELAXED),
+                             __ATOMIC_RELAXED);
         return tab; /* NULL: the row is not staged here */
     }
     return ex;
@@ -3354,9 +3355,9 @@ static struct efs_export *chunk_tab_peek(struct efs_export *ex, efs_ino_t ino,
     if (sh == 0)
         return ex;
     tab = efs_export_shard_tab(ex, sh);
-    if (tab && tab != ex)
-        tab->shard_tick = __atomic_add_fetch(&ex->shard_tick, 1,
-                                             __ATOMIC_RELAXED);
+    if (tab && tab != ex) /* the hint is written by every resolving thread */
+        __atomic_store_n(&tab->shard_tick, __atomic_add_fetch(&ex->shard_tick, 1, __ATOMIC_RELAXED),
+                         __ATOMIC_RELAXED);
     return tab;
 }
 

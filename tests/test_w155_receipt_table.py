@@ -8,7 +8,9 @@ verdict is run again (same identity); outcomes only ever rise; eviction
 takes finished receipts before a running one. Threads use real, short waits; the
 asserted outcomes do not depend on scheduling."""
 from pathlib import Path
-import os, shlex, subprocess, tempfile
+import os, shlex, subprocess, sys, tempfile
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sanitize_env import cflags, timeout, wrap  # noqa: E402
 
 root = Path(__file__).resolve().parents[1]
 code = r'''
@@ -100,8 +102,7 @@ with tempfile.TemporaryDirectory(prefix='efs-w155-table-') as d:
     p = Path(d) / 't.c'
     p.write_text(code)
     cc = shlex.split(os.environ.get('CC', 'cc'))
-    extra = ['-fsanitize=address,undefined', '-fno-omit-frame-pointer'] if os.environ.get('EFS_SANITIZE') == '1' else []
-    subprocess.run(cc + ['-std=gnu11', '-Wall', '-Wextra', '-Werror', '-I' + str(root / 'include'), *extra,
+    subprocess.run(cc + ['-std=gnu11', '-g', '-Wall', '-Wextra', '-Werror', '-I' + str(root / 'include'), *cflags(),
                          str(p), str(root / 'src/common/request_receipt.c'), '-pthread',
                          '-o', str(p.with_suffix(''))], check=True)
-    subprocess.run([str(p.with_suffix(''))], check=True, timeout=60)
+    subprocess.run(wrap() + [str(p.with_suffix(''))], check=True, timeout=timeout(60))

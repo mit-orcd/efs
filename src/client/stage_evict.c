@@ -537,9 +537,14 @@ static uint64_t stage_bytes_now(void)
  * *requeued counts pinned candidates moved to the newest end. */
 static int evict_pass(int *requeued)
 {
-    static int env_stage_dbg = -1; /* W143: read once, per-op path */
-    if (env_stage_dbg < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_stage_dbg_s = -1;
+    int env_stage_dbg = __atomic_load_n(&env_stage_dbg_s, __ATOMIC_ACQUIRE);
+    if (env_stage_dbg < 0) {
         env_stage_dbg = getenv("EFS_STAGE_DBG") != NULL;
+        __atomic_store_n(&env_stage_dbg_s, env_stage_dbg, __ATOMIC_RELEASE);
+    }
     static struct lru_node cand[SCAN_BATCH];
     uint32_t nc = lru_oldest(cand, SCAN_BATCH);
     int evicted = 0;
@@ -611,9 +616,14 @@ static int tab_lru_cb(efs_ino_t ino, void *arg)
 /* Returns the number of tabs dropped; *bytes_io is the reading after. */
 static int evict_cold_tabs(uint64_t cap, uint64_t *bytes_io)
 {
-    static int env_stage_dbg = -1; /* W143: read once, per-op path */
-    if (env_stage_dbg < 0)
+    /* W143: read once, per-op path. Any thread may be first: the static is
+     * read and set atomically and the function uses its local copy (TSan). */
+    static int env_stage_dbg_s = -1;
+    int env_stage_dbg = __atomic_load_n(&env_stage_dbg_s, __ATOMIC_ACQUIRE);
+    if (env_stage_dbg < 0) {
         env_stage_dbg = getenv("EFS_STAGE_DBG") != NULL;
+        __atomic_store_n(&env_stage_dbg_s, env_stage_dbg, __ATOMIC_RELEASE);
+    }
     uint32_t shards[TAB_SCAN];
     uint32_t n, i;
     int dropped = 0, skipped = 0;

@@ -74,9 +74,10 @@ int server_put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
                        uint8_t *path_used)
 {
     int rc=put_upload(s,body,bytes,path_used);
-    static int debug=-1;
-    if(debug<0)debug=getenv("EFS_PUT_TICKET_DBG")!=NULL;
-    if(rc!=EFS_OK && debug && bytes>=EFS_PUT_UPLOAD_HEADER_LEN)
+    static int debug=-1; /* idempotent first read on any connection thread (TSan) */
+    int dbg=__atomic_load_n(&debug,__ATOMIC_ACQUIRE);
+    if(dbg<0){dbg=getenv("EFS_PUT_TICKET_DBG")!=NULL;__atomic_store_n(&debug,dbg,__ATOMIC_RELEASE);}
+    if(rc!=EFS_OK && dbg && bytes>=EFS_PUT_UPLOAD_HEADER_LEN)
         fprintf(stderr,"put-upload refused fi=%u seq=%llu rc=%d\n",efs_put_upload_rd32(body+4),
                 (unsigned long long)(((uint64_t)efs_put_upload_rd32(body+28)<<32)|efs_put_upload_rd32(body+32)),rc);
     return rc;
@@ -132,8 +133,10 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     struct efs_export *ex=server_export_acquire_or_create_locked(s,export_id);
     /* A storage node learns the data geometry from its first PUT, here
      * only from a ticket that is ADMITTED under a live session. */
+    /* Writer threads read chunk_size lock-free (server_frag_len): the one
+     * store that sets the geometry is atomic (TSan, F1 gate). */
     if(ex && (ex->chunk_size==0 || ex->chunk_size==EFS_DEFAULT_CHUNK_SIZE))
-        ex->chunk_size=ticket.fragment_len*2u;
+        __atomic_store_n(&ex->chunk_size,ticket.fragment_len*2u,__ATOMIC_RELEASE);
     pthread_mutex_unlock(&s->lock);
     if(!ex)rc=EFS_ERR_NOMEM;
     else if(server_frag_len(ex,ticket.ino)!=ticket.fragment_len)rc=EFS_ERR_INVAL;

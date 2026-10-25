@@ -62,10 +62,16 @@ fi
 # error code and the parent's own child-status checks failed. With
 # --child-silent-after-fork those children write no report and keep their
 # exit status, so the gate covers the parent process, not forked children.
+#
+# --fair-sched: memcheck's default thread scheduling (a pipe-based lock) let
+# four KV reader threads starve the writer of test_kv_lsm_concurrent for
+# more than 3 minutes without one flush (F1, xorinox); with fair scheduling
+# the same 4 s stress finishes in 17 s. `try` keeps hosts without futex
+# support on the default.
 vg_args() {   # $1 = log file pattern
     printf '%s\n' "$VALGRIND" --tool=memcheck --leak-check=full \
         --show-leak-kinds=definite --errors-for-leak-kinds=definite \
-        --child-silent-after-fork=yes \
+        --child-silent-after-fork=yes --fair-sched=try \
         --num-callers=30 --suppressions="$SUPP" --log-file="$1"
 }
 
@@ -80,6 +86,16 @@ vg_args() {   # $1 = log file pattern
 # (memcheck must run the binary itself, not /usr/bin/env). kv_lsm skips its
 # peek-liveness case: memcheck's scheduling can queue the compactor's first
 # lsm_lock behind the parked reader (a lock-order race, not a leak).
+# F1 (Oct 25) added the unit binaries of the last two days' product code:
+# the concurrent KV reader/writer/peek stress (W126), the K33 membership
+# record and discovery datagram parsers (membership), the member view,
+# the client data commit, put tickets and orphans, append receipts, the
+# fragment record, small and packed segments, the pack ledger recovery and
+# the retained-namespace audit, and the three Python-driven harnesses for
+# the K32 ticket batch, the W155 receipt table and the E2 parallel revoke
+# (they honour EFS_LEAK_WRAP through tests/sanitize_env.py). The K36
+# recovery thread and the K37 segment rebuild run only inside efsd; their
+# leak check is the ASan/LSan daemon run of `make asan-check`.
 default_list() {
 cat <<'EOF'
 readindex_pair|py:tests/test_readindex_pair.py
@@ -107,6 +123,22 @@ txn_resolve_faults|tests/test_txn_resolve_faults
 txn_retire|tests/test_txn_retire
 session|tests/test_session
 lock|tests/test_lock
+kv_lsm_concurrent|tests/test_kv_lsm_concurrent 4
+membership|tests/test_membership
+member_view|tests/test_member_view
+data_commit|tests/test_data_commit
+put_ticket|tests/test_put_ticket
+put_orphan|tests/test_put_orphan
+put_orphan_server|tests/test_put_orphan_server
+append_receipt|tests/test_append_receipt
+frag_record|tests/test_frag_record
+small_segment|tests/test_small_segment
+packed_segment|tests/test_packed_segment
+pack_ledger_recovery|tests/test_pack_ledger_recovery
+retained_namespace_audit|tests/test_retained_namespace_audit
+put_ticket_batch|py:tests/test_put_ticket_batch.py
+receipt_table|py:tests/test_w155_receipt_table.py
+revoke_parallel|py:tests/test_session_revoke_parallel.py
 EOF
 }
 

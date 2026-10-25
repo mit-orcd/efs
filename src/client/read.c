@@ -1243,7 +1243,7 @@ int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
     struct rdcache_ent *e = rdcache_find(s, ino, ci);
     if (e && e->gen == tg && e->len >= len) {
         memcpy(dst, e->data, len);
-        e->tick = ++g_rdcache.tick;
+        e->tick = __atomic_add_fetch(&g_rdcache.tick, 1, __ATOMIC_RELAXED); /* one clock, many stripe locks */
         pthread_mutex_unlock(mu);
         return 0;
     }
@@ -1267,7 +1267,7 @@ int efs_rdcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
     struct rdcache_ent *e = rdcache_find(s, ino, ci);
     if (e && e->gen == tg && (uint64_t)off + len <= e->len) {
         memcpy(dst, e->data + off, len);
-        e->tick = ++g_rdcache.tick;
+        e->tick = __atomic_add_fetch(&g_rdcache.tick, 1, __ATOMIC_RELAXED); /* one clock, many stripe locks */
         pthread_mutex_unlock(mu);
         return 0;
     }
@@ -1390,7 +1390,7 @@ retry:
     e->ci = ci;
     e->gen = tg;
     e->pending = 0;
-    e->tick = ++g_rdcache.tick;
+    e->tick = __atomic_add_fetch(&g_rdcache.tick, 1, __ATOMIC_RELAXED); /* one clock, many stripe locks */
     pthread_cond_broadcast(&g_rdcache.cv[s & (RDCACHE_STRIPES - 1)]);
     pthread_mutex_unlock(mu);
     if (spare)
@@ -1422,7 +1422,7 @@ void *efs_rdcache_pin(efs_ino_t ino, uint32_t ci, uint32_t len,
     struct rdcache_ent *e = rdcache_find(s, ino, ci);
     if (e && !e->pending && e->data && e->gen == tg && e->len >= len) {
         e->pins++;
-        e->tick = ++g_rdcache.tick;
+        e->tick = __atomic_add_fetch(&g_rdcache.tick, 1, __ATOMIC_RELAXED); /* one clock, many stripe locks */
         *data = e->data;
         pthread_mutex_unlock(mu);
         return e;
@@ -1925,7 +1925,7 @@ static int rdcache_acquire(efs_ino_t ino, uint32_t ci, uint8_t *dst,
         }
         if (e && e->gen == tg && e->len >= len && tg) {
             memcpy(dst, e->data, len);
-            e->tick = ++g_rdcache.tick;
+            e->tick = __atomic_add_fetch(&g_rdcache.tick, 1, __ATOMIC_RELAXED); /* one clock, many stripe locks */
             pthread_mutex_unlock(mu);
             return 0;
         }

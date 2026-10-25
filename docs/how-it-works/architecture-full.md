@@ -1598,8 +1598,16 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
-[Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](../status/a11-qualification-matrix-20261024.md):
-**merged into devel; merged-tree `make test-all` on intel2 at `0b01a2a1e`: 471 commands, 0 FAIL, 15 NOTRUN host limits (2,604 s; raw: intel2 `~/efs-artifacts/merge-wave7-20261025/`, `SHA256SUMS` in that directory).** A11 findings 1 and 2 are fixed; every Stage 2 item now maps to a real `scripts/qualify.py` gate; live and real-host runs stay NOTRUN; every store needs a fresh format.
+[F1: memory and concurrency gates on the candidate](../status/f1-memory-concurrency-gates-20261025.md):
+**branch `claude/devel-f1-gates-46ff64` on `merge-wave7`, not merged, not pushed; xorinox, last code commit `c32cdf544`: `make leak-check` PASS 41/41, `make asan-check` PASS 47/47, `make tsan-check` PASS 18/18 (`test_k36_recovery.py` intermittent under TSan), `make test-all` PASS (861 commands, exit 0); RDMA memcheck NOTRUN (no device). Raw: xorinox `~/efs-artifacts/f1-gates-20261025/` (`SHA256SUMS` `825a4507…ab106`).**
+Two new gates (`tests/sanitizer_check.sh`: ThreadSanitizer and ASan+UBSan+LeakSanitizer over
+a sanitized copy of the tree, unit binaries, harnesses and daemons, with a self-test in `make test`),
+16 new entries in the leak gate. 15 findings fixed in product and test code: UB in the K36 recovery
+thread, a `fopencookie` cookie leak at every daemon exit, twelve data races (shutdown flags,
+member-store copy during formation, startup banner vs rejoin, counters and lazy env flags), a
+misaligned read in `test_wire`. 20-minute D4 RSS bounded (client 247 MiB, servers 134 MiB) but not
+flat while the namespace grows. Open: `test_k36_recovery.py` step 4 intermittent under TSan; 3–7
+packer put errors over a 20-minute load (not memory; logs not retained).
 
 [Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](../status/pack-unindex-race-20261024.md):
 **FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**
@@ -1610,7 +1618,7 @@ exact match (fresh format). New unit case red without the comparison, green with
 15 of 15 PASS with the fix (the live race did not fire on devel in 31 runs). Multi-host NOTRUN.
 
 [B6 under K37, `test_get_integrity.py`, and a packer unindex race](../status/b6-k37-merge-tests-20261024.md):
-**test fixes PASS (scoped, loopback), merged into devel (`0b01a2a1e`; tested at `335bfb5a0`), not pushed; B6 3 of 3 and `test_get_integrity.py` 3 of 3 on intel1; intel2 `make test-all` at `335bfb5a0`: 467 commands, 1 FAIL in an untouched test (`test_k33_payload.py`, intermittent EIO), 15 NOTRUN host limits (raw: intel1/intel2 `~/efs-artifacts/b6-k37-335bfb5a0-20261024/`, `SHA256SUMS` `2d0eda66…e769` / `a115365d…c825`). B6 mode `full`: known intermittent FAIL, not fixed.**
+**test fixes PASS (scoped, loopback), branch `claude/admiring-babbage-a2387d` (`335bfb5a0`), not merged, not pushed; B6 3 of 3 and `test_get_integrity.py` 3 of 3 on intel1; intel2 `make test-all` at `335bfb5a0`: 467 commands, 1 FAIL in an untouched test (`test_k33_payload.py`, intermittent EIO), 15 NOTRUN host limits (raw: intel1/intel2 `~/efs-artifacts/b6-k37-335bfb5a0-20261024/`, `SHA256SUMS` `2d0eda66…e769` / `a115365d…c825`). B6 mode `full`: known intermittent FAIL, not fixed.**
 B6's "nothing packed during a fault" predated K37's decided policy. B6 now
 checks that every segment written degraded names node 3, that nothing is
 packed without one, that those files read exact, and that `Degraded
@@ -1626,7 +1634,7 @@ in both metadata groups (placement-dependent, failed once).
 **merged into devel; merged-tree `make test-all` on intel2 at `646a43041`: 467 commands, 2 FAIL from the merge (a duplicate `read_reprobe_down` stub in `test_get_integrity.py`; `test_b6_unavailable.py` still asserting no packing during a fault, which K37's policy allows with a degraded mark), both fixed in `12d2a7957` and rerun PASS on intel2; 15 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave6-20261024/`, `SHA256SUMS` `fd750fd9…d662`).** `add-node` and `add-storage` are gone (JOIN/ADD_STORAGE wire types removed). Live gates stay NOTRUN; every store needs a fresh format.
 
 [A11 finding 2: REPORT across a metadata leader step-down](../status/a11-f2-report-stepdown-20261024.md):
-**FIXED, PASS (scoped, loopback), merged into devel (`1fee9bb04`; tested at `6654d5f15`); amd `make test-all` at `04562f14a`: 468 commands, 12 FAIL, all also failing on the base, 6 NOTRUN host limits; raw: amd `~/efs-artifacts/report-stepdown-20261024/`, `SHA256SUMS` `3857346d…41a6d6`.**
+**FIXED, PASS (scoped, loopback), branch `claude/devel-report-stepdown-36888a` (`6654d5f15`), not merged; amd `make test-all` at `04562f14a`: 468 commands, 12 FAIL, all also failing on the base, 6 NOTRUN host limits; raw: amd `~/efs-artifacts/report-stepdown-20261024/`, `SHA256SUMS` `3857346d…41a6d6`.**
 The nuc "30 s REPORT timeout" was an 8 s BUSY stall (`recv_ms` printed the
 configured bound): a DECIDE COMMIT that failed NOT_PRIMARY at the step-down
 was handed to nobody, so its PREPAREs held the inode until the 5 s recovery

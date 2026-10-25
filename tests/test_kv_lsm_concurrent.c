@@ -143,11 +143,19 @@ int main(int argc, char **argv)
     pthread_t w, r[READERS];
     assert(!pthread_create(&w, NULL, writer, NULL));
     for (uintptr_t i = 0; i < READERS; i++) assert(!pthread_create(&r[i], NULL, reader, (void *)(i + 1)));
-    sleep(secs);
+    /* Run for `secs`, then on until a flush has landed under the readers:
+     * memcheck and the sanitizers slow the writer 20-50x, and the check
+     * below is about flushes beside readers, not about a wall-clock rate.
+     * The alarm above still bounds a stuck run. */
+    uint32_t l0 = 0, l1 = 0;
+    for (unsigned waited = 0;; waited++) {
+        sleep(1);
+        assert(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK);
+        if (waited + 1 >= secs && l0 + l1 > 0) break;
+    }
     __atomic_store_n(&stop, 1, __ATOMIC_RELEASE);
     pthread_join(w, NULL);
     for (int i = 0; i < READERS; i++) pthread_join(r[i], NULL);
-    uint32_t l0 = 0, l1 = 0;
     assert(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK);
     assert(l0 + l1 > 0); /* flushes happened under the readers */
     efs_kv_lsm_close(kv);

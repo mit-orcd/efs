@@ -16,7 +16,9 @@ Compiles src/common/session_revoke.c against a thread-safe fake owner with
   failed cleanup names its shard (phase cleanup), never a completed revoke.
 """
 from pathlib import Path
-import os, shlex, subprocess, tempfile
+import os, shlex, subprocess, sys, tempfile
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sanitize_env import cflags, timeout, wrap  # noqa: E402
 root = Path(__file__).resolve().parents[1]
 code = r'''
 #include "efs/common.h"
@@ -165,7 +167,12 @@ int main(void)
     step_us=100;
     probe_fail=1;double serial=run(1,EFS_OK,NULL,0),parallel=run(16,EFS_OK,NULL,0);probe_fail=0;
     printf("serial %.2f s, parallel(16) %.2f s\n",serial,parallel);
+#ifndef EFS_INSTRUMENTED
+    /* The speed ratio holds natively only: memcheck serialises threads and
+     * the sanitizers slow each step unevenly. The overlap check in run()
+     * (maxflight>1) is what the instrumented gates keep. */
     assert(parallel*4<serial);
+#endif
     return 0;
 }
 '''
@@ -173,10 +180,14 @@ with tempfile.TemporaryDirectory(prefix='efs-revoke-parallel-') as d:
     p = Path(d) / 'test.c'
     p.write_text(code)
     exe = p.with_suffix('')
-    subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror',
-                   '-I' + str(root / 'include'), str(p), str(root / 'src/common/session_revoke.c'),
+    instrumented = ['-DEFS_INSTRUMENTED=1'] if wrap() or cflags() else []
+    subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
+                   *cflags(), *instrumented, '-I' + str(root / 'include'), str(p), str(root / 'src/common/session_revoke.c'),
                    '-pthread', '-o', str(exe)], check=True)
-    out = subprocess.run([str(exe)], check=True, capture_output=True, text=True, timeout=120).stdout
+    r = subprocess.run(wrap() + [str(exe)], capture_output=True, text=True, timeout=timeout(120))
+    if r.returncode != 0:
+        raise SystemExit('revoke harness rc=%d\n%s\n%s' % (r.returncode, r.stdout[-3000:], r.stderr[-3000:]))
+    out = r.stdout
 print(out.strip())
 print('session revoke: parallel per-shard stages keep FENCE_LOC<ACK<FINISH<cleanup, '
       'stop on the first failure and report progress PASS')

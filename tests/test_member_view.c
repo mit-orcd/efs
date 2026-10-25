@@ -138,13 +138,13 @@ static void rows_of(const struct efs_membership *m, struct efs_node *t)
 
 static struct efs_node race_rows[EFS_MAX_NODES];
 static uint32_t race_count;
-static volatile int race_stop;
+static int race_stop; /* atomic: volatile is not a synchronisation */
 static int race_bad;
 
 static void *race_reader(void *arg)
 {
     (void)arg;
-    while (!race_stop) {
+    while (!__atomic_load_n(&race_stop, __ATOMIC_ACQUIRE)) {
         uint32_t n = __atomic_load_n(&race_count, __ATOMIC_ACQUIRE);
         for (uint32_t i = 0; i < n; i++)
             if (race_rows[i].id != i + 1 || !race_rows[i].port || !race_rows[i].addr[0])
@@ -196,12 +196,12 @@ static void extension(void)
         pthread_t th[2];
         rows_of(&r1, race_rows);
         race_count = 3;
-        race_stop = 0;
+        __atomic_store_n(&race_stop, 0, __ATOMIC_RELEASE);
         for (int k = 0; k < 2; k++)
             pthread_create(&th[k], NULL, race_reader, NULL);
         efs_member_view_publish(race_rows, &race_count, &r2, err, sizeof(err));
         efs_member_view_publish(race_rows, &race_count, &r3, err, sizeof(err));
-        race_stop = 1;
+        __atomic_store_n(&race_stop, 1, __ATOMIC_RELEASE);
         for (int k = 0; k < 2; k++)
             pthread_join(th[k], NULL);
         CHECK(race_count == 5, "race: final count");

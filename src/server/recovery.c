@@ -754,7 +754,8 @@ static void rv_watch_pass(void)
             RV_ADD(superseded, 1);
     }
     pthread_mutex_lock(&rv.mu);
-    memmove(rv.marks + keep, rv.marks + n, (size_t)(rv.nmarks - n) * sizeof(*rv.marks));
+    if (rv.nmarks > n) /* rv.marks may be NULL (see rv_seg_watch_pass) */
+        memmove(rv.marks + keep, rv.marks + n, (size_t)(rv.nmarks - n) * sizeof(*rv.marks));
     rv.nmarks = keep + (rv.nmarks - n);
     rv.st.rebuild_waiting = rv.nmarks;
     pthread_mutex_unlock(&rv.mu);
@@ -799,7 +800,10 @@ static void rv_seg_watch_pass(void)
         rv.segs[keep++] = g;
     }
     pthread_mutex_lock(&rv.mu);
-    memmove(rv.segs + keep, rv.segs + n, (size_t)(rv.nsegs - n) * sizeof(*rv.segs));
+    /* With no segment remembered rv.segs is NULL: memmove(NULL, NULL, 0)
+     * is undefined (UBSan, F1 asan gate under test_k36_recovery.py). */
+    if (rv.nsegs > n)
+        memmove(rv.segs + keep, rv.segs + n, (size_t)(rv.nsegs - n) * sizeof(*rv.segs));
     rv.nsegs = keep + (rv.nsegs - n);
     rv.st.segments_waiting = rv.nsegs;
     pthread_mutex_unlock(&rv.mu);

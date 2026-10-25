@@ -18,6 +18,16 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[F1: memory and concurrency gates on the candidate](f1-memory-concurrency-gates-20261025.md):
+**branch `claude/devel-f1-gates-46ff64` on `merge-wave7`, not merged, not pushed; xorinox, last code commit `c32cdf544`: `make leak-check` PASS 41/41, `make asan-check` PASS 47/47, `make tsan-check` PASS 18/18 (`test_k36_recovery.py` intermittent under TSan), `make test-all` PASS (861 commands, exit 0); RDMA memcheck NOTRUN (no device). Raw: xorinox `~/efs-artifacts/f1-gates-20261025/` (`SHA256SUMS` `825a4507…ab106`).**
+Two new gates (`tests/sanitizer_check.sh`: ThreadSanitizer and ASan+UBSan+LeakSanitizer over
+a sanitized copy of the tree, unit binaries, harnesses and daemons, with a self-test in `make test`),
+16 new entries in the leak gate. 15 findings fixed in product and test code: UB in the K36 recovery
+thread, a `fopencookie` cookie leak at every daemon exit, twelve data races (shutdown flags,
+member-store copy during formation, startup banner vs rejoin, counters and lazy env flags), a
+misaligned read in `test_wire`. 20-minute D4 RSS bounded (client 247 MiB, servers 134 MiB) but not
+flat while the namespace grows. Open: `test_k36_recovery.py` step 4 intermittent under TSan; 3–7
+packer put errors over a 20-minute load (not memory; logs not retained).
 [Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `0b01a2a1e`: 471 commands, 0 FAIL, 15 NOTRUN host limits (2,604 s; raw: intel2 `~/efs-artifacts/merge-wave7-20261025/`, `SHA256SUMS` in that directory).** A11 findings 1 and 2 are fixed; every Stage 2 item now maps to a real `scripts/qualify.py` gate; live and real-host runs stay NOTRUN; every store needs a fresh format.
 
