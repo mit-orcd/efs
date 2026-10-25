@@ -838,10 +838,19 @@ static int send_snap(struct efs_raft *r, int to)
          * from matching. */
         ae_inflight_set(r, to, r->next_index[to] ? r->next_index[to] : 1,
                         UINT64_MAX);
-    /* Not queued. The next tick retries the same offset; marking this
-     * chunk in flight would suppress that retry for a heartbeat. */
-    if (rc == EFS_ERR_AGAIN)
+    if (rc == EFS_ERR_AGAIN) {
+        /* Not queued — but the chunk was already read and framed, and no
+         * reply will arrive to clear the window. Without a marker the next
+         * pump wake pays the same malloc+pread again: a stopped peer with a
+         * saturated lane drew ~300 full-chunk attempts per second
+         * (~1.2 GB/s of memcpy churn on the leader) and starved client
+         * RPCs into timeouts. Back off one heartbeat instead. */
+        r->ae_inflight[to] = r->next_index[to] ? r->next_index[to] : 1;
+        r->ae_inflight_tick[to] = r->ticks;
+        r->ae_inflight_end[to] = UINT64_MAX;
+        r->ae_inflight_full[to] = 0;
         return EFS_OK;
+    }
     return rc;
 }
 
