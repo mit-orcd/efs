@@ -27,12 +27,15 @@
 static inline int server_test_dest_fault(const char *op)
 {
 #if EFS_FAULTS
-    static const char *path;
+    static const char *path_s;
     static int init;
     if (!__atomic_load_n(&init, __ATOMIC_ACQUIRE)) {
-        path = getenv("EFS_FAULT_DEST_FILE");
+        /* Two first callers may both get here: both store the same pointer,
+         * atomically, so neither races the other (TSan). */
+        __atomic_store_n(&path_s, getenv("EFS_FAULT_DEST_FILE"), __ATOMIC_RELEASE);
         __atomic_store_n(&init, 1, __ATOMIC_RELEASE);
     }
+    const char *path = __atomic_load_n(&path_s, __ATOMIC_ACQUIRE);
     if (!path || !*path)
         return 0;
     char line[256] = {0};

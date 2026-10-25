@@ -608,11 +608,11 @@ static int apply_committed(struct efs_raft *r)
         }
         if (is_cfg_cmd(cmd, clen)) {
             if (cmd[0] == EFS_RAFT_CMD_JOINT) {
-                r->app_old = rd32(cmd + 1);
-                r->app_new = rd32(cmd + 5);
+                __atomic_store_n(&r->app_old, rd32(cmd + 1), __ATOMIC_RELEASE);
+                __atomic_store_n(&r->app_new, rd32(cmd + 5), __ATOMIC_RELEASE);
             } else {
-                r->app_old = rd32(cmd + 1);
-                r->app_new = 0;
+                __atomic_store_n(&r->app_old, rd32(cmd + 1), __ATOMIC_RELEASE);
+                __atomic_store_n(&r->app_new, 0, __ATOMIC_RELEASE);
             }
             rc = save_cfg(r);
             if (rc != EFS_OK) {
@@ -2008,8 +2008,8 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
 
     /* Persist membership before save_snap may discard its log entries. */
     if (take_cfg) {
-        r->app_old = cfg_old;
-        r->app_new = cfg_new;
+        __atomic_store_n(&r->app_old, cfg_old, __ATOMIC_RELEASE);
+        __atomic_store_n(&r->app_new, cfg_new, __ATOMIC_RELEASE);
     }
     rc = save_cfg(r);
     if (rc != EFS_OK) return rc;
@@ -2027,8 +2027,8 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
                     (unsigned long long)incl_t, (unsigned long long)r->last_applied);
         r->resync_requested = 0;
         r->last_applied = incl;
-        r->app_old = r->log_old = cfg_old;
-        r->app_new = r->log_new = cfg_new;
+        r->log_old = cfg_old; __atomic_store_n(&r->app_old, r->log_old, __ATOMIC_RELEASE);
+        r->log_new = cfg_new; __atomic_store_n(&r->app_new, r->log_new, __ATOMIC_RELEASE);
     }
     r->snap_idx = incl;
     r->snap_term = incl_t;
@@ -2252,7 +2252,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = -1;
     r->voted_for = -1;
-    r->log_old = r->app_old = voters;
+    r->log_old = voters; __atomic_store_n(&r->app_old, voters, __ATOMIC_RELEASE);
     r->election_ticks = cfg->election_ticks ? cfg->election_ticks : 10;
     r->heartbeat_ticks = cfg->heartbeat_ticks ? cfg->heartbeat_ticks : 1;
     r->rng = cfg->rng_seed;
@@ -2296,8 +2296,8 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
                 free(r);
                 return NULL;
             }
-            r->app_old = r->log_old = o;
-            r->app_new = r->log_new = n;
+            r->log_old = o; __atomic_store_n(&r->app_old, r->log_old, __ATOMIC_RELEASE);
+            r->log_new = n; __atomic_store_n(&r->app_new, r->log_new, __ATOMIC_RELEASE);
         } else if (rc != EFS_ERR_NOT_FOUND) {
             free(r);
             return NULL;
@@ -3067,12 +3067,14 @@ int efs_raft_leader(const struct efs_raft *r)
 
 uint32_t efs_raft_voters(const struct efs_raft *r)
 {
-    return r ? r->app_old : 0;
+    /* Read lock-free on request threads (host_pick_peer, hosts_group):
+     * every store of app_old/app_new on the Raft thread is atomic too. */
+    return r ? __atomic_load_n(&r->app_old, __ATOMIC_ACQUIRE) : 0;
 }
 
 int efs_raft_joint(const struct efs_raft *r)
 {
-    return r && r->app_new != 0;
+    return r && __atomic_load_n(&r->app_new, __ATOMIC_ACQUIRE) != 0;
 }
 
 int efs_raft_step_down(struct efs_raft *r)
