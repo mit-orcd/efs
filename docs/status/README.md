@@ -18,6 +18,10 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K38 / W161: STALE span re-sent on its old base until EIO](k38-stale-span-replay-20261025.md):
+**code fix PASS (scoped), branch `claude/vibrant-wiles-325684` on devel `5af760ff1`, not merged, not pushed; intel2 `make test-all` PASS with host limits at `bac34da00` (483 commands, 0 FAIL, 16 NOTRUN; a first run had 1 FAIL, `test_k36_recovery.py` step 8 read EIO, which passed 3 of 3 alone on the branch and on the base and did not recur); orcd-mini ior hard rerun NOTRUN.**
+A unit test on the production replay proves the cause; the body-less span replay now rebuilds or fails closed, a record re-sent unchanged after two STALE rounds is stopped, and `report-resolve` names the stuck record. The loopback test found and the branch fixes two silent losses of acknowledged bytes in the same path. Loopback, 24 writers sharing chunks under dcache pressure: base 6 of 6 runs fail (5 `EIO` with the K38 signature, 1 with lost records), fix 20 of 20 pass. New finding: two writing clients on shared chunks fail ~50 % with unit BUSY (base too).
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
