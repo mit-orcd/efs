@@ -449,7 +449,9 @@ def run_mode(mode):
             f'{mode}: {r.out["packed_during_fault"]} files packed, no segment written degraded'
     if mode in ('down', 'refuse') and dw:
         # The marks stay while node 3 is unavailable (a rebuild needs it).
-        end, n = time.time() + 30, None
+        # The count is what the group leaders' rebuild passes last
+        # reported, which lags the mark under load (make test-all).
+        end, n = time.time() + REBUILD_BOUND_S, None
         while time.time() < end:
             n = degraded_segments(c)
             if n is not None and n >= len(dw):
