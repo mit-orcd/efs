@@ -14977,6 +14977,26 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
          * 2-byte gap per forwarded reserve). It also let a forwarded txn
          * PREP's BUSY/STALE verdict read as OK. */
         rc = host_propose_wait_idx(h, group, cmd, clen, &hint, &idx);
+#if EFS_FAULTS
+        /* EFS_FAULT_FWD_TXN_STALE=<dir>: while <dir>/stale-<node id> exists,
+         * the next forwarded TXN_BATCH this leader applied with verdict OK
+         * is answered STALE (the flag is consumed): a forwarded PREPARE
+         * batch whose answer is a refusal although its intents applied, as
+         * a conflict in one PREPARE of the batch leaves the others'
+         * (tests/test_pub_unit_forward_abort.py). */
+        if (rc == EFS_OK && clen && cmd[0] == EFS_MD_CMD_TXN_BATCH) {
+            const char *d = getenv("EFS_FAULT_FWD_TXN_STALE");
+            char flag[4096];
+            if (d && *d && h->s &&
+                snprintf(flag, sizeof(flag), "%s/stale-%u", d, h->s->id) < (int)sizeof(flag) &&
+                !unlink(flag)) {
+                fprintf(stderr, "fault: EFS_FAULT_FWD_TXN_STALE answered a forwarded TXN_BATCH "
+                        "group=%u idx=%llu STALE after it applied\n", group,
+                        (unsigned long long)idx);
+                rc = EFS_ERR_STALE;
+            }
+        }
+#endif
         if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
            (cmd[1]==EFS_MD_SESS_LEASE_EDGE || cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED))
             rc=host_lease_submission_result(h,cmd,clen,group,&hint,&salt,rc);
@@ -17651,6 +17671,10 @@ struct host_txn_batch {
     int cohort;
     struct host_idx_ref *refs;
     int *nrefs, max;
+    /* An entry was handed to Raft (or a leader), whatever the answer: a
+     * forwarded entry's verdict comes back as the submit's rc, so a refused
+     * or ambiguous entry has no ref and may still have applied in part. */
+    int submitted;
     struct {
         uint8_t group;
         uint32_t n, len, size;
@@ -17714,6 +17738,7 @@ static int host_txn_batch_close(struct efs_raft_host *h, struct host_txn_batch *
     ref->group = b->open[slot].group;
     cmd[2] = (uint8_t)(n >> 8);
     cmd[3] = (uint8_t)n;
+    b->submitted = 1;
     rc = n == 1 ? host_txn_batch_submit(h, b, ref, cmd + 6, b->open[slot].len - 6, hint)
                 : host_txn_batch_submit(h, b, ref, cmd, b->open[slot].len, hint);
     free(cmd);
@@ -22958,8 +22983,17 @@ static int host_pub_unit_commit(struct efs_raft_host *h, const struct host_pub_u
 #endif
     __atomic_fetch_add(&h->obs_pub_unit_aborts, 1, __ATOMIC_RELAXED);
     /* Nothing is decided: every prepared record goes with an ABORT. A proposal
-     * whose verdict is unknown is covered the same way (recovery otherwise). */
-    if (k)
+     * whose verdict is unknown is covered the same way (recovery otherwise).
+     * That includes a PREPARE entry forwarded to the other group's leader
+     * and answered BUSY or STALE: the leader applied it (a TXN_BATCH applies
+     * each PREPARE on its own, so a conflict in one still installs the
+     * others' intents) but the answer came back as the submit's rc, so it
+     * holds no ref and k can be 0. Gating the ABORT on k left those intents
+     * undecided until the 5 s recovery scan, and the client's next
+     * publication of the inode (a new id after STALE) was BUSY all that
+     * time: EIO at its 8 s budget under the D4 plateau load (F1 follow-up,
+     * tests/test_pub_unit_forward_abort.py). */
+    if (k || batch.submitted)
         host_pub_unit_abort(h, &t, &parts, ish, hint);
     if (raft_dbg_on() || (rc != EFS_OK && rc != EFS_ERR_BUSY))
         fprintf(stderr, "raft-host: publication unit ino=%llu ci=%u n=%u units=%u rc=%d verdict=%d\n",

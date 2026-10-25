@@ -36,6 +36,7 @@ EFS_B6_MODES=refuse python3 tests/test_b6_unavailable.py	65	1
 EFS_B6_MODES=slow python3 tests/test_b6_unavailable.py	275	1	deliberate slow-member delays (8 s per operation, 45 s reads, 65 s commit) past the client deadlines
 EFS_B6_MODES=full python3 tests/test_b6_unavailable.py	125	2	
 python3 tests/test_d4_progress.py	260	2	bounded-progress gate (76-125 s; packer PUT deadlines fail beside fsync-heavy tests): the budget above every other two-slot command makes it the first, in the report step-down window
+python3 tests/test_pub_unit_forward_abort.py	60	1	
 python3 tests/test_report_stepdown.py	440	6	asserts a 3 s bound on every append and fsync through three metadata step-downs (1,600 appends, 200 fsyncs; 265-350 s on the nuc): six slots, so it starts first and only D4 and then timer-bound tests run beside it; an fsync-heavy neighbour breaks the bound
 python3 tests/test_query_first_catalog.py	35	1	
 python3 tests/test_client_processes.py	20	1	
