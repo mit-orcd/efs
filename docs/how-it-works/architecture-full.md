@@ -1598,6 +1598,17 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](../status/f1-followups-20261025.md):
+**branch `claude/devel-f1-followups-ae2deb`, not merged, not pushed; xorinox: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47 (`758dd144c`, same code); RSS plateau FAIL (bounded, not flat).**
+`test_k36_recovery.py` under TSan PASS 10 of 10 (crash hooks now `exit_group`; a hook race and a test
+defect fixed). The D4 fixed-working-set variant rewrites 2048 files for 30 and 60 minutes with no net
+creation. Plateau FAIL, bounded not flat: the clients plateau; efsd's live heap is flat, but glibc arenas held
+freed memory. efsd now caps arenas at 8, fixes the mmap threshold at 256 KiB and trims every 15 s, cutting its
+60-minute peak by about a third. It still grows 8–13 % over minutes 40–60 with throughput (open). The packer
+put errors were follower `NOT_PRIMARY`; with the flake-sweep fix the 20-minute D4 load ends with 0 (was 3), the
+60-minute rewrite load still with 5. New product fix: a W77 publication unit whose forwarded PREPARE batch
+was refused skipped its ABORT, which made rewrites EIO (regression test red 5 of 5, green 6 of 6).
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](../status/f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
