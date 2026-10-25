@@ -3,7 +3,7 @@
 
 Real efsd daemons on loopback (tests/k33_daemons.py, the EFS_FAULTS build,
 private stores under TMPDIR, free ports, never 17xxx) and two efs-fuse
-processes, each through its own member. 24 writer threads on mount a write
+processes, each through its own member. 24 writer threads on the mounts write
 one shared file in the ior hard layout: record k of writer r at offset
 (k * writers + r) * 47008, so most 128 KiB chunks hold spans of two or three
 writers, which race on the chunk's dcache slot, its PUTs and its REPORTs
@@ -12,7 +12,7 @@ body budget is the 32 MiB minimum (EFS_DCACHE_HARD_BYTES), its reclaim
 target 1 MiB (EFS_DCACHE_BYTES), and 24 writes in flight reserve more than
 the budget, so admission waits on the drain (`dcache-pressure` lines) while
 spans of shared chunks are PUT, reported and replayed against each other.
-Mount b, a second client on another member, reads the shared chunks back.
+Both mounts read the shared chunks back.
 
 Checks: no write, fsync or close fails (the EIO of K38); every byte reads
 back exactly through both mounts and after a remount (the zero-filled record
@@ -20,10 +20,14 @@ of the install-order finding); the writing client logged no record the
 REPORT bound stopped (`report-stuck`) and no lost span (`report-span-lost`);
 it ran under pressure. Prints the STALE replay and superseded-span counts.
 
-`--clients 2` splits the writers over both mounts. On devel 5af760ff1 that
-fails in about half the runs with EIO from REPORT units answered BUSY for
-the whole 8 s budget (cross-client unit transactions left prepared until
-txn-recover), a finding outside K38; it is not part of the gate until fixed.
+By default the writers are split over both mounts (`--clients 2`), so
+the two clients' REPORT units contend for the same chunks across groups.
+Before K40 that failed about half the runs on devel 5af760ff1 with EIO:
+a forwarded PREPARE batch refused for one CAS-lost chunk left the other
+chunks' stages undecided (no ABORT) until txn-recover, and every REPORT
+touching them answered BUSY for the whole 8 s budget
+(docs/status/k40-two-client-unit-busy-20261025.md). `--clients 1` keeps
+the single-client K38 shape.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, threading, time
@@ -41,8 +45,8 @@ if not fuse_ok():
 import argparse  # noqa: E402
 ap = argparse.ArgumentParser(description='K38 shared chunks under dcache pressure')
 ap.add_argument('--writers', type=int, default=24)
-ap.add_argument('--clients', type=int, choices=(1, 2), default=1,
-                help='writing clients; 2 is blocked by the cross-client unit BUSY finding')
+ap.add_argument('--clients', type=int, choices=(1, 2), default=2,
+                help='writing clients (1: the single-client K38 shape)')
 ap.add_argument('--records', type=int, default=200, help='records per writer')
 ap.add_argument('--fsyncs', type=int, default=1, help='fsyncs per writer, the last at the end')
 ap.add_argument('--no-pressure-check', action='store_true')
