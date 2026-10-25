@@ -333,6 +333,7 @@ test-wb-runtime:
 	python3 tests/test_report_span_base.py
 	python3 tests/test_k38_stale_span_replay.py
 	python3 tests/test_k38_report_bound.py
+	python3 tests/test_k38_install_order.py
 	python3 tests/test_inode_pending_eof.py
 	python3 tests/test_report_session_apply.py
 	python3 tests/test_report_activation.py

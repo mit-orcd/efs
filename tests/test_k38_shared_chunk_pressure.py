@@ -32,9 +32,17 @@ if not fuse_ok():
     print('K38 shared chunks under pressure: NOTRUN (no /dev/fuse, fusermount3 or efs-fuse)')
     sys.exit(0)
 
-RANKS, PER_MOUNT, XFER = 8, 4, 47008
-SEGMENTS = 120  # 8 x 120 x 47008 B = 45 MB
-FSYNC_EVERY = SEGMENTS // 2  # each client holds ~22 MB unpublished first
+import argparse  # noqa: E402
+ap = argparse.ArgumentParser(description='K38 shared chunks under dcache pressure')
+ap.add_argument('--writers', type=int, default=8)
+ap.add_argument('--clients', type=int, choices=(1, 2), default=2)
+ap.add_argument('--records', type=int, default=120, help='records per writer')
+ap.add_argument('--fsyncs', type=int, default=2, help='fsyncs per writer, the last at the end')
+ap.add_argument('--no-pressure-check', action='store_true')
+opt = ap.parse_args()
+RANKS, XFER, CHUNK = opt.writers, 47008, 128 << 10
+SEGMENTS = opt.records
+FSYNC_EVERY = max(1, SEGMENTS // opt.fsyncs)
 work = Path(tempfile.mkdtemp(prefix='efs-k38-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
 client_env = dict(env, EFS_DCACHE_HARD_BYTES=str(32 << 20), EFS_DCACHE_BYTES=str(1 << 20))
@@ -67,7 +75,15 @@ def verify(m, what):
     assert len(data) == RANKS * SEGMENTS * XFER, f'{what}: size {len(data)}'
     bad = [(r, k) for k in range(SEGMENTS) for r in range(RANKS)
            if data[(k * RANKS + r) * XFER:(k * RANKS + r + 1) * XFER] != record(r, k)]
-    assert not bad, f'{what}: {len(bad)} records differ, first {bad[:5]}'
+    lines = []
+    for r, k in bad[:4]:
+        o = (k * RANKS + r) * XFER
+        got, want = data[o:o + XFER], record(r, k)
+        diff = [i for i in range(XFER) if got[i] != want[i]]
+        lines.append(f'writer {r} record {k}: bytes {o + diff[0]}..{o + diff[-1]} '
+                     f'({len(diff)} differ, {got[diff[0]:diff[-1] + 1].count(0)} zero), '
+                     f'chunks {(o + diff[0]) // CHUNK}..{(o + diff[-1]) // CHUNK}')
+    assert not bad, f'{what}: {len(bad)} records differ\n' + '\n'.join(lines)
 
 
 c = Cluster(work, 'k', [1, 2, 3], env)
@@ -85,9 +101,8 @@ try:
     with open(a.path / 'shared', 'wb') as f:
         f.truncate(RANKS * SEGMENTS * XFER)
     errors = []
-    threads = [threading.Thread(target=writer, args=(a if r % 2 == 0 else b, r, errors))
+    threads = [threading.Thread(target=writer, args=((a, b)[r % opt.clients], r, errors))
                for r in range(RANKS)]
-    assert len(threads) == 2 * PER_MOUNT
     for t in threads:
         t.start()
     for t in threads:
@@ -97,14 +112,21 @@ try:
     assert not errors, '\n'.join(errors) + '\n' + '\n'.join(
         f'-- {n}:\n' + '\n'.join(l[-3000:].splitlines()[-30:]) for n, l in logs.items())
     write_s = time.time() - t0
-    verify(a, 'mount a')
-    verify(b, 'mount b')
+    # Both views first, so a failure says whether the writer's cache or
+    # the published data is wrong.
+    seen = []
+    for m in (a, b):
+        try:
+            verify(m, m.path.name)
+        except AssertionError as e:
+            seen.append(str(e))
+    assert not seen, '\n'.join(seen)
     for n, l in logs.items():
         for bad in ('report-stuck ', 'report-span-lost '):
             assert bad not in l, f'{n}: {bad.strip()}\n' + '\n'.join(
                 x for x in l.splitlines() if bad in x)[:3000]
     pressure = sum(l.count('dcache-pressure ') for l in logs.values())
-    assert pressure, 'no client ran under dcache pressure:\n' + '\n'.join(
+    assert pressure or opt.no_pressure_check, 'no client ran under dcache pressure:\n' + '\n'.join(
         l[-2000:] for l in logs.values())
     stale = sum(len(re.findall(r'report-stale: chunks=', l)) for l in logs.values())
     superseded = sum(l.count(' superseded by seq=') for l in logs.values())
@@ -124,6 +146,6 @@ finally:
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)
-print(f'K38 shared chunks under dcache pressure: {RANKS} writers on 2 clients, no EIO, '
+print(f'K38 shared chunks under dcache pressure: {RANKS} writers on {opt.clients} client(s), no EIO, '
       f'{RANKS * SEGMENTS} records exact on both mounts and after remount PASS '
       f'({time.time() - t0:.1f} s)')

@@ -6429,7 +6429,13 @@ static void dcache_install_image(struct dcache_ent *e, uint8_t *img,
     DTRACE(e, "install len=%u seq=%llu", len, (unsigned long long)seq);
     if (seq)
         e->img_seq = seq;
-    if (e->dirty) {
+    /* A newer snapshot already cleared dirty: bytes patched after this
+     * image's copy are in the body and its ranges (kept until commit), not
+     * in img. Replacing them left the body without them until the newer
+     * PUT installed, and a STALE replay that copied the body in between
+     * published the chunk without them (K38 loopback test, Oct 25: a whole
+     * 47008-byte record read back as zeros). */
+    if (e->dirty || (seq && e->snap_seq > seq)) {
         for (uint8_t i = 0; i < e->nrange; i++) {
             uint32_t a = e->roff[i], n = e->rlen[i];
 
