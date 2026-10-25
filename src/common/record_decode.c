@@ -3,6 +3,8 @@
 #include "efs/packed_segment.h"
 #include "efs/session.h"
 #include "efs/erasure.h"
+#include "efs/put_upload.h"
+#include "efs/kv_key.h"
 #include <string.h>
 static uint32_t be32(const uint8_t *p)
 { return (uint32_t)p[0]<<24 | (uint32_t)p[1]<<16 | (uint32_t)p[2]<<8 | p[3]; }
@@ -101,4 +103,39 @@ int efs_segment_audit_reply_decode(const uint8_t *p,uint32_t len,struct efs_audi
         r.status[i]=p[EFS_SEGMENT_AUDIT_REPLY+i];
     }
     *out=r;return EFS_OK;
+}
+int efs_put_upload_header_decode(const uint8_t *p,uint32_t len,struct efs_put_ticket *out,uint32_t *fragment)
+{
+    struct efs_put_ticket t;
+    if(!p || !out || !fragment || len!=EFS_PUT_UPLOAD_HEADER_LEN || be32(p)!=1 ||
+       be32(p+4)>=EFS_NUM_FRAGMENTS || efs_put_ticket_decode(p+8,EFS_PUT_TICKET_WIRE_LEN,&t)!=EFS_OK ||
+       efs_ino_is_meta_table(t.ino) || !efs_chunk_size_valid(t.fragment_len*2u))return EFS_ERR_INVAL;
+    *out=t;*fragment=be32(p+4);return EFS_OK;
+}
+int efs_degraded_command_decode(const uint8_t *p,uint32_t len,struct efs_degraded_command *out)
+{
+    if(!p || !out || len!=EFS_MD_DEGRADED_MARK_LEN || p[0]!=EFS_MD_CMD_DEGRADED_MARK)return EFS_ERR_UNSUPPORTED;
+    struct efs_degraded_command d={.ino=be64(p+1),.inode_gen=be64(p+9),.object_gen=be64(p+17),
+                                 .chunk_index=be32(p+25),.fragment=p[29],.node=be32(p+30)};
+    if(!d.ino || !d.inode_gen || !d.object_gen || d.fragment>=EFS_NUM_FRAGMENTS || !d.node || d.node>EFS_MAX_NODES)
+        return EFS_ERR_UNSUPPORTED;
+    *out=d;return EFS_OK;
+}
+int efs_pack_degraded_command_decode(const uint8_t *p,uint32_t len,struct efs_pack_degraded_command *out)
+{
+    if(!p || !out || len!=EFS_MD_PACK_DEGRADED_LEN || p[0]!=EFS_MD_CMD_PACK_DEGRADED)return EFS_ERR_UNSUPPORTED;
+    struct efs_pack_degraded_command d={.group=p[1],.op=p[2],.id=be64(p+3),.generation=be64(p+11),.mask=p[19],.reason=p[20]};
+    if((d.group!=0 && d.group!=2) || !d.id || !d.generation || !d.mask || d.mask>7 ||
+       d.op<EFS_MD_PACK_DEGRADED_MARK || d.op>EFS_MD_PACK_DEGRADED_RETIRE ||
+       (d.op==EFS_MD_PACK_DEGRADED_MARK && !d.reason) ||
+       (d.op==EFS_MD_PACK_DEGRADED_CLEAR && (d.mask&(d.mask-1))))return EFS_ERR_UNSUPPORTED;
+    *out=d;return EFS_OK;
+}
+int efs_ticket_drain_decode(const uint8_t *p,uint32_t len,struct efs_put_stream *out)
+{
+    struct efs_put_stream d={0};
+    if(!p || !out || len!=EFS_MD_PUT_TICKET_DRAIN_LEN || p[0]!=EFS_MD_CMD_PUT_TICKET_DRAIN)return EFS_ERR_UNSUPPORTED;
+    memcpy(d.uuid,p+1,16);d.epoch=be32(p+17);d.shard=be32(p+21);
+    if(!d.epoch || d.shard>EFS_KV_SHARD_MASK)return EFS_ERR_UNSUPPORTED;
+    *out=d;return EFS_OK;
 }

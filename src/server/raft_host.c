@@ -2229,9 +2229,10 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         free(s);
     } else if (cmd[0] == EFS_MD_CMD_PACK_DEGRADED) {
         int changed = 0;
-        if (clen != EFS_MD_PACK_DEGRADED_LEN) return EFS_ERR_UNSUPPORTED;
-        rc = efs_meta_apply_pack_degraded(h->kv, cmd[1], cmd[2], rd64be(cmd + 3), rd64be(cmd + 11),
-                                          cmd[19], cmd[20], &changed);
+        struct efs_pack_degraded_command decoded;
+        if (efs_pack_degraded_command_decode(cmd,clen,&decoded)!=EFS_OK) return EFS_ERR_UNSUPPORTED;
+        rc = efs_meta_apply_pack_degraded(h->kv, decoded.group, decoded.op, decoded.id, decoded.generation,
+                                          decoded.mask, decoded.reason, &changed);
         h->apply_extra = (uint64_t)changed;
     } else if (cmd[0] == EFS_MD_CMD_PACK_CANCEL) {
         if (clen != 18) return EFS_ERR_UNSUPPORTED;
@@ -2428,12 +2429,7 @@ static int apply_put_ticket_drain_cmd(struct efs_raft_host *h, const uint8_t *cm
 {
     struct efs_put_stream st;
     uint32_t moved = 0;
-    if (clen != EFS_MD_PUT_TICKET_DRAIN_LEN)
-        return EFS_ERR_UNSUPPORTED;
-    memcpy(st.uuid, cmd + 1, EFS_OPID_UUID_LEN);
-    st.epoch = rd32be(cmd + 17);
-    st.shard = rd32be(cmd + 21);
-    if (!st.epoch || st.shard > EFS_KV_SHARD_MASK)
+    if (efs_ticket_drain_decode(cmd,clen,&st)!=EFS_OK)
         return EFS_ERR_UNSUPPORTED;
     if (group != efs_raft_shard_group(st.shard))
         return EFS_ERR_INVAL;
@@ -2509,9 +2505,8 @@ static int apply_degraded_mark_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     uint32_t ci, fi;
     int added = 0, rc;
 
-    if (clen != EFS_MD_DEGRADED_MARK_LEN || !rd64be(cmd + 1) || !rd64be(cmd + 9) ||
-        !rd64be(cmd + 17) || cmd[29] >= EFS_NUM_FRAGMENTS || !rd32be(cmd + 30) ||
-        rd32be(cmd + 30) > EFS_MAX_NODES)
+    struct efs_degraded_command decoded;
+    if (efs_degraded_command_decode(cmd,clen,&decoded)!=EFS_OK)
         return EFS_ERR_UNSUPPORTED;
     if (group != degraded_mark_cmd_group(cmd))
         return EFS_ERR_INVAL;
