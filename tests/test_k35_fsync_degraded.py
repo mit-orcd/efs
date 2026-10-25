@@ -321,6 +321,10 @@ try:
     up(c, lead, 4)
     c.wait_members([1, 2, 3, 4], 4)
     settle(a, f'7b-{lead}')
+    # Stripes written before the stop and synced after it are marked
+    # degraded (case 3's rule); case 8 stops another member, so they must
+    # be rebuilt on the leader's return first.
+    wait_degraded(c, 1, lambda n: n == 0, '7b rebuild on return', timeout=180)
 
     # 8. Five members, node 2 down.
     c.start(5, join=3)

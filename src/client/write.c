@@ -2844,13 +2844,14 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
         conns[i] = NULL;
         pending[i] = 0;
         memset(hdrs[i], 0, sizeof(hdrs[i]));
-        /* An acknowledgement from an earlier attempt of this object stands
-         * (W154, K35): only the slots still missing are sent again. */
-        if (acked_out && acked_out[i])
-            acks++;
     }
 
-    /* Unreachable peers count as missing acks — do not abort the whole PUT. */
+    /* Unreachable peers count as missing acks — do not abort the whole PUT.
+     * An acknowledgement from an earlier attempt of this object stands
+     * (W154, K35): only the slots still missing are sent again, and it
+     * counts once (K39: it was counted here and in the loop above, so one
+     * earlier acknowledgement made a quorum and the attempt could return
+     * OK holding a single fragment). */
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (acked_out && acked_out[i]) {
             acks++;
@@ -3178,7 +3179,12 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                     pending[i] = 0;
                     continue;
                 } else if (w < 0) {
+                    /* K39: a lost connection after the quorum is a hard
+                     * failure of that slot (not a peer-health verdict): the
+                     * caller resends or places it around rather than
+                     * acknowledging the stripe on two fragments. */
                     efs_client_conn_drop(nodes[i], conns[i]);
+                    if (failed_out) failed_out[i] = 1;
                     conns[i] = NULL;
                     pending[i] = 0;
                     continue;
@@ -3209,7 +3215,10 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                     int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
                                            &ack_seq[i], &ack_epoch[i]);
                     put_drain_verdict(r, i, failed_out, acked_out, quota_out, &stale_errors);
-                } else efs_client_conn_drop(nodes[i], conns[i]);
+                } else {
+                    efs_client_conn_drop(nodes[i], conns[i]);
+                    if (failed_out) failed_out[i] = 1;
+                }
                 conns[i] = NULL;
                 pending[i] = 0;
             }
