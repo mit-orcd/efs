@@ -897,6 +897,12 @@ most `EFS_PACK_THRESHOLD` (16 KiB) is written and published as per-file
 chunk fragments like any file. Its chunk-zero publication also records the
 file in its group's **candidate index** (KV kind 46, key epoch + FileID, the
 epoch being leader time / 60 s, `EFS_PACK_EPOCH_S`), in the same batch.
+The entry's value is the inode generation and a publish stamp (the file's
+lane sequence after that publication). `PACK_UNINDEX` (MD 77) carries the
+value the packer read and deletes an entry only on an exact match, so a
+rewrite (an `O_TRUNC` that the packer saw at size 0, then new bytes) whose
+publication re-added the entry before the unindex committed stays a
+candidate.
 
 **Packer (group leader).** For each led group the packer selects
 candidates that are closed, quiet for the minimum age (60 s), linked,

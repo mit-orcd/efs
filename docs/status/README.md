@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](pack-unindex-race-20261024.md):
+**FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**
+The packer's UNINDEX deleted a candidate key unconditionally, so a rewrite whose publication
+re-added the key before the UNINDEX committed was never packed (B6 full: `packed 11 of 12`).
+Candidate values are now `[inode generation][publish stamp]` and UNINDEX deletes only on an
+exact match (fresh format). New unit case red without the comparison, green with it; B6 full
+15 of 15 PASS with the fix (the live race did not fire on devel in 31 runs). Multi-host NOTRUN.
+
 [Oct 24 merge: docs-review fixes, B6/D4, K37, A11 and the K33 live-harness port](a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `646a43041`: 467 commands, 2 FAIL from the merge (a duplicate `read_reprobe_down` stub in `test_get_integrity.py`; `test_b6_unavailable.py` still asserting no packing during a fault, which K37's policy allows with a degraded mark), both fixed in `12d2a7957` and rerun PASS on intel2; 15 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave6-20261024/`, `SHA256SUMS` `fd750fd9…d662`).** `add-node` and `add-storage` are gone (JOIN/ADD_STORAGE wire types removed). Live gates stay NOTRUN; every store needs a fresh format.
 
