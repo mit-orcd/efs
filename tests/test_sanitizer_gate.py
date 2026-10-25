@@ -48,7 +48,7 @@ int main(int argc, char **argv) { (void)argv; volatile int x = INT_MAX; x += arg
 LEAK = r'''
 #include <stdlib.h>
 #include <string.h>
-static void *keep;
+static void *volatile keep; /* gcc 15 -O1 elides a malloc whose pointer only reaches a plain dead store */
 int main(void) { char *p = malloc(48); memset(p, 1, 48); keep = p; keep = 0; return 0; }
 '''
 ENVCHK = r'''
