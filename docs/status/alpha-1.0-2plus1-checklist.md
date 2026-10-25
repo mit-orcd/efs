@@ -791,6 +791,10 @@ round says which physical or software limiter it hit.
   progress failure or unexplained mounted-I/O failure may be called PASS.
 - [ ] **F3** Complete the topology ledger below, link exact reproduction commands
   or committed drivers and evidence summaries. Raw captures stay outside Git.
+  **Oct 25 Task A rehearsal OPEN:** [three- and five-member AMD loopback](task-a-20261025.md)
+  runs exercise the complete driver selection and F3 output. This is one-host
+  regression evidence, not a completed physical-topology ledger; product
+  findings and corrected-run verdicts are recorded there.
 - [ ] **F4** Publish alpha limitations: fixed metadata-group count and
   default placement of two three-voter groups (both on 1–3 for N = 3; on
   1–3 and 2–4 for N ≥ 4, D38 as amended), actual packing placement, supported
