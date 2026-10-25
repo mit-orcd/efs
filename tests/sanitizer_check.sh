@@ -275,7 +275,14 @@ while IFS='|' read -r name cmd; do
         # crash-simulation children that open a store (and so start a
         # compactor thread); TSan kills such a child by default and the
         # parent's child-status checks fail without any race.
-        envs+=("TSAN_OPTIONS=log_path=$LOGDIR/$name.tsan second_deadlock_stack=1 halt_on_error=0 die_after_fork=0 exitcode=66 ${TSAN_OPTIONS:-}"
+        # detect_deadlocks=0: libtsan's lock-order detector aborts (CHECK
+        # sanitizer_deadlock_detector.h:67) when one thread holds more than
+        # 64 mutexes, and that abort's stack print self-deadlocks in
+        # pthread_getattr_np -> realloc (gcc 14 libtsan, glibc 2.39): the
+        # efs-fuse metadata fetch holds every inode lock stripe at once and
+        # never mounted. Data-race detection is unaffected; lock-order
+        # inversions are not reported by this gate (a stated limit).
+        envs+=("TSAN_OPTIONS=log_path=$LOGDIR/$name.tsan halt_on_error=0 die_after_fork=0 detect_deadlocks=0 exitcode=66 ${TSAN_OPTIONS:-}"
                "EFS_TEST_TSAN=1") ;;
     asan)
         envs+=("ASAN_OPTIONS=log_path=$LOGDIR/$name.asan $LSAN detect_stack_use_after_return=1 exitcode=66 ${ASAN_OPTIONS:-}"
