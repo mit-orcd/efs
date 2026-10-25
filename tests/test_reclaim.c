@@ -24,13 +24,13 @@ int server_gc_sync_roots(struct efsd_server *s)
 #include "test_tmpdir.h"
 
 /* No Raft host: recovery asks this oracle instead. */
-static int host_active;
+static int host_active; /* read by the recovery thread: atomic */
 static efs_ino_t dead_set[64];
 static int ndead;
 #if EFS_BUILD_EXPIRY
 void server_raft_host_expiry_status(struct efs_expiry_status *out){memset(out,0,sizeof(*out));}
 #endif
-int server_raft_host_active(void){return host_active;}
+int server_raft_host_active(void){return __atomic_load_n(&host_active,__ATOMIC_ACQUIRE);}
 int server_raft_host_inode_reaped(efs_ino_t ino,int *dead)
 {
     *dead=0;
@@ -293,14 +293,14 @@ static void t_fail_closed(void)
     assert(pread(fd,&x,1,20)==1);x^=0xff;
     assert(pwrite(fd,&x,1,20)==1);close(fd);
     ndead=2;dead_set[0]=9100;dead_set[1]=9101; /* 9101 was deleted but never journalled here */
-    host_active=0;
+    __atomic_store_n(&host_active,0,__ATOMIC_RELEASE);
     boot();
     uint64_t base=used()-3ull*EFS_FRAGMENT_SIZE; /* 9100, 9101, 9102 */
     assert(S.reclaim_fail_closed);
     assert(put(9102,1,0)==EFS_ERR_IO); /* even a live inode is refused */
     int32_t rc;struct efs_reclaim_item it={.export_id=1,.ino=9200,.generation=1};
     (void)server_reclaim_accept(&S,&it,1,&rc);assert(rc==EFS_ERR_BUSY); /* leader retries later */
-    host_active=1;
+    __atomic_store_n(&host_active,1,__ATOMIC_RELEASE);
     wait_readmitted();
     assert(!S.reclaim_fail_closed);
     assert(!put(9102,1,0));
@@ -348,7 +348,7 @@ static void t_state_rules_replay(void)
 }
 static void t_state_missing(void)
 {
-    host_active=0;
+    __atomic_store_n(&host_active,0,__ATOMIC_RELEASE);
     boot();
     assert(S.reclaim_fail_closed); /* segments without a state record */
     assert(put(9301,0,0)==EFS_ERR_IO);
@@ -382,7 +382,7 @@ static void t_old_meta(void)
                  roots[0],(long long)now+k,roots[0],(long long)now+k);
         assert(!system(cmd));
     }
-    host_active=0;
+    __atomic_store_n(&host_active,0,__ATOMIC_RELEASE);
     boot();
     assert(S.reclaim_fail_closed);
     snprintf(cmd,sizeof(cmd),"test -e %s/meta/gc-journal.broken.%lld/seg",roots[0],(long long)now);
@@ -734,13 +734,13 @@ static void t_segment_recover(void)
              roots[0], roots[0]);
     assert(!system(cmd));
     seg_setup(0x5e60004); /* ACTIVE; 0x5e60003 reads absent */
-    host_active = 1;
+    __atomic_store_n(&host_active,1,__ATOMIC_RELEASE);
     boot();
     for (int i = 0; i < 400 && S.reclaim_fail_closed; i++) usleep(25000);
     assert(!S.reclaim_fail_closed);
     wait_drained();
     assert(!seg_file(0x5e60003) && seg_file(0x5e60004));
-    host_active = 0;
+    __atomic_store_n(&host_active,0,__ATOMIC_RELEASE);
 }
 
 /* W125 superseded fragments: checksum-guarded deletion of one generation,
