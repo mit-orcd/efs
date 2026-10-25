@@ -8,6 +8,10 @@ outside Git, everything an evidence summary needs:
                    [--allow restart,turnover,remount|all] [--deadline GATE=SEC]
                    [--plugin NAME=COMMAND] [--work DIR] [--plan]
     qualify.py run --loopback 3 --out DIR --work DIR [--port-base 18740] ...
+    qualify.py run --matrix scripts/qualify_matrix.json --topology NAME --out DIR
+                   [--user-approved] [--ignore-blocked]   one A11 topology, its defaults
+    qualify.py plan [--matrix FILE] [--topology NAME] [--check]
+                                          validate the A11 matrix; print each topology's command
     qualify.py list                       gates, checklist items, destructive needs
     qualify.py verify-sums DIR            recheck DIR/SHA256SUMS (exit 1 on mismatch)
 
@@ -56,7 +60,17 @@ shell-quoted, so never quote them in the template):
                  "client_start": "cd {source} && scripts/client.sh {seed} {mount}",
                  "stop_timeout_s": 300, "ready_timeout_s": 300},
      "plugins": {"b-checks": {"command": "...", "deadline_s": 3600,
-                              "host": "local", "needs": [], "items": "B1-B6"}}}
+                              "host": "local", "needs": [], "items": "B1-B6"}},
+     "ssh": "scripts/orcd_mini_ssh.sh",       # optional: PROG HOST COMMAND replaces ssh
+     "private_cluster": {"root": "/home/u/efs-qual", "quota": "4G", "env": {}}}
+
+With private_cluster the driver owns the cluster: every node names its
+"store" (and every mount its path) under that root on its host; the driver
+starts one efsd per node there (`_node start`: the first node is the seed,
+the others --join it), mounts the clients, and at the end unmounts, stops
+those daemons and deletes the root on every host (unless --keep-work).
+Gates named STUB in `list` exist so the A11 plan can name them; they report
+NOTRUN with the missing harness until one replaces them.
 
 Plugins (the B checks and anything later) are commands run with the same
 placeholders plus {cluster} (the description copy in DIR) and {gate_dir}.
@@ -112,6 +126,10 @@ def is_local(host):
     return host in (name, name.split('.')[0])
 
 
+def ssh_program(ssh):
+    return ssh if os.path.isabs(ssh) else str(ROOT / ssh)
+
+
 def fill(template, values):
     return template.format(**{k: shlex.quote(str(v)) for k, v in values.items()})
 
@@ -127,8 +145,9 @@ class Runner:
     """Runs commands on hosts with a deadline; local ones in their own
     process group (killed on expiry), remote ones under timeout(1) via ssh."""
 
-    def __init__(self, env=None):
+    def __init__(self, env=None, ssh=None):
         self.env = env or {}
+        self.ssh = ssh  # PROG called as `PROG HOST COMMAND` in place of ssh (jump-host wrappers)
 
     def argv(self, host, cmd, deadline):
         exports = ''.join(f'export {k}={shlex.quote(str(v))}; ' for k, v in self.env.items())
@@ -137,6 +156,8 @@ class Runner:
             return ['bash', '-c', cmd]
         wrapped = f'timeout -k 30 {int(deadline) + 1} bash -c {shlex.quote(cmd)}' if deadline else \
             f'bash -c {shlex.quote(cmd)}'
+        if self.ssh:
+            return [ssh_program(self.ssh), host, wrapped]
         return ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=20',
                 '-o', 'ServerAliveInterval=30', host, wrapped]
 
@@ -170,10 +191,10 @@ class Runner:
 
 class Gate:
     def __init__(self, name, fn, items, ledger, needs=(), deadline_s=3600, partial_needs=(),
-                 doc=''):
+                 doc='', stub=False):
         self.name, self.fn, self.items, self.ledger = name, fn, items, ledger
         self.needs, self.partial_needs = tuple(needs), tuple(partial_needs)
-        self.deadline_s, self.doc = deadline_s, doc
+        self.deadline_s, self.doc, self.stub = deadline_s, doc, stub
 
 
 class GateRun:
@@ -279,7 +300,7 @@ class Controller:
         return g.run(name, host, cmd, deadline)
 
     def client_stop(self, g, m):
-        values = dict(mount=m['path'], source=self.q.source(m['host']))
+        values = dict(mount=m['path'], source=self.q.source(m['host']), host=m['host'])
         cmd = fill(self.c.get('client_stop') or 'cd {source} && scripts/client.sh stop {mount}',
                    self.values(**values))
         if 'force' in cmd:
@@ -287,7 +308,7 @@ class Controller:
         return g.run('client-stop', m['host'], cmd, self.c.get('stop_timeout_s', 300))
 
     def client_start(self, g, m):
-        values = dict(mount=m['path'], source=self.q.source(m['host']))
+        values = dict(mount=m['path'], source=self.q.source(m['host']), host=m['host'])
         cmd = fill(self.c.get('client_start') or 'cd {source} && scripts/client.sh {seed} {mount}',
                    self.values(**values))
         return g.run('client-start', m['host'], cmd, self.c.get('ready_timeout_s', 300))
@@ -481,6 +502,126 @@ class Loopback(Controller):
                             lambda: self.start_daemon(self.index(node), join=False))
 
 
+class PrivateCluster(Controller):
+    """A cluster the driver starts on the described hosts and removes at the
+    end (`private_cluster` in the description): one efsd per node from that
+    host's tree (`_node start`), the first node the seed and the others
+    `--join` it, then a client.sh mount per mount; restarts use the stores'
+    persisted identity. Every store and mount must lie under
+    private_cluster.root on its host (never /data1/efs); teardown unmounts,
+    stops the daemons it started and deletes that root on every host."""
+    owned = True
+
+    def __init__(self, q):
+        super().__init__(q)
+        self.pc = q.cluster['private_cluster']
+        self.nodes = q.cluster.get('nodes', [])
+
+    def has(self, *names):
+        return True
+
+    def can_restart_nodes(self):
+        return True
+
+    def env_args(self):
+        env = dict(EFS_TRANSPORT=self.q.cluster.get('transport', 'tcp'), **self.pc.get('env', {}))
+        return [f'--env={k}={v}' for k, v in sorted(env.items())]
+
+    def node_cmd(self, node, op, join=False):
+        args = ['_node', op, '--addr', node['addr'], '--store', node['store']]
+        if op == 'start':
+            args += ['--quota', self.pc.get('quota', '4G'), *self.env_args()]
+            if join:
+                args += ['--join', self.q.cluster['seed']]
+        return self.q.helper(node['host'], *args)
+
+    def start_node(self, g, node, join=False):
+        return g.run(f'start-node-{node["addr"]}', node['host'], self.node_cmd(node, 'start', join), 300)
+
+    def stop_node(self, g, node):
+        return g.run(f'stop-node-{node["addr"]}', node['host'], self.node_cmd(node, 'stop'), 300)
+
+    def start_cluster(self, g, join=False):
+        for i, node in enumerate(self.nodes):
+            rc, text = self.start_node(g, node, join=join and i > 0)
+            if rc:
+                return rc, text
+        if not wait_cluster_ready(self.q, g, self.pc.get('ready_timeout_s', 300)):
+            return 1, 'cluster not ready (raft-getattr on every node)'
+        return 0, ''
+
+    def stop_cluster(self, g):
+        worst_rc, texts = 0, []
+        for node in reversed(self.nodes):
+            rc, text = self.stop_node(g, node)
+            worst_rc, texts = worst_rc or rc, texts + [text]
+        return worst_rc, '\n'.join(texts)
+
+    def client_env(self):
+        return ' '.join(f'export {a[6:].split("=", 1)[0]}={shlex.quote(a[6:].split("=", 1)[1])};'
+                        for a in self.env_args())
+
+    def client_start(self, g, m):
+        src = shlex.quote(self.q.source(m['host']))
+        return g.run('client-start', m['host'], f'mkdir -p {shlex.quote(m["path"])} && cd {src} && '
+                     f'{self.client_env()} scripts/client.sh {shlex.quote(self.q.cluster["seed"])} '
+                     f'{shlex.quote(m["path"])}', 300)
+
+    def client_stop(self, g, m):
+        return g.run('client-stop', m['host'], f'cd {shlex.quote(self.q.source(m["host"]))} && '
+                     f'scripts/client.sh stop {shlex.quote(m["path"])}', 300)
+
+    def owned_setup(self, g):
+        g.step('format', 'driver-owned private cluster: fresh stores, seed + --join formation')
+        rc, text = self.start_cluster(g, join=True)
+        if rc:
+            return rc, text
+        for m in self.q.cluster.get('mounts', []):
+            rc, text = self.client_start(g, m)
+            if rc:
+                return rc, f'mount {m["host"]}:{m["path"]} failed: ' + text.strip()[-300:]
+        return 0, ''
+
+    def owned_teardown(self, g):
+        for m in self.q.cluster.get('mounts', []):
+            path = shlex.quote(m['path'])
+            g.run('teardown-unmount', m['host'], f'mountpoint -q {path} || exit 0; '
+                  f'cd {shlex.quote(self.q.source(m["host"]))} && scripts/client.sh stop {path} || '
+                  f'fusermount3 -uz {path}', 300)
+        self.stop_cluster(g)
+        # The daemons' and clients' logs are raw outputs; the stores are not.
+        for n in self.nodes:
+            store = Path(n['store'])
+            g.fetch(n['host'], f'{store.parent}/{store.name}.log', f'efsd-{n["addr"].replace(":", "-")}.log')
+        for m in self.q.cluster.get('mounts', []):
+            mount = Path(m['path'])
+            g.fetch(m['host'], f'{mount.parent}/efs-fuse-{mount.name}.log', f'efs-fuse-{m["host"]}-{mount.name}.log')
+        root = shlex.quote(self.pc['root'])
+        for host in sorted({n['host'] for n in self.nodes} | {m['host'] for m in self.q.cluster.get('mounts', [])}):
+            g.run('teardown-delete', host, f'test -e {root} || exit 0; if command -v edelete >/dev/null; '
+                  f'then edelete --force --delete {root}; else rm -rf -- {root}; fi', 900)
+
+
+def check_private_cluster(cluster):
+    """Refusals for a driver-owned multi-host cluster; returns error strings."""
+    pc, errors = cluster.get('private_cluster') or {}, []
+    root = pc.get('root', '')
+    if not root.startswith('/') or root.rstrip('/').count('/') < 2 or root.startswith('/data1/efs'):
+        errors.append(f'private_cluster.root {root!r} must be an absolute work directory outside /data1/efs')
+    for kind, entries, key in (('node', cluster.get('nodes', []), 'store'), ('mount', cluster.get('mounts', []), 'path')):
+        for e in entries:
+            path = e.get(key, '')
+            if not path.startswith(root.rstrip('/') + '/'):
+                errors.append(f'{kind} {e.get("addr") or path!r}: {key} {path!r} is not under private_cluster.root')
+    for n in cluster.get('nodes', []):
+        port = int(n.get('addr', ':0').rsplit(':', 1)[-1] or 0)
+        if port in RESERVED_PORTS:
+            errors.append(f'node {n["addr"]}: reserved port')
+    if cluster.get('nodes') and cluster.get('seed') != cluster['nodes'][0].get('addr'):
+        errors.append('private_cluster: seed must be the first node')
+    return errors
+
+
 # --------------------------------------------------------------------------
 # The qualification run.
 
@@ -493,7 +634,7 @@ class Qualify:
         self.private = dict(dict(host='local', root=str(work / 'live'), port_base=18700),
                             **cluster.get('private', {}))
         self.runid = out.name
-        self.runner = Runner()
+        self.runner = Runner(ssh=cluster.get('ssh'))
         self.control = controller
         self.plugins = plugins
         self.scratch = {}
@@ -574,14 +715,68 @@ class Qualify:
         (self.out / 'gates').mkdir(parents=True)
         (self.out / 'cluster.json').write_text(json.dumps(self.cluster, indent=2) + '\n')
         results = []
+        try:
+            setup_failed = self.setup(results)
+            self.run_gates(gates, results, setup_failed)
+        finally:
+            self.teardown()
+        self.cleanup_scratch()
+        if self.before_sums:
+            self.before_sums(self.out)
+        verdict = worst(r['verdict'] for r in results)
+        run = dict(driver='scripts/qualify.py', argv=sys.argv, cwd=os.getcwd(),
+                   driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                   driver_host=socket.gethostname(), start=started, end=now(),
+                   allow=sorted(self.allow), owned_cluster=self.control.owned,
+                   verdict=verdict, counts={v: sum(r['verdict'] == v for r in results)
+                                            for v in (PASS, FAIL, NOTRUN)},
+                   gates=[dict(gate=r['gate'], verdict=r['verdict'], reason=r['reason'])
+                          for r in results],
+                   destructive_steps=[dict(gate=r['gate'], **s) for r in results
+                                      for s in r['destructive_steps']])
+        (self.out / 'run.json').write_text(json.dumps(run, indent=2) + '\n')
+        sums = write_sums(self.out)
+        write_summary(self, run, results, sums)
+        return verdict
+
+    def setup(self, results):
+        """Start a driver-owned multi-host cluster; a failed formation is a
+        FAIL result of its own and the gates are NOTRUN."""
+        if not hasattr(self.control, 'owned_setup'):
+            return None
+        g = GateRun(self, Gate('_setup', None, 'A13 (formation), A5', 'Candidate and profile'), 1800)
+        rc, why = self.control.owned_setup(g)
+        failed = None if rc == 0 or self.plan else (why.strip()[-300:] or f'exit {rc}')
+        g.record.update(verdict=FAIL if failed else (NOTRUN if self.plan else PASS), reason=failed or '',
+                        end=now(), seconds=round(time.monotonic() - g.start, 3), commands=g.commands,
+                        fixture=g.fixture, destructive_steps=g.steps, raw=g.raw)
+        (g.dir / 'result.json').write_text(json.dumps(g.record, indent=2) + '\n')
+        print(f'[{now()}] setup {g.record["verdict"]} {failed or ""}', flush=True)
+        if failed:
+            results.append(g.record)
+        return failed
+
+    def teardown(self):
+        if not hasattr(self.control, 'owned_teardown') or getattr(self, 'torn_down', False):
+            return
+        self.torn_down = True
+        g = GateRun(self, Gate('_teardown', None, '', ''), 1800)
+        if not self.args.keep_work:
+            self.control.owned_teardown(g)
+        (g.dir / 'result.json').write_text(json.dumps(dict(g.record, commands=g.commands, end=now(), raw=g.raw,
+                                                           kept=bool(self.args.keep_work))) + '\n')
+
+    def run_gates(self, gates, results, setup_failed):
         for gate in self.selected(gates):
             deadline = self.args.deadline.get(gate.name, gate.deadline_s)
             g = GateRun(self, gate, deadline)
             missing = [n for n in gate.needs if n not in self.allow]
             print(f'[{now()}] gate {gate.name} start (deadline {deadline}s)', flush=True)
-            if gate.name != 'identity' and not self.plan:
+            if gate.name != 'identity' and not self.plan and not setup_failed:
                 g.record['identity'] = self.gate_identity(g)
-            if missing:
+            if setup_failed:
+                verdict, reason = NOTRUN, 'cluster setup failed: ' + setup_failed
+            elif missing:
                 verdict, reason = NOTRUN, 'destructive step not allowed: needs ' + \
                     ' '.join(f'--allow {n}' for n in missing)
             else:
@@ -606,24 +801,6 @@ class Qualify:
             self.identity_end = self.read_identity(end, 'end')
             end.raw_file('identity-end.json').write_text(json.dumps(self.identity_end, indent=2) + '\n')
             (end.dir / 'result.json').write_text(json.dumps(dict(end.record, commands=end.commands)) + '\n')
-        self.cleanup_scratch()
-        if self.before_sums:
-            self.before_sums(self.out)
-        verdict = worst(r['verdict'] for r in results)
-        run = dict(driver='scripts/qualify.py', argv=sys.argv, cwd=os.getcwd(),
-                   driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                   driver_host=socket.gethostname(), start=started, end=now(),
-                   allow=sorted(self.allow), owned_cluster=self.control.owned,
-                   verdict=verdict, counts={v: sum(r['verdict'] == v for r in results)
-                                            for v in (PASS, FAIL, NOTRUN)},
-                   gates=[dict(gate=r['gate'], verdict=r['verdict'], reason=r['reason'])
-                          for r in results],
-                   destructive_steps=[dict(gate=r['gate'], **s) for r in results
-                                      for s in r['destructive_steps']])
-        (self.out / 'run.json').write_text(json.dumps(run, indent=2) + '\n')
-        sums = write_sums(self.out)
-        write_summary(self, run, results, sums)
-        return verdict
 
     def gate_identity(self, g):
         """Daemon and client identity read live before this gate."""
@@ -701,6 +878,53 @@ def g_identity(q, g):
     return PASS, ''
 
 
+def parse_members(text):
+    """`efs-mgmt status` member lines -> {endpoint: (up, storage roots)}."""
+    out = {}
+    for m in re.finditer(r'^\s+node \d+: (\S+)\s+(up|DOWN)\b[^\n]*?(?:storage\((\d+)\))?\s*:?$', text, re.M):
+        out[m.group(1)] = (m.group(2) == 'up', int(m.group(3)) if m.group(3) else None)
+    return out
+
+
+def g_topology(q, g):
+    """A3/A4/A5: the members the cluster reports are the described nodes,
+    all up, on how many distinct hosts; the profile goes into the fixture."""
+    c = q.cluster
+    nodes, hosts = c.get('nodes', []), distinct_hosts(c)
+    mounts = c.get('mounts', [])
+    g.fixture.update(nodes=len(nodes), node_hosts=hosts, transport=c.get('transport'),
+                     direct_io=c.get('direct_io'), quota=c.get('quota'), features=c.get('features', {}),
+                     mounts=[f'{m["host"]}:{m["path"]}' for m in mounts],
+                     client_hosts=sorted({m['host'] for m in mounts}), hardware=c.get('hardware'),
+                     fixture=q.fixture)
+    if len(nodes) < 3:
+        return FAIL, f'{len(nodes)} nodes described; alpha 1.0 needs at least 3'
+    rc, text = q.mgmt(g, 'status', 'status', c.get('seed') or nodes[0]['addr'])
+    if q.plan:
+        return NOTRUN, 'plan only'
+    if rc:
+        return FAIL, outcome_from_rc(rc, text)[1]
+    members = parse_members(text)
+    g.fixture['members'] = {ep: dict(up=up, storage_roots=n) for ep, (up, n) in members.items()}
+    want = {n['addr'] for n in nodes}
+    if set(members) != want:
+        return FAIL, (f'status reports members {sorted(members)}, the description {sorted(want)}')
+    down = sorted(ep for ep, (up, _) in members.items() if not up)
+    if down:
+        return FAIL, 'members down: ' + ', '.join(down)
+    if len(hosts) < len(nodes) or c.get('owned') and not c.get('private_cluster'):
+        return NOTRUN, (f'{len(nodes)} members on {len(hosts)} host(s): not distinct failure domains '
+                        '(A4); regression evidence only')
+    return PASS, f'{len(nodes)} members up on {len(hosts)} distinct hosts'
+
+
+def g_stub(reason):
+    """A gate the plan needs and no harness implements yet."""
+    def gate(q, g):
+        return NOTRUN, 'no harness yet: ' + reason
+    return gate
+
+
 def g_posix(script, extra=''):
     def gate(q, g):
         m = q.mount(0)
@@ -742,7 +966,8 @@ def g_two_client(q, g):
         (q.work / 'scratch' / g.gate.name).mkdir(parents=True, exist_ok=True)
         cmd = (f'cd {shlex.quote(str(ROOT))} && python3 tests/posix/posix_2client.py --remote '
                f'{shlex.quote(a["host"])} {shlex.quote(b["host"])} --mnt {shlex.quote(a["path"])} '
-               f'--ssh ssh --results {shlex.quote(res)}')
+               f'--ssh {shlex.quote(ssh_program(q.cluster["ssh"]) if q.cluster.get("ssh") else "ssh")} '
+               f'--results {shlex.quote(res)}')
         host = 'local'
     else:
         return NOTRUN, 'two hosts need the same mount path for posix_2client.py --remote'
@@ -822,8 +1047,6 @@ def b_k14(q, src, work, port):
 
 
 def b_k13(q, src, work, port):
-    if not 18700 <= port + 10 <= 18797:
-        return (NOTRUN, f'k13_ticket_cluster.py only uses ports 18700-18799 (private base {port})'), {}
     return [('k13', f'python3 tests/live/k13_ticket_cluster.py --source {shlex.quote(src)} '
              f'--work {shlex.quote(work)}/run --port {port + 10}', False)], \
         dict(ports=f'{port + 10}-{port + 12}', stream_mib=256)
@@ -905,7 +1128,7 @@ def g_e1(q, g):
         return NOTRUN, 'manifest verified; control.stop_cluster/start_cluster not described'
     mounts = q.cluster.get('mounts', [])
     for mm in mounts:
-        rc, text = g.run('fuser-before-stop', mm['host'], f'fuser -m {shlex.quote(mm["path"])}', 60)
+        rc, text = g.run('fuser-before-stop', mm['host'], f'fuser -m {shlex.quote(mm["path"])} 2>/dev/null', 60)
         if rc == 0 and text.strip():
             return NOTRUN, f'{mm["host"]}:{mm["path"]} in use ({text.strip()[:120]}); not stopping it'
     g.step('restart', 'client stops (no force), orderly cluster stop, start, readiness, remount')
@@ -947,7 +1170,7 @@ def g_e2(q, g):
     if not m:
         return NOTRUN, 'no mount described'
     path, host = m['path'], m['host']
-    rc, text = g.run('fuser-idle', host, f'fuser -m {shlex.quote(path)}', 60)
+    rc, text = g.run('fuser-idle', host, f'fuser -m {shlex.quote(path)} 2>/dev/null', 60)
     if q.plan:
         return NOTRUN, 'plan'
     if rc == 0 and text.strip():
@@ -959,7 +1182,7 @@ def g_e2(q, g):
     if rc or not holder.isdigit():
         return FAIL, 'could not start the holder process in the mount'
     try:
-        rc, text = g.run('fuser-held', host, f'fuser -m {shlex.quote(path)}', 60)
+        rc, text = g.run('fuser-held', host, f'fuser -m {shlex.quote(path)} 2>/dev/null', 60)
         if holder not in re.findall(r'\d+', text):
             return FAIL, f'fuser -m does not list the holder pid {holder}: {text.strip()[:120]}'
         g.step('remount', f'client stop attempt while pid {holder} holds {host}:{path}')
@@ -973,7 +1196,7 @@ def g_e2(q, g):
     finally:
         g.run('holder-kill', host, f'kill {holder} 2>/dev/null; true', 30)
     time.sleep(1)
-    rc, text = g.run('fuser-released', host, f'fuser -m {shlex.quote(path)}', 60)
+    rc, text = g.run('fuser-released', host, f'fuser -m {shlex.quote(path)} 2>/dev/null', 60)
     if rc == 0 and text.strip():
         return FAIL, f'mount still in use after the holder exited: {text.strip()[:120]}'
     pending = f'{d}/pending.bin'
@@ -1064,7 +1287,7 @@ def g_e3(q, g):
         t0 = time.monotonic()
         rc, text = q.mgmt(g, f'step-down-g{group}', 'raft-step-down', addr, group,
                           *([successor] if successor else []))
-        new = None
+        new, attempts = None, 1
         while time.monotonic() - t0 < q.fixture['turnover_timeout_s']:
             now_leaders, views = leaders(q, g, f'leaders-g{group}')
             cur = now_leaders.get(group)
@@ -1072,7 +1295,13 @@ def g_e3(q, g):
                 new = cur
                 break
             time.sleep(1)
-        events.append(dict(group=group, old=addr, old_term=term, target_node=successor, rc=rc,
+            # A refusal that asks for a retry (target not caught up yet) is
+            # retried while the old leader still leads.
+            if rc and 'retry' in text and (not cur or cur[0] == addr):
+                attempts += 1
+                rc, text = q.mgmt(g, f'step-down-g{group}', 'raft-step-down', addr, group,
+                                  *([successor] if successor else []))
+        events.append(dict(group=group, old=addr, old_term=term, target_node=successor, rc=rc, attempts=attempts,
                            new=new and new[0], new_term=new and new[1],
                            seconds=round(time.monotonic() - t0, 3),
                            views=views.get(group)))
@@ -1311,6 +1540,8 @@ def gates(plugins):
     out = [
         Gate('identity', g_identity, 'A1, A2', 'Candidate and profile', deadline_s=600,
              doc='build identity of every daemon, client and harness tree, read live'),
+        Gate('topology', g_topology, 'A3, A4, A5', 'Candidate and profile', deadline_s=300,
+             doc='status members = described nodes, all up, distinct hosts; profile recorded'),
     ]
     for name, spec in plugins.items():
         out.append(Gate(name, g_plugin(name, spec), spec.get('items', 'plugin'),
@@ -1346,15 +1577,58 @@ def gates(plugins):
              partial_needs=('restart',), deadline_s=1800,
              doc='raft-step-down of every group leader under client load; member catch-up'),
     ]
+    out += [Gate(name, g_stub(reason), items, ledger, partial_needs=needs, deadline_s=60, doc='STUB (NOTRUN): ' + doc,
+                 stub=True) for name, items, ledger, needs, doc, reason in STUBS]
     return out
 
 
+# Gates the A11 plan needs that no harness implements yet: each reports
+# NOTRUN with its reason until a harness replaces the stub.
+STUBS = (
+    ('a13-node-addition', 'A13', 'Placement/capacity and decode', (),
+     'live 3->4->5 addition with usable capacity and interrupted join',
+     'loopback evidence only (tests/test_k33_growth.py, test_k33_interrupt.py, test_w153_formation.py); '
+     'a real-host add-node/interrupted-join gate on distinct hosts is not written'),
+    ('c5-protocol-live', 'C5 (W127-W134, W72, D25)', 'POSIX and concurrent I/O', (),
+     'apply/protocol/session gates on the integrated candidate cluster',
+     'covered by unit and private gates in make test-all on the candidate; no gate drives them against '
+     'the topology cluster (K6 VERIFY multi-host)'),
+    ('d1-packing', 'D1', 'Packing/shared-fragment GC', ('restart',),
+     'packed mappings, inventory savings, exact reads before/after packing and cold restart',
+     'b-checks B4 shows packed segments exist; the inventory-savings count and the read-back across an '
+     'orderly cold restart are not driven'),
+    ('d3-efs-load', 'D3', 'Enabled `.efs` under load', (),
+     '.efs commands and concurrent queries while ordinary I/O continues',
+     'tests/live/efs_commands_load.py is a private-fixture harness not yet wired to a described cluster; '
+     'posix-extras covers .efs commands without load'),
+    ('e4-scale', 'E4', 'Scale/progress evidence (E4, D4)', (),
+     'declared small-file and large-file fixtures, cold reads, query load, delete/reclaim',
+     'no harness with declared target counts runs on a described cluster (tiny_files-style loads are '
+     'hand-run on orcd-mini)'),
+)
+
+
+def b_checks_command(cluster):
+    """scripts/b_checks.py on the first mount's host, through every mount of
+    that host (it reads through each mount it is given); its JSON result is
+    printed into the gate log."""
+    mounts = cluster.get('mounts', [])
+    host = mounts[0].get('host', 'local') if mounts else 'local'
+    paths = [m['path'] for m in mounts if m.get('host', 'local') == host]
+    esc = lambda v: shlex.quote(str(v)).replace('{', '{{').replace('}', '}}')
+    res = '"${{TMPDIR:-/tmp}}/qualify-b-checks-$$.json"'
+    return host, ('cd {source} && python3 scripts/b_checks.py --seed {seed} '
+                  + ' '.join(f'--mount {esc(p)}' for p in paths)
+                  + f' --expect-members {len(cluster.get("nodes", []))} --out {res}; rc=$?; '
+                  f'cat {res} 2>/dev/null; rm -f {res}; exit $rc')
+
+
 def default_plugins(cluster, extra):
-    plugins = {'b-checks': dict(command='cd {source} && python3 scripts/b_checks.py --cluster {cluster} '
-                                        '--out {gate_dir}',
+    host, command = b_checks_command(cluster)
+    plugins = {'b-checks': dict(command=command, host=host,
                                 requires='{source}/scripts/b_checks.py', items='B1-B5',
                                 ledger='Placement/capacity and decode', deadline_s=3600,
-                                doc='B checks script (scripts/b_checks.py) when present'),
+                                doc='scripts/b_checks.py through the first host\'s mounts'),
                'd4-progress': dict(command='cd {source} && python3 scripts/d4_progress.py --cluster {cluster} '
                                            '--out {gate_dir}',
                                    requires='{source}/scripts/d4_progress.py', items='D4',
@@ -1443,8 +1717,8 @@ def write_summary(q, run, results, sums):
              'under `docs/status/`; raw outputs stay where the Raw evidence section says.\n')
     L.append('## Purpose and verdict\n')
     L.append('- Purpose: alpha 1.0 Stage 2 qualification gates on one frozen candidate '
-             '([checklist](alpha-1.0-2plus1-checklist.md) A1–A5, B (plugin), C1–C5, D2, D3, E1–E3; '
-             'F3 topology ledger).')
+             '([checklist](alpha-1.0-2plus1-checklist.md) A1–A5, A13, B1–B6, C1–C5, D1–D4, E1–E4 as '
+             'planned in [A11](a11-qualification-matrix-20261024.md); F3 topology ledger).')
     L.append(f'- Verdict: **{run["verdict"]}** ({run["counts"]["PASS"]} PASS, {run["counts"]["FAIL"]} FAIL, '
              f'{run["counts"]["NOTRUN"]} NOTRUN of {len(results)} gates).')
     L.append(f'- F3 column: {column}.\n')
@@ -1512,8 +1786,8 @@ def write_summary(q, run, results, sums):
             L.append(f'- {r["gate"]} NOTRUN: {r["reason"]}')
     if len(hosts) < len(c.get('nodes', [])) or c.get('owned'):
         L.append('- Daemons share hosts: not distinct failure domains (A4).')
-    L.append('- Not covered by this driver: E4 scale, D1 packing inventory, enabled `.efs` '
-             'under load beyond posix-extras, RDMA live harnesses (they run on TCP loopback).')
+    L.append('- Stub gates (NOTRUN until a harness exists): ' + ', '.join(n for n, *_ in STUBS) +
+             '; the live harnesses run on TCP loopback only (no RDMA live harness).')
     L.append('- TODO: other limitations.\n')
     L.append('## Raw evidence\n')
     L.append(f'- `{run["driver_host"]}:{out}` — {sums["files"]} files listed in `SHA256SUMS` '
@@ -1723,6 +1997,219 @@ def h_client_identity(args):
 
 # --------------------------------------------------------------------------
 
+def pid_alive(pid):
+    """True while PID runs (a zombie, ours or not, counts as exited)."""
+    try:
+        if os.waitpid(pid, os.WNOHANG)[0] == pid:
+            return False
+    except ChildProcessError:
+        pass
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    try:
+        return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0] != 'Z'
+    except (OSError, IndexError):
+        return True
+
+
+def h_node(a):
+    """One efsd of a driver-owned private cluster, on this host from this
+    tree: `start` launches it detached (seed: ADDR STORE; joiner: --join
+    SEED --listen ADDR STORE; a restart uses the persisted identity) and
+    waits until it listens; `stop` sends SIGTERM to the recorded pid and
+    waits, SIGKILL only after --timeout (exit 124)."""
+    store = Path(a.store)
+    pidfile, logfile = store.parent / f'{store.name}.pid', store.parent / f'{store.name}.log'
+    if str(store.resolve()).startswith('/data1/efs'):
+        print('_node: stores may not live under /data1/efs')
+        return 2
+    old = int(pidfile.read_text()) if pidfile.exists() and pidfile.read_text().strip().isdigit() else None
+    if a.op == 'stop':
+        if not old or not pid_alive(old):
+            print(f'_node stop {a.addr}: not running')
+            return 0
+        os.kill(old, signal.SIGTERM)
+        end = time.monotonic() + a.timeout
+        while time.monotonic() < end and pid_alive(old):
+            time.sleep(0.2)
+        if pid_alive(old):
+            os.kill(old, signal.SIGKILL)
+            print(f'_node stop {a.addr}: pid {old} ignored SIGTERM for {a.timeout}s; SIGKILL')
+            return 124
+        print(f'_node stop {a.addr}: pid {old} exited')
+        return 0
+    if old and pid_alive(old):
+        print(f'_node start {a.addr}: pid {old} already running')
+        return 1
+    store.mkdir(parents=True, exist_ok=True)
+    if a.join:
+        argv = [str(ROOT / 'efsd'), '--join', a.join, '--listen', a.addr, str(store)]
+    else:
+        argv = [str(ROOT / 'efsd'), a.addr, str(store)]
+    argv += ['--quota', a.quota, '--discovery-port', '0']
+    env = dict(os.environ, **dict(e.split('=', 1) for e in a.env))
+    with open(logfile, 'ab') as log:
+        log.write(f'\n==== {now()} {" ".join(argv)}\n'.encode())
+        log.flush()
+        proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                env=env, start_new_session=True)
+    pidfile.write_text(f'{proc.pid}\n')
+    host, port = a.addr.rsplit(':', 1)
+    end = time.monotonic() + a.timeout
+    while time.monotonic() < end:
+        if proc.poll() is not None:
+            tail = logfile.read_text(errors='replace').splitlines()[-5:]
+            print(f'_node start {a.addr}: efsd exited rc={proc.returncode}: ' + ' | '.join(tail))
+            return 1
+        try:
+            socket.create_connection((host, int(port)), timeout=1).close()
+            print(f'_node start {a.addr}: pid {proc.pid} listening')
+            return 0
+        except OSError:
+            time.sleep(0.5)
+    print(f'_node start {a.addr}: pid {proc.pid} alive, not listening after {a.timeout}s')
+    return 0
+
+
+# --------------------------------------------------------------------------
+# The A11 matrix file (scripts/qualify_matrix.json): topologies the parent
+# runs with one command each, and the Stage 2 item plan.
+
+MATRIX = ROOT / 'scripts' / 'qualify_matrix.json'
+STAGE2_ITEMS = ('A1', 'A2', 'A3', 'A4', 'A5', 'A13', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6',
+                'C1', 'C2', 'C3', 'C4', 'C5', 'D1', 'D2', 'D3', 'D4', 'E1', 'E2', 'E3', 'E4')
+CHECK_KINDS = ('qualify', 'b_checks', 'posix', 'live', 'code')
+
+
+def matrix_errors(matrix):
+    """Everything the plan names must exist: qualify gates in this driver,
+    files for the other kinds, every Stage 2 item mapped, every topology
+    description loadable."""
+    errors = []
+    plugins = default_plugins({}, [])
+    known = {g.name: g for g in gates(plugins)}
+    items = matrix.get('items', {})
+    for item in STAGE2_ITEMS:
+        if item not in items:
+            errors.append(f'item {item}: not in the plan')
+    topologies = matrix.get('topologies', {})
+    for item, spec in items.items():
+        for check in spec.get('checks', []):
+            kind, _, target = check.partition(':')
+            if kind not in CHECK_KINDS:
+                errors.append(f'item {item}: check {check!r}: unknown kind')
+            elif kind == 'qualify' and target not in known:
+                errors.append(f'item {item}: qualify gate {target!r} does not exist')
+            elif kind == 'code' and not re.search(rf'^{re.escape(target.split()[-1])}:', (ROOT / 'Makefile').read_text(), re.M):
+                errors.append(f'item {item}: make target {target!r} does not exist')
+            elif kind in ('b_checks', 'posix', 'live') and not (ROOT / target).exists():
+                errors.append(f'item {item}: {target} does not exist')
+        for t in spec.get('topologies', []):
+            if t not in topologies and t not in matrix.get('cells', {}):
+                errors.append(f'item {item}: topology {t!r} is not described')
+        for key in ('transports', 'duration', 'prerequisites'):
+            if key not in spec:
+                errors.append(f'item {item}: no {key}')
+    for name, topo in topologies.items():
+        for gate in topo.get('gates', []) + topo.get('skip', []):
+            if gate not in known:
+                errors.append(f'topology {name}: gate {gate!r} does not exist')
+        for kind in topo.get('allow', []):
+            if kind not in DESTRUCTIVE:
+                errors.append(f'topology {name}: --allow {kind!r} unknown')
+        if 'loopback' in topo:
+            continue
+        c = topo.get('cluster')
+        if not c:
+            errors.append(f'topology {name}: neither loopback nor cluster')
+            continue
+        if len(c.get('nodes', [])) < 3:
+            errors.append(f'topology {name}: fewer than 3 nodes')
+        for node in c.get('nodes', []):
+            if not re.fullmatch(r'[^\s:]+:\d+', node.get('addr', '')):
+                errors.append(f'topology {name}: node address {node.get("addr")!r} is not HOST:PORT')
+        base = int(c.get('private', {}).get('port_base', 18700))
+        if any(port in RESERVED_PORTS for port in range(base, base + 40)):
+            errors.append(f'topology {name}: private port base {base} overlaps reserved ports')
+        if c.get('private_cluster'):
+            errors += [f'topology {name}: {e}' for e in check_private_cluster(c)]
+        if c.get('ssh') and not Path(ssh_program(c['ssh'])).exists():
+            errors.append(f'topology {name}: ssh wrapper {c["ssh"]} does not exist')
+    return errors
+
+
+def topology_command(name, topo, out='OUT'):
+    argv = ['python3', 'scripts/qualify.py', 'run', '--matrix', 'scripts/qualify_matrix.json',
+            '--topology', name, '--out', out]
+    if topo.get('live_user_cluster'):
+        argv.append('--user-approved')
+    return ' '.join(argv)
+
+
+def print_plan(matrix, only=None):
+    known = {g.name: g for g in gates(default_plugins({}, []))}
+    for name, topo in matrix.get('topologies', {}).items():
+        if only and name != only:
+            continue
+        c = topo.get('cluster', {})
+        n = topo.get('loopback') or len(c.get('nodes', []))
+        hosts = 1 if 'loopback' in topo else len(distinct_hosts(c))
+        print(f'== {name}: {n} members on {hosts} host(s), {topo.get("transport") or c.get("transport")}; '
+              f'status {"BLOCKED" if topo.get("blocked") else "runnable with the user go-ahead (live cluster)" if topo.get("live_user_cluster") else "runnable"}')
+        for b in topo.get('blocked', []):
+            print(f'   blocked: {b}')
+        names = topo.get('gates') or list(known)
+        names = [g for g in names if g not in topo.get('skip', [])]
+        stubs = [g for g in names if known[g].stub]
+        print(f'   gates ({len(names)}, {len(stubs)} stubs): {", ".join(names)}')
+        print(f'   allow: {",".join(topo.get("allow", [])) or "none"}; '
+              f'estimated duration: {topo.get("duration", "?")}')
+        for key in ('covers', 'cannot_cover'):
+            for line in topo.get(key, []):
+                print(f'   {key.replace("_", " ")}: {line}')
+        print(f'   command: {topology_command(name, topo)}')
+    if only:
+        return
+    print('== items')
+    for item, spec in matrix.get('items', {}).items():
+        print(f'{item:4} {", ".join(spec.get("checks", []))}')
+        print(f'     on {", ".join(spec.get("topologies", []))} x {", ".join(spec.get("transports", []))}; '
+              f'{spec.get("duration")}; needs {spec.get("prerequisites")}')
+
+
+def matrix_topology(a, p):
+    """`run --matrix F --topology T`: the topology's description and its
+    gate, skip, allow and fixture defaults (command-line values win)."""
+    matrix = json.loads(a.matrix.read_text())
+    topo = matrix.get('topologies', {}).get(a.topology)
+    if not topo:
+        p.error(f'--topology {a.topology!r}: not in {a.matrix} '
+                f'(known: {", ".join(matrix.get("topologies", {}))})')
+    if topo.get('blocked') and not a.ignore_blocked:
+        p.error(f'topology {a.topology} is blocked: ' + '; '.join(topo['blocked']) +
+                ' (fix the blocker and update the matrix, or pass --ignore-blocked)')
+    if topo.get('live_user_cluster') and not a.user_approved:
+        p.error(f'topology {a.topology} is the user\'s live cluster: pass --user-approved only with '
+                'the user\'s go-ahead for this run (and for each destructive step it allows)')
+    a.gates = a.gates or topo.get('gates', [])
+    a.skip = a.skip or topo.get('skip', [])
+    a.allow = a.allow or list(topo.get('allow', []))
+    for gate, sec in topo.get('deadlines', {}).items():
+        a.deadline.setdefault(gate, float(sec))
+    a.matrix_fixture = topo.get('fixture', {})
+    if 'loopback' in topo:
+        a.loopback = topo['loopback']
+        # The command line wins: another host passes its own port range.
+        a.port_base = a.port_base or topo.get('port_base')
+        a.private_port_base = a.private_port_base or topo.get('private_port_base')
+        return None
+    return dict(topo['cluster'], name=topo['cluster'].get('name', a.topology))
+
+
 def parse_deadlines(items):
     out = {}
     for item in items:
@@ -1740,8 +2227,10 @@ def main(argv=None):
     r = sub.add_parser('run')
     r.add_argument('--cluster', type=Path)
     r.add_argument('--loopback', type=int, default=0, help='start an owned private N-daemon cluster')
-    r.add_argument('--port-base', type=int, default=18740, help='loopback daemon ports (N of them)')
-    r.add_argument('--private-port-base', type=int, default=18700, help='live harness ports with --loopback')
+    r.add_argument('--port-base', type=int, help='loopback daemon ports (N of them; default 18740 '
+                   'or the topology\'s)')
+    r.add_argument('--private-port-base', type=int, help='live harness ports with --loopback '
+                   '(default 18700 or the topology\'s)')
     r.add_argument('--out', type=Path, required=True)
     r.add_argument('--work', type=Path, help='scratch and owned stores (default OUT.work)')
     r.add_argument('--gates', type=lambda v: [x for x in v.split(',') if x], default=[])
@@ -1752,7 +2241,24 @@ def main(argv=None):
     r.add_argument('--plugin', action='append', default=[])
     r.add_argument('--plan', action='store_true', help='record the commands without running them')
     r.add_argument('--keep-work', action='store_true')
+    r.add_argument('--matrix', type=Path, help='A11 matrix file (scripts/qualify_matrix.json)')
+    r.add_argument('--topology', help='topology of --matrix to run')
+    r.add_argument('--user-approved', action='store_true',
+                   help="the user approved this run on their live cluster (matrix live_user_cluster)")
+    r.add_argument('--ignore-blocked', action='store_true', help='run a topology the matrix marks blocked')
     sub.add_parser('list').add_argument('--cluster', type=Path)
+    pl = sub.add_parser('plan', help='validate the A11 matrix and print each topology\'s command')
+    pl.add_argument('--matrix', type=Path, default=MATRIX)
+    pl.add_argument('--topology')
+    pl.add_argument('--check', action='store_true', help='validate only')
+    nd = sub.add_parser('_node')
+    nd.add_argument('op', choices=('start', 'stop'))
+    nd.add_argument('--addr', required=True)
+    nd.add_argument('--store', required=True)
+    nd.add_argument('--join', default='')
+    nd.add_argument('--quota', default='4G')
+    nd.add_argument('--env', action='append', default=[])
+    nd.add_argument('--timeout', type=float, default=120)
     v = sub.add_parser('verify-sums')
     v.add_argument('dir', type=Path)
     h = sub.add_parser('_manifest')
@@ -1791,6 +2297,20 @@ def main(argv=None):
         return h_client_identity(a)
     if a.cmd == '_b6':
         return h_b6(a)
+    if a.cmd == '_node':
+        return h_node(a)
+    if a.cmd == 'plan':
+        matrix = json.loads(a.matrix.read_text())
+        errors = matrix_errors(matrix)
+        if a.topology and a.topology not in matrix.get('topologies', {}):
+            errors.append(f'--topology {a.topology!r}: not in {a.matrix}')
+        if not a.check and not errors:
+            print_plan(matrix, a.topology)
+        for e in errors:
+            print(f'matrix error: {e}')
+        print(f'matrix {a.matrix}: ' + (f'{len(errors)} error(s)' if errors else
+                                         f'{len(matrix["items"])} items, {len(matrix["topologies"])} topologies OK'))
+        return 1 if errors else 0
     if a.cmd == 'verify-sums':
         bad = verify_sums(a.dir)
         for b in bad:
@@ -1804,17 +2324,24 @@ def main(argv=None):
             print(f'{gate.name:20} {gate.items:18} needs: {needs:34} {gate.doc}')
         return 0
 
+    a.deadline = parse_deadlines(a.deadline)
+    described = None
+    if a.matrix or a.topology:
+        if not (a.matrix and a.topology) or a.cluster or a.loopback:
+            p.error('--matrix needs --topology and excludes --cluster and --loopback')
+        described = matrix_topology(a, p)
+    a.port_base = a.port_base or 18740
+    a.private_port_base = a.private_port_base or 18700
     for name in a.allow:
         if name not in DESTRUCTIVE:
             p.error(f'--allow {name}: expected {",".join(DESTRUCTIVE)} or all')
-    a.deadline = parse_deadlines(a.deadline)
     out = a.out.resolve()
     if inside_git(out):
         p.error(f'--out {out} is inside a Git work tree ({inside_git(out)}); raw outputs stay outside Git')
     if out.exists() and any(out.iterdir()):
         p.error(f'--out {out} exists and is not empty')
-    if bool(a.cluster) == bool(a.loopback):
-        p.error('give exactly one of --cluster FILE or --loopback N')
+    if (a.cluster is not None or described is not None) == bool(a.loopback):
+        p.error('give exactly one of --cluster FILE, --loopback N or --matrix with --topology')
     work = (a.work or out.with_name(out.name + '.work')).resolve()
     if inside_git(work):
         p.error(f'--work {work} is inside a Git work tree')
@@ -1826,8 +2353,12 @@ def main(argv=None):
             p.error('--loopback needs at least 3 daemons')
         loop = controller = Loopback(a, work)
         cluster = loop.description(a.private_port_base)
+        cluster['fixture'] = dict(cluster.get('fixture', {}), **getattr(a, 'matrix_fixture', {}))
     else:
-        cluster = json.loads(a.cluster.read_text())
+        cluster = described if described is not None else json.loads(a.cluster.read_text())
+        if cluster.get('private_cluster'):
+            for error in check_private_cluster(cluster):
+                p.error(error)
         for node in cluster.get('nodes', []):
             if not re.fullmatch(r'[^\s:]+:\d+', node.get('addr', '')):
                 p.error(f'node address {node.get("addr")!r} is not HOST:PORT')
@@ -1844,7 +2375,7 @@ def main(argv=None):
     out.mkdir(parents=True, exist_ok=True)
     work.mkdir(parents=True, exist_ok=True)
     q = Qualify(a, cluster, out, work, None, plugins)
-    q.control = controller or Controller(q)
+    q.control = controller or (PrivateCluster(q) if cluster.get('private_cluster') else Controller(q))
     if loop:
         q.before_sums = loop.save_logs
     try:

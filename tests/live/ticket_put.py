@@ -16,6 +16,7 @@ are signalled.
 """
 import re, socket, struct, subprocess, time
 from pathlib import Path
+from raft_form import form
 
 PUT_CHUNK, PUT_REPLY = 6, 7
 TICKET_LEN, HEADER_LEN = 216, 224
@@ -99,17 +100,22 @@ class Cluster:
         self.storage = storage or (lambda i: [self.work / f'n{i+1}'])
         # W153: the member count comes from formation; EFS_MD_RAFT_N stops efsd.
         self.env = {k: v for k, v in dict(env or {}, EFS_TRANSPORT='tcp').items() if k != 'EFS_MD_RAFT_N'}
-        self.procs, self.logs = {}, []
+        self.procs, self.logs, self.joined = {}, [], set()
 
     def roots(self, i):
         return self.storage(i)
 
     def start(self, i):
-        cmd = [str(self.source / 'efsd'), '--node-id', str(i + 1), '--addr', '127.0.0.1',
-               '--port', str(self.base + i)] + self.extra
-        for root in self.roots(i):
-            Path(root).mkdir(parents=True, exist_ok=True); cmd += ['--storage', str(root)]
-        if i: cmd += ['--join', f'127.0.0.1:{self.base}']
+        # K33 CLI: the seed and every restart as `efsd ADDR:PORT STORE`; the
+        # first start of every other member joins the seed.
+        for root in self.roots(i): Path(root).mkdir(parents=True, exist_ok=True)
+        ep, store = f'127.0.0.1:{self.base + i}', ','.join(str(r) for r in self.roots(i))
+        if i and i not in self.joined:
+            cmd = [str(self.source / 'efsd'), '--join', f'127.0.0.1:{self.base}', '--listen', ep, store]
+            self.joined.add(i)
+        else:
+            cmd = [str(self.source / 'efsd'), ep, store]
+        cmd += ['--discovery-port', '0'] + self.extra
         log = open(self.work / f'n{i+1}.log', 'ab'); self.logs.append(log)
         self.procs[i] = subprocess.Popen(cmd, env=self.env, stdout=log, stderr=log)
         for _ in range(300):
@@ -130,8 +136,9 @@ class Cluster:
             if out.count('  up ') >= self.members: break
             assert time.monotonic() < deadline, ('members did not join', out[-400:])
             time.sleep(.2)
-        subprocess.run([str(self.source / 'efs-mgmt'), 'raft-mkfs', f'127.0.0.1:{self.base}'],
-                       check=True, env=self.env, stdout=subprocess.DEVNULL, timeout=120)
+        # K33 forms on the third join; raft-mkfs then agrees, after
+        # NOT_PRIMARY retries while group 0 has no leader yet.
+        form(self.source / 'efs-mgmt', f'127.0.0.1:{self.base}', env=self.env, quiet=True)
 
     def stop(self, i, timeout=20):
         p = self.procs.pop(i, None)

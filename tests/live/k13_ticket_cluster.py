@@ -24,11 +24,12 @@ from pathlib import Path
 ap = argparse.ArgumentParser()
 ap.add_argument('--source', type=Path, required=True)
 ap.add_argument('--work', type=Path, required=True)
-ap.add_argument('--port', type=int, default=18700)
+ap.add_argument('--port', type=int, default=18700,
+                help='private base: daemons on PORT..PORT+2 (any free range)')
 ap.add_argument('--stream-mib', type=int, default=256)
 a = ap.parse_args()
 src, work = a.source.resolve(), a.work.resolve()
-assert 18700 <= a.port and a.port + 2 <= 18799, 'ports must stay in 18700-18799'
+assert 1024 <= a.port and a.port + 2 <= 65535, 'ports must be in 1024-65535'
 work.mkdir(parents=True, exist_ok=True)
 mnt = work / 'mnt'; mnt.mkdir(exist_ok=True)
 roots = [work / f'n{i+1}' for i in range(3)]
@@ -59,12 +60,20 @@ def wait(pred, label, limit):
         time.sleep(.25)
     raise AssertionError(label + ' timed out')
 
+joined = set()
+
 def start_node(i):
     roots[i].mkdir(exist_ok=True)
     f = open(work / f'n{i+1}.log', 'ab'); logs.append(f)
-    cmd = [src / 'efsd', '--node-id', str(i+1), '--addr', '127.0.0.1', '--port', str(a.port+i),
-           '--storage', roots[i], '--quota', '4G', '--no-direct-io']
-    if i: cmd += ['--join', f'127.0.0.1:{a.port}']
+    # K33 CLI: the seed and every restart as `efsd ADDR:PORT STORE`; the
+    # first start of n2/n3 joins n1.
+    ep = f'127.0.0.1:{a.port+i}'
+    if i and i not in joined:
+        cmd = [src / 'efsd', '--join', f'127.0.0.1:{a.port}', '--listen', ep, roots[i]]
+        joined.add(i)
+    else:
+        cmd = [src / 'efsd', ep, roots[i]]
+    cmd += ['--quota', '4G', '--discovery-port', '0']
     servers[i] = subprocess.Popen([str(c) for c in cmd], env=env, stdout=f, stderr=f)
     (work / 'pids').open('a').write(f'efsd n{i+1} {servers[i].pid}\n')
     def listening():
@@ -149,7 +158,7 @@ try:
     start_all()
     form(src / 'efs-mgmt', f'127.0.0.1:{a.port}', env=env, quiet=True)
     mount()
-    log('three daemons (RAFT_N=3, tcp, buffered I/O) and one mount serving PASS')
+    log('three daemons (RAFT_N=3, tcp, O_DIRECT) and one mount serving PASS')
 
     # Default PUT/flush through FUSE.
     cases = {

@@ -434,6 +434,20 @@ alternatives reduces both product complexity and the supported test matrix.
   changes and orderly restart. Report before/after behavior-switch counts and
   reachable configuration counts where defensible; do not claim exhaustive
   coverage from testing flags individually or from pairwise tests alone.
+  **Oct 24, matrix and plan published ([A11](a11-qualification-matrix-20261024.md);
+  branch `claude/devel-a11-matrix-2bfd14`, not merged); qualification
+  NOTRUN.** Dimensions: transport (`tcp`, `rdma`; `auto` resolves to one),
+  members 3–16, `O_DIRECT` only, one root per node, one or two client
+  mounts, one feature profile, 33 numeric tunables at built-in values.
+  Selector × transport × member count: 1,376,256 before A6/A7, 28 now
+  (A/B selectors 15 → 0). Qualified exhaustively: TCP/RDMA × 3, 4, 5
+  distinct hosts (six full runs); 6–16 sampled (loopback 6–8 only). Every
+  Stage 2 item is mapped to its gates, cells, duration and prerequisites in
+  `scripts/qualify_matrix.json`; `qualify.py run --matrix … --topology NAME`
+  runs one topology. Seven gates are NOTRUN stubs (A13 real host, B6, C5
+  live, D1, D3 load, D4, E4). **Blocks A4:** no distinct-host topology can
+  form today (firewalld on the Rocky hosts allows only ssh; amd has no wired
+  link; no RDMA fabric across three hosts).
 - [ ] **A12 — Closure.** Every A/B selector has either been removed with its
   alternative implementation or is an explicitly justified, reviewed support
   dimension under A8. No unexplained experimental, legacy or correctness-policy

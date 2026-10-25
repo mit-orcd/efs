@@ -69,6 +69,27 @@ counts degraded segments and the cluster stays DEGRADED until they clear.
 Daemon test `tests/test_k37_segment_rebuild.py` PASS. intel2 `make test-all` at `b205cb9db`: 459 commands, 1 FAIL that also fails on the base (`tests/test_get_integrity.py`, a READ_VERIFY test / K34 merge interaction), 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/k37-20261024/`, `SHA256SUMS` `61fbd81d…98f0`). Live
 multi-host, RDMA and orcd-mini NOTRUN (parent).
 
+[A11: reduced qualification matrix and the Stage 2 run plan](a11-qualification-matrix-20261024.md):
+**plan PASS (scoped), qualification NOTRUN; branch `claude/devel-a11-matrix-2bfd14`, not merged.**
+Dimensions left after A6/A7/D42: transport (`tcp`, `rdma`), 3–16 members,
+`O_DIRECT` only, one root per node, one or two client mounts, built-in
+tunables. Selector × transport × member count 1,376,256 → 28; qualified
+exhaustively: TCP/RDMA × 3, 4, 5 distinct hosts; 6–16 sampled. Every
+Stage 2 item mapped in `scripts/qualify_matrix.json`; `qualify.py run
+--matrix … --topology NAME` runs a topology (orcd-mini, intel, loopback,
+bare-metal 3/4/5). Seven NOTRUN stub gates. **A4 blocked:** no
+distinct-host topology can form today (host firewalls, amd's network, no
+three-host RDMA). Driver fixes: the `b-checks` plugin called
+`b_checks.py` with options it rejects; E3 did not retry a step-down refused
+with "retry". Findings on nuc: a clean `client.sh stop` is refused when the
+unmount session revoke takes over 10 s (2 of 2 full private runs); one
+30 s REPORT timeout in append failover (8,000/8,000 records exact). The four
+live harnesses now use the K33 CLI: on amd k14, k13 and fragment-integrity
+PASS, gc-reclamation FAIL on the same refused client stop. nuc `make test-all` at `8d858a791`:
+458 commands, 1 FAIL, 14 NOTRUN host limits; the FAIL,
+`tests/test_get_integrity.py`, no longer compiles on `merge-wave5` (no stub
+for K34's `read_reprobe_down`) and fails the same on the base `376369aa8`.
+
 [D42 `EFS_READ_VERIFY`: GET-path integrity audit](read-verify-audit-20261024.md):
 **PASS (scoped), merged into devel (`ae3e7ab75`).** The
 storage node's record check does not cover the wire or the client's
