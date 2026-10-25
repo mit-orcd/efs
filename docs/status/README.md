@@ -32,6 +32,16 @@ misaligned read in `test_wire`. 20-minute D4 RSS bounded (client 247 MiB, server
 flat while the namespace grows. Open: `test_k36_recovery.py` step 4 intermittent under TSan; 3–7
 packer put errors over a 20-minute load (not memory; logs not retained).
 
+[Gate speed: `make test-all` under 15 minutes at 8 jobs (W160)](gate-speed-20261025.md):
+**PARTIAL PASS, not merged; branch `claude/devel-gate-speed-8aee30` on merge-wave7: nuc `make test-all` at 8 jobs 811 s / 839 s (0 FAIL) / 989 s (2 pre-existing intermittents) against 1,182–1,217 s with 3–6 load failures before; serial 2,754 s → 2,311 s. Three clean runs under 15 min not reached: the nuc's one NVMe (raw: nuc `~/efs-artifacts/gate-speed-20261025/`).**
+The code gate had grown to 44 minutes (serial on intel2) and failed six commands under an 8-way pool on the nuc.
+Runner budgets and disk-weighted slots per `test-long` command (`tests/budgets.tsv`, largest first,
+`OVERBUDGET` lines), a drift check in `tests/test_make_test_recipe.py`, B6, B geometry and the D39 model as
+independent commands, parallel verification and fast payloads in the K33 tests and the B/D4 drivers, status
+polls instead of settle sleeps, and ports held for the life of a loopback cluster. No assertion relaxed; four
+tests check more. Follow-ups: 15 s unmount storage fence to a down member, 32 s `efs-mgmt status` with a frozen
+member, intermittent EIO on a degraded read in `test_k33_payload.py` under host load (pre-existing).
+
 [Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](pack-unindex-race-20261024.md):
 **FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**
 The packer's UNINDEX deleted a candidate key unconditionally, so a rewrite whose publication

@@ -377,11 +377,20 @@ class Cluster:
 
 
 def payload(name, size):
-    out, k = bytearray(), 0
-    while len(out) < size:
-        out += hashlib.sha256(f'b-checks:{name}:{k}'.encode()).digest()
-        k += 1
-    return bytes(out[:size])
+    """`size` bytes that depend on every byte of `name` (SHAKE-256 of the
+    name: one C call, about 2 ms per MiB)."""
+    return hashlib.shake_256(f'b-checks:{name}'.encode()).digest(size) if size else b''
+
+
+def pmap(fn, items, threads):
+    """fn over items on `threads` threads, results in order (writes and
+    read-backs through FUSE wait on the cluster, not the CPU: W160)."""
+    from concurrent.futures import ThreadPoolExecutor
+    items = list(items)
+    if threads <= 1 or len(items) <= 1:
+        return [fn(x) for x in items]
+    with ThreadPoolExecutor(threads) as ex:
+        return list(ex.map(fn, items))
 
 
 def write_file(path, data):
@@ -435,7 +444,7 @@ def main(argv=None):
     ap.add_argument('--spread-files', type=int, default=0, help='two-chunk files for B3 (default 12 x N, at least 48)')
     ap.add_argument('--small-files', type=int, default=0, help='small files for B4 (default 40 x N)')
     ap.add_argument('--pack-wait', type=float, default=300.0, help='seconds to wait for packing')
-    ap.add_argument('--df-wait', type=float, default=6.0, help='quiet seconds before df vs status')
+    ap.add_argument('--df-wait', type=float, default=6.0, help='seconds to wait for df and status to agree')
     ap.add_argument('--overhead-tol', type=float, default=0.02,
                     help='--strict-used: allowed extra used bytes over 1.5x for the large files')
     ap.add_argument('--strict-used', action='store_true',
@@ -444,6 +453,7 @@ def main(argv=None):
     ap.add_argument('--expect-members', type=int, default=0)
     ap.add_argument('--items', default='B1,B2,B3,B4,B5')
     ap.add_argument('--keep', action='store_true', help='keep the test directory')
+    ap.add_argument('--parallel', type=int, default=4, help='threads for the writes and read-backs (default 4)')
     a = ap.parse_args(argv)
 
     root = Path(__file__).resolve().parents[1]
@@ -489,8 +499,7 @@ def main(argv=None):
 
         # Large files only first: their physical cost is the 1.5x figure.
         large = {f'large-{k}': size for k, size in enumerate((4 * cs, 8 * cs, 16 * cs))}
-        for name, size in large.items():
-            write_file(tdir / name, payload(name, size))
+        pmap(lambda it: write_file(tdir / it[0], payload(it[0], it[1])), large.items(), a.parallel)
         time.sleep(1.0)
         st1 = c.status()
         used1 = {i: st1['members'].get(i, {}).get('used') for i in ids}
@@ -498,23 +507,18 @@ def main(argv=None):
         # B2 boundary files and B3 spread files.
         files = {}
         for size in B2_SIZES:
-            name = f'b2-{size}'
-            write_file(tdir / name, payload(name, size))
-            files[name] = size
+            files[f'b2-{size}'] = size
         nspread = a.spread_files or max(48, 12 * n)
         for k in range(nspread):
-            name = f'spread-{k}'
-            write_file(tdir / name, payload(name, 2 * cs))
-            files[name] = 2 * cs
-        files.update(large)
+            files[f'spread-{k}'] = 2 * cs
         # B4 small files (packable).
         nsmall = a.small_files or 40 * n
         small = {}
         for k in range(nsmall):
-            name = f'small-{k}'
-            size = 1 + (k * 4099) % PACK_THRESHOLD
-            write_file(tdir / name, payload(name, size))
-            small[name] = size
+            small[f'small-{k}'] = 1 + (k * 4099) % PACK_THRESHOLD
+        pmap(lambda it: write_file(tdir / it[0], payload(it[0], it[1])),
+             list(files.items()) + list(small.items()), a.parallel)
+        files.update(large)
         files.update(small)
         time.sleep(1.0)
         st2 = c.status()
@@ -523,15 +527,21 @@ def main(argv=None):
 
         # B2: exact bytes through every mount.
         b2 = items['B2']
+
+        def read_one(path):
+            try:
+                return read_back(path), os.stat(path).st_size
+            except OSError as e:
+                return e, None
         for mnt in a.mount:
             base = Path(mnt) / rel
-            for name, size in files.items():
-                try:
-                    got = read_back(base / name)
-                except OSError as e:
-                    b2.check(False, f'{mnt}: {name}: read {e}')
+            names = list(files)
+            for name, (got, st_size) in zip(names, pmap(read_one, (base / nm for nm in names), a.parallel)):
+                size = files[name]
+                if isinstance(got, OSError):
+                    b2.check(False, f'{mnt}: {name}: read {got}')
                     continue
-                b2.check(len(got) == size and os.stat(base / name).st_size == size,
+                b2.check(len(got) == size and st_size == size,
                          f'{mnt}: {name}: size {len(got)} want {size}')
                 b2.check(got == payload(name, size), f'{mnt}: {name}: bytes differ')
 
@@ -633,11 +643,10 @@ def main(argv=None):
             # Packed files read back exactly through every mount.
             for mnt in a.mount:
                 base = Path(mnt) / rel
-                for name in packed_rows:
-                    try:
-                        got = read_back(base / name)
-                    except OSError as e:
-                        b2.check(False, f'{mnt}: packed {name}: read {e}')
+                names = list(packed_rows)
+                for name, (got, _) in zip(names, pmap(read_one, (base / nm for nm in names), a.parallel)):
+                    if isinstance(got, OSError):
+                        b2.check(False, f'{mnt}: packed {name}: read {got}')
                         continue
                     b2.check(got == payload(name, small[name]), f'{mnt}: packed {name}: bytes differ')
         else:
@@ -669,8 +678,21 @@ def main(argv=None):
 
         # B5: status on every member, df on every mount, costs.
         b5 = items['B5']
-        time.sleep(a.df_wait)
-        views = {i: c.status(members[i]['ep']) for i in ids}
+        # Sample until every member's status and every mount's df agree (the
+        # checks below), at most --df-wait seconds: the quiet window a fixed
+        # sleep gave, without waiting once they already agree.
+        end = time.time() + a.df_wait
+        while True:
+            views = {i: c.status(members[i]['ep']) for i in ids}
+            u0 = next((v['usable'] for v in views.values() if v['usable']), None)
+            agree = u0 is not None and all(v['usable'] and v['usable']['capacity'] == u0['capacity']
+                                           for v in views.values())
+            for mnt in a.mount if agree else ():
+                d = statfs(mnt)
+                agree = agree and d['total'] == u0['capacity'] // 512 * 512 and abs(d['free'] - u0['free']) <= 3 * cs
+            if agree or time.time() >= end:
+                break
+            time.sleep(0.5)
         caps = None
         for i, v in views.items():
             b5.check(v['usable'] is not None, f'status on {i}: no usable line ({v["state"]})')

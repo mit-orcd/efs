@@ -10,8 +10,11 @@ grow by the batch); large files (64 KiB + 1 to 1 MiB + 3) are never packed.
 1. Three nodes form; batch S0 and large files L0 through mount A (node 1).
 2. A writer thread keeps writing large files through mount A for the whole
    run (open/write/close, no fsync: DATA_COMMIT needs every storage node,
-   W154 limitation); each written file is read back at once; a failed
-   write is retried until it succeeds.
+   W154 limitation), at most one every WRITER_GAP_S (W160: at full speed
+   it wrote thousands of files, every one verified at every later step,
+   and starved the other tests of the parallel pool for disk time); each
+   written file is read back at once; a failed write is retried until it
+   succeeds.
 3. Node 4 joins (through node 2), batch S1 and L1; node 5 joins (through
    node 3), batch S2 and L2. Mount B (through node 4) reads everything.
 4. Orderly restart of the whole cluster: writer paused, mounts closed,
@@ -29,6 +32,7 @@ grow by the batch); large files (64 KiB + 1 to 1 MiB + 3) are never packed.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, threading, time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload, voters_ok  # noqa: E402
@@ -45,6 +49,8 @@ env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200')
 env.pop('EFS_FAULT_GC_DISABLE', None)
 SMALL = (1, 17, 512, 4095, 4096, 9000, 16384)
 LARGE = (64 * 1024 + 1, 300000, 1024 * 1024 + 3)
+READERS = 4
+WRITER_GAP_S = 0.5
 files = {}          # name -> size, every file whose write returned success
 lock = threading.Lock()
 notes = []
@@ -114,26 +120,44 @@ def wait_protected(c, node, timeout=120):
     raise AssertionError(f'degraded stripes not rebuilt in {timeout} s:\n{out[-2000:]}')
 
 
-def verify(m, what):
+def verify(m, what, parallel=True):
+    """Every file written so far reads back exactly through m; each file is
+    read whole and compared to its full payload. With every member up the
+    reads go through READERS threads (the set grows with the writer's files
+    and reaches thousands); while a member is down they stay one at a time,
+    the pattern the degraded read path was accepted with (W160: eight
+    concurrent degraded reads under I/O load once returned EIO on amd)."""
     with lock:
         snap = dict(files)
-    for name, size in snap.items():
+
+    def one(item):
+        name, size = item
         got = (m.path / name).read_bytes()
         assert got == payload(name, size), f'{what}: {name} differs ({len(got)} of {size} B)'
+    if parallel:
+        with ThreadPoolExecutor(READERS) as ex:
+            list(ex.map(one, snap.items()))
+    else:
+        for item in snap.items():
+            one(item)
     return len(snap)
 
 
 stats = {'retries': 0, 'written': 0}
 run_writer = threading.Event()
 stop_writer = threading.Event()
+writer_idle = threading.Event()   # set while the writer waits for run_writer
 writer_err = []
 
 
 def writer(mref):
     k = 0
     while not stop_writer.is_set():
-        if not run_writer.wait(0.1):
+        if not run_writer.is_set():
+            writer_idle.set()
+            run_writer.wait(0.1)
             continue
+        writer_idle.clear()
         name, size = f'w-{k}', LARGE[k % len(LARGE)]
         step = 'write'
         try:
@@ -146,6 +170,7 @@ def writer(mref):
             return
         stats['written'] += 1
         k += 1
+        stop_writer.wait(WRITER_GAP_S)
 
 
 t0 = time.time()
@@ -186,7 +211,7 @@ try:
 
     # 4. Orderly restart of the whole cluster.
     run_writer.clear()
-    time.sleep(0.5)
+    assert writer_idle.wait(60) or writer_err, 'the writer did not pause'  # its write in flight is done
     a.close()
     mounts.remove(a)
     for i in (5, 4, 3, 2, 1):
@@ -211,7 +236,7 @@ try:
         c.stop(k)
         write_batch(a, f's3.{k}', SMALL)
         write_batch(a, f'l3.{k}', LARGE)
-        verify(a, f'node {k} down')
+        verify(a, f'node {k} down', parallel=False)
         c.restart(k)
         c.wait_log(k, rf'raft-host: up raft_id={k - 1} n=5 formed', timeout=60)
         c.wait_members([1, 2, 3, 4, 5], 5)

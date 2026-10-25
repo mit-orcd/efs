@@ -11,7 +11,8 @@ node 3, the member made unavailable. Ordinary files are 300000 B (three
 128 KiB chunks), packed files 1 B to 16 KiB. Writes go through mount A
 (node 1); every read check is a fresh mount (no client or kernel cache).
 
-Modes (one cluster each; EFS_B6_MODES=down,refuse,slow,full picks some):
+Modes (one cluster each; EFS_B6_MODES=down,refuse,slow,full picks some;
+the test recipe runs one mode per command so the pool overlaps them):
 - down: node 3 stopped in order (SIGTERM);
 - refuse: node 3 up, every fragment PUT, GET, COMMIT, segment PUT/GET and
   rebuild answered with an error (EFS_FAULT_DEST_FILE, `refuse`);
@@ -521,7 +522,10 @@ finally:
         r.close()
     if artifacts:
         artifacts.mkdir(parents=True, exist_ok=True)
-        (artifacts / 'b6-result.json').write_text(json.dumps(result, indent=1, sort_keys=True))
+        # One file per mode selection: the recipe runs the four modes as
+        # four commands and their results must not overwrite each other.
+        tag = '' if modes == ['down', 'refuse', 'slow', 'full'] else '-' + '-'.join(modes)
+        (artifacts / f'b6-result{tag}.json').write_text(json.dumps(result, indent=1, sort_keys=True))
     if os.environ.get('EFS_B6_KEEP'):
         print('kept', work)
     else:
