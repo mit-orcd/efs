@@ -36,7 +36,7 @@ every size), grow-b (a fresh cluster grown to five without the driver, then
 six to eight with it) and full. EFS_B_ARTIFACTS=DIR keeps the driver's JSON
 results there.
 """
-import errno, json, os, re, shutil, sys, tempfile, time
+import errno, json, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import (Cluster as _Cluster, Mount, EFSD, MGMT, HOST, fuse_ok, mgmt as _mgmt,  # noqa: E402
@@ -273,7 +273,17 @@ def grow_to(c, m1, first, last):
     caps = {3: status(c, 1)[0]['usable']['capacity']}
     for n in range(4, last + 1):
         quota = None if n == 8 else '1G'
-        c.start(n, join=2 if n % 2 == 0 else 3, quota=quota)
+        observed = None
+        extra = None
+        if quota is None:
+            observed = work / 'n8-statvfs.tsv'
+            library = work / 'statvfs-trace.so'
+            subprocess.run(['cc', '-shared', '-fPIC', '-Wall', '-Wextra', '-Werror',
+                            str(root / 'tests/b_geometry_statvfs_trace.c'), '-ldl',
+                            '-o', str(library)], check=True)
+            extra = dict(LD_PRELOAD=str(library) + (':' + env['LD_PRELOAD'] if env.get('LD_PRELOAD') else ''),
+                         B_GEOMETRY_STATVFS_TRACE=str(observed))
+        c.start(n, join=2 if n % 2 == 0 else 3, quota=quota, extra_env=extra)
         wait_formed(c, n, n)
         for i in range(1, n):
             wait_formed(c, i, n)
@@ -301,28 +311,27 @@ def grow_to(c, m1, first, last):
             # Equal 1 GiB quotas: +2 GiB/3 per addition (floor of the bound).
             assert abs(caps[n] - caps[n - 1] - 2 * G // 3) <= 2, (n, caps)
         else:
-            # Automatic quota: the startup budget on the store's filesystem
-            # (20 % reserve, at least 1 GiB, 7/8 of the rest). The estimate
-            # is a function of the statvfs sample the daemon took at
-            # startup, which it logs (`storage-budget:`); a sample taken
-            # here would differ by whatever unrelated writers (the other
-            # tests of a parallel gate) moved in between.
-            m_b = re.search(r'storage-budget: fs=0 total=(\d+) available=(\d+) used=(\d+) '
-                            r'budget=(\d+)$', c.last_run(n), re.M)
-            assert m_b, c.last_run(n)[-2000:]
-            total, avail, used, budget = (int(x) for x in m_b.groups())
-            reserve = max(total // 5, G)
-            ceiling = total - reserve
-            ceiling -= ceiling // 8 + (ceiling % 8 != 0)
-            room = avail - reserve
-            additional = room - room // 8 - (room % 8 != 0)
-            want = ceiling if additional > ceiling - used else used + additional
+            # Compare against samples actually returned to this daemon, not
+            # host free space sampled later under an eight-way test pool.
+            # The observer returns libc's result unchanged. This store was
+            # empty when started, so fragment usage was zero.
+            assert re.search(r'storage-inventory: roots=1 used=0\b', c.last_run(n)), c.last_run(n)[:2000]
+            samples = [line.split('\t') for line in observed.read_text().splitlines()]
+            samples = [(int(total), int(avail)) for path, total, avail in samples
+                       if Path(path) == c.dir / f'n{n}']
+            assert samples, ('no startup statvfs sample', observed)
             q = mem[n]['quota']
-            assert q == budget == want, (q, budget, want, total, avail, used)
-            assert 0 < q <= ceiling, (q, ceiling)
-            assert used < (64 << 20), used  # a fresh store
-            summary['auto_quota'] = {'quota': q, 'fs_total': total, 'fs_available': avail,
-                                     'ceiling': ceiling}
+            budgets = []
+            for total, avail in samples:
+                reserve = max(total // 5, G)
+                ceiling = total - reserve
+                ceiling -= ceiling // 8 + (ceiling % 8 != 0)
+                room = avail - reserve
+                additional = room - room // 8 - (room % 8 != 0)
+                budgets.append(min(ceiling, additional))
+            assert q in budgets and q > 0, (q, budgets, samples)
+            summary['auto_quota'] = {'quota': q, 'startup_samples': samples,
+                                     'expected_budgets': budgets}
     summary['capacity_by_members'] = caps
 
 
