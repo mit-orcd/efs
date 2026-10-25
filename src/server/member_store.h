@@ -24,10 +24,14 @@
  *                 Node ids are never an operator input: id 1 is the seed,
  *                 formation allocates the others, an addition count + 1.
  * identity.bin is the "initialized" mark: it is written after boot.bin, so
- * a store with boot.bin and no identity.bin crashed during initialization
- * and is refused, as is a store holding Raft or KV data but no identity (a
- * store of another build). Files are replaced with write-temp, fsync,
- * rename, fsync-directory, so a failed start leaves them as they were. */
+ * a store with boot.bin at counter 0 and no identity.bin crashed during
+ * initialization, before its token left the process, and is initialized
+ * again (an interrupted join or seed start is retried with the same
+ * command). A store with no identity.bin but a boot counter above 0 (it
+ * started before), an unreadable one, or Raft or KV data (a store of
+ * another build) is refused. member_store_open lists every state's
+ * outcome. Files are replaced with write-temp, fsync, rename,
+ * fsync-directory, so a failed start leaves them as they were. */
 
 #include "efs/membership.h"
 #include <stddef.h>
@@ -82,6 +86,11 @@ int member_store_boot(struct member_store *ms, uint64_t fresh, uint64_t *incarna
 int member_store_learn(struct member_store *ms, const struct efs_membership *m,
                        char *err, size_t errlen);
 void member_store_close(struct member_store *ms);
+#if EFS_FAULTS
+/* K33 test hook (efsd sets it to server_test_member_exit): called at
+ * "before-identity", initialization's boot.bin written, identity.bin not. */
+extern void (*member_store_fault_exit)(const char *point);
+#endif
 
 /* Pure record codecs. A failed decode leaves *ms unchanged (including
  * caller-owned path and lock). No filesystem access or synchronization. */

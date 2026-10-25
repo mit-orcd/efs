@@ -265,6 +265,10 @@ static int path_exists(const char *dir, const char *name)
     return lstat(p, &st) == 0;
 }
 
+#if EFS_FAULTS
+void (*member_store_fault_exit)(const char *point);
+#endif
+
 void member_store_close(struct member_store *ms)
 {
     if (ms && ms->lockfd >= 0) {
@@ -308,14 +312,41 @@ int member_store_open(struct member_store *ms, const char *dir, int seed, const 
         ms_err(err, errlen, "lock %s: %s", p, strerror(e));
         return EFS_ERR_IO;
     }
+    /* Which stores start, which are refused (K33; identity.bin absent):
+     *   nothing          initialize (below).
+     *   boot.bin at 0    initialization was interrupted between boot.bin
+     *                    and identity.bin: initialize again (a new token).
+     *                    Counter 0 means member_store_boot never ran, so
+     *                    open never returned and the token minted then
+     *                    never left the process: no seed, joiner or record
+     *                    can know this store.
+     *   boot.bin above 0, unreadable, or Raft/KV data
+     *                    refused: the store started before and lost its
+     *                    identity (or is another build's).
+     * identity.bin present: every state is opened as recorded; what the
+     * cluster thinks of it is settled by the HELLO, not here:
+     *   joining   retries the join with its token (the seed's record
+     *             names it if the addition committed, else it is added
+     *             now at count + 1);
+     *   seed, promised, formed  start as that node id at that endpoint;
+     *             a cluster whose record holds this id or endpoint under
+     *             another token refuses it (wiped or swapped store). */
     snprintf(p, sizeof(p), "%s/identity.bin", dir);
     rc = read_small(p, buf, EFS_IDENTITY_FILE_LEN, &got);
     if (rc == EFS_ERR_NOT_FOUND) {
         if (path_exists(dir, "boot.bin")) {
-            ms_err(err, errlen, "store %s has a boot counter but was never initialized "
-                   "(interrupted initialization); format it fresh", dir);
-            member_store_close(ms);
-            return EFS_ERR_UNSUPPORTED;
+            uint8_t b[EFS_BOOT_FILE_LEN + 1];
+            uint64_t counter = 1;
+            size_t bgot = 0;
+            snprintf(p, sizeof(p), "%s/boot.bin", dir);
+            if (read_small(p, b, EFS_BOOT_FILE_LEN, &bgot) != EFS_OK ||
+                member_store_boot_decode(b, bgot, &counter) != EFS_OK || counter) {
+                ms_err(err, errlen, "store %s has a boot counter but no member identity (it "
+                       "started before and lost identity.bin, or its boot counter is "
+                       "unreadable); format it fresh", dir);
+                member_store_close(ms);
+                return EFS_ERR_UNSUPPORTED;
+            }
         }
         if (path_exists(dir, "kv") || path_exists(dir, "log")) {
             ms_err(err, errlen, "store %s holds Raft/KV data without a member identity "
@@ -341,9 +372,14 @@ int member_store_open(struct member_store *ms, const char *dir, int seed, const 
             snprintf(ms->addr, sizeof(ms->addr), "%s", addr);
             ms->port = port;
         }
-        if (member_store_identity_encode(ms, id) != EFS_OK ||
-            write_replace(dir, "boot.bin", b, sizeof(b)) != EFS_OK ||
-            write_replace(dir, "identity.bin", id, sizeof(id)) != EFS_OK) {
+        rc = member_store_identity_encode(ms, id) == EFS_OK &&
+             write_replace(dir, "boot.bin", b, sizeof(b)) == EFS_OK;
+#if EFS_FAULTS
+        /* K33 test hook: boot.bin at 0 written, identity.bin not yet. */
+        if (rc && member_store_fault_exit)
+            member_store_fault_exit("before-identity");
+#endif
+        if (!rc || write_replace(dir, "identity.bin", id, sizeof(id)) != EFS_OK) {
             ms_err(err, errlen, "store %s: cannot persist its initialization: %s", dir,
                    strerror(errno));
             member_store_close(ms);

@@ -297,8 +297,11 @@ int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t pe
  * env can be given to every member, the one that reaches the point first
  * ends, the others and every restart continue). Points: after-members-commit,
  * before-learn, after-learn, learner-added, joint-started, after-g2-copy
- * (raft_host.c and the joiner path above), data-commit (a DATA_COMMIT
- * received, before its barrier: K35, tests/test_k35_fsync_degraded.py). */
+ * (raft_host.c and the joiner path above), before-identity (store
+ * initialization, boot.bin written and identity.bin not: member_store.c)
+ * and before-hello (a joining identity persisted, no HELLO sent: efsd.c;
+ * both tests/test_k33_join_retry.py), data-commit (a DATA_COMMIT received,
+ * before its barrier: K35, tests/test_k35_fsync_degraded.py). */
 void server_test_member_exit(const char *point)
 {
 #if EFS_FAULTS
