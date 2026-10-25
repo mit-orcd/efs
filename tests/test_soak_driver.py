@@ -89,3 +89,30 @@ for text in ('',f'session uuid={u[:-1]} epoch=1\n',f'xsession uuid={u} epoch=1',
  except AssertionError:pass
  else:raise AssertionError('ambiguous/unowned session accepted')
 print('D31 owned-session identity and active-versus-revoked collection controls PASS')
+
+# Force the former spawn-versus-/proc ownership race: the native child exists
+# before Cluster.start publishes its PID. The observer must wait for enrollment.
+import threading,types
+h=s.Soak.__new__(s.Soak);h.mu=threading.RLock()
+spawned,release,observed=threading.Event(),threading.Event(),threading.Event()
+class Nodes:
+ def __init__(self):self.procs={}
+ def start(self,i,**kwargs):
+  spawned.set();assert release.wait(2)
+  self.procs[i]=types.SimpleNamespace(pid=4242)
+h.c=Nodes();old=s.foreign_jobs
+errors=[]
+def scan(owned=()):
+ observed.set();assert list(owned)==[4242], 'guard observed an unenrolled owned child'
+ return []
+s.foreign_jobs=scan
+starter=threading.Thread(target=lambda:h.start_node(1));starter.start();assert spawned.wait(2)
+def probe():
+ try:assert h.unrelated_jobs()==[]
+ except BaseException as e:errors.append(e)
+observer=threading.Thread(target=probe);observer.start()
+assert not observed.wait(.05), 'ownership scan ran inside an incomplete spawn'
+release.set();starter.join(2);observer.join(2);s.foreign_jobs=old
+assert not starter.is_alive() and not observer.is_alive() and not errors,errors
+assert observed.is_set()
+print('soak ownership registry: forced child-birth/observer interleaving PASS')

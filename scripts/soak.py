@@ -289,13 +289,32 @@ class Soak:
                 self.rss_fp.write(f'{int(time.time())} ' + ' '.join(points) + '\n')
             self.note('rss', values=points)
 
+    def start_node(self, i, **kwargs):
+        with self.mu:
+            return self.c.start(i, **kwargs)
+
+    def stop_node(self, i, sig):
+        with self.mu:
+            return self.c.stop(i, sig)
+
+    def restart_node(self, i, **kwargs):
+        with self.mu:
+            return self.c.restart(i, **kwargs)
+
+    def unrelated_jobs(self):
+        # The OS process can appear before Cluster.start registers its PID.
+        # Serialize birth/death with the ownership snapshot and /proc scan;
+        # never whitelist a command path or ignore an unowned process.
+        with self.mu:
+            return foreign_jobs(p.pid for p in self.c.procs.values())
+
     def monitor(self, mode):
         try:
             while not self.monitor_stop.is_set():
                 if mode == 'rss':
                     self.sample()
                 else:
-                    jobs = foreign_jobs(p.pid for p in self.c.procs.values())
+                    jobs = self.unrelated_jobs()
                     assert not jobs, f'quiet host lost to unrelated jobs: {jobs}'
                     self.status()
                     for node in list(self.c.procs):
@@ -417,16 +436,16 @@ class Soak:
                 # Preserve every client run in a separate log and mount path.
                 self.mounts[victim] = Mount(self.c, 1+victim, f'mnt-{victim}-r{len(self.events)}')
         elif kind == 'add':
-            self.c.start(victim, join=1, quota=self.a.quota)
+            self.start_node(victim, join=1, quota=self.a.quota)
             self.c.wait_members(list(range(1, victim+1)), victim, timeout=self.a.recovery_bound)
         else:
             assert all(self.c.alive(i) for i in self.c.procs), 'second member outage refused'
-            self.c.stop(victim, signal.SIGKILL if kind == 'crash' else signal.SIGTERM)
+            self.stop_node(victim, signal.SIGKILL if kind == 'crash' else signal.SIGTERM)
             assert all(self.c.alive(i) for i in self.c.procs), 'unexpected second member down'
             self.stop.wait(self.a.down_seconds)
             # Restore the one stopped node even if the workload failed: preserve
             # its recovery evidence, but never launch another scheduled event.
-            self.c.restart(victim, quota=self.a.quota)
+            self.restart_node(victim, quota=self.a.quota)
             self.c.wait_log(victim, r'node \d+ listening on ', timeout=self.a.recovery_bound)
         self.settle(victim if kind == 'crash' else None)
         self.churning = False
@@ -473,11 +492,11 @@ class Soak:
                 assert rc == 0, version
                 result.setdefault('versions', {})[binary.name] = version.strip()
             for i in (1,2,3):
-                self.c.start(i, join=None if i==1 else 1, quota=self.a.quota)
+                self.start_node(i, join=None if i==1 else 1, quota=self.a.quota)
             for i in (1,2,3):
                 self.c.wait_log(i, r'raft-host: formed: 3 members', timeout=120)
             for i in (4,5):
-                self.c.start(i, join=1, quota=self.a.quota)
+                self.start_node(i, join=1, quota=self.a.quota)
                 self.c.wait_members(list(range(1,i+1)), i, timeout=self.a.recovery_bound)
             self.mounts = [Mount(self.c,1,'mnt-0'), Mount(self.c,2,'mnt-1')]
             self.settle()
