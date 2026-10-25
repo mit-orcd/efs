@@ -20,7 +20,8 @@ during the load, drain within DRAIN_S after it, every acknowledged file
 exact. On top, from the daemon logs: KV compactions completed during the
 load (`kv-compact: end ... rc=0`) on every member, and no packer read or
 put error. EFS_D4_ARTIFACTS=DIR keeps the driver's JSON there; EFS_D4_LOAD_S,
-EFS_D4_THREADS and EFS_D4_REFRESH_MS change the load and the refresh.
+EFS_D4_THREADS and EFS_D4_REFRESH_MS change the load and the refresh;
+EFS_D4_QUOTA the per-store quota (default 1G).
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import calendar, json, os, re, shutil, sys, tempfile, time
@@ -41,6 +42,9 @@ if not fuse_ok():
     sys.exit(0)
 LOAD_S = float(os.environ.get('EFS_D4_LOAD_S', '45'))
 THREADS = int(os.environ.get('EFS_D4_THREADS', '8'))
+# Per-store quota: 1G fits the 45 s default load; a 20-minute run (F1 RSS
+# plateau) fills it (913 MB stores, ENOSPC), so long runs pass EFS_D4_QUOTA.
+QUOTA = os.environ.get('EFS_D4_QUOTA', '1G')
 FG_DEADLINE_S = 10.0
 DRAIN_S = 150.0
 # Under the F1 sanitizer gates (EFS_TEST_SANITIZE / EFS_TEST_TSAN) the
@@ -76,9 +80,9 @@ def compactions(c, i, since):
 c = Cluster(work, 'd', [1, 2, 3], env)
 mounts = []
 try:
-    c.start(1)
-    c.start(2, join=1)
-    c.start(3, join=1)
+    c.start(1, quota=QUOTA)
+    c.start(2, join=1, quota=QUOTA)
+    c.start(3, join=1, quota=QUOTA)
     for i in (1, 2, 3):
         c.wait_log(i, r'raft-host: formed: 3 members')
     c.wait_members([1, 2, 3], 3)

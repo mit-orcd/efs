@@ -1166,7 +1166,7 @@ void server_reclaim_status(struct efsd_server *s, struct efs_reclaim_status *out
 {
     memset(out, 0, sizeof(*out));
     pthread_mutex_lock(&rj.mu);
-    out->accepted = rj.accepted;
+    out->accepted = __atomic_load_n(&rj.accepted, __ATOMIC_RELAXED); /* bumped outside rj.mu */
     out->deleted = rj.deleted;
     out->checkpointed = rj.checkpointed;
     out->retired = rj.retired;

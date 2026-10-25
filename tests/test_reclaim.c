@@ -409,11 +409,11 @@ static void t_cap(void)
 /* 8. A PUT racing acceptance either lands before the fence (and is counted
  * in the credit, then deleted) or is refused; nothing survives. */
 static efs_ino_t race_ino;
-static volatile int race_stop;
+static int race_stop; /* atomic (TSan) */
 static void *race_writer(void *arg)
 {
     (void)arg;
-    for(uint32_t ci=10;!race_stop;ci++){
+    for(uint32_t ci=10;!__atomic_load_n(&race_stop,__ATOMIC_ACQUIRE);ci++){
         int rc=put(race_ino,ci%4000,ci&1);
         assert(rc==EFS_OK||rc==EFS_ERR_STALE||rc==EFS_ERR_EXIST);
         if(rc==EFS_ERR_STALE) break;
@@ -424,12 +424,12 @@ static void t_race(void)
 {
     boot();
     for(int round=0;round<20;round++){
-        race_ino=20000+round;race_stop=0;
+        race_ino=20000+round;__atomic_store_n(&race_stop,0,__ATOMIC_RELEASE);
         assert(!put(race_ino,0,0));
         pthread_t t;assert(!pthread_create(&t,NULL,race_writer,NULL));
         usleep(2000);
         accept_range(race_ino,1,EFS_OK);
-        race_stop=1;pthread_join(t,NULL);
+        __atomic_store_n(&race_stop,1,__ATOMIC_RELEASE);pthread_join(t,NULL);
         assert(put(race_ino,9999,0)==EFS_ERR_STALE);
     }
     wait_drained();

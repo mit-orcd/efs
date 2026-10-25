@@ -6348,11 +6348,9 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
             for (int i = 0; i < nr; i++)
                 efs_rdcache_unpin(refs[i].pin);
             {
-                static int logged;
-                if (!logged) {
-                    logged = 1;
+                static int logged; /* once, from any reader thread */
+                if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
                     fprintf(stderr, "efs: read reply zero-copy active (iov=%d size=%zu)\n", nr, size);
-                }
             }
             return;
         }

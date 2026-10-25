@@ -542,7 +542,7 @@ static struct efs_conn *rpc_primary_conn(efs_node_id_t *nid_out)
 {
     efs_node_id_t live[EFS_MAX_NODES];
     uint32_t nlive = 0;
-    for (uint32_t i = 0; i < g_client.node_count && nlive < EFS_MAX_NODES; i++) {
+    for (uint32_t i = 0; i < __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE) && nlive < EFS_MAX_NODES; i++) {
         efs_node_id_t id = g_client.nodes[i].id;
         if (efs_client_node_is_down(id))
             continue;
@@ -634,7 +634,7 @@ static struct efs_conn *raft_voter_conn_skip(uint32_t shard,
                                              efs_node_id_t skip)
 {
     uint8_t group = efs_raft_shard_group(shard);
-    int n = (int)g_client.node_count;
+    int n = (int)__atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE);
     uint32_t voters = raft_group_voters(group, n);
     efs_node_id_t lead = rpc_leader_of(group);
     int pass;
@@ -684,7 +684,7 @@ static struct efs_conn *raft_voter_conn(uint32_t shard,
 static struct efs_conn *raft_dual_voter_conn(efs_node_id_t *nid_out,
                                             efs_node_id_t skip)
 {
-    int n = (int)g_client.node_count;
+    int n = (int)__atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE);
     uint32_t dual = raft_group_voters(EFS_RAFT_GROUP_SHARD, n) &
                     raft_group_voters(EFS_RAFT_GROUP_SHARD2, n);
 
@@ -889,7 +889,7 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
             nid = target;
         } else if (read_route) {
             nid = efs_meta_read_route_get(&g_read_routes,read_key);
-            conn = nid && nid != skip && nid <= g_client.node_count &&
+            conn = nid && nid != skip && nid <= __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE) &&
                    !efs_client_node_is_down(nid) ? efs_client_conn_get(nid) : NULL;
             if (!conn)
                 conn = raft_voter_conn_skip(shard, &nid, skip);
@@ -970,7 +970,7 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
         free(payload);
         struct efs_msg_inode_reply *r = reply;
         if (read_route && r->status == EFS_INODE_RPC_OK && r->read_node_id &&
-            r->read_node_id <= g_client.node_count) {
+            r->read_node_id <= __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE)) {
             rpc_learn_leader(r);
             efs_meta_read_route_note(&g_read_routes,read_key,r->read_node_id);
         }
@@ -3194,7 +3194,7 @@ int efs_client_rpc_report_resolve(efs_export_id_t export_id,
     while (rpc_prof_now_us() / 1000ull < end) {
         int pending = 0, none = 0, asked = 0;
 
-        for (efs_node_id_t nid = 1; nid <= 64 && nid <= g_client.node_count; nid++) {
+        for (efs_node_id_t nid = 1; nid <= 64 && nid <= __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE); nid++) {
             struct efs_msg_report_receipt_reply rr;
 
             if (!(sent & (1ull << (nid - 1))))

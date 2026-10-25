@@ -127,7 +127,12 @@ the sanitized binaries. `make sanitize-check` runs both.
   `<name>.ubsan.<pid>`, so a report inside a daemon that a harness started
   counts too, and a daemon's own log cannot hide it; a harness binary that
   prints to stderr is read from `<name>.out` as well. TSan runs with
-  `halt_on_error=0` so one entry shows all its races; UBSan with
+  `halt_on_error=0` so one entry shows all its races, `die_after_fork=0`
+  (the unit tests fork crash-simulation children that open a store) and
+  `detect_deadlocks=0`: libtsan's lock-order detector aborts when a thread
+  holds more than 64 mutexes (the efs-fuse metadata fetch holds every
+  inode lock stripe) and that abort self-deadlocks, so the tsan gate
+  reports data races, not lock-order inversions. UBSan with
   `halt_on_error=1`.
 - **tsan list.** KV (`test_kv_lsm_concurrent 4`, `kv_lsm`, `kv_reader_gate`),
   `raft_store`, `reclaim`, `query_disk_io`, `query_delta`, the client data

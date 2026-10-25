@@ -1414,9 +1414,13 @@ int main(int argc, char **argv)
         char storage_disp[EFS_MAX_PATH];
         uint64_t used_disp = 0;
         server_format_storage_paths(&server, storage_disp, sizeof(storage_disp));
+        /* The rejoin thread may already be rewriting the node table under
+         * server.lock (TSan): read the local row under it. */
+        pthread_mutex_lock(&server.lock);
         struct efs_node *local = server_local_node(&server);
         if (local)
             used_disp = local->used;
+        pthread_mutex_unlock(&server.lock);
         char ver[256];
         printf("%s, build=%s: node %u listening on %s:%u, storage=%s "
                "(%u paths, stripe=%s), used=%llu, quota=%llu, direct_io=on, "

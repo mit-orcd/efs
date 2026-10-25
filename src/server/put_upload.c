@@ -74,9 +74,10 @@ int server_put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
                        uint8_t *path_used)
 {
     int rc=put_upload(s,body,bytes,path_used);
-    static int debug=-1;
-    if(debug<0)debug=getenv("EFS_PUT_TICKET_DBG")!=NULL;
-    if(rc!=EFS_OK && debug && bytes>=EFS_PUT_UPLOAD_HEADER_LEN)
+    static int debug=-1; /* idempotent first read on any connection thread (TSan) */
+    int dbg=__atomic_load_n(&debug,__ATOMIC_ACQUIRE);
+    if(dbg<0){dbg=getenv("EFS_PUT_TICKET_DBG")!=NULL;__atomic_store_n(&debug,dbg,__ATOMIC_RELEASE);}
+    if(rc!=EFS_OK && dbg && bytes>=EFS_PUT_UPLOAD_HEADER_LEN)
         fprintf(stderr,"put-upload refused fi=%u seq=%llu rc=%d\n",efs_put_upload_rd32(body+4),
                 (unsigned long long)(((uint64_t)efs_put_upload_rd32(body+28)<<32)|efs_put_upload_rd32(body+32)),rc);
     return rc;

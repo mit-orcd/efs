@@ -871,7 +871,7 @@ static int membership_copy(struct efs_membership *out)
         /* The member thread rewrites the store (promise, learn) under
          * h->mu; read it under the same lock (TSan: a HELLO on a
          * connection thread read a half-copied store). */
-        struct efs_raft_host *h = g_host;
+        struct efs_raft_host *h = __atomic_load_n(&g_host, __ATOMIC_ACQUIRE);
         if (h) pthread_mutex_lock(&h->mu);
         if (g_server->mstore.state == EFS_MEMBER_FORMED) {
             formed = 1;
@@ -12468,7 +12468,7 @@ static void *host_query_thread(void *ctx)
 int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_query_view *,int),
                                  void *ctx,uint16_t *primary_id)
 {
-    struct efs_raft_host *h=g_host;
+    struct efs_raft_host *h=__atomic_load_n(&g_host,__ATOMIC_ACQUIRE);
     if (primary_id) *primary_id=0;
     if (!h || !consume) return EFS_ERR_INVAL;
     uint8_t both[2];host_need_both(both);
@@ -13134,7 +13134,9 @@ int server_raft_host_start(struct efsd_server *s)
      * authority (D42). Tracking and the catalog worker always run; the
      * worker idles on its poll while the policy is off or nothing changed. */
     efs_kv_lsm_query_tracking(h->kv,1);
-    g_host = h;
+    /* Published atomically: the rejoin thread (membership_copy) and the
+     * query thread may already look for it. */
+    __atomic_store_n(&g_host, h, __ATOMIC_RELEASE);
     if (efsd_pthread_create(&h->tid, host_pump, h) != 0) {
         fprintf(stderr, "raft-host: pump thread failed\n");
         g_host = NULL;
@@ -15008,7 +15010,7 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
 void server_raft_host_expiry_status(struct efs_expiry_status *out)
 {
     memset(out,0,sizeof(*out));
-    struct efs_raft_host *h=g_host;
+    struct efs_raft_host *h=__atomic_load_n(&g_host,__ATOMIC_ACQUIRE);
     if(!h || !HOST_RUNNING(h))return;
     out->available=1;out->enabled=h->expiry_enabled;
     if(h->expiry_enabled)(void)host_expiry_clock_read(h,NULL);
@@ -17197,7 +17199,7 @@ static int host_retained_create_proof(struct efs_raft_host *h,
 void server_raft_host_create_retained(const struct efs_msg_create_retained *request,
                                       struct efs_msg_create_retained_reply *out)
 {
-    struct efs_raft_host *h=g_host;int hint=-1,rc;
+    struct efs_raft_host *h=__atomic_load_n(&g_host,__ATOMIC_ACQUIRE);int hint=-1,rc;
     memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
     if(!h || !HOST_RUNNING(h) || !request || request->probe>1 || request->routed>1 ||
        request->create.flags!=EFS_CREATE_F_PENDING || request->create.owner ||
@@ -23764,7 +23766,7 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
 void server_raft_host_publication(const struct efs_msg_publication *req, int query_only,
                                   struct efs_msg_publication_reply *out)
 {
-    struct efs_raft_host *h=g_host;struct efs_meta_pub p;int hint=-1,verdict;
+    struct efs_raft_host *h=__atomic_load_n(&g_host,__ATOMIC_ACQUIRE);struct efs_meta_pub p;int hint=-1,verdict;
     memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
     /* K13: no unticketed publication is accepted, submitted or answered. */
     if(query_only<0 || query_only>2 || !h || !HOST_RUNNING(h) || !req ||
