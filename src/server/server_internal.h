@@ -396,6 +396,9 @@ void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello 
 
 /* Start the background heartbeat thread. */
 void server_start_heartbeat(struct efsd_server *s);
+/* efsd.c: return free malloc pages to the OS (heartbeat, every EFSD_MALLOC_TRIM_MS). */
+#define EFSD_MALLOC_TRIM_MS 15000
+void efsd_malloc_trim(void);
 
 
 /* Production Raft host (architecture.md §10 10.5c). Starts unconditionally

@@ -509,7 +509,7 @@ static void *heartbeat_thread(void *arg)
     if (!nodes)
         return NULL;
 
-    uint64_t gc_log_ms = 0;
+    uint64_t gc_log_ms = 0, trim_ms = hb_now_ms();
     while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) {
         usleep(EFS_HEARTBEAT_MS * 1000);
 
@@ -538,6 +538,10 @@ static void *heartbeat_thread(void *arg)
                     (unsigned long long)gc.sweep_errors, (unsigned long long)gc.reap_errors,
                     (unsigned long long)gc.ack_errors, (unsigned long long)gc.missing_exports);
             gc_log_ms = now;
+        }
+        if (now - trim_ms >= EFSD_MALLOC_TRIM_MS) {
+            efsd_malloc_trim();
+            trim_ms = now;
         }
         for (uint32_t i = 0; i < node_count; i++) {
             if (nodes[i].id == self)

@@ -27,6 +27,9 @@
 #include "../common/recorder_stop.h"
 #include "../common/recorder_start.h"
 #include <sys/resource.h>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 #include <time.h>
 
 struct efsd_server *g_server = NULL;
@@ -886,8 +889,41 @@ static int join_as_new(struct efsd_server *s, const char *seed_host, uint16_t se
     return 2;
 }
 
+/* F1 RSS plateau (docs/status/f1-followups-20261025.md): efsd's live heap
+ * is flat under a fixed working set, yet its RSS crept upward for the
+ * whole 30-minute D4 load. glibc gave each of efsd's 60-80 threads an
+ * arena (59-73 per daemon), and freed memory stayed resident in them:
+ * malloc_info showed 27-70 MiB free of 44-93 MiB of arena memory, and
+ * the arena count and each arena's high-water mark kept rising with
+ * thread turnover and fragmentation. Two bounds: at most
+ * EFSD_MALLOC_ARENAS arenas (set before any thread exists), and every
+ * EFSD_MALLOC_TRIM_MS the heartbeat thread returns their free pages
+ * (malloc_trim walks every arena). Internal: not knobs. */
+#define EFSD_MALLOC_ARENAS 8
+static void efsd_malloc_setup(void)
+{
+#if defined(__GLIBC__) && defined(M_ARENA_MAX)
+    if (mallopt(M_ARENA_MAX, EFSD_MALLOC_ARENAS) != 1)
+        fprintf(stderr, "malloc: M_ARENA_MAX %d not applied\n", EFSD_MALLOC_ARENAS);
+#endif
+}
+
+void efsd_malloc_trim(void)
+{
+#if defined(__GLIBC__)
+    struct timespec a, b;
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    malloc_trim(0);
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    long long us = (b.tv_sec - a.tv_sec) * 1000000ll + (b.tv_nsec - a.tv_nsec) / 1000;
+    if (us > 100000)
+        fprintf(stderr, "malloc: trim took %lld ms\n", us / 1000);
+#endif
+}
+
 int main(int argc, char **argv)
 {
+    efsd_malloc_setup();
     efs_version_check_argv("efsd", argc, argv);
     if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],NULL);return 0; }
 
