@@ -50,8 +50,9 @@ it is not a benchmark or a live health report.
 ## Tested checkpoint
 
 **[v0.2.0-pre-alpha](https://github.com/mit-orcd/efs/tree/v0.2.0-pre-alpha)**
-passed POSIX, two-client and cold-remount suites on AMD for all four combinations:
-direct/buffered fragment I/O × TCP/RXE RDMA. Each passed 216 POSIX tests
+passed POSIX, two-client and cold-remount suites on AMD for all four combinations
+of that time: direct/buffered fragment I/O × TCP/RXE RDMA (buffered fragment
+I/O has since been removed, D42). Each passed 216 POSIX tests
 (one unsupported mmap skip), 64 peer tests and 26 cold-verification tests.
 These runs do not establish hardware power-loss durability or cross-host RDMA acceptance.
 [Results and evidence](docs/status/v020-amd-release.md).
