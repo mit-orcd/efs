@@ -34,7 +34,7 @@ static int efs_raft_leader(struct efs_raft*r){(void)r;return 2;}
 static int __attribute__((unused)) efs_raft_durable(struct efs_raft*r,uint64_t i){(void)r;assert(i==41);return durable;}
 static int host_wait_settled(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*p){(void)h;(void)g;(void)p;assert(i==expected_index&&t==expected_term);settled_calls++;return settled_rc;}
 static int host_wait_verdict(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*p){(void)h;(void)g;(void)p;assert(i==expected_index&&t==expected_term);waits++;return verdict;}
-static int host_wait_applied(struct efs_raft_host*h,uint8_t g,uint64_t i,int*p){(void)h;(void)g;(void)p;assert(i==41);waits++;return 0;}
+static int host_wait_applied_own(struct efs_raft_host*h,uint8_t g,uint64_t i,int*p){(void)h;(void)g;(void)p;assert(i==41);waits++;return 0;}
 static int retired;static int host_group_retired(struct efs_raft_host*h,uint8_t g){(void)h;(void)g;return retired;}
 static int host_remote_cmd(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint32_t n,struct efs_msg_raft_mkfs_reply*p,int lid){(void)h;(void)g;(void)c;(void)n;assert(lid==2);forwards++;p->index=41;return verdict;}
 static int host_propose_impl(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint32_t n,uint64_t*i,uint64_t*t,int*hint,int local){
