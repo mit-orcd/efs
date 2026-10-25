@@ -413,15 +413,15 @@ static int packed_short(efs_ino_t ino, const struct efs_chunk_entry *ce,
 {
     static uint64_t said_id, said_ms;
     int answered = 0, good = 0;
-    if (prc == EFS_OK || prc == EFS_ERR_BUSY)
+    /* Integrity refusals (CHECKSUM), a decode or record verdict (DECODE,
+     * STALE) keep their own code; only missing fragments are short. */
+    if (prc != EFS_ERR_NET && prc != EFS_ERR_NOT_FOUND)
         return prc;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         answered += pc->tried[i] && pc->rc[i] != EFS_ERR_NET;
         good += pc->tried[i] && pc->rc[i] == EFS_OK;
     }
-    /* Two fragments read: the decode or the record check refused (STALE,
-     * DECODE), not a short segment. */
-    if (good >= 2 || (!answered && prc == EFS_ERR_NET))
+    if (!answered && prc == EFS_ERR_NET)
         return prc;
     uint64_t now = read_peer_now_ms(), id = ce->packed.segment_id;
     if (__atomic_load_n(&said_id, __ATOMIC_RELAXED) != id ||
