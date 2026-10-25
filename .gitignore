@@ -17,6 +17,7 @@ tests/test_publication_ack
 tests/test_publication_recovery
 tests/test_lane_bootstrap_recovery
 tests/test_fence_view
+tests/test_apply_wait
 tests/test_reply_buffers
 tests/test_bufpool
 tests/test_erasure

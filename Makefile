@@ -276,6 +276,14 @@ test-lookup-memo:
 tests/test_fence_view: tests/test_fence_view.c include/efs/fence_view.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $<
 
+# W159: progress-bounded applied-wait (src/server/apply_wait.h).
+tests/test_apply_wait: tests/test_apply_wait.c src/server/apply_wait.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $<
+
+.PHONY: test-apply-wait
+test-apply-wait: tests/test_apply_wait
+	./tests/test_apply_wait
+
 test-fence-read:
 	python3 tests/test_fence_read.py
 	python3 tests/test_read_cache_reuse.py
@@ -1024,6 +1032,7 @@ test-rdma-message:
 	$(CC) -std=c99 -O2 -g -Wall -Wextra -Werror -Iinclude tests/test_rdma_message.c src/common/rdma_message.c -pthread -o "$$bin" && "$$bin"
 
 test: test-rdma-message
+test: test-apply-wait
 
 # make test-long: tests that wait on real deadlines, start daemons or
 # processes, inject faults or carry heavy workloads (1 s or more each on an
@@ -1055,6 +1064,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	EFS_B6_MODES=full python3 tests/test_b6_unavailable.py
 	python3 tests/test_d4_progress.py
 	python3 tests/test_report_stepdown.py
+	python3 tests/test_w159_apply_wait.py
 	python3 tests/test_query_first_catalog.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py

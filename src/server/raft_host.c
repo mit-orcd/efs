@@ -7,6 +7,7 @@
 #include "efs/batch_obs.h"
 #include "write_prof.h"
 #include "apply_ring.h"
+#include "apply_wait.h"
 #include "efs/raft_disk.h"
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
@@ -85,6 +86,13 @@ _Static_assert(EFS_RAFT_STATUS_PEERS == EFS_RAFT_MAX_PEERS,
 /* High bit of a member-forwarded submit's group byte (host_rpc_submit). */
 #define HOST_SUBMIT_FORWARDED 0x80u
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
+/* W159: the whole applied-wait for an own entry, however much the apply
+ * progresses (apply_wait.h): five grants. It must end well inside the
+ * client's REPORT and resolve budgets (8 s), so a wait the server cannot
+ * finish still answers BUSY while the client has time to retry; an 8 s
+ * cap made test_k33_payload.py's writes during a member outage miss the
+ * client budget instead (read EIO in 5 of 9 runs, 0 of 5 on the base). */
+#define HOST_APPLY_WAIT_CAP_US 2000000ull
 #define HOST_CREATE_NAME_OFF 31
 static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
                           uint64_t gen, const uint8_t uuid[EFS_OPID_UUID_LEN],
@@ -546,6 +554,8 @@ struct efs_raft_host {
     /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
      * the last stats-dump timestamp (ms). */
     uint64_t obs_wait_timeouts;
+    uint64_t obs_wait_extends; /* W159: applied-wait grants renewed on progress */
+    uint64_t obs_wait_timeouts_own; /* W159: of obs_wait_timeouts, waits for an own entry */
     /* Raft frames a peer handler could not queue (inbox full): the frame
      * is lost and the peer still gets its RAFT_REPLY. Counted since Sep 30
      * 2026; before that a drop had no line and no counter. Not gated on
@@ -569,6 +579,10 @@ struct efs_raft_host {
     uint64_t obs_apply_max_us;
     uint64_t obs_apply_cycle_us; /* cumulative apply time, current cycle */
     uint64_t obs_apply_cnt;      /* applies in the current cycle */
+    /* W159: every apply, across cycles, read lock-free by waiters as
+     * progress: a long cycle applies for seconds before it publishes
+     * its view, and that is progress too (apply_wait.h). */
+    uint64_t apply_progress;
     uint64_t obs_apply_max_cnt;  /* most applies in one cycle */
     /* Apply-result ring reads that found the slot overwritten
      * (>HOST_APPLY_RC_RING applies in one wait window). The waiter returns
@@ -3605,6 +3619,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         h->obs_apply_cnt++;
         h->obs_apply_cycle_us += elapsed;
     }
+    __atomic_fetch_add(&h->apply_progress, 1, __ATOMIC_RELAXED);
     /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
      * waiter that observes applied >= index always finds the slot: the
      * slot's release store precedes the view publish that carries applied.
@@ -5536,17 +5551,33 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
     return rc==EFS_OK ? host_read_index_admitted(h,second,hint,&admission[1],NULL,0) : rc;
 }
 
-static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
-                             uint64_t idx, int *leader_hint)
+/* own=1: the waiter's own committed entry (a proposal's verdict, a REPORT
+ * batch): apply is certain, a BUSY would only re-propose it behind the
+ * same lag, so the wait is bounded by progress (W159, apply_wait.h: a
+ * 400 ms grant renewed while the member applies, 2 s cap). own=0: a
+ * ReadIndex served behind a follower's apply, where a BUSY lets the
+ * client ask the leader instead; that keeps the one fixed budget. */
+static int host_wait_applied_mode(struct efs_raft_host *h, uint8_t group,
+                                  uint64_t idx, int *leader_hint, int own)
 {
     struct timespec end;
     struct host_view v;
+    struct efs_apply_wait w;
 
-    /* Same overall budget as the old poll loop (HOST_READ_TRIES x
-     * HOST_TICK_US), but the pump's applied_cv broadcast wakes us the
-     * moment the index applies instead of up to 5 ms later. Lock-free
-     * predicate on the published view; sleeps under cv_mu, never h->mu. */
-    host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
+    /* One grant is the old poll loop's budget (HOST_READ_TRIES x
+     * HOST_TICK_US); the pump's applied_cv broadcast wakes us the moment
+     * the index applies instead of up to 5 ms later. Lock-free predicate
+     * on the published view; sleeps under cv_mu, never h->mu. */
+    /* Progress is the published applied index plus the count of applies
+     * so far: a cycle that applies for longer than one grant publishes
+     * nothing until it ends, but every apply in it moves the count. */
+    host_view_get(h, group, &v);
+    efs_apply_wait_start(&w, now_us_(),
+                         (v.has ? v.applied : 0) +
+                             __atomic_load_n(&h->apply_progress, __ATOMIC_RELAXED),
+                         (uint64_t)HOST_READ_TRIES * HOST_TICK_US,
+                         own ? HOST_APPLY_WAIT_CAP_US
+                             : (uint64_t)HOST_READ_TRIES * HOST_TICK_US);
     for (;;) {
         host_view_get(h, group, &v);
         if (!v.has) {
@@ -5557,10 +5588,20 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
             *leader_hint = v.leader;
         if (v.applied >= idx)
             return EFS_OK;
-        if (host_past_deadline(&end)) {
-            __atomic_fetch_add(&h->obs_wait_timeouts, 1, __ATOMIC_RELAXED);
-            return EFS_ERR_BUSY;
+        {
+            unsigned before = w.extensions;
+            uint64_t progress = v.applied +
+                __atomic_load_n(&h->apply_progress, __ATOMIC_RELAXED);
+            if (efs_apply_wait_expired(&w, now_us_(), progress)) {
+                __atomic_fetch_add(&h->obs_wait_timeouts, 1, __ATOMIC_RELAXED);
+                if (own)
+                    __atomic_fetch_add(&h->obs_wait_timeouts_own, 1, __ATOMIC_RELAXED);
+                return EFS_ERR_BUSY;
+            }
+            if (w.extensions != before)
+                __atomic_fetch_add(&h->obs_wait_extends, 1, __ATOMIC_RELAXED);
         }
+        host_deadline_us(&end, (long)efs_apply_wait_remaining_us(&w, now_us_()));
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
         if (v.has && v.applied < idx) {
@@ -5576,6 +5617,18 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
         }
         pthread_mutex_unlock(&h->cv_mu);
     }
+}
+
+static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
+                             uint64_t idx, int *leader_hint)
+{
+    return host_wait_applied_mode(h, group, idx, leader_hint, 0);
+}
+
+static int host_wait_applied_own(struct efs_raft_host *h, uint8_t group,
+                                 uint64_t idx, int *leader_hint)
+{
+    return host_wait_applied_mode(h, group, idx, leader_hint, 1);
 }
 
 /* h->mu held. One fsync covered every append whose record ends at or
@@ -6042,7 +6095,7 @@ static int host_wait_verdict(struct efs_raft_host *h, uint8_t group,
     struct efs_arc_view v;
     int rc, hosted;
 
-    rc = host_wait_applied(h, group, idx, hint);
+    rc = host_wait_applied_own(h, group, idx, hint);
     if (rc != EFS_OK)
         return rc;
     if (wp0) seen = wprof_now();
@@ -6064,7 +6117,7 @@ static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
     struct efs_arc_view v;
     int rc = EFS_OK;
 
-    rc = host_wait_applied(h, group, idx, hint);
+    rc = host_wait_applied_own(h, group, idx, hint);
     if (rc != EFS_OK || !term)
         return rc;
     if (host_arc_read(h, group, idx, &v) && v.idx == idx && v.term != term) {
@@ -7919,13 +7972,15 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
             pub_p50 = psamp[pc / 2];
         }
         fprintf(stderr,
-                "raft-obs: wait_timeouts=%llu pump_hold_max=%lluus "
+                "raft-obs: wait_timeouts=%llu wait_timeouts_own=%llu wait_extends=%llu pump_hold_max=%lluus "
                 "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
                 "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
                 "arc_miss=%llu arc_term_miss=%llu opid_replay=%llu "
                 "fin_q=%llu fin_done=%llu fin_drop=%llu fin_full=%llu "
                 "pub_p50=%lluus pub_max=%lluus inbox_drop=%llu\n",
                 (unsigned long long)h->obs_wait_timeouts,
+                (unsigned long long)__atomic_load_n(&h->obs_wait_timeouts_own, __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&h->obs_wait_extends, __ATOMIC_RELAXED),
                 (unsigned long long)h->obs_pump_hold_max_us,
                 (unsigned long long)h->obs_wait_max_us,
                 (unsigned long long)h->obs_drain_max_us,
@@ -9310,7 +9365,7 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
      * deleted files were never reclaimed (tests/test_k33_bookkeeping.py). */
     if (retired)
         return EFS_OK;
-    return host_wait_applied(h, group, rep.index, NULL);
+    return host_wait_applied_own(h, group, rep.index, NULL);
 }
 
 static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
@@ -22646,7 +22701,7 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
 
     uint64_t wp0 = idx && write_prof_on() ? wprof_now() : 0, seen = 0, apply_us = 0;
     if (idx)
-        rc = host_wait_applied(h, b->group, idx, hint);
+        rc = host_wait_applied_own(h, b->group, idx, hint);
     if (rc == EFS_OK && idx) {
         if (wp0) seen = wprof_now();
         for (i = 0; i < b->nidx; i++) {

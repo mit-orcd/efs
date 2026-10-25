@@ -22,7 +22,7 @@ source = r'''
 struct host_group { int hosted; struct efs_arc_slot arc[8]; };
 struct efs_raft_host { pthread_mutex_t mu; struct host_group group; uint64_t obs_arc_miss, obs_arc_term_miss; };
 static struct host_group *group_slot(struct efs_raft_host *h, uint8_t group) { (void)group; return &h->group; }
-static int host_wait_applied(struct efs_raft_host *h, uint8_t group, uint64_t idx, int *hint) {
+static int host_wait_applied_own(struct efs_raft_host *h, uint8_t group, uint64_t idx, int *hint) {
     (void)h; (void)group; (void)idx; (void)hint; return EFS_OK;
 }
 static int write_prof_on(void) { return 0; }
