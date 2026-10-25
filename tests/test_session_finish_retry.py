@@ -7,8 +7,11 @@ s=(root/'src/common/session_revoke.c').read_text()
 def function(name):
     a=s.index(name)
     return s[a:s.index('\n}',a)+2]
+# The per-shard stage runner the coordinator calls (parallel=0: in the caller).
+stages=s[s.index('static uint64_t sess_now_ms('):s.index('/* Coordinator-driven I23 barrier')]
 code=r'''
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -49,12 +52,12 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
 int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,const uint8_t id[EFS_OPID_UUID_LEN],uint32_t old,uint32_t shard,int append,struct efs_msg_raft_mkfs_reply *r){
  assert(rpc->ctx==&seed);(void)r;assert(!memcmp(id,identity,16)&&old==4&&shard==1&&append==(int)cleanups);cleanups++;return EFS_OK;
 }
-'''+function('int efs_session_storage_barrier(')+'\n'+function('static void sess_pack_hdr(')+'\n'+function('int efs_session_revoke(')+r'''
-int main(void){identity[0]=42;const struct efs_session_rpc rpc={&seed,NULL};struct efs_session_revoke_result res;
+'''+function('int efs_session_storage_barrier(')+'\n'+function('static void sess_pack_hdr(')+'\n'+stages+function('int efs_session_revoke(')+r'''
+int main(void){identity[0]=42;const struct efs_session_rpc rpc={&seed,NULL,0,NULL};struct efs_session_revoke_result res;
  assert(!efs_session_revoke(&rpc,identity,&res)&&res.epoch==5&&res.state==1&&res.ntouch==1);assert(begins==1&&finishes==3&&cleanups==2&&deadline==0);return 0;}
 '''
 with tempfile.TemporaryDirectory() as directory:
     p=Path(directory)/'test.c';p.write_text(code)
-    subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
+    subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-pthread','-o',str(p.with_suffix(''))],check=True)
     subprocess.run([str(p.with_suffix(''))],check=True)
 print('session FINISH: BUSY retries keep UUID/epoch, one BEGIN, both cleanup stages PASS')

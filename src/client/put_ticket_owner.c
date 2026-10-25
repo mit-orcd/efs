@@ -510,8 +510,11 @@ int efs_client_put_settle(void)
     int progress = 1, rc = EFS_OK;
     uint64_t saved = efs_client_rpc_deadline_ms();
     efs_client_rpc_set_deadline_ms(0);
-    for (unsigned round = 0; progress && round < 64 && rc == EFS_OK; round++)
+    for (unsigned round = 0; progress && round < 64 && rc == EFS_OK; round++) {
+        if (efs_client_stop_owner())
+            efs_client_stop_phase("settling", round + 1, 64);
         rc = settle_pass(&progress);
+    }
     efs_client_rpc_set_deadline_ms(saved);
     pthread_mutex_unlock(&g_ledger.settle_mu);
     return rc;

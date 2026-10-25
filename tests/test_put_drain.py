@@ -62,7 +62,9 @@ assert 'efs_session_revoke(&rpc,id.client_uuid,&res)' in end and 'session_fenced
 assert 'getenv' not in end, 'clean unmount revoke has no switch'
 assert 'return result;' in sd
 fz = (root / 'src/client/efs_fuse.c').read_text()
-assert 'if (efs_client_shutdown() != EFS_OK)\n        g_unmount_unclean = 1;' in fz
+assert 'if (efs_client_shutdown() != EFS_OK)\n        unmount_unclean(efs_client_shutdown_reason());' in fz
+# A11 finding 1: the verdict reaches the stop record the stop tooling reads.
+assert 'efs_stop_status("failed", 0, 0, ret, why);' in fz and 'efs_stop_status("done", 0, 0, 0, NULL);' in fz
 assert 'if (!ret && g_unmount_unclean) {' in fz and 'ret = 1;' in fz
 mg = (root / 'src/mgmt/efs_mgmt.c').read_text()
 assert 'efs_session_revoke(&rpc, uuid, &res)' in mg, 'efs-mgmt fence uses the same coordinator'
@@ -287,7 +289,7 @@ static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_
 static void revoke(uint8_t uuid0)
 {
     uint8_t uuid[16] = {uuid0};
-    const struct efs_session_rpc rpc = {NULL, fence_submit};
+    const struct efs_session_rpc rpc = {NULL, fence_submit, 0, NULL};
     struct efs_session_revoke_result res;
     int rc = efs_session_revoke(&rpc, uuid, &res);
     if (rc) fprintf(stderr, "revoke rc=%d phase=%s\n", rc, res.phase);

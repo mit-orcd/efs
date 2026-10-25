@@ -405,6 +405,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_pack_object_remote.py
 	python3 tests/test_storage_fence_retry.py
 	python3 tests/test_session_finish_retry.py
+	python3 tests/test_session_revoke_parallel.py
 	./tests/test_put_upload_server
 	./tests/test_put_orphan_server
 	./tests/test_data_commit
@@ -1027,6 +1028,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_seed_loss.py
 	python3 tests/test_k33_bookkeeping.py
 	python3 tests/test_k34_stop_put.py
+	python3 tests/test_stop_progress.py
 	python3 tests/test_operator_workflows.py
 	python3 tests/test_member_limit.py
 	python3 tests/test_b6_unavailable.py

@@ -28,7 +28,15 @@ static struct {
     uint64_t deadline;
     int (*drain)(uint64_t, int);
     char path[sizeof(((struct sockaddr_un *)0)->sun_path)];
-} g_stop = {.gate=PTHREAD_RWLOCK_INITIALIZER, .listener=-1};
+    /* Stop record (A11 finding 1): the endpoint path with ".stop" for
+     * ".sock". It outlives the endpoint: the drain closes the socket
+     * before the unmount flushes, settles and revokes. */
+    pthread_mutex_t status_mu;
+    char status[sizeof(((struct sockaddr_un *)0)->sun_path)];
+    char status_phase[24];
+    uint64_t status_step, status_ms;
+} g_stop = {.gate=PTHREAD_RWLOCK_INITIALIZER, .listener=-1,
+            .status_mu=PTHREAD_MUTEX_INITIALIZER};
 
 static uint64_t efs_stop_now(void)
 {
@@ -74,6 +82,48 @@ static int efs_stop_path(const char *mount, char *out, size_t len)
         hash=(hash^*p)*1099511628211ull;
     return snprintf(out,len,"/tmp/efs-control-%016llx.sock",
                      (unsigned long long)hash)>=(int)len ? -1 : 0;
+}
+/* One line, replaced by rename so a reader sees a whole record:
+ *   pid=P phase=NAME step=N total=T rc=R reason=TEXT
+ * Phases: serving, flushing, draining, settling, revoking (step grows with
+ * every shard), then done (rc=0) or failed (rc and reason). A new
+ * (phase, step) is progress; the stop tooling waits while it advances.
+ * Writes within one phase are kept to ten a second. */
+static void efs_stop_status(const char *phase,uint64_t step,uint64_t total,
+                            int rc,const char *reason)
+{
+    pthread_mutex_lock(&g_stop.status_mu);
+    uint64_t now=efs_stop_now();
+    int final=!strcmp(phase,"done") || !strcmp(phase,"failed");
+    if(!g_stop.status[0] || (!final && !strcmp(phase,g_stop.status_phase) &&
+                             step!=0 && now<g_stop.status_ms+100)) {
+        pthread_mutex_unlock(&g_stop.status_mu);
+        return;
+    }
+    char line[512],tmp[sizeof(g_stop.status)+32];
+    int n=snprintf(line,sizeof(line),"pid=%ld phase=%s step=%llu total=%llu rc=%d reason=%s\n",
+                   (long)getpid(),phase,(unsigned long long)step,
+                   (unsigned long long)total,rc,reason && *reason ? reason : "-");
+    if(n<0 || n>=(int)sizeof(line))
+        n=(int)sizeof(line)-1,line[n-1]='\n';
+    for(int i=0;i<n-1;i++)
+        if(line[i]=='\n' || line[i]=='\r')line[i]=' ';
+    if(snprintf(tmp,sizeof(tmp),"%s.%ld.tmp",g_stop.status,(long)getpid())<(int)sizeof(tmp)) {
+        int fd=open(tmp,O_WRONLY|O_CREAT|O_TRUNC|O_NOFOLLOW|O_CLOEXEC,0600);
+        if(fd>=0) {
+            int ok=write(fd,line,(size_t)n)==n;
+            close(fd);
+            if(!ok || rename(tmp,g_stop.status)!=0)
+                unlink(tmp);
+        }
+    }
+    snprintf(g_stop.status_phase,sizeof(g_stop.status_phase),"%s",phase);
+    g_stop.status_step=step;g_stop.status_ms=now;
+    pthread_mutex_unlock(&g_stop.status_mu);
+}
+static void efs_stop_phase(const char *phase,uint64_t step,uint64_t total)
+{
+    efs_stop_status(phase,step,total,0,NULL);
 }
 static int efs_stop_socket(void)
 {
@@ -242,6 +292,12 @@ static int efs_stop_start(const char *mount,int (*drain)(uint64_t,int))
         close(fd);unlink(addr.sun_path);return -1;
     }
     strcpy(g_stop.path,addr.sun_path);
+    pthread_mutex_lock(&g_stop.status_mu);
+    strcpy(g_stop.status,addr.sun_path);
+    strcpy(g_stop.status+strlen(g_stop.status)-5,".stop");
+    g_stop.status_phase[0]=0;
+    pthread_mutex_unlock(&g_stop.status_mu);
+    efs_stop_phase("serving",0,0);
     g_stop.listener=fd;g_stop.drain=drain;
     __atomic_store_n(&g_stop.quiesce,0,__ATOMIC_RELEASE);
     __atomic_store_n(&g_stop.quit,0,__ATOMIC_RELEASE);

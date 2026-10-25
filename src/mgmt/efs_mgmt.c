@@ -1841,7 +1841,8 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
                                   const uint8_t uuid[EFS_OPID_UUID_LEN])
 {
     struct sess_seed seed = {host, port};
-    const struct efs_session_rpc rpc = {&seed, sess_seed_submit};
+    /* sess_rpc opens a connection per call, so stages may run in parallel. */
+    const struct efs_session_rpc rpc = {&seed, sess_seed_submit, 16, NULL};
     struct efs_session_revoke_result res;
     int rc = efs_session_revoke(&rpc, uuid, &res), st;
     if (rc != EFS_OK && !strcmp(res.phase, "cleanup"))
@@ -1926,7 +1927,7 @@ static int cmd_raft_session(int argc, char **argv)
         struct efs_msg_raft_mkfs_reply reply;
         memset(&reply, 0, sizeof(reply)); reply.leader_hint = -1;
         struct sess_seed seed = {host, port};
-        const struct efs_session_rpc rpc = {&seed, sess_seed_submit};
+        const struct efs_session_rpc rpc = {&seed, sess_seed_submit, 0, NULL};
         int rc = efs_session_cleanup_bounded(&rpc, uuid, (uint32_t)old,
                                       (uint32_t)target, !strcmp(op,"cleanup-appends"), &reply);
         printf("raft-session op=%s epoch=%lu shard=%lu rc=%d index=%llu salt=%llu\n",

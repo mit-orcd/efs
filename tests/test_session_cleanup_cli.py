@@ -75,7 +75,7 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
 '''+f+r'''
 int main(void) {
  uint8_t uuid[16];memset(uuid,42,16);struct efs_msg_raft_mkfs_reply r;
- const struct efs_session_rpc rpc={&owned,NULL};
+ const struct efs_session_rpc rpc={&owned,NULL,0,NULL};
  assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
  for(mode=1;mode<=3;mode++) {
    calls=0;assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==

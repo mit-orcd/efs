@@ -115,6 +115,11 @@ Reachable A/B combinations: 2^15 = 32,768 before A7, 2^1 = 2 after
 ([D42 audit](read-verify-audit-20261024.md)): one A/B selector fewer and one
 more refused name; with it, A/B behavior selectors are 15 → 0 and reachable A/B combinations 2^15 → 1, before transport (an A8 support dimension) and numeric tunables.
 
+**Oct 24, E2 clean stop:** one fault hook more in `EFS_FAULTS` builds,
+`EFS_FAULT_REVOKE_BEGIN_FILE` ([A11 finding 1](e2-clean-stop-20261024.md)).
+No product setting was added: the stop record and the parallel revoke have
+no switch or tunable.
+
 Reachable configurations: the 15 binary A/B selectors (13 environment, 2
 CLI) allow up to 2^15 = 32,768 combinations, before transport (`auto`, `tcp`,
 `rdma`) and the 33 numeric tunables. This counts switches, not tested
@@ -364,6 +369,7 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_PUBLICATION_APPLY_FILE` | `server/raft_host.c:3373` (host_apply) | off; refuse PUBLICATION at apply (marker) | fault/test hook | — | `publication_pending.c`, `publication_pending.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUB_BARRIER` | `server/raft_host.c:17070` (host_pub_fault) | off; park publication at a named stage | fault/test hook | — | `k14_atomic_cluster.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUT_REPLY_COLLISION` | `client/write.c:2556` (put_reply_fault) +1 | off; lose one PUT reply per fragment | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_REVOKE_BEGIN_FILE` | `server/raft_host.c` (server_raft_host_submit) | off; hold every session BEGIN while the named file exists, refuse it with EIO once the file reads `fail` (A11 finding 1: a stalled, then failed clean-unmount revoke) | fault/test hook | — | `test_stop_progress.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_RECOVERY_HOLD_FILE` | `server/recovery.c` (rv_held) | off; verified recovery waits before clearing the fence while the file exists | fault/test hook | — | `test_k36_recovery.py` | Keep in `EFS_FAULTS` builds (K36) |
 | `EFS_FAULT_RECV_PERSIST_FILE` | `server/raft_host.c:7370` (host_note_queued_reads) | off; hold the receive-persist cohort at its barrier | fault/test hook | — | `private_intel_receive_persist.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_REPLY_BUFFER` | `client/reply_buffers.h:62` (reply_buffers_init) | off; client reply-buffer allocation faults | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |

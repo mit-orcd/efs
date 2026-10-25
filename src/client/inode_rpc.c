@@ -3573,12 +3573,31 @@ static int session_revoke_submit(void *ctx,const uint8_t *payload,uint32_t plen,
     return out->rc;
 }
 
+/* Revoke progress for the stop tooling: the fence stage, then cleanup. */
+static void session_revoke_progress(void *ctx,const char *stage,uint32_t done,uint32_t total)
+{
+    (void)ctx;
+    efs_client_stop_phase("revoking",(strcmp(stage,"cleanup")?0u:(uint64_t)total)+done,
+                          2ull*total);
+}
+
+static char g_session_end_reason[128];
+
+const char *efs_client_session_end_reason(void)
+{
+    return g_session_end_reason;
+}
+
+
 /* D31: a clean unmount revokes its own session after its last settle, so
  * the bodies it abandoned (and the tickets it could not settle) become
  * collectable without an operator: the group leaders drain its streams
  * into the orphan ledger and collect them. The barrier is the operator's
  * (efs_session_revoke); a failure leaves it resumable by `efs-mgmt
- * raft-session fence`. Always (D42): there is no keep-open mode. */
+ * raft-session fence`. Always (D42): there is no keep-open mode. Per-shard
+ * steps run on EFS_CLIENT_REVOKE_PARALLEL pool connections at once: one
+ * step per shard at a time took 11 s for 765 touched shards (A11). */
+#define EFS_CLIENT_REVOKE_PARALLEL 16u
 int efs_client_session_end(void)
 {
     if (!__atomic_load_n(&g_client.session_started,__ATOMIC_ACQUIRE) ||
@@ -3586,17 +3605,27 @@ int efs_client_session_end(void)
         return EFS_OK;
     struct efs_opid id;
     int rc=efs_client_publication_id(1,&id);
-    if (rc!=EFS_OK) return rc;
+    if (rc!=EFS_OK) {
+        snprintf(g_session_end_reason,sizeof(g_session_end_reason),
+                 "revoke rc=%d phase=identity",rc);
+        return rc;
+    }
     uint64_t saved=efs_client_rpc_deadline_ms();
     efs_client_rpc_set_deadline_ms(0);
-    const struct efs_session_rpc rpc={NULL,session_revoke_submit};
+    const struct efs_session_rpc rpc={NULL,session_revoke_submit,EFS_CLIENT_REVOKE_PARALLEL,
+                                      session_revoke_progress};
     struct efs_session_revoke_result res;
     rc=efs_session_revoke(&rpc,id.client_uuid,&res);
     efs_client_rpc_set_deadline_ms(saved);
     /* Latch: nothing may run under the revoked epoch from here on. */
     __atomic_store_n(&g_client.session_fenced,1,__ATOMIC_RELEASE);
-    fprintf(stderr,"efs: session revoked at unmount: epoch=%u touched=%u rc=%d%s%s\n",
-            id.session_epoch,res.ntouch,rc,rc==EFS_OK?"":" phase=",
-            rc==EFS_OK?"":res.phase);
+    fprintf(stderr,"efs: session revoked at unmount: epoch=%u touched=%u rc=%d "
+            "ms=%llu fence_ms=%llu cleanup_ms=%llu%s%s\n",
+            id.session_epoch,res.ntouch,rc,(unsigned long long)res.total_ms,
+            (unsigned long long)res.fence_ms,(unsigned long long)res.cleanup_ms,
+            rc==EFS_OK?"":" phase=",rc==EFS_OK?"":res.phase);
+    if (rc!=EFS_OK)
+        snprintf(g_session_end_reason,sizeof(g_session_end_reason),
+                 "revoke rc=%d phase=%s shard=%u touched=%u",rc,res.phase,res.shard,res.ntouch);
     return rc;
 }

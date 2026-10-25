@@ -15,12 +15,19 @@ their argv, cwd and descriptors are never read.
 import os
 from pathlib import Path
 import signal
+import stat
 import sys
 import time
 
-# Seconds a client may take to leave on its own: a client without endpoint
-# ownership before refusal, and every retired client before giving up.
+# Seconds a client without endpoint ownership and without a stop record may
+# take to leave on its own before refusal.
 NATURAL_RETIRE_S = 10
+# A retiring client reports its stop phases in its stop record (A11 finding
+# 1): the wait continues while (phase, step) advances. STALL_S without an
+# advance, or DEADLINE_S in all, is a failed stop; nothing is force-killed.
+STALL_S = 30
+DEADLINE_S = 600
+FINAL_PHASES = ('done', 'failed')
 FSTYPE = 'fuse.efs-fuse'
 
 
@@ -45,6 +52,86 @@ def endpoint(mount, tmp='/tmp'):
     for byte in os.fsencode(canonical(mount)):
         value = ((value ^ byte) * 1099511628211) & ((1 << 64)-1)
     return f'{tmp}/efs-control-{value:016x}.sock'
+
+
+def stop_record_path(mount, tmp='/tmp'):
+    """Stop record efs-fuse keeps next to its control endpoint."""
+    return endpoint(mount, tmp)[:-len('.sock')] + '.stop'
+
+
+def stop_record(mount, pid, uid, tmp='/tmp'):
+    """{phase, step, total, rc, reason} from the stop record of PID, or None.
+    The record must be a regular file owned by uid (any owner when uid is
+    None) and name this PID; anything else is not this client's record."""
+    path = stop_record_path(mount, tmp)
+    try:
+        st = os.lstat(path)
+        if not stat.S_ISREG(st.st_mode) or (uid is not None and st.st_uid != uid):
+            return None
+        with open(path, encoding='utf-8', errors='replace') as f:
+            line = f.readline().rstrip('\n')
+    except FileNotFoundError:
+        return None
+    head, _, reason = line.partition(' reason=')
+    fields = dict(item.partition('=')[::2] for item in head.split())
+    if fields.get('pid') != str(pid) or 'phase' not in fields:
+        return None
+    try:
+        return {'phase': fields['phase'], 'step': int(fields.get('step', 0)),
+                'total': int(fields.get('total', 0)), 'rc': int(fields.get('rc', 0)),
+                'reason': reason}
+    except ValueError:
+        return None
+
+
+def describe(record):
+    if not record:
+        return 'no stop record'
+    text = f"phase {record['phase']}"
+    if record['step'] or record['total']:
+        text += f" step {record['step']}" + (f"/{record['total']}" if record['total'] else '')
+    return text
+
+
+def await_exit(mount, pid, stamp, proc=Path('/proc'), tmp='/tmp', stall_s=None,
+               deadline_s=None):
+    """Wait for a retiring client to leave while its stop record shows
+    progress; then require its final record to say done. Raises RuntimeError
+    with the reason otherwise. Never signals."""
+    stall_s = STALL_S if stall_s is None else stall_s
+    deadline_s = DEADLINE_S if deadline_s is None else deadline_s
+    try:
+        uid = euid(proc, pid) if alive(pid, stamp, proc) else None
+    except (FileNotFoundError, ProcessLookupError):
+        uid = None
+    if uid is None and os.getuid() != 0:
+        uid = os.getuid()  # only own clients are ever retired by non-root
+    start = last_change = time.monotonic()
+    last = seen = None
+    while alive(pid, stamp, proc):
+        record = stop_record(mount, pid, uid, tmp)
+        key = (record['phase'], record['step']) if record else None
+        now = time.monotonic()
+        if key != last:
+            last, last_change = key, now
+        seen = record or seen
+        if not record and now - last_change >= NATURAL_RETIRE_S:
+            raise RuntimeError(f'PID {pid} keeps no stop record for {mount}; retained, '
+                               f'no forced kill attempted')
+        if record and now - last_change >= stall_s:
+            raise RuntimeError(f'client stop stalled for {mount}: no progress for {stall_s:g} s '
+                               f'in {describe(record)}; client remains alive, no forced kill attempted')
+        if now - start >= deadline_s:
+            raise RuntimeError(f'client stop for {mount} not finished after {deadline_s:g} s '
+                               f'({describe(record)}); client remains alive, no forced kill attempted')
+        time.sleep(.1)
+    record = stop_record(mount, pid, uid, tmp)
+    if not record or record['phase'] not in FINAL_PHASES:
+        raise RuntimeError(f'efs-fuse PID {pid} for {mount} exited without a final stop record '
+                           f'(last seen: {describe(record or seen)})')
+    if record['phase'] != 'done':
+        raise RuntimeError(f'client stop for {mount} failed: {record["reason"]} (rc={record["rc"]})')
+    return record
 
 
 def unescape(raw):
@@ -244,32 +331,28 @@ def clients(proc=Path('/proc'), tmp='/tmp', uid=None):
     return sorted(set(result))
 
 
-def retire(mount, pid, stamp, proc=Path('/proc')):
-    """Terminate the drained controller identified by `has` before unmount."""
+def retire(mount, pid, stamp, proc=Path('/proc'), tmp='/tmp', stall_s=None, deadline_s=None):
+    """Terminate the drained controller identified by `has` before unmount,
+    then wait for its stop to finish (await_exit)."""
     mount = canonical(mount)
     if not alive(pid, stamp, proc):
-        return
-    current = controller(mount, proc)
+        return await_exit(mount, pid, stamp, proc, tmp, stall_s, deadline_s)
+    current = controller(mount, proc, tmp)
     if current and current != (pid, stamp):
         raise RuntimeError(f'control endpoint of {mount} is now held by PID {current[0]}, '
                            f'not drained PID {pid}; retained')
     if not current:
-        # A naturally exiting client can close its control socket before
-        # its last worker joins. Never signal without endpoint ownership;
-        # allow bounded natural retirement instead.
-        deadline = time.monotonic() + NATURAL_RETIRE_S
-        while alive(pid, stamp, proc) and time.monotonic() < deadline:
-            time.sleep(.1)
-        if not alive(pid, stamp, proc):
-            return
-        raise RuntimeError(f'PID {pid} does not own drained endpoint; retained')
+        # A naturally exiting client closes its control socket before it
+        # flushes, settles and revokes. Never signal without endpoint
+        # ownership; follow its stop record instead.
+        return await_exit(mount, pid, stamp, proc, tmp, stall_s, deadline_s)
     print(f'Retiring drained efs-fuse PID {pid} for {mount}', flush=True)
     if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
         raise RuntimeError('safe retirement requires Linux pidfd support')
     try:
         fd = os.pidfd_open(pid)
     except ProcessLookupError:
-        return
+        return await_exit(mount, pid, stamp, proc, tmp, stall_s, deadline_s)
     try:
         if alive(pid, stamp, proc):
             try:
@@ -278,11 +361,23 @@ def retire(mount, pid, stamp, proc=Path('/proc')):
                 pass
     finally:
         os.close(fd)
-    deadline = time.monotonic() + NATURAL_RETIRE_S
-    while alive(pid, stamp, proc):
-        if time.monotonic() >= deadline:
-            raise RuntimeError(f'client remains alive for {mount}; no forced kill attempted')
-        time.sleep(.1)
+    return await_exit(mount, pid, stamp, proc, tmp, stall_s, deadline_s)
+
+
+def seconds(args, flag):
+    if flag not in args:
+        return None
+    i = args.index(flag)
+    value = args[i+1] if i+1 < len(args) else ''
+    del args[i:i+2]
+    try:
+        return float(value)
+    except ValueError:
+        raise RuntimeError(f'{flag} needs seconds, not {value!r}')
+
+
+USAGE = ('usage: client_processes.py list | has MOUNT | '
+         'retire MOUNT PID STARTTIME [--stall S] [--deadline S]')
 
 
 def main():
@@ -302,10 +397,17 @@ def main():
         if not found:
             return 1
         print(f'{found[0]} {found[1]}')
-    elif command == 'retire' and len(sys.argv) == 5 and sys.argv[3].isdigit():
-        retire(sys.argv[2], int(sys.argv[3]), sys.argv[4])
+    elif command == 'retire':
+        args = sys.argv[2:]
+        stall, deadline = seconds(args, '--stall'), seconds(args, '--deadline')
+        if len(args) != 3 or not args[1].isdigit():
+            raise RuntimeError(USAGE)
+        record = retire(args[0], int(args[1]), args[2], stall_s=stall, deadline_s=deadline)
+        print(f'Client stop finished for {canonical(args[0])}: {record["reason"]}'
+              if record['reason'] != '-' else f'Client stop finished for {canonical(args[0])}',
+              flush=True)
     else:
-        raise RuntimeError('usage: client_processes.py list | has MOUNT | retire MOUNT PID STARTTIME')
+        raise RuntimeError(USAGE)
     return 0
 
 

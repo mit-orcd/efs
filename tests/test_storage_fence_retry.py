@@ -34,7 +34,7 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *payload,uin
 ''' + s[a:b] + r'''
 int main(void) {
  uint8_t p[23]={17};p[22]=2;struct efs_msg_raft_mkfs_reply out;
- const struct efs_session_rpc rpc={&seed,NULL};
+ const struct efs_session_rpc rpc={&seed,NULL,0,NULL};
  busy_count=3;terminal=EFS_OK;
  assert(efs_session_storage_barrier(&rpc,p,sizeof(p),&out)==EFS_OK&&calls==4&&deadline==0&&now_ms==1300);
  calls=0;busy_count=0;terminal=EFS_ERR_IO;

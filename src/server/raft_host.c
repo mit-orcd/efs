@@ -14400,6 +14400,27 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     if(clen && EFS_MD_CMD_IS_RESERVED(cmd[0])) {
         out->rc=EFS_ERR_PROTO;return;
     }
+#if EFS_FAULTS
+    /* Test-only (A11 finding 1): a session revoke that makes no progress.
+     * While the file exists, BEGIN is held; once it reads "fail", BEGIN is
+     * refused with EFS_ERR_IO, as a revoke that fails. */
+    if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_BEGIN) {
+        const char *gate=getenv("EFS_FAULT_REVOKE_BEGIN_FILE");
+        int noted=0;
+        while(gate && *gate && access(gate,F_OK)==0) {
+            char word[8]={0};
+            FILE *f=fopen(gate,"r");
+            if(f){if(!fgets(word,sizeof(word),f))word[0]=0;fclose(f);}
+            if(!strncmp(word,"fail",4)) {
+                fprintf(stderr,"raft-host: EFS_FAULT_REVOKE_BEGIN_FILE fail: session BEGIN refused\n");
+                out->rc=EFS_ERR_IO;return;
+            }
+            if(!noted++)
+                fprintf(stderr,"raft-host: EFS_FAULT_REVOKE_BEGIN_FILE present: session BEGIN held\n");
+            usleep(50000);
+        }
+    }
+#endif
     /* W153: the formation notice, and before formation nothing but the
      * group-0 MKFS a raft-mkfs forwards to the group-0 leader. */
     if (clen && cmd[0] == EFS_MD_REQ_FORMED) {
