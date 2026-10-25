@@ -1,4 +1,9 @@
 #include "../common/query_stage_trace.h"
+
+/* The host's running flag is set once at start, cleared once at stop and
+ * polled by every other host thread and request path: atomic loads, so
+ * the stop store never races a poll (F1 tsan gate). */
+#define HOST_RUNNING(h) __atomic_load_n(&(h)->running, __ATOMIC_ACQUIRE)
 #include "efs/query_policy.h"
 #include "server_internal.h"
 #include <arpa/inet.h>
@@ -14349,11 +14354,6 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
 }
 
 #include "publication_session_fast.h"
-
-/* The host's running flag is set once at start, cleared once at stop and
- * polled by every other host thread and request path: atomic loads, so
- * the stop store never races a poll (F1 tsan gate). */
-#define HOST_RUNNING(h) __atomic_load_n(&(h)->running, __ATOMIC_ACQUIRE)
 
 /* Payload: group byte, then command bytes (empty command = ReadIndex).
  * A hosted replica proposes (or ReadIndexes) even when it is not the
