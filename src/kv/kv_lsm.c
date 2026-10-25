@@ -1766,6 +1766,8 @@ int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out)
     out->l0_cap = kv_l0_cap(l);
     out->mem_budget = l->mem_budget;
     out->apply_deferred = l->apply_deferred;
+    out->flushes = __atomic_load_n(&l->flushes, __ATOMIC_RELAXED);
+    out->compactions = __atomic_load_n(&l->compactions, __ATOMIC_RELAXED);
     lsm_peek_unlock(l);
     return EFS_OK;
 }

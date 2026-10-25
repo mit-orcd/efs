@@ -326,8 +326,8 @@ static uint64_t read_peer_now_ms(void)
 /* W125: one fragment of a packed segment (GET_SEGMENT). The group rides
  * in the reference; the fetch reader checks the length and the hash. */
 struct packed_fetch_ctx { uint32_t group; };
-static int packed_fetch(void *context, efs_node_id_t node, uint64_t id, uint64_t generation,
-                        uint32_t fi, uint32_t geometry, uint8_t *out, uint32_t capacity)
+static int packed_fetch_run(void *context, efs_node_id_t node, uint64_t id, uint64_t generation,
+                            uint32_t fi, uint32_t geometry, uint8_t *out, uint32_t capacity)
 {
     const struct packed_fetch_ctx *pc = context;
     if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
@@ -371,6 +371,29 @@ static int packed_fetch(void *context, efs_node_id_t node, uint64_t id, uint64_t
     efs_client_conn_release(node, conn);
     if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
     if (!rc) efs_client_node_note_ok(node);
+    return rc;
+}
+
+/* B6: one segment fragment waits at most read_frag_timeout_ms, as a chunk
+ * fragment does (efs_client_get_fragment). The reader asks the fragments in
+ * order and stops at BUSY to keep the caller's deadline, so an unbounded
+ * fetch from a slow member spent the whole read budget and the read failed
+ * EBUSY while the other two fragments were available. A fetch that runs out
+ * of its own bound, not the read's, is that member failing (NET): the
+ * reader goes on to the next fragment. Never extends an inherited deadline. */
+static int packed_fetch(void *context, efs_node_id_t node, uint64_t id, uint64_t generation,
+                        uint32_t fi, uint32_t geometry, uint8_t *out, uint32_t capacity)
+{
+    if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = read_peer_now_ms() + (uint64_t)read_frag_timeout_ms;
+    if (previous && previous < deadline)
+        deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc = packed_fetch_run(context, node, id, generation, fi, geometry, out, capacity);
+    efs_client_rpc_set_deadline_ms(previous);
+    if (rc == EFS_ERR_BUSY && !efs_client_rpc_past_deadline())
+        rc = EFS_ERR_NET;
     return rc;
 }
 

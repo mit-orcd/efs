@@ -577,6 +577,19 @@ facts for A6, not decisions.
   bounded controlled test. Reads reconstruct or fail explicitly; writes must
   never report success without their documented durable publication requirement.
   Verify the result after orderly restore/restart, without claiming repair.
+  **Oct 24: loopback PASS, not merged (branch `claude/devel-b6-d4-4f65ac`,
+  `834f0b7ec`). `tests/test_b6_unavailable.py`: node 3 of three down,
+  refusing (new `EFS_FAULT_DEST_FILE`), slow past every client deadline
+  (8 s; COMMIT 65 s; GETs 45 s) and full (16 MiB quota), for ordinary and
+  packed files during write (one in flight), fsync and read: every read
+  exact, fsync only with marks, writes degraded from node 3 only (full:
+  ENOSPC, nothing degraded), `Protection: DEGRADED` shown and cleared by
+  W154 after the orderly restore, every acknowledged file exact after the
+  restore and a whole-cluster restart. FIXED: a packed read waited out a
+  slow member (30 s, EBUSY) instead of using the other two fragments; each
+  segment fragment now has the 2 s bound. Real-host gate `b6-member-down`
+  in `scripts/qualify.py` (loopback PASS); real-host run NOTRUN; no repair
+  beyond W154 ([evidence](b6-d4-unavailable-progress-20261024.md)).**
 
 ## C. Finish the enabled foreground paths
 
@@ -610,6 +623,21 @@ facts for A6, not decisions.
   work progresses. Diagnose repeated stalls, rather than relaxing tests to pass.
   CPU optimizations are required here only when needed to meet these gates;
   broader optimization remains later roadmap work.
+  **Oct 24: loopback PASS, not merged (branch `claude/devel-b6-d4-4f65ac`,
+  `834f0b7ec`). `scripts/d4_progress.py` (qualify plugin `d4-progress`) and
+  `tests/test_d4_progress.py`: small-file load with packing, `.efs` index
+  refresh and KV flush/compaction active (counted from new raft-status
+  `kv_flushes`/`kv_compactions` and the new pack-compact backlog line);
+  every foreground op within 10 s (max 0.87 s), client RSS 147 MiB ≤ 1024,
+  server RSS 74 MiB ≤ 2048, memtable and L0 within their design bounds,
+  pack backlog 117 ≤ 50,000, index pending age 1.8 s ≤ 60, drain 4.4 s ≤
+  150, 2935 files exact (gate run); through qualify on product daemons
+  (16 writers, 90 s) PASS, drain 31 s. FIXED (repeated stall): a member whose first
+  `.efs` catalog capture ran before formation was refused UNFORMED, waited
+  a whole 60 s interval and failed every query EIO meanwhile (104 of 104 in
+  the first gate run); now a prompt retry and "not indexed yet". Finding
+  for Stage 3: cold packed small-file reads 8–33 ms each. Real-host runs
+  NOTRUN ([evidence](b6-d4-unavailable-progress-20261024.md)).**
 
 ## E. Full verification and orderly lifecycle
 

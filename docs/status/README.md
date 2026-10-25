@@ -44,6 +44,18 @@ refused at startup; a 17th joiner is refused and exits; new POSIX cases
 README and quick start corrected. The [findings table](s-docs-alpha-1.0-20261024.md#findings-docs-and-code-disagreements)
 records every outcome. Stores formatted by an earlier build are refused.
 
+[B6 and D4: an unavailable fragment destination, bounded progress under background work](b6-d4-unavailable-progress-20261024.md):
+**PASS (scoped, loopback), branch `claude/devel-b6-d4-4f65ac` (`834f0b7ec`), not merged; xorinox `make test-all` at `834f0b7ec`: exit 0, 0 FAIL, 14 NOTRUN host limits (raw: xorinox `~/efs-artifacts/b6-d4-20261024/`, `SHA256SUMS` `f5e519ff…8840`).**
+B6: node 3 of three down, refusing, slow past every client deadline and
+full, for ordinary and packed files during write, fsync and read; reads
+exact, fsync only with proof, W154 clears after the orderly restore. D4:
+foreground deadlines, client/server RSS, KV memtable/L0, pack and index
+backlogs bounded and drained under a small-file load with packing,
+indexing and compaction active. FIXED: a packed read waited out a slow
+member and failed EBUSY; a just-formed member's first `.efs` catalog waited
+60 s and every query on it failed EIO. Real-host gates `b6-member-down`
+and `d4-progress` in `scripts/qualify.py`, NOTRUN (parent).
+
 [D42 `EFS_READ_VERIFY`: GET-path integrity audit](read-verify-audit-20261024.md):
 **PASS (scoped), merged into devel (`ae3e7ab75`).** The
 storage node's record check does not cover the wire or the client's

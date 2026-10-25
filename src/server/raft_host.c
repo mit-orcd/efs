@@ -12438,10 +12438,10 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     /* No catalog published yet (a fresh cluster before its first build):
      * nothing is indexed, the same "not indexed yet" NODATA a directory
      * newer than the catalog gets, so .efs callers wait for the refresh
-     * instead of failing on BUSY. A transient refresh refusal (BUSY or
-     * NOT_PRIMARY, retried within about a second) is the same condition;
-     * any other recorded refresh error still wins. */
-    int transient=h->query_error==EFS_ERR_BUSY || h->query_error==EFS_ERR_NOT_PRIMARY;
+     * instead of failing on BUSY. A transient refresh refusal (BUSY,
+     * NOT_PRIMARY or UNFORMED, retried within about a second) is the same
+     * condition; any other recorded refresh error still wins. */
+    int transient=efs_query_refresh_unsettled(h->query_error);
     int rc=h->query_view.catalog ? consume(ctx,&h->query_view,h->query_error) :
            h->query_error && !transient ? h->query_error : EFS_ERR_NODATA;
     pthread_rwlock_unlock(&h->query_lock);
@@ -15012,6 +15012,8 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
             out->kv_l0_bytes = ks.l0_bytes;
             out->kv_l0_cap = ks.l0_cap;
             out->kv_apply_deferred = ks.apply_deferred;
+            out->kv_flushes = ks.flushes;
+            out->kv_compactions = ks.compactions;
         }
         out->admit_busy = __atomic_load_n(&h->admit_busy, __ATOMIC_RELAXED);
     }

@@ -259,6 +259,7 @@ struct kv_lsm {
     uint64_t l0_cap_bytes;  /* K22: cfg.l0_bytes or KV_LSM_L0_BYTES */
     uint64_t mem_budget;    /* K22: derived; see efs_kv_lsm_mem_budget */
     uint64_t apply_deferred;
+    uint64_t flushes, compactions; /* completed since open (efs_kv_lsm_stats) */
     int room_logged;
     uint64_t apply_next; /* WAL seq whose turn it is to hit the memtable */
     int io_failed;

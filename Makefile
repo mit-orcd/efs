@@ -504,6 +504,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_applied_cursor.py
 	python3 tests/test_tiny_fragment_audit.py
 	python3 tests/test_b_checks_driver.py
+	python3 tests/test_d4_driver.py
 	python3 tests/test_read_recorded_nodes.py
 	python3 tests/test_tmpdir_hygiene.py
 	python3 tests/test_pressure_cohort.py
@@ -952,16 +953,19 @@ tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/
 # Daemon tests with server fault hooks: K1/R4 and T2 shutdown
 # (EFS_FAULT_SHUTDOWN_*), the K33 interruption and GC hooks
 # (EFS_FAULT_MEMBER_EXIT, EFS_FAULT_GC_DISABLE) and packer crash points
-# (EFS_FAULT_PACK_CRASH). The hooks exist only behind EFS_FAULTS; this daemon
-# compiles every server source with the gate on, so ./efsd never carries
-# them. Named efsd: the stop script only signals an efsd.
+# (EFS_FAULT_PACK_CRASH), the B6 unavailable destination
+# (EFS_FAULT_DEST_FILE) and the KV size hooks (EFS_FAULT_MEMTABLE_BYTES,
+# EFS_FAULT_L0_BYTES, D4). The hooks exist only behind EFS_FAULTS; this daemon
+# compiles every server source and the KV LSM and compactor with the gate on
+# (linked ahead of $(LIB), so the archive's plain copies are not used), so
+# ./efsd never carries them. Named efsd: the stop script only signals an efsd.
 FAULT_SERVER_OBJS = $(patsubst src/server/%.c,tests/faults/server/%.o,$(SERVER_SRCS))
+FAULT_KV_OBJS = tests/faults/kv/kv_lsm.o tests/faults/kv/kv_compact.o
 tests/faults/server/%.o: src/server/%.c src/server/server_internal.h $(wildcard src/server/*.h) $(wildcard include/efs/*.h) .build_id.stamp
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
-# K36: the KV compaction crash and small-memtable hooks too (kv_compact.c,
-# kv_lsm.c), linked ahead of $(LIB) so the gated objects replace its copies.
-FAULT_KV_OBJS = tests/faults/kv/kv_compact.o tests/faults/kv/kv_lsm.o
+# K36/B6: the KV compaction crash and small-memtable hooks (kv_compact.c,
+# kv_lsm.c) are FAULT_KV_OBJS above, linked ahead of $(LIB).
 tests/faults/kv/%.o: src/kv/%.c src/kv/kv_lsm_internal.h src/kv/kv_candidates.h $(wildcard include/efs/*.h)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
@@ -1024,6 +1028,9 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k34_stop_put.py
 	python3 tests/test_operator_workflows.py
 	python3 tests/test_member_limit.py
+	python3 tests/test_b6_unavailable.py
+	python3 tests/test_d4_progress.py
+	python3 tests/test_query_first_catalog.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	python3 tests/test_k36_recovery.py

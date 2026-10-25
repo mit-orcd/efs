@@ -2,6 +2,15 @@
 #define EFS_QUERY_REFRESH_H
 #include <stdint.h>
 #include "efs/common.h"
+/* Authority not settled yet: BUSY, NOT_PRIMARY, or UNFORMED while this
+ * member's cluster has not formed (the seed's first capture runs before
+ * its peers join). D4: UNFORMED used to count as a build failure, so the
+ * first catalog waited a whole refresh interval (60 s) after formation and
+ * every query on that member failed EIO with the recorded error. */
+static inline int efs_query_refresh_unsettled(int rc)
+{
+    return rc==EFS_ERR_BUSY || rc==EFS_ERR_NOT_PRIMARY || rc==EFS_ERR_UNFORMED;
+}
 /* A derived-cache refresh is not a consensus/checkpoint barrier. Coalesce
  * admission once per existing freshness interval, regardless of a busy N
  * trigger, so a faster incremental builder cannot churn generations nonstop.
@@ -16,7 +25,7 @@ static inline unsigned efs_query_refresh_failures(unsigned previous,int prior,in
     if(rc==EFS_OK)return 0;
     /* Ordinary authority/contention retries keep the normal interval. Only
      * repeated identical build failures should progressively back off. */
-    if(rc==EFS_ERR_BUSY || rc==EFS_ERR_NOT_PRIMARY || rc==EFS_ERR_STALE || rc!=prior)
+    if(efs_query_refresh_unsettled(rc) || rc==EFS_ERR_STALE || rc!=prior)
         return 1;
     return previous<5?previous+1:5;
 }
@@ -105,7 +114,7 @@ static inline int efs_query_refresh_interval_config(const char *text,unsigned fa
 #define EFS_QUERY_INITIAL_RETRY_MS 1000u
 static inline int efs_query_refresh_initial_retry(int rc,int initial)
 {
-    return initial && (rc==EFS_ERR_BUSY || rc==EFS_ERR_NOT_PRIMARY);
+    return initial && efs_query_refresh_unsettled(rc);
 }
 static inline int efs_query_refresh_due_reason(uint64_t now,uint64_t pending_since,
     uint64_t last_attempt,uint64_t dirty,int initial,int failed,int cut_retry,

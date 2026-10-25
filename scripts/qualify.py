@@ -83,7 +83,8 @@ DEFAULT_FIXTURE = dict(
     posix_jobs=4, posix_timeout_s=30, e3_seconds=60, e3_file_kib=64,
     turnover_timeout_s=60, catchup_timeout_s=180,
     append_failover_args='--records 8000 --writers 4 --failover step-down --interval 4 --first-event 3',
-    k14_phases='1 2 3 7', gc_args='--posix', remote_tmp='/tmp')
+    k14_phases='1 2 3 7', gc_args='--posix', remote_tmp='/tmp',
+    b6_pack_wait_s=600, b6_rebuild_s=900, b6_read_s=30, b6_write_s=90, b6_fsync_s=75)
 
 
 def now():
@@ -1148,6 +1149,129 @@ def g_e3(q, g):
     return PASS, ''
 
 
+# B6 on a real cluster: one member stopped in order (control.stop_node), the
+# fault the description can make. Refusing, full and slow members need the
+# EFS_FAULTS daemon or a quota change: tests/test_b6_unavailable.py (loopback).
+B6_SETS = {'before': [('R0', 300000, 1), ('R1', 300000, 1), ('R2', 300000, 1),
+                      ('P0', 1, 1), ('P1', 512, 1), ('P2', 4096, 1), ('P3', 16384, 1),
+                      ('F0', 300000, 0), ('F1', 300000, 0), ('F2', 300000, 0),
+                      ('FS0', 1, 0), ('FS1', 4096, 0)],
+           'during': [('W0', 300000, 1), ('W1', 300000, 1), ('W2', 300000, 1),
+                      ('Q0', 1, 1), ('Q1', 512, 1), ('Q2', 4096, 1), ('Q3', 16384, 1)]}
+
+
+def b6_status(q, g, label):
+    rc, text = q.mgmt(g, label, 'status', q.cluster['seed'])
+    m = re.search(r'^Degraded chunks: (\d+) ', text, re.M)
+    down = re.findall(r'^\s+node (\d+): (\S+)\s+DOWN\b', text, re.M)
+    return (int(m.group(1)) if m else None), {ep for _, ep in down}, text
+
+
+def b6_pack_idle(q, g, label):
+    rc, text = q.mgmt(g, label, 'pack-compact', q.cluster['seed'], 0, deadline=120)
+    backlog = [int(n) for n in re.findall(r'backlog group=\d+ candidates=(\d+)', text)]
+    return rc == 0 and len(backlog) >= 2 and not any(backlog)
+
+
+def b6_helper(q, g, label, m, op, d, *extra, stdin_path=None, deadline=600):
+    rc, text = g.run(label, m['host'], q.helper(m['host'], '_b6', op, '--dir', d, '--seed', q.runid,
+                                                 *extra), deadline, stdin_path=stdin_path)
+    try:
+        return json.loads(text.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return dict(error=text.strip()[-300:] or f'exit {rc}')
+
+
+def g_b6(q, g):
+    w, r = q.mount(0), q.mount(1) or q.mount(0)
+    if not w:
+        return NOTRUN, 'no mount described'
+    nodes = q.cluster.get('nodes', [])
+    if len(nodes) < 3:
+        return NOTRUN, 'needs three members'
+    if not q.control.can_restart_nodes():
+        return NOTRUN, 'control.stop_node/start_node not described'
+    fx = q.fixture
+    victim = next((n for n in reversed(nodes) if n['addr'] != q.cluster.get('seed')), nodes[-1])
+    d = f'{w["path"]}/qualify-{q.runid}/b6'
+    rd = f'{r["path"]}/qualify-{q.runid}/b6'
+    if q.plan:
+        return NOTRUN, 'plan'
+    count, down, text = b6_status(q, g, 'status-start')
+    if count != 0 or down:
+        return NOTRUN, f'cluster not fully protected at the start (degraded {count}, down {sorted(down)})'
+    before = b6_helper(q, g, 'write-before', w, 'write', d, '--set', 'before')
+    if before.get('errors') or 'files' not in before:
+        return FAIL, f'writes with every member up failed: {before}'[:400]
+    acked = {f['name']: f['size'] for f in before['files']}
+    end = time.monotonic() + fx['b6_pack_wait_s']
+    while not b6_pack_idle(q, g, 'pack-wait'):
+        if time.monotonic() > end:
+            return NOTRUN, f'small files not packed within {fx["b6_pack_wait_s"]} s (pack backlog)'
+        time.sleep(5)
+    g.step('restart', f'orderly stop of member {victim["addr"]} (B6: unavailable destination)')
+    rc, text = q.control.stop_node(g, victim)
+    if rc:
+        return FAIL, f'orderly stop of {victim["addr"]} failed'
+    out = g.fixture
+    try:
+        end = time.monotonic() + 120
+        while victim['addr'] not in b6_status(q, g, 'status-down')[1]:
+            if time.monotonic() > end:
+                return FAIL, f'{victim["addr"]} never reported DOWN'
+            time.sleep(2)
+        names = [n for n in acked if n[0] in 'RP']
+        reads = b6_helper(q, g, 'read-down', r, 'verify', rd, '--names', ','.join(names),
+                          '--bound', fx['b6_read_s'])
+        out['reads_member_down'] = reads
+        if not reads.get('ok'):
+            return FAIL, f'reads with {victim["addr"]} down: {reads}'[:400]
+        fs = b6_helper(q, g, 'fsync-down', w, 'fsync', d,
+                       '--names', ','.join(n for n in acked if n.startswith('F')), '--bound', fx['b6_fsync_s'])
+        out['fsync_member_down'] = fs
+        if not fs.get('ok'):
+            return FAIL, f'fsync with {victim["addr"]} down: {fs}'[:400]
+        during = b6_helper(q, g, 'write-down', w, 'write', d, '--set', 'during', '--bound', fx['b6_write_s'])
+        out['writes_member_down'] = during
+        if during.get('errors') or 'files' not in during:
+            return FAIL, f'writes with {victim["addr"]} down: {during}'[:400]
+        acked.update({f['name']: f['size'] for f in during['files']})
+        # The group leaders refresh the count in their GC pass: wait for it.
+        end = time.monotonic() + 120
+        while True:
+            count, _, text = b6_status(q, g, 'status-degraded')
+            if count and 'Protection: DEGRADED' in text:
+                break
+            if time.monotonic() > end:
+                return FAIL, f'degraded state not shown with {victim["addr"]} down (count {count})'
+            time.sleep(3)
+        out['degraded_member_down'] = count
+    finally:
+        g.step('restart', f'start of member {victim["addr"]} (restore)')
+        rc, text = q.control.start_node(g, victim)
+    if rc:
+        return FAIL, f'start of {victim["addr"]} failed'
+    t0 = time.monotonic()
+    while True:
+        count, down, text = b6_status(q, g, 'status-rebuild')
+        if count == 0 and not down and 'Protection: full' in text:
+            break
+        if time.monotonic() - t0 > fx['b6_rebuild_s']:
+            return FAIL, f'W154 did not clear the degraded state within {fx["b6_rebuild_s"]} s (count {count})'
+        time.sleep(5)
+    out['rebuild_s'] = round(time.monotonic() - t0, 1)
+    for label, m, path in (('verify-reader', r, rd), ('verify-writer', w, d)):
+        res = b6_helper(q, g, label, m, 'verify', path, '--names', ','.join(sorted(acked)),
+                        '--bound', fx['b6_read_s'])
+        out[label] = res
+        if not res.get('ok'):
+            return FAIL, f'{label} after the restore: {res}'[:400]
+    out['acknowledged'] = len(acked)
+    return PASS, (f'member {victim["addr"]} down: reads exact, fsync with proof, writes degraded '
+                  f'({out["degraded_member_down"]} marked); W154 cleared in {out["rebuild_s"]} s; '
+                  f'{len(acked)} files exact (refusing, full and slow members: loopback test only)')
+
+
 def g_plugin(name, spec):
     def gate(q, g):
         host = spec.get('host', 'local')
@@ -1216,6 +1340,8 @@ def gates(plugins):
              deadline_s=3600, doc='acknowledged-file manifest verified after orderly stop/start'),
         Gate('e2-client-stop', g_e2, 'E2', 'Full payloads + orderly restart', needs=('remount',),
              deadline_s=1800, doc='fuser -m, stop refused while busy, clean stop, remount'),
+        Gate('b6-member-down', g_b6, 'B6', 'Placement/capacity and decode', needs=('restart',),
+             deadline_s=3600, doc='one member stopped in order: reads, fsync, writes, W154 after restore'),
         Gate('e3-turnover', g_e3, 'E3', 'Full payloads + orderly restart', needs=('turnover',),
              partial_needs=('restart',), deadline_s=1800,
              doc='raft-step-down of every group leader under client load; member catch-up'),
@@ -1226,9 +1352,14 @@ def gates(plugins):
 def default_plugins(cluster, extra):
     plugins = {'b-checks': dict(command='cd {source} && python3 scripts/b_checks.py --cluster {cluster} '
                                         '--out {gate_dir}',
-                                requires='{source}/scripts/b_checks.py', items='B1-B6',
+                                requires='{source}/scripts/b_checks.py', items='B1-B5',
                                 ledger='Placement/capacity and decode', deadline_s=3600,
-                                doc='B checks script (scripts/b_checks.py) when present')}
+                                doc='B checks script (scripts/b_checks.py) when present'),
+               'd4-progress': dict(command='cd {source} && python3 scripts/d4_progress.py --cluster {cluster} '
+                                           '--out {gate_dir}',
+                                   requires='{source}/scripts/d4_progress.py', items='D4',
+                                   ledger='Scale/progress evidence (E4, D4)', deadline_s=7200,
+                                   doc='D4 bounded progress under packing, indexing and KV compaction')}
     plugins.update(cluster.get('plugins', {}))
     for spec in extra:
         name, _, command = spec.partition('=')
@@ -1381,7 +1512,7 @@ def write_summary(q, run, results, sums):
             L.append(f'- {r["gate"]} NOTRUN: {r["reason"]}')
     if len(hosts) < len(c.get('nodes', [])) or c.get('owned'):
         L.append('- Daemons share hosts: not distinct failure domains (A4).')
-    L.append('- Not covered by this driver: E4/D4 scale and progress, D1 packing inventory, enabled `.efs` '
+    L.append('- Not covered by this driver: E4 scale, D1 packing inventory, enabled `.efs` '
              'under load beyond posix-extras, RDMA live harnesses (they run on TCP loopback).')
     L.append('- TODO: other limitations.\n')
     L.append('## Raw evidence\n')
@@ -1466,6 +1597,59 @@ def h_manifest_verify(args):
     ok = not bad and not extra and checked == len(doc['files'])
     print(json.dumps(dict(ok=ok, checked=checked, bytes=size, bad=bad[:20], nbad=len(bad), extra=extra[:20])))
     return 0 if ok else 1
+
+
+def b6_payload(seed, name, size):
+    return payload(seed, f'b6/{name}', size)
+
+
+def h_b6(args):
+    d = Path(args.dir)
+    out = dict(files=[], errors=[], times={})
+    if args.op == 'write':
+        d.mkdir(parents=True, exist_ok=True)
+        for name, size, sync in B6_SETS[args.set]:
+            t = time.monotonic()
+            try:
+                fd = os.open(d / name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+                try:
+                    view = memoryview(b6_payload(args.seed, name, size))
+                    while view:
+                        view = view[os.write(fd, view):]
+                    if sync:
+                        os.fsync(fd)
+                finally:
+                    os.close(fd)
+                out['files'].append(dict(name=name, size=size, synced=sync))
+            except OSError as exc:
+                out['errors'].append(dict(name=name, errno=exc.errno, error=str(exc)))
+            out['times'][name] = round(time.monotonic() - t, 3)
+        out['ok'] = not out['errors'] and max(out['times'].values()) <= args.bound
+    else:
+        sizes = {n: s for st in B6_SETS.values() for n, s, _ in st}
+        for name in [n for n in args.names.split(',') if n]:
+            t = time.monotonic()
+            try:
+                if args.op == 'fsync':
+                    fd = os.open(d / name, os.O_RDWR)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+                    out['files'].append(dict(name=name, verdict='ok'))
+                else:
+                    got = (d / name).read_bytes()
+                    want = b6_payload(args.seed, name, sizes[name])
+                    if got != want:  # wrong or short bytes: never acceptable
+                        out['errors'].append(dict(name=name, wrong=True, got=len(got), want=len(want)))
+                    else:
+                        out['files'].append(dict(name=name, verdict='exact'))
+            except OSError as exc:
+                out['errors'].append(dict(name=name, errno=exc.errno, error=str(exc)))
+            out['times'][name] = round(time.monotonic() - t, 3)
+        out['ok'] = not out['errors'] and (not out['times'] or max(out['times'].values()) <= args.bound)
+    print(json.dumps(out))
+    return 0 if out['ok'] else 1
 
 
 def h_pending(args):
@@ -1588,6 +1772,13 @@ def main(argv=None):
     w.add_argument('seed')
     ci = sub.add_parser('_client-identity')
     ci.add_argument('mount')
+    b6 = sub.add_parser('_b6')
+    b6.add_argument('op', choices=('write', 'fsync', 'verify'))
+    b6.add_argument('--dir', required=True)
+    b6.add_argument('--seed', required=True)
+    b6.add_argument('--set', choices=sorted(B6_SETS), default='before')
+    b6.add_argument('--names', default='')
+    b6.add_argument('--bound', type=float, default=90.0)
     a = p.parse_args(argv)
 
     if a.cmd == '_manifest':
@@ -1598,6 +1789,8 @@ def main(argv=None):
         return h_workload(a)
     if a.cmd == '_client-identity':
         return h_client_identity(a)
+    if a.cmd == '_b6':
+        return h_b6(a)
     if a.cmd == 'verify-sums':
         bad = verify_sums(a.dir)
         for b in bad:

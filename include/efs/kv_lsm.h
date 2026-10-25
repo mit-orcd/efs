@@ -93,6 +93,7 @@ struct efs_kv_lsm_stats {
     uint64_t l0_cap;
     uint64_t mem_budget;
     uint64_t apply_deferred; /* apply_room refusals since open */
+    uint64_t flushes, compactions; /* D4: completed since open (maintenance progress) */
 };
 int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out);
 
