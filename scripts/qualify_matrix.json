@@ -106,6 +106,7 @@
    "loopback": 3,
    "port_base": 18940,
    "private_port_base": 18900,
+   "loopback_quota": "4G",
    "transport": "tcp",
    "fixture": {
     "posix_timeout_s": 150,

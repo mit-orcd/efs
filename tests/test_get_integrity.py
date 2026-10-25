@@ -113,8 +113,8 @@ static int efs_client_node_reprobe(efs_node_id_t n) { (void)n; return 0; }
 static void efs_client_node_note_ok(efs_node_id_t n) { (void)n; }
 static void efs_client_node_note_fail(efs_node_id_t n) { (void)n; }
 static int read_retry_pause(unsigned us) { (void)us; return EFS_OK; }
-/* K34: no node is down in these cases, so the reprobe never brings one back. */
-static int read_reprobe_down(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS]) { (void)nodes; return 0; }
+/* K34: read_reprobe_down is the production copy above; no node is down in
+ * these cases (efs_client_node_is_down is 0), so it never brings one back. */
 static void *demand_read_alloc(uint32_t n) { return malloc(n); }
 static void test_buf_free(void *p, uint32_t n) { (void)n; free(p); }
 #define efs_buf_free test_buf_free

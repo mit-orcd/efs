@@ -428,13 +428,13 @@ def parse_getchunks(text):
 
 def stored_objects(rows):
     """The stored 2+1 objects one file's rows reference: a packed row its
-    segment, an unpacked row its base object (unless a stub) and spans."""
+    segment, an unpacked row its base object (unless a stub), and every
+    span (an overwrite overlays spans on a packed base until it is repacked)."""
     objs = set()
     for r in rows:
         if r['packed']:
             objs.add(('segment', r['packed']['segment'], r['packed']['gen']))
-            continue
-        if r['obj_gen']:
+        elif r['obj_gen']:
             objs.add(('chunk', r['obj_gen'], tuple(r['nodes'])))
         for gen, nodes in r['spans']:
             objs.add(('span', gen, nodes))
@@ -467,7 +467,7 @@ def h_small_rows(a):
         objects |= stored_objects(rows)
         if f['size'] == 0 and not rows:
             packed += 1  # nothing stored
-        elif rows and all(r['packed'] for r in rows):
+        elif rows and all(r['packed'] and not r['spans'] for r in rows):
             packed += 1
             for r in rows:
                 segments.add((r['packed']['segment'], r['packed']['gen']))
@@ -560,6 +560,7 @@ def h_d3(a):
         write_exact(static / name, data)
         nbytes += len(data)
         want.add(name)
+    created = time.monotonic()
     peer = Path(a.peer) / static.relative_to(a.mount) if a.peer else static
     out = dict(static_files=len(want), static_bytes=nbytes, writers=a.writers, queriers=a.queriers,
                load_s=a.load_s, io_deadline_s=a.io_deadline_s, query_deadline_s=a.query_deadline_s,
@@ -585,10 +586,15 @@ def h_d3(a):
             return emit(out, False)
         time.sleep(1)
     out['fixture_published_s'] = round(time.monotonic() - t0, 3)
+    # Each member keeps its own catalog: one that has not refreshed since
+    # the fixture was created answers "not indexed yet" (exit 75). That is
+    # tolerated (counted) for one settle window after the fixture; later
+    # it is an error (initial catalog creation must finish, D3/D4).
+    ready_by = created + settle
     stop = time.monotonic() + a.load_s
     lock = threading.Lock()
     res = dict(io_ops=0, io_errors=[], io_over=[], io_lat=[], q_ops=0, q_errors=[], q_over=[], q_lat=[],
-               q_busy=0, q_busy_max_s=0.0, generations=set(), files=[])
+               q_busy=0, q_busy_max_s=0.0, q_not_indexed=0, generations=set(), files=[])
 
     def writer(w):
         d = base / 'load' / f'w{w}'
@@ -646,6 +652,8 @@ def h_d3(a):
             return rc, dt, (rc == 2 and 'exceeds' in err) or f'invalid find rc={rc} {err[-120:]}', None
         if rc == 1 and 'resource busy' in err:
             return rc, dt, 'busy', None
+        if rc == 75 and time.monotonic() < ready_by:
+            return rc, dt, 'not-indexed', None
         return rc, dt, f'{kind} exit {rc}: {err.strip()[-200:]}', None
 
     def querier(q):
@@ -672,9 +680,12 @@ def h_d3(a):
                         refused.pop(kind)
                     else:
                         continue  # retry the same kind at once
+                elif verdict == 'not-indexed':
+                    res['q_not_indexed'] += 1
+                    continue
                 elif verdict is True and kind in refused:
                     res['q_busy_max_s'] = max(res['q_busy_max_s'], t - refused.pop(kind))
-                if verdict not in (True, 'busy'):
+                if verdict is not True:
                     res['q_errors'].append(dict(kind=kind, rc=rc, error=str(verdict)[:300], at=now()))
                 if doc:
                     res['generations'].add(doc['snapshot']['generation'])
@@ -710,7 +721,8 @@ def h_d3(a):
                io_p99_s=pct(res['io_lat'], .99), io_max_s=round(max(res['io_lat'] or [0]), 3),
                query_ops=res['q_ops'], query_errors=res['q_errors'][:20], nquery_errors=len(res['q_errors']),
                query_over_deadline=res['q_over'][:20], query_busy=res['q_busy'],
-               query_busy_max_s=round(res['q_busy_max_s'], 3), query_p50_s=pct(res['q_lat'], .5),
+               query_busy_max_s=round(res['q_busy_max_s'], 3), query_not_indexed=res['q_not_indexed'],
+               query_p50_s=pct(res['q_lat'], .5),
                query_p99_s=pct(res['q_lat'], .99), query_max_s=round(max(res['q_lat'] or [0]), 3),
                generations=len(res['generations']), load_files=expected, load_converged=converged,
                load_converge_s=converge_s, load_settle_s=settle, load_stats=last,

@@ -344,7 +344,7 @@ class Loopback(Controller):
     owned = True
 
     def __init__(self, args, work):
-        self.n, self.work = args.loopback, work
+        self.n, self.work, self.quota = args.loopback, work, args.loopback_quota
         self.base = args.port_base
         ports = list(range(self.base, self.base + self.n))
         if any(p in RESERVED_PORTS for p in ports + [self.base + 9]) or not 1024 < self.base < 65000:
@@ -373,7 +373,7 @@ class Loopback(Controller):
                     transport='tcp', direct_io=True,
                     features=dict(efs_commands='cluster commands-policy (default: enabled)',
                                   packing='build default (not set by the driver)'),
-                    quota='1G per daemon', hardware=f'{socket.gethostname()} (one host, loopback)',
+                    quota=f'{self.quota} per daemon', hardware=f'{socket.gethostname()} (one host, loopback)',
                     private=dict(host='local', root=str(self.work / 'live'), port_base=private_base),
                     notes='driver-owned loopback dry-run cluster; not distinct hosts (A4)')
 
@@ -384,7 +384,7 @@ class Loopback(Controller):
                     str(self.stores[i])]
         else:
             argv = [str(ROOT / 'efsd'), self.addrs[i], str(self.stores[i])]
-        argv += ['--quota', '1G', '--discovery-port', '0']
+        argv += ['--quota', self.quota, '--discovery-port', '0']
         log = open(self.work / 'loopback' / f'efsd-n{i + 1}.log', 'ab')
         log.write(f'\n==== {now()} {" ".join(argv)}\n'.encode())
         log.flush()
@@ -3021,6 +3021,7 @@ def matrix_topology(a, p):
         # The command line wins: another host passes its own port range.
         a.port_base = a.port_base or topo.get('port_base')
         a.private_port_base = a.private_port_base or topo.get('private_port_base')
+        a.loopback_quota = a.loopback_quota or topo.get('loopback_quota')
         return None
     return dict(topo['cluster'], name=topo['cluster'].get('name', a.topology))
 
@@ -3046,6 +3047,7 @@ def main(argv=None):
                    'or the topology\'s)')
     r.add_argument('--private-port-base', type=int, help='live harness ports with --loopback '
                    '(default 18700 or the topology\'s)')
+    r.add_argument('--loopback-quota', help='quota of each loopback daemon (default 1G or the topology\'s)')
     r.add_argument('--out', type=Path, required=True)
     r.add_argument('--work', type=Path, help='scratch and owned stores (default OUT.work)')
     r.add_argument('--gates', type=lambda v: [x for x in v.split(',') if x], default=[])
@@ -3147,6 +3149,7 @@ def main(argv=None):
         described = matrix_topology(a, p)
     a.port_base = a.port_base or 18740
     a.private_port_base = a.private_port_base or 18700
+    a.loopback_quota = a.loopback_quota or '1G'
     for name in a.allow:
         if name not in DESTRUCTIVE:
             p.error(f'--allow {name}: expected {",".join(DESTRUCTIVE)} or all')
