@@ -335,11 +335,9 @@ table).
    (4 × 50 ms), so its local ReadIndex failed for more than 200 ms. Run 4
    shared the host; run 6 ran alone at the highest rate. The other 90
    resends in run 4 succeeded. The 20-minute D4 load and runs 2 and 3
-   counted 0. The direction is a time-bounded
-   retry in that loop, for example up to 2 s like the client's
-   per-fragment bound, instead of a fixed count. The loop is on the
-   flake-sweep branch, not on devel or this branch. Owner: flake sweep
-   (packer).
+   counted 0. **Fixed** on `claude/interesting-mclean-65362a`
+   (`dd0abe363`): the resend is bounded by 2 s, not 4 tries; 0 put errors
+   in the 60-minute runs ([evidence](d4-pack-drain-20261025.md)).
 
 3. **One foreground EBUSY in run 5.** A ring rewrite's truncate
    (`INODE_SETATTR`, from `O_TRUNC`) to node 3 failed on receive five times
@@ -349,7 +347,11 @@ table).
    retry and server GC pass length.
 4. **efsd RSS growth with throughput** (item 2 verdict). Owner: F1/K22.
 5. **Pack candidates left for minutes after a rewrite load** (drain,
-   item 2). Owner: D4/packer.
+   item 2). **Fixed** on `claude/interesting-mclean-65362a`: not leases,
+   but two candidate keys of one inode in one segment (`dd0abe363`), then
+   the truncate-sweep backlog holding the index drain (`b7bf18bdd`); the
+   60-minute run drains in 54.5 s and `test_d4_plateau.py` is back in
+   `make test-long` ([evidence](d4-pack-drain-20261025.md)).
 6. **`tests/test_stop_progress.py`: one mkdir EIO** in the 8-job gate at
    `758dd144c` (its logs were not kept); 5 of 5 reruns passed beside the
    TSan gate. Not attributed.

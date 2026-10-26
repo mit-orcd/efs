@@ -758,6 +758,16 @@ facts for A6, not decisions.
   publication unit that skipped its ABORT. The drain after a long rewrite load
   takes 390–415 s (index changes from segment compaction), against 3.5 s
   after the create load; the long runs use a 900 s drain bound.
+  **Oct 25 (D4 drain, branch `claude/interesting-mclean-65362a`,
+  [evidence](d4-pack-drain-20261025.md)):** the drain stall had two causes,
+  both fixed. A small file rewritten across a pack epoch had two candidate
+  keys, and a segment holding both failed silently every pass. The D25
+  truncate sweep's backlog (about 5 inodes a second) held the index drain.
+  The 60-minute run (intel1) drains in 54.5 s within the default 150 s, with
+  0 packer put errors (the fragment resend is now bounded by 2 s, not 4
+  tries); `test_d4_plateau.py` is back in `make test-long`; 8-job gate PASS
+  with host limits. Open: reclaim lags a high rewrite rate (quota 52 % at 60
+  minutes on intel1, ENOSPC at about 45 minutes on amd).
 
 ## E. Full verification and orderly lifecycle
 

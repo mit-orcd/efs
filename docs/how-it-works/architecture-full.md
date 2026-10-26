@@ -1598,6 +1598,15 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[D4 drain after a rewrite load and packer put errors at a high rewrite rate](../status/d4-pack-drain-20261025.md):
+**branch `claude/interesting-mclean-65362a` (F1 follow-ups merged), not merged, not pushed; xorinox `make test-all` 8-job pool at `9670b895b`: 500 commands, 0 FAIL, 13 NOTRUN host limits, 760 s; intel1 60-minute run: drain 54.5 s ≤ 150, 0 put errors (RSS criterion FAIL on one efs-fuse, F1).**
+The F1 drain stall was not leases: a small file rewritten across a pack epoch had two candidate keys,
+and a segment holding both failed silently every pass (fixed; new `test_pack_dup_candidate.py` red 4 of 4,
+green). The D25 truncate sweep retired about 5 inodes a second and its backlog held the index drain
+(now one pass per inode, 32 a pass: drain 22–25 s). The packer's fragment resend is bounded by 2 s
+(K37 case 1c). `test_d4_plateau.py` is back in `make test-long`. New open finding: reclaim lags a high
+rewrite rate (quota 52 % at 60 min on intel1, ENOSPC on amd).
+
 [F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](../status/f1-followups-20261025.md):
 **branch `claude/devel-f1-followups-ae2deb`, not merged, not pushed; xorinox: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47 (`758dd144c`, same code); RSS plateau FAIL (bounded, not flat).**
 `test_k36_recovery.py` under TSan PASS 10 of 10 (crash hooks now `exit_group`; a hook race and a test
