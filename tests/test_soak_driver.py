@@ -224,4 +224,43 @@ h.mount_mu=[RefuseLock(),RefuseLock()]
 try:h.verify()
 except RuntimeError:pass
 else:raise AssertionError('fixture did not abort')
-print('RSS: long-window growth negative controls, per-role coverage, rehearsal NOTRUN, verification isolation PASS')
+print('RSS: long-window growth negative controls, per-role coverage, rehearsal RSS left unqualified, verification isolation PASS')
+
+
+# STALE is a definite refusal, never BUSY permission. Capture exact product
+# context without issuing GET, a new BEGIN, or another cleanup operation.
+for code in (-14,-5):
+ calls=[]
+ def refused(op,uuid,*args,timeout):
+  calls.append(op)
+  return 1,busy.replace('rc=-13',f'rc={code}')
+ try:s.revoke_owned_session(refused,u,1,300)
+ except s.SessionCleanupRefusal as e:
+  assert e.evidence['rc']==code and e.evidence['shard']==1
+  assert (e.evidence['old_epoch'],e.evidence['epoch'])==(1,2)
+  assert calls==['fence'] and 'no re-fence' in e.evidence['action']
+ else:raise AssertionError('STALE/IO retried or accepted')
+print('cleanup refusal: exact STALE/IO context, one fence, zero follow-up mutations PASS')
+
+
+# "not indexed yet" (exit 75, no stdout) is a returning member's documented
+# readiness answer; any other refusal, or one outlasting the bound, fails.
+NI='efs command: not indexed yet: this directory was created, renamed or moved after the published catalog snapshot; retry after the next background refresh.\n'
+assert s.query_outcome(75,'',NI)==dict(not_indexed=True)
+assert s.query_outcome(0,'{"stats":{}}\n','')['stats']=={'stats':{}}
+for bad in ((75,'',''),(75,'{}',NI),(1,'',NI),(16,'','busy\n'),(0,'not json','')):
+ try:s.query_outcome(*bad)
+ except (AssertionError,ValueError):pass
+ else:raise AssertionError(f'query refusal accepted: {bad}')
+tick=[0];answers=[dict(not_indexed=True)]*3+[dict(not_indexed=False,stats={})];notes=[]
+assert s.query_ready(lambda:answers.pop(0),300,lambda:notes.append(1),clock,pause)['stats']=={}
+assert len(notes)==3 and tick[0]==6
+tick=[0];notes=[]
+try:s.query_ready(lambda:dict(not_indexed=True),10,lambda:notes.append(1),clock,pause)
+except AssertionError as e:assert 'beyond 10s' in str(e) and tick[0]>=10 and len(notes)<=7
+else:raise AssertionError('unbounded not-indexed wait')
+def failing():raise AssertionError('child exit 1')
+try:s.query_ready(failing,300,lambda:None,clock,pause)
+except AssertionError as e:assert 'child exit 1' in str(e)
+else:raise AssertionError('query failure retried')
+print('query readiness: not-indexed bounded, other refusals and overrun fail PASS')

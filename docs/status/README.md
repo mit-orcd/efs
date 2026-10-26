@@ -18,6 +18,27 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Task D: seeded member-churn endurance](task-d-20261025.md):
+**four-hour soak FAIL on EFS finding K43; branch
+`claude/stoic-goldwasser-06dbca`, not merged or pushed.** devel `39a1cbbbc`
+with `agent/devel-task-d` merged and one harness fix (`b2fc06ba5`: a
+returning member's documented "not indexed yet" `.efs` answer is waited out
+under the recovery bound). Rehearsal PASS on intel2 (`4cb79d09d`, 1,102 s)
+and nuc (`b2fc06ba5`, 1,166 s). The four-hour soak on nuc stopped at 7,195 s,
+at its 15th event: SIGKILL of the group-0 leader that coordinated an
+in-flight REPORT left its PREPARE intents until recovery aborted them, the
+client's resend lost its CAS against them and the writer got `EBUSY`
+(**K43, blocks alpha**). 14 events and seven exact two-mount verifications
+passed before it; the retained stores read all 512 acknowledged versions and
+3,379 appends exact; every qualifying RSS window PASS, role coverage NOTRUN.
+Earlier attempts: intel2 interrupted at 2,768 s and nuc attempt08 at 9 m 52 s
+by other sessions' builds (environmental). nuc `make test-all` (8 jobs): candidate `08c949ea0` 502
+commands, 2 FAIL, 15 NOTRUN; base `39a1cbbbc` 502, 4 FAIL, 15 NOTRUN; both
+candidate failures (`test_k41_packer_placement`, `test_k38_shared_chunk_pressure`)
+also fail on the base: no candidate-only failure. Raw: nuc
+`~/efs-artifacts/task-d-20261025-nuc2/`, intel2
+`~/efs-artifacts/task-d-20261025-intel2/`.
+
 [Wave 12 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`78b9e0981`; gate at `78b9e0981`)**: K41/W163 ([evidence](k41-packer-placement-20261025.md): bounded parallel heartbeat probes with the streak and down mark kept per node id across table rebuilds, the packer probes its three destinations and replaces a failed one with the next live ring member before writing, a packed read that reached a holder but gathered fewer than two fragments is `EIO` naming the segment; intel2 gate 0 FAIL, `test_k33_growth.py` 10 of 10) and Task C's last test-hygiene commits (K37 degraded-write events by identity, the refusal test checks every replica's log for the refused tag, K33 payload fixtures kept on failure). intel2 `make test-all` (8 jobs): 502 commands in 657 s, 0 FAIL, 15 NOTRUN host limits, PASS with host limits.
 
 [Wave 11 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`d3051f273`; gate at `d3051f273`)**: K33/W157 join retry ([evidence](k33-join-retry-20261025.md): a first start killed between `boot.bin` and `identity.bin`, or in the O_DIRECT probe, is retried with the same command; a store that started before and lost its identity stays refused; intel1 gate 0 FAIL, A13 PASS with the kill before the commit) and the Task C/D agents' latest evidence commits. intel2 `make test-all` (8 jobs): 499 commands in 545 s, 0 FAIL, 15 NOTRUN host limits, PASS with host limits.
@@ -64,19 +85,6 @@ cluster expiry policy (`efs-mgmt expiry-policy NODE:PORT cluster`,
 versioned, off by default) changes at runtime; a deadline acts only while
 its source folder policy is enabled. Expiry tests back in `make test-all`;
 new qualify gate `d5-expiry` (item D5) on every matrix topology.
-
-[Task D: seeded member-churn endurance rehearsal](task-d-20261025.md):
-**IN PROGRESS, branch `agent/devel-task-d`, not merged or pushed.** New
-five-to-seven-member loopback harness, independent acknowledged-content and
-shared-append oracles, quiet-host guard, RSS interval checks and qualification
-plugin. NUC's later rehearsal exposed a bounded session-cleanup BUSY that the harness
-failed to resume, plus a stop-order race that acknowledged one local file after
-unmount. Both are fixed in the harness only: exact old-epoch cleanup and both
-fresh readers verified 512 genuine file versions and all 363 appends. The next rehearsal completed all lifecycle/content checks but failed an RSS
-assessment contaminated by read verification and short restart windows. Harness-only
-`18d98c071` separates workloads and requires long steady windows, keeping the 5%
-threshold and explicit NOTRUN coverage. Its fresh rehearsal/conditional four-hour
-retry is running on NUC after build and component checks passed; full endurance, RSS and candidate/base comparison remain open.
 
 [Task A: full three- and five-member Stage 2 rehearsal](task-a-20261025.md):
 **rehearsal complete with product findings; branch `agent/devel-task-a`,
