@@ -18,6 +18,8 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Wave 14 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a81bc8dc0`, fast-forward; gate at the same commit)**: the D4 drain and reclaim branch ([drain](d4-pack-drain-20261025.md), [reclaim](d4-reclaim-20261026.md)): one packer candidate per file per pass, the fragment resend bounded by 2 s inside K41's placement loop, the truncate sweep takes an inode to retire in one pass and waits 2 s for the writer's own publication, an unconditional full image replaces spans of an older content epoch but is still refused by an unseen live span of its own epoch (`988efba3e`: the wave-13 gate's K38 writer EIO was this branch's `acb8a7318` dropping another writer's span; K36's EBUSY did not reproduce); 60-minute run: stored data bounded, drain 72 s, 0 put errors, abandoned uploads 610 → 41. intel1 8-job gate 0 FAIL twice, intel2 `make test-all` (8 jobs): 506 commands in 641 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits. The W160 target is 16 min 30 s (990 s) for the D4 plateau driver back in `make test-long` and the pack dup-candidate test.
+
 [D4 reclaim lag: abandoned uploads from refused unconditional images](d4-reclaim-20261026.md):
 **branch `claude/interesting-mclean-65362a` (devel wave 13 merged at `ed01bb005`), not merged, not pushed; head `988efba3e`: intel1 `make test-all` 8-job pool twice, 506 commands, 0 FAIL, 14 NOTRUN host limits (565 s, 684 s); K36 and K38 5 of 5 each. 60-minute run at `acb8a7318`: PASS on every check, 41 abandoned uploads (was 610 at `66bfc2786`, linear quota growth to 4.2 GiB before).**
 The quota growth under the D4 rewrite load came from abandoned uploads, which D31 collects only when the mount's session
