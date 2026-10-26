@@ -3858,6 +3858,19 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
          * watermark is re-derived on the next pass (D26). */
         efs_meta_gc_pending_invalidate(g->group == 0 ? 1u : 2u);
         efs_meta_degraded_count_invalidate(g->group == 0 ? 1u : 2u);
+        /* W130/K6: an image that covers the halt point replaces the row
+         * state the apply refused, so the halt heals with it. The import
+         * itself decodes every row it writes: an image this build cannot
+         * serve fails the import instead, and the halt stands. */
+        if (__atomic_load_n(&g->incompatible, __ATOMIC_ACQUIRE) &&
+            g->import_incl >= g->incompat_index) {
+            __atomic_store_n(&g->incompatible, 0, __ATOMIC_RELEASE);
+            fprintf(stderr,
+                    "raft-host: group=%u snapshot import incl=%llu covers the "
+                    "halted entry %llu: halt cleared, group served again\n",
+                    g->group, (unsigned long long)g->import_incl,
+                    (unsigned long long)g->incompat_index);
+        }
         pthread_mutex_unlock(&h->snap_mu);
         unlink(g->part_path);
         __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
@@ -3978,7 +3991,8 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
      * snapshots once per EFS_RAFT_SNAP_BYTES of commands past snap_idx
      * and keeps that window for AppendEntries. */
     if (efs_raft_tracks_log_bytes(h->g[gi].r)) {
-        if (efs_raft_log_new_bytes(h->g[gi].r) < host_snap_window_bytes())
+        if (!efs_raft_snap_wanted(h->g[gi].r) &&
+            efs_raft_log_new_bytes(h->g[gi].r) < host_snap_window_bytes())
             return EFS_OK;
     } else if (applied < snap + HOST_SNAP_MIN) {
         return EFS_OK;
