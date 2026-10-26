@@ -225,3 +225,19 @@ try:h.verify()
 except RuntimeError:pass
 else:raise AssertionError('fixture did not abort')
 print('RSS: long-window growth negative controls, per-role coverage, rehearsal NOTRUN, verification isolation PASS')
+
+
+# STALE is a definite refusal, never BUSY permission. Capture exact product
+# context without issuing GET, a new BEGIN, or another cleanup operation.
+for code in (-14,-5):
+ calls=[]
+ def refused(op,uuid,*args,timeout):
+  calls.append(op)
+  return 1,busy.replace('rc=-13',f'rc={code}')
+ try:s.revoke_owned_session(refused,u,1,300)
+ except s.SessionCleanupRefusal as e:
+  assert e.evidence['rc']==code and e.evidence['shard']==1
+  assert (e.evidence['old_epoch'],e.evidence['epoch'])==(1,2)
+  assert calls==['fence'] and 'no re-fence' in e.evidence['action']
+ else:raise AssertionError('STALE/IO retried or accepted')
+print('cleanup refusal: exact STALE/IO context, one fence, zero follow-up mutations PASS')
