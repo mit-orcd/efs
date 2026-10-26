@@ -165,8 +165,8 @@ and 119,827 on xorinox in the F1 follow-ups' run 6.
    raw evidence (`logs/mnt-l.log`).
 3. **intel2:** a gate run of `66a3a4024` started there on Oct 25 stayed
    unread; from about 00:05 on Oct 26 intel2's sshd reset every connection
-   (from the Mac and from xorinox). Its private tree `~/efs-rss` is still
-   there. The same gates then ran on xorinox (table above).
+   (from the Mac and from xorinox) until a reboot, which ended the run with
+   no verdict. The same gates then ran on xorinox (table above).
 4. **amd went down during this session.** At about 21:08 on Oct 25, 30
    minutes after this session's gates and another session's 60-minute D4
    run started on it, amd stopped answering ping and ssh. The other session
@@ -190,7 +190,7 @@ chose. Gates at `a6720c088`: intel2 (8 CPUs, 15 GB, Rocky 10); at
 `66a3a4024`: xorinox; `EFS_TEST_JOBS=8` both. The unit test and the reap
 test also ran on xorinox. No 17xxx port, `/data1` mount
 or other user's process was touched. The private trees were deleted on nuc
-and xorinox. intel2's (`~/efs-rss`) is left until its sshd answers.
+xorinox and, after its reboot, intel2.
 
 ## Raw evidence
 
@@ -199,6 +199,11 @@ Run F and the xorinox gates: xorinox `~/efs-artifacts/efsd-rss-x60-20261026/`
 and mount logs in `logs/`, the gate summaries, sanitizer verdicts and K33
 rerun logs in `gates/`; sha256 of its `SHA256SUMS`
 `f88b3e71aa54a918d565599feac54ac8a74020e0e421824ba501702ab35c406f`).
+
+intel2 gate logs (the `a6720c088` gates, the packer tests and the
+unfinished `66a3a4024` run): intel2 `~/efs-artifacts/efsd-rss-intel2-20261026/`
+(72 KiB, 19 files; sha256 of its `SHA256SUMS`
+`fd6f50a4886c5463eaefc76513827c0ae0d5aa8c6b76a90febf83c7be2d9f776`).
 
 Runs A–E: nuc `~/efs-artifacts/efsd-rss-20261026/` (62 MiB, outside Git), with
 `SHA256SUMS` (271 files; sha256 of `SHA256SUMS` itself

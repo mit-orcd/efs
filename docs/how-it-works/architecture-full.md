@@ -1605,8 +1605,7 @@ ever closed an idle connection; both pools now close one after 30 s idle. Bounde
 ring, whose pages were never released (half the baseline's growth), and the packer's compaction
 buffers, which fragmented the leader's arenas. On nuc the last run still stepped up at minute 48, when
 the host's page cache ran short (slab 14.6 GB, 395 MB cached), with elections; a concurrency step still
-raises arena memory for the rest of the load. amd went down during the session (cause not established);
-intel2's sshd refuses connections.
+raises arena memory for the rest of the load. amd went down during the session (cause not established).
 
 [F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](../status/f1-followups-20261025.md):
 **branch `claude/devel-f1-followups-ae2deb`, not merged, not pushed; xorinox: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47 (`758dd144c`, same code); RSS plateau FAIL (bounded, not flat).**
