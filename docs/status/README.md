@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[D4 reclaim lag: abandoned uploads from refused unconditional images](d4-reclaim-20261026.md):
+**branch `claude/interesting-mclean-65362a`, not merged, not pushed; fix `66bfc2786`; xorinox `make test-all` 8-job pool at `d5f492d31`: 500 commands, 0 FAIL, 13 NOTRUN host limits (1 OVERBUDGET, `posix_expiry.py`, untouched); intel1 60-minute run: stored data bounded at 118–278 MiB per node (was linear to 4.2 GiB), drain 72.4 s, 0 put errors.**
+The quota growth under the D4 rewrite load came from abandoned uploads, which D31 collects only when the mount's session
+ends. Each resizing rewrite abandoned its whole first upload: the REPORT host passed the client's post-truncate span list with an
+unconditional tail image and the fold check refused the unit. The host now takes that list from the committed row (probe:
+1182 → 7 abandoned). The D4 driver bounds abandoned uploads (5 % of the rewrites) and stored data (peak rule). Open: about 3.5 %
+of `O_TRUNC` overwrites still abandon an upload (about 27 MiB per node per hour, held until unmount).
+
 [D4 drain after a rewrite load and packer put errors at a high rewrite rate](d4-pack-drain-20261025.md):
 **branch `claude/interesting-mclean-65362a` (F1 follow-ups merged), not merged, not pushed; xorinox `make test-all` 8-job pool at `9670b895b`: 500 commands, 0 FAIL, 13 NOTRUN host limits, 760 s; intel1 60-minute run: drain 54.5 s ≤ 150, 0 put errors (RSS criterion FAIL on one efs-fuse, F1).**
 The F1 drain stall was not leases: a small file rewritten across a pack epoch had two candidate keys,

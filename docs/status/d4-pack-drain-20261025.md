@@ -27,7 +27,7 @@ with `claude/devel-f1-followups-ae2deb` merged, `ad0b65761`). Code commits
 | Plateau test back in `make test-long` | Done: budget row 180 s / 2 slots, `NOT_WIRED` entry removed; dup-candidate test 105 s / 1 slot; budgeted gate 1439 s of 1440 |
 | 60-minute run (intel1, `9670b895b`) | **Drain 54.5 s ≤ 150, 0 put errors, every file exact, 193 642 rewrites, 0 errors.** The run's overall verdict is FAIL on one RSS criterion: the load mount's efs-fuse grew 5.4 % over the last third (bound 5 %), the open F1 RSS item. All three efsd plateau (+1.0 to +1.7 %) |
 | `make test-all`, 8-job pool (xorinox, `9670b895b`) | **PASS with host limits:** 500 commands, 0 FAIL, 13 NOTRUN (RDMA device, `~/git/cluster` scripts, an `EFS_FAULTS=1`-only case, valgrind/sanitizer runtime markers), 760 s, exit 3 (INCOMPLETE); no OVERBUDGET. Plateau 158 s of 180, dup candidate 71 s of 105, K37 199 s of 335 |
-| New finding: reclaim lags under the rewrite load | **OPEN.** Quota use climbs linearly through the load (intel1 52 % of 8 GiB at 60 min, F1's xorinox runs 31 %); amd's higher rate reached ENOSPC at about 45 minutes. Old generations are reclaimed after the load (64 MB left per store). See [Open](#open) |
+| New finding: reclaim lags under the rewrite load | **FIXED Oct 26** ([evidence](d4-reclaim-20261026.md); residual open). Was **OPEN.** Quota use climbs linearly through the load (intel1 52 % of 8 GiB at 60 min, F1's xorinox runs 31 %); amd's higher rate reached ENOSPC at about 45 minutes. Old generations are reclaimed after the load (64 MB left per store). See [Open](#open) |
 
 ## Item 1: the drain
 
@@ -170,7 +170,14 @@ efs-fuse 300 MiB of 1024, efsd 91 MiB of 2048.
    and shutdown the store held 64 MB. So old generations are reclaimed,
    but slower than a high rewrite rate produces them. Not attributed yet:
    the next measurement is the reclaim path's rate (journal, GC reap) per
-   rewrite. Owner: D4/GC.
+   rewrite. Owner: D4/GC. **Cause found and fixed (Oct 26,
+   [evidence](d4-reclaim-20261026.md)):** not GC throughput. Abandoned
+   uploads wait in the D31 orphan ledger until their mount's session
+   ends, and each resizing rewrite abandoned its whole first upload: the
+   REPORT host passed the client's stale span list with an unconditional
+   tail image, and the fold check refused the unit (`66bfc2786`). The
+   60-minute run now keeps stored data at 118–278 MiB per node. About
+   3.5 % of `O_TRUNC` overwrites still abandon an upload (open there).
 2. **efs-fuse RSS on the load mount** grew 5.4 % over the last third in
    the intel1 run (criterion 5 %). This is the F1 plateau item in the
    [F1 follow-ups](f1-followups-20261025.md); efsd plateaued in this run.

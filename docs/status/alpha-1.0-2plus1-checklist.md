@@ -766,8 +766,15 @@ facts for A6, not decisions.
   The 60-minute run (intel1) drains in 54.5 s within the default 150 s, with
   0 packer put errors (the fragment resend is now bounded by 2 s, not 4
   tries); `test_d4_plateau.py` is back in `make test-long`; 8-job gate PASS
-  with host limits. Open: reclaim lags a high rewrite rate (quota 52 % at 60
-  minutes on intel1, ENOSPC at about 45 minutes on amd).
+  with host limits. Found then: quota use grew linearly under the rewrite
+  load (52 % at 60 minutes on intel1, ENOSPC at about 45 minutes on amd).
+  **Oct 26 ([evidence](d4-reclaim-20261026.md)):** the cause was abandoned
+  uploads, collectable only at unmount (D31). Each resizing rewrite
+  abandoned its first upload because the REPORT host checked an
+  unconditional tail image against the client's stale span list. Fixed:
+  stored data stays at 118–278 MiB per node over 60 minutes, and the D4
+  driver bounds abandoned uploads and stored data. Open: about 3.5 % of
+  `O_TRUNC` overwrites still abandon an upload.
 
 ## E. Full verification and orderly lifecycle
 
