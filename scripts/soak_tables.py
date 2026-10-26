@@ -83,7 +83,8 @@ def main(out):
                 rws.append((label, name, len(xs), f'{pct(xs,.5):.3f}', f'{pct(xs,.99):.3f}', f'{max(xs):.3f}'))
     print(table(('operation', 'phase', 'count', 'p50 s', 'p99 s', 'max s'), rws))
 
-    plateau = json.loads((out/'plateau.json').read_text())
+    plateau = json.loads((out/'plateau.json').read_text()) if (out/'plateau.json').exists() else \
+        dict(verdict='NOTRUN', missing_roles='all (no plateau.json: run stopped first)', method='-', windows=[])
     print(f"\nRSS {plateau['verdict']}, missing roles {plateau['missing_roles']}; {plateau['method']}\n")
     w = plateau['windows']
     print(table(('window', 'role', 'pid', 'verdict', 'measured s', 'first MiB', 'peak MiB', 'last MiB', 'last-third growth %'),
