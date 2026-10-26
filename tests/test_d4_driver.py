@@ -61,9 +61,10 @@ def args(**kw):
     return argparse.Namespace(**a)
 
 
-def sample(t, phase, comp=0, mt=5, packed=0, gen=0, backlog=5, age=100, crss=10240, srss=20480):
+def sample(t, phase, comp=0, mt=5, packed=0, gen=0, backlog=5, age=100, crss=10240, srss=20480,
+           data=64 << 20):
     node = {'mt': mt, 'budget': 100, 'l0': 10, 'l0_cap': 1000, 'flushes': comp * 2, 'compactions': comp,
-            'unapplied': 1, 'rss_kib': srss}
+            'unapplied': 1, 'rss_kib': srss, 'data_bytes': data, 'gc_pending': 0}
     return {'t': t, 'phase': phase, 'client_rss_kib': {'/m': crss},
             'nodes': {1: dict(node), 2: dict(node)},
             'pack': {'backlog': {0: backlog, 2: 0}, 'lag_ms': {0: 1, 2: 0}, 'files_packed': packed,
@@ -206,9 +207,26 @@ fails_with('client RSS', edit=unsampled)
 def fixed(r):
     r.counts.update(created=20, overwritten=5, truncated=4, rewritten=3)
     r.live = {f'f{i}': 1 for i in range(20)}
+    r.samples[-1]['abandoned'] = 2
 v, fails, m = run(a=args(working_set=10), edit=fixed)
 assert v == 'PASS' and m['working_set'] == {'files': 20, 'created': 20, 'live': 20, 'populate_s': None,
                                             'overwritten': 5, 'truncated': 4, 'rewritten': 3}, (fails, m)
+
+
+def abandoned(r):
+    fixed(r)
+    r.counts.update(overwritten=200, truncated=200, rewritten=200)
+    r.samples[-1]['abandoned'] = 31
+fails_with('abandoned uploads 31 after 600 rewrites', a=args(working_set=10), edit=abandoned)
+def abandoned_ok(r):
+    abandoned(r)
+    r.samples[-1]['abandoned'] = 30
+assert run(a=args(working_set=10), edit=abandoned_ok)[0] == 'PASS'
+def abandoned_unknown(r):
+    fixed(r)
+    del r.samples[-1]['abandoned']
+fails_with('abandoned uploads None', a=args(working_set=10), edit=abandoned_unknown)
+assert d.parse_abandoned('x\nAbandoned uploads: pending=17 (group 0: 9, group 2: 8); collected=0\n') == 17
 
 
 def net_creation(r):
@@ -239,6 +257,25 @@ assert [x['verdict'] for x in m['rss_plateau']] == ['PLATEAU'] * 3 and m['rss_pl
 def growing(r):
     r.samples = [sample(t, 'load', comp=t + 1, packed=t + 1, gen=t + 1, crss=100000 + t * 10000) for t in range(12)]
 fails_with('not at a plateau', a=args(load_s=12.0, plateau_pct=5.0), edit=growing)
+# Stored data (fixed working set): reclaim behind the rewrites grows the
+# nodes' quota usage over the last third; a sawtooth around a level passes.
+def space_growing(r):
+    fixed(r)
+    r.samples = [sample(t, 'load', comp=t + 1, packed=t + 1, gen=t + 1, data=(64 << 20) + t * (8 << 20))
+                 for t in range(12)]
+    r.samples[-1]['abandoned'] = 0
+fails_with('stored data not at a plateau', a=args(load_s=12.0, plateau_pct=5.0, threads=2, working_set=10),
+           edit=space_growing)
+def space_saw(r):
+    fixed(r)
+    r.samples = [sample(t, 'load', comp=t + 1, packed=t + 1, gen=t + 1, data=(64 << 20) + (t % 3) * (4 << 20))
+                 for t in range(12)]
+    r.samples[-1]['abandoned'] = 0
+v, fails, m = run(a=args(load_s=12.0, plateau_pct=5.0, threads=2, working_set=10), edit=space_saw)
+assert v == 'PASS', fails
+assert [x['verdict'] for x in m['space_plateau']] == ['PLATEAU'] * 2, m['space_plateau']
+assert d.parse_gc_status('data_usage_bytes=123 removed_fragments=1\ngroup=0 sampled=1 pending_estimate=7 x\n'
+                         'group=2 sampled=1 pending_estimate=5 x\n') == {'data_bytes': 123, 'gc_pending': 12}
 rows = d.rss_plateau.evaluate({'p': [(t, 1000 + t * 100) for t in range(9)]}, None, 5.0)
 assert rows[0]['verdict'] == 'GROWING' and rows[0]['growth_pct'] > 5, rows
 rows = d.rss_plateau.evaluate({'p': [(t, 1000 + min(t, 5) * 100) for t in range(9)], 'q': [(0, 1)]}, None, 5.0)
@@ -257,4 +294,4 @@ print('D4 driver: raft-status, pack-compact and .efs/stats parsers; PASS and one
 
       'bound (deadline, errors, client/server RSS, memtable, L0, pack backlog, index age, packing, index, '
       'flush and compaction progress, index readiness, '
-      'drain, exact files, fixed working set, RSS plateau slope) PASS')
+      'drain, exact files, fixed working set, abandoned uploads, RSS and stored-data plateau slope) PASS')

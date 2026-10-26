@@ -38,7 +38,12 @@ ring of --fg-set 1 MiB files instead of new ones. The verdict also needs
 created == live == threads × N (no net creation) and every operation kind
 to have run; with --plateau-pct P every efs-fuse and efsd RSS must be at a
 plateau over the load: the last third grows by at most P % of the peak
-(scripts/rss_plateau.py, the same rows in the result's `rss_plateau`).
+(scripts/rss_plateau.py, the same rows in the result's `rss_plateau`), and
+so must every node's stored data (`efs-mgmt gc-status` data_usage_bytes,
+rows in `space_plateau`, always reported in this mode): with no net
+creation, superseded fragments must be reclaimed as fast as they are made.
+The orphan ledger's abandoned uploads (`efs-mgmt status`) after the load
+must stay at most 5 % of the rewrites (at least 16).
 
 Sampled every --sample-s (default 1 s) and recorded with the maximum:
 - client RSS of the efs-fuse process of each mount (this host, /proc);
@@ -94,6 +99,22 @@ _spec.loader.exec_module(rss_plateau)
 
 
 # ---- parsing (pure; tests/test_d4_driver.py) -------------------------------
+
+def parse_gc_status(text):
+    """`efs-mgmt gc-status` -> {'data_bytes': the node's quota usage, 'gc_pending': GC records its
+    led groups still have to hand to the reclaim journals}, or {} when absent."""
+    m = re.search(r'\bdata_usage_bytes=(\d+)', text)
+    if not m:
+        return {}
+    return {'data_bytes': int(m.group(1)),
+            'gc_pending': sum(int(x) for x in re.findall(r'\bpending_estimate=(\d+)', text))}
+
+
+def parse_abandoned(text):
+    """`efs-mgmt status` -> the orphan ledger's abandoned uploads (D31), or None."""
+    m = re.search(r'Abandoned uploads: pending=(\d+)', text)
+    return int(m.group(1)) if m else None
+
 
 def parse_raft_bound(text):
     """`efs-mgmt raft-status` -> {'mt', 'budget', 'l0', 'l0_cap', 'flushes',
@@ -491,9 +512,14 @@ class Run:
             rc, text = self.x.run('raft-status', ep, timeout=20)
             b = parse_raft_bound(text) if rc == 0 else None
             b = dict(b or {}, rss_kib=self.x.server_rss(nid, ep))
+            rc, text = self.x.run('gc-status', ep, timeout=20)
+            b.update(parse_gc_status(text) if rc == 0 else {})
             s['nodes'][nid] = b
         rc, text = self.x.run('pack-compact', self.x.seed, '0', timeout=30)
         s['pack'] = parse_pack(text) if rc == 0 else None
+        if phase != 'load':
+            rc, text = self.x.run('status', self.x.seed, timeout=30)
+            s['abandoned'] = parse_abandoned(text) if rc == 0 else None
         if s['pack']:
             s['pack']['led'] = sorted(s['pack']['led'])
         try:
@@ -708,12 +734,34 @@ class Run:
                              f'live {len(self.live)} (net creation)')
             if not all(ops.values()):
                 fails.append(f'the working set was not overwritten, truncated and rewritten: {ops}')
+            # Rewrites of one writer's own files publish what they upload: an
+            # upload abandoned (D31) waits for the mount's session to end, so
+            # a steady share of them grows the stored data for the mount's
+            # life. A refused unconditional image once abandoned every chunk
+            # of each truncating rewrite (about a quarter of the operations).
+            ab = next((x['abandoned'] for x in reversed(self.samples) if x.get('abandoned') is not None), None)
+            m['abandoned_uploads'] = ab
+            bound = max(16, sum(ops.values()) // 20)
+            if ab is None or ab > bound:
+                fails.append(f'abandoned uploads {ab} after {sum(ops.values())} rewrites (bound {bound}, 5 %)')
         if a.plateau_pct is not None:
             rows = rss_plateau.evaluate(rss_plateau.from_samples(self.samples), a.load_s, a.plateau_pct)
             m['rss_plateau'] = rows
             growing = [r['process'] for r in rows if r['verdict'] != 'PLATEAU']
             if growing or not rows:
                 fails.append(f'RSS not at a plateau (the last third of the load grows by more than '
+                             f'{a.plateau_pct} % of the peak): {growing or "no samples"}')
+        if a.working_set:
+            # With no net creation the stored data is bounded too: superseded
+            # fragments must be reclaimed as fast as rewrites make them.
+            space = rss_plateau.space_from_samples(self.samples)
+            rows = rss_plateau.evaluate(space, a.load_s, a.plateau_pct or 5.0)
+            m['space_plateau'] = rows
+            m['gc_pending_max'] = mx(sum((b or {}).get('gc_pending', 0) for b in s['nodes'].values())
+                                     for s in self.samples if s.get('nodes'))
+            growing = [r['process'] for r in rows if r['verdict'] != 'PLATEAU']
+            if a.plateau_pct is not None and (growing or not rows):
+                fails.append(f'stored data not at a plateau (the last third of the load grows by more than '
                              f'{a.plateau_pct} % of the peak): {growing or "no samples"}')
         return ('FAIL' if fails else 'PASS'), fails, m
 

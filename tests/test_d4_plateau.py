@@ -125,6 +125,9 @@ try:
     print(f'RSS over the {LOAD_S:.0f} s load ({"enforced" if PLATEAU else "reported"}, criterion '
           f'{PLATEAU_PCT:.0f} % of the peak over the last third):')
     print(d4_progress.rss_plateau.format_rows(rows))
+    print('Stored data per node (quota usage; same criterion, GC records pending at most '
+          f'{m.get("gc_pending_max")}):')
+    print(d4_progress.rss_plateau.format_rows(m.get('space_plateau') or []))
     assert rc == 0, f'D4 driver: {doc["verdict"]}: {doc["reason"]}\n' + json.dumps(m, indent=1)[:4000]
     ws = m['working_set']
     assert ws['created'] == ws['live'] == THREADS * WORKING_SET, ws

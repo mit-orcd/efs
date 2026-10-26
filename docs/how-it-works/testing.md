@@ -202,7 +202,11 @@ the sanitized binaries. `make sanitize-check` runs both.
   least-squares slope over the last third of the load, times its span, is
   at most 5 % of the peak. The table is
   printed on every run and enforced from a 600 s load (`EFS_D4_PLATEAU=1`
-  forces it). The F1 measurement is
+  forces it); the same rule applies to every node's stored data
+  (`efs-mgmt gc-status` data_usage_bytes), and on every run the orphan
+  ledger's abandoned uploads after the load must stay at most 5 % of the
+  rewrites (an abandoned upload is collectable only when its mount's
+  session ends). The F1 measurement is
   `EFS_D4_LOAD_S=3600 EFS_D4_SET=256 EFS_D4_QUOTA=8G python3 tests/test_d4_plateau.py`
   ([evidence](../status/f1-followups-20261025.md); drain within the default
   150 s since the duplicate-candidate fix, [evidence](../status/d4-pack-drain-20261025.md)).

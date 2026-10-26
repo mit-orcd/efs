@@ -22362,7 +22362,8 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
     struct efs_meta_pub p;
     struct efs_meta_row row;
     struct efs_meta_chunk got;
-    uint32_t lsh, ish;
+    uint32_t lsh, ish, uncond_n = 0;
+    uint64_t uncond_seq = 0;
     uint8_t lane, lg, ig;
     int rc, i;
 
@@ -22517,6 +22518,24 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
             rc = EFS_OK;
         else if (rc != EFS_OK)
             return rc;
+        /* An unconditional (aligned, last-writer-wins) image contains none
+         * of the old bytes, so it replaces whatever span list is live, as
+         * it replaces whatever base is committed (expected_gen below). The
+         * client's list is its own view and is stale after a truncate:
+         * the full image of the previous write's tail chunk then failed
+         * the fold check (FOLD_LIST), its whole multi-chunk unit with it,
+         * and every chunk was uploaded again. Each first upload became an
+         * abandoned upload, collectable only when the mount's session
+         * ends: the D4 rewrite load's stored data grew all run (ENOSPC at
+         * 45 min on amd). */
+        if (rec->base_gen == EFS_CHUNK_BASE_UNCOND && !rec->delta_len) {
+            rc = efs_meta_apply_get_chunk_deltas(h->kv, rec->ino, rec->chunk_index, NULL, 0,
+                                                 &uncond_n, &uncond_seq);
+            if (rc == EFS_ERR_NOT_FOUND)
+                rc = EFS_OK;
+            else if (rc != EFS_OK)
+                return rc;
+        }
         if (got.generation != 0 &&
             (!(rec->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
              got.generation == rec->chunk_generation) &&
@@ -22574,8 +22593,8 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
     memcpy(p.ch.checksums, rec->checksums, sizeof(p.ch.checksums));
     p.delta_off = rec->delta_off;
     p.delta_len = rec->delta_len;
-    p.delta_base_n = rec->delta_base_n;
-    p.delta_base_seq = rec->delta_base_seq;
+    p.delta_base_n = rec->base_gen == EFS_CHUNK_BASE_UNCOND ? uncond_n : rec->delta_base_n;
+    p.delta_base_seq = rec->base_gen == EFS_CHUNK_BASE_UNCOND ? uncond_seq : rec->delta_base_seq;
     p.inode_gen = rec->file_generation; /* the ticket FileID, checked above */
     if (lg != ig) {
         /* Lane-local: the lane group's KV has no inode row. The FileID

@@ -62,6 +62,22 @@ def from_samples(samples):
     return series
 
 
+def space_from_samples(samples):
+    """{'data:<node>': [(seconds, kib), ...]}: each node's quota usage
+    (`efs-mgmt gc-status` data_usage_bytes) from the D4 driver's samples, in
+    KiB so evaluate() reads it like RSS."""
+    series = OrderedDict()
+    t0 = None
+    for s in samples:
+        t = s.get('t') or s.get('elapsed_s') or 0
+        t0 = t if t0 is None else t0
+        for n, b in (s.get('nodes') or {}).items():
+            v = (b or {}).get('data_bytes')
+            if v is not None:
+                series.setdefault('data:' + str(n), []).append((t - t0, v // 1024))
+    return series
+
+
 def from_json(path):
     doc = json.loads(Path(path).read_text())
     return from_samples(doc if isinstance(doc, list) else doc.get('samples', []))
