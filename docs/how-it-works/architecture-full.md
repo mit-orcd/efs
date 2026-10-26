@@ -1599,12 +1599,13 @@ full acceptance are separate states.
 ### Recent evidence and remaining acceptance
 
 [D4 reclaim lag: abandoned uploads from refused unconditional images](../status/d4-reclaim-20261026.md):
-**branch `claude/interesting-mclean-65362a`, not merged, not pushed; fix `66bfc2786`; xorinox `make test-all` 8-job pool at `d5f492d31`: 500 commands, 0 FAIL, 13 NOTRUN host limits (1 OVERBUDGET, `posix_expiry.py`, untouched); intel1 60-minute run: stored data bounded at 118–278 MiB per node (was linear to 4.2 GiB), drain 72.4 s, 0 put errors.**
+**branch `claude/interesting-mclean-65362a` (devel wave 13 merged at `ed01bb005`), not merged, not pushed; head `988efba3e`: intel1 `make test-all` 8-job pool twice, 506 commands, 0 FAIL, 14 NOTRUN host limits (565 s, 684 s); K36 and K38 5 of 5 each. 60-minute run at `acb8a7318`: PASS on every check, 41 abandoned uploads (was 610 at `66bfc2786`, linear quota growth to 4.2 GiB before).**
 The quota growth under the D4 rewrite load came from abandoned uploads, which D31 collects only when the mount's session
-ends. Each resizing rewrite abandoned its whole first upload: the REPORT host passed the client's post-truncate span list with an
-unconditional tail image and the fold check refused the unit. The host now takes that list from the committed row (probe:
-1182 → 7 abandoned). The D4 driver bounds abandoned uploads (5 % of the rewrites) and stored data (peak rule). Open: about 3.5 %
-of `O_TRUNC` overwrites still abandon an upload (about 27 MiB per node per hour, held until unmount).
+ends. Resizing rewrites abandoned their first upload when the REPORT host refused the previous tail image (stale span list,
+`66bfc2786`), and when the D25 sweep zeroed a base the writer's own truncate had masked (`acb8a7318`: unconditional publications
+replace the committed base, captured records publish on a swept base, sweeps wait 2 s). The wave-13 merge gate found that an
+unconditional image could drop another writer's span (K38); narrowed in `988efba3e`. The D4 driver bounds abandoned uploads and
+stored data. Open: a live mount's abandoned uploads still wait for its unmount (D31 epoch rotation).
 
 [D4 drain after a rewrite load and packer put errors at a high rewrite rate](../status/d4-pack-drain-20261025.md):
 **branch `claude/interesting-mclean-65362a` (F1 follow-ups merged), not merged, not pushed; xorinox `make test-all` 8-job pool at `9670b895b`: 500 commands, 0 FAIL, 13 NOTRUN host limits, 760 s; intel1 60-minute run: drain 54.5 s ≤ 150, 0 put errors (RSS criterion FAIL on one efs-fuse, F1).**
