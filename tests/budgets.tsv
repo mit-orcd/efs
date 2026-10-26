@@ -82,3 +82,6 @@ python3 tests/test_create_retry_ack.py	5	1
 python3 tests/test_apply_ring.py	5	1	
 python3 tests/test_posix_phase_trace.py	5	1	
 python3 tests/test_sanitizer_gate.py	120	1	
+python3 tests/test_k22_snapshot_import.py	380	2	drives both groups four snapshot windows past a stopped follower before the install can fire (~230 s of load), then verifies catch-up, RSS and byte-exact read-back
+python3 tests/test_k22_leader_admission.py	290	2	fills the leader's small KV budget past the admission watermark (organically, ~190 s), then proves the move, the drain and clean client service
+python3 tests/test_w130_dir_fault.py	190	2	
