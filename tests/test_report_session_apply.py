@@ -18,6 +18,7 @@ code=r'''
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_F_FRESH_OBJECT 2
 #define HOST_PUB_F_TICKETED 4
+#define HOST_PUB_F_UNCONDITIONAL 8
 #define HOST_PUB_F_MISSING_SHIFT 4
 #define HOST_PUB_F_MISSING_MASK (7u << HOST_PUB_F_MISSING_SHIFT)
 #define HOST_PUB_F_REJECT_GONE 128
@@ -51,8 +52,10 @@ int main(void){struct efs_raft_host h={0};enum{R0=21,R1=21+HOST_REPORT_REC_LEN};
   * unknown flag) refuses the whole frame before any effect. */
  cmd[R1+HOST_PUBLISH_LEN-1]=HOST_PUB_F_FRESH_OBJECT;assert(apply_report_publish_cmd(&h,cmd,sizeof(cmd),0)==EFS_ERR_PROTO && !effects);
  cmd[R1+HOST_PUBLISH_LEN-1]=HOST_PUB_F_TICKETED;assert(apply_report_publish_cmd(&h,cmd,sizeof(cmd),0)==EFS_ERR_PROTO && !effects);
- cmd[R1+HOST_PUBLISH_LEN-1]=HOST_PUB_F_TICKETED|HOST_PUB_F_FRESH_OBJECT|8;assert(apply_report_publish_cmd(&h,cmd,sizeof(cmd),0)==EFS_ERR_PROTO && !effects);
- cmd[R1+HOST_PUBLISH_LEN-1]=HOST_PUB_F_TICKETED|HOST_PUB_F_FRESH_OBJECT;
+ /* Bit 8 carries efs_meta_pub.unconditional on a ticketed record. */
+ cmd[R1+HOST_PUBLISH_LEN-1]=HOST_PUB_F_TICKETED|HOST_PUB_F_FRESH_OBJECT|HOST_PUB_F_UNCONDITIONAL;
+ assert(!apply_report_publish_cmd(&h,cmd,sizeof(cmd),0) && effects==2 && holds==1 && releases==1);
+ cmd[R1+HOST_PUBLISH_LEN-1]=HOST_PUB_F_TICKETED|HOST_PUB_F_FRESH_OBJECT;effects=0;holds=releases=0;
  assert(!apply_report_publish_cmd(&h,cmd,sizeof(cmd),0) && effects==2 && holds==1 && releases==1);
  /* W154 missing mask rides a ticketed record; two missing bits never do. */
  cmd[R1+HOST_PUBLISH_LEN-1]|=16;assert(!apply_report_publish_cmd(&h,cmd,sizeof(cmd),0) && effects==4);
