@@ -124,6 +124,32 @@ void efs_client_conn_init(void)
     conn_pool_inited = 1;
 }
 
+/* F1: a pool never shrank, so one stall kept every connection it opened,
+ * and each holds a server connection thread with its stack and request
+ * buffers (efsd RSS stepped up with them and stayed). An idle connection
+ * has no owner and last_ok_ms is its last completed send or receive:
+ * close it after EFS_CLIENT_CONN_IDLE_MS, scanning at most once a second
+ * per node. Checkout takes the lowest free slot, so the slots a burst
+ * added go idle first. conn_lock[idx] held. */
+#define EFS_CLIENT_CONN_IDLE_MS 30000
+static int64_t conn_reaped_ms[EFS_MAX_NODES];
+
+static void conn_reap_idle_locked(int idx, int64_t now)
+{
+    if (now - conn_reaped_ms[idx] < 1000)
+        return;
+    conn_reaped_ms[idx] = now;
+    int n = pool_size();
+    for (int s = 0; s < n; s++) {
+        struct efs_conn *c = g_client.conn[idx][s];
+        if (!c || g_client.conn_busy[idx][s] || !c->last_ok_ms ||
+            now - c->last_ok_ms <= EFS_CLIENT_CONN_IDLE_MS)
+            continue;
+        efs_conn_destroy(c);
+        g_client.conn[idx][s] = NULL;
+    }
+}
+
 static int slot_for_conn(uint32_t idx, struct efs_conn *conn)
 {
     int n = pool_size();
@@ -675,32 +701,6 @@ static void node_probe_maybe_start(int idx, int64_t now)
     else
         free(p);
     pthread_attr_destroy(&attr);
-}
-
-/* F1: a pool never shrank, so one stall kept every connection it opened,
- * and each holds a server connection thread with its stack and request
- * buffers (efsd RSS stepped up with them and stayed). An idle connection
- * has no owner and last_ok_ms is its last completed send or receive:
- * close it after EFS_CLIENT_CONN_IDLE_MS, scanning at most once a second
- * per node. Checkout takes the lowest free slot, so the slots a burst
- * added go idle first. conn_lock[idx] held. */
-#define EFS_CLIENT_CONN_IDLE_MS 30000
-static int64_t conn_reaped_ms[EFS_MAX_NODES];
-
-static void conn_reap_idle_locked(int idx, int64_t now)
-{
-    if (now - conn_reaped_ms[idx] < 1000)
-        return;
-    conn_reaped_ms[idx] = now;
-    int n = pool_size();
-    for (int s = 0; s < n; s++) {
-        struct efs_conn *c = g_client.conn[idx][s];
-        if (!c || g_client.conn_busy[idx][s] || !c->last_ok_ms ||
-            now - c->last_ok_ms <= EFS_CLIENT_CONN_IDLE_MS)
-            continue;
-        efs_conn_destroy(c);
-        g_client.conn[idx][s] = NULL;
-    }
 }
 
 struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
