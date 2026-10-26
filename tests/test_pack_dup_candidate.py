@@ -16,13 +16,15 @@ file again. Leases were not involved: the lag counts only lease-free,
 quiet candidates.
 
 Three efsd and one efs-fuse on loopback (free ports, stores under TMPDIR),
-EFS_PACK_MIN_AGE_MS=MIN_AGE_S. FILES small files are written late in one
-epoch and rewritten in place early in the next, inside the minimum age, so each has
-two candidate entries when it becomes quiet. The test then requires the
-pack backlog of every led group to reach 0 within BOUND_S of the files
-becoming quiet, files_packed to count every file once, no packer put or
-read errors, and every file to read back with its rewritten content. On
-the unfixed server the backlog stays at 2 x FILES (3 of 3 runs fail).
+EFS_PACK_MIN_AGE_MS=MIN_AGE_S. FILES small files are written, then
+rewritten in place every ROUND_S (inside the minimum age, so they never
+become quiet) until a round has run wholly in a later epoch than an
+earlier round: each file then has two candidate entries when it becomes
+quiet. The test requires the pack backlog of every led group to reach 0
+within BOUND_S of the files becoming quiet, files_packed to count every
+file once, no packer put or read errors, and every file to read back with
+its last content. On the unfixed server the backlog stays at 2 x FILES
+(4 of 4 runs fail, one with this version of the test).
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, time
@@ -38,7 +40,8 @@ if not fuse_ok():
     sys.exit(0)
 EPOCH_S = 60                 # EFS_PACK_EPOCH_S
 FILES = 24
-MIN_AGE_S = 30
+MIN_AGE_S = 8
+ROUND_S = 2
 BOUND_S = 20.0 * SLOW
 work = Path(tempfile.mkdtemp(prefix='efs-pdc-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
@@ -75,18 +78,22 @@ try:
     d = m.path / 'd'
     d.mkdir()
     names = [d / f'f{i}' for i in range(FILES)]
-    # Late in an epoch, and early enough that the rewrite in the next one
-    # lands inside the minimum age of the first write.
-    wait_epoch_second(EPOCH_S - 18, EPOCH_S - 14)
-    first = time.time()
-    for p in names:
-        p.write_bytes(payload(p.name + '.v1', 2048))
-    assert time.time() - first < 12, 'the first writes crossed into the next epoch'
-    wait_epoch_second(1, 6)
-    assert time.time() - first < MIN_AGE_S - 2, 'the rewrite missed the minimum age of the first write'
-    for p in names:                 # in place: an O_TRUNC would show the packer size 0
-        with open(p, 'r+b') as f:
-            f.write(payload(p.name + '.v2', 2048))
+    first_epoch, v = None, 0
+    while True:
+        v += 1
+        start = time.time()
+        for p in names:             # in place after the first: an O_TRUNC would show the packer size 0
+            with open(p, 'r+b' if v > 1 else 'wb') as f:
+                f.write(payload(f'{p.name}.v{v}', 2048))
+        end = time.time()
+        assert end - start < MIN_AGE_S - ROUND_S, f'a round of writes took {end - start:.1f} s'
+        epoch = int(start // EPOCH_S)
+        if epoch == int(end // EPOCH_S):        # the round lies in one epoch
+            if first_epoch is None:
+                first_epoch = epoch
+            elif epoch != first_epoch:
+                break
+        time.sleep(max(0.0, start + ROUND_S - time.time()))
     quiet = time.time() + MIN_AGE_S
     time.sleep(2)                   # a packer pass recounts the index
     backlog, before = pack(c)
@@ -107,8 +114,8 @@ try:
     assert packed == FILES, f'files_packed {packed}, want {FILES}'
     assert not tot['put_errors'] and not tot['read_errors'], f'packer errors: {tot}'
     for p in names:
-        assert p.read_bytes() == payload(p.name + '.v2', 2048), f'{p} differs'
-    print(f'{FILES} files with two candidate entries each: backlog 0 {waited} s after quiet '
+        assert p.read_bytes() == payload(f'{p.name}.v{v}', 2048), f'{p} differs'
+    print(f'{FILES} files with two candidate entries each ({v} rounds): backlog 0 {waited} s after quiet '
           f'(bound {BOUND_S}), {packed} packed, 0 put/read errors, contents exact PASS')
 finally:
     for mt in mounts:
