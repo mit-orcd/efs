@@ -19,7 +19,7 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [efsd RSS plateau under the fixed-working-set D4 load (F1 follow-ups item 2)](efsd-rss-plateau-20261025.md):
-**branch `claude/wizardly-mcclintock-0e2efd`, not merged, not pushed; RSS plateau PASS on one 60-minute run at `66a3a4024` (xorinox: efsd +0.6 / −0.8 / −0.1 %, efs-fuse +0.0 / +3.6 %; the D4 run itself FAIL on one truncate EIO, not memory); FAIL on every nuc run. xorinox at `66a3a4024`: `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47, `make test-all` 481 commands, 2 FAIL (the K33 degraded-read EIO intermittent, which fails on the base too), 14 NOTRUN host limits.**
+**branch `claude/wizardly-mcclintock-0e2efd`, not merged, not pushed; RSS plateau PASS on one 60-minute run at `66a3a4024` (xorinox: efsd +0.6 / −0.8 / −0.1 %, efs-fuse +0.0 / +3.6 %; the D4 run itself FAIL on one truncate EIO, not memory); FAIL on every nuc run. xorinox at `66a3a4024`: `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47, `make test-all` 481 commands, 2 FAIL (K33 read EIO under the pool: `test_k33_payload.py` fails 1 of 3 alone on the base too; `test_k33_growth.py` did not reproduce), 14 NOTRUN host limits.**
 The connection-thread hypothesis is refuted as the main cause (about 0.15 MiB per thread), but no pool
 ever closed an idle connection; both pools now close one after 30 s idle. Bounded: the reclaim journal
 ring, whose pages were never released (half the baseline's growth), and the packer's compaction
