@@ -10341,7 +10341,10 @@ both. Gate: `make test` on efs3, in the K25 report.
   replica neither serves nor steps aside.
 - Reproduced on xorinox loopback in gate runs 11/13/14/21 (kept forensics
   under the test work dirs there); the deterministic apply-path case halts
-  and recovers as designed.
+  and recovers as designed. Worse under load: in the full-gate run
+  (case-444) a create racing the halt never answered and the FUSE worker
+  pool pinned every later op in D-state until the 900 s command timeout —
+  the serve path must answer (an error), never hold the request forever.
 - Fix direction: route decode failures on the serve path (lane pick and
   pre-propose row reads) through the same halt, or make the client
   re-resolve and ride out the halted leader; decide which.
