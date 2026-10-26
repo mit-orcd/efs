@@ -32,7 +32,10 @@ client's resend lost its CAS against them and the writer got `EBUSY`
 passed before it; the retained stores read all 512 acknowledged versions and
 3,379 appends exact; every qualifying RSS window PASS, role coverage NOTRUN.
 Earlier attempts: intel2 interrupted at 2,768 s and nuc attempt08 at 9 m 52 s
-by other sessions' builds (environmental). GATE_README Raw: nuc
+by other sessions' builds (environmental). nuc `make test-all` (8 jobs): candidate `08c949ea0` 502
+commands, 2 FAIL, 15 NOTRUN; base `39a1cbbbc` 502, 4 FAIL, 15 NOTRUN; both
+candidate failures (`test_k41_packer_placement`, `test_k38_shared_chunk_pressure`)
+also fail on the base: no candidate-only failure. Raw: nuc
 `~/efs-artifacts/task-d-20261025-nuc2/`, intel2
 `~/efs-artifacts/task-d-20261025-intel2/`.
 

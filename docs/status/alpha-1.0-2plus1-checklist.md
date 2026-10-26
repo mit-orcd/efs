@@ -804,7 +804,8 @@ facts for A6, not decisions.
   seven exact two-mount verifications passed before it, and the retained
   stores read every acknowledged version exact. A harness defect (a
   returning member's documented "not indexed yet") was fixed on the way.
-  GATE_E4 The `soak` plugin's default is its own loopback fixture, not
+  nuc `make test-all`: candidate 502/2 FAIL/15 NOTRUN, base `39a1cbbbc`
+  502/4/15, no candidate-only failure. The `soak` plugin's default is its own loopback fixture, not
   qualification of a parent real-host topology.
 - [ ] **E5** Moved to Stage 3 as **P1**.
 
