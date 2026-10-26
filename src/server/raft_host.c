@@ -11195,10 +11195,15 @@ static int host_gc_expiry_groups(struct efs_raft_host *h)
  * empty history. Per inode: sweep each active lane not yet done for the
  * newest entry T (TRUNC_SWEEP on its group), record lanes whose applied
  * stamp shows swept_epoch >= T (SWEEP_DONE), and retire T once every active
- * lane is done. Bounded per pass; a restart rediscovers the work from the
- * committed keys. Needs both groups local to read lane stamps. */
-#define TRUNC_PASS_INODES 16u
-#define TRUNC_PASS_PROPOSALS 64u
+ * lane is done. The proposals return once the local replica applied them,
+ * so one pass takes an inode through all three steps, 32 inodes a pass:
+ * 16 inodes over three passes retired about 5 a second, a 75 s rewrite
+ * load left ~600 for the drain (each sweep a metadata change the index
+ * waited for) and a faster host's backlog grew for the whole run (D4).
+ * Bounded per pass; a restart rediscovers the work from the committed keys.
+ * Needs both groups local to read lane stamps. */
+#define TRUNC_PASS_INODES 32u
+#define TRUNC_PASS_PROPOSALS 128u
 struct trunc_scan_ctx { efs_ino_t ino[TRUNC_PASS_INODES]; uint64_t gen[TRUNC_PASS_INODES]; uint32_t n; };
 static int trunc_scan_cb(void *user, const uint8_t *key, uint32_t klen,
                          const uint8_t *val, uint32_t vlen)
@@ -11268,15 +11273,8 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
             if (hist.entries[hist.count - 1].done & (1ull << lane))
                 continue;
             pending |= 1ull << lane;
-            if (efs_meta_get_lane_swept(h->kv, c.ino[i], row.generation, lane, &swept) == EFS_OK &&
-                swept >= target) {
-                cmd[0] = EFS_MD_CMD_SWEEP_DONE;
-                wr64be(cmd + 1, c.ino[i]);
-                wr64be(cmd + 9, row.generation);
-                cmd[17] = lane;
-                wr64be(cmd + 18, target);
-                (void)host_gc_propose(h, ig, cmd, 26);
-            } else {
+            if (efs_meta_get_lane_swept(h->kv, c.ino[i], row.generation, lane, &swept) != EFS_OK ||
+                swept < target) {
                 cmd[0] = EFS_MD_CMD_TRUNC_SWEEP;
                 wr64be(cmd + 1, c.ino[i]);
                 wr64be(cmd + 9, row.generation);
@@ -11288,9 +11286,21 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
                     wr64be(cmd + 31 + 16 * k, hist.entries[k].epoch);
                     wr64be(cmd + 39 + 16 * k, hist.entries[k].size);
                 }
-                (void)host_gc_propose(h, efs_raft_shard_group(efs_kv_lane_shard(c.ino[i], lane)),
-                                      cmd, 31 + 16 * hist.count);
+                int src = host_gc_propose(h, efs_raft_shard_group(efs_kv_lane_shard(c.ino[i], lane)),
+                                          cmd, 31 + 16 * hist.count);
+                budget--;
+                if (src != EFS_OK || !budget ||
+                    efs_meta_get_lane_swept(h->kv, c.ino[i], row.generation, lane, &swept) != EFS_OK ||
+                    swept < target)
+                    continue;
             }
+            cmd[0] = EFS_MD_CMD_SWEEP_DONE;
+            wr64be(cmd + 1, c.ino[i]);
+            wr64be(cmd + 9, row.generation);
+            cmd[17] = lane;
+            wr64be(cmd + 18, target);
+            if (host_gc_propose(h, ig, cmd, 26) == EFS_OK)
+                pending &= ~(1ull << lane);
             budget--;
         }
         if (!pending && budget) {
