@@ -18,6 +18,8 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Wave 13 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`899c0a2e0`; gate at the same commit)**: K42/W164 ([evidence](e2-clean-stop-busy-20261025.md): a clean unmount repeats certified no-op cleanup waits instead of failing on one BUSY, the stop names its shard and the server's reason; 20 of 20 clean stops), Task D's endurance acceptance ([evidence](task-d-20261025.md): rehearsal PASS on intel2 and nuc, four-hour soak FAIL at 7,195 s on **K43** (blocks alpha), harness fixes for a returning member's not-indexed query answer and the soak tables), and the efsd RSS plateau work ([evidence](efsd-rss-plateau-20261025.md): idle connection reaping in both pools, the reclaim journal ring releases pages, segment reads and compaction in one mapping; plateau PASS on one 60-minute xorinox run). intel2 `make test-all` (8 jobs): 504 commands in 632 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits. **Held back:** the D4 drain and reclaim branch `claude/interesting-mclean-65362a` (`eec27ed50`; [drain](d4-pack-drain-20261025.md), [reclaim](d4-reclaim-20261026.md)): with it merged the same gate failed twice with different writers' errors under the 8-job pool (`test_k38_shared_chunk_pressure.py` writer `EIO`, then `test_k36_recovery.py` step 8 `mkdir` `EBUSY` after a member kill), both passing alone; without it 0 FAIL. Its publish and truncate-sweep changes are to be re-gated on their own branch (intel2 `~/efs-artifacts/merge-wave13-20261026/held-back/`).
+
 [Task D: seeded member-churn endurance](task-d-20261025.md):
 **four-hour soak FAIL on EFS finding K43; branch
 `claude/stoic-goldwasser-06dbca`, not merged or pushed.** devel `39a1cbbbc`
