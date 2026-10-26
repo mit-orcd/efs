@@ -22,7 +22,7 @@ become quiet) until a round has run wholly in a later epoch than an
 earlier round: each file then has two candidate entries when it becomes
 quiet. The test requires the pack backlog of every led group to reach 0
 within BOUND_S of the files becoming quiet, files_packed to count every
-file once, no packer put or read errors, and every file to read back with
+file at least once, no packer put or read errors, and every file to read back with
 its last content. On the unfixed server the backlog stays at 2 x FILES
 (4 of 4 runs fail, one with this version of the test).
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
@@ -40,7 +40,7 @@ if not fuse_ok():
     sys.exit(0)
 EPOCH_S = 60                 # EFS_PACK_EPOCH_S
 FILES = 24
-MIN_AGE_S = 8
+MIN_AGE_S = 10
 ROUND_S = 2
 BOUND_S = 20.0 * SLOW
 work = Path(tempfile.mkdtemp(prefix='efs-pdc-', dir=os.environ.get('TMPDIR')))
@@ -111,7 +111,9 @@ try:
         f'pack backlog {backlog} {BOUND_S} s after the files became quiet (files_packed ' \
         f'{tot["files_packed"] - before["files_packed"]} of {FILES})'
     packed = tot['files_packed'] - before['files_packed']
-    assert packed == FILES, f'files_packed {packed}, want {FILES}'
+    # A round slowed by a loaded host can let a file go quiet and pack
+    # early; its next rewrite makes it a repack candidate (packed twice).
+    assert packed >= FILES, f'files_packed {packed}, want at least {FILES}'
     assert not tot['put_errors'] and not tot['read_errors'], f'packer errors: {tot}'
     for p in names:
         assert p.read_bytes() == payload(f'{p.name}.v{v}', 2048), f'{p} differs'

@@ -213,7 +213,7 @@ the sanitized binaries. `make sanitize-check` runs both.
 - **Pack duplicate candidate (D4).** `tests/test_pack_dup_candidate.py`
   rewrites small files in place across a pack-epoch boundary inside the
   minimum age, so each has two candidate entries, and requires the backlog
-  to reach 0 within 20 s of the files becoming quiet (rewritten every 2 s across the boundary, minimum age 8 s).
+  to reach 0 within 20 s of the files becoming quiet (rewritten every 2 s across the boundary, minimum age 10 s).
 
 ## Current release acceptance and local POSIX suites
 

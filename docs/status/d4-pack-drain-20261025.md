@@ -65,7 +65,7 @@ unindexed. A refused build is logged (`packer: segment gN of N files not
 built (rc=...)`).
 
 **Test** `tests/test_pack_dup_candidate.py` (`make test-long`): three efsd
-and one efs-fuse on loopback, packer minimum age 8 s. 24 small files are
+and one efs-fuse on loopback, packer minimum age 10 s. 24 small files are
 rewritten in place every 2 s until a round lies wholly in a later epoch
 than an earlier round, so each file has two candidate keys. The test
 requires the backlog to reach 0 within 20 s of the files becoming quiet,
