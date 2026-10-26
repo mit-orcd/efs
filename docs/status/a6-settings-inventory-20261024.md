@@ -120,6 +120,11 @@ more refused name; with it, A/B behavior selectors are 15 → 0 and reachable A/
 No product setting was added: the stop record and the parallel revoke have
 no switch or tunable.
 
+**Oct 25, K42 clean stop on a healthy cluster:** one fault hook more in
+`EFS_FAULTS` builds, `EFS_FAULT_APPEND_HOLD_FILE`
+([evidence](e2-clean-stop-busy-20261025.md)). No product setting was added:
+the per-shard cleanup budget (20 s) is a constant.
+
 Reachable configurations: the 15 binary A/B selectors (13 environment, 2
 CLI) allow up to 2^15 = 32,768 combinations, before transport (`auto`, `tcp`,
 `rdma`) and the 33 numeric tunables. This counts switches, not tested
@@ -345,6 +350,7 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
+| `EFS_FAULT_APPEND_HOLD_FILE` | `server/raft_host.c` (host_fault_append_hold) | off; while the named file holds an inode number, a REPORT does not resolve that inode's OPEN append reservations (a foreign OPEN another session's revoke cleanup must wait for); while it reads `cleanup`, every revoke append cleanup step answers that wait (K42: a clean unmount on a healthy cluster) | fault/test hook | — | `test_k42_peer_stop_open.py` | Keep in `EFS_FAULTS` builds (K42) |
 | `EFS_FAULT_APPEND_LOSE_EVERY` | `client/inode_rpc.c:2611` (append_reply_fault) | off; drop every Nth APPEND reservation reply | fault/test hook | — | `append_failover.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_APPEND_LOSE_MAX` | `client/inode_rpc.c:2612` (append_reply_fault) | off; cap on dropped APPEND replies (4) | fault/test hook | — | `append_failover.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_COMPACT_DIE` | `kv/kv_compact.c:51` (compact_maybe_die) | off; `_exit(99)` after the Nth compaction output | fault/test hook | — | `test_kv_compact_crash.c`, `test_faults_env_ignored.py` | Keep in `EFS_FAULTS` builds |
@@ -361,14 +367,14 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_L0_BYTES` | `kv/kv_lsm.c:1435` (efs_kv_lsm_open) | off; KV L0 cap override | fault/test hook | — | `k22_follower_bound.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_DECIDE_LOST` | `server/raft_host.c` (host_decide_lost_fault) | off; the next multi-part DECIDE COMMIT steps its coordinator-group leader down and is not proposed (NOT_PRIMARY), one-shot until `<file>.ready` is removed (A11 finding 2) | fault/test hook | — | `test_report_stepdown.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_LOOKUP_BARRIER` | `client/efs_fuse.c:5755` (lookup_reply_barrier) | off; park a LOOKUP reply at a barrier directory | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
-| `EFS_FAULT_MEMBER_EXIT` | `server/cluster.c:298` (server_test_member_exit) | off; `_exit(86)` at a named K33 handoff point (was `EFS_TEST_MEMBER_EXIT`) | fault/test hook | — | `k33_daemons.py`, `test_k33_autoid.py` +7 | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_MEMBER_EXIT` | `server/cluster.c:308` (server_test_member_exit) | off; `_exit(86)` at a named K33 handoff point (was `EFS_TEST_MEMBER_EXIT`; `before-identity` and `before-hello` added by the K33 join retry, `member_store.c` reaches the hook through `member_store_fault_exit`) | fault/test hook | — | `k33_daemons.py`, `test_k33_autoid.py` +9 | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUT_BUSY_FILE` | `server/put_upload.c` (put_test_busy) | off; this member answers fragment PUTs BUSY while the named file exists (K34; was `EFS_TEST_PUT_BUSY_FILE` on its branch) | fault/test hook | — | `test_k34_stop_put.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUT_STOP_AFTER` | `server/put_upload.c` (put_test_stop_after_store) | off; SIGTERM on this member right after its n-th stored fragment (K34; was `EFS_TEST_PUT_STOP_AFTER` on its branch) | fault/test hook | — | `test_k34_stop_put.py` | Keep in `EFS_FAULTS` builds |
-| `EFS_FAULT_MEMBER_EXIT_ONCE` | `server/cluster.c:298` (server_test_member_exit) | off; one-shot prefix for `EFS_FAULT_MEMBER_EXIT` (was `EFS_TEST_MEMBER_EXIT_ONCE`) | fault/test hook | — | `test_k33_interrupt.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_MEMBER_EXIT_ONCE` | `server/cluster.c:308` (server_test_member_exit) | off; one-shot prefix for `EFS_FAULT_MEMBER_EXIT` (was `EFS_TEST_MEMBER_EXIT_ONCE`) | fault/test hook | — | `test_k33_interrupt.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_MEMTABLE_BYTES` | `kv/kv_lsm.c:1443` (efs_kv_lsm_open) | off; KV memtable size override | fault/test hook | — | `k22_follower_bound.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PACK_CRASH` | `server/packer.c:138` (server_pack_crash_point) | off; `_exit(137)` at a packer crash point (was `EFS_PACK_CRASH`) | fault/test hook | — | `w125_p7_crash.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PACK_CRASH_NODE` | `server/packer.c:138` (server_pack_crash_point) | off; restrict the pack crash to one node (was `EFS_PACK_CRASH_NODE`) | fault/test hook | — | `w125_p7_crash.sh` | Keep in `EFS_FAULTS` builds |
-| `EFS_FAULT_PACK_PLACE_DOWN` | `server/packer.c` (pk_group) | off; place segments on that node id even while the heartbeat marks it down, so its PUT fails and the segment is written with two fragments (K37) | fault/test hook | — | `test_k37_segment_rebuild.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_PACK_PLACE_DOWN` | `server/packer.c` (pk_group) | off; place segments on that node id even while it is marked down: its placement probe fails and a live spare takes the fragment (K41), or with no spare left its PUT fails and the segment is written with two fragments (K37) | fault/test hook | — | `test_k37_segment_rebuild.py`, `test_k41_packer_placement.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUBLICATION_APPLY_FILE` | `server/raft_host.c:3373` (host_apply) | off; refuse PUBLICATION at apply (marker) | fault/test hook | — | `publication_pending.c`, `publication_pending.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_FWD_TXN_STALE` | `server/raft_host.c` (server_raft_host_submit) | off; a leader answers the next forwarded TXN_BATCH STALE after it applied, once per `<dir>/stale-<node id>` (F1 follow-up) | fault/test hook | — | `test_pub_unit_forward_abort.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUB_BARRIER` | `server/raft_host.c:17070` (host_pub_fault) | off; park publication at a named stage | fault/test hook | — | `k14_atomic_cluster.sh` | Keep in `EFS_FAULTS` builds |
@@ -384,7 +390,7 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_REPORT_FILE` | `client/write.c:1697` (report_fault_withhold) | off; REPORT withhold control file | fault/test hook | — | `gc_reclamation.py`, `rdma_four_node_qualification.sh`; `intel_w100_private.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_REPORT_SIZE_FILE` | `client/inode_rpc.c:3199` (report_fault_omit_size) | off; omit one REPORT size | fault/test hook | — | `rdma_four_node_qualification.sh`; `intel_w100_private.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_SEGMENT_PUT_STALE` | `server/packer.c` (pk_stale_fault) | off; directory: the packer's next pooled connection to node N fails once while `<dir>/stale-<N>` exists (consumed; K38) | fault/test hook | — | `test_k38_protection_now.py` | Keep in `EFS_FAULTS` builds |
-| `EFS_FAULT_SEGMENT_PUT_REFUSE` | `server/segment_store.c` (server_segment_put) | off; directory: this member refuses the packer's segment PUTs while `<dir>/refuse-<node id>` exists (K37) | fault/test hook | — | `test_k37_segment_rebuild.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_SEGMENT_PUT_REFUSE` | `server/segment_store.c` (server_segment_put) | off; directory: this member refuses the packer's segment PUTs while `<dir>/refuse-<node id>` exists (K37; K41: the packer places the files again on live spares) | fault/test hook | — | `test_k37_segment_rebuild.py`, `test_k41_packer_placement.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_SEGMENT_PUT_TRANSIENT` | `server/segment_store.c` (server_segment_put) | off; directory: this member refuses one segment PUT NOT_PRIMARY while `<dir>/transient-<node id>` exists, consuming the flag; a flag holding a number N refuses every PUT for N ms (the packer's time-bounded resend, K37 cases 1b and 1c) | fault/test hook | — | `test_k37_segment_rebuild.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_SEGMENT_REBUILD_HOLD` | `server/segment_rebuild.c` (sr_one) | off; segment rebuilds wait while the named file exists (K37) | fault/test hook | — | `test_k37_segment_rebuild.py`, `test_k36_segment_recovery.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_SHUTDOWN_PARK` | `server/efsd.c:285` (server_shutdown_fault_park) | off; park a shutdown phase | fault/test hook | — | `test_shutdown_blocked_io.py`, `test_shutdown_bounded.py` +1; `gates_nuc_k01_stop.sh` | Keep in `EFS_FAULTS` builds |

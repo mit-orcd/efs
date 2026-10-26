@@ -42,6 +42,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <time.h>
@@ -363,6 +364,52 @@ static int seg_open_locked(void)
 }
 
 static struct rj_rec *rec_at(uint64_t i) { return &rj.recs[i % RJ_CAP]; }
+
+/* The ring is its own anonymous mapping, demand-zero. Appends walk it
+ * forward, so without a release every page the tail ever reached stayed
+ * resident: RSS grew with the records ever accepted, not with the
+ * unretired window, until all 30 MiB were touched (F1 plateau, efsd +8-13 %
+ * over minutes 40-60 of a 60-minute rewrite load). Retirement drops the
+ * whole pages its records covered. RJ_CAP is a power of two at least the
+ * page size, so the ring is a whole number of pages and a page boundary
+ * in record-byte space is one in the mapping at every wrap. No huge pages
+ * (see ring_map). */
+#define RJ_RING_BYTES ((size_t)RJ_CAP * sizeof(struct rj_rec))
+static size_t rj_page;
+
+static int ring_map(void)
+{
+    if (rj.recs) munmap(rj.recs, RJ_RING_BYTES);
+    long pg = sysconf(_SC_PAGESIZE);
+    rj_page = pg > 0 ? (size_t)pg : 4096;
+    void *m = mmap(NULL, RJ_RING_BYTES, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    rj.recs = m == MAP_FAILED ? NULL : m;
+#ifdef MADV_NOHUGEPAGE
+    /* Under THP "always" one append after a release faulted a whole 2 MiB
+     * page back in; the release must be page-granular. */
+    if (rj.recs) (void)madvise(rj.recs, RJ_RING_BYTES, MADV_NOHUGEPAGE);
+#endif
+    return rj.recs && !(RJ_RING_BYTES % rj_page) ? 0 : -1;
+}
+
+/* Records [old_head, rj.head) just retired. Release every page that holds
+ * only dead records: retired ones, and the never-reused slots behind them
+ * (absolute record bytes from (tail - RJ_CAP) up to head are not live).
+ * A page that also holds a live record stays. rj.mu held: an append may
+ * reuse these slots as soon as it is dropped. */
+static void ring_release_locked(uint64_t old_head)
+{
+    uint64_t sz = sizeof(struct rj_rec), pg = rj_page;
+    uint64_t dead_lo = (rj.tail > RJ_CAP ? rj.tail - RJ_CAP : 0) * sz;
+    uint64_t lo = old_head * sz / pg * pg, hi = rj.head * sz / pg * pg;
+    if (lo < dead_lo) lo = (dead_lo + pg - 1) / pg * pg;
+    while (lo < hi) {
+        uint64_t off = lo % RJ_RING_BYTES, n = hi - lo;
+        if (n > RJ_RING_BYTES - off) n = RJ_RING_BYTES - off;
+        (void)madvise((uint8_t *)rj.recs + off, (size_t)n, MADV_DONTNEED);
+        lo += n;
+    }
+}
 
 /* Append and fsync; records enter the ring only once durable. rj.mu held. */
 static int journal_append_locked(const struct efs_reclaim_item *items, const uint32_t *pick,
@@ -763,7 +810,9 @@ static void retire_some(void)
             if (rec_at(i)->kind != EFS_RECLAIM_SUPERSEDED) /* installed no fence */
                 fence_remove_locked(rec_at(i)->eid, rec_at(i)->ino);
         pthread_rwlock_unlock(&fence_mu);
+        uint64_t old_head = rj.head;
         rj.head = sg->first + sg->count;
+        ring_release_locked(old_head);
         rj.retired += sg->count;
         memmove(&rj.segs[0], &rj.segs[1], (rj.nseg - 1) * sizeof(rj.segs[0]));
         rj.nseg--;
@@ -1083,7 +1132,7 @@ int server_reclaim_init(struct efsd_server *s)
     rj.s = s;
     snprintf(rj.dir, sizeof(rj.dir), "%s/meta/gc-journal", s->storage_paths[0]);
     snprintf(rj.root, sizeof(rj.root), "%s", s->storage_paths[0]);
-    rj.recs = calloc(RJ_CAP, sizeof(*rj.recs));
+    if (ring_map() != 0) return EFS_ERR_NOMEM;
     fence_cap = 1;
     while (fence_cap < 2ull * RJ_CAP) fence_cap <<= 1;
     fence_keys = calloc(fence_cap, sizeof(*fence_keys));

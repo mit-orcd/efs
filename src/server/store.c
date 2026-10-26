@@ -3384,6 +3384,7 @@ void server_load_nodes(struct efsd_server *s)
     pthread_mutex_lock(&s->lock);
     memcpy(s->nodes, unique, sizeof(*unique) * EFS_MAX_NODES);
     s->node_count = unique_count;
+    server_heartbeat_apply_locked(s);
     pthread_mutex_unlock(&s->lock);
 
     printf("Loaded %u persisted cluster node(s) from %s/meta/cluster_nodes.bin\n",

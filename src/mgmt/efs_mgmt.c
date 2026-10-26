@@ -895,7 +895,8 @@ static int cmd_pack_compact(int argc, char **argv)
         printf("  packer: passes=%llu candidates=%llu built=%llu files_packed=%llu cancelled=%llu "
                "unindexed=%llu backfilled=%llu read_errors=%llu put_errors=%llu admit_errors=%llu "
                "abandoned=%llu busy_passes=%llu budget_waits=%llu abandon_scanned=%llu "
-               "abandon_actionable=%llu abandon_refused=%llu base_segments=%llu base_files=%llu\n",
+               "abandon_actionable=%llu abandon_refused=%llu base_segments=%llu base_files=%llu "
+               "spares=%llu degraded=%llu\n",
                (unsigned long long)p->passes, (unsigned long long)p->candidates,
                (unsigned long long)p->segments, (unsigned long long)p->files_packed,
                (unsigned long long)p->files_cancelled, (unsigned long long)p->unindexed,
@@ -904,7 +905,8 @@ static int cmd_pack_compact(int argc, char **argv)
                (unsigned long long)p->abandoned, (unsigned long long)p->busy_passes,
                (unsigned long long)p->budget_waits, (unsigned long long)p->abandon_scanned,
                (unsigned long long)p->abandon_actionable, (unsigned long long)p->abandon_refused,
-               (unsigned long long)p->base_segments, (unsigned long long)p->base_files);
+               (unsigned long long)p->base_segments, (unsigned long long)p->base_files,
+               (unsigned long long)p->spares, (unsigned long long)p->degraded);
         free(r);
     }
     free(payload);
@@ -1864,7 +1866,7 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
     struct efs_session_revoke_result res;
     int rc = efs_session_revoke(&rpc, uuid, &res), st;
     if (rc != EFS_OK && !strcmp(res.phase, "cleanup"))
-        fprintf(stderr,"session cleanup incomplete: epoch=%u shard=%u rc=%d; resume cleanup-leases and cleanup-appends for that epoch/shard\n",res.old_epoch,res.shard,rc);
+        fprintf(stderr,"session cleanup incomplete: epoch=%u shard=%u rc=%d reason=%s; resume cleanup-leases and cleanup-appends for that epoch/shard\n",res.old_epoch,res.shard,rc,res.reason);
     if (rc != EFS_OK) fprintf(stderr,"session fence incomplete: phase=%s epoch=%u rc=%d\n",res.phase,res.epoch,rc);
     st = 0;
     if (rc == EFS_ERR_NOT_PRIMARY)

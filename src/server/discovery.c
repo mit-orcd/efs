@@ -41,7 +41,7 @@ void efs_disc_probe_encode(uint8_t out[EFS_DISC_PROBE_LEN], uint64_t nonce)
 
 int efs_disc_probe_decode(const uint8_t *in, size_t len, uint64_t *nonce)
 {
-    if (len != EFS_DISC_PROBE_LEN || memcmp(in, disc_magic, 8) || in[8] != DISC_PROBE)
+    if (!in || !nonce || len != EFS_DISC_PROBE_LEN || memcmp(in, disc_magic, 8) || in[8] != DISC_PROBE)
         return -1;
     *nonce = get64(in + 9);
     return 0;

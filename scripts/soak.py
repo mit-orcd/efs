@@ -9,6 +9,7 @@ preserve logs, and refuse to reuse either output directory. No extra EFS syncs:
 fsync belongs only to the workload's application acknowledgement contract.
 """
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -28,6 +29,8 @@ sys.path.insert(0, str(ROOT / 'tests'))
 from k33_daemons import Cluster, Mount, EFSD, MGMT, fuse_ok, payload, hold_port
 sys.path.insert(0, str(ROOT / 'tests/live'))
 import append_failover as APP
+sys.path.insert(0, str(ROOT / 'scripts'))
+import rss_plateau as RSS
 
 
 def schedule(seconds, seed=12345, scale=1):
@@ -117,10 +120,110 @@ def foreign_jobs(owned=()):
     return found
 
 
+def query_outcome(returncode, stdout, stderr):
+    """Classify one `.efs/stats --json` run. Exit 75 "not indexed yet" is the
+    documented answer of a query member with no published catalog yet (fresh
+    or just restarted, src/server/raft_host.c); every other failure fails."""
+    if returncode == 75 and 'not indexed yet' in stderr and not stdout.strip():
+        return dict(not_indexed=True)
+    assert returncode == 0, (returncode, stdout, stderr)
+    return dict(not_indexed=False, stats=json.loads(stdout))
+
+
+def query_ready(run, bound, note, clock=time.monotonic, pause=time.sleep):
+    """Repeat only the not-indexed answer, under one overall bound, as the
+    startup readiness wait does. Never a generic retry of a failed query."""
+    end = clock()+bound
+    while True:
+        got = run()
+        if not got['not_indexed']:
+            return got
+        note()
+        assert clock() < end, f'query not indexed beyond {bound}s'
+        pause(min(2, max(0, end-clock())))
+
+
 def owned_session(text):
     found=re.findall(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z session uuid=([0-9a-f]{32}) epoch=(\d+)$',text,re.M)
     assert len(found)==1, 'cannot identify exact owned mount session'
     return found[0][0],int(found[0][1])
+
+
+def session_view(text):
+    rows=re.findall(r'^raft-session status=(\d+) rc=(-?\d+) primary=\d+ op=get ssh=\d+ shard=\d+ '
+                    r'epoch=(\d+) state=(\d+) touched=([01]) index=\d+$',text,re.M)
+    assert len(rows)==1, 'missing/ambiguous session GET proof: '+text
+    status,rc,epoch,state,touched=map(int,rows[0])
+    assert status==0 and rc==0, text
+    return epoch,state,touched
+
+
+class SessionCleanupRefusal(AssertionError):
+    """A definite non-BUSY product cleanup refusal, not a retry certificate."""
+    def __init__(self, uuid, old_epoch, epoch, shard, code, output):
+        self.evidence=dict(classification='product cleanup candidate; cause requires review',
+                           uuid=uuid, old_epoch=old_epoch, epoch=epoch, shard=shard,
+                           rc=code, output=output, action='stopped; no re-fence or cleanup retry')
+        super().__init__(f'owned session cleanup refused rc={code}, old_epoch={old_epoch}, '
+                         f'epoch={epoch}, shard={shard}: '+output)
+
+
+def revoke_owned_session(invoke,uuid,old_epoch,bound,clock=time.monotonic,pause=time.sleep):
+    """One fence; resume only its explicit cleanup-BUSY at the same old epoch.
+
+    FINISH retains touched[], so enumerate the authority's bits, not just the
+    first failed shard: parallel cleanup may have left other units unfinished.
+    Never BEGIN again, advance the epoch, retry an ambiguous transport failure,
+    infer empty from BUSY, or grant another deadline to a resumed phase.
+    """
+    started=clock();end=started+bound
+    def call(op,*args):
+        remaining=end-clock()
+        assert remaining>0, 'owned session cleanup exceeded original bound'
+        return invoke(op,uuid,*args,timeout=remaining if op=='fence' else min(60,remaining))
+    rc,text=call('fence')
+    if rc==0:
+        rows=re.findall(r'^raft-session status=0 rc=0 .*?op=fence .*?epoch=(\d+) state=1 ',text,re.M)
+        assert rows==[str(old_epoch+1)],text
+        return dict(resumed=False,seconds=clock()-started)
+    before=re.findall(r'^session cleanup incomplete: epoch=(\d+) shard=(\d+) rc=(-?\d+); '
+                      r'resume cleanup-leases and cleanup-appends for that epoch/shard$',text,re.M)
+    after=re.findall(r'^session fence incomplete: phase=cleanup epoch=(\d+) rc=(-?\d+)$',text,re.M)
+    assert len(before)==1 and int(before[0][0])==old_epoch,text
+    code=int(before[0][2])
+    assert after==[(str(old_epoch+1),str(code))] and code<0,text
+    assert 0<=int(before[0][1])<4096,text
+    if code != -13:
+        raise SessionCleanupRefusal(uuid,old_epoch,old_epoch+1,int(before[0][1]),code,text)
+    rc,owner=call('get')
+    assert rc==0 and session_view(owner)[:2]==(old_epoch+1,1),owner
+    touched=[]
+    for shard in range(4096):
+        rc,view=call('get',str(shard))
+        assert rc==0,view
+        epoch,state,bit=session_view(view)
+        assert (epoch,state)==(old_epoch+1,1),view
+        if bit:touched.append(shard)
+    assert int(before[0][1]) in touched, 'failed cleanup shard missing from frozen touched set'
+    attempts=0
+    for shard in touched:
+        for op in ('cleanup-leases','cleanup-appends'):
+            while True:
+                rc,text=call(op,str(old_epoch),str(shard));attempts+=1
+                rows=re.findall(r'^raft-session op=('+op+r') epoch=(\d+) shard=(\d+) '
+                                r'rc=(-?\d+) index=\d+ salt=(\d+)$',text,re.M)
+                assert len(rows)==1, text
+                _,epoch,returned,code,salt=rows[0]
+                assert (int(epoch),int(returned))==(old_epoch,shard),text
+                if rc==0 and (int(code),int(salt))==(0,1):break
+                assert rc!=0 and int(code)==-13,text
+                # Documented bounded/incomplete cleanup, not permission to
+                # retry IO/NET or to forget an unknown result.
+                pause(min(.05,max(0,end-clock())))
+    rc,owner=call('get')
+    assert rc==0 and session_view(owner)[:2]==(old_epoch+1,1),owner
+    return dict(resumed=True,old_epoch=old_epoch,epoch=old_epoch+1,touched=touched,
+                cleanup_invocations=attempts,seconds=clock()-started)
 
 
 def digest(path):
@@ -152,8 +255,7 @@ def io(req):
         p = subprocess.run([sys.executable, str(Path(req['mount']) / '.efs' / 'stats'), '--json'],
                            capture_output=True, text=True, timeout=30)
         # Catalog initialization is documented ENODATA; parent gives it a bound.
-        assert p.returncode == 0, (p.returncode, p.stdout, p.stderr)
-        return json.loads(p.stdout)
+        return query_outcome(p.returncode, p.stdout, p.stderr)
     if op == 'append':
         b = APP.body(req['writer'], req['seq'])
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -215,6 +317,7 @@ class Soak:
         self.churning = False
         self.quiet_start = None
         self.quiet_files = []
+        self.rss_roles = {}
         self.rss_fp = None
         self.monitor_stop = threading.Event()
         self.c = None
@@ -248,6 +351,7 @@ class Soak:
         return p.returncode, text
 
     def op(self, mount, req, timeout=None):
+        assert os.path.ismount(self.mounts[mount].path), 'refusing IO through an unmounted client path'
         req = dict(req, mount=str(self.mounts[mount].path))
         deadline = timeout or (self.a.churn_deadline if self.churning else self.a.io_deadline)
         rc, text = self.command([sys.executable, str(Path(__file__).resolve()), '--io'],
@@ -274,10 +378,11 @@ class Soak:
 
     def sample(self):
         with self.mu:
-            procs = [p for p in self.c.procs.values() if p.poll() is None]
-            procs += [m.p for m in self.mounts if m.p.poll() is None]
+            roles = [(f'node-{i}',p) for i,p in self.c.procs.items() if p.poll() is None]
+            roles += [(f'client-{i}',m.p) for i,m in enumerate(self.mounts) if m.p.poll() is None]
             points = []
-            for p in procs:
+            for role,p in roles:
+                self.rss_roles[str(p.pid)] = role
                 try:
                     text = Path(f'/proc/{p.pid}/status').read_text()
                     rss = re.search(r'^VmRSS:\s+(\d+) kB', text, re.M)
@@ -384,7 +489,11 @@ class Soak:
                             self.appends[idx].append(seq)
                             self.note('ack-append-fsync', writer=idx, seq=seq)
                     if seq % 32 == 31 and self.commands_enabled:
-                        self.op(idx, dict(op='query', name=''), 30)
+                        # A member returning from churn answers "not indexed
+                        # yet" until its first catalog publish.
+                        query_ready(lambda: self.op(idx, dict(op='query', name=''), 30),
+                                    self.a.recovery_bound,
+                                    lambda: self.note('query-not-indexed', mount=idx, churn=self.churning))
                     # Metadata deadline separate from data: child runs stat/list as a
                     # distinct bounded operation (included in deterministic unit tests).
                     self.op(idx, dict(op='metadata', name=name), self.a.meta_deadline if not self.churning else self.a.churn_deadline)
@@ -397,6 +506,11 @@ class Soak:
             self.note('first-failure', worker=idx, trace=self.errors[-1])
 
     def verify(self):
+        # Full readback populates read caches and pauses writers: a different
+        # workload, never part of a write-load RSS plateau window.
+        measuring = self.rss_fp is not None
+        self.quiet(False)
+        self.note('verify-start')
         # Freeze only workload operations, never daemons or maintenance. An exact
         # manifest snapshot cannot race the overwrite it is checking.
         with self.mount_mu[0], self.mount_mu[1]:
@@ -409,6 +523,19 @@ class Soak:
             self.note('verified', files=len(manifest), mounts=2,
                       appends=sum(len(s) for s in self.appends.values()))
             (self.out / 'manifest.json').write_text(json.dumps(dict(files=manifest, appends=self.appends), indent=2))
+        if measuring and self.phase == 'load' and not self.stop.is_set():
+            self.quiet(True)
+
+    @contextlib.contextmanager
+    def changing_mount(self, victim):
+        with self.mount_mu[victim]:
+            try:
+                yield
+            except BaseException:
+                # A failed revoke/remount must stop the writer before releasing
+                # its lock: otherwise it can fsync an ordinary local directory.
+                self.stop.set()
+                raise
 
     def churn(self, event):
         self.quiet(False)
@@ -420,7 +547,7 @@ class Soak:
             # Other mount continues writing; this mount drains before killing its
             # FUSE process. This tests session revoke/remount, not replay of an
             # application call interrupted by SIGKILL (covered by K15/K29 gates).
-            with self.mount_mu[victim]:
+            with self.changing_mount(victim):
                 m = self.mounts[victim]
                 uuid,epoch=owned_session(m.logp.read_text())
                 m.p.kill()
@@ -430,9 +557,17 @@ class Soak:
                 m.log.close()
                 # D31 deliberately requires operator revocation after client
                 # death. Revoke this exact owned UUID, never infer an expiry.
-                rc,text=self.command([str(MGMT),'raft-session',self.c.ep(1),'fence',uuid],
-                                     self.a.recovery_bound,'revoke-crashed-client')
-                assert rc==0 and re.search(r'epoch=%d\b' % (int(epoch)+1),text),text
+                def invoke(op,uuid,*args,timeout):
+                    return self.command([str(MGMT),'raft-session',self.c.ep(1),op,uuid,*args],
+                                        timeout,'crashed-session-'+op)
+                try:
+                    proof=revoke_owned_session(invoke,uuid,epoch,self.a.recovery_bound)
+                except SessionCleanupRefusal as failure:
+                    self.stop.set()
+                    (self.out/'cleanup-refusal.json').write_text(json.dumps(failure.evidence,indent=2))
+                    self.note('cleanup-refusal', **failure.evidence)
+                    raise
+                self.note('crashed-session-revoked',uuid=uuid,proof=proof)
                 # Preserve every client run in a separate log and mount path.
                 self.mounts[victim] = Mount(self.c, 1+victim, f'mnt-{victim}-r{len(self.events)}')
         elif kind == 'add':
@@ -458,14 +593,27 @@ class Soak:
         self.quiet(False)
         rows = []
         for path in self.quiet_files:
-            lines = path.read_text().splitlines()
-            if len(lines) < 4:
-                rows.append(dict(path=path.name, verdict='NOTRUN', reason='quiet stretch shorter than four RSS samples'))
-                continue
-            rc, text = self.command([sys.executable, str(ROOT/'scripts/rss_plateau.py'), str(path)], 30, 'rss-plateau')
-            rows.append(dict(path=path.name, verdict='PASS' if rc == 0 else 'FAIL', report=text))
-        (self.out/'plateau.json').write_text(json.dumps(rows, indent=2))
-        assert rows and all(r['verdict']=='PASS' for r in rows), rows
+            series=RSS.from_ps(path)
+            if not series:
+                rows.append(dict(path=path.name, verdict='NOTRUN', reason='no write-load samples'))
+            for pid,pts in series.items():
+                assert pid in self.rss_roles, f'unidentified RSS process {pid}'
+                rows.append(dict(path=path.name, pid=pid, role=self.rss_roles[pid],
+                                 **RSS.assess_points(pts)))
+        required={f'node-{i}' for i in self.c.procs} | {'client-0','client-1'}
+        covered={r['role'] for r in rows if r['verdict']=='PASS'}
+        failed=any(r['verdict']=='FAIL' for r in rows)
+        missing=sorted(required-covered)
+        verdict='FAIL' if failed else ('NOTRUN' if missing else 'PASS')
+        report=dict(verdict=verdict, missing_roles=missing, processes=self.rss_roles, windows=rows,
+                    method='per uninterrupted write-load window: 120s warmup, >=360s measured, last-third growth <=5% of peak')
+        (self.out/'plateau.json').write_text(json.dumps(report, indent=2))
+        # The compressed rehearsal qualifies lifecycle/correctness, not a memory
+        # plateau. Endurance cannot pass without every daemon/client role covered.
+        assert not failed, report
+        if self.a.profile != 'rehearsal':
+            assert verdict == 'PASS', report
+        return report
 
     def run(self):
         self.env = {k: v for k,v in os.environ.items() if not k.startswith(('EFS_', 'LD_PRELOAD'))}
@@ -569,9 +717,9 @@ class Soak:
             self.verify()
             self.stop.set()
             self.sample()
-            self.plateau()
+            result['rss'] = self.plateau()
             result.update(verdict='PASS', files=len(self.manifest), events=self.events,
-                          reason='every acknowledged current version and append exact on both mounts; all protection/recovery bounds and RSS checks passed')
+                          reason='every acknowledged current version and append exact on both mounts; protection/recovery bounds passed; RSS '+result['rss']['verdict'])
         except BaseException:
             result['reason'] = traceback.format_exc()
             self.note('failure', trace=result['reason'], phase=self.phase)

@@ -75,11 +75,14 @@ int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,
         wr32be_sess(payload + 19, old_epoch);wr32be_sess(payload + 23, shard);
     }
     /* An invocation has a finite work budget; unfinished ownership remains
-     * durable and must not be reported as a completed cleanup. */
+     * durable and must not be reported as a completed cleanup. K42: 20 s,
+     * inside the 30 s no-progress window of the client stop tooling, so a
+     * shard still refused at the end fails the revoke with its reason. */
     struct timespec start;
     if (clock_gettime(CLOCK_MONOTONIC, &start)) return EFS_ERR_IO;
     uint64_t saved = efs_net_deadline_ms();
-    uint64_t deadline = (uint64_t)start.tv_sec * 1000 + start.tv_nsec / 1000000 + 30000;
+    uint64_t deadline = (uint64_t)start.tv_sec * 1000 + start.tv_nsec / 1000000 +
+                        EFS_SESSION_CLEANUP_BUDGET_MS;
     if (saved && saved < deadline) deadline = saved;
     efs_net_set_deadline_ms(deadline);
     int result = EFS_ERR_BUSY;
@@ -88,12 +91,14 @@ int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,
         int rc = sess_rpc(rpc, payload, length, reply);
         /* NOT_PRIMARY explicitly rejects proposal admission. Cold owners can
          * remain leaderless beyond sess_rpc's redirect window. Retry only
-         * that definite rejection, with the same UUID/epoch/shard and the
-         * original invocation deadline (also bounding socket waits). */
+         * that definite rejection, or a BUSY the server certifies as a
+         * no-op step (efs_session_cleanup_retry_ok: refused selection, or
+         * K42 an append step waiting on another session's OPEN append, the
+         * frontier, an aborted PREPARE or REAP), with the same
+         * UUID/epoch/shard and the original invocation deadline (also
+         * bounding socket waits). */
         if (rc == EFS_ERR_NOT_PRIMARY ||
-            (rc == EFS_ERR_BUSY && !reply->index && !reply->term &&
-             reply->salt == (appends ? EFS_MD_SESSION_APPEND_RETRY_SALT :
-                                      EFS_MD_SESSION_CLEANUP_RETRY_SALT))) {
+            (rc == EFS_ERR_BUSY && efs_session_cleanup_retry_ok(reply, appends))) {
             usleep(50000);
             continue;
         }
@@ -147,6 +152,7 @@ struct sess_stage {
     uint32_t next, done, pending, probe_failed;
     int rc;
     uint32_t failed;
+    uint64_t reason; /* salt of the reply that failed the stage */
     const char *phase;
     struct efs_msg_raft_mkfs_reply last;
 };
@@ -233,6 +239,7 @@ static void *sess_stage_worker(void *arg)
             st->rc = rc;
             st->failed = failed;
             st->phase = phase;
+            st->reason = r.salt;
         }
         if (rc == EFS_OK)
             st->done += (uint32_t)__builtin_popcountll(st->units[i].mask);
@@ -280,6 +287,7 @@ int efs_session_revoke(const struct efs_session_rpc *rpc,
     struct efs_msg_raft_mkfs_reply r = {.leader_hint = -1};
     uint32_t ssh, epoch = 0, old_epoch = 0, state = 0, word, ntouch = 0, nunit = 0, stopped = 0;
     uint32_t cleaned = 0, probe_failed = 0;
+    const char *reason = "";
     static __thread struct sess_unit units[2 * (EFS_SESSION_BITMAP / 8u)];
     struct sess_stage stage;
     uint64_t t0 = sess_now_ms(), t_fence = 0, t_cleanup = 0, mark;
@@ -370,6 +378,7 @@ int efs_session_revoke(const struct efs_session_rpc *rpc,
     probe_failed = stage.probe_failed;
     if (rc != EFS_OK) {
         stopped = stage.failed;
+        reason = efs_session_cleanup_reason(stage.reason, rc);
         goto out;
     }
     memset(payload, 0, sizeof(payload));
@@ -398,6 +407,7 @@ out:
         res->total_ms = sess_now_ms() - t0;
         res->cleaned = cleaned;
         res->probe_failed = probe_failed;
+        res->reason = reason;
     }
     return rc;
 }

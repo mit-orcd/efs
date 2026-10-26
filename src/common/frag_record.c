@@ -96,7 +96,8 @@ int efs_frag_record_verify(const uint8_t *rec, size_t len,
         *field = NULL;
     if (!expect)
         return EFS_ERR_INVAL;
-    int rc = efs_frag_record_parse(rec, len, &got, payload_digest);
+    uint8_t digest[EFS_HASH_SIZE];
+    int rc = efs_frag_record_parse(rec, len, &got, digest);
     if (rc != EFS_OK)
         return rc;
     const char *bad = got.kind != expect->kind ? "kind" :
@@ -112,6 +113,8 @@ int efs_frag_record_verify(const uint8_t *rec, size_t len,
             *field = bad;
         return EFS_ERR_FRAG_IDENTITY;
     }
+    if (payload_digest)
+        memcpy(payload_digest, digest, EFS_HASH_SIZE);
     return EFS_OK;
 }
 

@@ -48,8 +48,11 @@ static void check_kind(uint32_t kind)
         default: w.coding_profile = 2; want = "coding_profile"; break;
         }
         field = NULL;
+        memset(got, 0xa5, sizeof(got));
+        uint8_t unchanged[EFS_HASH_SIZE];memcpy(unchanged,got,sizeof(got));
         int rc = efs_frag_record_verify(rec, sizeof(rec), &w, got, &field);
         assert(rc == EFS_ERR_FRAG_IDENTITY);
+        assert(!memcmp(got,unchanged,sizeof(got)));
         assert(field && !strcmp(field, want));
     }
 

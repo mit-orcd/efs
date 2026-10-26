@@ -35,16 +35,40 @@ green). The D25 truncate sweep retired about 5 inodes a second and its backlog h
 (K37 case 1c). `test_d4_plateau.py` is back in `make test-long`. New open finding: reclaim lags a high
 rewrite rate (quota 52 % at 60 min on intel1, ENOSPC on amd).
 
-[F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](f1-followups-20261025.md):
-**branch `claude/devel-f1-followups-ae2deb`, not merged, not pushed; xorinox: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47 (`758dd144c`, same code); RSS plateau FAIL (bounded, not flat).**
-`test_k36_recovery.py` under TSan PASS 10 of 10 (crash hooks now `exit_group`; a hook race and a test
-defect fixed). The D4 fixed-working-set variant rewrites 2048 files for 30 and 60 minutes with no net
-creation. Plateau FAIL, bounded not flat: the clients plateau; efsd's live heap is flat, but glibc arenas held
-freed memory. efsd now caps arenas at 8, fixes the mmap threshold at 256 KiB and trims every 15 s, cutting its
-60-minute peak by about a third. It still grows 8–13 % over minutes 40–60 with throughput (open). The packer
-put errors were follower `NOT_PRIMARY`; with the flake-sweep fix the 20-minute D4 load ends with 0 (was 3), the
-60-minute rewrite load still with 5. New product fix: a W77 publication unit whose forwarded PREPARE batch
-was refused skipped its ABORT, which made rewrites EIO (regression test red 5 of 5, green 6 of 6).
+[Wave 13 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`899c0a2e0`; gate at the same commit)**: K42/W164 ([evidence](e2-clean-stop-busy-20261025.md): a clean unmount repeats certified no-op cleanup waits instead of failing on one BUSY, the stop names its shard and the server's reason; 20 of 20 clean stops), Task D's endurance acceptance ([evidence](task-d-20261025.md): rehearsal PASS on intel2 and nuc, four-hour soak FAIL at 7,195 s on **K43** (blocks alpha), harness fixes for a returning member's not-indexed query answer and the soak tables), and the efsd RSS plateau work ([evidence](efsd-rss-plateau-20261025.md): idle connection reaping in both pools, the reclaim journal ring releases pages, segment reads and compaction in one mapping; plateau PASS on one 60-minute xorinox run). intel2 `make test-all` (8 jobs): 504 commands in 632 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits. **Held back:** the D4 drain and reclaim branch `claude/interesting-mclean-65362a` (`eec27ed50`; its evidence pages `d4-pack-drain-20261025.md` and `d4-reclaim-20261026.md` live on that branch): with it merged the same gate failed twice with different writers' errors under the 8-job pool (`test_k38_shared_chunk_pressure.py` writer `EIO`, then `test_k36_recovery.py` step 8 `mkdir` `EBUSY` after a member kill), both passing alone; without it 0 FAIL. Its publish and truncate-sweep changes are to be re-gated on their own branch (intel2 `~/efs-artifacts/merge-wave13-20261026/held-back/`).
+
+[Task D: seeded member-churn endurance](task-d-20261025.md):
+**four-hour soak FAIL on EFS finding K43; branch
+`claude/stoic-goldwasser-06dbca`, not merged or pushed.** devel `39a1cbbbc`
+with `agent/devel-task-d` merged and one harness fix (`b2fc06ba5`: a
+returning member's documented "not indexed yet" `.efs` answer is waited out
+under the recovery bound). Rehearsal PASS on intel2 (`4cb79d09d`, 1,102 s)
+and nuc (`b2fc06ba5`, 1,166 s). The four-hour soak on nuc stopped at 7,195 s,
+at its 15th event: SIGKILL of the group-0 leader that coordinated an
+in-flight REPORT left its PREPARE intents until recovery aborted them, the
+client's resend lost its CAS against them and the writer got `EBUSY`
+(**K43, blocks alpha**). 14 events and seven exact two-mount verifications
+passed before it; the retained stores read all 512 acknowledged versions and
+3,379 appends exact; every qualifying RSS window PASS, role coverage NOTRUN.
+Earlier attempts: intel2 interrupted at 2,768 s and nuc attempt08 at 9 m 52 s
+by other sessions' builds (environmental). nuc `make test-all` (8 jobs): candidate `08c949ea0` 502
+commands, 2 FAIL, 15 NOTRUN; base `39a1cbbbc` 502, 4 FAIL, 15 NOTRUN; both
+candidate failures (`test_k41_packer_placement`, `test_k38_shared_chunk_pressure`)
+also fail on the base: no candidate-only failure. Raw: nuc
+`~/efs-artifacts/task-d-20261025-nuc2/`, intel2
+`~/efs-artifacts/task-d-20261025-intel2/`.
+
+[Wave 12 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`78b9e0981`; gate at `78b9e0981`)**: K41/W163 ([evidence](k41-packer-placement-20261025.md): bounded parallel heartbeat probes with the streak and down mark kept per node id across table rebuilds, the packer probes its three destinations and replaces a failed one with the next live ring member before writing, a packed read that reached a holder but gathered fewer than two fragments is `EIO` naming the segment; intel2 gate 0 FAIL, `test_k33_growth.py` 10 of 10) and Task C's last test-hygiene commits (K37 degraded-write events by identity, the refusal test checks every replica's log for the refused tag, K33 payload fixtures kept on failure). intel2 `make test-all` (8 jobs): 502 commands in 657 s, 0 FAIL, 15 NOTRUN host limits, PASS with host limits.
+
+[Wave 11 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`d3051f273`; gate at `d3051f273`)**: K33/W157 join retry ([evidence](k33-join-retry-20261025.md): a first start killed between `boot.bin` and `identity.bin`, or in the O_DIRECT probe, is retried with the same command; a store that started before and lost its identity stays refused; intel1 gate 0 FAIL, A13 PASS with the kill before the commit) and the Task C/D agents' latest evidence commits. intel2 `make test-all` (8 jobs): 499 commands in 545 s, 0 FAIL, 15 NOTRUN host limits, PASS with host limits.
+
+[Wave 10 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`358ebc378`; gate at `358ebc378`)**: the F1 follow-ups ([evidence](f1-followups-20261025.md): K36 under TSan 10/10, the W77 publication-unit ABORT after a refused forwarded PREPARE, packer put errors 3 → 0 on the 20-minute D4 load, glibc arena cap and fixed mmap threshold with a periodic trim, crash hooks exit through `exit_group`; the efsd RSS plateau stays **OPEN**, 8–13 % growth late in 60-minute runs, and `test_d4_plateau.py` is a measurement driver outside `make test-long`), Task C's remaining decoder commits (frag-record digest kept on refusal, malformed error envelopes rejected) and Task D's endurance-harness commits (RSS qualified only in steady write-load windows, cleanup resume, writer stop before a failed mount transition). intel2 `make test-all` (8 jobs): 498 commands in 647 s, 0 FAIL, 15 NOTRUN host limits (the extra one is test_soak_driver's own 'rehearsal NOTRUN' marker), PASS with host limits.
+
+[K33/W157: an interrupted join is retried](k33-join-retry-20261025.md): **PASS (loopback), branch `claude/sweet-allen-560f74` on devel `1fc526f66` (code `d9186e38a`, `bfd0abdf6`), not merged, not pushed; intel1 `make test-all` at `bfd0abdf6` (8 jobs): 499 commands, 0 FAIL, 14 NOTRUN host limits (two earlier runs had one known intermittent each: K38 shared-chunk EIO, B6 refuse); A13 on `loopback-3` PASS with the kill before the commit (`a13_interrupt_s` 0.05) and at 0.1 s (after the commit). Raw: intel1 `~/efs-artifacts/k33-join-retry-20261025/` (`SHA256SUMS` `cc1ec97b…7963`).** Task A's Candidate A: a first start killed between `boot.bin` and `identity.bin`, or during the storage root's O_DIRECT probe, was refused on every retry. A store whose boot counter is still 0 (its token never left the process) now initializes again, and a new root's leftover probe page is removed; a lost identity, a wiped store at a member's endpoint and unknown root data stay refused. Deterministic test `tests/test_k33_join_retry.py` (fault points `before-identity`, `before-hello`). Live multi-host A13 stays NOTRUN.
+
+[K41: packer placement on a member already known down](k41-packer-placement-20261025.md): **FIXED (scoped), branch `k41-packer-placement` on devel `1fc526f66` (`531c7c783`), not merged, not pushed; intel2 `make test-all` at 8 jobs: 499 commands, 0 FAIL, 14 NOTRUN host limits (656 s).** Serial heartbeats with 30 s timeouts let a silent joiner stall liveness detection, so the group leader never marked a stopped member down and its packer wrote a segment degraded onto it. Heartbeats now run in parallel under a 2 s deadline with per-node-id marks; the packer also uses peer-pool and Raft voter liveness, probes each destination and replaces a failed or refusing one by a live spare; a short packed read is `EIO` naming the segment. `test_k41_packer_placement.py` fails on the base and passes; growth test 10 of 10 PASS (2 spread). Live, RDMA and orcd-mini NOTRUN.
+
+[K42: clean unmount BUSY in revoke cleanup](e2-clean-stop-busy-20261025.md): **FIXED, branch `claude/great-curie-e4cfb1` on devel `1fc526f66` (code `e62cc1d07` … `b9d5f9443`), not merged, not pushed.** Task A's candidate D was reproduced on amd on the first loaded run. Cause: cleanup steps that committed nothing (the peer's append cleanup meeting another client's in-flight append or its refused retirement transaction; the lease batch meeting its close transaction) reached the client as a bare BUSY that it never retries. The server now names such refusals and the client retries them within 20 s, or fails closed with the shard and reason. Intel2 at `b9d5f9443`: 20 of 20 clean stops of a loaded peer (68-case two-client suite before each); `make test-all` at 8 jobs 499 commands, 0 FAIL, 14 NOTRUN host limits (amd, where it was reproduced, went offline before the final runs). Raw: intel2 and amd `~/efs-artifacts/e2-clean-stop-20261025/`.
 
 [Wave 9 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`9ae2f36d3`; gate at `9ae2f36d3`)**: wave 8b (W159 applied-wait, flake sweep, A6–A12 hygiene, docs audit 2) with the K39 fix, K38/W161 with K40/W162, the K33 payload server fix (status protection now, packer fragment resend), D43 expiry compiled in and policy-governed with the create-path follow-up, and the Task A/C/D agent branches (Stage 2 rehearsal driver, decoder validation fail-closed, endurance harness). intel2 `make test-all` (8 jobs): 498 commands in 561 s, 0 FAIL, 14 NOTRUN host limits (no RDMA device, no valgrind, no cluster scripts, fault-build-only case), PASS with host limits. Merge-time fixes: a forwarded expiry deletion may forward its own steps (the flake sweep's never-forward-again rule refused it); Task D's 15-minute soak is `make test-soak`, outside the W160 test-all target, which is 16 min since this wave; loopback-5 runs loopback-3's gates. Found: **K41** (packer places on a stopped member the leader never marked down, then one more loss loses the segment), OPEN. Two earlier runs of the gate on this tree: 4 FAIL (the fixes above), then 3 FAIL (apply-wait build race, put-drain include, K41).
 
@@ -81,16 +105,6 @@ versioned, off by default) changes at runtime; a deadline acts only while
 its source folder policy is enabled. Expiry tests back in `make test-all`;
 new qualify gate `d5-expiry` (item D5) on every matrix topology.
 
-[Task D: seeded member-churn endurance rehearsal](task-d-20261025.md):
-**IN PROGRESS, branch `agent/devel-task-d`, not merged or pushed.** New
-five-to-seven-member loopback harness, independent acknowledged-content and
-shared-append oracles, quiet-host guard, RSS interval checks and qualification
-plugin. NUC's fourth rehearsal reached five clean returns and a verified daemon
-recovery, then failed in the harness's timestamped-session parser. The corrected
-rehearsal is running in its reserved detached screen; four-hour completion
-and candidate/base code-gate comparison remain NOTRUN/queued. No acceptance
-or new product-fix claim yet.
-
 [Task A: full three- and five-member Stage 2 rehearsal](task-a-20261025.md):
 **rehearsal complete with product findings; branch `agent/devel-task-a`,
 full matrices `c3c4fa2bd`, affected GC and final code gate `a6ba11c3a`.
@@ -100,6 +114,32 @@ about 66/61 minutes; GC sequencing corrected, affected GC PASS on one run,
 healthy cleanup BUSY on the other. Join retry refusal and rewrite/degraded-read
 EIO remain product findings. Real-host/RDMA qualification stays NOTRUN.
 Raw evidence remains external; private AMD test tree removed.
+
+[efsd RSS plateau under the fixed-working-set D4 load (F1 follow-ups item 2)](efsd-rss-plateau-20261025.md):
+**branch `claude/wizardly-mcclintock-0e2efd`, not merged, not pushed; RSS plateau PASS on one 60-minute run at `66a3a4024` (xorinox: efsd +0.6 / −0.8 / −0.1 %, efs-fuse +0.0 / +3.6 %; the D4 run itself FAIL on one truncate EIO, not memory); FAIL on every nuc run. xorinox at `66a3a4024`: `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47, `make test-all` 481 commands, 2 FAIL (K33 read EIO under the pool: `test_k33_payload.py` fails 1 of 3 alone on the base too; `test_k33_growth.py` did not reproduce), 14 NOTRUN host limits.**
+The connection-thread hypothesis is refuted as the main cause (about 0.15 MiB per thread), but no pool
+ever closed an idle connection; both pools now close one after 30 s idle. Bounded: the reclaim journal
+ring, whose pages were never released (half the baseline's growth), and the packer's compaction
+buffers, which fragmented the leader's arenas. On nuc the last run still stepped up at minute 48, when
+the host's page cache ran short (slab 14.6 GB, 395 MB cached), with elections; a concurrency step still
+raises arena memory for the rest of the load. amd went down during the session (cause not established).
+
+[F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](f1-followups-20261025.md):
+**branch `claude/devel-f1-followups-ae2deb`, not merged, not pushed; xorinox: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47 (`758dd144c`, same code); RSS plateau FAIL (bounded, not flat).**
+`test_k36_recovery.py` under TSan PASS 10 of 10 (crash hooks now `exit_group`; a hook race and a test
+defect fixed). The D4 fixed-working-set variant rewrites 2048 files for 30 and 60 minutes with no net
+creation. Plateau FAIL, bounded not flat: the clients plateau; efsd's live heap is flat, but glibc arenas held
+freed memory. efsd now caps arenas at 8, fixes the mmap threshold at 256 KiB and trims every 15 s, cutting its
+60-minute peak by about a third. It still grows 8–13 % over minutes 40–60 with throughput (open). The packer
+put errors were follower `NOT_PRIMARY`; with the flake-sweep fix the 20-minute D4 load ends with 0 (was 3), the
+60-minute rewrite load still with 5. New product fix: a W77 publication unit whose forwarded PREPARE batch
+was refused skipped its ABORT, which made rewrites EIO (regression test red 5 of 5, green 6 of 6).
+
+[Task C: transactional decoder validation](task-c-20261025.md):
+**branch `agent/devel-task-c`, code `cd5ed9dc5`, not merged.** Original randomized
+campaign PASS 25/25, expanded two-hour apply PASS, private three-node W140
+refusal PASS, ASan PASS 47/47. Corrected full-suite and five affected decoder
+reruns RUNNING; acceptance PENDING. Raw evidence stays outside Git on intel1.
 
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.

@@ -320,6 +320,16 @@
  * admission/authority/selection refusal, before transaction callbacks.
  * It never certifies a completion or retirement transaction's BUSY. */
 #define EFS_MD_SESSION_APPEND_RETRY_SALT 3ull
+/* K42: SESSION_APPEND_NEXT BUSY certificates for a definite no-op cleanup
+ * step (EFS_META_APPEND_WAIT_*): RETRY_SALT + reason. The step may be
+ * repeated; the salt names the server's reason in the client's log. */
+#define EFS_MD_SESSION_APPEND_WAIT_OPEN     4ull
+#define EFS_MD_SESSION_APPEND_WAIT_FRONTIER 5ull
+#define EFS_MD_SESSION_APPEND_WAIT_ABORTED  6ull
+#define EFS_MD_SESSION_APPEND_WAIT_GONE     7ull
+/* K42: a LEASE_LOCK_BATCH this leader proposed applied with BUSY and no
+ * effect (a key under another transaction's exclusive intent). */
+#define EFS_MD_SESSION_CLEANUP_WAIT_LOCKED  8ull
 
 /* W140: the log commands this build applies. host_apply_dispatch
  * (src/server/raft_host.c) handles exactly these tags, and every proposal

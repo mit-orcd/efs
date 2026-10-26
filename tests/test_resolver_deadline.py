@@ -87,6 +87,8 @@ static int node_index_for_id(efs_node_id_t id) {assert(id==1);return 0;}
 /* K33 live view: an unknown id waits for the view; id 1 is always known here. */
 static int node_index_or_await(efs_node_id_t id) {return node_index_for_id(id);}
 static int pool_size(void) {return 1;}
+/* Idle reap (tests/test_conn_idle_reap.py) is not under test here. */
+static void conn_reap_idle_locked(int idx,int64_t now) {(void)idx;(void)now;}
 static int conn_fd_is_dead(struct efs_conn *c) {(void)c;assert(0);return 0;}
 /* Background reprobe (tests/test_node_reprobe.py) is not under test here. */
 __attribute__((unused)) static void node_probe_maybe_start(int idx,int64_t now) {(void)idx;(void)now;}

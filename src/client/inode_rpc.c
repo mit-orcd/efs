@@ -3749,14 +3749,19 @@ int efs_client_session_end(void)
     efs_client_rpc_set_deadline_ms(saved);
     /* Latch: nothing may run under the revoked epoch from here on. */
     __atomic_store_n(&g_client.session_fenced,1,__ATOMIC_RELEASE);
+    /* K42: a cleanup stop names its shard and the server's reason. */
+    char stop[96]="";
+    if (rc!=EFS_OK && !strcmp(res.phase,"cleanup"))
+        snprintf(stop,sizeof(stop)," shard=%u reason=%s",res.shard,res.reason);
     fprintf(stderr,"efs: session revoked at unmount: epoch=%u touched=%u rc=%d "
-            "ms=%llu fence_ms=%llu cleanup_ms=%llu cleaned=%u probe_failed=%u%s%s\n",
+            "ms=%llu fence_ms=%llu cleanup_ms=%llu cleaned=%u probe_failed=%u%s%s%s\n",
             id.session_epoch,res.ntouch,rc,(unsigned long long)res.total_ms,
             (unsigned long long)res.fence_ms,(unsigned long long)res.cleanup_ms,
             res.cleaned,res.probe_failed,
-            rc==EFS_OK?"":" phase=",rc==EFS_OK?"":res.phase);
+            rc==EFS_OK?"":" phase=",rc==EFS_OK?"":res.phase,stop);
     if (rc!=EFS_OK)
         snprintf(g_session_end_reason,sizeof(g_session_end_reason),
-                 "revoke rc=%d phase=%s shard=%u touched=%u",rc,res.phase,res.shard,res.ntouch);
+                 "revoke rc=%d phase=%s shard=%u touched=%u%s%s",rc,res.phase,res.shard,
+                 res.ntouch,*stop?" reason=":"",*stop?res.reason:"");
     return rc;
 }

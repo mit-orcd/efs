@@ -408,6 +408,8 @@ test-bins: all $(TEST_SPECIAL_BINS) decoder-bins tests/test_apply_wait
 # under a second; about a minute in all). Slow tests belong in test-long.
 test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_decoder_inputs.py
+	python3 tests/test_k37_events.py
+	python3 tests/test_raft_log_entries.py
 	python3 tests/test_env_inventory.py
 	python3 tests/test_leader_placement.py
 	python3 tests/test_env_removed.py
@@ -1048,9 +1050,11 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_autoid.py
 	python3 tests/test_k33_client_view.py
 	python3 tests/test_k33_interrupt.py
+	python3 tests/test_k33_join_retry.py
 	python3 tests/test_k33_payload.py
 	python3 tests/test_k35_fsync_degraded.py
 	python3 tests/test_k37_segment_rebuild.py
+	python3 tests/test_k41_packer_placement.py
 	python3 tests/test_k38_protection_now.py
 	EFS_B_PHASES=grow-a python3 tests/test_b_geometry.py
 	EFS_B_PHASES=grow-b python3 tests/test_b_geometry.py
@@ -1058,6 +1062,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_seed_loss.py
 	python3 tests/test_k33_bookkeeping.py
 	python3 tests/test_k34_stop_put.py
+	python3 tests/test_k42_peer_stop_open.py
 	python3 tests/test_k38_shared_chunk_pressure.py
 	python3 tests/test_stop_progress.py
 	python3 tests/test_operator_workflows.py
@@ -1070,6 +1075,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_d4_plateau.py
 	python3 tests/test_pack_dup_candidate.py
 	python3 tests/test_pub_unit_forward_abort.py
+	python3 tests/test_conn_idle_reap.py
 	python3 tests/test_report_stepdown.py
 	python3 tests/test_w159_apply_wait.py
 	python3 tests/test_query_first_catalog.py

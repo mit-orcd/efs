@@ -132,7 +132,10 @@ def verify(m, what, parallel=True):
 
     def one(item):
         name, size = item
-        got = (m.path / name).read_bytes()
+        try:
+            got = (m.path / name).read_bytes()
+        except OSError as error:
+            raise AssertionError(f'{what}: read failed for {name} ({size} B), errno={error.errno}') from error
         assert got == payload(name, size), f'{what}: {name} differs ({len(got)} of {size} B)'
     if parallel:
         with ThreadPoolExecutor(READERS) as ex:
@@ -265,7 +268,7 @@ finally:
     for m in mounts:
         m.close()
     c.stop_all()
-    if os.environ.get('EFS_K33_KEEP'):
+    if os.environ.get('EFS_K33_KEEP') or sys.exc_info()[0] is not None:
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)

@@ -43,7 +43,7 @@ int efs_member_view_parse_reply(const void *payload, uint32_t len, struct efs_me
     memset(&r, 0, sizeof(r));
     memcpy(&r, payload, len);
     if (r.rc != EFS_OK)
-        return r.rc < 0 ? r.rc : EFS_ERR_DECODE;
+        return r.rc < 0 && r.len == 0 && len == EFS_MEMBERSHIP_REPLY_HDR ? r.rc : EFS_ERR_DECODE;
     if (r.len == 0 || r.len > EFS_MEMBERSHIP_MAX_LEN || len != EFS_MEMBERSHIP_REPLY_HDR + r.len)
         return EFS_ERR_DECODE;
     int rc = efs_membership_decode(r.record, r.len, out);

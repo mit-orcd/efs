@@ -129,6 +129,7 @@ struct finish_capture {
     struct finish_image *images;
     uint32_t count, capacity, mutations;
     efs_ino_t close_ino;
+    int refused; /* finish_execute: the refused PREPARE's rc (COMMIT never proposed) */
 };
 static int finish_data_key(const uint8_t *key,uint32_t n)
 {
@@ -301,6 +302,7 @@ static int finish_execute(struct finish_capture *capture,const struct efs_txid *
             rc=held<0?held:held?EFS_ERR_BUSY:EFS_OK;
         }
         if(rc!=EFS_OK) {
+            capture->refused=rc;
             int aborted=ops->decide(ctx,t,&parts,EFS_TXN_ABORT);
             if(aborted!=EFS_OK)rc=aborted;
             else (void)ops->resolve(ctx,t,&parts,EFS_TXN_ABORT);
@@ -372,9 +374,27 @@ int efs_meta_finish_append_owned(struct efs_kv *kv,efs_ino_t ino,uint64_t offset
     const struct efs_meta_append_ops *ops,void *ctx)
 {return efs_meta_finish_append_batch_owned(kv,ino,&offset,1,outcome,id,tx,ops,ctx);}
 
-int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
+/* A PREPARE refused with BUSY or STALE (a concurrent append took a lock or
+ * a guard) ends the transaction before COMMIT is ever proposed: a definite
+ * no-op, whatever the coordinator's own DECIDE ABORT answered (a failed one
+ * is finished by the server's ABORT finisher or recovery; K42 saw it on a
+ * five-member loopback). BUSY with *wait ABORTED. Any other refusal and
+ * every COMMIT keep their own result. */
+__thread const char *efs_meta_append_cleanup_why;
+static int finish_refusal(const struct finish_capture *c,int rc,unsigned *wait)
+{
+    efs_meta_append_cleanup_why=c->refused?"prepare":"commit";
+    if(rc!=EFS_OK && (c->refused==EFS_ERR_BUSY || c->refused==EFS_ERR_STALE)) {
+        *wait=EFS_META_APPEND_WAIT_ABORTED;return EFS_ERR_BUSY;
+    }
+    return rc;
+}
+
+/* wait (K42, revoked-session cleanup only): name a no-op BUSY; NULL keeps
+ * every result exactly as the other callers expect it. */
+static int retire_barriers(struct efs_kv *kv,efs_ino_t ino,
     const struct efs_opid *id,const struct efs_txid *tx,
-    const struct efs_meta_append_ops *ops,void *ctx)
+    const struct efs_meta_append_ops *ops,void *ctx,unsigned *wait)
 {
     if(!kv || !ino || !tx || !ops || !ops->prepare || !ops->decide ||
        !ops->resolve)return EFS_ERR_INVAL;
@@ -382,6 +402,9 @@ int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
     const struct efs_kv_ops capture_ops={.get=finish_get};
     struct efs_kv reader={.ops=&capture_ops,.ctx=&capture};
     int rc=efs_meta_collect_append_barrier_retirement(&reader,ino,finish_batch,&capture);
+    /* A reservation opened after the caller's state read. */
+    if(rc==EFS_ERR_BUSY && wait)*wait=EFS_META_APPEND_WAIT_OPEN;
+    if(wait)efs_meta_append_cleanup_why="barrier-collect";
     struct append_owner_context owner={.ops=ops,.ctx=ctx,.first=1};
     const struct efs_meta_append_ops owned_ops={append_owner_prepare,append_owner_decide,append_owner_resolve};
     if(rc==EFS_OK && capture.mutations && id) {
@@ -396,24 +419,38 @@ int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
             memcpy(owner.owner.value,owner.owner.expected,EFS_SESS_LOCAL_VAL);
         }
     }
-    if(rc==EFS_OK && capture.mutations)
+    if(rc==EFS_OK && capture.mutations) {
         rc=finish_execute(&capture,tx,id?&owned_ops:ops,id?(void *)&owner:ctx);
+        if(wait)rc=finish_refusal(&capture,rc,wait);
+    }
     finish_free(&capture);return rc;
 }
 
+int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
+    const struct efs_opid *id,const struct efs_txid *tx,
+    const struct efs_meta_append_ops *ops,void *ctx)
+{
+    return retire_barriers(kv,ino,id,tx,ops,ctx,NULL);
+}
+
+
 int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t generation,
     uint64_t offset,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
-    const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx)
+    const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx,
+    unsigned *wait)
 {
-    if(!kv || !ino || !generation || !uuid || !epoch || !t || !ops ||
+    if(!kv || !ino || !generation || !uuid || !epoch || !t || !ops || !wait ||
        !ops->prepare || !ops->decide || !ops->resolve)return EFS_ERR_INVAL;
+    *wait=EFS_META_APPEND_WAIT_NONE;efs_meta_append_cleanup_why="floor";
     int rc=efs_session_cleanup_floor(kv,efs_kv_inode_shard(ino),uuid,epoch);
     if(rc!=EFS_OK)return rc;
+    efs_meta_append_cleanup_why="capture";
     struct finish_capture c={.base=kv};
     const struct efs_kv_ops capture_ops={.get=finish_get,.scan_prefix=finish_scan,.scan_from=finish_scan_from};
     struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
     struct efs_meta_row row;
     rc=efs_meta_apply_get_inode(&capture,ino,&row);
+    if(rc==EFS_ERR_NOT_FOUND)*wait=EFS_META_APPEND_WAIT_GONE;
     if(rc==EFS_OK && row.generation!=generation)rc=EFS_ERR_STALE;
     uint8_t key[EFS_KV_KEY_MAX],value[48];uint32_t kl=0,vl=sizeof(value);
     if(rc==EFS_OK)rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,generation,offset,key,&kl);
@@ -424,7 +461,7 @@ int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t gener
         (uint32_t)value[34]<<8 | value[35])!=epoch))rc=EFS_ERR_STALE;
     if(rc==EFS_OK)rc=efs_meta_collect_append_completion(&capture,ino,offset,
                                       EFS_META_APPEND_FENCED_HOLE,finish_batch,&c);
-    if(rc==EFS_OK && c.mutations)rc=finish_execute(&c,t,ops,ctx);
+    if(rc==EFS_OK && c.mutations)rc=finish_refusal(&c,finish_execute(&c,t,ops,ctx),wait);
     finish_free(&c);return rc;
 }
 
@@ -635,22 +672,24 @@ int efs_meta_append_session_idle(struct efs_kv *kv,uint32_t shard,
 int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
     const struct efs_txid *tx,const struct efs_meta_append_ops *ops,void *ctx,
-    unsigned *progress)
+    unsigned *progress,unsigned *wait)
 {
     if(!kv || !uuid || !tx || !ops || !ops->prepare || !ops->decide ||
-       !ops->resolve || !progress)return EFS_ERR_INVAL;
-    *progress=0;
+       !ops->resolve || !progress || !wait)return EFS_ERR_INVAL;
+    *progress=0;*wait=EFS_META_APPEND_WAIT_NONE;efs_meta_append_cleanup_why="select";
     struct receipt_selection selected={.shard=shard,.epoch=epoch,.uuid=uuid};
     int rc=retire_select(kv,&selected);
     if(rc!=EFS_OK || !selected.kl)return rc;
+    efs_meta_append_cleanup_why="capture";
     efs_ino_t ino=0;for(unsigned i=3;i<11;i++)ino=ino<<8|selected.key[i];
     uint64_t watermark=0;uint32_t open=0;
     rc=efs_meta_apply_append_state(kv,ino,&watermark,NULL,&open);
+    if(rc==EFS_ERR_NOT_FOUND)*wait=EFS_META_APPEND_WAIT_GONE;
     if(rc!=EFS_OK)return rc;
     if(watermark && !open) {
         /* Interrupted REPORT completed its inode rows but still owes lane
          * retirement. Use this cleanup txid only once; the next step prunes. */
-        rc=efs_meta_retire_append_barriers(kv,ino,NULL,tx,ops,ctx);
+        rc=retire_barriers(kv,ino,NULL,tx,ops,ctx,wait);
         if(rc==EFS_OK)*progress=1;
         return rc;
     }
@@ -660,16 +699,16 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     const struct efs_kv_ops capture_ops={.get=finish_get};
     struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
     rc=efs_meta_apply_append_state(&capture,ino,NULL,NULL,&open);
-    if(rc==EFS_OK && open)rc=EFS_ERR_BUSY;
+    if(rc==EFS_OK && open){rc=EFS_ERR_BUSY;*wait=EFS_META_APPEND_WAIT_OPEN;}
     unsigned removed=0;
     if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&removed,0);
-    if(rc==EFS_OK && !removed && selected.kl==27)rc=EFS_ERR_BUSY;
+    if(rc==EFS_OK && !removed && selected.kl==27){rc=EFS_ERR_BUSY;*wait=EFS_META_APPEND_WAIT_FRONTIER;}
     if(rc==EFS_OK && !removed) {
         uint32_t slot;
         rc=finish_record(&c,selected.key,selected.kl,selected.value,selected.vl,&slot);
         if(rc==EFS_OK) {c.images[slot].op=EFS_TXN_DEL;c.images[slot].new_len=0;}
     }
-    if(rc==EFS_OK)rc=finish_execute(&c,tx,ops,ctx);
+    if(rc==EFS_OK)rc=finish_refusal(&c,finish_execute(&c,tx,ops,ctx),wait);
     if(rc==EFS_OK)*progress=removed?removed:1;
     finish_free(&c);return rc;
 }

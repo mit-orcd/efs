@@ -325,7 +325,7 @@ static uint64_t read_peer_now_ms(void)
 
 /* W125: one fragment of a packed segment (GET_SEGMENT). The group rides
  * in the reference; the fetch reader checks the length and the hash. */
-struct packed_fetch_ctx { uint32_t group; };
+struct packed_fetch_ctx { uint32_t group; int rc[EFS_NUM_FRAGMENTS], tried[EFS_NUM_FRAGMENTS]; };
 static int packed_fetch_run(void *context, efs_node_id_t node, uint64_t id, uint64_t generation,
                             uint32_t fi, uint32_t geometry, uint8_t *out, uint32_t capacity)
 {
@@ -394,7 +394,51 @@ static int packed_fetch(void *context, efs_node_id_t node, uint64_t id, uint64_t
     efs_client_rpc_set_deadline_ms(previous);
     if (rc == EFS_ERR_BUSY && !efs_client_rpc_past_deadline())
         rc = EFS_ERR_NET;
+    struct packed_fetch_ctx *pc = context;
+    if (fi < EFS_NUM_FRAGMENTS) {
+        pc->rc[fi] = rc;
+        pc->tried[fi] = 1;
+    }
     return rc;
+}
+
+/* K41: a packed read that reached a member holding a fragment but could not
+ * gather two is lost or unprotected data, not a network error to retry:
+ * EIO, with the segment and every fragment's outcome logged (at most once
+ * per segment every 10 s). Found by the wave-9 gate: a segment written
+ * degraded lost its second holder and the read logged only
+ * `fetch published ... rc=-6`. All three unreachable stays NET. */
+static int packed_short(efs_ino_t ino, const struct efs_chunk_entry *ce,
+                        const struct packed_fetch_ctx *pc, int prc)
+{
+    static uint64_t said_id, said_ms;
+    int answered = 0, good = 0;
+    /* Integrity refusals (CHECKSUM), a decode or record verdict (DECODE,
+     * STALE) keep their own code; only missing fragments are short. */
+    if (prc != EFS_ERR_NET && prc != EFS_ERR_NOT_FOUND)
+        return prc;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        answered += pc->tried[i] && pc->rc[i] != EFS_ERR_NET;
+        good += pc->tried[i] && pc->rc[i] == EFS_OK;
+    }
+    if (!answered && prc == EFS_ERR_NET)
+        return prc;
+    uint64_t now = read_peer_now_ms(), id = ce->packed.segment_id;
+    if (__atomic_load_n(&said_id, __ATOMIC_RELAXED) != id ||
+        now >= __atomic_load_n(&said_ms, __ATOMIC_RELAXED) + 10000) {
+        __atomic_store_n(&said_id, id, __ATOMIC_RELAXED);
+        __atomic_store_n(&said_ms, now, __ATOMIC_RELAXED);
+        char what[3][24];
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+            snprintf(what[i], sizeof(what[i]), pc->tried[i] ? "%d" : "untried", pc->rc[i]);
+        fprintf(stderr, "efs: packed read ino=%llu segment g%u id=%016llx gen=%llx: %d of 3 "
+                "fragments read (node %u rc=%s, node %u rc=%s, node %u rc=%s; need 2): EIO\n",
+                (unsigned long long)ino, (unsigned)ce->packed.publication_group,
+                (unsigned long long)id, (unsigned long long)ce->packed.segment_generation, good,
+                ce->fragment_nodes[0], what[0], ce->fragment_nodes[1], what[1],
+                ce->fragment_nodes[2], what[2]);
+    }
+    return EFS_ERR_IO;
 }
 
 /* K34: a read that found fewer than two fragments may have skipped a member
@@ -467,19 +511,22 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
         if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
         void *scratch = demand_read_alloc((uint32_t)needed);
         if (!scratch) return EFS_ERR_BUSY; /* deadline passed */
-        struct packed_fetch_ctx pctx = {ce.packed.publication_group};
+        struct packed_fetch_ctx pctx = {.group = ce.packed.publication_group};
         int prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
             (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
             chunk_out, chunk_size, scratch, needed);
-        if (prc == EFS_ERR_NET && read_reprobe_down(ce.fragment_nodes))
+        if (prc == EFS_ERR_NET && read_reprobe_down(ce.fragment_nodes)) {
+            pctx = (struct packed_fetch_ctx){.group = ce.packed.publication_group};
             prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
                 (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
                 chunk_out, chunk_size, scratch, needed);
+        }
         efs_buf_free(scratch, (uint32_t)needed);
         /* K37: a segment fragment its node does not have is lost data, not
          * a missing file: fewer than two fragments read is EIO, never
-         * ENOENT on an open file. */
-        return prc == EFS_ERR_NOT_FOUND ? EFS_ERR_IO : prc;
+         * ENOENT on an open file (K41: nor a network error when a holder
+         * answered). */
+        return packed_short(ino, &ce, &pctx, prc);
     }
     if (have_ce) {
         uint8_t zck[EFS_HASH_SIZE];
