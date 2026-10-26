@@ -18,6 +18,9 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Oct 25 K22/K6 loopback gates: snapshot import into a stalled follower, leader admission at 3/4, W130 one-replica DIR fault with raft-resync recovery](k22-k6-loopback-taskb-20261025.md):
+**branch `agent/devel-taskb` (from devel `5af760ff1`), not merged, not pushed; xorinox loopback, fault build, TCP.** All three gates PASS as new `make test-long` tests with budget rows; two product defects found and fixed on the branch (send_snap retry storm; raft-resync could not heal a halted replica), two opened (W162 serve-path decode not fail-closed, W163 close EIO while a leader's apply lags). NOTRUN: production-scale 1 GiB lag on real hosts, RDMA, multi-host.
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 

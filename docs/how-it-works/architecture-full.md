@@ -1598,6 +1598,9 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Oct 25 K22/K6 loopback gates: snapshot import into a stalled follower, leader admission at 3/4, W130 one-replica DIR fault with raft-resync recovery](../status/k22-k6-loopback-taskb-20261025.md):
+**branch `agent/devel-taskb` (from devel `5af760ff1`), not merged, not pushed; xorinox loopback, fault build, TCP.** All three gates PASS as new `make test-long` tests with budget rows; two product defects found and fixed on the branch (send_snap retry storm; raft-resync could not heal a halted replica), two opened (W162 serve-path decode not fail-closed, W163 close EIO while a leader's apply lags). NOTRUN: production-scale 1 GiB lag on real hosts, RDMA, multi-host.
+
 [Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](../status/f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
@@ -10326,6 +10329,48 @@ mutation passes the old memory-store cases. An inclusive resume fails
 both. Gate: `make test` on efs3, in the K25 report.
 
 **Raw evidence note (2026-10-23):** the bulk data in `gc-buffered-3ohdte4d` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.
+
+<a id="w162"></a>
+### W162 — Serve-path decode of a damaged stored row does not fail closed
+
+**Correctness; opened 2026-10-25 from the W130 one-replica gate (tests/test_w130_dir_fault.py on `agent/devel-taskb`).**
+- The W127/W130 fail-closed halt covers only the raft *apply* path. When a
+  replica's stored directory row is damaged and a *serve*-path read meets it
+  first — a create into the splitting directory whose lane's leader holds
+  the damage — client opens fail EIO persistently and no halt fires, so the
+  replica neither serves nor steps aside.
+- Reproduced on xorinox loopback in gate runs 11/13/14/21 (kept forensics
+  under the test work dirs there); the deterministic apply-path case halts
+  and recovers as designed.
+- Fix direction: route decode failures on the serve path (lane pick and
+  pre-propose row reads) through the same halt, or make the client
+  re-resolve and ride out the halted leader; decide which.
+- Gate: extend the W130 test to arm the fault between the split's commit
+  and the next DIR apply so the serve path meets it first.
+
+<a id="w163"></a>
+### W163 — close(2) EIO at the 30 s flush deadline while a leader's apply lags
+
+**Correctness / availability; opened 2026-10-25 from the K22 loopback gates on `agent/devel-taskb`.**
+- A stalled follower (SIGSTOP; log present, sockets open) makes client
+  closes fail EIO at the 30 s flush deadline during the first ~2.5 min of
+  the stall — before fencing settles — reproduced with the production 512
+  MiB snapshot window (snap-prodwin.log on xorinox: t=71/77/112/152 s).
+  The B6 member-fault contract allows explicit failure, but a *stalled*
+  member is not fenced yet when the errors start.
+- The same close-EIO signature appears throughout a pressured leader's
+  fill when the KV budget is compressed to test scale (apply churn; K22
+  leader-admission gate, t=41..228 s every ~30 s, all writers in
+  lockstep). At production budgets the window is the multi-host drivers'
+  subject.
+- Fix direction: decide between faster fencing of a stalled member, a
+  flush deadline that rides out member-change windows, or earlier
+  admission shielding of closes; the 30 s deadline is fail-fast by design
+  and the question is which side owns the stall.
+- Gate: the K22 tests print these as findings with timestamps; a dedicated
+  reproducer is `tests/test_k22_snapshot_import.py` at
+  `K22_SNAP_BYTES=0 K22_STOP_DEADLINE=240` (drive-phase failure message
+  lists the write errors).
 
 
 ## Appendix 6 — Naming
