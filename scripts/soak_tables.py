@@ -56,6 +56,9 @@ def main(out):
             begin = r['t']
         elif r['kind'] == 'churn-end':
             spans.append((begin, r['t']))
+            begin = None
+    if begin is not None:
+        spans.append((begin, float('inf')))  # run stopped inside this event
     bad_steady = [r for r in bad if not any(a <= r['t'] <= b for a, b in spans)]
     revoked = [r for r in rows if r['kind'] == 'crashed-session-revoked']
     print()
@@ -125,7 +128,7 @@ def main(out):
     print(table(('final check', 'value'), [
         ('last verification', f"{verified[-1]['files']} files, {verified[-1]['appends']} appends, {verified[-1]['mounts']} mounts" if verified else 'none'),
         ('last protection sample', json.dumps(status[-1]['protection']) if status else 'none'),
-        ('orphans in samples after final revoke', sorted({(r.get('protection') or {}).get('orphans') for r in final})),
+        ('orphans in samples after final revoke', sorted({(r.get('protection') or {}).get('orphans') for r in final}, key=str)),
     ]))
 
 
