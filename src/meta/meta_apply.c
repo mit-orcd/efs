@@ -5183,9 +5183,24 @@ static int publish_inner_as(struct efs_kv *kv, const struct efs_meta_pub *p,
             newest = last.seq;
         }
         /* The merged image covers exactly the deltas the writer read.
-         * A span that landed after that read must not be deleted. */
-        if (!p->unconditional && (nd_old != p->delta_base_n || newest != p->delta_base_seq))
+         * A span that landed after that read must not be deleted. An
+         * unconditional image (aligned, or a client's overflow collapse)
+         * may replace spans of an older content epoch: a truncate the
+         * writer saw masked them (its own previous tail, D4). A span of
+         * this epoch newer than the writer's view is another writer's, and
+         * still refuses it, so the writer replays and merges (K38). */
+        if (p->unconditional) {
+            for (uint32_t di = 0; di < nd_old; di++) {
+                struct efs_meta_delta d;
+                rc = trailer_at(old_ch, ch_vlen, di, &d);
+                if (rc != EFS_OK)
+                    return rc;
+                if (d.len && d.content_epoch >= p->content_epoch && d.seq > p->delta_base_seq)
+                    PUB_STALE(EFS_PUB_STALE_FOLD_LIST);
+            }
+        } else if (nd_old != p->delta_base_n || newest != p->delta_base_seq) {
             PUB_STALE(EFS_PUB_STALE_FOLD_LIST);
+        }
     }
     ln.max_end = max_u64(ln.max_end, p->new_size);
     /* D17: the chunk row coming into existence is what st_blocks counts;

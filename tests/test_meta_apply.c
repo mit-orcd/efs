@@ -1034,10 +1034,12 @@ static void test_chunk_deltas(void)
               got.generation == 0xF1,
           "second fold landed");
     /* D4 reclaim lag: an unconditional full image (the writer sent
-     * EFS_CHUNK_BASE_UNCOND) replaces whatever is committed. The REPORT
-     * host's base and the writer's span list may both be out of date by
-     * the time it applies (a truncate sweep, the writer's own truncate);
-     * the same record without the flag is still refused. */
+     * EFS_CHUNK_BASE_UNCOND) replaces whatever base is committed and the
+     * spans a truncate masked (an older content epoch). The REPORT host's
+     * base and the writer's span list may both be out of date by the time
+     * it applies; the same record without the flag is still refused. A
+     * span of the image's epoch newer than the writer's view is another
+     * writer's and refuses it (K38: the writer replays and merges). */
     p.delta_off = 200;
     p.delta_len = 100;
     p.candidate_gen = 0xF2;
@@ -1053,6 +1055,10 @@ static void test_chunk_deltas(void)
               efs_meta_apply_publish_stale_why() == EFS_PUB_STALE_BASE_CAS,
           "conditional image on a stale base");
     p.unconditional = 1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE &&
+              efs_meta_apply_publish_stale_why() == EFS_PUB_STALE_FOLD_LIST,
+          "unconditional image over an unseen span of its epoch");
+    p.content_epoch++;                /* the image follows a truncate */
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "unconditional image");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
               got.generation == 0xF3,
@@ -1064,6 +1070,7 @@ static void test_chunk_deltas(void)
         CHECK(ds[k].len == 0, "no live span survives an unconditional image");
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "unconditional replay");
     p.unconditional = 0;
+    p.content_epoch--;
 
     /* A fresh file fills the chain and refuses the next span. */
     efs_kv_mem_free(kv);
