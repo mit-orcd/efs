@@ -364,7 +364,9 @@ struct efs_packer_status {
              abandon_actionable, /* of those, foreign admissions with pending records */
              abandon_refused,    /* candidates whose full decode failed (not cancelled) */
              base_segments,      /* packed-base segments read (one per segment per pass) */
-             base_files;         /* files whose packed base came from those reads */
+             base_files,         /* files whose packed base came from those reads */
+             spares,             /* K41: segment destinations replaced by a live spare */
+             degraded;           /* K37: segments written with two fragments and marked */
 };
 struct efs_msg_pack_compact_reply {
     int32_t rc;

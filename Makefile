@@ -1052,6 +1052,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_payload.py
 	python3 tests/test_k35_fsync_degraded.py
 	python3 tests/test_k37_segment_rebuild.py
+	python3 tests/test_k41_packer_placement.py
 	python3 tests/test_k38_protection_now.py
 	EFS_B_PHASES=grow-a python3 tests/test_b_geometry.py
 	EFS_B_PHASES=grow-b python3 tests/test_b_geometry.py

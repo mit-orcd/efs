@@ -16073,6 +16073,32 @@ int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit
     pthread_mutex_unlock(&h->mu);
     return lead;
 }
+/* K41: voters of a group this node leads that have acknowledged no
+ * AppendEntries (heartbeats go every HOST_HB_TICKS) for HOST_UNRESPONSIVE_TICKS,
+ * as node-id bits (bit id - 1); 0 when this node does not lead the group.
+ * One liveness signal of the packer's placement among several. */
+#define HOST_UNRESPONSIVE_TICKS (4u * HOST_ELECT_BASE)
+uint32_t server_raft_host_unresponsive_voters(uint8_t group)
+{
+    struct efs_raft_host *h = g_host;
+    uint32_t out = 0;
+    if (!h || !__atomic_load_n(&h->running, __ATOMIC_ACQUIRE)) return 0;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    if (r && efs_raft_role(r) == EFS_RAFT_LEADER) {
+        uint32_t voters = efs_raft_voters(r);
+        for (int p = 0; p < EFS_RAFT_MAX_PEERS && p < EFS_MAX_NODES; p++) {
+            struct efs_raft_peer_progress pp;
+            if (!(voters & (1u << p)) || p == h->raft_id ||
+                efs_raft_peer_progress(r, p, &pp) != EFS_OK)
+                continue;
+            if (pp.ack_age == UINT64_MAX || pp.ack_age >= HOST_UNRESPONSIVE_TICKS)
+                out |= 1u << p;
+        }
+    }
+    pthread_mutex_unlock(&h->mu);
+    return out;
+}
 /* Commit index of a group hosted here, leader or not; 0 when not hosted. */
 uint64_t server_raft_host_group_commit(uint8_t group)
 {

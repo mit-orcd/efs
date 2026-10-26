@@ -140,22 +140,23 @@ void efs_place_fragments(const struct efs_node *nodes, uint32_t node_count,
     }
 }
 
-int efs_pack_destinations(const struct efs_node *members, uint32_t count,
-                          efs_node_id_t self, uint64_t segment_id,
-                          efs_node_id_t out[EFS_NUM_FRAGMENTS])
+/* The segment ring: live members (not heartbeat-marked down, not in skip;
+ * self always live), distinct, ascending. Returns how many. */
+static uint32_t pack_ring(const struct efs_node *members, uint32_t count,
+                          efs_node_id_t self, uint32_t skip,
+                          efs_node_id_t ids[EFS_MAX_NODES])
 {
-    efs_node_id_t ids[EFS_MAX_NODES], ranks[EFS_NUM_FRAGMENTS];
     uint32_t n = 0;
 
-    memset(out, 0, sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
     if (!members)
-        return EFS_ERR_BUSY;
+        return 0;
     if (count > EFS_MAX_NODES)
         count = EFS_MAX_NODES;
     for (uint32_t i = 0; i < count; i++) {
         efs_node_id_t id = members[i].id;
         int dup = 0;
-        if (!id || id > EFS_MAX_NODES || (id != self && members[i].down_until_ms))
+        if (!id || id > EFS_MAX_NODES || (skip & (1u << (id - 1))) ||
+            (id != self && members[i].down_until_ms))
             continue;
         for (uint32_t j = 0; j < n; j++)
             dup |= ids[j] == id;
@@ -169,12 +170,53 @@ int efs_pack_destinations(const struct efs_node *members, uint32_t count,
         }
         ids[j] = id;
     }
+    return n;
+}
+
+int efs_pack_destinations(const struct efs_node *members, uint32_t count,
+                          efs_node_id_t self, uint64_t segment_id,
+                          efs_node_id_t out[EFS_NUM_FRAGMENTS])
+{
+    return efs_pack_destinations_skip(members, count, self, segment_id, 0, out);
+}
+
+int efs_pack_destinations_skip(const struct efs_node *members, uint32_t count,
+                               efs_node_id_t self, uint64_t segment_id, uint32_t skip,
+                               efs_node_id_t out[EFS_NUM_FRAGMENTS])
+{
+    efs_node_id_t ids[EFS_MAX_NODES], ranks[EFS_NUM_FRAGMENTS];
+    uint32_t n = pack_ring(members, count, self, skip, ids);
+
+    memset(out, 0, sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
     if (n < EFS_NUM_FRAGMENTS)
         return EFS_ERR_BUSY;
     place_wide(n, (efs_ino_t)segment_id, 0, ranks);
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         out[i] = ids[ranks[i] - 1];
     return EFS_OK;
+}
+
+efs_node_id_t efs_pack_spare(const struct efs_node *members, uint32_t count,
+                             efs_node_id_t self, efs_node_id_t after, uint32_t skip,
+                             const efs_node_id_t stripe[EFS_NUM_FRAGMENTS])
+{
+    efs_node_id_t ids[EFS_MAX_NODES];
+    uint32_t n = pack_ring(members, count, self, skip, ids), at = 0;
+
+    if (!stripe)
+        return 0;
+    /* First ring position past `after` (which may itself be off the ring). */
+    while (at < n && ids[at] <= after)
+        at++;
+    for (uint32_t k = 0; k < n; k++) {
+        efs_node_id_t id = ids[(at + k) % n];
+        int used = 0;
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+            used |= stripe[i] == id;
+        if (!used)
+            return id;
+    }
+    return 0;
 }
 
 efs_node_id_t efs_place_spare(const efs_node_id_t *live, uint32_t count,

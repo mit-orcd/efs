@@ -203,6 +203,69 @@ static int k28_pack_destinations(uint32_t n)
     return failures;
 }
 
+/* K41: the packer drops destinations its probe or PUT found unreachable
+ * (efs_pack_destinations_skip) and replaces one by the next live ring
+ * member (efs_pack_spare): never a skipped, down or already used member,
+ * the same answer for any membership order, 0 once none is left. */
+static int k41_pack_spare(void)
+{
+    int failures = 0;
+    struct efs_node m[6], rev[6];
+    efs_node_id_t d[EFS_NUM_FRAGMENTS], e[EFS_NUM_FRAGMENTS];
+
+    memset(m, 0, sizeof(m));
+    for (uint32_t i = 0; i < 6; i++) m[i].id = i + 1;
+    m[3].down_until_ms = 1; /* node 4 heartbeat-marked down */
+    for (uint32_t i = 0; i < 6; i++) rev[i] = m[5 - i];
+    for (uint64_t t = 1; t <= 500; t++) {
+        uint64_t id = (t * 7919ull) << 8 | 1;
+        uint32_t skip = 1u << (t % 6); /* one member failed its probe */
+        if (efs_pack_destinations_skip(m, 6, 1, id, skip, d) != EFS_OK ||
+            efs_pack_destinations_skip(rev, 6, 1, id, skip, e) != EFS_OK || memcmp(d, e, sizeof(d))) {
+            fprintf(stderr, "FAIL k41 skip t=%llu refused or order-dependent\n", (unsigned long long)t);
+            failures++;
+            continue;
+        }
+        for (int k = 0; k < EFS_NUM_FRAGMENTS; k++) {
+            if (d[k] == 4 || (skip >> (d[k] - 1) & 1u)) {
+                fprintf(stderr, "FAIL k41 skip t=%llu placed on %u\n", (unsigned long long)t, d[k]);
+                failures++;
+            }
+        }
+    }
+    /* Ring 1,2,3,5,6 (4 down): node 2 failed, the spare after it outside
+     * the stripe {1,2,3} is 5; past the highest id the walk wraps to 1. */
+    efs_node_id_t stripe[EFS_NUM_FRAGMENTS] = {1, 2, 3};
+    if (efs_pack_spare(m, 6, 1, 2, 1u << 1, stripe) != 5 ||
+        efs_pack_spare(rev, 6, 1, 2, 1u << 1, stripe) != 5) {
+        fprintf(stderr, "FAIL k41 spare after 2 is not 5\n");
+        failures++;
+    }
+    efs_node_id_t s2[EFS_NUM_FRAGMENTS] = {5, 6, 2};
+    if (efs_pack_spare(m, 6, 1, 6, 1u << 5, s2) != 1) { /* wraps: 1 */
+        fprintf(stderr, "FAIL k41 spare does not wrap to 1\n");
+        failures++;
+    }
+    if (efs_pack_spare(m, 6, 1, 4, 0, stripe) != 5) { /* `after` off the ring */
+        fprintf(stderr, "FAIL k41 spare after a down member\n");
+        failures++;
+    }
+    /* 5 and 6 skipped, 4 down: nothing outside {1,2,3}. */
+    if (efs_pack_spare(m, 6, 1, 2, (1u << 4) | (1u << 5) | (1u << 1), stripe) != 0 ||
+        efs_pack_spare(m, 6, 1, 2, 0, NULL) != 0) {
+        fprintf(stderr, "FAIL k41 spare found a member that is not left\n");
+        failures++;
+    }
+    /* Two skipped of five live leaves three: placed; three skipped: refused. */
+    if (efs_pack_destinations_skip(m, 6, 1, 99, (1u << 1) | (1u << 2), d) != EFS_OK ||
+        efs_pack_destinations_skip(m, 6, 1, 99, (1u << 1) | (1u << 2) | (1u << 4), d) != EFS_ERR_BUSY ||
+        d[0] || d[1] || d[2]) {
+        fprintf(stderr, "FAIL k41 skip three-member edge\n");
+        failures++;
+    }
+    return failures;
+}
+
 /* K28/W151 + D38: three voters per group for n >= 4, nodes 5..n host no
  * metadata, n <= 3 all nodes; every set is a valid Raft voter mask. */
 static int k28_voters(void)
@@ -619,6 +682,7 @@ int main(void)
         failures += spread_spares();
         for (size_t i = 0; i < sizeof(ks) / sizeof(ks[0]); i++)
             failures += k28_pack_destinations(ks[i]);
+        failures += k41_pack_spare();
         if (EFS_MAX_NODES != 16) {
             fprintf(stderr, "FAIL k28 cap changed: update the K28 evidence summary\n");
             failures++;
