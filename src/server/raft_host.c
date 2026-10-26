@@ -2610,6 +2610,27 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (clen < HOST_DIR_LEN)
         return EFS_ERR_UNSUPPORTED;
     dir = rd64be(cmd + 2);
+#if EFS_FAULTS
+    /* Test hook (W130 gate): while the marker file exists, damage the
+     * target directory's stored row on THIS replica just before the step,
+     * so the step's own meta read gets a row the decoder refuses
+     * (one-replica fault, apply path). A step that rewrites the row
+     * without reading it repairs the damage, so the marker is re-armed
+     * until a step actually trips on the row. */
+    const char *dmg_ = getenv("EFS_FAULT_DIR_CORRUPT_FILE");
+    if (dmg_ && access(dmg_, F_OK) == 0) {
+        uint8_t key[EFS_KV_KEY_MAX], junk[16];
+        uint32_t kl = 0;
+        if (efs_kv_key_inode(efs_kv_inode_shard(dir), dir, key, &kl) == EFS_OK) {
+            memset(junk, 0xEE, sizeof(junk));
+            if (efs_kv_put(h->kv, key, kl, junk, sizeof(junk)) == EFS_OK)
+                fprintf(stderr, "raft-host: fault dir-corrupt: damaged ino=%llu row\n",
+                        (unsigned long long)dir);
+        }
+    } else {
+        dmg_ = NULL;
+    }
+#endif
     switch (cmd[1]) {
     case EFS_MD_DIR_BEGIN:
         rc = efs_meta_dir_begin_split(h->kv, dir);
@@ -2624,24 +2645,8 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         return EFS_ERR_UNSUPPORTED;
     }
 #if EFS_FAULTS
-    if (rc == EFS_OK) {
-        /* Test hook (W130 gate): while the marker file exists, damage the
-         * target directory's stored row on THIS replica after a successful
-         * step — the next step's meta read then gets a row the decoder
-         * cannot accept (one-replica fault). One-shot per marker. */
-        const char *dmg = getenv("EFS_FAULT_DIR_CORRUPT_FILE");
-        if (dmg && access(dmg, F_OK) == 0) {
-            uint8_t key[EFS_KV_KEY_MAX], junk[16];
-            uint32_t kl = 0;
-            if (efs_kv_key_inode(efs_kv_inode_shard(dir), dir, key, &kl) == EFS_OK) {
-                memset(junk, 0xEE, sizeof(junk));
-                if (efs_kv_put(h->kv, key, kl, junk, sizeof(junk)) == EFS_OK)
-                    fprintf(stderr, "raft-host: fault dir-corrupt: damaged ino=%llu row\n",
-                            (unsigned long long)dir);
-            }
-            unlink(dmg);   /* one-shot per marker */
-        }
-    }
+    if (dmg_ && rc == EFS_ERR_PROTO)
+        unlink(dmg_);   /* the step tripped on the damaged row: one-shot done */
 #endif
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY)
         rc = EFS_OK;
