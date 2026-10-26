@@ -202,8 +202,10 @@ the sanitized binaries. `make sanitize-check` runs both.
   least-squares slope over the last third of the load, times its span, is
   at most 5 % of the peak. The table is
   printed on every run and enforced from a 600 s load (`EFS_D4_PLATEAU=1`
-  forces it); the same rule applies to every node's stored data
-  (`efs-mgmt gc-status` data_usage_bytes), and on every run the orphan
+  forces it); every node's stored data (`efs-mgmt gc-status`
+  data_usage_bytes) must stay bounded under the same switch: the last
+  third's peak at most 25 % above the peak before it (reclaim works in
+  batches, a sawtooth a slope misreads); and on every run the orphan
   ledger's abandoned uploads after the load must stay at most 5 % of the
   rewrites (an abandoned upload is collectable only when its mount's
   session ends). The F1 measurement is

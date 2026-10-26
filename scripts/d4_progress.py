@@ -39,9 +39,11 @@ created == live == threads × N (no net creation) and every operation kind
 to have run; with --plateau-pct P every efs-fuse and efsd RSS must be at a
 plateau over the load: the last third grows by at most P % of the peak
 (scripts/rss_plateau.py, the same rows in the result's `rss_plateau`), and
-so must every node's stored data (`efs-mgmt gc-status` data_usage_bytes,
-rows in `space_plateau`, always reported in this mode): with no net
-creation, superseded fragments must be reclaimed as fast as they are made.
+every node's stored data (`efs-mgmt gc-status` data_usage_bytes, rows in
+`space_plateau`, always reported in this mode) must stay bounded: the last
+third's peak at most 25 % above the peak before it (reclaim works in
+batches, so the series is a sawtooth). With no net creation, superseded
+fragments must be reclaimed as fast as they are made.
 The orphan ledger's abandoned uploads (`efs-mgmt status`) after the load
 must stay at most 5 % of the rewrites (at least 16).
 
@@ -108,6 +110,9 @@ def parse_gc_status(text):
         return {}
     return {'data_bytes': int(m.group(1)),
             'gc_pending': sum(int(x) for x in re.findall(r'\bpending_estimate=(\d+)', text))}
+
+
+SPACE_PEAK_PCT = 25.0  # stored data: last third's peak over the earlier peak (rss_plateau.evaluate_peaks)
 
 
 def parse_abandoned(text):
@@ -757,14 +762,14 @@ class Run:
             # With no net creation the stored data is bounded too: superseded
             # fragments must be reclaimed as fast as rewrites make them.
             space = rss_plateau.space_from_samples(self.samples)
-            rows = rss_plateau.evaluate(space, a.load_s, a.plateau_pct or 5.0)
+            rows = rss_plateau.evaluate_peaks(space, a.load_s, SPACE_PEAK_PCT)
             m['space_plateau'] = rows
             m['gc_pending_max'] = mx(sum((b or {}).get('gc_pending', 0) for b in s['nodes'].values())
                                      for s in self.samples if s.get('nodes'))
             growing = [r['process'] for r in rows if r['verdict'] != 'PLATEAU']
             if a.plateau_pct is not None and (growing or not rows):
-                fails.append(f'stored data not at a plateau (the last third of the load grows by more than '
-                             f'{a.plateau_pct} % of the peak): {growing or "no samples"}')
+                fails.append(f'stored data not bounded (the last third of the load peaks more than '
+                             f'{SPACE_PEAK_PCT} % above the peak before it): {growing or "no samples"}')
         return ('FAIL' if fails else 'PASS'), fails, m
 
     def cleanup(self):

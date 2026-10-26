@@ -264,7 +264,7 @@ def space_growing(r):
     r.samples = [sample(t, 'load', comp=t + 1, packed=t + 1, gen=t + 1, data=(64 << 20) + t * (8 << 20))
                  for t in range(12)]
     r.samples[-1]['abandoned'] = 0
-fails_with('stored data not at a plateau', a=args(load_s=12.0, plateau_pct=5.0, threads=2, working_set=10),
+fails_with('stored data not bounded', a=args(load_s=12.0, plateau_pct=5.0, threads=2, working_set=10),
            edit=space_growing)
 def space_saw(r):
     fixed(r)
@@ -274,6 +274,13 @@ def space_saw(r):
 v, fails, m = run(a=args(load_s=12.0, plateau_pct=5.0, threads=2, working_set=10), edit=space_saw)
 assert v == 'PASS', fails
 assert [x['verdict'] for x in m['space_plateau']] == ['PLATEAU'] * 2, m['space_plateau']
+# The stored-data rule compares peaks: a sawtooth whose slope over the last
+# third is positive (a falling tooth before it) is bounded; a ramp is not.
+saw = {'d': [(t, 100000 + (t % 10) * 8000 + (40000 if t == 85 else 0)) for t in range(90)]}
+row = d.rss_plateau.evaluate_peaks(saw, None, 25.0)[0]
+assert row['verdict'] == 'PLATEAU' and d.rss_plateau.evaluate(saw, None, 5.0)[0]['growth_pct'] > 5, row
+row = d.rss_plateau.evaluate_peaks({'d': [(t, 20000 + t * 2000) for t in range(90)]}, None, 25.0)[0]
+assert row['verdict'] == 'GROWING' and row['growth_pct'] > 25, row
 assert d.parse_gc_status('data_usage_bytes=123 removed_fragments=1\ngroup=0 sampled=1 pending_estimate=7 x\n'
                          'group=2 sampled=1 pending_estimate=5 x\n') == {'data_bytes': 123, 'gc_pending': 12}
 rows = d.rss_plateau.evaluate({'p': [(t, 1000 + t * 100) for t in range(9)]}, None, 5.0)

@@ -114,6 +114,36 @@ def evaluate(series, load_s=None, slope_pct=5.0):
     return rows
 
 
+def evaluate_peaks(series, load_s=None, peak_pct=25.0):
+    """Bounded-sawtooth rule for stored data, one row per node: the peak of
+    the last third of the load against the peak before it. Reclaim works in
+    batches, so the series rises and falls; a least-squares slope over the
+    last third reads a falling half-tooth as growth (+8.5 % on a bounded
+    60-minute run), while a store that keeps what it should reclaim raises
+    every later peak (+35-44 % over 8 minutes). It detects growth that is
+    large against the live data over the run, not a slow drift.
+    growth_pct is the last third's peak over the earlier peak; PLATEAU
+    (bounded) at most peak_pct."""
+    rows = []
+    for name, pts in series.items():
+        if load_s is not None:
+            pts = [x for x in pts if x[0] <= load_s] or pts
+        if len(pts) < 6:
+            rows.append({'process': name, 'samples': len(pts), 'verdict': 'too few'})
+            continue
+        k = len(pts) * 2 // 3
+        before, last = max(v for _, v in pts[:k]), max(v for _, v in pts[k:])
+        pct = 100.0 * (last - before) / before if before else 0.0
+        kib = [v for _, v in pts]
+        rows.append({'process': name, 'first_mib': round(kib[0] / 1024, 1), 'peak_mib': round(max(kib) / 1024, 1),
+                     'last_mib': round(kib[-1] / 1024, 1), 'last_third_start_mib': round(pts[k][1] / 1024, 1),
+                     'growth_pct': round(pct, 2),
+                     'endpoint_pct': round(100.0 * (kib[-1] - kib[0]) / max(kib), 2) if max(kib) else 0.0,
+                     'verdict': 'PLATEAU' if pct <= peak_pct else 'GROWING',
+                     'samples': len(pts), 'span_s': pts[-1][0] - pts[0][0]})
+    return rows
+
+
 def format_rows(rows):
     out = ['%-28s %9s %9s %9s %9s %9s %9s  %s' % ('process', 'first', 'peak', 'last', 'lastthird', 'growth', 'endpoint',
                                                     'verdict')]
