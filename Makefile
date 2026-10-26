@@ -1073,6 +1073,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	EFS_B6_MODES=full python3 tests/test_b6_unavailable.py
 	python3 tests/test_d4_progress.py
 	python3 tests/test_pub_unit_forward_abort.py
+	python3 tests/test_conn_idle_reap.py
 	python3 tests/test_report_stepdown.py
 	python3 tests/test_w159_apply_wait.py
 	python3 tests/test_query_first_catalog.py

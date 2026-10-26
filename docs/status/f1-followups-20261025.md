@@ -348,6 +348,13 @@ table).
    EBUSY: one in 13 173 foreground operations. Owner: client metadata RPC
    retry and server GC pass length.
 4. **efsd RSS growth with throughput** (item 2 verdict). Owner: F1/K22.
+   Worked in [efsd RSS plateau](efsd-rss-plateau-20261025.md) (branch
+   `claude/wizardly-mcclintock-0e2efd`): the reclaim journal ring, idle
+   pooled connections and the packer's compaction buffers are bounded.
+   With all three, one 60-minute run on xorinox plateaus (efsd +0.6 /
+   −0.8 / −0.1 %, `66a3a4024`); every nuc run failed, the last after a host
+   page-cache shortage. Closed for the RSS plateau on that run; robustness
+   to a mid-run leader change is open there.
 5. **Pack candidates left for minutes after a rewrite load** (drain,
    item 2). Owner: D4/packer.
 6. **`tests/test_stop_progress.py`: one mkdir EIO** in the 8-job gate at

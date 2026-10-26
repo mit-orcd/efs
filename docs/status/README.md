@@ -96,6 +96,15 @@ healthy cleanup BUSY on the other. Join retry refusal and rewrite/degraded-read
 EIO remain product findings. Real-host/RDMA qualification stays NOTRUN.
 Raw evidence remains external; private AMD test tree removed.
 
+[efsd RSS plateau under the fixed-working-set D4 load (F1 follow-ups item 2)](efsd-rss-plateau-20261025.md):
+**branch `claude/wizardly-mcclintock-0e2efd`, not merged, not pushed; RSS plateau PASS on one 60-minute run at `66a3a4024` (xorinox: efsd +0.6 / −0.8 / −0.1 %, efs-fuse +0.0 / +3.6 %; the D4 run itself FAIL on one truncate EIO, not memory); FAIL on every nuc run. xorinox at `66a3a4024`: `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47, `make test-all` 481 commands, 2 FAIL (K33 read EIO under the pool: `test_k33_payload.py` fails 1 of 3 alone on the base too; `test_k33_growth.py` did not reproduce), 14 NOTRUN host limits.**
+The connection-thread hypothesis is refuted as the main cause (about 0.15 MiB per thread), but no pool
+ever closed an idle connection; both pools now close one after 30 s idle. Bounded: the reclaim journal
+ring, whose pages were never released (half the baseline's growth), and the packer's compaction
+buffers, which fragmented the leader's arenas. On nuc the last run still stepped up at minute 48, when
+the host's page cache ran short (slab 14.6 GB, 395 MB cached), with elections; a concurrency step still
+raises arena memory for the rest of the load. amd went down during the session (cause not established).
+
 [F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](f1-followups-20261025.md):
 **branch `claude/devel-f1-followups-ae2deb`, not merged, not pushed; xorinox: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47 (`758dd144c`, same code); RSS plateau FAIL (bounded, not flat).**
 `test_k36_recovery.py` under TSan PASS 10 of 10 (crash hooks now `exit_group`; a hook race and a test

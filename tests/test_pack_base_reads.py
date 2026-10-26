@@ -5,6 +5,8 @@ import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/packer.c').read_text()
 def fn(sig,end='\n}\n'):
     a=s.index(sig);return s[a:s.index(end,a)+len(end)]
+def line(sig):
+    a=s.index(sig);return s[a:s.index('\n',a)+1]
 assert 'pk_read_bases(nodes, count, files, n, flen);' in s, 'the pass reads packed bases before its files'
 assert 'pk_read_packed_base(' not in s, 'no per-file segment read remains'
 code=r'''
@@ -22,7 +24,7 @@ static struct efs_kv *server_raft_host_kv(void) { return (struct efs_kv *)1; }
 int efs_pack_object_get(struct efs_kv *kv, uint32_t g, uint64_t id, uint64_t gen, struct efs_pack_object *o)
 { (void)kv; memset(o, 0, sizeof(*o)); o->ledger.publication_group = g; o->ledger.segment_id = id; o->ledger.segment_generation = gen; return EFS_OK; }
 static struct efs_pack_record rec[8]; static uint8_t bytes[3][8][16]; static struct efs_pack_ref refs[3][8];
-static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
+'''+line('#define PK_SEG_WORK ')+r'''static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
                            uint8_t *image, struct efs_pack_view *view)
 {
     (void)nodes; (void)count; size_t g; uint64_t id = o->ledger.segment_id;

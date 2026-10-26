@@ -318,8 +318,16 @@ static int pk_get_d1(const struct efs_node *nodes, uint32_t count, const struct 
     if (rc == EFS_OK) for (uint32_t i = 0; i < flen; i++) a[i] ^= b[i];
     return rc;
 }
+/* A segment read's working memory: the decoded image, then room for its
+ * three fragments. One allocation above efsd's fixed 256 KiB mmap
+ * threshold (efsd.c), so it is its own mapping and returns on free: as
+ * separate 128 KiB images and 192 KiB fragment buffers, and with one image
+ * per source segment held through a compaction pass, these transient
+ * blocks came from the arenas, and the leader's arena RSS stepped up as
+ * compaction work grew late in a long rewrite load (F1 plateau). */
+#define PK_SEG_WORK ((size_t)EFS_SEGMENT_MAX_SIZE + (size_t)EFS_NUM_FRAGMENTS * (EFS_SEGMENT_MAX_SIZE / 2))
 static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
-                           uint8_t *image, struct efs_pack_view *view);
+                           uint8_t *work, struct efs_pack_view *view);
 /* Packed bases, a segment at a time: every file of the pass whose base is a
  * record of one segment is read from one fetch and one validation of that
  * segment (it was a fetch and a whole-image validation per file). */
@@ -345,7 +353,7 @@ static void pk_base_run(struct pk_bases *b, uint32_t run)
     const struct pk_base_key *k = &b->keys[b->runs[run]];
     uint32_t n = b->runs[run + 1] - b->runs[run];
     struct efs_pack_object *o = malloc(sizeof(*o));
-    uint8_t *image = malloc(EFS_SEGMENT_MAX_SIZE);
+    uint8_t *image = malloc(PK_SEG_WORK);
     struct efs_pack_view view;
     int rc = kv && o && image ? EFS_OK : EFS_ERR_NOMEM;
     if (rc == EFS_OK) rc = efs_pack_object_get(kv, k->group, k->id, k->gen, o);
@@ -968,13 +976,14 @@ static int pk_get_segfrag(const struct efs_node *nodes, uint32_t count, const st
     return memcmp(h, o->checksums[fi], EFS_HASH_SIZE) || memcmp(sum, o->checksums[fi], EFS_HASH_SIZE)
            ? EFS_ERR_CHECKSUM : EFS_OK;
 }
-/* Any two of the three fragments; the image is validated once, into *view. */
+/* Any two of the three fragments; the image is validated once, into *view.
+ * work: PK_SEG_WORK bytes; the image is its first EFS_SEGMENT_MAX_SIZE. */
 static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
-                           uint8_t *image, struct efs_pack_view *view)
+                           uint8_t *work, struct efs_pack_view *view)
 {
     uint32_t g = o->ledger.geometry, flen = g / 2;
-    uint8_t *buf = malloc((size_t)flen * EFS_NUM_FRAGMENTS);
-    if (!buf) return EFS_ERR_NOMEM;
+    if (g > EFS_SEGMENT_MAX_SIZE) return EFS_ERR_DECODE;
+    uint8_t *image = work, *buf = work + EFS_SEGMENT_MAX_SIZE;
     uint8_t *f[EFS_NUM_FRAGMENTS] = {buf, buf + flen, buf + 2 * flen};
     int have[EFS_NUM_FRAGMENTS] = {0}, n = 0;
     for (uint32_t fi = 0; fi < EFS_NUM_FRAGMENTS && n < 2; fi++)
@@ -986,7 +995,6 @@ static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const s
     }
     int rc = n == 2 && missing >= 0 ? efs_decode_segment(f, g, a, b, missing, image, g) : EFS_ERR_DECODE;
     if (rc == EFS_OK) rc = efs_pack_view_open(image, g, view);
-    free(buf);
     return rc;
 }
 static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
@@ -998,9 +1006,13 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
     sc.now = pk_now_ns();
     sc.s = calloc(PK_COMPACT_MAX, sizeof(struct pk_seg));
     struct pk_file *files = calloc(EFS_PACK_MAX_RECORDS, sizeof(*files));
-    uint8_t **images = calloc(PK_COMPACT_MAX, sizeof(*images));
-    uint32_t nfiles = 0, used = EFS_PACK_HEADER_BYTES + EFS_HASH_SIZE;
-    if (!sc.s || !files || !images) goto out;
+    /* One source image at a time (its live records are copied out before
+     * the next is read), and the copies, which the output segment bounds,
+     * in one block after it: see PK_SEG_WORK. */
+    uint8_t *work = malloc(PK_SEG_WORK + EFS_SEGMENT_MAX_SIZE), *data;
+    uint32_t nfiles = 0, used = EFS_PACK_HEADER_BYTES + EFS_HASH_SIZE, data_used = 0;
+    if (!sc.s || !files || !work) goto out;
+    data = work + PK_SEG_WORK;
     uint32_t anchor = efs_pack_group_anchor(group);
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
     if (efs_kv_lsm_scan_yield(kv, prefix, 3, 128, pk_cscan_cb, &sc) < 0 || !sc.n) goto out;
@@ -1013,8 +1025,7 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
     for (uint32_t si = 0; si < sc.n && nfiles < EFS_PACK_MAX_RECORDS; si++) {
         const struct efs_pack_object *o = &sc.s[si].o;
         struct efs_pack_view view;
-        images[si] = malloc(EFS_SEGMENT_MAX_SIZE);
-        if (!images[si] || pk_read_segment(nodes, count, o, images[si], &view) != EFS_OK) {
+        if (pk_read_segment(nodes, count, o, work, &view) != EFS_OK) {
             STAT_ADD(read_errors, 1);
             continue;
         }
@@ -1037,9 +1048,9 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
             struct pk_file *f = &files[nfiles];
             f->c = *c;
             f->c.size = ref.len;
-            f->data = malloc(ref.len);
-            if (!f->data) break;
-            memcpy(f->data, images[si] + ref.offset, ref.len);
+            f->data = data + data_used; /* used bounds data_used + ref.len below the segment size */
+            data_used += ref.len;
+            memcpy(f->data, work + ref.offset, ref.len);
             /* D25: copy the record's visible bytes only; a clipped or
              * fenced tail is zero in the compacted record. */
             if (c->base_visible < ref.len)
@@ -1060,9 +1071,7 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
         fprintf(stderr, "packer: compact group=%u sources=%u moved=%u/%u\n", group, used_segs, moved, nfiles);
     }
 out:
-    if (files) for (uint32_t i = 0; i < EFS_PACK_MAX_RECORDS; i++) free(files[i].data);
-    if (images) for (uint32_t i = 0; i < PK_COMPACT_MAX; i++) free(images[i]);
-    free(images);
+    free(work); /* every files[].data points into it */
     free(files);
     free(sc.s);
     return moved;
