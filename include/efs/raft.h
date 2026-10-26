@@ -376,6 +376,10 @@ void efs_raft_set_pressure(struct efs_raft *r, int over);
 int efs_raft_request_resync(struct efs_raft *r);
 int efs_raft_resync_pending(const struct efs_raft *r);
 
+/* A resyncing peer pulled its match to 0: the pump must export an image
+ * for send_snap outside the byte cadence. */
+int efs_raft_snap_wanted(const struct efs_raft *r);
+
 /* Committed voting set (C_old). During joint this is still C_old. */
 uint32_t efs_raft_voters(const struct efs_raft *r);
 /* 1 if a joint config is committed (C_new not yet COLD-committed). */

@@ -88,6 +88,9 @@ struct efs_raft {
     uint64_t campaigns_held, capacity_stepdowns, capacity_log_tick;
     unsigned last_commit_bits; /* W145: quorum that made the last leader commit */
     int resync_requested;      /* W145 repair: see efs_raft_request_resync */
+    int snap_want;             /* W130/K6: a resyncing peer pulled match 0; the
+                                * pump must export an image outside the byte
+                                * cadence so send_snap has one to ship */
     unsigned vote_bits;
     unsigned prevote_bits;      /* K1: pre-vote grants for prevote_term */
     uint64_t prevote_term;      /* current_term + 1 while pre-voting, else 0 */
@@ -840,10 +843,19 @@ static int send_snap(struct efs_raft *r, int to)
          * from matching. */
         ae_inflight_set(r, to, r->next_index[to] ? r->next_index[to] : 1,
                         UINT64_MAX);
-    /* Not queued. The next tick retries the same offset; marking this
-     * chunk in flight would suppress that retry for a heartbeat. */
-    if (rc == EFS_ERR_AGAIN)
+    if (rc == EFS_ERR_AGAIN) {
+        /* Not queued — but the chunk was already read and framed, and no
+         * reply will arrive to clear the window. Without a marker the next
+         * pump wake pays the same malloc+pread again: a stopped peer with a
+         * saturated lane drew ~300 full-chunk attempts per second
+         * (~1.2 GB/s of memcpy churn on the leader) and starved client
+         * RPCs into timeouts. Back off one heartbeat instead. */
+        r->ae_inflight[to] = r->next_index[to] ? r->next_index[to] : 1;
+        r->ae_inflight_tick[to] = r->ticks;
+        r->ae_inflight_end[to] = UINT64_MAX;
+        r->ae_inflight_full[to] = 0;
         return EFS_OK;
+    }
     return rc;
 }
 
@@ -1683,6 +1695,17 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     rc = last_log(r, &last_i, &last_t);
     if (rc != EFS_OK)
         return rc;
+    if (r->resync_requested) {
+        /* W130/K6: the operator ordered a resync — this replica's log is
+         * untrusted even where it matches (a halted apply cannot replay
+         * it). A match=0 rejection pulls the leader's next_index to 1;
+         * the leader answers with its snapshot image (snap_want), which is
+         * the only state transfer that heals the halted replica. */
+        m.success = 0;
+        m.match_index = 0;
+        ae_reject_note(r, in, last_i, "resync-requested");
+        return send_msg(r, &m);
+    }
     {
         static int ae_dbg[EFS_RAFT_MAX_PEERS];
         int *ctr = &ae_dbg[in->from >= 0 && in->from < EFS_RAFT_MAX_PEERS ? in->from : 0];
@@ -1987,6 +2010,20 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         if (ni < 1)
             ni = 1;
         r->next_index[in->from] = ni;
+        /* W130/K6: match=0 from a peer with a proven prefix is an
+         * operator-ordered resync pull (the peer's log is untrusted even
+         * where it matches), not a fresh join. Log replay cannot heal a
+         * halted replica; only the image can. A young leader may have no
+         * image yet: snap_want makes the pump export one outside the byte
+         * cadence, and the next rejection ships it. When the floor has
+         * already passed, send_ae below routes to send_snap as before. */
+        if (ni <= 1 && r->match_index[in->from] > 0) {
+            if (r->snap_idx < r->last_applied)
+                r->snap_want = 1;
+            if (r->snap_idx > 0 &&
+                send_snap(r, in->from) == EFS_OK)
+                return EFS_OK;
+        }
     }
     return send_ae(r, in->from, 0);
 }
@@ -2950,6 +2987,7 @@ int efs_raft_snapshot(struct efs_raft *r)
     }
     r->snap_idx = r->last_applied;
     r->snap_term = t;
+    r->snap_want = 0;
     return EFS_OK;
 }
 
@@ -3021,6 +3059,11 @@ int efs_raft_request_resync(struct efs_raft *r)
 int efs_raft_resync_pending(const struct efs_raft *r)
 {
     return r && r->resync_requested;
+}
+
+int efs_raft_snap_wanted(const struct efs_raft *r)
+{
+    return r && r->snap_want;
 }
 
 int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *out)

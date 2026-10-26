@@ -989,6 +989,7 @@ tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/
 # ./efsd never carries them. Named efsd: the stop script only signals an efsd.
 FAULT_SERVER_OBJS = $(patsubst src/server/%.c,tests/faults/server/%.o,$(SERVER_SRCS))
 FAULT_KV_OBJS = tests/faults/kv/kv_lsm.o tests/faults/kv/kv_compact.o
+FAULT_RAFT_OBJS = tests/faults/raft/raft_disk.o
 tests/faults/server/%.o: src/server/%.c src/server/server_internal.h $(wildcard src/server/*.h) $(wildcard include/efs/*.h) .build_id.stamp
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
@@ -997,8 +998,13 @@ tests/faults/server/%.o: src/server/%.c src/server/server_internal.h $(wildcard 
 tests/faults/kv/%.o: src/kv/%.c src/kv/kv_lsm_internal.h src/kv/kv_candidates.h $(wildcard include/efs/*.h)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
-tests/faults/efsd: $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(LIB) $(LDFLAGS)
+# Same override pattern for raft_disk.c (EFS_FAULT_SNAP_BYTES): compiled with
+# the gate and linked ahead of $(LIB) so the fault daemon's symbols win.
+tests/faults/raft/%.o: src/raft/%.c src/raft/raft_disk_internal.h $(wildcard include/efs/*.h)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
+tests/faults/efsd: $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(LIB) $(LDFLAGS)
 
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
 src/kv/kv_lsm.o: src/kv/kv_candidates.h
@@ -1089,6 +1095,9 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_opid_admission.py
 	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
 	python3 tests/test_raft_ack_window.py
+	python3 tests/test_k22_snapshot_import.py
+	python3 tests/test_k22_leader_admission.py
+	python3 tests/test_w130_dir_fault.py
 	./tests/test_kv_lsm
 	python3 tests/test_server_processes.py
 	python3 tests/test_w125_harness.py

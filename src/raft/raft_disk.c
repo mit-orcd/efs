@@ -208,6 +208,20 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
 {
     uint32_t n_in = 0, drop, i;
     uint64_t bytes;
+#if EFS_FAULTS
+    /* Test hook: shrink the retained window so snapshot tests fit test
+     * budgets. Read once; unset/invalid means the production window. */
+    static uint64_t snap_window;
+    if (!snap_window) {
+        const char *v = getenv("EFS_FAULT_SNAP_BYTES");
+        uint64_t b = v && v[0] ? strtoull(v, NULL, 0) : 0;
+        snap_window = b ? b : UINT64_MAX;
+    }
+    const uint64_t window = snap_window != UINT64_MAX ? snap_window
+                                                      : EFS_RAFT_SNAP_BYTES;
+#else
+    const uint64_t window = EFS_RAFT_SNAP_BYTES;
+#endif
 
     if (last_index < g->snap_idx)
         return EFS_ERR_INVAL;
@@ -220,7 +234,7 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
         for (i = 0; i < n_in; i++)
             bytes += g->log[i].clen;
         drop = 0;
-        while (drop < n_in && bytes > EFS_RAFT_SNAP_BYTES) {
+        while (drop < n_in && bytes > window) {
             bytes -= g->log[drop].clen;
             g->bytes_all -= g->log[drop].clen;
             cache_free(g,&g->log[drop]);
@@ -264,6 +278,14 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
     g->snap_idx = last_index;
     g->snap_term = last_term;
     index_reset_residency(g);
+#if EFS_FAULTS
+    if (snap_window != UINT64_MAX)
+        fprintf(stderr,
+                "raft-snap: window-drop group=%u last=%llu base=%llu n=%u window=%llu\n",
+                g->group, (unsigned long long)last_index,
+                (unsigned long long)g->log_base, g->n,
+                (unsigned long long)window);
+#endif
     return EFS_OK;
 }
 
