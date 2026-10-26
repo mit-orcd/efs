@@ -129,7 +129,7 @@ struct finish_capture {
     struct finish_image *images;
     uint32_t count, capacity, mutations;
     efs_ino_t close_ino;
-    int aborted; /* finish_execute: a PREPARE refused and ABORT was decided */
+    int refused; /* finish_execute: the refused PREPARE's rc (COMMIT never proposed) */
 };
 static int finish_data_key(const uint8_t *key,uint32_t n)
 {
@@ -302,12 +302,10 @@ static int finish_execute(struct finish_capture *capture,const struct efs_txid *
             rc=held<0?held:held?EFS_ERR_BUSY:EFS_OK;
         }
         if(rc!=EFS_OK) {
+            capture->refused=rc;
             int aborted=ops->decide(ctx,t,&parts,EFS_TXN_ABORT);
             if(aborted!=EFS_OK)rc=aborted;
-            else {
-                (void)ops->resolve(ctx,t,&parts,EFS_TXN_ABORT);
-                capture->aborted=1;
-            }
+            else (void)ops->resolve(ctx,t,&parts,EFS_TXN_ABORT);
             goto out;
         }
     }
@@ -405,12 +403,15 @@ int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
     finish_free(&capture);return rc;
 }
 
-/* A refused PREPARE whose ABORT was decided is a definite no-op: a BUSY or
- * STALE lock/guard (a concurrent append took the inode) becomes BUSY with
- * *wait ABORTED. An undecided ABORT or a COMMIT keeps its own result. */
+/* A PREPARE refused with BUSY or STALE (a concurrent append took a lock or
+ * a guard) ends the transaction before COMMIT is ever proposed: a definite
+ * no-op, whatever the coordinator's own DECIDE ABORT answered (a failed one
+ * is finished by the server's ABORT finisher or recovery; K42 saw it on a
+ * five-member loopback). BUSY with *wait ABORTED. Any other refusal and
+ * every COMMIT keep their own result. */
 static int finish_refusal(const struct finish_capture *c,int rc,unsigned *wait)
 {
-    if(c->aborted && (rc==EFS_ERR_BUSY || rc==EFS_ERR_STALE)) {
+    if(rc!=EFS_OK && (c->refused==EFS_ERR_BUSY || c->refused==EFS_ERR_STALE)) {
         *wait=EFS_META_APPEND_WAIT_ABORTED;return EFS_ERR_BUSY;
     }
     return rc;

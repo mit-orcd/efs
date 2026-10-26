@@ -261,6 +261,10 @@ static int prepare_locked(void *ctx,const struct efs_txid *t,const struct efs_tx
                           const struct efs_meta_append_image *q)
 {(void)ctx;(void)t;(void)p;(void)q;return EFS_ERR_BUSY;}
 static const struct efs_meta_append_ops locked={prepare_locked,decide,resolve};
+/* The coordinator's own DECIDE ABORT fails too (it lost its group). */
+static int decide_lost(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
+{(void)ctx;(void)t;(void)p;assert(d==EFS_TXN_ABORT);return EFS_ERR_NOT_PRIMARY;}
+static const struct efs_meta_append_ops locked_lost={prepare_locked,decide_lost,resolve};
 static void foreign_open_wait(void)
 {
  efs_ino_t ino;uint64_t gen;struct efs_kv *kv=fixture(&ino,&gen);
@@ -283,6 +287,11 @@ static void foreign_open_wait(void)
  struct efs_txid t=next_tx();append_wait=99;
  assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&locked,kv,&progress,&append_wait)==EFS_ERR_BUSY);
  assert(!progress && append_wait==EFS_META_APPEND_WAIT_ABORTED);
+ /* COMMIT was never proposed: still a certified no-op when ABORT's own
+  * decision fails (the server's finisher decides it). */
+ t=next_tx();append_wait=99;
+ assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&locked_lost,kv,&progress,&append_wait)==EFS_ERR_BUSY);
+ assert(!progress && append_wait==EFS_META_APPEND_WAIT_ABORTED);
  assert(efs_meta_append_session_idle(kv,shard,a.id.client_uuid,1,&idle)==EFS_OK && !idle);
  unsigned steps=0;
  do {
@@ -304,6 +313,6 @@ int main(void)
  live_owner_untouched();
  foreign_open_wait();
  puts("append cleanup (K15/W64): lost reply retired by fence or abandon, frontier advances, late completion/replay refused, completion never overtaken, live owner untouched PASS");
- puts("append cleanup (K42): revoked receipt waits on a foreign OPEN (named), aborted PREPARE named, retired after the foreign REPORT PASS");
+ puts("append cleanup (K42): revoked receipt waits on a foreign OPEN (named), aborted PREPARE named (also with a failed ABORT decide), retired after the foreign REPORT PASS");
  return 0;
 }

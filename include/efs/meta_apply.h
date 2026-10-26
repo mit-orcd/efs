@@ -1282,8 +1282,9 @@ int efs_meta_append_session_idle(struct efs_kv *, uint32_t shard,
  *           REPORT resolves it; foreign work is never discarded);
  * FRONTIER  a DONE row of this session is past the published size, which
  *           the earlier OPEN reservations' REPORTs advance;
- * ABORTED   a PREPARE lost its lock/guard to a concurrent append and the
- *           ABORT was decided (nothing applied);
+ * ABORTED   a PREPARE lost its lock/guard to a concurrent append, so COMMIT
+ *           was never proposed (nothing applies, even when the
+ *           coordinator's own DECIDE ABORT failed and a finisher decides);
  * GONE      the inode is gone and REAP_MULTI still owes its rows.
  * NONE with BUSY is not definite (e.g. an unacknowledged COMMIT). */
 enum {

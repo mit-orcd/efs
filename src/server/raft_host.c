@@ -15113,6 +15113,10 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                         rd32be(cmd+22),rd32be(cmd+18),n+1);
             out->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return;
         }
+        if (rc==EFS_ERR_BUSY)
+            fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u idx=%llu BUSY "
+                    "uncertified (verdict not known)\n",rd32be(cmd+22),rd32be(cmd+18),
+                    (unsigned long long)batch_idx);
         out->index=batch_idx;
         return;
     } else if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH) {
@@ -18580,6 +18584,10 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
     if(rc==EFS_ERR_NOT_FOUND)rc=EFS_ERR_BUSY;
     if(rc==EFS_ERR_BUSY && wait!=EFS_META_APPEND_WAIT_NONE)
         *empty=EFS_MD_SESSION_APPEND_RETRY_SALT+wait;
+    else if(rc==EFS_ERR_BUSY)
+        fprintf(stderr,"raft-host: session append cleanup shard=%u epoch=%u ino=%llu BUSY "
+                "uncertified (transaction outcome not known)\n",rd32be(cmd+21),
+                rd32be(cmd+17),(unsigned long long)(found?ino:0));
     return rc;
 }
 /* EFS_MD_REQ_SESSION_CLEANUP_PROBE: the proofs of both cleanup phases
