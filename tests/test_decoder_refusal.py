@@ -3,7 +3,7 @@
 
 Unknown declared messages and bad declarations disconnect with an audible
 reason. Unknown submit tags are refused through leader and follower RPCs;
-the log does not move, no group halts, a subsequent real CREATE commits.
+the refused tag never enters any replica log, no group halts, a subsequent real CREATE commits.
 """
 from pathlib import Path
 import os
@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import time
 import k33_daemons as fixture
+from raft_log_entries import assert_command_absent
 ROOT=Path(__file__).resolve().parents[1]
 fixture.EFSD=ROOT/'efsd'
 work=Path(tempfile.mkdtemp(prefix='efs-decoder-refusal-',dir=os.environ.get('TMPDIR')))
@@ -81,7 +82,10 @@ try:
                         assert tag==96,(tag,body)
                         rc=struct.unpack_from('@i',body)[0]
                 assert rc==-7,(g,i,rc,body)
-        after=status(i);assert before==after,(i,before,after)
+                assert len(body)==32 and struct.unpack_from('@Q',body,8)[0]==0,('refusal assigned an index',body)
+        after=status(i)
+        if before!=after:
+            print('Background index movement (checked by command identity below):',i,before,after)
         assert c.alive(i)
         c.wait_log(i,'handler: refused declaration of protocol 0')
         c.wait_log(i,'handler: refused unknown message 255')
@@ -90,6 +94,9 @@ try:
     logs='\n'.join(c.log(i) for i in (1,2,3))
     assert 'refused proposal tag=200' in logs
     assert 'halt' not in logs.lower(),logs[-3000:]
+    c.stop_all()  # inspect complete records only after orderly fixture stop
+    checked=assert_command_absent([c.dir/f'n{i}/mdraft/log/raft.log' for i in (1,2,3)],200)
+    print('PASS refusal log oracle:',checked,'entries across all three replicas; no tag 200')
     print('PASS W140 cluster submit refusal: leader/follower, both groups, no log entry, subsequent CREATE commits')
     print('PASS live declaration/unknown-frame disconnect and diagnostics on all three nodes')
 finally:
