@@ -54,6 +54,7 @@ import errno, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload  # noqa: E402
+from k37_events import degraded_write_events
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -150,17 +151,7 @@ def seg_path(c, i, group, sid, gen, fi):
 
 
 def degraded_writes(c, since=()):
-    """(group, id, gen, fragment, node) of each `written degraded` line of
-    every member's log, minus those in `since` (an earlier result). The logs
-    are concatenated in node order, so a position in the combined list is
-    not stable: a packer that moved to another leader after a step-down
-    appends its lines before the other members' older ones, and slicing by
-    count then names an old, already rebuilt segment as the new one."""
-    seen = set(since)
-    return [e for e in ((int(g), int(i, 16), int(n, 16), int(f), int(node)) for g, i, n, f, node in
-                        re.findall(r'packer: segment g(\d+) id=([0-9a-f]+) gen=([0-9a-f]+) written degraded: '
-                                   r'fragment (\d+) for node (\d+)', logs(c)))
-            if e not in seen]
+    return degraded_write_events(logs(c), since)
 
 
 def verify(c, node, what, skip=()):
@@ -420,7 +411,7 @@ finally:
     for mt in mounts:
         mt.close()
     c.stop_all()
-    if os.environ.get('EFS_K37_KEEP'):
+    if os.environ.get('EFS_K37_KEEP') or sys.exc_info()[0] is not None:
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)
