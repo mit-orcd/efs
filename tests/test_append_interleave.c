@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+static unsigned append_wait; /* K42 wait reason of the last cleanup step */
 
 static int decision(void *ctx,const struct efs_txid *t,uint32_t sh,int *d)
 { return efs_txn_decision_get(ctx,sh,t,d); }
@@ -236,7 +237,7 @@ static void fence(int o)
   if(!found)break;
   struct efs_txid t=next_tx();
   assert(sel==ino && sgen==gen);
-  assert(efs_meta_finish_append_fenced(kv,ino,gen,soff,uuid,old,&t,&ops,kv)==EFS_OK);
+  assert(efs_meta_finish_append_fenced(kv,ino,gen,soff,uuid,old,&t,&ops,kv,&append_wait)==EFS_OK);
   expect_outcome(soff,EFS_META_APPEND_FENCED_HOLE);
  }
  for(unsigned i=0;i<OWNERS*WRITES;i++) {

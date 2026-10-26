@@ -12,6 +12,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include "test_tmpdir.h"
+static unsigned append_wait; /* K42 wait reason of the last cleanup step */
 static int decision(void *ctx,const struct efs_txid *t,uint32_t sh,int *d)
 { return efs_txn_decision_get(ctx,sh,t,d); }
 static int prepare(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,
@@ -408,12 +409,12 @@ static void fenced_completion(void)
  assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
  assert(efs_meta_append_session_next(kv,shard,q.id.client_uuid,1,&selected,&generation,&off,&found)==EFS_OK && found && selected==ino && generation==gen && off==200);
  t.bytes[1]=10;
- assert(efs_meta_finish_append_fenced(kv,ino,gen+1,off,q.id.client_uuid,1,&t,&ops,kv)==EFS_ERR_STALE);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen+1,off,q.id.client_uuid,1,&t,&ops,kv,&append_wait)==EFS_ERR_STALE);
  uint8_t inode_key[EFS_KV_KEY_MAX],inode_value[EFS_META_INO_BYTES];uint32_t il,iv=sizeof(inode_value);
  assert(efs_kv_key_inode(shard,ino,inode_key,&il)==EFS_OK && efs_kv_get(kv,inode_key,il,inode_value,&iv)==EFS_OK);
  struct efs_txid held={{122}};struct efs_txn_parts held_parts={.n=1,.shard={shard}};
  assert(efs_txn_prepare_excl_value(kv,&held,&held_parts,inode_key,il,inode_value,iv,EFS_TXN_PUT,inode_value,iv)==EFS_OK);
- assert(efs_meta_finish_append_fenced(kv,ino,gen,off,q.id.client_uuid,1,&t,&ops,kv)==EFS_ERR_BUSY);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,off,q.id.client_uuid,1,&t,&ops,kv,&append_wait)==EFS_ERR_BUSY);
  assert(efs_txn_resolve(kv,&held,shard,EFS_TXN_ABORT)==EFS_OK);
  t.bytes[1]=12; /* each attempted transaction keeps a distinct identity */
  uint8_t key[EFS_KV_KEY_MAX],value[48];uint32_t kl,vl=sizeof(value);
@@ -421,13 +422,13 @@ static void fenced_completion(void)
  assert(efs_kv_get(kv,key,kl,value,&vl)==EFS_OK);value[16]=43;
  assert(efs_kv_put(kv,key,kl,value,vl)==EFS_OK); /* independent surviving owner */
  uint8_t other[16]={43};assert(efs_session_fence_local(kv,shard,other,2)==EFS_OK);
- assert(efs_meta_finish_append_fenced(kv,ino,gen,200,other,1,&t,&ops,kv)==EFS_ERR_STALE);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,200,other,1,&t,&ops,kv,&append_wait)==EFS_ERR_STALE);
  const struct efs_meta_append_ops lost={prepare,lost_decision,resolve};
- assert(efs_meta_finish_append_fenced(kv,ino,gen,200,q.id.client_uuid,1,&t,&lost,kv)==EFS_ERR_IO);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,200,q.id.client_uuid,1,&t,&lost,kv,&append_wait)==EFS_ERR_IO);
  assert(resolve(kv,&t,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
- assert(efs_meta_finish_append_fenced(kv,ino,gen,200,q.id.client_uuid,1,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,200,q.id.client_uuid,1,&t,&ops,kv,&append_wait)==EFS_OK);
  assert(efs_meta_append_session_next(kv,shard,q.id.client_uuid,1,&selected,&generation,&off,&found)==EFS_OK && found && off==216);
- t.bytes[1]=11;assert(efs_meta_finish_append_fenced(kv,ino,gen,off,q.id.client_uuid,1,&t,&ops,kv)==EFS_OK);
+ t.bytes[1]=11;assert(efs_meta_finish_append_fenced(kv,ino,gen,off,q.id.client_uuid,1,&t,&ops,kv,&append_wait)==EFS_OK);
  assert(efs_meta_append_session_next(kv,shard,q.id.client_uuid,1,&selected,&generation,&off,&found)==EFS_OK && !found);
  uint32_t open;uint64_t watermark,frontier;
  assert(efs_meta_apply_append_state(kv,ino,&watermark,&frontier,&open)==EFS_OK && open==1 && watermark==224 && frontier==208);
@@ -494,11 +495,11 @@ static void retired_append_receipts(int cold)
   tx.bytes[1]=i;assert(efs_meta_execute_append(plan,&tx,&ops,kv)==EFS_OK);
  }
  unsigned progress=99;uint32_t shard=efs_kv_inode_shard(ino);
- assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_BUSY && !progress);
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress,&append_wait)==EFS_ERR_BUSY && !progress);
  assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
  /* Any OPEN reservation defers retirement; neither result nor frontier is lost. */
  tx.bytes[1]=30;
- assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_BUSY && !progress);
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress,&append_wait)==EFS_ERR_BUSY && !progress);
  for(unsigned i=20;i;i--) {
   tx.bytes[1]=40+i;
   assert(efs_meta_finish_append(kv,ino,200+(i-1)*8,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_OK);
@@ -517,15 +518,15 @@ static void retired_append_receipts(int cold)
  assert(efs_opid_window_pack(&window,newer_value,&newer_len)==EFS_OK && efs_kv_put(kv,newer,kl,newer_value,newer_len)==EFS_OK);
  /* Corrupt matching evidence is not empty proof. */
  assert(efs_kv_put(kv,key,kl,value,2)==EFS_OK);tx.bytes[1]=70;
- assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_PROTO && !progress);
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress,&append_wait)==EFS_ERR_PROTO && !progress);
  assert(efs_kv_put(kv,key,kl,value,vl)==EFS_OK);
  uint8_t reservation[EFS_KV_KEY_MAX],body[48];uint32_t rl,bl=sizeof(body);
  assert(efs_kv_key_append_rsv(shard,ino,gen,200,reservation,&rl)==EFS_OK && efs_kv_get(kv,reservation,rl,body,&bl)==EFS_OK);
  body[0]^=1;assert(efs_kv_put(kv,reservation,rl,body,bl)==EFS_OK);
- assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_PROTO && !progress);
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress,&append_wait)==EFS_ERR_PROTO && !progress);
  body[0]^=1;assert(efs_kv_put(kv,reservation,rl,body,bl)==EFS_OK);
  const struct efs_meta_append_ops lost={prepare,lost_decision,resolve};tx.bytes[1]=71;
- assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&lost,kv,&progress)==EFS_ERR_IO && !progress);
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&lost,kv,&progress,&append_wait)==EFS_ERR_IO && !progress);
  if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
  assert(resolve(kv,&tx,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
  unsigned total=8,pages=1;
@@ -534,13 +535,13 @@ static void retired_append_receipts(int cold)
   if(total==20) {
    struct efs_txid held={{214}};struct efs_txn_parts part={.n=1,.shard={shard}};
    assert(efs_txn_prepare_excl_value(kv,&held,&part,key,kl,value,vl,EFS_TXN_PUT,value,vl)==EFS_OK);
-   assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_BUSY && !progress);
+   assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress,&append_wait)==EFS_ERR_BUSY && !progress);
    assert(efs_txn_resolve(kv,&held,shard,EFS_TXN_ABORT)==EFS_OK);
    tx.bytes[2]=1;
-   assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&lost,kv,&progress)==EFS_ERR_IO && !progress);
+   assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&lost,kv,&progress,&append_wait)==EFS_ERR_IO && !progress);
    if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
    assert(resolve(kv,&tx,&last_parts,EFS_TXN_COMMIT)==EFS_OK);progress=1;
-  }else assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_OK && progress<=8);
+  }else assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress,&append_wait)==EFS_OK && progress<=8);
   total+=progress;
  }while(progress);
  assert(total==21 && pages==5); /* 20 DONE rows plus one receipt, then empty */
@@ -562,10 +563,10 @@ static void retired_append_receipts(int cold)
  assert(efs_meta_finish_append(kv,ino,off,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_OK);
  assert(efs_session_fence_local(kv,shard,legacy.client_uuid,2)==EFS_OK);
  tx.bytes[1]=91;
- assert(efs_meta_retire_append_session(kv,shard,legacy.client_uuid,1,&tx,&ops,kv,&progress)==EFS_OK && progress==1);
+ assert(efs_meta_retire_append_session(kv,shard,legacy.client_uuid,1,&tx,&ops,kv,&progress,&append_wait)==EFS_OK && progress==1);
  assert(efs_meta_apply_append_reserve(kv,ino,8,&legacy,decision,kv,&off)==EFS_ERR_FENCED);
  tx.bytes[1]=92;
- assert(efs_meta_retire_append_session(kv,shard,legacy.client_uuid,1,&tx,&ops,kv,&progress)==EFS_OK && !progress);
+ assert(efs_meta_retire_append_session(kv,shard,legacy.client_uuid,1,&tx,&ops,kv,&progress,&append_wait)==EFS_OK && !progress);
  free(plan);
  if(cold){
   efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;

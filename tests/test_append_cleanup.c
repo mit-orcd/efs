@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+static unsigned append_wait; /* K42 wait reason of the last cleanup step */
 
 static int decision(void *ctx,const struct efs_txid *t,uint32_t sh,int *d)
 { return efs_txn_decision_get(ctx,sh,t,d); }
@@ -113,13 +114,13 @@ static void fenced_lost_reply(void)
  assert(try_reserve(kv,ino,&b,NULL)==EFS_ERR_BUSY);
  /* Session still established: no cleanup authority yet. */
  struct efs_txid t=next_tx();
- assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv)==EFS_ERR_BUSY);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv,&append_wait)==EFS_ERR_BUSY);
  assert(efs_session_fence_local(kv,shard,a.id.client_uuid,2)==EFS_OK);
  efs_ino_t sel;uint64_t sgen,soff;unsigned found=0;
  assert(efs_meta_append_session_next(kv,shard,a.id.client_uuid,1,&sel,&sgen,&soff,&found)==EFS_OK &&
         found && sel==ino && sgen==gen && soff==off);
  t=next_tx();
- assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv,&append_wait)==EFS_OK);
  assert(row_outcome(kv,ino,gen,off)==EFS_META_APPEND_FENCED_HOLE);
  state(kv,ino,&open,&size);assert(!open && size==208);
  assert(efs_meta_append_session_next(kv,shard,a.id.client_uuid,1,&sel,&sgen,&soff,&found)==EFS_OK && !found);
@@ -137,7 +138,7 @@ static void fenced_lost_reply(void)
  assert(efs_meta_apply_append_resolve(kv,ino,off,EFS_META_APPEND_COMPLETED)==EFS_ERR_STALE);
  /* A repeated retirement is a no-op. */
  t=next_tx();
- assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv,&append_wait)==EFS_OK);
  assert(row_outcome(kv,ino,gen,off)==EFS_META_APPEND_FENCED_HOLE);
  assert(complete(kv,ino,off2,&b)==EFS_OK);
  state(kv,ino,&open,&size);assert(!open && size==216);
@@ -202,7 +203,7 @@ static void completed_then_cleanup(void)
  assert(complete(kv,ino,off,&a)==EFS_OK); /* completion replay stays OK */
  assert(efs_session_fence_local(kv,shard,a.id.client_uuid,2)==EFS_OK);
  struct efs_txid t=next_tx();
- assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv,&append_wait)==EFS_OK);
  assert(row_outcome(kv,ino,gen,off)==EFS_META_APPEND_COMPLETED);
  state(kv,ino,&open,&size);assert(!open && size==208);
  efs_kv_mem_free(kv);
@@ -231,11 +232,11 @@ static void live_owner_untouched(void)
  struct efs_opid_req a=identity(42,1,0);
  uint64_t off=grant(kv,ino,&a);
  struct efs_txid t=next_tx();
- assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv)==EFS_ERR_BUSY);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,off,a.id.client_uuid,1,&t,&ops,kv,&append_wait)==EFS_ERR_BUSY);
  efs_ino_t sel;uint64_t sgen,soff;unsigned found=7,progress=7;
  assert(efs_meta_append_session_next(kv,shard,a.id.client_uuid,1,&sel,&sgen,&soff,&found)==EFS_ERR_BUSY && !found);
  t=next_tx();
- assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&ops,kv,&progress)==EFS_ERR_BUSY && !progress);
+ assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_ERR_BUSY && !progress);
  /* Abandoning another identity of the same owner leaves this one alone. */
  struct efs_opid_req other=identity(42,2,0);
  assert(abandon(kv,ino,&other,&retired)==EFS_OK && !retired);
@@ -250,12 +251,68 @@ static void live_owner_untouched(void)
  efs_kv_mem_free(kv);
 }
 
+/* K42 (Task A candidate D): a revoked session's append receipt sits on an
+ * inode another live session is appending to. Its retirement waits on that
+ * OPEN reservation and names the wait (OPEN), a PREPARE that loses its lock
+ * aborts and names ABORTED, and once the foreign close REPORT lands the same
+ * step retires everything and the shard is idle. Nothing is committed while
+ * a wait is named; the foreign append is never discarded. */
+static int prepare_locked(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,
+                          const struct efs_meta_append_image *q)
+{(void)ctx;(void)t;(void)p;(void)q;return EFS_ERR_BUSY;}
+static const struct efs_meta_append_ops locked={prepare_locked,decide,resolve};
+/* The coordinator's own DECIDE ABORT fails too (it lost its group). */
+static int decide_lost(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
+{(void)ctx;(void)t;(void)p;assert(d==EFS_TXN_ABORT);return EFS_ERR_NOT_PRIMARY;}
+static const struct efs_meta_append_ops locked_lost={prepare_locked,decide_lost,resolve};
+static void foreign_open_wait(void)
+{
+ efs_ino_t ino;uint64_t gen;struct efs_kv *kv=fixture(&ino,&gen);
+ uint32_t shard=efs_kv_inode_shard(ino),open;uint64_t size;unsigned progress=9;int idle=7;
+ struct efs_opid_req a=identity(42,1,0),b=identity(43,1,0);
+ uint64_t off=grant(kv,ino,&a);
+ assert(complete(kv,ino,off,&a)==EFS_OK);
+ uint64_t off2=grant(kv,ino,&b);assert(off2==208);
+ assert(efs_session_fence_local(kv,shard,a.id.client_uuid,2)==EFS_OK);
+ assert(efs_meta_append_session_idle(kv,shard,a.id.client_uuid,1,&idle)==EFS_OK && !idle);
+ for(unsigned i=0;i<3;i++) {
+  struct efs_txid t=next_tx();append_wait=99;
+  assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_ERR_BUSY);
+  assert(!progress && append_wait==EFS_META_APPEND_WAIT_OPEN);
+ }
+ state(kv,ino,&open,&size);assert(open==1 && size==208);
+ assert(complete(kv,ino,off2,&b)==EFS_OK);
+ state(kv,ino,&open,&size);assert(!open && size==216);
+ /* A PREPARE refused by a held lock aborts: BUSY, ABORTED, nothing applied. */
+ struct efs_txid t=next_tx();append_wait=99;
+ assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&locked,kv,&progress,&append_wait)==EFS_ERR_BUSY);
+ assert(!progress && append_wait==EFS_META_APPEND_WAIT_ABORTED);
+ /* COMMIT was never proposed: still a certified no-op when ABORT's own
+  * decision fails (the server's finisher decides it). */
+ t=next_tx();append_wait=99;
+ assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&locked_lost,kv,&progress,&append_wait)==EFS_ERR_BUSY);
+ assert(!progress && append_wait==EFS_META_APPEND_WAIT_ABORTED);
+ assert(efs_meta_append_session_idle(kv,shard,a.id.client_uuid,1,&idle)==EFS_OK && !idle);
+ unsigned steps=0;
+ do {
+  t=next_tx();append_wait=99;
+  assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_OK);
+  assert(append_wait==EFS_META_APPEND_WAIT_NONE && ++steps<16);
+ } while(progress);
+ assert(steps>=2);
+ assert(efs_meta_append_session_idle(kv,shard,a.id.client_uuid,1,&idle)==EFS_OK && idle);
+ state(kv,ino,&open,&size);assert(!open && size==216);
+ efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
  fenced_lost_reply();
  abandoned_lost_reply();
  completed_then_cleanup();
  live_owner_untouched();
+ foreign_open_wait();
  puts("append cleanup (K15/W64): lost reply retired by fence or abandon, frontier advances, late completion/replay refused, completion never overtaken, live owner untouched PASS");
+ puts("append cleanup (K42): revoked receipt waits on a foreign OPEN (named), aborted PREPARE named (also with a failed ABORT decide), retired after the foreign REPORT PASS");
  return 0;
 }

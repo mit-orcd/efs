@@ -120,6 +120,11 @@ more refused name; with it, A/B behavior selectors are 15 → 0 and reachable A/
 No product setting was added: the stop record and the parallel revoke have
 no switch or tunable.
 
+**Oct 25, K42 clean stop on a healthy cluster:** one fault hook more in
+`EFS_FAULTS` builds, `EFS_FAULT_APPEND_HOLD_FILE`
+([evidence](e2-clean-stop-busy-20261025.md)). No product setting was added:
+the per-shard cleanup budget (20 s) is a constant.
+
 Reachable configurations: the 15 binary A/B selectors (13 environment, 2
 CLI) allow up to 2^15 = 32,768 combinations, before transport (`auto`, `tcp`,
 `rdma`) and the 33 numeric tunables. This counts switches, not tested
@@ -345,6 +350,7 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
+| `EFS_FAULT_APPEND_HOLD_FILE` | `server/raft_host.c` (host_fault_append_hold) | off; while the named file holds an inode number, a REPORT does not resolve that inode's OPEN append reservations (a foreign OPEN another session's revoke cleanup must wait for); while it reads `cleanup`, every revoke append cleanup step answers that wait (K42: a clean unmount on a healthy cluster) | fault/test hook | — | `test_k42_peer_stop_open.py` | Keep in `EFS_FAULTS` builds (K42) |
 | `EFS_FAULT_APPEND_LOSE_EVERY` | `client/inode_rpc.c:2611` (append_reply_fault) | off; drop every Nth APPEND reservation reply | fault/test hook | — | `append_failover.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_APPEND_LOSE_MAX` | `client/inode_rpc.c:2612` (append_reply_fault) | off; cap on dropped APPEND replies (4) | fault/test hook | — | `append_failover.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_COMPACT_DIE` | `kv/kv_compact.c:51` (compact_maybe_die) | off; `_exit(99)` after the Nth compaction output | fault/test hook | — | `test_kv_compact_crash.c`, `test_faults_env_ignored.py` | Keep in `EFS_FAULTS` builds |

@@ -15092,7 +15092,33 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             struct host_view v;host_view_get(h,group,&v);
             out->rc=EFS_OK;out->salt=1;out->index=v.applied;return;
         }
-        cmd=cleanup_cmd;clen=packed;
+        /* K42: the batch's apply refuses with BUSY, changing nothing, while
+         * another transaction holds an exclusive intent on one of its keys
+         * (a close-step marker of an inode another client is appending
+         * to). That applied verdict of this exact entry is definite: it
+         * gets the lease certificate. A wait timeout, a ring miss or any
+         * other verdict keeps the entry's index (uncertain). */
+        uint64_t batch_idx=0,batch_term=0;
+        rc=host_propose_mode(h,group,cleanup_cmd,packed,&batch_idx,&batch_term,&hint,1);
+        if (rc==EFS_OK) rc=host_wait_verdict(h,group,batch_idx,batch_term,&hint);
+        out->rc=rc;out->leader_hint=hint;
+        struct efs_arc_view av;
+        if (rc==EFS_ERR_BUSY && batch_term && host_arc_read(h,group,batch_idx,&av) &&
+            av.idx==batch_idx && av.term==batch_term && av.rc==EFS_ERR_BUSY) {
+            static unsigned locked;
+            unsigned n=__atomic_fetch_add(&locked,1,__ATOMIC_RELAXED);
+            if (!(n&63))
+                fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u applied BUSY "
+                        "(key under another transaction's intent), retry certified (%u)\n",
+                        rd32be(cmd+22),rd32be(cmd+18),n+1);
+            out->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return;
+        }
+        if (rc==EFS_ERR_BUSY)
+            fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u idx=%llu BUSY "
+                    "uncertified (verdict not known)\n",rd32be(cmd+22),rd32be(cmd+18),
+                    (unsigned long long)batch_idx);
+        out->index=batch_idx;
+        return;
     } else if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH) {
         rc=host_session_cleanup_admit(h,cmd,clen,group,&hint);
         if (rc!=EFS_OK) {out->rc=rc;out->leader_hint=hint;return;}
@@ -18535,11 +18561,19 @@ static int host_append_authority(struct efs_raft_host *h,int *hint)
      * Different leaders keep the scalar path and its fresh authority checks. */
     return host_read_index_pair(h,groups[0],groups[1],hint);
 }
+#if EFS_FAULTS
+static int host_fault_append_hold(efs_ino_t ino);
+#endif
 static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
     uint32_t clen,uint8_t group,int *hint,uint64_t *empty)
 {
     *empty=0;
     if(clen!=25)return EFS_ERR_INVAL;
+#if EFS_FAULTS
+    if(host_fault_append_hold(0)) {
+        *empty=EFS_MD_SESSION_APPEND_WAIT_OPEN;return EFS_ERR_BUSY;
+    }
+#endif
     uint8_t owner[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_LEASE_LOCK_NEXT};
     memcpy(owner+2,cmd+1,24);
     int rc=host_session_cleanup_admit(h,owner,sizeof(owner),group,hint);
@@ -18559,17 +18593,29 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
     }
     *empty=0;
     struct host_resize_ctx ctx={h,hint};struct efs_txid tx;fill_txid(h,&tx);
+    unsigned wait=EFS_META_APPEND_WAIT_NONE;
     if(!found) {
         unsigned progress=0;
         rc=efs_meta_retire_append_session(h->kv,rd32be(cmd+21),cmd+1,
-            rd32be(cmd+17),&tx,&host_append_ops,&ctx,&progress);
+            rd32be(cmd+17),&tx,&host_append_ops,&ctx,&progress,&wait);
         if(rc==EFS_OK)*empty=!progress;
-        return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
+    } else {
+        rc=efs_meta_finish_append_fenced(h->kv,ino,generation,offset,cmd+1,
+                                        rd32be(cmd+17),&tx,&host_append_ops,&ctx,&wait);
     }
-    rc=efs_meta_finish_append_fenced(h->kv,ino,generation,offset,cmd+1,
-                                    rd32be(cmd+17),&tx,&host_append_ops,&ctx);
-    /* A dead inode still owes REAP_MULTI; absence is never empty-phase proof. */
-    return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
+    /* A dead inode still owes REAP_MULTI; absence is never empty-phase proof.
+     * K42: a step that committed nothing names why (foreign OPEN append,
+     * frontier, aborted PREPARE, REAP owed), so the coordinator may repeat
+     * it; an uncertain transaction keeps a bare BUSY. */
+    if(rc==EFS_ERR_NOT_FOUND)rc=EFS_ERR_BUSY;
+    if(rc==EFS_ERR_BUSY && wait!=EFS_META_APPEND_WAIT_NONE)
+        *empty=EFS_MD_SESSION_APPEND_RETRY_SALT+wait;
+    else if(rc==EFS_ERR_BUSY)
+        fprintf(stderr,"raft-host: session append cleanup shard=%u epoch=%u ino=%llu BUSY "
+                "uncertified at %s (transaction outcome not known)\n",rd32be(cmd+21),
+                rd32be(cmd+17),(unsigned long long)(found?ino:0),
+                efs_meta_append_cleanup_why?efs_meta_append_cleanup_why:"-");
+    return rc;
 }
 /* EFS_MD_REQ_SESSION_CLEANUP_PROBE: the proofs of both cleanup phases
  * once for a word of shards (owner ACTIVE past epoch, fresh views of both
@@ -22249,10 +22295,44 @@ static int host_complete_single_append(struct efs_raft_host *h,efs_ino_t ino,
  * REPORT's `report resolve ... (retry)` line. */
 static __thread const char *host_resolve_why;
 
+#if EFS_FAULTS
+/* Test-only (K42): while EFS_FAULT_APPEND_HOLD_FILE exists and names an
+ * inode (decimal), a REPORT does not resolve that inode's OPEN append
+ * reservations: another session's revoke cleanup then meets a standing
+ * foreign OPEN, as an append in flight on a loaded cluster leaves it
+ * (ino 0: none). While it reads "cleanup", every revoke append cleanup step
+ * answers that wait instead (a foreign OPEN outlasting the budget). */
+static int host_fault_append_hold(efs_ino_t ino)
+{
+    const char *gate=getenv("EFS_FAULT_APPEND_HOLD_FILE");
+    if(!gate || !*gate)return 0;
+    FILE *f=fopen(gate,"r");
+    if(!f)return 0;
+    char word[32]={0};
+    if(!fgets(word,sizeof(word),f))word[0]=0;
+    fclose(f);
+    if(!strncmp(word,"cleanup",7)) {
+        static int noted;
+        if(!ino && !__atomic_exchange_n(&noted,1,__ATOMIC_RELAXED))
+            fprintf(stderr,"raft-host: EFS_FAULT_APPEND_HOLD_FILE holds append cleanup\n");
+        return !ino;
+    }
+    unsigned long long held=strtoull(word,NULL,10);
+    int match=ino && held==(unsigned long long)ino;
+    static unsigned long long noted;
+    if(match && __atomic_exchange_n(&noted,held,__ATOMIC_RELAXED)!=held)
+        fprintf(stderr,"raft-host: EFS_FAULT_APPEND_HOLD_FILE holds ino=%llu\n",held);
+    return match;
+}
+#endif
+
 static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                                   uint64_t sz, const struct efs_opid *session, int *hint)
 {
     uint64_t watermark=0;uint32_t open=0;
+#if EFS_FAULTS
+    if(host_fault_append_hold(ino)){host_resolve_why="fault-hold";return EFS_ERR_BUSY;}
+#endif
     host_resolve_why="state";
     int rc=efs_meta_apply_append_state(h->kv,ino,&watermark,NULL,&open);
     if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;

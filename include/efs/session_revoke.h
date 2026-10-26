@@ -39,12 +39,48 @@ static inline int efs_session_busy_retry_ok(const uint8_t *payload, uint32_t ple
             (payload[2] == EFS_MD_SESS_FENCE_LOC && plen == 1 + EFS_MD_SESS_FENCE_LOC_LEN) ||
             (payload[2] == EFS_MD_SESS_STORAGE_FENCE && plen == 23));
 }
+/* A cleanup step's BUSY that the server certified as a no-op (zero
+ * index/term): LEASE_LOCK_NEXT's refused selection or (K42) its batch
+ * applied with BUSY and no effect, or SESSION_APPEND_NEXT's refused
+ * selection and K42 waits (another session's OPEN append on the inode, the
+ * frontier, an aborted PREPARE, REAP owed). Any other BUSY may follow a
+ * submitted transaction and stays the step's one result. */
+static inline int efs_session_cleanup_retry_ok(const struct efs_msg_raft_mkfs_reply *r,
+                                               int appends)
+{
+    if (r->index || r->term)
+        return 0;
+    return appends ? r->salt >= EFS_MD_SESSION_APPEND_RETRY_SALT &&
+                     r->salt <= EFS_MD_SESSION_APPEND_WAIT_GONE
+                   : r->salt == EFS_MD_SESSION_CLEANUP_RETRY_SALT ||
+                     r->salt == EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;
+}
+/* The server's reason for a cleanup step that failed with rc ("" if none):
+ * what a client logs with the shard where its revoke stopped. */
+static inline const char *efs_session_cleanup_reason(uint64_t salt, int rc)
+{
+    if (rc != EFS_ERR_BUSY)
+        return "";
+    switch (salt) {
+    case EFS_MD_SESSION_CLEANUP_RETRY_SALT: return "lease-selection-refused";
+    case EFS_MD_SESSION_CLEANUP_WAIT_LOCKED: return "lease-key-locked";
+    case EFS_MD_SESSION_APPEND_RETRY_SALT: return "append-selection-refused";
+    case EFS_MD_SESSION_APPEND_WAIT_OPEN: return "append-open-by-other-session";
+    case EFS_MD_SESSION_APPEND_WAIT_FRONTIER: return "append-frontier";
+    case EFS_MD_SESSION_APPEND_WAIT_ABORTED: return "append-prepare-aborted";
+    case EFS_MD_SESSION_APPEND_WAIT_GONE: return "append-reap-owed";
+    default: return "uncertified-busy";
+    }
+}
+/* Per-shard cleanup budget of efs_session_cleanup_bounded. */
+#define EFS_SESSION_CLEANUP_BUDGET_MS 20000u
 /* Repeat one certificate barrier (STORAGE_FENCE, FENCE_LOC, FINISH) while
  * BUSY, within 15 s and any caller deadline. */
 int efs_session_storage_barrier(const struct efs_session_rpc *, const uint8_t *payload,
                                 uint32_t plen, struct efs_msg_raft_mkfs_reply *out);
 /* Exact lease/lock (appends=0) or append (appends=1) cleanup of one shard
- * for old_epoch, eight keys per RPC, within 30 s. OK once the phase is empty. */
+ * for old_epoch, eight keys per RPC, within EFS_SESSION_CLEANUP_BUDGET_MS.
+ * OK once the phase is empty; a certified BUSY is repeated every 50 ms. */
 int efs_session_cleanup_bounded(const struct efs_session_rpc *,
                                 const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t old_epoch,
                                 uint32_t shard, int appends,
@@ -57,6 +93,7 @@ struct efs_session_revoke_result {
     uint64_t fence_ms, cleanup_ms, total_ms; /* wall time of the stages */
     uint32_t cleaned;      /* shards the cleanup probe left to per-shard cleanup */
     uint32_t probe_failed; /* probes that failed (their whole word was cleaned) */
+    const char *reason;    /* cleanup stop: efs_session_cleanup_reason, or "" */
 };
 /* The whole barrier. OK only when the owner reads ACTIVE at the new epoch
  * after FINISH and every cleanup phase; any other result leaves the barrier

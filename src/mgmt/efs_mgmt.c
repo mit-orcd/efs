@@ -1866,7 +1866,7 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
     struct efs_session_revoke_result res;
     int rc = efs_session_revoke(&rpc, uuid, &res), st;
     if (rc != EFS_OK && !strcmp(res.phase, "cleanup"))
-        fprintf(stderr,"session cleanup incomplete: epoch=%u shard=%u rc=%d; resume cleanup-leases and cleanup-appends for that epoch/shard\n",res.old_epoch,res.shard,rc);
+        fprintf(stderr,"session cleanup incomplete: epoch=%u shard=%u rc=%d reason=%s; resume cleanup-leases and cleanup-appends for that epoch/shard\n",res.old_epoch,res.shard,rc,res.reason);
     if (rc != EFS_OK) fprintf(stderr,"session fence incomplete: phase=%s epoch=%u rc=%d\n",res.phase,res.epoch,rc);
     st = 0;
     if (rc == EFS_ERR_NOT_PRIMARY)

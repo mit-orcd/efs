@@ -1276,13 +1276,36 @@ int efs_meta_append_session_next(struct efs_kv *, uint32_t shard,
  * empty. Same caller obligations as those two. */
 int efs_meta_append_session_idle(struct efs_kv *, uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch, int *idle);
+/* K42: why a revoked-session append cleanup step answered BUSY without
+ * committing anything (*wait), so the caller may repeat the same step:
+ * OPEN      another session's OPEN reservation on the inode (its close
+ *           REPORT resolves it; foreign work is never discarded);
+ * FRONTIER  a DONE row of this session is past the published size, which
+ *           the earlier OPEN reservations' REPORTs advance;
+ * ABORTED   a PREPARE lost its lock/guard to a concurrent append, so COMMIT
+ *           was never proposed (nothing applies, even when the
+ *           coordinator's own DECIDE ABORT failed and a finisher decides);
+ * GONE      the inode is gone and REAP_MULTI still owes its rows.
+ * NONE with BUSY is not definite (e.g. an unacknowledged COMMIT). */
+enum {
+    EFS_META_APPEND_WAIT_NONE = 0,
+    EFS_META_APPEND_WAIT_OPEN,
+    EFS_META_APPEND_WAIT_FRONTIER,
+    EFS_META_APPEND_WAIT_ABORTED,
+    EFS_META_APPEND_WAIT_GONE,
+};
+/* The stage of the last revoked-session append cleanup step on this thread
+ * ("select", "floor", "capture", "barrier-collect", "prepare", "commit"),
+ * for the server's line about a BUSY it cannot certify. */
+extern __thread const char *efs_meta_append_cleanup_why;
 int efs_meta_retire_append_session(struct efs_kv *, uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
     const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx,
-    unsigned *progress);
+    unsigned *progress, unsigned *wait);
 int efs_meta_finish_append_fenced(struct efs_kv *, efs_ino_t, uint64_t generation,
     uint64_t offset, const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
-    const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx);
+    const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx,
+    unsigned *wait);
 /* K15/W64 cleanup-append under a live owner: retire the exact identity q
  * whose reserve outcome the client never learned. Decide-once at the
  * receipt: the identity's result becomes STALE, so a delayed reserve or a
