@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -831,6 +832,55 @@ static void t_retire_cut(void)
  retire_some();assert(!rj.nseg&&rj.head==rj.tail);
 }
 
+/* F1: retired records give their ring pages back. Every slot is touched
+ * first (as a long load's sweeps do); then retirement of a prefix, and of
+ * a window that wraps, must leave resident only the pages that still hold
+ * a live record, with the live records intact. */
+static size_t ring_resident(void)
+{
+    size_t pages=RJ_RING_BYTES/rj_page,n=0;unsigned char *v=malloc(pages);assert(v);
+    assert(!mincore(rj.recs,RJ_RING_BYTES,v));
+    for(size_t i=0;i<pages;i++) n+=v[i]&1;
+    free(v);return n;
+}
+static int live_intact(void)
+{
+    for(uint64_t i=rj.head;i<rj.tail;i++) if(rec_at(i)->ino!=0x5a00000000ull+(i%RJ_CAP)) return 0;
+    return 1;
+}
+static size_t live_pages(void)
+{
+    uint64_t sz=sizeof(struct rj_rec),a=rj.head*sz/rj_page,b=(rj.tail*sz+rj_page-1)/rj_page;
+    return (size_t)(b-a)+1; /* +1: a window that wraps splits one page run in two */
+}
+static void t_ring_release(void)
+{
+    boot();
+    rj.hold=1;
+    pthread_mutex_lock(&rj.mu);
+    for(uint64_t i=0;i<RJ_CAP;i++){memset(rec_at(i),0,sizeof(struct rj_rec));rec_at(i)->ino=0x5a00000000ull+i;}
+    assert(ring_resident()==RJ_RING_BYTES/rj_page);
+    rj.head=0;rj.tail=3*RJ_SEG_RECORDS;
+    rj.head=2*RJ_SEG_RECORDS;ring_release_locked(0);
+    /* Slots ahead of the tail were touched above but never retired: only
+     * the prefix behind the head is released. */
+    size_t ahead=(RJ_RING_BYTES-rj.tail*sizeof(struct rj_rec))/rj_page;
+    assert(live_intact());
+    assert(ring_resident()<=live_pages()+ahead+1);
+    assert(ring_resident()>=live_pages()-1+ahead);
+    /* A window across the wrap: [CAP-100, CAP+200). */
+    uint64_t old=rj.head;
+    rj.tail=RJ_CAP+200;
+    for(uint64_t i=3*RJ_SEG_RECORDS;i<rj.tail;i++){memset(rec_at(i),0,sizeof(struct rj_rec));rec_at(i)->ino=0x5a00000000ull+(i%RJ_CAP);}
+    rj.head=RJ_CAP-100;ring_release_locked(old);
+    assert(live_intact());
+    assert(ring_resident()<=live_pages()+1);
+    /* Everything retired: nothing but the page under the head is left. */
+    old=rj.head;rj.head=rj.tail;ring_release_locked(old);
+    assert(ring_resident()<=2);
+    pthread_mutex_unlock(&rj.mu);
+}
+
 int main(void)
 {
     /* Under TMPDIR (make_test_summary.sh sets a disk path): the physical
@@ -858,6 +908,7 @@ int main(void)
     run("PUT racing acceptance",t_race,0);
     run("physical guard",t_phys,0);
     run("retirement excludes post-sync deletion",t_retire_cut,0);
+    run("retired ring pages released",t_ring_release,0);
     run("segment PUT/accept/fence/delete",t_segment,0);
     run("segment crash after accept",t_segment_crash,1);
     run("segment record replays",t_segment_replay,0);
