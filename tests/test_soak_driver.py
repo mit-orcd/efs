@@ -224,7 +224,7 @@ h.mount_mu=[RefuseLock(),RefuseLock()]
 try:h.verify()
 except RuntimeError:pass
 else:raise AssertionError('fixture did not abort')
-print('RSS: long-window growth negative controls, per-role coverage, rehearsal NOTRUN, verification isolation PASS')
+print('RSS: long-window growth negative controls, per-role coverage, rehearsal RSS left unqualified, verification isolation PASS')
 
 
 # STALE is a definite refusal, never BUSY permission. Capture exact product
