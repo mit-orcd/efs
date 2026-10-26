@@ -35,6 +35,7 @@ struct peer_slot {
     struct efs_conn *conn[EFS_PEER_CONNS_PER_NODE];
     int busy[EFS_PEER_CONNS_PER_NODE];
     uint64_t down_until_ms; /* skip reconnect until this monotonic deadline */
+    uint64_t reaped_ms;     /* last idle scan (peer_reap_idle_locked) */
     uint32_t fail_streak;
     pthread_mutex_t lock;
     pthread_cond_t cv;
@@ -155,6 +156,29 @@ void server_peer_note_up(const char *host, uint16_t port)
     pthread_mutex_unlock(&p->lock);
 }
 
+/* F1: the pool grew to its busiest moment and never shrank; every
+ * connection holds a connection thread on the peer (stack, request
+ * buffers). Close one that has been idle EFS_PEER_CONN_IDLE_MS: it has no
+ * owner, and last_ok_ms is its last completed send or receive. At most
+ * one scan a second per peer. Checkout takes the lowest free slot, so a
+ * burst's extra slots go idle first. p->lock held. */
+#define EFS_PEER_CONN_IDLE_MS 30000
+
+static void peer_reap_idle_locked(struct peer_slot *p, uint64_t now)
+{
+    if (now - p->reaped_ms < 1000)
+        return;
+    p->reaped_ms = now;
+    for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++) {
+        struct efs_conn *c = p->conn[s];
+        if (!c || p->busy[s] || c->last_ok_ms <= 0 ||
+            now - (uint64_t)c->last_ok_ms <= EFS_PEER_CONN_IDLE_MS)
+            continue;
+        efs_conn_destroy(c);
+        p->conn[s] = NULL;
+    }
+}
+
 static struct efs_conn *peer_connect(const char *host, uint16_t port)
 {
     int fd = efs_connect_tcp(host, port);
@@ -221,6 +245,7 @@ static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int read)
         pthread_mutex_unlock(&p->lock);
         return NULL;
     }
+    peer_reap_idle_locked(p, now);
     for (;;) {
         if(!efs_net_remaining_ms(1)) {
             pthread_mutex_unlock(&p->lock);return NULL;
@@ -315,6 +340,7 @@ void server_peer_conn_release(const char *host, uint16_t port,
     for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++) {
         if (p->conn[s] == c) {
             p->busy[s] = 0;
+            peer_reap_idle_locked(p, peer_now_ms());
             pthread_cond_signal(s >= EFS_PEER_DATA_CONNS ? &p->read_cv : &p->cv);
             pthread_mutex_unlock(&p->lock);
             return;
