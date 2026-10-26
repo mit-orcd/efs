@@ -93,6 +93,7 @@ def write_file(path, body):
     explicit error; the B6 contract allows explicit failure, never silent
     corruption, so a brief retry is the correct client behavior. A write
     that never lands is a failure."""
+    import errno as _errno
     last = None
     for attempt in range(40):
         op = 'open'
@@ -114,6 +115,8 @@ def write_file(path, body):
                     os.close(fd)
                 except OSError:
                     pass
+            if e.errno == _errno.ENOTCONN:
+                raise AssertionError(f'mount died during the fault window: {last}') from e
             write_retries[0] += 1
             time.sleep(0.5)
     raise AssertionError(f'{path}: write never landed in 40 retries, last: {last}')
@@ -152,25 +155,24 @@ try:
     target.mkdir()
     marker = work / 'corrupt-on-3'
 
-    # arm the fault on node 3 just before the threshold crossing lands
+    # arm the fault on node 3 just before the threshold crossing lands.
+    # The spread fires when the entry count EXCEEDS the minimum
+    # (efs_meta_dir_note_entry), so the crossing file is number min+1.
     target_entries = int(SPREAD_MIN)
-    for k in range(target_entries - 1):
+    for k in range(target_entries):
         write_file(target / f'f{k:04d}', payload(f'target/{k}'))
     os.sync()
     marker.touch()          # node 3's next DIR apply damages the row it reads
-    write_file(target / f'f{target_entries - 1:04d}', payload(f'target/{target_entries - 1}'))
-    os.sync()
-    # let the split's DIR sequence apply on every replica (and the halt fire
-    # on node 3) before more creates: a create that meets the damaged row on
-    # the serve path in this window instead of the halted apply is a separate
-    # finding (kept forensics, runs 11/13/14/21), not this gate's subject.
-    time.sleep(3)
-    for k in range(target_entries, target_entries + 32):
-        write_file(target / f'f{k:04d}', payload(f'target/{k}'))
+    write_file(target / f'f{target_entries:04d}', payload(f'target/{target_entries}'))
     os.sync()
 
     # 1. node 3 must log the damage and the halt of the target's group
-    #    (which group? the dir shard's group — found in node 3's log)
+    #    (which group? the dir shard's group — found in node 3's log).
+    #    Wait for the halt BEFORE more creates: a create that meets the
+    #    damaged row on the serve path in this window instead of the halted
+    #    apply (persistent open-EIO, or a stuck client op under gate load —
+    #    gate case-444 kept on xorinox) is W162's finding, not this gate's
+    #    subject.
     deadline = time.time() + HALT_DEADLINE
     halt_group = None
     while time.time() < deadline:
@@ -185,6 +187,11 @@ try:
     assert 'fault dir-corrupt: damaged' in c.log(3), 'damage line missing on node 3'
     print(f'[w130] node 3 halted group {halt_group}: '
           f'{int(time.time() - t0)} s in')
+
+    # the group keeps serving through the quorum: 31 more files land
+    for k in range(target_entries + 1, target_entries + 32):
+        write_file(target / f'f{k:04d}', payload(f'target/{k}'))
+    os.sync()
 
     # 2. other groups and other replicas keep serving
     probe = m.path / 'post-halt.txt'
