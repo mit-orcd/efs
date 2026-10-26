@@ -189,7 +189,7 @@ tree under `~/efs-rss`, `TMPDIR=~/efs-rss/tmp`, loopback ports the test
 chose. Gates at `a6720c088`: intel2 (8 CPUs, 15 GB, Rocky 10); at
 `66a3a4024`: xorinox; `EFS_TEST_JOBS=8` both. The unit test and the reap
 test also ran on xorinox. No 17xxx port, `/data1` mount
-or other user's process was touched. The private trees were deleted on nuc
+or other user's process was touched. The private trees were deleted on nuc,
 xorinox and, after its reboot, intel2.
 
 ## Raw evidence
