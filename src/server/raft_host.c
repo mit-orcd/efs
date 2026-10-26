@@ -18586,8 +18586,9 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
         *empty=EFS_MD_SESSION_APPEND_RETRY_SALT+wait;
     else if(rc==EFS_ERR_BUSY)
         fprintf(stderr,"raft-host: session append cleanup shard=%u epoch=%u ino=%llu BUSY "
-                "uncertified (transaction outcome not known)\n",rd32be(cmd+21),
-                rd32be(cmd+17),(unsigned long long)(found?ino:0));
+                "uncertified at %s (transaction outcome not known)\n",rd32be(cmd+21),
+                rd32be(cmd+17),(unsigned long long)(found?ino:0),
+                efs_meta_append_cleanup_why?efs_meta_append_cleanup_why:"-");
     return rc;
 }
 /* EFS_MD_REQ_SESSION_CLEANUP_PROBE: the proofs of both cleanup phases

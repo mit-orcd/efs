@@ -1294,6 +1294,10 @@ enum {
     EFS_META_APPEND_WAIT_ABORTED,
     EFS_META_APPEND_WAIT_GONE,
 };
+/* The stage of the last revoked-session append cleanup step on this thread
+ * ("select", "floor", "capture", "barrier-collect", "prepare", "commit"),
+ * for the server's line about a BUSY it cannot certify. */
+extern __thread const char *efs_meta_append_cleanup_why;
 int efs_meta_retire_append_session(struct efs_kv *, uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
     const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx,

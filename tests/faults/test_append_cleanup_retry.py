@@ -21,6 +21,7 @@ static const struct efs_meta_append_ops host_append_ops={0};
 static int admission,authority,selection,transaction;
 static unsigned admit_calls,authority_calls,select_calls,txids,finishes,retires;
 static unsigned present=1,progress,reason;
+__thread const char *efs_meta_append_cleanup_why;
 static uint32_t rd32be(const uint8_t *p)
 {return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
 static int host_session_cleanup_admit(struct efs_raft_host *h,const uint8_t *p,

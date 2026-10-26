@@ -374,9 +374,27 @@ int efs_meta_finish_append_owned(struct efs_kv *kv,efs_ino_t ino,uint64_t offset
     const struct efs_meta_append_ops *ops,void *ctx)
 {return efs_meta_finish_append_batch_owned(kv,ino,&offset,1,outcome,id,tx,ops,ctx);}
 
-int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
+/* A PREPARE refused with BUSY or STALE (a concurrent append took a lock or
+ * a guard) ends the transaction before COMMIT is ever proposed: a definite
+ * no-op, whatever the coordinator's own DECIDE ABORT answered (a failed one
+ * is finished by the server's ABORT finisher or recovery; K42 saw it on a
+ * five-member loopback). BUSY with *wait ABORTED. Any other refusal and
+ * every COMMIT keep their own result. */
+__thread const char *efs_meta_append_cleanup_why;
+static int finish_refusal(const struct finish_capture *c,int rc,unsigned *wait)
+{
+    efs_meta_append_cleanup_why=c->refused?"prepare":"commit";
+    if(rc!=EFS_OK && (c->refused==EFS_ERR_BUSY || c->refused==EFS_ERR_STALE)) {
+        *wait=EFS_META_APPEND_WAIT_ABORTED;return EFS_ERR_BUSY;
+    }
+    return rc;
+}
+
+/* wait (K42, revoked-session cleanup only): name a no-op BUSY; NULL keeps
+ * every result exactly as the other callers expect it. */
+static int retire_barriers(struct efs_kv *kv,efs_ino_t ino,
     const struct efs_opid *id,const struct efs_txid *tx,
-    const struct efs_meta_append_ops *ops,void *ctx)
+    const struct efs_meta_append_ops *ops,void *ctx,unsigned *wait)
 {
     if(!kv || !ino || !tx || !ops || !ops->prepare || !ops->decide ||
        !ops->resolve)return EFS_ERR_INVAL;
@@ -384,6 +402,9 @@ int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
     const struct efs_kv_ops capture_ops={.get=finish_get};
     struct efs_kv reader={.ops=&capture_ops,.ctx=&capture};
     int rc=efs_meta_collect_append_barrier_retirement(&reader,ino,finish_batch,&capture);
+    /* A reservation opened after the caller's state read. */
+    if(rc==EFS_ERR_BUSY && wait)*wait=EFS_META_APPEND_WAIT_OPEN;
+    if(wait)efs_meta_append_cleanup_why="barrier-collect";
     struct append_owner_context owner={.ops=ops,.ctx=ctx,.first=1};
     const struct efs_meta_append_ops owned_ops={append_owner_prepare,append_owner_decide,append_owner_resolve};
     if(rc==EFS_OK && capture.mutations && id) {
@@ -398,24 +419,20 @@ int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
             memcpy(owner.owner.value,owner.owner.expected,EFS_SESS_LOCAL_VAL);
         }
     }
-    if(rc==EFS_OK && capture.mutations)
+    if(rc==EFS_OK && capture.mutations) {
         rc=finish_execute(&capture,tx,id?&owned_ops:ops,id?(void *)&owner:ctx);
+        if(wait)rc=finish_refusal(&capture,rc,wait);
+    }
     finish_free(&capture);return rc;
 }
 
-/* A PREPARE refused with BUSY or STALE (a concurrent append took a lock or
- * a guard) ends the transaction before COMMIT is ever proposed: a definite
- * no-op, whatever the coordinator's own DECIDE ABORT answered (a failed one
- * is finished by the server's ABORT finisher or recovery; K42 saw it on a
- * five-member loopback). BUSY with *wait ABORTED. Any other refusal and
- * every COMMIT keep their own result. */
-static int finish_refusal(const struct finish_capture *c,int rc,unsigned *wait)
+int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
+    const struct efs_opid *id,const struct efs_txid *tx,
+    const struct efs_meta_append_ops *ops,void *ctx)
 {
-    if(rc!=EFS_OK && (c->refused==EFS_ERR_BUSY || c->refused==EFS_ERR_STALE)) {
-        *wait=EFS_META_APPEND_WAIT_ABORTED;return EFS_ERR_BUSY;
-    }
-    return rc;
+    return retire_barriers(kv,ino,id,tx,ops,ctx,NULL);
 }
+
 
 int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t generation,
     uint64_t offset,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
@@ -424,9 +441,10 @@ int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t gener
 {
     if(!kv || !ino || !generation || !uuid || !epoch || !t || !ops || !wait ||
        !ops->prepare || !ops->decide || !ops->resolve)return EFS_ERR_INVAL;
-    *wait=EFS_META_APPEND_WAIT_NONE;
+    *wait=EFS_META_APPEND_WAIT_NONE;efs_meta_append_cleanup_why="floor";
     int rc=efs_session_cleanup_floor(kv,efs_kv_inode_shard(ino),uuid,epoch);
     if(rc!=EFS_OK)return rc;
+    efs_meta_append_cleanup_why="capture";
     struct finish_capture c={.base=kv};
     const struct efs_kv_ops capture_ops={.get=finish_get,.scan_prefix=finish_scan,.scan_from=finish_scan_from};
     struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
@@ -658,10 +676,11 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
 {
     if(!kv || !uuid || !tx || !ops || !ops->prepare || !ops->decide ||
        !ops->resolve || !progress || !wait)return EFS_ERR_INVAL;
-    *progress=0;*wait=EFS_META_APPEND_WAIT_NONE;
+    *progress=0;*wait=EFS_META_APPEND_WAIT_NONE;efs_meta_append_cleanup_why="select";
     struct receipt_selection selected={.shard=shard,.epoch=epoch,.uuid=uuid};
     int rc=retire_select(kv,&selected);
     if(rc!=EFS_OK || !selected.kl)return rc;
+    efs_meta_append_cleanup_why="capture";
     efs_ino_t ino=0;for(unsigned i=3;i<11;i++)ino=ino<<8|selected.key[i];
     uint64_t watermark=0;uint32_t open=0;
     rc=efs_meta_apply_append_state(kv,ino,&watermark,NULL,&open);
@@ -670,7 +689,7 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     if(watermark && !open) {
         /* Interrupted REPORT completed its inode rows but still owes lane
          * retirement. Use this cleanup txid only once; the next step prunes. */
-        rc=efs_meta_retire_append_barriers(kv,ino,NULL,tx,ops,ctx);
+        rc=retire_barriers(kv,ino,NULL,tx,ops,ctx,wait);
         if(rc==EFS_OK)*progress=1;
         return rc;
     }
