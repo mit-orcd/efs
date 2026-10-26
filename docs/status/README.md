@@ -19,13 +19,14 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [efsd RSS plateau under the fixed-working-set D4 load (F1 follow-ups item 2)](efsd-rss-plateau-20261025.md):
-**branch `claude/wizardly-mcclintock-0e2efd`, not merged, not pushed; nuc 60-minute runs: plateau FAIL (efsd +7.0 to +23.7 % on the last run, efs-fuse PASS); intel2 at `a6720c088`: `make test-all` 481 commands, 0 FAIL, 16 NOTRUN host limits, `make tsan-check` and `make asan-check` PASS; gates at `66a3a4024` unread (intel2 sshd down).**
+**branch `claude/wizardly-mcclintock-0e2efd`, not merged, not pushed; RSS plateau PASS on one 60-minute run at `66a3a4024` (xorinox: efsd +0.6 / −0.8 / −0.1 %, efs-fuse +0.0 / +3.6 %; the D4 run itself FAIL on one truncate EIO, not memory); FAIL on every nuc run. xorinox at `66a3a4024`: `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47, `make test-all` 481 commands, 2 FAIL (the K33 degraded-read EIO intermittent, which fails on the base too), 14 NOTRUN host limits.**
 The connection-thread hypothesis is refuted as the main cause (about 0.15 MiB per thread), but no pool
 ever closed an idle connection; both pools now close one after 30 s idle. Bounded: the reclaim journal
 ring, whose pages were never released (half the baseline's growth), and the packer's compaction
-buffers, which fragmented the leader's arenas. efsd still fails the 5 % criterion: the last run stepped
-up at minute 48, when nuc's page cache ran short (slab 14.6 GB, 395 MB cached), with elections. Next: one
-60-minute run on a host with free page cache. amd went down during the session (cause not established).
+buffers, which fragmented the leader's arenas. On nuc the last run still stepped up at minute 48, when
+the host's page cache ran short (slab 14.6 GB, 395 MB cached), with elections; a concurrency step still
+raises arena memory for the rest of the load. amd went down during the session (cause not established);
+intel2's sshd refuses connections.
 
 [F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](f1-followups-20261025.md):
 **branch `claude/devel-f1-followups-ae2deb`, not merged, not pushed; xorinox: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47 (`758dd144c`, same code); RSS plateau FAIL (bounded, not flat).**
