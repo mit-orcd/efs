@@ -512,14 +512,12 @@ class Run:
             rc, text = self.x.run('raft-status', ep, timeout=20)
             b = parse_raft_bound(text) if rc == 0 else None
             b = dict(b or {}, rss_kib=self.x.server_rss(nid, ep))
-            rc, text = self.x.run('gc-status', ep, timeout=20)
-            b.update(parse_gc_status(text) if rc == 0 else {})
+            if phase != 'load' or len(self.samples) % 4 == 0:  # three more RPCs: every 4th load sample
+                rc, text = self.x.run('gc-status', ep, timeout=20)
+                b.update(parse_gc_status(text) if rc == 0 else {})
             s['nodes'][nid] = b
         rc, text = self.x.run('pack-compact', self.x.seed, '0', timeout=30)
         s['pack'] = parse_pack(text) if rc == 0 else None
-        if phase != 'load':
-            rc, text = self.x.run('status', self.x.seed, timeout=30)
-            s['abandoned'] = parse_abandoned(text) if rc == 0 else None
         if s['pack']:
             s['pack']['led'] = sorted(s['pack']['led'])
         try:
@@ -613,6 +611,10 @@ class Run:
                 drained_at = time.time() - t_stop
                 break
             time.sleep(self.a.sample_s)
+        if self.a.working_set and self.samples:
+            # The orphan ledger once the load's settles have landed.
+            rc, text = self.x.run('status', self.x.seed, timeout=30)
+            self.samples[-1]['abandoned'] = parse_abandoned(text) if rc == 0 else None
         self.stop_all.set()
         fg.join(timeout=self.a.fg_deadline_s * 3)
         if fg.is_alive():
