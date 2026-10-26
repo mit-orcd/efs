@@ -1598,6 +1598,15 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[efsd RSS plateau under the fixed-working-set D4 load (F1 follow-ups item 2)](../status/efsd-rss-plateau-20261025.md):
+**branch `claude/wizardly-mcclintock-0e2efd`, not merged, not pushed; nuc 60-minute runs: plateau FAIL (efsd +7.0 to +23.7 % on the last run, efs-fuse PASS); intel2 at `a6720c088`: `make test-all` 481 commands, 0 FAIL, 16 NOTRUN host limits, `make tsan-check` and `make asan-check` PASS; gates at `66a3a4024` unread (intel2 sshd down).**
+The connection-thread hypothesis is refuted as the main cause (about 0.15 MiB per thread), but no pool
+ever closed an idle connection; both pools now close one after 30 s idle. Bounded: the reclaim journal
+ring, whose pages were never released (half the baseline's growth), and the packer's compaction
+buffers, which fragmented the leader's arenas. efsd still fails the 5 % criterion: the last run stepped
+up at minute 48, when nuc's page cache ran short (slab 14.6 GB, 395 MB cached), with elections. Next: one
+60-minute run on a host with free page cache. amd went down during the session (cause not established).
+
 [F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](../status/f1-followups-20261025.md):
 **branch `claude/devel-f1-followups-ae2deb`, not merged, not pushed; xorinox: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47 (`758dd144c`, same code); RSS plateau FAIL (bounded, not flat).**
 `test_k36_recovery.py` under TSan PASS 10 of 10 (crash hooks now `exit_group`; a hook race and a test

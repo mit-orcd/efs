@@ -348,6 +348,11 @@ table).
    EBUSY: one in 13 173 foreground operations. Owner: client metadata RPC
    retry and server GC pass length.
 4. **efsd RSS growth with throughput** (item 2 verdict). Owner: F1/K22.
+   Worked in [efsd RSS plateau](efsd-rss-plateau-20261025.md) (branch
+   `claude/wizardly-mcclintock-0e2efd`): the reclaim journal ring, idle
+   pooled connections and the packer's compaction buffers are bounded.
+   efsd still fails the 5 % criterion on 60-minute runs on nuc; the last
+   run stepped up at a host page-cache shortage. Still open.
 5. **Pack candidates left for minutes after a rewrite load** (drain,
    item 2). Owner: D4/packer.
 6. **`tests/test_stop_progress.py`: one mkdir EIO** in the 8-job gate at
