@@ -135,6 +135,16 @@ def session_view(text):
     return epoch,state,touched
 
 
+class SessionCleanupRefusal(AssertionError):
+    """A definite non-BUSY product cleanup refusal, not a retry certificate."""
+    def __init__(self, uuid, old_epoch, epoch, shard, code, output):
+        self.evidence=dict(classification='product cleanup candidate; cause requires review',
+                           uuid=uuid, old_epoch=old_epoch, epoch=epoch, shard=shard,
+                           rc=code, output=output, action='stopped; no re-fence or cleanup retry')
+        super().__init__(f'owned session cleanup refused rc={code}, old_epoch={old_epoch}, '
+                         f'epoch={epoch}, shard={shard}: '+output)
+
+
 def revoke_owned_session(invoke,uuid,old_epoch,bound,clock=time.monotonic,pause=time.sleep):
     """One fence; resume only its explicit cleanup-BUSY at the same old epoch.
 
@@ -153,11 +163,15 @@ def revoke_owned_session(invoke,uuid,old_epoch,bound,clock=time.monotonic,pause=
         rows=re.findall(r'^raft-session status=0 rc=0 .*?op=fence .*?epoch=(\d+) state=1 ',text,re.M)
         assert rows==[str(old_epoch+1)],text
         return dict(resumed=False,seconds=clock()-started)
-    before=re.findall(r'^session cleanup incomplete: epoch=(\d+) shard=(\d+) rc=-13; '
+    before=re.findall(r'^session cleanup incomplete: epoch=(\d+) shard=(\d+) rc=(-?\d+); '
                       r'resume cleanup-leases and cleanup-appends for that epoch/shard$',text,re.M)
-    after=re.findall(r'^session fence incomplete: phase=cleanup epoch=(\d+) rc=-13$',text,re.M)
-    assert len(before)==1 and int(before[0][0])==old_epoch and after==[str(old_epoch+1)],text
+    after=re.findall(r'^session fence incomplete: phase=cleanup epoch=(\d+) rc=(-?\d+)$',text,re.M)
+    assert len(before)==1 and int(before[0][0])==old_epoch,text
+    code=int(before[0][2])
+    assert after==[(str(old_epoch+1),str(code))] and code<0,text
     assert 0<=int(before[0][1])<4096,text
+    if code != -13:
+        raise SessionCleanupRefusal(uuid,old_epoch,old_epoch+1,int(before[0][1]),code,text)
     rc,owner=call('get')
     assert rc==0 and session_view(owner)[:2]==(old_epoch+1,1),owner
     touched=[]
@@ -520,7 +534,13 @@ class Soak:
                 def invoke(op,uuid,*args,timeout):
                     return self.command([str(MGMT),'raft-session',self.c.ep(1),op,uuid,*args],
                                         timeout,'crashed-session-'+op)
-                proof=revoke_owned_session(invoke,uuid,epoch,self.a.recovery_bound)
+                try:
+                    proof=revoke_owned_session(invoke,uuid,epoch,self.a.recovery_bound)
+                except SessionCleanupRefusal as failure:
+                    self.stop.set()
+                    (self.out/'cleanup-refusal.json').write_text(json.dumps(failure.evidence,indent=2))
+                    self.note('cleanup-refusal', **failure.evidence)
+                    raise
                 self.note('crashed-session-revoked',uuid=uuid,proof=proof)
                 # Preserve every client run in a separate log and mount path.
                 self.mounts[victim] = Mount(self.c, 1+victim, f'mnt-{victim}-r{len(self.events)}')
