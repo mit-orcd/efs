@@ -120,6 +120,29 @@ def foreign_jobs(owned=()):
     return found
 
 
+def query_outcome(returncode, stdout, stderr):
+    """Classify one `.efs/stats --json` run. Exit 75 "not indexed yet" is the
+    documented answer of a query member with no published catalog yet (fresh
+    or just restarted, src/server/raft_host.c); every other failure fails."""
+    if returncode == 75 and 'not indexed yet' in stderr and not stdout.strip():
+        return dict(not_indexed=True)
+    assert returncode == 0, (returncode, stdout, stderr)
+    return dict(not_indexed=False, stats=json.loads(stdout))
+
+
+def query_ready(run, bound, note, clock=time.monotonic, pause=time.sleep):
+    """Repeat only the not-indexed answer, under one overall bound, as the
+    startup readiness wait does. Never a generic retry of a failed query."""
+    end = clock()+bound
+    while True:
+        got = run()
+        if not got['not_indexed']:
+            return got
+        note()
+        assert clock() < end, f'query not indexed beyond {bound}s'
+        pause(min(2, max(0, end-clock())))
+
+
 def owned_session(text):
     found=re.findall(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z session uuid=([0-9a-f]{32}) epoch=(\d+)$',text,re.M)
     assert len(found)==1, 'cannot identify exact owned mount session'
@@ -232,8 +255,7 @@ def io(req):
         p = subprocess.run([sys.executable, str(Path(req['mount']) / '.efs' / 'stats'), '--json'],
                            capture_output=True, text=True, timeout=30)
         # Catalog initialization is documented ENODATA; parent gives it a bound.
-        assert p.returncode == 0, (p.returncode, p.stdout, p.stderr)
-        return json.loads(p.stdout)
+        return query_outcome(p.returncode, p.stdout, p.stderr)
     if op == 'append':
         b = APP.body(req['writer'], req['seq'])
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -467,7 +489,11 @@ class Soak:
                             self.appends[idx].append(seq)
                             self.note('ack-append-fsync', writer=idx, seq=seq)
                     if seq % 32 == 31 and self.commands_enabled:
-                        self.op(idx, dict(op='query', name=''), 30)
+                        # A member returning from churn answers "not indexed
+                        # yet" until its first catalog publish.
+                        query_ready(lambda: self.op(idx, dict(op='query', name=''), 30),
+                                    self.a.recovery_bound,
+                                    lambda: self.note('query-not-indexed', mount=idx, churn=self.churning))
                     # Metadata deadline separate from data: child runs stat/list as a
                     # distinct bounded operation (included in deterministic unit tests).
                     self.op(idx, dict(op='metadata', name=name), self.a.meta_deadline if not self.churning else self.a.churn_deadline)

@@ -68,6 +68,7 @@ def main(out):
         ('status samples / not fully protected / of those outside churn', f'{len(status)} / {len(bad)} / {len(bad_steady)}'),
         ('crashed sessions revoked (resumed)', f"{len(revoked)} ({sum(1 for r in revoked if r['proof'].get('resumed'))})"),
         ('cleanup refusals', kinds['cleanup-refusal']),
+        ('query not-indexed answers (bounded wait)', kinds['query-not-indexed']),
         ('RSS samples', kinds['rss']),
     ]))
 
