@@ -87,8 +87,18 @@ def main(out):
                 rws.append((label, name, len(xs), f'{pct(xs,.5):.3f}', f'{pct(xs,.99):.3f}', f'{max(xs):.3f}'))
     print(table(('operation', 'phase', 'count', 'p50 s', 'p99 s', 'max s'), rws))
 
-    plateau = json.loads((out/'plateau.json').read_text()) if (out/'plateau.json').exists() else \
-        dict(verdict='NOTRUN', missing_roles='all (no plateau.json: run stopped first)', method='-', windows=[])
+    if (out/'plateau.json').exists():
+        plateau = json.loads((out/'plateau.json').read_text())
+    else:
+        # Run stopped before its own assessment: apply the same per-window
+        # rule offline to the retained samples; roles were not recorded.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import rss_plateau as RSS
+        w = [dict(path=p.name, pid=pid, role='(unrecorded)', **RSS.assess_points(pts))
+             for p in sorted(out.glob('rss-quiet-*.txt')) for pid, pts in RSS.from_ps(p).items()]
+        plateau = dict(verdict='FAIL' if any(r['verdict'] == 'FAIL' for r in w) else 'NOTRUN',
+                       missing_roles='role coverage unknown (no plateau.json: run stopped first; offline assessment)',
+                       method='offline: 120s warmup, >=360s measured, last-third growth <=5% of peak', windows=w)
     print(f"\nRSS {plateau['verdict']}, missing roles {plateau['missing_roles']}; {plateau['method']}\n")
     w = plateau['windows']
     print(table(('window', 'role', 'pid', 'verdict', 'measured s', 'first MiB', 'peak MiB', 'last MiB', 'last-third growth %'),
@@ -97,7 +107,7 @@ def main(out):
                   *(f"{r[k]/1024:.1f}" if k in r else '-' for k in ('first', 'peak', 'last')),
                   f"{r['growth_pct']:.2f}" if 'growth_pct' in r else '-')
                  for r in w if r['verdict'] != 'NOTRUN']))
-    print(f"\n{sum(1 for r in w if r['verdict']=='NOTRUN')} short window/process rows NOTRUN (retained in plateau.json)")
+    print(f"\n{sum(1 for r in w if r['verdict']=='NOTRUN')} short window/process rows NOTRUN (plateau.json or rss-quiet-*.txt keep them)")
 
     print()
     prow = []
