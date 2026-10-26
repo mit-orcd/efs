@@ -5079,16 +5079,17 @@ static int publish_inner_as(struct efs_kv *kv, const struct efs_meta_pub *p,
     }
     /* A delta's candidate names the span object, not the base image, so
      * matching the base generation is not a replay of this publish. */
+    uint64_t expect = p->unconditional && !p->delta_len ? committed : p->expected_gen;
     if (!p->delta_len && committed == p->candidate_gen) {
         if (got.coding_profile_id != p->coding_profile_id) return EFS_ERR_PROTO;
         if (!p->durable_result) return EFS_OK;
         /* A new identical write has its own identity and still updates time.
          * Missing evidence for an older CAS must not fabricate its success. */
-        if (p->expected_gen != committed) return EFS_ERR_STALE;
+        if (expect != committed) return EFS_ERR_STALE;
     }
     /* D1: a span attaches to whatever base is current. expected_gen is
      * the full-image CAS. Overlap and a chain of live spans still STALE. */
-    if (!p->delta_len && p->expected_gen != committed)
+    if (!p->delta_len && expect != committed)
         PUB_STALE(EFS_PUB_STALE_BASE_CAS);
     vn = sizeof(old_ln);
     rc = efs_kv_get(kv, k_ln, kl, old_ln, &vn);
@@ -5183,7 +5184,7 @@ static int publish_inner_as(struct efs_kv *kv, const struct efs_meta_pub *p,
         }
         /* The merged image covers exactly the deltas the writer read.
          * A span that landed after that read must not be deleted. */
-        if (nd_old != p->delta_base_n || newest != p->delta_base_seq)
+        if (!p->unconditional && (nd_old != p->delta_base_n || newest != p->delta_base_seq))
             PUB_STALE(EFS_PUB_STALE_FOLD_LIST);
     }
     ln.max_end = max_u64(ln.max_end, p->new_size);
@@ -5559,6 +5560,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
 #define PUB_STAGE_F_TICKETED 4u /* K13: mandatory */
 #define PUB_STAGE_F_MISSING_SHIFT 3u /* W154 missing mask, bits 3..5 */
 #define PUB_STAGE_F_MISSING_MASK (((1u << EFS_NUM_FRAGMENTS) - 1u) << PUB_STAGE_F_MISSING_SHIFT)
+#define PUB_STAGE_F_UNCONDITIONAL 64u
 
 int efs_meta_pub_stage_encode(const struct efs_meta_pub *p, const struct efs_opid *session,
                               uint8_t out[EFS_PUB_STAGE_LEN])
@@ -5588,6 +5590,7 @@ int efs_meta_pub_stage_encode(const struct efs_meta_pub *p, const struct efs_opi
     be64(out + 65, p->mtime_gen);
     out[73] = (uint8_t)((p->lane_local ? PUB_STAGE_F_LANE_LOCAL : 0) |
                         (p->fresh_object ? PUB_STAGE_F_FRESH_OBJECT : 0) | PUB_STAGE_F_TICKETED |
+                        (p->unconditional ? PUB_STAGE_F_UNCONDITIONAL : 0) |
                         ((uint32_t)p->missing_mask << PUB_STAGE_F_MISSING_SHIFT));
     be32(out + 74, p->delta_off);
     be32(out + 78, p->delta_len);
@@ -5615,7 +5618,7 @@ int efs_meta_pub_stage_decode(const uint8_t *in, uint32_t n, struct efs_meta_pub
 
     if (!in || !p || n != EFS_PUB_STAGE_LEN || in[0] != EFS_PUB_STAGE_VERSION ||
         (in[73] & ~(PUB_STAGE_F_LANE_LOCAL | PUB_STAGE_F_FRESH_OBJECT | PUB_STAGE_F_TICKETED |
-                    PUB_STAGE_F_MISSING_MASK)) ||
+                    PUB_STAGE_F_MISSING_MASK | PUB_STAGE_F_UNCONDITIONAL)) ||
         !(in[73] & PUB_STAGE_F_TICKETED) ||
         !efs_chunk_missing_valid((in[73] & PUB_STAGE_F_MISSING_MASK) >> PUB_STAGE_F_MISSING_SHIFT))
         return EFS_ERR_PROTO;
@@ -5632,6 +5635,7 @@ int efs_meta_pub_stage_decode(const uint8_t *in, uint32_t n, struct efs_meta_pub
     p->mtime_gen = rd64(in + 65);
     p->lane_local = !!(in[73] & PUB_STAGE_F_LANE_LOCAL);
     p->fresh_object = !!(in[73] & PUB_STAGE_F_FRESH_OBJECT);
+    p->unconditional = !!(in[73] & PUB_STAGE_F_UNCONDITIONAL);
     p->missing_mask = (uint8_t)((in[73] & PUB_STAGE_F_MISSING_MASK) >> PUB_STAGE_F_MISSING_SHIFT);
     p->delta_off = rd32(in + 74);
     p->delta_len = rd32(in + 78);

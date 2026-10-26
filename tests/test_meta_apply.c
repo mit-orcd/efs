@@ -1033,6 +1033,37 @@ static void test_chunk_deltas(void)
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
               got.generation == 0xF1,
           "second fold landed");
+    /* D4 reclaim lag: an unconditional full image (the writer sent
+     * EFS_CHUNK_BASE_UNCOND) replaces whatever is committed. The REPORT
+     * host's base and the writer's span list may both be out of date by
+     * the time it applies (a truncate sweep, the writer's own truncate);
+     * the same record without the flag is still refused. */
+    p.delta_off = 200;
+    p.delta_len = 100;
+    p.candidate_gen = 0xF2;
+    p.expected_gen = 0;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "span on F1");
+    p.delta_off = 0;
+    p.delta_len = 0;
+    p.delta_base_n = 0;
+    p.delta_base_seq = 0;
+    p.expected_gen = 0xE1;            /* stale: F1 is committed */
+    p.candidate_gen = 0xF3;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE &&
+              efs_meta_apply_publish_stale_why() == EFS_PUB_STALE_BASE_CAS,
+          "conditional image on a stale base");
+    p.unconditional = 1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "unconditional image");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0xF3,
+          "unconditional image landed");
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
+                                          &nd, &newest) == EFS_OK,
+          "list after unconditional image");
+    for (uint32_t k = 0; k < nd; k++)
+        CHECK(ds[k].len == 0, "no live span survives an unconditional image");
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "unconditional replay");
+    p.unconditional = 0;
 
     /* A fresh file fills the chain and refuses the next span. */
     efs_kv_mem_free(kv);

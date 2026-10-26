@@ -422,6 +422,15 @@ struct efs_meta_pub {
      * object's state at PUT, not the publication intent. */
     uint8_t missing_mask;
     uint8_t durable_result; /* atomically record exact immutable publication result */
+    /* A full image the writer sent EFS_CHUNK_BASE_UNCOND (aligned, last
+     * writer wins): it contains none of the old bytes, so the apply replaces
+     * whatever base and span list are committed. expected_gen and the delta
+     * list are what the REPORT host read; a change between that read and
+     * the apply (a D25 truncate sweep zeroing the row) is no conflict. A
+     * CAS mode like expected_gen: not part of the intent digest (the
+     * client computes the ticket body digest byte-identically), and the
+     * durable publication path never carries it (it refuses UNCOND). */
+    uint8_t unconditional;
     /* delta_len > 0 appends an immutable span instead of CAS-replacing
      * the chunk image. expected_gen is still the base image's generation
      * (0 if the chunk has no base object yet). A full CAS (delta_len == 0)

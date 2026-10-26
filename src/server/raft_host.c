@@ -126,7 +126,8 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
 #define HOST_PUBLICATION_TICKET_LEN (HOST_PUBLICATION_LEN + 36u)
 #define HOST_PUB_F_TICKETED 4
-/* W154: bits 4..6 carry efs_meta_pub.missing_mask (bit 3 stays reserved). */
+#define HOST_PUB_F_UNCONDITIONAL 8 /* efs_meta_pub.unconditional */
+/* W154: bits 4..6 carry efs_meta_pub.missing_mask. */
 #define HOST_PUB_F_MISSING_SHIFT 4
 #define HOST_PUB_F_MISSING_MASK (((1u << EFS_NUM_FRAGMENTS) - 1u) << HOST_PUB_F_MISSING_SHIFT)
 /* REPORT records (K13) always carry TICKETED and a 16-byte trailer:
@@ -134,7 +135,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
  * session prefix. A GONE record only settles its ticket: the pack found the
  * file deleted (verdict OK, P3). */
 #define HOST_PUB_F_REJECT_GONE 128
-_Static_assert((HOST_PUB_F_REJECT_GONE & (HOST_PUB_F_MISSING_MASK | 8u |
+_Static_assert((HOST_PUB_F_REJECT_GONE & (HOST_PUB_F_MISSING_MASK | HOST_PUB_F_UNCONDITIONAL |
                HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED)) == 0,
                "REPORT reject bit overlaps another PUBLISH flag");
 #define HOST_REPORT_TICKET_LEN 16u
@@ -3033,9 +3034,9 @@ static int host_publication_command_valid(const uint8_t *cmd, uint32_t len)
         (cmd[0] != EFS_MD_CMD_PUBLICATION && cmd[0] != EFS_MD_CMD_PUBLICATION_ADMIT &&
          cmd[0] != EFS_MD_CMD_PUBLICATION_RETIRE)) return 0;
     uint8_t flags = cmd[HOST_PUBLISH_LEN - 1];
-    /* Unknown flags, including reserved bit 8, are never valid. */
+    /* Unknown flags are never valid. */
     if (flags & ~(HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED |
-                  HOST_PUB_F_MISSING_MASK) ||
+                  HOST_PUB_F_MISSING_MASK | HOST_PUB_F_UNCONDITIONAL) ||
         !efs_chunk_missing_valid((flags & HOST_PUB_F_MISSING_MASK) >> HOST_PUB_F_MISSING_SHIFT))
         return 0;
     return (flags & HOST_PUB_F_TICKETED) && (flags & HOST_PUB_F_FRESH_OBJECT);
@@ -3072,6 +3073,7 @@ static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
     p->mtime_gen = rd64be(q + 8);
     p->lane_local = (q[16] & HOST_PUB_F_LANE_LOCAL) ? 1 : 0;
     p->fresh_object = !!(q[16] & HOST_PUB_F_FRESH_OBJECT);
+    p->unconditional = !!(q[16] & HOST_PUB_F_UNCONDITIONAL);
     p->missing_mask = (uint8_t)((q[16] & HOST_PUB_F_MISSING_MASK) >> HOST_PUB_F_MISSING_SHIFT);
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
         p->durable_result = 1;
@@ -3152,7 +3154,7 @@ static int apply_report_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (cmd[off] != EFS_MD_CMD_PUBLISH) return EFS_ERR_PROTO;
         if (!(flags & HOST_PUB_F_TICKETED) || !(flags & HOST_PUB_F_FRESH_OBJECT) ||
             (flags & ~(HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED |
-                       HOST_PUB_F_MISSING_MASK | HOST_PUB_F_REJECT_GONE)) ||
+                       HOST_PUB_F_MISSING_MASK | HOST_PUB_F_UNCONDITIONAL | HOST_PUB_F_REJECT_GONE)) ||
             !efs_chunk_missing_valid((flags & HOST_PUB_F_MISSING_MASK) >> HOST_PUB_F_MISSING_SHIFT))
             return EFS_ERR_PROTO;
         uint32_t shard = efs_kv_lane_shard(rd64be(cmd + off + 1),
@@ -6964,6 +6966,7 @@ static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_p
         return EFS_ERR_INVAL;
     q[16] = (p->lane_local ? HOST_PUB_F_LANE_LOCAL : 0) |
             (p->fresh_object ? HOST_PUB_F_FRESH_OBJECT : 0) |
+            (p->unconditional ? HOST_PUB_F_UNCONDITIONAL : 0) |
             (uint8_t)(p->missing_mask << HOST_PUB_F_MISSING_SHIFT);
     *len = HOST_PUBLISH_LEN;
     return EFS_OK;
@@ -11200,11 +11203,33 @@ static int host_gc_expiry_groups(struct efs_raft_host *h)
  * 16 inodes over three passes retired about 5 a second, a 75 s rewrite
  * load left ~600 for the drain (each sweep a metadata change the index
  * waited for) and a faster host's backlog grew for the whole run (D4).
- * Bounded per pass; a restart rediscovers the work from the committed keys.
- * Needs both groups local to read lane stamps. */
+ * A truncate is swept only once its entry is TRUNC_SWEEP_MIN_AGE_NS old:
+ * the writer that truncated publishes on the base the truncate masked
+ * (a conditional tail image, a span), and a sweep that zeroed that base
+ * first refused the publication (base CAS, span-norow), its unit with
+ * it, and every chunk was uploaded again, the first uploads abandoned
+ * until unmount (D4). Ages live in this leader's memory; a restart only
+ * delays a sweep. Bounded per pass; a restart rediscovers the work from
+ * the committed keys. Needs both groups local to read lane stamps. */
 #define TRUNC_PASS_INODES 32u
+#define TRUNC_SCAN_INODES 256u /* candidates per scan: young ones wait */
 #define TRUNC_PASS_PROPOSALS 128u
-struct trunc_scan_ctx { efs_ino_t ino[TRUNC_PASS_INODES]; uint64_t gen[TRUNC_PASS_INODES]; uint32_t n; };
+#define TRUNC_SWEEP_MIN_AGE_NS (2000ull * 1000000ull)
+#define TRUNC_AGE_SLOTS 4096u
+static struct { efs_ino_t ino; uint64_t target, first_ns; } trunc_age[TRUNC_AGE_SLOTS]; /* GC thread only */
+/* 1 when (ino, target) was first seen at least TRUNC_SWEEP_MIN_AGE_NS ago. */
+static int trunc_sweep_due(efs_ino_t ino, uint64_t target, uint64_t now)
+{
+    uint32_t slot = (uint32_t)((ino * 0x9E3779B97F4A7C15ull) >> 52) % TRUNC_AGE_SLOTS;
+    if (trunc_age[slot].ino != ino || trunc_age[slot].target != target) {
+        trunc_age[slot].ino = ino;
+        trunc_age[slot].target = target;
+        trunc_age[slot].first_ns = now;
+        return 0;
+    }
+    return now - trunc_age[slot].first_ns >= TRUNC_SWEEP_MIN_AGE_NS;
+}
+struct trunc_scan_ctx { efs_ino_t ino[TRUNC_SCAN_INODES]; uint64_t gen[TRUNC_SCAN_INODES]; uint32_t n; };
 static int trunc_scan_cb(void *user, const uint8_t *key, uint32_t klen,
                          const uint8_t *val, uint32_t vlen)
 {
@@ -11213,14 +11238,17 @@ static int trunc_scan_cb(void *user, const uint8_t *key, uint32_t klen,
         return 0;
     c->ino[c->n] = rd64be(key + 3);
     c->gen[c->n] = rd64be(val);
-    return ++c->n == TRUNC_PASS_INODES;
+    return ++c->n == TRUNC_SCAN_INODES;
 }
 
 static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
 {
-    struct trunc_scan_ctx c = {0};
+    static struct trunc_scan_ctx c; /* one GC thread */
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_TRUNC_PENDING};
-    uint32_t cs = EFS_DEFAULT_CHUNK_SIZE, budget = TRUNC_PASS_PROPOSALS;
+    uint32_t cs = EFS_DEFAULT_CHUNK_SIZE, budget = TRUNC_PASS_PROPOSALS, swept = 0;
+    uint64_t now = now_ns();
+
+    memset(&c, 0, sizeof(c));
 
     if (!host_hosts(h, EFS_RAFT_GROUP_SHARD) || !host_hosts(h, EFS_RAFT_GROUP_SHARD2))
         return;
@@ -11242,7 +11270,7 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
         if (gate && access(gate, F_OK) == 0) return;
     }
 #endif
-    for (uint32_t i = 0; i < c.n && budget; i++) {
+    for (uint32_t i = 0; i < c.n && budget && swept < TRUNC_PASS_INODES; i++) {
         struct efs_meta_row row;
         struct efs_fence_history hist;
         uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(c.ino[i]));
@@ -11266,6 +11294,9 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
             continue;
         }
         target = hist.entries[hist.count - 1].epoch;
+        if (!trunc_sweep_due(c.ino[i], target, now))
+            continue;
+        swept++;
         for (uint8_t lane = 0; lane < EFS_META_LANES && budget; lane++) {
             uint64_t swept = 0;
             if (!(row.active_lanes & (1ull << lane)))
@@ -22362,10 +22393,11 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
     struct efs_meta_pub p;
     struct efs_meta_row row;
     struct efs_meta_chunk got;
-    uint32_t lsh, ish, uncond_n = 0;
-    uint64_t uncond_seq = 0;
+    uint32_t lsh, ish;
     uint8_t lane, lg, ig;
-    int rc, i;
+    int rc, i, swept_base = 0, swept_list = 0;
+    uint32_t swept_n = 0;
+    uint64_t swept_seq = 0;
 
     *clen = 0;
     if (!rec || rec->ino == 0)
@@ -22494,7 +22526,14 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
         if (rc != 0 && rc != EFS_ERR_NOT_FOUND)
             return rc;
         if (rec->base_gen != 0) {
-            if (rc == EFS_ERR_NOT_FOUND || cur != rec->base_gen) {
+            /* D25: a sweep removed the base (no row, or generation 0): a
+             * truncate made all of its bytes invisible, so a span written
+             * from a view at the current epoch (captured) sees zeros under
+             * it either way and attaches to the empty base (as for a full
+             * image above: refusing it re-uploaded the unit, D4). */
+            int swept = (rc == EFS_ERR_NOT_FOUND || cur == 0) &&
+                        (rec->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH);
+            if (!swept && (rc == EFS_ERR_NOT_FOUND || cur != rec->base_gen)) {
                 host_pub_stale_note(rc == EFS_ERR_NOT_FOUND ? "span-norow" : "span-base",
                                     rec, rec->base_gen, cur);
                 return EFS_ERR_STALE;
@@ -22518,24 +22557,6 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
             rc = EFS_OK;
         else if (rc != EFS_OK)
             return rc;
-        /* An unconditional (aligned, last-writer-wins) image contains none
-         * of the old bytes, so it replaces whatever span list is live, as
-         * it replaces whatever base is committed (expected_gen below). The
-         * client's list is its own view and is stale after a truncate:
-         * the full image of the previous write's tail chunk then failed
-         * the fold check (FOLD_LIST), its whole multi-chunk unit with it,
-         * and every chunk was uploaded again. Each first upload became an
-         * abandoned upload, collectable only when the mount's session
-         * ends: the D4 rewrite load's stored data grew all run (ENOSPC at
-         * 45 min on amd). */
-        if (rec->base_gen == EFS_CHUNK_BASE_UNCOND && !rec->delta_len) {
-            rc = efs_meta_apply_get_chunk_deltas(h->kv, rec->ino, rec->chunk_index, NULL, 0,
-                                                 &uncond_n, &uncond_seq);
-            if (rc == EFS_ERR_NOT_FOUND)
-                rc = EFS_OK;
-            else if (rc != EFS_OK)
-                return rc;
-        }
         if (got.generation != 0 &&
             (!(rec->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
              got.generation == rec->chunk_generation) &&
@@ -22544,8 +22565,39 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
             return EFS_OK;
         if (rec->base_gen != EFS_CHUNK_BASE_UNCOND &&
             rec->base_gen != got.generation) {
-            host_pub_stale_note("image-base", rec, rec->base_gen, got.generation);
-            return EFS_ERR_STALE;
+            /* D25: a sweep zeroed this base, so a truncate made all of its
+             * bytes invisible. An image built from a view at the current
+             * epoch (captured, checked equal above) holds none of them:
+             * publish it on the empty base. The writer's base is stale
+             * only because it never learns of sweeps (its own earlier
+             * shrinking rewrite); refusing it re-uploaded every chunk of
+             * the unit and abandoned the first uploads (D4). */
+            if (got.generation == 0 && (rec->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH)) {
+                /* The sweep left the chunk's spans as tombstones; with no
+                 * live span the fold list guards nothing, so take the
+                 * row's (a live span keeps the writer's list: refused if
+                 * the writer did not see it). */
+                struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+                uint32_t nd = 0, live = 0;
+                uint64_t newest = 0;
+                rc = efs_meta_apply_get_chunk_deltas(h->kv, rec->ino, rec->chunk_index, ds,
+                                                     EFS_CHUNK_DELTA_MAX, &nd, &newest);
+                if (rc == EFS_ERR_NOT_FOUND)
+                    rc = EFS_OK;
+                else if (rc != EFS_OK)
+                    return rc;
+                for (uint32_t di = 0; di < nd && di < EFS_CHUNK_DELTA_MAX; di++)
+                    live += ds[di].len != 0;
+                if (!live) {
+                    swept_n = nd;
+                    swept_seq = newest;
+                    swept_list = 1;
+                }
+                swept_base = 1;
+            } else {
+                host_pub_stale_note("image-base", rec, rec->base_gen, got.generation);
+                return EFS_ERR_STALE;
+            }
         }
         /* D25: a logical truncate leaves the row and its generation in
          * place and masks its bytes. A full image built from an unmasked
@@ -22574,7 +22626,7 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
     p.chunk_index = rec->chunk_index;
     p.new_size = new_size;
     p.now = now_ns();
-    p.expected_gen = (rec->base_gen == EFS_CHUNK_BASE_UNCOND)
+    p.expected_gen = (rec->base_gen == EFS_CHUNK_BASE_UNCOND || swept_base)
                          ? got.generation
                          : rec->base_gen;
     /* Prefer the PUT object name from the client. Hashing here is only
@@ -22593,8 +22645,14 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
     memcpy(p.ch.checksums, rec->checksums, sizeof(p.ch.checksums));
     p.delta_off = rec->delta_off;
     p.delta_len = rec->delta_len;
-    p.delta_base_n = rec->base_gen == EFS_CHUNK_BASE_UNCOND ? uncond_n : rec->delta_base_n;
-    p.delta_base_seq = rec->base_gen == EFS_CHUNK_BASE_UNCOND ? uncond_seq : rec->delta_base_seq;
+    p.delta_base_n = swept_list ? swept_n : rec->delta_base_n;
+    p.delta_base_seq = swept_list ? swept_seq : rec->delta_base_seq;
+    /* The apply replaces whatever is committed then: the base read above
+     * can be zeroed by a D25 sweep before the PREPARE applies, and the
+     * client's span list is its own view (stale after a truncate). Either
+     * refused the unit and re-uploaded every chunk, each first upload
+     * abandoned until unmount (D4 reclaim lag). */
+    p.unconditional = rec->base_gen == EFS_CHUNK_BASE_UNCOND && !rec->delta_len;
     p.inode_gen = rec->file_generation; /* the ticket FileID, checked above */
     if (lg != ig) {
         /* Lane-local: the lane group's KV has no inode row. The FileID
