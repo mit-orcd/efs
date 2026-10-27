@@ -242,45 +242,26 @@ ssh xorinox 'python3 ~/efs-x/scripts/rss_mappings_split.py ~/efs-x-out/mem.jsonl
 The fixes' own tests: `./tests/test_reclaim` (`make test-long`) and
 `python3 tests/test_conn_idle_reap.py` (`make test-long`).
 
-## Task I — nuc RSS PASS scoped, overall D4 FAIL (reviewed October 27)
+## Task I — reviewed October 27: hardware client RSS failure
 
-Source `931845748`, product base `394f2b791` unchanged. All five independent
-10-second RSS series passed: efsd +3.5/+3.3/+2.8%, load client +2.3%,
-foreground client +0.0% (360 samples each). Drain 62.4 s under the unchanged
-150 s limit, 2080 final files exact, zero hour-long operation or packer
-PUT/read errors. **D4 FAIL:** stored-data last-third peaks increased
-27.86/27.55/29.30%, exceeding the unchanged 25% bound on all nodes.
+Nuc RSS PASS but D4 FAIL on stored-data peaks; xorinox PASSed both RSS and
+D4 at `931845748`. On user-selected node9900, both 60-minute confirmations
+at `ff0a6db69` **FAIL on the load client's anonymous RSS growth**: RDMA
++15.25%, TCP +17.72% in independent 10-second sampling, against 5%.
+Every efsd and foreground client passes; all 2080 files are exact on each
+transport, no operation/packer errors, bounded storage, drain 95.6/88.4 s.
+The failures are retained, not replaced by the prior xorinox PASS.
 
-The full gate also failed: `TOTAL 508 FAIL 5 NOTRUN 14 STATUS FAIL (1624s)
-OVERBUDGET 25 BUILD 17s`. An untouched-base gate is RUNNING on the same nuc
-with the same eight-job command. The user authorized xorinox for further
-qualification Oct 27; an identical-source 60-minute run plus gate has
-STARTED there, verdict pending. Node9901 TCP/RDMA remains NOTRUN under the
-brief's loopback-pass prerequisite. RSS passing alone does not close F1.
-[Per-process table, host CPU/disk analysis, individual gate failures,
-reproduction and verified raw manifest](task-i-20261026.md).
+A separate TCP allocator diagnostic at `c6e61c921` is RUNNING, collecting
+malloc_info/mallinfo2 at actual load minutes 20/40/60, without trimming or
+changing allocator policy. It cannot qualify a product fix. Thread,
+socket, stack and file RSS were flat; live heap versus arena retention is
+not yet distinguished.
 
-### Xorinox confirmation reviewed October 27
-
-User-authorized repeat at the identical `931845748` source **PASSed both
-RSS and D4**: independent 10-second daemon growth +3.21/+0.93/+3.40%,
-clients +3.87/-0.07%; drain 34.2 s, 2080 exact final files, no operation or
-packer errors, stored-data last-third peaks 15.4–16.3% below earlier peaks.
-This is a successful second-host measurement, not a correction of nuc's
-failed stored-data bound. Full gate: `TOTAL 508 FAIL 1 NOTRUN 13 (818s)`,
-leadership-transfer setup BUSY before the publication workload. Test-only
-fix `39d3848fd` waits for documented transfer readiness; it is UNTESTED,
-queued after Task G releases xorinox. Nuc base attempt 1 was interrupted,
-not still running; attempt 2 is active. Node9901 remains NOTRUN pending
-shared-host measurement policy. [Full table, reviewed failure, evidence
-hashes and exact remaining work](task-i-20261026.md).
-
-### Hardware host changed by the user
-
-On October 27 the user selected **node9900 instead of node9901**.
-The private RDMA measurement is RUNNING at source `ff0a6db69` (unchanged
-product code), native build PASS; TCP follows. The pre-existing orcd-mini
-client stays mounted and its identity/CPU activity are recorded, so the
-hardware evidence is shared-client scoped, never silently called quiet.
-The first preflight stopped NOTRUN when that client's PID changed; its
-receipt is retained separately. [Controller, exact commands and paths](task-i-20261026.md#user-selected-node9900-hardware-stage--october-27).
+Xorinox's original gate was `TOTAL 508 FAIL 1 NOTRUN 13 (818s)` on a
+transfer-setup BUSY. Test-only fix `39d3848fd` passes deterministic setup
+checks and all 12 real publication rounds (max 0.51 s); full gate RUNNING.
+Both nuc base attempts are INCOMPLETE, including a contradictory exit-0
+receipt with no terminal stage/summary. No original nuc failure is excused.
+[Tables, source/environment, transport-evidence correction, reproduction,
+verified manifests and outstanding qualification](task-i-20261026.md).
