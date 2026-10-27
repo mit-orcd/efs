@@ -479,7 +479,7 @@ static int fence_history_read(struct efs_kv *kv, efs_ino_t ino,
     }
     if (rc != EFS_OK)
         return rc;
-    return efs_meta_unpack_fence_history(value, len, out);
+    return efs_kv_decode_result(kv, key, kl, efs_meta_unpack_fence_history(value, len, out));
 }
 
 int efs_meta_get_fence_history(struct efs_kv *kv, efs_ino_t ino,
@@ -574,7 +574,7 @@ int efs_meta_apply_get_inode(struct efs_kv *kv, efs_ino_t ino,
     rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
     if (rc != EFS_OK)
         return rc;
-    return unpack_inode(val, vlen, out);
+    return efs_kv_decode_result(kv, key, klen, unpack_inode(val, vlen, out));
 }
 
 /* Handler reads must observe committed replacements even when an old row
@@ -594,7 +594,7 @@ static int inode_read_tx(struct efs_kv *kv, efs_ino_t ino,
         rc = efs_txn_read_ex(kv, key, klen, coord, ctx, val, &vlen, pend);
     if (rc != EFS_OK)
         return rc;
-    return unpack_inode(val, vlen, out);
+    return efs_kv_decode_result(kv, key, klen, unpack_inode(val, vlen, out));
 }
 
 int efs_meta_apply_get_inode_tx(struct efs_kv *kv, efs_ino_t ino,
@@ -672,7 +672,7 @@ static int dent_get(struct efs_kv *kv, uint32_t shard, efs_ino_t parent,
     rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
     if (rc != EFS_OK)
         return rc;
-    return unpack_dentry(val, vlen, out);
+    return efs_kv_decode_result(kv, key, klen, unpack_dentry(val, vlen, out));
 }
 
 int efs_meta_capture_dentry_drop(struct efs_kv *kv, const struct efs_meta_row *prow,
@@ -758,7 +758,7 @@ static int dent_get_tx(struct efs_kv *kv, uint32_t shard, efs_ino_t parent,
     rc = efs_txn_read(kv, key, klen, coord, ctx, val, &vlen);
     if (rc != EFS_OK)
         return rc;
-    return unpack_dentry(val, vlen, out);
+    return efs_kv_decode_result(kv, key, klen, unpack_dentry(val, vlen, out));
 }
 
 static int lookup_at(struct efs_kv *kv, efs_ino_t parent, const char *name,
@@ -3373,6 +3373,7 @@ int efs_meta_apply_setattr(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
 #define DENTRY_KEY_PREFIX 11 /* shard + kind + parent; name follows */
 
 struct dir_scan {
+    struct efs_kv *kv;
     struct efs_meta_dir_ent *out;
     uint32_t max;
     uint32_t n;
@@ -3392,8 +3393,8 @@ static int dir_scan_cb(void *user, const uint8_t *key, uint32_t klen,
         return 0; /* the prefix itself is not an entry */
     nl = klen - DENTRY_KEY_PREFIX;
     if (nl >= EFS_MAX_NAME) {
-        s->rc = EFS_ERR_PROTO;
-        return EFS_ERR_PROTO;
+        s->rc = efs_kv_decode_result(s->kv, key, klen, EFS_ERR_PROTO);
+        return s->rc;
     }
     if (s->n >= s->max) {
         s->full = 1; /* stop; the cursor resumes in this same source */
@@ -3401,9 +3402,10 @@ static int dir_scan_cb(void *user, const uint8_t *key, uint32_t klen,
     }
     memcpy(s->out[s->n].name, key + DENTRY_KEY_PREFIX, nl);
     s->out[s->n].name[nl] = 0;
-    if (unpack_dentry(val, vlen, &s->out[s->n].d) != EFS_OK) {
-        s->rc = EFS_ERR_PROTO;
-        return EFS_ERR_PROTO;
+    int decoded = unpack_dentry(val, vlen, &s->out[s->n].d);
+    if (decoded != EFS_OK) {
+        s->rc = efs_kv_decode_result(s->kv, key, klen, decoded);
+        return s->rc;
     }
     memcpy(s->last, s->out[s->n].name, nl + 1);
     s->have_last = 1;
@@ -3420,6 +3422,8 @@ static int dir_scan_one(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
     uint8_t pre[EFS_KV_KEY_MAX], start[EFS_KV_KEY_MAX];
     uint32_t pl = 0, sl = 0;
     int rc;
+
+    s->kv = kv;
 
     rc = efs_kv_key_dentry_prefix(shard, dir, pre, &pl);
     if (rc != EFS_OK)
@@ -4786,7 +4790,7 @@ static int load_append_cur(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         return EFS_OK;
     if (rc != EFS_OK)
         return rc;
-    return unpack_append_cur(val, vlen, c);
+    return efs_kv_decode_result(kv, key, klen, unpack_append_cur(val, vlen, c));
 }
 
 /* Which rule STALEd the last publish on this thread (raft_host logs it
@@ -6455,7 +6459,7 @@ static int resize_lane_read(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         memset(stamp, 0, sizeof(*stamp));
         return EFS_OK;
     }
-    return rc == EFS_OK ? unpack_lane(val, *len, stamp) : rc;
+    return rc == EFS_OK ? efs_kv_decode_result(kv, key, kl, unpack_lane(val, *len, stamp)) : rc;
 }
 
 int efs_meta_get_lane_writer_view(struct efs_kv *kv, efs_ino_t ino,
@@ -6503,12 +6507,14 @@ int efs_meta_get_lane_writer_view(struct efs_kv *kv, efs_ino_t ino,
         }
         if (!stable)
             continue;
-        rc = unpack_lane_authority(before[0], bl[0], &got_cs,
-                                      &view.authority_epoch, &view.oldest_complete_epoch);
+        rc = efs_kv_decode_result(kv, keys[0], kl[0],
+                unpack_lane_authority(before[0], bl[0], &got_cs,
+                                      &view.authority_epoch, &view.oldest_complete_epoch));
         if (rc == EFS_OK)
-            rc = unpack_lane(before[1], bl[1], &stamp);
+            rc = efs_kv_decode_result(kv, keys[1], kl[1], unpack_lane(before[1], bl[1], &stamp));
         if (rc == EFS_OK)
-            rc = efs_meta_unpack_fence_history(before[2], bl[2], &view.history);
+            rc = efs_kv_decode_result(kv, keys[2], kl[2],
+                    efs_meta_unpack_fence_history(before[2], bl[2], &view.history));
         if (rc != EFS_OK)
             return rc;
         if (got_cs != cs)
@@ -7584,7 +7590,7 @@ static int lane_seq_get(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         return EFS_OK;
     if (rc != EFS_OK)
         return rc;
-    rc = unpack_lane(val, vn, &ln);
+    rc = efs_kv_decode_result(kv, key, kl, unpack_lane(val, vn, &ln));
     if (rc != EFS_OK)
         return rc;
     *seq = ln.seq;
@@ -7651,7 +7657,7 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
             if (rc != EFS_OK)
                 return rc;
             if (value_rc == EFS_OK) {
-                rc = unpack_lane(val, vn, &ln);
+                rc = efs_kv_decode_result(kv, key, kl, unpack_lane(val, vn, &ln));
                 if (rc != EFS_OK)
                     return rc;
             } else if (value_rc == EFS_ERR_NOT_FOUND) {
@@ -7701,7 +7707,7 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
                 seq2[i] = 0;
                 rc = EFS_OK;
             } else if (rc == EFS_OK) {
-                rc = unpack_lane(val, vn, &ln);
+                rc = efs_kv_decode_result(kv, key, kl, unpack_lane(val, vn, &ln));
                 if (rc == EFS_OK)
                     seq2[i] = ln.seq;
             }
@@ -9311,10 +9317,10 @@ int efs_meta_apply_chunk_holds(struct efs_kv *kv, efs_ino_t ino,
     rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
     if (rc != EFS_OK)
         return rc;
-    rc = unpack_chunk(val, vlen, &ch);
+    rc = efs_kv_decode_result(kv, key, klen, unpack_chunk(val, vlen, &ch));
     if (rc != EFS_OK)
         return rc;
-    rc = efs_pack_chunk_identity(&ch, ino, inode_gen, chunk_index);
+    rc = efs_kv_decode_result(kv, key, klen, efs_pack_chunk_identity(&ch, ino, inode_gen, chunk_index));
     if (rc != EFS_OK) return rc;
     if (committed)
         *committed = ch.generation;
@@ -9326,7 +9332,7 @@ int efs_meta_apply_chunk_holds(struct efs_kv *kv, efs_ino_t ino,
     for (i = 0; i < nd; i++) {
         struct efs_meta_delta d;
 
-        rc = trailer_at(val, vlen, i, &d);
+        rc = efs_kv_decode_result(kv, key, klen, trailer_at(val, vlen, i, &d));
         if (rc != EFS_OK)
             return rc;
         if (d.generation != gen)
@@ -9366,15 +9372,15 @@ int efs_meta_apply_get_chunk_deltas(struct efs_kv *kv, efs_ino_t ino,
     if (rc != EFS_OK)
         return rc;
     struct efs_meta_chunk base;
-    rc = unpack_chunk(val, vlen, &base);
-    if (rc == EFS_OK) rc = efs_pack_chunk_identity(&base, ino, row.generation, chunk_index);
+    rc = efs_kv_decode_result(kv, key, klen, unpack_chunk(val, vlen, &base));
+    if (rc == EFS_OK) rc = efs_kv_decode_result(kv, key, klen, efs_pack_chunk_identity(&base, ino, row.generation, chunk_index));
     if (rc != EFS_OK) return rc;
     nd = trailer_n(val, vlen);
     wr = nd < cap ? nd : cap;
     for (i = 0; i < wr; i++) {
         if (!out)
             break;
-        rc = trailer_at(val, vlen, i, &out[i]);
+        rc = efs_kv_decode_result(kv, key, klen, trailer_at(val, vlen, i, &out[i]));
         if (rc != EFS_OK)
             return rc;
     }
@@ -9382,7 +9388,7 @@ int efs_meta_apply_get_chunk_deltas(struct efs_kv *kv, efs_ino_t ino,
     if (newest && nd) {
         struct efs_meta_delta last;
 
-        rc = trailer_at(val, vlen, nd - 1, &last);
+        rc = efs_kv_decode_result(kv, key, klen, trailer_at(val, vlen, nd - 1, &last));
         if (rc != EFS_OK)
             return rc;
         *newest = last.seq;
@@ -9413,8 +9419,8 @@ int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_in
     rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
     if (rc != EFS_OK)
         return rc;
-    rc = unpack_chunk(val, vlen, out);
-    return rc == EFS_OK ? efs_pack_chunk_identity(out, ino, row.generation, chunk_index) : rc;
+    rc = efs_kv_decode_result(kv, key, klen, unpack_chunk(val, vlen, out));
+    return rc == EFS_OK ? efs_kv_decode_result(kv, key, klen, efs_pack_chunk_identity(out, ino, row.generation, chunk_index)) : rc;
 }
 
 /* One KV get for the image and the span trailer, keyed by a row the
@@ -9501,7 +9507,7 @@ int efs_meta_get_chunk_view_tx(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
             n1 = 0;
             memset(&stamp, 0, sizeof(stamp));
         } else if (rc == EFS_OK) {
-            rc = unpack_lane(before, n1, &stamp);
+            rc = efs_kv_decode_result(kv, key, kl, unpack_lane(before, n1, &stamp));
         }
         if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND)
             return rc;

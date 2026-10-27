@@ -211,6 +211,8 @@ static inline int seg_slot_excludes(const struct seg_slot *sl, int r)
 }
 
 struct kv_lsm {
+    void (*decode_error)(void *, const uint8_t *, uint32_t);
+    void *decode_error_ctx;
     uint32_t magic;
     char dir[KV_LSM_PATH_MAX];
     struct efs_kv_lsm_cfg cfg;
