@@ -1,8 +1,8 @@
-agent/devel-task-j (analysis 28d6659dc, base 394f2b791): ORCD gates RUNNING; first fstor007 attempt TOTAL 0 FAIL 1 NOTRUN 0 (libfuse prerequisite). Intel calibration NOTRUN pending F release. Evidence: docs/status/gate-budgets-refit-20261026.md. No product defect established; tests/budgets unchanged.
+agent/devel-task-j (analysis 9567e6b9a, base 394f2b791): node9901 TOTAL 508 FAIL 5 NOTRUN 5 (769s); fstor007 TOTAL 508 FAIL 1 NOTRUN 5 (750s), both unchanged-base gates. Evidence: docs/status/gate-budgets-refit-20261026.md. Intel calibration NOTRUN pending F release; no product defect established; no refit yet.
 
 # W160 three-run budget refit — October 26, 2026
 
-**REAL-HOST GATES RUNNING, NOT COMPLETE.** No measured budget is changed and no gate PASS is
+**REAL-HOST GATES COMPLETE WITH FAILURES; CALIBRATION NOT COMPLETE.** No measured budget is changed and no gate PASS is
 claimed. The user assigned Task J from `parallel-tasks-20261026.md`; its updated
 instructions retain intel1/intel2 after Task F/E releases the host and add
 one real-host gate each on node9901 and fstor007. The user explicitly
@@ -12,7 +12,7 @@ runs after Task F releases intel1.
 ## Resource and source scope
 
 Planned calibration host: **intel1, after Task F's explicit handoff**. Task F
-is active and has started its unchanged-base build there. A lightly loaded
+is active, fixing its serve-path failure there. A lightly loaded
 host does not establish that its reservation has ended. No Task J source,
 build, cluster or measurement has been started on either Intel host. The
 coordinator can collect this report from branch `agent/devel-task-j`; no merge
@@ -25,7 +25,7 @@ Intel measurements, per-command medians and the budget refit remain
 use fresh untouched devel **394f2b791** archives, build identity
 `EFS_GIT_ID=394f2b791`, `EFS_GIT_BRANCH=devel`,
 `EFS_GIT_DESCRIBE=394f2b791`. Exact version lines, completed command counts,
-walls and closed gate manifests remain pending. Historical evidence stands
+walls and closed gate manifests are recorded below. Historical evidence stands
 on its own.
 
 ## ORCD-first execution
@@ -39,8 +39,8 @@ reserved loopback ports. No test, pool slot or deadline is changed.
 
 | Host | Actual environment | Task J run |
 | --- | --- | --- |
-| node9901 | RHEL kernel 5.14.0-503.38.1.el9_5.x86_64; 192 logical CPUs in affinity; MemTotal 395217884 KiB; GCC 11.5.0; Python 3.9.25; supplied libfuse 3.16.2 | 8 build jobs / 8 test slots, running |
-| fstor007 (`fstor007-mgmt`) | RHEL kernel 5.14.0-687.36.1.el9_8.x86_64; 96 logical CPUs in affinity; MemTotal 791576532 KiB; GCC 11.5.0; Python 3.9.25 | 8 build jobs / 8 test slots, fresh prerequisite-corrected gate running |
+| node9901 | RHEL kernel 5.14.0-503.38.1.el9_5.x86_64; 192 logical CPUs in affinity; MemTotal 395217884 KiB; GCC 11.5.0; Python 3.9.25; supplied libfuse 3.16.2 | 8 build jobs / 8 test slots; 769 s, 5 FAIL |
+| fstor007 (`fstor007-mgmt`) | RHEL kernel 5.14.0-687.36.1.el9_8.x86_64; 96 logical CPUs in affinity; MemTotal 791576532 KiB; GCC 11.5.0; Python 3.9.25 | 8 build jobs / 8 test slots; compatible-FUSE gate 750 s, 1 FAIL |
 
 The assignment's eight-CPU shorthand does not describe these exposed CPU
 allocations. These are **8-job** gates, without CPU pinning; their walls will
@@ -66,7 +66,7 @@ No root installation, system library replacement, source fallback or EFS test
 edit was performed. The compatible build starts in a separate fresh source
 tree and output directory.
 
-Current source/launcher roots and externally retained text evidence:
+Completed source/launcher roots (now pruned) and retained text evidence:
 
 - node9901 source `/tmp/efs-taskJ-20261026-394f2b791/src`; screen
   `taskJ-node9901`; output
@@ -80,9 +80,8 @@ Current source/launcher roots and externally retained text evidence:
   `EFS_FUSE_PREFIX=/data1/efs/deps/libfuse`; fstor007 uses the relocated
   private prefix. The runner supplies its FUSE rpath and per-command TMPDIRs.
 - `exit-status`, `DONE`, summaries, timings, progress, build/enumeration/run
-  logs and per-failure logs are saved independently. No final gate manifest
-  is claimed while its files are open. Scratch trees remain during diagnosis;
-  prune only this task's inactive bulk after recording the final method.
+  logs and per-failure logs are saved independently. The closed manifests
+  and task-owned scratch cleanup are recorded below.
 
 ## Prepared analysis
 
@@ -113,11 +112,81 @@ Changing budgets can change launch order, so a modeled improvement is not a
 new measured gate result. A separate post-refit gate is planned to verify
 that order change, without adding its timings to the three-run median.
 
-Only static Python syntax parsing has been done on the Mac. Functional
-validation of the helper and all EFS builds/tests remain for the released
-host. This base has no `make evidence-check` target; invoking it returned
-"No rule to make target". No evidence-policy PASS is claimed from that call.
-The separate architecture checker is the applicable documentation check.
+Functional helper validation ran on now-idle node9901 with deterministic
+synthetic inputs, not ORCD gate timings. Rounding/floor, reason/slot retention,
+five refusal cases (failed command, duplicate timing index, differing budget,
+changed enumeration, negative duration), and 500 seeded schedule comparisons
+against the existing recipe checker algorithm passed. Named slot chains were
+also checked for overlap and critical-chain duration. The initial validation
+script incorrectly expected a reason annotation when none was required; that
+script failure and the corrected successful validation are both retained.
+No helper or EFS test was executed on the Mac. This base has no
+`make evidence-check` target; invoking it returned "No rule to make target".
+No evidence-policy PASS is claimed from that call. The separate architecture
+checker is the applicable documentation check.
+
+## Completed ORCD results and diagnosis
+
+Both runs used **untouched base 394f2b791e3e8f9abc23f742dea754ad6f614a97**;
+therefore these are baseline failures directly, not newly introduced branch
+failures. No test was changed, excluded, or retried into a gate PASS.
+
+- node9901: `TOTAL 508 FAIL 5 NOTRUN 5 STATUS FAIL (769s) BUILD 21s`.
+  Build: `efsd 394f2b791 (branch devel, built 2026-10-27T01:32:42Z on node9901)`.
+- fstor007 compatible prerequisite attempt:
+  `TOTAL 508 FAIL 1 NOTRUN 5 STATUS FAIL (750s) OVERBUDGET 1 BUILD 22s`.
+  Build: `efsd 394f2b791 (branch devel, built 2026-10-27T01:36:20Z on fstor007-mgmt)`.
+  `test_k33_growth.py` measured 151.1 s against 135 s; this observation is
+  preserved, not used to refit from ORCD.
+
+**Node9901 failures:** `test_readindex_pair.py`, `test_host_outbox.py`,
+`test_raft_ack_window.py` and `test_stage_evict_lru.py` failed in LeakSanitizer
+with its fatal ptrace/runtime message. The assignment explicitly requires
+separate diagnostics with `ASAN_OPTIONS=detect_leaks=0`; all four completed
+with rc 0. Commands were `ASAN_OPTIONS=detect_leaks=0 python3 tests/test_NAME.py`
+in the same source tree, with individual TMPDIRs. These diagnostics establish
+no leak coverage and do not change the original FAIL verdict.
+`test_qualify_driver.py:477` assumes its hardcoded target `node9901` is remote.
+On that host `Runner.argv` correctly returns `['bash', '-c', 'echo hi']`
+because `is_local('node9901')` is true. This is a hostname-dependent test
+assertion defect. The actual argv and hostname are retained separately.
+
+**Fstor007 failure:** `test_reclaim.c:903` uses `char cmd[256]` for a shell
+cleanup containing three copies of its TMPDIR path. The actual command
+needed 272 bytes; `snprintf` truncated it to a final `/.`, and the shell
+cleanup refused to remove dot. The assertion `!system(cmd)` then aborted.
+`reclaim-cleanup-diagnosis.json` records the exact path, full length, buffer
+size and truncated command, without executing that reconstructed command.
+This is a long-path test defect on the unchanged source; it does not
+establish a reclaim product failure. Task J forbids modifying tests, so the
+fix belongs to the coordinator rather than this budget-only branch.
+
+**NOTRUN accounting on both hosts:** missing cluster lifecycle scripts,
+missing `valgrind/memcheck.h`, and the fault-build-only stalled-compactor
+case are three real prerequisite limits. The other two markers are the
+leak/sanitizer driver self-tests verifying their own missing-tool refusal;
+they are not evidence that the installed tools are absent. The gate is
+loopback/local, not a multi-host RDMA qualification. Neither real cluster
+nor its mounted data was stopped or changed.
+
+## Retention and cleanup
+
+After launchers and diagnostic commands completed, process executable/cwd
+and mount checks showed no task-root users. Only this task's inactive `/tmp`
+source/build/fixture trees, synthetic-validation scratch, diagnostic scratch
+and private copied FUSE dependency were pruned with
+`~/bin/edelete --force --delete DIR`. Relevant text logs, exact launch scripts,
+helper validation scripts/logs, build identities and binary hashes remain
+outside Git. Each output has `PRUNED.txt`; runtime-store replay is forfeited,
+while the source and reproduction method remain available.
+
+Closed `SHA256SUMS` manifests and their SHA-256 values:
+
+| Host / attempt | Manifest path | SHA-256 |
+| --- | --- | --- |
+| node9901 | `/data1/efs/traces/taskJ-20261026/node9901/gate-394f2b791/SHA256SUMS` | `c6f1f18c65ff683bb5f8786ab15c0a04fcc9a1962030ee88dcb0dd13781ebf35` |
+| fstor007 first prerequisite failure | `/home/erbmi1/efs-artifacts/taskJ-20261026/fstor007/gate-394f2b791/SHA256SUMS` | `db0ca10d3d19c8b95575dd566c6070f33fed97fc846097650bfdf9afd98a7cb0` |
+| fstor007 compatible-FUSE gate | `/home/erbmi1/efs-artifacts/taskJ-20261026/fstor007/gate-394f2b791-fuse316/SHA256SUMS` | `a2d00ae42f1b789787196a46862b0c63ced3fb8c7e696b4bb6bd8fd536a0b086` |
 
 ## Remaining calibration plan (Intel not executed)
 
@@ -164,8 +233,8 @@ The separate architecture checker is the applicable documentation check.
 ## Outstanding
 
 - Intel host handoff; three measured calibration runs and safe failure handling.
-- Functional analysis-helper validation and actual budget refit.
+- Actual Intel budget refit (synthetic helper validation passed).
 - Recipe check and post-refit gate on the released host.
-- Completion/review of node9901 and fstor007 real-host gates, preserving failures.
+- Coordinator fixes for the two baseline test defects; ORCD gate FAILs remain recorded.
 - Per-command table, critical chain, exact build identities, closed manifests
-  and cleanup receipts. No raw archive or manifest hash is invented here.
+  and Intel cleanup receipts. ORCD manifests and cleanup are complete above.
