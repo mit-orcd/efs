@@ -1327,6 +1327,58 @@ static void test_grow_3_to_5(void)
 }
 
 
+/* Resync withdraws election eligibility until a verified image installs.
+ * A transfer/grant already queued before the operator's request must not
+ * promote the very replica whose local state is being repaired. */
+static void test_resync_fences_elections(void)
+{
+    for (int kind = 0; kind < 3; kind++) {
+        struct net n;
+        struct efs_raft_store *st[3];
+        struct app app[3];
+        struct efs_raft_cfg cfg;
+        boot_n(&n, st, app, &cfg, 3, 0x7);
+        CHECK(elect(&n, 40) == 1, "resync election fixture elected");
+        int lid = leader_id(&n);
+        if (lid < 0) { free_n(&n, st, 3); continue; }
+        int target = (lid + 1) % 3;
+        n.hold_transfer = 1;
+        CHECK(efs_raft_transfer(n.r[lid], target) == EFS_OK && n.transfer,
+              "resync fixture captured delayed transfer");
+        if (!n.transfer) { free_n(&n, st, 3); continue; }
+        if (kind == 2) {
+            n.isolate[target] = 1;
+            CHECK(efs_raft_recv(n.r[target], n.transfer) == EFS_OK &&
+                  efs_raft_role(n.r[target]) == EFS_RAFT_CANDIDATE,
+                  "candidate awaiting grants before resync");
+        }
+        uint64_t term = efs_raft_term(n.r[target]);
+        CHECK(efs_raft_request_resync(n.r[target]) == EFS_OK &&
+              efs_raft_resync_pending(n.r[target]), "resync requested");
+        if (kind == 0)
+            CHECK(efs_raft_recv(n.r[target], n.transfer) == EFS_OK,
+                  "delayed transfer delivered while resync pending");
+        else if (kind == 1) {
+            n.isolate[target] = 1;
+            for (int tick = 0; tick < 200; tick++)
+                CHECK(efs_raft_tick(n.r[target]) == EFS_OK, "resync election timer");
+        } else {
+            struct efs_raft_msg grant;
+            memset(&grant, 0, sizeof(grant));
+            grant.type = EFS_RAFT_MSG_VOTE_REP;
+            grant.from = lid; grant.to = target; grant.term = term;
+            grant.vote_granted = 1;
+            CHECK(efs_raft_recv(n.r[target], &grant) == EFS_OK,
+                  "old candidate's delayed grant delivered after resync");
+        }
+        CHECK(efs_raft_role(n.r[target]) == EFS_RAFT_FOLLOWER &&
+              efs_raft_term(n.r[target]) == term &&
+              efs_raft_resync_pending(n.r[target]),
+              "pending resync fences transfer, timer and delayed-grant elections");
+        free_n(&n, st, 3);
+    }
+}
+
 static void test_leadership_transfer(void)
 {
     for (int count = 3; count <= 4; count++) {
@@ -2722,6 +2774,15 @@ static void test_resync_replaces_diverged_follower(void)
     m.entries[0].term = 2; m.entries[0].cmd = (const uint8_t *)"F"; m.entries[0].clen = 1;
     CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && efs_raft_commit(n.r[1]) == 6 &&
           app.last == 'F', "follower replicates normally after the resync");
+    efs_raft_allow_campaign(n.r[1], 1);
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_TIMEOUT_NOW; m.from = 0; m.to = 1; m.term = 2;
+    m.prev_index = 0x7; m.last_log_index = 6; m.last_log_term = 2;
+    m.leader_commit = 6;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK &&
+          efs_raft_role(n.r[1]) == EFS_RAFT_CANDIDATE &&
+          efs_raft_term(n.r[1]) == 3,
+          "verified snapshot restores resync replica's election eligibility");
     efs_raft_free(n.r[1]);
     efs_raft_mem_free(st);
 }
@@ -3278,6 +3339,7 @@ int main(void)
         test_four_voters();
         test_membership_persistence();
         test_leadership_transfer();
+        test_resync_fences_elections();
         test_grow_3_to_4();
         test_solo_durable_cap_then_grow();
         test_i18_joint_quorum();

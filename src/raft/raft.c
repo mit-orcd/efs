@@ -1405,7 +1405,7 @@ static int start_election(struct efs_raft *r)
     uint64_t last_i = 0, last_t = 0;
     int i, rc;
 
-    if (!is_voter(r, r->id) || !r->allow_campaign) {
+    if (!is_voter(r, r->id) || !r->allow_campaign || r->resync_requested) {
         reset_election(r);
         return EFS_OK;
     }
@@ -1497,7 +1497,7 @@ static int start_prevote(struct efs_raft *r)
     uint64_t last_i = 0, last_t = 0;
     int i, rc;
 
-    if (!is_voter(r, r->id) || !r->allow_campaign) {
+    if (!is_voter(r, r->id) || !r->allow_campaign || r->resync_requested) {
         reset_election(r);
         return EFS_OK;
     }
@@ -3047,9 +3047,23 @@ int efs_raft_request_resync(struct efs_raft *r)
 {
     if (!r)
         return EFS_ERR_INVAL;
+    if (r->recv_persisting)
+        return EFS_ERR_BUSY;
     if (r->role == EFS_RAFT_LEADER)
         return EFS_ERR_NOT_PRIMARY;
     r->resync_requested = 1;
+    /* This replica explicitly distrusts its local image until snapshot
+     * install. Cancel an election already in flight as well as preventing
+     * timer/TimeoutNow elections; a delayed grant must not make it leader. */
+    read_proof_forget(r);
+    if (r->role == EFS_RAFT_CANDIDATE) {
+        r->role = EFS_RAFT_FOLLOWER;
+        r->leader = -1;
+    }
+    r->prevote_term = 0;
+    r->prevote_bits = 0;
+    r->vote_bits = 0;
+    reset_election(r);
     fprintf(stderr, "raft: group=%u resync requested (commit=%llu applied=%llu)\n",
             r->group, (unsigned long long)r->commit_index,
             (unsigned long long)r->last_applied);
