@@ -4751,6 +4751,20 @@ static void host_need_both(uint8_t *need)
     need[1] = EFS_RAFT_GROUP_SHARD2;
 }
 
+/* The routing unit is a FileID's inode, not one chunk record. A 1 MiB
+ * write normally carries eight records and needs the same inode leader as
+ * a one-record write. Mixed-inode batches retain their existing coordinator. */
+static int host_report_primary_pick(struct efs_raft_host *h,
+                                     const struct efs_chunk_rec *recs, uint32_t count)
+{
+    if(!recs || !count)return -1;
+    for(uint32_t i=1;i<count;i++)
+        if(recs[i].ino!=recs[0].ino)return -1;
+    uint8_t both[2];host_need_both(both);
+    return host_leader_cover_pick(h,
+        efs_raft_shard_group(efs_kv_inode_shard(recs[0].ino)),both,2);
+}
+
 /* STATUS is a complete read-only authority request, not a mutation.
  * Keep its route off the mutation pool and within the read budget. */
 static int host_submit_read_only(const uint8_t *cmd,uint32_t clen)
@@ -24049,11 +24063,9 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     /* A one-file REPORT can finish its append on the inode primary. Route
      * before publication only if that primary hosts the complete authority
      * domain; a single-group primary would otherwise bounce back here. */
-    if(session && count==1) {
-        uint8_t both[2];host_need_both(both);
-        /* The routing helper owns h->mu; callers must not lock it again. */
-        int preferred=host_leader_cover_pick(h,
-            efs_raft_shard_group(efs_kv_inode_shard(recs[0].ino)),both,2);
+    if(session) {
+        /* Uses only the published routing view, without h->mu. */
+        int preferred=host_report_primary_pick(h,recs,count);
         if(preferred>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,preferred);return;}
     }
     /* One ReadIndex per touched group for the whole batch (§8 amortize).
