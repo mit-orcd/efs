@@ -1,4 +1,4 @@
-Branch agent/devel-task-j, tested candidate58b87f0ed: old-library regression fails20 intended checks; fixed full Raft normal/early, follower-bound and recipe PASS. Live qualification ACTIVE before three full calibration runs. Earlier Intel/ORCD FAILs and failed stores remain preserved; no budgets fitted. Evidence: docs/status/gate-budgets-refit-20261026.md.
+Branch agent/devel-task-j, tested candidate58b87f0ed: regression controls, 10 operator checks, snapshot catch-up and 3 strict K22/K36 pairs PASS (TCP loopback scoped). Snapshot fault window recorded5 contract-allowed write errors;344 successful payloads exact. Three full8-job calibration runs ACTIVE. Earlier Intel/ORCD FAILs/stores remain preserved; budgets unchanged. Evidence: docs/status/gate-budgets-refit-20261026.md.
 
 # W160 three-run budget refit — October 26, 2026
 
@@ -734,3 +734,41 @@ including post-resync workload readback and the POSIX cases. The controller
 is running snapshot-import; it has not started the subsequent strict pairs
 or full calibration. These live checks extend the candidate evidence but
 are not substitutes for the three full gates or the still-owed refit.
+
+### Corrective live gates complete; full calibration started
+
+At exact source/build58b87f0ed, snapshot-import passed in249.615s. Every
+leader advanced its snapshot past the stopped node four times (197s);
+node3 installed5s after resume, caught up6s after resume and drained every
+commit2s after the load stopped. Peak RSS92,112KiB was below the627,068KiB
+bound. **Five write-close EIOs were recorded during the intentional member
+stall**, allowed by this test's existing B6 contract; those unsuccessful
+files are outside its success manifest, not silently verified or retried
+into PASS. All344 successfully published fixture files read back byte-exact
+through node3. This is scoped catch-up evidence, not a zero-error workload
+claim or verification of the five failed writes.
+
+| Repetition | Strict K22 wall s | Client writes / errors | K36 wall s |
+| --- | ---: | ---: | ---: |
+| 1 | 21.791 | 531 / 0 | 77.557 |
+| 2 | 23.261 | 546 / 0 | 61.815 |
+| 3 | 21.732 | 479 / 0 | 57.428 |
+
+Each strict K22 run observed L0-full with RAM/log watermarks false, admission
+BUSY, leadership movement, drain after releasing the compactor and **zero
+client errors throughout**. Each K36 run passed its original crash/torn/
+missing-fragment recovery, exact referenced segment-loss/mark/rebuild and
+payload checks. Normal/early Raft controls and10 operator checks already
+passed. All2208 archived source files were verified unchanged before the
+controller copied the committed calibration launcher outside the source
+and started run1. No overlapping diagnostic or build controller remains.
+
+Authoritative full-gate progress:
+`intel1:~/efs-artifacts/taskJ-20261026/intel1-calibration-58b87f0ed/`
+(`stage`, `run-1` through `run-3`); parent controller remains
+`~/efs-taskJ4/prefix-qualification.py`, screen `taskJ-prefix-qualification`.
+The source, budgets and pool slots remain pinned throughout these three
+serial8-job gates. No full-gate result, fitted median, budget reduction or
+post-refit PASS is claimed yet. Earlier failed baselines remain FAIL and
+all failing fixtures remain kept for traceability. TCP loopback/direct-I/O
+fixture evidence does not supply a new repaired-build real-host/RDMA gate.
