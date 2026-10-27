@@ -194,17 +194,17 @@ else: time.sleep(30)
                     assert m.controller(mount)==(process.pid,stamp)
                     assert (process.pid,mount,stamp) in m.clients()
                     original_controller=m.controller
-                def proven_before_teardown(*args,**kwargs):
-                    proof=original_controller(*args,**kwargs)
-                    assert proof==(process.pid,stamp)
-                    Path(record+'.release').touch()
-                    end=time.monotonic()+3
-                    while not Path(record+'.teardown').exists():
-                        assert time.monotonic()<end,'teardown did not start'
-                        time.sleep(.01)
-                    return proof
-                with patch.object(m,'controller',proven_before_teardown):
-                    assert m.retire(mount,process.pid,stamp)['phase']=='done' 
+                    def proven_before_teardown(*args,**kwargs):
+                        proof=original_controller(*args,**kwargs)
+                        assert proof==(process.pid,stamp)
+                        Path(record+'.release').touch()
+                        end=time.monotonic()+3
+                        while not Path(record+'.teardown').exists():
+                            assert time.monotonic()<end,'teardown did not start'
+                            time.sleep(.01)
+                        return proof
+                    with patch.object(m,'controller',proven_before_teardown):
+                        assert m.retire(mount,process.pid,stamp)['phase']=='done' 
                     assert process.wait(timeout=2)==0
                 elif case=='closing':
                     assert m.controller(mount) is None
