@@ -79,7 +79,7 @@ try:
     for name in ('summary.txt','timings.tsv','progress.txt','enum.log','build.log','cmds.txt','cmds.raw'):
         src=plain/name
         if src.exists():(a.out/('gate-'+name)).write_bytes(src.read_bytes())
-    for src in (a.work/'gate-tmp').glob('fail-*.log'):
+    for src in (plain/'tmp').glob('fail-*.log'):
         (a.out/src.name).write_bytes(src.read_bytes())
     (a.out/'controller-result.json').write_text(json.dumps(dict(finished=time.time(),
         verdict='PASS' if all(row['exit']==0 for row in rows) else 'FAIL',commands=rows),indent=2)+'\n')
