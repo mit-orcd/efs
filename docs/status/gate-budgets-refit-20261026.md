@@ -1,8 +1,8 @@
-agent/devel-task-j (analysis 9567e6b9a, base 394f2b791): node9901 TOTAL 508 FAIL 5 NOTRUN 5 (769s); fstor007 TOTAL 508 FAIL 1 NOTRUN 5 (750s), both unchanged-base gates. Evidence: docs/status/gate-budgets-refit-20261026.md. Intel calibration NOTRUN pending F release; no product defect established; no refit yet.
+agent/devel-task-j (analysis 9567e6b9a, base 394f2b791): node9901 TOTAL 508 FAIL 5 NOTRUN 5 (769s); fstor007 TOTAL 508 FAIL 1 NOTRUN 5 (750s), both unchanged-base gates. Evidence: docs/status/gate-budgets-refit-20261026.md. Intel calibration RUNNING at devel4066f74df after F completed; no product defect established; no refit yet.
 
 # W160 three-run budget refit — October 26, 2026
 
-**REAL-HOST GATES COMPLETE WITH FAILURES; CALIBRATION NOT COMPLETE.** No measured budget is changed and no gate PASS is
+**REAL-HOST GATES COMPLETE WITH FAILURES; INTEL CALIBRATION RUNNING.** No measured budget is changed and no gate PASS is
 claimed. The user assigned Task J from `parallel-tasks-20261026.md`; its updated
 instructions retain intel1/intel2 after Task F/E releases the host and add
 one real-host gate each on node9901 and fstor007. The user explicitly
@@ -11,22 +11,48 @@ runs after Task F releases intel1.
 
 ## Resource and source scope
 
-Planned calibration host: **intel1, after Task F's explicit handoff**. Task F
-is active, fixing its serve-path failure there. A lightly loaded
-host does not establish that its reservation has ended. No Task J source,
-build, cluster or measurement has been started on either Intel host. The
-coordinator can collect this report from branch `agent/devel-task-j`; no merge
-or push was performed. The shared devel checkout and its uncommitted D39 edit
-are untouched. The preflight base is devel `394f2b791`; pin current devel
-again at the eventual calibration start if the coordinator has merged fixes.
+Calibration host: **intel1**. Task F completed its qualification and final
+report at `fe3b34a79`; its finalized `private-stop-check.json` records no
+remaining Task F process or mount. Its private trees remain retained and
+untouched. Independent Task J preflight found no active test/build jobs,
+no screen session, eight CPUs, load 0.09/0.23/1.95 and 828 GiB home free.
+Existing cluster listeners on 17432/17433 remain untouched.
 
-Intel measurements, per-command medians and the budget refit remain
-**NOTRUN**; no historical timing is reused as a new observation. ORCD gates
-use fresh untouched devel **394f2b791** archives, build identity
-`EFS_GIT_ID=394f2b791`, `EFS_GIT_BRANCH=devel`,
-`EFS_GIT_DESCRIBE=394f2b791`. Exact version lines, completed command counts,
-walls and closed gate manifests are recorded below. Historical evidence stands
-on its own.
+Three serial eight-job gates started in detached screen `taskJ-calibration`
+after that handoff, on pinned **current devel
+4066f74df5b997d70f263ae8dc1063b1a6049b92**. This differs from the ORCD source
+394f2b791 only in documentation: `git diff --quiet 394f2b791 4066f74df --
+src include tests scripts Makefile` succeeds. Task F's unmerged product and
+budget changes are not silently included in this calibration.
+
+Private source is `/home/maik/efs-taskJ/src`, with launcher and helper copied
+outside the pinned source under `/home/maik/efs-taskJ/scripts/`. Results are
+`/home/maik/efs-artifacts/taskJ-20261026/intel1-4066f74df/run-1`, `run-2`,
+`run-3`. The archive SHA-256 is
+`ae4f166b247596f3bbc6ad151335c8cc6c4bc8bbde4bb596cd0a15084d48e0b7`;
+`SOURCE-MANIFEST.sha256` records the 2,205 regular source files before build.
+`PROVENANCE.json` and `host.txt` retain exact source/environment facts.
+No final manifest is claimed while these files are open.
+
+Intel1 is Linux 6.12.0-211.67.1.el10_2 x86_64, GCC14.3.1, Python3,
+FUSE3.16.2, MemTotal15,774,852 KiB, XFS home on LVM. The launcher exports
+`EFS_FUSE_PREFIX=/usr`, `EFS_TEST_TARGET=test-all`, `EFS_TEST_JOBS=8`,
+`EFS_BUILD_JOBS=8` and commit-derived `EFS_GIT_ID`, `EFS_GIT_BRANCH=devel`,
+`EFS_GIT_DESCRIBE`; exact build version is saved per run. Invocation:
+
+```sh
+cd "$HOME/efs-taskJ/src"
+EFS_FUSE_PREFIX=/usr bash "$HOME/efs-taskJ/scripts/calibrate_test_budgets.sh" \
+  4066f74df5b997d70f263ae8dc1063b1a6049b92 \
+  "$HOME/efs-artifacts/taskJ-20261026/intel1-4066f74df"
+```
+
+Intel measurements, per-command medians and budget changes are pending;
+no prior or ORCD timing is reused as an Intel observation. ORCD gates used
+fresh untouched devel394f2b791 archives, with its source/build identifiers.
+Their exact results and closed manifests remain below. The coordinator can
+collect this branch; no merge or push was performed. Shared devel's other
+agent D39 edit remains untouched.
 
 ## ORCD-first execution
 
@@ -197,7 +223,7 @@ verified `SHA256SUMS` SHA-256:
 `44a16d2ee18e9c0650cb4001c240d4e66b3c6b9ed255e8b2036a0805b2e98942`.
 The synthetic scratch tree was pruned separately with edelete.
 
-## Remaining calibration plan (Intel not executed)
+## Calibration and remaining verification plan (Intel running)
 
 1. After intel1's handoff, export one pinned current devel commit into
    `~/efs-taskJ/src`; build and run the three 8-job `test-all` gates through
@@ -244,7 +270,7 @@ The synthetic scratch tree was pruned separately with edelete.
 
 ## Outstanding
 
-- Intel host handoff; three measured calibration runs and safe failure handling.
+- Completion of three Intel calibration runs and safe failure handling.
 - Actual Intel budget refit (synthetic helper validation passed).
 - Recipe check and post-refit gate on the released host.
 - Coordinator fixes for the two baseline test defects; ORCD gate FAILs remain recorded.
