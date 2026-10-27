@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Task I, F1: one unchanged 60-minute fixed-set load, then the full code gate.
 # Run only on the assigned quiet host, from a private exported source tree.
-# Usage: bash scripts/task_i_run.sh COMMIT ARTIFACTS [tcp|rdma] [HOST_IPV4] [full|measure-only]
+# Usage: bash scripts/task_i_run.sh COMMIT ARTIFACTS [tcp|rdma] [HOST_IPV4] [full|measure-only] [EXISTING_NODE9900_CLIENT_PID]
 set -u
 commit=${1:?exact exported commit required}
 art=${2:?new external artifacts directory required}
 transport=${3:-tcp}
 address=${4:-127.0.0.1}
 gate_mode=${5:-full}
+background_client=${6:-}
 [[ "$gate_mode" == full || "$gate_mode" == measure-only ]] || exit 2
 [[ "$commit" =~ ^[0-9a-f]{9,40}$ && "$transport" =~ ^(tcp|rdma)$ ]] || exit 2
 src=$(pwd -P)
@@ -22,11 +23,17 @@ export EFS_FUSE_PREFIX=${EFS_FUSE_PREFIX:-/usr}
 export EFS_TRANSPORT="$transport"
 export PATH="$HOME/bin:$PATH"
 # Refuse other test jobs; never signal them. No other cluster is stopped.
-python3 - <<'PY'
-import sys
+python3 - "$background_client" "$art" <<'PY'
+import json,sys
+from pathlib import Path
 sys.path.insert(0,'scripts')
 from soak import foreign_jobs
+from task_i_host_sample import background_identity
+allowed = background_identity(sys.argv[1]) if sys.argv[1] else None
 jobs=foreign_jobs()
+if allowed:
+    (Path(sys.argv[2])/'background-client.json').write_text(json.dumps(allowed,indent=2)+'\n')
+    jobs=[job for job in jobs if job['pid']!=allowed['pid']]
 if jobs:raise SystemExit('NOTRUN: quiet host required: '+repr(jobs))
 PY
 [ "$?" -eq 0 ] || exit 77
@@ -44,7 +51,7 @@ sha256sum efsd tests/faults/efsd efs-fuse efs-mgmt > "$art/binaries.sha256"
 printf 'MEASUREMENT\n' > "$art/stage"
 python3 -u scripts/rss_mappings_sample.py "${src%/src}/" "$art/measurement/mem.jsonl" 10 > "$art/measurement/sampler.log" 2>&1 &
 sampler=$!
-python3 -u scripts/task_i_host_sample.py "$src" "$art/measurement/host.jsonl" > "$art/measurement/host-sampler.log" 2>&1 &
+python3 -u scripts/task_i_host_sample.py "$src" "$art/measurement/host.jsonl" "${background_client:+$art/background-client.json}" > "$art/measurement/host-sampler.log" 2>&1 &
 vmstat_pid=$!
 EFS_D4_LOAD_S=3600 EFS_D4_SET=256 EFS_D4_THREADS=8 EFS_D4_FG_SET=32 \
 EFS_D4_DRAIN_S=150 EFS_D4_QUOTA=8G EFS_D4_KEEP=1 EFS_D4_ARTIFACTS="$art/measurement" \
@@ -58,8 +65,10 @@ from pathlib import Path
 import json,os,shutil,sys
 art,src=map(Path,sys.argv[1:]);sys.path.insert(0,str(src/'scripts'))
 import rss_plateau
-foreign=[r for r in (json.loads(x) for x in (art/'measurement/host.jsonl').read_text().splitlines()) if r['foreign_jobs']]
-(art/'measurement/quiet-host.json').write_text(json.dumps(dict(verdict='FAIL' if foreign else 'PASS',overlaps=foreign),indent=2)+'\n')
+host_rows=[json.loads(x) for x in (art/'measurement/host.jsonl').read_text().splitlines()]
+foreign=[r for r in host_rows if r['foreign_jobs']]
+shared=any(r.get('background_jobs') for r in host_rows)
+(art/'measurement/quiet-host.json').write_text(json.dumps(dict(verdict='FAIL' if foreign else ('SHARED_CLIENT' if shared else 'PASS'),overlaps=foreign,background_client_present=shared),indent=2)+'\n')
 # Preserve closed daemon and mount logs BEFORE any scratch pruning.
 for work in (src/'tmp').glob('efs-d4p-*'):
  dest=art/'logs'/work.name;dest.mkdir()
@@ -85,7 +94,7 @@ if f.exists():
    for name,p in r['p'].items():series.setdefault(name+':'+str(p['pid']),[]).append((t,p['rss']))
   rows=rss_plateau.evaluate(series,3600,5)
   valid=len(rows)==5 and all(r['samples']>=350 and r['span_s']>=3490 for r in rows)
-  result=dict(rows=rows,complete=valid,verdict='PASS' if valid and not foreign and all(r['verdict']=='PLATEAU' for r in rows) else 'FAIL')
+  result=dict(rows=rows,complete=valid,scope='shared-client-host' if shared else 'quiet-host',verdict='PASS' if valid and not foreign and all(r['verdict']=='PLATEAU' for r in rows) else 'FAIL')
   (art/'measurement/rss-10s.json').write_text(json.dumps(result,indent=2)+'\n')
   print(rss_plateau.format_rows(rows))
   valid=result['verdict']=='PASS'
