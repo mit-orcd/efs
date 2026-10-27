@@ -555,10 +555,13 @@ def main():
         report['checks']['final_fsync_max_s'] = max(fs)
         report['checks']['final_fsync_within_bound'] = max(fs) <= a.report_bound
         flog = root / 'logs' / 'fuse-mnt.log'
-        n67, first67 = grep_count(flog, r'inode-rpc: retry type=67 .*why=recv')
+        client_logs = [root/'logs'/f'fuse-{name}.log' for name in ('mnt','peer')]
+        retries = [grep_count(log,r'inode-rpc: retry type=67 .*why=recv') for log in client_logs]
+        n67 = sum(count for count,_lines in retries)
+        first67 = [dict(client=log.name,line=line) for log,(_count,lines) in zip(client_logs,retries) for line in lines][:10]
         report['checks']['report_recv_timeouts'] = n67
         report['checks']['report_recv_timeout_lines'] = first67
-        ftext = flog.read_text(errors='replace') if flog.exists() else ''
+        ftext = '\n'.join(log.read_text(errors='replace') for log in client_logs if log.exists())
         slow67, over = [], []
         for stamp, us in re.findall(r'^(\S+)Z inode-rpc: slow-ok type=67 .*us=(\d+)', ftext, re.M):
             end = calendar.timegm(time.strptime(stamp[:19], '%Y-%m-%dT%H:%M:%S')) + float('0' + stamp[19:])
