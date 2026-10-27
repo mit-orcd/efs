@@ -18,8 +18,7 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[Task I RSS confirmation](task-i-20261026.md): **NOTRUN, queued behind task H
-on nuc**; branch `agent/devel-task-i`, source `931845748`, product unchanged
+[Task I RSS confirmation](task-i-20261026.md): **RUNNING on nuc after task H cleanup; build PASS**; branch `agent/devel-task-i`, source `931845748`, product unchanged
 from `394f2b791`. The unchanged 60-minute fixed-set/5% plateau rule and
 150-second drain precede nuc's full gate, then private node9901 TCP/RDMA.
 No additional passing memory or D4 result yet; F1 remains open.

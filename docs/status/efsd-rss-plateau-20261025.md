@@ -242,12 +242,14 @@ ssh xorinox 'python3 ~/efs-x/scripts/rss_mappings_split.py ~/efs-x-out/mem.jsonl
 The fixes' own tests: `./tests/test_reclaim` (`make test-long`) and
 `python3 tests/test_conn_idle_reap.py` (`make test-long`).
 
-## Task I — second confirmation queued (October 26)
+## Task I — second confirmation running (October 26)
 
-**NOTRUN, queued; no new PASS.** Branch `agent/devel-task-i`, source
+**RUNNING on nuc; build PASS, no measurement verdict yet.** Branch `agent/devel-task-i`, source
 `931845748` (product base `394f2b791` unchanged), uses the existing 60-minute
-fixed-set load and 5% RSS rule with a **150-second** drain bound. Nuc must
-first be released by task H, including removal of H's private tree. A private
+fixed-set load and 5% RSS rule with a **150-second** drain bound. Task H's
+private tree is removed; Task I's three daemons and two FUSE clients are
+being sampled every 10 seconds with no sampled foreign jobs at the progress
+check. A private
 node9901 TCP/RDMA stage follows a passing nuc result. [Committed controller,
 exact commands, evidence locations and pending gates](task-i-20261026.md).
 The original run F's RSS PASS and overall D4 FAIL remain as reported above.

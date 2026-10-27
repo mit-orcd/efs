@@ -883,8 +883,8 @@ round says which physical or software limiter it hit.
 - [ ] **F1** Unit/integration, enabled-feature and applicable memory/concurrency
   checks have explicit PASS/FAIL/NOTRUN results. Docs and code tests both report;
   an unavailable diagnostic is disclosed, never silently counted as passed.
-  **Task I Oct 26: second 60-minute confirmation NOTRUN, queued behind task H
-  on nuc; private node9901 TCP/RDMA follows a passing nuc result. Existing
+  **Task I Oct 26: second 60-minute confirmation RUNNING on nuc after H cleanup;
+  build PASS, measurement verdict pending; private node9901 TCP/RDMA follows a passing nuc result. Existing
   xorinox RSS PASS / overall D4 FAIL is unchanged; no second PASS yet
   ([method and state](task-i-20261026.md)).**
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
