@@ -75,7 +75,7 @@ def schedule(cmds, budgets, durations, exclusive, jobs=8):
     while pending:
         pick = next((i for i in pending if weight(i) <= len(free)), None)
         if pick is None:
-            now, _, slots = heapq.heappop(running)
+            now, _, _, slots = heapq.heappop(running)
             free.update(slots)
             continue
         pending.remove(pick)
@@ -89,7 +89,7 @@ def schedule(cmds, budgets, durations, exclusive, jobs=8):
         for slot in slots:
             free.remove(slot)
             previous[slot] = pick
-        heapq.heappush(running, (end, pick, slots))
+        heapq.heappush(running, (end, weight(pick), pick, slots))
     pool_end = max((Decimal(str(s['end_s'])) for s in spans.values()), default=Decimal(0))
     chain = []
     if spans:
