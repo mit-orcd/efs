@@ -654,3 +654,48 @@ fixtures clean up normally. This larger bounded sample seeks the rare
 failure's first fence call site; **even100 clean runs cannot stand in for a
 root-cause correction**, and none are median inputs. No duplicate workload,
 assertion, timeout, slot or budget change; no qualification controller is active.
+
+### Compacted-prefix mechanism demonstrated; corrective candidate queued
+
+A deterministic, socket-free probe against the **unchanged44cc4e3e2** library
+installed a snapshot at4, delivered an old AppendEntries starting at0 with
+entries1–5, then delivered a correct suffix starting at4. It reproduced:
+
+- first storage fence: `at=on_ae_req:1868 term=1 commit=4 applied=4 snap=4 resync=0`;
+- delayed-prefix rc-5; subsequent valid-suffix rc-1; applied stayed4.
+
+The missing entries below the snapshot were treated as new appends; storage
+correctly refused an index already compacted, and the receive path wrongly
+turned that stale network request into a permanent storage fence. This
+proves a concrete mechanism matching the captured stuck replica. The actual
+packet sequence of the original logless full-gate failure remains unknown;
+that failure stays recorded, rather than being relabelled a PASS.
+Raw probe source/build/output:
+`intel1:~/efs-artifacts/taskJ-20261026/compacted-prefix-probe-44/`.
+
+Fix `58b87f0ed3b71f47c0e7af0518b1398d6bd35c5a` refuses a request whose
+previous index is below the installed snapshot and returns that committed
+boundary as a rebase hint. It does not append, truncate or apply the stale
+prefix, and the leader can send the valid suffix from that boundary.
+Resync-pending requests retain their explicit snapshot-pull behavior.
+No durability, format, clock, timeout, slot or configuration change.
+The new regression installs a real snapshot through the receive API, then
+checks wholly old and overlapping batches, an empty old-prefix probe and
+a mismatched boundary term, using both single and batch receive and both
+existing acknowledgement-window modes. It requires unchanged snapshot
+payload and successful subsequent exact suffix apply.
+
+The exact source is staged at `intel1:~/efs-taskJ4/src-58b87f0ed`.
+Controller `~/efs-taskJ4/prefix-qualification.py`, screen
+`taskJ-prefix-qualification`, **waits for the existing100-fixture diagnostic**
+before any build/test load. If that run fails at another fence origin it
+stops for investigation instead of silently proceeding. Planned output:
+`~/efs-artifacts/taskJ-20261026/prefix-58b87f0ed/` (`stage`, `results.json`,
+per-command logs). It requires the new regression to fail on the old44
+library only at the compacted-prefix checks, then fixed normal/early Raft
+units, follower-bound, recipe,10 unchanged operator checks, snapshot import
+and three strict K22/K36 pairs. Only after all those pass does the committed
+launcher, copied outside the source, run three serial8-job full gates at
+`~/efs-artifacts/taskJ-20261026/intel1-calibration-58b87f0ed/`. Every failure
+stops and is retained. The candidate remains **NOTRUN/pending qualification**
+while the predecessor diagnostic is active. No budgets have been fitted.
