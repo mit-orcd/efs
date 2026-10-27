@@ -154,6 +154,27 @@ try:
     assert re.search(r'membership: group 2 voters 0x7 -> 0xe: joint consensus started',
                      ''.join(c.log(i) for i in (1, 2, 3))), 'no joint change logged'
 
+    # K44/W167: the seed retains a retired g2 log after this addition.
+    # Its SALT must use the live leader's verdict, never that frozen cursor.
+    rc, out = mgmt('raft-mkfs', c.ep(1))
+    assert rc == 0, 'K44 retired seed: ' + out
+    rc, out = mgmt('commands-policy', c.ep(1), 'get')
+    assert rc == 0, out
+    version = re.search(r'version=(\d+)', out).group(1)
+    mask = re.search(r'mask=(\d+)', out).group(1)
+    rc, out = mgmt('commands-policy', c.ep(1), 'set', mask, version)
+    assert rc == 0, out
+    rc, out = mgmt('raft-resync', c.ep(1), '2')
+    assert rc != 0 and 'rc=-15' in out, out
+    if mounts:
+        name = 'after-retirement'
+        files[name] = 4097
+        with (mounts[0].path / name).open('wb') as f:
+            f.write(payload(name, files[name]))
+            f.flush()
+            os.fsync(f.fileno())
+        assert (mounts[0].path / name).read_bytes() == payload(name, files[name])
+
     # 4. Node 5 ends when the record naming it arrives; restarted (a
     # retried join with the same store) it is the same member.
     c.start(5, join=3, extra_env={'EFS_FAULT_MEMBER_EXIT': 'before-learn'})
