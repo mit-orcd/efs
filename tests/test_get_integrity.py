@@ -108,13 +108,18 @@ static __thread uint64_t deadline_ms;
 static uint64_t efs_client_rpc_deadline_ms(void) { return deadline_ms; }
 static void efs_client_rpc_set_deadline_ms(uint64_t d) { deadline_ms = d; }
 static int efs_client_rpc_past_deadline(void) { return 0; }
-static int efs_client_node_is_down(efs_node_id_t n) { (void)n; return 0; }
-static int efs_client_node_reprobe(efs_node_id_t n) { (void)n; return 0; }
+static unsigned down_mask, reprobe_mask;
+static int efs_client_node_is_down(efs_node_id_t n) { return !!(down_mask & (1u << n)); }
+static int efs_client_node_reprobe(efs_node_id_t n)
+{
+    if (!(reprobe_mask & (1u << n))) return 0;
+    down_mask &= ~(1u << n);
+    return 1;
+}
 static void efs_client_node_note_ok(efs_node_id_t n) { (void)n; }
 static void efs_client_node_note_fail(efs_node_id_t n) { (void)n; }
 static int read_retry_pause(unsigned us) { (void)us; return EFS_OK; }
-/* K34: read_reprobe_down is the production copy above; no node is down in
- * these cases (efs_client_node_is_down is 0), so it never brings one back. */
+/* Production down-member recovery, with deterministic probe outcomes. */
 static void *demand_read_alloc(uint32_t n) { return malloc(n); }
 static void test_buf_free(void *p, uint32_t n) { (void)n; free(p); }
 #define efs_buf_free test_buf_free
@@ -143,6 +148,7 @@ static void reset(void)
     memset(served, 0, sizeof(served));
     pthread_mutex_unlock(&serve_mu);
     memset(&read_peer_order, 0, sizeof(read_peer_order));
+    down_mask = reprobe_mask = 0;
 }
 static void set_mode(int kind, int fi, int m0, int m1)
 { mode[kind][fi][0] = m0; mode[kind][fi][1] = m1; mode[kind][fi][2] = m1; mode[kind][fi][3] = m1; }
@@ -373,6 +379,24 @@ static void packed_cases(void)
         REFUSED(decode(1), expect);
         reset(); set_mode(K_SEG, 1, M_NOTFOUND, M_NOTFOUND); set_mode(K_SEG, 2, bad[b], bad[b]);
         REFUSED(decode(1), expect);
+    }
+    /* A returned holder plus one live holder is enough even when the last
+     * fragment is absent. The reader's last-error order must not suppress
+     * the bounded down-member re-probe (K36 pool failure, step 8). */
+    for (int returned = 0; returned < 3; returned++) {
+        for (int missing = 0; missing < 3; missing++) {
+            if (returned == missing) continue;
+            reset();
+            down_mask = reprobe_mask = 1u << (returned + 1);
+            set_mode(K_SEG, missing, M_NOTFOUND, M_NOTFOUND);
+            GOOD(decode(1), expect);
+            assert(!down_mask);
+            /* A probe that cannot reach the holder still refuses; no
+             * absent fragment or unchecked payload becomes a success. */
+            reset(); down_mask = 1u << (returned + 1);
+            set_mode(K_SEG, missing, M_NOTFOUND, M_NOTFOUND);
+            assert(decode(1) == EFS_ERR_IO);
+        }
     }
     /* A verified segment, but the reference names a neighbour's slice
      * (offset inside the segment) or carries another digest: refused by
