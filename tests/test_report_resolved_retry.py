@@ -15,9 +15,16 @@ import tempfile
 
 root = Path(__file__).resolve().parents[1]
 source = Path(os.environ.get('K38_WRITE_SOURCE', root / 'src/client/write.c')).read_text()
-m = re.search(r'^int efs_client_report_dirty_ino\([^;]+?\)\n\{', source, re.M)
-assert m
-function = source[m.start():source.index('\n}', m.end()) + 2]
+def extract(name):
+    m = re.search(r'^(?:static )?int ' + name + r'\([^;]+?\)\n\{', source, re.M)
+    assert m, name
+    return source[m.start():source.index('\n}', m.end()) + 2]
+function = ''
+if 'static int report_dirty_ino_complete(' in source:
+    function += extract('report_dirty_ino_complete') + '\n'
+function += extract('efs_client_report_dirty_ino')
+if 'int efs_client_report_pressure_ino(' in source:
+    function += '\n' + extract('efs_client_report_pressure_ino')
 code = r'''
 #include "efs/common.h"
 #include <assert.h>
@@ -70,6 +77,12 @@ int main(void){
  return 0;
 }
 '''
+if 'int efs_client_report_pressure_ino(' in source:
+    cases = r''' reset(3);assert(efs_client_report_pressure_ino(7)==EFS_OK && calls==1 && !flushes && owned && !published);
+ reset(0);assert(efs_client_report_pressure_ino(7)==EFS_OK && calls==2 && !flushes && !owned && published);
+ reset(1);assert(efs_client_report_pressure_ino(7)==EFS_ERR_IO && calls==1 && owned && !published);
+'''
+    code = code.replace(' puts("K38/K45 receipt-STALE retry:', cases + ' puts("K38/K45 receipt-STALE retry:')
 if 'completion_deadline, &resolved_stale' not in function:
     code = code.replace('static int report_dirty_ino_run(efs_ino_t ino,int sync, REPAIR_SCOPE_ARGS){',
                         'static int report_dirty_ino_run(efs_ino_t ino,int sync){ uint64_t end=17000;int value,*resolved=&value;')

@@ -2483,7 +2483,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
 }
 
 
-int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
+static int report_dirty_ino_complete(efs_ino_t only_ino, int sync, int wait_held)
 {
     uint64_t started = report_clock_ms(), wait_ms = 0, flush_ms = 0;
     const char *stage = "report";
@@ -2506,7 +2506,7 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
      * result may use the remaining resolution allowance for recovery.
      * Unknown outcomes (IO) remain failures. No deadline is renewed. */
     for (unsigned round = 0; sync &&
-         (rc == EFS_ERR_AGAIN || resolved_stale) && round < 16; round++) {
+         ((wait_held && rc == EFS_ERR_AGAIN) || resolved_stale) && round < 16; round++) {
         if (resolved_stale)
             efs_client_rpc_set_deadline_ms(completion_deadline);
         if (efs_client_rpc_past_deadline())
@@ -2531,7 +2531,7 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
         }
     }
     if (rc == EFS_ERR_AGAIN)
-        rc = sync ? EFS_ERR_BUSY : EFS_OK;
+        rc = sync && wait_held ? EFS_ERR_BUSY : EFS_OK;
     if (sync && rc != EFS_OK)
         fprintf(stderr, "report-sync-fail ino=%llu stage=%s total_ms=%llu wait_ms=%llu "
                 "flush_ms=%llu resolved_stale=%d rc=%d\n", (unsigned long long)only_ino,
@@ -2542,6 +2542,21 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
     /* Settle off this thread: an fsync never waits for ticket retirement. */
     efs_client_put_settle_kick();
     return rc;
+}
+
+
+int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
+{
+    return report_dirty_ino_complete(only_ino, sync, 1);
+}
+
+/* Pressure is a finite publication pass, not an fsync of future writes.
+ * Keep the same synchronous REPORT/receipt proof for carried records, but
+ * leave held units dirty and charged. In particular, do not recursively
+ * enter the whole-inode PUT-window flush while writers keep arriving. */
+int efs_client_report_pressure_ino(efs_ino_t only_ino)
+{
+    return report_dirty_ino_complete(only_ino, 1, 0);
 }
 
 

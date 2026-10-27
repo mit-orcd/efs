@@ -3407,7 +3407,7 @@ static int fuse_pressure_flush(efs_ino_t ino)
     if (rc == EFS_OK) {
         rc = efs_dcache_flush_pressure_ino(ino);
         if (rc == EFS_OK)
-            rc = efs_client_report_dirty_ino(ino, 1);
+            rc = efs_client_report_pressure_ino(ino);
         pthread_mutex_unlock(amu);
     }
     efs_client_rpc_set_deadline_ms(previous);
