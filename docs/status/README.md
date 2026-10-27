@@ -508,6 +508,11 @@ test). On intel1: TSan clean on the KV tests, `make leak-check` 25/25, and
 `test_k33_client_view.py`, fails 5/5 on base `3e01ba95c` too. The orcd-mini
 A/B rerun is NOTRUN.
 
+[orcd-test fresh deploy of `394f2b791` (RDMA), all POSIX suites](orcd-test-devel-rdma-394f2b791-20261027.md):
+**PASS on all seven clients: POSIX all 220/223 (3 expected SKIPs), durability 27/27 across a full restart,
+two-client 68/68 and every live `.efs` harness.** Expiry checks PASS; the fixture's closing core run failed
+one case with EBUSY (W159). New W167: `raft-mkfs` at the seed answers BUSY forever after an online node addition.
+
 [orcd-mini fresh deploy of `5a7463440` (RDMA), POSIX and ior](orcd-mini-deploy-5a7463440-20261025.md):
 **core 218/218, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
 two-client 68/68 PASS; ior easy PASS on both clients; ior hard FAIL 1 of 4
