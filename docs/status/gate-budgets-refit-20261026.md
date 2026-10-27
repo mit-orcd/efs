@@ -1,8 +1,8 @@
-agent/devel-task-j (analysis 9567e6b9a, base 394f2b791): node9901 TOTAL 508 FAIL 5 NOTRUN 5 (769s); fstor007 TOTAL 508 FAIL 1 NOTRUN 5 (750s), both unchanged-base gates. Evidence: docs/status/gate-budgets-refit-20261026.md. Intel calibration RUNNING at devel4066f74df after F completed; no product defect established; no refit yet.
+agent/devel-task-j (analysis72b01728a, tested devel4066f74df): Intel TOTAL 508 FAIL 2 NOTRUN 14 (616s), on untouched base; runs2/3 stopped. Evidence: docs/status/gate-budgets-refit-20261026.md. Task J INCOMPLETE: K22 fixture leader assumption and K36 segment-recovery assertion need resolution. No fit. ORCD failures remain preserved.
 
 # W160 three-run budget refit — October 26, 2026
 
-**REAL-HOST GATES COMPLETE WITH FAILURES; INTEL CALIBRATION RUNNING.** No measured budget is changed and no gate PASS is
+**INCOMPLETE: FIRST INTEL CALIBRATION FAILED ON UNCHANGED BASE.** No measured budget is changed and no gate PASS is
 claimed. The user assigned Task J from `parallel-tasks-20261026.md`; its updated
 instructions retain intel1/intel2 after Task F/E releases the host and add
 one real-host gate each on node9901 and fstor007. The user explicitly
@@ -25,14 +25,14 @@ after that handoff, on pinned **current devel
 src include tests scripts Makefile` succeeds. Task F's unmerged product and
 budget changes are not silently included in this calibration.
 
-Private source is `/home/maik/efs-taskJ/src`, with launcher and helper copied
+Historical private source was `/home/maik/efs-taskJ/src` (now pruned), with launcher and helper copied
 outside the pinned source under `/home/maik/efs-taskJ/scripts/`. Results are
 `/home/maik/efs-artifacts/taskJ-20261026/intel1-4066f74df/run-1`, `run-2`,
 `run-3`. The archive SHA-256 is
 `ae4f166b247596f3bbc6ad151335c8cc6c4bc8bbde4bb596cd0a15084d48e0b7`;
 `SOURCE-MANIFEST.sha256` records the 2,205 regular source files before build.
 `PROVENANCE.json` and `host.txt` retain exact source/environment facts.
-No final manifest is claimed while these files are open.
+The stopped run now has a closed verified manifest, recorded below.
 
 Intel1 is Linux 6.12.0-211.67.1.el10_2 x86_64, GCC14.3.1, Python3,
 FUSE3.16.2, MemTotal15,774,852 KiB, XFS home on LVM. The launcher exports
@@ -47,8 +47,9 @@ EFS_FUSE_PREFIX=/usr bash "$HOME/efs-taskJ/scripts/calibrate_test_budgets.sh" \
   "$HOME/efs-artifacts/taskJ-20261026/intel1-4066f74df"
 ```
 
-Intel measurements, per-command medians and budget changes are pending;
-no prior or ORCD timing is reused as an Intel observation. ORCD gates used
+Only Intel run 1 completed, with failures. The launcher stopped before runs
+2/3. Per-command three-run medians, refit and post-refit gate remain NOTRUN;
+no failed or ORCD timing is reused as a successful calibration cost. ORCD gates used
 fresh untouched devel394f2b791 archives, with its source/build identifiers.
 Their exact results and closed manifests remain below. The coordinator can
 collect this branch; no merge or push was performed. Shared devel's other
@@ -108,6 +109,54 @@ Completed source/launcher roots (now pruned) and retained text evidence:
 - `exit-status`, `DONE`, summaries, timings, progress, build/enumeration/run
   logs and per-failure logs are saved independently. The closed manifests
   and task-owned scratch cleanup are recorded below.
+
+## Intel calibration stopped on unchanged-base failures
+
+Verbatim result:
+`TOTAL 508 FAIL 2 NOTRUN 14 STATUS FAIL (616s) OVERBUDGET 1 BUILD 29s`.
+Build: `efsd 4066f74df (branch devel, built 2026-10-27T03:21:40Z on intel1)`.
+Controller exit1, stage `run-1 FAILED; preserved; calibration stopped`;
+`run-2` and `run-3` were never created. This is directly an untouched-current-
+devel comparison: Task J changed no product, test or measured budget.
+The 616 s wall is **not** evidence for lowering D44's target: failing tests
+ran shorter paths. `test_k33_growth.py` also exceeded its 135 s budget at
+136.0 s; no change is inferred from this single observation.
+
+| Finding | Observation and assessment | Remaining resolution |
+| --- | --- | --- |
+| J1 / K22 fixture | `test_k22_leader_admission.py:172` asserts group0 leader is node1; observed node2, before pressure is armed and before client load. The fixture configures pressure only on node1 and assumes bootstrap leadership persists. | Explicitly establish the fixture's pressured leader before arming; do not weaken the admission/client correctness assertions. No test change is made by Task J. |
+| J2 / K36, unclassified | `test_k36_recovery.py:509` expected at least one missing segment after deleting a fragment. Observed recovery `verified`, segments `(3,0)`, no missing/unrecoverable count. Victim is `segs(c, holder)[0]`, selected by filesystem ordering. | Prove the removed fragment belongs to a current referenced segment and correlate recovery's inventory before deciding fixture race versus product defect. Recovery corruption or successful repair is not established by this output. |
+
+Both tests unconditionally delete their fixture trees in `finally` in the
+ordinary gate (`EFS_K36_KEEP` was not set). Their detailed daemon logs and
+stores were therefore already unavailable when the command outputs reported
+failure. Full command stdout/stderr, summaries and timings survive; this
+limits J2 diagnosis. A future diagnostic should retain failure fixtures,
+not silently retry them. These failures remain failures. Task J's explicit
+"do not change any test" boundary keeps the required fixes outside this
+budget-only branch; there is no exclusion, timeout relaxation, or extra
+attempt on the unchanged source.
+
+The fourteen NOTRUN markers match the expected Intel prerequisites: no
+cluster lifecycle scripts, no memcheck header, unavailable IB paths,
+fault-build-only stalled-compactor case, and two missing-tool self-test
+markers. They are reported separately from the two failures.
+
+After completion, all2,205 source files verified against the initial
+manifest; source-manifest SHA-256:
+`40cceac22f5e0ab0749525d059706daff6086ad95e7504fe72da348bde927edb`.
+`private-stop-check.json` records no Task J process or mount. Task J's own
+inactive source/build/fixture root was pruned with edelete; Task F's retained
+trees and all existing clusters remain untouched. `PRUNED.txt` states the
+fixture-loss limitation and what survives. Closed raw evidence:
+`intel1:/home/maik/efs-artifacts/taskJ-20261026/intel1-4066f74df/`.
+Its verified `SHA256SUMS` covers33 files; SHA-256:
+`286844d59f36742fd037243f8560d9fdf351b539a302d48a427ba26f5aa4f593`.
+
+Task J remains INCOMPLETE. A materially corrected source needs a new,
+separately retained three-run campaign before any fit is possible; an
+unchanged-source retry cannot turn these findings into PASS. No new timing,
+median, critical chain or target reduction is invented here.
 
 ## Prepared analysis
 
@@ -223,9 +272,10 @@ verified `SHA256SUMS` SHA-256:
 `44a16d2ee18e9c0650cb4001c240d4e66b3c6b9ed255e8b2036a0805b2e98942`.
 The synthetic scratch tree was pruned separately with edelete.
 
-## Calibration and remaining verification plan (Intel running)
+## Remaining verification plan (blocked by baseline failures)
 
-1. After intel1's handoff, export one pinned current devel commit into
+1. After the two baseline findings are resolved in reviewed source, export one
+   pinned current devel commit into
    `~/efs-taskJ/src`; build and run the three 8-job `test-all` gates through
    `scripts/make_test_summary.sh` serially in detached screen with the prepared
    `scripts/calibrate_test_budgets.sh FULL_COMMIT ARTIFACT_ROOT` launcher
@@ -270,9 +320,9 @@ The synthetic scratch tree was pruned separately with edelete.
 
 ## Outstanding
 
-- Completion of three Intel calibration runs and safe failure handling.
+- Resolution of J1/K22 and unclassified J2/K36; three clean Intel calibration runs on corrected source.
 - Actual Intel budget refit (synthetic helper validation passed).
 - Recipe check and post-refit gate on the released host.
 - Coordinator fixes for the two baseline test defects; ORCD gate FAILs remain recorded.
 - Per-command table, critical chain, exact build identities, closed manifests
-  and Intel cleanup receipts. ORCD manifests and cleanup are complete above.
+  for a future successful calibration. Failed Intel and ORCD manifests and cleanup are complete above.
