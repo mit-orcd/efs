@@ -1,6 +1,6 @@
 # W165: serve-path damaged metadata — Task F
 
-Branch `agent/devel-task-f`, tested head `525cf3816`: TOTAL 509 FAIL 0 NOTRUN 14, twice (803/771 s); base `394f2b791`: 508/0/14 (694 s). Evidence `docs/status/w165-serve-path-damaged-row-20261026.md`. PASS TCP loopback; node9901/RDMA NOTRUN (host scope). W165 FIXED: stored-row halt, atomic abort and quorum routing. Cleanup blocked; private trees retained.
+Branch `agent/devel-task-f`, tested head `525cf3816`: TOTAL 509 FAIL 0 NOTRUN 14, twice (803/771 s); base `394f2b791`: 508/0/14 (694 s). Evidence `docs/status/w165-serve-path-damaged-row-20261026.md`. PASS TCP loopback; node9901/RDMA NOTRUN (host scope). W165 FIXED: stored-row halt, atomic abort and quorum routing. Approved private-tree cleanup complete; finalized evidence retained.
 
 ## Purpose and scope
 
@@ -182,15 +182,24 @@ deployed, reformatted or otherwise changed.
 All 2,204 tracked regular source files matched commit `525cf3816` both before
 and after qualification. `525cf3816/SOURCE-MANIFEST.sha256` SHA-256:
 `4c8d1367b2c12edb1db81c334ad601c9798fd575b8522cd1e2f3f5bfed4dcc0d`.
-The final artifact `SHA256SUMS` covers 512 retained files; verification passed.
+Before cleanup, the finalized artifact `SHA256SUMS` covered 512 files; verification passed.
 Its SHA-256 is:
 `8ad0fd04d46a11d4ec112f211937f55e775c39b470a0bf58cb8b5dc582b3804a`.
 
-**Cleanup blocked, bulk retained.** Automatic approval review rejected removal
-of `/home/maik/efs-taskF` and the two saved `runner-tmp` trees as broad cleanup
-not explicitly authorized. Nothing was deleted and no workaround was attempted.
-`RETENTION.txt` records this. Original failed synthetic stores, payloads and
-source/build trees remain on intel1; their bulk is outside the artifact hash
-manifest. Cleanup needs explicit user approval. This administrative hold does
-not turn the completed qualification into NOTRUN. Real-host TCP/RDMA gates
-remain NOTRUN and are not claimed closed by the loopback results.
+**Cleanup completed after explicit user approval.** Only `/home/maik/efs-taskF`
+and `525cf3816/gate-1/runner-tmp` and `gate-2/runner-tmp` beneath the evidence
+root were deleted, after process/mount checks. Finalized logs, results, command
+logs and `preserved-fixtures/` remain. No running cluster was changed.
+The original manifest and retention notes remain unchanged as historical records:
+344 surviving manifest entries verify, and all 168 removed entries belong to
+the two authorized scratch trees; there are no other missing entries or hash
+mismatches. The source/build and synthetic-store bulk is no longer retained;
+reproduction uses the tested commit and commands above.
+
+The separate cleanup receipt is
+`intel1:/home/maik/efs-artifacts/taskF-cleanup-20261026/cleanup-receipt.json`,
+SHA-256 `0a0f3dd35e26b98ed35806fa58908d41ca35fca0a104af6029b4476759965573`.
+Its sibling `RETAINED-SHA256SUMS` lists the 344 surviving entries, SHA-256
+`186003232d14f8623b7ff96192a8614529b515d24d25e3146b42c38185dd14c6`.
+The original 512-entry manifest is a pre-cleanup inventory, not a current
+all-files-present verification claim. Real-host TCP/RDMA gates remain NOTRUN.
