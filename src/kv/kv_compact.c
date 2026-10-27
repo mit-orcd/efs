@@ -897,8 +897,8 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
      * slots are free, not merely until one slot is. */
     /* D9: the apply path is the pump and holds h->mu. Waiting here for a
      * compaction (24 s for range 0) is a 24 s pump hold. Leave the
-     * memtable in place and let the compactor catch up; admission of new
-     * publish batches returns BUSY instead (efs_kv_lsm_l0_hot). */
+     * memtable in place and let the compactor catch up; the leader's
+     * apply_room admission watermark bounds the unflushed tail. */
     if (kv_l0_bytes(l) >= kv_l0_cap(l) && l->n_l0 > 0) {
         if (!l->bp_logged) {
             fprintf(stderr, "kv-compact: backpressure n_l0=%u\n", l->n_l0);

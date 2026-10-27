@@ -1097,6 +1097,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_raft_ack_window.py
 	python3 tests/test_k22_snapshot_import.py
 	python3 tests/test_k22_leader_admission.py
+	python3 tests/test_w166_authority.py
 	./tests/test_kv_lsm
 	python3 tests/test_server_processes.py
 	python3 tests/test_w125_harness.py
