@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""W166: publication's L0 refusal must also fence leadership/admission.
+"""W166: admission and leadership share one KV pressure predicate.
 
 Execute the production predicate and admission code against independent KV
-and Raft states. L0-full with free RAM used to strand flushes on a leader
-that saw no pressure. The live K22 fixture covers the real handoff.
+and Raft states. The predicate is the bounded unflushed memtable/WAL tail
+(apply_room) plus the unapplied-log watermark; a full L0 alone is not
+pressure (Task G: publication no longer refuses on it, wave 19). The live
+K22 fixture covers the real handoff.
 An optional source argument permits an unchanged-source negative control.
 """
 from pathlib import Path
@@ -20,11 +22,10 @@ code = r'''
 #include "efs/raft.h"
 #include <assert.h>
 #include <stdio.h>
-struct efs_kv { int room, hot; };
+struct efs_kv { int room, hot; }; /* hot: L0 at its cap, which must not count */
 struct efs_raft { int role; uint64_t lag, cap; };
 struct efs_raft_host { struct efs_kv *kv; uint64_t admit_busy; };
 static int efs_kv_lsm_apply_room(struct efs_kv *kv, int admit) { assert(admit == 1); return kv ? kv->room : 0; }
-static int efs_kv_lsm_l0_hot(struct efs_kv *kv) { return kv && kv->hot; }
 int efs_raft_role(const struct efs_raft *r) { return r->role; }
 int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *p) {
  *p=(struct efs_raft_log_progress){.unapplied=r->lag,.max_unapplied=r->cap};return 0;
@@ -35,20 +36,22 @@ int main(void) {
  struct efs_raft r={.role=EFS_RAFT_LEADER,.cap=1000};
  uint8_t create[]={EFS_MD_CMD_CREATE,0};
  assert(!host_kv_pressure(&h) && !host_admit(&h,&r,create,2));
- kv.hot=1; /* Full L0, plenty of RAM, no unapplied backlog. */
+ kv.hot=1; /* Full L0, plenty of memtable room, no unapplied backlog: not pressure. */
+ assert(!host_kv_pressure(&h) && !host_admit(&h,&r,create,2));
+ kv.room=EFS_ERR_BUSY; /* the tail bound itself refuses new work */
  assert(host_kv_pressure(&h) && host_admit(&h,&r,create,2)==EFS_ERR_BUSY);
  uint8_t cleanup[]={EFS_MD_CMD_DECIDE,EFS_MD_CMD_RESOLVE,EFS_MD_CMD_DROP};
  for(unsigned i=0;i<sizeof(cleanup);i++) assert(!host_admit(&h,&r,&cleanup[i],1));
  uint8_t batch[]={EFS_MD_CMD_TXN_BATCH,EFS_MD_CMD_RESOLVE};
  assert(!host_admit(&h,&r,batch,2));
- kv.hot=0;assert(!host_kv_pressure(&h) && !host_admit(&h,&r,create,2));
+ kv.hot=0;kv.room=0;assert(!host_kv_pressure(&h) && !host_admit(&h,&r,create,2));
  kv.room=EFS_ERR_BUSY;assert(host_kv_pressure(&h));
  assert(host_admit(&h,&r,create,2)==EFS_ERR_BUSY);
  kv.room=0;r.lag=749;assert(!host_admit(&h,&r,create,2));
  r.lag=750;assert(host_admit(&h,&r,create,2)==EFS_ERR_BUSY);
  r.role=EFS_RAFT_FOLLOWER;assert(!host_admit(&h,&r,create,2));
  h.kv=NULL;assert(!host_kv_pressure(&h));
- puts("KV leadership pressure: L0/RAM, clear, cleanup reserve, log watermark PASS");
+ puts("KV leadership pressure: memtable tail only (full L0 is not pressure), clear, cleanup reserve, log watermark PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-kv-pressure-') as d:

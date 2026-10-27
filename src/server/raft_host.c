@@ -5873,11 +5873,11 @@ static int host_tag_refused(uint8_t group, const uint8_t *cmd, uint32_t clen)
  * and meets only the hard cap in efs_raft_propose. Under h->mu. */
 static int host_kv_pressure(struct efs_raft_host *h)
 {
-    /* Publication already refuses at the L0 cap. A leader that cannot
-     * publish must yield on that same condition, even while its memtable
-     * still has room; waiting for the log cap strands client flushes. */
-    return h->kv && (efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY ||
-                     efs_kv_lsm_l0_hot(h->kv));
+    /* One predicate for admission and leadership pressure (W166): the
+     * bounded unflushed memtable/WAL tail. A full L0 alone is not pressure:
+     * publication no longer refuses on it (Task G, W166 option B), and
+     * apply_room bounds the committed tail while the compactor catches up. */
+    return h->kv && efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY;
 }
 
 static int host_admit(struct efs_raft_host *h, struct efs_raft *r,
