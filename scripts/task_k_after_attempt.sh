@@ -22,6 +22,18 @@ left.extend(x for x in Path('/proc/self/mountinfo').read_text().splitlines() if 
 if left:raise SystemExit('BLOCKED: earlier fixture processes/mounts remain: '+repr(left))
 PY
 [ "$?" -eq 0 ] || exit 125
+# Re-run the exact final regression against unchanged base product code.
+# Only this measurement driver is added, then moved out before gate enumeration.
+base=/tmp/efs-taskK-20261026/base
+cp scripts/task_k_routing.py "$base/scripts/task_k_routing.py" || exit 2
+TMPDIR="$base/tmp" EFS_TRANSPORT=tcp python3 -u "$base/scripts/task_k_routing.py" \
+ --port-min 19201 --out "$parent/base/final-negative" > "$parent/base/final-negative.log" 2>&1
+negative_rc=$?; echo "$negative_rc" > "$parent/base/final-negative-exit"
+mv "$base/scripts/task_k_routing.py" "$parent/base/final-negative-driver.py" || exit 2
+if [ "$negative_rc" -eq 0 ] || ! grep -q 'K44 retired-seed raft-mkfs:' "$parent/base/final-negative.log"; then
+ echo 'BLOCKED: final negative control did not fail with K44; retain evidence and investigate'
+ exit 1
+fi
 bash scripts/task_k_qualify.sh "$commit" "$parent/qualification-$commit" "$address"
 rc=$?
 # A failed candidate gate requires the untouched base on the same host/command.
