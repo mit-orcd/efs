@@ -1,4 +1,4 @@
-Branch agent/devel-task-j, tested head4c4446e02. Base4066f74df: TOTAL508 FAIL2 NOTRUN14 (616s); strict fixed K22/K36 3/3 each, zero client errors. Full corrected calibration FAIL: operator-workflow create EIO (509 commands, 1 FAIL, 14 NOTRUN, 738s); diagnostic pool 0 FAIL/14 NOTRUN (731s), cause unresolved. Evidence: docs/status/gate-budgets-refit-20261026.md. W166 candidate unifies L0 leadership/admission; qualification pending. Original Intel/ORCD FAILs retained; no budget fit.
+Branch agent/devel-task-j, tested candidate58b87f0ed: old-library regression fails20 intended checks; fixed full Raft normal/early, follower-bound and recipe PASS. Live qualification ACTIVE before three full calibration runs. Earlier Intel/ORCD FAILs and failed stores remain preserved; no budgets fitted. Evidence: docs/status/gate-budgets-refit-20261026.md.
 
 # W160 three-run budget refit — October 26, 2026
 
@@ -699,3 +699,32 @@ launcher, copied outside the source, run three serial8-job full gates at
 `~/efs-artifacts/taskJ-20261026/intel1-calibration-58b87f0ed/`. Every failure
 stops and is retained. The candidate remains **NOTRUN/pending qualification**
 while the predecessor diagnostic is active. No budgets have been fitted.
+
+### Corrective candidate controls PASS; live qualification active
+
+The predecessor100-fixture diagnostic completed without failure (8.456–13.109s,
+median10.691s); this does not resolve the earlier failure by repetition.
+It verified all2208 source files unchanged and finalized a106-file manifest,
+SHA256 of SHA256SUMS:
+`86cdb9d63a4470dd83500723c78ca6c8f61d5719c909c6ff42d0684cff1fd971`.
+The deterministic unchanged-source failure probe is also closed and verified
+(6 files), SHA256 of SHA256SUMS:
+`72fca62a062732c0b6ad2db39be8972c053a6fd735f0f4528b88fb44e2b0d579`.
+
+The waiting controller then built exact58b87f0ed in29.492s. Binary:
+`efsd 58b87f0ed (branch agent/devel-task-j, built 2026-10-27T05:18:38Z on intel1)`.
+The new complete unit linked against the unchanged44 library failed20
+assertions, all confined to compacted-prefix rejection and survival of the
+subsequent valid suffix; it had no unrelated failure. The fixed complete
+Raft suite passed in normal and early-read modes (0.027/0.029s), and
+follower-bound (0.017s) and recipe (1.028s) passed. Thus the corrective guard
+has a real failing control, not just a source-text test. The first two live
+operator checks passed8.811s/8.682s; remaining live checks are active.
+
+The controller's original order and fail-stopping behavior remain unchanged:
+10 operator runs, snapshot-import, three strict K22/K36 pairs, then three
+full serial8-job calibration gates only if all preceding checks pass.
+The exact old failure's packets were not captured, so causality is still
+an inference from the demonstrated mechanism and matching stuck state.
+Acceptance depends on the fixed-build gates, never on relabelling old FAILs.
+No fit, target reduction, post-refit result or real-host/RDMA PASS yet.
