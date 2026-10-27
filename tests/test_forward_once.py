@@ -122,3 +122,55 @@ refuse = prop.index('host_forward_refused(host_serving_forward, lid, h->raft_id,
 assert refuse < prop.index('rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);'), 'forward before refusal'
 print('forward once: a member-forwarded submit is served without a further forward (DIR_MIGRATE '
       'excepted), client submits forward one hop, the refusal hints the known leader PASS')
+
+# W166: execute the actual STATUS route block with controlled hosting/role
+# snapshots. A forwarded wrong-target request (including an unhosted data
+# member) must answer a hint without checking out another peer connection.
+start = entry.index('        /* A lagging storage member')
+stop = entry.index('\n        if(!host_hosts(h,group))', start)
+route = entry[start:stop]
+code = r'''
+#include "efs/protocol.h"
+#include "efs/meta_cmd.h"
+#include "efs/raft.h"
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+struct efs_raft_host { int raft_id, hosted, has, role, leader; };
+struct host_view { int has, role, leader; };
+static int host_serving_forward, remote_calls, local_calls, remote_rc;
+static int host_hosts(struct efs_raft_host *h,uint8_t group){(void)group;return h->hosted;}
+static void host_view_get(struct efs_raft_host *h,uint8_t group,struct host_view *v)
+{(void)group;*v=(struct host_view){h->has,h->role,h->leader};}
+static int host_remote_cmd(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,
+                          uint32_t clen,struct efs_msg_raft_mkfs_reply *out,int hint)
+{(void)h;(void)out;(void)hint;assert(group==0 && clen==1 && cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS);remote_calls++;return remote_rc;}
+static void run(struct efs_raft_host *h,struct efs_msg_raft_mkfs_reply *out)
+{
+    uint8_t body=EFS_MD_REQ_PUT_TICKET_STATUS,group=0;
+    const uint8_t *cmd=&body;uint32_t clen=1;int rc,hint=-1;
+''' + route + r'''
+    local_calls++;
+}
+static void reset(void){remote_calls=local_calls=remote_rc=0;}
+int main(void)
+{
+    struct efs_raft_host h={.raft_id=0,.hosted=1,.has=1,.role=EFS_RAFT_FOLLOWER,.leader=1};
+    struct efs_msg_raft_mkfs_reply out={0};
+    reset();host_serving_forward=0;run(&h,&out);assert(remote_calls==1 && !local_calls);
+    reset();host_serving_forward=1;run(&h,&out);assert(!remote_calls && !local_calls && out.rc==EFS_ERR_NOT_PRIMARY && out.leader_hint==1);
+    reset();h.hosted=0;run(&h,&out);assert(!remote_calls && !local_calls && out.rc==EFS_ERR_NOT_PRIMARY && out.leader_hint==1);
+    reset();h.leader=0;run(&h,&out);assert(!remote_calls && out.leader_hint==-1);
+    reset();h.has=0;run(&h,&out);assert(!remote_calls && out.leader_hint==-1);
+    reset();host_serving_forward=0;run(&h,&out);assert(remote_calls==1 && !local_calls);
+    reset();remote_rc=EFS_ERR_STALE;run(&h,&out);assert(remote_calls==1 && out.rc==EFS_ERR_STALE);
+    reset();h.hosted=h.has=1;h.role=EFS_RAFT_LEADER;host_serving_forward=1;run(&h,&out);assert(!remote_calls && local_calls==1);
+    puts("STATUS route: hosted/unhosted one-hop refusal, unknown/self hints, complete delegation and semantic refusal PASS");
+}
+'''
+with tempfile.TemporaryDirectory(prefix='efs-status-forward-') as d:
+    p = Path(d) / 't.c'
+    p.write_text(code)
+    subprocess.run(['cc', '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-I' + str(root / 'include'),
+                    str(p), '-o', str(p.with_suffix(''))], check=True)
+    subprocess.run([str(p.with_suffix(''))], check=True)
