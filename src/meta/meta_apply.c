@@ -2356,7 +2356,7 @@ int efs_meta_xattr_get(struct efs_kv *kv, efs_ino_t ino, const uint8_t *name,
     rc = xattr_load(kv, ino, k, &kl, blob, &blen);
     if (rc != EFS_OK)
         return rc;
-    rc = xattr_check_blob(blob, blen, &count);
+    rc = efs_kv_decode_result(kv, k, kl, xattr_check_blob(blob, blen, &count));
     if (rc != EFS_OK)
         return rc;
     pos = blen ? 4 : 0;
@@ -2399,7 +2399,7 @@ int efs_meta_xattr_list(struct efs_kv *kv, efs_ino_t ino, uint8_t *buf,
     rc = xattr_load(kv, ino, k, &kl, blob, &blen);
     if (rc != EFS_OK)
         return rc;
-    rc = xattr_check_blob(blob, blen, &count);
+    rc = efs_kv_decode_result(kv, k, kl, xattr_check_blob(blob, blen, &count));
     if (rc != EFS_OK)
         return rc;
     cap = buf ? *len : 0;
@@ -9452,14 +9452,14 @@ int efs_meta_apply_get_chunk_row(struct efs_kv *kv, efs_ino_t ino,
     rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
     if (rc != EFS_OK)
         return rc;
-    rc = unpack_chunk(val, vlen, out);
-    if (rc == EFS_OK) rc = efs_pack_chunk_identity(out, ino, inode_gen, chunk_index);
+    rc = efs_kv_decode_result(kv, key, klen, unpack_chunk(val, vlen, out));
+    if (rc == EFS_OK) rc = efs_kv_decode_result(kv, key, klen, efs_pack_chunk_identity(out, ino, inode_gen, chunk_index));
     if (rc != EFS_OK)
         return rc;
     nd = trailer_n(val, vlen);
     wr = nd < cap ? nd : cap;
     for (i = 0; i < wr && ds; i++) {
-        rc = trailer_at(val, vlen, i, &ds[i]);
+        rc = efs_kv_decode_result(kv, key, klen, trailer_at(val, vlen, i, &ds[i]));
         if (rc != EFS_OK)
             return rc;
     }
@@ -9467,7 +9467,7 @@ int efs_meta_apply_get_chunk_row(struct efs_kv *kv, efs_ino_t ino,
     if (newest && nd) {
         struct efs_meta_delta last;
 
-        rc = trailer_at(val, vlen, nd - 1, &last);
+        rc = efs_kv_decode_result(kv, key, klen, trailer_at(val, vlen, nd - 1, &last));
         if (rc != EFS_OK)
             return rc;
         *newest = last.seq;
@@ -9667,7 +9667,7 @@ int efs_meta_get_lane_epoch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     if (rc == EFS_OK)
         rc = efs_kv_get(kv, key, kl, val, &vn);
     if (rc == EFS_OK)
-        rc = unpack_lane(val, vn, &ln);
+        rc = efs_kv_decode_result(kv, key, kl, unpack_lane(val, vn, &ln));
     if (rc == EFS_OK)
         *epoch = ln.fenced_epoch;
     return rc;
@@ -10542,7 +10542,7 @@ int efs_meta_get_lane_swept(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     if (rc == EFS_OK)
         rc = efs_kv_get(kv, key, kl, val, &vn);
     if (rc == EFS_OK)
-        rc = unpack_lane(val, vn, &ln);
+        rc = efs_kv_decode_result(kv, key, kl, unpack_lane(val, vn, &ln));
     if (rc == EFS_OK)
         *swept_epoch = ln.swept_epoch;
     return rc;
@@ -10667,7 +10667,7 @@ int efs_meta_pack_candidate(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen
     memset(&lane, 0, sizeof(lane));
     rc = efs_kv_key_lane(efs_kv_lane_shard(ino, 0), ino, row.generation, 0, lk, &lkl);
     if (rc == EFS_OK) rc = efs_kv_get(kv, lk, lkl, lv, &lvl);
-    if (rc == EFS_OK) rc = unpack_lane(lv, lvl, &lane);
+    if (rc == EFS_OK) rc = efs_kv_decode_result(kv, lk, lkl, unpack_lane(lv, lvl, &lane));
     if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) return rc;
     /* D25: the packed image is masked by the inode history (and the base
      * clip); a lane EOF counts only at the current epoch. */
@@ -10683,15 +10683,15 @@ int efs_meta_pack_candidate(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen
     rc = pack_chunk_key(ino, row.generation, key, &kl);
     if (rc == EFS_OK) rc = kv_get_copy(kv, key, kl, val, sizeof(val), &vl);
     if (rc == EFS_ERR_NOT_FOUND) return EFS_ERR_STALE;
-    if (rc == EFS_OK) rc = unpack_chunk(val, vl, &out->base);
-    if (rc == EFS_OK) rc = efs_pack_chunk_identity(&out->base, ino, row.generation, 0);
+    if (rc == EFS_OK) rc = efs_kv_decode_result(kv, key, kl, unpack_chunk(val, vl, &out->base));
+    if (rc == EFS_OK) rc = efs_kv_decode_result(kv, key, kl, efs_pack_chunk_identity(&out->base, ino, row.generation, 0));
     if (rc != EFS_OK) return rc;
     efs_hash(val, vl, out->source_digest);
     out->content_epoch = pack_row_epoch(val, vl, &out->base);
     out->ndelta = trailer_n(val, vl);
     if (out->ndelta > EFS_CHUNK_DELTA_MAX) return EFS_ERR_PROTO;
     for (uint32_t i = 0; i < out->ndelta; i++) {
-        rc = trailer_at(val, vl, i, &out->deltas[i]);
+        rc = efs_kv_decode_result(kv, key, kl, trailer_at(val, vl, i, &out->deltas[i]));
         if (rc != EFS_OK) return rc;
         out->deltas[i].len = sweep_visible(&hist, out->deltas[i].content_epoch, 0,
                                            out->deltas[i].off, out->deltas[i].len);
