@@ -73,6 +73,7 @@ try:
             report=fixture/'report.json'
             if report.exists():
                 (a.out/(label+'-report.json')).write_bytes(report.read_bytes())
+    (a.work/'gate-tmp').mkdir(exist_ok=True)
     rc=run('gate',['bash','scripts/make_test_summary.sh'],plain,
         dict(EFS_TEST_TARGET='test-all',EFS_TEST_JOBS='8',TMPDIR=str(a.work/'gate-tmp')))
     for name in ('summary.txt','timings.tsv','progress.txt','enum.log','build.log','cmds.txt','cmds.raw'):
