@@ -13751,10 +13751,34 @@ static int host_formation_notify(struct efs_raft_host *h, const struct efs_membe
         struct efs_msg_raft_mkfs_reply rep;
         if (p->id == h->s->id)
             continue;
-        int r = host_rpc_submit(h, (int)p->id - 1, EFS_RAFT_GROUP_SHARD, cmd,
-                                (uint32_t)(1 + rlen), &rep, 5000);
-        if (r == EFS_OK)
-            r = rep.rc;
+        /* A restarted member can already serve Raft/status while this
+         * sender's peer pool is still in its failed-connect backoff. The
+         * notice is idempotent (one committed membership history), so ride
+         * transient transport/admission refusal inside the existing 5 s
+         * notice budget rather than reporting NET immediately. Identity or
+         * encoding refusals are never retried. Preserve any caller scope. */
+        uint64_t previous = efs_net_deadline_ms();
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        uint64_t deadline = (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000 + 5000;
+        if (previous && previous < deadline) deadline = previous;
+        efs_net_set_deadline_ms(deadline);
+        int r = EFS_ERR_BUSY, tries = 0;
+        while (efs_net_remaining_ms(1)) {
+            tries++;
+            r = host_rpc_submit(h, (int)p->id - 1, EFS_RAFT_GROUP_SHARD, cmd,
+                                (uint32_t)(1 + rlen), &rep, efs_net_remaining_ms(5000));
+            if (r == EFS_OK) r = rep.rc;
+            if (r != EFS_ERR_BUSY && r != EFS_ERR_NET && r != EFS_ERR_IO &&
+                r != EFS_ERR_AGAIN) break;
+            int left = efs_net_remaining_ms(50);
+            if (!left) break;
+            usleep((unsigned)left * 1000);
+        }
+        efs_net_set_deadline_ms(previous);
+        if (tries > 1)
+            fprintf(stderr, "raft-host: membership notice node %u: %d attempts rc=%d\n",
+                    p->id, tries, r);
         if (r != EFS_OK && ml < sizeof(missed))
             ml += (size_t)snprintf(missed + ml, sizeof(missed) - ml, "%snode %u at %s:%u "
                                    "(rc=%d)", ml ? ", " : "", p->id, p->addr, p->port, r);
