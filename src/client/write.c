@@ -247,6 +247,7 @@ struct put_id {
     uint64_t gen;
     uint64_t seq; /* dcache snapshot seq of this PUT (0 = unordered) */
     uint64_t span_base_gen; /* immutable base observed by this span's PUT */
+    uint8_t stale_retry; /* one unchanged-view retry, without another physical PUT */
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     uint32_t delta_off;
@@ -369,6 +370,7 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
 {
     struct put_id *p;
     uint64_t superseded = 0;
+    uint8_t stale_retry = 0;
 
     if (!ino || !gen || ino == PUTID_TOMB || !ticket || ticket->object != gen)
         return;
@@ -387,6 +389,8 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
         pthread_mutex_unlock(&g_putid_mu);
         return;
     }
+    if (p && p->gen == gen && p->seq == seq && p->put_seq == ticket->id.seq)
+        stale_retry = p->stale_retry;
     if (p && p->gen != gen)
         superseded = p->gen;
     if (!p) {
@@ -409,6 +413,7 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
     p->gen = gen;
     p->seq = seq;
     p->span_base_gen = span_base_gen;
+    p->stale_retry = stale_retry;
     memcpy(p->nodes, nodes, sizeof(p->nodes));
     memcpy(p->cks, cks, sizeof(p->cks));
     p->delta_off = delta_off;
@@ -1514,6 +1519,61 @@ static int stale_sent_cmp(const void *a, const void *b)
     return x->ci < y->ci ? -1 : x->ci > y->ci;
 }
 
+struct stale_retry_view {
+    efs_ino_t ino;
+    uint64_t generation;
+    int rc;
+    struct efs_msg_inode_writer_view_reply authority;
+};
+
+/* A transaction can abort on admission/lock BUSY while its chunk mapping
+ * did not change. Its uploaded immutable body is still owned: retry that
+ * object under the next publication id, rather than settle it REJECTED and
+ * upload identical bytes again. This is never an ACK. The server rechecks
+ * the ticket, CAS and atomic unit. One such retry per exact PUT keeps a
+ * terminal ticket or a persistent semantic refusal on the normal replay
+ * path; the existing REPORT attempt/deadline bounds are unchanged. */
+static int stale_retry_owned(const struct efs_chunk_rec *r, uint64_t seq,
+                              const struct efs_chunk_entry *ce, int absent,
+                              struct stale_retry_view *view)
+{
+    int keep = 0;
+    if (!seq || !r->put_seq || !r->file_generation || r->delta_len ||
+        !(r->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
+        (r->publish_epoch && !(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH)))
+        return 0;
+    /* No inference from our staging placeholder on an absent server row. */
+    if (r->base_gen == EFS_CHUNK_BASE_UNCOND ? !absent :
+        r->base_gen != (absent ? 0 : ce->generation))
+        return 0;
+    if (r->delta_base_n != (absent ? 0 : ce->ndelta) ||
+        r->delta_base_seq != (absent ? 0 : ce->delta_seq))
+        return 0;
+    /* One fresh FileID/epoch proof per inode in this repull round, not one
+     * network round-trip per chunk of a large atomic write. No global cache. */
+    if (view->ino != r->ino || view->generation != r->file_generation) {
+        view->ino = r->ino;
+        view->generation = r->file_generation;
+        view->rc = efs_client_rpc_writer_view(r->ino, r->file_generation,
+                                             r->chunk_index, &view->authority);
+    }
+    if (view->rc != EFS_OK || view->authority.generation != r->file_generation ||
+        view->authority.authority_epoch != r->publish_epoch)
+        return 0; /* a truncate/FileID change needs ordinary repull/replay */
+    pthread_mutex_lock(&g_putid_mu);
+    struct put_id *p = putid_find(r->ino, r->chunk_index);
+    if (p && !p->stale_retry && p->gen == r->chunk_generation && p->seq == seq &&
+        p->put_seq == r->put_seq && p->file_generation == r->file_generation &&
+        p->publish_epoch == r->publish_epoch &&
+        !memcmp(p->nodes, r->nodes, sizeof(p->nodes)) &&
+        !memcmp(p->cks, r->checksums, sizeof(p->cks))) {
+        p->stale_retry = 1;
+        keep = 1;
+    }
+    pthread_mutex_unlock(&g_putid_mu);
+    return keep;
+}
+
 /* sent[0..nsent) and sent_seq: the records the STALE round carried and their
  * snapshot seqs. A chunk is done only when the host holds the object that
  * round SENT. The putid and the local table can already name a newer PUT
@@ -1529,7 +1589,8 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
 {
     struct stale_pair *pp, *rp = NULL;
     struct stale_sent *sx = NULL;
-    uint64_t n = 0, i, runs = 0, replayed = 0, committed = 0;
+    struct stale_retry_view reuse = {0};
+    uint64_t n = 0, i, runs = 0, replayed = 0, committed = 0, retained = 0;
     uint64_t t_start = report_mono_ms();
     int error = EFS_OK;
     static int dbg_s = -1; /* any thread may be first: atomic, local copy (TSan) */
@@ -1679,6 +1740,11 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
             i = j;
             continue;
         }
+        if (stale_retry_owned(&obj, object_seq, &ce, pp[i].absent, &reuse)) {
+            retained++;
+            i = j;
+            continue;
+        }
         struct efs_chunk_entry observed = ce;
         if (pp[i].absent)
             memset(&observed, 0, sizeof(observed));
@@ -1696,13 +1762,14 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
             error = replay_fan_run(rp, replayed);
         /* Always logged when a round replayed: this is the wall the
          * REPORT budget pays for (chunks = snapshot entries pulled). */
-        if (dbg || replayed)
+        if (dbg || replayed || retained)
             fprintf(stderr,
                     "report-stale: chunks=%llu runs=%llu committed=%llu "
-                    "replayed=%llu pull_ms=%llu replay_ms=%llu\n",
+                    "replayed=%llu retained=%llu pull_ms=%llu replay_ms=%llu\n",
                     (unsigned long long)n, (unsigned long long)runs,
                     (unsigned long long)committed,
                     (unsigned long long)replayed,
+                    (unsigned long long)retained,
                     (unsigned long long)(t1 - t_start),
                     (unsigned long long)(report_mono_ms() - t1));
     }
