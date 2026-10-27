@@ -1620,14 +1620,15 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
-[Task I RSS confirmation](../status/task-i-20261026.md): **node9900 RDMA and TCP
-FAIL on load-client RSS** (+15.25/+17.72% vs 5%); both verify 2080 exact
-payloads, bounded storage and drain within 150 s. A separate allocator
-snapshot diagnostic is RUNNING; no memory fix yet. Xorinox RSS/D4 PASS;
-original gate TOTAL 508 FAIL 1 NOTRUN 13 (818s). Setup fix targeted PASS,
-fixed-source full gate RUNNING after G's completed handoff. Both nuc base
-attempts INCOMPLETE; original nuc failures remain unclassified. Captures
-hashed and retained, qualification INCOMPLETE.
+[Task I RSS confirmation](../status/task-i-20261026.md): candidate `971100542` now
+includes committed devel `091d9ea5e` and native four-arena startup policy
+`bc86327c6`. Native allocator regression PASS (4 arenas vs 25 unfixed).
+Uninstrumented xorinox hour+gate RUNNING; node9900 RDMA/TCP QUEUED behind
+the original allocator diagnostic (20-minute data shows substantial free
+arena retention; 40/60 pending). Previous hardware runs remain FAIL; prior
+fixed-test gate TOTAL 509 FAIL 2 NOTRUN 13 (805s), with signatures addressed
+by integrated devel corrections. Nuc comparisons remain INCOMPLETE.
+Qualification INCOMPLETE; no candidate memory PASS claimed.
 
 [Wave 18 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`08701031d`; gate at the same commit)**: Task K, K44/W167 ([evidence](../status/k44-retired-replica-routing-20261026.md)): a retired replica never answers for its group — forwarded commands get NOT_PRIMARY with the live leader's hint, local proposals and applied-waits route to live voters instead of waiting on the frozen cursor, routing uses the current voter set, `raft-mkfs` on a member without a group-0 replica forwards the whole operation, a retired replica stops exporting snapshots; formation notices ride transient peer refusals within their 5 s budget; `raft-change` checks convergence at the live responder. orcd-mini (RDMA): fresh formation, online fourth member, 27 management checks through the seed, POSIX core 218/218, two-client 68/68 PASS; orcd-mini now runs Task K's build `00e85a299531`. intel2 `make test-all` (8 jobs): 510 commands in 737 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 4 (k33_client_view 26.0/25, k38_shared_chunk 43.3/35, stop_progress 63.3/50, k22_leader_admission 30.4/30 s: intel2 runs slower than the intel1 refit).
 

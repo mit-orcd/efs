@@ -891,12 +891,13 @@ round says which physical or software limiter it hit.
 - [ ] **F1** Unit/integration, enabled-feature and applicable memory/concurrency
   checks have explicit PASS/FAIL/NOTRUN results. Docs and code tests both report;
   an unavailable diagnostic is disclosed, never silently counted as passed.
-  **Task I reviewed Oct 27: node9900 RDMA/TCP FAIL on load-client RSS
-  (+15.25/+17.72% vs 5%); payload/storage/drain checks pass. Allocator
-  diagnostic RUNNING. Xorinox RSS/D4 PASS; original gate 508/1 FAIL/13
-  NOTRUN; setup fix targeted PASS, full gate RUNNING. Nuc stored-data FAIL
-  remains open; both base attempts INCOMPLETE. No overall qualification
-  PASS ([evidence](task-i-20261026.md)).**
+  **Task I reviewed Oct 27: candidate `971100542` integrates devel
+  `091d9ea5e` plus fixed native allocator arenas `bc86327c6`; concurrent
+  allocator regression PASS (4 vs 25 unfixed). Candidate xorinox hour+gate
+  RUNNING; node9900 uninstrumented RDMA/TCP QUEUED behind the original
+  diagnostic. Prior hardware RSS FAIL and two prior full-gate failures
+  remain recorded; nuc comparisons INCOMPLETE. No candidate qualification
+  PASS yet ([evidence](task-i-20261026.md)).**
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;
   [evidence](f1-memory-concurrency-gates-20261025.md)):** `make leak-check`
