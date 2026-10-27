@@ -1,4 +1,4 @@
-Branch agent/devel-task-j, tested head4c4446e02. Base4066f74df: TOTAL508 FAIL2 NOTRUN14 (616s); strict fixed K22/K36 3/3 each, zero client errors. Full corrected calibration RUNNING. Evidence: docs/status/gate-budgets-refit-20261026.md. W166 candidate unifies L0 leadership/admission; qualification pending. Original Intel/ORCD FAILs retained; no budget fit.
+Branch agent/devel-task-j, tested head4c4446e02. Base4066f74df: TOTAL508 FAIL2 NOTRUN14 (616s); strict fixed K22/K36 3/3 each, zero client errors. Full corrected calibration FAIL: operator-workflow create EIO (509 commands, 1 FAIL, 14 NOTRUN, 738s); diagnosis active. Evidence: docs/status/gate-budgets-refit-20261026.md. W166 candidate unifies L0 leadership/admission; qualification pending. Original Intel/ORCD FAILs retained; no budget fit.
 
 # W160 three-run budget refit — October 26, 2026
 
@@ -430,3 +430,25 @@ The controller automatically started full calibration run1 at eight jobs
 after these checks. Its new fast regression makes the recipe509 commands.
 No corrected full-gate result, budget fit or final closed manifest is claimed
 until all three runs finish and their retained source/timings are validated.
+
+### Full corrected gate stopped: operator-workflow EIO
+
+The first full gate at `4c4446e02` ended **FAIL**: 509 commands, 1 FAIL,
+14 NOTRUN, 738s, build0s. Command446 (`tests/test_operator_workflows.py`)
+failed opening a file for creation immediately after requesting follower
+resync, at line107; its wall42.8s exceeded its old30s estimate. Neither
+this failed cost nor the gate wall is a calibration input. The controller
+stopped before runs2/3. Raw summary, timing and traceback remain at
+`intel1:/home/maik/efs-artifacts/taskJ-20261026/intel1-calibration-4c4446e02/run-1/`.
+The original fixture deleted its daemon/client logs even on failure, so
+that run's root cause is **unclassified**, not assumed to be W166.
+
+One isolated diagnostic on the same binaries passed all operator checks;
+it does not reverse the full-gate FAIL. It used `EFS_OPS_KEEP=1`, with raw
+output and stores temporarily retained for this open investigation at
+`intel1:/home/maik/efs-artifacts/taskJ-20261026/operator-4c4446e02/`.
+The diagnostic change now records the exact operation and all three live
+Raft status replies before cleanup, and automatically retains failed
+fixtures. Assertions, deadlines, slots and product code are unchanged.
+The next pool run is diagnostic, not permission to retry into PASS or
+fit budgets while this failure remains unresolved.
