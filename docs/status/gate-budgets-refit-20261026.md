@@ -609,3 +609,26 @@ series now uses only `EFS_RAFT_AE_DBG=1` to reduce tracing overhead:
 assertions/timeouts remain exactly93d96f8e6. The purpose is the missing
 AppendEntries transition trace after a successful snapshot, not additional
 successful repetitions. No fit or post-refit gate has started.
+
+### Pinpoint the stopped replica's fail-closed transition
+
+The AE-only trace series also completed20/20 without a failure; it does not
+close the reproduced EIO. Source inspection identifies another necessary
+piece of evidence: `fence_storage` makes a replica follower with leader-1,
+sets commit back to applied and refuses further Raft traffic, matching the
+captured node2 status. That is a **hypothesis**, since the old function
+logged no call site; the retained capture alone does not establish it.
+
+Diagnostic commit `44cc4e3e227466aa3bec2d938444ca81851f1ced` adds one log line
+only on the first storage-fence transition, naming its function/line, term,
+commit/applied/snapshot and resync state. The fence and all decisions remain
+unchanged. No flag, format change, timeout change or assertion change.
+Source `intel1:~/efs-taskJ4/src-44cc4e3e2` is isolated from the failed93
+source/stores. Controller `~/efs-taskJ4/fence-diagnostic.py`, screen
+`taskJ-fence-diagnostic`, waits for the preceding trace series to finish,
+then builds, runs full Raft units in both modes, and tries at most20 fresh
+operator fixtures, stopping at its first failure. Verbose tracing is off.
+Output is `~/efs-artifacts/taskJ-20261026/operator-fence-44cc4e3e2/`.
+Build and both unit modes passed; the first three operator checks passed.
+This is diagnostics only; no calibration or qualification claim follows
+from clean repetitions, and no prior failed evidence is changed.
