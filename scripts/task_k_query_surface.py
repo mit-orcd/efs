@@ -61,7 +61,9 @@ try:
     (a.out/'policy-get.txt').write_text(out)
     assert rc==0 and 'rc=0' in out,out
     version_no=re.search(r'version=(\d+)',out).group(1)
-    rc,out=kd.mgmt(env,'commands-policy',c.ep(1),'set','7',version_no)
+    mask=re.search(r'mask=(\d+)',out).group(1)
+    assert mask=='3','private cluster must have both commands-policy bits enabled: '+out
+    rc,out=kd.mgmt(env,'commands-policy',c.ep(1),'set',mask,version_no)
     (a.out/'policy-set.txt').write_text(out)
     assert rc==0 and 'rc=0' in out,out
     assert kd.fuse_ok(),'NOTRUN: FUSE prerequisites absent'
