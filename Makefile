@@ -787,6 +787,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_client_allocator.py
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
 	python3 tests/test_recorder_stop.py
@@ -1124,6 +1125,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_storage_root_inventory.py
 	python3 tests/test_efs_commands.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_client_allocator.py
 	python3 tests/test_storage_principles.py
 	python3 tests/test_session_latch_tsan.py
 	./tests/test_kv_insertion_buffer

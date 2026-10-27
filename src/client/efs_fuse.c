@@ -23,6 +23,9 @@
 #include "efs/rdma.h"
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
@@ -7393,8 +7396,27 @@ ready:
     return EFS_OK;
 }
 
+/* A6/F1: libfuse and RPC workers share four malloc arenas, independently
+ * of CPU count and whether the launcher was used. Per-core glibc defaults
+ * retained tens of MiB of free holes across 74+ arenas under fixed-set
+ * rewrites on large hosts. This is process policy, never a mode switch.
+ * Other allocators do not expose glibc's per-core arena policy. */
+static int fuse_allocator_init(void)
+{
+#ifdef __GLIBC__
+    if (!mallopt(M_ARENA_MAX, 4))
+        return -1;
+#endif
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
+    /* Before transport, client pools or FUSE start any worker threads. */
+    if (fuse_allocator_init()) {
+        fprintf(stderr, "efs-fuse: cannot establish allocator arena policy\n");
+        return 1;
+    }
     if (argc==2 && !strcmp(argv[1],"--help-fuse")) {
         puts("efs-fuse - FUSE option reference\n");
         fuse_cmdline_help();fuse_lowlevel_help();return 0;
