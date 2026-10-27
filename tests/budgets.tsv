@@ -97,4 +97,4 @@ python3 tests/test_w159_apply_wait.py	70	2
 python3 tests/test_decoder_refusal.py	120	1	Three private loopback daemons: refusal, ReadIndex, CREATE and orderly stop
 python3 tests/test_k22_snapshot_import.py	380	2	drives both groups four snapshot windows past a stopped follower before the install can fire (~230 s of load), then verifies catch-up, RSS and byte-exact read-back
 python3 tests/test_k22_leader_admission.py	290	2	fills the leader's small KV budget past the admission watermark (organically, ~190 s), then proves the move, the drain and clean client service
-python3 tests/test_w166_authority.py	40	1	W166: compressed 2 MiB metadata fill, then a single read-routing fault; 31.09 s alone on xorinox x 1.25 rounded up to 5 s; short fill followed by idle single-file checks
+python3 tests/test_w166_authority.py	40	1	W166: compressed 1 MiB L0 fill with 4 MiB KV budget, then a read-routing fault; 28.8 s in the xorinox 8-job pool x 1.25 rounded up to 5 s

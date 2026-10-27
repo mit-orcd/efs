@@ -1,236 +1,196 @@
-# W166 — flush-deadline decision memo (October 26, 2026)
+# W166 — option B implementation and xorinox qualification
 
-Report: branch `agent/devel-task-g`, product fix `878c00e96`, qualification
-build `430cd676c`, base `394f2b791`; diagnostic quota revision `cd2bfcf7c`.
-Full gate `ec7c639d7`: RUNNING with one pre-fault setup failure;
-corrected-helper full gate `23ead82d1` pending. Base full gate NOTRUN.
-Evidence: `docs/status/w166-close-eio-flush-deadline-20261026.md`.
-W166 REPRODUCED on unchanged base product binaries: 36 untraced close-EIOs,
-12 forensic close-EIOs. Product fix `878c00e96` passes both targeted cases;
-full qualification pending. Multi-host/RDMA NOTRUN.
-**Option B authorized; implementation qualification in progress; W166 remains OPEN.**
+Report: `agent/devel-task-g`, based on devel `394f2b791`; not merged or pushed.
+**DECIDED; the two reproduced responsive-node pressure paths are implemented
+and qualified on xorinox.** Product changes: `878c00e96`, `a72adf70a`.
+Final tested source: `4bcd52ca0`. Original full-process SIGSTOP / production
+snapshot-window acceptance and live RDMA/multi-host gates remain **NOTRUN**;
+this does not close every scenario in the original W166 item.
 
-## Authorized implementation — qualification RUNNING
+Final full-gate result, preserved verbatim:
+`TOTAL 510 FAIL 1 NOTRUN 13 STATUS FAIL (833s) OVERBUDGET 1 BUILD 11s`.
+The sole failure is `test_k38_shared_chunk_pressure.py`, also failing in the
+unchanged-base full gate. **No new full-gate failures; no unconditional suite
+PASS.** The shared-chunk acceptance remains open and its cause unclassified.
 
-User decision: **“yes, implement option B in your branch, keep the 30 second
-deadline, fix both failure paths and finish the qualification on xorinox.”**
-Implementation `878c00e96`; instrumentation-only baseline `ddff5fcfd`
-(parent `6a57fb4f6`, original product `394f2b791`). Both have identical
-fault instrumentation; the baseline includes no product fix.
+## Decision and implementation
 
-- PUT STATUS on a hosted follower delegates the complete owner/session,
-  registered-participant, local-floor and exact-ticket check to the lane
-  leader. A forwarded follower answers NOT_PRIMARY; it never forwards again.
-  STATUS uses the bounded read pool rather than the mutation pool. The
-  storage member still enforces its own guarded session fence before I/O.
-- REPORT no longer treats a full L0 alone as a proposal refusal. The live
-  reproduction shows that it can stay full while the bounded memtable tail
-  has room and leadership remains stable. The leader's existing KV-memory
-  and unapplied-log admission watermarks, and apply-side hard bounds, remain
-  enforced. The old REPORT-only early refusal caused an 8+8 s failure even
-  with no blocked apply. Receipt identity, resolution and unknown-outcome
-  semantics are unchanged.
+User: **“yes, implement option B in your branch, keep the 30 second deadline,
+fix both failure paths and finish the qualification on xorinox.”**
 
-`tests/test_w166_authority.py` on xorinox: baseline **FAIL in both cases**,
-REPORT EIO at 16.061 s, forced follower STATUS EIO at 6.505 s (the immediate
-fault reaches the client's 128-attempt cap sooner than a real 400 ms proof
-wait). Fixed build **PASS**, REPORT 0.0097 s, PUT 0.0127 s; both exact via a
-fresh mount. Wall 31.09 s. The actual L0 cap was reached before the REPORT
-case with memtable admission headroom; metadata load stopped first. This
-is a separate deterministic mechanism test, not a timing replay of the
-original 30 s captures. Both log sets are retained under
-`/home/maik/efs-taskG-impl-20261026/` pending verified stable-copy/pruning.
+The decision memo recommended B because a healthy quorum already held the
+needed authority while a storage member's KV prefix was parked. Extending a
+wait cannot help that replica make progress. Alternative A, progress-bounded
+renewal, would need operation-relevant progress evidence, bounded retained
+memory and coordinated PUT/REPORT/receipt budgets; it was not implemented.
 
-First full fixed-build pressure replay, 300 s, original **1 GiB/member**:
-**FAIL — fixture quota exhausted**, not a W166 EIO reproduction. There were
-4,615 ENOSPC failures (2,346 closes, 2,269 writes), **zero EIO**, and all
-21,996 confirmed-close files read back exactly after release. Wall 490.36 s.
-The retained diagnostic's generic `REPRODUCED` label means a close failed;
-the errno/event records establish quota exhaustion rather than W166. No
-failed path is counted as a successful payload. The first ENOSPC was at
-255.52 s, after the corrected path had made substantially more progress
-than the original failing binary. This failure remains in the evidence.
+- **PUT authority:** a hosted follower delegates the **complete** ticket
+  STATUS request to the lane leader. The receiver performs fresh owner/session
+  and registered-participant checks, the lane read proof, session floor and
+  exact immutable-ticket lookup against the KV it actually reads. A remotely
+  obtained ReadIndex is never permission to inspect stale local KV. STATUS
+  uses the bounded read pool/budget, not the mutation pool. Forwarded wrong
+  targets, including unhosted members, answer NOT_PRIMARY without another hop.
+  The storage member's guarded durable session fence still precedes its write.
+- **REPORT:** a full L0 alone no longer refuses publication while the bounded
+  memtable/WAL tail still has room. The old REPORT-only check caused repeated
+  BUSY before the actual capacity gate fired, exhausting 8 s REPORT + 8 s
+  resolution. Leader-only KV-memory/unapplied-log admission, apply-side bounds,
+  receipt identities and unknown-outcome semantics remain enforced.
 
-A separate repeat uses an explicit **8 GiB/member** quota; pressure faults,
-workload, concurrency, 300 s duration and deadlines are unchanged. This is
-a declared fixture change, not an ignored ENOSPC or a clean rerun of the
-1 GiB profile. Its driver records the quota and product revision; its exact
-driver is `cd2bfcf7c`, binaries/source `430cd676c` (identical product code).
-The earlier diagnostic revision did not record its quota field; its
-committed default and command establish 1 GiB.
+The **30,000 ms outer flush deadline and 8 s inner budgets are unchanged**.
+No new behavior selector, BUSY-to-down classification, quota-to-degraded
+conversion, optimistic receipt inference or weakened protection was added.
+The fault hook is compiled only under `EFS_FAULTS` and inventoried in A6.
 
-The corrected 8 GiB replay (`f00c91c41`, 300 s) completed with **zero syscall
-errors and all 24,018 successful-close payloads exact** on post-release
-same-mount readback. Diagnostic rc 2 / NOT_REPRODUCED; wall 508.90 s including
-verification/cleanup. Close p50/p99/max: 21.68 / 191.64 / 2,871.57 ms. These
-are scoped observations under the fault workload, not a throughput comparison
-or a cold-restart/durability proof.
+## Environment and results
 
-Five standalone K22 runs on `f00c91c41` **PASS 5/5**, with 3,985 / 4,334 /
-4,750 / 4,470 / 3,992 successful client writes. Every run reaches the 3/4
-admission watermark, moves leadership, and drains after release; no early
-or late client-error findings. K22 does not verify every payload; the full
-payload claim above belongs only to the separate diagnostic readback.
+Xorinox / user `maik`, 16 logical CPUs, Linux
+`6.12.0-211.67.1.el10_2.x86_64`, XFS home filesystem, GCC and system libfuse
+3.16.2. Private three-member loopback clusters, free reserved ports, TCP,
+O_DIRECT, two storage writers/member, product background maintenance defaults.
+Only node 1 has compressed KV limits and a parked compactor during pressure.
+No production cluster, `efs` user's mount, protected port or `/data1/efs` store
+was operated on. Build logs, compiler/hardware inventory and binary hashes
+are retained; the final daemon identifies as `4bcd52ca0` on this branch.
 
-Product follow-up `a72adf70a` makes the STATUS one-hop guard cover unhosted
-members too; three-node behavior is unchanged. `ec7c639d7` adds extracted
-production-code tests for STATUS's bounded read scope, separate read pool,
-semantic refusal and hosted/unhosted wrong-target refusal (TCP/RDMA transport
-mocks, **not live RDMA**). Those unit tests pass locally.
+| Experiment | Actual outcome |
+| --- | --- |
+| Unchanged `394f2b791`, 300 s pressure, 1 GiB/member; driver `4a0d7460f` | **FAIL**, 36 close EIOs at 29,999.56–30,001.29 ms; PUT consumed the budget. All 331 confirmed-close files exact on the same mount. |
+| Separate forensic run on the same product, 120 s; driver `7cdbe0f55` | **FAIL**, eight 30 s PUT failures and four 8+8 s REPORT/resolution failures. All 228 confirmed-close files exact on the same mount. Tracing is diagnostic, not a timing comparison. |
+| Instrumentation-only baseline `ddff5fcfd`, original 2 MiB deterministic fixture | **FAIL both cases:** REPORT 16.061 s; forced follower STATUS 6.505 s. No product fix in this baseline. |
+| Fix `878c00e96`, same 2 MiB fixture | **PASS:** REPORT 9.7 ms, PUT 12.7 ms; both exact through a fresh client. Wall 31.09 s. |
+| Fixed `430cd676c`, original 1 GiB/member, 300 s | **FAIL: quota exhaustion**, not a W166 EIO reproduction: 2,346 close ENOSPC + 2,269 write ENOSPC, zero EIO. All 21,996 acknowledged payloads exact on initial same-mount readback. Wall 490.36 s. Failures are retained, never promoted to success. |
+| First 8 GiB attempt, `430cd676c` | **HARNESS FAILURE before workload:** node 3 won formation; the driver assumed node 1 would lead. Retained separately. |
+| Corrected setup `f00c91c41`, 8 GiB/member, 300 s | **PASS scoped pressure replay:** zero syscall errors; all 24,018 acknowledged payloads exact on initial same-mount readback. Wall 508.90 s. Close p50/p99/max 21.68 / 191.64 / 2,871.57 ms. |
+| Five standalone K22 runs, `f00c91c41` | **PASS 5/5**, 3,985 / 4,334 / 4,750 / 4,470 / 3,992 successful writes; zero early or late client errors. Host refusal and the 3/4 backlog watermark observed, leadership moves, then each replica drains after release. These tests do not read every payload. |
+| Final 1 MiB deterministic fixture, baseline product `ddff5fcfd`, driver/helper `4bcd52ca0` | **FAIL both cases:** REPORT 16.008 s, PUT 6.507 s. The immediate STATUS fault reaches the 128-attempt cap sooner than the real 400 ms proof waits in the original 30 s captures. |
+| Final `4bcd52ca0`, same 1 MiB fixture | **PASS:** REPORT 9.98 ms, PUT 11.08 ms; both exact through a fresh client. Wall 20.35 s alone, 28.8 s / rc 0 in the full pool. |
+| Retained 1 GiB fixture, same-build orderly process restart + new FUSE client | **PASS:** all **21,996 / 21,996** acknowledged payloads exact, zero read errors; ready in 1.64 s; wall 189.62 s. |
+| Retained 8 GiB fixture, same-build orderly process restart + new FUSE client | **PASS:** all **24,018 / 24,018** acknowledged payloads exact, zero read errors; ready in 1.64 s; wall 417.42 s. |
 
-The first full gate (`ec7c639d7`) has a pre-fault **harness failure**: under
-the pool, `raft-step-down` returned documented BUSY because the requested
-formation voter was not caught up. No pressure fault or application work
-had started. It is preserved, not counted as a passing gate. `2b5b7d1ee`
-retries only this documented setup BUSY within the existing 30 s setup bound;
-unknown management errors still fail. `23ead82d1` adds a unit check for
-success after catch-up, perpetual BUSY expiry and immediate hard-error
-refusal. The final clean full gate remains pending. The 30 s application
-flush deadline has never changed.
+The 8 GiB replay is a **declared fixture change**: the repaired path made enough
+progress to exhaust the original 1 GiB quota. Memory limits, concurrency,
+300 s pressure and deadlines were unchanged. The pressure replay keeps the
+original 2 MiB L0 / 1 MiB memtable / 4 MiB KV budget. The dedicated regression
+uses a 1 MiB L0 cap with the same 4 MiB KV budget to reach the same full-L0 /
+remaining-memory condition faster. Four 2 KiB writers and four 16-worker
+metadata-load processes drive the pressure replay.
 
-W166 stays OPEN until that gate is finished. RDMA/multi-host NOTRUN.
+All **46,014** acknowledged pressure payloads were checked byte-for-byte after
+orderly full-process restarts through new clients, eliminating the writer's
+cache as their readback source. Verifier `71d856de6` checks matching binary
+identity, existing stores, original quota/endpoints, readiness, every recorded
+successful close, unmount and every daemon's exit. It neither retries failed
+reads nor counts failed writes. These are **not power-loss or OS-reboot proofs**;
+no claim is made that every failed/ambiguous write was absent or durable.
 
-## Original decision memo — choose the owner of the wait (superseded by authorization above)
+## Full gates and harness corrections
 
-**Recommendation: B, bounded authority redirection with the existing
-30-second outer flush deadline.** Approve that direction before implementation.
-The observation changes the proposed scope: faster *leader* fencing alone
-cannot fix a lagging storage member after leadership already moved.
+| Full `make test-all`, 8 jobs | Preserved result |
+| --- | --- |
+| First branch `ec7c639d7` | `TOTAL 509 FAIL 2 NOTRUN 13 STATUS FAIL (803s) OVERBUDGET 2 BUILD 23s`: pre-fault leadership-transfer BUSY and reclaim test cleanup. W166 regression itself passed. |
+| Unchanged base `394f2b791` | `TOTAL 508 FAIL 2 NOTRUN 13 STATUS FAIL (862s) BUILD 23s`: shared-chunk pressure EIO and the identical reclaim cleanup assertion. |
+| Final branch `4bcd52ca0` | `TOTAL 510 FAIL 1 NOTRUN 13 STATUS FAIL (833s) OVERBUDGET 1 BUILD 11s`: only the same shared-chunk pressure test. K22 rc 0 / 213.3 s, W166 rc 0 / 28.8 s, reclaim rc 0 / 15.0 s. |
 
-The untraced baseline produced 36 `close(2)` EIOs at 29,999.56–30,001.29 ms.
-Their PUT stage consumed the budget; REPORT took 0–1 ms. At the first failure,
-node 1 was already a follower with 1,497 unapplied entries; node 3 led group 0
-and the other two replicas were fully applied. At that first failure the
-unapplied count was below the 3/4 watermark: 1,497 versus 12,288 of node 1's
-16,384-entry cap. Its KV capacity gate had
-already refused proposals. This is an availability failure under the injected
-single-replica pressure, even with a working quorum.
+Setup now explicitly transfers leadership before arming faults instead of
+assuming the first election's winner. It retries only documented pre-fault
+catch-up BUSY in the existing transfer window; hard errors fail. The unit gate
+checks eventual catch-up, permanent BUSY expiry and immediate hard-error
+refusal. K22 failures retain their fixture automatically; five standalone
+runs explicitly used `--keep`.
 
-The separate traced run also exposed four shorter failures: PUT completed
-in 154–379 ms, then REPORT spent 8 seconds and receipt resolution another
-8 seconds before returning EIO with an unknown outcome. Eight additional
-closes exhausted the outer 30 seconds in PUT. Changing only the outer
-deadline would leave the inner limits unchanged.
+The reclaim failure was a **test path-length bug**. Its 256-byte cleanup
+command was 257 bytes at the first branch's nested TMPDIR, truncating the
+state-file name and leaving state behind after deleting its journal directory.
+The unchanged-base full pool reproduced the same `accept_range` assertion;
+39 short-path standalone/parallel controls passed. The test now sizes the
+buffer for all three paths and checks every formatting result; no reclaim
+product code or assertion was weakened. The longer-path standalone control
+and the final pool pass.
 
-| Choice | User latency / retained data | Failure behavior / code required |
-| --- | --- | --- |
-| **A: progress-bounded deadline renewal** | Can exceed today's 30 seconds if approved; dirty bytes, tickets and publication identities stay owned for longer. Requires a hard total cap and bounded in-flight memory. | A heartbeat, BUSY response, PENDING receipt or another replica applying is insufficient evidence that this operation is advancing. A genuinely parked replica makes no progress, so renewal alone cannot solve this reproduction. Requires operation-relevant progress evidence, cancellation/ownership rules and coordinated PUT, REPORT and receipt budgets. W159's server-local 400 ms grants / 2 s own-entry cap are a precedent, not an existing client protocol. |
-| **B: earlier refusal and authoritative redirection** | Keep the 30-second ceiling and leave time for publication. Avoid spending it repeatedly asking a replica that cannot serve the required authority. | First investigate forwarding the **complete existing PUT-ticket STATUS/session check** to a healthy authoritative voter when a hosted replica cannot answer. The server already forwards that request for non-hosted groups. Preserve fresh ReadIndex, exact ticket/session checks and the local storage fence. Separately route REPORT/receipt work around an incapable coordinator; the four shorter failures need their own deterministic gate. Prevent forwarding loops, stale hints and unsafe retry/receipt conclusions. |
+The final pool has one unrelated OVERBUDGET: geometry grow-a 122.1 s against
+120 s. W166's row is **40 s, one slot**: 28.8 s × 1.25, rounded up to 5 s.
+The D44 target stays 1,100 s; the budgeted gate stays below its existing bound.
+No deadline was increased to manufacture acceptance.
 
-Prefer B because the healthy quorum already has the authority needed to
-continue; waiting longer for the parked replica adds latency without making
-it catch up. This recommendation does **not** authorize treating BUSY as a
-dead member, acknowledging an undeclared two-fragment stripe, weakening
-session fences or changing full-member/ENOSPC policy. Keep the existing
-degraded-publication and rebuild contract for an actual unavailable member.
-If safe redirection cannot meet the bound, return that evidence for a further
-decision rather than silently extending it.
+**Shared-chunk acceptance remains OPEN.** Both base and final pool got EIO
+in `test_k38_shared_chunk_pressure.py` (one client's writers, REPORT/BUSY
+visible in captured tails). The first branch pool passed that case. This does
+not establish recurrence of K40's old PREPARE-abort bug, nor prove a new cause;
+no K38/K40 fix or closure is claimed. That test auto-cleaned its failed stores,
+so only its captured failure output/client tails remain, not a full replayable
+store capture. The 13 NOTRUNs cover unavailable RDMA hardware, cluster devops
+scripts, sanitizer/Valgrind runtimes and the normal-build follower-bound hook.
 
-**Decision requested:** authorize B with the 30-second bound unchanged, covering
-both the lagging-replica PUT authority path and the separate REPORT/receipt
-path? Task G §2 requires stopping here until that choice is made.
+## Original ladder and reproduction
 
-## Reproduction and exact ladder
+The original pressured member had **already stepped down** before the first
+30 s close failure: 1,497 unapplied entries versus its 12,288 admission
+watermark, while healthy voters applied. The forensic ticket for inode 237763,
+sequence 229, object `0x759a0134f4ab0209` sent fragments 0/1 once each to healthy
+nodes and fragment 2 **66 times** to node 1. The node refused each STATUS with
+NOT_PRIMARY; the data reply became BUSY and discarded the hint. Median resend
+gap was 452.55 ms. CLOSE-PROF: PUT 30,001 ms, REPORT 0 ms. The separate inode
+122898 had PUT 379 ms, REPORT/resolution 16,000 ms, unknown receipt outcome.
+Absent receipts are not abort proofs. The client's old `published degraded
+for rebuild` trace was local bookkeeping before publication, not durability
+or successful publication evidence.
 
-Production source/build: **devel `394f2b791`**, with no C changes.
-Diagnostic driver `4a0d7460f` for the untraced run; `7cdbe0f55` for the separate
-forensic run. Trace summarizer `c71677190`. No policy option is implemented.
-
-Environment: xorinox, 16 logical CPUs, Linux
-`6.12.0-211.67.1.el10_2.x86_64`, XFS home filesystem, user `maik` (UID 1000),
-system libfuse 3.16.2. Three fault-build loopback members, free ports, 1 GiB
-quota/member, two writers/member, TCP, O_DIRECT; one FUSE mount seeded at
-healthy node 2. Four 2 KiB payload writers and four 16-worker metadata-load
-processes mirror K22. Only node 1 has the 2 MiB L0 / 1 MiB memtable fault
-budgets and parked compaction; the derived KV budget is 4 MiB. Other nodes
-use defaults. Existing RPC/REPORT/write profiling switches are trace-only;
-the forensic run adds PUT-ticket logging and strace. No new setting.
-
-Build identity:
-`efsd 394f2b791 (branch devel, built 2026-10-27T01:15:22Z on xorinox)`.
-`identity.txt` retains the fault-daemon, client, management and bench binary
-hashes plus build/compiler identity. No existing cluster, `efs` user,
-protected port, or `/data1/efs` tree was touched.
-
-| Experiment | Result | Successful-close payload verification |
-| --- | --- | --- |
-| Base, no syscall tracing, 300 s pressure | **FAIL / REPRODUCED**, rc 1: 36 close EIOs; zero open/write errors; median failed close 30,000.51 ms. Total 312.05 s including drain/verification/cleanup. | All 331 confirmed files exact |
-| Same product binaries, separate 120 s forensic capture | **FAIL / REPRODUCED**, rc 1: 12 close EIOs, four REPORT/resolve failures at 16.15–16.38 s and eight PUT failures near 30 s. Total 132.65 s. | All 228 confirmed files exact |
-
-The traced timings are diagnostic, not a performance comparison or a clean
-rerun. Failed files are not promoted to successful writes, and no rollback
-or durability conclusion is drawn from later visibility. Reads above cover
-all files whose closes succeeded, not every unconfirmed failed attempt.
-Readback used the same mount after pressure ended; fresh-client, crash and
-physical-durability qualification are NOTRUN.
-
-One complete 30-second forensic ladder, inode **237763**, ticket sequence
-**229**, object **0x759a0134f4ab0209**, chunk 0:
-
-1. Fragments 0 and 1 each have one complete send, to healthy nodes 2 and 3.
-   The client records two ACKs; that is not a COMMIT/durability proof.
-2. Fragment 2 is sent **66** times to lagging node 1. The same ticket/object
-   identity is retained. First/last send epochs are
-   `1793064342.924233` / `1793064372.623914`; median gap **452.55 ms**.
-3. Node 1 logs **66** corresponding `put-upload refused fi=2 seq=229 rc=-15`
-   results. Its STATUS log names NOT_PRIMARY and a healthy-leader hint.
-   `efs_put_reply_status` maps that verdict to PUT BUSY; the data reply does
-   not carry the hint. K34 retries the missing fragment, retaining earlier
-   ACKs. The approximately 400 ms authority wait plus 50 ms retry pause is
-   consistent with the trace; all 66 send times remain in the analysis JSON.
-4. `CLOSE-PROF`: total **30001 ms**, PUT **30001 ms**, REPORT **0 ms**, rc -13.
-   `efs_fuse_flush_ino` exposes EIO. No REPORT receipt can prove publication
-   for this not-yet-reported close.
-
-The other class is explicit too: inode **122898** PUT **379 ms**, REPORT plus
-resolution **16000 ms**, total **16379 ms**, rc -1. Its logged publication
-`75a61127/1/18e23e801b2fa0f0:244` exhausted a 16-attempt BUSY/STALE ladder;
-resolution recorded four queries, two resends, `none=1/2`, and **unknown**.
-An absent receipt or unknown outcome is not an abort proof.
-
-The client's `published degraded for rebuild` line occurs in the local
-`degraded_record` bookkeeping before publication. It cannot establish that
-metadata was published or that the failed close met durability requirements.
-
-## Commands, retention and remaining gates
-
-Create a fresh private source tree under `$HOME`, using `git archive`
-(no macOS filesystem tar), then build and run in screen:
+From a clean private `git archive` on xorinox, build the chosen revision:
 
 ```sh
-make -j8 EFS_GIT_ID=394f2b791 EFS_GIT_BRANCH=devel \
-  EFS_GIT_DESCRIBE=394f2b791 all tests/faults/efsd
-TMPDIR="$HOME/efs-taskG-20261026/tmp" python3 -u scripts/w166_flush_diagnostic.py \
-  --work "$HOME/efs-taskG-20261026/run-untraced" --seconds 300
-# Separate fresh fixture and diagnostic-only tracing, after the first exits:
-TMPDIR="$HOME/efs-taskG-20261026/tmp" python3 -u scripts/w166_flush_diagnostic.py \
-  --work "$HOME/efs-taskG-20261026/run-traced" --seconds 120 --trace-client
-python3 scripts/w166_trace_summary.py \
-  "$HOME/efs-taskG-20261026/run-traced" --ino 237763
+make -j8 EFS_GIT_ID=4bcd52ca0 EFS_GIT_BRANCH=agent/devel-task-g \
+  EFS_GIT_DESCRIBE=4bcd52ca0 all tests/faults/efsd
+python3 -u tests/test_w166_authority.py
+# Original pressure: --quota 1G; declared extended-capacity fixture: 8G.
+python3 -u scripts/w166_flush_diagnostic.py --work "$HOME/PRIVATE/pressure" \
+  --seconds 300 --quota 8G --source-revision 4bcd52ca0
+for n in 1 2 3 4 5; do python3 -u tests/test_k22_leader_admission.py --keep; done
+EFS_GIT_ID=4bcd52ca0 EFS_GIT_BRANCH=agent/devel-task-g \
+  EFS_GIT_DESCRIBE=4bcd52ca0 EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 \
+  EFS_BUILD_JOBS=8 bash scripts/make_test_summary.sh
+# Verifier from 71d856de6; SOURCE is that fixture's matching binary tree.
+python3 -u scripts/w166_verify_retained.py --run "$HOME/PRIVATE/pressure" \
+  --source "$HOME/PRIVATE/source" --output "$HOME/PRIVATE/cold-read" --quota 8G
 ```
 
-Use the recorded driver revisions when reproducing these exact experiments;
-a fresh experiment has different inode/ticket values, selected from its own
-application log and CLOSE-PROF lines. Driver exits 1 on reproduced close
-failure, 2 if not reproduced, 3 on harness failure; it never retries a failed
-experiment into PASS. The writer records an `fstat` before each write for
-inode correlation; these are diagnostic workloads, not POSIX gate timing claims.
+Set TMPDIR beneath the private home-directory run root. Runs are sequential;
+retain each output under a unique name. Diagnostic rc 1 records a failed
+workload, rc 2 means no failure reproduced, rc 3 is harness failure; inspect
+errno and result JSON, never treat ENOSPC as the W166 EIO signature. For the
+baseline deterministic test, use binaries from `ddff5fcfd` (only fault
+instrumentation on original product code) with the final committed driver and
+`k33_daemons.py`. Both original and final fixture versions fail there. The
+original forensic driver revisions and optional strace method remain in Git
+and in the original evidence; their inode/ticket values are run-specific.
 
-**Retained on xorinox:** `/home/maik/efs-artifacts/taskG-20261026/` (61 files,
-about 30.4 MB), including both complete log sets, application/status JSONL,
-socket traces, exact driver copies, identity/build log and per-ticket analysis.
-All copied closed files were hash-checked before removing bulk. `SHA256SUMS`
-itself: **90aa33419088b2c500630233e494524ce1eda16274f08d3a00e68627afd76a43**;
-every listed hash verified. `PRUNED.txt` records deletion of the private source,
-build, stores, payloads and compiler scratch with `~/bin/edelete --force
---delete`, after checked child shutdown and kernel mount absence. No raw
-capture is committed. No private workload remains running on xorinox.
+## Retention and limits
 
-**Qualification remaining:** original pressure replay on the fixed build,
-five standalone K22 passes, `make test-all`, then evidence finalization.
-Targeted fresh-reader verification passes; multi-host and RDMA remain outside
-the completed xorinox scope. The original pre-decision failure experiments
-above retain their original verdicts. The new acceptance test is wired into
-`make test-long`; its budget is 40 s (31.09 s x 1.25, rounded to 5 s), one
-slot for the short compressed fill followed by idle single-file checks.
-The D44 gate target remains unchanged.
+**New evidence:** `/home/maik/efs-artifacts/taskG-20261026/implementation/`:
+306 manifest entries, about 111.4 MB. Closed driver/client/daemon logs, syscall
+outcomes, status snapshots, all full-gate summaries/timings/commands/failure
+outputs, restart results, exact driver copies, compiler/hardware inventory and
+binary hashes remain on xorinox. Manifest `SHA256SUMS` SHA-256:
+**db322266b71f14d9e953f2b0572d7045b06206e3651535c734898273984150c0**.
+Every copied file was checked against its closed source; all manifest entries
+verified. `COPY_MANIFEST.json`, `pre-prune.json` and `manifest-verify.log` record
+those checks. Verification output is excluded from the manifest itself.
+
+**Original evidence unchanged:** parent directory's 61-file manifest SHA-256
+**90aa33419088b2c500630233e494524ce1eda16274f08d3a00e68627afd76a43**.
+It covers the original captures; the new subdirectory has its own manifest.
+
+`PRUNED.txt` and `edelete.log` record removal of owned private source/build,
+Raft/KV/fragment and generated-payload bulk with `~/bin/edelete --force --delete`
+after checked child shutdown, mount absence, completed restart verification
+and hash-verified copying (110,889 files / 134,764 directories, zero errors).
+No Task G workload or mount remains. Recreate synthetic stores from the
+recorded source/method. The first failed K22 full-pool setup also auto-cleaned
+its pre-fault fixture; its management error is captured and the correction is
+independently covered by a deterministic unit test.
+
+**Remaining:** original full-process SIGSTOP / production-window acceptance,
+live RDMA and multi-host gates, and the separately open shared-chunk full-pool
+failure. No sampled payloads, missing captures or quiet rerun are counted as
+passing those gates.

@@ -1598,16 +1598,17 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
-[W166 option B implementation (Task G)](../status/w166-close-eio-flush-deadline-20261026.md):
-**OPEN / qualification running**, branch `agent/devel-task-g`. User approved
-B with the 30 s bound unchanged. Fix `878c00e96` passes the two targeted
-cases (REPORT with full L0 but available memory; lagging follower PUT STATUS),
-which both fail on the instrumentation-only baseline. Fresh-reader payloads
-exact. The 8 GiB pressure replay has zero errors and 24,018 exact
-successful-close payloads; K22 5/5 clean. The 1 GiB quota-exhaustion run and
-one setup failure are preserved. Full gate pending the bounded setup-helper
-correction; original 36 untraced / 12 forensic failures preserved. No FIXED
-or multi-host/RDMA claim.
+[W166 option B qualification (Task G)](../status/w166-close-eio-flush-deadline-20261026.md):
+**DECIDED / responsive-pressure paths qualified**, branch `agent/devel-task-g`;
+30 s unchanged. Both deterministic cases fail on the instrumented base and
+pass on `4bcd52ca0`; 300 s pressure has zero errors; K22 5/5 clean; all
+46,014 acknowledged payloads exact after orderly restarts/new clients.
+Full gate: **510 commands, 1 FAIL (shared-chunk pressure, also on unchanged
+base), 13 NOTRUN**; no unconditional PASS. Two harness failures corrected;
+all failed outputs preserved on xorinox with verified hashes, private bulk
+pruned after checks. Original SIGSTOP / production-window, RDMA and multi-host
+acceptance remain NOTRUN; shared-chunk acceptance remains OPEN.
+
 
 
 [Wave 15 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](../status/k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it is its own gate, `make test-w130`, until W165 is fixed. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](#appendix-4--decisions--taken-and-pending-register-d1d36), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
@@ -3281,11 +3282,11 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | harness-unticketed-put | **W158** · `tests/live/gc_reclamation.py` hand-builds an unticketed PUT for its "valid late-PUT control"; since K13 every PUT needs an admitted ticket, so storage refuses it and the expiry fixture stops before its expiry checks | test correctness (K13 drift) | FIXED, merged (`33c68a465`): the late-PUT control admits a ticket and checks that an unticketed PUT is refused; the same fix in `fragment_integrity`, `fragment_tail_smoke`, `io_stats_smoke`; static test in `make test`; nuc `make test-all` PASS. Intel expiry fixture rerun: every expiry check PASS; the fixture's closing POSIX run is W159 | [W158 evidence](../status/w158-ticketed-harness-20261023.md), [intel run](../status/intel-devel-a23d45540-20261023.md), K13 |
 | fixture-posix-timeouts | **W159** · the expiry fixture's closing core POSIX run (four members and client on intel1, devel `a23d45540`) timed out `dir_many_files` (75 s) and `concurrent_creates_same_dir` (30 s); client log shows metadata RPCs of 2–7 s; the same build passed both on the real four-host cluster | fixture environment (one consumer NVMe shared by four members: 7–28 ms per durable barrier) amplified by the product (fixed 400 ms applied-wait → BUSY → client backoff ladder) | CAUSE FOUND, fix PARTIAL, PASS (scoped), branch `claude/devel-w159-fe09e8`, not merged: the metadata path costs about 39 fsync/fdatasync per create-and-unlink pair across the members (13 per member); on the fixture's disk each takes 7–28 ms (intel1 measured p50 7.2 ms against 0.25 ms on amd) and the four daemons queue on it, so the Raft pump's apply lag passes the server's fixed 400 ms applied-wait budget, every expired wait answered BUSY and the client's 50..800 ms backoff ladder plus re-proposal made the 2–7 s RPCs. amd reproduces both timeouts on the untouched base with an emulated 7 ms barrier queued on one lock (`scripts/w159_fixture.py --fsync-delay-us 7000 --fsync-lock`); without the emulation the same fixture passes 218/218 and the three cases under load with no RPC over 1 s (runs 1–6). Fix: progress-bounded applied-wait for a member's own committed entry (`src/server/apply_wait.h`: a 400 ms grant renewed while the member applies, 2 s cap, `raft-obs wait_extends=`; a follower's ReadIndex wait keeps the fixed budget so the client asks the leader); under the emulation `concurrent_creates_same_dir` now passes (28–29 s of 30) and `dir_many_files` passes 1 of 2 rounds (the barrier cost itself). Tests: `tests/test_apply_wait.c` (make test), `tests/test_w159_apply_wait.py` (make test-long). Follow-up (Stage 3): the per-operation barrier count and the follower's AppendEntries fdatasync inside the pump; the expiry wrapper `posix_suite.py --suite expiry` cannot start on this base (`--disable-efs-commands` refused since D42) | [W159 evidence](../status/w159-fixture-posix-timeouts-20261025.md), [intel run](../status/intel-devel-a23d45540-20261023.md), [orcd-mini run](../status/orcd-mini-deploy-cb970ca7c-20261024.md) |
 | ior-hard-stale-eio | **W161** · ior hard (8 ranks, one shared file, orcd-mini node9901, devel `5a7463440`) got EIO from `write()`: a REPORT answered STALE (`report-split stale=1 rc=-14`), the client resolved it `outcome=partial rc=-14`, retained the error and returned it to fsync/flush instead of replaying; 1 of 4 runs, 0 of 1 on node9900; passed on `d94ca85bf` | data path / REPORT replay, alpha blocker candidate | FIXED on branch `claude/vibrant-wiles-325684` (Oct 25), merged into devel (wave 9, `9ae2f36d3`); orcd-mini rerun NOTRUN. Proven by a unit test on the production replay (body-less replay returned OK, putid kept the stale base; reached by a late older PUT re-inserting its putid). Fix: rebuild from the span's own object or drop it when a newer snapshot carries it, fail closed only when unreadable; livelock bound (`report-stuck`); `report-resolve` names the record. Two same-path data-loss bugs found and fixed (install order, classifier identity). Two writing clients on shared chunks got unit BUSY until the budget, then EIO (base too): W162, fixed by K40 | [K38 evidence](../status/k38-stale-span-replay-20261025.md), [orcd-mini 5a7463440 deploy](../status/orcd-mini-deploy-5a7463440-20261025.md) |
-| two-client-unit-busy | **W162** · two FUSE clients writing one shared file (chunks shared across clients; `tests/test_k38_shared_chunk_pressure.py --clients 2`) got `EIO`: REPORT units BUSY for the 8 s budget, `report-resolve outcome=unknown`; unit stages left undecided until `txn-recover ... -> ABORT` 5-20 s later; 3 of 4 runs on the K38 branch, ~3 of 7 on devel `5af760ff1` | data path / publication unit ABORT, alpha blocker candidate | FIXED on branch `claude/musing-grothendieck-1a6c0c` (Oct 25, K40), merged into devel (wave 9, `9ae2f36d3`); orcd-mini NOTRUN. A forwarded PREPARE batch refused STALE/BUSY for one chunk still installed the other chunks' stages, held no ref, and the unit skipped its ABORT when k == 0. Fix (`d7a6eed7e` from the F1 follow-ups, cherry-picked): ABORT once any entry was submitted. Two clients 10 of 10 PASS; deterministic `test_pub_unit_forward_abort.py` red 5 of 5 without the fix; `--clients 2` is the K38 test default | [K40 evidence](../status/k40-two-client-unit-busy-20261025.md) |
+| two-client-unit-busy | **W162** · two FUSE clients writing one shared file (chunks shared across clients; `tests/test_k38_shared_chunk_pressure.py --clients 2`) got `EIO`: REPORT units BUSY for the 8 s budget, `report-resolve outcome=unknown`; unit stages left undecided until `txn-recover ... -> ABORT` 5-20 s later; 3 of 4 runs on the K38 branch, ~3 of 7 on devel `5af760ff1` | data path / publication unit ABORT, alpha blocker candidate | FIXED on branch `claude/musing-grothendieck-1a6c0c` (Oct 25, K40), merged into devel (wave 9, `9ae2f36d3`); orcd-mini NOTRUN. **Oct 27 acceptance counterexample:** the same two-client shared-chunk test gets EIO in full pools on base `394f2b791` and Task G `4bcd52ca0`; cause unclassified, not proof the old PREPARE bug returned. Full-pool acceptance OPEN; [Task G evidence](../status/w166-close-eio-flush-deadline-20261026.md). A forwarded PREPARE batch refused STALE/BUSY for one chunk still installed the other chunks' stages, held no ref, and the unit skipped its ABORT when k == 0. Fix (`d7a6eed7e` from the F1 follow-ups, cherry-picked): ABORT once any entry was submitted. Two clients 10 of 10 PASS; deterministic `test_pub_unit_forward_abort.py` red 5 of 5 without the fix; `--clients 2` is the K38 test default | [K40 evidence](../status/k40-two-client-unit-busy-20261025.md) |
 | packer-places-on-down-member | **W163** · the packer placed a fragment on a member stopped 27 s earlier (the group leader held no down mark) and wrote the segment degraded; a second loss seven seconds later left one fragment and a fresh mount read `EIO` (`test_k33_growth.py`, leaders spread, 1 of 3 alone on intel2, once in the wave-9 gate) | single-loss durability (K37 follow-up), alpha blocker candidate | FIXED (scoped), not merged: branch `k41-packer-placement` `531c7c783` (bounded parallel heartbeats, probed placement with live spares, short packed read `EIO`); intel2 `make test-all` 0 FAIL; live/RDMA NOTRUN | [K41](../status/alpha-1.0-2plus1-checklist.md), [evidence](../status/k41-packer-placement-20261025.md), intel2 `~/efs-artifacts/k41-20261025`, `~/efs-artifacts/k41-fix-20261025` |
 | clean-stop-cleanup-busy | **W164** · a clean unmount on a healthy cluster failed its revoke cleanup with BUSY and exited 1 (Task A candidate D). Cause: cleanup refusals that committed nothing were not certified as retryable (the append step meeting another session's in-flight append; a lease batch applied as a no-op BUSY under the other client's close-step intent), so the client stopped after one RPC | clean client stop (E2), alpha blocker | FIXED on branch `claude/great-curie-e4cfb1`, not merged: named, certified cleanup waits, retried within a 20 s per-shard budget, and a fail-closed stop that logs `shard=N reason=...`. intel2 at `b9d5f9443`: 20 of 20 clean stops of a loaded peer (68-case two-client suite before each); `make test-all` at 8 jobs 499 commands, 0 FAIL, 14 NOTRUN host limits (amd, where it was reproduced, went offline before the final runs) | [K42](../status/alpha-1.0-2plus1-checklist.md), [evidence](../status/e2-clean-stop-busy-20261025.md) |
 | serve-path-damaged-row | **W165** · the serve path's decode of a damaged stored directory row does not fail closed: a create into a splitting directory whose lane leader holds the damage fails `EIO` persistently instead of halting the group as the apply path does (W130) | correctness / fail-closed | OPEN, found by Task B's W130 one-replica fault gate (Oct 25, loopback) | [item](#w165) · [evidence](../status/k22-k6-loopback-taskb-20261025.md) |
-| close-eio-flush-deadline | **W166** · `close(2)` EIO under replica apply lag: 30 s PUT-budget exhaustion and a separate 8 s REPORT + 8 s receipt-resolution path | availability under pressure | OPEN: option B authorized, 30 s unchanged; `878c00e96` passes both targeted authority paths and exact fresh-reader payloads (both cases fail on instrumentation-only baseline). Pressure replay, K22 5/5 and full gate pending; original 36 untraced / 12 forensic failures preserved | [item](#w166) · [decision memo / evidence](../status/w166-close-eio-flush-deadline-20261026.md) · [original evidence](../status/k22-k6-loopback-taskb-20261025.md) |
+| close-eio-flush-deadline | **W166** · close EIO under member stalls/apply pressure: 30 s PUT and 8+8 s REPORT/receipt paths | availability under pressure | DECIDED: B, 30 s unchanged; responsive-pressure paths implemented and qualified on xorinox (`4bcd52ca0`), both base-failing regressions pass, K22 5/5, 46,014 exact restart reads. Full gate 1 baseline-equivalent shared-chunk FAIL / 13 NOTRUN. Original SIGSTOP/production-window and live RDMA/multi-host acceptance NOTRUN; not a global W166 closure | [item](#w166) · [implementation / evidence](../status/w166-close-eio-flush-deadline-20261026.md) · [original evidence](../status/k22-k6-loopback-taskb-20261025.md) |
 | gate-speed | **W160** · the merged-tree code gate (`make test-all` through `scripts/make_test_summary.sh`) grew from 298 s to 2,641 s in a day with the new daemon tests, and at `EFS_TEST_JOBS=8` eight daemon tests at once oversubscribe an 8-CPU host's disk (nuc: 1,209 s, 6 FAIL) | test infrastructure / gate time | IMPLEMENTED, PARTIAL PASS, not merged (branch `claude/devel-gate-speed-8aee30`): runner budgets and disk-weighted slots per `test-long` command (`tests/budgets.tsv`), a drift check in `tests/test_make_test_recipe.py` (per-command bound with a recorded reason, budgeted gate bound), B6 / B geometry / D39 model split into independent commands, parallel verification and fast payloads, status polls for settle sleeps, ports held for a cluster's life. nuc at 8 jobs: 811 s, 839 s (0 FAIL), 989 s (2 pre-existing intermittents); serial 2,754 → 2,311 s. Not reached: three clean runs under 900 s on the nuc's single NVMe. Follow-ups: 15 s unmount storage fence to a down member; 32 s `efs-mgmt status` with a frozen member; intermittents under disk load (payload degraded-read EIO, report step-down 3 s bound, K36 step 11, K35 step 7) | [evidence](../status/gate-speed-20261025.md), [testing guide](testing.md) |
 | nfs-macos-clients | **W152** · NFS re-export and macOS clients | beta backlog | DECIDED out of alpha 1.0 (user, Oct 22); the W55 NFS/macOS triggers move here; alpha publishes "Linux FUSE client only" (F4) | [alpha checklist S1](../status/alpha-1.0-2plus1-checklist.md) |
 | node-cap | **W151** · the code caps a cluster at four nodes (`EFS_MAX_NODES` 4, `EFS_MD_RAFT_N` 3..4, voter sets only for n ≤ 4, placement ring clamped, client `leader_hint` bound), while alpha 1.0 and the spec (§1: 3–64) require >4 | implementation / scope | FIXED, merged into devel Oct 22 (`a2942cb0f`; [evidence](../status/k28-w151-cluster-cap-20261022.md)): cap 16, three voters per group, segments on the data ring; single-host five-daemon TCP/buffered gate scoped PASS ([evidence](../status/gates-xorinox-20261022.md)), with W154 protection finding. Multi-host/RDMA/direct-I/O qualification NOTRUN. Was OPEN; alpha K28 and Stage 2 prerequisite of A3: raise the cap, define voter sets for n ≥ 5, placement/capacity tests at 5..max, membership and client tables, fresh format; no compatibility. Sub-item (D38, user Oct 22): packed segments move from the group's voters to the data ring across all N nodes, which needs a remote linearizable pack-object read for PUT_SEGMENT admission and reclaim on non-voter nodes | [review](../status/alpha-1.0-plan-review-20261022.md) · [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
@@ -10542,7 +10543,7 @@ both. Gate: `make test` on efs3, in the K25 report.
   and the next DIR apply so the serve path meets it first.
 
 <a id="w166"></a>
-### W166 — close(2) EIO at the 30 s flush deadline while a leader's apply lags
+### W166 — close(2) EIO under member stalls and apply pressure
 
 **Correctness / availability; opened 2026-10-25 from the K22 loopback gates on `agent/devel-taskb`.**
 - A stalled follower (SIGSTOP; log present, sockets open) makes client
@@ -10565,29 +10566,31 @@ both. Gate: `make test` on efs3, in the K25 report.
   `K22_SNAP_BYTES=0 K22_STOP_DEADLINE=240` (drive-phase failure message
   lists the write errors).
 
-#### Task G decision memo — October 26
+#### Task G decision and implementation — October 26–27
 
-**OPEN, awaiting the user decision; no implementation.** On unchanged devel
-`394f2b791`, xorinox loopback with only node 1's KV budget compressed and
-compactor parked reproduced 36 close EIOs at approximately 30 s. Their PUT
-stage consumed the budget; the pressured node had already become a follower
-while a healthy quorum kept applying. A separate forensic capture reproduced
-12 closes: eight with PUT consuming 30 s, four with 8 s REPORT plus 8 s
-receipt resolution ending in an unknown outcome. This is not solely a
-leader-fencing or outer-deadline problem.
+**DECIDED; responsive-pressure paths qualified on `agent/devel-task-g`, not a
+global closure of the original SIGSTOP/production-window acceptance.**
+User: “yes, implement option B in your branch, keep the 30 second deadline,
+fix both failure paths and finish the qualification on xorinox.”
 
-The [decision memo](../status/w166-close-eio-flush-deadline-20261026.md)
-compares progress-bounded renewal with earlier refusal/authoritative
-redirection. It recommends keeping 30 s and investigating exact PUT-ticket
-STATUS/session authority forwarding off the lagging hosted replica, plus
-separate REPORT/receipt routing qualification. No automatic degradation of
-BUSY, weakening of ticket/session checks, new behavior flag or deadline
-extension is authorized. The user approved option B with the 30 s deadline
-unchanged. Branch `agent/devel-task-g`, fix `878c00e96`, passes both targeted
-cases (both fail on the instrumentation-only baseline) and exact fresh-reader
-payload checks. Full pressure replay, five standalone K22 runs and the full
-gate are pending; W166 stays OPEN. Original captures and hashes remain on
-xorinox; the original private build/payload bulk was pruned.
+On original devel `394f2b791`, the lagging member was already a follower when
+PUT consumed 30 s; a separate REPORT path exhausted 8+8 s. The implementation
+(`878c00e96`, `a72adf70a`) forwards complete ticket/session authority, keeps
+forwarding one hop, and removes premature REPORT refusal on full L0 while
+bounded memory remains. All existing admission, session, quota and protection
+checks remain; no deadline extension or behavior selector.
+
+Final tested source `4bcd52ca0`: both base-failing regressions pass, 300 s
+pressure has zero syscall errors, K22 5/5, and all 46,014 acknowledged payloads
+are exact through fresh clients after orderly process restarts. Full gate:
+510 commands, **1 FAIL** (shared-chunk pressure also failing on untouched base),
+13 NOTRUN; no unconditional suite PASS or K38/K40 closure. Harness setup and
+long-TMPDIR cleanup failures were fixed without weakening their assertions.
+
+[Evidence, exact commands and retention](../status/w166-close-eio-flush-deadline-20261026.md)
+record every original failure, the declared quota change, both full-gate
+failures and checked/pruned private fixtures. Original full-process SIGSTOP /
+production-window acceptance plus live RDMA/multi-host gates remain NOTRUN.
 
 
 ## Appendix 6 — Naming
