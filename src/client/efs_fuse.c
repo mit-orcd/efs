@@ -3791,9 +3791,10 @@ static int append_publish_burst(efs_ino_t ino)
 }
 
 /* Reserve worst-case chunk capacity before any append range is accepted.
- * Under pressure, use exactly the fsync ordering (queued writes, append
- * stripe, data PUTs, REPORT). A failed drain retains previously owned bytes
- * and rejects this request before touching its data or append reservation. */
+ * Capacity pressure drains bounded PUT/REPORT cohorts, never future writes
+ * through the full fsync path. Cycle the same inode when its publication
+ * unit needs several cohorts, within the existing sixteen-round bound.
+ * Failure retains owned bytes and rejects this request before acceptance. */
 static int fuse_validate_write_extent(off_t offset, size_t size)
 {
     if (offset < 0)
@@ -3866,11 +3867,15 @@ static int fuse_write_admit(size_t size)
             return -EAGAIN;
         efs_ino_t ino = efs_dcache_pressure_ino(after);
         int rc;
+        if (!ino && after) {
+            after = 0;
+            ino = efs_dcache_pressure_ino(0);
+        }
         if (!ino)
             break;
         after = ino;
         efs_buf_drain_enter();
-        rc = efs_append_flush_report(NULL, ino);
+        rc = fuse_pressure_flush(ino);
         efs_buf_drain_leave();
         if (rc != EFS_OK)
             return rc == EFS_ERR_QUOTA ? -ENOSPC :

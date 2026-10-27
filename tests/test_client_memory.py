@@ -118,8 +118,7 @@ static int flush_error, drains, trims;
  * worker/admission harnesses separately cover successful asynchronous startup. */
 static int fuse_pressure_kick(void) { return 0; }
 void efs_rdcache_trim(void) { trims++; }
-static int efs_append_flush_report(void *fi, efs_ino_t ino) {
-    (void)fi;
+static int fuse_pressure_flush(efs_ino_t ino) {
     drains++;
     if (flush_error) return flush_error;
     for (uint32_t s=0;s<DCACHE_SLOTS;s++)
