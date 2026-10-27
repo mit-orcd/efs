@@ -169,7 +169,19 @@ try:
     # defers, backlog grows
     g0_leader = next(i for i in (1, 2, 3)
                      if fields(raw_status(c, i)).get(0, {}).get('role') == 'LEADER')
-    assert g0_leader == 1, f'group 0 leader is node {g0_leader}, not the pressured node 1'
+    if g0_leader != 1:
+        # The forming node usually holds the first leadership, but not
+        # always (a gate run started with node 3 leading): move group 0
+        # onto the pressured node instead of assuming it.
+        rc, out = mgmt(env, 'raft-step-down', c.ep(g0_leader), '0', str(c.node_id(1)))
+        assert rc == 0, out
+        end = time.time() + 30
+        while g0_leader != 1 and time.time() < end:
+            time.sleep(0.5)
+            g0_leader = next((i for i in (1, 2, 3)
+                              if fields(raw_status(c, i)).get(0, {}).get('role') == 'LEADER'),
+                             g0_leader)
+        assert g0_leader == 1, f'group 0 would not move to node 1: {g0_leader}'
     print(f'[k22admit] group 0 leader: node {g0_leader}; parking its compactor')
     (work / f'fault-{g0_leader}').touch()
 

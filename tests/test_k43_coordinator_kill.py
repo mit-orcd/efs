@@ -41,7 +41,10 @@ if not fuse_ok():
     print('K43 coordinator kill: NOTRUN (no /dev/fuse, fusermount3 or efs-fuse)')
     sys.exit(0)
 
-SIZE = int(os.environ.get('K43_SIZE', str(64 << 20)))   # the incident's 64 MiB overwrite
+# 16 MiB per phase keeps three multi-unit writes meaningful (each unit still
+# covers dozens of chunk records) while the pool-time disk cost stays in
+# budget; K43_SIZE=64MiB reproduces the incident's exact volume.
+SIZE = int(os.environ.get('K43_SIZE', str(16 << 20)))
 PARK_DEADLINE = 60 * SLOW
 WRITE_DEADLINE = 120 * SLOW
 
