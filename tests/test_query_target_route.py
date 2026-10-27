@@ -58,7 +58,7 @@ int main(void){struct efs_raft r[2]={{2,7},{2,14}};
  assert(host_leader_cover_pick(&h,0,need,2)==2);
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==3&&!barriers&&!consumed);
  r[0].leader=0;r[1].leader=2;
- assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==3);
+ assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==2); /* split leaders: healthy dual coordinator fallback */
  r[1].leader=3; /* Both known leaders are single-group; keep dual fallback. */
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==2);
  r[0].leader=r[1].leader=-1;
