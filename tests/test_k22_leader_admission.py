@@ -16,6 +16,7 @@ Expected, asserted from `efs-mgmt raft-status` and the client log:
    `admit_busy` at 0).
 3. Releasing the compactor lets the backlog drain and the node recover.
 """
+import argparse
 import os, re, shutil, signal, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -33,7 +34,11 @@ DRAIN_BOUND = int(os.environ.get('K22_DRAIN_BOUND', '600'))
 FAULT_MARKER = os.environ.get('K22_FAULT_MARKER', '')              # default: per-run marker
 WRITE_BYTES = 2048
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--keep', action='store_true', help='retain private logs/stores for evidence review')
+args = parser.parse_args()
 work = Path(tempfile.mkdtemp(prefix='efs-k22-admit-', dir=os.environ.get('TMPDIR')))
+print('[k22admit] work:', work, flush=True)
 env = dict(os.environ)
 env['EFS_TRANSPORT'] = 'tcp'
 
@@ -287,4 +292,7 @@ finally:
         m.close()
     if c:
         c.stop_all()
-    shutil.rmtree(work, ignore_errors=True)
+    if args.keep:
+        print('[k22admit] retained work:', work, flush=True)
+    else:
+        shutil.rmtree(work, ignore_errors=True)
