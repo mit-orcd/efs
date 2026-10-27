@@ -16,10 +16,11 @@ Expected, asserted from `efs-mgmt raft-status` and the client log:
    `admit_busy` at 0).
 3. Releasing the compactor lets the backlog drain and the node recover.
 """
+import argparse
 import os, re, shutil, signal, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster as _Cluster, EFSD, MGMT, FUSE, mgmt as _mgmt  # noqa: E402
+from k33_daemons import Cluster as _Cluster, EFSD, MGMT, FUSE, mgmt as _mgmt, place_leaders  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -33,7 +34,11 @@ DRAIN_BOUND = int(os.environ.get('K22_DRAIN_BOUND', '600'))
 FAULT_MARKER = os.environ.get('K22_FAULT_MARKER', '')              # default: per-run marker
 WRITE_BYTES = 2048
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--keep', action='store_true', help='retain private logs/stores for evidence review')
+args = parser.parse_args()
 work = Path(tempfile.mkdtemp(prefix='efs-k22-admit-', dir=os.environ.get('TMPDIR')))
+print('[k22admit] work:', work, flush=True)
 env = dict(os.environ)
 env['EFS_TRANSPORT'] = 'tcp'
 
@@ -160,6 +165,7 @@ def writer(mnt, tag):
 
 
 t0 = time.time()
+passed = False
 c = None
 mounts = []
 try:
@@ -181,6 +187,8 @@ try:
     for i in (1, 2, 3):
         c.wait_log(i, r'raft-host: formed: 3 members', timeout=120)
     c.wait_voters([1, 2, 3], lambda i, v: v == {0: (1, 7), 2: (1, 7)})
+
+    place_leaders(c, 1)
 
     # park the group-0 leader's compactor up front: its L0 fills, apply
     # defers, backlog grows
@@ -292,6 +300,7 @@ try:
     assert wrote[0] > 0, 'no client writes happened'
     print(f'[k22admit] {wrote[0]} client writes, zero errors throughout pressure and handoff')
     print('[k22admit] PASS')
+    passed = True
 except Exception as e:
     print('[k22admit] FAIL:', e)
     raise
@@ -304,7 +313,7 @@ finally:
         m.close()
     if c:
         c.stop_all()
-    if failed:
-        print(f'[k22admit] failed fixture retained: {work}', flush=True)
+    if failed or args.keep or not passed:
+        print(f'[k22admit] retained work: {work}', flush=True)
     else:
         shutil.rmtree(work, ignore_errors=True)

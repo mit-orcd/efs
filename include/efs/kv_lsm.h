@@ -104,8 +104,8 @@ struct efs_kv_lsm_stats {
 };
 int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out);
 
-/* 1 when L0 is within one flush of the file cap. Publish admission
- * returns BUSY; the apply path does not wait. */
+/* 1 when L0 has reached its byte cap. This is an observation, not a
+ * proposal-admission verdict: apply_room bounds the unflushed tail. */
 int efs_kv_lsm_l0_hot(struct efs_kv *kv);
 /* K22/W23: room for one more state-machine apply. EFS_ERR_BUSY while the
  * unflushed memtable/WAL tail is at mem_budget (flushes are deferred because

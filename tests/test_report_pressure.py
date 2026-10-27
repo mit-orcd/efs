@@ -61,8 +61,11 @@ static void meta_flush_enqueue(efs_ino_t ino) {
     }
     pthread_mutex_unlock(&g_client.dirty_mu);
 }
+uint64_t efs_client_rpc_resolve_budget_ms(void) { return 8000; }
+int efs_client_rpc_past_deadline(void) { return deadline && report_clock_ms()>=deadline; }
 void efs_client_rpc_set_deadline_ms(uint64_t value) { deadline=value; }
-static int report_dirty_ino_run(efs_ino_t ino, int sync) {
+static int report_dirty_ino_run(efs_ino_t ino, int sync, uint64_t end, int *resolved) {
+    (void)end;*resolved=0;
     (void)ino;
     assert(!sync || (deadline && deadline<=report_clock_ms()+8000));
     return EFS_ERR_BUSY;
@@ -71,7 +74,7 @@ static int report_dirty_ino_run(efs_ino_t ino, int sync) {
 static int unit_wait_idle(efs_ino_t ino) { (void)ino; return EFS_OK; }
 int efs_dcache_flush_ino(efs_ino_t ino) { (void)ino; return EFS_OK; }
 int efs_dcache_flush_all(void) { return EFS_OK; }
-'''+function('efs_client_report_dirty_ino')+r'''
+'''+(function('report_dirty_ino_complete')+'\n' if 'static int report_dirty_ino_complete(' in w else '')+function('efs_client_report_dirty_ino')+r'''
 static void *request(void *arg) {
     (void)arg;
     assert(efs_client_report_admit(2)==EFS_OK);

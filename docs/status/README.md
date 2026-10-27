@@ -65,6 +65,30 @@ POSIX core, 68/68 two-client cases, exact cross-mount payloads and stable `.efs`
 Original closed logs preserved; cluster left running; existing devops config
 still lists three members, so the fourth has a retained owned lifecycle helper.
 
+[K38 Task G repair](k38-task-g-repair-20261027.md): **scoped xorinox PASS**,
+`agent/devel-task-g`, not merged/pushed. Original-product pooled failure
+reproduced with complete retained stores/logs; reviewed fixes and four
+intended original-code negative controls. Seven fixed K38 runs: **33,600
+records exact on both mounts and remount**. Final `make test-all`: **512
+commands, 0 FAIL, 13 NOTRUN, INCOMPLETE** (842 s + 24 s build); both W166
+cases pass. Failed stores and matching binaries remain on xorinox; positive
+bulk pruned after hash-verified capture. Real-cluster/RDMA gates remain open.
+
+[W166 option B qualification (Task G)](w166-close-eio-flush-deadline-20261026.md):
+**DECIDED / responsive-pressure paths qualified**, branch `agent/devel-task-g`;
+30 s unchanged. Both deterministic cases fail on the instrumented base and
+pass on `4bcd52ca0`; 300 s pressure has zero errors; K22 5/5 clean; all
+46,014 acknowledged payloads exact after orderly restarts/new clients.
+Full gate: **510 commands, 1 FAIL (shared-chunk pressure, also on unchanged
+base), 13 NOTRUN**; no unconditional PASS. Two harness failures corrected;
+all failed outputs preserved on xorinox with verified hashes, private bulk
+pruned after checks. Original SIGSTOP / production-window, RDMA and multi-host
+acceptance remain NOTRUN. The later shared-chunk continuation above repairs
+the xorinox counterexample and has a zero-failure host gate; merge and
+real-cluster shared-chunk acceptance remain open.
+
+
+
 [Wave 15 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it is its own gate, `make test-w130`, until W165 is fixed. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](decisions.md), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
 
 [Wave 14 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a81bc8dc0`, fast-forward; gate at the same commit)**: the D4 drain and reclaim branch ([drain](d4-pack-drain-20261025.md), [reclaim](d4-reclaim-20261026.md)): one packer candidate per file per pass, the fragment resend bounded by 2 s inside K41's placement loop, the truncate sweep takes an inode to retire in one pass and waits 2 s for the writer's own publication, an unconditional full image replaces spans of an older content epoch but is still refused by an unseen live span of its own epoch (`988efba3e`: the wave-13 gate's K38 writer EIO was this branch's `acb8a7318` dropping another writer's span; K36's EBUSY did not reproduce); 60-minute run: stored data bounded, drain 72 s, 0 put errors, abandoned uploads 610 → 41. intel1 8-job gate 0 FAIL twice, intel2 `make test-all` (8 jobs): 506 commands in 641 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits. The W160 target is 16 min 30 s (990 s) for the D4 plateau driver back in `make test-long` and the pack dup-candidate test.

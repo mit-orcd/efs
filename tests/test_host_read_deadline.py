@@ -8,6 +8,7 @@ def function(name):
     a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
 scope=r'''
 #include "efs/protocol.h"
+#include "efs/meta_cmd.h"
 #include "efs/network.h"
 #include <assert.h>
 #include <time.h>
@@ -24,7 +25,7 @@ static int controlled_clock(clockid_t id,struct timespec *out)
 static int host_remote_cmd_impl(struct efs_raft_host *h,uint8_t g,const uint8_t *cmd,uint32_t n,struct efs_msg_raft_mkfs_reply *r,int rid)
 {(void)h;assert(g==2 && rid==3 && (n==0 || cmd));(void)r;observed=deadline;if(expire)now_ms=deadline;return status;}
 #define clock_gettime controlled_clock
-'''+function('host_remote_cmd')+r'''
+'''+function('host_submit_read_only')+function('host_remote_cmd')+r'''
 #undef clock_gettime
 int main(void){struct efs_raft_host h;struct efs_msg_raft_mkfs_reply reply;uint8_t cmd=1;
  assert(!host_remote_cmd(&h,2,NULL,0,&reply,3) && observed==10400 && !deadline);
@@ -34,10 +35,16 @@ int main(void){struct efs_raft_host h;struct efs_msg_raft_mkfs_reply reply;uint8
  status=EFS_ERR_IO;assert(host_remote_cmd(&h,2,NULL,0,&reply,3)==EFS_ERR_IO && deadline==15000);
  expire=1;assert(host_remote_cmd(&h,2,NULL,0,&reply,3)==EFS_ERR_BUSY && deadline==15000);
  now_ms=10000;deadline=15000;assert(host_remote_cmd(&h,2,&cmd,1,&reply,3)==EFS_ERR_IO && observed==15000 && deadline==15000);
+ now_ms=10000;deadline=15000;cmd=EFS_MD_REQ_PUT_TICKET_STATUS;expire=0;status=EFS_OK;
+ assert(!host_remote_cmd(&h,2,&cmd,1,&reply,3) && observed==10400 && deadline==15000);
+ deadline=10100;assert(!host_remote_cmd(&h,2,&cmd,1,&reply,3) && observed==10100 && deadline==10100);
+ now_ms=10000;deadline=15000;expire=1;status=EFS_ERR_IO;
+ assert(host_remote_cmd(&h,2,&cmd,1,&reply,3)==EFS_ERR_BUSY && deadline==15000);
  puts("read scope: one absolute400ms budget, shorter inherited/expired budgets, restoration, semantic/hard refusal and unchanged mutation uncertainty PASS");}
 '''
 rpc=r'''
 #include "efs/protocol.h"
+#include "efs/meta_cmd.h"
 #include "efs/network.h"
 #include "efs/wire.h"
 #include <assert.h>
@@ -62,12 +69,15 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *n)
 {assert(c==&peer && c->recv_timeout_ms==expected_timeout);recvs++;if(fail_recv)return -1;
  *type=bad_type?0:EFS_MSG_RAFT_MKFS_REPLY;*n=sizeof(struct efs_msg_raft_mkfs_reply)-(short_reply?1:0);
  *out=calloc(1,sizeof(struct efs_msg_raft_mkfs_reply));return 0;}
-'''+function('host_rpc_submit')+r'''
+'''+function('host_submit_read_only')+function('host_rpc_submit')+r'''
 static void reset(int kind){peer=(struct efs_conn){.kind=kind,.fd=42,.recv_timeout_ms=17};setters=drops=releases=sends=recvs=fail_send=fail_recv=bad_type=short_reply=ordinary_gets=read_gets=0;expected_timeout=400;}
 int main(void){struct efs_raft_host h={.raft_id=0};struct efs_msg_raft_mkfs_reply reply;uint8_t body[900]={0};
  for(int kind=EFS_CONN_TCP;kind<=EFS_CONN_RDMA;kind++) {
   reset(kind);assert(!host_rpc_submit(&h,2,2,NULL,0,&reply,400));assert(setters==2 && releases==1 && !drops && read_gets==1 && !ordinary_gets);
   reset(kind);assert(!host_rpc_submit(&h,2,2,body,sizeof(body),&reply,400));assert(setters==2 && releases==1 && ordinary_gets==1 && !read_gets);
+  reset(kind);body[0]=EFS_MD_REQ_PUT_TICKET_STATUS;
+  assert(!host_rpc_submit(&h,2,2,body,1,&reply,400));assert(setters==2 && releases==1 && read_gets==1 && !ordinary_gets);
+  body[0]=0;
   reset(kind);fail_send=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !recvs && !releases);
   reset(kind);fail_recv=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !releases);
   reset(kind);bad_type=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !releases);

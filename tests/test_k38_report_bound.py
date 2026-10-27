@@ -12,7 +12,7 @@ from pathlib import Path
 import os, re, shlex, subprocess, tempfile
 
 root = Path(__file__).resolve().parents[1]
-src = (root/'src/client/write.c').read_text()
+src = Path(os.environ.get('K38_BOUND_SOURCE', root/'src/client/write.c')).read_text()
 
 
 def fn(name):
@@ -64,6 +64,14 @@ int main(void)
  assert(n==1&&st[0].stale==1&&!report_rec_stuck(st,n,&moved,0x9999));
  report_streak_note(&st,&n,next,1);
  assert(report_rec_stuck(st,n,&moved,0x9999));
+ /* Retained node9901 TCP failure: full object gen == local table gen,
+  * base zero. That table entry can be our unpublished PUT placeholder for
+  * an authoritative absent row. Two unit STALE replies prove no own loss. */
+ struct efs_chunk_rec placeholder=rec(7,57,0x9cf386ef7c2e7bd2ull,0,0);
+ report_streak_note(&st,&n,&placeholder,1);report_streak_note(&st,&n,&placeholder,1);
+ assert(!report_rec_stuck(st,n,&placeholder,placeholder.chunk_generation));
+ /* Real changed-base evidence still enforces the original two-round bound. */
+ assert(report_rec_stuck(st,n,&placeholder,0x1111));
  /* a record absent from the last STALE round starts over */
  report_streak_note(&st,&n,sent+1,1);
  assert(!report_rec_stuck(st,n,&moved,0x9999)&&!report_rec_stuck(st,n,&sent[0],NEW));

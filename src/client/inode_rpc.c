@@ -145,6 +145,13 @@ static uint64_t rpc_resolve_ms(void)
     return (uint64_t)ms;
 }
 
+/* The publisher shares this existing resolution allowance across retries;
+ * it must not allocate a fresh receipt window after each PARTIAL result. */
+uint64_t efs_client_rpc_resolve_budget_ms(void)
+{
+    return rpc_resolve_ms();
+}
+
 static int rpc_prof_enabled(void)
 {
     if (efs_rpc_prof_on < 0)
@@ -3288,6 +3295,8 @@ int efs_client_rpc_report_resolve(efs_export_id_t export_id,
     previous = efs_client_rpc_deadline_ms();
     start = rpc_prof_now_us() / 1000ull;
     end = start + bound;
+    if (previous && previous < end)
+        end = previous;
     fprintf(stderr, "report-resolve id=%s ino=%llu recs=%u rc=%d sent=%llx: outcome not "
             "known; same-identity lookup for %llu ms\n", ident, (unsigned long long)ino,
             count, rc, (unsigned long long)sent, (unsigned long long)bound);
