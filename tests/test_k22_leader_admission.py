@@ -101,6 +101,23 @@ def fields(status_text):
     return out
 
 
+def leader_on(c, target, timeout=60):
+    """Establish fixture leadership, not an assumed election outcome."""
+    end, last = time.time() + timeout, {}
+    while time.time() < end:
+        last = {i: fields(raw_status(c, i)).get(0, {}) for i in (1, 2, 3)}
+        leaders = [i for i, st in last.items() if st.get('role') == 'LEADER']
+        if leaders == [target]:
+            return target
+        if len(leaders) == 1:
+            rc, out = mgmt('raft-step-down', c.ep(leaders[0]), '0', str(c.node_id(target)))
+            print(f'[k22admit] fixture transfer to node {target}: {out.strip()}', flush=True)
+            # BUSY while the target catches up is fixture setup, before load.
+            assert rc == 0 or re.search(r'rc=-(?:13|15)\b', out), out
+        time.sleep(0.2)
+    raise AssertionError(f'fixture leadership never moved to node {target}: {last}')
+
+
 def payload(name, size=WRITE_BYTES):
     import hashlib
     out, k = b'', 0
@@ -149,8 +166,8 @@ try:
     assert fuse_ok(), 'NOTRUN: no FUSE on this host'
     c = Cluster('admit34', [1, 2, 3])
     # Only node 1 gets the small KV budget and the compactor park. The forming
-    # node holds the first leadership, so node 1 leads group 0 at start
-    # (asserted below). Followers keep default budgets: with every node on a
+    # node may lose leadership during formation. Establish node 1 as leader
+    # explicitly before pressure. Followers keep default budgets: with every node on a
     # small budget the group throttles to its slowest memtable flush (~34
     # entries/s), the fill outruns the deadline, and client closes starve past
     # their 30 s flush deadline for reasons unrelated to admission.
@@ -167,8 +184,10 @@ try:
 
     # park the group-0 leader's compactor up front: its L0 fills, apply
     # defers, backlog grows
-    g0_leader = next(i for i in (1, 2, 3)
-                     if fields(raw_status(c, i)).get(0, {}).get('role') == 'LEADER')
+    # Exercise setup after a real leadership change too: bootstrap leadership
+    # is not a contract, and the old fixture failed when node 2 won naturally.
+    leader_on(c, 2)
+    g0_leader = leader_on(c, 1)
     assert g0_leader == 1, f'group 0 leader is node {g0_leader}, not the pressured node 1'
     print(f'[k22admit] group 0 leader: node {g0_leader}; parking its compactor')
     (work / f'fault-{g0_leader}').touch()
@@ -280,6 +299,7 @@ except Exception as e:
     print('[k22admit] FAIL:', e)
     raise
 finally:
+    failed = sys.exc_info()[0] is not None
     stop_load.set()
     for i in (1, 2, 3):
         (work / f'fault-{i}').unlink(missing_ok=True)
@@ -287,4 +307,7 @@ finally:
         m.close()
     if c:
         c.stop_all()
-    shutil.rmtree(work, ignore_errors=True)
+    if failed:
+        print(f'[k22admit] failed fixture retained: {work}', flush=True)
+    else:
+        shutil.rmtree(work, ignore_errors=True)

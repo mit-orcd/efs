@@ -2,7 +2,7 @@ agent/devel-task-j (analysis72b01728a, tested devel4066f74df): Intel TOTAL 508 F
 
 # W160 three-run budget refit — October 26, 2026
 
-**INCOMPLETE: FIRST INTEL CALIBRATION FAILED ON UNCHANGED BASE.** No measured budget is changed and no gate PASS is
+**INCOMPLETE: BASELINE FAILED; AUTHORIZED FIXES UNDER QUALIFICATION.** No measured budget is changed and no gate PASS is
 claimed. The user assigned Task J from `parallel-tasks-20261026.md`; its updated
 instructions retain intel1/intel2 after Task F/E releases the host and add
 one real-host gate each on node9901 and fstor007. The user explicitly
@@ -326,3 +326,20 @@ The synthetic scratch tree was pruned separately with edelete.
 - Coordinator fixes for the two baseline test defects; ORCD gate FAILs remain recorded.
 - Per-command table, critical chain, exact build identities, closed manifests
   for a future successful calibration. Failed Intel and ORCD manifests and cleanup are complete above.
+
+## Authorized follow-up on this branch
+
+The user expanded Task J to investigate/fix J1 and J2 on this branch and
+calibrate corrected code. The initial failed runs remain immutable. The
+candidate changes only these two fixtures: K22 explicitly establishes the
+pressured leader using bounded pre-load leadership transfer (including a
+forced intervening node2 leadership), and K36 selects a victim from a live
+file's packed metadata reference and holds segment rebuild until recovery
+records that exact loss. Packed compaction stays outside this fixture's
+observation window, as in the dedicated segment-recovery gate. No recovery
+or client durability assertion is relaxed. Both tests now retain failed
+fixtures after clean process/mount shutdown instead of deleting diagnostics.
+
+These changes are candidates, not a new PASS claim. Standalone qualification
+and a new pinned three-run calibration are pending. No product behavior,
+pool slots, test deadlines or D44 target changed.
