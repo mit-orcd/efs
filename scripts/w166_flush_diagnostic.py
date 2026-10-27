@@ -36,6 +36,8 @@ def main():
     work.mkdir(parents=True, exist_ok=False)
     env = {k: v for k, v in os.environ.items() if not k.startswith(('EFS_', 'K22_'))}
     env.update(EFS_TRANSPORT='tcp', EFS_RPC_PROF='1', EFS_REPORT_DBG='1', EFS_WRITE_PROF='1')
+    if args.trace_client:
+        env['EFS_PUT_TICKET_DBG'] = '1'  # existing trace switch; no behavior selection
     start = time.monotonic()
     stop = threading.Event()
     lock = threading.Lock()
@@ -51,6 +53,7 @@ def main():
     mount = c.dir / 'mnt'
     marker = work / 'compactor-parked'
     result = dict(method='K22 leader-only compressed-budget pressure', trace_client=args.trace_client,
+                  driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   l0_bytes=2 << 20, memtable_bytes=1 << 20, seconds=args.seconds,
                   product_changed=False, outcome='HARNESS_FAILURE')
 
