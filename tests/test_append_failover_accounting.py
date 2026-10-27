@@ -119,3 +119,10 @@ for f in tmp.iterdir():
 tmp.rmdir()
 print('append failover accounting (K15/K29): accounted failures separated from mismatches, '
       '9 negative controls refused: pass')
+
+# Availability is separate: explained real errors remain failed gates.
+assert not af.availability(dict(accounted_failures=1,failed_writes=1),[dict(error_count=1)])
+assert af.availability(dict(accounted_failures=0,failed_writes=4),[dict(error_count=4)])
+assert not af.availability(dict(accounted_failures=0,failed_writes=0),[dict(error_count=1)])
+assert af.availability(dict(accounted_failures=0,failed_writes=0),[dict(error_count=0)])
+print('append availability: real write/fsync errors fail even when integrity is accounted: pass')
