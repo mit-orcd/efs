@@ -44,6 +44,19 @@ def ports(n):
     raise AssertionError('no private ports free')
 kd.free_ports = ports
 a.out.mkdir(parents=True, exist_ok=False)
+left = []
+for proc in Path('/proc').glob('[0-9]*'):
+    try:
+        if proc.stat().st_uid == os.getuid() and (proc/'exe').resolve() in (
+                root/'efsd', kd.EFSD, kd.FUSE):
+            left.append(str(proc))
+    except OSError:
+        pass
+left.extend(x for x in Path('/proc/self/mountinfo').read_text().splitlines()
+            if str(root/'tmp')+'/' in x)
+if left:
+    (a.out/'blocked.json').write_text(json.dumps(left, indent=2)+'\n')
+    sys.exit('NOTRUN: predecessor fixture processes/mounts remain: '+repr(left))
 work = Path(tempfile.mkdtemp(prefix='efs-k44-surface-', dir=os.environ.get('TMPDIR')))
 env = dict(os.environ)
 c = kd.Cluster(work, 'surface', [1, 2, 3, 4], env,
