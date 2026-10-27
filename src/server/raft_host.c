@@ -5384,6 +5384,10 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
     int prof = read_prof_on();
     uint64_t p0 = prof ? now_us_() : 0;
     int first = 1, requested = 0;
+    if (proof_index)
+        *proof_index = 0;
+    if (leader_hint)
+        *leader_hint = -1;
     /* W127/B4: never serve reads from a group stuck below a committed
      * entry it cannot apply. */
     if (host_group_incompatible(h, group)) {
@@ -5393,10 +5397,6 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
     /* Server mode: admission and round starts never take h->mu. */
     int delegated=h->s!=NULL;
 
-    if (proof_index)
-        *proof_index = 0;
-    if (leader_hint)
-        *leader_hint = -1;
     host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
     host_view_get(h, group, &v);
     if (!v.has)
