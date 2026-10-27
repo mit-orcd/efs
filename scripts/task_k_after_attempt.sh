@@ -17,15 +17,15 @@ while [ ! -f "$receipt" ]; do
  if [ "$SECONDS" -ge "$end" ]; then echo 'BLOCKED: earlier attempt still owns host'; exit 77; fi
  sleep 300
 done
-python3 - "$old" <<'PY'
+python3 - "$old" /tmp/efs-taskK-20261026/base <<'PY'
 from pathlib import Path
 import os,sys
-root=Path(sys.argv[1]);left=[]
+roots=list(map(Path,sys.argv[1:]));left=[]
 for p in Path('/proc').glob('[0-9]*'):
  try:
-  if p.stat().st_uid==os.getuid() and (p/'exe').resolve().is_relative_to(root):left.append(str(p))
+  if p.stat().st_uid==os.getuid() and any((p/'exe').resolve().is_relative_to(root) for root in roots):left.append(str(p))
  except (OSError,ValueError):pass
-left.extend(x for x in Path('/proc/self/mountinfo').read_text().splitlines() if str(root)+'/' in x)
+left.extend(x for x in Path('/proc/self/mountinfo').read_text().splitlines() if any(str(root)+'/' in x for root in roots))
 if left:raise SystemExit('BLOCKED: earlier fixture processes/mounts remain: '+repr(left))
 PY
 [ "$?" -eq 0 ] || exit 125
