@@ -366,7 +366,7 @@ static void t_old_meta_prepare(void)
 {
     rj.hold=1;
     boot();
-    char cmd[512];snprintf(cmd,sizeof(cmd),"rm -rf %s/meta-old && cp -a %s/meta %s/meta-old",roots[0],roots[0],roots[0]);
+    char cmd[8192];snprintf(cmd,sizeof(cmd),"rm -rf %s/meta-old && cp -a %s/meta %s/meta-old",roots[0],roots[0],roots[0]);
     assert(!system(cmd));
     /* Fill one segment so the next acceptance opens a new one. */
     for(uint32_t base=0;base<RJ_SEG_RECORDS;base+=64) accept_range(400000+base,64,EFS_OK);
@@ -732,7 +732,7 @@ static void t_segment_recover_prepare(void)
 }
 static void t_segment_recover(void)
 {
-    char cmd[512];
+    char cmd[8192];
     /* A segment file without a state record fails verification closed. */
     snprintf(cmd, sizeof(cmd), "rm -f %s/" RJ_STATE_FILE " && touch %s/meta/gc-journal/0000000000000000.seg",
              roots[0], roots[0]);
@@ -905,8 +905,13 @@ int main(void)
     run("segments without state fail closed",t_state_missing,0);
     run("old meta/ copy prepare",t_old_meta_prepare,1);
     run("old meta/ copy fails closed",t_old_meta,0);
-    char cmd[256];snprintf(cmd,sizeof(cmd),"rm -rf %s/meta/gc-journal* %s/data %s/" RJ_STATE_FILE,roots[0],roots[0],roots[0]);assert(!system(cmd));
+    /* Three valid root paths plus suffixes exceed 256 bytes in the gate's
+     * nested TMPDIR. A truncated cleanup left the state record but removed its
+     * journal directory, so the next first append failed ENOENT. */
+    char cmd[8192];snprintf(cmd,sizeof(cmd),"rm -rf %s/meta/gc-journal* %s/data %s/" RJ_STATE_FILE,roots[0],roots[0],roots[0]);assert(!system(cmd));
     snprintf(cmd,sizeof(cmd),"rm -rf %s/data",roots[1]);assert(!system(cmd));
+    char state[8192];snprintf(state,sizeof(state),"%s/" RJ_STATE_FILE,roots[0]);
+    assert(access(state,F_OK)<0 && errno==ENOENT); /* cleanup, not reclaim */
     run("journal cap BUSY",t_cap,0);
     run("PUT racing acceptance",t_race,0);
     run("physical guard",t_phys,0);
