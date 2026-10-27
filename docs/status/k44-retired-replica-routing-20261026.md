@@ -1,6 +1,6 @@
 # K44 / W167 — routing at a retired replica (October 26)
 
-`agent/devel-task-k`, source `fcc8533d8`: final gate NOTRUN (queued); base `4066f74df` reproduces BUSY, expected FAIL. `docs/status/k44-retired-replica-routing-20261026.md`. orcd-mini NOTRUN (lifecycle approval). Defects: retired MKFS; retired resync; nonhost MKFS; notice NET after restart; stale CFG convergence. Candidate fixes, qualification pending.
+`agent/devel-task-k`, source `7029a6266`: final gate RUNNING; base `4066f74df` reproduces BUSY, expected FAIL. `docs/status/k44-retired-replica-routing-20261026.md`. orcd-mini NOTRUN (lifecycle approval). Defects: retired MKFS; retired resync; nonhost MKFS; notice NET after restart; stale CFG convergence. Core TCP/RDMA + joint PASS; full gate pending; old stop/reclaim findings OPEN.
 
 ## Purpose and verdict
 
@@ -52,10 +52,11 @@ The candidate separates application service from consensus participation:
 The one-loss sweep also exposed a separate immediate NET outcome: the
 restarted member was answering Raft/status, but the sender's peer pool still
 returned BUSY during failed-connect backoff. The membership notice is
-idempotent, so it now retries only transient BUSY/NET/IO/AGAIN inside the
-existing five-second notice I/O budget and any shorter caller deadline.
+idempotent, so it now retries only transient BUSY/NET/IO/AGAIN using the same 5,000 ms value as the existing notice RPC I/O timeout, now
+as one absolute budget covering all attempts, and any shorter caller deadline.
 Identity and encoding refusals are never retried; no client write deadline
-changes. This fix still requires its final run.
+changes. Final one-loss evidence: seed MKFS succeeds in 0.556 s after 12 notice
+attempts ending in rc=0; the added member's MKFS then succeeds in 0.004 s.
 
 The command sweep found a second retired-view consumer in the CLI:
 `raft-change` polled the seed's historical voter set for eight seconds and
@@ -72,7 +73,7 @@ No deployment-tool repository was edited.
 ## Sources, attempts and evidence
 
 Base: `4066f74df5b997d70f263ae8dc1063b1a6049b92`.
-Candidate source: `fcc8533d8` (product changes through `fcc8533d8`, including the membership-notice
+Candidate source: `7029a6266` (product changes through `fcc8533d8`; `7029a6266` reorders assertions only. Includes the membership-notice
 retry and live-responder convergence check).
 
 | Attempt | Result and scope |
@@ -83,7 +84,9 @@ retry and live-responder convergence check).
 | `ae0262306` dispatch | Canceled before any build/test after the provisional gate exposed missing unit mocks. |
 | `7e4ddcb5e` | Both one-loss TCP/RDMA sweeps **FAIL** with NET: node 2's notice returns BUSY after its restart. All seven focused K33 acceptance tests PASS. Gate: `TOTAL 508 FAIL 10 NOTRUN 14 STATUS FAIL (574s) OVERBUDGET 1 BUILD 0s`; base comparison running. Its one-loss base control also failed with NET rather than BUSY and does not qualify the precise original signature. |
 | `afc6d1466` and `6cd513dc7` dispatches | Canceled before any build/test as further observed issues were fixed; their cancellation records are retained. |
-| Corrected `fcc8533d8` | Queued after the preceding candidate **and** base comparison, with no build/test overlap. The default base control must fail specifically with BUSY; a separate one-loss transition fixture checks consensus participation. Final results pending. |
+| `fcc8533d8` dispatch | Canceled before its negative control/build/test; `7029a6266` keeps the original BUSY assertion before the additional CLI-convergence assertion (all assertions remain). |
+| Untouched-base full gate | `TOTAL 508 FAIL 5 NOTRUN 14 STATUS FAIL (764s) BUILD 11s`: four LSan fatal instrumentation errors and the expiry fixture's client-stop failure. |
+| Final `7029a6266` | Healthy TCP, healthy RDMA and separate one-loss joint-transition sweeps **PASS**, 26 recorded management calls each plus exact FUSE checks. Final driver against the untouched base **FAILS as expected with `rc=-13` BUSY**. All seven focused K33 suites PASS. Fast suite FAILS at the same read-pair LSan instrumentation error as the base gate. Full gate running. |
 
 Two harness defects in the provisional controller are retained, not hidden:
 `tests/test_k33_acceptance.py` does not exist; acceptance was split into
@@ -94,7 +97,7 @@ controller uses those actual acceptance tests; the sweep is now
 the already-wired K33 growth test, with its existing budget; no new long-test
 command or larger gate target was added.
 
-The provisional gate reported `test_stop_progress.py` and
+The provisional gates reported `test_stop_progress.py` and
 `test_posix_expiry.py` stop failures, compile failures in extracted-helper
 mocks, the stale resync diagnostic assertion, the unwired driver inventory
 failure and four LeakSanitizer fatal instrumentation errors. The compile,
@@ -102,7 +105,41 @@ diagnostic and inventory defects have candidate corrections with added
 behavioral assertions; they are not dismissed as environment failures. They remain unclassified until the
 corrected candidate and, if required, untouched base run under the same
 host/command. These are not attributed to the routing fix or dismissed as
-host conditions without that comparison.
+host conditions without that comparison. The `7e4ddcb5e` gate additionally
+failed `test_reclaim` at `accept_range` during PUT racing acceptance; the
+base gate passed that command in 11 s. This test includes store/reclaim/
+segment-store implementations and **stubs** the Raft host; those source files
+are unchanged by this branch. The assertion did not print the actual
+acceptance rc, so the race remains **OPEN/unlocalized**, not proved harmless
+and not resolved by a later passing run. The old stop-progress failure also
+remains distinct from the base's passing stop-progress result. Preserve both
+in the final comparison.
+
+## Final focused command table — October 27
+
+Source `7029a6266`, build identity:
+`efsd 7029a6266 (branch agent/devel-task-k, built 2026-10-27T04:00:30Z on node9900)`.
+RDMA daemon logs confirm `segmented-v1 on mlx5_0`, rather than only the
+presence of the device or a requested environment value.
+
+| Check through seed unless named | TCP | RDMA | One-loss transition, TCP |
+|---|---|---|---|
+| MKFS through retired seed | rc=0, 0.004 s | rc=0, 0.004 s | rc=0, 0.556 s |
+| MKFS through added member 4 | rc=0, 0.003 s | rc=0, 0.003 s | rc=0, 0.004 s |
+| Commands-policy get and same-mask versioned set | PASS | PASS | PASS |
+| Expiry-policy get; expiry-clock get | PASS | PASS | PASS |
+| Raft/status, sync-status, data-commit, I/O/version/GC/expiry status | PASS | PASS | PASS |
+| Pack-compact summary (no compaction requested) | PASS | PASS | PASS |
+| Root/file getattr, lookup, path lookup, readdir, getchunks | PASS | PASS | PASS |
+| Same-voter-set CFG convergence | observed, 0.007 s | observed, 0.009 s | observed, 0.006 s |
+| Step-down and resync on retired group | NOT_PRIMARY, as required | same | same |
+| Seed-only FUSE operations and exact payloads | PASS | PASS | PASS |
+
+Each sweep has 26 recorded CLI calls: 24 successful calls and two expected
+NOT_PRIMARY refusals. Lower-level CLI status fields are checked independently
+of process exit status. All three sweep processes exit 0. Payloads are
+1,048,832 bytes before truncate, then exactly the expected first 4,099 bytes;
+hardlink, symlink and renamed-file reads also compare those exact bytes.
 
 ## Reproduction and acceptance
 
@@ -165,7 +202,7 @@ been exhaustively checked. The final command/result table is pending.
 Raw evidence stays on node9900 at
 `/home/erbmi1/efs-artifacts/taskK-20261026/`, including `base/`, the provisional
 `fixed/` sweeps, `qualification-d643adcd9/`, the source-tagged dispatch logs and
-`qualification-7e4ddcb5e/` and final `qualification-fcc8533d8/`. No raw capture or store is in Git or copied to
+`qualification-7e4ddcb5e/` and final `qualification-7029a6266/`. No raw capture or store is in Git or copied to
 the Mac. Build identities and binary hashes are recorded by the controller.
 
 **Open investigation:** bulk private stores/source trees are temporarily
