@@ -900,8 +900,14 @@ int main(void)
     run("segments without state fail closed",t_state_missing,0);
     run("old meta/ copy prepare",t_old_meta_prepare,1);
     run("old meta/ copy fails closed",t_old_meta,0);
-    char cmd[256];snprintf(cmd,sizeof(cmd),"rm -rf %s/meta/gc-journal* %s/data %s/" RJ_STATE_FILE,roots[0],roots[0],roots[0]);assert(!system(cmd));
-    snprintf(cmd,sizeof(cmd),"rm -rf %s/data",roots[1]);assert(!system(cmd));
+    /* Three owned root paths plus suffixes. A 256-byte command silently
+     * cut the state-file name under the per-command gate TMPDIR, leaving
+     * state without its journal and failing the following acceptance race. */
+    char cmd[3 * sizeof(roots[0]) + 128];
+    int len=snprintf(cmd,sizeof(cmd),"rm -rf %s/meta/gc-journal* %s/data %s/" RJ_STATE_FILE,roots[0],roots[0],roots[0]);
+    assert(len>0 && (size_t)len<sizeof(cmd));assert(!system(cmd));
+    len=snprintf(cmd,sizeof(cmd),"rm -rf %s/data",roots[1]);
+    assert(len>0 && (size_t)len<sizeof(cmd));assert(!system(cmd));
     run("journal cap BUSY",t_cap,0);
     run("PUT racing acceptance",t_race,0);
     run("physical guard",t_phys,0);
@@ -919,7 +925,8 @@ int main(void)
     run("superseded record replays",t_superseded_replay,0);
     run("segment PUT at a full quota uses the reserve",t_segment_quota,0);
     run("K37 segment audit and rebuild PUT",t_segment_audit_rebuild,0);
-    snprintf(cmd,sizeof(cmd),"rm -rf %s %s",roots[0],roots[1]);(void)system(cmd);
+    len=snprintf(cmd,sizeof(cmd),"rm -rf %s %s",roots[0],roots[1]);
+    assert(len>0 && (size_t)len<sizeof(cmd));assert(!system(cmd));
     printf("reclaim journal: PASS\n");
     return 0;
 }
