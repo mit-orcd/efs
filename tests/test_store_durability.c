@@ -364,6 +364,43 @@ static void write_frag(struct efsd_server *s,efs_ino_t ino,uint32_t ci,uint32_t 
     int fd=open(path,O_CREAT|O_TRUNC|O_WRONLY,0644);assert(fd>=0);
     assert(write(fd,data,4096)==4096 && write(fd,tail,sizeof(tail))==(ssize_t)sizeof(tail));close(fd);
 }
+/* GC may unlink an obsolete fragment, but may not remove its containing
+ * directory while an acknowledged epoch still owns that namespace proof. */
+static void test_gc_epoch_prune(uint8_t *data)
+{
+    for(int superseded=0;superseded<2;superseded++) {
+        char root[EFS_TEST_PATH],path[8192],rec[EFS_TEST_PATH+32];
+        efs_test_path(root,sizeof(root),"efs-prune-XXXXXX");assert(efs_test_mkdtemp(root));
+        struct statfs fs;assert(!statfs(root,&fs));
+        if((unsigned long)fs.f_type!=XFS_SUPER_MAGIC_){assert(!rmdir(root));return;}
+        struct efsd_server *s=calloc(1,sizeof(*s));assert(s);pthread_mutex_init(&s->lock,NULL);
+        s->storage_path_count=1;strcpy(s->storage_paths[0],root);
+        s->node_count=1;s->nodes[0].id=s->id=1;
+        write_frag(s,12345,7,1,0x77,12345,data,path,sizeof(path));
+        struct put_sync_root *r=&put_sync_roots[0];
+        uint64_t window=put_sync_window_ms;put_sync_window_ms=100000;
+        booting=1;put_sync_attach(r,root,101,1);booting=0;assert(r->fd>=0);put_sync_state[0]=1;
+        int fd=open(path,O_RDONLY);assert(fd>=0);
+        assert(!put_sync_note(r,4096,put_epoch_pin(fd),s,path));close(fd);
+        r->recovery_uncertain=1; /* namespace ownership is separate from recovery proof */
+        uint8_t sum[EFS_HASH_SIZE];efs_hash(data,4096,sum);
+        int rc=superseded ? server_gc_superseded_delete(s,1,12345,7,1,0x77,sum,0)
+                          : server_gc_inode_delete(s,1,12345,NULL,0);
+        assert(!rc && access(path,F_OK) && !put_epoch_owned);
+        assert(r->durable_seq>=1 && r->recovery_uncertain && put_sync_commit_root(r)==EFS_ERR_IO);
+        server_put_sync_recovered();assert(!server_put_sync_stop(s));
+        close(r->fd);close(r->record_fd);pthread_mutex_destroy(&r->mu);pthread_cond_destroy(&r->cv);
+        memset(r,0,sizeof(*r));put_sync_state[0]=0;put_sync_window_ms=window;
+        /* Only the exact fresh fixture's empty ancestors; failed tests retain it. */
+        char *slash;
+        while((slash=strrchr(path,'/')) && (size_t)(slash-path)>strlen(root)) {
+            *slash=0;int d=rmdir(path);assert(!d || errno==ENOENT);
+        }
+        snprintf(rec,sizeof(rec),"%s/%s",root,PUT_SYNC_RECORD);assert(!unlink(rec));assert(!rmdir(root));
+        pthread_mutex_destroy(&s->lock);free(s);
+    }
+    puts("GC namespace pruning drains owned PUT epochs without clearing recovery uncertainty PASS");
+}
 static void test_recovery_local(uint8_t *data)
 {
     char root[1024],good[8192],torn[8192],other[8192],flip[8192],pub[8192],foreign[8300];
@@ -601,6 +638,7 @@ int main(void)
     test_root_set();
     test_scoped_epoch();
     int async_ran=test_async_durability(data);
+    test_gc_epoch_prune(data);
     test_startup_abandon(data);
     test_recovery_local(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
