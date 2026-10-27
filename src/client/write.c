@@ -1387,6 +1387,7 @@ struct stale_pair {
     uint32_t idx;    /* index into the dirty snapshot */
     uint8_t valid;   /* successful authoritative repull */
     uint8_t absent;  /* the repull found no row on the host */
+    uint8_t owned;   /* exact unconditional body retained; never ACKed */
 };
 
 static int stale_pair_cmp(const void *a, const void *b)
@@ -1655,20 +1656,45 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
         pp[n].idx = (uint32_t)i;
         pp[n].absent = 0;
         pp[n].valid = 0;
+        pp[n].owned = 0;
         n++;
     }
     qsort(pp, (size_t)n, sizeof(*pp), stale_pair_cmp);
+    /* An explicit unconditional full overwrite has no chunk-map predicate.
+     * Retain its exact owned body from fresh FileID/epoch/ticket authority
+     * before fetching a map it does not depend on. This never acknowledges
+     * publication; a terminal/changed owner falls through to ordinary pull.
+     * Conditional records still require that pull before ACK or replay. */
+    for (i = 0; i < n;) {
+        uint64_t j=i+1;
+        while (j<n && pp[j].ino==pp[i].ino && pp[j].ci==pp[i].ci)j++;
+        struct stale_sent key={pp[i].ino,pp[i].ci,0};
+        const struct stale_sent *was=nsent?bsearch(&key,sx,nsent,sizeof(*sx),stale_sent_cmp):NULL;
+        if (was && sent[was->idx].base_gen==EFS_CHUNK_BASE_UNCOND &&
+            !sent[was->idx].delta_len) {
+            struct efs_chunk_entry unused={0};
+            int keep=stale_retry_owned(&sent[was->idx],sent_seq?sent_seq[was->idx]:0,
+                                       &unused,1,&reuse);
+            if (keep<0) {free(sx);free(rp);free(pp);return keep;}
+            if (keep) {
+                for(uint64_t k=i;k<j;k++)pp[k].owned=1;
+                retained++;
+            }
+        }
+        i=j;
+    }
     /* Gap-tolerant runs, one paged pull per run (64 recs/RPC). A chunk
      * the host has no row for is marked absent: the table then still
      * holds our own PUT's identity and must not read as committed. */
     i = 0;
     while (i < n) {
+        if (pp[i].owned) {i++;continue;}
         efs_ino_t ino = pp[i].ino;
         uint32_t lo = pp[i].ci, hi = pp[i].ci;
         uint64_t j = i + 1, k;
         uint8_t *bits;
 
-        while (j < n && pp[j].ino == ino && pp[j].ci - hi <= 64) {
+        while (j < n && !pp[j].owned && pp[j].ino == ino && pp[j].ci - hi <= 64) {
             if (pp[j].ci > hi)
                 hi = pp[j].ci;
             j++;
@@ -1701,7 +1727,7 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
 
         while (j < n && pp[j].ino == pp[i].ino && pp[j].ci == pp[i].ci)
             j++; /* [i,j) = duplicate snapshot entries for one chunk */
-        if (!pp[i].valid) {
+        if (pp[i].owned || !pp[i].valid) {
             i = j;
             continue;
         }

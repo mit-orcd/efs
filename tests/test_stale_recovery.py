@@ -32,19 +32,20 @@ static void *test_calloc(size_t n,size_t z) {return fail_bits?NULL:calloc(n,z);}
 struct dirty_snap {uint64_t chunk_count;efs_ino_t *chunk_inos;uint32_t *chunk_idxs;};
 '''+pair+r'''
 static int pull_error, absent, verdict_error, replay_error;
-static unsigned verdicts,replays,commits;
+static unsigned verdicts,replays,commits,pulls;
+static int mixed;static uint32_t pulled_lo,pulled_hi;
 static struct efs_chunk_entry map,observed;
 static uint64_t report_mono_ms(void) {return 0;}
 static int efs_client_pull_chunks_range_absent(efs_ino_t ino,uint32_t lo,
                                              uint32_t hi,uint8_t *bits) {
-    (void)ino;(void)lo;(void)hi;bits[0]=absent?1:0;return pull_error;
+    (void)ino;pulled_lo=lo;pulled_hi=hi;pulls++;bits[0]=absent?1:0;return pull_error;
 }
 static int export_chunk_copy(efs_ino_t ino,uint32_t ci,struct efs_chunk_entry *out) {
-    (void)ino;(void)ci;*out=map;return EFS_OK;
+    (void)ino;*out=map;if(mixed&&ci==1)out->generation=20;return EFS_OK;
 }
 /* The round sent object 10 (snapshot 11) for chunk (1,0). */
-static struct efs_chunk_rec sent[1]={{.ino=1,.chunk_index=0,.chunk_generation=10}};
-static uint64_t sent_seq[1]={11};
+static struct efs_chunk_rec sent[2]={{.ino=1,.chunk_index=0,.chunk_generation=10}};
+static uint64_t sent_seq[2]={11,11};
 static uint32_t nsent=1;
 static int dcache_note_committed(efs_ino_t ino,uint32_t ci,uint64_t gen,uint64_t obj,uint64_t seq) {
     (void)ino;(void)ci;(void)gen;(void)obj;(void)seq;commits++;return 1;
@@ -77,7 +78,7 @@ static int efs_client_rpc_writer_view(efs_ino_t ino,uint64_t gen,uint32_t ci,str
 '''+function('stale_retry_owned',current)+'\n'+function('stale_pair_cmp')+'\n'+function('stale_sent_cmp')+'\n'+function('stale_repull_replay')+r'''
 static void reset(void) {
     memset(&map,0,sizeof(map));map.generation=7;
-    verdicts=replays=commits=0;pull_error=absent=verdict_error=replay_error=fail_bits=0;
+    verdicts=replays=commits=pulls=0;pull_error=absent=verdict_error=replay_error=fail_bits=0;
 }
 int main(void) {
     (void)stale_retry_owned; /* baseline classifier may not call this helper */
@@ -172,9 +173,16 @@ int main(void) {
     owner.nodes[0]=0;reset();sent[0].base_gen=EFS_CHUNK_BASE_UNCOND;
     /* An explicit full overwrite is not conditional on row absence or its
      * base/delta set. It remains the same owned image, never an ACK. */
-    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!replays&&!commits&&owner.stale_retry);
+    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!replays&&!commits&&!pulls&&owner.stale_retry);
     reset();map.generation=8;map.ndelta=1;map.delta_seq=4;
-    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!replays&&!commits);
+    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!replays&&!commits&&!pulls);
+    reset();pull_error=EFS_ERR_BUSY;
+    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!pulls&&!commits&&!replays);
+    reset();ticket_live=EFS_ERR_BUSY;
+    assert(stale_repull_replay(&ds,1,sent,sent_seq,1)==EFS_ERR_BUSY&&!pulls&&!commits&&!replays);
+    ticket_live=0;reset();map.generation=10;
+    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&pulls==1&&commits==1&&!replays);
+    inos[0]=inos[1]=1;ticket_live=1;
     reset();authority.authority_epoch=4;owner.stale_retry=0;
     assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!owner.stale_retry);
     authority.authority_epoch=3;reset();sent[0].delta_len=16;owner.delta_len=16;
@@ -182,6 +190,17 @@ int main(void) {
     sent[0].delta_len=owner.delta_len=0;
     sent[0].base_gen=7;reset();pull_error=EFS_ERR_BUSY;attr_reads=0;
     assert(stale_repull_replay(&ds,1,sent,sent_seq,1)==EFS_ERR_BUSY&&!owner.stale_retry&&!attr_reads&&!replays);
+    /* A mixed unit fetches only its conditional chunk. A failed conditional
+     * proof retains both records, including the unconditional owner, no ACK. */
+    mixed=1;cis[1]=1;owner.stale_retry=0;
+    sent[0].base_gen=EFS_CHUNK_BASE_UNCOND;sent[1]=sent[0];
+    sent[1].chunk_index=1;sent[1].chunk_generation=11;sent[1].base_gen=20;
+    reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,2));
+    assert(pulls==1&&pulled_lo==1&&pulled_hi==2&&!commits&&replays==1&&inos[0]&&inos[1]);
+    reset();pull_error=EFS_ERR_BUSY;
+    assert(stale_repull_replay(&ds,1,sent,sent_seq,2)==EFS_ERR_BUSY);
+    assert(pulls==1&&!commits&&!replays&&inos[0]&&inos[1]);
+    mixed=0;cis[1]=0;
     /* One authority read covers this inode's chunks in this one round. */
     struct stale_retry_view cached={0};reset();attr_reads=0;
     sent[0].base_gen=7;sent[0].publish_flags|=EFS_CHUNK_REC_F_CAPTURED_EPOCH;
