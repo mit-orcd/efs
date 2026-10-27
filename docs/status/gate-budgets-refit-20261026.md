@@ -728,3 +728,9 @@ The exact old failure's packets were not captured, so causality is still
 an inference from the demonstrated mechanism and matching stuck state.
 Acceptance depends on the fixed-build gates, never on relabelling old FAILs.
 No fit, target reduction, post-refit result or real-host/RDMA PASS yet.
+
+All10 unchanged operator checks on58b87f0ed have now passed (8.682–12.163s),
+including post-resync workload readback and the POSIX cases. The controller
+is running snapshot-import; it has not started the subsequent strict pairs
+or full calibration. These live checks extend the candidate evidence but
+are not substitutes for the three full gates or the still-owed refit.
