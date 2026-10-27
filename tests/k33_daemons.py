@@ -271,7 +271,15 @@ def place_leaders(c, target, groups=(0, 2)):
                 break
             rc, out = mgmt(c.env, 'raft-step-down', c.ep(by_id[placement[group]]),
                            str(group), str(wanted))
-            assert rc == 0, out
+            if rc != 0:
+                # The transfer checks match/commit before handoff. A newly
+                # formed voter may still be catching up under the test pool.
+                # Retry only this documented pre-fault BUSY, never an unknown
+                # management error or an application outcome.
+                assert re.search(r'\brc=-13\b', out), out
+                assert time.monotonic() < end, f'group {group}: transfer stayed BUSY: {out}'
+                time.sleep(.1)
+                continue
             while time.monotonic() < end:
                 if c.leader_placement(target)[group] == wanted:
                     break
