@@ -121,9 +121,10 @@ python3 scripts/soak.py --work ~/efs-taskE/soak1h --out ... --hours 1
 ```
 
 Raw run logs, soak outputs and gate summaries: intel2
-`~/efs-artifacts/taskE-20261026/` with `SHA256SUMS`. Scratch worktrees for
-the era builds lived in `~/git/efs-k43base`/`~/git/efs-k43pre` (never
-committed; deleted).
+`~/efs-artifacts/taskE-20261026/` with `SHA256SUMS` (manifest sha256
+`9954e3faf4382c10ba4c6bee4b30bfc5`, 114 files; `PRUNED.txt` lists the
+deleted run trees). Scratch worktrees for the era builds lived in
+`~/git/efs-k43base`/`~/git/efs-k43pre` (never committed; deleted).
 
 ## Defects
 
