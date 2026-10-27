@@ -772,3 +772,57 @@ serial8-job gates. No full-gate result, fitted median, budget reduction or
 post-refit PASS is claimed yet. Earlier failed baselines remain FAIL and
 all failing fixtures remain kept for traceability. TCP loopback/direct-I/O
 fixture evidence does not supply a new repaired-build real-host/RDMA gate.
+
+### Second corrective full gate failed: packed read after compaction crash
+
+The first full eight-job gate of58b87f0ed stopped with **509 commands,
+1 FAIL,14 NOTRUN,729s, build0s**. K36 step8 readback after the injected
+KV-compaction crash raised EIO. Runs2/3 never started and these timings are
+not calibration inputs. Its earlier three standalone K36 passes remain scoped
+results, not a full-gate PASS.
+
+The retained client log identifies inode57345,901 bytes, packed segment
+`g0/e24c517a4e3cb802/1`: node1 NET(-6), node2 valid, node3 NOT_FOUND(-3).
+Node3's log independently records this segment published degraded during its
+reclaim crash and marked for rebuild. Node1 had restarted and verified before
+the read. No Raft storage-fence diagnostic appears for this failure. The
+captured logs do not prove whether node1's NET was its cooldown or a failed
+connection; that distinction remains a live-evidence limit.
+
+Code inspection found a concrete client defect: the packed reader returns
+the last unsuccessful fragment's verdict. Its existing returned-member
+re-probe ran only when that verdict was NET. A later absent fragment changed
+the verdict to NOT_FOUND and bypassed that recovery path. New deterministic
+cases in `tests/test_get_integrity.py` extract the production readers and
+use framed socketpair replies: one down-marked returned holder, one valid
+holder and one absent fragment, in all six holder/absence orders. The new
+test against unchanged58 source fails exactly on the first expected-success
+assertion. Corrective49e5ffd71 also permits the existing bounded re-probe on
+NOT_FOUND; all six cases pass, while unreachable returned holders still
+return EIO and all integrity-refusal cases remain passing. This proves the
+mixed-verdict defect, not retrospectively the captured client's cooldown.
+No timeout, durability, assertion, slot or budget was relaxed.
+
+Exact candidate `49e5ffd7116fa0bfca0273aa5202126d26226e55` is archived separately
+at `intel1:~/efs-taskJ4/src-49e5ffd71`. Ordered controller
+`~/efs-taskJ4/packed-qualification.py`, screen `taskJ-packed-qualification`,
+runs build, GET integrity, normal/early Raft and recipe, then three strict
+K36/K22 pairs and three operator checks. Only their success permits three
+new serial8-job full gates. Output:
+`~/efs-artifacts/taskJ-20261026/packed-reprobe-49e5ffd71/` and, if reached,
+`intel1-calibration-49e5ffd71/`. Fixed-source live qualification is pending;
+budgets and target1100s/bound1650s remain unchanged.
+
+Failed stores remain unchanged for this open investigation at
+`intel1:~/efs-taskJ4/src-58b87f0ed/tmp/case-462/efs-k36-6l9j3zwl/`.
+Diagnostic log copies are under the stable artifact root, directory
+`k36-compaction-58b87f0ed`. Closed manifests were re-read and verified:
+
+| Directory under `intel1:~/efs-artifacts/taskJ-20261026/` | Files | SHA256 of SHA256SUMS |
+| --- | ---: | --- |
+| `intel1-calibration-58b87f0ed` |17| `f9fc220139cac7a988ad11edee30553ce7b098d3630943a360329b5f8c28ab3a` |
+| `prefix-58b87f0ed` |32| `1b53ae350911fec400b3521cffe508e71863adc7b54cb9240215cf25e034f6ad` |
+| `k36-compaction-58b87f0ed` |10| `3f23d0b9e048fdb67cd6ec9b3b8f00fc7e6faabeb09b2e7f5ba54b28956e6113` |
+
+The failed runtime stores are deliberately outside those text manifests and
+remain retained, not pruned. Earlier original/operator failures stay FAIL.
