@@ -45,7 +45,7 @@ for (seq, obj, frag, port), times in sorted(groups.items()):
     times.sort()
     gaps = [b-a for a, b in zip(times, times[1:])]
     output.append(dict(seq=seq, object=hex(obj), fragment=frag, port=port,
-                       complete_sends=len(times), first=times[0], last=times[-1],
+                       complete_sends=len(times), first=times[0], last=times[-1], send_epochs=times,
                        gap_median_ms=1000*statistics.median(gaps) if gaps else None))
 refusals = []
 for path in (args.work/'cluster').glob('n*.log'):
