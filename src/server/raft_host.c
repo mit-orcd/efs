@@ -5856,6 +5856,12 @@ static int host_admit(struct efs_raft_host *h, struct efs_raft *r,
         return EFS_OK;
     if (cmd && clen && (cmd[0] == EFS_MD_CMD_DECIDE || cmd[0] == EFS_MD_CMD_RESOLVE ||
                         cmd[0] == EFS_MD_CMD_DROP ||
+                        /* Revocation stops an existing session's growth and
+                         * is prerequisite to reclaiming its owned bodies.
+                         * BEGIN uses cleanup's reserved quarter, never new
+                         * work's soft admission. Raft's hard cap still wins. */
+                        (cmd[0] == EFS_MD_CMD_SESSION && clen == HOST_SESS_HDR_LEN &&
+                         cmd[1] == EFS_MD_SESS_BEGIN) ||
                         (cmd[0] == EFS_MD_CMD_TXN_BATCH && clen > 1 &&
                          cmd[1] == EFS_MD_CMD_RESOLVE)))
         return EFS_OK;

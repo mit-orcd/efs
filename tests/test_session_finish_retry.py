@@ -77,3 +77,45 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-pthread','-o',str(p.with_suffix(''))],check=True)
     subprocess.run([str(p.with_suffix(''))],check=True)
 print('session FINISH: BUSY retries keep UUID/epoch, one BEGIN, both cleanup stages, same-epoch handoff retries, permanent deadline and no ambiguous resend PASS')
+
+# BEGIN cannot be starved by soft new-work admission: it freezes an existing
+# session before cleanup. Execute the production predicate at memory/log
+# pressure; new session/namespace work must remain refused.
+host=Path(os.environ.get('SESSION_ADMIT_SOURCE',root/'src/server/raft_host.c')).read_text()
+a=host.index('static int host_admit(');body=host[a:host.index('\n}',a)+2]
+code=r'''
+#include "efs/common.h"
+#include "efs/meta_cmd.h"
+#include <assert.h>
+#include <stdio.h>
+#include <stdint.h>
+#define EFS_RAFT_LEADER 1
+#define HOST_SESS_HDR_LEN 18u
+struct efs_raft_host {void *kv;uint64_t admit_busy;};
+struct efs_raft {int leader,memory;uint64_t pending;};
+struct efs_raft_log_progress {uint64_t unapplied,max_unapplied;};
+static int efs_raft_role(struct efs_raft*r){return r->leader;}
+static int efs_kv_lsm_apply_room(void*p,int n){assert(n==1);return ((struct efs_raft*)p)->memory?EFS_ERR_BUSY:EFS_OK;}
+static int efs_raft_log_progress(struct efs_raft*r,struct efs_raft_log_progress*p){p->max_unapplied=100;p->unapplied=r->pending;return EFS_OK;}
+'''+body+r'''
+int main(void){struct efs_raft r={.leader=1};struct efs_raft_host h={.kv=&r};
+ uint8_t begin[HOST_SESS_HDR_LEN+1]={EFS_MD_CMD_SESSION,EFS_MD_SESS_BEGIN};begin[2]=42;
+ uint8_t create[]={EFS_MD_CMD_CREATE};
+ for(unsigned memory=0;memory<2;memory++){
+  r.memory=memory;r.pending=memory?0:75;
+  assert(!host_admit(&h,&r,begin,HOST_SESS_HDR_LEN));
+  assert(host_admit(&h,&r,create,sizeof(create))==EFS_ERR_BUSY);
+  begin[1]=EFS_MD_SESS_CREATE;assert(host_admit(&h,&r,begin,HOST_SESS_HDR_LEN)==EFS_ERR_BUSY);
+  begin[1]=EFS_MD_SESS_REGISTER;assert(host_admit(&h,&r,begin,HOST_SESS_HDR_LEN)==EFS_ERR_BUSY);
+  begin[1]=EFS_MD_SESS_BEGIN;
+  assert(host_admit(&h,&r,begin,HOST_SESS_HDR_LEN-1)==EFS_ERR_BUSY);
+  assert(host_admit(&h,&r,begin,HOST_SESS_HDR_LEN+1)==EFS_ERR_BUSY);
+ }
+ r.memory=0;r.pending=74;assert(!host_admit(&h,&r,create,sizeof(create)));
+ puts("session BEGIN: cleanup reserve at soft memory/log pressure, exact encoding, new work still refused PASS");
+}
+'''
+with tempfile.TemporaryDirectory(prefix='efs-begin-admit-') as directory:
+    p=Path(directory)/'test.c';p.write_text(code)
+    subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
+    subprocess.run([str(p.with_suffix(''))],check=True)
