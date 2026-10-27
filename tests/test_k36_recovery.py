@@ -3,7 +3,8 @@
 
 Private efsd daemons on loopback (tests/k33_daemons.py, tests/faults/efsd
 with EFS_FAULTS hooks) and efs-fuse; stores under TMPDIR, free ports, never
-17xxx. Large files only (never packed). Every crash is a SIGKILL or an
+17xxx. Large files exercise chunk recovery; small files exercise packed recovery.
+Every crash is a SIGKILL or an
 EFS_FAULT_CRASH / EFS_FAULT_COMPACT_DIE exit, so the store is left as a
 killed process leaves it; acknowledged-but-unsynced loss is emulated by
 truncating (torn) and deleting (missing) fragment files of the stopped
@@ -53,7 +54,7 @@ store, since a process kill keeps the page cache.
     (tests/test_k36_segment_recovery.py covers this path in depth).
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
-import errno, os, re, shutil, signal, sys, tempfile, time
+import errno, json, os, re, shutil, signal, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload  # noqa: E402
@@ -66,7 +67,12 @@ if not fuse_ok():
     sys.exit(0)
 work = Path(tempfile.mkdtemp(prefix='efs-k36-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200')
+segment_rebuild_hold = work / 'segment-rebuild-hold'
+env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200',
+           EFS_FAULT_SEGMENT_REBUILD_HOLD=str(segment_rebuild_hold),
+           EFS_PACK_COMPACT_IDLE_S='1000000',
+           EFS_PACK_COMPACT_DAILY_START_MIN=str((time.gmtime().tm_hour * 60 +
+                                               time.gmtime().tm_min + 720) % 1440))
 SIZES = (1024 * 1024 + 3, 300000, 2 * 1024 * 1024 + 11, 70001)
 files = {}
 notes = []
@@ -117,6 +123,29 @@ def segs(c, i):
     for dirpath, _, names in os.walk(c.dir / f'n{i}' / 'data' / 'segments'):
         out += [Path(dirpath) / n for n in names if re.match(r'^[0-9a-f]{16}\.[0-9a-f]+\.\d$', n)]
     return sorted(out)
+
+
+def packed_victim(c, m, names):
+    """A fragment named by a live file, not the first orphan on disk."""
+    for name in names:
+        ino = (m.path / name).stat().st_ino
+        for via in sorted(c.procs):
+            rc, out = mgmt(c.env, 'raft-getchunks', c.ep(via), str(ino))
+            if rc or not re.search(r'raft-getchunks status=0\b', out):
+                continue
+            ref = re.search(r'packed segment=(\d+) gen=(\d+) group=(\d+)', out)
+            if not ref:
+                continue
+            sid, gen, group = map(int, ref.groups())
+            for holder in (2, 3, 4):
+                for path in segs(c, holder):
+                    if path.parent.parent.name == f'g{group}' and \
+                            re.fullmatch(rf'{sid:016x}\.{gen:x}\.\d', path.name):
+                        proof = dict(file=name, ino=ino, holder=holder, group=group,
+                                     segment=sid, generation=gen, fragment=int(path.name[-1]),
+                                     path=str(path), getchunks=out)
+                        return holder, path, proof
+    raise AssertionError('no referenced packed fragment found for the new files')
 
 
 def packed_total(c):
@@ -498,20 +527,27 @@ try:
             break
         assert time.time() < end, out
         time.sleep(0.5)
-    holder = next((i for i in (2, 3, 4) if segs(c, i)), None)
-    assert holder, 'no member holds a segment fragment'
+    # Recovery must observe this exact live loss before a background leader
+    # can rebuild it. The dedicated segment-recovery gate uses the same hold.
+    segment_rebuild_hold.touch()
+    holder, lost, proof = packed_victim(c, b, [f's{k}' for k in range(8)])
+    (work / 'segment-victim.json').write_text(json.dumps(proof, indent=2) + '\n')
+    print(f'11. deleting referenced segment: {json.dumps(proof)}', flush=True)
     kill(c, holder)
-    lost = segs(c, holder)[0]
     lost.unlink()
+    assert not lost.exists(), lost
     c.restart(holder)
     up(c, holder, n=4)
     st = verified(c, holder)
     assert st['segments'][0] >= 1 and st['segments'][1] >= 1, st
-    assert re.search(r'recovery: segment g\d+ id=\S+ gen=\S+ fragment \d not proven here',
+    identity = (rf'g{proof["group"]} id={proof["segment"]:016x} '
+                rf'gen={proof["generation"]:x} fragment {proof["fragment"]}')
+    assert re.search(r'recovery: segment ' + identity + r' not proven here',
                      c.last_run(holder)), c.last_run(holder)[-2000:]
-    assert re.search(r'recovery: segment g\d+ id=\S+ gen=\S+ fragment \d (?:already )?marked '
+    assert re.search(r'recovery: segment ' + identity + r' (?:already )?marked '
                      r'degraded for rebuild', c.last_run(holder)), c.last_run(holder)[-2000:]
     verify(b, 'segment fragment lost on one member')
+    segment_rebuild_hold.unlink()
     st = wait_status(c, holder, lambda s: re.search(r'segments .*? rebuilt=[1-9]\d* waiting=0;',
                                                      status(c, holder)[1]) is not None,
                      timeout=180)
@@ -519,10 +555,12 @@ try:
           f'missing and marked it (segments checked={st["segments"][0]} '
           f'missing={st["segments"][1]}), verified; rebuilt by K37; files exact PASS', flush=True)
 finally:
+    failed = sys.exc_info()[0] is not None
+    segment_rebuild_hold.unlink(missing_ok=True)
     for m in mounts:
         m.close()
     c.stop_all()
-    if os.environ.get('EFS_K36_KEEP'):
+    if failed or os.environ.get('EFS_K36_KEEP'):
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)

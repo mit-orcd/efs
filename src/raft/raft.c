@@ -340,8 +340,15 @@ static int receive_store(struct efs_raft *r, enum receive_store_kind kind,
     return receive_store_run(&call);
 }
 
-static void fence_storage(struct efs_raft *r)
+static void fence_storage_at(struct efs_raft *r, const char *where, int line)
 {
+    if (!r->storage_failed)
+        fprintf(stderr, "raft: group=%u storage fenced at=%s:%d term=%llu "
+                "commit=%llu applied=%llu snap=%llu resync=%d\n", r->group,
+                where, line, (unsigned long long)r->current_term,
+                (unsigned long long)r->commit_index,
+                (unsigned long long)r->last_applied,
+                (unsigned long long)r->snap_idx, r->resync_requested);
     r->storage_failed = 1;
     r->commit_index = r->last_applied;
     read_proof_forget(r);
@@ -350,6 +357,8 @@ static void fence_storage(struct efs_raft *r)
     r->allow_campaign = 0;
     r->read_in_flight = 0;
 }
+
+#define fence_storage(r) fence_storage_at((r), __func__, __LINE__)
 
 static int save_hard(struct efs_raft *r)
 {
@@ -1405,7 +1414,7 @@ static int start_election(struct efs_raft *r)
     uint64_t last_i = 0, last_t = 0;
     int i, rc;
 
-    if (!is_voter(r, r->id) || !r->allow_campaign) {
+    if (!is_voter(r, r->id) || !r->allow_campaign || r->resync_requested) {
         reset_election(r);
         return EFS_OK;
     }
@@ -1497,7 +1506,7 @@ static int start_prevote(struct efs_raft *r)
     uint64_t last_i = 0, last_t = 0;
     int i, rc;
 
-    if (!is_voter(r, r->id) || !r->allow_campaign) {
+    if (!is_voter(r, r->id) || !r->allow_campaign || r->resync_requested) {
         reset_election(r);
         return EFS_OK;
     }
@@ -1704,6 +1713,18 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         m.success = 0;
         m.match_index = 0;
         ae_reject_note(r, in, last_i, "resync-requested");
+        return send_msg(r, &m);
+    }
+    /* A queued batch may predate an installed snapshot. In particular,
+     * prev=0 always matches the virtual log origin, but its entries can
+     * already be compacted. Appending that missing prefix would fail the
+     * store's index check and permanently fence an otherwise healthy
+     * replica. Ask the leader to rebase at the committed snapshot boundary;
+     * do not import, append, truncate or apply anything from this request. */
+    if (in->prev_index < r->snap_idx) {
+        m.success = 0;
+        m.match_index = r->snap_idx;
+        ae_reject_note(r, in, last_i, "prev-compacted");
         return send_msg(r, &m);
     }
     {
@@ -3047,9 +3068,23 @@ int efs_raft_request_resync(struct efs_raft *r)
 {
     if (!r)
         return EFS_ERR_INVAL;
+    if (r->recv_persisting)
+        return EFS_ERR_BUSY;
     if (r->role == EFS_RAFT_LEADER)
         return EFS_ERR_NOT_PRIMARY;
     r->resync_requested = 1;
+    /* This replica explicitly distrusts its local image until snapshot
+     * install. Cancel an election already in flight as well as preventing
+     * timer/TimeoutNow elections; a delayed grant must not make it leader. */
+    read_proof_forget(r);
+    if (r->role == EFS_RAFT_CANDIDATE) {
+        r->role = EFS_RAFT_FOLLOWER;
+        r->leader = -1;
+    }
+    r->prevote_term = 0;
+    r->prevote_bits = 0;
+    r->vote_bits = 0;
+    reset_election(r);
     fprintf(stderr, "raft: group=%u resync requested (commit=%llu applied=%llu)\n",
             r->group, (unsigned long long)r->commit_index,
             (unsigned long long)r->last_applied);

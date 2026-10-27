@@ -515,7 +515,12 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
         int prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
             (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
             chunk_out, chunk_size, scratch, needed);
-        if (prc == EFS_ERR_NET && read_reprobe_down(ce.fragment_nodes)) {
+        /* The final fetch verdict depends on fragment order: a missing
+         * third fragment can mask an earlier NET from a returned holder.
+         * Re-probe down members for either short-read result before K41
+         * classifies the shortage. Integrity/deadline errors stay fatal. */
+        if ((prc == EFS_ERR_NET || prc == EFS_ERR_NOT_FOUND) &&
+            read_reprobe_down(ce.fragment_nodes)) {
             pctx = (struct packed_fetch_ctx){.group = ce.packed.publication_group};
             prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
                 (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,

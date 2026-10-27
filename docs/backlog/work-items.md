@@ -6648,6 +6648,16 @@ synthetic stores are retained on intel1; private cleanup was blocked by approval
 ## W166 — close(2) EIO at the 30 s flush deadline while a leader's apply lags
 
 **Correctness / availability; opened 2026-10-25 from the K22 loopback gates on `agent/devel-taskb`.**
+
+Oct27 Task J: the compressed-KV L0-pressure subcase is fixed on
+`agent/devel-task-j` (4c4446e02, integrated through49e5ffd71/0f72c1665):
+publication, admission and leader pressure share the same predicate. Strict
+K22 repetitions report zero client errors; three full gates and a separate
+post-refit gate have zero failures, with14 NOTRUN host/self-test markers each.
+No deadline was relaxed. This does not close the stalled-follower fault-
+window errors or supply production-scale/RDMA evidence; W166 remains OPEN
+for that residual scope. [Task J evidence](../status/gate-budgets-refit-20261026.md).
+
 - A stalled follower (SIGSTOP; log present, sockets open) makes client
   closes fail EIO at the 30 s flush deadline during the first ~2.5 min of
   the stall — before fencing settles — reproduced with the production 512
