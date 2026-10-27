@@ -188,11 +188,23 @@ Closed `SHA256SUMS` manifests and their SHA-256 values:
 | fstor007 first prerequisite failure | `/home/erbmi1/efs-artifacts/taskJ-20261026/fstor007/gate-394f2b791/SHA256SUMS` | `db0ca10d3d19c8b95575dd566c6070f33fed97fc846097650bfdf9afd98a7cb0` |
 | fstor007 compatible-FUSE gate | `/home/erbmi1/efs-artifacts/taskJ-20261026/fstor007/gate-394f2b791-fuse316/SHA256SUMS` | `a2d00ae42f1b789787196a46862b0c63ced3fb8c7e696b4bb6bd8fd536a0b086` |
 
+The serial calibration launcher also passed an isolated node9901 synthetic
+check: three successful stub gates retain separate results, while a first
+failed stub stops before run 2. This was not an EFS product test or a
+calibration measurement. Its scripts, logs and synthetic output are retained
+under `/data1/efs/traces/taskJ-20261026/node9901/launcher-validation/`;
+verified `SHA256SUMS` SHA-256:
+`44a16d2ee18e9c0650cb4001c240d4e66b3c6b9ed255e8b2036a0805b2e98942`.
+The synthetic scratch tree was pruned separately with edelete.
+
 ## Remaining calibration plan (Intel not executed)
 
 1. After intel1's handoff, export one pinned current devel commit into
    `~/efs-taskJ/src`; build and run the three 8-job `test-all` gates through
-   `scripts/make_test_summary.sh` serially in detached screen. Use the exact
+   `scripts/make_test_summary.sh` serially in detached screen with the prepared
+   `scripts/calibrate_test_budgets.sh FULL_COMMIT ARTIFACT_ROOT` launcher
+   copied outside that pinned archive. The launcher stops on a failed gate
+   or leftover task process; it never retries a failed measurement. Use the exact
    source/build identifiers, save each gate's summary, command enumeration,
    progress, timings, build/run logs and failure logs in its own directory
    under `~/efs-artifacts/taskJ-20261026/`. Preserve every verdict. Never use
