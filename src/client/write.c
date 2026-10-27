@@ -3833,6 +3833,25 @@ static int degraded_record(efs_ino_t ino, uint32_t chunk_index, uint64_t object,
     return EFS_OK;
 }
 
+/* Preserve immediate placement around full members when enough unused live
+ * members exist. Otherwise the same immutable ticket may wait for local
+ * packing/reclaim to return space, within the existing PUT retry budget. */
+static int put_quota_has_spares(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS], uint32_t mask)
+{
+    unsigned need = (unsigned)__builtin_popcount(mask), available = 0;
+    if (!need) return 0;
+    uint32_t count = __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE);
+    for (uint32_t n = 0; n < count && n < EFS_MAX_NODES; n++) {
+        efs_node_id_t id = g_client.nodes[n].id;
+        if (!id || node_is_full(id) || efs_client_node_is_down(id) || node_is_away(id))
+            continue;
+        int used = 0;
+        for (unsigned i = 0; i < EFS_NUM_FRAGMENTS; i++) used |= nodes[i] == id;
+        if (!used && ++available >= need) return 1;
+    }
+    return 0;
+}
+
 /* Retries reuse the ticket: same object name, placement and bytes.
  * *quota_mask gets the slots whose member refused the object as full.
  * On EFS_OK seq/epoch hold each acknowledged slot's acknowledgement (0 for
@@ -3861,14 +3880,24 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
     *unreachable_mask = 0;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         seq[i] = epoch[i] = 0;
-    int reprobed = 0;
+    int reprobed = 0, quota_waited = 0;
     for (int attempt = 1; attempt <= 128; attempt++) {
+        memset(quota, 0, sizeof(quota));
+        *quota_mask = 0;
         rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota, seq, epoch);
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             if (acked[i])
                 node_note_back(nodes[i]);
             if (quota[i] && !acked[i])
                 *quota_mask |= 1u << i;
+        }
+        if (*quota_mask && (rc == EFS_OK || rc == EFS_ERR_QUOTA) &&
+            !put_quota_has_spares(nodes, *quota_mask) && !quota_waited) {
+            quota_waited = 1;
+            fprintf(stderr, "put quota backpressure ino=%llu ci=%u ticket=%llu: "
+                    "retaining object and ACKs within existing retry budget\n",
+                    (unsigned long long)ino, chunk_index,
+                    (unsigned long long)ticket->id.seq);
         }
         if (rc == EFS_OK) {
             uint32_t missing = 0;
@@ -3898,8 +3927,13 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
              * on two fragments would create protection debt that no
              * rebuild can pay while the member stays full; the caller
              * places the object again without it, or reports ENOSPC. */
-            if (missing & *quota_mask)
-                return EFS_ERR_QUOTA;
+            if (missing & *quota_mask) rc = EFS_ERR_QUOTA;
+            if (rc == EFS_ERR_QUOTA) {
+                if (put_quota_has_spares(nodes, *quota_mask)) return rc;
+                if (efs_client_rpc_past_deadline() || report_retry_pause(50000) != EFS_OK)
+                    return rc;
+                continue;
+            }
             /* K34: two acks with the third member alive but BUSY (its
              * ticket read during a group leader change, pressure) are not
              * a degraded stripe: either acknowledging member may be the
@@ -3930,6 +3964,11 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
                 return rc;
             return degraded_record(ino, chunk_index, ticket->object, nodes, missing,
                                    failed[mi]);
+        }
+        if (rc == EFS_ERR_QUOTA && *quota_mask && !put_quota_has_spares(nodes, *quota_mask)) {
+            if (efs_client_rpc_past_deadline() || report_retry_pause(50000) != EFS_OK)
+                return rc;
+            continue;
         }
         if (rc == EFS_ERR_QUOTA || rc == EFS_ERR_STALE)
             return rc;

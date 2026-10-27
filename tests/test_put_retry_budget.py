@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Actual outer PUT retry loop: no sleeps, reprobes or retries past ownership budget."""
 from pathlib import Path
-import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/client/write.c').read_text()
+import os,subprocess,tempfile
+root=Path(__file__).resolve().parents[1];current=(root/'src/client/write.c').read_text()
+s=Path(os.environ.get('PUT_RETRY_SOURCE',root/'src/client/write.c')).read_text()
 def fn(name):
- a=s.index(name+'(');a=s.rfind('\n',0,a)+1;return s[a:s.index('\n}',a)+2]
+ text=current if name=='put_quota_has_spares' else s
+ a=text.index(name+'(');a=text.rfind('\n',0,a)+1;return text[a:text.index('\n}',a)+2]
 code=r'''
 #include "efs/protocol.h"
 #include "efs/put_ticket.h"
@@ -14,6 +16,10 @@ code=r'''
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+static struct {uint32_t node_count;struct {efs_node_id_t id;} nodes[EFS_MAX_NODES];} g_client;
+static uint64_t blocked_down,blocked_full,blocked_away;
+static int node_is_full(efs_node_id_t n){return !!(blocked_full&(1ull<<n));}
+static int node_is_away(efs_node_id_t n){return !!(blocked_away&(1ull<<n));}
 static uint64_t deadline;static unsigned calls,admits,releases,invalidations,reprobes;static efs_node_id_t admitted_on[8];static unsigned fulls,spare_left;static int full_slot=-1;static int terminal=EFS_ERR_NET;static int recover_busy,hard_fail,admit_rc;
 static uint64_t report_clock_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 static uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
@@ -25,7 +31,7 @@ static void efs_client_put_release(uint64_t seq,int landed){assert(seq==admits&&
 /* K34: down_third marks member 3 down in this client; reprobe_ok says
  * whether it answers a probe. */
 static int down_third,reprobe_ok;static unsigned probes;
-static int efs_client_node_is_down(efs_node_id_t n){return down_third && n==3;}
+static int efs_client_node_is_down(efs_node_id_t n){return (down_third && n==3)||!!(blocked_down&(1ull<<n));}
 static int efs_client_node_reprobe(efs_node_id_t n){assert(n==3);probes++;if(reprobe_ok)down_third=0;return reprobe_ok;}
 static void node_note_full(efs_node_id_t n){assert(n==3);fulls++;}
 static unsigned backs;static void node_note_back(efs_node_id_t n){(void)n;backs++;}
@@ -43,7 +49,7 @@ const char *efs_strerror(int rc){(void)rc;return "injected";}
 /* W154: degrade=1 leaves fragment 2 unacknowledged on the OK attempt. */
 static int degrade,note_rc=EFS_OK;static unsigned notes,logs;static uint32_t noted_mask;
 /* K34: busy_third>0 makes member 3 answer BUSY on that many OK attempts. */
-static int busy_third;
+static int busy_third,quota_recover_after;
 static int dgobj_note(efs_ino_t ino,uint32_t ci,uint64_t gen,uint32_t mask)
 {(void)ino;(void)ci;assert(gen==77);notes++;noted_mask=mask;return note_rc;}
 static void degraded_ack_log(efs_ino_t ino,uint32_t ci,uint64_t gen,const efs_node_id_t *nodes,int fi,const char *why)
@@ -53,15 +59,23 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint
 {(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline&&acked&&quota&&seq&&epoch);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail||(degrade_hard&&i==2&&t->nodes[2]==3)?1:2;usleep(5000);
  int rc=recover_busy && calls>2 ? EFS_OK : terminal;
  /* full_slot: that member refuses as full after the other two ACK. */
- if(full_slot>=0 && t->nodes[full_slot]==3){for(unsigned i=0;i<3;i++){if((int)i==full_slot)quota[i]=1;else acked[i]=1;}return EFS_OK;}
+ if(full_slot>=0 && t->nodes[full_slot]==3 && (!quota_recover_after || calls<=(unsigned)quota_recover_after)){for(unsigned i=0;i<3;i++){if((int)i==full_slot)quota[i]=1;else if(!acked[i]){acked[i]=1;seq[i]=calls*3+i+1;epoch[i]=9;}}return EFS_OK;}
  /* Acks from an earlier attempt of the same object still count. */
  if(rc==EFS_OK)for(unsigned i=0;i<3;i++)if(!degrade||i!=2||t->nodes[2]!=3){acked[i]=1;seq[i]=calls*3+i+1;epoch[i]=9;}
  if(rc==EFS_OK && busy_third){busy_third--;failed[2]=3;if(!busy_third){acked[2]=1;seq[2]=calls*3+3;epoch[2]=9;}}
  return rc;}
-'''+fn('report_retry_pause')+fn('static int degraded_record')+fn('put_fragments_parallel_run')+fn('efs_client_put_fragments_parallel')+r'''
+'''+fn('report_retry_pause')+fn('static int degraded_record')+fn('put_quota_has_spares')+fn('put_fragments_parallel_run')+fn('efs_client_put_fragments_parallel')+r'''
 #define PUT(t) efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,0,0,t)
 int main(void){
  efs_node_id_t nodes[3]={1,2,3};const uint8_t *fragments[3]={0};const uint8_t checksums[3][EFS_HASH_SIZE]={{0}};struct efs_put_ticket t;
+ for(unsigned i=0;i<5;i++)g_client.nodes[i].id=i+1;
+ g_client.node_count=3;assert(!put_quota_has_spares(nodes,4));
+ g_client.node_count=4;assert(put_quota_has_spares(nodes,4)&&!put_quota_has_spares(nodes,3));
+ g_client.node_count=5;assert(put_quota_has_spares(nodes,3));
+ blocked_down=1ull<<4;assert(!put_quota_has_spares(nodes,3));blocked_down=0;
+ blocked_full=1ull<<5;assert(!put_quota_has_spares(nodes,3));blocked_full=0;
+ blocked_away=1ull<<4;assert(!put_quota_has_spares(nodes,3));blocked_away=0;
+ g_client.node_count=3;
  uint64_t start=report_clock_ms();deadline=start;
  /* An expired budget admits nothing and sends nothing. */
  assert(PUT(&t)==EFS_ERR_BUSY);
@@ -122,15 +136,20 @@ int main(void){
  /* B5: one full member is never a degraded acknowledgement. With a spare
   * the object is placed again (new ticket, the refused one released) and
   * stored on three members; without one the write is QUOTA (ENOSPC). */
- calls=0;terminal=EFS_OK;full_slot=2;spare_left=1;fulls=0;before=admits;unsigned rel=releases,nb=notes;
+ g_client.node_count=4;calls=0;terminal=EFS_OK;full_slot=2;spare_left=1;fulls=0;before=admits;unsigned rel=releases,nb=notes;
  deadline=report_clock_ms()+500;
  assert(PUT(&t)==EFS_OK);
  assert(admits==before+2&&admitted_on[before%8]==3&&admitted_on[(before+1)%8]==4);
  assert(releases==rel+1&&fulls==1&&notes==nb&&nodes[2]==4&&t.nodes[2]==4);
- nodes[2]=3;calls=0;fulls=0;spare_left=0;before=admits;rel=releases;
+ g_client.node_count=3;nodes[2]=3;calls=0;fulls=0;spare_left=0;before=admits;rel=releases;
  deadline=report_clock_ms()+500;
  assert(PUT(&t)==EFS_ERR_QUOTA);
- assert(admits==before+1&&releases==rel+1&&fulls==1&&notes==nb&&nodes[2]==3);
+ assert(admits==before+1&&releases==rel+1&&!fulls&&notes==nb&&nodes[2]==3&&calls>1&&calls<=128);
+ /* Reclaim returns space: retain the same ticket and prior ACKs, with
+  * no new object, no degraded acknowledgement and no deadline renewal. */
+ calls=0;quota_recover_after=2;before=admits;rel=releases;deadline=report_clock_ms()+500;
+ assert(PUT(&t)==EFS_OK&&calls==3&&admits==before+1&&releases==rel&&notes==nb);
+ quota_recover_after=0;
  full_slot=-1;
  /* K35: a member that failed hard on a two-fragment acknowledgement: with
   * a spare the object is placed again there (new ticket, the degraded one
