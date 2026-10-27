@@ -360,6 +360,9 @@ void efs_client_put_cohort_leave(void);
 void efs_client_put_done(efs_ino_t ino, uint32_t ci, uint64_t object);
 /* 1 while a client table still names the object (write.c). */
 int efs_client_put_referenced(efs_ino_t ino, uint32_t ci, uint64_t object);
+/* 1: exact owned ticket is freshly ADMITTED; 0: no longer reusable;
+ * negative: authority unavailable, keep the body rather than abandon it. */
+int efs_client_put_retry_admitted(efs_ino_t ino,uint32_t ci,uint64_t object,uint64_t seq);
 /* One settle pass: retire PUBLISHED, abandon unreported tickets, in
  * per-stream sequence order. Background thread: kick after a REPORT. */
 int efs_client_put_settle(void);

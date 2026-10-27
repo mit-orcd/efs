@@ -73,6 +73,7 @@ static uint64_t put_bg, put_seq, next_object=0x1000, seqctr=10;
 static uint32_t put_off, put_len;
 static uint8_t put_img[LEN];
 static struct efs_chunk_delta overlay_d;
+int efs_client_put_retry_admitted(efs_ino_t ino,uint32_t ci,uint64_t o,uint64_t seq){(void)ino;(void)ci;(void)o;(void)seq;return 0;}
 void efs_client_put_done(efs_ino_t ino,uint32_t ci,uint64_t o){(void)ino;(void)ci;if(o)settled++;}
 static void putid_miss_note(efs_ino_t ino,uint32_t ci,const efs_node_id_t *n){(void)ino;(void)ci;(void)n;}
 static void report_retry_without_identity(efs_ino_t ino,uint32_t ci){(void)ino;(void)ci;}

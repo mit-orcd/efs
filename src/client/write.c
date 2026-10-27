@@ -247,7 +247,7 @@ struct put_id {
     uint64_t gen;
     uint64_t seq; /* dcache snapshot seq of this PUT (0 = unordered) */
     uint64_t span_base_gen; /* immutable base observed by this span's PUT */
-    uint8_t stale_retry; /* one unchanged-view retry, without another physical PUT */
+    uint8_t stale_retry; /* subsequent reuse requires fresh ADMITTED-ticket proof */
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     uint32_t delta_off;
@@ -1530,14 +1530,15 @@ struct stale_retry_view {
  * did not change. Its uploaded immutable body is still owned: retry that
  * object under the next publication id, rather than settle it REJECTED and
  * upload identical bytes again. This is never an ACK. The server rechecks
- * the ticket, CAS and atomic unit. One such retry per exact PUT keeps a
- * terminal ticket or a persistent semantic refusal on the normal replay
- * path; the existing REPORT attempt/deadline bounds are unchanged. */
+ * the ticket, CAS and atomic unit. Subsequent reuse additionally proves the
+ * same live ticket is ADMITTED; terminal tickets take normal replay and
+ * unknown authority preserves the body as a failure. Existing REPORT
+ * attempt/deadline bounds still terminate persistent refusals. */
 static int stale_retry_owned(const struct efs_chunk_rec *r, uint64_t seq,
                               const struct efs_chunk_entry *ce, int absent,
                               struct stale_retry_view *view)
 {
-    int keep = 0;
+    int keep = 0, repeated = 0;
     if (!seq || !r->put_seq || !r->file_generation || r->delta_len ||
         !(r->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
         (r->publish_epoch && !(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH)))
@@ -1562,14 +1563,28 @@ static int stale_retry_owned(const struct efs_chunk_rec *r, uint64_t seq,
         return 0; /* a truncate/FileID change needs ordinary repull/replay */
     pthread_mutex_lock(&g_putid_mu);
     struct put_id *p = putid_find(r->ino, r->chunk_index);
-    if (p && !p->stale_retry && p->gen == r->chunk_generation && p->seq == seq &&
+    if (p && p->gen == r->chunk_generation && p->seq == seq &&
         p->put_seq == r->put_seq && p->file_generation == r->file_generation &&
         p->publish_epoch == r->publish_epoch &&
         !memcmp(p->nodes, r->nodes, sizeof(p->nodes)) &&
         !memcmp(p->cks, r->checksums, sizeof(p->cks))) {
+        repeated=p->stale_retry;
         p->stale_retry = 1;
         keep = 1;
     }
+    pthread_mutex_unlock(&g_putid_mu);
+    if (!keep || !repeated) return keep;
+    int live=efs_client_put_retry_admitted(r->ino,r->chunk_index,
+                                          r->chunk_generation,r->put_seq);
+    if (live<=0) return live;
+    /* Another PUT may replace this exact snapshot while status is read. */
+    pthread_mutex_lock(&g_putid_mu);
+    p=putid_find(r->ino,r->chunk_index);
+    keep=p && p->gen==r->chunk_generation && p->seq==seq &&
+         p->put_seq==r->put_seq && p->file_generation==r->file_generation &&
+         p->publish_epoch==r->publish_epoch &&
+         !memcmp(p->nodes,r->nodes,sizeof(p->nodes)) &&
+         !memcmp(p->cks,r->checksums,sizeof(p->cks));
     pthread_mutex_unlock(&g_putid_mu);
     return keep;
 }
@@ -1740,7 +1755,9 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
             i = j;
             continue;
         }
-        if (stale_retry_owned(&obj, object_seq, &ce, pp[i].absent, &reuse)) {
+        int owned_retry=stale_retry_owned(&obj, object_seq, &ce, pp[i].absent, &reuse);
+        if (owned_retry<0) { error=owned_retry;break; }
+        if (owned_retry) {
             retained++;
             i = j;
             continue;

@@ -8,7 +8,7 @@ is not a commit, and a chunk the round did not send is left to the rebuild.
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-current=(root/'src/client/write.c').read_text()
+current=Path(os.environ.get('OWNED_RETRY_SOURCE',root/'src/client/write.c')).read_text()
 w=Path(os.environ.get('STALE_CLASSIFIER_SOURCE',root/'src/client/write.c')).read_text()
 def function(name,source=None):
     source=w if source is None else source
@@ -68,6 +68,9 @@ static struct put_id owner;
 static pthread_mutex_t g_putid_mu=PTHREAD_MUTEX_INITIALIZER;
 static struct efs_msg_inode_writer_view_reply authority;
 static int attr_error;static unsigned attr_reads;
+static int ticket_live=1;static unsigned ticket_checks;
+int efs_client_put_retry_admitted(efs_ino_t ino,uint32_t ci,uint64_t object,uint64_t seq)
+{assert(ino==1&&ci==0&&object==10&&seq==81);ticket_checks++;return ticket_live;}
 static struct put_id *putid_find(efs_ino_t ino,uint32_t ci) {return owner.ino==ino&&owner.ci==ci?&owner:NULL;}
 static int efs_client_rpc_writer_view(efs_ino_t ino,uint64_t gen,uint32_t ci,struct efs_msg_inode_writer_view_reply *out)
 {assert(ino==1&&gen==22&&ci==0);attr_reads++;*out=authority;return attr_error;}
@@ -125,8 +128,12 @@ int main(void) {
     authority=(struct efs_msg_inode_writer_view_reply){.generation=22,.authority_epoch=3};attr_reads=0;attr_error=0;
     reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1));
     assert(!commits&&!replays&&!verdicts&&inos[0]&&inos[1]&&owner.stale_retry&&attr_reads==1);
-    /* Repeated refusal falls back to ordinary replay under the same bound. */
-    reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!commits);
+    /* Repeated unchanged refusals retain the same ADMITTED body, never ACK. */
+    for(unsigned i=0;i<8;i++){reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!replays&&!commits);}
+    assert(ticket_checks==8);
+    ticket_live=EFS_ERR_BUSY;reset();assert(stale_repull_replay(&ds,1,sent,sent_seq,1)==EFS_ERR_BUSY&&!replays&&!commits);
+    ticket_live=0;reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!commits);
+    ticket_live=1;
     owner.stale_retry=0;authority.authority_epoch=4;reset();
     assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!owner.stale_retry);
     authority.authority_epoch=3;authority.generation=23;reset();
@@ -163,7 +170,7 @@ int main(void) {
     owner.stale_retry=0;owner.ci=1;owner.gen=11;owner.put_seq=82;
     sent[0].chunk_index=1;sent[0].chunk_generation=11;sent[0].put_seq=82;
     assert(stale_retry_owned(sent,11,&map,0,&cached)&&attr_reads==1);
-    puts("STALE recovery: authoritative pull, sent-object identity, one owned unchanged-view retry; changed epochs, mappings, identities and repeated refusals replay PASS");
+    puts("STALE recovery: authoritative pull, sent-object identity, owned unchanged-view reuse with fresh ADMITTED-ticket proof; changed epochs/mappings/identities replay and unknown authority refuses PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-stale-recovery-') as directory:

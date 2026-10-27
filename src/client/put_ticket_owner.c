@@ -354,6 +354,32 @@ void efs_client_put_done(efs_ino_t ino, uint32_t ci, uint64_t object)
     pthread_mutex_unlock(&g_ledger.mu);
 }
 
+/* A repeated definite publication refusal need not manufacture another
+ * physical body. Require the exact still-owned ticket to remain ADMITTED
+ * at fresh server authority; unknown status retains ownership as an error.
+ * Never hold table/ledger locks across the status RPC. */
+int efs_client_put_retry_admitted(efs_ino_t ino,uint32_t ci,uint64_t object,uint64_t seq)
+{
+    struct efs_put_ticket ticket;
+    pthread_mutex_lock(&g_ledger.mu);
+    struct ledger_entry *e=ledger_find(seq);
+    int owned=e && !e->putting && !e->done && e->ticket.ino==ino &&
+              e->ticket.ci==ci && e->ticket.object==object;
+    if (owned) ticket=e->ticket;
+    pthread_mutex_unlock(&g_ledger.mu);
+    if (!owned) return 0;
+    uint32_t state=0;
+    int rc=efs_client_rpc_put_ticket(&ticket,1,&state);
+    if (rc!=EFS_OK) return rc==EFS_ERR_NOT_FOUND?0:rc;
+    if (state!=EFS_PUT_TICKET_ADMITTED) return 0;
+    pthread_mutex_lock(&g_ledger.mu);
+    e=ledger_find(seq);
+    owned=e && !e->putting && !e->done && e->ticket.ino==ino &&
+          e->ticket.ci==ci && e->ticket.object==object;
+    pthread_mutex_unlock(&g_ledger.mu);
+    return owned;
+}
+
 uint32_t efs_client_put_outstanding(void)
 {
     pthread_mutex_lock(&g_ledger.mu);
