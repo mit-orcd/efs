@@ -14984,6 +14984,23 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             if(rc!=EFS_OK)out->rc=rc;
             return;
         }
+#if EFS_FAULTS
+        /* W166: a hosted follower cannot cover its ticket STATUS read.
+         * Models the observed frozen apply prefix, without stalling Raft
+         * replication or fabricating a ticket/session verdict. */
+        if(cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS) {
+            const char *gate=getenv("EFS_FAULT_TICKET_READ_LAG_FILE");
+            struct host_view lag;host_view_get(h,group,&lag);
+            if(gate && access(gate,F_OK)==0 && lag.has && lag.role!=EFS_RAFT_LEADER) {
+                static unsigned noted;
+                if(!__atomic_exchange_n(&noted,1,__ATOMIC_RELAXED))
+                    fprintf(stderr,"fault: EFS_FAULT_TICKET_READ_LAG_FILE: follower STATUS not covered\n");
+                out->rc=EFS_ERR_NOT_PRIMARY;
+                out->leader_hint=lag.leader==h->raft_id?-1:lag.leader;
+                return;
+            }
+        }
+#endif
         uint8_t admission[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_ESTABLISH};
         memcpy(admission+2,ticket->id.client_uuid,16);
         wr32be(admission+18,ticket->id.session_epoch);wr32be(admission+22,shard);
