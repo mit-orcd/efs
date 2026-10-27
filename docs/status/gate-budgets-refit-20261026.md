@@ -1,4 +1,4 @@
-Branch agent/devel-task-j, tested head4c4446e02. Base4066f74df: TOTAL508 FAIL2 NOTRUN14 (616s); strict fixed K22 1/1 zero errors. Full corrected gate NOTRUN pending repetitions. Evidence: docs/status/gate-budgets-refit-20261026.md. W166 candidate unifies L0 leadership/admission; qualification pending. Original Intel/ORCD FAILs retained; no budget fit.
+Branch agent/devel-task-j, tested head4c4446e02. Base4066f74df: TOTAL508 FAIL2 NOTRUN14 (616s); strict fixed K22/K36 3/3 each, zero client errors. Full corrected calibration RUNNING. Evidence: docs/status/gate-budgets-refit-20261026.md. W166 candidate unifies L0 leadership/admission; qualification pending. Original Intel/ORCD FAILs retained; no budget fit.
 
 # W160 three-run budget refit — October 26, 2026
 
@@ -408,3 +408,25 @@ application EIOs. It is **one standalone run**, not full qualification. The
 capacity unit, expected missing-predicate source control, follower-bound
 checks and recipe check passed before it. K36 and the remaining repetitions
 are active; full calibration has not started yet. No budgets changed.
+
+### Strict repetitions complete; full calibration active
+
+At exact source/build `4c4446e02`, all three strict repetitions passed:
+
+| Repetition | K22 wall s | K36 wall s | Verdict |
+| --- | ---: | ---: | --- |
+| 1 | 28.758 | 73.104 | both rc0; zero K22 client errors |
+| 2 | 21.144 | 69.820 | both rc0; zero K22 client errors |
+| 3 | 20.151 | 67.448 | both rc0; zero K22 client errors |
+
+K36 checked the exact metadata-referenced victim's missing/mark identity,
+verified recovery, rebuilt it and read every fixture payload exactly in each
+run. The normal/fault build is
+`efsd 4c4446e02 (branch agent/devel-task-j, built 2026-10-27T03:56:35Z on intel1)`.
+These are TCP loopback observations, not a new real-host/RDMA result. The
+old application-EIO runs remain failed evidence and are not median inputs.
+
+The controller automatically started full calibration run1 at eight jobs
+after these checks. Its new fast regression makes the recipe509 commands.
+No corrected full-gate result, budget fit or final closed manifest is claimed
+until all three runs finish and their retained source/timings are validated.
