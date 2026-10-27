@@ -887,7 +887,8 @@ round says which physical or software limiter it hit.
   drain 34.2 s; full gate TOTAL 508 FAIL 1 NOTRUN 13 (transfer setup).
   Test-only fix `39d3848fd` UNTESTED, queued behind Task G. Nuc RSS PASS /
   stored-data D4 FAIL stays open; base attempt 1 INCOMPLETE, attempt 2
-  RUNNING. Node9901 TCP/RDMA NOTRUN pending shared-host policy; no overall
+  RUNNING. User-selected node9900 RDMA RUNNING, TCP follows, shared-client
+  scope recorded; node9901 superseded. No overall
   qualification PASS ([evidence](task-i-20261026.md)).**
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;

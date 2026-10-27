@@ -274,3 +274,13 @@ queued after Task G releases xorinox. Nuc base attempt 1 was interrupted,
 not still running; attempt 2 is active. Node9901 remains NOTRUN pending
 shared-host measurement policy. [Full table, reviewed failure, evidence
 hashes and exact remaining work](task-i-20261026.md).
+
+### Hardware host changed by the user
+
+On October 27 the user selected **node9900 instead of node9901**.
+The private RDMA measurement is RUNNING at source `ff0a6db69` (unchanged
+product code), native build PASS; TCP follows. The pre-existing orcd-mini
+client stays mounted and its identity/CPU activity are recorded, so the
+hardware evidence is shared-client scoped, never silently called quiet.
+The first preflight stopped NOTRUN when that client's PID changed; its
+receipt is retained separately. [Controller, exact commands and paths](task-i-20261026.md#user-selected-node9900-hardware-stage--october-27).
