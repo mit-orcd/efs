@@ -2,7 +2,7 @@
 """W166: two independent close failure paths, with the 30 s budget unchanged.
 
 Private three-voter TCP/O_DIRECT cluster. REPORT: park node 1's compactor,
-fill its actual L0 to the compressed 2 MiB cap with metadata, then stop the
+fill its actual L0 to the compressed 1 MiB cap with metadata, then stop the
 load while the bounded memtable tail still has admission room. A full L0
 alone must not reject REPORT until its 8+8 second budgets expire. PUT:
 move both leaders away from node 1, then force only its local ticket STATUS
@@ -71,7 +71,7 @@ def write_case(case, path):
 
 
 try:
-    c.start(1, extra_env={'EFS_FAULT_L0_BYTES': str(2 << 20),
+    c.start(1, extra_env={'EFS_FAULT_L0_BYTES': str(1 << 20),
                         'EFS_FAULT_MEMTABLE_BYTES': str(1 << 20),
                         'EFS_FAULT_COMPACT_STALL': '1',
                         'EFS_FAULT_COMPACT_FILE': str(park),

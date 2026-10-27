@@ -148,6 +148,7 @@ def writer(mnt, tag):
 
 
 t0 = time.time()
+passed = False
 c = None
 mounts = []
 try:
@@ -283,6 +284,7 @@ try:
     assert wrote[0] > 0, 'no client writes happened'
     print(f'[k22admit] {wrote[0]} client writes, zero errors after the move')
     print('[k22admit] PASS')
+    passed = True
 except Exception as e:
     print('[k22admit] FAIL:', e)
     raise
@@ -294,7 +296,7 @@ finally:
         m.close()
     if c:
         c.stop_all()
-    if args.keep:
+    if args.keep or not passed:
         print('[k22admit] retained work:', work, flush=True)
     else:
         shutil.rmtree(work, ignore_errors=True)
