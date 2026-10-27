@@ -12,7 +12,7 @@ background_client=${6:-}
 [[ "$gate_mode" == full || "$gate_mode" == measure-only ]] || exit 2
 [[ "$commit" =~ ^[0-9a-f]{9,40}$ && "$transport" =~ ^(tcp|rdma)$ ]] || exit 2
 src=$(pwd -P)
-[[ "$src" == "$HOME/efs-taskI/src" || "$src" == /tmp/efs-taskI-*/src ]] || exit 2
+[[ "$src" == "$HOME/efs-taskI/src" || "$src" == "$HOME"/efs-taskI/*/src || "$src" == /tmp/efs-taskI-*/src ]] || exit 2
 [[ ! -e "$HOME/efs-taskH" ]] || { echo 'NOTRUN: task H still owns its private tree'; exit 77; }
 mkdir "$art" || exit 2
 mkdir "$art/measurement" "$art/gate" "$art/logs" "$src/tmp"
