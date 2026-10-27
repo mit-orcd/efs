@@ -59,3 +59,18 @@ for mode, target, bound in (('catchup', 1, 30), ('catchup', 2, 20),
             else:
                 raise AssertionError(f'{mode}: setup falsely succeeded')
 print('K33 pressure setup: retry documented catch-up BUSY only, 30 s bound, hard errors fail PASS')
+
+# Join completion may assign member 3 to the process named node2. The
+# requested target and the management endpoint must use assigned identities.
+c = Cluster()
+c.node_id = lambda i: {1: 1, 2: 3, 3: 2}[i]
+c.leaders = {0: 1, 2: 1}
+calls = []
+def assigned_mgmt(env, *args):
+    calls.append(args)
+    c.leaders[int(args[2])] = int(args[3])
+    return 0, 'rc=0'
+with patch.object(k, 'mgmt', assigned_mgmt):
+    assert k.place_leaders(c, 2, timeout=20) == {0: 3, 2: 3}
+assert all(a[1] == 'node1' and a[3] == '3' for a in calls), calls
+print('K33 pressure setup: assigned target identity, independent of process start order PASS')

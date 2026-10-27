@@ -119,7 +119,8 @@ try:
         # when the first transfer request arrives. Retry only pre-fault
         # catch-up BUSY, sharing the existing 20 s setup/transfer bound.
         place_leaders(c, 2, timeout=20)
-        assert c.leader_placement(2) == {0: 2, 2: 2}
+        wanted = c.node_id(2)  # physical start order is not assigned member order
+        assert c.leader_placement(2) == {0: wanted, 2: wanted}
         lag.touch()
         write_case('put', m.path / 'put')
         lag.unlink()
