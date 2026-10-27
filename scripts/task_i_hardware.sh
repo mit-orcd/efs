@@ -35,10 +35,15 @@ for transport in rdma tcp; do
     if test "$rc" -eq 125 || test "$rc" -eq 77 || test ! -f "$art/$transport/measurement/exit"; then exit "$rc";fi
     [ "$rc" -eq 0 ] || status=1
     python3 - "$art/$transport" <<'PY'
-import json,sys
+import json,re,sys
 from pathlib import Path
 p=Path(sys.argv[1]);lines=[]
-for f in (p/'logs').rglob('*.log'):
+doc=json.loads((p/'measurement/d4-result.json').read_text())
+process=next(r['process'] for r in doc['measured']['rss_plateau'] if 'mnt-l' in r['process'])
+fixture=re.search(r'(efs-d4p-[^/]+)/',process)[1]
+# The source scratch dir can hold the preceding transport's closed fixture.
+# Keep every raw log, but scope the transport summary to this result's fixture.
+for f in (p/'logs'/fixture).rglob('*.log'):
     for line in f.read_text(errors='replace').splitlines():
         if 'RDMA transport up' in line or 'RDMA counters ' in line or 'transport ' in line:
             lines.append(str(f.relative_to(p))+': '+line)

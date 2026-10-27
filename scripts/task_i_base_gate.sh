@@ -8,7 +8,19 @@ art=${2:?fresh external evidence directory required}
 mkdir "$art" || exit 2
 mkdir "$art/gate"
 exec >"$art/controller.log" 2>&1
-trap 'rc=$?; printf "%s\n" "$rc" > "$art/controller-exit"' EXIT
+finish_receipt() {
+    rc=$?
+    if [ "$(cat "$art/stage" 2>/dev/null)" != FINISHED ]; then
+        [ "$rc" -ne 0 ] || rc=1
+        printf 'INCOMPLETE\n' > "$art/incomplete"
+    fi
+    printf '%s\n' "$rc" > "$art/controller-exit"
+    exit "$rc"
+}
+trap finish_receipt EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 export EFS_FUSE_PREFIX=/usr EFS_TRANSPORT=tcp
 export EFS_GIT_ID="$commit" EFS_GIT_BRANCH=devel EFS_GIT_DESCRIBE="$commit"
 python3 - <<'PY'
