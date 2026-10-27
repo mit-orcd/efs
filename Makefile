@@ -532,6 +532,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_tiny_fragment_audit.py
 	python3 tests/test_b_checks_driver.py
 	python3 tests/test_d4_driver.py
+	python3 tests/test_pub_unit_setup.py
 	python3 tests/test_read_recorded_nodes.py
 	python3 tests/test_tmpdir_hygiene.py
 	python3 tests/test_pressure_cohort.py

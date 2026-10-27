@@ -35,6 +35,7 @@ import os, re, shutil, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, SLOW, Mount, fuse_ok, mgmt, payload  # noqa: E402
+from pub_unit_setup import split_leaders  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -65,17 +66,10 @@ try:
     # The REPORT runs at a group leader, which forwards the other group's
     # batch: the two groups must have different leaders (a member leading
     # both forwards nothing). Move group 2 off the leader of group 0.
-    place = c.leader_placement(1)
-    if place[0] == place[2]:
-        by_id = {c.node_id(i): i for i in (1, 2, 3)}
-        target = next(n for n in sorted(by_id) if n != place[0])
-        rc, out = mgmt(c.env, 'raft-step-down', c.ep(by_id[place[2]]), '2', str(target))
-        assert rc == 0, out
-        end = time.time() + 30 * SLOW
-        while place[0] == place[2] and time.time() < end:
-            time.sleep(0.5)
-            place = c.leader_placement(1)
-    assert place[0] != place[2], f'one member leads both groups: {place}'
+    # Formation can precede the target's matched tail/current-term commit.
+    # Wait through documented transfer refusals before starting the measured
+    # publication workload; the 12 rounds and 3-second bound stay unchanged.
+    place = split_leaders(c, mgmt, 30 * SLOW)
     led = set(place.values())
     via = next((i for i in (1, 2, 3) if c.node_id(i) not in led), None)
     assert via, f'every member leads a group: {place}'
