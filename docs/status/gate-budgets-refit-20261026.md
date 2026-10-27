@@ -593,3 +593,19 @@ and retains that fixture. Screen `taskJ-operator-debug`, controller
 `intel1:~/efs-taskJ4/operator-debug.py`, output
 `~/efs-artifacts/taskJ-20261026/operator-debug-93d96f8e6/`.
 No qualification/calibration controller is still active. Budgets stay unchanged.
+
+The failed `resync-93d96f8e6` capture's21-file text manifest is closed and
+verified: SHA256 of SHA256SUMS
+`968587537eff6d8cce1455f9e25a979a22d2f0e0d936e7fbd258a53a39e485c7`.
+The manifest covers the controller/unit/operator results plus the failed
+fixture's failure.json and five daemon/client logs; runtime stores remain
+kept separately and unchanged for the open investigation.
+
+The fully verbose series completed20/20 without reproducing the stall;
+it supplies no qualification result. A separate20-run, fail-stopping
+series now uses only `EFS_RAFT_AE_DBG=1` to reduce tracing overhead:
+`intel1:~/efs-taskJ4/operator-ae.py`, screen `taskJ-operator-ae`, output
+`~/efs-artifacts/taskJ-20261026/operator-ae-93d96f8e6/`. Source and all
+assertions/timeouts remain exactly93d96f8e6. The purpose is the missing
+AppendEntries transition trace after a successful snapshot, not additional
+successful repetitions. No fit or post-refit gate has started.
