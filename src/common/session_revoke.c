@@ -39,7 +39,11 @@ int efs_session_storage_barrier(const struct efs_session_rpc *rpc,
     int rc;
     do {
         rc=sess_rpc(rpc,payload,plen,out);
-        if(rc!=EFS_ERR_BUSY) break;
+        /* NOT_PRIMARY is definite non-admission. The inner routing window
+         * can expire during a capacity handoff before this barrier's own
+         * existing 15 s deadline. Keep the same UUID/epoch/payload while
+         * reselecting, as for BUSY; never resend an ambiguous transport error. */
+        if(rc!=EFS_ERR_BUSY && rc!=EFS_ERR_NOT_PRIMARY) break;
         if(efs_net_remaining_ms(0x7fffffff)<=0) break;
         usleep(100000);
     } while(efs_net_remaining_ms(0x7fffffff)>0);
