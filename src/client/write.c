@@ -1539,7 +1539,8 @@ static int stale_retry_owned(const struct efs_chunk_rec *r, uint64_t seq,
                               struct stale_retry_view *view)
 {
     int keep = 0, repeated = 0;
-    if (!seq || !r->put_seq || !r->file_generation || r->delta_len ||
+    if (!seq || !r->put_seq || !r->file_generation ||
+        (r->delta_len && r->base_gen==EFS_CHUNK_BASE_UNCOND) ||
         !(r->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
         (r->publish_epoch && !(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH)))
         return 0;
@@ -1565,6 +1566,9 @@ static int stale_retry_owned(const struct efs_chunk_rec *r, uint64_t seq,
     struct put_id *p = putid_find(r->ino, r->chunk_index);
     if (p && p->gen == r->chunk_generation && p->seq == seq &&
         p->put_seq == r->put_seq && p->file_generation == r->file_generation &&
+        p->delta_off==r->delta_off && p->delta_len==r->delta_len &&
+        (!r->delta_len || p->span_base_gen==r->base_gen) &&
+        p->delta_base_n==r->delta_base_n && p->delta_base_seq==r->delta_base_seq &&
         p->publish_epoch == r->publish_epoch &&
         !memcmp(p->nodes, r->nodes, sizeof(p->nodes)) &&
         !memcmp(p->cks, r->checksums, sizeof(p->cks))) {
@@ -1582,6 +1586,9 @@ static int stale_retry_owned(const struct efs_chunk_rec *r, uint64_t seq,
     p=putid_find(r->ino,r->chunk_index);
     keep=p && p->gen==r->chunk_generation && p->seq==seq &&
          p->put_seq==r->put_seq && p->file_generation==r->file_generation &&
+         p->delta_off==r->delta_off && p->delta_len==r->delta_len &&
+         (!r->delta_len || p->span_base_gen==r->base_gen) &&
+         p->delta_base_n==r->delta_base_n && p->delta_base_seq==r->delta_base_seq &&
          p->publish_epoch==r->publish_epoch &&
          !memcmp(p->nodes,r->nodes,sizeof(p->nodes)) &&
          !memcmp(p->cks,r->checksums,sizeof(p->cks));

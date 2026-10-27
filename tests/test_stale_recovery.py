@@ -134,6 +134,17 @@ int main(void) {
     ticket_live=EFS_ERR_BUSY;reset();assert(stale_repull_replay(&ds,1,sent,sent_seq,1)==EFS_ERR_BUSY&&!replays&&!commits);
     ticket_live=0;reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!commits);
     ticket_live=1;
+    /* A span with the same immutable range/base and unchanged observed map
+     * is reusable too; a changed range/base must take ordinary rebase. */
+    sent[0].delta_len=16;sent[0].delta_off=7;
+    owner.delta_len=16;owner.delta_off=7;owner.span_base_gen=7;
+    owner.stale_retry=0;reset();
+    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!replays&&!commits);
+    reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!replays&&!commits);
+    owner.span_base_gen=8;reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1);
+    owner.span_base_gen=7;owner.delta_off=8;reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1);
+    owner.delta_off=7;reset();map.generation=8;assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1);
+    owner.delta_off=owner.delta_len=0;sent[0].delta_off=sent[0].delta_len=0;
     owner.stale_retry=0;authority.authority_epoch=4;reset();
     assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!owner.stale_retry);
     authority.authority_epoch=3;authority.generation=23;reset();
