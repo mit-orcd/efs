@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run inside the pinned archived source tree, under a detached screen.
-# Usage: bash /path/taskJ-calibrate.sh FULL_SOURCE_COMMIT ARTIFACT_ROOT
+# Usage: bash /path/taskJ-calibrate.sh FULL_SOURCE_COMMIT ARTIFACT_ROOT [BUILD_BRANCH]
 set -u
 commit=$1
 out=$2
@@ -10,7 +10,7 @@ esac
 [ "${#commit}" -eq 40 ] || exit 2
 [ -f Makefile ] && [ -f scripts/make_test_summary.sh ] || exit 2
 mkdir -p "$out"
-export EFS_GIT_ID=${commit:0:9} EFS_GIT_BRANCH=devel EFS_GIT_DESCRIBE=${commit:0:9}
+export EFS_GIT_ID=${commit:0:9} EFS_GIT_BRANCH=${3:-devel} EFS_GIT_DESCRIBE=${commit:0:9}
 export EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 EFS_BUILD_JOBS=8
 for n in 1 2 3; do
     dest=$out/run-$n

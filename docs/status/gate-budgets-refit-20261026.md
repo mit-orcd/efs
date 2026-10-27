@@ -1,4 +1,4 @@
-agent/devel-task-j (analysis72b01728a, tested devel4066f74df): Intel TOTAL 508 FAIL 2 NOTRUN 14 (616s), on untouched base; runs2/3 stopped. Evidence: docs/status/gate-budgets-refit-20261026.md. Task J INCOMPLETE: K22 fixture leader assumption and K36 segment-recovery assertion need resolution. No fit. ORCD failures remain preserved.
+agent/devel-task-j (analysis72b01728a, tested devel4066f74df): Intel TOTAL 508 FAIL 2 NOTRUN 14 (616s), on untouched base; runs2/3 stopped. Evidence: docs/status/gate-budgets-refit-20261026.md. Task J INCOMPLETE: user-authorized fixture candidate8f6cd4b5f now under standalone qualification. No fit. ORCD failures remain preserved.
 
 # W160 three-run budget refit — October 26, 2026
 
@@ -343,3 +343,14 @@ fixtures after clean process/mount shutdown instead of deleting diagnostics.
 These changes are candidates, not a new PASS claim. Standalone qualification
 and a new pinned three-run calibration are pending. No product behavior,
 pool slots, test deadlines or D44 target changed.
+
+Candidate qualification is detached on intel1 in screen
+`taskJ-fix-qualification`, source `/home/maik/efs-taskJ/src` at
+`8f6cd4b5f065febc6893b1406ba5c8c55bfad55e`. Controller builds `test-bins`
+then runs K22 and K36 serially three times each, stopping at the first
+failure and copying retained diagnostic logs. Raw output:
+`/home/maik/efs-artifacts/taskJ-20261026/intel1-fix-8f6cd4b5f/`.
+Build branch is `agent/devel-task-j`; K36's existing keep hook is enabled
+for these diagnostic runs. The first K22 setup successfully transferred
+group0 to node2 and back to node1; the pressure assertions are still pending.
+No final manifest or PASS is claimed while qualification is running.
