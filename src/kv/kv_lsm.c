@@ -1373,6 +1373,21 @@ static void lsm_destroy(void *ctx)
     free(l);
 }
 
+
+static int lsm_decode_error(void *ctx, const uint8_t *key, uint32_t klen)
+{
+    struct kv_lsm *l = ctx;
+    if (!l->decode_error) return EFS_ERR_PROTO;
+    l->decode_error(l->decode_error_ctx, key, klen);
+    if (apply_staging(l)) {
+        /* A command family may normalize business rejections. Stored decode
+         * refusal is not one: poison the scope itself so no masked return
+         * can commit its staged rows or applied cursor. */
+        apply_scope.failed = EFS_ERR_UNSUPPORTED;
+        return EFS_ERR_UNSUPPORTED;
+    }
+    return EFS_ERR_NOT_PRIMARY;
+}
 static const struct efs_kv_ops lsm_ops = {
     .put = lsm_put,
     .get = lsm_get,
@@ -1382,7 +1397,17 @@ static const struct efs_kv_ops lsm_ops = {
     .scan_from = lsm_scan_from,
     .batch = lsm_batch,
     .destroy = lsm_destroy,
+    .decode_error = lsm_decode_error,
 };
+
+void efs_kv_lsm_set_decode_error(struct efs_kv *kv,
+    void (*callback)(void *, const uint8_t *, uint32_t), void *ctx)
+{
+    if (!kv || kv->ops != &lsm_ops) return;
+    struct kv_lsm *l = kv->ctx;
+    l->decode_error = callback;
+    l->decode_error_ctx = ctx;
+}
 
 static int replay_item(void *user, uint8_t op, const uint8_t *key,
                        uint32_t klen, const uint8_t *val, uint32_t vlen)

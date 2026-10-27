@@ -51,12 +51,24 @@ struct efs_kv_ops {
                      void *user);
     int (*batch)(void *ctx, const struct efs_kv_item *items, uint32_t n);
     void (*destroy)(void *ctx);
+    /* A typed reader rejected an existing stored value, not wire input.
+     * The owning server may fence this key's replica group. Backends with
+     * no owner retain PROTO; valid reads pay no callback or extra lookup. */
+    int (*decode_error)(void *ctx, const uint8_t *key, uint32_t klen);
 };
 
 struct efs_kv {
     const struct efs_kv_ops *ops;
     void *ctx;
 };
+
+static inline int efs_kv_decode_result(struct efs_kv *kv, const uint8_t *key,
+                                      uint32_t klen, int rc)
+{
+    if (rc == EFS_ERR_PROTO && kv && kv->ops && kv->ops->decode_error)
+        return kv->ops->decode_error(kv->ctx, key, klen);
+    return rc;
+}
 
 static inline int efs_kv_put(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
                              const uint8_t *val, uint32_t vlen)

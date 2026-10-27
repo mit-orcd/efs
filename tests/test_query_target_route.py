@@ -52,13 +52,13 @@ static int host_read_index_pair(struct efs_raft_host*h,uint8_t a,uint8_t b,int *
 static int consume(void *ctx,const struct efs_server_query_view*v,int error)
 {assert(ctx==g_host&&v==&g_host->query_view&&!error);consumed++;return 0;}
 """+unsettled+fn('host_pick_peer')+s[s.index('static uint32_t host_route_voters('):s.index('\n}',s.index('static uint32_t host_route_voters('))+2]+fn('host_leader_cover_pick')+fn('server_raft_host_query_read')+r"""
-int main(void){struct efs_raft r[2]={{2,7},{3,14}};
+int main(void){struct efs_raft r[2]={{2,7},{2,14}};
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.query_lock=PTHREAD_RWLOCK_INITIALIZER,.n=4,.raft_id=0,.groups={{&r[0],0},{&r[1],0}},.query_view={(void*)1}};
  g_host=&h;uint16_t target=0;uint8_t need[2]={0,2};
  assert(host_leader_cover_pick(&h,0,need,2)==2);
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==3&&!barriers&&!consumed);
  r[0].leader=0;r[1].leader=2;
- assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==3);
+ assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==2); /* split leaders: healthy dual coordinator fallback */
  r[1].leader=3; /* Both known leaders are single-group; keep dual fallback. */
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==2);
  r[0].leader=r[1].leader=-1;

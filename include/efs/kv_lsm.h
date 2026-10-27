@@ -39,6 +39,13 @@ struct efs_kv_lsm_cfg {
 struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg);
 /* Every live segment gets a point-get filter, built in the background. */
 void efs_kv_lsm_close(struct efs_kv *kv);
+/* Install once before starting readers. Called on a typed stored-value
+ * decode failure, possibly under a scan lock: callback must not take KV
+ * or host locks or perform blocking I/O (a nonblocking pump notification
+ * is allowed). Apply poisons its scope with UNSUPPORTED; serving redirects. */
+void efs_kv_lsm_set_decode_error(struct efs_kv *,
+    void (*)(void *, const uint8_t *, uint32_t), void *);
+
 
 /* Bounded maintenance scan: counts merged keys including tombstones.
  * rc1 with resume_len>0 is a work stop; resume is the last consumed key.

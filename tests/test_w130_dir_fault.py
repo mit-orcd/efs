@@ -14,13 +14,17 @@ Asserts:
    ("INCOMPATIBLE entry ... apply halted, group not served").
 2. The other groups keep serving; the healthy replicas keep serving the
    halted group (quorum unaffected).
-3. A client reading the damaged directory sees a clean error, never wrong
-   data; unrelated directories read fine.
+3. A client reads the damaged directory completely through the healthy quorum;
+   unrelated directories read fine. No application retries hide EIO/BUSY.
 4. raft-status on node 3 shows the halt (the group's applied count freezes
    while the leaders advance; node 3 never campaigns for it).
 5. `efs-mgmt raft-resync <node3> <group>` resyncs the replica from the
    leader's snapshot; the group serves again and the directory reads back
    correctly.
+
+The serve-first W165 scenario runs first: DIR is held before the damaged
+leader receives distinct CREATEs. It must step aside, and snapshot resync
+must restore its own direct GETATTR.
 """
 import hashlib, os, re, shutil, signal, subprocess, sys, tempfile, time
 from pathlib import Path
@@ -84,42 +88,25 @@ def payload(name, size=128):
     return out[:size]
 
 
-write_retries = [0]
-
-
 def write_file(path, body):
-    """Create+write+close with bounded retries. In the first seconds after
-    formation (and while the fault window opens) a close can fail with an
-    explicit error; the B6 contract allows explicit failure, never silent
-    corruption, so a brief retry is the correct client behavior. A write
-    that never lands is a failure."""
-    import errno as _errno
-    last = None
-    for attempt in range(40):
-        op = 'open'
-        fd = None
-        try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
-            op = 'write'
-            view = memoryview(body)
-            while view:
-                view = view[os.write(fd, view):]
-            op = 'close'
-            os.close(fd)   # releases the fd even when it reports an error
-            fd = None
-            return
-        except OSError as e:
-            last = f'{op}: {e}'
-            if fd is not None and op != 'close':
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-            if e.errno == _errno.ENOTCONN:
-                raise AssertionError(f'mount died during the fault window: {last}') from e
-            write_retries[0] += 1
-            time.sleep(0.5)
-    raise AssertionError(f'{path}: write never landed in 40 retries, last: {last}')
+    """One application attempt: EIO/BUSY is a failure, never test-retried."""
+    with path.open('wb', buffering=0) as stream:
+        view = memoryview(body)
+        while view:
+            written = stream.write(view)
+            assert written, f'zero write: {path}'
+            view = view[written:]
+
+
+def retain_logs(cluster):
+    """Finalize private fixture logs before successful runtime bulk is pruned."""
+    dest = os.environ.get('W130_EVIDENCE_DIR')
+    if dest:
+        Path(dest).mkdir(parents=True, exist_ok=True)
+        kept = Path(tempfile.mkdtemp(prefix=cluster.dir.name + '-', dir=dest))
+        for log in cluster.dir.glob('*.log'):
+            shutil.copy2(log, kept / log.name)
+        print('[w130] retained finalized logs:', kept, flush=True)
 
 
 def group_applied(c, i, g):
@@ -128,6 +115,116 @@ def group_applied(c, i, g):
     m = re.search(rf'\s+group {g} .*?applied=(\d+)', out)
     return int(m.group(1)) if m else -1
 
+
+
+def serve_fault():
+    """Hold DIR before corrupting its leader: CREATE must be the first reader.
+
+    Three distinct direct CREATEs expose persistent base EIO without retries;
+    the fixed node must redirect (or forward), then FUSE creates succeed.
+    """
+    cluster = Cluster('w165-serve', [1, 2, 3])
+    mounted = None
+    markers = {i: work / f'serve-on-{i}' for i in (1, 2, 3)}
+    try:
+        for i in (1, 2, 3):
+            cluster.start(i, join=1 if i > 1 else None,
+                          extra_env={'EFS_FAULT_DIR_SERVE_FILE': str(markers[i])})
+        cluster.wait_voters((1, 2, 3), lambda i, v: v == {0: (1, 7), 2: (1, 7)})
+        mounted = Mount(cluster, 1, 'mnt-serve')
+        target = mounted.path / 'serve-target'
+        target.mkdir()
+        inode = target.stat().st_ino
+        group = 0 if inode & 1 else 2
+        victim = cluster.leader_placement(1)[group]
+        for k in range(int(SPREAD_MIN)):
+            write_file(target / f'old-{k}', payload(f'old-{k}'))
+        mark = markers[victim]
+        mark.touch()  # hold spread before crossing; no corruption yet
+        fd = os.open(target / 'crossing', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        os.close(fd)
+        Path(str(mark) + '.arm').touch()  # CREATE above has finished completely
+        ready = Path(str(mark) + '.ready')
+        deadline = time.monotonic() + 30
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(.05)
+        assert ready.exists(), 'serve damage did not reach its deterministic boundary'
+        assert int(ready.read_text()) == inode, ('wrong fault target', ready.read_text(), inode)
+        assert 'INCOMPATIBLE' not in cluster.log(victim), 'a prior apply consumed the damage'
+        print(f'[w165] damaged leader node={victim} group={group} inode={inode}; DIR held', flush=True)
+        replies = []
+        for k in range(3):
+            rc, out = mgmt('raft-create', cluster.ep(victim), str(inode), f'direct-{k}')
+            assert rc == 0, out
+            match = re.search(r'status=(\d+) primary=(\d+)', out)
+            assert match, out
+            replies.append(tuple(map(int, match.groups())))
+        print('[w165] three distinct CREATE replies:', replies, flush=True)
+        # A raw RPC may say BUSY (5) while the new leader is elected.
+        # This is not an application retry: the FUSE operations below must
+        # still complete once, including fsync and exact readback. Base's
+        # permanent ERROR (3) is never accepted.
+        assert all(status in (0, 5, 7) for status, hint in replies), \
+            ('persistent serve-path EIO/ERROR instead of redirect', replies, cluster.log(victim)[-1500:])
+        assert all(hint != victim for status, hint in replies if status == 7), ('self redirect', replies)
+        cluster.wait_log(victim, rf'group={group} INCOMPATIBLE stored row', timeout=10)
+        assert 'apply halted, group not served' in cluster.log(victim)
+        # No application retries: the healthy quorum must complete each create.
+        for k in range(3):
+            path = target / f'quorum-{k}'
+            body = payload(f'quorum-{k}')
+            with path.open('xb', buffering=0) as stream:
+                assert stream.write(body) == len(body)
+                os.fsync(stream.fileno())
+            assert path.read_bytes() == body
+        before = group_applied(cluster, victim, group)
+        time.sleep(.1)
+        assert group_applied(cluster, victim, group) == before
+        rc, out = mgmt('raft-getattr', cluster.ep(victim), str(inode))
+        route = re.search(r'status=(\d+) primary=(\d+)', out)
+        assert rc == 0 and route and int(route[1]) in (0, 7) and int(route[2]) in {1, 2, 3} - {victim}, \
+            ('halted replica must forward or redirect to a healthy leader', out)
+        mark.unlink()
+        rc, out = mgmt('raft-resync', cluster.ep(victim), str(group))
+        assert rc == 0, out
+        cluster.wait_log(victim, r'snapshot import .*halt cleared, group served again', timeout=60)
+        # Normal leader routing may redirect even a fully healed follower.
+        # Require the explicit clear, a fresh mutation applied on this replica,
+        # and an exact successful read through the returned healthy route.
+        healed = group_applied(cluster, victim, group)
+        write_file(target / 'after-resync', payload('after-resync'))
+        deadline = time.monotonic() + 15
+        while group_applied(cluster, victim, group) <= healed and time.monotonic() < deadline:
+            time.sleep(.05)
+        assert group_applied(cluster, victim, group) > healed, 'resynced replica did not resume apply'
+        rc, out = mgmt('raft-getattr', cluster.ep(victim), str(inode))
+        route = re.search(r'status=(\d+) primary=(\d+)', out)
+        assert rc == 0 and route and int(route[1]) in (0, 7), out
+        if int(route[1]) == 7:
+            assert int(route[2]) in {1, 2, 3} - {victim}, out
+            rc, out = mgmt('raft-getattr', cluster.ep(int(route[2])), str(inode))
+        assert rc == 0 and f'status=0 ' in out and f'ino={inode} ' in out, out
+        assert (target / 'after-resync').read_bytes() == payload('after-resync')
+        assert (target / 'old-0').read_bytes() == payload('old-0')
+        assert (target / 'quorum-2').read_bytes() == payload('quorum-2')
+        print('[w165] PASS serve-first halt, quorum creates and snapshot resync', flush=True)
+    finally:
+        for mark in markers.values():
+            mark.unlink(missing_ok=True)
+            Path(str(mark) + '.arm').unlink(missing_ok=True)
+        if mounted:
+            mounted.close()
+        cluster.stop_all()
+        retain_logs(cluster)
+        print('[w165] evidence fixture:', work, flush=True)
+
+
+if '--serve-only' in sys.argv:
+    serve_fault()
+    shutil.rmtree(work)
+    raise SystemExit(0)
+
+serve_fault()
 
 t0 = time.time()
 c = None
@@ -169,10 +266,7 @@ try:
     # 1. node 3 must log the damage and the halt of the target's group
     #    (which group? the dir shard's group — found in node 3's log).
     #    Wait for the halt BEFORE more creates: a create that meets the
-    #    damaged row on the serve path in this window instead of the halted
-    #    apply (persistent open-EIO, or a stuck client op under gate load —
-    #    gate case-444 kept on xorinox) is W162's finding, not this gate's
-    #    subject.
+    #    damaged row on the serve path is covered separately above (W165).
     deadline = time.time() + HALT_DEADLINE
     halt_group = None
     while time.time() < deadline:
@@ -202,16 +296,11 @@ try:
     assert rc == 0
     print('[w130] healthy replicas still serve; other groups unaffected')
 
-    # 3. the damaged directory: a client sees a clean error, never wrong data
-    try:
-        entries = list(target.iterdir())
-        # if the read succeeded it must be complete and correct
-        names = sorted(e.name for e in entries)
-        assert len(names) == target_entries + 32, \
-            f'partial listing {len(names)} != {target_entries + 32}'
-        print('[w130] target dir read complete and exact after halt')
-    except OSError as e:
-        print(f'[w130] target dir read refused cleanly: {e}')
+    # 3. Healthy-quorum reads must succeed completely, with no application retry.
+    names = sorted(e.name for e in target.iterdir())
+    assert len(names) == target_entries + 32, \
+        f'partial listing {len(names)} != {target_entries + 32}'
+    print('[w130] target dir read complete and exact after halt')
 
     # 4. raft-status shows the halt: node 3's applied count for the group is
     #    frozen while the leaders advance
@@ -256,7 +345,7 @@ try:
         raise AssertionError(f'listing {len(names)} != {target_entries + 32}; missing {missing[:8]}')
     names = sorted(e.name for e in target.iterdir())
     assert (target / 'f0000').read_bytes() == payload('target/0')
-    print(f'[w130] PASS (write retries: {write_retries[0]})')
+    print('[w130] PASS (no application retries)')
 except Exception as e:
     print('[w130] FAIL:', e)
     raise
@@ -266,6 +355,7 @@ finally:
         m.close()
     if c:
         c.stop_all()
+        retain_logs(c)
     import sys as _sys
     if _sys.exc_info()[0] is None:
         shutil.rmtree(work, ignore_errors=True)

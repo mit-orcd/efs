@@ -1459,6 +1459,28 @@ until the scope commits or aborts. Failed or oversized scopes publish no
 partial entry and do not advance Raft application. Existing durable watermark
 and ACK rules still apply; staging does not make an unsynced WAL durable.
 
+**Stored metadata decode refusal is replica-local fail-closed (W165).**
+A typed metadata reader that rejects an existing stored row reports its exact
+shard key to the owning replica. Malformed request bytes do not take this
+route. The reader fences service immediately and notifies the Raft pump without
+acquiring the host mutex under a KV scan/writer lock. The pump disables
+campaigning, steps down and halts application for that group; its applied
+cursor does not advance past refused work. The diagnostic names
+`INCOMPATIBLE stored row`, group, shard, kind, key length and applied frontier,
+followed by `apply halted, group not served`.
+
+A halted replica routes metadata service and its storage-side ticket/session
+authority through healthy voters. Existing `NOT_PRIMARY` replies never point
+back to the halted member; before an election completes the hint may be
+unknown. Cross-group namespace routing must not bounce a healthy coordinator
+back to a leader whose other replica is halted. Split leaders use ordinary
+participant ReadIndexes. Other groups remain available. `raft-resync` installs
+a validated leader snapshot covering the halt frontier before clearing the
+halt and restoring local service; neither a redirect nor successful remote
+read authorizes local use of the refused row. The wire status format is
+unchanged. [W165 evidence](../status/w165-serve-path-damaged-row-20261026.md)
+records the standalone and pooled acceptance scope.
+
 Two fixed node-local cursor keys have an invalid shard prefix and are excluded
 from group snapshot export/import. On restart, the node restores the greater
 of its validated KV cursor and valid legacy `applied.N` checkpoint. Missing

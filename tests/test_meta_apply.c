@@ -2073,6 +2073,93 @@ static void test_lookup_committed_unresolved_dentry(void)
     efs_kv_mem_free(kv);
 }
 
+/* The owner is notified only for an existing stored value rejected by a
+ * typed decoder. Exercise the shared serve readers, including scan callbacks. */
+static unsigned damaged_calls;
+static uint8_t damaged_key[EFS_KV_KEY_MAX];
+static uint32_t damaged_len;
+static int damaged_decode(void *ctx, const uint8_t *key, uint32_t len)
+{
+    (void)ctx;
+    damaged_calls++;
+    damaged_len = len;
+    memcpy(damaged_key, key, len);
+    return EFS_ERR_NOT_PRIMARY;
+}
+
+static void test_stored_decode_owner(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc = {.kv = kv};
+    const struct efs_kv_ops *original = kv->ops;
+    struct efs_kv_ops owned = *original;
+    uint8_t key[EFS_KV_KEY_MAX], saved[EFS_META_INO_BYTES], bad[16] = {0};
+    uint32_t kl, n = sizeof(saved), got;
+    struct efs_meta_row row;
+    struct efs_meta_dentry dent;
+    struct efs_meta_stat st;
+    struct efs_meta_dir_cursor cur = {0};
+    struct efs_meta_dir_ent ent[4];
+    efs_ino_t child = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "decode init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO,
+          S_IFREG | 0644, "bad", &child) == EFS_OK, "decode child");
+    owned.decode_error = damaged_decode;
+    kv->ops = &owned;
+    damaged_calls = 0;
+    CHECK(efs_meta_apply_get_inode(kv, child, &row) == EFS_OK && !damaged_calls,
+          "valid stored row does not notify");
+    CHECK(efs_meta_unpack_inode(bad, sizeof(bad), &row) == EFS_ERR_PROTO && !damaged_calls,
+          "pure wire decoder has no store side effect");
+    CHECK(efs_kv_key_inode(efs_kv_inode_shard(EFS_ROOT_INO), EFS_ROOT_INO, key, &kl) == EFS_OK,
+          "root key");
+    CHECK(efs_kv_get(kv, key, kl, saved, &n) == EFS_OK, "save root");
+    CHECK(efs_kv_put(kv, key, kl, bad, sizeof(bad)) == EFS_OK, "damage root");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &row) == EFS_ERR_NOT_PRIMARY,
+          "inode decoder redirects");
+    CHECK(efs_meta_apply_getattr(kv, EFS_ROOT_INO, coord_fn, &cc, &st) == EFS_ERR_NOT_PRIMARY,
+          "getattr decoder redirects");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "bad", &dent) == EFS_ERR_NOT_PRIMARY,
+          "lookup inode decoder redirects");
+    CHECK(efs_meta_apply_readdir(kv, EFS_ROOT_INO, &cur, ent, 4, &got) == EFS_ERR_NOT_PRIMARY,
+          "readdir inode decoder redirects");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+          "new", &child) == EFS_ERR_NOT_PRIMARY, "create parent decoder redirects");
+    CHECK(damaged_calls == 5 && damaged_len == kl && !memcmp(damaged_key, key, kl),
+          "owner receives exact root key for every failed reader");
+    CHECK(efs_kv_put(kv, key, kl, saved, n) == EFS_OK, "restore root");
+    CHECK(efs_kv_key_dentry(efs_kv_inode_shard(EFS_ROOT_INO), EFS_ROOT_INO,
+          "bad", key, &kl) == EFS_OK, "dentry key");
+    CHECK(efs_kv_put(kv, key, kl, bad, 1) == EFS_OK, "damage dentry");
+    damaged_calls = 0;
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "bad", &dent) == EFS_ERR_NOT_PRIMARY,
+          "lookup dentry decoder redirects");
+    memset(&cur, 0, sizeof(cur));
+    CHECK(efs_meta_apply_readdir(kv, EFS_ROOT_INO, &cur, ent, 4, &got) == EFS_ERR_NOT_PRIMARY,
+          "scan dentry decoder redirects");
+    CHECK(damaged_calls == 2 && damaged_len == kl && !memcmp(damaged_key, key, kl),
+          "scan reports exact damaged dentry key");
+    /* Chunk and lane readers use the same owner path as inode/dentry reads. */
+    uint32_t count = 0; uint64_t epoch = 0;
+    struct efs_meta_chunk chunk;
+    CHECK(efs_kv_key_chunk(efs_kv_lane_shard(child, 0), child, 1, 0, 0, key, &kl) == EFS_OK,
+          "chunk key");
+    CHECK(efs_kv_put(kv, key, kl, bad, 1) == EFS_OK, "damage chunk");
+    CHECK(efs_meta_apply_get_chunk_row(kv, child, 1, 0, &chunk, NULL, 0, &count, NULL) ==
+          EFS_ERR_NOT_PRIMARY, "chunk decoder redirects");
+    CHECK(damaged_len == kl && !memcmp(damaged_key, key, kl), "exact chunk key");
+    CHECK(efs_kv_key_lane(efs_kv_lane_shard(child, 0), child, 1, 0, key, &kl) == EFS_OK,
+          "lane key");
+    CHECK(efs_kv_put(kv, key, kl, bad, 1) == EFS_OK, "damage lane");
+    CHECK(efs_meta_get_lane_epoch(kv, child, 1, 0, &epoch) == EFS_ERR_NOT_PRIMARY,
+          "lane decoder redirects");
+    CHECK(damaged_len == kl && !memcmp(damaged_key, key, kl), "exact lane key");
+    kv->ops = original;
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "bad", &dent) == EFS_ERR_PROTO,
+          "unowned memory KV preserves decoder error");
+    efs_kv_mem_free(kv);
+}
+
 static void test_stat_collect(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -6679,6 +6766,7 @@ int main(void)
     test_gc_last_close_before_resolve();
     test_orphan_unlink();
     test_create_initial_lease_atomic();
+    test_stored_decode_owner();
     test_create_lookup_unlink();
     test_xattr();
     test_mkdir();
