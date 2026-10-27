@@ -536,3 +536,28 @@ assertions; the first candidate unit FAIL remains retained at
 negative control also demonstrated the actual pending-resync failures.
 A corrected pinned candidate and live resync/full gates are still owed.
 Neither the original EIO nor W160 is closed; no budgets have been fitted.
+
+### Corrected resync candidate qualifying
+
+Exact candidate `93d96f8e6d5f286f91342ef2532aa8a7b163e278` is archived at
+`intel1:/home/maik/efs-taskJ4/src-93d96f8e6`. Controller
+`~/efs-taskJ4/qualify-resync.py` in screen `taskJ-resync-qualification`
+records ordered commands, walls and exits under
+`~/efs-artifacts/taskJ-20261026/resync-93d96f8e6/`. It builds `test-bins`,
+compiles the new regression against the old `36db33f98` library, requires
+exactly four failures of the pending-resync check (transfer and delayed
+vote in both acknowledgement-window modes), then runs the fixed complete
+Raft unit in normal and early-read modes, follower-bound and recipe checks.
+Those stages passed with the expected negative-control failure. The first
+two live operator checks passed11.200s/12.171s; the third is in progress.
+Next are snapshot-import, strict leader-admission, K36 recovery and one
+full eight-job diagnostic gate, stopping at the first unexpected result.
+The full gate remains **diagnostic**, not a median input or closure of the
+unclassified original EIO. No active candidate source is modified.
+
+The earlier20 clean operator repetitions took8.624–12.327s (median10.713s).
+Their43-file closed text manifest was verified; SHA256 of SHA256SUMS is
+`e789580d386dac9763b2331cf5d24d5fd64d5614f1d6811f2acc9d32eeefac58`.
+Successful series fixtures were removed by their normal cleanup; raw run
+logs and outcomes remain. The original failed captures/stores still kept
+for open investigations have not been pruned.
