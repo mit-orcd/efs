@@ -6615,8 +6615,8 @@ both. Gate: `make test` on efs3, in the K25 report.
 
 **Raw evidence note (2026-10-23):** the bulk data in `gc-buffered-3ohdte4d` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.
 
-<a id="w162"></a>
-## W162 — Serve-path decode of a damaged stored row does not fail closed
+<a id="w165"></a>
+## W165 — Serve-path decode of a damaged stored row does not fail closed
 
 **Correctness; opened 2026-10-25 from the W130 one-replica gate (tests/test_w130_dir_fault.py on `agent/devel-taskb`).**
 - The W127/W130 fail-closed halt covers only the raft *apply* path. When a
@@ -6636,8 +6636,8 @@ both. Gate: `make test` on efs3, in the K25 report.
 - Gate: extend the W130 test to arm the fault between the split's commit
   and the next DIR apply so the serve path meets it first.
 
-<a id="w163"></a>
-## W163 — close(2) EIO at the 30 s flush deadline while a leader's apply lags
+<a id="w166"></a>
+## W166 — close(2) EIO at the 30 s flush deadline while a leader's apply lags
 
 **Correctness / availability; opened 2026-10-25 from the K22 loopback gates on `agent/devel-taskb`.**
 - A stalled follower (SIGSTOP; log present, sockets open) makes client
