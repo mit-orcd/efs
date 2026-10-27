@@ -491,6 +491,76 @@ static void test_abort_and_refusals(void)
     efs_kv_mem_free(f.kv);
 }
 
+/* K43: an abort-decided but unresolved stage is reaped on contact.
+ * A lost coordinator's unit leaves staged publications whose ABORT is
+ * decided while their RESOLVEs are still in flight (a leader change, a
+ * saturated apply, a restarted replica); a new writer's PREPARE of the
+ * same chunk must not BUSY for that whole window. */
+static void test_reap_aborted_on_contact(void)
+{
+    struct fixture f;
+    struct efs_txid t, t2;
+    struct efs_txn_parts parts, parts2;
+    struct efs_meta_pub p0, p1;
+
+    setup(&f);
+    mint(&t, 7);
+    parts = parts_for(&f, &t);
+    p0 = pub_of(&f, 0, 0xA0, 0xC0);
+    p1 = pub_of(&f, 1, 0xB0, 0xC2);
+    CHECK(prep_chunk(&f, &t, &parts, &p0) == EFS_OK &&
+          prep_chunk(&f, &t, &parts, &p1) == EFS_OK, "prepare");
+
+    mint(&t2, 8);
+    parts2 = parts_for(&f, &t2);
+    p0 = pub_of(&f, 0, 0xA0, 0xC4);
+    CHECK(prep_chunk(&f, &t2, &parts2, &p0) == EFS_ERR_BUSY,
+          "an undecided stage blocks contact: BUSY");
+
+    CHECK(efs_txn_decide_parts(f.kv, f.ish, &t, &parts, EFS_TXN_ABORT) == EFS_OK,
+          "decide abort");
+    CHECK(prep_chunk(&f, &t2, &parts2, &p0) == EFS_OK,
+          "an abort-decided stage is reaped on contact, the new PREPARE lands");
+
+    /* The reaped stage is really t2's now: a third txn meets it BUSY, and
+     * the dead txn's late RESOLVE removes the chunk-1 stage and leaves
+     * t2's alone. */
+    {
+        struct efs_txid t3;
+        mint(&t3, 9);
+        struct efs_txn_parts parts3 = parts_for(&f, &t3);
+        struct efs_meta_pub q0 = pub_of(&f, 0, 0xA0, 0xC6);
+        CHECK(prep_chunk(&f, &t3, &parts3, &q0) == EFS_ERR_BUSY,
+              "the re-staged chunk blocks a third txn");
+    }
+    CHECK(efs_meta_apply_txn_resolve(f.kv, &t, f.ish, EFS_TXN_ABORT) == EFS_OK &&
+          efs_meta_apply_txn_resolve(f.kv, &t, f.lsh1, EFS_TXN_ABORT) == EFS_OK,
+          "the late resolve after a contact reap is a no-op");
+    CHECK(prep_chunk(&f, &t2, &parts2, &p0) == EFS_OK,
+          "t2's stage is idempotent past the dead txn's resolve");
+
+    /* A COMMIT-decided stage is never reaped: contact stays BUSY until the
+     * resolve commits it. */
+    {
+        struct efs_txid t4, t5;
+        mint(&t4, 10);
+        struct efs_txn_parts parts4 = parts_for(&f, &t4);
+        struct efs_meta_pub r1 = pub_of(&f, 1, 0xB0, 0xC8);
+        CHECK(prep_chunk(&f, &t4, &parts4, &r1) == EFS_OK, "t4 prepares chunk 1");
+        CHECK(efs_txn_decide_parts(f.kv, f.ish, &t4, &parts4, EFS_TXN_COMMIT) == EFS_OK,
+              "t4 commit-decided");
+        mint(&t5, 11);
+        struct efs_txn_parts parts5 = parts_for(&f, &t5);
+        struct efs_meta_pub r5 = pub_of(&f, 1, 0xB0, 0xCA);
+        CHECK(prep_chunk(&f, &t5, &parts5, &r5) == EFS_ERR_BUSY,
+              "a commit-decided stage is never reaped");
+        CHECK(efs_meta_apply_txn_resolve(f.kv, &t4, f.lsh1, EFS_TXN_COMMIT) == EFS_OK,
+              "resolve commit");
+        CHECK(gen_of(&f, 1) == G(1, 0xC8), "the commit applied t4's image");
+    }
+    efs_kv_mem_free(f.kv);
+}
+
 /* A reclaimed decision is unknown: a straggler stage is BUSY to readers. */
 static void test_unknown_decision(void)
 {
@@ -532,12 +602,13 @@ int main(void)
     test_encoding();
     test_commit();
     test_abort_and_refusals();
+    test_reap_aborted_on_contact();
     test_unknown_decision();
     if (failures) {
         fprintf(stderr, "test_pub_stage: %d failures\n", failures);
         return 1;
     }
     printf("test_pub_stage: staged publication decision, pin, read validation, "
-           "commit/abort/drop/recovery PASS\n");
+           "commit/abort/drop/recovery, contact-reap PASS\n");
     return 0;
 }
