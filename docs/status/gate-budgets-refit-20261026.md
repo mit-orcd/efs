@@ -632,3 +632,25 @@ Output is `~/efs-artifacts/taskJ-20261026/operator-fence-44cc4e3e2/`.
 Build and both unit modes passed; the first three operator checks passed.
 This is diagnostics only; no calibration or qualification claim follows
 from clean repetitions, and no prior failed evidence is changed.
+
+The minimal-fence build completed20 operator repetitions without failure;
+its two Raft unit modes and all2208 tracked-source hash checks passed. These
+are diagnostic results and do not resolve the captured EIO. Closed manifests:
+
+| Diagnostic directory | Files | SHA256 of SHA256SUMS |
+| --- | ---: | --- |
+| `operator-debug-93d96f8e6` | 43 | `412cc972d7f4564f3dec1afb7f199cb5188eec8d1f17b3b9689daa8eb82afc11` |
+| `operator-ae-93d96f8e6` | 43 | `255576277d94c89c5a4cf799671ecc01c7575f0265d7cc736fac90eaf5d57e9e` |
+| `operator-fence-44cc4e3e2` | 29 | `c9143289e501bc08c69dd3ce2478673a1fbfa8e4225e2208eec9f0e49551aa45` |
+
+A bounded100-fixture series now reuses that verified44cc4e3e2 build with
+no verbose tracing, stops at the first error, and preserves its failed
+fixture automatically. Controller `intel1:~/efs-taskJ4/fence100.py`, screen
+`taskJ-fence100`; output
+`~/efs-artifacts/taskJ-20261026/operator-fence100-44cc4e3e2/`. It verifies
+all tracked files against the prior manifest before starting; each run is
+`TMPDIR=NEW_DIRECTORY python3 -u tests/test_operator_workflows.py`. Successful
+fixtures clean up normally. This larger bounded sample seeks the rare
+failure's first fence call site; **even100 clean runs cannot stand in for a
+root-cause correction**, and none are median inputs. No duplicate workload,
+assertion, timeout, slot or budget change; no qualification controller is active.
