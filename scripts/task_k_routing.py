@@ -63,6 +63,24 @@ def command(label, *args):
     # application rejection. A successful process is not our success oracle.
     if rc == 0:
         statuses = re.findall(r'\bstatus=(\d+)', out)
+        if statuses == ['7'] and args[0] in (
+                'raft-getattr','raft-lookup','raft-lookup-path','raft-readdir','raft-getchunks'):
+            # Raw diagnostic reads expose NOT_PRIMARY (the FUSE client
+            # follows it). Task K permits this verdict with a live hint.
+            # Prove that specific hint serves the same read; do not accept
+            # arbitrary errors, repeat the seed, or retry into a PASS.
+            hint=re.search(r'\bprimary=(\d+)',out)
+            assert hint and int(hint.group(1)) in (2,3,4),out
+            target=c.ep(int(hint.group(1)))
+            begin=time.monotonic()
+            rc,out=kd.mgmt(env,args[0],target,*args[2:])
+            rows.append(dict(command=label+' live-hint read',
+                             argv=[args[0],target,*args[2:]],rc=rc,output=out,
+                             seconds=round(time.monotonic()-begin,3)))
+            print(json.dumps(rows[-1]),flush=True)
+            assert rc == 0,out
+            statuses=re.findall(r'\bstatus=(\d+)',out)
+            assert statuses,out
         assert all(int(st) == 0 for st in statuses), out
     return rc, out
 
