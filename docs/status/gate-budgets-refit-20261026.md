@@ -1,4 +1,4 @@
-agent/devel-task-j (analysis72b01728a, tested devel4066f74df): Intel TOTAL 508 FAIL 2 NOTRUN 14 (616s), on untouched base; runs2/3 stopped. Evidence: docs/status/gate-budgets-refit-20261026.md. Task J INCOMPLETE: user-authorized fixture candidate8f6cd4b5f now under standalone qualification. No fit. ORCD failures remain preserved.
+agent/devel-task-j (analysis72b01728a, tested devel4066f74df): Intel TOTAL 508 FAIL 2 NOTRUN 14 (616s), on untouched base; runs2/3 stopped. Evidence: docs/status/gate-budgets-refit-20261026.md. Task J INCOMPLETE: user-authorized W166 candidate4c4446e02 queued for strict qualification. No fit. ORCD failures remain preserved.
 
 # W160 three-run budget refit — October 26, 2026
 
@@ -377,3 +377,25 @@ independent Raft follower-bound tests retain the log-watermark coverage.
 A new fast extracted-code regression covers L0-full with free RAM, pressure
 clearing, reserved cleanup, and the unchanged log watermark. W166 remains
 OPEN until these stronger gates and calibration finish.
+
+### Strict W166 candidate queued
+
+Commit `4c4446e0225b2e09d5d4b5fac50b3e3654784c4e` is staged at
+`intel1:/home/maik/efs-taskJ2/src`. Detached screen
+`taskJ-w166-qualification` first waits for the earlier diagnostic controller
+to end (no overlapping test load), then runs the new fast pressure unit
+against the candidate and an expected-failure control against8f6cd4b5f's
+unchanged production source. It builds, checks `test_follower_bound` and the
+recipe, and requires three serial strict K22/K36 repetitions before the
+new three-run full calibration. A failed stage stops the controller.
+
+Raw qualification output is
+`/home/maik/efs-artifacts/taskJ-20261026/intel1-fix-4c4446e02/`; proposed
+calibration output is
+`/home/maik/efs-artifacts/taskJ-20261026/intel1-calibration-4c4446e02/`.
+The source is pinned throughout; the calibration launcher receives the
+correct `agent/devel-task-j` build branch. Diagnostic K36 retention is
+removed from the calibration environment, restoring ordinary successful-run
+cleanup; failed fixtures are still retained by the corrected tests. No
+calibration or W166 PASS is claimed yet. Both task-owned source trees are
+kept temporarily for this open investigation; neither Task F tree is changed.
