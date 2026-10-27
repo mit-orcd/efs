@@ -29,6 +29,8 @@ def main():
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--seconds', type=int, default=300)
     parser.add_argument('--trace-client', action='store_true')
+    parser.add_argument('--source-revision', default='unspecified',
+                        help='tested product revision, recorded without inferring a verdict')
     args = parser.parse_args()
     work = args.work.resolve()
     assert work.is_relative_to(Path.home()) and not str(work).startswith('/data1/')
@@ -55,7 +57,7 @@ def main():
     result = dict(method='K22 leader-only compressed-budget pressure', trace_client=args.trace_client,
                   driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   l0_bytes=2 << 20, memtable_bytes=1 << 20, seconds=args.seconds,
-                  product_changed=False, outcome='HARNESS_FAILURE')
+                  source_revision=args.source_revision, outcome='HARNESS_FAILURE')
 
     def record(**row):
         row.update(epoch=time.time(), elapsed=round(time.monotonic() - start, 6))

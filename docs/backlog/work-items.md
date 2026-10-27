@@ -6677,6 +6677,9 @@ redirection. It recommends keeping 30 s and investigating exact PUT-ticket
 STATUS/session authority forwarding off the lagging hosted replica, plus
 separate REPORT/receipt routing qualification. No automatic degradation of
 BUSY, weakening of ticket/session checks, new behavior flag or deadline
-extension is authorized. Task G explicitly stops for that decision; W166 is
-not FIXED or DECIDED. Raw captures and checked hashes stay on xorinox; private
-build and payload bulk is pruned.
+extension is authorized. The user approved option B with the 30 s deadline
+unchanged. Branch `agent/devel-task-g`, fix `878c00e96`, passes both targeted
+cases (both fail on the instrumentation-only baseline) and exact fresh-reader
+payload checks. Full pressure replay, five standalone K22 runs and the full
+gate are pending; W166 stays OPEN. Original captures and hashes remain on
+xorinox; the original private build/payload bulk was pruned.

@@ -1,13 +1,49 @@
 # W166 — flush-deadline decision memo (October 26, 2026)
 
 Report: branch `agent/devel-task-g`, code head `c71677190`, base `394f2b791`.
-Gate `TOTAL`: NOTRUN on branch/base (Task G's pre-decision hold).
+Gate `TOTAL`: NOTRUN on branch/base; full qualification pending.
 Evidence: `docs/status/w166-close-eio-flush-deadline-20261026.md`.
 W166 REPRODUCED on unchanged base product binaries: 36 untraced close-EIOs,
-12 forensic close-EIOs; no product fix implemented. Multi-host/RDMA NOTRUN.
-**Decision required; W166 remains OPEN.**
+12 forensic close-EIOs. Product fix `878c00e96` passes both targeted cases;
+full qualification pending. Multi-host/RDMA NOTRUN.
+**Option B authorized; implementation qualification in progress; W166 remains OPEN.**
 
-## Decision memo — choose the owner of the wait
+## Authorized implementation — qualification RUNNING
+
+User decision: **“yes, implement option B in your branch, keep the 30 second
+deadline, fix both failure paths and finish the qualification on xorinox.”**
+Implementation `878c00e96`; instrumentation-only baseline `ddff5fcfd`
+(parent `6a57fb4f6`, original product `394f2b791`). Both have identical
+fault instrumentation; the baseline includes no product fix.
+
+- PUT STATUS on a hosted follower delegates the complete owner/session,
+  registered-participant, local-floor and exact-ticket check to the lane
+  leader. A forwarded follower answers NOT_PRIMARY; it never forwards again.
+  STATUS uses the bounded read pool rather than the mutation pool. The
+  storage member still enforces its own guarded session fence before I/O.
+- REPORT no longer treats a full L0 alone as a proposal refusal. The live
+  reproduction shows that it can stay full while the bounded memtable tail
+  has room and leadership remains stable. The leader's existing KV-memory
+  and unapplied-log admission watermarks, and apply-side hard bounds, remain
+  enforced. The old REPORT-only early refusal caused an 8+8 s failure even
+  with no blocked apply. Receipt identity, resolution and unknown-outcome
+  semantics are unchanged.
+
+`tests/test_w166_authority.py` on xorinox: baseline **FAIL in both cases**,
+REPORT EIO at 16.061 s, forced follower STATUS EIO at 6.505 s (the immediate
+fault reaches the client's 128-attempt cap sooner than a real 400 ms proof
+wait). Fixed build **PASS**, REPORT 0.0097 s, PUT 0.0127 s; both exact via a
+fresh mount. Wall 31.09 s. The actual L0 cap was reached before the REPORT
+case with memtable admission headroom; metadata load stopped first. This
+is a separate deterministic mechanism test, not a timing replay of the
+original 30 s captures. Both log sets are retained under
+`/home/maik/efs-taskG-impl-20261026/` pending verified stable-copy/pruning.
+
+Five standalone K22 runs, the original pressure workload on the fixed build,
+and `make test-all` remain **NOTRUN / pending**. W166 stays OPEN; no completed
+qualification or RDMA/multi-host claim.
+
+## Original decision memo — choose the owner of the wait (superseded by authorization above)
 
 **Recommendation: B, bounded authority redirection with the existing
 30-second outer flush deadline.** Approve that direction before implementation.
@@ -143,9 +179,11 @@ build, stores, payloads and compiler scratch with `~/bin/edelete --force
 --delete`, after checked child shutdown and kernel mount absence. No raw
 capture is committed. No private workload remains running on xorinox.
 
-**NOTRUN pending the Task G decision:** implementation, a base-failing
-deterministic acceptance test, five standalone K22 passes, branch/base
-`make test-all`, pooled/failover/one-member-down gates, multi-host and RDMA.
-There is no clean gate TOTAL to report and no FIXED/DECIDED claim. The new
-scripts are standalone diagnostic drivers, not additional `make test-long`
-commands; no budget row or D44 target is changed.
+**Qualification remaining:** original pressure replay on the fixed build,
+five standalone K22 passes, `make test-all`, then evidence finalization.
+Targeted fresh-reader verification passes; multi-host and RDMA remain outside
+the completed xorinox scope. The original pre-decision failure experiments
+above retain their original verdicts. The new acceptance test is wired into
+`make test-long`; its budget is 40 s (31.09 s x 1.25, rounded to 5 s), one
+slot for the short compressed fill followed by idle single-file checks.
+The D44 gate target remains unchanged.
