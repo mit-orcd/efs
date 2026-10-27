@@ -250,13 +250,25 @@ one online addition. O_DIRECT fragment I/O only. TCP loopback; RDMA
 
 Raw evidence is on node9900:
 `/home/erbmi1/efs-artifacts/taskK-20261026/`. No raw capture/store is committed
-or copied to the Mac. Closed logs/results and copy-hash verification are being finalized before
-classified fixture stores, generated payloads and build trees are pruned
-with `edelete`. Bulk is temporarily kept only for this retention checkpoint;
-manifest/pruning receipts will follow. Exact failed-store replay is forfeited
-after pruning; the committed sources and method reproduce each classified
-failure. Copied runtime `mdraft/log/raft.log` files are WAL bulk, despite their
-suffix, and are pruned rather than retained as text logs.
+or copied to the Mac. The final `SHA256SUMS` contains 2,655 closed retained files and was verified
+with `sha256sum -c`; its own SHA256 is:
+
+`e8c821bec6f7bd1f0736b5b5c5f10d486a2b84426ff52a0f954150f7ab961fd5`.
+
+`retention-check.json` records original/copy full hashes and ownership/activity
+checks. `PRUNED.txt` and `prune.log` record 12 scratch roots removed with
+`edelete`: classified fixture stores, generated payloads and source/build
+trees, including the diagnostic TMPDIRs. Copied runtime
+`mdraft/log/raft.log` WAL files were also pruned rather than mistaken for
+text logs. Exact failed-store replay is forfeited; the committed sources and
+method reproduce each classified failure. Closed text logs, results, driver
+hashes, binary hashes and all failure/verdict receipts remain.
+
+`released-host.json` confirms no Task K directory/process/mount remains and
+the existing orcd-mini mount is still listed. Cleanup's initial canonical-path
+guard refusal occurred before copying/deleting and is retained; v2 checks the
+canonical authorized raw root. The final manifest verification log is
+`/home/erbmi1/efs-artifacts/taskK-manifest-final-check.log`.
 
 The remaining orcd-mini stage needs the coordinator's lifecycle window and
 user approval; the task brief does not authorize wiping it. No cluster is
