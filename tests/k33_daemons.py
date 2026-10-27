@@ -257,6 +257,37 @@ class Cluster:
         raise AssertionError(f'members never settled at {count}: {last}')
 
 
+def place_leaders(c, target, groups=(0, 2), timeout=30):
+    """Deterministic fault setup via the existing operator transfer, not an
+    assumption about which member wins the first election. Wait for both
+    formed groups before arming a pressure/authority fault."""
+    by_id = {c.node_id(i): i for i in c.ports}
+    wanted = c.node_id(target)
+    for group in groups:
+        end = time.monotonic() + timeout * SLOW
+        while True:
+            placement = c.leader_placement(target)
+            if placement[group] == wanted:
+                break
+            rc, out = mgmt(c.env, 'raft-step-down', c.ep(by_id[placement[group]]),
+                           str(group), str(wanted))
+            if rc != 0:
+                # The transfer checks match/commit before handoff. A newly
+                # formed voter may still be catching up under the test pool.
+                # Retry only this documented pre-fault BUSY, never an unknown
+                # management error or an application outcome.
+                assert re.search(r'\brc=-13\b', out), out
+                assert time.monotonic() < end, f'group {group}: transfer stayed BUSY: {out}'
+                time.sleep(.1)
+                continue
+            while time.monotonic() < end:
+                if c.leader_placement(target)[group] == wanted:
+                    break
+                time.sleep(.1)
+            assert time.monotonic() < end, f'group {group} did not move to node {wanted}'
+    return c.leader_placement(target)
+
+
 def voters_ok(nid, v, count):
     """raft-status of member nid (`Cluster.status`) under `count` members:
     group 0 votes on {1,2,3}; group 2 on {1,2,3} at three and {2,3,4} from

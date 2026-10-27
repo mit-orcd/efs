@@ -4785,6 +4785,13 @@ static void host_need_both(uint8_t *need)
     need[1] = EFS_RAFT_GROUP_SHARD2;
 }
 
+/* STATUS is a complete read-only authority request, not a mutation.
+ * Keep its route off the mutation pool and within the read budget. */
+static int host_submit_read_only(const uint8_t *cmd,uint32_t clen)
+{
+    return !clen || (cmd && cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS);
+}
+
 static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
                            const uint8_t *cmd, uint32_t clen,
                            struct efs_msg_raft_mkfs_reply *rep, int io_ms)
@@ -4823,7 +4830,8 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
     }
     /* A read proof must not queue behind mutation RPCs that themselves
      * need metadata authority before they can finish. Budgets are unchanged. */
-    pc = clen ? server_peer_conn_get(host, port) : server_peer_read_conn_get(host, port);
+    pc = host_submit_read_only(cmd,clen) ? server_peer_read_conn_get(host, port) :
+                                         server_peer_conn_get(host, port);
     if (!pc) {
         rc = EFS_ERR_BUSY;
         goto out;
@@ -4888,7 +4896,7 @@ static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
     for (;;) {
         /* Inherited read scope bounds routing retries; mutations keep their
          * existing uncertainty handling. */
-        if(!clen && !efs_net_remaining_ms(1))return EFS_ERR_BUSY;
+        if(host_submit_read_only(cmd,clen) && !efs_net_remaining_ms(1))return EFS_ERR_BUSY;
         rid = prefer_rid;
         if (rid < 0 || rid == h->raft_id || rid == skip)
             rid = host_local_leader(h, group);
@@ -4902,7 +4910,7 @@ static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
             prefer_rid = -1;
             continue;
         }
-        int io_ms=clen?EFS_IO_TIMEOUT_MS:HOST_READ_TRIES*HOST_TICK_US/1000;
+        int io_ms=host_submit_read_only(cmd,clen)?HOST_READ_TRIES*HOST_TICK_US/1000:EFS_IO_TIMEOUT_MS;
         rc = host_rpc_submit(h, rid, group, cmd, clen, rep, io_ms);
         if (rc != EFS_OK) {
             if (host_past_deadline(&end))
@@ -4942,7 +4950,7 @@ static int host_remote_cmd(struct efs_raft_host *h,uint8_t group,
                           const uint8_t *cmd,uint32_t clen,
                           struct efs_msg_raft_mkfs_reply *rep,int prefer_rid)
 {
-    if(clen)return host_remote_cmd_impl(h,group,cmd,clen,rep,prefer_rid);
+    if(!host_submit_read_only(cmd,clen))return host_remote_cmd_impl(h,group,cmd,clen,rep,prefer_rid);
     uint64_t previous=efs_net_deadline_ms();
     struct timespec now;clock_gettime(CLOCK_MONOTONIC,&now);
     uint64_t deadline=(uint64_t)now.tv_sec*1000+(uint64_t)now.tv_nsec/1000000+
@@ -5865,11 +5873,11 @@ static int host_tag_refused(uint8_t group, const uint8_t *cmd, uint32_t clen)
  * and meets only the hard cap in efs_raft_propose. Under h->mu. */
 static int host_kv_pressure(struct efs_raft_host *h)
 {
-    /* Publication already refuses at the L0 cap. A leader that cannot
-     * publish must yield on that same condition, even while its memtable
-     * still has room; waiting for the log cap strands client flushes. */
-    return h->kv && (efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY ||
-                     efs_kv_lsm_l0_hot(h->kv));
+    /* One predicate for admission and leadership pressure (W166): the
+     * bounded unflushed memtable/WAL tail. A full L0 alone is not pressure:
+     * publication no longer refuses on it (Task G, W166 option B), and
+     * apply_room bounds the committed tail while the compactor catches up. */
+    return h->kv && efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY;
 }
 
 static int host_admit(struct efs_raft_host *h, struct efs_raft *r,
@@ -15157,11 +15165,45 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if(rc!=EFS_OK || group!=efs_raft_shard_group(shard)) {
             out->rc=rc==EFS_OK?EFS_ERR_INVAL:rc;return;
         }
+        /* A lagging storage member still stores its fragment, but must not
+         * keep proving STATUS against its own frozen KV prefix. Delegate
+         * the ENTIRE session + exact-ticket read to the lane leader; its
+         * fresh proofs cover the KV it actually inspects. A forwarded
+         * request never forwards again, including during an election. */
+        if(cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS) {
+            struct host_view authority;host_view_get(h,group,&authority);
+            if(!host_hosts(h,group) || !authority.has || authority.role!=EFS_RAFT_LEADER) {
+                hint=authority.has && authority.leader!=h->raft_id?authority.leader:-1;
+                if(host_serving_forward) {
+                    out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=hint;return;
+                }
+                rc=host_remote_cmd(h,group,cmd,clen,out,hint);
+                if(rc!=EFS_OK)out->rc=rc;
+                return;
+            }
+        }
         if(!host_hosts(h,group)) {
             rc=host_remote_cmd(h,group,cmd,clen,out,-1);
             if(rc!=EFS_OK)out->rc=rc;
             return;
         }
+#if EFS_FAULTS
+        /* W166: a hosted follower cannot cover its ticket STATUS read.
+         * Models the observed frozen apply prefix, without stalling Raft
+         * replication or fabricating a ticket/session verdict. */
+        if(cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS) {
+            const char *gate=getenv("EFS_FAULT_TICKET_READ_LAG_FILE");
+            struct host_view lag;host_view_get(h,group,&lag);
+            if(gate && access(gate,F_OK)==0 && lag.has && lag.role!=EFS_RAFT_LEADER) {
+                static unsigned noted;
+                if(!__atomic_exchange_n(&noted,1,__ATOMIC_RELAXED))
+                    fprintf(stderr,"fault: EFS_FAULT_TICKET_READ_LAG_FILE: follower STATUS not covered\n");
+                out->rc=EFS_ERR_NOT_PRIMARY;
+                out->leader_hint=lag.leader==h->raft_id?-1:lag.leader;
+                return;
+            }
+        }
+#endif
         uint8_t admission[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_ESTABLISH};
         memcpy(admission+2,ticket->id.client_uuid,16);
         wr32be(admission+18,ticket->id.session_epoch);wr32be(admission+22,shard);
@@ -23205,10 +23247,11 @@ static int host_pub_batch_propose(struct efs_raft_host *h, struct host_pub_batch
 
     if (!b->buf || !b->len)
         return EFS_OK;
-    /* L0 is within one flush of the cap. BUSY here, on the leader,
-     * instead of the apply path waiting out a compaction. */
-    if (h->kv && efs_kv_lsm_l0_hot(h->kv))
-        return EFS_ERR_BUSY;
+    /* L0 being full alone is not an admission verdict: the bounded
+     * memtable/WAL tail can still accept work. In particular this may be
+     * a follower coordinating a publication on a healthy remote leader.
+     * host_propose's leader-only KV/unapplied watermarks remain authoritative;
+     * apply_room keeps the committed tail bounded without blocking Raft. */
     b->t0 = now_us_();
     uint32_t prefix = b->session ? HOST_REPORT_PREFIX_LEN : 0u;
     if (prefix) {
@@ -23741,6 +23784,17 @@ static int host_pub_units_publish(struct efs_raft_host *h, struct host_pub_unit 
     return rc;
 }
 
+/* A rejected CAS is a definite residual, even if a later independent unit
+ * meets backpressure. Do not hide it behind UNKNOWN/BUSY and keep resending
+ * the immutable stale publication. STALE acknowledges nothing: the client
+ * retains all records and authoritatively repulls/replays the residual.
+ * Other units may still finish; their ordinary identity/CAS rules stand.
+ * With no known loser, BUSY remains unknown. Permanent failures stand. */
+static int host_report_stale_verdict(int rc, int had_stale)
+{
+    return had_stale && (rc == EFS_OK || rc == EFS_ERR_BUSY) ? EFS_ERR_STALE : rc;
+}
+
 void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                              const struct efs_ino_size_rec *irecs,
                              uint32_t ino_count, uint32_t flags, const struct efs_opid *session,
@@ -24217,8 +24271,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
          * skipped losers (its residual report re-pulls and replays just
          * those). The resolve pass below stays gated on a fully clean
          * round, matching the old whole-batch STALE behavior. */
-        if (rc == EFS_OK && had_stale)
-            rc = EFS_ERR_STALE;
+        rc = host_report_stale_verdict(rc, had_stale);
         host_report_note.phase = fail_phase;
         /* G2: name the request, so a failed split joins its receipt. */
         if (count >= 256u || n_inval ||

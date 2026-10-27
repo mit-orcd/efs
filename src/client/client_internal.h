@@ -472,6 +472,8 @@ int efs_client_rpc_report_resolve(efs_export_id_t export_id,
                                   uint32_t ino_count, int sync,
                                   const struct efs_report_pubid *pubid, uint64_t sent,
                                   int rc, efs_ino_t ino);
+/* Existing receipt-resolution allowance, shared by one sync publication. */
+uint64_t efs_client_rpc_resolve_budget_ms(void);
 /* Nodes the calling thread's last metadata RPC was sent to (bit nid-1). */
 uint64_t efs_client_rpc_last_sent(void);
 /* W77 · atomic publication units (write.c). A write request touching two
@@ -486,6 +488,7 @@ void efs_client_unit_end(efs_ino_t ino, uint64_t offset, uint64_t len);
  * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
 int efs_client_report_dirty(int sync);
 int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync);
+int efs_client_report_pressure_ino(efs_ino_t ino);
 /* Read-miss resolution: a chunk row missing from the local table inside
  * the file size is a HOLE only if the owner says so. Pulls the mappings
  * for [ci0, ci1) and returns EFS_OK when the range is now authoritative

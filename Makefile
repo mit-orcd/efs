@@ -189,6 +189,8 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
 .PHONY: test-fence-read test-fence-view test-lookup-memo test-fold-observation test-create-errors test-report-pressure
 test-report-pressure:
 	python3 tests/test_report_pressure.py
+	python3 tests/test_report_resolved_retry.py
+	python3 tests/test_report_partial_verdict.py
 	python3 tests/test_report_snapshot_locks.py
 	python3 tests/test_report_retry_budget.py
 	python3 tests/test_write_queue.py
@@ -509,6 +511,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_identity_revocation.py
 	python3 tests/test_put_ticket_rpc.py
 	python3 tests/test_forward_once.py
+	python3 tests/test_k33_setup.py
 	python3 tests/test_put_ticket_owner.py
 	python3 tests/test_put_ticket_batch.py
 	python3 tests/test_put_drain.py
@@ -1102,6 +1105,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k22_snapshot_import.py
 	python3 tests/test_k22_leader_admission.py
 	python3 tests/test_w130_dir_fault.py
+	python3 tests/test_w166_authority.py
 	./tests/test_kv_lsm
 	python3 tests/test_server_processes.py
 	python3 tests/test_w125_harness.py

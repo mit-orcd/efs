@@ -6645,7 +6645,7 @@ synthetic stores are retained on intel1; private cleanup was blocked by approval
   and the next DIR apply so the serve path meets it first.
 
 <a id="w166"></a>
-## W166 — close(2) EIO at the 30 s flush deadline while a leader's apply lags
+## W166 — close(2) EIO under member stalls and apply pressure
 
 **Correctness / availability; opened 2026-10-25 from the K22 loopback gates on `agent/devel-taskb`.**
 
@@ -6677,3 +6677,29 @@ for that residual scope. [Task J evidence](../status/gate-budgets-refit-20261026
   reproducer is `tests/test_k22_snapshot_import.py` at
   `K22_SNAP_BYTES=0 K22_STOP_DEADLINE=240` (drive-phase failure message
   lists the write errors).
+
+### Task G decision and implementation — October 26–27
+
+**DECIDED; responsive-pressure paths qualified on `agent/devel-task-g`, not a
+global closure of the original SIGSTOP/production-window acceptance.**
+User: “yes, implement option B in your branch, keep the 30 second deadline,
+fix both failure paths and finish the qualification on xorinox.”
+
+On original devel `394f2b791`, the lagging member was already a follower when
+PUT consumed 30 s; a separate REPORT path exhausted 8+8 s. The implementation
+(`878c00e96`, `a72adf70a`) forwards complete ticket/session authority, keeps
+forwarding one hop, and removes premature REPORT refusal on full L0 while
+bounded memory remains. All existing admission, session, quota and protection
+checks remain; no deadline extension or behavior selector.
+
+Final tested source `4bcd52ca0`: both base-failing regressions pass, 300 s
+pressure has zero syscall errors, K22 5/5, and all 46,014 acknowledged payloads
+are exact through fresh clients after orderly process restarts. Full gate:
+510 commands, **1 FAIL** (shared-chunk pressure also failing on untouched base),
+13 NOTRUN; no unconditional suite PASS or K38/K40 closure. Harness setup and
+long-TMPDIR cleanup failures were fixed without weakening their assertions.
+
+[Evidence, exact commands and retention](../status/w166-close-eio-flush-deadline-20261026.md)
+record every original failure, the declared quota change, both full-gate
+failures and checked/pruned private fixtures. Original full-process SIGSTOP /
+production-window acceptance plus live RDMA/multi-host gates remain NOTRUN.

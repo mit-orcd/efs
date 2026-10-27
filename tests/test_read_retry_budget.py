@@ -3,8 +3,10 @@ import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static int host_remote_cmd_impl(');b=s.index('\nstatic int host_wait_applied(',a)
+c=s.index('static int host_submit_read_only(');helper=s[c:s.index('\n}',c)+2]
 code=r'''
 #include "efs/protocol.h"
+#include "efs/meta_cmd.h"
 #include "efs/network.h"
 #include <assert.h>
 #include <time.h>
@@ -29,7 +31,7 @@ static int controlled_sleep(unsigned us){now_ms+=us/1000;return 0;}
 static int controlled_clock(clockid_t id,struct timespec *out){assert(id==CLOCK_MONOTONIC);out->tv_sec=now_ms/1000;out->tv_nsec=(now_ms%1000)*1000000;return 0;}
 #define usleep controlled_sleep
 #define clock_gettime controlled_clock
-'''+s[a:b]+r'''
+'''+helper+s[a:b]+r'''
 int main(void){struct efs_raft_host h={0};struct efs_msg_raft_mkfs_reply reply;
  deadline=10100;int rc=host_remote_cmd(&h,2,NULL,0,&reply,-1);
  printf("inherited100ms: elapsed=%llu expired_RPC_attempts=%u status=%d\n",(unsigned long long)(now_ms-10000),expired_calls,rc);
@@ -46,6 +48,8 @@ int main(void){struct efs_raft_host h={0};struct efs_msg_raft_mkfs_reply reply;
  now_ms=10000;deadline=10100;calls=expired_calls=0;succeed=1;
  assert(host_remote_cmd(&h,2,NULL,0,&reply,-1)==EFS_OK&&now_ms==10000&&calls==1&&!expired_calls&&deadline==10100);
  assert(noted==1&&noted_rid==1);
+ now_ms=10000;deadline=10100;calls=expired_calls=0;succeed=0;uint8_t query=EFS_MD_REQ_PUT_TICKET_STATUS;
+ assert(host_remote_cmd(&h,2,&query,1,&reply,-1)==EFS_ERR_BUSY && now_ms==10100 && !expired_calls && deadline==10100);
  puts("read retry loop: inherited/no-peer/already-expired budgets stop without expired RPC attempts; unscoped400ms and scope restoration PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-retry-') as d:

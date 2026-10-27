@@ -1903,12 +1903,23 @@ static const struct report_streak *report_rec_stuck(const struct report_streak *
 
     if (r->base_gen == EFS_CHUNK_BASE_UNCOND || r->base_gen == committed)
         return NULL;
+    /* The export table also carries our unpublished PUT placeholder. For
+     * a full image, observing its own generation there is not proof that
+     * the server's CAS base moved: an absent row still expects base zero.
+     * The STALE classifier alone may ACK a fresh authoritative match. Do
+     * not convert a unit bystander's unchanged owned retry into permanent
+     * writeback failure from this ambiguous table observation. The normal
+     * REPORT attempt/deadline and failed-rebase bounds still apply. */
+    if (!r->delta_len && r->chunk_generation == committed)
+        return NULL;
     was = report_streak_find(st, n, r->ino, r->chunk_index);
     return was && was->stale >= 2 && report_streak_same(was, r) ? was : NULL;
 }
 
-static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
+static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
+                               uint64_t completion_deadline, int *resolved_stale)
 {
+    *resolved_stale = 0;
     if (efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
     struct dirty_snap ds;
@@ -1935,6 +1946,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
      * reads clean while its REPORT is being set up. Lock order is table
      * lock, then dirty_mu; the wait drops both (the in-flight REPORT
      * needs the table lock to finish). */
+    uint64_t slot_begin = report_clock_ms();
     for (;;) {
         report_snapshot_lock(only_ino);
         pthread_mutex_lock(&g_client.dirty_mu);
@@ -1952,6 +1964,9 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         while ((only_ino && pub_has_locked(only_ino)) || pub_full_locked()) {
             if (efs_client_rpc_past_deadline()) {
                 pthread_mutex_unlock(&g_client.dirty_mu);
+                fprintf(stderr, "report-slot-timeout ino=%llu wait_ms=%llu\n",
+                        (unsigned long long)only_ino,
+                        (unsigned long long)(report_clock_ms()-slot_begin));
                 return EFS_ERR_BUSY;
             }
             struct timespec until;
@@ -1961,6 +1976,9 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             uint64_t now = report_clock_ms();
             if (deadline && now >= deadline) {
                 pthread_mutex_unlock(&g_client.dirty_mu);
+                fprintf(stderr, "report-slot-timeout ino=%llu wait_ms=%llu\n",
+                        (unsigned long long)only_ino,
+                        (unsigned long long)(report_clock_ms()-slot_begin));
                 return EFS_ERR_BUSY;
             }
             if (deadline && deadline - now < wait)
@@ -2406,9 +2424,16 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
      * against its receipt (same identity, bounded) before failing: applied
      * is success, a definite verdict stands, and only a still-unknown
      * outcome becomes EIO (efs_client_rpc_report_resolve logs which). */
-    if (sync && report_sent && cn)
+    if (sync && report_sent && cn) {
+        int sent_rc = rc;
+        /* Resolution may outlive the 8 s send phase, as before, but every
+         * lookup/rebuild shares the caller's original completion deadline. */
+        efs_client_rpc_set_deadline_ms(completion_deadline);
         rc = efs_client_rpc_report_resolve(g_client.export_id, crecs, cn, irecs, in, sync,
                                            &pubid, report_sent, rc, only_ino);
+        efs_client_rpc_set_deadline_ms(outer);
+        *resolved_stale = sent_rc != EFS_ERR_STALE && rc == EFS_ERR_STALE;
+    }
     if (dcache_trace_on()) {
         for (uint32_t k = 0; k < cn; k++)
             fprintf(stderr, "report ino=%llu ci=%u only=%llu sync=%d rc=%d\n",
@@ -2467,33 +2492,80 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
 }
 
 
-int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
+static int report_dirty_ino_complete(efs_ino_t only_ino, int sync, int wait_held)
 {
+    uint64_t started = report_clock_ms(), wait_ms = 0, flush_ms = 0;
+    const char *stage = "report";
     uint64_t outer = efs_client_rpc_deadline_ms();
+    uint64_t completion_deadline = outer;
     if (sync) {
         uint64_t deadline = report_clock_ms() + 8000;
+        completion_deadline = deadline + efs_client_rpc_resolve_budget_ms();
+        if (outer && outer < completion_deadline)
+            completion_deadline = outer;
         if (!outer || deadline < outer)
             efs_client_rpc_set_deadline_ms(deadline);
     }
-    int rc = report_dirty_ino_run(only_ino, sync);
-    /* W77: a unit was held back (a write still open on it, or a chunk not
-     * yet landed). A sync caller must still publish it: wait for its
-     * writers, land its chunks, report again. An async REPORT leaves it to
-     * the next one. */
-    for (unsigned round = 0; sync && rc == EFS_ERR_AGAIN && round < 16; round++) {
-        rc = unit_wait_idle(only_ino);
-        if (rc == EFS_OK)
-            rc = only_ino ? efs_dcache_flush_ino(only_ino) : efs_dcache_flush_all();
-        if (rc == EFS_OK)
-            rc = report_dirty_ino_run(only_ino, sync);
+    int resolved_stale = 0;
+    int rc = report_dirty_ino_run(only_ino, sync, completion_deadline, &resolved_stale);
+    /* W77: wait/flush held units. K38/K45: a lost reply can resolve to a
+     * definite PARTIAL/STALE AFTER the inner send loop has ended. The run
+     * retained its snapshot and putids; a new run mints a new pubid and uses
+     * normal authoritative STALE repull/replay. Only that definite receipt
+     * result may use the remaining resolution allowance for recovery.
+     * Unknown outcomes (IO) remain failures. No deadline is renewed. */
+    for (unsigned round = 0; sync &&
+         ((wait_held && rc == EFS_ERR_AGAIN) || resolved_stale) && round < 16; round++) {
+        if (resolved_stale)
+            efs_client_rpc_set_deadline_ms(completion_deadline);
+        if (efs_client_rpc_past_deadline())
+            break;
+        if (rc == EFS_ERR_AGAIN) {
+            stage = "held-unit-wait";
+            uint64_t before = report_clock_ms();
+            rc = unit_wait_idle(only_ino);
+            wait_ms += report_clock_ms() - before;
+            if (rc == EFS_OK) {
+                stage = "held-unit-flush";
+                before = report_clock_ms();
+                rc = only_ino ? efs_dcache_flush_ino(only_ino) : efs_dcache_flush_all();
+                flush_ms += report_clock_ms() - before;
+            }
+        } else {
+            rc = EFS_OK;
+        }
+        if (rc == EFS_OK) {
+            stage = "report-retry";
+            rc = report_dirty_ino_run(only_ino, sync, completion_deadline, &resolved_stale);
+        }
     }
     if (rc == EFS_ERR_AGAIN)
-        rc = sync ? EFS_ERR_BUSY : EFS_OK;
+        rc = sync && wait_held ? EFS_ERR_BUSY : EFS_OK;
+    if (sync && rc != EFS_OK)
+        fprintf(stderr, "report-sync-fail ino=%llu stage=%s total_ms=%llu wait_ms=%llu "
+                "flush_ms=%llu resolved_stale=%d rc=%d\n", (unsigned long long)only_ino,
+                stage, (unsigned long long)(report_clock_ms()-started),
+                (unsigned long long)wait_ms, (unsigned long long)flush_ms, resolved_stale, rc);
     if (sync)
         efs_client_rpc_set_deadline_ms(outer);
     /* Settle off this thread: an fsync never waits for ticket retirement. */
     efs_client_put_settle_kick();
     return rc;
+}
+
+
+int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
+{
+    return report_dirty_ino_complete(only_ino, sync, 1);
+}
+
+/* Pressure is a finite publication pass, not an fsync of future writes.
+ * Keep the same synchronous REPORT/receipt proof for carried records, but
+ * leave held units dirty and charged. In particular, do not recursively
+ * enter the whole-inode PUT-window flush while writers keep arriving. */
+int efs_client_report_pressure_ino(efs_ino_t only_ino)
+{
+    return report_dirty_ino_complete(only_ino, 1, 0);
 }
 
 

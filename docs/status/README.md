@@ -27,6 +27,7 @@ arena retention; 40/60 pending). Previous hardware runs remain FAIL; prior
 fixed-test gate TOTAL 509 FAIL 2 NOTRUN 13 (805s), with signatures addressed
 by integrated devel corrections. Nuc comparisons remain INCOMPLETE.
 Qualification INCOMPLETE; no candidate memory PASS claimed.
+[Wave 19 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`21630289a`; gate at the same commit)**: Task G ([W166](w166-close-eio-flush-deadline-20261026.md), [K38 repair](k38-task-g-repair-20261027.md)): W166 option B as the user decided (30 s deadline unchanged): a lagging storage member delegates the whole ticket STATUS read to the lane leader on the read pool and budget, a forwarded STATUS never forwards again, and a full L0 alone no longer refuses publication; K38 shared-chunk repairs: a definite STALE is kept when a later unit meets BUSY, receipt recovery stays inside the original completion budget, and pressure reclaim drains a bounded cohort instead of waiting for future writes. **Merge decision (user):** Task J's L0 term in `host_kv_pressure` is dropped, so admission and leadership share apply_room plus the unapplied-log watermark; `test_kv_leader_pressure.py` now asserts a full L0 alone is not pressure. intel2 targeted reruns at `7a7b9f420`: K22 leader admission 3/3, K22 snapshot import 2/2, W166 authority 3/3, K38 shared-chunk 5/5, REPORT retry/verdict tests 2/2 each. intel2 `make test-all` (8 jobs): 514 commands in 734 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run had 1 FAIL, `test_read_retry_budget.py`, a merge-resolution error fixed in `21630289a`); OVERBUDGET 5, `test_stop_progress.py` 102 s against 50 s the largest. W166's SIGSTOP, RDMA and multi-host acceptance stays NOTRUN.
 
 [Wave 18 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`08701031d`; gate at the same commit)**: Task K, K44/W167 ([evidence](k44-retired-replica-routing-20261026.md)): a retired replica never answers for its group — forwarded commands get NOT_PRIMARY with the live leader's hint, local proposals and applied-waits route to live voters instead of waiting on the frozen cursor, routing uses the current voter set, `raft-mkfs` on a member without a group-0 replica forwards the whole operation, a retired replica stops exporting snapshots; formation notices ride transient peer refusals within their 5 s budget; `raft-change` checks convergence at the live responder. orcd-mini (RDMA): fresh formation, online fourth member, 27 management checks through the seed, POSIX core 218/218, two-client 68/68 PASS; orcd-mini now runs Task K's build `00e85a299531`. intel2 `make test-all` (8 jobs): 510 commands in 737 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 4 (k33_client_view 26.0/25, k38_shared_chunk 43.3/35, stop_progress 63.3/50, k22_leader_admission 30.4/30 s: intel2 runs slower than the intel1 refit).
 
@@ -74,6 +75,30 @@ online fourth-member addition, 27-call seed/added-member sweep, 218/218
 POSIX core, 68/68 two-client cases, exact cross-mount payloads and stable `.efs` queries PASS.
 Original closed logs preserved; cluster left running; existing devops config
 still lists three members, so the fourth has a retained owned lifecycle helper.
+
+[K38 Task G repair](k38-task-g-repair-20261027.md): **scoped xorinox PASS**,
+`agent/devel-task-g`, not merged/pushed. Original-product pooled failure
+reproduced with complete retained stores/logs; reviewed fixes and four
+intended original-code negative controls. Seven fixed K38 runs: **33,600
+records exact on both mounts and remount**. Final `make test-all`: **512
+commands, 0 FAIL, 13 NOTRUN, INCOMPLETE** (842 s + 24 s build); both W166
+cases pass. Failed stores and matching binaries remain on xorinox; positive
+bulk pruned after hash-verified capture. Real-cluster/RDMA gates remain open.
+
+[W166 option B qualification (Task G)](w166-close-eio-flush-deadline-20261026.md):
+**DECIDED / responsive-pressure paths qualified**, branch `agent/devel-task-g`;
+30 s unchanged. Both deterministic cases fail on the instrumented base and
+pass on `4bcd52ca0`; 300 s pressure has zero errors; K22 5/5 clean; all
+46,014 acknowledged payloads exact after orderly restarts/new clients.
+Full gate: **510 commands, 1 FAIL (shared-chunk pressure, also on unchanged
+base), 13 NOTRUN**; no unconditional PASS. Two harness failures corrected;
+all failed outputs preserved on xorinox with verified hashes, private bulk
+pruned after checks. Original SIGSTOP / production-window, RDMA and multi-host
+acceptance remain NOTRUN. The later shared-chunk continuation above repairs
+the xorinox counterexample and has a zero-failure host gate; merge and
+real-cluster shared-chunk acceptance remain open.
+
+
 
 [Wave 15 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it is its own gate, `make test-w130`, until W165 is fixed. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](decisions.md), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
 
