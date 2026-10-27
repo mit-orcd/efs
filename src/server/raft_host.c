@@ -14987,11 +14987,6 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if(rc!=EFS_OK || group!=efs_raft_shard_group(shard)) {
             out->rc=rc==EFS_OK?EFS_ERR_INVAL:rc;return;
         }
-        if(!host_hosts(h,group)) {
-            rc=host_remote_cmd(h,group,cmd,clen,out,-1);
-            if(rc!=EFS_OK)out->rc=rc;
-            return;
-        }
         /* A lagging storage member still stores its fragment, but must not
          * keep proving STATUS against its own frozen KV prefix. Delegate
          * the ENTIRE session + exact-ticket read to the lane leader; its
@@ -14999,7 +14994,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
          * request never forwards again, including during an election. */
         if(cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS) {
             struct host_view authority;host_view_get(h,group,&authority);
-            if(!authority.has || authority.role!=EFS_RAFT_LEADER) {
+            if(!host_hosts(h,group) || !authority.has || authority.role!=EFS_RAFT_LEADER) {
                 hint=authority.has && authority.leader!=h->raft_id?authority.leader:-1;
                 if(host_serving_forward) {
                     out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=hint;return;
@@ -15008,6 +15003,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                 if(rc!=EFS_OK)out->rc=rc;
                 return;
             }
+        }
+        if(!host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);
+            if(rc!=EFS_OK)out->rc=rc;
+            return;
         }
 #if EFS_FAULTS
         /* W166: a hosted follower cannot cover its ticket STATUS read.
