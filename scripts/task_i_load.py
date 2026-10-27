@@ -15,6 +15,7 @@ import sys
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--host-address', default='127.0.0.1')
+p.add_argument('--allocator-start-marker', type=Path, help='diagnostic-only observer synchronization')
 a = p.parse_args()
 address = ipaddress.IPv4Address(a.host_address)
 if os.environ.get('EFS_TRANSPORT') == 'rdma' and address.is_loopback:
@@ -36,6 +37,18 @@ def private_port(host=None, udp=False):
                 continue
             return candidate
     raise RuntimeError('no private 19xxx port available')
+
+if a.allocator_start_marker:
+    sys.path.insert(0, str(root / 'scripts'))
+    import d4_progress
+    original_sample = d4_progress.Run.sample
+    def diagnostic_sample(self, phase):
+        if phase == 'before':
+            # This callback runs after population and before writers start.
+            with a.allocator_start_marker.open('x') as marker:
+                marker.write(str(self.t0) + '\n')
+        return original_sample(self, phase)
+    d4_progress.Run.sample = diagnostic_sample
 
 original_init = h.Cluster.__init__
 def cluster_init(self, work, name, ids, env, disc_port=0, hosts=None):

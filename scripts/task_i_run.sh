@@ -53,9 +53,13 @@ python3 -u scripts/rss_mappings_sample.py "${src%/src}/" "$art/measurement/mem.j
 sampler=$!
 python3 -u scripts/task_i_host_sample.py "$src" "$art/measurement/host.jsonl" "${background_client:+$art/background-client.json}" > "$art/measurement/host-sampler.log" 2>&1 &
 vmstat_pid=$!
+load_args=(--host-address "$address")
+if [ -n "${TASK_I_ALLOC_DIR:-}" ]; then
+    load_args+=(--allocator-start-marker "$TASK_I_ALLOC_DIR/load-start")
+fi
 EFS_D4_LOAD_S=3600 EFS_D4_SET=256 EFS_D4_THREADS=8 EFS_D4_FG_SET=32 \
 EFS_D4_DRAIN_S=150 EFS_D4_QUOTA=8G EFS_D4_KEEP=1 EFS_D4_ARTIFACTS="$art/measurement" \
-python3 -u scripts/task_i_load.py --host-address "$address" > "$art/measurement/run.log" 2>&1
+python3 -u scripts/task_i_load.py "${load_args[@]}" > "$art/measurement/run.log" 2>&1
 measure_rc=$?
 kill "$sampler" "$vmstat_pid"
 wait "$sampler" "$vmstat_pid" 2>/dev/null || :
