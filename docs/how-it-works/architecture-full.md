@@ -1598,14 +1598,13 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
-[Task I RSS confirmation](../status/task-i-20261026.md): **nuc RSS PASS scoped, D4
-FAIL on stored-data growth; full gate TOTAL 508 FAIL 5 NOTRUN 14 (1624s)**.
-Branch `agent/devel-task-i`, runtime `931845748`, product base unchanged
-`394f2b791`. All five RSS series pass; drain 62.4 s and 2080 final files
-exact in the hour, but stored-data peaks exceed the 25% bound. Untouched-base
-gate RUNNING; user-authorized identical-source xorinox confirmation STARTED
-Oct 27; node9901 TCP/RDMA NOTRUN pending loopback qualification.
-Failed evidence and fixture retained on nuc. F1 remains open.
+[Task I RSS confirmation](../status/task-i-20261026.md): **xorinox 60-minute RSS/D4
+PASS** at `931845748` (2080 exact files, drain 34.2 s); code gate `TOTAL 508
+FAIL 1 NOTRUN 13 (818s)`, a transfer-readiness setup refusal. Harness fix
+`39d3848fd` is committed but UNTESTED, queued behind Task G's xorinox cleanup.
+Nuc's RSS PASS / D4 FAIL remains open; its first base gate is INCOMPLETE,
+second attempt RUNNING. Node9901 TCP/RDMA NOTRUN, shared-host decision
+pending. All failed evidence retained; F1 remains open.
 
 [Wave 15 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](../status/k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it is its own gate, `make test-w130`, until W165 is fixed. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](#appendix-4--decisions--taken-and-pending-register-d1d36), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
 

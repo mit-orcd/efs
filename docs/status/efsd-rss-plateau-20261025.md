@@ -259,3 +259,18 @@ STARTED there, verdict pending. Node9901 TCP/RDMA remains NOTRUN under the
 brief's loopback-pass prerequisite. RSS passing alone does not close F1.
 [Per-process table, host CPU/disk analysis, individual gate failures,
 reproduction and verified raw manifest](task-i-20261026.md).
+
+### Xorinox confirmation reviewed October 27
+
+User-authorized repeat at the identical `931845748` source **PASSed both
+RSS and D4**: independent 10-second daemon growth +3.21/+0.93/+3.40%,
+clients +3.87/-0.07%; drain 34.2 s, 2080 exact final files, no operation or
+packer errors, stored-data last-third peaks 15.4–16.3% below earlier peaks.
+This is a successful second-host measurement, not a correction of nuc's
+failed stored-data bound. Full gate: `TOTAL 508 FAIL 1 NOTRUN 13 (818s)`,
+leadership-transfer setup BUSY before the publication workload. Test-only
+fix `39d3848fd` waits for documented transfer readiness; it is UNTESTED,
+queued after Task G releases xorinox. Nuc base attempt 1 was interrupted,
+not still running; attempt 2 is active. Node9901 remains NOTRUN pending
+shared-host measurement policy. [Full table, reviewed failure, evidence
+hashes and exact remaining work](task-i-20261026.md).
