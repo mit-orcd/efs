@@ -1,4 +1,4 @@
-agent/devel-task-j (analysis72b01728a, tested devel4066f74df): Intel TOTAL 508 FAIL 2 NOTRUN 14 (616s), on untouched base; runs2/3 stopped. Evidence: docs/status/gate-budgets-refit-20261026.md. Task J INCOMPLETE: user-authorized W166 candidate4c4446e02 queued for strict qualification. No fit. ORCD failures remain preserved.
+Branch agent/devel-task-j, tested head4c4446e02. Base4066f74df: TOTAL508 FAIL2 NOTRUN14 (616s); strict fixed K22 1/1 zero errors. Full corrected gate NOTRUN pending repetitions. Evidence: docs/status/gate-budgets-refit-20261026.md. W166 candidate unifies L0 leadership/admission; qualification pending. Original Intel/ORCD FAILs retained; no budget fit.
 
 # W160 three-run budget refit — October 26, 2026
 
@@ -399,3 +399,12 @@ removed from the calibration environment, restoring ordinary successful-run
 cleanup; failed fixtures are still retained by the corrected tests. No
 calibration or W166 PASS is claimed yet. Both task-owned source trees are
 kept temporarily for this open investigation; neither Task F tree is changed.
+
+The strict candidate's first K22 run passed in28.758s: L0 was full while
+RAM/log watermarks were false; admission refused, group0 moved to node3,
+and473 client writes completed with zero errors throughout pressure/handoff.
+This contrasts with the uncorrected production candidate's208s run with24
+application EIOs. It is **one standalone run**, not full qualification. The
+capacity unit, expected missing-predicate source control, follower-bound
+checks and recipe check passed before it. K36 and the remaining repetitions
+are active; full calibration has not started yet. No budgets changed.
