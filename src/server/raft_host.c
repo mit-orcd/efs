@@ -8930,7 +8930,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
     host_cfg_fan_note(h, group, voters);
     pthread_mutex_lock(&h->mu);
     s = group_slot(h, group);
-    r = (s && s->r) ? s->r : NULL;
+    r = group_raft(h, group);
     if (r) {
         lid = efs_raft_leader(r);
         if (hint)
@@ -8944,6 +8944,8 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
         }
     }
     pthread_mutex_unlock(&h->mu);
+    if (host_forward_refused(host_serving_forward, lid, h->raft_id, hint))
+        return EFS_ERR_NOT_PRIMARY;
     memset(&rep, 0, sizeof(rep));
     rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
     if (hint && rep.leader_hint >= 0)

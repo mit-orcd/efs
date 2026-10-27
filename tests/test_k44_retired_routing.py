@@ -7,6 +7,7 @@ private test endpoints for the ORCD TCP/RDMA stages; they change no product
 behavior. --out retains closed logs/results outside Git (including failures).
 """
 import argparse
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -81,6 +82,16 @@ try:
     expiry_rc, expiry_out = command('expiry-policy', 'expiry-policy', c.ep(1), 'cluster', 'get')
     status_rc, status_out = command('status', 'status', c.ep(1))
     compact_rc, compact_out = command('pack-compact summary', 'pack-compact', c.ep(1), '0')
+    for cmd in ('sync-status', 'data-commit', 'io-stats', 'version', 'gc-status', 'expiry-status'):
+        rc, out = command(cmd, cmd, c.ep(1))
+        assert rc == 0, out
+    for cmd, args in (('raft-getattr', ['1']), ('raft-readdir', ['1']),
+                      ('raft-lookup-path', ['/']), ('expiry-clock', ['get'])):
+        rc, out = command(cmd, cmd, c.ep(1), *args)
+        assert rc == 0, out
+    # No membership mutation: ask for the already committed voter set.
+    rc, out = command('raft-change same voters', 'raft-change', c.ep(1), '2', '0xe')
+    assert rc == 0, out
     step_rc, step_out = command('raft-step-down retired', 'raft-step-down', c.ep(1), '2')
     resync_rc, resync_out = command('raft-resync retired', 'raft-resync', c.ep(1), '2')
     rc, out = command('raft-setattr', 'raft-setattr', c.ep(1), '1', '6', '0',
@@ -99,6 +110,31 @@ try:
         with (mnt/'seed-only').open('wb') as f:
             f.write(payload); f.flush(); os.fsync(f.fileno())
         assert (mnt/'seed-only').read_bytes() == payload
+        ino = str((mnt/'seed-only').stat().st_ino)
+        for cmd, args in (('raft-lookup', ['1', 'seed-only']),
+                          ('raft-getattr', [ino]), ('raft-getchunks', [ino])):
+            rc, out = command(cmd, cmd, c.ep(1), *args)
+            assert rc == 0, out
+        os.chmod(mnt/'seed-only', 0o640)
+        os.setxattr(mnt/'seed-only', 'user.k44', b'exact')
+        assert os.getxattr(mnt/'seed-only', 'user.k44') == b'exact'
+        os.removexattr(mnt/'seed-only', 'user.k44')
+        with (mnt/'seed-only').open('r+b') as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            fcntl.lockf(f, fcntl.LOCK_EX, 64)
+            fcntl.lockf(f, fcntl.LOCK_UN, 64)
+            fcntl.flock(f, fcntl.LOCK_UN)
+            f.truncate(4099); f.flush(); os.fdatasync(f.fileno())
+        assert (mnt/'seed-only').read_bytes() == payload[:4099]
+        payload = payload[:4099]
+        os.link(mnt/'seed-only', mnt/'hardlink')
+        assert (mnt/'hardlink').read_bytes() == payload
+        (mnt/'hardlink').unlink()
+        (mnt/'symlink').symlink_to('seed-only')
+        assert os.readlink(mnt/'symlink') == 'seed-only'
+        assert (mnt/'symlink').read_bytes() == payload
+        (mnt/'symlink').unlink()
+        assert os.statvfs(mnt).f_blocks > 0
         (mnt/'directory').mkdir()
         assert sorted(x.name for x in mnt.iterdir()) == ['directory', 'seed-only']
         (mnt/'seed-only').rename(mnt/'renamed')
@@ -115,6 +151,13 @@ try:
     # An administrative refusal must not schedule resync on a retired replica.
     rc, after = command('raft-status after', 'raft-status', c.ep(1))
     assert rc == 0, after
+    retired = re.search(r'group 2 .*', after).group(0)
+    assert 'resync=1' not in retired, retired
+    assert re.search(r'leader=[123] ', retired), retired
+    for field in ('term', 'commit', 'applied', 'last'):
+        old = re.search(r'group 2 .*', status).group(0)
+        assert re.search(r'\b'+field+r'=(\d+)', old).group(1) == re.search(
+            r'\b'+field+r'=(\d+)', retired).group(1), (old, retired)
     passed = True
 finally:
     if mount:

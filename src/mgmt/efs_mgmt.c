@@ -1147,7 +1147,7 @@ static int cmd_raft_resync(int argc, char **argv)
     close(fd);
     r = reply;
     printf("raft-resync %s:%u group=%u rc=%d%s\n", host, port, req.group, r->rc,
-           r->rc == EFS_ERR_NOT_PRIMARY ? " (this node leads the group; refused)" :
+           r->rc == EFS_ERR_NOT_PRIMARY ? " (this replica is not eligible for resync: leader or retired; refused)" :
            r->rc == EFS_OK ? " (requested; the next conflicting AppendEntries asks for a snapshot)" : "");
     int out = r->rc == EFS_OK ? 0 : 1;
     free(reply);
