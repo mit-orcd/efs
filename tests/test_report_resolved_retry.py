@@ -39,7 +39,8 @@ static int report_dirty_ino_run(efs_ino_t ino,int sync, REPAIR_SCOPE_ARGS){
  *resolved=0;
  (void)ino;(void)sync;calls++;assert(owned);
  if(calls==1)first_deadline=deadline;
- else assert(deadline==end); /* no renewed receipt budget */
+ else if(mode==3 && calls==2)assert(deadline==first_deadline); /* held unit keeps send budget */
+ else assert(deadline==end); /* receipt recovery uses the one completion budget */
  if(mode==1){now+=100;return EFS_ERR_IO;} /* unknown receipt stays a failure */
  if(mode==2){now+=end>now && end-now<1000?end-now:1000;*resolved=1;return EFS_ERR_STALE;}
  if(mode==4){return EFS_ERR_STALE;}
