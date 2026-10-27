@@ -98,6 +98,17 @@ def write_file(path, body):
             view = view[written:]
 
 
+def retain_logs(cluster):
+    """Finalize private fixture logs before successful runtime bulk is pruned."""
+    dest = os.environ.get('W130_EVIDENCE_DIR')
+    if dest:
+        Path(dest).mkdir(parents=True, exist_ok=True)
+        kept = Path(tempfile.mkdtemp(prefix=cluster.dir.name + '-', dir=dest))
+        for log in cluster.dir.glob('*.log'):
+            shutil.copy2(log, kept / log.name)
+        print('[w130] retained finalized logs:', kept, flush=True)
+
+
 def group_applied(c, i, g):
     rc, out = mgmt('raft-status', c.ep(i))
     assert rc == 0, out
@@ -165,6 +176,10 @@ def serve_fault():
         before = group_applied(cluster, victim, group)
         time.sleep(.1)
         assert group_applied(cluster, victim, group) == before
+        rc, out = mgmt('raft-getattr', cluster.ep(victim), str(inode))
+        route = re.search(r'status=(\d+) primary=(\d+)', out)
+        assert rc == 0 and route and int(route[1]) == 7 and int(route[2]) in {1, 2, 3} - {victim}, \
+            ('halted replica must give a usable healthy-leader hint', out)
         mark.unlink()
         rc, out = mgmt('raft-resync', cluster.ep(victim), str(group))
         assert rc == 0, out
@@ -181,6 +196,7 @@ def serve_fault():
         if mounted:
             mounted.close()
         cluster.stop_all()
+        retain_logs(cluster)
         print('[w165] evidence fixture:', work, flush=True)
 
 
@@ -231,10 +247,7 @@ try:
     # 1. node 3 must log the damage and the halt of the target's group
     #    (which group? the dir shard's group — found in node 3's log).
     #    Wait for the halt BEFORE more creates: a create that meets the
-    #    damaged row on the serve path in this window instead of the halted
-    #    apply (persistent open-EIO, or a stuck client op under gate load —
-    #    gate case-444 kept on xorinox) is W162's finding, not this gate's
-    #    subject.
+    #    damaged row on the serve path is covered separately above (W165).
     deadline = time.time() + HALT_DEADLINE
     halt_group = None
     while time.time() < deadline:
@@ -323,6 +336,7 @@ finally:
         m.close()
     if c:
         c.stop_all()
+        retain_logs(c)
     import sys as _sys
     if _sys.exc_info()[0] is None:
         shutil.rmtree(work, ignore_errors=True)
