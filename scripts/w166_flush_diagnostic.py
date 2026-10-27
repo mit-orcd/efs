@@ -21,7 +21,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))
-from k33_daemons import Cluster, EFSD, MGMT, FUSE, mgmt
+from k33_daemons import Cluster, EFSD, MGMT, FUSE, mgmt, place_leaders
 
 
 def main():
@@ -152,6 +152,7 @@ def main():
         for i in (1, 2, 3):
             c.wait_log(i, r'raft-host: formed: 3 members', timeout=120)
         c.wait_voters([1, 2, 3], lambda i, v: v == {0: (1, 7), 2: (1, 7)})
+        place_leaders(c, 1)
         rc, text = mgmt(env, 'raft-status', c.ep(1))
         assert rc == 0 and 'group 0 hosted=1 role=LEADER' in text, text
         mount.mkdir()

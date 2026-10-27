@@ -20,7 +20,7 @@ import argparse
 import os, re, shutil, signal, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster as _Cluster, EFSD, MGMT, FUSE, mgmt as _mgmt  # noqa: E402
+from k33_daemons import Cluster as _Cluster, EFSD, MGMT, FUSE, mgmt as _mgmt, place_leaders  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -169,6 +169,8 @@ try:
     for i in (1, 2, 3):
         c.wait_log(i, r'raft-host: formed: 3 members', timeout=120)
     c.wait_voters([1, 2, 3], lambda i, v: v == {0: (1, 7), 2: (1, 7)})
+
+    place_leaders(c, 1)
 
     # park the group-0 leader's compactor up front: its L0 fills, apply
     # defers, backlog grows

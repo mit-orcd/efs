@@ -23,7 +23,7 @@ import sys
 import tempfile
 import time
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster, Mount, fuse_ok, mgmt, payload, root
+from k33_daemons import Cluster, Mount, fuse_ok, mgmt, payload, root, place_leaders
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--case', choices=('both', 'report', 'put'), default='both')
@@ -80,6 +80,7 @@ try:
     c.start(3, join=1)
     for i in (1, 2, 3):
         c.wait_log(i, r'raft-host: formed: 3 members')
+    place_leaders(c, 1)
     m = Mount(c, 2, 'writer')
     mounts.append(m)
     # Do not let inode allocation/open failures masquerade as a close failure.
