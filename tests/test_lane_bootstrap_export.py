@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text();a=s.index('void server_raft_host_lane_bootstrap_rpc(');b=s.index('\nvoid server_raft_host_lane_writer_view',a)
+hs=s.index('static efs_node_id_t host_reply_hint(');hint=s[hs:s.index('\n}',hs)+2]
 code=r'''
 #include "efs/protocol.h"
 #include "efs/raft.h"
@@ -15,7 +16,7 @@ code=r'''
 #include <string.h>
 int efs_chunk_size_valid(uint32_t n){return n>=EFS_MIN_CHUNK_SIZE && n<=EFS_MAX_CHUNK_SIZE && !(n&(n-1));}
 struct server {pthread_mutex_t lock;};
-struct efs_raft_host {int running,n;struct server *s;};
+struct efs_raft_host {int running,n,raft_id;struct server *s;};
 static struct server server={.lock=PTHREAD_MUTEX_INITIALIZER};
 static struct efs_raft_host host={.running=1,.n=4,.s=&server},*g_host=&host;
 static struct efs_export configured;static int present,boot_rc,boot_calls,put_calls;
@@ -29,7 +30,7 @@ static void server_export_put(struct server*s,struct efs_export*ex){(void)s;asse
 static int rc_to_inode_status(int rc){return rc==EFS_ERR_NOT_FOUND?EFS_INODE_RPC_NOT_FOUND:EFS_INODE_RPC_ERROR;}
 static int server_raft_host_lane_bootstrap(efs_ino_t ino,uint64_t gen,uint32_t ci,uint32_t cs,int *hint){assert(ino==10 && gen==20 && ci==1);(void)hint;assert(cs==EFS_DEFAULT_CHUNK_SIZE || cs==2*EFS_DEFAULT_CHUNK_SIZE);boot_calls++;return boot_rc;}
 static void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view*q,struct efs_msg_lane_writer_view_reply*out){out->view.status=EFS_INODE_RPC_OK;out->view.ino=q->ino;out->view.generation=q->generation;out->chunk_size=q->chunk_size;}
-'''+s[a:b]+r'''
+'''+hint+'\n'+s[a:b]+r'''
 int main(void){struct efs_msg_lane_bootstrap q={.export_id=1,.ino=10,.generation=20,.chunk_index=1,.chunk_size=EFS_DEFAULT_CHUNK_SIZE};struct efs_msg_lane_writer_view_reply out;
  server_raft_host_lane_bootstrap_rpc(&q,&out);assert(out.view.status==EFS_INODE_RPC_OK && boot_calls==1 && !put_calls);
  q.chunk_size*=2;server_raft_host_lane_bootstrap_rpc(&q,&out);assert(out.view.status==EFS_INODE_RPC_STALE && boot_calls==1);

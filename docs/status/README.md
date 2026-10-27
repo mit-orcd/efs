@@ -27,6 +27,53 @@ fixed-source full gate RUNNING after G's completed handoff. Both nuc base
 attempts INCOMPLETE; original nuc failures remain unclassified. Captures
 hashed and retained, qualification INCOMPLETE.
 
+[Wave 18 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`08701031d`; gate at the same commit)**: Task K, K44/W167 ([evidence](k44-retired-replica-routing-20261026.md)): a retired replica never answers for its group — forwarded commands get NOT_PRIMARY with the live leader's hint, local proposals and applied-waits route to live voters instead of waiting on the frozen cursor, routing uses the current voter set, `raft-mkfs` on a member without a group-0 replica forwards the whole operation, a retired replica stops exporting snapshots; formation notices ride transient peer refusals within their 5 s budget; `raft-change` checks convergence at the live responder. orcd-mini (RDMA): fresh formation, online fourth member, 27 management checks through the seed, POSIX core 218/218, two-client 68/68 PASS; orcd-mini now runs Task K's build `00e85a299531`. intel2 `make test-all` (8 jobs): 510 commands in 737 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 4 (k33_client_view 26.0/25, k38_shared_chunk 43.3/35, stop_progress 63.3/50, k22_leader_admission 30.4/30 s: intel2 runs slower than the intel1 refit).
+
+[Wave 17 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`db3ec76d4`; gate at `db3ec76d4`)**: Task J ([evidence](gate-budgets-refit-20261026.md)): the W160 budgets re-fitted from three clean 8-job intel1 gates (729/723/725 s; fitted model 1,025 s under the D44 target of 1,100 s; slots and reasons kept; `scripts/calibrate_test_budgets.sh`, `scripts/refit_test_budgets.py`), and the three defects its calibration gates surfaced, fixed on the branch and recorded as **K45** (a delayed AppendEntries below the installed snapshot fenced a healthy replica for good; now refused with the snapshot boundary as the rebase hint), **K46** (a replica with `raft-resync` pending could win an election; no election while resync is pending), **K47** (a packed read with a returned holder answering NET and an absent third fragment bypassed the returned-member re-probe; now re-probed for NET and NOT_FOUND), plus the W166 L0-pressure subcase (publication, admission and leadership share one pressure predicate; `test_kv_leader_pressure.py`); W166's stalled-follower residual stays open. Merge-time: the refit rows win where both sides had a row, Task F's W130 row (50 s) is kept. intel2 `make test-all` (8 jobs): 510 commands in 757 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 1 (test_stop_progress.py 56.8 s against its re-fitted 50 s row: intel2 runs it slower than the intel1 fit). Real-host stage: node9901 built and gated (769 s), fstor007 does not build unchanged devel (prerequisite), see the page.
+
+[Wave 16 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`9b7a34583`; gate at `9b7a34583`)**: Task F, W165 ([evidence](w165-serve-path-damaged-row-20261026.md)): a stored row the typed readers refuse is reported through a KV decode-error callback; the apply poisons its scope and halts the group (W127 route), a serving thread answers NOT_PRIMARY with a healthy replica's hint instead of a persistent `EIO`, storage authority follows the healthy quorum through a metadata halt, and `raft-resync` heals the replica; `test_w130_dir_fault.py` is back in `make test-long` at a measured 50 s budget (the `make test-w130` target is gone), the K22 snapshot-import budget is re-fitted to 320 s, the D44 target of 1,100 s stands. intel1 8-job gates at `525cf3816`: 509 commands, 0 FAIL twice (base 508, 0 FAIL). intel2 `make test-all` (8 jobs): 509 commands in 803 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 1 (test_k33_growth.py 135.3 s against its 135 s row, within noise). Real-host (node9901, RDMA, orcd-mini) stays NOTRUN.
+
+[W165: serve-first damaged metadata, healthy-quorum routing and resync](w165-serve-path-damaged-row-20261026.md):
+**`agent/devel-task-f`, not merged or pushed; ten strict combined loopback runs PASS on intel1 (`31b7ce7e2`), fast suite PASS; both eight-job gates at `525cf3816`: TOTAL 509 FAIL 0 NOTRUN 14, 803/771 s (base 508/0/14, 694 s). W130 passed in both pools in 31.1/34.1 s.**
+The replica stops serving/campaigning/applying when a stored decoder refuses a row;
+its storage authority and cross-group coordinators use healthy voters. The atomic
+KV scope preserves the fatal refusal even when a command handler masks its result.
+`test_w130_dir_fault.py` is restored to `make test-long`, with no application-error
+retries. Finalized captures remain on intel1 with verified hashes; explicit user approval authorized deletion of the private source/build tree and two runner scratch trees. The evidence page records the separate cleanup receipt; synthetic-store bulk is pruned. Real-host TCP/RDMA gates remain NOTRUN. D44 stays at 1,100 s; the measured
+restoration budgets estimate 1,641 s within its existing 1,650 s margin bound.
+
+[Wave 15 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it was held as its own gate, `make test-w130`, while W165 was open; the [Task F follow-up](w165-serve-path-damaged-row-20261026.md) restores it to the ordinary gate and removes that separate target. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](decisions.md), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
+
+[W160 Task J budget calibration](gate-budgets-refit-20261026.md):
+**COMPLETE scoped, branch `agent/devel-task-j`, not merged/pushed.** Corrected
+source49e5ffd71: three full8-job gates729/723/725s,509 commands,zero failures,
+14 NOTRUN each. Refit0f72c1665:85 rows retain slots/reasons, model1025s below
+unchanged1100s target/1650s bound. Separate post-refit gate730s plus30s build,
+zero failures,14 NOTRUN. All medians, modeled critical chain/exclusive tail,
+exact builds and verified closed raw manifests are recorded. Eight inactive
+build trees pruned; failed58/93 fixtures retained. Earlier ORCD/Intel failures
+stay FAIL; host skips remain INCOMPLETE and no repaired-build RDMA PASS is
+claimed. W166 pressure subcase fixed/qualified TCP; stalled-follower fault-
+window write errors and production/RDMA scope remain open.
+
+[Task K: retired-replica routing](k44-retired-replica-routing-20261026.md):
+**FIXED (private TCP/RDMA plus orcd-mini RDMA scope)** on `agent/devel-task-k`, product/test
+source `00e85a299`, not merged. Final routing and one-loss sweeps, seven K33
+suites, POSIX core 218/218 on both transports, and steady-state `.efs`
+stats/ls/find plus exact payloads PASS. Full gate: **508 commands, 4 FAIL,
+14 NOTRUN**, all four shared base LSan instrumentation failures; separate
+leak-disabled checks 4/4 PASS, leak verification NOTRUN. Cold-query cases
+remain INCOMPLETE (TCP: 1/3 pass, 2 skip on base and candidate; RDMA: 2/3
+pass, 1 skip, under the default 60 s refresh). Clean-stop signal race and long-path reclaim fixture fixed.
+Raw logs/results and verified SHA256 manifest retained; 12 private scratch
+roots and copied WAL bulk pruned, node9900 private stage released.
+**Oct 27, explicitly authorized orcd-mini format/deploy:** Task K product
+`00e85a299531` runs on four node9901 members and both mounts. Fresh formation,
+online fourth-member addition, 27-call seed/added-member sweep, 218/218
+POSIX core, 68/68 two-client cases, exact cross-mount payloads and stable `.efs` queries PASS.
+Original closed logs preserved; cluster left running; existing devops config
+still lists three members, so the fourth has a retained owned lifecycle helper.
+
 [Wave 15 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it is its own gate, `make test-w130`, until W165 is fixed. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](decisions.md), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
 
 [Wave 14 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a81bc8dc0`, fast-forward; gate at the same commit)**: the D4 drain and reclaim branch ([drain](d4-pack-drain-20261025.md), [reclaim](d4-reclaim-20261026.md)): one packer candidate per file per pass, the fragment resend bounded by 2 s inside K41's placement loop, the truncate sweep takes an inode to retire in one pass and waits 2 s for the writer's own publication, an unconditional full image replaces spans of an older content epoch but is still refused by an unseen live span of its own epoch (`988efba3e`: the wave-13 gate's K38 writer EIO was this branch's `acb8a7318` dropping another writer's span; K36's EBUSY did not reproduce); 60-minute run: stored data bounded, drain 72 s, 0 put errors, abandoned uploads 610 → 41. intel1 8-job gate 0 FAIL twice, intel2 `make test-all` (8 jobs): 506 commands in 641 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits. The W160 target is 16 min 30 s (990 s) for the D4 plateau driver back in `make test-long` and the pack dup-candidate test.
@@ -516,6 +563,11 @@ test). On intel1: TSan clean on the KV tests, `make leak-check` 25/25, and
 `make test-all` 442 commands with 1 FAIL and 14 host NOTRUN. The FAIL,
 `test_k33_client_view.py`, fails 5/5 on base `3e01ba95c` too. The orcd-mini
 A/B rerun is NOTRUN.
+
+[orcd-test fresh deploy of `394f2b791` (RDMA), all POSIX suites](orcd-test-devel-rdma-394f2b791-20261027.md):
+**PASS on all seven clients: POSIX all 220/223 (3 expected SKIPs), durability 27/27 across a full restart,
+two-client 68/68 and every live `.efs` harness.** Expiry checks PASS; the fixture's closing core run failed
+one case with EBUSY (W159). New W167: `raft-mkfs` at the seed answers BUSY forever after an online node addition.
 
 [orcd-mini fresh deploy of `5a7463440` (RDMA), POSIX and ior](orcd-mini-deploy-5a7463440-20261025.md):
 **core 218/218, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,

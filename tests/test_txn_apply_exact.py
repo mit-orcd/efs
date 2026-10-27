@@ -58,6 +58,7 @@ struct efs_raft {int role,campaign,stepped;};
 struct efs_raft_host;
 struct host_group {
     uint8_t group;int import_block,kv_incomplete,incompatible;
+    int damaged_row;uint32_t damaged_key_len;uint8_t damaged_key[EFS_KV_KEY_MAX];
     uint64_t incompat_index,incompat_term;uint32_t incompat_len;uint8_t incompat_tag,incompat_sub;
     struct efs_raft *r;struct efs_raft_host *host;struct efs_arc_slot arc[HOST_APPLY_RC_RING];
 };

@@ -1071,6 +1071,9 @@ static int raft_cfg_submit(const char *host, uint16_t port, uint8_t group,
     return 0;
 }
 
+static int sess_leader_address(const char *host, uint16_t port, int hint,
+                               char target[64], uint16_t *target_port);
+
 static int raft_change_converged(const char *host, uint16_t port, uint8_t group,
                                  uint32_t voters)
 {
@@ -1147,7 +1150,7 @@ static int cmd_raft_resync(int argc, char **argv)
     close(fd);
     r = reply;
     printf("raft-resync %s:%u group=%u rc=%d%s\n", host, port, req.group, r->rc,
-           r->rc == EFS_ERR_NOT_PRIMARY ? " (this node leads the group; refused)" :
+           r->rc == EFS_ERR_NOT_PRIMARY ? " (this replica is not eligible for resync: leader or retired; refused)" :
            r->rc == EFS_OK ? " (requested; the next conflicting AppendEntries asks for a snapshot)" : "");
     int out = r->rc == EFS_OK ? 0 : 1;
     free(reply);
@@ -1272,13 +1275,26 @@ static int cmd_raft_change(int argc, char **argv)
             break;
         usleep(100000);
     }
+    int converged = 0;
     if (rc == EFS_OK) {
-        for (i = 0; i < 80 && !raft_change_converged(host, port, group, voters);
-             i++)
+        char target[64];
+        uint16_t target_port = port;
+        snprintf(target, sizeof(target), "%s", host);
+        /* K44: the seed may retain a retired joint replica forever.
+         * Check the live responder, not that historical local config. */
+        if (r.leader_hint >= 0)
+            rc = sess_leader_address(host, port, r.leader_hint, target, &target_port);
+        for (i = 0; rc == EFS_OK && i < 80; i++) {
+            if (raft_change_converged(target, target_port, group, voters)) {
+                converged = 1;
+                break;
+            }
             usleep(100000);
+        }
+        if (rc == EFS_OK && !converged) rc = EFS_ERR_BUSY;
     }
-    printf("raft-change rc=%d group=%u voters=0x%x index=%llu hint=%d\n",
-           rc, group, voters, (unsigned long long)r.index, r.leader_hint);
+    printf("raft-change rc=%d group=%u voters=0x%x index=%llu hint=%d converged=%d\n",
+           rc, group, voters, (unsigned long long)r.index, r.leader_hint, converged);
     return rc == EFS_OK ? 0 : 1;
 }
 

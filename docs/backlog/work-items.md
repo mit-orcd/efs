@@ -6618,6 +6618,14 @@ both. Gate: `make test` on efs3, in the K25 report.
 <a id="w165"></a>
 ## W165 — Serve-path decode of a damaged stored row does not fail closed
 
+**Current: FIXED, intel1 TCP loopback, on `agent/devel-task-f` (not merged).**
+Ten strict combined serve/apply fault runs pass; both eight-job gates at
+`525cf3816` have 509 commands, 0 FAIL and 14 unchanged NOTRUNs (803/771 s).
+Node9901 TCP/RDMA and multi-host gates remain NOTRUN. Original failures and
+synthetic stores are retained on intel1; private cleanup was blocked by approval review.
+[Implementation, preserved failures and acceptance](../status/w165-serve-path-damaged-row-20261026.md).
+
+
 **Correctness; opened 2026-10-25 from the W130 one-replica gate (tests/test_w130_dir_fault.py on `agent/devel-taskb`).**
 - The W127/W130 fail-closed halt covers only the raft *apply* path. When a
   replica's stored directory row is damaged and a *serve*-path read meets it
@@ -6640,6 +6648,16 @@ both. Gate: `make test` on efs3, in the K25 report.
 ## W166 — close(2) EIO at the 30 s flush deadline while a leader's apply lags
 
 **Correctness / availability; opened 2026-10-25 from the K22 loopback gates on `agent/devel-taskb`.**
+
+Oct27 Task J: the compressed-KV L0-pressure subcase is fixed on
+`agent/devel-task-j` (4c4446e02, integrated through49e5ffd71/0f72c1665):
+publication, admission and leader pressure share the same predicate. Strict
+K22 repetitions report zero client errors; three full gates and a separate
+post-refit gate have zero failures, with14 NOTRUN host/self-test markers each.
+No deadline was relaxed. This does not close the stalled-follower fault-
+window errors or supply production-scale/RDMA evidence; W166 remains OPEN
+for that residual scope. [Task J evidence](../status/gate-budgets-refit-20261026.md).
+
 - A stalled follower (SIGSTOP; log present, sockets open) makes client
   closes fail EIO at the 30 s flush deadline during the first ~2.5 min of
   the stall — before fencing settles — reproduced with the production 512

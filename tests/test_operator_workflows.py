@@ -18,7 +18,7 @@ private stores under TMPDIR, free ports (never 17xxx). Node addition with
 3. With FUSE, the F13 POSIX cases (tests/posix/posix_suite.py
    dir_rename_noreplace*, mknod_special_files_refused) on that mount.
 """
-import os, re, shutil, subprocess, sys, tempfile, time
+import json, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt  # noqa: E402
@@ -41,6 +41,7 @@ def group_status(c, i, group):
 
 
 mounts = []
+stage = 'storage roots'
 c = Cluster(work, 'roots', [1], env)
 r = Cluster(work, 'resync', [1, 2, 3], env)
 try:
@@ -85,6 +86,7 @@ try:
           'add-storage and add-node refused; the same roots start PASS')
 
     # 2. raft-resync on a follower.
+    stage = 'resync setup'
     r.start(1)
     r.start(2, join=1)
     r.start(3, join=1)
@@ -96,7 +98,7 @@ try:
     follower = next(i for i in (1, 2, 3) if r.node_id(i) != leader)
     lead_i = next(i for i in (1, 2, 3) if r.node_id(i) == leader)
     rc, out = mgmt(env, 'raft-resync', r.ep(lead_i), str(group))
-    assert rc == 1 and 'leads the group; refused' in out, out
+    assert rc == 1 and 'rc=-15' in out and 'leader or retired; refused' in out, out
     rc, out = mgmt(env, 'raft-resync', r.ep(follower), str(group))
     assert rc == 0 and 'requested' in out, out
     r.wait_log(follower, rf'raft: group={group} resync requested')
@@ -104,10 +106,14 @@ try:
         a = Mount(r, 1, 'mnt')
         mounts.append(a)
         for k in range(50):
+            stage = f'create f{k}, bytes={k}'
             (a.path / f'f{k}').write_bytes(b'x' * k)
+            stage = f'mkdir d{k}'
             os.mkdir(a.path / f'd{k}')
         for k in range(50):
+            stage = f'read f{k}, bytes={k}'
             assert (a.path / f'f{k}').read_bytes() == b'x' * k
+    stage = 'follower catch-up'
     end = time.time() + 60
     while True:
         lst, fst = group_status(r, lead_i, group), group_status(r, follower, group)
@@ -120,6 +126,7 @@ try:
           f'(resync={int(fst["resync"])}); the follower applied to commit {lst["commit"]}'
           f'{" after 100 mount operations" if mounts else " (no FUSE: no writes)"} PASS')
     if mounts:
+        stage = 'POSIX cases'
         # 3. F13 POSIX cases on this mount: RENAME_NOREPLACE (existing and
         # free target) and mknod of special files.
         suite = Path(__file__).resolve().parent / 'posix/posix_suite.py'
@@ -130,12 +137,27 @@ try:
                 p.stdout + p.stderr
         print('3. POSIX: renameat2(RENAME_NOREPLACE) EEXIST/EOPNOTSUPP, mknod of FIFO, socket '
               'and devices EPERM PASS')
+except Exception as error:
+    # Capture before shutdown; a successful rerun cannot reconstruct the
+    # failed operation's Raft roles, import state or client log.
+    diagnostic = {'stage': stage, 'error': repr(error), 'elapsed_s': time.time() - t0,
+                  'nodes': {}}
+    for i in (1, 2, 3):
+        try:
+            rc, out = mgmt(env, 'raft-status', r.ep(i))
+            diagnostic['nodes'][str(i)] = {'endpoint': r.ep(i), 'rc': rc, 'status': out}
+        except Exception as status_error:
+            diagnostic['nodes'][str(i)] = {'error': repr(status_error)}
+    (work / 'failure.json').write_text(json.dumps(diagnostic, indent=2) + '\n')
+    print(f'operator failure: {stage}: {error!r}; evidence {work}', flush=True)
+    raise
 finally:
+    failed = sys.exc_info()[0] is not None
     for m in mounts:
         m.close()
     c.stop_all()
     r.stop_all()
-    if os.environ.get('EFS_OPS_KEEP'):
+    if failed or os.environ.get('EFS_OPS_KEEP'):
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)

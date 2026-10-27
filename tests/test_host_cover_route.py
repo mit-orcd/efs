@@ -5,6 +5,7 @@ import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 r=s.index('static uint32_t host_route_voters(');a=s.index('static int host_leader_cover_pick(');b=s.index('\n}',a)+2
+fa=s.index('static int host_group_retired(');fb=s.index('\n}',fa)+2
 code=r"""
 #include "efs/raft.h"
 #include <assert.h>
@@ -13,7 +14,7 @@ code=r"""
 #include <pthread.h>
 #include <stdio.h>
 #define HOST_NGROUPS 2
-struct host_group {struct efs_raft *r;uint32_t voters;};
+struct host_group {struct efs_raft *r;uint32_t voters;int retired;};
 struct efs_raft_host {pthread_mutex_t mu;int n,raft_id;struct host_group g[2];};
 struct host_view {int has,leader;uint32_t voters;};
 static int leaders[2];static uint32_t masks[2];
@@ -29,23 +30,30 @@ static void host_view_get(struct efs_raft_host*h,uint8_t group,struct host_view*
 /* Routing must never take the host mutex. */
 #define pthread_mutex_lock(m) (abort(),0)
 #define pthread_mutex_unlock(m) (abort(),0)
-"""+s[r:a]+s[a:b]+r"""
+"""+s[fa:fb]+s[r:a]+s[a:b]+r"""
 int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.n=4,.raft_id=2};
  h.g[0].r=(struct efs_raft*)1;h.g[1].r=(struct efs_raft*)2;masks[0]=7;masks[1]=14;
  uint8_t both[]={0,2};leaders[0]=1;leaders[1]=1;
  assert(host_leader_cover_pick(&h,0,both,2)==1);
  leaders[0]=0;assert(host_leader_cover_pick(&h,0,both,2)==-1);
+ /* A retired g2 still reports the old 0x7 mask; node 1 is no longer dual. */
+ h.g[1].retired=1;masks[1]=7;
+ assert(host_route_voters(&h,2)==14);
+ assert(host_leader_cover_pick(&h,0,both,2)==-1);
+ h.g[1].retired=0;masks[1]=14;
  leaders[1]=3;assert(host_leader_cover_pick(&h,2,both,2)==-1);
  /* A one-group retained result probe may route to that group's leader. */
  assert(host_leader_cover_pick(&h,2,both+1,1)==3);
  leaders[0]=2;assert(host_leader_cover_pick(&h,0,both,2)==-1);
  leaders[0]=-1;assert(host_leader_cover_pick(&h,0,both,2)==-1);
  leaders[0]=4;assert(host_leader_cover_pick(&h,0,both,2)==-1);
- h.n=3;masks[0]=masks[1]=7;leaders[0]=1;
+ h.n=3;masks[0]=masks[1]=7;leaders[0]=1;leaders[1]=2;
+ assert(host_leader_cover_pick(&h,0,both,2)==-1); /* full membership, split leaders */
+ leaders[1]=1;
  assert(host_leader_cover_pick(&h,0,both,2)==1);
  masks[1]=5;assert(host_leader_cover_pick(&h,0,both,2)==-1);
  h.g[1].r=NULL;h.g[1].voters=5;assert(host_leader_cover_pick(&h,0,both,2)==-1);
- h.g[1].voters=7;assert(host_leader_cover_pick(&h,0,both,2)==1);
+ h.g[1].voters=7;assert(host_leader_cover_pick(&h,0,both,2)==-1); /* missing leadership proof */
  assert(host_leader_cover_pick(&h,0,NULL,2)==-1 && host_leader_cover_pick(&h,0,both,0)==-1);
  puts("leader routing: full committed coverage, three/four-node layouts, membership changes, missing/self leaders and single-group loop refusal PASS");
 }

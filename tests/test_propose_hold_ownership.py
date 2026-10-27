@@ -21,7 +21,8 @@ struct efs_raft_disk {int depth,hold_rc;};
 struct efs_raft_host {pthread_mutex_t mu;struct efs_raft_disk *disk;struct efs_raft *r;int raft_id;};
 static __thread int host_serving_forward;
 static struct efs_raft_host *test_host;
-static int first_depth,appends,locked_sync,held_sync;
+static int first_depth,appends,locked_sync,held_sync,retired;
+static int host_group_retired(struct efs_raft_host*h,uint8_t g){(void)h;(void)g;return retired;}
 int efs_raft_disk_sync_depth(struct efs_raft_disk*d){if(first_depth){first_depth=0;return 1;}return d->depth;}
 int efs_raft_disk_sync_hold(struct efs_raft_disk*d){if(d->hold_rc)return d->hold_rc;d->depth++;return 0;}
 static int release(struct efs_raft_disk*d){assert(!pthread_mutex_trylock(&test_host->mu));pthread_mutex_unlock(&test_host->mu);assert(d->depth>0);d->depth--;held_sync++;return 0;}
@@ -43,6 +44,7 @@ static void host_note_durable_synced(struct efs_raft_host*h){(void)h;}
 static int host_mark_durable_covered(struct efs_raft_host*h,uint8_t g,struct efs_raft*r,uint64_t i){(void)h;(void)g;(void)r;assert(i==17);return 0;}
 static int host_remote_cmd(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint32_t n,struct efs_msg_raft_mkfs_reply*r,int lid){(void)h;(void)g;(void)c;(void)n;(void)r;(void)lid;return EFS_ERR_NOT_PRIMARY;}
 ''' + 'static int host_group_incompatible(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return 0;}\n' \
+  + '/* Routing is exercised by readindex_result and W165; this fixture isolates hold ownership. */\nstatic int host_halted_hint(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return -1;}\n' \
   + '/* W140 tag gate: tested in test_submit_unknown_tag.py. */\n' \
   + 'static int host_tag_refused(uint8_t g,const uint8_t *c,uint32_t n){(void)g;(void)c;(void)n;return 0;}\n' \
   + 'static int host_admit(struct efs_raft_host *h,struct efs_raft *r,const uint8_t *c,uint32_t n){(void)h;(void)r;(void)c;(void)n;return 0;}\n' + s[fa:fb] + '\n' + s[a:b] + r'''
@@ -60,6 +62,8 @@ int main(void){struct efs_raft r={EFS_RAFT_LEADER,3};struct efs_raft_disk d={0};
  /* A pre-existing outer hold remains owned by its caller. */
  d.hold_rc=0;d.depth=1;
  assert(!host_propose_impl(&h,0,cmd,1,&index,&term,&hint,0)&&d.depth==1&&!locked_sync);
+ efs_raft_disk_sync_release(&d);retired=1;appends=0;
+ assert(host_propose_impl(&h,0,cmd,1,&index,&term,&hint,0)==EFS_ERR_NOT_PRIMARY&&!appends&&!d.depth);
  puts("submit hold ownership: concurrent closure, failed hold and nested ownership PASS");
 }
 '''

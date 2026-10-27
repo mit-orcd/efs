@@ -1327,6 +1327,117 @@ static void test_grow_3_to_5(void)
 }
 
 
+/* Snapshot installation may overtake a previously queued AppendEntries.
+ * Refusing its compacted prefix must leave the replica able to take the
+ * leader's correctly rebased suffix, in both single and batched receive. */
+static void test_snapshot_rejects_delayed_compacted_prefix(void)
+{
+    for (int batched = 0; batched < 2; batched++) {
+        for (int kind = 0; kind < 4; kind++) {
+            struct net n = { .n = 3, .cap_rep = 1 };
+            struct app app = {0};
+            struct efs_raft_cfg cfg = {0};
+            struct efs_raft_store *st = efs_raft_mem_create();
+            struct efs_raft_msg m;
+            uint8_t image[13] = {0}, bytes[] = "ABCDE";
+            CHECK(st != NULL, "compacted-prefix store");
+            if (!st) continue;
+            cfg.n = 3; cfg.id = 1; cfg.voters = 7;
+            cfg.store = st; cfg.store_ctx = st; cfg.send = send_now; cfg.net = &n;
+            cfg.apply = apply_cmd; cfg.app = &app; cfg.snap_chunk = snap_chunk;
+            cfg.election_ticks = 10; cfg.heartbeat_ticks = 2;
+            n.drop[0] = 1;
+            n.r[1] = test_raft_new(&cfg);
+            CHECK(n.r[1] != NULL, "compacted-prefix follower");
+            if (!n.r[1]) { efs_raft_mem_free(st); continue; }
+            wr32_t(image, 7); image[8] = 'D'; wr32_t(image + 9, 4);
+            memset(&m, 0, sizeof(m));
+            m.type = EFS_RAFT_MSG_SNAP_REQ; m.from = 0; m.to = 1; m.term = 1;
+            m.last_log_index = 4; m.last_log_term = 1; m.leader_commit = 4;
+            m.success = 1; m.nentries = 1;
+            m.entries[0].cmd = image; m.entries[0].clen = sizeof(image);
+            CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && app.snap_at == 4,
+                  "snapshot installs before the delayed prefix arrives");
+            memset(&m, 0, sizeof(m));
+            m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 1;
+            m.leader_commit = 5;
+            m.nentries = kind == 0 ? 2 : kind == 1 ? 5 : 0;
+            if (kind == 3) { m.prev_index = 4; m.prev_term = 2; }
+            for (uint32_t i = 0; i < m.nentries; i++) {
+                m.entries[i].term = 1; m.entries[i].cmd = bytes + i;
+                m.entries[i].clen = 1;
+            }
+            n.cap_n = 0;
+            int rc = batched ? efs_raft_recv_batch(n.r[1], &m, 1) : efs_raft_recv(n.r[1], &m);
+            CHECK(rc == EFS_OK && n.cap_n == 1 && !n.cap_ok && n.cap_match == 4,
+                  "compacted prefix refused with snapshot rebase hint");
+            CHECK(efs_raft_applied(n.r[1]) == 4 && app.n == 4 && app.last == 'D',
+                  "delayed prefix never changes the installed image");
+            memset(&m, 0, sizeof(m));
+            m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 1;
+            m.prev_index = 4; m.prev_term = 1; m.leader_commit = 5; m.nentries = 1;
+            m.entries[0].cmd = bytes + 4; m.entries[0].clen = 1; m.entries[0].term = 1;
+            rc = batched ? efs_raft_recv_batch(n.r[1], &m, 1) : efs_raft_recv(n.r[1], &m);
+            CHECK(rc == EFS_OK && n.cap_ok && n.cap_match == 5 &&
+                  efs_raft_applied(n.r[1]) == 5 && app.n == 5 && app.last == 'E',
+                  "valid suffix still replicates after compacted-prefix rejection");
+            efs_raft_free(n.r[1]); efs_raft_mem_free(st);
+        }
+    }
+}
+
+/* Resync withdraws election eligibility until a verified image installs.
+ * A transfer/grant already queued before the operator's request must not
+ * promote the very replica whose local state is being repaired. */
+static void test_resync_fences_elections(void)
+{
+    for (int kind = 0; kind < 3; kind++) {
+        struct net n;
+        struct efs_raft_store *st[3];
+        struct app app[3];
+        struct efs_raft_cfg cfg;
+        boot_n(&n, st, app, &cfg, 3, 0x7);
+        CHECK(elect(&n, 40) == 1, "resync election fixture elected");
+        int lid = leader_id(&n);
+        if (lid < 0) { free_n(&n, st, 3); continue; }
+        int target = (lid + 1) % 3;
+        n.hold_transfer = 1;
+        CHECK(efs_raft_transfer(n.r[lid], target) == EFS_OK && n.transfer,
+              "resync fixture captured delayed transfer");
+        if (!n.transfer) { free_n(&n, st, 3); continue; }
+        if (kind == 2) {
+            n.isolate[target] = 1;
+            CHECK(efs_raft_recv(n.r[target], n.transfer) == EFS_OK &&
+                  efs_raft_role(n.r[target]) == EFS_RAFT_CANDIDATE,
+                  "candidate awaiting grants before resync");
+        }
+        uint64_t term = efs_raft_term(n.r[target]);
+        CHECK(efs_raft_request_resync(n.r[target]) == EFS_OK &&
+              efs_raft_resync_pending(n.r[target]), "resync requested");
+        if (kind == 0)
+            CHECK(efs_raft_recv(n.r[target], n.transfer) == EFS_OK,
+                  "delayed transfer delivered while resync pending");
+        else if (kind == 1) {
+            n.isolate[target] = 1;
+            for (int tick = 0; tick < 200; tick++)
+                CHECK(efs_raft_tick(n.r[target]) == EFS_OK, "resync election timer");
+        } else {
+            struct efs_raft_msg grant;
+            memset(&grant, 0, sizeof(grant));
+            grant.type = EFS_RAFT_MSG_VOTE_REP;
+            grant.from = lid; grant.to = target; grant.term = term;
+            grant.vote_granted = 1;
+            CHECK(efs_raft_recv(n.r[target], &grant) == EFS_OK,
+                  "old candidate's delayed grant delivered after resync");
+        }
+        CHECK(efs_raft_role(n.r[target]) == EFS_RAFT_FOLLOWER &&
+              efs_raft_term(n.r[target]) == term &&
+              efs_raft_resync_pending(n.r[target]),
+              "pending resync fences transfer, timer and delayed-grant elections");
+        free_n(&n, st, 3);
+    }
+}
+
 static void test_leadership_transfer(void)
 {
     for (int count = 3; count <= 4; count++) {
@@ -2722,6 +2833,16 @@ static void test_resync_replaces_diverged_follower(void)
     m.entries[0].term = 2; m.entries[0].cmd = (const uint8_t *)"F"; m.entries[0].clen = 1;
     CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && efs_raft_commit(n.r[1]) == 6 &&
           app.last == 'F', "follower replicates normally after the resync");
+    efs_raft_allow_campaign(n.r[1], 1);
+    n.drop[2] = 1; /* This fixture instantiates only replica 1. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_TIMEOUT_NOW; m.from = 0; m.to = 1; m.term = 2;
+    m.prev_index = 0x7; m.last_log_index = 6; m.last_log_term = 2;
+    m.leader_commit = 6;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK &&
+          efs_raft_role(n.r[1]) == EFS_RAFT_CANDIDATE &&
+          efs_raft_term(n.r[1]) == 3,
+          "verified snapshot restores resync replica's election eligibility");
     efs_raft_free(n.r[1]);
     efs_raft_mem_free(st);
 }
@@ -3278,6 +3399,8 @@ int main(void)
         test_four_voters();
         test_membership_persistence();
         test_leadership_transfer();
+        test_resync_fences_elections();
+        test_snapshot_rejects_delayed_compacted_prefix();
         test_grow_3_to_4();
         test_solo_durable_cap_then_grow();
         test_i18_joint_quorum();

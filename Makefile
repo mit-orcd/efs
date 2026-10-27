@@ -601,6 +601,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_host_outbox.py
 	python3 tests/test_raft_read_probe.py
 	python3 tests/test_raft_read_admission.py
+	python3 tests/test_kv_leader_pressure.py
 	python3 tests/test_posix_timeout_zombie.py
 	python3 tests/test_host_pending_entries.py
 	python3 tests/test_raft_slow_sync.py
@@ -1098,6 +1099,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_raft_ack_window.py
 	python3 tests/test_k22_snapshot_import.py
 	python3 tests/test_k22_leader_admission.py
+	python3 tests/test_w130_dir_fault.py
 	./tests/test_kv_lsm
 	python3 tests/test_server_processes.py
 	python3 tests/test_w125_harness.py
@@ -1182,13 +1184,6 @@ decoder-check:
 .PHONY: test-soak
 test-soak: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_soak.py
-
-# Task B: the W130 one-replica DIR fault gate. Its serve-path race (W165, open:
-# a create that meets the damaged row before any DIR apply fails EIO for good)
-# fails it under the parallel pool; its own gate until W165 is fixed.
-.PHONY: test-w130
-test-w130: all $(TEST_SPECIAL_BINS)
-	python3 tests/test_w130_dir_fault.py
 
 decoder-bins: tests/decoders/apply
 tests/decoders/efsd.o: src/server/efsd.c src/server/server_internal.h

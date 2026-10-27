@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """expiry show's path lookup follows the namespace leader's NOT_PRIMARY hint."""
 from pathlib import Path
-import os,shlex,subprocess,tempfile
+import os,re,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/mgmt/efs_mgmt.c').read_text()
-a=s.index('static int sess_leader_address(');b=s.index('\n}\n',a)+3
-c=s.index('static int expiry_lookup(');d=s.index('\n}\n',c)+3
+def function(name):
+    # A prototype may precede the definition; never include intervening commands.
+    match=re.search(r'^static int '+re.escape(name)+r'\([^;]+?\)\n\{',s,re.M)
+    assert match,name
+    return s[match.start():s.index('\n}\n',match.end())+3]
 source=r'''
 #include "efs/protocol.h"
 #include <assert.h>
@@ -35,7 +38,7 @@ static int send_recv(int fd,uint8_t t,const void *p,uint32_t n,uint8_t *rt,void 
  if(seed || loop){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=no_hint?0:3;}
  else {r->status=status_after;r->inode.ino=42;}
  *out=r;*len=sizeof(*r);*rt=EFS_MSG_INODE_LOOKUP_PATH_REPLY;return fail_transport;}
-'''+s[a:b]+s[c:d]+r'''
+'''+function('sess_leader_address')+function('expiry_lookup')+r'''
 static void reset(void){lookups=discoveries=waits=seed_lookups=0;no_hint=loop=fail_transport=0;status_after=EFS_INODE_RPC_OK;}
 int main(void){
  struct efs_inode ino;const char *p="/expiry-gates/inspection";

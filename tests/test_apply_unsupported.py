@@ -27,8 +27,12 @@ dispatch = function('static int host_apply_dispatch(')
 assert dispatch.rstrip().endswith('return EFS_ERR_UNSUPPORTED;\n}'), dispatch[-200:]
 assert 'if(EFS_MD_CMD_IS_RESERVED(cmd[0]))\n        return EFS_ERR_UNSUPPORTED;' in dispatch
 # Proposals and reads of an incompatible group are refused.
-assert 'if (host_group_incompatible(h, group))\n        return EFS_ERR_UNSUPPORTED;' in function('static int host_propose_impl(')
-assert 'if (host_group_incompatible(h, group))\n        return EFS_ERR_UNSUPPORTED;' in function('static int host_read_index_admitted(')
+for name in ('static int host_propose_impl(', 'static int host_read_index_admitted('):
+    body = function(name)
+    gate = body[body.index('if (host_group_incompatible(h, group))'):]
+    gate = gate[:gate.index('\n    }')]
+    assert 'host_halted_hint(h, group)' in gate and 'return EFS_ERR_NOT_PRIMARY;' in gate
+
 code = '#define EFS_FAULTS 0\n#define HOST_APPLY_RC_RING 16\n#define HOST_APPLY_RC_MASK 15\n' + lens + r'''
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
@@ -47,7 +51,8 @@ code = '#define EFS_FAULTS 0\n#define HOST_APPLY_RC_RING 16\n#define HOST_APPLY_
 struct efs_raft {int role,campaign,stepped;};
 struct efs_raft_host;
 struct host_group {
-    uint8_t group;int import_block,kv_incomplete,incompatible;
+    uint8_t group;int import_block,kv_incomplete,incompatible,damaged_row;
+    uint32_t damaged_key_len;uint8_t damaged_key[EFS_KV_KEY_MAX];
     uint64_t incompat_index,incompat_term;uint32_t incompat_len;uint8_t incompat_tag,incompat_sub;
     struct efs_raft *r;struct efs_raft_host *host;struct efs_arc_slot arc[HOST_APPLY_RC_RING];
 };

@@ -1884,6 +1884,54 @@ static void *apply_peer(void *p)
  __atomic_store_n(&a->done,1,__ATOMIC_RELEASE);
  return NULL;
 }
+static unsigned decode_notices;
+static void decode_notice(void *ctx, const uint8_t *key, uint32_t len)
+{
+    CHECK(ctx == &decode_notices && len == 3 && !memcmp(key, "key", 3),
+          "stored refusal preserves callback context and key");
+    decode_notices++;
+}
+
+static void test_decode_owner(void)
+{
+    rmtree(g_dir);
+    struct efs_kv *kv = open_store(EFS_KV_LSM_SYNC, 0);
+    CHECK(kv != NULL, "open decode owner store");
+    if (!kv) return;
+    const uint8_t *key = (const uint8_t *)"key";
+    CHECK(efs_kv_decode_result(kv, key, 3, EFS_ERR_PROTO) == EFS_ERR_PROTO,
+          "unowned LSM preserves protocol error");
+    decode_notices = 0;
+    efs_kv_lsm_set_decode_error(kv, decode_notice, &decode_notices);
+    CHECK(efs_kv_decode_result(kv, key, 3, EFS_OK) == EFS_OK &&
+          efs_kv_decode_result(kv, key, 3, EFS_ERR_IO) == EFS_ERR_IO && !decode_notices,
+          "valid reads and IO errors do not notify");
+    CHECK(efs_kv_decode_result(kv, key, 3, EFS_ERR_PROTO) == EFS_ERR_NOT_PRIMARY &&
+          decode_notices == 1, "serve refusal redirects");
+    CHECK(efs_kv_lsm_apply_begin(kv) == EFS_OK, "begin damaged apply");
+    CHECK(put_s(kv, "staged", "discard") == EFS_OK, "stage before damaged read");
+    CHECK(efs_kv_decode_result(kv, key, 3, EFS_ERR_PROTO) == EFS_ERR_UNSUPPORTED &&
+          decode_notices == 2, "apply refusal remains fatal");
+    struct efs_kv_item cursor = {EFS_KV_PUT, (const uint8_t *)"cursor", 6,
+                                (const uint8_t *)"1", 1};
+    CHECK(efs_kv_lsm_apply_end(kv, &cursor) == EFS_ERR_UNSUPPORTED,
+          "masked decoder result cannot commit effects or cursor; writer released");
+    uint8_t val[16]; uint32_t len = sizeof(val);
+    CHECK(efs_kv_get(kv, (const uint8_t *)"staged", 6, val, &len) == EFS_ERR_NOT_FOUND,
+          "rejected apply exposes no staged value");
+    len = sizeof(val);
+    CHECK(efs_kv_get(kv, (const uint8_t *)"cursor", 6, val, &len) == EFS_ERR_NOT_FOUND,
+          "damaged entry cannot advance cursor");
+    CHECK(efs_kv_lsm_apply_begin(kv) == EFS_OK, "begin explicit abort");
+    CHECK(efs_kv_decode_result(kv, key, 3, EFS_ERR_PROTO) == EFS_ERR_UNSUPPORTED,
+          "second apply refusal fatal");
+    CHECK(efs_kv_lsm_apply_end(kv, NULL) == EFS_ERR_UNSUPPORTED,
+          "explicit abort retains fatal verdict and unlocks");
+    CHECK(put_s(kv, "after", "ok") == EFS_OK, "writer progresses after abort");
+    efs_kv_lsm_close(kv);
+    rmtree(g_dir);
+}
+
 static void test_apply_scope(void)
 {
  rmtree(g_dir);
@@ -2087,6 +2135,7 @@ int main(void)
         goto report;
     }
 
+    test_decode_owner();
     test_apply_scope();
     rmtree(g_dir);
     test_semantics();

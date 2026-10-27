@@ -14,7 +14,6 @@ their argv, cwd and descriptors are never read.
 """
 import os
 from pathlib import Path
-import signal
 import stat
 import sys
 import time
@@ -332,8 +331,11 @@ def clients(proc=Path('/proc'), tmp='/tmp', uid=None):
 
 
 def retire(mount, pid, stamp, proc=Path('/proc'), tmp='/tmp', stall_s=None, deadline_s=None):
-    """Terminate the drained controller identified by `has` before unmount,
-    then wait for its stop to finish (await_exit)."""
+    """Await the drained, unmounted controller identified by `has`.
+    Unmount makes the FUSE loop exit; teardown owns flush/settle/revoke.
+    Never signal it: ownership can disappear immediately after the proof,
+    and libfuse removes its signal handlers before destroy completes.
+    """
     mount = canonical(mount)
     if not alive(pid, stamp, proc):
         return await_exit(mount, pid, stamp, proc, tmp, stall_s, deadline_s)
@@ -341,27 +343,9 @@ def retire(mount, pid, stamp, proc=Path('/proc'), tmp='/tmp', stall_s=None, dead
     if current and current != (pid, stamp):
         raise RuntimeError(f'control endpoint of {mount} is now held by PID {current[0]}, '
                            f'not drained PID {pid}; retained')
-    if not current:
-        # A naturally exiting client closes its control socket before it
-        # flushes, settles and revokes. Never signal without endpoint
-        # ownership; follow its stop record instead.
-        return await_exit(mount, pid, stamp, proc, tmp, stall_s, deadline_s)
-    print(f'Retiring drained efs-fuse PID {pid} for {mount}', flush=True)
-    if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
-        raise RuntimeError('safe retirement requires Linux pidfd support')
-    try:
-        fd = os.pidfd_open(pid)
-    except ProcessLookupError:
-        return await_exit(mount, pid, stamp, proc, tmp, stall_s, deadline_s)
-    try:
-        if alive(pid, stamp, proc):
-            try:
-                signal.pidfd_send_signal(fd, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-    finally:
-        os.close(fd)
+    print(f'Awaiting drained efs-fuse PID {pid} for {mount}', flush=True)
     return await_exit(mount, pid, stamp, proc, tmp, stall_s, deadline_s)
+
 
 
 def seconds(args, flag):

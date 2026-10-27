@@ -29,7 +29,7 @@ code=r"""
 #define EFS_ERR_NODATA -21
 #define EFS_ERR_UNFORMED -29
 struct efs_raft {int leader;uint32_t voters;};
-struct host_group {struct efs_raft *r;uint32_t voters;};
+struct host_group {struct efs_raft *r;uint32_t voters;int retired;};
 struct efs_server_query_view {void *catalog;};
 struct efs_raft_host {pthread_mutex_t mu;pthread_rwlock_t query_lock;
  int n,raft_id,query_error,capable;struct host_group groups[2];struct efs_server_query_view query_view;};
@@ -41,7 +41,7 @@ struct host_view {int has,leader;uint32_t voters;};
 /* Published routing snapshot of a local replica. */
 static void host_view_get(struct efs_raft_host*h,uint8_t g,struct host_view*v){struct efs_raft*r=group_raft(h,g);v->has=r!=NULL;v->leader=r?r->leader:-1;v->voters=r?r->voters:0;}
 static uint32_t efs_raft_voters(struct efs_raft*r){return r->voters;}
-static uint32_t group_voters(uint8_t g,int n){(void)g;(void)n;return 0;}
+static uint32_t group_voters(uint8_t g,int n){return g==0||n<4?7:14;}
 static int hosts_group(int id,uint32_t voters){return id>=0&&id<32&&(voters&(1u<<id));}
 enum{WP_HOLD,WP_MU,WP_APPEND,WP_SPIN,WP_PERSIST,WP_MU_AFTER,WP_PROPOSE,WP_COMMIT_APPLY,WP_WAKE,WP_VERDICT,WP_APPLY,WP_COVER,WP_REPORT_MU};__attribute__((unused)) static inline int write_prof_on(void){return 0;}__attribute__((unused)) static inline uint64_t wprof_now(void){return 0;}__attribute__((unused)) static inline void wprof_add(int p,uint64_t us){(void)p;(void)us;}__attribute__((unused)) static inline void wprof_tick(void){}
 static int host_fwd_leader_pick(struct efs_raft_host*h,uint8_t g,int skip){(void)h;(void)g;(void)skip;return -1;}
@@ -51,14 +51,14 @@ static int host_read_index_pair(struct efs_raft_host*h,uint8_t a,uint8_t b,int *
 {assert(a==0&&b==2);(void)hint;barriers++;if(lose_capability)h->capable=0;return barrier_rc;}
 static int consume(void *ctx,const struct efs_server_query_view*v,int error)
 {assert(ctx==g_host&&v==&g_host->query_view&&!error);consumed++;return 0;}
-"""+unsettled+fn('host_pick_peer')+s[s.index('static uint32_t host_route_voters('):s.index('\n}',s.index('static uint32_t host_route_voters('))+2]+fn('host_leader_cover_pick')+fn('server_raft_host_query_read')+r"""
-int main(void){struct efs_raft r[2]={{2,7},{3,14}};
- struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.query_lock=PTHREAD_RWLOCK_INITIALIZER,.n=4,.raft_id=0,.groups={{&r[0],0},{&r[1],0}},.query_view={(void*)1}};
+"""+unsettled+fn('host_group_retired')+fn('host_pick_peer')+s[s.index('static uint32_t host_route_voters('):s.index('\n}',s.index('static uint32_t host_route_voters('))+2]+fn('host_leader_cover_pick')+fn('server_raft_host_query_read')+r"""
+int main(void){struct efs_raft r[2]={{2,7},{2,14}};
+ struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.query_lock=PTHREAD_RWLOCK_INITIALIZER,.n=4,.raft_id=0,.groups={{.r=&r[0]},{.r=&r[1]}},.query_view={(void*)1}};
  g_host=&h;uint16_t target=0;uint8_t need[2]={0,2};
  assert(host_leader_cover_pick(&h,0,need,2)==2);
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==3&&!barriers&&!consumed);
  r[0].leader=0;r[1].leader=2;
- assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==3);
+ assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==2); /* split leaders: healthy dual coordinator fallback */
  r[1].leader=3; /* Both known leaders are single-group; keep dual fallback. */
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==2);
  r[0].leader=r[1].leader=-1;
@@ -67,7 +67,14 @@ int main(void){struct efs_raft r[2]={{2,7},{3,14}};
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==2);
  r[0].leader=2;r[0].voters=3; /* Removed/nonvoting leader cannot be preferred. */
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==2);
- r[0].voters=7;h.capable=1;h.raft_id=1;
+ r[0].voters=7;
+ /* K44: a frozen old g2 mask is not the current routing membership. */
+ h.groups[1].retired=1;r[1].voters=7;
+ assert(host_route_voters(&h,2)==14);
+ assert(host_pick_peer(&h,need,2,-1)==1);
+ assert(host_pick_peer(&h,need,2,1)==2);
+ h.groups[1].retired=0;r[1].voters=14;
+ h.capable=1;h.raft_id=1;
  assert(!server_raft_host_query_read(consume,&h,&target)&&!target&&barriers==1&&consumed==1);
  barrier_rc=EFS_ERR_BUSY;
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_BUSY&&consumed==1);

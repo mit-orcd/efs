@@ -6,6 +6,8 @@ root=Path(__file__).resolve().parents[1]
 text=(root/'src/server/raft_host.c').read_text()
 start=text.index('void server_raft_host_lane_writer_view(')
 function=text[start:text.index('\n}',start)+2]
+hint_start=text.index('static efs_node_id_t host_reply_hint(')
+hint=text[hint_start:text.index('\n}',hint_start)+2]
 source=r'''
 #include "efs/protocol.h"
 #include "efs/meta_apply.h"
@@ -13,7 +15,7 @@ source=r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
-struct efs_raft_host { int running, n; struct efs_kv *kv; };
+struct efs_raft_host { int running, n, raft_id; struct efs_kv *kv; };
 static struct efs_raft_host host = {.running=1, .n=3};
 static struct efs_raft_host *g_host=&host;
 static unsigned reads, forwards, lane_reads;
@@ -39,7 +41,7 @@ static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t type,
     return 0;
 }
 static uint8_t rc_to_inode_status(int rc) {
-    return rc==EFS_OK ? EFS_INODE_RPC_OK : rc==EFS_ERR_NOT_FOUND ?
+    return rc==EFS_ERR_NOT_PRIMARY ? EFS_INODE_RPC_NOT_PRIMARY : rc==EFS_OK ? EFS_INODE_RPC_OK : rc==EFS_ERR_NOT_FOUND ?
       EFS_INODE_RPC_NOT_FOUND : EFS_INODE_RPC_BUSY;
 }
 int efs_meta_get_lane_writer_view(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
@@ -47,7 +49,7 @@ int efs_meta_get_lane_writer_view(struct efs_kv *kv, efs_ino_t ino, uint64_t gen
     (void)kv; assert(ino==123 && gen==456 && ci==17 && cs==EFS_MIN_CHUNK_SIZE);
     ++lane_reads; *out=(struct efs_meta_writer_view){.ino=ino,.generation=gen}; return lane_rc;
 }
-''' + function + r'''
+''' + hint + '\n' + function + r'''
 int main(void) {
     struct efs_msg_lane_writer_view req={123,456,17,EFS_MIN_CHUNK_SIZE};
     struct efs_msg_lane_writer_view_reply out;
@@ -64,6 +66,11 @@ int main(void) {
     assert(reads==3 && forwards==1 && out.view.status==EFS_INODE_RPC_BUSY);
     req.generation=0; server_raft_host_lane_writer_view(&req,&out);
     assert(reads==3 && forwards==1 && out.view.status==EFS_INODE_RPC_INVAL);
+    req.generation=456; owns=1; read_rc=0; lane_rc=EFS_ERR_NOT_PRIMARY;
+    host.raft_id=1;server_raft_host_lane_writer_view(&req,&out);
+    assert(out.view.status==EFS_INODE_RPC_NOT_PRIMARY && !out.view.primary_id);
+    host.raft_id=0;server_raft_host_lane_writer_view(&req,&out);
+    assert(out.view.status==EFS_INODE_RPC_NOT_PRIMARY && out.view.primary_id==2);
     puts("lane host: one ReadIndex, no inode group, single-group forwarding and cold absence PASS");
 }
 '''
