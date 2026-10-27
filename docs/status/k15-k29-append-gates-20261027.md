@@ -98,7 +98,26 @@ under Task N's explicit scope; the running user clusters are not touched.
 
 ## Results, retention and cleanup
 
-Pending. `commands.json`, per-case reports/logs, per-record latency files,
+First completed case (the remaining five live cases and full gate are still
+pending):
+
+| Case | Verdict | Writes / failures | Writer-loop wall | Final fsync max | Per-writer p50 / p99 | Exact views |
+|---|---|---|---:|---:|---|---|
+| W52-1, split leaders (g0 node 1 / g2 node 3) | PASS | 20,000 / 0 | 2,878.0 s | 0.6765 s | p50 0.5556–0.5571 s; p99 0.9580–0.9649 s | All three full 81,920,000-byte views identical, zero holes/missing/duplicates/order errors. |
+
+W52-1 had zero REPORT receive timeouts, exhausted REPORT budgets or abandon
+failures. No REPORT crossed the one-second slow-success logging threshold;
+`report_max_ms=0` is a censored log-derived field, **not zero RPC latency**.
+The whole command including verification and checked restart/cleanup took
+3,225.7 s. Every stop was orderly. Mean sampled host iowait was 3.270%,
+maximum 6.418%. This is one complete positive run, not complete K15 acceptance.
+
+W52-2 elected both groups on node 1 and is progressing substantially faster.
+Leader placement correlates with the variation; no settings were changed,
+no controlled placement A/B has run, and no causal or performance acceptance
+claim follows from the correlation alone.
+
+`commands.json`, per-case reports/logs, per-record latency files,
 `host-samples.jsonl` and build identities are authoritative live progress.
 Closed evidence will receive a verified SHA256 manifest before private
 stores, payloads and build bulk are pruned with `edelete`; open failures

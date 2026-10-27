@@ -1623,7 +1623,9 @@ full acceptance are separate states.
 [Task N: K15/K29 append gates](../status/k15-k29-append-gates-20261027.md):
 **IN PROGRESS** on intel1, branch `agent/devel-task-n`. Two sequential runs
 each of W52 20k, W64 leader step-down and lost-reply gates, followed by
-8-job `make test-all`. No PASS yet. Product equals devel `063154e0e`;
+8-job `make test-all`. First W52 20k run PASS: all three full views exact,
+zero write failures/holes/timeouts, final fsync max 0.6765 s. Remaining
+cases/gate pending. Product equals devel `063154e0e`;
 harness now checks clean cold stops, real application availability, actual
 failover events and both client logs. Existing production services untouched.
 
