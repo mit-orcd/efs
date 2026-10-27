@@ -294,6 +294,13 @@ int main(void){
  assert(rc==EFS_OK && applies==2 && execs[1]==1);
  { struct efs_receipt_key k;struct efs_receipt rec;memset(&k,0,sizeof(k));k.uuid[0]=0x55;k.uuid[1]=0x15;k.epoch=7;k.mint_ns=pid.mint_ns;k.seq=pid.seq;
    assert(efs_receipt_lookup(&g_report_receipts_n1,&k,&rec) && rec.attempts==1 && rec.replayed>=1 && rec.outcome==EFS_RECEIPT_OUT_APPLIED); }
+ /* I: receipt lookup shares an inherited completion bound, not a fresh
+  * eight seconds on every retry. No receipt is never success or abort. */
+ reset();recs2(r);up[1]=up[2]=up[3]=0;phase=2;pid.mint_ns++;pid.seq++;
+ {struct efs_ino_size_rec ir={.ino=4242,.size=2u<<20};uint64_t begin=now,limit=now+200;
+  deadline=limit;
+  rc=efs_client_rpc_report_resolve(1,r,2,&ir,1,1,&pid,1,EFS_ERR_NET,4242);
+  assert(rc==EFS_ERR_IO && !applies && now-begin<=200 && deadline==limit);}
  puts("W155 REPORT: applied+lost reply, lost request, BUSY-unknown, failed node, all-down EIO, partial STALE, pending and replayed duplicate PASS");
  return 0;
 }
@@ -323,8 +330,8 @@ with tempfile.TemporaryDirectory(prefix='efs-w155-report-') as d:
     assert re.search(r'report-receipt query id=\S+ state=1 ', log), log
     assert re.search(r'report-receipt id=\S+ ino=4242 nrec=2 how=replay rc=0 outcome=applied', log), log
     assert re.search(r'inode-rpc: retry type=67 attempt=0 why=recv rc=-?\d+ req_len=\d+ recv_ms=\d+ wait_ms=\d+ cut=\w+ nid=1 id=5515', log), log
-    # EIO comes from exactly one case: the all-down E.
-    assert log.count('-> EIO') == 1, log
+    # EIO comes only from unknown all-down outcomes: E and inherited-bound I.
+    assert log.count('-> EIO') == 2, log
     print(out.stdout.strip())
 
 # The production REPORT loop calls the resolver before failing a sync REPORT.
