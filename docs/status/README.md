@@ -53,7 +53,9 @@ and3 strict K22/K36 pairs (zero strict K22 errors). The full58 gate FAILED (509 
 after compaction crash, NET/valid/NOT_FOUND fragment outcomes. A deterministic
 mixed-verdict re-probe regression fails on58 and passes corrective49e5ffd71;
 three strict K36/K22 pairs and three operator checks passed, with zero K22
-errors; new three-run full calibration is active on pinned49e5ffd71. Failed
+errors; all three full gates completed at729/723/725s, each509 commands,zero failures
+and14 NOTRUN markers. Fitted budget model1025s versus unchanged1100s target
+(1650s bound); slots and reasons retained. Separate post-refit gate pending. Failed
 stores/logs are preserved; budgets remain unchanged. The original logless EIO remains preserved as FAIL. These diagnostics are not calibration inputs; no budget fit yet.
 Budgets/slots/target unchanged; original failures remain failures.
 

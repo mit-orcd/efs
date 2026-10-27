@@ -15,76 +15,76 @@ command	budget_s	slots	reason
 python3 tests/test_shutdown_blocked_io.py	15	1	
 python3 tests/test_w153_formation.py	15	1	
 python3 tests/test_k33_growth.py	135	2	
-python3 tests/test_k33_autoid.py	45	1	
-python3 tests/test_k33_client_view.py	70	2	
-python3 tests/test_k33_interrupt.py	70	1	
-python3 tests/test_k33_join_retry.py	15	1	
-python3 tests/test_k33_payload.py	240	2	one cluster carries additions, a restart and five outages in sequence; its writer is paced to two files a second, so it is a two-slot command that runs beside the report step-down test once D4 is done
-python3 tests/test_k35_fsync_degraded.py	95	1	
-python3 tests/test_k37_segment_rebuild.py	335	1	seven steps on one cluster: two waits on the 30 s member-down detection, nine unmounts with a member down (15 s storage fence each)
-python3 tests/test_k41_packer_placement.py	110	1	
-python3 tests/test_k38_protection_now.py	90	1	
-EFS_B_PHASES=grow-a python3 tests/test_b_geometry.py	120	3	three members with the B1-B5 driver and B2 on the stores, then four and five with the driver (fsync writes and read-backs of about 500 files per size; 58 s alone, up to three times that beside other writers)
-EFS_B_PHASES=grow-b python3 tests/test_b_geometry.py	260	3	a fresh cluster grown to five, then six to eight members with the B1-B5 driver at every size (84 s alone, up to three times that beside other writers)
-EFS_B_PHASES=full python3 tests/test_b_geometry.py	75	2	
-python3 tests/test_k33_seed_loss.py	70	1	
-python3 tests/test_k33_bookkeeping.py	65	2	
-python3 tests/test_k34_stop_put.py	55	1	
-python3 tests/test_k42_peer_stop_open.py	90	1	
-python3 tests/test_k38_shared_chunk_pressure.py	120	2	
-python3 tests/test_stop_progress.py	165	3	1,500 directories and files through FUSE, then the stop steps (66 s alone, up to four times that beside other writers)
-python3 tests/test_operator_workflows.py	30	1	
-python3 tests/test_member_limit.py	25	1	
-EFS_B6_MODES=down python3 tests/test_b6_unavailable.py	75	1	
-EFS_B6_MODES=refuse python3 tests/test_b6_unavailable.py	65	1	
+python3 tests/test_k33_autoid.py	40	1	
+python3 tests/test_k33_client_view.py	25	2	
+python3 tests/test_k33_interrupt.py	85	1	
+python3 tests/test_k33_join_retry.py	10	1	
+python3 tests/test_k33_payload.py	45	2	one cluster carries additions, a restart and five outages in sequence; its writer is paced to two files a second, so it is a two-slot command that runs beside the report step-down test once D4 is done
+python3 tests/test_k35_fsync_degraded.py	80	1	
+python3 tests/test_k37_segment_rebuild.py	245	1	seven steps on one cluster: two waits on the 30 s member-down detection, nine unmounts with a member down (15 s storage fence each)
+python3 tests/test_k41_packer_placement.py	115	1	
+python3 tests/test_k38_protection_now.py	70	1	
+EFS_B_PHASES=grow-a python3 tests/test_b_geometry.py	70	3	three members with the B1-B5 driver and B2 on the stores, then four and five with the driver (fsync writes and read-backs of about 500 files per size; 58 s alone, up to three times that beside other writers)
+EFS_B_PHASES=grow-b python3 tests/test_b_geometry.py	85	3	a fresh cluster grown to five, then six to eight members with the B1-B5 driver at every size (84 s alone, up to three times that beside other writers)
+EFS_B_PHASES=full python3 tests/test_b_geometry.py	60	2	
+python3 tests/test_k33_seed_loss.py	60	1	
+python3 tests/test_k33_bookkeeping.py	45	2	
+python3 tests/test_k34_stop_put.py	50	1	
+python3 tests/test_k42_peer_stop_open.py	45	1	
+python3 tests/test_k38_shared_chunk_pressure.py	35	2	
+python3 tests/test_stop_progress.py	50	3	1,500 directories and files through FUSE, then the stop steps (66 s alone, up to four times that beside other writers)
+python3 tests/test_operator_workflows.py	15	1	
+python3 tests/test_member_limit.py	20	1	
+EFS_B6_MODES=down python3 tests/test_b6_unavailable.py	55	1	
+EFS_B6_MODES=refuse python3 tests/test_b6_unavailable.py	45	1	
 EFS_B6_MODES=slow python3 tests/test_b6_unavailable.py	275	1	deliberate slow-member delays (8 s per operation, 45 s reads, 65 s commit) past the client deadlines
-EFS_B6_MODES=full python3 tests/test_b6_unavailable.py	125	2	
-python3 tests/test_d4_progress.py	260	2	bounded-progress gate (76-125 s; packer PUT deadlines fail beside fsync-heavy tests): the budget above every other two-slot command makes it the first, in the report step-down window
-python3 tests/test_d4_plateau.py	180	2	
-python3 tests/test_pack_dup_candidate.py	105	1	up to 60 s waiting for a pack-epoch boundary (41-60 s measured)
-python3 tests/test_pub_unit_forward_abort.py	60	1	
-python3 tests/test_conn_idle_reap.py	80	1	
-python3 tests/test_report_stepdown.py	440	6	asserts a 3 s bound on every append and fsync through three metadata step-downs (1,600 appends, 200 fsyncs; 265-350 s on the nuc): six slots, so it starts first and only D4 and then timer-bound tests run beside it; an fsync-heavy neighbour breaks the bound
-python3 tests/test_query_first_catalog.py	35	1	
+EFS_B6_MODES=full python3 tests/test_b6_unavailable.py	65	2	
+python3 tests/test_d4_progress.py	100	2	bounded-progress gate (76-125 s; packer PUT deadlines fail beside fsync-heavy tests): the budget above every other two-slot command makes it the first, in the report step-down window
+python3 tests/test_d4_plateau.py	175	2	
+python3 tests/test_pack_dup_candidate.py	90	1	up to 60 s waiting for a pack-epoch boundary (41-60 s measured)
+python3 tests/test_pub_unit_forward_abort.py	25	1	
+python3 tests/test_conn_idle_reap.py	70	1	
+python3 tests/test_report_stepdown.py	235	6	asserts a 3 s bound on every append and fsync through three metadata step-downs (1,600 appends, 200 fsyncs; 265-350 s on the nuc): six slots, so it starts first and only D4 and then timer-bound tests run beside it; an fsync-heavy neighbour breaks the bound
+python3 tests/test_query_first_catalog.py	25	1	
 python3 tests/test_client_processes.py	20	1	
 python3 tests/test_shutdown_stuck_worker.py	10	1	
-python3 tests/test_k36_recovery.py	120	1	
-python3 tests/test_expiry_policy_live.py	45	1	
-python3 tests/posix/posix_expiry.py --private	175	3	the four-member expiry fixture and its fsynced create bursts (135 s alone, 133-262 s in the pool depending on its neighbours): three slots and a budget below D4's, so it never runs beside the report step-down or D4 in the first wave
+python3 tests/test_k36_recovery.py	105	1	
+python3 tests/test_expiry_policy_live.py	40	1	
+python3 tests/posix/posix_expiry.py --private	165	3	the four-member expiry fixture and its fsynced create bursts (135 s alone, 133-262 s in the pool depending on its neighbours): three slots and a budget below D4's, so it never runs beside the report step-down or D4 in the first wave
 python3 tests/test_k36_segment_recovery.py	160	1	
-./tests/test_reclaim	35	1	
+./tests/test_reclaim	20	1	
 python3 tests/test_opid_admission.py	15	1	
-EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta	40	1	
-python3 tests/test_raft_ack_window.py	30	1	
-./tests/test_kv_lsm	35	1	
+EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta	10	1	
+python3 tests/test_raft_ack_window.py	10	1	
+./tests/test_kv_lsm	10	1	
 python3 tests/test_server_processes.py	10	1	
-python3 tests/test_w125_harness.py	20	1	
-./tests/test_append_transaction	40	1	
+python3 tests/test_w125_harness.py	15	1	
+./tests/test_append_transaction	10	1	
 python3 tests/test_orcd_verify_resume.py	10	1	
 ./tests/test_kv_lsm_concurrent 4	10	1	
-./tests/test_txn_retire	20	1	
+./tests/test_txn_retire	10	1	
 ./tests/test_pub_stage	5	1	
-python3 tests/test_d39_model.py --shard 0/3	65	1	
-python3 tests/test_d39_model.py --shard 1/3	45	1	
-python3 tests/test_d39_model.py --shard 2/3	20	1	
+python3 tests/test_d39_model.py --shard 0/3	25	1	
+python3 tests/test_d39_model.py --shard 1/3	15	1	
+python3 tests/test_d39_model.py --shard 2/3	5	1	
 python3 tests/test_bench_cli.py	5	1	
 python3 tests/test_bench_profile.py	5	1	
-python3 tests/test_query_subtree_negative.py	20	1	
-python3 tests/test_query_sort_peak_negative.py	20	1	
-EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 ./tests/test_query_delta	15	1	
-python3 tests/test_raft_rotate_stall.py	10	1	
+python3 tests/test_query_subtree_negative.py	5	1	
+python3 tests/test_query_sort_peak_negative.py	5	1	
+EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 ./tests/test_query_delta	5	1	
+python3 tests/test_raft_rotate_stall.py	5	1	
 python3 tests/test_leak_gate.py	5	1	
 python3 tests/test_append_sequence.py	5	1	
 ./tests/test_store_durability	5	1	
 python3 tests/test_storage_root_inventory.py	5	1	
-python3 tests/test_efs_commands.py	10	1	
-python3 tests/test_client_memory.py	10	1	
-python3 tests/test_storage_principles.py	10	1	
+python3 tests/test_efs_commands.py	5	1	
+python3 tests/test_client_memory.py	5	1	
+python3 tests/test_storage_principles.py	5	1	
 python3 tests/test_session_latch_tsan.py	5	1	
-./tests/test_kv_insertion_buffer	10	1	
+./tests/test_kv_insertion_buffer	5	1	
 python3 tests/test_make_test_summary_runner.py	10	1	
-./tests/test_query_disk_io	10	1	
-./tests/test_raft_store	10	1	
+./tests/test_query_disk_io	5	1	
+./tests/test_raft_store	5	1	
 ./tests/test_meta_apply	5	1	
 python3 tests/test_put_retry_budget.py	5	1	
 python3 tests/test_make_test_recipe.py	5	1	
@@ -92,8 +92,8 @@ python3 tests/test_stage_evict_lru.py	5	1
 python3 tests/test_create_retry_ack.py	5	1	
 python3 tests/test_apply_ring.py	5	1	
 python3 tests/test_posix_phase_trace.py	5	1	
-python3 tests/test_sanitizer_gate.py	120	1	
+python3 tests/test_sanitizer_gate.py	5	1	
 python3 tests/test_w159_apply_wait.py	70	2	
-python3 tests/test_decoder_refusal.py	120	1	Three private loopback daemons: refusal, ReadIndex, CREATE and orderly stop
-python3 tests/test_k22_snapshot_import.py	380	2	drives both groups four snapshot windows past a stopped follower before the install can fire (~230 s of load), then verifies catch-up, RSS and byte-exact read-back
-python3 tests/test_k22_leader_admission.py	290	2	fills the leader's small KV budget past the admission watermark (organically, ~190 s), then proves the move, the drain and clean client service
+python3 tests/test_decoder_refusal.py	10	1	Three private loopback daemons: refusal, ReadIndex, CREATE and orderly stop
+python3 tests/test_k22_snapshot_import.py	310	2	drives both groups four snapshot windows past a stopped follower before the install can fire (~230 s of load), then verifies catch-up, RSS and byte-exact read-back
+python3 tests/test_k22_leader_admission.py	30	2	fills the leader's small KV budget past the admission watermark (organically, ~190 s), then proves the move, the drain and clean client service
