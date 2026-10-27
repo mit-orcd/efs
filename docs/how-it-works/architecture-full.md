@@ -1620,6 +1620,8 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Wave 16 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`9b7a34583`; gate at `9b7a34583`)**: Task F, W165 ([evidence](../status/w165-serve-path-damaged-row-20261026.md)): a stored row the typed readers refuse is reported through a KV decode-error callback; the apply poisons its scope and halts the group (W127 route), a serving thread answers NOT_PRIMARY with a healthy replica's hint instead of a persistent `EIO`, storage authority follows the healthy quorum through a metadata halt, and `raft-resync` heals the replica; `test_w130_dir_fault.py` is back in `make test-long` at a measured 50 s budget (the `make test-w130` target is gone), the K22 snapshot-import budget is re-fitted to 320 s, the D44 target of 1,100 s stands. intel1 8-job gates at `525cf3816`: 509 commands, 0 FAIL twice (base 508, 0 FAIL). intel2 `make test-all` (8 jobs): 509 commands in 803 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 1 (test_k33_growth.py 135.3 s against its 135 s row, within noise). Real-host (node9901, RDMA, orcd-mini) stays NOTRUN.
+
 [W165: serve-first damaged metadata, healthy-quorum routing and resync](../status/w165-serve-path-damaged-row-20261026.md):
 **`agent/devel-task-f`, not merged or pushed; ten strict combined loopback runs PASS on intel1 (`31b7ce7e2`), fast suite PASS; both eight-job gates at `525cf3816`: TOTAL 509 FAIL 0 NOTRUN 14, 803/771 s (base 508/0/14, 694 s). W130 passed in both pools in 31.1/34.1 s.**
 The replica stops serving/campaigning/applying when a stored decoder refuses a row;
