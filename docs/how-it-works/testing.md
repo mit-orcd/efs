@@ -6,12 +6,12 @@
 ## Linux build prerequisites
 
 Use a C compiler, GNU make, pkg-config, libibverbs development headers/library,
-and **libfuse3 development headers/library at version3.12 or newer**.
+and **libfuse3 development headers/library at version 3.12 or newer**.
 Before building, check `pkg-config --modversion fuse3` and
 `pkg-config --atleast-version=3.12 fuse3`. FUSE runtime support also needs
 an accessible `/dev/fuse` and `fusermount3`.
 
-RHEL9's system fuse3-devel3.10.2 is insufficient: it lacks
+RHEL9's system fuse3-devel 3.10.2 is insufficient: it lacks
 `fuse_cmdline_opts.max_threads` and the bounded worker-loop configuration
 API used by EFS. This is a missing prerequisite, not a supported alternate
 client behavior. Do not remove worker bounds or add an old-FUSE fallback.

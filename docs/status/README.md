@@ -19,12 +19,13 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [Task M: fstor007 build and RDMA gates](gate-fstor007-20261027.md):
-IN PROGRESS on `agent/devel-task-m`, base063154e0e. The unchanged system
-build reproduces the missing libfuse3.12+ prerequisite (system3.10.2), no
-tests run. Compatible private3.16.2 supplied dependency staged; stale RDMA
-POSIX launcher corrected for current CLI, private ports and POSIX-all.
-Full gate and live RDMA results pending; original failure retained.
-
+COMPLETE scoped on `agent/devel-task-m`, tested7ca545e2b, not merged/pushed.
+Current devel product unchanged; missing libfuse3.12+ prerequisite documented
+and private3.16.2 dependency used. Final gate514 commands,0 FAIL,5 NOTRUN,
+617s; RDMA transport/segmented/declaration paths ran. Live RDMA GC PASS;
+POSIX-all221/223 with2 explicit skips, peer68/68. Two private-launcher defects
+fixed; no product defect found. Original failures, verified closed manifests
+and budget overruns retained;7 scratch roots pruned, no task mounts/processes.
 
 [Wave 19 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`21630289a`; gate at the same commit)**: Task G ([W166](w166-close-eio-flush-deadline-20261026.md), [K38 repair](k38-task-g-repair-20261027.md)): W166 option B as the user decided (30 s deadline unchanged): a lagging storage member delegates the whole ticket STATUS read to the lane leader on the read pool and budget, a forwarded STATUS never forwards again, and a full L0 alone no longer refuses publication; K38 shared-chunk repairs: a definite STALE is kept when a later unit meets BUSY, receipt recovery stays inside the original completion budget, and pressure reclaim drains a bounded cohort instead of waiting for future writes. **Merge decision (user):** Task J's L0 term in `host_kv_pressure` is dropped, so admission and leadership share apply_room plus the unapplied-log watermark; `test_kv_leader_pressure.py` now asserts a full L0 alone is not pressure. intel2 targeted reruns at `7a7b9f420`: K22 leader admission 3/3, K22 snapshot import 2/2, W166 authority 3/3, K38 shared-chunk 5/5, REPORT retry/verdict tests 2/2 each. intel2 `make test-all` (8 jobs): 514 commands in 734 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run had 1 FAIL, `test_read_retry_budget.py`, a merge-resolution error fixed in `21630289a`); OVERBUDGET 5, `test_stop_progress.py` 102 s against 50 s the largest. W166's SIGSTOP, RDMA and multi-host acceptance stays NOTRUN.
 
