@@ -4761,6 +4761,15 @@ static int host_leader_cover_pick(struct efs_raft_host *h,uint8_t group,
         peer=leader;
         for(int i=0;i<count;i++) {
             if(!hosts_group(leader,host_route_voters(h,need[i]))){peer=-1;break;}
+            if (count > 1) {
+                struct host_view participant;
+                host_view_get(h, need[i], &participant);
+                /* Voting membership alone does not prove the peer can
+                 * coordinate every group: one of its replicas may have
+                 * stepped down and halted. Do not redirect a healthy
+                 * retained CREATE/REPORT coordinator back to that peer. */
+                if (!participant.has || participant.leader != leader) {peer=-1;break;}
+            }
         }
     }
     if(wp0)wprof_add(WP_COVER,wprof_now()-wp0);

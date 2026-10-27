@@ -41,11 +41,13 @@ int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.n=4,.raft_
  leaders[0]=2;assert(host_leader_cover_pick(&h,0,both,2)==-1);
  leaders[0]=-1;assert(host_leader_cover_pick(&h,0,both,2)==-1);
  leaders[0]=4;assert(host_leader_cover_pick(&h,0,both,2)==-1);
- h.n=3;masks[0]=masks[1]=7;leaders[0]=1;
+ h.n=3;masks[0]=masks[1]=7;leaders[0]=1;leaders[1]=2;
+ assert(host_leader_cover_pick(&h,0,both,2)==-1); /* full membership, split leaders */
+ leaders[1]=1;
  assert(host_leader_cover_pick(&h,0,both,2)==1);
  masks[1]=5;assert(host_leader_cover_pick(&h,0,both,2)==-1);
  h.g[1].r=NULL;h.g[1].voters=5;assert(host_leader_cover_pick(&h,0,both,2)==-1);
- h.g[1].voters=7;assert(host_leader_cover_pick(&h,0,both,2)==1);
+ h.g[1].voters=7;assert(host_leader_cover_pick(&h,0,both,2)==-1); /* missing leadership proof */
  assert(host_leader_cover_pick(&h,0,NULL,2)==-1 && host_leader_cover_pick(&h,0,both,0)==-1);
  puts("leader routing: full committed coverage, three/four-node layouts, membership changes, missing/self leaders and single-group loop refusal PASS");
 }
