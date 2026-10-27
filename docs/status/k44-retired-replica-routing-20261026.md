@@ -1,6 +1,6 @@
 # K44 / W167 — routing at a retired replica (October 26)
 
-`agent/devel-task-k`, source `afc6d1466`: final gate NOTRUN/queued; base `4066f74df` reproduces K44 (expected negative-control FAIL). Evidence: `docs/status/k44-retired-replica-routing-20261026.md`. Final TCP/RDMA and base gate comparison pending; orcd-mini NOTRUN, requires its own stop/format/deploy approval. Product defects: K44 retired-seed MKFS BUSY; retired resync accepted; non-group-0 MKFS readback cannot finish. Candidate fixes are not yet qualified.
+`agent/devel-task-k`, source `fcc8533d8`: final gate NOTRUN (queued); base `4066f74df` reproduces BUSY, expected FAIL. `docs/status/k44-retired-replica-routing-20261026.md`. orcd-mini NOTRUN (lifecycle approval). Defects: retired MKFS; retired resync; nonhost MKFS; notice NET after restart; stale CFG convergence. Candidate fixes, qualification pending.
 
 ## Purpose and verdict
 
@@ -49,14 +49,31 @@ The candidate separates application service from consensus participation:
   This high-level route terminates at a group-0 host under alpha's fixed
   three-voter group-0 layout.
 
+The one-loss sweep also exposed a separate immediate NET outcome: the
+restarted member was answering Raft/status, but the sender's peer pool still
+returned BUSY during failed-connect backoff. The membership notice is
+idempotent, so it now retries only transient BUSY/NET/IO/AGAIN inside the
+existing five-second notice I/O budget and any shorter caller deadline.
+Identity and encoding refusals are never retried; no client write deadline
+changes. This fix still requires its final run.
+
+The command sweep found a second retired-view consumer in the CLI:
+`raft-change` polled the seed's historical voter set for eight seconds and
+then reported success even though that check never converged. It now
+resolves the successful responder's leader hint, checks that live member's
+configuration and reports `converged=1` only when observed; exhaustion
+returns BUSY rather than false success. The sweep checks application-status
+fields as well as process exits, since some diagnostic commands return
+zero even on a rejected application request.
+
 No format, wire, quorum, durability, compatibility or behavior-switch change.
 No deployment-tool repository was edited.
 
 ## Sources, attempts and evidence
 
 Base: `4066f74df5b997d70f263ae8dc1063b1a6049b92`.
-Candidate source: `afc6d1466` (product changes through `9288e71dd`; later commits update test fixtures
-and the serialized qualification controller).
+Candidate source: `fcc8533d8` (product changes through `fcc8533d8`, including the membership-notice
+retry and live-responder convergence check).
 
 | Attempt | Result and scope |
 |---|---|
@@ -64,8 +81,9 @@ and the serialized qualification controller).
 | `a58c679b9`, focused sweep, TCP and RDMA | PASS for the original focused assertions; provisional, superseded source. |
 | `d643adcd9`, expanded sweep, TCP and RDMA | Both exited 0. K33 growth passed in 92.3 s. Full gate: `TOTAL 508 FAIL 10 NOTRUN 14 STATUS FAIL (614s) BUILD 0s`; it is not final-source qualification. |
 | `ae0262306` dispatch | Canceled before any build/test after the provisional gate exposed missing unit mocks. |
-| `7e4ddcb5e` | Expanded TCP/RDMA sweeps and all seven focused K33 acceptance tests passed so far. Gate/base comparison pending. Its one-loss base control failed with NET rather than BUSY and does not qualify the precise original signature. |
-| Corrected `afc6d1466` | Queued after the preceding candidate **and** base comparison, with no build/test overlap. The default base control must fail specifically with BUSY; a separate one-loss transition fixture checks consensus participation. Final results pending. |
+| `7e4ddcb5e` | Both one-loss TCP/RDMA sweeps **FAIL** with NET: node 2's notice returns BUSY after its restart. All seven focused K33 acceptance tests PASS. Gate: `TOTAL 508 FAIL 10 NOTRUN 14 STATUS FAIL (574s) OVERBUDGET 1 BUILD 0s`; base comparison running. Its one-loss base control also failed with NET rather than BUSY and does not qualify the precise original signature. |
+| `afc6d1466` and `6cd513dc7` dispatches | Canceled before any build/test as further observed issues were fixed; their cancellation records are retained. |
+| Corrected `fcc8533d8` | Queued after the preceding candidate **and** base comparison, with no build/test overlap. The default base control must fail specifically with BUSY; a separate one-loss transition fixture checks consensus participation. Final results pending. |
 
 Two harness defects in the provisional controller are retained, not hidden:
 `tests/test_k33_acceptance.py` does not exist; acceptance was split into
@@ -147,7 +165,7 @@ been exhaustively checked. The final command/result table is pending.
 Raw evidence stays on node9900 at
 `/home/erbmi1/efs-artifacts/taskK-20261026/`, including `base/`, the provisional
 `fixed/` sweeps, `qualification-d643adcd9/`, the source-tagged dispatch logs and
-`qualification-7e4ddcb5e/` and final `qualification-afc6d1466/`. No raw capture or store is in Git or copied to
+`qualification-7e4ddcb5e/` and final `qualification-fcc8533d8/`. No raw capture or store is in Git or copied to
 the Mac. Build identities and binary hashes are recorded by the controller.
 
 **Open investigation:** bulk private stores/source trees are temporarily
