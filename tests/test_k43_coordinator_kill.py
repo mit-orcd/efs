@@ -134,7 +134,7 @@ try:
     overwrite(target, base)
     assert write_rc == ['ok'], f'baseline write failed: {write_rc}'
     assert target.read_bytes() == base
-    print(f'[k43] baseline exact; {int(time.time() - t0)} s', flush=True)
+    print(f'[k43] baseline exact ({SIZE >> 20} MiB); {int(time.time() - t0)} s', flush=True)
 
     # arm the barrier: the next unit parks after its PREPAREs, undecided
     barrier.write_text('prepare\n')
@@ -223,7 +223,7 @@ try:
     mounts.append(m2)
     got = (m2.path / 'k43-target').read_bytes()
     assert got == new, 'fresh reader: content differs after the coordinator kill'
-    print('[k43] fresh reader: 64 MiB exact', flush=True)
+    print(f'[k43] fresh reader: {SIZE >> 20} MiB exact', flush=True)
     print(f'[k43] coordinator kill mid-REPORT: write retried past the lost unit, '
           f'no EBUSY/EIO, data exact PASS ({time.time() - t0:.1f} s)', flush=True)
 except Exception as e:

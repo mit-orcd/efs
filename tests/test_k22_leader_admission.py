@@ -173,7 +173,7 @@ try:
         # The forming node usually holds the first leadership, but not
         # always (a gate run started with node 3 leading): move group 0
         # onto the pressured node instead of assuming it.
-        rc, out = mgmt(env, 'raft-step-down', c.ep(g0_leader), '0', str(c.node_id(1)))
+        rc, out = mgmt('raft-step-down', c.ep(g0_leader), '0', str(c.node_id(1)))
         assert rc == 0, out
         end = time.time() + 30
         while g0_leader != 1 and time.time() < end:
