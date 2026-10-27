@@ -2,8 +2,10 @@
 
 Branch `agent/devel-task-g`; no merge or push. User authorized fixing the
 K38 full-suite failure and repeating `make test-all` on xorinox, retaining
-failed evidence. **Qualification in progress.** Tested candidate
-`66c78fbdb57fdb31fc2666a5c6f9108e8100e2f2`, based on Task G `c5eda4478`
+failed evidence. **PASS for the scoped xorinox checks; full runner remains
+INCOMPLETE for 13 prerequisite-limited commands.** Product repairs through
+`66c78fbdb57fdb31fc2666a5c6f9108e8100e2f2`; final binaries `1354d568d`,
+committed test-only identity correction `c33139385`, based on Task G `c5eda4478`
 (product W166 repair on devel `394f2b791`). This is a scoped continuation of
 [W166](w166-close-eio-flush-deadline-20261026.md), not closure of its separate
 SIGSTOP, RDMA or multi-host gates.
@@ -81,29 +83,71 @@ shared file (225,638,400 bytes); client body budget 32 MiB and reclaim target
 | Original product full suite | `TOTAL 510 FAIL 1 NOTRUN 13 STATUS FAIL (977s) OVERBUDGET 2 BUILD 11s`; sole failure K38 EIO/EAGAIN with full fixture retained. Standalone work and the candidate build/repetitions overlapped portions of this diagnostic run, so no timing comparison is claimed. |
 | Candidate `66c78fbdb`, five unprofiled default K38 runs | 5 PASS; 24,000 written records checked fully through both original mounts and after remount, zero syscall errors. Walls 64.8 / 55.8 / 39.9 / 63.4 / 44.6 s under co-running diagnostic work. |
 | Four production-source negative controls, on Mac and xorinox | All four fail at their intended assertions on the original code: resolved receipt retry, STALE/BUSY classifier, finite pressure completion and placeholder CAS evidence. Fixed versions pass. No compiler/setup failure is counted as a negative control. |
-| Candidate native `make test`, default `/tmp` | FAIL: direct-I/O positive-control daemon refused startup. Root XFS was 84% used, below the required 20% free reserve. Separate startup probe confirms `Storage quota: cannot establish safe headroom; refusing startup`. This is retained, not hidden. |
+| Candidate native `make test`, default `/tmp` | FAIL: direct-I/O positive-control daemon refused startup. Root XFS was 84% used, below the required 20% free reserve. Separate startup probe confirms `Storage quota: cannot establish safe headroom; refusing startup`. The unmodified test cleaned its temporary fixture; its failed output and a separate retained startup probe survive, not that original temporary store. |
 | Candidate native `make test`, private HOME TMPDIR | PASS, rc 0. Same binary/code; required reserve preserved. |
-| Candidate unprofiled eight-job `make test-all` | RUNNING since 18:54:23 UTC, after prior gate and standalone jobs finished; no additional workload alongside it. |
+| Candidate `66c78fbdb`, unprofiled eight-job `make test-all` | `TOTAL 512 FAIL 1 NOTRUN 13 STATUS FAIL (878s) OVERBUDGET 1 BUILD 1s`. K38 PASS, 34.3 s (4,800 exact records on both mounts and remount); sole failure W166 pre-fault leadership-transfer BUSY, before PUT was tested. |
+| Setup-only continuation `1354d568d` + committed harness `c33139385`, same product; full eight-job rerun | `TOTAL 512 FAIL 0 NOTRUN 13 STATUS INCOMPLETE (842s) OVERBUDGET 2 BUILD 24s`, rc 3. K38 PASS 34.5 s; W166 PASS 28.5 s, both 2 KiB payloads exact through a fresh reader (REPORT close 15.22 ms; PUT close 32.77 ms). All earlier failures retained. |
 
-Positive readback is exact, not sampled. Remounts are process/client-cache
+Across five standalone and two full-pool fixed K38 runs, all **33,600**
+written records were checked byte-for-byte through both mounts and after
+remount, with zero writer syscall errors. Positive readback is exact, not sampled. Remounts are process/client-cache
 checks, not OS reboot or power-loss verification. Missing RDMA, sanitizer,
 Valgrind and external cluster prerequisites must remain explicit NOTRUN;
-zero runnable failures alone is not an unconditional all-host PASS.
+zero failures alone is not an unconditional all-host PASS. Specifically,
+the 13 NOTRUN commands are nine RDMA paths, the absent external cluster-stop
+driver, a unit fixture requiring a separate `EFS_FAULTS=1` build, Valgrind and
+the unavailable sanitizer runtime. The fault-built loopback daemons did run;
+that does not qualify the separately compiled follower unit fixture.
+
+Two timing budgets were exceeded in the final run: geometry grow-a 121.3 s
+of 120 s, D4 plateau 197.2 s of 180 s. Their assertions passed; the runner
+reports these as OVERBUDGET, separately from FAIL. Neither budget nor the
+D44 1,100 s target / 1,650 s aggregate budget bound was raised. The final
+842 s test wall plus 24 s build is below the overall target.
+
+## Additional setup failure and correction
+
+The first repaired full suite's W166 REPORT case passed (13.49 ms), then
+its PUT setup requested a leader transfer once and asserted success even
+though the target was still catching up. This was a test setup failure;
+the PUT fault and final fresh-reader checks were NOTRUN. Its `result.json`
+contains only the REPORT result and must not be read as both cases passing.
+
+`1354d568d` reuses the existing bounded `place_leaders` helper for this
+second transfer, with the original 20 s window. Only the documented
+pre-fault `rc=-13` catch-up response is retried. Both groups must be led by
+the target before the STATUS fault is armed; permanent BUSY or any hard
+management error still fails. The helper tests now exercise both transfer
+directions and the 20/30 s bounds. No product behavior changed after
+`66c78fbdb`. The final run rebuilt all binaries at `1354d568d`. Before the
+affected test files were executing, the committed test-only `c33139385`
+correction was installed: compare the transfer result against the actual
+assigned member ID rather than assuming process start order. Its unit test
+covers reordered assignments. Before/after file hashes, install time,
+source commit and unchanged binary identity are in
+`gate-fixed2/harness-c33139385/manifest.json`. No uncommitted test code was
+used; the product source is identical in these revisions. Failed case 474 (229 files, 23,801,782 bytes) and the passing
+pooled K38 case 446 (6,434 files, 477,877,793 bytes) are copied and
+source/destination hash-verified in `gate-fixed/`, alongside the original
+binaries. This additional failure remains in the evidence.
 
 ## Reproduce
 
 Build a fresh exact archive on a Linux FUSE host with sufficient storage
-headroom; set build identity explicitly outside Git:
+headroom. Archive `c33139385`; the final qualification used its unchanged
+product at build identity `1354d568d`, with the test-only overlay recorded
+above. Set the identity explicitly outside Git:
 
 ```sh
-make -j8 EFS_GIT_ID=66c78fbdb EFS_GIT_BRANCH=agent/devel-task-g \
-  EFS_GIT_DESCRIBE=66c78fbdb all tests/faults/efsd test-bins
+make -j8 EFS_GIT_ID=1354d568d EFS_GIT_BRANCH=agent/devel-task-g \
+  EFS_GIT_DESCRIBE=1354d568d all tests/faults/efsd test-bins
 mkdir -p "$HOME/private-k38-tmp"
 env -u EFS_RPC_PROF -u EFS_REPORT_DBG -u EFS_RECEIPT_TRACE \
   EFS_K38_KEEP=1 TMPDIR="$HOME/private-k38-tmp" \
   python3 tests/test_k38_shared_chunk_pressure.py
 TMPDIR="$HOME/private-k38-tmp" make test
-EFS_K38_KEEP=1 EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 \
+EFS_K38_KEEP=1 EFS_GIT_ID=1354d568d EFS_GIT_BRANCH=agent/devel-task-g \
+  EFS_GIT_DESCRIBE=1354d568d EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 \
   EFS_BUILD_JOBS=8 bash scripts/make_test_summary.sh
 ```
 
@@ -122,15 +166,29 @@ Stable host evidence: `/home/maik/efs-artifacts/taskG-20261026/k38-20261027/`.
 `build-environment.json` records full source commits, binary SHA256s, actual
 versions and configuration. `negative-controls/` contains each original-code
 assertion failure. `repro1`–`repro6`, `untraced1`–`untraced4`, `fsync20` and
-`fixed1`–`fixed5` retain separate logs and fixtures. `gate-baseline/` contains
+`fixed1`–`fixed5` retain separate logs; positive payload/store bulk was pruned
+after copying and hash-verifying text captures. The failed `fsync20` fixture remains. `gate-baseline/` contains
 the complete failed case 444 copied from the original gate with 7,928 files,
 588,943,545 bytes, and source/destination SHA256 comparisons in
 `k38-copy-manifest.json`. The original gate's source fixture also remains.
-`gate-fixed/` is reserved for the unprofiled final run; controllers and both
+`gate-fixed/` holds the first unprofiled repaired run and `gate-fixed2/` the setup-corrected rerun; controllers and both
 failed/successful fast-target logs are separate.
 
 No raw artifacts are in Git. Failed stores remain for the unmerged acceptance
-investigation. No bulk has been pruned in this continuation. Final text-log
-manifest and gate result pending. Before any later pruning, stop/check owned
-clients and daemons, verify mount absence and copy/hash closed logs/results;
-use `~/bin/edelete --force --delete` on only the recorded private trees.
+investigation. Passing payloads and source/build bulk were pruned with `edelete` only after
+process/mount absence and closed-log copy/hash checks. The original failed
+case 444 and failed W166 setup remain at their original paths, as do their
+stable copies and the failed fsync-frequency diagnostic. Matching baseline,
+`66c78fbdb` and `1354d568d` binaries remain. Positive stores cannot be replayed
+after pruning; reproduce them from the source/commands instead. No failed
+store was deleted or reformatted by the final pruning; the original fast-test
+auto-cleanup limitation is stated in the results table. Details: `PRUNED.txt`, `prune-plan.json`,
+`closed-text-copy-manifest.json` (2,027 verified text copies), `edelete.log`
+and `final-quiescence.json` (no owned live processes or mounts).
+
+Final text/binary `SHA256SUMS`: **2,147 files, 118,584,305 indexed bytes**;
+manifest SHA256
+`1e4b7d152bfd17c757708557dbb3542b2270de3666049bd2ec8af9c1e83c1a36`.
+Failed store bulk is covered separately by its full source/copy manifests.
+All indexing and retention stayed on xorinox; no payload export to the Mac.
+Merge into devel and real-cluster/RDMA acceptance remain for the coordinator.

@@ -18,11 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[K38 Task G continuation](k38-task-g-repair-20261027.md): original-product full-pool
-EIO/EAGAIN reproduced with complete failed fixture hash-verified on xorinox.
-Reviewed publication/pressure repairs are on `agent/devel-task-g`; four intended
-negative controls fail on original code, five fixed default K38 runs and native
-`make test` pass. **Final unprofiled full-suite rerun pending**, no closure yet.
+[K38 Task G repair](k38-task-g-repair-20261027.md): **scoped xorinox PASS**,
+`agent/devel-task-g`, not merged/pushed. Original-product pooled failure
+reproduced with complete retained stores/logs; reviewed fixes and four
+intended original-code negative controls. Seven fixed K38 runs: **33,600
+records exact on both mounts and remount**. Final `make test-all`: **512
+commands, 0 FAIL, 13 NOTRUN, INCOMPLETE** (842 s + 24 s build); both W166
+cases pass. Failed stores and matching binaries remain on xorinox; positive
+bulk pruned after hash-verified capture. Real-cluster/RDMA gates remain open.
 
 [W166 option B qualification (Task G)](w166-close-eio-flush-deadline-20261026.md):
 **DECIDED / responsive-pressure paths qualified**, branch `agent/devel-task-g`;
@@ -33,7 +36,9 @@ Full gate: **510 commands, 1 FAIL (shared-chunk pressure, also on unchanged
 base), 13 NOTRUN**; no unconditional PASS. Two harness failures corrected;
 all failed outputs preserved on xorinox with verified hashes, private bulk
 pruned after checks. Original SIGSTOP / production-window, RDMA and multi-host
-acceptance remain NOTRUN; shared-chunk acceptance remains OPEN.
+acceptance remain NOTRUN. The later shared-chunk continuation above repairs
+the xorinox counterexample and has a zero-failure host gate; merge and
+real-cluster shared-chunk acceptance remain open.
 
 
 

@@ -7,11 +7,18 @@ Final tested source: `4bcd52ca0`. Original full-process SIGSTOP / production
 snapshot-window acceptance and live RDMA/multi-host gates remain **NOTRUN**;
 this does not close every scenario in the original W166 item.
 
-Final full-gate result, preserved verbatim:
+Original qualification full-gate result, preserved verbatim:
 `TOTAL 510 FAIL 1 NOTRUN 13 STATUS FAIL (833s) OVERBUDGET 1 BUILD 11s`.
 The sole failure is `test_k38_shared_chunk_pressure.py`, also failing in the
 unchanged-base full gate. **No new full-gate failures; no unconditional suite
-PASS.** The shared-chunk acceptance remains open and its cause unclassified.
+PASS.** That result remains a historical failure. The subsequent
+[K38 continuation](k38-task-g-repair-20261027.md) reproduces it with complete
+captures, ports reviewed publication/pressure repairs and finishes at **512
+commands, 0 FAIL, 13 NOTRUN / INCOMPLETE** (842 s + 24 s build). A pre-fault
+W166 transfer BUSY in its first repaired run is retained and corrected with
+bounded setup retries. Both final W166 cases pass and read back exactly
+through a fresh mount. No additional W166 product change or deadline
+extension was needed; original SIGSTOP/RDMA/multi-host acceptance is still open.
 
 ## Decision and implementation
 
