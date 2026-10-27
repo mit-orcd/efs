@@ -48,7 +48,7 @@ int main(void){struct efs_raft_host h={0};struct efs_msg_raft_mkfs_reply reply;
  now_ms=10000;deadline=10100;calls=expired_calls=0;succeed=1;
  assert(host_remote_cmd(&h,2,NULL,0,&reply,-1)==EFS_OK&&now_ms==10000&&calls==1&&!expired_calls&&deadline==10100);
  assert(noted==1&&noted_rid==1);
- now_ms=10000;deadline=10100;calls=expired_calls=0;uint8_t query=EFS_MD_REQ_PUT_TICKET_STATUS;
+ now_ms=10000;deadline=10100;calls=expired_calls=0;succeed=0;uint8_t query=EFS_MD_REQ_PUT_TICKET_STATUS;
  assert(host_remote_cmd(&h,2,&query,1,&reply,-1)==EFS_ERR_BUSY && now_ms==10100 && !expired_calls && deadline==10100);
  puts("read retry loop: inherited/no-peer/already-expired budgets stop without expired RPC attempts; unscoped400ms and scope restoration PASS");}
 '''
