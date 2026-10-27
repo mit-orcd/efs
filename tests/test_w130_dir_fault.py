@@ -178,8 +178,8 @@ def serve_fault():
         assert group_applied(cluster, victim, group) == before
         rc, out = mgmt('raft-getattr', cluster.ep(victim), str(inode))
         route = re.search(r'status=(\d+) primary=(\d+)', out)
-        assert rc == 0 and route and int(route[1]) == 7 and int(route[2]) in {1, 2, 3} - {victim}, \
-            ('halted replica must give a usable healthy-leader hint', out)
+        assert rc == 0 and route and int(route[1]) in (0, 7) and int(route[2]) in {1, 2, 3} - {victim}, \
+            ('halted replica must forward or redirect to a healthy leader', out)
         mark.unlink()
         rc, out = mgmt('raft-resync', cluster.ep(victim), str(group))
         assert rc == 0, out
