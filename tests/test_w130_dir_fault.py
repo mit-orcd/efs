@@ -14,13 +14,17 @@ Asserts:
    ("INCOMPATIBLE entry ... apply halted, group not served").
 2. The other groups keep serving; the healthy replicas keep serving the
    halted group (quorum unaffected).
-3. A client reading the damaged directory sees a clean error, never wrong
-   data; unrelated directories read fine.
+3. A client reads the damaged directory completely through the healthy quorum;
+   unrelated directories read fine. No application retries hide EIO/BUSY.
 4. raft-status on node 3 shows the halt (the group's applied count freezes
    while the leaders advance; node 3 never campaigns for it).
 5. `efs-mgmt raft-resync <node3> <group>` resyncs the replica from the
    leader's snapshot; the group serves again and the directory reads back
    correctly.
+
+The serve-first W165 scenario runs first: DIR is held before the damaged
+leader receives distinct CREATEs. It must step aside, and snapshot resync
+must restore its own direct GETATTR.
 """
 import hashlib, os, re, shutil, signal, subprocess, sys, tempfile, time
 from pathlib import Path
@@ -84,42 +88,14 @@ def payload(name, size=128):
     return out[:size]
 
 
-write_retries = [0]
-
-
 def write_file(path, body):
-    """Create+write+close with bounded retries. In the first seconds after
-    formation (and while the fault window opens) a close can fail with an
-    explicit error; the B6 contract allows explicit failure, never silent
-    corruption, so a brief retry is the correct client behavior. A write
-    that never lands is a failure."""
-    import errno as _errno
-    last = None
-    for attempt in range(40):
-        op = 'open'
-        fd = None
-        try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
-            op = 'write'
-            view = memoryview(body)
-            while view:
-                view = view[os.write(fd, view):]
-            op = 'close'
-            os.close(fd)   # releases the fd even when it reports an error
-            fd = None
-            return
-        except OSError as e:
-            last = f'{op}: {e}'
-            if fd is not None and op != 'close':
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-            if e.errno == _errno.ENOTCONN:
-                raise AssertionError(f'mount died during the fault window: {last}') from e
-            write_retries[0] += 1
-            time.sleep(0.5)
-    raise AssertionError(f'{path}: write never landed in 40 retries, last: {last}')
+    """One application attempt: EIO/BUSY is a failure, never test-retried."""
+    with path.open('wb', buffering=0) as stream:
+        view = memoryview(body)
+        while view:
+            written = stream.write(view)
+            assert written, f'zero write: {path}'
+            view = view[written:]
 
 
 def group_applied(c, i, g):
@@ -192,7 +168,7 @@ def serve_fault():
         mark.unlink()
         rc, out = mgmt('raft-resync', cluster.ep(victim), str(group))
         assert rc == 0, out
-        cluster.wait_log(victim, 'resync: installed snapshot', timeout=60)
+        cluster.wait_log(victim, r'snapshot import .*halt cleared, group served again', timeout=60)
         rc, out = mgmt('raft-getattr', cluster.ep(victim), str(inode))
         assert rc == 0 and 'status=0 ' in out, out
         assert (target / 'old-0').read_bytes() == payload('old-0')
@@ -212,6 +188,8 @@ if '--serve-only' in sys.argv:
     serve_fault()
     shutil.rmtree(work)
     raise SystemExit(0)
+
+serve_fault()
 
 t0 = time.time()
 c = None
@@ -286,16 +264,11 @@ try:
     assert rc == 0
     print('[w130] healthy replicas still serve; other groups unaffected')
 
-    # 3. the damaged directory: a client sees a clean error, never wrong data
-    try:
-        entries = list(target.iterdir())
-        # if the read succeeded it must be complete and correct
-        names = sorted(e.name for e in entries)
-        assert len(names) == target_entries + 32, \
-            f'partial listing {len(names)} != {target_entries + 32}'
-        print('[w130] target dir read complete and exact after halt')
-    except OSError as e:
-        print(f'[w130] target dir read refused cleanly: {e}')
+    # 3. Healthy-quorum reads must succeed completely, with no application retry.
+    names = sorted(e.name for e in target.iterdir())
+    assert len(names) == target_entries + 32, \
+        f'partial listing {len(names)} != {target_entries + 32}'
+    print('[w130] target dir read complete and exact after halt')
 
     # 4. raft-status shows the halt: node 3's applied count for the group is
     #    frozen while the leaders advance
@@ -340,7 +313,7 @@ try:
         raise AssertionError(f'listing {len(names)} != {target_entries + 32}; missing {missing[:8]}')
     names = sorted(e.name for e in target.iterdir())
     assert (target / 'f0000').read_bytes() == payload('target/0')
-    print(f'[w130] PASS (write retries: {write_retries[0]})')
+    print('[w130] PASS (no application retries)')
 except Exception as e:
     print('[w130] FAIL:', e)
     raise

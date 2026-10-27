@@ -14829,6 +14829,19 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->rc = EFS_ERR_UNFORMED;
         return;
     }
+    /* A damaged metadata replica remains a storage member. Its local PUT
+     * ticket/status and session-fence checks must obtain authority from the
+     * healthy quorum, just as a data-only member does. Never forward a peer's
+     * forward again: the original caller follows the non-self hint. */
+    if (host_group_incompatible(h, group)) {
+        out->rc = EFS_ERR_NOT_PRIMARY;
+        out->leader_hint = host_halted_hint(h, group);
+        if (clen && !host_serving_forward) {
+            rc = host_remote_cmd(h, group, cmd, clen, out, out->leader_hint);
+            if (rc != EFS_OK) out->rc = rc;
+        }
+        return;
+    }
     if(clen && (cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK || cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET)) {
         if(clen!=(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK?1u:5u)) {out->rc=EFS_ERR_INVAL;return;}
         if(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET && (!host_expiry_on(h) || rd32be(cmd+1))) {
