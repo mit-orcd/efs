@@ -97,8 +97,13 @@ static void accept_range(efs_ino_t first,uint32_t n,int expect)
     struct efs_reclaim_item it[64];int32_t rc[64];
     assert(n<=64);
     for(uint32_t i=0;i<n;i++) it[i]=(struct efs_reclaim_item){.export_id=1,.ino=first+i,.generation=7};
-    (void)server_reclaim_accept(&S,it,n,rc);
-    for(uint32_t i=0;i<n;i++) assert(rc[i]==expect);
+    int accepted=server_reclaim_accept(&S,it,n,rc);
+    for(uint32_t i=0;i<n;i++) {
+        if(rc[i]!=expect) fprintf(stderr,"reclaim acceptance ino=%llu item=%u rc=%d expected=%d batch_rc=%d used=%llu pending=%llu\n",
+            (unsigned long long)first,i,rc[i],expect,accepted,
+            (unsigned long long)used(),(unsigned long long)pending());
+        assert(rc[i]==expect);
+    }
 }
 static int inode_dir_exists(efs_ino_t ino)
 {

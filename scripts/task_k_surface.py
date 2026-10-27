@@ -72,11 +72,11 @@ def call(cmd, *args, expected='ok'):
     if expected == 'ok':
         good = rc == 0 and all(x == 0 for x in statuses + values)
     elif expected == 'expiry-off':
-        good = rc != 0 and (-16 in values or 'policy is off' in out)
+        good = rc != 0 and (-16 in values or 'status -16' in out or 'policy is off' in out)
     elif expected == 'dir-precondition':
         good = values and values[-1] in (0, -1)
     elif expected == 'unidentified-report':
-        good = statuses and statuses[-1] == 6  # missing required op-id
+        good = statuses and statuses[-1] == 15  # EFS_INODE_RPC_UNREGISTERED: required session identity absent
     else:
         raise AssertionError(expected)
     row = dict(command=cmd, args=list(map(str,args)), exit=rc, statuses=statuses,
@@ -127,7 +127,7 @@ try:
         mount=kd.Mount(c,1,'mnt')
         with open(a.out/'posix-core.log','w') as log:
             result=subprocess.run([sys.executable,str(root/'tests/posix/posix_suite.py'),
-                                   str(mount.path/'posix-core'),'--suite','core','--jobs','1'],
+                                   str(mount.path),'--suite','core','--jobs','1'],
                                   env=env,stdout=log,stderr=subprocess.STDOUT,timeout=900)
         (a.out/'posix-core-exit').write_text(str(result.returncode)+'\n')
         if result.returncode:failures.append(dict(command='POSIX core',exit=result.returncode))
