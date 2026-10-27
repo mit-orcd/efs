@@ -1,22 +1,24 @@
 # K44 / W167 — routing at a retired replica (October 26–27)
 
-`agent/devel-task-k`; tested source `00e85a299`: TOTAL 508 FAIL 4 NOTRUN 14; base: TOTAL 508 FAIL 5 NOTRUN 14. `docs/status/k44-retired-replica-routing-20261026.md`. orcd-mini NOTRUN: lifecycle approval. Fixed: retired verdict/routing/resync, nonhost MKFS, notice NET, false CFG success, clean-stop signal race. Final measurement heads: `3846ecc1c`, `6780925c9`.
+`agent/devel-task-k`; tested source `00e85a299`: TOTAL 508 FAIL 4 NOTRUN 14; base: TOTAL 508 FAIL 5 NOTRUN 14. `docs/status/k44-retired-replica-routing-20261026.md`. orcd-mini RDMA formation/addition and seed sweep PASS (Oct 27; user-approved format). Fixed: retired verdict/routing/resync, nonhost MKFS, notice NET, false CFG success, clean-stop signal race. Final measurement heads: `3846ecc1c`, `6780925c9`.
 
 ## Verdict and scope
 
 Task K, [K44](alpha-1.0-2plus1-checklist.md) / [W167](work-queue.md).
-**FIXED (private single-host TCP/RDMA scope), not merged or pushed.** The
+**FIXED (private TCP/RDMA and orcd-mini RDMA scope), not merged or pushed.** The
 original [ORCD-test BUSY](orcd-test-devel-rdma-394f2b791-20261027.md) reproduces
 on unchanged base product and the final driver, and the candidate's named
 routing sweeps succeed. The gate remains **FAIL**, with four shared host
 LeakSanitizer instrumentation failures; leak verification is **NOTRUN**.
-Cold-directory query cases remain **INCOMPLETE**, described below. The
-multi-host orcd-mini stage is **NOTRUN**, requiring explicit approval through
-the coordinator for its stop, fresh format and deployment (Task K §6).
+Cold-directory query cases remain **INCOMPLETE**, described below. The orcd-mini fresh formation, online addition and cross-host seed sweep
+now **PASS** with the user’s explicit stop/format/deploy authorization
+(Task K §6; October 27). Results and live-deployment limits follow below.
 
-Every execution is on **node9900**, private `/tmp/efs-taskK-20261026*`
-trees and private endpoints. Existing orcd-mini services/stores/mounts and
-fcstor003–013 are untouched. No devops/cluster repository was edited.
+The earlier private executions use **node9900**, `/tmp/efs-taskK-20261026*`
+trees and private endpoints. The subsequently authorized orcd-mini execution
+uses node9901’s four product daemon endpoints and node9900’s client.
+fcstor003–013 and Task H’s separate node9901 fixtures remain untouched.
+No devops/cluster repository was edited.
 
 ## Confirmed code changes
 
@@ -270,8 +272,160 @@ guard refusal occurred before copying/deleting and is retained; v2 checks the
 canonical authorized raw root. The final manifest verification log is
 `/home/erbmi1/efs-artifacts/taskK-manifest-final-check.log`.
 
-The remaining orcd-mini stage needs the coordinator's lifecycle window and
-user approval; the task brief does not authorize wiping it. No cluster is
-left stopped. `~/git/cluster/orcd-test.py init-export` should propagate a
-failed format instead of silently assuming initialization; its owner should
-review that separately. This task does not edit that repository.
+The private-stage release above preceded the separately authorized
+orcd-mini run below. `~/git/cluster/orcd-test.py init-export` should propagate
+a failed format instead of silently assuming initialization; its owner
+should review that separately. This task does not edit that repository.
+
+## Authorized orcd-mini qualification — October 27
+
+**PASS for fresh formation, online addition and the retired-seed command /
+POSIX core sweep.** The user explicitly authorized stopping, reformatting
+and deploying Task K, preserving evidence and leaving the cluster running.
+The separate Task H private cluster on node9901 was not signalled or changed.
+
+Product source is exactly `00e85a299531e873daefa0a40b5f781c5ec7225c`.
+The source archive SHA256 is
+`1fa031a84b97d8abeeef7a36e999f5cf1a0e309126a45cb45675a374d9e9f064`.
+Both hosts built release `00e85a299531` independently with eight build jobs,
+private libfuse under `/data1/efs/deps/libfuse` and its runtime rpath.
+Build times are 18:46:27Z on node9900 and 18:46:28Z on node9901.
+Measurement drivers are separate from that product source: `e56f63f82`,
+`1d3638e7a`, `571594e6c`, `5cbe53168`, `e79dbb48a`. No product code changed for this run.
+
+Environment: orcd-mini, four **processes on node9901**, endpoints
+`10.1.99.1:17432–17435`, stores `/data1/efs/n1..n4`, each with `--quota 720G`;
+node9900 mounts only seed `10.1.99.1:17432` at
+`/data1/efs/orcd-mini-mnt`; node9901 mounts it at `/data1/efs/mnt`.
+Both hosts run RHEL and native InfiniBand `mlx5_0`,
+`EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0`, product O_DIRECT, ordinary
+background packing and commands-policy mask 3. Actual client and daemon
+logs record `RDMA transport up segmented-v1 on mlx5_0`.
+This is a real cross-host client test, **not four independent storage hosts
+or a physical failure-domain/capacity qualification**.
+
+### Formation, results and full-payload scope
+
+The remote client stopped first, then the local client, then the three
+configured daemons. All three old daemon exit records report `orderly`,
+`rc=0`, with PUT-sync, reclaim-journal and usage-flush barriers done.
+Closed old logs were archived and verified before formatting only n1..n3.
+The old product was `394f2b791`; no old store or payload migration was attempted.
+The existing devops script started three fresh Task K members; formation
+at 18:48:07Z committed both voter masks `0x7`, and MKFS succeeded.
+Member 4 then joined online at port 17435. Seed group 2 retired at
+18:48:32Z; live group 2 converged to `voters=0xe joint=0`.
+
+| Check | Result |
+|---|---|
+| Seed and added-member MKFS | Both rc=0; application result checked, not just process exit. |
+| Management sweep | 27 calls, including added-member live-status observation; get/set commands-policy, expiry read-only policy/clock, status/sync/data-commit/I/O/version/GC/expiry, pack summary, raw namespace/chunk reads, same-voter-set CFG: PASS. |
+| Retired step-down and resync | Required NOT_PRIMARY (`rc=-15`), no resync scheduled. |
+| Seed-only FUSE surface | Create, write, fsync/fdatasync, exact read, xattrs, chmod, flock/fcntl, truncate, links, rename, readdir, unlink and mkdir/rmdir: PASS. |
+| Unchanged POSIX core, remote client, one job | **218/218 PASS**, zero fail/skip/NOTRUN, 137.3 s. |
+| Unchanged two-client POSIX, node9901 ↔ node9900 | **68/68 PASS**, zero fail, 282.9 s. The 500 disjoint pwrite+fsync operations per client complete in the 53.36 s concurrent step; this is correctness evidence, not a throughput acceptance gate. |
+| Exact retained payloads through both mounts | Every byte of `large.bin` (1,048,832 B) and `tail.bin` (4,099 B), **1,052,931 B total**, matches the deterministic final expected contents. |
+| Stable `.efs` stats / ls / find | PASS after every serving catalog was ready: nodes 2 and 3, 60 s advertised refresh, 32.181 s readiness using the existing 180 s precondition bound; normal per-command budget unchanged. Exact two-file names/sizes, 5,120 B tree total and both full payloads checked. |
+
+Full reads above cover the named fixtures, not every file ever created in
+POSIX/two-client tests and not the old, explicitly reformatted stores.
+The earlier private cold-query skips remain **INCOMPLETE**; these warm
+results do not replace them. The previous default full gate remains
+508 commands / 4 shared LSan FAIL / 14 NOTRUN; no new full-gate PASS is claimed.
+
+### Reproduction and operational ownership
+
+Prerequisites: authenticated SSH master to ORCD, both hosts' libfuse/RDMA
+runtime, idle configured orcd-mini mounts, and **explicit authorization for
+this cluster's fresh format**. The following procedure is destructive to
+only its named stores and must not be run as an unattended regression:
+
+1. Export `git archive 00e85a299531` to each host's
+   `/tmp/efs-taskK-mini-20261027/source`; run
+   `scripts/task_k_mini_build.sh` detached on each host. Inspect both
+   `build-exit` records and retain binary hashes.
+2. On node9900, use the new source's `scripts/client.sh stop` for
+   `/data1/efs/orcd-mini-mnt`, verify mount absence, archive the old client
+   logs, move the built source to
+   `/data1/efs/orcd-mini-client/releases/00e85a299531` and switch its `src`
+   symlink. This uses the clean-stop helper fix, without forced discard.
+3. On node9901, run `scripts/task_k_mini_deploy.sh` detached. It records old
+   identities/status/config, stops the configured local client and daemons,
+   closes/verifies the log archive, checks no process owns the product
+   stores, uses `edelete` for n1..n3, switches the built release and invokes
+   `EFS_CLUSTER=orcd-mini EFS_START_TIMEOUT=900 ./start.sh` from the existing
+   `/data1/efs/devops`. Inspect `deployment-exit` and formed-three status.
+4. Start member 4 with `scripts/task_k_mini_fourth.sh start` on node9901;
+   record its owned PID. Start node9900's existing client wrapper. Observe
+   seed retirement and live mask `0xe` before proceeding.
+5. On node9900, with the RDMA environment above:
+
+   ```sh
+   python3 mini-sweep.py --source /data1/efs/orcd-mini-client/src \
+     --mount /data1/efs/orcd-mini-mnt --out NEW_EVIDENCE/rdma-sweep
+   python3 mini-queries.py --source /data1/efs/orcd-mini-client/src \
+     --mount /data1/efs/orcd-mini-mnt --out NEW_EVIDENCE/stable-queries
+   ```
+
+   These are the committed `task_k_mini_sweep.py` and
+   `task_k_mini_queries.py` copied outside the product tree. Output paths
+   must not exist. The query fixture is separate and remains quiescent.
+6. From the driver, run `scripts/task_k_mini_two_clients.py NEW_RESULT.tsv`;
+   it uses `task_k_mini_ssh.sh` without BatchMode, the unchanged POSIX
+   two-client cases and the existing orcd-mini 120 s remote-step bound.
+7. Run the same sweep on node9901 with `--source /data1/efs/src
+   --mount /data1/efs/mnt --verify-only --out NEW_EVIDENCE/peer-full-read`.
+   Then capture closed snapshots with `scripts/task_k_mini_capture.py` on
+   each host, hash/verify the retained files and leave the services running.
+
+The devops repository was **not edited**. Its checked-in orcd-mini arrays
+still name three members. Until its owner extends PORTS/NODE_ADDRS/STORDIRS
+with member 4, do not treat its three-member start/stop wrapper as a complete
+four-member lifecycle. The retained `fourth-member.sh` is the committed
+ownership-checked helper: stop both clients cleanly first, then stop member 4
+with it, then stop the original three using devops. A restart must bring
+back all four stores with the same membership; never silently revert to a
+three-member cluster or reformat on a startup refusal.
+
+### Closed evidence and final running state
+
+Raw evidence on **each** of node9900 and node9901 is retained at:
+`/data1/efs/evidence/taskK-orcd-mini-20261027/`.
+The source/build/result manifest is `run-manifest.json`; exact binary hashes,
+closed test logs/TSVs, old log archives, deployment/stop records, copied
+measurement drivers and final health/process/mount snapshots are included.
+Archive listing and every SHA256 entry were verified successfully.
+
+| Host | Closed files in `SHA256SUMS` | SHA256 of that manifest |
+|---|---:|---|
+| node9900 | 49 | `1eda435d14edfca41dc0cbdcbc33455503d141e82b6a5c8f9c2493f63d9568e0` |
+| node9901 | 58 | `bd567cf21d5727db2db672594bedf3d35963068436cd508fc4ec1e6689972153` |
+
+Verification receipts are outside each closed tree at
+`/data1/efs/evidence/taskK-orcd-mini-20261027-verify.log`.
+`PRUNED.txt` and prune logs state that the explicitly reformatted old stores
+are gone, the completed two-client synthetic namespace was removed with
+`edelete`, and finished `/tmp/efs-taskK-mini-20261027` staging was removed.
+The built sources live in their versioned infrastructure releases; they
+were not deleted. No copied stores or generated payload bulk is retained
+inside the evidence trees. The two small exact-check namespaces remain on
+the live cluster for inspection.
+
+At **18:58:19–21Z**, both final snapshots report:
+
+- `Cluster state: OK (4 up, 0 down)`; `00e85a299531`, 4/4 identical.
+- Zero degraded chunks and zero degraded/unrecoverable segments.
+- Group 0 on voters 1–3; group 2 on voters 2–4; seed group 2 remains
+  explicitly retired with its historical local cursor.
+- Both configured product mounts serving their Task K client binaries.
+- 312 abandoned uploads pending, zero collection failures. This run does
+  not claim that orphan grace periods/collection have fully drained or
+  qualify reclaim throughput.
+
+All four product daemons and both product mounts are **left running**.
+Other agents’ private Task H / Task I mounts visible in the host mount tables
+are not part of this deployment and were left alone. No product process is
+running from the deleted staging tree. K44’s real-host gate is satisfied in
+this scope; the parent still owes merged-tree qualification. The shared
+host LSan failures and historical cold-query INCOMPLETE verdicts remain
+explicit rather than being relabelled by this result.
