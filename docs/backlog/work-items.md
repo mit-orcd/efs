@@ -6659,3 +6659,24 @@ both. Gate: `make test` on efs3, in the K25 report.
   reproducer is `tests/test_k22_snapshot_import.py` at
   `K22_SNAP_BYTES=0 K22_STOP_DEADLINE=240` (drive-phase failure message
   lists the write errors).
+
+### Task G decision memo — October 26
+
+**OPEN, awaiting the user decision; no implementation.** On unchanged devel
+`394f2b791`, xorinox loopback with only node 1's KV budget compressed and
+compactor parked reproduced 36 close EIOs at approximately 30 s. Their PUT
+stage consumed the budget; the pressured node had already become a follower
+while a healthy quorum kept applying. A separate forensic capture reproduced
+12 closes: eight with PUT consuming 30 s, four with 8 s REPORT plus 8 s
+receipt resolution ending in an unknown outcome. This is not solely a
+leader-fencing or outer-deadline problem.
+
+The [decision memo](../status/w166-close-eio-flush-deadline-20261026.md)
+compares progress-bounded renewal with earlier refusal/authoritative
+redirection. It recommends keeping 30 s and investigating exact PUT-ticket
+STATUS/session authority forwarding off the lagging hosted replica, plus
+separate REPORT/receipt routing qualification. No automatic degradation of
+BUSY, weakening of ticket/session checks, new behavior flag or deadline
+extension is authorized. Task G explicitly stops for that decision; W166 is
+not FIXED or DECIDED. Raw captures and checked hashes stay on xorinox; private
+build and payload bulk is pruned.
