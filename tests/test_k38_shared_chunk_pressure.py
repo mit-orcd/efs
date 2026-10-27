@@ -30,7 +30,7 @@ touching them answered BUSY for the whole 8 s budget
 the single-client K38 shape.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
-import os, re, shutil, sys, tempfile, threading, time
+import json, os, re, shutil, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload  # noqa: E402
@@ -64,20 +64,35 @@ def record(r, k):
     return payload(f'k38-{r}-{k}', XFER)
 
 
-def writer(m, r, errors):
+def writer(m, r, errors, outcomes):
+    result = {'writer': r, 'mount': m.path.name, 'written': 0, 'fsyncs': 0,
+              'stage': 'open', 'errors': []}
+    outcomes[r] = result
+    fd = None
     try:
         fd = os.open(m.path / 'shared', os.O_WRONLY)
-        try:
-            for k in range(SEGMENTS):
-                off = (k * RANKS + r) * XFER
-                assert os.pwrite(fd, record(r, k), off) == XFER
-                if (k + 1) % FSYNC_EVERY == 0:
-                    os.fsync(fd)
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-    except Exception as e:  # noqa: BLE001 - reported with its writer
-        errors.append(f'writer {r}: {e!r}')
+        for k in range(SEGMENTS):
+            result['stage'] = 'pwrite'
+            off = (k * RANKS + r) * XFER
+            assert os.pwrite(fd, record(r, k), off) == XFER
+            result['written'] += 1
+            if (k + 1) % FSYNC_EVERY == 0:
+                result['stage'] = 'fsync'
+                os.fsync(fd)
+                result['fsyncs'] += 1
+        result['stage'] = 'final-fsync'
+        os.fsync(fd)
+        result['fsyncs'] += 1
+    except Exception as e:  # noqa: BLE001 - preserve the original and close errors
+        result['errors'].append(f"{result['stage']}: {e!r}")
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except Exception as e:  # noqa: BLE001
+                result['errors'].append(f'close: {e!r}')
+        errors.extend(f"writer {r} after {result['written']} records: {e}"
+                      for e in result['errors'])
 
 
 def verify(m, what):
@@ -99,6 +114,8 @@ def verify(m, what):
 
 c = Cluster(work, 'k', [1, 2, 3], env)
 mounts = []
+passed = False
+outcomes = [None] * RANKS
 try:
     c.start(1)
     c.start(2, join=1)
@@ -112,13 +129,14 @@ try:
     with open(a.path / 'shared', 'wb') as f:
         f.truncate(RANKS * SEGMENTS * XFER)
     errors = []
-    threads = [threading.Thread(target=writer, args=((a, b)[r % opt.clients], r, errors))
+    threads = [threading.Thread(target=writer, args=((a, b)[r % opt.clients], r, errors, outcomes))
                for r in range(RANKS)]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=600)
     assert not any(t.is_alive() for t in threads), 'a writer did not finish in 600 s'
+    (work / 'writers.json').write_text(json.dumps(outcomes, indent=2) + '\n')
     logs = {m.path.name: m.logp.read_text(errors='replace') for m in mounts}
     assert not errors, '\n'.join(errors) + '\n' + '\n'.join(
         f'-- {n}:\n' + '\n'.join(l[-3000:].splitlines()[-30:]) for n, l in logs.items())
@@ -149,11 +167,12 @@ try:
     verify(r, 'remount')
     print(f'pressure lines {pressure}, STALE replay rounds {stale}, superseded spans {superseded}, '
           f'write+fsync {write_s:.1f} s')
+    passed = True
 finally:
     for m in mounts:
         m.close()
     c.stop_all()
-    if os.environ.get('EFS_K38_KEEP'):
+    if not passed or os.environ.get('EFS_K38_KEEP'):
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)
