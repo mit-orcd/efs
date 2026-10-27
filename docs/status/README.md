@@ -23,8 +23,10 @@ full acceptance are separate states.
 B with the 30 s bound unchanged. Fix `878c00e96` passes the two targeted
 cases (REPORT with full L0 but available memory; lagging follower PUT STATUS),
 which both fail on the instrumentation-only baseline. Fresh-reader payloads
-exact. Original 36 untraced / 12 forensic failures remain preserved. Full
-pressure replay, five standalone K22 runs and full gate pending; no FIXED
+exact. The 8 GiB pressure replay has zero errors and 24,018 exact
+successful-close payloads; K22 5/5 clean. The 1 GiB quota-exhaustion run and
+one setup failure are preserved. Full gate pending the bounded setup-helper
+correction; original 36 untraced / 12 forensic failures preserved. No FIXED
 or multi-host/RDMA claim.
 
 

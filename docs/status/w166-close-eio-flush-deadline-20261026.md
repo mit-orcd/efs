@@ -1,7 +1,9 @@
 # W166 — flush-deadline decision memo (October 26, 2026)
 
-Report: branch `agent/devel-task-g`, code head `c71677190`, base `394f2b791`.
-Gate `TOTAL`: NOTRUN on branch/base; full qualification pending.
+Report: branch `agent/devel-task-g`, product fix `878c00e96`, qualification
+build `430cd676c`, base `394f2b791`; diagnostic quota revision `cd2bfcf7c`.
+Full gate `ec7c639d7`: RUNNING with one pre-fault setup failure;
+corrected-helper full gate `23ead82d1` pending. Base full gate NOTRUN.
 Evidence: `docs/status/w166-close-eio-flush-deadline-20261026.md`.
 W166 REPRODUCED on unchanged base product binaries: 36 untraced close-EIOs,
 12 forensic close-EIOs. Product fix `878c00e96` passes both targeted cases;
@@ -39,9 +41,54 @@ is a separate deterministic mechanism test, not a timing replay of the
 original 30 s captures. Both log sets are retained under
 `/home/maik/efs-taskG-impl-20261026/` pending verified stable-copy/pruning.
 
-Five standalone K22 runs, the original pressure workload on the fixed build,
-and `make test-all` remain **NOTRUN / pending**. W166 stays OPEN; no completed
-qualification or RDMA/multi-host claim.
+First full fixed-build pressure replay, 300 s, original **1 GiB/member**:
+**FAIL — fixture quota exhausted**, not a W166 EIO reproduction. There were
+4,615 ENOSPC failures (2,346 closes, 2,269 writes), **zero EIO**, and all
+21,996 confirmed-close files read back exactly after release. Wall 490.36 s.
+The retained diagnostic's generic `REPRODUCED` label means a close failed;
+the errno/event records establish quota exhaustion rather than W166. No
+failed path is counted as a successful payload. The first ENOSPC was at
+255.52 s, after the corrected path had made substantially more progress
+than the original failing binary. This failure remains in the evidence.
+
+A separate repeat uses an explicit **8 GiB/member** quota; pressure faults,
+workload, concurrency, 300 s duration and deadlines are unchanged. This is
+a declared fixture change, not an ignored ENOSPC or a clean rerun of the
+1 GiB profile. Its driver records the quota and product revision; its exact
+driver is `cd2bfcf7c`, binaries/source `430cd676c` (identical product code).
+The earlier diagnostic revision did not record its quota field; its
+committed default and command establish 1 GiB.
+
+The corrected 8 GiB replay (`f00c91c41`, 300 s) completed with **zero syscall
+errors and all 24,018 successful-close payloads exact** on post-release
+same-mount readback. Diagnostic rc 2 / NOT_REPRODUCED; wall 508.90 s including
+verification/cleanup. Close p50/p99/max: 21.68 / 191.64 / 2,871.57 ms. These
+are scoped observations under the fault workload, not a throughput comparison
+or a cold-restart/durability proof.
+
+Five standalone K22 runs on `f00c91c41` **PASS 5/5**, with 3,985 / 4,334 /
+4,750 / 4,470 / 3,992 successful client writes. Every run reaches the 3/4
+admission watermark, moves leadership, and drains after release; no early
+or late client-error findings. K22 does not verify every payload; the full
+payload claim above belongs only to the separate diagnostic readback.
+
+Product follow-up `a72adf70a` makes the STATUS one-hop guard cover unhosted
+members too; three-node behavior is unchanged. `ec7c639d7` adds extracted
+production-code tests for STATUS's bounded read scope, separate read pool,
+semantic refusal and hosted/unhosted wrong-target refusal (TCP/RDMA transport
+mocks, **not live RDMA**). Those unit tests pass locally.
+
+The first full gate (`ec7c639d7`) has a pre-fault **harness failure**: under
+the pool, `raft-step-down` returned documented BUSY because the requested
+formation voter was not caught up. No pressure fault or application work
+had started. It is preserved, not counted as a passing gate. `2b5b7d1ee`
+retries only this documented setup BUSY within the existing 30 s setup bound;
+unknown management errors still fail. `23ead82d1` adds a unit check for
+success after catch-up, perpetual BUSY expiry and immediate hard-error
+refusal. The final clean full gate remains pending. The 30 s application
+flush deadline has never changed.
+
+W166 stays OPEN until that gate is finished. RDMA/multi-host NOTRUN.
 
 ## Original decision memo — choose the owner of the wait (superseded by authorization above)
 
