@@ -19276,6 +19276,21 @@ static void host_dir_spread_pass(struct efs_raft_host *h)
         cmd[1] = EFS_MD_DIR_MIGRATE;
         wr64be(cmd + 2, dir);
         hint = -1;
+#if EFS_FAULTS
+        /* W165: keep the split worker off a damaged row so the next
+         * request, not DIR apply or another worker pass, observes it. */
+        const char *serve_fault = getenv("EFS_FAULT_DIR_SERVE_FILE");
+        char serve_ready[EFS_MAX_PATH], serve_arm[EFS_MAX_PATH];
+        if (serve_fault) {
+            snprintf(serve_ready, sizeof(serve_ready), "%s.ready", serve_fault);
+            snprintf(serve_arm, sizeof(serve_arm), "%s.arm", serve_fault);
+            if (access(serve_fault, F_OK) == 0 &&
+                (access(serve_ready, F_OK) == 0 || access(serve_arm, F_OK) != 0)) {
+                efs_dir_spread_note(dir);
+                return;
+            }
+        }
+#endif
         rc = host_read_index(h, pg, &hint);
         if (rc == EFS_OK) {
             struct efs_meta_row row;
@@ -19283,6 +19298,26 @@ static void host_dir_spread_pass(struct efs_raft_host *h)
             rc = efs_meta_apply_get_inode(h->kv, dir, &row);
             if (rc != EFS_OK || row.layout != EFS_META_LAYOUT_SPLITTING)
                 continue;
+#if EFS_FAULTS
+            if (serve_fault && access(serve_fault, F_OK) == 0) {
+                uint8_t key[EFS_KV_KEY_MAX], junk[16];
+                uint32_t kl = 0;
+                memset(junk, 0xEE, sizeof(junk));
+                int damaged = efs_kv_key_inode(efs_kv_inode_shard(dir), dir, key, &kl);
+                if (!damaged) damaged = efs_kv_put(h->kv, key, kl, junk, sizeof(junk));
+                if (!damaged) {
+                    FILE *ready = fopen(serve_ready, "w");
+                    if (ready) {
+                        fprintf(ready, "%llu\n", (unsigned long long)dir);
+                        fclose(ready);
+                    }
+                    fprintf(stderr, "raft-host: fault dir-serve-corrupt: damaged ino=%llu group=%u; before DIR propose\n",
+                            (unsigned long long)dir, (unsigned)pg);
+                }
+                efs_dir_spread_note(dir);
+                return;
+            }
+#endif
             rc = host_dir_migrate(h, dir, cmd, HOST_DIR_LEN, &hint);
         } else {
             efs_dir_spread_note(dir);

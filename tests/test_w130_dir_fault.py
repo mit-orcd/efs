@@ -129,6 +129,90 @@ def group_applied(c, i, g):
     return int(m.group(1)) if m else -1
 
 
+
+def serve_fault():
+    """Hold DIR before corrupting its leader: CREATE must be the first reader.
+
+    Three distinct direct CREATEs expose persistent base EIO without retries;
+    the fixed node must redirect (or forward), then FUSE creates succeed.
+    """
+    cluster = Cluster('w165-serve', [1, 2, 3])
+    mounted = None
+    markers = {i: work / f'serve-on-{i}' for i in (1, 2, 3)}
+    try:
+        for i in (1, 2, 3):
+            cluster.start(i, join=1 if i > 1 else None,
+                          extra_env={'EFS_FAULT_DIR_SERVE_FILE': str(markers[i])})
+        cluster.wait_voters((1, 2, 3), lambda i, v: v == {0: (1, 7), 2: (1, 7)})
+        mounted = Mount(cluster, 1, 'mnt-serve')
+        target = mounted.path / 'serve-target'
+        target.mkdir()
+        inode = target.stat().st_ino
+        group = 0 if inode & 1 else 2
+        victim = cluster.leader_placement(1)[group]
+        for k in range(int(SPREAD_MIN)):
+            write_file(target / f'old-{k}', payload(f'old-{k}'))
+        mark = markers[victim]
+        mark.touch()  # hold spread before crossing; no corruption yet
+        fd = os.open(target / 'crossing', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        os.close(fd)
+        Path(str(mark) + '.arm').touch()  # CREATE above has finished completely
+        ready = Path(str(mark) + '.ready')
+        deadline = time.monotonic() + 30
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(.05)
+        assert ready.exists(), 'serve damage did not reach its deterministic boundary'
+        assert int(ready.read_text()) == inode, ('wrong fault target', ready.read_text(), inode)
+        assert 'INCOMPATIBLE' not in cluster.log(victim), 'a prior apply consumed the damage'
+        print(f'[w165] damaged leader node={victim} group={group} inode={inode}; DIR held', flush=True)
+        replies = []
+        for k in range(3):
+            rc, out = mgmt('raft-create', cluster.ep(victim), str(inode), f'direct-{k}')
+            assert rc == 0, out
+            match = re.search(r'status=(\d+) primary=(\d+)', out)
+            assert match, out
+            replies.append(tuple(map(int, match.groups())))
+        print('[w165] three distinct CREATE replies:', replies, flush=True)
+        assert all(status in (0, 7) for status, hint in replies), \
+            ('persistent serve-path EIO/ERROR instead of redirect', replies, cluster.log(victim)[-1500:])
+        assert all(hint != victim for status, hint in replies if status == 7), ('self redirect', replies)
+        cluster.wait_log(victim, rf'group={group} INCOMPATIBLE stored row', timeout=10)
+        assert 'apply halted, group not served' in cluster.log(victim)
+        # No application retries: the healthy quorum must complete each create.
+        for k in range(3):
+            path = target / f'quorum-{k}'
+            body = payload(f'quorum-{k}')
+            with path.open('xb', buffering=0) as stream:
+                assert stream.write(body) == len(body)
+                os.fsync(stream.fileno())
+            assert path.read_bytes() == body
+        before = group_applied(cluster, victim, group)
+        time.sleep(.1)
+        assert group_applied(cluster, victim, group) == before
+        mark.unlink()
+        rc, out = mgmt('raft-resync', cluster.ep(victim), str(group))
+        assert rc == 0, out
+        cluster.wait_log(victim, 'resync: installed snapshot', timeout=60)
+        rc, out = mgmt('raft-getattr', cluster.ep(victim), str(inode))
+        assert rc == 0 and 'status=0 ' in out, out
+        assert (target / 'old-0').read_bytes() == payload('old-0')
+        assert (target / 'quorum-2').read_bytes() == payload('quorum-2')
+        print('[w165] PASS serve-first halt, quorum creates and snapshot resync', flush=True)
+    finally:
+        for mark in markers.values():
+            mark.unlink(missing_ok=True)
+            Path(str(mark) + '.arm').unlink(missing_ok=True)
+        if mounted:
+            mounted.close()
+        cluster.stop_all()
+        print('[w165] evidence fixture:', work, flush=True)
+
+
+if '--serve-only' in sys.argv:
+    serve_fault()
+    shutil.rmtree(work)
+    raise SystemExit(0)
+
 t0 = time.time()
 c = None
 mounts = []
