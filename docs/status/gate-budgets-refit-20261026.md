@@ -1,13 +1,18 @@
-Branch agent/devel-task-j, tested candidate58b87f0ed: regression controls, 10 operator checks, snapshot catch-up and 3 strict K22/K36 pairs PASS (TCP loopback scoped). Snapshot fault window recorded5 contract-allowed write errors;344 successful payloads exact. Three full8-job calibration runs ACTIVE. Earlier Intel/ORCD FAILs/stores remain preserved; budgets unchanged. Evidence: docs/status/gate-budgets-refit-20261026.md.
-
 # W160 three-run budget refit — October 26, 2026
 
-**INCOMPLETE: BASELINE FAILED; AUTHORIZED FIXES UNDER QUALIFICATION.** No measured budget is changed and no gate PASS is
-claimed. The user assigned Task J from `parallel-tasks-20261026.md`; its updated
-instructions retain intel1/intel2 after Task F/E releases the host and add
-one real-host gate each on node9901 and fstor007. The user explicitly
-overrode that order: run both ORCD gates first, then three Intel calibration
-runs after Task F releases intel1.
+**Task J COMPLETE, scoped Intel budget calibration; not a universal gate PASS.**
+Branch `agent/devel-task-j`: corrected-source49e5ffd71 completed three serial
+8-job full gates at729/723/725s,509 commands,zero failures and14 NOTRUN each.
+Budget refit0f72c1665 retains slots/reasons and the1100s target/1650s bound;
+fitted model1025s. Separate post-refit full gate:730s plus30s build,zero
+failures,14 NOTRUN. All85 per-command medians and modeled critical chain/
+exclusive tail are below. Host-limit skips and earlier Intel/ORCD FAILs
+remain explicit; no failed measurements enter the fit and no repaired-build
+ORCD/RDMA claim is made. Failed fixtures remain retained on Intel.
+
+The original assignment and stopped baselines below are historical evidence.
+The user ordered ORCD gates first, then quiet Intel calibration after Task F,
+and subsequently authorized fixing the discovered gate failures on this branch.
 
 ## Resource and source scope
 
@@ -48,7 +53,7 @@ EFS_FUSE_PREFIX=/usr bash "$HOME/efs-taskJ/scripts/calibrate_test_budgets.sh" \
 ```
 
 Only Intel run 1 completed, with failures. The launcher stopped before runs
-2/3. Per-command three-run medians, refit and post-refit gate remain NOTRUN;
+2/3. For that stopped baseline, three-run medians, refit and post-refit were NOTRUN;
 no failed or ORCD timing is reused as a successful calibration cost. ORCD gates used
 fresh untouched devel394f2b791 archives, with its source/build identifiers.
 Their exact results and closed manifests remain below. The coordinator can
@@ -1110,3 +1115,63 @@ NOTRUN. These85 rows do not claim every support dimension is qualified.
 The fitted table is now applied on the isolated Task J branch. A separate
 post-refit full gate is still required and will not become a fourth median
 input. No fresh repaired-build RDMA/ORCD or unrestricted alpha PASS is claimed.
+
+### Final post-refit result, retention and cleanup
+
+The separate gate at exact `0f72c166557fdafe16822a9826d5ab3bd4d619ef`
+passed every runnable check: **509 commands,0 FAIL,14 NOTRUN,730s**, plus
+30s build (whole wrapper759.622s). Binary `efsd0f72c1665`, branch
+`agent/devel-task-j`, built `2026-10-27T06:32:22Z on intel1`.
+Recipe check passed1.091s (structural1024s of1650s). Both measurement and
+post-refit source manifests verified all2208 files unchanged. This gate is
+excluded from the three-input medians. It supplies no measured speedup:
+730s is comparable to the729/723/725s observations. The change removes
+inflated budget declarations, while retaining the requested safety margin;
+it does not change execution slots or claim the modeled1025s was observed.
+
+All14 NOTRUN markers remain in each summary, so the runner honestly labels
+these gates INCOMPLETE despite zero failures. Missing RDMA/device/header and
+cluster-script coverage is not transformed into PASS. Intentional missing-
+tool markers from leak/sanitizer gate self-tests are distinguished from real
+runtime coverage above. Earlier ORCD stages remain baseline FAILs and their
+raw evidence/limits remain unchanged. W166's reproduced L0-pressure subcase
+is fixed and strictly qualified on loopback TCP; the separate fault-window
+stalled-follower write errors and production-scale/RDMA scope remain open.
+
+Raw roots below are absolute under
+`intel1:/home/maik/efs-artifacts/taskJ-20261026/`. All manifests were closed,
+re-read and verified after controllers finished:
+
+| Directory | Files | SHA256 of SHA256SUMS |
+| --- | ---: | --- |
+| `intel1-calibration-49e5ffd71` |46| `9f3162159f86cdcc423c75f2c384b9710b43d23f599aea621ca348074b1d63cc` |
+| `packed-reprobe-49e5ffd71` |26| `b7184eccdd72a87e170e10365bfb556a943270a80aced13b35a5b444f619fe2e` |
+| `refit-49e5ffd71` |3| `d48b35ccc1063fb5ba2f2f20fcdb5fbe7c93b03e558f9964e3326288f54303d1` |
+| `post-refit-0f72c1665` |18| `5a9e11557fdbaf0c55d34fcea3732c4008fda6352fe1e1604a90d04959765672` |
+| `exact-builds` |45| `3b5391e3238c3da89b95e2ccf05c55b57f3b8da075df462e0a712670e081f1db` |
+
+`exact-builds` retains nine full-commit source tarballs, eight exact tested
+binary/library tarballs with per-member hashes, copied controllers/tools and
+`PRUNED.txt`. Every archive opens; each binary member was re-hashed against
+its source file before pruning. The49/0f source archives also match every
+file in their measured2208-file manifests. These archives are206MiB on Intel;
+no payload/store export to the Mac occurred.
+
+After proving no process executable/cwd or mount used each target, eight
+inactive source/build trees were removed using
+`~/bin/edelete --force --delete PATH`: the `src` trees under `efs-taskJ`,
+`efs-taskJ2`, `efs-taskJ3`, and `efs-taskJ4/src`, plus Task J4's93,44,49 and0f
+source trees. Their exact paths are in `exact-builds/PRUNED.txt`; earlier
+source-path references on this page are historical and now resolve through
+the retained archives. Controllers/text evidence remain. No Task F tree was
+touched. No Task J daemon, client or mount remains.
+
+The failed58 K36 fixture remains unchanged at
+`/home/maik/efs-taskJ4/src-58b87f0ed/tmp/case-462/efs-k36-6l9j3zwl/`;
+the captured93 operator stores remain at
+`/home/maik/efs-artifacts/taskJ-20261026/resync-93d96f8e6/operator-3-tmp/efs-ops-okaubhoy/`.
+They are deliberately retained for the unresolved exact-capture causality;
+this does not negate the deterministic negative controls or fixed-build
+qualification, nor turn the old failures into PASS. Task J's remaining
+416MiB source tree contains that failed58 fixture. No shared devel edit,
+merge, push, Task F evidence, real cluster or devops repository changed.

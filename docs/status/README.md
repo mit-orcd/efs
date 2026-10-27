@@ -19,45 +19,16 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [W160 Task J budget calibration](gate-budgets-refit-20261026.md):
-**ORCD-first stages finished with baseline failures**, branch
-`agent/devel-task-j`, untouched devel `394f2b791`: node9901 508 commands,
-5 FAIL, 5 NOTRUN, 769 s; fstor007 compatible-FUSE gate 508 commands, 1 FAIL,
-5 NOTRUN, 750 s. Failures are four LSan runtime errors (separate
-leak-disabled checks passed), a hostname-dependent wrapper assertion and a
-long-TMPDIR cleanup-buffer assertion. Initial fstor007 FUSE prerequisite
-failure is retained too. Closed raw manifests and task-owned cleanup are
-recorded. Intel run1 on untouched devel4066f74df FAILED: 508 commands,
-2 FAIL, 14 NOTRUN, 616 s (K22 fixture leader assumption; K36 packed-segment
-recovery assertion, unclassified). Controller stopped before runs2/3; raw
-manifest verified and Task J scratch pruned. **Refit INCOMPLETE**, pending
-resolution of those baseline failures. The user authorized fixes on this
-branch; candidate8f6cd4b5f exposed24 early client EIOs per K22 run despite its
-old PASS line, so it is not qualified. A shared L0/RAM leadership-pressure
-candidate4c4446e02 passed3/3 strict K22 runs with zero client errors
-(28.8/21.1/20.2s) and3/3 K36 recovery runs (W166/J2). The first full eight-job calibration gate FAILED (509 commands, 1 FAIL,
-14 NOTRUN, 738s): operator-workflow create EIO after follower resync.
-An isolated diagnostic and a full diagnostic pool (0 FAIL, 14 NOTRUN, 731s)
-passed their runnable checks; cause remains unclassified. Failure retention
-and operation/status capture are implemented; 20 diagnostic repetitions were
-clean. A separate deterministic resync/election race is fixed in90345a46e
-with regression-fixture correction93d96f8e6; negative/positive unit controls
-passed; live operator run3 then reproduced CREATE EIO with retained
-statuses/logs: snapshot installed at4, follower stuck there while leader
-reached19 with no KV capacity pressure. Qualification stopped; a trace-enabled
-reproduction series is active. A deterministic old-library probe now
-reproduces a compacted-prefix append permanently fencing a snapshot replica;
-corrective58b87f0ed now passes the negative/positive regression controls,
-normal/early Raft units, follower-bound/recipe,10 operator checks, snapshot
-catch-up (344 successful payloads exact;5 fault-window write errors recorded)
-and3 strict K22/K36 pairs (zero strict K22 errors). The full58 gate FAILED (509 commands,1 FAIL,14 NOTRUN,729s): K36 packed read
-after compaction crash, NET/valid/NOT_FOUND fragment outcomes. A deterministic
-mixed-verdict re-probe regression fails on58 and passes corrective49e5ffd71;
-three strict K36/K22 pairs and three operator checks passed, with zero K22
-errors; all three full gates completed at729/723/725s, each509 commands,zero failures
-and14 NOTRUN markers. Fitted budget model1025s versus unchanged1100s target
-(1650s bound); slots and reasons retained. Separate post-refit gate pending. Failed
-stores/logs are preserved; budgets remain unchanged. The original logless EIO remains preserved as FAIL. These diagnostics are not calibration inputs; no budget fit yet.
-Budgets/slots/target unchanged; original failures remain failures.
+**COMPLETE scoped, branch `agent/devel-task-j`, not merged/pushed.** Corrected
+source49e5ffd71: three full8-job gates729/723/725s,509 commands,zero failures,
+14 NOTRUN each. Refit0f72c1665:85 rows retain slots/reasons, model1025s below
+unchanged1100s target/1650s bound. Separate post-refit gate730s plus30s build,
+zero failures,14 NOTRUN. All medians, modeled critical chain/exclusive tail,
+exact builds and verified closed raw manifests are recorded. Eight inactive
+build trees pruned; failed58/93 fixtures retained. Earlier ORCD/Intel failures
+stay FAIL; host skips remain INCOMPLETE and no repaired-build RDMA PASS is
+claimed. W166 pressure subcase fixed/qualified TCP; stalled-follower fault-
+window write errors and production/RDMA scope remain open.
 
 [Wave 15 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it is its own gate, `make test-w130`, until W165 is fixed. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](decisions.md), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
 
