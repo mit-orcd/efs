@@ -452,3 +452,29 @@ Raft status replies before cleanup, and automatically retains failed
 fixtures. Assertions, deadlines, slots and product code are unchanged.
 The next pool run is diagnostic, not permission to retry into PASS or
 fit budgets while this failure remains unresolved.
+
+Closed text-evidence manifests were re-read and verified after the controllers
+exited (bulk remains separate, temporarily kept for diagnosis):
+
+| Directory beneath intel1 `~/efs-artifacts/taskJ-20261026/` | Files | SHA256 of SHA256SUMS |
+| --- | ---: | --- |
+| `intel1-calibration-4c4446e02` | 19 | `0f7a215213bc2ae06de7b77b7f7c2962fb60a45f19a81d6d1e69015287756452` |
+| `intel1-fix-4c4446e02` | 65 | `7bb0e66b7be48590da18de1bb033d363f85e0e41f6ed17305f87a5392f91e55f` |
+| `intel1-fix-8f6cd4b5f` | 58 | `251faff021638f341e752a790b0a11af53d4045da93dd7e695f4ce1a70e69a91` |
+
+The diagnostic pool is running at source `36db33f98`, in
+`intel1:/home/maik/efs-taskJ3/src`, screen `taskJ-operator-pool-staged`.
+Reproduction: archive that commit into a clean tree, set `FUSE_PREFIX=/usr`,
+`EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 EFS_BUILD_JOBS=8 EFS_OPS_KEEP=1`,
+and run `bash scripts/make_test_summary.sh` with the commit's build identity.
+The source manifest contains2208 files. Output is
+`intel1:/home/maik/efs-artifacts/taskJ-20261026/operator-pool-36db33f98-staged/`;
+retained operator fixtures are beneath the source's `tmp/case-446/`.
+This is diagnosis only, not one of the three calibration inputs.
+
+An initial diagnostic launch raced an unfinished archive transfer and exited127
+before any test ran (`scripts/make_test_summary.sh` absent). Its86-file
+manifest and launcher error are preserved separately in
+`operator-pool-36db33f98/`. The corrected launch waited for staging completion;
+its build completed and the test pool started. This setup error supplies no
+product result. No failed run or fixture has been pruned in this investigation.
