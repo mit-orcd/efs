@@ -354,3 +354,26 @@ Build branch is `agent/devel-task-j`; K36's existing keep hook is enabled
 for these diagnostic runs. The first K22 setup successfully transferred
 group0 to node2 and back to node1; the pressure assertions are still pending.
 No final manifest or PASS is claimed while qualification is running.
+
+### First candidate exposed W166; not qualified
+
+Candidate8f6cd4b5f's first two K22 runs returned rc0 but each printed24
+application EIOs before handoff. Those runs are **not qualification PASS**,
+regardless of the old test's final PASS line. The first K36 run passed in
+56.606s with a metadata-referenced fragment, exact identity in the missing/
+mark logs, rebuild, and full fixture payload readback. It is one diagnostic
+run, not three-run acceptance. Raw logs remain in the candidate directory.
+
+The W166 mechanism is concrete: `host_pub_batch_propose` refuses publication
+when `efs_kv_lsm_l0_hot` is true, while admission and the pump's leadership-
+pressure signal consider only RAM/log capacity. L0 can remain full while
+RAM still has room, leaving a leader refusing publication until flushes
+time out. The next candidate shares the L0/RAM predicate between admission
+and leadership; no Raft timing, client timeout, durability rule or setting
+is changed. The live test now requires zero application errors throughout
+pressure/handoff and observes the first KV/log capacity bound rather than
+insisting that the log must fill after publication is already blocked. The
+independent Raft follower-bound tests retain the log-watermark coverage.
+A new fast extracted-code regression covers L0-full with free RAM, pressure
+clearing, reserved cleanup, and the unchanged log watermark. W166 remains
+OPEN until these stronger gates and calibration finish.

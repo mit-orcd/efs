@@ -358,7 +358,7 @@ void efs_raft_set_max_unapplied(struct efs_raft *r, uint64_t max);
  * full AppendEntries batches. No operator setting. */
 uint64_t efs_raft_unapplied_cap(uint64_t mem_budget);
 /* K22/W23 (D30: leadership requires local capacity). The host reports its
- * state machine's memory pressure (KV at the admission watermark). A replica
+ * state machine's pressure (KV memory watermark or L0 publication cap). A replica
  * under pressure, or with >= 3/4 of max_unapplied committed but not applied,
  * does not campaign; a leader that stays so for four election timeouts steps
  * down so a healthy peer can lead. The uncommitted part of the log tail does

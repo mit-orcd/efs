@@ -5811,6 +5811,15 @@ static int host_tag_refused(uint8_t group, const uint8_t *cmd, uint32_t clen)
  * New work is refused EFS_ERR_BUSY at 3/4 of the KV memory budget or of the
  * unapplied-log cap; transaction resolution/cleanup keeps the last quarter
  * and meets only the hard cap in efs_raft_propose. Under h->mu. */
+static int host_kv_pressure(struct efs_raft_host *h)
+{
+    /* Publication already refuses at the L0 cap. A leader that cannot
+     * publish must yield on that same condition, even while its memtable
+     * still has room; waiting for the log cap strands client flushes. */
+    return h->kv && (efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY ||
+                     efs_kv_lsm_l0_hot(h->kv));
+}
+
 static int host_admit(struct efs_raft_host *h, struct efs_raft *r,
                       const uint8_t *cmd, uint32_t clen)
 {
@@ -5823,7 +5832,7 @@ static int host_admit(struct efs_raft_host *h, struct efs_raft *r,
                         (cmd[0] == EFS_MD_CMD_TXN_BATCH && clen > 1 &&
                          cmd[1] == EFS_MD_CMD_RESOLVE)))
         return EFS_OK;
-    if (efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY)
+    if (host_kv_pressure(h))
         goto busy;
     if (efs_raft_log_progress(r, &lp) == EFS_OK && lp.max_unapplied &&
         lp.unapplied >= lp.max_unapplied / 4u * 3u)
@@ -8530,7 +8539,7 @@ static void *host_pump(void *arg)
             uint64_t now = now_us_();
             if (now - last_tick_us >= HOST_TICK_US) {
                 /* K22/W23: KV at its admission watermark -> no leadership. */
-                int kv_over = h->kv && efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY;
+                int kv_over = host_kv_pressure(h);
                 for (i = 0; i < HOST_NGROUPS; i++) {
                     if (h->g[i].hosted && h->g[i].r) {
                         efs_raft_set_pressure(h->g[i].r, kv_over);

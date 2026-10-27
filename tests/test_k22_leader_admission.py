@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""K22/W23: live leader admission at 3/4 of the unapplied-log bound.
+"""K22/W23: live leader admission and handoff at local capacity pressure.
 
 Loopback 3-member cluster of fault-build daemons (tests/k33_daemons.py).
 The group-0 leader runs with a small KV budget (EFS_FAULT_L0_BYTES +
@@ -8,7 +8,7 @@ parked (EFS_FAULT_COMPACT_STALL + the marker file), so its L0 fills, apply
 defers and its committed-unapplied backlog grows.
 
 Expected, asserted from `efs-mgmt raft-status` and the client log:
-1. At 3/4 of max_unapplied the leader stops admitting new work: its
+1. At KV pressure or 3/4 of max_unapplied the leader stops admitting new work: its
    `admit_busy` counter climbs (documented BUSY); client writes keep
    succeeding through retries within their budgets — no EIO.
 2. If the leader cannot recover, leadership moves to a member with capacity
@@ -207,14 +207,17 @@ try:
     for t in threads:
         t.start()
 
-    # 1. drive until the leader's backlog passes 3/4 and it refuses work
+    # 1. Drive to the first capacity bound. A full L0 already refuses
+    # publication, so it must trigger handoff before the log also fills.
     deadline = time.time() + BOUND_DEADLINE
     refused = False
     max_seen = 0
     polls = 0
     while time.time() < deadline:
         time.sleep(2)
-        st = fields(raw_status(c, g0_leader)).get(0, {})
+        current = raw_status(c, g0_leader)
+        parsed = fields(current)
+        st = parsed.get(0, {})
         try:
             commit, applied = int(st.get('commit') or 0), int(st.get('applied') or 0)
             maxu = int(st.get('max_unapplied') or 0)
@@ -222,18 +225,24 @@ try:
         except ValueError:
             continue
         backlog = commit - applied
-        host_admit = int(fields(raw_status(c, g0_leader)).get('host', {}).get('admit_busy') or 0)
+        host_admit = int(parsed.get('host', {}).get('admit_busy') or 0)
+        kv = {k: int(v) for k, v in re.findall(r'(kv_\w+)=(\d+)', current)}
+        l0_full = kv.get('kv_l0_cap', 0) > 0 and kv.get('kv_l0_bytes', 0) >= kv['kv_l0_cap']
+        ram_full = kv.get('kv_mem_budget', 0) > 0 and \
+            kv.get('kv_mt_bytes', 0) >= kv['kv_mem_budget'] * 3 // 4
+        log_full = maxu > 0 and backlog >= maxu * 3 // 4
         max_seen = max(max_seen, backlog)
         polls += 1
         if polls % 15 == 0:
             print(f'[k22admit] t={int(time.time() - t0)}s backlog={backlog} '
                   f'max_unapplied={maxu} admit_busy(host)={host_admit}', flush=True)
-        if maxu and backlog >= maxu * 3 // 4 and host_admit > 0:
+        if (l0_full or ram_full or log_full) and host_admit > 0:
             refused = True
             break
-    assert refused, f'leader never refused at 3/4 (max backlog seen {max_seen})'
-    print(f'[k22admit] leader refused admission at backlog {max_seen} '
-          f'(>= 3/4 of {maxu}); admit_busy={admit}; {int(time.time() - t0)} s in')
+    assert refused, f'leader never refused at local capacity (max backlog seen {max_seen})'
+    print(f'[k22admit] leader refused admission: L0_full={l0_full} RAM_watermark={ram_full} '
+          f'log_watermark={log_full} backlog={backlog}/{maxu}; '
+          f'admit_busy={host_admit}; {int(time.time() - t0)} s in', flush=True)
 
     # 2. leadership moves if the pressured node cannot recover
     deadline = time.time() + MOVE_DEADLINE
@@ -274,26 +283,14 @@ try:
     assert recovered, 'pressured node did not drain after release'
     print(f'[k22admit] pressured node drained {int(time.time() - t_rel)} s after release')
 
-    # client proof: once leadership has settled on a member with capacity,
-    # a client mounted on a healthy node sees a clean service — no errors
-    # after the move (+ grace for the redirect). Errors before that are
-    # printed as findings: at this compressed budget scale the pressured
-    # leader's apply churn turns some closes into EIO at their 30 s flush
-    # deadline well before the admission point; that artifact is the
-    # environment, and the production-scale window is the multi-host
-    # driver's subject, not this gate's.
+    # Client service must survive the entire pressure window, not just the
+    # period after leadership moves. EIO before handoff is still a failure.
     stop_load.set()
     for t in threads:
         t.join(timeout=60)
-    grace = (t_move - t0) + 5
-    late = [e for e in errors if float(e.rsplit('t=', 1)[1][:-1]) > grace]
-    early = [e for e in errors if float(e.rsplit('t=', 1)[1][:-1]) <= grace]
-    if early:
-        print(f'[k22admit] {len(early)} client errors inside the pressure window '
-              f'(findings): {early[:6]}')
-    assert not late, f'{len(late)} client errors after leadership settled: {late}'
+    assert not errors, f'{len(errors)} client errors during pressure/handoff: {errors}'
     assert wrote[0] > 0, 'no client writes happened'
-    print(f'[k22admit] {wrote[0]} client writes, zero errors after the move')
+    print(f'[k22admit] {wrote[0]} client writes, zero errors throughout pressure and handoff')
     print('[k22admit] PASS')
 except Exception as e:
     print('[k22admit] FAIL:', e)

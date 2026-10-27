@@ -600,6 +600,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_host_outbox.py
 	python3 tests/test_raft_read_probe.py
 	python3 tests/test_raft_read_admission.py
+	python3 tests/test_kv_leader_pressure.py
 	python3 tests/test_posix_timeout_zombie.py
 	python3 tests/test_host_pending_entries.py
 	python3 tests/test_raft_slow_sync.py
