@@ -561,3 +561,35 @@ Their43-file closed text manifest was verified; SHA256 of SHA256SUMS is
 Successful series fixtures were removed by their normal cleanup; raw run
 logs and outcomes remain. The original failed captures/stores still kept
 for open investigations have not been pruned.
+
+### Operator EIO reproduced with retained state — qualification stopped
+
+The third live operator check on `93d96f8e6` **FAILED** in41.834s at
+`create f1, bytes=1`. The controller stopped; snapshot-import, K22, K36 and
+the new full gate were **NOTRUN**. The earlier two operator successes and
+unit successes remain scoped; the candidate is not qualified end to end.
+Exact failed fixture (kept unchanged):
+`intel1:~/efs-artifacts/taskJ-20261026/resync-93d96f8e6/operator-3-tmp/efs-ops-okaubhoy/`.
+It includes `failure.json` with pre-shutdown statuses and all daemon/client
+logs and stores. The election fix does not resolve this second failure.
+
+The follower actually logged **successful** group0 snapshot installation
+at index4, then stayed commit/applied4 while the leader reached19. Node1
+reported405 rejections from that follower with hint0; the follower's leader
+hint was-1, while group2 remained healthy at38. RAM/L0 pressure, admission
+BUSY and apply-deferred counters were0, excluding the earlier L0-pressure
+mechanism for this capture. Its repeated400ms apply waits blocked a local
+PUT proof (67 PUT errors, no disk writes there). At30s the client recorded
+a degraded fragment acknowledgement and REPORT BUSY, then flush EIO; its
+unmount also failed its storage-fence stage. These are failures, not evidence
+of a durable successful write. The mechanism after snapshot installation
+still needs tracing; the original logless full-gate failure's exact cause
+cannot be proven retrospectively merely from this matching symptom.
+
+A new bounded20-run diagnostic on the same pinned source enables existing
+`EFS_RAFT_DBG=1 EFS_RAFT_AE_DBG=1 EFS_OPID_TRACE=1 EFS_OPID_TRACE_VERBOSE=1`
+without changing behavior/deadlines/assertions. It stops at its first error
+and retains that fixture. Screen `taskJ-operator-debug`, controller
+`intel1:~/efs-taskJ4/operator-debug.py`, output
+`~/efs-artifacts/taskJ-20261026/operator-debug-93d96f8e6/`.
+No qualification/calibration controller is still active. Budgets stay unchanged.

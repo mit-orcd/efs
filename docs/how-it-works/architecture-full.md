@@ -1621,8 +1621,11 @@ passed their runnable checks; cause remains unclassified. Failure retention
 and operation/status capture are implemented; 20 diagnostic repetitions were
 clean. A separate deterministic resync/election race is fixed in90345a46e
 with regression-fixture correction93d96f8e6; negative/positive unit controls
-passed, live qualification is running. Its relationship to the original EIO
-is unproven. These diagnostics are not calibration inputs; no budget fit yet.
+passed; live operator run3 then reproduced CREATE EIO with retained
+statuses/logs: snapshot installed at4, follower stuck there while leader
+reached19 with no KV capacity pressure. Qualification stopped; a trace-enabled
+reproduction series is active. Its relationship to the original logless EIO
+remains unproven. These diagnostics are not calibration inputs; no budget fit yet.
 Budgets/slots/target unchanged; original failures remain failures.
 
 [Wave 15 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](../status/k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it is its own gate, `make test-w130`, until W165 is fixed. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](#appendix-4--decisions--taken-and-pending-register-d1d36), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
