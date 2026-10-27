@@ -1715,6 +1715,18 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         ae_reject_note(r, in, last_i, "resync-requested");
         return send_msg(r, &m);
     }
+    /* A queued batch may predate an installed snapshot. In particular,
+     * prev=0 always matches the virtual log origin, but its entries can
+     * already be compacted. Appending that missing prefix would fail the
+     * store's index check and permanently fence an otherwise healthy
+     * replica. Ask the leader to rebase at the committed snapshot boundary;
+     * do not import, append, truncate or apply anything from this request. */
+    if (in->prev_index < r->snap_idx) {
+        m.success = 0;
+        m.match_index = r->snap_idx;
+        ae_reject_note(r, in, last_i, "prev-compacted");
+        return send_msg(r, &m);
+    }
     {
         static int ae_dbg[EFS_RAFT_MAX_PEERS];
         int *ctr = &ae_dbg[in->from >= 0 && in->from < EFS_RAFT_MAX_PEERS ? in->from : 0];
