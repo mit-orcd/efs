@@ -158,6 +158,14 @@ if sys.argv[3] in ("closing","progress","stall","failed","norecord","forever"):
 print("READY",flush=True)
 mode=sys.argv[3]
 if mode=="closing": time.sleep(.5);stop_record("done")
+elif mode=="owned":
+ # Deterministic post-unmount teardown: the ownership proof was valid, but
+ # libfuse's SIGTERM handler has gone before the retire step can signal.
+ while not os.path.exists(sys.argv[4]+".release"): time.sleep(.01)
+ signal.signal(signal.SIGTERM,signal.SIG_DFL)
+ s.close();os.unlink(sys.argv[2]);stop_record("revoking",1)
+ open(sys.argv[4]+".teardown","w").close()
+ time.sleep(.5);stop_record("done")
 elif mode=="progress":
  for step in range(1,12): stop_record("revoking",step);time.sleep(.3)
  stop_record("done")
@@ -170,6 +178,8 @@ elif mode=="forever":
 else: time.sleep(30)
 '''
     for case in ('owned','other','closing','denied','nofuse','progress','stall','failed','norecord','forever'):
+        for suffix in ('.release','.teardown'):
+            Path(record+suffix).unlink(missing_ok=True)
         bound=endpoint+'.other' if case=='other' else endpoint
         process=subprocess.Popen([sys.executable,'-c',code,mount,bound,case,record],stdout=subprocess.PIPE,text=True)
         try:
@@ -183,7 +193,18 @@ else: time.sleep(30)
                 if case=='owned':
                     assert m.controller(mount)==(process.pid,stamp)
                     assert (process.pid,mount,stamp) in m.clients()
-                    assert m.retire(mount,process.pid,stamp)['phase']=='done'
+                    original_controller=m.controller
+                def proven_before_teardown(*args,**kwargs):
+                    proof=original_controller(*args,**kwargs)
+                    assert proof==(process.pid,stamp)
+                    Path(record+'.release').touch()
+                    end=time.monotonic()+3
+                    while not Path(record+'.teardown').exists():
+                        assert time.monotonic()<end,'teardown did not start'
+                        time.sleep(.01)
+                    return proof
+                with patch.object(m,'controller',proven_before_teardown):
+                    assert m.retire(mount,process.pid,stamp)['phase']=='done' 
                     assert process.wait(timeout=2)==0
                 elif case=='closing':
                     assert m.controller(mount) is None
