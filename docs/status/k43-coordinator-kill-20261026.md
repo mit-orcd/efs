@@ -94,7 +94,18 @@ REPORT budget, and with the heal there is nothing left to outwait.
   plateau overruns block K43's closure here or ride with F1/Task-I (the
   dedicated nuc plateau rerun). Numbers and windows are in the run's
   `result.json` under the artifacts path below.
-- Full gate: (filled below when it lands)
+- Full gate (`make test-all`, intel2, EFS_TEST_JOBS=8, tree at the head):
+  **`TOTAL 509 FAIL 0 NOTRUN 14 STATUS INCOMPLETE (779 s)`** — NOTRUNs are
+  host limits (no RDMA device, no valgrind, no cluster-scripts path).
+  OVERBUDGET 1: `test_k43_coordinator_kill.py` measured 54.6 s under the
+  pool against its 25 s row — the honest 1.25x row (70 s) would push the
+  budgeted gate past the D44 1,100 s target's bound, so the row stays at
+  25 s with the notice standing for the in-flight W160 budget refit (Task
+  J owns the re-fit from measured walls this round). A first gate run
+  failed `test_k22_leader_admission.py` on its 'node 1 leads' assumption
+  (fixed in this branch: leadership is stepped onto the pressured node;
+  3/3 after) — that was my task-B test's brittleness, not a product
+  defect.
 
 ## Environment / reproduction
 
@@ -123,4 +134,5 @@ committed; deleted).
 
 ## Results
 
-Gate: (filled below). Soak and neighbor results are in Gates above.
+Gate: `TOTAL 509 FAIL 0 NOTRUN 14 STATUS INCOMPLETE (779 s)` on intel2 at
+the head commit. Soak and neighbor results are in Gates above.
