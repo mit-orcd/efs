@@ -30,6 +30,14 @@ def commands(path):
     return result
 
 
+def command_identity(command):
+    # make stamps inline compiles at enumeration time. Only that exact
+    # informational ISO timestamp may differ; flags, source, build ID,
+    # branch, command order and every other byte still have to match.
+    return re.sub(r"""(-DEFS_BUILD_TIME=)'"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z"'""",
+                  r"\1'<enumeration-build-time>'", command)
+
+
 def read_run(path):
     cmds = commands(path / 'cmds.txt')
     summary = (path / 'summary.txt').read_text().splitlines()
@@ -118,7 +126,8 @@ def main():
     args = parser.parse_args()
     runs = [read_run(p) for p in args.runs]
     cmds = runs[0]['commands']
-    if any(run['commands'] != cmds for run in runs[1:]):
+    if any([command_identity(c) for c in run['commands']] !=
+           [command_identity(c) for c in cmds] for run in runs[1:]):
         raise ValueError('three runs did not enumerate the identical command sequence')
     # A failed/partial test's duration is not a successful workload cost.
     if any(run['fail'] or any(int(row['rc']) for row in run['timings']) for run in runs):
