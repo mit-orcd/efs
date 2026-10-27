@@ -504,3 +504,35 @@ retained. Output is `intel1:~/efs-artifacts/taskJ-20261026/operator-series-36db3
 fixture). Controller: `~/efs-taskJ3/operator-series.py`, screen
 `taskJ-operator-series`. This series only seeks the missing failure trace;
 clean repetitions cannot count as correcting the original failed gate.
+
+### Resync/election race reproduced independently
+
+The operator series finished20/20 without an error; this remains diagnostic,
+not a fix for the original EIO. A separate deterministic in-memory probe
+against the unchanged `36db33f98` library found a concrete resync race:
+queue a valid leadership transfer to a caught-up follower, request resync
+on that follower, then deliver the queued transfer. It becomes leader in
+the next term while `resync_pending=1`. Probe output was
+`resync=1 role=2 term_before=1 term_after=2 leader=1 target=1` (exit1).
+Raw source/build/output is at
+`intel1:~/efs-artifacts/taskJ-20261026/resync-transfer-probe/`.
+This is a demonstrated defect; its connection to the earlier create EIO
+is **not established** and no such causal claim is made.
+
+Candidate `90345a46e` blocks both timer/pre-vote and transfer elections
+while resync is pending, cancels an existing candidacy/pre-vote and read
+proof when resync is requested, and refuses mutation during an owned
+receive-persistence cohort. It keeps voting/replication and all durability
+rules, formats, deadlines and knobs unchanged. The regression covers delayed
+transfer, election timer and delayed vote grant; the snapshot test checks
+that verified installation restores election eligibility.
+
+The first candidate unit run exposed a regression-fixture mistake: the
+post-install election check tried sending to an absent replica2 and got
+INVAL. The same check failed on the old library too. The fixture now drops
+that absent peer's vote traffic explicitly, preserving the OK/candidate/term
+assertions; the first candidate unit FAIL remains retained at
+`intel1:~/efs-artifacts/taskJ-20261026/resync-90345a46e/`. The old-library
+negative control also demonstrated the actual pending-resync failures.
+A corrected pinned candidate and live resync/full gates are still owed.
+Neither the original EIO nor W160 is closed; no budgets have been fitted.

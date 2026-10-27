@@ -2775,6 +2775,7 @@ static void test_resync_replaces_diverged_follower(void)
     CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && efs_raft_commit(n.r[1]) == 6 &&
           app.last == 'F', "follower replicates normally after the resync");
     efs_raft_allow_campaign(n.r[1], 1);
+    n.drop[2] = 1; /* This fixture instantiates only replica 1. */
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_TIMEOUT_NOW; m.from = 0; m.to = 1; m.term = 2;
     m.prev_index = 0x7; m.last_log_index = 6; m.last_log_term = 2;
