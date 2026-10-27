@@ -26,8 +26,10 @@ class Cluster:
         return dict(self.leaders)
 
 
-for mode in ('catchup', 'unknown', 'stuck'):
+for mode, target, bound in (('catchup', 1, 30), ('catchup', 2, 20),
+                            ('unknown', 1, 30), ('stuck', 1, 30), ('stuck', 2, 20)):
     c, calls, now = Cluster(), [], [0.0]
+    c.leaders = {0: 3 - target, 2: 3 - target}
 
     def mgmt(env, *args):
         calls.append(args)
@@ -44,16 +46,16 @@ for mode in ('catchup', 'unknown', 'stuck'):
     with patch.object(k, 'mgmt', mgmt), patch.object(k, 'SLOW', 1), \
          patch.object(k.time, 'monotonic', lambda: now[0]), patch.object(k.time, 'sleep', sleep):
         if mode == 'catchup':
-            assert k.place_leaders(c, 1) == {0: 1, 2: 1}
+            assert k.place_leaders(c, target, timeout=bound) == {0: target, 2: target}
             assert len(calls) == 3 and 0 < now[0] < 1
         else:
             try:
-                k.place_leaders(c, 1)
+                k.place_leaders(c, target, timeout=bound)
             except AssertionError as e:
                 if mode == 'unknown':
                     assert len(calls) == 1 and 'storage error' in str(e) and now[0] == 0
                 else:
-                    assert 30 <= now[0] <= 30.2 and 'stayed BUSY' in str(e)
+                    assert bound <= now[0] <= bound + .2 and 'stayed BUSY' in str(e)
             else:
                 raise AssertionError(f'{mode}: setup falsely succeeded')
 print('K33 pressure setup: retry documented catch-up BUSY only, 30 s bound, hard errors fail PASS')

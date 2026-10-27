@@ -257,14 +257,14 @@ class Cluster:
         raise AssertionError(f'members never settled at {count}: {last}')
 
 
-def place_leaders(c, target, groups=(0, 2)):
+def place_leaders(c, target, groups=(0, 2), timeout=30):
     """Deterministic fault setup via the existing operator transfer, not an
     assumption about which member wins the first election. Wait for both
     formed groups before arming a pressure/authority fault."""
     by_id = {c.node_id(i): i for i in c.ports}
     wanted = c.node_id(target)
     for group in groups:
-        end = time.monotonic() + 30 * SLOW
+        end = time.monotonic() + timeout * SLOW
         while True:
             placement = c.leader_placement(target)
             if placement[group] == wanted:

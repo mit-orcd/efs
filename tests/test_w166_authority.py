@@ -115,15 +115,11 @@ try:
             time.sleep(.2)
     if a.case in ('both', 'put'):
         # The storage node remains live. This is never a degraded write.
-        for group in (0, 2):
-            leader = c.leader_placement(2)[group]
-            if leader == 1:
-                rc, out = mgmt(env, 'raft-step-down', c.ep(1), str(group), '2')
-                assert rc == 0, out
-                end = time.monotonic() + 20
-                while c.leader_placement(2)[group] == 1:
-                    assert time.monotonic() < end, 'leadership did not move'
-                    time.sleep(.1)
+        # A compressed-L0 follower can still be applying the last REPORT
+        # when the first transfer request arrives. Retry only pre-fault
+        # catch-up BUSY, sharing the existing 20 s setup/transfer bound.
+        place_leaders(c, 2, timeout=20)
+        assert c.leader_placement(2) == {0: 2, 2: 2}
         lag.touch()
         write_case('put', m.path / 'put')
         lag.unlink()
