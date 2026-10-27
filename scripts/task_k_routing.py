@@ -26,6 +26,7 @@ p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--host', default='127.0.0.1')
 p.add_argument('--port-min', type=int)
 p.add_argument('--out', type=Path)
+p.add_argument('--one-loss-transition', action='store_true')
 a = p.parse_args()
 if a.port_min:
     assert 19000 <= a.port_min <= 19990
@@ -70,10 +71,12 @@ try:
     # old group still needs nodes 1+3 while node 2 is down during the joint
     # transition; the new group needs nodes 3+4. Stopping the retired
     # replica's Raft receive/tick here would strand a valid one-loss quorum.
-    c.stop(2)
+    if a.one_loss_transition:
+        c.stop(2)
     c.start(4, join=1)
-    c.wait_voters([3, 4], lambda i, v: v[2] == (1, 0xe))
-    c.start(2, join=1)
+    if a.one_loss_transition:
+        c.wait_voters([3, 4], lambda i, v: v[2] == (1, 0xe))
+        c.start(2, join=1)
     c.wait_voters([2, 3, 4], lambda i, v: v[2] == (1, 0xe))
     c.wait_log(1, r'group 2 replica retired')
     rc, status = command('raft-status', 'raft-status', c.ep(1))

@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # Wait for our earlier attempt only; never stop an unrelated process or service.
-# Usage: bash scripts/task_k_after_attempt.sh COMMIT ARTIFACTS_PARENT IPV4
+# Usage: bash scripts/task_k_after_attempt.sh COMMIT ARTIFACTS_PARENT IPV4 [PREDECESSOR_COMMIT]
 set -u
 commit=${1:?}; parent=${2:?}; address=${3:?}
-old=/tmp/efs-taskK-20261026/candidate
-oldart="$parent/qualification-d643adcd9"
+previous=${4:-d643adcd9}
+if [ "$previous" == d643adcd9 ]; then
+ old=/tmp/efs-taskK-20261026/candidate
+ receipt="$parent/qualification-$previous/controller-exit"
+else
+ [[ "$previous" =~ ^[0-9a-f]{9,40}$ ]] || exit 2
+ old="/tmp/efs-taskK-20261026-$previous/candidate"
+ receipt="$parent/dispatch-$previous-exit"
+fi
 end=$((SECONDS+14400))
-while [ ! -f "$oldart/controller-exit" ]; do
+while [ ! -f "$receipt" ]; do
  if [ "$SECONDS" -ge "$end" ]; then echo 'BLOCKED: earlier attempt still owns host'; exit 77; fi
  sleep 300
 done
@@ -27,10 +34,10 @@ PY
 base=/tmp/efs-taskK-20261026/base
 cp scripts/task_k_routing.py "$base/scripts/task_k_routing.py" || exit 2
 TMPDIR="$base/tmp" EFS_TRANSPORT=tcp python3 -u "$base/scripts/task_k_routing.py" \
- --port-min 19201 --out "$parent/base/final-negative" > "$parent/base/final-negative.log" 2>&1
-negative_rc=$?; echo "$negative_rc" > "$parent/base/final-negative-exit"
-mv "$base/scripts/task_k_routing.py" "$parent/base/final-negative-driver.py" || exit 2
-if [ "$negative_rc" -eq 0 ] || ! grep -q 'K44 retired-seed raft-mkfs:' "$parent/base/final-negative.log"; then
+ --port-min 19201 --out "$parent/base/negative-$commit" > "$parent/base/negative-$commit.log" 2>&1
+negative_rc=$?; echo "$negative_rc" > "$parent/base/negative-$commit-exit"
+mv "$base/scripts/task_k_routing.py" "$parent/base/negative-$commit-driver.py" || exit 2
+if [ "$negative_rc" -eq 0 ] || ! grep -q 'K44 retired-seed raft-mkfs: raft-mkfs rc=-13' "$parent/base/negative-$commit.log"; then
  echo 'BLOCKED: final negative control did not fail with K44; retain evidence and investigate'
  exit 1
 fi
@@ -38,7 +45,8 @@ bash scripts/task_k_qualify.sh "$commit" "$parent/qualification-$commit" "$addre
 rc=$?
 # A failed candidate gate requires the untouched base on the same host/command.
 summary="$parent/qualification-$commit/gate/summary.txt"
-if [ -f "$summary" ] && head -n1 "$summary" | grep -Eq 'FAIL [1-9][0-9]*'; then
+if [ -f "$summary" ] && head -n1 "$summary" | grep -Eq 'FAIL [1-9][0-9]*' &&
+   [ ! -f "$parent/base/gate/summary.txt" ]; then
  base=/tmp/efs-taskK-20261026/base
  # This one added driver was the recorded negative control; move it out so
  # the base gate enumerates exactly the archived base tests.

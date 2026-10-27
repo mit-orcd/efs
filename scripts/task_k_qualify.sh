@@ -8,7 +8,7 @@ commit=${1:?source commit}; art=${2:?new artifacts directory}; address=${3:?RDMA
 mkdir "$art" || exit 2
 exec >"$art/controller.log" 2>&1
 trap 'rc=$?; echo "$rc" > "$art/controller-exit"' EXIT
-mkdir "$art/tcp" "$art/rdma" "$art/focused" "$art/gate" "$PWD/tmp"
+mkdir "$art/tcp" "$art/rdma" "$art/joint" "$art/focused" "$art/gate" "$PWD/tmp"
 export TMPDIR="$PWD/tmp" EFS_GIT_ID="$commit" EFS_GIT_BRANCH=agent/devel-task-k EFS_GIT_DESCRIBE="$commit"
 export EFS_FUSE_PREFIX=/data1/efs/deps/libfuse
 export PKG_CONFIG_PATH="$EFS_FUSE_PREFIX/lib64/pkgconfig" LD_LIBRARY_PATH="$EFS_FUSE_PREFIX/lib64"
@@ -29,6 +29,7 @@ run() {
 }
 run tcp env EFS_TRANSPORT=tcp python3 -u scripts/task_k_routing.py --port-min 19001 --out "$art/tcp"
 run rdma env EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 python3 -u scripts/task_k_routing.py --host "$address" --port-min 19101 --out "$art/rdma"
+run joint env EFS_TRANSPORT=tcp python3 -u scripts/task_k_routing.py --one-loss-transition --port-min 19301 --out "$art/joint"
 export EFS_TRANSPORT=tcp EFS_K33_KEEP=1
 for test in growth seed_loss interrupt payload client_view autoid bookkeeping; do
  run "focused/k33-$test" python3 -u "tests/test_k33_$test.py"
