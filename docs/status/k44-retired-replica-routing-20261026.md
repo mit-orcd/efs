@@ -1,6 +1,6 @@
 # K44 / W167 — routing at a retired replica (October 26)
 
-`agent/devel-task-k`, source `ae0262306`: final gate NOTRUN/queued; base `4066f74df` reproduces K44 (expected negative-control FAIL). Evidence: `docs/status/k44-retired-replica-routing-20261026.md`. Final TCP/RDMA and base gate comparison pending; orcd-mini NOTRUN, requires its own stop/format/deploy approval. Product defects: K44 retired-seed MKFS BUSY; retired resync accepted; non-group-0 MKFS readback cannot finish. Candidate fixes are not yet qualified.
+`agent/devel-task-k`, source `afc6d1466`: final gate NOTRUN/queued; base `4066f74df` reproduces K44 (expected negative-control FAIL). Evidence: `docs/status/k44-retired-replica-routing-20261026.md`. Final TCP/RDMA and base gate comparison pending; orcd-mini NOTRUN, requires its own stop/format/deploy approval. Product defects: K44 retired-seed MKFS BUSY; retired resync accepted; non-group-0 MKFS readback cannot finish. Candidate fixes are not yet qualified.
 
 ## Purpose and verdict
 
@@ -55,15 +55,17 @@ No deployment-tool repository was edited.
 ## Sources, attempts and evidence
 
 Base: `4066f74df5b997d70f263ae8dc1063b1a6049b92`.
-Candidate source: `ae0262306` (product changes through `ffb645805`; the last
-commit adds only the serialized qualification controller).
+Candidate source: `afc6d1466` (product changes through `9288e71dd`; later commits update test fixtures
+and the serialized qualification controller).
 
 | Attempt | Result and scope |
 |---|---|
 | Untouched base, TCP, original focused sweep | **FAIL as expected:** retired-seed MKFS BUSY; other named seed operations and exact FUSE payload work. Retired `raft-resync` incorrectly returns success. |
 | `a58c679b9`, focused sweep, TCP and RDMA | PASS for the original focused assertions; provisional, superseded source. |
-| `d643adcd9`, expanded sweep, TCP and RDMA | Both exited 0. K33 growth passed in 92.3 s. Full gate still running at this checkpoint; it is not final-source qualification. |
-| Corrected `ae0262306` | Queued after the earlier attempt, with no build/test overlap. Final results pending. |
+| `d643adcd9`, expanded sweep, TCP and RDMA | Both exited 0. K33 growth passed in 92.3 s. Full gate: `TOTAL 508 FAIL 10 NOTRUN 14 STATUS FAIL (614s) BUILD 0s`; it is not final-source qualification. |
+| `ae0262306` dispatch | Canceled before any build/test after the provisional gate exposed missing unit mocks. |
+| `7e4ddcb5e` | Expanded TCP/RDMA sweeps and all seven focused K33 acceptance tests passed so far. Gate/base comparison pending. Its one-loss base control failed with NET rather than BUSY and does not qualify the precise original signature. |
+| Corrected `afc6d1466` | Queued after the preceding candidate **and** base comparison, with no build/test overlap. The default base control must fail specifically with BUSY; a separate one-loss transition fixture checks consensus participation. Final results pending. |
 
 Two harness defects in the provisional controller are retained, not hidden:
 `tests/test_k33_acceptance.py` does not exist; acceptance was split into
@@ -74,8 +76,12 @@ controller uses those actual acceptance tests; the sweep is now
 the already-wired K33 growth test, with its existing budget; no new long-test
 command or larger gate target was added.
 
-The provisional gate has reported `test_stop_progress.py` and
-`test_posix_expiry.py` stop failures. They remain unclassified until the
+The provisional gate reported `test_stop_progress.py` and
+`test_posix_expiry.py` stop failures, compile failures in extracted-helper
+mocks, the stale resync diagnostic assertion, the unwired driver inventory
+failure and four LeakSanitizer fatal instrumentation errors. The compile,
+diagnostic and inventory defects have candidate corrections with added
+behavioral assertions; they are not dismissed as environment failures. They remain unclassified until the
 corrected candidate and, if required, untouched base run under the same
 host/command. These are not attributed to the routing fix or dismissed as
 host conditions without that comparison.
@@ -88,25 +94,33 @@ space, compiler, libfuse and verbs information in `environment.txt`.
 Build concurrency is 8. Fragment I/O is O_DIRECT only. TCP uses loopback;
 RDMA uses `mlx5_0` and `172.16.99.0`, without TCP fallback. Each focused
 fixture has four private 1 GiB stores and a seed-only FUSE mount; endpoints
-are selected from 19xxx. The added-member transition is also checked while
-node 2 is down: old quorum {1,3}, new quorum {3,4}; node 2 is restarted
-before the management sweep.
+are selected from 19xxx. A separate `--one-loss-transition` fixture checks addition while node 2
+is down: old quorum {1,3}, new quorum {3,4}; node 2 is restarted before its
+management sweep. The default reproduction keeps all four members up so
+an unrelated restart transport failure cannot count as the BUSY signature.
 
-Export the named source with `git archive`, then on node9900:
-
-```sh
-cd /tmp/efs-taskK-20261026-final/candidate
-bash scripts/task_k_after_attempt.sh ae0262306 \
-  "$HOME/efs-artifacts/taskK-20261026" 172.16.99.0
-```
-
-That controller waits for the previous task-owned attempt and refuses any
-leftover private daemon or mount before calling:
+Export the named source with `git archive` into a fresh private tree, then
+on node9900 (this direct command needs no prior run or private capture):
 
 ```sh
-bash scripts/task_k_qualify.sh ae0262306 \
-  "$HOME/efs-artifacts/taskK-20261026/qualification-ae0262306" 172.16.99.0
+cd /tmp/efs-taskK-repro/candidate
+bash scripts/task_k_qualify.sh afc6d1466 \
+  "$HOME/efs-artifacts/taskK-repro" 172.16.99.0
 ```
+
+For the base negative control, archive `4066f74df` into another fresh tree,
+build with the same libfuse and 8 jobs, copy only the committed
+`scripts/task_k_routing.py` driver into its `scripts/`, and run it with
+`EFS_TRANSPORT=tcp`, a private TMPDIR, `--port-min 19201` and a fresh `--out`
+directory. Expect the final assertion to name `raft-mkfs rc=-13`; a different
+error is retained as a different failure. The base product source remains
+unchanged. Move the added measurement driver out before a base gate.
+
+The actual detached run uses `scripts/task_k_after_attempt.sh afc6d1466
+ARTIFACTS_PARENT 172.16.99.0 7e4ddcb5e`: this waits for the preceding run's
+controller and its base comparison, checks both trees for leftover processes
+and mounts, and then invokes the same direct qualification command. Its
+per-run negative-control outputs have unique source-tagged paths.
 
 The committed driver runs the focused sweep once over each transport,
 K33 growth/seed-loss/interrupt/payload/client-view/autoid/bookkeeping, the
@@ -132,8 +146,8 @@ been exhaustively checked. The final command/result table is pending.
 
 Raw evidence stays on node9900 at
 `/home/erbmi1/efs-artifacts/taskK-20261026/`, including `base/`, the provisional
-`fixed/` sweeps, `qualification-d643adcd9/`, the dispatch log and final
-`qualification-ae0262306/`. No raw capture or store is in Git or copied to
+`fixed/` sweeps, `qualification-d643adcd9/`, the source-tagged dispatch logs and
+`qualification-7e4ddcb5e/` and final `qualification-afc6d1466/`. No raw capture or store is in Git or copied to
 the Mac. Build identities and binary hashes are recorded by the controller.
 
 **Open investigation:** bulk private stores/source trees are temporarily

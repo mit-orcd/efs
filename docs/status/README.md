@@ -19,7 +19,7 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [Task K: retired-replica routing](k44-retired-replica-routing-20261026.md):
-**IN PROGRESS**, branch `agent/devel-task-k`, final source `ae0262306`.
+**IN PROGRESS**, branch `agent/devel-task-k`, final source `afc6d1466`.
 Untouched base reproduces K44; provisional TCP/RDMA sweeps pass. Final
 qualification is queued after the retained earlier gate; K44/W167 remain
 open. orcd-mini NOTRUN pending its own lifecycle approval.
