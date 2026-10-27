@@ -57,7 +57,12 @@ for id in 1 2 3; do
     pids+=("$!")
     ready=0
     for attempt in $(seq 1 60); do
-        if grep -q 'listening on' "$run/n$id.log"; then ready=1; break; fi
+        # A second member is admitted but cannot finish its listener until
+        # the third joins. Wait for admission here, not completed formation.
+        if grep -q 'listening on' "$run/n$id.log" ||
+           { [ "$id" = 2 ] && grep -q 'forming (2 joined; formation needs 3)' "$run/n$id.log"; }; then
+            ready=1; break
+        fi
         kill -0 "${pids[-1]}" 2>/dev/null || break; sleep .5
     done
     [ "$ready" = 1 ] || { cat "$run/n$id.log"; exit 1; }
