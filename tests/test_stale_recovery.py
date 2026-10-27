@@ -170,7 +170,16 @@ int main(void) {
     owner.gen=10;owner.nodes[0]=2;reset();
     assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!owner.stale_retry);
     owner.nodes[0]=0;reset();sent[0].base_gen=EFS_CHUNK_BASE_UNCOND;
+    /* An explicit full overwrite is not conditional on row absence or its
+     * base/delta set. It remains the same owned image, never an ACK. */
+    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!replays&&!commits&&owner.stale_retry);
+    reset();map.generation=8;map.ndelta=1;map.delta_seq=4;
+    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&!replays&&!commits);
+    reset();authority.authority_epoch=4;owner.stale_retry=0;
     assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!owner.stale_retry);
+    authority.authority_epoch=3;reset();sent[0].delta_len=16;owner.delta_len=16;
+    assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!owner.stale_retry);
+    sent[0].delta_len=owner.delta_len=0;
     sent[0].base_gen=7;reset();pull_error=EFS_ERR_BUSY;attr_reads=0;
     assert(stale_repull_replay(&ds,1,sent,sent_seq,1)==EFS_ERR_BUSY&&!owner.stale_retry&&!attr_reads&&!replays);
     /* One authority read covers this inode's chunks in this one round. */

@@ -1544,12 +1544,16 @@ static int stale_retry_owned(const struct efs_chunk_rec *r, uint64_t seq,
         !(r->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
         (r->publish_epoch && !(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH)))
         return 0;
-    /* No inference from our staging placeholder on an absent server row. */
-    if (r->base_gen == EFS_CHUNK_BASE_UNCOND ? !absent :
-        r->base_gen != (absent ? 0 : ce->generation))
-        return 0;
-    if (r->delta_base_n != (absent ? 0 : ce->ndelta) ||
-        r->delta_base_seq != (absent ? 0 : ce->delta_seq))
+    /* A full UNCOND image has no mapping CAS predicate. Its exact owned
+     * body is reusable over an existing row too: server publication still
+     * validates FileID/epoch/ticket and orders this overwrite. Requiring
+     * absence here replayed every unchanged overwrite after admission BUSY.
+     * Conditional images/spans still need the fresh exact mapping proof;
+     * no inference from a staging placeholder on an absent server row. */
+    if (r->base_gen != EFS_CHUNK_BASE_UNCOND &&
+        (r->base_gen != (absent ? 0 : ce->generation) ||
+         r->delta_base_n != (absent ? 0 : ce->ndelta) ||
+         r->delta_base_seq != (absent ? 0 : ce->delta_seq)))
         return 0;
     /* One fresh FileID/epoch proof per inode in this repull round, not one
      * network round-trip per chunk of a large atomic write. No global cache. */
