@@ -5946,9 +5946,14 @@ int efs_meta_apply_publication_stage(struct efs_kv *kv, const struct efs_txid *t
     rc = efs_kv_get(kv, sk, sizeof(sk), have, &hl);
     if (rc == EFS_OK) {
         rc = pub_record_same(have, hl, t, pay, plen);
-        if (rc == EFS_ERR_BUSY &&
-            pub_stage_reap_if_aborted(kv, sk, sizeof(sk), have, hl) == EFS_OK)
+        if (rc == EFS_ERR_BUSY) {
+            int rrc = pub_stage_reap_if_aborted(kv, sk, sizeof(sk), have, hl);
+            if (rrc == EFS_ERR_BUSY)
+                return rc;   /* undecided or commit-decided: BUSY stands */
+            if (rrc != EFS_OK)
+                return rrc;  /* a corrupt stage row is not a retry loop */
             rc = efs_kv_get(kv, sk, sizeof(sk), have, &hl); /* re-read: reaped */
+        }
         if (rc == EFS_OK || rc != EFS_ERR_NOT_FOUND)
             return rc;
     }
