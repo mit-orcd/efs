@@ -28,6 +28,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--seconds', type=int, default=300)
+    parser.add_argument('--quota', default='1G', help='explicit per-member fixture quota')
     parser.add_argument('--trace-client', action='store_true')
     parser.add_argument('--source-revision', default='unspecified',
                         help='tested product revision, recorded without inferring a verdict')
@@ -56,7 +57,7 @@ def main():
     marker = work / 'compactor-parked'
     result = dict(method='K22 leader-only compressed-budget pressure', trace_client=args.trace_client,
                   driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                  l0_bytes=2 << 20, memtable_bytes=1 << 20, seconds=args.seconds,
+                  l0_bytes=2 << 20, memtable_bytes=1 << 20, seconds=args.seconds, quota=args.quota,
                   source_revision=args.source_revision, outcome='HARNESS_FAILURE')
 
     def record(**row):
@@ -143,11 +144,11 @@ def main():
                 log.write(f'{time.time():.6f} {line}')
 
     try:
-        c.start(1, extra_env={'EFS_FAULT_L0_BYTES': str(2 << 20),
+        c.start(1, quota=args.quota, extra_env={'EFS_FAULT_L0_BYTES': str(2 << 20),
                             'EFS_FAULT_MEMTABLE_BYTES': str(1 << 20),
                             'EFS_FAULT_COMPACT_STALL': '1', 'EFS_FAULT_COMPACT_FILE': str(marker)})
         for i in (2, 3):
-            c.start(i, join=1)
+            c.start(i, join=1, quota=args.quota)
         for i in (1, 2, 3):
             c.wait_log(i, r'raft-host: formed: 3 members', timeout=120)
         c.wait_voters([1, 2, 3], lambda i, v: v == {0: (1, 7), 2: (1, 7)})
@@ -195,7 +196,7 @@ def main():
         status('after-pressure')
         for name, expected in confirmed:
             assert name.read_bytes() == expected, ('successful close readback mismatch', name)
-        result.update(outcome='REPRODUCED' if any(r['stage'] == 'close' for r in failures) else 'NOT_REPRODUCED',
+        result.update(outcome='REPRODUCED' if failures else 'NOT_REPRODUCED',
                       confirmed_close_files=len(confirmed), failures=failures, verified_files=len(confirmed))
     except Exception as error:
         result['harness_error'] = repr(error)
