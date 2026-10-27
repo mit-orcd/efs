@@ -1903,6 +1903,15 @@ static const struct report_streak *report_rec_stuck(const struct report_streak *
 
     if (r->base_gen == EFS_CHUNK_BASE_UNCOND || r->base_gen == committed)
         return NULL;
+    /* The export table also carries our unpublished PUT placeholder. For
+     * a full image, observing its own generation there is not proof that
+     * the server's CAS base moved: an absent row still expects base zero.
+     * The STALE classifier alone may ACK a fresh authoritative match. Do
+     * not convert a unit bystander's unchanged owned retry into permanent
+     * writeback failure from this ambiguous table observation. The normal
+     * REPORT attempt/deadline and failed-rebase bounds still apply. */
+    if (!r->delta_len && r->chunk_generation == committed)
+        return NULL;
     was = report_streak_find(st, n, r->ino, r->chunk_index);
     return was && was->stale >= 2 && report_streak_same(was, r) ? was : NULL;
 }
