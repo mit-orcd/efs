@@ -27,10 +27,10 @@ run() {
  local rc=$?; echo "$rc" > "$art/$name-exit"
  [ "$rc" -eq 0 ] || failed=1
 }
-run tcp env EFS_TRANSPORT=tcp python3 -u tests/test_k44_retired_routing.py --port-min 19001 --out "$art/tcp"
-run rdma env EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 python3 -u tests/test_k44_retired_routing.py --host "$address" --port-min 19101 --out "$art/rdma"
-export EFS_TRANSPORT=tcp
-for test in growth acceptance client_view autoid bookkeeping; do
+run tcp env EFS_TRANSPORT=tcp python3 -u scripts/task_k_routing.py --port-min 19001 --out "$art/tcp"
+run rdma env EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 python3 -u scripts/task_k_routing.py --host "$address" --port-min 19101 --out "$art/rdma"
+export EFS_TRANSPORT=tcp EFS_K33_KEEP=1
+for test in growth seed_loss interrupt payload client_view autoid bookkeeping; do
  run "focused/k33-$test" python3 -u "tests/test_k33_$test.py"
 done
 run fast make test

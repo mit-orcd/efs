@@ -158,6 +158,8 @@ try:
     # Its SALT must use the live leader's verdict, never that frozen cursor.
     rc, out = mgmt('raft-mkfs', c.ep(1))
     assert rc == 0, 'K44 retired seed: ' + out
+    rc, out = mgmt('raft-mkfs', c.ep(4))
+    assert rc == 0, 'K44 g2-only member: ' + out
     rc, out = mgmt('commands-policy', c.ep(1), 'get')
     assert rc == 0, out
     version = re.search(r'version=(\d+)', out).group(1)

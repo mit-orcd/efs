@@ -4247,8 +4247,7 @@ static struct efs_raft *group_raft(struct efs_raft_host *h, uint8_t group)
 {
     int i;
     for (i = 0; i < HOST_NGROUPS; i++) {
-        if (h->g[i].hosted && h->g[i].group == group &&
-            !__atomic_load_n(&h->g[i].retired, __ATOMIC_ACQUIRE))
+        if (h->g[i].hosted && h->g[i].group == group)
             return h->g[i].r;
     }
     return NULL;
@@ -5927,7 +5926,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
         wprof_add(WP_MU, t - wpt);
         wpt = t;
     }
-    r = group_raft(h, group);
+    r = host_group_retired(h, group) ? NULL : group_raft(h, group);
     if (r) {
         uint32_t voters = efs_raft_voters(r);
         int solo = voters && (voters & (voters - 1)) == 0;
@@ -8554,7 +8553,7 @@ static void *host_pump(void *arg)
                 /* K22/W23: KV at its admission watermark -> no leadership. */
                 int kv_over = h->kv && efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY;
                 for (i = 0; i < HOST_NGROUPS; i++) {
-                    if (h->g[i].hosted && h->g[i].r && !h->g[i].retired) {
+                    if (h->g[i].hosted && h->g[i].r) {
                         efs_raft_set_pressure(h->g[i].r, kv_over);
                         (void)efs_raft_tick(h->g[i].r);
                     }
@@ -8930,7 +8929,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
     host_cfg_fan_note(h, group, voters);
     pthread_mutex_lock(&h->mu);
     s = group_slot(h, group);
-    r = group_raft(h, group);
+    r = host_group_retired(h, group) ? NULL : group_raft(h, group);
     if (r) {
         lid = efs_raft_leader(r);
         if (hint)
@@ -13994,6 +13993,26 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         return;
     }
     out->salt = h->salt;
+    if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE) &&
+        !host_hosts(h, EFS_RAFT_GROUP_SHARD)) {
+        /* The full formation operation reads back group 0's committed
+         * membership before SALT. A storage-only/g2-only member has no
+         * such local image: route the operation, not just its MKFS entry.
+         * Group 0 keeps its three original voters in alpha, so this
+         * top-level forward cannot recurse through another non-host. */
+        rc = EFS_ERR_NOT_PRIMARY;
+        const uint8_t empty = 0;
+        uint32_t voters = group_voters(EFS_RAFT_GROUP_SHARD,
+                                       __atomic_load_n(&h->n, __ATOMIC_ACQUIRE));
+        for (int rid = 0; rid < EFS_RAFT_MAX_PEERS; rid++) {
+            if (rid == h->raft_id || !hosts_group(rid, voters)) continue;
+            rc = host_inode_rpc_peer(h, rid, EFS_MSG_RAFT_MKFS, &empty, 0,
+                                     EFS_MSG_RAFT_MKFS_REPLY, out, sizeof(*out));
+            if (rc == EFS_OK && out->rc != EFS_ERR_NOT_PRIMARY) return;
+        }
+        if (rc != EFS_OK) out->rc = EFS_ERR_NET;
+        return;
+    }
     if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
         pthread_mutex_lock(&h->mu);
         want = h->members;
