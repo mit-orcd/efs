@@ -1081,6 +1081,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_d4_plateau.py
 	python3 tests/test_pack_dup_candidate.py
 	python3 tests/test_pub_unit_forward_abort.py
+	python3 tests/test_k43_coordinator_kill.py
 	python3 tests/test_conn_idle_reap.py
 	python3 tests/test_report_stepdown.py
 	python3 tests/test_w159_apply_wait.py

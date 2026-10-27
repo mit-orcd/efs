@@ -43,6 +43,7 @@ python3 tests/test_d4_progress.py	260	2	bounded-progress gate (76-125 s; packer 
 python3 tests/test_d4_plateau.py	180	2	
 python3 tests/test_pack_dup_candidate.py	105	1	up to 60 s waiting for a pack-epoch boundary (41-60 s measured)
 python3 tests/test_pub_unit_forward_abort.py	60	1	
+python3 tests/test_k43_coordinator_kill.py	20	2	
 python3 tests/test_conn_idle_reap.py	80	1	
 python3 tests/test_report_stepdown.py	440	6	asserts a 3 s bound on every append and fsync through three metadata step-downs (1,600 appends, 200 fsyncs; 265-350 s on the nuc): six slots, so it starts first and only D4 and then timer-bound tests run beside it; an fsync-heavy neighbour breaks the bound
 python3 tests/test_query_first_catalog.py	35	1	
