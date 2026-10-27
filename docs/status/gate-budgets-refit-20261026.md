@@ -826,3 +826,24 @@ Diagnostic log copies are under the stable artifact root, directory
 
 The failed runtime stores are deliberately outside those text manifests and
 remain retained, not pruned. Earlier original/operator failures stay FAIL.
+
+### Mixed-result correction: standalone qualification complete
+
+Exact49e5ffd71 binary built `2026-10-27T05:47:34Z on intel1`, branch
+`agent/devel-task-j`. Build29.602s, production GET-integrity0.262s,
+normal/early full Raft0.032/0.028s and recipe0.939s all passed. Results:
+
+| Repetition | K36 wall s | Strict K22 wall s | Client writes / errors | Operator wall s |
+| --- | ---: | ---: | ---: | ---: |
+|1|80.583|21.813|505 /0|12.240|
+|2|84.928|20.909|538 /0|12.643|
+|3|53.102|21.461|400 /0|11.614|
+
+All three K36 runs passed compaction-crash readback and the original later
+certificate, unhosted-group and referenced-segment rebuild checks; these
+standalones do not relabel the failed58 pool. All2208 archived source files
+were verified unchanged before the controller started full calibration
+run1. Authoritative stage is now
+`intel1:~/efs-artifacts/taskJ-20261026/intel1-calibration-49e5ffd71/stage`.
+It will stop at any failed full gate. Three complete successful gates,
+refit and the separate post-refit gate are still owed; budgets unchanged.

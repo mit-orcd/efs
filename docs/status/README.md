@@ -52,7 +52,8 @@ catch-up (344 successful payloads exact;5 fault-window write errors recorded)
 and3 strict K22/K36 pairs (zero strict K22 errors). The full58 gate FAILED (509 commands,1 FAIL,14 NOTRUN,729s): K36 packed read
 after compaction crash, NET/valid/NOT_FOUND fragment outcomes. A deterministic
 mixed-verdict re-probe regression fails on58 and passes corrective49e5ffd71;
-ordered live qualification is running before any new full calibration. Failed
+three strict K36/K22 pairs and three operator checks passed, with zero K22
+errors; new three-run full calibration is active on pinned49e5ffd71. Failed
 stores/logs are preserved; budgets remain unchanged. The original logless EIO remains preserved as FAIL. These diagnostics are not calibration inputs; no budget fit yet.
 Budgets/slots/target unchanged; original failures remain failures.
 
