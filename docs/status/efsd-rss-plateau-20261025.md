@@ -242,14 +242,18 @@ ssh xorinox 'python3 ~/efs-x/scripts/rss_mappings_split.py ~/efs-x-out/mem.jsonl
 The fixes' own tests: `./tests/test_reclaim` (`make test-long`) and
 `python3 tests/test_conn_idle_reap.py` (`make test-long`).
 
-## Task I — second confirmation running (October 26)
+## Task I — nuc RSS PASS scoped, overall D4 FAIL (reviewed October 27)
 
-**RUNNING on nuc; build PASS, no measurement verdict yet.** Branch `agent/devel-task-i`, source
-`931845748` (product base `394f2b791` unchanged), uses the existing 60-minute
-fixed-set load and 5% RSS rule with a **150-second** drain bound. Task H's
-private tree is removed; Task I's three daemons and two FUSE clients are
-being sampled every 10 seconds with no sampled foreign jobs at the progress
-check. A private
-node9901 TCP/RDMA stage follows a passing nuc result. [Committed controller,
-exact commands, evidence locations and pending gates](task-i-20261026.md).
-The original run F's RSS PASS and overall D4 FAIL remain as reported above.
+Source `931845748`, product base `394f2b791` unchanged. All five independent
+10-second RSS series passed: efsd +3.5/+3.3/+2.8%, load client +2.3%,
+foreground client +0.0% (360 samples each). Drain 62.4 s under the unchanged
+150 s limit, 2080 final files exact, zero hour-long operation or packer
+PUT/read errors. **D4 FAIL:** stored-data last-third peaks increased
+27.86/27.55/29.30%, exceeding the unchanged 25% bound on all nodes.
+
+The full gate also failed: `TOTAL 508 FAIL 5 NOTRUN 14 STATUS FAIL (1624s)
+OVERBUDGET 25 BUILD 17s`. An untouched-base gate is RUNNING on the same nuc
+with the same eight-job command. Node9901 TCP/RDMA remains NOTRUN under the
+brief's loopback-pass prerequisite. RSS passing alone does not close F1.
+[Per-process table, host CPU/disk analysis, individual gate failures,
+reproduction and verified raw manifest](task-i-20261026.md).
