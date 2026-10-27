@@ -533,6 +533,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_b_checks_driver.py
 	python3 tests/test_d4_driver.py
 	python3 tests/test_pub_unit_setup.py
+	python3 tests/test_client_allocator.py
 	python3 tests/test_read_recorded_nodes.py
 	python3 tests/test_tmpdir_hygiene.py
 	python3 tests/test_pressure_cohort.py
@@ -1125,7 +1126,6 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_storage_root_inventory.py
 	python3 tests/test_efs_commands.py
 	python3 tests/test_client_memory.py
-	python3 tests/test_client_allocator.py
 	python3 tests/test_storage_principles.py
 	python3 tests/test_session_latch_tsan.py
 	./tests/test_kv_insertion_buffer
