@@ -472,6 +472,8 @@ int efs_client_rpc_report_resolve(efs_export_id_t export_id,
                                   uint32_t ino_count, int sync,
                                   const struct efs_report_pubid *pubid, uint64_t sent,
                                   int rc, efs_ino_t ino);
+/* Existing receipt-resolution allowance, shared by one sync publication. */
+uint64_t efs_client_rpc_resolve_budget_ms(void);
 /* Nodes the calling thread's last metadata RPC was sent to (bit nid-1). */
 uint64_t efs_client_rpc_last_sent(void);
 /* W77 · atomic publication units (write.c). A write request touching two

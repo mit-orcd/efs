@@ -1907,8 +1907,10 @@ static const struct report_streak *report_rec_stuck(const struct report_streak *
     return was && was->stale >= 2 && report_streak_same(was, r) ? was : NULL;
 }
 
-static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
+static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
+                               uint64_t completion_deadline, int *resolved_stale)
 {
+    *resolved_stale = 0;
     if (efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
     struct dirty_snap ds;
@@ -2406,9 +2408,16 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
      * against its receipt (same identity, bounded) before failing: applied
      * is success, a definite verdict stands, and only a still-unknown
      * outcome becomes EIO (efs_client_rpc_report_resolve logs which). */
-    if (sync && report_sent && cn)
+    if (sync && report_sent && cn) {
+        int sent_rc = rc;
+        /* Resolution may outlive the 8 s send phase, as before, but every
+         * lookup/rebuild shares the caller's original completion deadline. */
+        efs_client_rpc_set_deadline_ms(completion_deadline);
         rc = efs_client_rpc_report_resolve(g_client.export_id, crecs, cn, irecs, in, sync,
                                            &pubid, report_sent, rc, only_ino);
+        efs_client_rpc_set_deadline_ms(outer);
+        *resolved_stale = sent_rc != EFS_ERR_STALE && rc == EFS_ERR_STALE;
+    }
     if (dcache_trace_on()) {
         for (uint32_t k = 0; k < cn; k++)
             fprintf(stderr, "report ino=%llu ci=%u only=%llu sync=%d rc=%d\n",
@@ -2470,22 +2479,38 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
 int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
 {
     uint64_t outer = efs_client_rpc_deadline_ms();
+    uint64_t completion_deadline = outer;
     if (sync) {
         uint64_t deadline = report_clock_ms() + 8000;
+        completion_deadline = deadline + efs_client_rpc_resolve_budget_ms();
+        if (outer && outer < completion_deadline)
+            completion_deadline = outer;
         if (!outer || deadline < outer)
             efs_client_rpc_set_deadline_ms(deadline);
     }
-    int rc = report_dirty_ino_run(only_ino, sync);
-    /* W77: a unit was held back (a write still open on it, or a chunk not
-     * yet landed). A sync caller must still publish it: wait for its
-     * writers, land its chunks, report again. An async REPORT leaves it to
-     * the next one. */
-    for (unsigned round = 0; sync && rc == EFS_ERR_AGAIN && round < 16; round++) {
-        rc = unit_wait_idle(only_ino);
+    int resolved_stale = 0;
+    int rc = report_dirty_ino_run(only_ino, sync, completion_deadline, &resolved_stale);
+    /* W77: wait/flush held units. K38/K45: a lost reply can resolve to a
+     * definite PARTIAL/STALE AFTER the inner send loop has ended. The run
+     * retained its snapshot and putids; a new run mints a new pubid and uses
+     * normal authoritative STALE repull/replay. Only that definite receipt
+     * result may use the remaining resolution allowance for recovery.
+     * Unknown outcomes (IO) remain failures. No deadline is renewed. */
+    for (unsigned round = 0; sync &&
+         (rc == EFS_ERR_AGAIN || resolved_stale) && round < 16; round++) {
+        if (resolved_stale)
+            efs_client_rpc_set_deadline_ms(completion_deadline);
+        if (efs_client_rpc_past_deadline())
+            break;
+        if (rc == EFS_ERR_AGAIN) {
+            rc = unit_wait_idle(only_ino);
+            if (rc == EFS_OK)
+                rc = only_ino ? efs_dcache_flush_ino(only_ino) : efs_dcache_flush_all();
+        } else {
+            rc = EFS_OK;
+        }
         if (rc == EFS_OK)
-            rc = only_ino ? efs_dcache_flush_ino(only_ino) : efs_dcache_flush_all();
-        if (rc == EFS_OK)
-            rc = report_dirty_ino_run(only_ino, sync);
+            rc = report_dirty_ino_run(only_ino, sync, completion_deadline, &resolved_stale);
     }
     if (rc == EFS_ERR_AGAIN)
         rc = sync ? EFS_ERR_BUSY : EFS_OK;
