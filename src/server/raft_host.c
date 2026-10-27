@@ -4037,7 +4037,7 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
     uint64_t applied, snap;
     int exporting;
 
-    if (!h->g[gi].hosted || !h->g[gi].r)
+    if (!h->g[gi].hosted || !h->g[gi].r || h->g[gi].retired)
         return EFS_OK;
     pthread_mutex_lock(&h->snap_mu);
     exporting = h->g[gi].snap_exporting;
@@ -4684,8 +4684,8 @@ static int host_fwd_leader_pick(struct efs_raft_host *h, uint8_t group,
         return -1;
     {
         struct host_group *s = group_slot(h, group);
-        uint32_t voters = (s && s->r) ? efs_raft_voters(s->r)
-                          : (s ? s->voters : group_voters(group, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE)));
+        uint32_t voters = (s && s->r && !host_group_retired(h, group)) ? efs_raft_voters(s->r)
+                          : group_voters(group, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
         if (!hosts_group(rid, voters))
             return -1;
     }
@@ -4715,9 +4715,8 @@ static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng
             continue;
         for (i = 0; i < ng; i++) {
             struct host_group *s = group_slot(h, groups[i]);
-            uint32_t voters = (s && s->r) ? efs_raft_voters(s->r)
-                              : (s ? s->voters
-                                 : group_voters(groups[i], __atomic_load_n(&h->n,__ATOMIC_ACQUIRE)));
+            uint32_t voters = (s && s->r && !host_group_retired(h, groups[i])) ? efs_raft_voters(s->r)
+                              : group_voters(groups[i], __atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
             if (!hosts_group(rid, voters)) {
                 ok = 0;
                 break;
@@ -4736,7 +4735,8 @@ static uint32_t host_route_voters(struct efs_raft_host *h,uint8_t group)
 {
     struct host_group *g=group_slot(h,group);
     struct host_view v;
-    if(!g)return group_voters(group,__atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
+    if(!g || host_group_retired(h,group))
+        return group_voters(group,__atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
     host_view_get(h,group,&v);
     if(v.has)return v.voters;
     return __atomic_load_n(&g->voters,__ATOMIC_ACQUIRE);
@@ -4869,7 +4869,7 @@ static int host_local_leader(struct efs_raft_host *h, uint8_t group)
     struct host_view v;
 
     host_view_get(h, group, &v);
-    return v.has ? v.leader : -1;
+    return v.has && !host_group_retired(h, group) ? v.leader : -1;
 }
 
 static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
@@ -4912,8 +4912,10 @@ static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
             prefer_rid = -1;
             continue;
         }
-        if (rep->rc == EFS_OK)
+        if (rep->rc == EFS_OK) {
+            host_fwd_leader_note(group, rep->leader_hint >= 0 ? rep->leader_hint : rid);
             return EFS_OK;
+        }
         if (rep->rc != EFS_ERR_NOT_PRIMARY)
             return rep->rc;
         if (host_past_deadline(&end))
@@ -5709,6 +5711,12 @@ static int host_wait_applied_mode(struct efs_raft_host *h, uint8_t group,
                              : (uint64_t)HOST_READ_TRIES * HOST_TICK_US);
     for (;;) {
         host_view_get(h, group, &v);
+        /* A local proposal racing retirement has no local verdict proof.
+         * It must retry at a live voter, never wait on the frozen cursor. */
+        if (host_group_retired(h, group)) {
+            if (leader_hint) *leader_hint = host_fwd_leader_pick(h, group, -1);
+            return EFS_ERR_NOT_PRIMARY;
+        }
         if (!v.has) {
             /* No local replica: the leader already waited in submit. */
             return EFS_OK;
@@ -5974,7 +5982,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
         wprof_add(WP_MU, t - wpt);
         wpt = t;
     }
-    r = group_raft(h, group);
+    r = host_group_retired(h, group) ? NULL : group_raft(h, group);
     if (r) {
         uint32_t voters = efs_raft_voters(r);
         int solo = voters && (voters & (voters - 1)) == 0;
@@ -6295,6 +6303,20 @@ static int host_propose_wait_idx_impl(struct efs_raft_host *h, uint8_t group,
     uint64_t idx = 0, term = 0;
     int rc;
 
+    /* K44/W167: only a serving replica can supply a local apply verdict.
+     * A retired replica keeps its old log/ring for durable history, but
+     * cannot catch up to a forwarded SALT (or any new command). Use the
+     * live leader's submit verdict directly, including its rejections. */
+    if (!host_hosts(h, group)) {
+        struct efs_msg_raft_mkfs_reply rep = {0};
+        if (host_forward_refused(host_serving_forward,
+                                 host_fwd_leader_pick(h, group, -1), h->raft_id, hint))
+            return EFS_ERR_NOT_PRIMARY;
+        rc = host_remote_cmd(h, group, cmd, clen, &rep, -1);
+        if (hint) *hint = rep.leader_hint;
+        if (rc == EFS_OK && idx_out) *idx_out = rep.index;
+        return rc;
+    }
     rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
     if (rc != EFS_OK)
         return rc;
@@ -8999,7 +9021,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
     host_cfg_fan_note(h, group, voters);
     pthread_mutex_lock(&h->mu);
     s = group_slot(h, group);
-    r = (s && s->r) ? s->r : NULL;
+    r = host_group_retired(h, group) ? NULL : group_raft(h, group);
     if (r) {
         lid = efs_raft_leader(r);
         if (hint)
@@ -9013,6 +9035,8 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
         }
     }
     pthread_mutex_unlock(&h->mu);
+    if (host_forward_refused(host_serving_forward, lid, h->raft_id, hint))
+        return EFS_ERR_NOT_PRIMARY;
     memset(&rep, 0, sizeof(rep));
     rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
     if (hint && rep.leader_hint >= 0)
@@ -13819,10 +13843,34 @@ static int host_formation_notify(struct efs_raft_host *h, const struct efs_membe
         struct efs_msg_raft_mkfs_reply rep;
         if (p->id == h->s->id)
             continue;
-        int r = host_rpc_submit(h, (int)p->id - 1, EFS_RAFT_GROUP_SHARD, cmd,
-                                (uint32_t)(1 + rlen), &rep, 5000);
-        if (r == EFS_OK)
-            r = rep.rc;
+        /* A restarted member can already serve Raft/status while this
+         * sender's peer pool is still in its failed-connect backoff. The
+         * notice is idempotent (one committed membership history), so ride
+         * transient transport/admission refusal inside the existing 5 s
+         * notice budget rather than reporting NET immediately. Identity or
+         * encoding refusals are never retried. Preserve any caller scope. */
+        uint64_t previous = efs_net_deadline_ms();
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        uint64_t deadline = (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000 + 5000;
+        if (previous && previous < deadline) deadline = previous;
+        efs_net_set_deadline_ms(deadline);
+        int r = EFS_ERR_BUSY, tries = 0;
+        while (efs_net_remaining_ms(1)) {
+            tries++;
+            r = host_rpc_submit(h, (int)p->id - 1, EFS_RAFT_GROUP_SHARD, cmd,
+                                (uint32_t)(1 + rlen), &rep, efs_net_remaining_ms(5000));
+            if (r == EFS_OK) r = rep.rc;
+            if (r != EFS_ERR_BUSY && r != EFS_ERR_NET && r != EFS_ERR_IO &&
+                r != EFS_ERR_AGAIN) break;
+            int left = efs_net_remaining_ms(50);
+            if (!left) break;
+            usleep((unsigned)left * 1000);
+        }
+        efs_net_set_deadline_ms(previous);
+        if (tries > 1)
+            fprintf(stderr, "raft-host: membership notice node %u: %d attempts rc=%d\n",
+                    p->id, tries, r);
         if (r != EFS_OK && ml < sizeof(missed))
             ml += (size_t)snprintf(missed + ml, sizeof(missed) - ml, "%snode %u at %s:%u "
                                    "(rc=%d)", ml ? ", " : "", p->id, p->addr, p->port, r);
@@ -14062,6 +14110,26 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         return;
     }
     out->salt = h->salt;
+    if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE) &&
+        !host_hosts(h, EFS_RAFT_GROUP_SHARD)) {
+        /* The full formation operation reads back group 0's committed
+         * membership before SALT. A storage-only/g2-only member has no
+         * such local image: route the operation, not just its MKFS entry.
+         * Group 0 keeps its three original voters in alpha, so this
+         * top-level forward cannot recurse through another non-host. */
+        rc = EFS_ERR_NOT_PRIMARY;
+        const uint8_t empty = 0;
+        uint32_t voters = group_voters(EFS_RAFT_GROUP_SHARD,
+                                       __atomic_load_n(&h->n, __ATOMIC_ACQUIRE));
+        for (int rid = 0; rid < EFS_RAFT_MAX_PEERS; rid++) {
+            if (rid == h->raft_id || !hosts_group(rid, voters)) continue;
+            rc = host_inode_rpc_peer(h, rid, EFS_MSG_RAFT_MKFS, &empty, 0,
+                                     EFS_MSG_RAFT_MKFS_REPLY, out, sizeof(*out));
+            if (rc == EFS_OK && out->rc != EFS_ERR_NOT_PRIMARY) return;
+        }
+        if (rc != EFS_OK) out->rc = EFS_ERR_NET;
+        return;
+    }
     if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
         pthread_mutex_lock(&h->mu);
         want = h->members;
@@ -14799,6 +14867,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     host_serving_forward = host_submit_serves_forward(payload, plen, &group);
     cmd = payload + 1;
     clen = plen - 1;
+    if (host_serving_forward && host_group_retired(h, group)) {
+        out->rc = EFS_ERR_NOT_PRIMARY;
+        out->leader_hint = host_fwd_leader_pick(h, group, -1);
+        return;
+    }
     /* Never propose reserved commands/requests. Any other tag this build
      * does not apply is refused by host_tag_refused on the way into the
      * log (W140); RPC-only requests answer above that gate. */
@@ -15538,6 +15611,10 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
                 ps->busy_hold = (uint64_t)pp.busy_hold;
             }
         }
+        /* The local log/indices above are historical on a retired replica.
+         * Its routing hint comes from successful live-group forwarding. */
+        if (gs->retired)
+            gs->leader = host_fwd_leader_pick(h, gs->group, -1);
     }
     pthread_mutex_unlock(&h->mu);
     {
@@ -15581,7 +15658,8 @@ void server_raft_host_resync(const struct efs_msg_raft_resync *in,
     pthread_mutex_lock(&h->mu);
     for (i = 0; i < HOST_NGROUPS; i++)
         if (h->g[i].group == in->group && h->g[i].hosted && h->g[i].r)
-            out->rc = efs_raft_request_resync(h->g[i].r);
+            out->rc = h->g[i].retired ? EFS_ERR_NOT_PRIMARY :
+                                      efs_raft_request_resync(h->g[i].r);
     pthread_mutex_unlock(&h->mu);
 }
 

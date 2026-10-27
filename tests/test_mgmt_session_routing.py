@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Production session CLI redirect routing; transport ambiguity is not retried."""
 from pathlib import Path
-import os,shlex,subprocess,tempfile
+import os,re,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/mgmt/efs_mgmt.c').read_text()
-a=s.index('static int sess_leader_address(')
-rpc=s.index('static int sess_rpc(',a)
-b=s.index('\n}\n',rpc)+3  # only the named helper, not adjacent CLI commands
+def function(name):
+    # A prototype may precede the definition; never include intervening commands.
+    match=re.search(r'^static int '+re.escape(name)+r'\([^;]+?\)\n\{',s,re.M)
+    assert match,name
+    return s[match.start():s.index('\n}\n',match.end())+3]
 source=r'''
 #include "efs/protocol.h"
 #include "efs/meta_cmd.h"
@@ -40,7 +42,7 @@ static int send_recv(int fd,uint8_t t,const void *p,uint32_t n,uint8_t *rt,void 
  r->rc=(requests==1 || loop)?(busy?EFS_ERR_BUSY:EFS_ERR_NOT_PRIMARY):EFS_OK;r->leader_hint=no_hint?-1:2;
  *out=r;*len=sizeof(*r);*rt=EFS_MSG_RAFT_MKFS_REPLY;return fail_transport;
 }
-''' +s[a:b]+r'''
+''' +function('sess_leader_address')+function('sess_rpc')+r'''
 static void reset(void){requests=discoveries=connections=waits=0;fail_transport=loop=invalid_count=unknown=no_hint=busy=0;expected_len=27;memset(immutable,0xa5,sizeof(immutable));}
 int main(void) {
  struct efs_msg_raft_mkfs_reply out;memset(immutable,0xa5,sizeof(immutable));
