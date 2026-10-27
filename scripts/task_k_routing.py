@@ -106,8 +106,7 @@ try:
         rc, out = command(cmd, cmd, c.ep(1), *args)
         assert rc == 0, out
     # No membership mutation: ask for the already committed voter set.
-    rc, out = command('raft-change same voters', 'raft-change', c.ep(1), '2', '0xe')
-    assert rc == 0 and 'converged=1' in out, out
+    change_rc, change_out = command('raft-change same voters', 'raft-change', c.ep(1), '2', '0xe')
     step_rc, step_out = command('raft-step-down retired', 'raft-step-down', c.ep(1), '2')
     resync_rc, resync_out = command('raft-resync retired', 'raft-resync', c.ep(1), '2')
     rc, out = command('raft-setattr', 'raft-setattr', c.ep(1), '1', '6', '0',
@@ -161,6 +160,7 @@ try:
         print('NOTRUN seed-only FUSE checks: missing FUSE prerequisites', flush=True)
     assert mkfs_rc == 0, 'K44 retired-seed raft-mkfs: '+mkfs_out
     assert added_rc == 0, added_out
+    assert change_rc == 0 and 'converged=1' in change_out, change_out
     assert policy_rc == 0, policy_out
     assert expiry_rc == status_rc == compact_rc == 0, (expiry_out, status_out, compact_out)
     assert step_rc != 0 and 'rc=-15' in step_out, step_out
