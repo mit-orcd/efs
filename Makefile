@@ -190,6 +190,7 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
 test-report-pressure:
 	python3 tests/test_report_pressure.py
 	python3 tests/test_report_resolved_retry.py
+	python3 tests/test_report_partial_verdict.py
 	python3 tests/test_report_snapshot_locks.py
 	python3 tests/test_report_retry_budget.py
 	python3 tests/test_write_queue.py

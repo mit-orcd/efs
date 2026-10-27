@@ -161,7 +161,7 @@ static void fake_exec(int node,const struct efs_chunk_rec *recs,uint32_t count,c
    snprintf(host_report_note.stale.why,sizeof(host_report_note.stale.why),"span-base");}
   stale=1;
  }
- set_inode_rc(out,busy_after_apply&&phase==1?EFS_ERR_BUSY:stale?EFS_ERR_STALE:EFS_OK,-1);
+ set_inode_rc(out,host_report_stale_verdict(busy_after_apply&&phase==1?EFS_ERR_BUSY:stale?EFS_ERR_STALE:EFS_OK,stale),-1);
 }
 '''+nodes+r'''
 struct bg_arg {int node;struct efs_chunk_rec recs[4];uint32_t count;struct efs_ino_size_rec irec;struct efs_opid session;struct efs_report_pubid pubid;struct efs_msg_inode_reply out;};
@@ -301,10 +301,16 @@ int main(void){
   deadline=limit;
   rc=efs_client_rpc_report_resolve(1,r,2,&ir,1,1,&pid,1,EFS_ERR_NET,4242);
   assert(rc==EFS_ERR_IO && !applies && now-begin<=200 && deadline==limit);}
+ /* J: one CAS loser and later BUSY is still definite PARTIAL, never an
+  * UNKNOWN receipt that re-sends the stale identity until the bound. */
+ reset();recs2(r);committed[1]=77;r[1].base_gen=5;drop_reply=1;busy_after_apply=1;rc=report(r,2);
+ assert(rc==EFS_ERR_STALE && applies==1 && committed[0]==100 && committed[1]==77);
  puts("W155 REPORT: applied+lost reply, lost request, BUSY-unknown, failed node, all-down EIO, partial STALE, pending and replayed duplicate PASS");
  return 0;
 }
 '''
+
+code = code.replace('static void fake_exec(', fn(srv, 'static int host_report_stale_verdict(') + '\nstatic void fake_exec(', 1)
 
 with tempfile.TemporaryDirectory(prefix='efs-w155-report-') as d:
     p = Path(d) / 't.c'

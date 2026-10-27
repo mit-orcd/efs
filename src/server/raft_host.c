@@ -23560,6 +23560,17 @@ static int host_pub_units_publish(struct efs_raft_host *h, struct host_pub_unit 
     return rc;
 }
 
+/* A rejected CAS is a definite residual, even if a later independent unit
+ * meets backpressure. Do not hide it behind UNKNOWN/BUSY and keep resending
+ * the immutable stale publication. STALE acknowledges nothing: the client
+ * retains all records and authoritatively repulls/replays the residual.
+ * Other units may still finish; their ordinary identity/CAS rules stand.
+ * With no known loser, BUSY remains unknown. Permanent failures stand. */
+static int host_report_stale_verdict(int rc, int had_stale)
+{
+    return had_stale && (rc == EFS_OK || rc == EFS_ERR_BUSY) ? EFS_ERR_STALE : rc;
+}
+
 void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                              const struct efs_ino_size_rec *irecs,
                              uint32_t ino_count, uint32_t flags, const struct efs_opid *session,
@@ -24036,8 +24047,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
          * skipped losers (its residual report re-pulls and replays just
          * those). The resolve pass below stays gated on a fully clean
          * round, matching the old whole-batch STALE behavior. */
-        if (rc == EFS_OK && had_stale)
-            rc = EFS_ERR_STALE;
+        rc = host_report_stale_verdict(rc, had_stale);
         host_report_note.phase = fail_phase;
         /* G2: name the request, so a failed split joins its receipt. */
         if (count >= 256u || n_inval ||
