@@ -891,13 +891,14 @@ round says which physical or software limiter it hit.
 - [ ] **F1** Unit/integration, enabled-feature and applicable memory/concurrency
   checks have explicit PASS/FAIL/NOTRUN results. Docs and code tests both report;
   an unavailable diagnostic is disclosed, never silently counted as passed.
-  **Task I reviewed Oct 27: candidate `971100542` integrates devel
-  `091d9ea5e` plus fixed native allocator arenas `bc86327c6`; concurrent
-  allocator regression PASS (4 vs 25 unfixed). Candidate xorinox hour+gate
-  RUNNING; node9900 uninstrumented RDMA/TCP QUEUED behind the original
-  diagnostic. Prior hardware RSS FAIL and two prior full-gate failures
-  remain recorded; nuc comparisons INCOMPLETE. No candidate qualification
-  PASS yet ([evidence](task-i-20261026.md)).**
+  **Task I reviewed Oct 27 ([evidence](task-i-20261026.md)):**
+  `971100542` xorinox hour PASS, but full gate FAIL 2/512 (K38 and duplicate
+  allocator wiring), 13 NOTRUN. New candidate `03b50dcd5` integrates devel
+  `063154e0e` K38/W166 repairs plus wiring fix; xorinox gate-first run active.
+  Node9900 diagnostic completed: free arena retention dominates observed
+  growth; instrumented RSS FAIL +8.34%. Fixed uninstrumented RDMA active,
+  TCP follows. Earlier failures preserved; final-candidate qualification
+  INCOMPLETE, no release closure claimed.
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;
   [evidence](f1-memory-concurrency-gates-20261025.md)):** `make leak-check`

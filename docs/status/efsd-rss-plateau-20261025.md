@@ -268,16 +268,20 @@ verified manifests and outstanding qualification](task-i-20261026.md).
 
 ### Allocator candidate, still under qualification
 
-The original node9900 TCP diagnostic's first 20-minute snapshot shows
-74 load-client arenas: 77.3 MiB arena memory, 21.9 MiB allocated and 55.3
-MiB free. The foreground client has 127 arenas. Later snapshots remain
-pending, so the complete growth mechanism is not yet proved.
+The completed original node9900 diagnostic has 74 load-client arenas.
+Between minute 40 and 60, free arena memory rises 38.42 MiB while allocated
+arena memory rises 1.43 MiB and mmap bytes remain constant. Independent
+RSS still FAILS at +8.34%; this supports allocator retention, not proof of
+bounded live allocations. All six snapshots and computed deltas are retained.
 
 Candidate `bc86327c6` moves the launcher's existing four-arena policy into
 native `efs-fuse` startup and removes its launcher-only switch. The real
 24-worker allocator regression passes with four arenas; its unfixed
-negative control has 25. Devel `091d9ea5e` was integrated for the two
-remaining gate signatures. At `971100542`, an uninstrumented xorinox hour
-and full gate are RUNNING; node9900 RDMA/TCP reruns are QUEUED behind all
-original diagnostic snapshots. No candidate plateau PASS yet.
-[Exact source, regression, commands and pending checks](task-i-20261026.md#candidate-fix-and-qualification-now-active).
+negative control has 25. `971100542` xorinox hour PASS: all five processes
+within 5%, data bounds pass, 2080 exact, zero errors, drain 84 s. Its full
+gate FAILS on K38 and duplicate allocator test wiring (512 / 2 FAIL /
+13 NOTRUN). New integrated `03b50dcd5` incorporates reviewed devel
+`063154e0e` K38/W166 corrections and fast-test wiring repair; xorinox's
+fresh gate-first run is active. Node9900 fixed `971100542` RDMA is active,
+TCP follows. Overall qualification remains INCOMPLETE.
+[Exact sources, results and remaining checks](task-i-20261026.md#candidate-fix-and-qualification).
