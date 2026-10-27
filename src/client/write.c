@@ -1937,6 +1937,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
      * reads clean while its REPORT is being set up. Lock order is table
      * lock, then dirty_mu; the wait drops both (the in-flight REPORT
      * needs the table lock to finish). */
+    uint64_t slot_begin = report_clock_ms();
     for (;;) {
         report_snapshot_lock(only_ino);
         pthread_mutex_lock(&g_client.dirty_mu);
@@ -1954,6 +1955,9 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
         while ((only_ino && pub_has_locked(only_ino)) || pub_full_locked()) {
             if (efs_client_rpc_past_deadline()) {
                 pthread_mutex_unlock(&g_client.dirty_mu);
+                fprintf(stderr, "report-slot-timeout ino=%llu wait_ms=%llu\n",
+                        (unsigned long long)only_ino,
+                        (unsigned long long)(report_clock_ms()-slot_begin));
                 return EFS_ERR_BUSY;
             }
             struct timespec until;
@@ -1963,6 +1967,9 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
             uint64_t now = report_clock_ms();
             if (deadline && now >= deadline) {
                 pthread_mutex_unlock(&g_client.dirty_mu);
+                fprintf(stderr, "report-slot-timeout ino=%llu wait_ms=%llu\n",
+                        (unsigned long long)only_ino,
+                        (unsigned long long)(report_clock_ms()-slot_begin));
                 return EFS_ERR_BUSY;
             }
             if (deadline && deadline - now < wait)
@@ -2478,6 +2485,8 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
 
 int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
 {
+    uint64_t started = report_clock_ms(), wait_ms = 0, flush_ms = 0;
+    const char *stage = "report";
     uint64_t outer = efs_client_rpc_deadline_ms();
     uint64_t completion_deadline = outer;
     if (sync) {
@@ -2503,17 +2512,31 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
         if (efs_client_rpc_past_deadline())
             break;
         if (rc == EFS_ERR_AGAIN) {
+            stage = "held-unit-wait";
+            uint64_t before = report_clock_ms();
             rc = unit_wait_idle(only_ino);
-            if (rc == EFS_OK)
+            wait_ms += report_clock_ms() - before;
+            if (rc == EFS_OK) {
+                stage = "held-unit-flush";
+                before = report_clock_ms();
                 rc = only_ino ? efs_dcache_flush_ino(only_ino) : efs_dcache_flush_all();
+                flush_ms += report_clock_ms() - before;
+            }
         } else {
             rc = EFS_OK;
         }
-        if (rc == EFS_OK)
+        if (rc == EFS_OK) {
+            stage = "report-retry";
             rc = report_dirty_ino_run(only_ino, sync, completion_deadline, &resolved_stale);
+        }
     }
     if (rc == EFS_ERR_AGAIN)
         rc = sync ? EFS_ERR_BUSY : EFS_OK;
+    if (sync && rc != EFS_OK)
+        fprintf(stderr, "report-sync-fail ino=%llu stage=%s total_ms=%llu wait_ms=%llu "
+                "flush_ms=%llu resolved_stale=%d rc=%d\n", (unsigned long long)only_ino,
+                stage, (unsigned long long)(report_clock_ms()-started),
+                (unsigned long long)wait_ms, (unsigned long long)flush_ms, resolved_stale, rc);
     if (sync)
         efs_client_rpc_set_deadline_ms(outer);
     /* Settle off this thread: an fsync never waits for ticket retirement. */
