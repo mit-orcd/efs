@@ -886,7 +886,8 @@ round says which physical or software limiter it hit.
   **Task I reviewed Oct 27: nuc RSS PASS (all five within 5%), D4 FAIL
   (stored-data peaks +27.6–29.3% against 25%), drain 62.4 s and 2080 final
   payloads exact. Full gate TOTAL 508 FAIL 5 NOTRUN 14; untouched-base
-  comparison RUNNING. Node9901 TCP/RDMA NOTRUN until loopback qualification
+  comparison RUNNING; user-authorized xorinox confirmation STARTED Oct 27,
+  same source and criteria. Node9901 TCP/RDMA NOTRUN until loopback qualification
   passes. Original xorinox RSS PASS / D4 FAIL remains separate; no overall
   second confirmation PASS ([evidence](task-i-20261026.md)).**
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch

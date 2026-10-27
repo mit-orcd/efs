@@ -253,7 +253,9 @@ PUT/read errors. **D4 FAIL:** stored-data last-third peaks increased
 
 The full gate also failed: `TOTAL 508 FAIL 5 NOTRUN 14 STATUS FAIL (1624s)
 OVERBUDGET 25 BUILD 17s`. An untouched-base gate is RUNNING on the same nuc
-with the same eight-job command. Node9901 TCP/RDMA remains NOTRUN under the
+with the same eight-job command. The user authorized xorinox for further
+qualification Oct 27; an identical-source 60-minute run plus gate has
+STARTED there, verdict pending. Node9901 TCP/RDMA remains NOTRUN under the
 brief's loopback-pass prerequisite. RSS passing alone does not close F1.
 [Per-process table, host CPU/disk analysis, individual gate failures,
 reproduction and verified raw manifest](task-i-20261026.md).
