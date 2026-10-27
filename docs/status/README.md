@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K38 Task G continuation](k38-task-g-repair-20261027.md): original-product full-pool
+EIO/EAGAIN reproduced with complete failed fixture hash-verified on xorinox.
+Reviewed publication/pressure repairs are on `agent/devel-task-g`; four intended
+negative controls fail on original code, five fixed default K38 runs and native
+`make test` pass. **Final unprofiled full-suite rerun pending**, no closure yet.
+
 [W166 option B qualification (Task G)](w166-close-eio-flush-deadline-20261026.md):
 **DECIDED / responsive-pressure paths qualified**, branch `agent/devel-task-g`;
 30 s unchanged. Both deterministic cases fail on the instrumented base and

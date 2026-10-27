@@ -134,3 +134,12 @@ failing base runs): intel2 `~/efs-artifacts/k40-20261025/` (10,848 files,
   abort and retry each other's units (13–133 aborted units per run); they now
   release promptly, so progress depends on the clients' retries, not on the
   recovery scan.
+
+## October 27 continuation
+
+The later xorinox full pools reproduced shared-chunk application errors on
+unchanged devel and Task G. Historical scoped results above do not close
+that counterexample. [Task G repair and retained evidence](k38-task-g-repair-20261027.md)
+records the new complete failure capture, reviewed repairs, original-code
+negative controls and pending full-suite requalification. No recurrence of
+the original missing-ABORT defect is inferred from the test name alone.

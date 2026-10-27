@@ -204,3 +204,12 @@ intel2 `~/efs-artifacts/k38-20261025/` (test outputs, the loopback series
 summaries and the logs of every failed run, the install-order and
 classifier traces, the gate output); `SHA256SUMS` there, hash
 `b8d83c80…8cb68` (sha256 of `SHA256SUMS`, 111 files, 5.9 MB).
+
+## October 27 continuation
+
+The later xorinox full pools reproduced shared-chunk application errors on
+unchanged devel and Task G. Historical scoped results above do not close
+that counterexample. [Task G repair and retained evidence](k38-task-g-repair-20261027.md)
+records the new complete failure capture, reviewed repairs, original-code
+negative controls and pending full-suite requalification. No recurrence of
+the original missing-ABORT defect is inferred from the test name alone.
