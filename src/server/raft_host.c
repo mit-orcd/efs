@@ -5272,6 +5272,14 @@ static int host_read_probe_needed(struct efs_raft *r,
     return !efs_raft_read_pending(r) || efs_raft_read_quorum(r);
 }
 
+/* No self hint while the pump is still stepping down the poisoned leader. */
+static int host_halted_hint(struct efs_raft_host *h, uint8_t group)
+{
+    struct host_view v;
+    host_view_get(h, group, &v);
+    return v.leader >= 0 && v.leader != h->raft_id ? v.leader : -1;
+}
+
 /* h->mu held. Raise ri_begun to the round read_begin is about to start
  * before any of its probes can leave. A reader that loads N from ri_begun
  * and then requires round N+1 can only be covered by probes sent after its
@@ -5352,13 +5360,6 @@ static unsigned host_read_start_requested(struct efs_raft_host *h)
 }
 
 
-/* No self hint while the pump is still stepping down the poisoned leader. */
-static int host_halted_hint(struct efs_raft_host *h, uint8_t group)
-{
-    struct host_view v;
-    host_view_get(h, group, &v);
-    return v.leader >= 0 && v.leader != h->raft_id ? v.leader : -1;
-}
 static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint,const struct host_read_admission *admission,
                            uint64_t *proof_index, int proof_only)
@@ -16350,7 +16351,16 @@ int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t le
 static int host_namespace_leader_hint(struct efs_raft_host *,uint8_t);
 static int host_read_leader_hint(struct efs_raft_host *h,uint8_t group)
 {
-    return h->s ? host_namespace_leader_hint(h,group) : -1;
+    if (!h->s) return -1;
+    int leader = host_local_leader(h, group);
+    /* A read may discover a child or lane in either group. With split
+     * leaders, forcing it back to the parent leader can bounce forever
+     * when that leader's other replica is halted. Serve the follower's
+     * ordinary fresh ReadIndexes instead. */
+    for (unsigned i = 0; i < HOST_NGROUPS; ++i)
+        if (host_local_leader(h, (uint8_t)(i << 1)) != leader)
+            return -1;
+    return host_namespace_leader_hint(h, group);
 }
 
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)

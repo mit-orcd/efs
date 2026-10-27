@@ -17,8 +17,8 @@ struct efs_raft {uint32_t voters;};
 struct host_group {struct efs_raft *r;uint32_t voters;};
 struct efsd_server {int unused;};
 struct efs_raft_host {pthread_mutex_t mu;int n,raft_id;struct host_group groups[2];struct efsd_server *s;};
-static int leader=-1;
-static int host_local_leader(struct efs_raft_host *h,uint8_t group){(void)h;assert(group==0 || group==2);return leader;}
+static int leader=-1, split=-1;
+static int host_local_leader(struct efs_raft_host *h,uint8_t group){(void)h;assert(group==0 || group==2);return group==2 && split>=0 ? split : leader;}
 static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return &h->groups[group>>1];}
 static uint32_t efs_raft_voters(struct efs_raft *r){return r->voters;}
 static int hosts_group(int id,uint32_t voters){return id>=0 && id<32 && (voters&(1u<<id));}
@@ -32,6 +32,10 @@ int main(void){
  struct efsd_server server={0};h.s=&server;
  assert(host_read_leader_hint(&h,2)==1); /* ordinary files route too */
  assert(host_read_leader_hint(&h,2)==1);
+ split=2;assert(host_read_leader_hint(&h,0)==-1 && host_read_leader_hint(&h,2)==-1);
+ /* A parent leader cannot force a healthy cross-group reader back to its
+  * halted other replica. Split leadership uses ordinary follower proofs. */
+ split=-1;
  leader=0;assert(host_read_leader_hint(&h,2)==-1);
  leader=1;
  leader=0;assert(host_namespace_leader_hint(&h,0)==-1);
