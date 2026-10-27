@@ -33,6 +33,7 @@ int main(void){
  assert(host_read_leader_hint(&h,2)==1); /* ordinary files route too */
  assert(host_read_leader_hint(&h,2)==1);
  split=2;assert(host_read_leader_hint(&h,0)==-1 && host_read_leader_hint(&h,2)==-1);
+ assert(host_namespace_leader_hint(&h,0)==-1 && host_namespace_leader_hint(&h,2)==-1);
  /* A parent leader cannot force a healthy cross-group reader back to its
   * halted other replica. Split leadership uses ordinary follower proofs. */
  split=-1;

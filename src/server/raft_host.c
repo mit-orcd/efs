@@ -4413,6 +4413,16 @@ retry:
         goto retry;
 }
 
+/* No self hint while the pump is still stepping down the poisoned leader. */
+static int host_halted_hint(struct efs_raft_host *h, uint8_t group)
+{
+    struct host_view v;
+    host_view_get(h, group, &v);
+    return v.leader >= 0 && v.leader != h->raft_id ? v.leader : -1;
+}
+
+
+
 static int host_view_covers(const struct host_view *v, uint64_t want,
                             uint64_t round, uint64_t term)
 {
@@ -4609,8 +4619,10 @@ static int host_hosts(struct efs_raft_host *h, uint8_t group)
 
     /* A learner replica exists so it can catch up; it must not serve
      * inode RPCs until COLD puts this id in app_old. A retired replica
-     * (K33) never serves: it may never learn the COLD that removed it. */
-    if (!s || !s->r || __atomic_load_n(&s->retired, __ATOMIC_ACQUIRE))
+     * (K33) never serves: it may never learn the COLD that removed it.
+     * A halted replica similarly routes service through a healthy voter. */
+    if (!s || !s->r || __atomic_load_n(&s->retired, __ATOMIC_ACQUIRE) ||
+        host_group_incompatible(h, group))
         return 0;
     return hosts_group(h->raft_id, efs_raft_voters(s->r));
 }
@@ -5270,14 +5282,6 @@ static int host_read_probe_needed(struct efs_raft *r,
         efs_raft_read_index(r) >= admission->want)
         return 0;
     return !efs_raft_read_pending(r) || efs_raft_read_quorum(r);
-}
-
-/* No self hint while the pump is still stepping down the poisoned leader. */
-static int host_halted_hint(struct efs_raft_host *h, uint8_t group)
-{
-    struct host_view v;
-    host_view_get(h, group, &v);
-    return v.leader >= 0 && v.leader != h->raft_id ? v.leader : -1;
 }
 
 /* h->mu held. Raise ri_begun to the round read_begin is about to start
@@ -16351,16 +16355,7 @@ int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t le
 static int host_namespace_leader_hint(struct efs_raft_host *,uint8_t);
 static int host_read_leader_hint(struct efs_raft_host *h,uint8_t group)
 {
-    if (!h->s) return -1;
-    int leader = host_local_leader(h, group);
-    /* A read may discover a child or lane in either group. With split
-     * leaders, forcing it back to the parent leader can bounce forever
-     * when that leader's other replica is halted. Serve the follower's
-     * ordinary fresh ReadIndexes instead. */
-    for (unsigned i = 0; i < HOST_NGROUPS; ++i)
-        if (host_local_leader(h, (uint8_t)(i << 1)) != leader)
-            return -1;
-    return host_namespace_leader_hint(h, group);
+    return h->s ? host_namespace_leader_hint(h,group) : -1;
 }
 
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
@@ -19867,6 +19862,11 @@ static int host_namespace_leader_hint(struct efs_raft_host *h,uint8_t group)
         uint8_t g=(uint8_t)(i<<1);
         uint32_t voters=group_slot(h,g) ? host_route_voters(h,g) : 0;
         if (!voters || !hosts_group(rid,voters)) return -1;
+        /* Routing to a parent leader is safe for a cross-group request
+         * only when it leads both groups. Otherwise a healthy reader or
+         * REPORT coordinator can be bounced to that node's halted other
+         * replica forever. Split leaders use ordinary participant proofs. */
+        if (host_local_leader(h,g) != rid) return -1;
     }
     return rid;
 }
