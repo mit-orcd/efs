@@ -1,4 +1,4 @@
-Branch agent/devel-task-j, tested head4c4446e02. Base4066f74df: TOTAL508 FAIL2 NOTRUN14 (616s); strict fixed K22/K36 3/3 each, zero client errors. Full corrected calibration FAIL: operator-workflow create EIO (509 commands, 1 FAIL, 14 NOTRUN, 738s); diagnosis active. Evidence: docs/status/gate-budgets-refit-20261026.md. W166 candidate unifies L0 leadership/admission; qualification pending. Original Intel/ORCD FAILs retained; no budget fit.
+Branch agent/devel-task-j, tested head4c4446e02. Base4066f74df: TOTAL508 FAIL2 NOTRUN14 (616s); strict fixed K22/K36 3/3 each, zero client errors. Full corrected calibration FAIL: operator-workflow create EIO (509 commands, 1 FAIL, 14 NOTRUN, 738s); diagnostic pool 0 FAIL/14 NOTRUN (731s), cause unresolved. Evidence: docs/status/gate-budgets-refit-20261026.md. W166 candidate unifies L0 leadership/admission; qualification pending. Original Intel/ORCD FAILs retained; no budget fit.
 
 # W160 three-run budget refit — October 26, 2026
 
@@ -478,3 +478,29 @@ manifest and launcher error are preserved separately in
 `operator-pool-36db33f98/`. The corrected launch waited for staging completion;
 its build completed and the test pool started. This setup error supplies no
 product result. No failed run or fixture has been pruned in this investigation.
+
+### Diagnostic pool complete; EIO still unresolved
+
+The diagnostics-only pool at `36db33f98` completed509 commands with **0 FAIL,
+14 NOTRUN, STATUS INCOMPLETE**, wall731s plus build30s. The same Intel host
+limits remain. Source manifest verification passed for all2208 archived
+files. This run does not fix or replace the earlier EIO failure and is not
+one of the calibration inputs. The retained operator logs show a group0
+snapshot imported at index12, diff16 rows, in51ms from import-start to
+installed, followed by successful workload and orderly fixture shutdown.
+
+Its closed text manifest contains21 files, including the five operator
+fixture logs copied to `operator-logs/`; SHA256 of `SHA256SUMS`:
+`5d55bb5ad5c7759bc0e3781283a557943f5de1a5a7f0dc42f184e83e6133ee5f`.
+The source and fixture bulk remain temporarily retained for the open EIO
+investigation. No budget value or acceptance assertion changed.
+
+A bounded **20-repetition diagnostic series** is now running serially on
+those same binaries, stopping on its first error. Each invocation is
+`TMPDIR=NEW_RUN/tmp python3 -u tests/test_operator_workflows.py`; the existing
+keep-success override is removed, while failed fixtures are automatically
+retained. Output is `intel1:~/efs-artifacts/taskJ-20261026/operator-series-36db33f98/`
+(`stage`, `results.json`, numbered run logs and `exit`, plus any failed
+fixture). Controller: `~/efs-taskJ3/operator-series.py`, screen
+`taskJ-operator-series`. This series only seeks the missing failure trace;
+clean repetitions cannot count as correcting the original failed gate.
