@@ -96,7 +96,7 @@ try:
     follower = next(i for i in (1, 2, 3) if r.node_id(i) != leader)
     lead_i = next(i for i in (1, 2, 3) if r.node_id(i) == leader)
     rc, out = mgmt(env, 'raft-resync', r.ep(lead_i), str(group))
-    assert rc == 1 and 'leads the group; refused' in out, out
+    assert rc == 1 and 'rc=-15' in out and 'leader or retired; refused' in out, out
     rc, out = mgmt(env, 'raft-resync', r.ep(follower), str(group))
     assert rc == 0 and 'requested' in out, out
     r.wait_log(follower, rf'raft: group={group} resync requested')

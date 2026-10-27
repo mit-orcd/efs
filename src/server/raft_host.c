@@ -4707,7 +4707,8 @@ static uint32_t host_route_voters(struct efs_raft_host *h,uint8_t group)
 {
     struct host_group *g=group_slot(h,group);
     struct host_view v;
-    if(!g)return group_voters(group,__atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
+    if(!g || host_group_retired(h,group))
+        return group_voters(group,__atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
     host_view_get(h,group,&v);
     if(v.has)return v.voters;
     return __atomic_load_n(&g->voters,__ATOMIC_ACQUIRE);
