@@ -165,7 +165,7 @@ def main():
             (mount / f'writer-{i}').mkdir()
         if args.trace_client:
             tracer = subprocess.Popen(['strace', '-ff', '-ttt', '-T', '-yy', '-s', '80',
-                                       '-e', 'trace=connect,sendto,recvfrom,poll,ppoll', '-o', str(work / 'client.trace'),
+                                       '-e', 'trace=connect,sendto,recvfrom,sendmsg,recvmsg,read,writev,poll,ppoll', '-o', str(work / 'client.trace'),
                                        '-p', str(client.pid)], stdout=subprocess.DEVNULL,
                                       stderr=(work / 'strace.log').open('w'))
             time.sleep(1)
