@@ -188,8 +188,23 @@ def serve_fault():
         rc, out = mgmt('raft-resync', cluster.ep(victim), str(group))
         assert rc == 0, out
         cluster.wait_log(victim, r'snapshot import .*halt cleared, group served again', timeout=60)
+        # Normal leader routing may redirect even a fully healed follower.
+        # Require the explicit clear, a fresh mutation applied on this replica,
+        # and an exact successful read through the returned healthy route.
+        healed = group_applied(cluster, victim, group)
+        write_file(target / 'after-resync', payload('after-resync'))
+        deadline = time.monotonic() + 15
+        while group_applied(cluster, victim, group) <= healed and time.monotonic() < deadline:
+            time.sleep(.05)
+        assert group_applied(cluster, victim, group) > healed, 'resynced replica did not resume apply'
         rc, out = mgmt('raft-getattr', cluster.ep(victim), str(inode))
-        assert rc == 0 and 'status=0 ' in out, out
+        route = re.search(r'status=(\d+) primary=(\d+)', out)
+        assert rc == 0 and route and int(route[1]) in (0, 7), out
+        if int(route[1]) == 7:
+            assert int(route[2]) in {1, 2, 3} - {victim}, out
+            rc, out = mgmt('raft-getattr', cluster.ep(int(route[2])), str(inode))
+        assert rc == 0 and f'status=0 ' in out and f'ino={inode} ' in out, out
+        assert (target / 'after-resync').read_bytes() == payload('after-resync')
         assert (target / 'old-0').read_bytes() == payload('old-0')
         assert (target / 'quorum-2').read_bytes() == payload('quorum-2')
         print('[w165] PASS serve-first halt, quorum creates and snapshot resync', flush=True)
