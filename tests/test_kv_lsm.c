@@ -1912,10 +1912,21 @@ static void test_decode_owner(void)
     CHECK(put_s(kv, "staged", "discard") == EFS_OK, "stage before damaged read");
     CHECK(efs_kv_decode_result(kv, key, 3, EFS_ERR_PROTO) == EFS_ERR_UNSUPPORTED &&
           decode_notices == 2, "apply refusal remains fatal");
-    CHECK(efs_kv_lsm_apply_end(kv, NULL) == EFS_OK, "abort damaged apply releases writer");
+    struct efs_kv_item cursor = {EFS_KV_PUT, (const uint8_t *)"cursor", 6,
+                                (const uint8_t *)"1", 1};
+    CHECK(efs_kv_lsm_apply_end(kv, &cursor) == EFS_ERR_UNSUPPORTED,
+          "masked decoder result cannot commit effects or cursor; writer released");
     uint8_t val[16]; uint32_t len = sizeof(val);
     CHECK(efs_kv_get(kv, (const uint8_t *)"staged", 6, val, &len) == EFS_ERR_NOT_FOUND,
           "rejected apply exposes no staged value");
+    len = sizeof(val);
+    CHECK(efs_kv_get(kv, (const uint8_t *)"cursor", 6, val, &len) == EFS_ERR_NOT_FOUND,
+          "damaged entry cannot advance cursor");
+    CHECK(efs_kv_lsm_apply_begin(kv) == EFS_OK, "begin explicit abort");
+    CHECK(efs_kv_decode_result(kv, key, 3, EFS_ERR_PROTO) == EFS_ERR_UNSUPPORTED,
+          "second apply refusal fatal");
+    CHECK(efs_kv_lsm_apply_end(kv, NULL) == EFS_ERR_UNSUPPORTED,
+          "explicit abort retains fatal verdict and unlocks");
     CHECK(put_s(kv, "after", "ok") == EFS_OK, "writer progresses after abort");
     efs_kv_lsm_close(kv);
     rmtree(g_dir);

@@ -2697,7 +2697,7 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
      * is a malformed encoding — refuse and halt the group (W127 route),
      * never log-and-skip: skipping advances this replica past a
      * split/migrate step it did not perform and diverges it. */
-    if (rc == EFS_ERR_PROTO)
+    if (rc == EFS_ERR_PROTO || rc == EFS_ERR_UNSUPPORTED)
         return EFS_ERR_UNSUPPORTED;
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply dir rc=%d index=%llu ino=%llu kind=%u\n",

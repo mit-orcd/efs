@@ -1379,7 +1379,14 @@ static int lsm_decode_error(void *ctx, const uint8_t *key, uint32_t klen)
     struct kv_lsm *l = ctx;
     if (!l->decode_error) return EFS_ERR_PROTO;
     l->decode_error(l->decode_error_ctx, key, klen);
-    return apply_staging(l) ? EFS_ERR_UNSUPPORTED : EFS_ERR_NOT_PRIMARY;
+    if (apply_staging(l)) {
+        /* A command family may normalize business rejections. Stored decode
+         * refusal is not one: poison the scope itself so no masked return
+         * can commit its staged rows or applied cursor. */
+        apply_scope.failed = EFS_ERR_UNSUPPORTED;
+        return EFS_ERR_UNSUPPORTED;
+    }
+    return EFS_ERR_NOT_PRIMARY;
 }
 static const struct efs_kv_ops lsm_ops = {
     .put = lsm_put,
