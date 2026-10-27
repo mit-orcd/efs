@@ -160,7 +160,11 @@ def serve_fault():
             assert match, out
             replies.append(tuple(map(int, match.groups())))
         print('[w165] three distinct CREATE replies:', replies, flush=True)
-        assert all(status in (0, 7) for status, hint in replies), \
+        # A raw RPC may say BUSY (5) while the new leader is elected.
+        # This is not an application retry: the FUSE operations below must
+        # still complete once, including fsync and exact readback. Base's
+        # permanent ERROR (3) is never accepted.
+        assert all(status in (0, 5, 7) for status, hint in replies), \
             ('persistent serve-path EIO/ERROR instead of redirect', replies, cluster.log(victim)[-1500:])
         assert all(hint != victim for status, hint in replies if status == 7), ('self redirect', replies)
         cluster.wait_log(victim, rf'group={group} INCOMPATIBLE stored row', timeout=10)
