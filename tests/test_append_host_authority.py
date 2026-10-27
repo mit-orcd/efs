@@ -16,17 +16,19 @@ code=r"""
 #include <string.h>
 #define EFS_RAFT_LEADER 1
 struct efs_raft{int role,leader;};
-struct efs_raft_host{struct efs_kv *kv;pthread_mutex_t mu;struct efs_raft r;};
+struct efs_raft_host{int raft_id;struct efs_kv *kv;pthread_mutex_t mu;struct efs_raft r;};
+static struct efs_raft_host *g_host;
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){return g==2?&h->r:NULL;}
 static int efs_raft_role(struct efs_raft*r){return r->role;}
 static int efs_raft_leader(struct efs_raft*r){return r->leader;}
-"""+fn('static int host_append_primary(')+r"""
+"""+fn('static efs_node_id_t host_reply_hint(')+fn('static int host_append_primary(')+r"""
 static struct efs_raft_host host={.mu=PTHREAD_MUTEX_INITIALIZER};
-int main(void){struct efs_msg_inode_reply r={0};host.r.role=0;host.r.leader=2;
+int main(void){g_host=&host;struct efs_msg_inode_reply r={0};host.r.role=0;host.r.leader=2;
  assert(!host_append_primary(&host,2,&r)&&r.status==EFS_INODE_RPC_NOT_PRIMARY&&r.primary_id==3);
  host.r.role=EFS_RAFT_LEADER;assert(host_append_primary(&host,2,&r));
  host.r.role=0;host.r.leader=-1;assert(!host_append_primary(&host,2,&r)&&!r.primary_id);
  assert(!host_append_primary(&host,0,&r));
+ host.r.leader=0;assert(!host_append_primary(&host,2,&r)&&!r.primary_id);
  return 0;
 }
 """

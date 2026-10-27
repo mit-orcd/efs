@@ -5,6 +5,8 @@ import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 text=(root/'src/server/raft_host.c').read_text();start=text.index('void server_raft_host_lane_bootstrap_rpc(')
 function=text[start:text.index('\n}',start)+2]
+hint_start=text.index('static efs_node_id_t host_reply_hint(')
+hint=text[hint_start:text.index('\n}',hint_start)+2]
 source=r'''
 #include "efs/protocol.h"
 #include "efs/meta_apply.h"
@@ -14,9 +16,9 @@ source=r'''
 #include <stdio.h>
 #include <pthread.h>
 struct efs_server { pthread_mutex_t lock; };
-struct efs_raft_host { int running,n; struct efs_server *s; };
+struct efs_raft_host { int running,n,raft_id; struct efs_server *s; };
 static struct efs_server server={.lock=PTHREAD_MUTEX_INITIALIZER};
-static struct efs_raft_host host={1,4,&server}, *g_host=&host;
+static struct efs_raft_host host={.running=1,.n=4,.s=&server}, *g_host=&host;
 static struct efs_export ex={.chunk_size=EFS_MIN_CHUNK_SIZE};
 static unsigned boots,views,puts,forwards; static int dual=1,boot_rc;
 int efs_chunk_size_valid(uint32_t cs) { return cs==EFS_MIN_CHUNK_SIZE || cs==EFS_MIN_CHUNK_SIZE*2; }
@@ -45,7 +47,7 @@ void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *q,
     out->view.status=EFS_INODE_RPC_OK;
 }
 static uint8_t rc_to_inode_status(int rc) { return rc==EFS_OK?EFS_INODE_RPC_OK:EFS_INODE_RPC_BUSY; }
-''' + function + r'''
+''' + hint + '\n' + function + r'''
 int main(void) {
     struct efs_msg_lane_bootstrap q={19,123,456,17,EFS_MIN_CHUNK_SIZE};
     struct efs_msg_lane_writer_view_reply out;
