@@ -59,6 +59,11 @@ def command(label, *args):
     rows.append(dict(command=label, argv=list(args), rc=rc, output=out,
                      seconds=round(time.monotonic()-begin, 3)))
     print(json.dumps(rows[-1]), flush=True)
+    # Several diagnostic CLI commands historically return zero even for an
+    # application rejection. A successful process is not our success oracle.
+    if rc == 0:
+        statuses = re.findall(r'\bstatus=(\d+)', out)
+        assert all(int(st) == 0 for st in statuses), out
     return rc, out
 
 try:
@@ -102,7 +107,7 @@ try:
         assert rc == 0, out
     # No membership mutation: ask for the already committed voter set.
     rc, out = command('raft-change same voters', 'raft-change', c.ep(1), '2', '0xe')
-    assert rc == 0, out
+    assert rc == 0 and 'converged=1' in out, out
     step_rc, step_out = command('raft-step-down retired', 'raft-step-down', c.ep(1), '2')
     resync_rc, resync_out = command('raft-resync retired', 'raft-resync', c.ep(1), '2')
     rc, out = command('raft-setattr', 'raft-setattr', c.ep(1), '1', '6', '0',
