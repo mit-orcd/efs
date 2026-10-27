@@ -21,7 +21,7 @@ groups = collections.defaultdict(list)
 incomplete = 0
 for path in args.work.glob('client.trace.*'):
     for line in path.read_text(errors='replace').splitlines():
-        if 'writev(' not in line or 'TCP:' not in line:
+        if ('writev(' not in line and 'sendmsg(' not in line) or 'TCP:' not in line:
             continue
         quoted = re.findall(r'iov_base=("(?:[^"\\]|\\.)*")', line)
         if len(quoted) < 2:
