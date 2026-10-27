@@ -340,8 +340,15 @@ static int receive_store(struct efs_raft *r, enum receive_store_kind kind,
     return receive_store_run(&call);
 }
 
-static void fence_storage(struct efs_raft *r)
+static void fence_storage_at(struct efs_raft *r, const char *where, int line)
 {
+    if (!r->storage_failed)
+        fprintf(stderr, "raft: group=%u storage fenced at=%s:%d term=%llu "
+                "commit=%llu applied=%llu snap=%llu resync=%d\n", r->group,
+                where, line, (unsigned long long)r->current_term,
+                (unsigned long long)r->commit_index,
+                (unsigned long long)r->last_applied,
+                (unsigned long long)r->snap_idx, r->resync_requested);
     r->storage_failed = 1;
     r->commit_index = r->last_applied;
     read_proof_forget(r);
@@ -350,6 +357,8 @@ static void fence_storage(struct efs_raft *r)
     r->allow_campaign = 0;
     r->read_in_flight = 0;
 }
+
+#define fence_storage(r) fence_storage_at((r), __func__, __LINE__)
 
 static int save_hard(struct efs_raft *r)
 {
