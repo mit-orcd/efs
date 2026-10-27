@@ -29,6 +29,13 @@ repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
 
+## D44 — the K22 release gates stay in `make test-long` (user, Oct 26)
+
+`tests/test_k22_snapshot_import.py` and `tests/test_k22_leader_admission.py` (Task B, wave 15) stay in the
+`make test-all` gate rather than becoming a separate target like `make test-soak`. The W160 target is
+therefore 1,100 s (18 min 20 s) at `EFS_TEST_JOBS=8`, recorded in `tests/test_make_test_recipe.py`;
+`test_w130_dir_fault.py` stays its own gate (`make test-w130`) until W165 is fixed.
+
 ## D43 — `.efs` and expiry ship in alpha 1.0 (user, Oct 25)
 
 The user's statement of Oct 25: "`.efs` and expiry are features which ship
