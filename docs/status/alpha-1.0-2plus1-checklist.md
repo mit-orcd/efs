@@ -40,7 +40,7 @@ Alpha 1.0 is reached in three stages, in this order:
   blocks again.
 - **Performance comes last.** No performance work is done before Stage 3,
   except where a correctness gate needs it (bounded progress, D4), and the
-  explicitly authorized Stage 1 hot-path tasks AB–AU below (Oct 28).
+  explicitly authorized Stage 1 hot-path tasks AB–AX below (Oct 28).
   Performance changes never relax correctness or durability checks.
 - **Stage 3 stays inside alpha.** A performance change that needs 2+2, more
   or redistributed metadata groups, leader or voter redistribution (W66),
@@ -838,6 +838,83 @@ Apply AB–AR's exact-source, retained-evidence and unchanged-gate requirements.
 Measure idle/low-load and saturated cases, context switches and tail latency,
 including starvation and cancellation. No new switches or performance PASS
 claims; no implementation or live test was run for this review.
+
+### Stage 1 additional letter tasks — workload-sized scans (AV–AX)
+
+**User-directed extension, October 28; source reviewed at `ee66f837b`.**
+All three are **OPEN / implementation and measurements NOTRUN**. Graph queries
+for `server_raft_host_report`, `child_idx_del` and `sync_hardlink_attrs` were
+checked against the function bodies and callers. Complexity below describes
+those loops, not a measured end-to-end slowdown or an unbounded input: message
+and staging limits still apply. No K defect, acceptance or failure verdict changes.
+
+- [ ] **AV — REPORT: index the chunk-to-inode-size join once per request.**
+  In `src/server/raft_host.c::server_raft_host_report`, the main record loop
+  searches `irecs[0..ino_count)` from the start for each of `count` chunk records.
+  This is O(C × I) comparisons in the worst case for C chunks and I inode-size
+  records; with one chunk per distinct inode it can grow quadratically within
+  the bounded frame. This is not the separate `ic[32]` row cache, whose linear
+  lookup has a fixed small bound. Evaluate a bounded request-local inode index
+  or order-preserving indexed join built once, retaining original record order
+  and immutable publication identity. Preserve first-match behavior for duplicate
+  size records unless a separately reviewed validation rule changes it; zero
+  EOF is explicit and absence is not permission to guess size. Preserve deleted
+  inode handling, captured FileID/epoch, partial verdicts, deadlines and allocation
+  failure before any new side effects. Gates: REPORT zero-EOF, frame-boundary,
+  partial-verdict, retry/resolve and K38 bounds; add mixed/duplicate/missing inode
+  records and adversarial order. Measure comparison count, CPU, transient memory
+  and latency while varying C and I independently, including the common one-inode
+  case. This is not AM's degraded-object bookkeeping, AN's status proofs or
+  P3-C's ticket compaction. The client chunk-only-inode fallback has another
+  size-array scan, but it already bypasses normal inodes through `dirty_set_has`;
+  do not label all client REPORT construction quadratic from that rare branch.
+- [ ] **AW — Local child vectors: avoid a parent-sized search on deletion and slot moves.**
+  `src/meta/metadata.c::child_idx_del` searches all slots of the parent's child
+  vector before swap-removing the match. `child_idx_replace_slot` searches that
+  vector again to fix a relocated inode row; `remove_inode_slot` invokes it
+  when swapping the last row into a removed slot. Graph callers include local
+  unlink/forget, rename and RPC-row upsert. For a loaded parent with D children,
+  an operation can scan O(D); an adversarial sequence of D removals can do
+  O(D²) comparisons, even though the actual vector deletion is O(1).
+  This is the in-memory export/staging index, not the authoritative Raft KV
+  directory scan or the split migrator. Evaluate a reverse slot-to-child-position
+  index or equivalent bounded representation. Update it on both vector swaps
+  and inode-row moves, parent rebinding, rebuild and eviction. Preserve hardlink
+  row identity, per-name indexing, root handling, sharded tables, memory charging
+  and failure atomicity; do not cache unstable array pointers across growth.
+  Gates: sparse-metadata/stage-eviction and rename/unlink coverage, with forced
+  realloc, swap of a row from another parent, multiple aliases, repeated grow/
+  delete cycles and allocation failure. Measure comparisons against loaded
+  child count, retained index bytes and local mutation latency. Distinct from
+  AH's chunk-map locking and AO's server READDIR page transport.
+- [ ] **AX — Loaded hardlink aliases: visit aliases rather than unrelated inode rows.**
+  `src/meta/metadata.c::sync_hardlink_attrs` scans `ex->inode_count` to propagate
+  shared attributes for a non-directory with nlink > 1; size, mode, owner, time
+  and RPC upsert callers use it. Single-link files and directories already return
+  immediately. Link/unlink nlink updates also contain full-table scans, and
+  `stamp_ctime_loaded` can visit shard tables for multiply linked inodes. Thus
+  cost depends on unrelated loaded rows, not just the inode's alias count.
+  Evaluate an inode-to-alias-row index, potentially sharing AW's slot-lifetime
+  machinery but with a different key and invariant. Preserve each alias's parent,
+  name/slab ownership and rollups while updating shared attributes, nlink and
+  timestamps. Cover row relocation, unlink with open handles, last alias,
+  remote adoption, cross-shard aliases, eviction/reload and allocation failure.
+  Gates: metadata hardlink semantics, stage eviction, sparse metadata and POSIX
+  link/rename/chmod/truncate cases; compare a fixed number of aliases while
+  increasing unrelated loaded rows, then vary aliases independently. Report
+  index memory and update cost as well as lookup speed. This task does not
+  claim ordinary single-link writes scan the table, nor replace authoritative
+  metadata reads with a local alias index.
+
+**Deduplication and acceptance:** bounded 32-entry REPORT row-cache, 256-entry
+mtime pins, fixed-size node/connection tables and hash-probe loops are not called
+quadratic merely because they contain loops. Existing inode/name/chunk hash
+indexes, hashed READDIR name deduplication and P3-C's repeated ticket memmove
+remain separate. Keep AB–AU's exact build/environment, retained raw evidence,
+unchanged correctness/deadline and memory-bound gates. Use operation/comparison
+counts to establish scaling before proposing data-structure complexity; retain
+small-workload baselines. No new behavior flags, implementation or live
+performance acceptance is included in this documentation review.
 
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 

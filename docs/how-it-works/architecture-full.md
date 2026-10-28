@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**OPEN / implementation and measurements NOTRUN**, source reviewed at `ee66f837b`:
+REPORT chunk/size nested search, local child-vector deletion/relocation scans,
+and loaded hardlink-alias scans. Scope and fixed-size fast paths distinguished;
+no new K defect or measured slowdown claimed. Existing tasks remain separate.
+
+[Stage 1 wakeup/polling tasks AS–AU](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--wakeups-and-polling-asau):
 **OPEN / implementation and measurements NOTRUN**, source reviewed at `7dc73fb68`:
 demand-read allocation polling, broad PUT-window wakeups, and repeated Raft
 eventfd kicks. Lost-wakeup, overflow, deadline and progress gates required;
