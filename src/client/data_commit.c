@@ -333,6 +333,30 @@ static void stripe_log(const char *what, const struct stripe *s, int durable,
             frag_letter(s->state[2]), durable, why, rc);
 }
 
+/* Closure/publication is a fence against a later publication of this
+ * object, not proof of absence. The caller must read metadata afterwards. */
+static int stripe_close_for_absence(struct stripe *s)
+{
+    if (s->published || s->closed) return EFS_OK;
+    int rc = efs_client_put_terminal(s->ino, s->inode_gen, s->ci, s->object);
+    pthread_mutex_lock(&commit_mu);
+    struct stripe *live = stripe_find(s->ino, s->ci, s->object);
+    int closed = live && live->inode_gen == s->inode_gen && live->closed;
+    pthread_mutex_unlock(&commit_mu);
+    if (rc == EFS_OK || closed) {
+        s->closed = 1;
+        return EFS_OK;
+    }
+    return rc;
+}
+
+static int sweep_expired(uint64_t deadline)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now)) return 1;
+    return (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000 >= deadline;
+}
+
 /* Prove the recorded stripes of `ino` (all of them when `all`). */
 static int stripe_prove(efs_ino_t ino, int all)
 {
@@ -419,6 +443,10 @@ static int stripe_prove(efs_ino_t ino, int all)
     }
     pthread_mutex_unlock(&commit_mu);
 
+    /* The same absolute budget covers all metadata work, not just COMMIT
+     * workers. In particular the first mark and every retired-object read
+     * must inherit it; restore the caller's TLS value on the single exit. */
+    efs_client_rpc_set_deadline_ms(deadline);
     int rc = EFS_OK;
     unsigned logged = 0, failed = 0, marked = 0;
     const char *what = all ? "data-commit sweep" : "fsync";
@@ -427,6 +455,11 @@ static int stripe_prove(efs_ino_t ino, int all)
         int durable = 0, open = -1, opens = 0, retire = 0;
         if (!s->ino)
             continue;
+        if (sweep_expired(deadline)) {
+            stripe_log(what, s, 0, "sweep deadline exhausted; obligations retained", EFS_ERR_BUSY);
+            failed++;
+            break;
+        }
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             if (s->state[i] == FRAG_DURABLE)
                 durable++;
@@ -448,20 +481,11 @@ static int stripe_prove(efs_ino_t ino, int all)
                  * SETTLE/PUBLISHED/REJECTED are durable fences against a late
                  * REPORT. Then repeat the mark: absence BEFORE that fence is
                  * not evidence of absence AFTER it. */
-                uint64_t saved = efs_client_rpc_deadline_ms();
-                efs_client_rpc_set_deadline_ms(deadline);
-                int trc = efs_client_put_terminal(s->ino, s->inode_gen, s->ci, s->object);
-                pthread_mutex_lock(&commit_mu);
-                struct stripe *live = stripe_find(s->ino, s->ci, s->object);
-                int closed = live && live->inode_gen == s->inode_gen && live->closed;
-                pthread_mutex_unlock(&commit_mu);
-                if (trc == EFS_OK || closed) {
-                    s->closed = 1;
+                if (stripe_close_for_absence(s) == EFS_OK && !sweep_expired(deadline))
                     mrc = efs_client_rpc_degraded_mark(s->ino, s->inode_gen, s->object,
                                                        s->ci, (uint32_t)open, s->nodes[open]);
-                }
-                efs_client_rpc_set_deadline_ms(saved);
             }
+            if (sweep_expired(deadline)) mrc = EFS_ERR_BUSY;
             if (mrc == EFS_OK) {
                 s->state[open] = FRAG_MARKED;
                 if (marked++ < 8)
@@ -477,12 +501,25 @@ static int stripe_prove(efs_ino_t ino, int all)
                 failed++;
             }
         } else {
-            if (logged++ < 8)
-                stripe_log(what, s, durable, s->state[0] == FRAG_LOST || s->state[1] == FRAG_LOST ||
-                           s->state[2] == FRAG_LOST
-                               ? "need 2 (a member of another incarnation lost a fragment)"
-                               : "need 2", EFS_ERR_IO);
-            failed++;
+            /* A closed/superseded object needs no fragment proof once a
+             * fresh authoritative read proves it absent. With fewer than
+             * two durable fragments never write a one-fragment repair mark:
+             * a still-live or uncertain object must keep failing fsync. */
+            int live = 1;
+            int absent = stripe_close_for_absence(s);
+            if (absent == EFS_OK && !sweep_expired(deadline))
+                absent = efs_client_rpc_object_live(s->ino, s->inode_gen, s->ci,
+                                                     s->object, &live);
+            if (absent == EFS_OK && !live && !sweep_expired(deadline)) {
+                retire = 1;
+            } else {
+                if (logged++ < 8)
+                    stripe_log(what, s, durable, s->state[0] == FRAG_LOST || s->state[1] == FRAG_LOST ||
+                               s->state[2] == FRAG_LOST
+                                   ? "need 2 (a member of another incarnation lost a fragment)"
+                                   : "need 2", EFS_ERR_IO);
+                failed++;
+            }
         }
         if (retire) {
             pthread_mutex_lock(&commit_mu);
@@ -497,6 +534,7 @@ static int stripe_prove(efs_ino_t ino, int all)
             fprintf(stderr, "%s: %u more stripes without proof\n", what, logged - 8);
         rc = EFS_ERR_IO;
     }
+    efs_client_rpc_set_deadline_ms(parent);
     free(snap);
     return rc;
 }

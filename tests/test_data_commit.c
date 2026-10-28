@@ -5,10 +5,26 @@
  * EIO (stripe named in the log) with fewer than two, with an uncertain or
  * re-incarnated member holding a needed fragment, or without the mark.
  * Built with a small table so the full-table sweep is reached. */
+#include <stdint.h>
+#include <time.h>
+static uint64_t test_clock_jump_ms;
+static int test_clock_gettime(clockid_t clock, struct timespec *ts)
+{
+    int rc = clock_gettime(clock, ts);
+    uint64_t jump = __atomic_load_n(&test_clock_jump_ms, __ATOMIC_ACQUIRE);
+    if (!rc && clock == CLOCK_MONOTONIC) {
+        ts->tv_sec += jump / 1000;
+        ts->tv_nsec += (long)(jump % 1000) * 1000000L;
+        if (ts->tv_nsec >= 1000000000L) { ts->tv_sec++; ts->tv_nsec -= 1000000000L; }
+    }
+    return rc;
+}
+#define clock_gettime test_clock_gettime
 #ifndef STRIPE_CAP
 #define STRIPE_CAP 16u
 #endif
 #include "../src/client/data_commit.c"
+#undef clock_gettime
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -50,18 +66,33 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **p, uint32_t *n)
     return 0;
 }
 static int terminal_rc = EFS_ERR_BUSY, terminal_calls;
+static uint64_t metadata_deadline;
+static int object_queries, object_rc = EFS_ERR_NET, object_live = 1, expire_during_object;
+int efs_client_rpc_object_live(efs_ino_t ino, uint64_t gen, uint32_t ci,
+                               uint64_t object, int *live_object)
+{
+    assert(ino && gen && object); (void)ci;
+    __atomic_fetch_add(&object_queries, 1, __ATOMIC_ACQ_REL);
+    if (expire_during_object) __atomic_store_n(&test_clock_jump_ms, 60001, __ATOMIC_RELEASE);
+    __atomic_store_n(&metadata_deadline, efs_client_rpc_deadline_ms(), __ATOMIC_RELEASE);
+    if (object_rc == EFS_OK) *live_object = object_live;
+    return object_rc;
+}
 int efs_client_put_terminal(efs_ino_t ino, uint64_t gen, uint32_t ci, uint64_t object)
 {
     assert(ino && gen && object); (void)ci;
-    terminal_calls++;
+    __atomic_store_n(&metadata_deadline, efs_client_rpc_deadline_ms(), __ATOMIC_RELEASE);
+    __atomic_fetch_add(&terminal_calls, 1, __ATOMIC_ACQ_REL);
     return terminal_rc;
 }
-static int marks, mark_rc = EFS_OK, publish_during_mark;
+static int marks, mark_rc = EFS_OK, publish_during_mark, expire_during_mark;
 static efs_ino_t mark_ino; static uint32_t mark_ci, mark_fi; static efs_node_id_t mark_node;
 int efs_client_rpc_degraded_mark(efs_ino_t ino, uint64_t inode_gen, uint64_t object,
                                  uint32_t ci, uint32_t fi, efs_node_id_t node)
 {
     assert(inode_gen == 5 && object == ino * 1000 + ci);
+    __atomic_store_n(&metadata_deadline, efs_client_rpc_deadline_ms(), __ATOMIC_RELEASE);
+    if (expire_during_mark) __atomic_store_n(&test_clock_jump_ms, 60001, __ATOMIC_RELEASE);
     marks++; mark_ino = ino; mark_ci = ci; mark_fi = fi; mark_node = node;
     if (publish_during_mark) {
         struct efs_chunk_rec rec = {.ino=ino, .chunk_index=ci,
@@ -114,9 +145,76 @@ static void *do_fsync(void *arg)
     return NULL;
 }
 
-int main(void)
+static void test_sweep_deadline(void)
 {
+    /* One sweep deadline covers the initial metadata call, every stripe,
+     * and restoration of the caller's TLS deadline, including errors. */
+    assert(put(960,0,1,2,3,7)==EFS_OK);
+    down[3]=1; reset(); metadata_deadline=0;
+    assert(efs_client_data_commit(960)==EFS_OK && marks==1);
+    assert(metadata_deadline && deadline==0);
+    assert(put(961,0,1,2,3,7)==EFS_OK);
+    struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts);
+    uint64_t parent=(uint64_t)ts.tv_sec*1000+ts.tv_nsec/1000000+30000;
+    deadline=parent; reset();
+    assert(efs_client_data_commit(961)==EFS_OK && metadata_deadline==parent && deadline==parent);
+    deadline=0;
+    assert(put(965,0,1,2,3,7)==EFS_OK);
+    clock_gettime(CLOCK_MONOTONIC,&ts);
+    parent=(uint64_t)ts.tv_sec*1000+ts.tv_nsec/1000000+300000;
+    deadline=parent; reset();
+    assert(efs_client_data_commit(965)==EFS_OK && metadata_deadline<parent && deadline==parent);
+    deadline=0;
+    assert(put(962,0,1,2,3,7)==EFS_OK);
+    assert(put(962,1,1,2,3,7)==EFS_OK);
+    reset(); expire_during_mark=1;
+    assert(efs_client_data_commit(962)==EFS_ERR_IO && marks==1 && live()==2 && deadline==0);
+    expire_during_mark=0; test_clock_jump_ms=0;
+    reset(); assert(efs_client_data_commit(962)==EFS_OK && marks==2 && !live());
+    heal();
+}
+
+static void test_retired_objects(void)
+{
+    /* Two lost fragments do not keep a retired, closed object forever.
+     * Closure alone is insufficient: require a fresh authoritative absence
+     * query; a present base/span or uncertain read must still fail. */
+    assert(put_unpublished(963,0,1,2,3,7)==EFS_OK);
+    struct efs_put_ticket closed={.ino=963,.inode_gen=5,.object=963000};
+    efs_client_stripe_closed(&closed);
+    epochs[2]++; epochs[3]++;
+    object_rc=EFS_ERR_NET; object_queries=0; reset();
+    assert(efs_client_data_commit(963)==EFS_ERR_IO && live()==1 && object_queries==1 && !marks);
+    object_rc=EFS_OK; object_live=1;
+    reset(); assert(efs_client_data_commit(963)==EFS_ERR_IO && live()==1 && !marks);
+    object_live=0; expire_during_object=1;
+    reset(); assert(efs_client_data_commit(963)==EFS_ERR_IO && live()==1 && !marks && !deadline);
+    expire_during_object=0; test_clock_jump_ms=0;
+    reset(); assert(efs_client_data_commit(963)==EFS_OK && !live() && !marks && metadata_deadline && !deadline);
+    /* No closure or publication: even a configured absent reply is not a
+     * certificate. Terminal failure retains; terminal success precedes read. */
+    assert(put_unpublished(964,0,1,2,3,7)==EFS_OK);
+    epochs[2]++; epochs[3]++;
+    terminal_rc=EFS_ERR_BUSY; object_queries=0;
+    reset(); assert(efs_client_data_commit(964)==EFS_ERR_IO && live()==1 && !object_queries && !marks);
+    terminal_rc=EFS_OK;
+    reset(); assert(efs_client_data_commit(964)==EFS_OK && !live() && object_queries==1 && !marks);
+    /* Published then removed, with all three old incarnations gone. The
+     * read, rather than a fragment count or closure alone, permits cleanup. */
+    assert(put(966,0,1,2,3,7)==EFS_OK);
+    epochs[1]++; epochs[2]++; epochs[3]++;
+    reset(); assert(efs_client_data_commit(966)==EFS_OK && !live() && !marks);
+    terminal_rc=EFS_ERR_BUSY; object_rc=EFS_ERR_NET; object_live=1; heal();
+}
+
+int main(int argc, char **argv)
+{
+    assert(argc == 1 || (argc == 2 &&
+           (!strcmp(argv[1], "deadline") || !strcmp(argv[1], "retirement"))));
     for (int i = 1; i < NN; i++) epochs[i] = 101;
+    if (argc == 1 || !strcmp(argv[1], "deadline")) test_sweep_deadline();
+    if (argc == 1 || !strcmp(argv[1], "retirement")) test_retired_objects();
+    if (argc > 1) return 0;
     /* Full-table pressure before REPORT: NOT_FOUND is not a retirement
      * certificate. All obligations survive, and the new PUT gets BUSY. */
     for (efs_ino_t ino=900; ino<916; ino++)

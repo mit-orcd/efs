@@ -92,3 +92,7 @@ static void *do_fsync(void *arg)
 
 int efs_client_put_terminal(efs_ino_t ino,uint64_t gen,uint32_t ci,uint64_t obj)
 { (void)ino;(void)gen;(void)ci;(void)obj;return EFS_ERR_BUSY; }
+
+/* Uncertain retirement reads never weaken the frozen original oracle. */
+int efs_client_rpc_object_live(efs_ino_t ino,uint64_t gen,uint32_t ci,uint64_t obj,int *live_object)
+{ (void)ino;(void)gen;(void)ci;(void)obj;(void)live_object;return EFS_ERR_NET; }

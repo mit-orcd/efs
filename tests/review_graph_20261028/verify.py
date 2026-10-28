@@ -19,7 +19,7 @@ def main():
     flags=['-std=gnu11','-Wall','-Wextra','-Werror','-O1','-g','-Iinclude','-pthread']
     if args.sanitize:flags+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
     source=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
-    watched=['src/common/request_receipt.c','include/efs/request_receipt.h','src/client/data_commit.c','src/client/client_internal.h','src/client/inode_rpc.c','src/server/raft_host.c','src/raft/raft_disk.c','src/raft/raft_mem.c','tests/test_data_commit.c','tests/test_raft_store.c','tests/test_receipt_pending_pressure.py']
+    watched=['src/common/request_receipt.c','include/efs/request_receipt.h','src/client/data_commit.c','src/client/client_internal.h','src/client/inode_rpc.c','src/server/raft_host.c','src/raft/raft_disk.c','src/raft/raft_mem.c','tests/test_data_commit.c','tests/test_raft_store.c','tests/test_receipt_pending_pressure.py','tests/test_getchunks_budget.py']
     manifest={'source_commit':source,'platform':platform.platform(),'compiler':subprocess.check_output(cc+['--version'],text=True),'mode':'ASan/UBSan (no leak claim)' if args.sanitize else 'native',
               'sha256':{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in watched}}
     (out/'source.json').write_text(json.dumps(manifest,indent=2)+'\n')
@@ -33,7 +33,7 @@ def main():
             print('exit',rc,file=log,flush=True)
         results.append({'name':name,'rc':rc,'sha256':hashlib.sha256((out/(name+'.log')).read_bytes()).hexdigest()})
         return rc
-    py=['tests/test_w155_receipt_table.py','tests/test_receipt_pending_pressure.py','tests/test_w155_report_resolve.py','tests/test_w155_identified_resolve.py']
+    py=['tests/test_getchunks_budget.py','tests/test_w155_receipt_table.py','tests/test_receipt_pending_pressure.py','tests/test_w155_report_resolve.py','tests/test_w155_identified_resolve.py']
     if not args.sanitize:py+=['tests/test_report_frame_boundary.py','tests/test_txn_apply_retry.py','tests/test_make_test_recipe.py']
     for test in py:step(Path(test).stem,['python3',test])
     core=['src/raft/raft.c','src/raft/raft_mem.c','src/common/batch_obs.c']
