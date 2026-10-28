@@ -225,9 +225,9 @@ def cases_for(a, cpus):
     if 'store' in modes or 'read' in modes:
         add('store-prime', 'store', common + ['--size', str(a.store_size[0])], prerequisite=True)
     if 'store' in modes:
-        add('store-timed', 'store', common + ['--store', '--time', duration, '--window', str(chunks)])
+        add('store-timed', 'store', [a.seed, '--id', str(a.chunk_base + 1), '--size', str(a.store_size[0]), '--time', duration])
     if 'read' in modes:
-        add('read', 'read', common + ['--read', '--time', duration, '--window', str(chunks)])
+        add('read', 'read', common + ['--read', '--time', duration])
     if 'remote-meta' in modes:
         add('meta-remote', 'remote-meta', common + ['--meta', '--export', a.export,
             '--files', str(a.files), '--dirs', str(a.dirs), '--phases', 'all'])

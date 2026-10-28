@@ -24,7 +24,10 @@ def main():
     parser.add_argument('--smoke', action='store_true', help='also run real local backends')
     args = parser.parse_args()
     assert '--bench' not in run('efsd', '--help')
-    assert '--bench data' in run('efs-bench', '--help')
+    help_text = run('efs-bench', '--help')
+    assert '--bench data' in help_text and '--store' not in help_text
+    for args in [('--store',), ('--window', '2'), ('--read',), ('--size', '1M', '--io-size', '17M'), ('--size', '2', '--workers', '3')]:
+        run('efs-bench', '127.0.0.1:1', *args, ok=False)
     assert 'no cluster' in run('efs-bench', '--bench', 'data', '--help')
     run('efsd', '--bench', 'meta', ok=False)
     assert 'BENCH_OK kind=blake3' in run('efs-bench', '--bench', 'blake3', '--threads', '1',
