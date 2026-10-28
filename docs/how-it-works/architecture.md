@@ -1279,11 +1279,12 @@ transaction (§7.2).
 The client keeps that identity through transient admission and routing
 refusals. An inherited RPC deadline bounds those retries; an unrelated fixed
 attempt count must not expire first. FUSE MKDIR and RMDIR use a 30-second
-callback bound covering their prerequisite reads and mutation together, while
-preserving any tighter inherited deadline. Exhaustion reports the RPC,
-identity and stopping reason; it never turns an uncertain operation into a
-successful result. Receipt resolution of a lost reply is a separate authority
-check, not permission to issue the mutation under a new identity.
+normal-attempt budget covering prerequisite reads and mutation together,
+preserving any tighter inherited deadline. The existing separately bounded
+same-identity receipt-resolution allowance may follow a lost reply; this is
+not a new attempt identity or an unbounded extension. Exhaustion reports the
+RPC, identity and stopping reason and never turns an uncertain operation into
+a successful result.
 
 **That state is a bounded window, not a history.** At this scale "one durable
 record per operation, kept forever" is an unbounded table on every shard, so
