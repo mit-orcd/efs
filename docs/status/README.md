@@ -3,8 +3,9 @@
 [Graphify review fixes](graphify-review-findings-20261027.md):
 `graphify-review-fixes` from devel `063154e0e815`; infrastructure-error retry,
 shared byte/geometry/KV helpers and SETATTR codec implemented. Focused checks
-PASS; Linux full-suite RUNNING at `c0586c891`, final-source `5d403b68f` queued
-behind it. Prior header/test build failures retained. Not merged, pushed or deployed.
+PASS. First full suite FAIL (31 corrected harness dependencies, 9 RDMA setup
+failures; 5 NOTRUN). Final-source `e95cf62b4` full Linux suite RUNNING;
+unchanged-base RDMA comparison queued. No merge, push or deployment.
 
 Reviewed and reorganized October 15, 2026. This directory is the work queue and
 acceptance index; [backlog](../backlog/README.md) holds detailed work items and

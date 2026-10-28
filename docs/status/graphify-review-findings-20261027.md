@@ -1,10 +1,12 @@
 # Graphify review findings — October 27, 2026
 
 **Branch `graphify-review-fixes`, based on devel `063154e0e815`.
-Implementation committed through `5d403b68f`; Linux qualification
+Implementation committed through `e95cf62b4`; Linux qualification
 RUNNING, not an acceptance claim. Nothing merged, pushed or deployed.**
 
 ## Purpose and scope
+
+Related apply-refusal gates: [W127–W131](../backlog/work-items.md).
 
 The user requested implementation of the correctness and duplication findings
 from the Graphify review. The input graph is the external snapshot at
@@ -82,22 +84,35 @@ The failed build log is retained, not overwritten:
 `/data1/efs/evidence/graphify-review-ca111755b092/build.log` and
 `/data1/efs/evidence/graphify-review-b02cbe878/build.log`.
 
-The `c0586c891` Linux product/test-binary build PASS; its complete suite is
-running. Final-source `5d403b68f` is queued behind it, with a refusal guard if
-prior processes or mounts remain. Fourteen focused host/client Python
-regressions PASS on the final adapters. Seven native C regressions (KV,
-metadata apply, simulator, transactions, RAM/disk query catalogs and writer
-ranges) also PASS against the portable core. The original and corrected
-source logs for local checks remain outside Git at
-`/Users/mike/Documents/Codex/artifacts/graphify-review-20261027/`.
+The `c0586c891` Linux product/test-binary build PASS; complete run **FAIL**:
+515 commands, 40 failures, 5 NOTRUN, 1046 seconds (build 33 seconds).
+31 failures are extraction harness dependencies on removed helper names and
+one changed comment boundary. The final adapters and harness corrections
+address those dependencies without disabling warnings or removing assertions.
+Nine failures are RDMA setup (`CQ moderation off failed`): declaration gate,
+RDMA transport, and seven segmented modes. They remain failures; the unchanged
+base comparison is queued to determine attribution. Complete failed-suite
+commands, build log, summary and all 40 failure logs are retained at
+`/data1/efs/evidence/graphify-review-c0586c891/`, with a full hash manifest.
+
+`5d403b68f` was superseded while still waiting, before build or tests (rc143,
+not a product failure or gate PASS). Staged `1b83afbf6` was not run.
+**Final-source `e95cf62b4` full suite RUNNING** after the prior suite stopped;
+a guard refused to start if prior processes or mounts remained. The unchanged
+base RDMA run waits for the final suite, so the checks do not compete.
+Fourteen focused host/client Python regressions and the participant/prepare
+bounds checks PASS locally. Seven native C regressions (KV, metadata apply,
+simulator, transactions, RAM/disk query catalogs and writer ranges) PASS
+against the portable core. Original/corrected local logs remain outside Git
+at `/Users/mike/Documents/Codex/artifacts/graphify-review-20261027/`.
 
 Corrected exact-source reproduction on a Linux host with GCC, FUSE3 development
 headers, libibverbs, Python 3 and the normal project test prerequisites:
 
 ```sh
-git archive 5d403b68f | tar -xm -C /tmp/efs-graphify-5d403b68f
-cd /tmp/efs-graphify-5d403b68f
-EFS_GIT_ID=5d403b68f EFS_GIT_BRANCH=graphify-review-fixes \
+git archive e95cf62b4 | tar -xm -C /tmp/efs-graphify-e95cf62b4
+cd /tmp/efs-graphify-e95cf62b4
+EFS_GIT_ID=e95cf62b4 EFS_GIT_BRANCH=graphify-review-fixes \
   EFS_BUILD_JOBS=4 EFS_TEST_JOBS=4 EFS_TEST_TARGET=test-all \
   nice -n 10 bash scripts/make_test_summary.sh
 ```
@@ -106,6 +121,6 @@ Create the empty destination before extracting. The summary runner builds
 all test binaries, runs every fast and long command, preserves individual
 failures and reports NOTRUN separately. Four test slots respect its exclusive
 command scheduling; no per-test timeout is increased. Raw output is outside
-Git under `/data1/efs/evidence/graphify-review-5d403b68f/`; the temporary
-source and active run are `/tmp/efs-graphify-5d403b68f`. Validation results,
+Git under `/data1/efs/evidence/graphify-review-e95cf62b4/`; the temporary
+source and active run are `/tmp/efs-graphify-e95cf62b4`. Validation results,
 artifact hashes and cleanup status will be finalized after completion.
