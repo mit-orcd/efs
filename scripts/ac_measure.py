@@ -4,7 +4,7 @@ Run from the corresponding PRIVATE instrumented export on its assigned host.
 The original and split sources use identical instrumentation and workload.
 Raw files remain on host. Any payload/operation/cleanup error fails the trial.
 """
-import argparse, hashlib, json, math, os, re, signal, statistics, sys, threading, time
+import argparse, hashlib, json, math, os, re, signal, statistics, sys, tempfile, threading, time, shutil
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tests'))
@@ -19,7 +19,8 @@ p.add_argument('--writers',type=int,default=4)
 p.add_argument('--variant',required=True)
 a=p.parse_args();a.out.mkdir(parents=True,exist_ok=False)
 assert '/efs-task-ac' in str(ROOT) and a.seconds>=30 and a.rate>0
-work=a.out/'fixture';work.mkdir()
+scratch=ROOT.parent/'tmp';scratch.mkdir(exist_ok=True)
+work=Path(tempfile.mkdtemp(prefix='ac-',dir=scratch))
 env=dict(os.environ,EFS_TRANSPORT=a.transport,EFS_RAFT_OBS='1')
 env.pop('LD_PRELOAD',None)
 c=Cluster(work,'cluster',[1,2,3],env,hosts={i:a.address for i in [1,2,3]})
@@ -107,7 +108,9 @@ for f in c.dir.glob('n*.log'):
     for line in f.read_text().splitlines():
         if 'ac-probe:' in line:probe.append(dict(node=f.stem,line=line))
         if 'raft-obs: wait_timeouts=' in line:obs.append(dict(node=f.stem,line=line))
-result['probe']=probe;result['raft_obs']=obs
+result['probe']=probe;result['raft_obs']=obs;result['fixture']=str(work)
+logs=a.out/'logs';logs.mkdir()
+for f in c.dir.glob('*.log'):shutil.copy2(f,logs/f.name)
 assert len(probe)>=3,'instrumentation missing'
 assert all(n>=a.rate*a.seconds*.8 for n in counts),('offered rate not sustained',counts,late)
 assert len(lat)>=a.seconds*8,('stat sampler insufficient',len(lat))
