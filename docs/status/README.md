@@ -23,7 +23,8 @@ F1/release coverage remains INCOMPLETE. User-selected quiet fstor007 qualificati
 `8e1db244f` stopped: 528/1 FAIL/15 NOTRUN, B6 full packing assertion;
 failure-retaining B6 diagnostic `b9947abb6` passes alone (48 exact);
 loaded gate528/0 FAIL/15 NOTRUN, native hardware RDMA9/9 PASS,
-unchanged RDMA hour active; earlier B6 intermittent remains unresolved;
+unchanged quiet-host RDMA hour PASS:2080exact,pack0/0,RSSwithin5%,
+drain13.7s; TCP active; earlier B6 intermittent remains unresolved;
 node9901 was occupied and left untouched. User-requested drain follow-up
 identified ongoing lane-row refresh triggers and a truncate scheduling gap.
 Repair `773284b5d`: node9900 gate 527/0 FAIL/18 NOTRUN, native RDMA9/9
@@ -36,7 +37,8 @@ unknown protection status; harness `99f3b1964` preserves the zero-count
 assertion and 30 s bound; AMD99 gate then528/1 FAIL/14 NOTRUN on the recurring B6 full assertion.
 AMD b994 gate528/1 FAIL/14 NOTRUN retained a W165 resync-admission BUSY.
 Test-only093415c86 uses the existing BUSY-only management helper within
-the original60s recovery bound; fresh continuation uses closed-prior/quiet guards. Qualification
+the original60s recovery bound; corrected gate528/0 FAIL/14 NOTRUN,
+native9/9 PASS, TCP hour active under closed-prior/quiet guards. Qualification
 remains INCOMPLETE.
 Last qualified candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
