@@ -342,6 +342,7 @@ int efs_client_rpc_put_ticket_batch(const struct efs_put_ticket *t, uint32_t n, 
   pthread_mutex_unlock(&mock_mu);
   for (uint32_t i = 1; i < n; i++) assert(grp(&t[i]) == grp(t));
   *mask = (uint32_t)((1ull << n) - 1); return EFS_OK; }
+void efs_client_stripe_closed(const struct efs_put_ticket *t){assert(t && t->object);}
 int efs_client_put_referenced(efs_ino_t ino, uint32_t ci, uint64_t object) { (void)ino; (void)ci; (void)object; return 0; }
 #include "OWNER"
 static const efs_node_id_t nodes[3] = {1, 2, 3};

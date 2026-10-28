@@ -394,11 +394,51 @@ static void settle_forget(const struct efs_put_ticket *t, uint32_t n, uint32_t m
         if (leading ? j >= mask : !(mask >> j & 1u)) continue;
         struct ledger_entry *gone = ledger_find(t[j].id.seq);
         if (!gone) continue;
+        efs_client_stripe_closed(&t[j]);
         uint32_t at = (uint32_t)(gone - g_ledger.e);
         memmove(gone, gone + 1, (size_t)(g_ledger.n - at - 1) * sizeof(*gone));
         g_ledger.n--;
     }
     pthread_mutex_unlock(&g_ledger.mu);
+}
+
+/* Rare fsync path for an abandoned replay object. A local done flag is
+ * only permission to settle, never a publication verdict. Do not settle an
+ * actively referenced/putting ticket. RPCs retain the caller's deadline. */
+int efs_client_put_terminal(efs_ino_t ino, uint64_t generation, uint32_t ci,
+                            uint64_t object)
+{
+    struct efs_put_ticket ticket;
+    int found = 0;
+    pthread_mutex_lock(&g_ledger.mu);
+    for (uint32_t i = 0; i < g_ledger.n; i++) {
+        const struct ledger_entry *e = &g_ledger.e[i];
+        if (e->ticket.ino != ino || e->ticket.inode_gen != generation ||
+            e->ticket.ci != ci || e->ticket.object != object) continue;
+        if (!e->done || e->putting) {
+            pthread_mutex_unlock(&g_ledger.mu);
+            return EFS_ERR_BUSY;
+        }
+        ticket = e->ticket; found = 1; break;
+    }
+    pthread_mutex_unlock(&g_ledger.mu);
+    if (!found) return EFS_ERR_NOT_FOUND; /* never infer a verdict from absence */
+    uint32_t retired = 0, state = 0;
+    int rc = efs_client_rpc_put_ticket_settle(&ticket, 1, &retired);
+    if (rc == EFS_OK && retired == 1) {
+        efs_client_stripe_closed(&ticket);
+        return EFS_OK;
+    }
+    /* A preceding stream member can prevent retirement even though SETTLE
+     * durably rejected this ticket. Read that exact terminal state; BUSY,
+     * transport loss, ADMITTED and missing state alone prove nothing. */
+    if (rc != EFS_OK && rc != EFS_ERR_BUSY) return rc;
+    rc = efs_client_rpc_put_ticket(&ticket, 1, &state);
+    if (rc != EFS_OK) return rc;
+    if (state != EFS_PUT_TICKET_PUBLISHED && state != EFS_PUT_TICKET_REJECTED)
+        return EFS_ERR_BUSY;
+    efs_client_stripe_closed(&ticket);
+    return EFS_OK;
 }
 
 /* (Raft group, lane shard) order of the pass's streams (g_pass indices). */
