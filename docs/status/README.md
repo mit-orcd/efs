@@ -19,7 +19,9 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [Task I review](task-i-20261026.md): live protocol **PASS (scoped), complete**;
-F1/release coverage remains INCOMPLETE.
+F1/release coverage remains INCOMPLETE. User-requested drain follow-up
+is ACTIVE: bounded fault-build diagnostic `9dfe9d979` on AMD; not another
+qualification hour.
 Current candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
 observer log I/O. Fresh gates: node9900 **527 / 0 FAIL / 18 NOTRUN**,
