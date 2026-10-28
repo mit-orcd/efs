@@ -17,17 +17,19 @@ from qualify import parse_raft
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--out',type=Path,required=True);p.add_argument('--hz',type=int,choices=[1,10,50],required=True)
 p.add_argument('--seconds',type=float,default=60);p.add_argument('--rate',type=float,default=5)
+p.add_argument('--transport',choices=['tcp','rdma'],default='tcp')
+p.add_argument('--address',default='127.0.0.1')
 a=p.parse_args();assert '/efs-task-af/' in str(ROOT) and a.seconds>=60 and a.rate>0
 a.out.mkdir(parents=True,exist_ok=False)
 scratch=ROOT.parent/'tmp';scratch.mkdir(exist_ok=True)
 work=Path(tempfile.mkdtemp(prefix='af-',dir=scratch))
 env={k:v for k,v in os.environ.items() if not k.startswith(('EFS_FAULT_','EFS_TEST_'))}
-env.update(EFS_TRANSPORT='tcp',EFS_RAFT_OBS='1',EFS_PACK_MIN_AGE_MS='1000',
+env.update(EFS_TRANSPORT=a.transport,EFS_RAFT_OBS='1',EFS_PACK_MIN_AGE_MS='1000',
            EFS_PACK_INTERVAL_MS='200',EFS_QUERY_REFRESH_MS='2000',EFS_FAULT_MEMTABLE_BYTES='262144')
 env.pop('LD_PRELOAD',None);env.pop('EFS_GC_DISABLE',None)
-c=Cluster(work,'cluster',[1,2,3],env);mount=None;threads=[];stop=threading.Event();errors=[]
+c=Cluster(work,'cluster',[1,2,3],env,hosts={i:a.address for i in [1,2,3]});mount=None;threads=[];stop=threading.Event();errors=[]
 counts=[0]*4;late=[0]*4;versions={};names=[];stat_us=[];status_us={i:[] for i in [1,2,3]}
-poll_late={i:0 for i in [1,2,3]};last_status={};doc=dict(hz=a.hz,fixture=str(work),errors=errors)
+poll_late={i:0 for i in [1,2,3]};last_status={};doc=dict(hz=a.hz,transport=a.transport,fixture=str(work),errors=errors)
 def quantiles(values):
     assert values
     return dict(count=len(values),p50_us=statistics.median(values),p99_us=sorted(values)[math.ceil(.99*len(values))-1],max_us=max(values))

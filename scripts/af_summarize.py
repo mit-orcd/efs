@@ -5,17 +5,19 @@ from pathlib import Path
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('capture',type=Path);a=p.parse_args()
 rows=[]
 for f in sorted(a.capture.glob('trial-*/result.json')):
- d=json.loads(f.read_text());assert d['verdict']=='PASS',f
+ d=json.loads(f.read_text());assert d['verdict']=='PASS' and not d['errors'] and d['verified_files']==128,f
  row=dict(trial=f.parent.name,hz=d['hz'],mib_s=d['mib_s'],daemon_cpu_s=sum(d['daemon_cpu_s'].values()),
           stat_p50_us=d['stat']['p50_us'],stat_p99_us=d['stat']['p99_us'],write_late=sum(d['write_late']))
  for q in ['p50_us','p99_us']:
   row['status_node_'+q]=max(v[q] for v in d['status'].values())
  row['polls']=sum(v['count'] for v in d['status'].values())
- metrics={}
+ metrics={};by_node={}
  for item in d['probe']:
   m=re.search(r'af-probe metric=(\w+) count=(\d+) max=(\d+) bins=([0-9,]+)',item['line']);assert m,item
+  by_node.setdefault(item['node'],set()).add(m[1])
   hist=[int(v) for v in m[4].split(',')];assert len(hist)==64
   dst=metrics.setdefault(m[1],dict(count=0,max=0,bins=[0]*64));dst['count']+=int(m[2]);dst['max']=max(dst['max'],int(m[3]));dst['bins']=[x+y for x,y in zip(dst['bins'],hist)]
+ assert set(by_node)=={'n1','n2','n3'} and all(v=={'pump_work_ns','pump_period_ns','status_wait_ns','status_hold_ns'} for v in by_node.values()),(f,by_node)
  for key,v in metrics.items():
   row[key+'_count']=v['count'];row[key+'_max_us']=v['max']/1000
   for q in [.5,.99]:
