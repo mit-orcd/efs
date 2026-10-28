@@ -24,7 +24,7 @@ F1/release coverage remains INCOMPLETE. User-selected quiet fstor007 qualificati
 failure-retaining B6 diagnostic `b9947abb6` passes alone (48 exact);
 loaded gate528/0 FAIL/15 NOTRUN, native hardware RDMA9/9 PASS,
 unchanged quiet-host RDMA hour PASS:2080exact,pack0/0,RSSwithin5%,
-drain13.7s; TCP active; earlier B6 intermittent remains unresolved;
+drain13.7s; TCP also PASS2080exact,pack0/0,drain25.8s; earlier B6 intermittent remains unresolved;
 node9901 was occupied and left untouched. User-requested drain follow-up
 identified ongoing lane-row refresh triggers and a truncate scheduling gap.
 Repair `773284b5d`: node9900 gate 527/0 FAIL/18 NOTRUN, native RDMA9/9
@@ -38,7 +38,9 @@ assertion and 30 s bound; AMD99 gate then528/1 FAIL/14 NOTRUN on the recurring B
 AMD b994 gate528/1 FAIL/14 NOTRUN retained a W165 resync-admission BUSY.
 Test-only093415c86 uses the existing BUSY-only management helper within
 the original60s recovery bound; corrected gate528/0 FAIL/14 NOTRUN,
-native9/9 PASS, TCP hour active under closed-prior/quiet guards. Qualification
+native9/9 PASS; TCP metrics pass but host coverage FAILs275 samples
+of resumed UID1001 W123 work. Clean AMD confirmation remains pending;
+other users’ work is untouched. Qualification
 remains INCOMPLETE.
 Last qualified candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
