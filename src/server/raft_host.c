@@ -25207,6 +25207,7 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
     struct efs_meta_dir_cursor cur;
     struct efs_meta_dir_ent page[EFS_READDIR_MAX];
     uint32_t got = 0, i;
+    uint8_t covered = 0;
     int hint = -1;
     int rc;
 
@@ -25258,12 +25259,14 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
             }
         }
     }
-    if (rc == EFS_OK)
-        /* The successful first fence belongs to this RPC. Reread the row
-         * transactionally and fence newly discovered lane groups, without
-         * issuing a second fresh round for the already-fenced inode group. */
-        rc = host_read_inode_lanes_covered(h, parent, &hint,
-                  (uint8_t)(1u << efs_raft_shard_group(efs_kv_inode_shard(parent))));
+    if (rc == EFS_OK) {
+        /* Keep this RPC's proof mask: a concurrent split can introduce a
+         * lane group after this read but before the guarded KV scan. */
+        covered = (uint8_t)(1u << efs_raft_shard_group(efs_kv_inode_shard(parent)));
+        rc = host_read_inode_lanes_reuse(h, parent, &hint, &covered);
+    }
+scan_covered:
+    out->count = 0;
     /* Resume from the client's cookie: (src, name) is the exact KV scan
      * position. The scan is name-ordered, so this is stable and complete —
      * an ino filter would skip entries (name order != ino order). */
@@ -25293,6 +25296,25 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
             strncpy(out->ents[out->count].name, page[i].name,
                     EFS_MAX_NAME - 1);
             out->count++;
+        }
+    }
+    if (rc == EFS_OK) {
+        struct efs_meta_row after;
+        uint8_t need = (uint8_t)(1u << efs_raft_shard_group(efs_kv_inode_shard(parent)));
+        rc = efs_meta_apply_get_inode(h->kv, parent, &after);
+        if (rc == EFS_OK && after.layout != EFS_META_LAYOUT_LOCAL)
+            for (uint32_t lane = 0; lane < EFS_META_LANES; lane++)
+                if (after.used_shards & (1ull << lane))
+                    need |= (uint8_t)(1u << efs_raft_shard_group(efs_kv_lane_shard(parent, (uint8_t)lane)));
+        if (rc == EFS_OK && (need & ~covered)) {
+            /* A KV retry is not authority to read a previously unfenced
+             * group. Fence it, then rescan from the request's original
+             * cookie. Each restart adds a group to the finite proof mask. */
+            rc = host_read_inode_lanes_reuse(h, parent, &hint, &covered);
+            if (rc == EFS_OK && (need & ~covered))
+                rc = EFS_ERR_BUSY; /* no proof progress: never loop or serve */
+            if (rc == EFS_OK)
+                goto scan_covered;
         }
     }
     /* Resume cookie: the cursor sits past the last emitted entry (or past

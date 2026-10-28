@@ -20,7 +20,8 @@ Asserts:
    while the leaders advance; node 3 never campaigns for it).
 5. `efs-mgmt raft-resync <node3> <group>` resyncs the replica from the
    leader's snapshot; the group serves again and the directory reads back
-   correctly.
+   correctly. Only operator resync's pre-admission BUSY can retry, sharing
+   the existing recovery deadline; application requests never retry.
 
 The serve-first W165 scenario runs first: DIR is held before the damaged
 leader receives distinct CREATEs. It must step aside, and snapshot resync
@@ -29,7 +30,8 @@ must restore its own direct GETATTR.
 import hashlib, os, re, shutil, signal, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster as _Cluster, EFSD, MGMT, FUSE, mgmt as _mgmt  # noqa: E402
+from k33_daemons import Cluster as _Cluster, EFSD, MGMT, FUSE, SLOW, mgmt as _mgmt  # noqa: E402
+from resync_admission import request_resync  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -185,9 +187,13 @@ def serve_fault():
         assert rc == 0 and route and int(route[1]) in (0, 7) and int(route[2]) in {1, 2, 3} - {victim}, \
             ('halted replica must forward or redirect to a healthy leader', out)
         mark.unlink()
-        rc, out = mgmt('raft-resync', cluster.ep(victim), str(group))
-        assert rc == 0, out
-        cluster.wait_log(victim, r'snapshot import .*halt cleared, group served again', timeout=60)
+        # A receive-persistence cohort can refuse the operator request BUSY
+        # before admission. Include that wait in the existing recovery bound;
+        # application CREATE/LOOKUP/GETATTR above still have no retries.
+        resync_end = time.monotonic() + 60 * SLOW
+        request_resync(MGMT, cluster.ep(victim), group, env, resync_end)
+        cluster.wait_log(victim, r'snapshot import .*halt cleared, group served again',
+                         timeout=max(0, resync_end - time.monotonic()) / SLOW)
         # Normal leader routing may redirect even a fully healed follower.
         # Require the explicit clear, a fresh mutation applied on this replica,
         # and an exact successful read through the returned healthy route.
@@ -322,17 +328,16 @@ try:
           f'while the leader commits (visible in raft-status)')
 
     # 5. recover: raft-resync pulls the leader's snapshot onto node 3
-    rc, out = mgmt('raft-resync', c.ep(3), str(halt_group))
-    assert rc == 0, f'raft-resync rc={rc}: {out}'
-    deadline = time.time() + RESYNC_DEADLINE
+    deadline = time.monotonic() + RESYNC_DEADLINE
+    request_resync(MGMT, c.ep(3), halt_group, env, deadline)
     served = False
-    while time.time() < deadline:
+    while time.monotonic() < deadline:
         if 'resync: installed snapshot' in c.log(3) or \
            ('INCOMPATIBLE' not in c.last_run(3).split('resync')[-1] and
             group_applied(c, 3, halt_group) > a3):
             served = True
             break
-        time.sleep(2)
+        time.sleep(min(2, max(0, deadline - time.monotonic())))
     assert served, 'node 3 did not resync/serve the group within the bound'
     print(f'[w130] node 3 resynced; group {halt_group} serves again '
           f'{int(time.time() - t0)} s in')

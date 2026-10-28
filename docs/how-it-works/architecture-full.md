@@ -1647,6 +1647,12 @@ full acceptance are separate states.
 ### Recent evidence and remaining acceptance
 
 [Task T: budgets across hosts](../status/gate-budgets-per-host-20261028.md): **INCOMPLETE** on `agent/devel-task-t`; multi-host maximum-median fitter and synthetic regression PASS. Frozen `babeea640` nuc run 1 has six observed failures (including an invalid synthetic-index setup) and will stop before run 2; same-host baseline comparison pending. Intel1 first pool started for K43 per user instruction; the same invalid setup must be corrected before a clean cohort; Task J historical timings kept separate. Intel2 remains occupied by Task W; no fit or confirmations yet. Budgets, slots and D44 target unchanged.
+[Wave 29 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`f3a447fa3`)**: Task Y, the known-defect register reconciled ([report](../status/k-register-reconciled-20261028.md)): both tables carry exactly one row for each K1–K52, each opening with one canonical disposition (11 FIXED, 0 VERIFIED, 35 VERIFY, 2 DECIDED, 2 CLOSED, 2 OPEN: K48 and K52), with every earlier cell kept as history; `scripts/check_k_register.py` enforces that in `make test` (`tests/test_k_register.py`). No row was promoted to VERIFIED and no gate was rerun. Merged together with D45's K36 scope note and topology row.
+
+[Task Y — K register reconciliation](../status/k-register-reconciled-20261028.md): reviewed wave-28 devel `9e4d66a8c`; 52 canonical rows in each table, 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN. K48/K52 remain OPEN; named live gates remain VERIFY. History preserved, stale merge/acceptance contradictions reported, structural checker in `make test`; no new live qualification or user decision.
+
+[Wave 28 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`c0081d095`; gate at `d951ca293`)**: Task S, K48 ([evidence](../status/k48-readdir-omission-20261028.md)): a directory page is published only if the directory's layout and used lanes are unchanged after its scan (bounded rescans, then BUSY rather than a short page), and lanes that became used during the scan are fenced before the page is served; `test_k48_readdir.py` reproduces the omission on the base. K48 stays OPEN: the original Task N capture lacks the missing name and RPC trace, so its exact cause is unproven. And Task U ([evidence](../status/k32-write-cost-profile-20261028.md)): K32 write-cost profile (FUSE tickets 5.66, sessions 0.48, publication 0.36 Raft entries/MiB), the direct-client harness, operator `raft-resync` admission BUSY retried within the W130 test's recovery deadline; IOR NOTRUN, D4 baseline failure open. Merge-time: `test_code_graph.py` (added unwired by the code-graph commit `3debca7ec`) is now in `make test-long`, and its git-dependent case reports NOTRUN in the gate's git-archive tree. intel2 `make test-all` at `d951ca293`: 526 commands in 702 s, 1 FAIL (that test case, fixed in `c0081d095` and rerun there: OK, one NOTRUN), 12 NOTRUN host limits.
+
 [Wave 27 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](../status/a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (blocks alpha): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); whether K52 is K10 needs the new helper's observed bytes before it is closed or kept. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
 
 [Task V four-host driver rehearsal](../status/a4-lab-topology-dryrun-20261028.md):
@@ -1658,6 +1664,20 @@ and checked restart PASS. Final code gate **522/1 FAIL/12 NOTRUN, 744 s**:
 K48-shaped 95/96 listing after resync, closed fixture retained on intel2.
 All private fcstor cluster trees and intel2 build scratch removed; sealed raw
 evidence retained. A4 topology defined and dry-run, decision open. No product fix.
+
+[K32 write cost profile](../status/k32-write-cost-profile-20261028.md): **Task U complete
+in scope**, no product source changes. Twelve 1 GiB direct/aligned-FUSE cases
+pass filesystem byte-pattern checks (FUSE reads are cache-warm);
+ticket/session/publication work averages 5.657/0.484/0.356
+entries per MiB in the six FUSE rows. Final `75db7afb0` xorinox gate:
+**524 commands, 0 FAIL, 11 NOTRUN, INCOMPLETE**, 824 s. Benchmark failure,
+unaligned diagnostics and earlier full-gate failures retained. W130's
+pre-admission BUSY test handling fixed within its original deadline; D4's
+packer error reproduced on untouched base and remains OPEN. Captures hashed,
+failed stores archived, scratch pruned and host free. **Real-host IOR gate
+NOTRUN; K32 remains open.**
+
+[Task S — K48 directory omission](../status/k48-readdir-omission-20261028.md): same-signature migration race fixed; frozen `947edd15f` passes deterministic 3/3, W130/payload 10/10 each and full gate 523/0 FAIL/12 NOTRUN (679 s). Original 677 files unchanged; count-only historical incident attribution remains OPEN. Raw manifest verified; own scratch pruned.
 
 [Wave 26 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`4e4f15307`; gate at `4e4f15307`)**: Task E, **K43** ([evidence](../status/k43-coordinator-kill-20261026.md)): a publication stage whose owner transaction has a locally recorded ABORT is reaped on contact by the next unit instead of blocking it until the recovery scan's age gate, a reap's own errors are surfaced instead of collapsing into BUSY, and the K43 gate (`test_k43_coordinator_kill.py`: the coordinator SIGKILLed between PREPARE and COMMIT) fails on the base and passes on the fix; plus the heartbeat shutdown wake-up (`agent/heartbeat-stop-wakeup`: the heartbeat thread waits on a condition with a monotonic deadline and is woken by stop before the join, so an orderly stop no longer waits out a heartbeat interval). intel2 `make test-all` (8 jobs): 522 commands in 667 s, 0 FAIL, 12 NOTRUN host limits, PASS with host limits; OVERBUDGET 6 (intel1-fitted rows on intel2, Task T). **Held back:** `agent/task-h-repair` (187 commits of publication, receipt, Raft pump and client read repairs grown out of Task H): its own evidence page says IN PROGRESS, no overall PASS, with its nuc suite still running and the original K33 EIO cause open, and it conflicts with devel in eleven source files; it merges when its agent reports PASS on a rebase.
 
@@ -2630,7 +2650,7 @@ persisted; ior write regression needs a K row.
 
 [Simple startup and node addition](../status/alpha-1.0-node-addition-20261023.md): **user decision Oct 23: the `--cluster` file feature is removed; the D39 admission merge is reverted on devel; seed/`--join` is the only startup.** Alpha needs W153 (member count and voters from the committed membership, formation at three) and then node addition (K33/W157).
 
-[K32 write regression](../status/k32-write-regression-20261023.md): **OPEN; code fix on a branch ([fix evidence](../status/k32-write-fix-20261023.md)).** orcd-mini (devel `757d76844`, fresh format) passes but ior easy write fell to ~0.36–0.5 GiB/s: K14 publishes every multi-chunk write as its own cross-group transaction (~20 Raft entries per 1 MiB write), K13 adds ~9.
+[K32 write regression](../status/k32-write-regression-20261023.md): **OPEN; code fix merged (`ea2dc4443`), real-host IOR gate NOTRUN ([fix evidence](../status/k32-write-fix-20261023.md), [Oct 28 cost profile](../status/k32-write-cost-profile-20261028.md)).** The Oct 23 orcd-mini run (devel `757d76844`, fresh format) passed its functional checks but measured ior easy write at ~0.36–0.5 GiB/s. Its unbatched K14 profile published each multi-chunk write separately (~20 Raft entries per 1 MiB write); K13 added ~9. Current measured costs are in the Oct 28 profile.
 
 [K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](../status/k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
@@ -3443,7 +3463,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | PROPOSED: role-specific supported settings, defaults, effective values and startup/runtime scope; backend implementation and acceptance NOTRUN | [feature and gates](#w122) |
+| settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | DEFERRED to beta (D45, user, Oct 28); was PROPOSED: role-specific supported settings, defaults, effective values and startup/runtime scope; backend implementation and acceptance NOTRUN | [feature and gates](#w122) |
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
 | small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
@@ -3624,6 +3644,14 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
+
+### D45 — Stage 1 decisions taken Oct 28 (user, in one pass)
+
+1. **A4, the distinct-host qualification topology:** the orcd-test cluster, in four shapes — 3 storage hosts fcstor003–005 with fcstor006–015 as test clients; 4 hosts fcstor003–006 with fcstor007–015 as clients; 5 hosts fcstor003–007 with fcstor008–015 as clients; and 13 hosts fcstor003–015 all storage, with Slurm and the cluster generating the I/O payload. The lab hosts (intel1, intel2, nuc, xorinox) stay loopback gate hosts; Task V's `fcstor-4x1-tcp` dry run is the template for the matrix entries, which the A4 campaign defines when it starts (D45 item 5).
+2. **S4 / W122 effective-settings listing:** out of alpha 1.0; limitation L24 stays, W122 moves to the beta backlog. The A6 inventory page is alpha's settings catalog.
+3. **F12 cluster-port authentication:** no authentication in any alpha release; limitation L22 stays as the documented trusted-network requirement; the first beta item.
+4. **K36 scope:** alpha claims verified recovery after unclean *process* stops (crash, SIGKILL, forced exit); recovery after real power loss is not claimed — K23/W71 stay deferred (D40 reaffirmed), the fail-closed refusal of an unverified store holds for any unclean stop, and the release notes carry the limitation.
+5. **Live-gate campaign:** starts after Task S (K48) and Task X (K52) report, on a frozen candidate, in this order: orcd-mini RDMA reruns (K38/K40/K41 ior hard, K27/K32 ior easy A/B, K17 C1), then the orcd-test A4 matrix TCP then RDMA (K6, K11, K12, K18, K19, K21, K33 and K15 multi-host), then the four-hour soak on the four-host shape (E4/D4 with K43).
 
 ### D44 — the K22 release gates stay in `make test-long` (user, Oct 26)
 
