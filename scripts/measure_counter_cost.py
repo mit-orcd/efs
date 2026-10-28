@@ -12,6 +12,8 @@ import json
 import os
 from pathlib import Path
 import random
+import resource
+import select
 import signal
 import socket
 import subprocess
@@ -40,6 +42,10 @@ def main():
     p.add_argument('--host', default='127.0.0.1')
     p.add_argument('--load-s', type=int, default=90)
     p.add_argument('--profile-s', type=int, default=60)
+    p.add_argument('--capture', choices=('full', 'none'), default='full',
+                   help='measurement instrumentation only; none retains CPU/stat timing')
+    p.add_argument('--working-set', type=int, default=0,
+                   help='D4 rewrite files per application writer; zero creates/unlinks')
     a = p.parse_args()
     assert a.load_s >= a.profile_s + 15
     a.source = a.source.resolve()
@@ -71,7 +77,7 @@ def main():
                TMPDIR=str(a.scratch))
     c = k.Cluster(a.scratch, 'cluster', [1, 2, 3], env,
                   hosts={i: a.host for i in (1, 2, 3)})
-    mounts, profilers, handles = [], [], []
+    mounts, profilers, handles, controls = [], [], [], []
     result = {'arguments': vars(a),
               'environment': {key: value for key, value in env.items()
                               if key.startswith('EFS_') or key == 'TMPDIR'},
@@ -80,6 +86,29 @@ def main():
     profiling = threading.Event()
     finished = threading.Event()
     latencies, stat_errors = [], []
+
+    def control(pair, command):
+        write, read = pair
+        os.write(write, (command+'\n').encode())
+        assert select.select([read], [], [], 20)[0], f'perf {command}: no acknowledgement'
+        ack = os.read(read, 64)
+        assert ack in (b'ack\n', b'ack\n\0'), f'perf {command}: invalid acknowledgement {ack!r}'
+
+    def launch(cmd, name):
+        ctl_read, ctl_write = os.pipe()
+        ack_read, ack_write = os.pipe()
+        cmd += ['-D', '-1', '--control', f'fd:{ctl_read},{ack_write}']
+        log = open(a.out/f'{name}-record.log', 'w'); handles.append(log)
+        result['profile_commands'].append(cmd)
+        def limit():
+            _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            resource.setrlimit(resource.RLIMIT_NOFILE, (min(65536, hard), hard))
+        proc = subprocess.Popen(cmd, stdout=log, stderr=log, env=env,
+                                pass_fds=(ctl_read, ack_write), preexec_fn=limit)
+        profilers.append(proc)
+        os.close(ctl_read); os.close(ack_write)
+        controls.append((ctl_write, ack_read))
+        control(controls[-1], 'disable')  # startup barrier while cluster is idle
 
     def stat_loop():
         # FUSE syscall latency, not claimed as one uncached RPC per call.
@@ -97,27 +126,21 @@ def main():
             if not profiling.wait(120):
                 raise RuntimeError('D4 load did not start')
             time.sleep(10)  # exclude formation/initialization and warm the load
-            ids = ','.join(str(proc.pid) for proc in c.procs.values())
             result['profile_start_epoch_s'] = time.time()
             before = {i: cpu(proc.pid) for i, proc in c.procs.items()}
-            for i, proc in c.procs.items():
-                (a.out/f'n{i}.maps').write_text(Path(f'/proc/{proc.pid}/maps').read_text())
-                cmd = ['perf', 'stat', '-x', ';', '-e',
-                       'task-clock,cycles,instructions,cache-references,cache-misses',
-                       '-p', str(proc.pid), '-o', str(a.out/f'n{i}-stat.csv'),
-                       '--', 'sleep', str(a.profile_s)]
-                result['profile_commands'].append(cmd)
-                profilers.append(subprocess.Popen(cmd, env=env))
-            for name, event in [('cycles', ['-e', 'cycles', '-F', '499', '-g', '--call-graph', 'fp']),
-                                ('memory', ['-e', 'ibs_op//', '-c', '1048576', '-d'])]:
-                log = open(a.out/f'{name}-record.log', 'w'); handles.append(log)
-                cmd = ['perf', 'record', '-v', '-N', '-m', '64', *event, '-p', ids, '-o',
-                       str(a.out/f'{name}.data'), '--', 'sleep', str(a.profile_s)]
-                result['profile_commands'].append(cmd)
-                profilers.append(subprocess.Popen(cmd, stdout=log, stderr=log, env=env))
-            result['profiler_rc'] = [proc.wait(timeout=a.profile_s+30) for proc in profilers]
+            for pair in controls:
+                control(pair, 'enable')
+            time.sleep(a.profile_s)
+            for pair in controls:
+                control(pair, 'disable')
             result['profile_cpu_s'] = {i: cpu(proc.pid)-before[i] for i, proc in c.procs.items()}
             result['profile_end_epoch_s'] = time.time()
+            for proc in profilers:
+                assert proc.poll() is None, f'profiler exited before requested stop: {proc.returncode}'
+                proc.send_signal(signal.SIGINT)
+            result['profiler_raw_rc'] = [proc.wait(timeout=30) for proc in profilers]
+            result['profiler_rc'] = [0 if rc in (0, -signal.SIGINT) else rc
+                                     for rc in result['profiler_raw_rc']]
         except Exception:
             result['errors'].append(traceback.format_exc())
 
@@ -133,6 +156,18 @@ def main():
         result['endpoints'] = {i: c.ep(i) for i in c.procs}
         result['leaders_before'] = c.leader_placement(1)
         save(a.out/'running.json', result)
+        if a.capture == 'full':
+            time.sleep(1)  # let the setup management connections finish
+            ids = ','.join(str(proc.pid) for proc in c.procs.values())
+            for i, proc in c.procs.items():
+                (a.out/f'n{i}.maps').write_text(Path(f'/proc/{proc.pid}/maps').read_text())
+                launch(['perf', 'stat', '-x', ';', '-e',
+                        'task-clock,cycles,instructions,cache-references,cache-misses',
+                        '-p', str(proc.pid), '-o', str(a.out/f'n{i}-stat.csv')], f'n{i}-stat')
+            for name, event in [('cycles', ['-e', 'cycles', '-F', '499', '-g', '--call-graph', 'fp']),
+                                ('memory', ['-e', 'ibs_op//', '-c', '1048576', '-d'])]:
+                launch(['perf', 'record', '-v', '-N', '-m', '64', *event, '-p', ids,
+                        '-o', str(a.out/f'{name}.data')], name)
         mounts.append(k.Mount(c, 1, 'load'))
         mounts.append(k.Mount(c, 2, 'foreground'))
         # Signal the profiler from the actual first load sample, not mount time.
@@ -150,6 +185,7 @@ def main():
             '--mount', str(mounts[0].path), '--fg-mount', str(mounts[1].path),
             '--seed', c.ep(1), '--mgmt', str(k.MGMT), '--out', str(a.out/'d4'),
             '--load-s', str(a.load_s), '--threads', str(a.writers), '--drain-s', '150',
+            '--working-set', str(a.working_set),
             '--stall-s', '30', '--server-rss-mib', '2048', '--pack-backlog', '50000',
             '--index-age-s', '60', '--keep'])
         result['leaders_after'] = c.leader_placement(1)
@@ -172,6 +208,9 @@ def main():
                 proc.wait(timeout=30)
         for handle in handles:
             handle.close()
+        for pair in controls:
+            for fd in pair:
+                os.close(fd)
         save(a.out/'stat-syscalls.json', {'seconds': latencies, 'errors': stat_errors})
         # No lazy unmount, forced discard or removal of a failed fixture.
         for mount in reversed(mounts):

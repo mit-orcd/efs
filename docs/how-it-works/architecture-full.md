@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**IN PROGRESS**, frozen product source `1d2852da4`, private TCP/RDMA clusters
+on node9900 (user-selected alternate to occupied node9901). Local counter no-op
+comparison remains outside Git; no product change, switch or AD closure.
+Repeated 8/16/32-writer measurements and the full gate are outstanding.
+
+[Stage 1 hot-path serialization tasks AG–AJ](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--hot-path-serialization-agaj):
 **OPEN / implementation and measurements NOTRUN**: shared client allocation
 budget, mount-wide chunk map, RDMA completion registry and server export lifetime
 locks. Verified source mechanisms at `08a1606df`; no measured bottleneck, new K

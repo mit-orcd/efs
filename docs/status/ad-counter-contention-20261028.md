@@ -29,8 +29,11 @@ environment switch. Its full patch is retained with SHA-256
   never qualify the management counter interface.
 
 `efs_iostats_now_us` remains unchanged: it also drives maintenance deadlines,
-not just diagnostics. This comparison isolates shared counter updates, not all
-timestamp or telemetry cost. Detailed `g_stats` writer timing is **not enabled
+not just diagnostics. This comparison removes shared counter updates while
+retaining caller timing and dump cadence, not all timestamp or telemetry cost.
+It also leaves less diagnostic snapshot work (empty latency rings and uptime);
+use direct counter-body cycle attribution for the threshold, not a claim that
+the no-op A/B isolates every nanosecond. Detailed `g_stats` writer timing is **not enabled
 by the daemon**: `server_writer_stats_reset` is called by the local benchmark
 and writer-routing test. The production workload therefore cannot establish
 how that benchmark-only enabled path scales.
@@ -50,8 +53,11 @@ RDMA uses `172.16.99.0` and `mlx5_0`. Three repetitions per transport and
 concurrency alternate baseline/no-op order. No other AD case or full gate
 runs concurrently with a measurement.
 
-The existing D4 driver runs 45 seconds, with two mounts: small-file writers
-and a foreground write/fsync/read/stat/list/query stream. This is D4's
+The final `matrix2` uses D4's fixed-footprint rewrite mode: 2,048 files total
+(256/128/64 per application writer), populated before the 45-second load,
+then overwritten, truncated and rewritten. A second mount runs the foreground
+write/fsync/read/stat/list/query stream. Throughput is rewrite mutations per
+configured load second, not the population's creates per second. This is D4's
 saturated **closed-loop** offered load, not a fixed arrival-rate generator.
 As in the loopback D4 gate, fault-built daemons use 256 KiB memtables,
 one-second pack minimum age, 200 ms pack passes and two-second query refresh;
@@ -62,7 +68,15 @@ deadlines and error/readback checks remain: ten-second foreground operations,
 acknowledged, non-deleted, non-uncertain live file; uncertain writes remain
 errors, never a payload PASS by exclusion.
 
-Ten seconds into load, profile all three **owned daemon PIDs** for 30 seconds:
+Before mounting or starting load, attach to all three **owned daemon PIDs**
+while the formed cluster is idle, with events disabled (`-D -1`). This avoids
+this perf version's race enumerating rapidly exiting connection threads.
+Owned control pipes require an acknowledgement from every profiler. Ten
+seconds into load, enable events, measure 30 seconds, then disable with another
+acknowledged barrier. After verifying the profilers are still alive, request
+SIGINT and retain their raw exit codes: planned `-2` is expected here, whereas
+an early exit fails the case. Only profiler children get a 65,536 descriptor
+soft limit; no host configuration or daemon limit changes.
 
 - `perf stat`: task-clock, cycles, instructions, cache references and misses,
   separately per daemon; `/proc/PID/stat` CPU seconds as a second measure.
@@ -79,7 +93,9 @@ service latency. Daemon logs preserve `raft-obs` pump-hold/lock-wait and
 drain/tick/apply/persist high-water observations; these are not a complete
 pump-cycle distribution. Profiler overhead is present in these diagnostic
 throughputs, equally in both variants; no native uninstrumented speedup is
-inferred from them. Report medians **and ranges**, not just the best run.
+inferred from them. Three additional 32-writer TCP pairs use `--capture none`
+(measurement tool only), retaining the same workload, CPU window and stat loop
+without perf. Report medians **and ranges**, not just the best run.
 
 Reproduce with built, matching daemon/client/management binaries in each root:
 
@@ -87,12 +103,13 @@ Reproduce with built, matching daemon/client/management binaries in each root:
 python3 scripts/measure_counter_cost.py \
   --source BASELINE_OR_LOCAL_EXPERIMENT --scratch NEW_PRIVATE_SCRATCH \
   --out NEW_RAW_DIRECTORY --writers 32 --transport tcp \
-  --load-s 45 --profile-s 30
+  --load-s 45 --profile-s 30 --working-set 64
 python3 scripts/analyze_counter_profile.py NEW_RAW_DIRECTORY \
   BASELINE_OR_LOCAL_EXPERIMENT/tests/faults/efsd
 ```
 
-Repeat for 8/16/32 writers, both variants and transports, three times. RDMA
+Repeat for 8/16/32 writers with working sets 256/128/64 per writer, both variants
+and transports, three times. RDMA
 adds `--transport rdma --host 172.16.99.0` instead of TCP. Run on a compatible
 private host, not a production store. The exact serial commands, build commands
 and environment are retained below. The measurement driver never modifies the
@@ -108,11 +125,23 @@ chosen source; use an external copy for the explicitly uncommitted no-op patch.
   evidence**. Bounded 64-page profiler buffers fixed capture in `pilot3`.
 - `pilot3-tcp32` passed D4, all profiler exits and checked cleanup. Its 90-second
   predecessor is not pooled with the 45-second comparison matrix.
+- The first create/unlink matrix stopped at `tcp-w16-r2-noop`: D4 and cleanup
+  passed but both sampling profilers exited 255 while opening a transient
+  thread's `/proc/.../status`. Its partial matrix remains auxiliary evidence,
+  not the final repeated rewrite comparison. `matrix2` starts afresh using
+  the idle-attach control barrier.
+- `pilot4-tcp32` failed the measurement startup barrier, before load: this perf
+  sends `ack\n` including its terminating NUL. The driver now recognizes that
+  documented-by-preflight byte sequence. `pilot5-tcp32` passed the repaired
+  barrier, D4 rewrite checks and checked cleanup, with the planned profiler
+  SIGINT exit codes retained. No failed case was overwritten or re-labelled.
 - Analyzer calibration initially omitted `ip` from perf-script fields. This
   perf version then emitted empty symbols/zero addresses despite valid data.
   Those preliminary zero-attribution summaries are invalid. The committed
   analyzer requests IP explicitly, retains unresolved samples in the denominator
-  and counts address coverage; raw captures remain unchanged.
+  and counts address coverage; raw captures remain unchanged. Attribution uses
+  ELF instruction ranges even when perf cannot print a symbol, and verifies
+  that the supplied ELF's build ID occurs in the capture.
 - Sampling does not prove zero cost or zero misses. Threshold decisions require
   symbol/address coverage, repeated measurements and the comparison; an
   unresolved/unsupported capture cannot qualify the under-one-percent rule.
@@ -123,7 +152,8 @@ Raw evidence on node9900:
 `/data1/efs/evidence/taskAD-20261028-node9900-1d2852da4/`.
 Scratch: `/tmp/efs-taskAD-20261028-1d2852da4/`.
 `environment.json`, `variants.json`, `local-noop.patch`, build logs, pilot logs,
-`matrix-reproduction.py`, per-case commands/PIDs/maps/perf captures, D4 exact
+`matrix-reproduction.py`, `matrix2-reproduction.py`, per-case
+commands/PIDs/maps/perf captures, D4 exact
 readback results and checked stop records are retained. Stores/payloads remain
 temporarily while measurement is running; prune only after finalization and
 checked mount/process absence, using `edelete`. Keep minimal matching ELFs for
