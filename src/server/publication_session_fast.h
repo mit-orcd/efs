@@ -9,7 +9,7 @@ static int host_session_establish_reuse(struct efs_raft_host *h,
     if(rc)return rc;
     rc=host_read_index(h,group,hint);
     if(rc)return rc;
-    rc=efs_session_accept(h->kv,efs_load_be32(cmd+22),cmd+2,efs_load_be32(cmd+18));
+    rc=efs_session_accept(h->kv,rd32be(cmd+22),cmd+2,rd32be(cmd+18));
     if(rc==EFS_ERR_UNREGISTERED)return EFS_OK;
     if(rc)return rc;
     *reused=1;return EFS_OK;

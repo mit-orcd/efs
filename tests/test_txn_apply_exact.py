@@ -75,7 +75,7 @@ static void host_mark_incomplete(struct host_group *g){g->kv_incomplete=1;}
 static void host_clear_incomplete(struct host_group *g){g->kv_incomplete=0;}
 static void host_rec_mark(struct efs_raft_host *h,uint32_t shard){(void)h;(void)shard;}
 ''' + function('static void wr64be(') + function('static uint64_t rd64be(') + \
-    '\n' + \
+    function('static void wr32be(') + function('static uint32_t rd32be(') + \
     function('static int apply_txn_cmd(') + r'''
 static int host_apply_dispatch(struct efs_raft_host *h,uint64_t index,uint64_t term,uint8_t group,
                                const uint8_t *cmd,uint32_t clen){
@@ -102,13 +102,13 @@ static int cursor_at(struct efs_kv *kv,uint8_t group,uint64_t index){
 #define SEC 1000000000ull
 static void mint(struct efs_txid *t,uint64_t born,uint64_t seq){memcpy(t->bytes,&born,8);memcpy(t->bytes+8,&seq,8);}
 static uint32_t decide(uint8_t *out,const struct efs_txid *t,uint32_t coord,int dec,const struct efs_txn_parts *p){
-    uint32_t n=23;out[0]=EFS_MD_CMD_DECIDE;memcpy(out+1,t->bytes,16);efs_store_be32(out+17,coord);
+    uint32_t n=23;out[0]=EFS_MD_CMD_DECIDE;memcpy(out+1,t->bytes,16);wr32be(out+17,coord);
     out[21]=(uint8_t)dec;out[22]=(uint8_t)p->n;
-    for(uint32_t i=0;i<p->n;i++){efs_store_be32(out+n,p->shard[i]);n+=4;}
+    for(uint32_t i=0;i<p->n;i++){wr32be(out+n,p->shard[i]);n+=4;}
     return n;
 }
 static uint32_t retire(uint8_t *out,const struct efs_txid *t,uint32_t coord,uint64_t now){
-    out[0]=EFS_MD_CMD_TXN_RETIRE;memcpy(out+1,t->bytes,16);efs_store_be32(out+17,coord);wr64be(out+21,now);
+    out[0]=EFS_MD_CMD_TXN_RETIRE;memcpy(out+1,t->bytes,16);wr32be(out+17,coord);wr64be(out+21,now);
     return HOST_RETIRE_LEN;
 }
 static struct efs_raft_host H;
@@ -167,7 +167,7 @@ int main(int argc,char **argv){
     n=decide(cmd,&d,efs_txn_coordinator(&d,&p),EFS_TXN_COMMIT,&p);
     for(uint32_t l=1;l<n;l++)bad(cmd,l,"decide truncated");
     memcpy(m,cmd,n);m[n]=0;bad(m,n+1,"decide +1 byte");
-    memcpy(m,cmd,n);efs_store_be32(m+n,7);bad(m,n+4,"decide + a shard the count does not cover");
+    memcpy(m,cmd,n);wr32be(m+n,7);bad(m,n+4,"decide + a shard the count does not cover");
     memcpy(m,cmd,n);memset(m+n,0,8);bad(m,n+8,"decide +8 bytes");
     for(unsigned v=0;v<256;v++){
         if(v==EFS_TXN_COMMIT || v==EFS_TXN_ABORT)continue;
@@ -178,7 +178,7 @@ int main(int argc,char **argv){
         for(uint32_t i=0;i<EFS_TXN_MAX_PART;i++)big.shard[i]=i;
         memcpy(m,cmd,23);m[22]=0;bad(m,23,"decide count 0");
         uint32_t bn=decide(m,&d,0,EFS_TXN_COMMIT,&big);
-        efs_store_be32(m+bn,200);m[22]=EFS_TXN_MAX_PART+1;bad(m,bn+4,"decide count MAX+1");
+        wr32be(m+bn,200);m[22]=EFS_TXN_MAX_PART+1;bad(m,bn+4,"decide count MAX+1");
         m[22]=255;bad(m,bn+4,"decide count 255 short");
     }
     {   struct efs_txn_parts q={.n=2,.shard={5,EFS_KV_SHARD_MASK+1}};
@@ -195,7 +195,7 @@ int main(int argc,char **argv){
     for(uint32_t l=1;l<n;l++)bad(cmd,l,"retire truncated");
     memcpy(m,cmd,n);m[n]=0;bad(m,n+1,"retire +1 byte");
     memcpy(m,cmd,n);memset(m+n,0xab,8);bad(m,n+8,"retire +8 bytes");
-    memcpy(m,cmd,n);efs_store_be32(m+17,EFS_KV_SHARD_MASK+1);bad(m,n,"retire coordinator out of range");
+    memcpy(m,cmd,n);wr32be(m+17,EFS_KV_SHARD_MASK+1);bad(m,n,"retire coordinator out of range");
     assert(efs_txn_decision_get(H.kv,cc,&c,&dec)==EFS_OK && dec==EFS_TXN_ABORT); /* tombstone kept */
     struct dump keep=snap(H.kv);
 

@@ -65,7 +65,7 @@ struct efs_raft_host {
 static uint64_t clock_ns;
 static uint64_t now_ns(void) { return clock_ns; }
 static void host_rec_mark(struct efs_raft_host *h, uint32_t shard) { (void)h; (void)shard; }
-''' + '\n' + \
+''' + function('static void wr32be(') + function('static uint32_t rd32be(') + \
     function('static void wr64be(') + function('static uint64_t rd64be(') + r'''
 #define COORD 21u
 #define BLOCKED 22u
@@ -85,7 +85,7 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group, const uint8_t
     (void)verdict;
     if (cmd[0] == EFS_MD_CMD_RESOLVE) {
         assert(clen == 22);
-        uint32_t sh = efs_load_be32(cmd + 17);
+        uint32_t sh = rd32be(cmd + 17);
         assert(group == efs_raft_shard_group(sh));
         if (sh == BLOCKED) { blocked_tries++; return EFS_ERR_NOT_PRIMARY; }
         if (sh == OKSH) resolves++;

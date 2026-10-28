@@ -623,6 +623,17 @@ static __thread struct {
 } host_report_note;
 
 
+/* Local spelling is retained for host slice harnesses; encoding lives in
+ * byteorder.h, shared with the simulator, wire and metadata code. */
+static void wr32be(uint8_t *p, uint32_t v)
+{
+    efs_store_be32(p,v);
+}
+static uint32_t rd32be(const uint8_t *p)
+{
+    return efs_load_be32(p);
+}
+
 static void wr64be(uint8_t *p, uint64_t v)
 {
     int i;
@@ -659,7 +670,7 @@ static uint32_t pack_opid_trailer(uint8_t *p, const struct efs_opid_req *q)
     if (!q || !efs_opid_req_valid(q))
         return 0;
     memcpy(p, q->id.client_uuid, EFS_OPID_UUID_LEN);
-    efs_store_be32(p + EFS_OPID_UUID_LEN, q->id.session_epoch);
+    wr32be(p + EFS_OPID_UUID_LEN, q->id.session_epoch);
     wr64be(p + EFS_OPID_UUID_LEN + 4, q->id.seq);
     wr64be(p + EFS_OPID_UUID_LEN + 12, q->ack);
     return HOST_OPID_TRAILER;
@@ -669,7 +680,7 @@ static void unpack_opid_trailer(const uint8_t *p, struct efs_opid_req *q)
 {
     memset(q, 0, sizeof(*q));
     memcpy(q->id.client_uuid, p, EFS_OPID_UUID_LEN);
-    q->id.session_epoch = efs_load_be32(p + EFS_OPID_UUID_LEN);
+    q->id.session_epoch = rd32be(p + EFS_OPID_UUID_LEN);
     q->id.seq = rd64be(p + EFS_OPID_UUID_LEN + 4);
     q->ack = rd64be(p + EFS_OPID_UUID_LEN + 12);
 }
@@ -1310,8 +1321,8 @@ static void host_fill_ae_hdr(uint8_t *p, const struct efs_raft_msg *msg)
     q[2] = (uint8_t)(msg->vote_granted ? 1 : 0);
     q[3] = (uint8_t)((msg->success ? 1 : 0) | (msg->busy ? 2 : 0));
     q += 4;
-    efs_store_be32(q, (uint32_t)msg->from); q += 4;
-    efs_store_be32(q, (uint32_t)msg->to); q += 4;
+    wr32be(q, (uint32_t)msg->from); q += 4;
+    wr32be(q, (uint32_t)msg->to); q += 4;
     wr64be(q, msg->term); q += 8;
     wr64be(q, msg->boot_id); q += 8;
     wr64be(q, msg->last_log_index); q += 8;
@@ -1320,7 +1331,7 @@ static void host_fill_ae_hdr(uint8_t *p, const struct efs_raft_msg *msg)
     wr64be(q, msg->prev_term); q += 8;
     wr64be(q, msg->leader_commit); q += 8;
     wr64be(q, msg->match_index); q += 8;
-    efs_store_be32(q, msg->nentries);
+    wr32be(q, msg->nentries);
 }
 
 static void host_wire_taken(const struct efs_raft_msg *msg)
@@ -1584,7 +1595,7 @@ static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
     if (clen <= 13 || efs_membership_decode(cmd + 13, clen - 13, &m) != EFS_OK)
         return EFS_ERR_UNSUPPORTED;
-    anchor = efs_load_be32(cmd + 1);
+    anchor = rd32be(cmd + 1);
     salt = rd64be(cmd + 5);
     rc = efs_meta_apply_membership_record(h->kv, anchor, cmd + 13, clen - 13,
                                           EFS_MEMBERSHIP_EXTEND_ANY);
@@ -1649,10 +1660,10 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if ((cmd[1]&~(HOST_CREATE_F_OPID|HOST_CREATE_F_PENDING|HOST_CREATE_F_FENCE)) ||
         (pending && !(cmd[1]&HOST_CREATE_F_OPID))) return EFS_ERR_UNSUPPORTED;
     parent = rd64be(cmd + 2);
-    mode = efs_load_be32(cmd + 10);
+    mode = rd32be(cmd + 10);
     memset(&at, 0, sizeof(at));
-    at.uid = efs_load_be32(cmd + 14);
-    at.gid = efs_load_be32(cmd + 18);
+    at.uid = rd32be(cmd + 14);
+    at.gid = rd32be(cmd + 18);
     at.now = rd64be(cmd + 22);
     nl = cmd[30];
     if ((uint32_t)HOST_CREATE_NAME_OFF + nl + EFS_OPID_UUID_LEN + 4 > clen)
@@ -1699,7 +1710,7 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             }
             for (int i = 0; i < EFS_OPID_UUID_LEN; i++) nonzero |= uuid[i];
             if (pending) {
-                uint32_t epoch=efs_load_be32(uuid+EFS_OPID_UUID_LEN);
+                uint32_t epoch=rd32be(uuid+EFS_OPID_UUID_LEN);
                 if (!nonzero || !epoch || !qp || epoch!=qp->id.session_epoch ||
                     memcmp(uuid,qp->id.client_uuid,EFS_OPID_UUID_LEN))
                     return EFS_ERR_PROTO;
@@ -1709,7 +1720,7 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                 rc = efs_meta_apply_create_file_log_lease(h->kv, &at, parent, mode,
                                                       name, want, lay, qp,
                                                       nonzero ? uuid : NULL,
-                                                      efs_load_be32(uuid + EFS_OPID_UUID_LEN),
+                                                      rd32be(uuid + EFS_OPID_UUID_LEN),
                                                       &ino);
         }
     }
@@ -1862,16 +1873,16 @@ static int apply_xattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     op = cmd[1];
     ino = rd64be(cmd + 2);
     now = rd64be(cmd + 10);
-    flags = efs_load_be32(cmd + 18);
+    flags = rd32be(cmd + 18);
     nlen = (uint16_t)(((uint16_t)cmd[22] << 8) | cmd[23]);
-    vlen = efs_load_be32(cmd + 24);
+    vlen = rd32be(cmd + 24);
     if (nlen > EFS_XATTR_NAME_MAX || vlen > EFS_XATTR_VALUE_MAX)
         return EFS_ERR_UNSUPPORTED;
     body = (uint32_t)nlen + vlen;
     if (clen != HOST_XATTR_HDR + body)
         return EFS_ERR_UNSUPPORTED;
     rc = efs_session_accept(h->kv, efs_kv_inode_shard(ino), cmd + 28,
-                            efs_load_be32(cmd + 28 + EFS_OPID_UUID_LEN));
+                            rd32be(cmd + 28 + EFS_OPID_UUID_LEN));
     if (rc == EFS_OK)
         rc = efs_meta_apply_xattr(h->kv, ino, now, op, flags, cmd + HOST_XATTR_HDR,
                                   nlen, cmd + HOST_XATTR_HDR + nlen, vlen);
@@ -1899,14 +1910,14 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     now = rd64be(cmd + 9);
     memset(&u, 0, sizeof(u));
     u.expect_gen = rd64be(cmd + 17);
-    u.mask = efs_load_be32(cmd + 25);
+    u.mask = rd32be(cmd + 25);
     u.mtime = rd64be(cmd + 29);
     u.atime = rd64be(cmd + 37);
     u.mtime_gen = rd64be(cmd + 45);
     u.lane_bits = rd64be(cmd + 53);
     rc = u.lane_bits ? EFS_OK :
          efs_session_accept(h->kv, efs_kv_inode_shard(ino), cmd + 73,
-                            efs_load_be32(cmd + 73 + EFS_OPID_UUID_LEN));
+                            rd32be(cmd + 73 + EFS_OPID_UUID_LEN));
     if (rc == EFS_OK)
         rc = efs_meta_apply_utimens(h->kv, ino, now, &u);
     /* W45. STALE is the one documented idempotent case: it means a utimens
@@ -2042,7 +2053,7 @@ static int apply_trunc_sweep_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         snap.entries[i].size = rd64be(cmd + 39 + 16 * i);
     }
     rc = efs_meta_apply_trunc_sweep(h->kv, ino, rd64be(cmd + 9), lane,
-                                    rd64be(cmd + 18), efs_load_be32(cmd + 26), &snap);
+                                    rd64be(cmd + 18), rd32be(cmd + 26), &snap);
     if (rc != EFS_OK)
         fprintf(stderr, "raft-host: apply trunc-sweep rc=%d index=%llu ino=%llu lane=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)ino, (unsigned)lane);
@@ -2123,7 +2134,7 @@ static int host_pack_sweep_next(struct efs_raft_host *h, uint8_t group,
      * reclaim journals, so the sweep emits no per-chunk GC records. */
     cmd[0]=EFS_MD_CMD_LANE_SWEEP_MULTI;cmd[1]=0;cmd[2]=1;
     memcpy(cmd+3,request+1,17);cmd[20]=(uint8_t)n;
-    for (uint32_t i=0; i<n; i++) efs_store_be32(cmd+21+4*i,indices[i]);
+    for (uint32_t i=0; i<n; i++) wr32be(cmd+21+4*i,indices[i]);
     *clen=21+4*n;
     return EFS_OK;
 }
@@ -2146,7 +2157,7 @@ static int apply_lane_sweep_multi_cmd(struct efs_raft_host *h, const uint8_t *cm
         uint8_t lane = cmd[off + 16], n = cmd[off + 17];
         uint32_t indices[EFS_META_SWEEP_BATCH_MAX];
         if (n > EFS_META_SWEEP_BATCH_MAX || clen - off - 18 < 4u * n) return EFS_ERR_UNSUPPORTED;
-        for (uint32_t i = 0; i < n; i++) indices[i] = efs_load_be32(cmd + off + 18 + 4 * i);
+        for (uint32_t i = 0; i < n; i++) indices[i] = rd32be(cmd + off + 18 + 4 * i);
         off += 18u + 4u * n;
         int rc = efs_meta_apply_lane_sweep_reaped(h->kv, ino, gen, lane, indices, n);
         if (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM) {
@@ -2227,7 +2238,7 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         for (uint32_t i = 0; i < n; i++)
             items[i] = (struct efs_pack_index_item){rd64be(cmd + 9 + 24 * i), rd64be(cmd + 17 + 24 * i),
                                                     rd64be(cmd + 25 + 24 * i)};
-        rc = efs_meta_apply_pack_index(h->kv, cmd[1], efs_load_be32(cmd + 4), cmd[8], items, n);
+        rc = efs_meta_apply_pack_index(h->kv, cmd[1], rd32be(cmd + 4), cmd[8], items, n);
     } else if (cmd[0] == EFS_MD_CMD_PACK_UNINDEX) {
         struct efs_pack_unindex_item items[EFS_PACK_UNINDEX_MAX];
         if (clen < 4) return EFS_ERR_UNSUPPORTED;
@@ -2276,12 +2287,12 @@ static int degraded_clear_decode(const uint8_t *cmd, uint32_t clen,
     d->ino = rd64be(q + 1);
     d->inode_gen = rd64be(q + 9);
     d->object_gen = rd64be(q + 17);
-    d->chunk_index = efs_load_be32(q + 25);
+    d->chunk_index = rd32be(q + 25);
     d->lane = q[29];
     d->missing_mask = q[30];
     q += 31;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++, q += 4)
-        d->nodes[i] = efs_load_be32(q);
+        d->nodes[i] = rd32be(q);
     memcpy(d->checksums, q, sizeof(d->checksums));
     return EFS_OK;
 }
@@ -2296,12 +2307,12 @@ static void degraded_clear_encode(uint8_t *cmd, const struct efs_meta_degraded *
     wr64be(q + 1, d->ino);
     wr64be(q + 9, d->inode_gen);
     wr64be(q + 17, d->object_gen);
-    efs_store_be32(q + 25, d->chunk_index);
+    wr32be(q + 25, d->chunk_index);
     q[29] = d->lane;
     q[30] = d->missing_mask;
     q += 31;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++, q += 4)
-        efs_store_be32(q, d->nodes[i]);
+        wr32be(q, d->nodes[i]);
     memcpy(q, d->checksums, sizeof(d->checksums));
 }
 
@@ -2475,7 +2486,7 @@ static int apply_recovery_mark_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 static uint8_t degraded_mark_cmd_group(const uint8_t *cmd)
 {
     return efs_raft_shard_group(efs_kv_lane_shard(rd64be(cmd + 1),
-                                                  (uint8_t)(efs_load_be32(cmd + 25) % EFS_META_LANES)));
+                                                  (uint8_t)(rd32be(cmd + 25) % EFS_META_LANES)));
 }
 
 /* EFS_MD_CMD_DEGRADED_MARK [ino:8][inode_gen:8][object_gen:8][ci:4][fi:1]
@@ -2493,15 +2504,15 @@ static int apply_degraded_mark_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (group != degraded_mark_cmd_group(cmd))
         return EFS_ERR_INVAL;
     ino = rd64be(cmd + 1);
-    ci = efs_load_be32(cmd + 25);
+    ci = rd32be(cmd + 25);
     fi = cmd[29];
     rc = efs_meta_apply_degraded_mark(h->kv, ino, rd64be(cmd + 9), rd64be(cmd + 17), ci, fi,
-                                      efs_load_be32(cmd + 30), &added);
+                                      rd32be(cmd + 30), &added);
     if (rc == EFS_OK && added)
         fprintf(stderr, "raft-host: degraded mark ino=%llu ci=%u gen=%llx fragment=%u "
                 "node=%u: COMMIT did not prove it durable; rebuild on return\n",
                 (unsigned long long)ino, ci, (unsigned long long)rd64be(cmd + 17), fi,
-                efs_load_be32(cmd + 30));
+                rd32be(cmd + 30));
     else if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND)
         fprintf(stderr, "raft-host: apply degraded-mark rc=%d index=%llu ino=%llu ci=%u "
                 "gen=%llx fragment=%u\n", rc, (unsigned long long)index,
@@ -2531,7 +2542,7 @@ static int apply_gc_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         items[i].ino = rd64be(cmd + off);
         items[i].gen = rd64be(cmd + off + 8);
         items[i].lane = cmd[off + 16];
-        items[i].ci = efs_load_be32(cmd + off + 17);
+        items[i].ci = rd32be(cmd + off + 17);
         items[i].frag = cmd[off + 21];
         off += 22;
     }
@@ -2573,7 +2584,7 @@ static int apply_append_rsv_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     len = rd64be(cmd + 9);
     memset(&op, 0, sizeof(op));
     memcpy(op.client_uuid, cmd + 17, EFS_OPID_UUID_LEN);
-    op.session_epoch = efs_load_be32(cmd + 33);
+    op.session_epoch = rd32be(cmd + 33);
     op.seq = rd64be(cmd + 37);
     if (clen == HOST_APPEND_RSV_LEN) {
         struct efs_opid_req q = {.id = op, .ack = rd64be(cmd + 45)};
@@ -2603,14 +2614,14 @@ static int apply_append_catchup_cmd(struct efs_raft_host *h,const uint8_t *cmd,
 {
     if(clen!=38 && clen!=58)return EFS_ERR_UNSUPPORTED;
     if(cmd[37]>1 || (cmd[37] && clen!=58) || (!cmd[37] && clen!=38))return EFS_ERR_UNSUPPORTED;
-    uint32_t limit=efs_load_be32(cmd+33);
+    uint32_t limit=rd32be(cmd+33);
     if(!limit || limit>EFS_META_APPEND_CATCHUP_MAX)return EFS_ERR_INVAL;
     efs_ino_t ino=rd64be(cmd+1);
     if(group!=efs_raft_shard_group(efs_kv_inode_shard(ino)))return EFS_ERR_INVAL;
     struct efs_opid session={0};
     if(cmd[37]) {
         memcpy(session.client_uuid,cmd+38,EFS_OPID_UUID_LEN);
-        session.session_epoch=efs_load_be32(cmd+54);
+        session.session_epoch=rd32be(cmd+54);
     }
     return efs_meta_apply_append_catchup(h->kv,ino,rd64be(cmd+9),
         rd64be(cmd+17),rd64be(cmd+25),limit,cmd[37]?&session:NULL);
@@ -2761,8 +2772,8 @@ static int host_unpack_lease_edge(const uint8_t *cmd,uint32_t clen,
         cmd[1]!=EFS_MD_SESS_LEASE_EDGE_DEFERRED && cmd[1]!=EFS_MD_SESS_LEASE_PROBE_DEFERRED))
         return EFS_ERR_INVAL;
     memset(q,0,sizeof(*q));memcpy(q->id.client_uuid,cmd+2,EFS_OPID_UUID_LEN);
-    q->id.session_epoch=efs_load_be32(cmd+18);q->id.seq=rd64be(cmd+22);q->ack=rd64be(cmd+30);
-    *ino=rd64be(cmd+38);*gen=rd64be(cmd+46);*flags=efs_load_be32(cmd+54);*token=rd64be(cmd+58);
+    q->id.session_epoch=rd32be(cmd+18);q->id.seq=rd64be(cmd+22);q->ack=rd64be(cmd+30);
+    *ino=rd64be(cmd+38);*gen=rd64be(cmd+46);*flags=rd32be(cmd+54);*token=rd64be(cmd+58);
     if(!*ino || !*gen || !efs_opid_req_valid(q) || !q->id.session_epoch || q->ack>=q->id.seq ||
        !*flags || (*flags&~7u) || (*flags&3u)==3u ||
        !!(*flags&EFS_LEASE_EDGE_CLEAR_PENDING)!=!!*token)return EFS_ERR_INVAL;
@@ -2774,7 +2785,7 @@ static int host_unpack_session_cleanup(const uint8_t *cmd,uint32_t clen,
 {
     if (clen<27 || cmd[0]!=EFS_MD_CMD_SESSION ||
         cmd[1]!=EFS_MD_SESS_LEASE_LOCK_BATCH) return EFS_ERR_INVAL;
-    *epoch=efs_load_be32(cmd+18);*shard=efs_load_be32(cmd+22);*n=cmd[26];
+    *epoch=rd32be(cmd+18);*shard=rd32be(cmd+22);*n=cmd[26];
     if (!*epoch || *shard>=EFS_SESSION_BITS || !*n || *n>EFS_SESSION_CLEANUP_MAX ||
         clen!=27+66u*(*n)) return EFS_ERR_INVAL;
     for (uint32_t i=0;i<*n;i++) {
@@ -2823,25 +2834,25 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_CREATE:
         if (clen < HOST_SESS_CREATE_LEN)
             return EFS_ERR_UNSUPPORTED;
-        epoch = efs_load_be32(cmd + 18);
+        epoch = rd32be(cmd + 18);
         rc = efs_session_create(h->kv, uuid, epoch);
         break;
     case EFS_MD_SESS_REGISTER:
         if (clen < HOST_SESS_REG_LEN)
             return EFS_ERR_UNSUPPORTED;
-        epoch = efs_load_be32(cmd + 18);
-        shard = efs_load_be32(cmd + 22);
+        epoch = rd32be(cmd + 18);
+        shard = rd32be(cmd + 22);
         rc = host_session_register_apply(h, uuid, epoch, shard);
         break;
     case EFS_MD_SESS_REGISTER_ESTABLISH:
         if(clen!=HOST_SESS_REG_LEN)return EFS_ERR_UNSUPPORTED;
-        rc=efs_session_register_establish(h->kv,uuid,efs_load_be32(cmd+18),efs_load_be32(cmd+22));
+        rc=efs_session_register_establish(h->kv,uuid,rd32be(cmd+18),rd32be(cmd+22));
         break;
     case EFS_MD_SESS_ESTABLISH:
         if (clen < HOST_SESS_REG_LEN)
             return EFS_ERR_UNSUPPORTED;
-        epoch = efs_load_be32(cmd + 18);
-        shard = efs_load_be32(cmd + 22);
+        epoch = rd32be(cmd + 18);
+        shard = rd32be(cmd + 22);
         rc = efs_session_establish(h->kv, shard, uuid, epoch);
         break;
     case EFS_MD_SESS_BEGIN:
@@ -2850,8 +2861,8 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_FENCE_LOC: {
         if (clen != EFS_MD_SESS_FENCE_LOC_LEN)
             return EFS_ERR_UNSUPPORTED;
-        epoch = efs_load_be32(cmd + 18);
-        uint32_t word = efs_load_be32(cmd + 22);
+        epoch = rd32be(cmd + 18);
+        uint32_t word = rd32be(cmd + 22);
         uint64_t mask = rd64be(cmd + 26);
         if (!epoch || !mask || word >= EFS_SESSION_BITS / 64u)
             return EFS_ERR_INVAL;
@@ -2871,7 +2882,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_ACK: {
         if (clen != EFS_MD_SESS_ACK_LEN)
             return EFS_ERR_UNSUPPORTED;
-        uint32_t word = efs_load_be32(cmd + 18);
+        uint32_t word = rd32be(cmd + 18);
         uint64_t mask = rd64be(cmd + 22);
         shard = mask ? word * 64u + (uint32_t)__builtin_ctzll(mask) : 0;
         rc = efs_session_ack_fence_word(h->kv, uuid, word, mask);
@@ -2880,7 +2891,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_FINISH:
         if(clen!=HOST_SESS_HDR_LEN && clen!=HOST_SESS_CREATE_LEN)return EFS_ERR_INVAL;
         rc = clen==HOST_SESS_CREATE_LEN?
-            efs_session_finish_fence_epoch(h->kv,uuid,efs_load_be32(cmd+18)):
+            efs_session_finish_fence_epoch(h->kv,uuid,rd32be(cmd+18)):
             efs_session_finish_fence(h->kv, uuid);
         break;
     case EFS_MD_SESS_LEASE_LOCK_BATCH: {
@@ -2898,8 +2909,8 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_LEASE_DROP:
         if (clen < HOST_SESS_REG_LEN)
             return EFS_ERR_UNSUPPORTED;
-        epoch = efs_load_be32(cmd + 18);
-        shard = efs_load_be32(cmd + 22);
+        epoch = rd32be(cmd + 18);
+        shard = rd32be(cmd + 22);
         rc = efs_lease_drop_session(h->kv, shard, uuid, epoch);
         if (rc == EFS_OK || rc == EFS_ERR_NOT_FOUND) {
             int r2 = efs_lock_drop_session(h->kv, shard, uuid, epoch);
@@ -2918,7 +2929,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_LEASE_OPEN:
         if (clen < HOST_SESS_LEASE_LEN)
             return EFS_ERR_UNSUPPORTED;
-        epoch = efs_load_be32(cmd + 18);
+        epoch = rd32be(cmd + 18);
         ino = rd64be(cmd + 22);
         gen = rd64be(cmd + 30);
         rc = efs_lease_open(h->kv, ino, gen, uuid, epoch);
@@ -2926,7 +2937,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_LEASE_CLOSE:
         if (clen < HOST_SESS_LEASE_LEN)
             return EFS_ERR_UNSUPPORTED;
-        epoch = efs_load_be32(cmd + 18);
+        epoch = rd32be(cmd + 18);
         ino = rd64be(cmd + 22);
         gen = rd64be(cmd + 30);
         rc = efs_lease_close(h->kv, ino, gen, uuid, epoch);
@@ -3019,7 +3030,7 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     r.owner.id = rd64be(cmd + 37);
     p = cmd + 45;
     memcpy(r.owner.uuid, p, EFS_OPID_UUID_LEN);
-    r.owner.epoch = efs_load_be32(p + EFS_OPID_UUID_LEN);
+    r.owner.epoch = rd32be(p + EFS_OPID_UUID_LEN);
     if (cmd[1] == EFS_MD_LOCK_GRANT)
         rc = efs_lock_grant(h->kv, &r);
     else if (cmd[1] == EFS_MD_LOCK_RELEASE)
@@ -3061,25 +3072,25 @@ static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
     int i;
     memset(p, 0, sizeof(*p));
     p->ino = rd64be(cmd + 1);
-    p->chunk_index = efs_load_be32(cmd + 9);
+    p->chunk_index = rd32be(cmd + 9);
     p->new_size = rd64be(cmd + 13);
     p->now = rd64be(cmd + 21);
     q = cmd + 29;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        p->ch.nodes[i] = efs_load_be32(q);
+        p->ch.nodes[i] = rd32be(q);
         q += 4;
         memcpy(p->ch.checksums[i], q, EFS_HASH_SIZE);
         q += EFS_HASH_SIZE;
     }
-    p->delta_off = efs_load_be32(q + 0);
-    p->delta_len = efs_load_be32(q + 4);
-    p->delta_base_n = efs_load_be32(q + 8);
+    p->delta_off = rd32be(q + 0);
+    p->delta_len = rd32be(q + 4);
+    p->delta_base_n = rd32be(q + 8);
     p->delta_base_seq = rd64be(q + 12);
     q += EFS_OPID_UUID_LEN + 4;
     p->candidate_gen = rd64be(q);
     p->expected_gen = rd64be(q + 8);
     p->content_epoch = rd64be(q + 16);
-    p->coding_profile_id = efs_load_be32(q + 24);
+    p->coding_profile_id = rd32be(q + 24);
     q += 28;
     p->inode_gen = rd64be(q);
     p->mtime_gen = rd64be(q + 8);
@@ -3091,15 +3102,15 @@ static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
         p->durable_result = 1;
         p->receipt_locator=(struct efs_publication_locator){group,index,term};
         memcpy(p->publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
-        p->publication_id.session_epoch=efs_load_be32(cmd+HOST_PUBLISH_LEN+16);
+        p->publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
         p->publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
         if (q[16] & HOST_PUB_F_TICKETED) {
             p->ticketed=1;
             memcpy(p->put_id.client_uuid,cmd+HOST_PUBLICATION_LEN,EFS_OPID_UUID_LEN);
-            p->put_id.session_epoch=efs_load_be32(cmd+HOST_PUBLICATION_LEN+16);
+            p->put_id.session_epoch=rd32be(cmd+HOST_PUBLICATION_LEN+16);
             p->put_id.seq=rd64be(cmd+HOST_PUBLICATION_LEN+20);
-            p->put_fragment_len=efs_load_be32(cmd+HOST_PUBLICATION_LEN+28);
-            p->put_member_mask=efs_load_be32(cmd+HOST_PUBLICATION_LEN+32);
+            p->put_fragment_len=rd32be(cmd+HOST_PUBLICATION_LEN+28);
+            p->put_member_mask=rd32be(cmd+HOST_PUBLICATION_LEN+32);
         }
     }
 }
@@ -3145,8 +3156,8 @@ static void unpack_report_ticket(const uint8_t *rec, const struct efs_opid *sess
     memcpy(p->put_id.client_uuid, session->client_uuid, EFS_OPID_UUID_LEN);
     p->put_id.session_epoch = session->session_epoch;
     p->put_id.seq = rd64be(t);
-    p->put_fragment_len = efs_load_be32(t + 8);
-    p->put_member_mask = efs_load_be32(t + 12);
+    p->put_fragment_len = rd32be(t + 8);
+    p->put_member_mask = rd32be(t + 12);
     p->publication_id = p->put_id;
 }
 
@@ -3170,7 +3181,7 @@ static int apply_report_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             !efs_chunk_missing_valid((flags & HOST_PUB_F_MISSING_MASK) >> HOST_PUB_F_MISSING_SHIFT))
             return EFS_ERR_PROTO;
         uint32_t shard = efs_kv_lane_shard(rd64be(cmd + off + 1),
-                            efs_load_be32(cmd + off + 9) % EFS_META_LANES);
+                            rd32be(cmd + off + 9) % EFS_META_LANES);
         if (efs_raft_shard_group(shard) != group) return EFS_ERR_INVAL;
         int rc = efs_session_accept(h->kv, shard, session.client_uuid, session.session_epoch);
         if (rc != EFS_OK) return rc;
@@ -3234,7 +3245,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         {
             uint8_t i;
             for (i = 0; i < p.n; i++)
-                p.shard[i] = efs_load_be32(cmd + off + (uint32_t)i * 4u);
+                p.shard[i] = rd32be(cmd + off + (uint32_t)i * 4u);
         }
         off += (uint32_t)p.n * 4u;
         klen = ((uint32_t)cmd[off] << 8) | cmd[off + 1];
@@ -3260,7 +3271,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (clen < 23)
             break;
         memcpy(t.bytes, cmd + 1, 16);
-        shard = efs_load_be32(cmd + 17);
+        shard = rd32be(cmd + 17);
         dec = cmd[21];
         p.n = cmd[22];
         if (p.n == 0 || p.n > EFS_TXN_MAX_PART || clen != 23 + (uint32_t)p.n * 4u)
@@ -3271,7 +3282,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         {
             uint8_t i;
             for (i = 0; i < p.n; i++)
-                p.shard[i] = efs_load_be32(cmd + 23 + (uint32_t)i * 4u);
+                p.shard[i] = rd32be(cmd + 23 + (uint32_t)i * 4u);
         }
         if (!efs_txn_parts_valid(&p))
             break; /* shard id out of range or repeated */
@@ -3282,7 +3293,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (clen != HOST_RETIRE_LEN)
             break;
         memcpy(t.bytes, cmd + 1, 16);
-        shard = efs_load_be32(cmd + 17);
+        shard = rd32be(cmd + 17);
         if (shard > EFS_KV_SHARD_MASK)
             break;
         rc = efs_meta_apply_txn_retire(h->kv, shard, &t, rd64be(cmd + 21));
@@ -3291,7 +3302,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (clen < 1 + 16 + 4 + 1)
             break;
         memcpy(t.bytes, cmd + 1, 16);
-        shard = efs_load_be32(cmd + 17);
+        shard = rd32be(cmd + 17);
         dec = cmd[21];
         rc = efs_meta_apply_txn_resolve(h->kv, &t, shard, dec);
         break;
@@ -3299,7 +3310,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (clen < 1 + 16 + 4)
             break;
         memcpy(t.bytes, cmd + 1, 16);
-        shard = efs_load_be32(cmd + 17);
+        shard = rd32be(cmd + 17);
         rc = efs_txn_drop(h->kv, &t, shard);
         break;
     default:
@@ -3313,7 +3324,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 static uint32_t txn_batch_shard(const uint8_t *cmd, uint32_t clen)
 {
     if (cmd[0] == EFS_MD_CMD_RESOLVE)
-        return clen >= 22 ? efs_load_be32(cmd + 17) : UINT32_MAX;
+        return clen >= 22 ? rd32be(cmd + 17) : UINT32_MAX;
     if (clen < 19 || !cmd[18] || cmd[18] > EFS_TXN_MAX_PART)
         return UINT32_MAX;
     uint32_t off = 19u + 4u * cmd[18];
@@ -4024,7 +4035,7 @@ static int host_session_combined_group(const uint8_t *cmd,uint32_t clen,uint8_t 
 {
     if(clen!=HOST_SESS_REG_LEN ||
        group!=efs_raft_shard_group(efs_kv_session_shard(cmd+2)) ||
-       efs_load_be32(cmd+22)>=EFS_SESSION_BITS || group!=efs_raft_shard_group(efs_load_be32(cmd+22)))
+       rd32be(cmd+22)>=EFS_SESSION_BITS || group!=efs_raft_shard_group(rd32be(cmd+22)))
         return EFS_ERR_INVAL;
     return EFS_OK;
 }
@@ -4041,15 +4052,15 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (!efs_md_cmd_applicable(cmd[0]))
         return EFS_ERR_UNSUPPORTED;
     if(cmd[0]==EFS_MD_CMD_CREATE_REFUSAL) {
-        if(clen!=5+HOST_OPID_TRAILER || efs_load_be32(cmd+1)>EFS_KV_SHARD_MASK ||
-           group!=efs_raft_shard_group(efs_load_be32(cmd+1)))return EFS_ERR_PROTO;
+        if(clen!=5+HOST_OPID_TRAILER || rd32be(cmd+1)>EFS_KV_SHARD_MASK ||
+           group!=efs_raft_shard_group(rd32be(cmd+1)))return EFS_ERR_PROTO;
         struct efs_opid_req q;unpack_opid_trailer(cmd+5,&q);
-        return efs_meta_apply_create_refusal(h->kv,efs_load_be32(cmd+1),&q);
+        return efs_meta_apply_create_refusal(h->kv,rd32be(cmd+1),&q);
     }
     if(cmd[0]==EFS_MD_CMD_EXPIRY_RENEW) {
         if(clen!=45 || group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))return EFS_ERR_PROTO;
         return efs_meta_apply_expiry_renew(h->kv,rd64be(cmd+1),rd64be(cmd+9),
-              efs_load_be32(cmd+17),rd64be(cmd+21),rd64be(cmd+29),rd64be(cmd+37));
+              rd32be(cmd+17),rd64be(cmd+21),rd64be(cmd+29),rd64be(cmd+37));
     }
 
     if(cmd[0]==EFS_MD_CMD_APPEND_CATCHUP)
@@ -4060,7 +4071,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     }
     if (cmd[0] == EFS_MD_CMD_QUERY_POLICY) {
         if(clen!=13 || group!=efs_raft_shard_group(1))return EFS_ERR_INVAL;
-        return efs_query_policy_apply(h->kv,rd64be(cmd+1),efs_load_be32(cmd+9));
+        return efs_query_policy_apply(h->kv,rd64be(cmd+1),rd32be(cmd+9));
     }
     if (cmd[0] == EFS_MD_CMD_EXPIRY_SWITCH) {
         if(clen!=10 || group!=efs_raft_shard_group(1))return EFS_ERR_INVAL;
@@ -4144,7 +4155,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if(cmd[0]==EFS_MD_CMD_APPEND_COMPLETE_ATOMIC) {
         if(clen!=EFS_MD_APPEND_COMPLETE_ATOMIC_LEN || group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))
             return EFS_ERR_INVAL;
-        struct efs_opid owner={.session_epoch=efs_load_be32(cmd+41)};
+        struct efs_opid owner={.session_epoch=rd32be(cmd+41)};
         memcpy(owner.client_uuid,cmd+25,16);
         return efs_meta_apply_append_complete_atomic(h->kv,rd64be(cmd+1),rd64be(cmd+9),rd64be(cmd+17),&owner,rd64be(cmd+45),cmd+53);
     }
@@ -6833,9 +6844,9 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     out[0] = EFS_MD_CMD_CREATE;
     out[1] = (with_op ? HOST_CREATE_F_OPID : 0) | (pending ? HOST_CREATE_F_PENDING : 0);
     wr64be(out + 2, parent);
-    efs_store_be32(out + 10, mode);
-    efs_store_be32(out + 14, at->uid);
-    efs_store_be32(out + 18, at->gid);
+    wr32be(out + 10, mode);
+    wr32be(out + 14, at->uid);
+    wr32be(out + 18, at->gid);
     wr64be(out + 22, at->now);
     out[30] = (uint8_t)nl;
     memcpy(out + HOST_CREATE_NAME_OFF, name, nl);
@@ -6843,7 +6854,7 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     memset(p, 0, EFS_OPID_UUID_LEN + 4);
     if (pending || (hold_owner && !S_ISDIR(mode))) {
         memcpy(p,q->id.client_uuid,EFS_OPID_UUID_LEN);
-        efs_store_be32(p+EFS_OPID_UUID_LEN,q->id.session_epoch);
+        wr32be(p+EFS_OPID_UUID_LEN,q->id.session_epoch);
     }
     p += EFS_OPID_UUID_LEN + 4;
     if (child_ino) {
@@ -6926,7 +6937,7 @@ static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     wr64be(out + 1, ino);
     wr64be(out + 9, now);
     wr64be(out + 17, u->expect_gen);
-    efs_store_be32(out + 25, u->mask);
+    wr32be(out + 25, u->mask);
     wr64be(out + 29, u->mtime);
     wr64be(out + 37, u->atime);
     wr64be(out + 45, u->mtime_gen);
@@ -6935,7 +6946,7 @@ static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     memset(out + 53, 0, EFS_OPID_UUID_LEN + 4);
     wr64be(out + 53, u->lane_bits);
     memcpy(out + 73, id->client_uuid, EFS_OPID_UUID_LEN);
-    efs_store_be32(out + 73 + EFS_OPID_UUID_LEN, id->session_epoch);
+    wr32be(out + 73 + EFS_OPID_UUID_LEN, id->session_epoch);
     *len = HOST_UTIMENS_LEN;
     return EFS_OK;
 }
@@ -6962,7 +6973,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
     out[0] = EFS_MD_CMD_SESSION;
     out[1] = open ? EFS_MD_SESS_LEASE_OPEN : EFS_MD_SESS_LEASE_CLOSE;
     memcpy(out + 2, uuid, EFS_OPID_UUID_LEN);
-    efs_store_be32(out + 18, epoch);
+    wr32be(out + 18, epoch);
     wr64be(out + 22, ino);
     wr64be(out + 30, gen);
     *len = HOST_SESS_LEASE_LEN;
@@ -6989,7 +7000,7 @@ static int pack_lock_cmd(uint8_t *out, uint32_t *len, uint8_t kind,
     wr64be(out + 37, r->owner.id);
     p = out + 45;
     memcpy(p, r->owner.uuid, EFS_OPID_UUID_LEN);
-    efs_store_be32(p + EFS_OPID_UUID_LEN, r->owner.epoch);
+    wr32be(p + EFS_OPID_UUID_LEN, r->owner.epoch);
     *len = HOST_LOCK_LEN;
     return EFS_OK;
 }
@@ -7025,12 +7036,12 @@ static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_p
         return EFS_ERR_INVAL;
     out[0] = EFS_MD_CMD_PUBLISH;
     wr64be(out + 1, p->ino);
-    efs_store_be32(out + 9, p->chunk_index);
+    wr32be(out + 9, p->chunk_index);
     wr64be(out + 13, p->new_size);
     wr64be(out + 21, p->now);
     q = out + 29;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        efs_store_be32(q, p->ch.nodes[i]);
+        wr32be(q, p->ch.nodes[i]);
         q += 4;
         memcpy(q, p->ch.checksums[i], EFS_HASH_SIZE);
         q += EFS_HASH_SIZE;
@@ -7038,15 +7049,15 @@ static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_p
     /* Session bytes are unused on this path. A span publish stores its
      * range here; a full CAS stores the delta list it observed. Old
      * entries are zeros, which is a full CAS that saw no spans. */
-    efs_store_be32(q + 0, p->delta_off);
-    efs_store_be32(q + 4, p->delta_len);
-    efs_store_be32(q + 8, p->delta_base_n);
+    wr32be(q + 0, p->delta_off);
+    wr32be(q + 4, p->delta_len);
+    wr32be(q + 8, p->delta_base_n);
     wr64be(q + 12, p->delta_base_seq);
     q += EFS_OPID_UUID_LEN + 4;
     wr64be(q, p->candidate_gen);
     wr64be(q + 8, p->expected_gen);
     wr64be(q + 16, p->content_epoch);
-    efs_store_be32(q + 24, p->coding_profile_id);
+    wr32be(q + 24, p->coding_profile_id);
     q += 28;
     wr64be(q, p->inode_gen);
     wr64be(q + 8, p->mtime_gen);
@@ -7087,8 +7098,8 @@ static int pack_report_rec(uint8_t *out, uint32_t *len, const struct efs_meta_pu
     if (rc != EFS_OK) return rc;
     out[HOST_PUBLISH_LEN - 1] |= HOST_PUB_F_TICKETED | reject;
     wr64be(out + HOST_PUBLISH_LEN, p->put_id.seq);
-    efs_store_be32(out + HOST_PUBLISH_LEN + 8, p->put_fragment_len);
-    efs_store_be32(out + HOST_PUBLISH_LEN + 12, p->put_member_mask);
+    wr32be(out + HOST_PUBLISH_LEN + 8, p->put_fragment_len);
+    wr32be(out + HOST_PUBLISH_LEN + 12, p->put_member_mask);
     *len = HOST_REPORT_REC_LEN;
     return EFS_OK;
 }
@@ -7150,7 +7161,7 @@ static uint32_t pack_prep(uint8_t *out, int kind, const struct efs_txid *t,
     out[18] = p->n;
     n = 19;
     for (i = 0; i < p->n; i++) {
-        efs_store_be32(out + n, p->shard[i]);
+        wr32be(out + n, p->shard[i]);
         n += 4;
     }
     /* klen is 2 bytes: a dentry key is 11 + name, and a 255-char name is
@@ -7162,7 +7173,7 @@ static uint32_t pack_prep(uint8_t *out, int kind, const struct efs_txid *t,
     n += klen;
     wr64be(out + n, expected);
     out[n + 8] = (uint8_t)op;
-    efs_store_be32(out + n + 9, vlen);
+    wr32be(out + n + 9, vlen);
     n += 13;
     if (vlen) {
         memcpy(out + n, val, vlen);
@@ -7186,7 +7197,7 @@ static uint32_t pack_prep_raw(uint8_t *out, int kind, const struct efs_txid *t,
     out[18] = p->n;
     n = 19;
     for (i = 0; i < p->n; i++) {
-        efs_store_be32(out + n, p->shard[i]);
+        wr32be(out + n, p->shard[i]);
         n += 4;
     }
     out[n++] = (uint8_t)(klen >> 8);
@@ -7208,11 +7219,11 @@ static uint32_t pack_decide(uint8_t *out, const struct efs_txid *t, uint32_t coo
 
     out[0] = EFS_MD_CMD_DECIDE;
     memcpy(out + 1, t->bytes, 16);
-    efs_store_be32(out + 17, coord);
+    wr32be(out + 17, coord);
     out[21] = (uint8_t)dec;
     out[22] = p ? p->n : 0;
     for (i = 0; p && i < p->n; i++) {
-        efs_store_be32(out + n, p->shard[i]);
+        wr32be(out + n, p->shard[i]);
         n += 4;
     }
     return n;
@@ -7226,7 +7237,7 @@ static void pack_retire(uint8_t *out, const struct efs_txid *t, uint32_t coord)
 {
     out[0] = EFS_MD_CMD_TXN_RETIRE;
     memcpy(out + 1, t->bytes, 16);
-    efs_store_be32(out + 17, coord);
+    wr32be(out + 17, coord);
     wr64be(out + 21, now_ns());
 }
 
@@ -7235,7 +7246,7 @@ static void pack_resolve(uint8_t *out, const struct efs_txid *t, uint32_t shard,
 {
     out[0] = EFS_MD_CMD_RESOLVE;
     memcpy(out + 1, t->bytes, 16);
-    efs_store_be32(out + 17, shard);
+    wr32be(out + 17, shard);
     out[21] = (uint8_t)dec;
 }
 
@@ -7243,7 +7254,7 @@ static void pack_drop(uint8_t *out, const struct efs_txid *t, uint32_t shard)
 {
     out[0] = EFS_MD_CMD_DROP;
     memcpy(out + 1, t->bytes, 16);
-    efs_store_be32(out + 17, shard);
+    wr32be(out + 17, shard);
 }
 
 static void fill_txid(struct efs_raft_host *h, struct efs_txid *t)
@@ -8774,7 +8785,7 @@ static uint32_t load_desired(struct efs_raft_host *h, uint8_t group,
         return fallback;
     }
     close(fd);
-    v = efs_load_be32(buf);
+    v = rd32be(buf);
     return efs_raft_voters_valid(v) ? v : fallback;
 }
 
@@ -8786,7 +8797,7 @@ static int save_desired(struct efs_raft_host *h, uint8_t group, uint32_t voters)
 
     desired_path(h, group, path, sizeof(path));
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    efs_store_be32(buf, voters);
+    wr32be(buf, voters);
     fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0)
         return EFS_ERR_IO;
@@ -8921,7 +8932,7 @@ static void host_cfg_fan_note(struct efs_raft_host *h, uint8_t group,
 
     cmd[0] = EFS_MD_CMD_CFG;
     cmd[1] = EFS_MD_CFG_NOTE;
-    efs_store_be32(cmd + 2, voters);
+    wr32be(cmd + 2, voters);
     for (rid = 0; rid < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); rid++) {
         if (rid == h->raft_id)
             continue;
@@ -8950,7 +8961,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
     if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE))
         return EFS_ERR_UNFORMED;
     sub = cmd[1];
-    voters = efs_load_be32(cmd + 2);
+    voters = rd32be(cmd + 2);
     if (!efs_raft_voters_valid(voters))
         return EFS_ERR_INVAL;
     if (sub != EFS_MD_CFG_NOTE && sub != EFS_MD_CFG_CHANGE)
@@ -9534,7 +9545,7 @@ static void host_gc_segment_nodes_batch(struct efs_raft_host *h, uint8_t group,
         for (uint32_t i = 0; i < n; i++) if ((members[i] & bit) && ok[i]) pick[m++] = i;
         if (!m) continue;
         req[0] = group;
-        efs_store_be32(req + 4, m);
+        wr32be(req + 4, m);
         for (uint32_t k = 0; k < m; k++) {
             uint32_t i = pick[k];
             wr64be(req + 8 + 16 * k, ids[i]);
@@ -9702,7 +9713,7 @@ static int close_step_scan_cb(void *user,const uint8_t *key,uint32_t len,
 {
     struct close_step_scan *scan=user;
     if(len!=11 || length!=EFS_CLOSE_STEP_VALUE || !rd64be(value) ||
-       !efs_load_be32(value+24) || !rd64be(value+28)) {scan->rc=EFS_ERR_PROTO;return 1;}
+       !rd32be(value+24) || !rd64be(value+28)) {scan->rc=EFS_ERR_PROTO;return 1;}
     if(scan->skip_len && !memcmp(key,scan->skip,11))return 0;
     memcpy(scan->last,key,11);scan->last_len=11;scan->ino[scan->n]=rd64be(key+3);
     memcpy(scan->identity[scan->n++],value,length);
@@ -10320,7 +10331,7 @@ static void host_gc_records(struct efs_raft_host *h, struct efs_export *ex,
             x->ino = rd64be(keys[r] + 3);
             x->gen = rd64be(keys[r] + 11);
             x->lane = keys[r][19];
-            x->ci = efs_load_be32(keys[r] + 20);
+            x->ci = rd32be(keys[r] + 20);
             x->fi = (uint8_t)fi;
             x->node = (uint8_t)fnodes[fi];
             memcpy(x->sum, sums[fi], EFS_HASH_SIZE);
@@ -10346,12 +10357,12 @@ static void host_gc_records(struct efs_raft_host *h, struct efs_export *ex,
         uint8_t *req = calloc(1, len);
         struct efs_conn *pc = req ? server_peer_conn_get(nodes[i].addr, nodes[i].port) : NULL;
         if (!pc) { free(req); continue; }
-        efs_store_be32(req, ex->id);
-        efs_store_be32(req + 4, c);
+        wr32be(req, ex->id);
+        wr32be(req + 4, c);
         for (uint32_t j = 0; j < c; j++) {
             const struct gc_frag_item *x = &it[pick[i][j]];
             uint8_t *q = req + 8 + (size_t)j * EFS_GC_FRAG_ITEM_BYTES;
-            wr64be(q, x->ino); wr64be(q + 8, x->gen); efs_store_be32(q + 16, x->ci); q[20] = x->fi;
+            wr64be(q, x->ino); wr64be(q + 8, x->gen); wr32be(q + 16, x->ci); q[20] = x->fi;
             memcpy(q + 24, x->sum, EFS_HASH_SIZE);
         }
         if (pc->kind == EFS_CONN_TCP) {
@@ -10625,7 +10636,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                     wr64be(item + 8, cp->gen[i]);
                     item[16] = (uint8_t)lane;
                     item[17] = (uint8_t)cnt;
-                    for (uint32_t j = 0; j < cnt; j++) efs_store_be32(item + 18 + 4 * j, indices[j]);
+                    for (uint32_t j = 0; j < cnt; j++) wr32be(item + 18 + 4 * j, indices[j]);
                     reap_multi_add(h, &host_reap_sweep[lg >> 1], item, 18 + 4 * cnt);
                     queued = 1;
                 } else {
@@ -10724,7 +10735,7 @@ static int host_gc_ack_flush(struct efs_raft_host *h, uint8_t group,
         wr64be(cmd + off, acks[j].ino);
         wr64be(cmd + off + 8, acks[j].gen);
         cmd[off + 16] = acks[j].lane;
-        efs_store_be32(cmd + off + 17, acks[j].ci);
+        wr32be(cmd + off + 17, acks[j].ci);
         cmd[off + 21] = acks[j].frag;
         off += 22;
     }
@@ -11434,7 +11445,7 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
                 wr64be(cmd + 9, row.generation);
                 cmd[17] = lane;
                 wr64be(cmd + 18, target);
-                efs_store_be32(cmd + 26, cs);
+                wr32be(cmd + 26, cs);
                 cmd[30] = (uint8_t)hist.count;
                 for (uint32_t k = 0; k < hist.count; k++) {
                     wr64be(cmd + 31 + 16 * k, hist.entries[k].epoch);
@@ -11654,7 +11665,7 @@ static int dg_put_fragment(struct efs_raft_host *h, struct efs_export *ex,
 
     if (!n || fi >= EFS_NUM_FRAGMENTS || d->missing_mask != (1u << fi))
         return EFS_ERR_IO;
-    efs_store_be32(hdr, ex->id);
+    wr32be(hdr, ex->id);
     server_degraded_mark_encode(hdr + 4, d);
     pc = dg_conn_get(n);
     if (!pc)
@@ -11928,7 +11939,7 @@ static int put_orphan_revoked(void *ctx, const uint8_t uuid[EFS_OPID_UUID_LEN], 
     query[0] = efs_raft_shard_group(ssh);
     query[1] = EFS_MD_CMD_SESSION; /* sub 0: GET, a ReadIndex on the session group */
     memcpy(query + 3, uuid, EFS_OPID_UUID_LEN);
-    efs_store_be32(query + 19, ssh);
+    wr32be(query + 19, ssh);
     server_raft_host_submit(query, sizeof(query), &r);
     if (r.rc != EFS_OK)
         return r.rc;
@@ -11941,8 +11952,8 @@ static int put_orphan_delete(void *ctx, const struct efs_put_ticket *t, unsigned
     struct put_orphan_host *c = ctx;
     uint8_t frame[EFS_PUT_ORPHAN_DELETE_LEN];
     struct efs_msg_put_orphan_delete_reply reply = {.rc = EFS_ERR_IO};
-    efs_store_be32(frame, 1);
-    efs_store_be32(frame + 4, fi);
+    wr32be(frame, 1);
+    wr32be(frame + 4, fi);
     if (efs_put_ticket_encode(t, frame + 8) != EFS_OK)
         return EFS_ERR_INVAL;
     if (t->nodes[fi] == c->h->s->id)
@@ -12063,8 +12074,8 @@ static int put_drain_cmd(void *ctx, const struct efs_put_stream *st)
     struct put_drain_host *c = ctx;
     uint8_t cmd[EFS_MD_PUT_TICKET_DRAIN_LEN] = {EFS_MD_CMD_PUT_TICKET_DRAIN};
     memcpy(cmd + 1, st->uuid, EFS_OPID_UUID_LEN);
-    efs_store_be32(cmd + 17, st->epoch);
-    efs_store_be32(cmd + 21, st->shard);
+    wr32be(cmd + 17, st->epoch);
+    wr32be(cmd + 21, st->shard);
     return host_gc_propose(c->h, c->group, cmd, sizeof(cmd));
 }
 static void host_put_drain_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
@@ -13869,7 +13880,7 @@ static int host_form(struct efs_raft_host *h, const struct efs_membership *want,
     }
     if (rc == EFS_OK) {
         scmd[0] = EFS_MD_CMD_SALT;
-        efs_store_be32(scmd + 1, efs_kv_anchor_shard(2));
+        wr32be(scmd + 1, efs_kv_anchor_shard(2));
         wr64be(scmd + 5, h->salt);
         rc = efs_membership_encode(&committed, scmd + 13, EFS_MEMBERSHIP_MAX_LEN, &rlen);
         /* Group 2 was attached by the notice just now: allow its first
@@ -14135,7 +14146,7 @@ static int host_member_add_forward(struct efs_raft_host *h, const struct efs_mem
     int rc = EFS_ERR_NET;
 
     cmd[0] = EFS_MD_REQ_MEMBER_ADD;
-    efs_store_be32(cmd + 1, 0); /* K33: node ids come from the record (count + 1) */
+    wr32be(cmd + 1, 0); /* K33: node ids come from the record (count + 1) */
     cmd[5] = (uint8_t)(j->port >> 8);
     cmd[6] = (uint8_t)j->port;
     wr64be(cmd + 7, j->token);
@@ -14167,7 +14178,7 @@ static int host_member_add_decode(const uint8_t *cmd, uint32_t clen, struct efs_
     if (clen < 16 || cmd[15] < 1 || cmd[15] > EFS_MEMBER_ADDR_MAX || clen != 16u + cmd[15])
         return EFS_ERR_INVAL;
     memset(j, 0, sizeof(*j));
-    j->id = efs_load_be32(cmd + 1);
+    j->id = rd32be(cmd + 1);
     j->port = (uint16_t)(cmd[5] << 8 | cmd[6]);
     j->token = rd64be(cmd + 7);
     memcpy(j->addr, cmd + 16, cmd[15]);
@@ -14367,7 +14378,7 @@ static void host_notice_pump(struct efs_raft_host *h, uint64_t now)
         if (efs_meta_apply_export_salt(h->kv, &salt) != EFS_OK)
             return;
         scmd[0] = EFS_MD_CMD_SALT;
-        efs_store_be32(scmd + 1, efs_kv_anchor_shard(2));
+        wr32be(scmd + 1, efs_kv_anchor_shard(2));
         wr64be(scmd + 5, salt);
         memcpy(scmd + 13, cmd + 1, rlen);
         if (host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, (uint32_t)(13 + rlen), &hint) ==
@@ -14487,7 +14498,7 @@ static int host_session_get_covered(struct efs_raft_host *h, const uint8_t *cmd,
         return EFS_ERR_INVAL;
     memcpy(uuid, cmd + 2, EFS_OPID_UUID_LEN);
     if (clen >= HOST_SESS_REG_LEN - 4)
-        shard = efs_load_be32(cmd + 18);
+        shard = rd32be(cmd + 18);
     rc = (covered&(1u<<group)) ? EFS_OK : host_read_index(h, group, hint);
     if (rc != EFS_OK)
         return rc;
@@ -14527,12 +14538,12 @@ static int host_session_establish_admit_covered(struct efs_raft_host *h,
     const uint8_t *cmd, uint32_t clen, uint8_t group, int *hint,uint8_t covered)
 {
     if (clen != HOST_SESS_REG_LEN) return EFS_ERR_INVAL;
-    uint32_t epoch=efs_load_be32(cmd+18), shard=efs_load_be32(cmd+22);
+    uint32_t epoch=rd32be(cmd+18), shard=rd32be(cmd+22);
     if (!epoch || shard>=EFS_SESSION_BITS || group!=efs_raft_shard_group(shard))
         return EFS_ERR_INVAL;
     uint8_t query[HOST_SESS_HDR_LEN+4];
     memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;
-    efs_store_be32(query+18,shard);
+    wr32be(query+18,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(cmd+2));
     uint64_t salt=0;int rc;
     if (host_hosts(h,owner)) rc=host_session_get_covered(h,query,sizeof(query),owner,hint,&salt,covered);
@@ -14563,12 +14574,12 @@ static int host_session_establish_admit(struct efs_raft_host *h,
 static int host_session_cleanup_admit(struct efs_raft_host *h,
     const uint8_t *cmd,uint32_t clen,uint8_t group,int *hint)
 {
-    if (clen<HOST_SESS_REG_LEN || !efs_load_be32(cmd+18) ||
-        efs_load_be32(cmd+22)>=EFS_SESSION_BITS || group!=efs_raft_shard_group(efs_load_be32(cmd+22)))
+    if (clen<HOST_SESS_REG_LEN || !rd32be(cmd+18) ||
+        rd32be(cmd+22)>=EFS_SESSION_BITS || group!=efs_raft_shard_group(rd32be(cmd+22)))
         return EFS_ERR_INVAL;
     uint8_t query[HOST_SESS_HDR_LEN+4];
     memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;
-    efs_store_be32(query+18,efs_load_be32(cmd+22));
+    wr32be(query+18,rd32be(cmd+22));
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(cmd+2));
     uint64_t salt=0;int rc;
     if (host_hosts(h,owner)) rc=host_session_get(h,query,sizeof(query),owner,hint,&salt);
@@ -14579,7 +14590,7 @@ static int host_session_cleanup_admit(struct efs_raft_host *h,
         if (rc==EFS_OK) salt=reply.salt;
     }
     if (rc!=EFS_OK) return rc;
-    return (uint8_t)(salt>>32)==EFS_SESSION_ACTIVE && (uint32_t)salt>efs_load_be32(cmd+18) ?
+    return (uint8_t)(salt>>32)==EFS_SESSION_ACTIVE && (uint32_t)salt>rd32be(cmd+18) ?
         EFS_OK : EFS_ERR_BUSY;
 }
 
@@ -14591,7 +14602,7 @@ static int host_append_session_admit_covered(struct efs_raft_host *h,efs_ino_t i
     const struct efs_opid_req *q,int *hint,uint8_t covered)
 {
     uint32_t shard=efs_kv_inode_shard(ino);uint8_t query[HOST_SESS_HDR_LEN+4]={EFS_MD_CMD_SESSION,HOST_SESS_GET};
-    memcpy(query+2,q->id.client_uuid,16);efs_store_be32(query+18,shard);
+    memcpy(query+2,q->id.client_uuid,16);wr32be(query+18,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
     uint64_t salt=0;int rc;
     if(host_hosts(h,owner))rc=host_session_get_covered(h,query,sizeof(query),owner,hint,&salt,covered);
@@ -14615,7 +14626,7 @@ static int host_pack_session_cleanup(struct efs_raft_host *h,const uint8_t *cmd,
     if (rc==EFS_OK) rc=host_read_index(h,group,hint);
     if (rc!=EFS_OK) return rc;
     struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];uint32_t n;
-    rc=efs_session_cleanup_select(h->kv,efs_load_be32(cmd+22),cmd+2,efs_load_be32(cmd+18),keys,&n);
+    rc=efs_session_cleanup_select(h->kv,rd32be(cmd+22),cmd+2,rd32be(cmd+18),keys,&n);
     if (rc!=EFS_OK) return rc;
     if (!n) { *size=0;return EFS_OK; }
     *size=27+66*n;memset(packed,0,*size);memcpy(packed,cmd,26);
@@ -14744,7 +14755,7 @@ static void host_put_ticket_batch_submit(struct efs_raft_host *h, uint8_t group,
         shards[ns++]=shard;
         uint8_t admission[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_ESTABLISH};
         memcpy(admission+2,tickets[0].id.client_uuid,16);
-        efs_store_be32(admission+18,tickets[0].id.session_epoch);efs_store_be32(admission+22,shard);
+        wr32be(admission+18,tickets[0].id.session_epoch);wr32be(admission+22,shard);
         rc=host_session_establish_admit(h,admission,sizeof(admission),group,&hint);
         if(rc!=EFS_OK){out->rc=rc;out->leader_hint=hint;return;}
     }
@@ -14886,7 +14897,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     }
     if(clen && (cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK || cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET)) {
         if(clen!=(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK?1u:5u)) {out->rc=EFS_ERR_INVAL;return;}
-        if(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET && (!host_expiry_on(h) || efs_load_be32(cmd+1))) {
+        if(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET && (!host_expiry_on(h) || rd32be(cmd+1))) {
             out->rc=EFS_ERR_ACCES;return;
         }
         /* Read health freshly even on followers that do not run a sweep. */
@@ -15035,19 +15046,19 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         uint32_t ssh=efs_kv_session_shard(cmd+2);
         if(group!=efs_raft_shard_group(ssh)){out->rc=EFS_ERR_INVAL;return;}
         query[0]=efs_raft_shard_group(ssh);query[1]=EFS_MD_CMD_SESSION;
-        memcpy(query+3,cmd+2,16);efs_store_be32(query+19,ssh);
+        memcpy(query+3,cmd+2,16);wr32be(query+19,ssh);
         struct efs_msg_raft_mkfs_reply authority;
         server_raft_host_submit(query,sizeof(query),&authority);
         uint32_t epoch=(uint32_t)authority.salt,state=(uint32_t)((authority.salt>>32)&255);
         rc=authority.rc;
         if(rc==EFS_OK && (epoch<2 ||
            (state!=EFS_SESSION_FENCING && !(cmd[1]==EFS_MD_SESS_FINISH && state==EFS_SESSION_ACTIVE))))rc=EFS_ERR_STALE;
-        if(rc==EFS_OK && clen==HOST_SESS_CREATE_LEN && efs_load_be32(cmd+18)!=epoch)rc=EFS_ERR_STALE;
+        if(rc==EFS_OK && clen==HOST_SESS_CREATE_LEN && rd32be(cmd+18)!=epoch)rc=EFS_ERR_STALE;
         if(rc==EFS_OK)rc=host_storage_fence_members(h,cmd+2,epoch,cmd[1]==EFS_MD_SESS_FINISH);
         if(rc!=EFS_OK || cmd[1]==EFS_MD_SESS_STORAGE_FENCE){out->rc=rc;out->leader_hint=authority.leader_hint;return;}
         /* Freeze the verified epoch in the log, not just in this RPC's stack.
          * Another coordinator may finish and BEGIN a later epoch before apply. */
-        memcpy(storage_finish_cmd,cmd,HOST_SESS_HDR_LEN);efs_store_be32(storage_finish_cmd+18,epoch);
+        memcpy(storage_finish_cmd,cmd,HOST_SESS_HDR_LEN);wr32be(storage_finish_cmd+18,epoch);
         cmd=storage_finish_cmd;clen=sizeof(storage_finish_cmd);
     }
     if(clen && cmd[0]==EFS_MD_CMD_CLOSE_STEP &&
@@ -15144,7 +15155,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
 #endif
         uint8_t admission[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_ESTABLISH};
         memcpy(admission+2,ticket->id.client_uuid,16);
-        efs_store_be32(admission+18,ticket->id.session_epoch);efs_store_be32(admission+22,shard);
+        wr32be(admission+18,ticket->id.session_epoch);wr32be(admission+22,shard);
         rc=host_session_establish_admit(h,admission,sizeof(admission),group,&hint);
         if(rc!=EFS_OK){out->rc=rc;out->leader_hint=hint;return;}
         if(cmd[0]!=EFS_MD_REQ_PUT_TICKET_STATUS)
@@ -15187,7 +15198,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];
         if (cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {
             if (clen!=HOST_SESS_REG_LEN) {out->rc=EFS_ERR_INVAL;return;}
-            shard=efs_load_be32(cmd+22);epoch=efs_load_be32(cmd+18);
+            shard=rd32be(cmd+22);epoch=rd32be(cmd+18);
         } else if (host_unpack_session_cleanup(cmd,clen,&shard,&epoch,keys,&n)!=EFS_OK) {
             out->rc=EFS_ERR_INVAL;return;
         }
@@ -15197,9 +15208,9 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     }
     if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION && cmd[1] == EFS_MD_SESS_FENCE_LOC) {
         /* Every shard of the mask lives in this group's log. */
-        uint32_t word = clen == EFS_MD_SESS_FENCE_LOC_LEN ? efs_load_be32(cmd + 22) : 0;
+        uint32_t word = clen == EFS_MD_SESS_FENCE_LOC_LEN ? rd32be(cmd + 22) : 0;
         uint64_t mask = clen == EFS_MD_SESS_FENCE_LOC_LEN ? rd64be(cmd + 26) : 0;
-        int wrong = clen != EFS_MD_SESS_FENCE_LOC_LEN || !efs_load_be32(cmd + 18) || !mask ||
+        int wrong = clen != EFS_MD_SESS_FENCE_LOC_LEN || !rd32be(cmd + 18) || !mask ||
                     word >= EFS_SESSION_BITS / 64u;
         for (uint32_t b = 0; b < 64 && !wrong; b++)
             wrong = (mask & (1ull << b)) && group != efs_raft_shard_group(word * 64u + b);
@@ -15210,14 +15221,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     }
     if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION && cmd[1] == EFS_MD_SESS_ACK &&
         (clen != EFS_MD_SESS_ACK_LEN || !rd64be(cmd + 22) ||
-         efs_load_be32(cmd + 18) >= EFS_SESSION_BITS / 64u ||
+         rd32be(cmd + 18) >= EFS_SESSION_BITS / 64u ||
          group != efs_raft_shard_group(efs_kv_session_shard(cmd + 2)))) {
         out->rc = EFS_ERR_INVAL;
         return;
     }
     if(clen && cmd[0]==EFS_MD_REQ_SESSION_APPEND_NEXT) {
-        if(clen!=25 || !efs_load_be32(cmd+17) || efs_load_be32(cmd+21)>=EFS_SESSION_BITS ||
-           group!=efs_raft_shard_group(efs_load_be32(cmd+21))) {
+        if(clen!=25 || !rd32be(cmd+17) || rd32be(cmd+21)>=EFS_SESSION_BITS ||
+           group!=efs_raft_shard_group(rd32be(cmd+21))) {
             out->rc=EFS_ERR_INVAL;return;
         }
         uint8_t groups[2];host_need_both(groups);
@@ -15371,12 +15382,12 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             if (!(n&63))
                 fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u applied BUSY "
                         "(key under another transaction's intent), retry certified (%u)\n",
-                        efs_load_be32(cmd+22),efs_load_be32(cmd+18),n+1);
+                        rd32be(cmd+22),rd32be(cmd+18),n+1);
             out->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return;
         }
         if (rc==EFS_ERR_BUSY)
             fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u idx=%llu BUSY "
-                    "uncertified (verdict not known)\n",efs_load_be32(cmd+22),efs_load_be32(cmd+18),
+                    "uncertified (verdict not known)\n",rd32be(cmd+22),rd32be(cmd+18),
                     (unsigned long long)batch_idx);
         out->index=batch_idx;
         return;
@@ -15472,7 +15483,7 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
     unsigned nonzero=0;for(unsigned i=0;i<16;i++)nonzero|=request->uuid[i];if(!nonzero)return;
     uint32_t ssh=efs_kv_session_shard(request->uuid);
     uint8_t query[1+HOST_SESS_CREATE_LEN]={0};query[0]=efs_raft_shard_group(ssh);query[1]=EFS_MD_CMD_SESSION;
-    memcpy(query+3,request->uuid,16);efs_store_be32(query+19,ssh);
+    memcpy(query+3,request->uuid,16);wr32be(query+19,ssh);
     struct efs_msg_raft_mkfs_reply authority;server_raft_host_submit(query,sizeof(query),&authority);
     uint32_t epoch=(uint32_t)authority.salt,state=(uint32_t)((authority.salt>>32)&255);
     out->rc=authority.rc;
@@ -15740,11 +15751,11 @@ static int recovery_segment_cb(void *user, const uint8_t *key, uint32_t klen,
         if (o->nodes[i] != p->node)
             continue;
         uint8_t *r = p->recs + (size_t)p->n * EFS_RECOVERY_SEGMENT_REC_LEN;
-        efs_store_be32(r, o->ledger.publication_group);
+        wr32be(r, o->ledger.publication_group);
         wr64be(r + 4, o->ledger.segment_id);
         wr64be(r + 12, o->ledger.segment_generation);
-        efs_store_be32(r + 20, (uint32_t)i);
-        efs_store_be32(r + 24, o->ledger.geometry);
+        wr32be(r + 20, (uint32_t)i);
+        wr32be(r + 24, o->ledger.geometry);
         memcpy(r + 28, o->checksums[i], EFS_HASH_SIZE);
         p->n++;
         break;
@@ -17188,13 +17199,13 @@ static int host_namespace_session_admit_covered(struct efs_raft_host *h,uint32_t
     if(rc==EFS_OK)return efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
     uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_REGISTER};
-    memcpy(cmd+2,q->id.client_uuid,16);efs_store_be32(cmd+18,q->id.session_epoch);efs_store_be32(cmd+22,shard);
+    memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);wr32be(cmd+22,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
     /* Consult fresh owner authority before admitting a new participant.
      * Never infer ACTIVE from a missing local floor, never cache the owner
      * across requests and never create a session for an unknown uuid. */
     uint8_t query[HOST_SESS_HDR_LEN+4];
-    memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;efs_store_be32(query+18,shard);
+    memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;wr32be(query+18,shard);
     uint64_t session=0;
     if(host_hosts(h,owner))rc=host_session_get_covered(h,query,sizeof(query),owner,hint,&session,covered);
     else {
@@ -17554,7 +17565,7 @@ static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
         }
         if(rc==EFS_OK && births) {
             uint8_t refusal[5+HOST_OPID_TRAILER]={EFS_MD_CMD_CREATE_REFUSAL};
-            efs_store_be32(refusal+1,dsh);pack_opid_trailer(refusal+5,q);
+            wr32be(refusal+1,dsh);pack_opid_trailer(refusal+5,q);
             rc=host_propose_wait(h,dg,refusal,sizeof(refusal),&hint);
             set_inode_rc(out,rc,hint);return;
         }
@@ -18849,7 +18860,7 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
         return rc;
     }
     efs_ino_t ino;uint64_t generation,offset;unsigned found=0;
-    rc=efs_meta_append_session_next(h->kv,efs_load_be32(cmd+21),cmd+1,efs_load_be32(cmd+17),
+    rc=efs_meta_append_session_next(h->kv,rd32be(cmd+21),cmd+1,rd32be(cmd+17),
                                     &ino,&generation,&offset,&found);
     if(rc!=EFS_OK) {
         /* Selection only reads the floor and reservation rows. No cleanup
@@ -18862,12 +18873,12 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
     unsigned wait=EFS_META_APPEND_WAIT_NONE;
     if(!found) {
         unsigned progress=0;
-        rc=efs_meta_retire_append_session(h->kv,efs_load_be32(cmd+21),cmd+1,
-            efs_load_be32(cmd+17),&tx,&host_append_ops,&ctx,&progress,&wait);
+        rc=efs_meta_retire_append_session(h->kv,rd32be(cmd+21),cmd+1,
+            rd32be(cmd+17),&tx,&host_append_ops,&ctx,&progress,&wait);
         if(rc==EFS_OK)*empty=!progress;
     } else {
         rc=efs_meta_finish_append_fenced(h->kv,ino,generation,offset,cmd+1,
-                                        efs_load_be32(cmd+17),&tx,&host_append_ops,&ctx,&wait);
+                                        rd32be(cmd+17),&tx,&host_append_ops,&ctx,&wait);
     }
     /* A dead inode still owes REAP_MULTI; absence is never empty-phase proof.
      * K42: a step that committed nothing names why (foreign OPEN append,
@@ -18878,8 +18889,8 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
         *empty=EFS_MD_SESSION_APPEND_RETRY_SALT+wait;
     else if(rc==EFS_ERR_BUSY)
         fprintf(stderr,"raft-host: session append cleanup shard=%u epoch=%u ino=%llu BUSY "
-                "uncertified at %s (transaction outcome not known)\n",efs_load_be32(cmd+21),
-                efs_load_be32(cmd+17),(unsigned long long)(found?ino:0),
+                "uncertified at %s (transaction outcome not known)\n",rd32be(cmd+21),
+                rd32be(cmd+17),(unsigned long long)(found?ino:0),
                 efs_meta_append_cleanup_why?efs_meta_append_cleanup_why:"-");
     return rc;
 }
@@ -18891,12 +18902,12 @@ static int host_session_cleanup_probe(struct efs_raft_host *h,const uint8_t *cmd
     uint8_t group,int *hint,uint64_t *pending)
 {
     const uint8_t *uuid=cmd+1;
-    uint32_t epoch=efs_load_be32(cmd+17),word=efs_load_be32(cmd+21);
+    uint32_t epoch=rd32be(cmd+17),word=rd32be(cmd+21);
     uint64_t mask=rd64be(cmd+25);
     uint8_t owner[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_LEASE_LOCK_NEXT};
     *pending=mask;
-    memcpy(owner+2,uuid,16);efs_store_be32(owner+18,epoch);
-    efs_store_be32(owner+22,word*64u+(uint32_t)__builtin_ctzll(mask));
+    memcpy(owner+2,uuid,16);wr32be(owner+18,epoch);
+    wr32be(owner+22,word*64u+(uint32_t)__builtin_ctzll(mask));
     int rc=host_session_cleanup_admit(h,owner,sizeof(owner),group,hint);
     if(rc==EFS_OK)rc=host_append_authority(h,hint);
     if(rc!=EFS_OK)return rc;
@@ -19530,7 +19541,7 @@ static int host_expiry_update_txn(struct efs_raft_host *h,const uint8_t *cmd,
                                   const struct host_expiry_birth *birth,int *hint)
 {
     efs_ino_t ino=rd64be(cmd+1);uint64_t gen=rd64be(cmd+9),expected=rd64be(cmd+21);
-    uint32_t uid=efs_load_be32(cmd+17);uint64_t deadline=rd64be(cmd+37),now=0;
+    uint32_t uid=rd32be(cmd+17);uint64_t deadline=rd64be(cmd+37),now=0;
     if(!host_expiry_clock_read(h,&now))return EFS_ERR_BUSY;
     uint32_t ish=efs_kv_inode_shard(ino);int rc=host_read_index(h,efs_raft_shard_group(ish),hint);
     struct efs_meta_row row;struct efs_expiry_record old,renewed;
@@ -19674,7 +19685,7 @@ static int host_expiry_policy_txn(struct efs_raft_host *h,const uint8_t *cmd,int
         if(rc==EFS_OK && after!=pver)rc=EFS_ERR_BUSY;
         if(rc==EFS_OK && row.generation!=gen)rc=EFS_ERR_STALE;
         if(rc==EFS_OK && !S_ISDIR(row.mode))rc=EFS_ERR_INVAL;
-        if(rc==EFS_OK)rc=efs_expiry_policy_plan(h->kv,root,gen,efs_load_be32(cmd+17),rd64be(cmd+21),&p,&c);
+        if(rc==EFS_OK)rc=efs_expiry_policy_plan(h->kv,root,gen,rd32be(cmd+17),rd64be(cmd+21),&p,&c);
         if(rc!=EFS_OK)continue;
         struct efs_txn_parts parts={0};struct efs_txid tx;
         rc=host_parts_add(&parts,shard);
@@ -19818,8 +19829,8 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
         if(rc==EFS_OK)rc=efs_kv_key_sess_local(dsh,lease_uuid,session_key,&session_len);
         if(rc==EFS_OK)rc=efs_kv_get(h->kv,session_key,session_len,session_value,&session_bytes);
         if(rc==EFS_OK && (session_bytes!=sizeof(session_value) ||
-             efs_load_be32(session_value)!=q->id.session_epoch ||
-             efs_load_be32(session_value+4)>q->id.session_epoch))rc=EFS_ERR_STALE;
+             rd32be(session_value)!=q->id.session_epoch ||
+             rd32be(session_value+4)>q->id.session_epoch))rc=EFS_ERR_STALE;
     }
     if (rc == EFS_OK) {
         memset(&parts, 0, sizeof(parts));
@@ -21494,12 +21505,12 @@ void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
     cmd[1] = op;
     wr64be(cmd + 2, ino);
     wr64be(cmd + 10, now_ns());
-    efs_store_be32(cmd + 18, flags);
+    wr32be(cmd + 18, flags);
     cmd[22] = (uint8_t)(nlen >> 8);
     cmd[23] = (uint8_t)nlen;
-    efs_store_be32(cmd + 24, vlen);
+    wr32be(cmd + 24, vlen);
     memcpy(cmd + 28, sess_uuid, EFS_OPID_UUID_LEN);
-    efs_store_be32(cmd + 28 + EFS_OPID_UUID_LEN, sess_epoch);
+    wr32be(cmd + 28 + EFS_OPID_UUID_LEN, sess_epoch);
     if (nlen)
         memcpy(cmd + HOST_XATTR_HDR, name, nlen);
     if (vlen)
@@ -22585,11 +22596,11 @@ static int host_complete_single_append(struct efs_raft_host *h,efs_ino_t ino,
     if(vl!=sizeof(value) || rd64be(value)!=offset)
         return EFS_ERR_PROTO;
     if(rd64be(value+8)!=length)return EFS_ERR_BUSY;
-    if(memcmp(value+16,owner->client_uuid,16) || efs_load_be32(value+32)!=owner->session_epoch)
+    if(memcmp(value+16,owner->client_uuid,16) || rd32be(value+32)!=owner->session_epoch)
         return EFS_OK;
     uint8_t cmd[EFS_MD_APPEND_COMPLETE_ATOMIC_LEN]={EFS_MD_CMD_APPEND_COMPLETE_ATOMIC};
     wr64be(cmd+1,ino);wr64be(cmd+9,row->generation);wr64be(cmd+17,offset);
-    memcpy(cmd+25,owner->client_uuid,16);efs_store_be32(cmd+41,owner->session_epoch);
+    memcpy(cmd+25,owner->client_uuid,16);wr32be(cmd+41,owner->session_epoch);
     wr64be(cmd+45,row->content_epoch);memcpy(cmd+53,value,sizeof(value));
     uint64_t index=0,term=0;
     *handled=1;
@@ -22665,10 +22676,10 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
         uint8_t cmd[58]={EFS_MD_CMD_APPEND_CATCHUP};
         wr64be(cmd+1,ino);wr64be(cmd+9,row.generation);
         wr64be(cmd+17,row.content_epoch);wr64be(cmd+25,sz);
-        efs_store_be32(cmd+33,open);cmd[37]=session!=NULL;
+        wr32be(cmd+33,open);cmd[37]=session!=NULL;
         if(session) {
             memcpy(cmd+38,session->client_uuid,EFS_OPID_UUID_LEN);
-            efs_store_be32(cmd+54,session->session_epoch);
+            wr32be(cmd+54,session->session_epoch);
         }
         host_resolve_why="catchup";
         rc=host_propose_wait(h,efs_raft_shard_group(efs_kv_inode_shard(ino)),
@@ -23391,7 +23402,7 @@ static uint32_t host_pub_set_len(const struct host_pub_unit *u)
 
         memset(add, 0, sizeof(add));
         for (i = 0; fits && i < x->n; i++) {
-            uint32_t c = efs_load_be32(x->cmd[i] + 9);
+            uint32_t c = rd32be(x->cmd[i] + 9);
             uint8_t lane = (uint8_t)(c % EFS_META_LANES);
             for (j = 0; j < n && ci[j] != c; j++)
                 ;
@@ -23403,7 +23414,7 @@ static uint32_t host_pub_set_len(const struct host_pub_unit *u)
         if (!fits)
             break;
         for (i = 0; i < x->n; i++)
-            ci[n++] = efs_load_be32(x->cmd[i] + 9);
+            ci[n++] = rd32be(x->cmd[i] + 9);
         for (i = 0; i < EFS_META_LANES; i++)
             lane_n[i] = (uint8_t)(lane_n[i] + add[i]);
     }
@@ -23464,15 +23475,15 @@ static int host_pub_unit_txn(const struct host_pub_unit *u, uint32_t nunits,
         mint = now;
     }
     memcpy(seed, session->client_uuid, 16);
-    efs_store_be32(seed + 16, session->session_epoch);
+    wr32be(seed + 16, session->session_epoch);
     wr64be(seed + 20, pubid->seq);
     wr64be(seed + 28, u->ino);
-    efs_store_be32(seed + 36, u->ci0);
+    wr32be(seed + 36, u->ci0);
     for (m = 1; m < nunits && last->next; m++)
         last = last->next;
     if (nunits > 1) {
-        efs_store_be32(seed + 40, nunits);
-        efs_store_be32(seed + 44, last->ci0);
+        wr32be(seed + 40, nunits);
+        wr32be(seed + 44, last->ci0);
         slen = sizeof(seed);
     }
     for (i = 0; i < slen; i++) {
@@ -23485,7 +23496,7 @@ static int host_pub_unit_txn(const struct host_pub_unit *u, uint32_t nunits,
     for (x = u, m = 0; x && m < nunits; x = x->next, m++)
         for (i = 0; i < x->n; i++) {
             uint32_t sh = efs_kv_lane_shard(x->ino,
-                                            (uint8_t)(efs_load_be32(x->cmd[i] + 9) % EFS_META_LANES));
+                                            (uint8_t)(rd32be(x->cmd[i] + 9) % EFS_META_LANES));
             for (j = 0; j < nl && lanes[j] != sh; j++)
                 ;
             if (j == nl && sh != ish && nl < EFS_META_LANES)
@@ -24552,13 +24563,13 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
         if(rc==EFS_OK) {
             cmd[0]=query_only==2?EFS_MD_CMD_PUBLICATION_RETIRE:EFS_MD_CMD_PUBLICATION;
             memcpy(cmd+len,p.publication_id.client_uuid,EFS_OPID_UUID_LEN);
-            efs_store_be32(cmd+len+16,p.publication_id.session_epoch);wr64be(cmd+len+20,p.publication_id.seq);
+            wr32be(cmd+len+16,p.publication_id.session_epoch);wr64be(cmd+len+20,p.publication_id.seq);
             len+=28;
             if (p.ticketed) {
                 cmd[HOST_PUBLISH_LEN-1]|=HOST_PUB_F_TICKETED;
                 memcpy(cmd+len,p.put_id.client_uuid,EFS_OPID_UUID_LEN);
-                efs_store_be32(cmd+len+16,p.put_id.session_epoch);wr64be(cmd+len+20,p.put_id.seq);
-                efs_store_be32(cmd+len+28,p.put_fragment_len);efs_store_be32(cmd+len+32,p.put_member_mask);
+                wr32be(cmd+len+16,p.put_id.session_epoch);wr64be(cmd+len+20,p.put_id.seq);
+                wr32be(cmd+len+28,p.put_fragment_len);wr32be(cmd+len+32,p.put_member_mask);
                 len+=36;
             }
             if(!query_only && rc==EFS_OK) {
