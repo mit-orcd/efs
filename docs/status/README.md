@@ -1,5 +1,11 @@
 # Project status — work queue and evidence
 
+[AD shared-counter measurement](ad-counter-contention-20261028.md):
+**IN PROGRESS**, frozen product source `1d2852da4`, private TCP/RDMA clusters
+on node9900 (user-selected alternate to occupied node9901). Local counter no-op
+comparison remains outside Git; no product change, switch or AD closure.
+Repeated 8/16/32-writer measurements and the full gate are outstanding.
+
 [Stage 1 hot-path serialization tasks AG–AJ](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--hot-path-serialization-agaj):
 **OPEN / implementation and measurements NOTRUN**: shared client allocation
 budget, mount-wide chunk map, RDMA completion registry and server export lifetime
