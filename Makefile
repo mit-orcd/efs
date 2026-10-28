@@ -1063,6 +1063,7 @@ test: test-apply-wait
 # runs both and is what the gates run.
 .PHONY: test-long test-all
 test-long: all $(TEST_SPECIAL_BINS)
+	python3 tests/test_code_graph.py
 	python3 tests/test_decoder_refusal.py
 	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_w153_formation.py
