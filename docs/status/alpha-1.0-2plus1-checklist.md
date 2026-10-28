@@ -906,7 +906,9 @@ round says which physical or software limiter it hit.
   AMD native default RoCE PASS 9/9; full gate FAIL 3/520, hour NOTRUN;
   fixed-harness/cleanup continuation `d7e265746` timed out waiting for W123;
   no store touched. Fresh `14010248c` preservation/cleanup succeeded: six
-  synthetic lines exact, peer/three daemons stopped cleanly; qualification BUILD. Original
+  synthetic lines exact, peer/three daemons stopped cleanly; native RDMA 9/9
+  PASS, gate FAIL 1/526 on observer compilation, corrected unit PASS; fresh
+  small-page candidate qualification owed. Original
   failures preserved. Final qualification INCOMPLETE.
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;

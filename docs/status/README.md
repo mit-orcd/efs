@@ -36,14 +36,17 @@ RDMA 9/9 PASS; hour FAIL foreground RSS +13.04% and drain, with
 +0.10%, servers <=1.63%, drain 92.9 s, 2080 exact, pack errors 0/0. Overall
 pair FAIL remains; allocator-observer diagnostic `f5ef68036` completed without
 reproducing foreground growth (not qualification). Address-level mapping/
-residency diagnostic `0611de678` has started; no further allocator policy change
-is justified yet. AMD `5f07151c2` default-RoCE native PASS 9/9; full
+residency diagnostic `0611de678` completed without reproducing the slope.
+It identifies ~46 MiB THP backing of sparse static metadata; a per-range
+small-page candidate tests at 96 KiB versus 48 MiB with exact contents.
+Fresh live qualification is owed. AMD `5f07151c2` default-RoCE native PASS 9/9; full
 gate FAIL 3/520 (two busy unmounts, expected-abort timeout), hour NOTRUN.
 AMD became quiet; fresh preservation copied the fixture but refused normal
 internal query-cache links before any restart. Strict copy/link validation is
 fixed/tested in `14010248c`: 100 copied files/three links verified, all six
 synthetic lines exact, peer and three daemons stopped cleanly. Fresh AMD
-qualification BUILD; previous failures remain.
+gate FAIL 1/526 on GCC 15 observer write-result checking; corrected native
+unit PASS, fresh gate/hour owed. Native rxe0 RDMA 9/9 PASS; previous failures remain.
 All original failures/stores stay on-host; allocator probe capture hashes
 verified. No other cluster/client touched.
 

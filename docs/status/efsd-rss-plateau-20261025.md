@@ -346,3 +346,12 @@ verified 100 copied files/three links, recovered only the original fixture
 with unchanged binaries, checked all six synthetic lines and stopped peer/
 three daemons cleanly. Fresh qualification is BUILD; earlier failures and
 pre-recovery stores remain on AMD. No RSS/reclaim qualification closure.
+
+Mapping diagnostic0611de678 also completed without reproducing the slope;
+static BSS (mostly dirty-cache metadata) uses 47104 KiB THP per client on
+node9900's THP-always host. Per-range small-page candidate preserves sparse
+contents at 96 KiB versus 48 MiB in the native control on node9900 and AMD;
+full live acceptance is owed. AMD140 native RDMA9/9 PASS, gate FAIL1/526
+on GCC15's unchecked observer write result; checked-error fix native PASS.
+Drain correction: foreground writes already stop; only reads/queries continue.
+No drain threshold is changed and no prior failed qualification is closed.

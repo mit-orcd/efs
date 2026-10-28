@@ -23,6 +23,7 @@ static char output[PATH_MAX];
  * Direct syscall has mmap/munmap semantics on the assigned x86_64 Linux host.
  * This observer is diagnostic-only, never linked into the product. */
 static int mapping_log = -1;
+static unsigned mapping_errors;
 static void mapping_event(const char *kind, void *address, size_t bytes, int flags,
                           void *caller)
 {
@@ -31,8 +32,11 @@ static void mapping_event(const char *kind, void *address, size_t bytes, int fla
         char line[192];
         int n = snprintf(line, sizeof(line), "%s %p %zu %x %p\n",
                          kind, address, bytes, flags, caller);
-        if (n > 0 && (size_t)n < sizeof(line))
-            (void)write(mapping_log, line, (size_t)n);
+        if (n > 0 && (size_t)n < sizeof(line)) {
+            ssize_t written = write(mapping_log, line, (size_t)n);
+            if (written != n)
+                __atomic_add_fetch(&mapping_errors, 1, __ATOMIC_RELAXED);
+        }
     }
     errno = saved;
 }
@@ -96,8 +100,9 @@ static void *observe(void *unused) {
         snprintf(path, sizeof(path), "%s/%ld-%dm.json", output, (long)getpid(), minute);
         f = fopen(path, "w");
         if (f) {
-            fprintf(f, "{\"pid\":%ld,\"elapsed_s\":%.3f,\"arena\":%zu,\"uordblks\":%zu,\"fordblks\":%zu,\"hblkhd\":%zu,\"keepcost\":%zu}\n",
-                    (long)getpid(), wall()-start, m.arena, m.uordblks, m.fordblks, m.hblkhd, m.keepcost);
+            fprintf(f, "{\"pid\":%ld,\"elapsed_s\":%.3f,\"arena\":%zu,\"uordblks\":%zu,\"fordblks\":%zu,\"hblkhd\":%zu,\"keepcost\":%zu,\"mapping_errors\":%u}\n",
+                    (long)getpid(), wall()-start, m.arena, m.uordblks, m.fordblks, m.hblkhd, m.keepcost,
+                    __atomic_load_n(&mapping_errors, __ATOMIC_RELAXED));
             fclose(f);
         }
     }

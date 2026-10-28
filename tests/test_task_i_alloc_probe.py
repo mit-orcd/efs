@@ -57,6 +57,7 @@ int main(void) {
     for minute in (20,40,60):
         payload=json.loads(next(d.glob(f'*-{minute}m.json')).read_text())
         assert payload['elapsed_s']>=3600 and payload['arena']>0
+        assert payload['mapping_errors']==0
         ET.parse(next(d.glob(f'*-{minute}m.xml')))
         text=next(d.glob(f'*-{minute}m.smaps')).read_text()
         assert 'Rss:' in text and 'VmFlags:' in text
