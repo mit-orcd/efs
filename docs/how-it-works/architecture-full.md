@@ -1624,7 +1624,8 @@ full acceptance are separate states.
 F1/release coverage remains INCOMPLETE. User-selected quiet fstor007 qualification at
 `8e1db244f` stopped: 528/1 FAIL/15 NOTRUN, B6 full packing assertion;
 failure-retaining B6 diagnostic `b9947abb6` passes alone (48 exact);
-loaded gate queued with original assertions to capture the intermittent;
+loaded gate528/0 FAIL/15 NOTRUN, native hardware RDMA9/9 PASS,
+unchanged RDMA hour active; earlier B6 intermittent remains unresolved;
 node9901 was occupied and left untouched. User-requested drain follow-up
 identified ongoing lane-row refresh triggers and a truncate scheduling gap.
 Repair `773284b5d`: node9900 gate 527/0 FAIL/18 NOTRUN, native RDMA9/9
