@@ -1620,6 +1620,8 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Wave 20 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`4a20f4ddf`)**: Task M ([evidence](../status/gate-fstor007-20261027.md)): fstor007 full gate on the unchanged wave-19 product, 514 commands, 0 FAIL, 5 NOTRUN, 617 s, once the documented libfuse ≥ 3.12 prerequisite is met (RHEL9's system 3.10.2 cannot build EFS: a missing prerequisite, not a fallback to add); RDMA GC, POSIX all 221/223 (2 SKIP), two-client 68/68 on a private three-member RDMA fixture. Merged: the build-prerequisite section in `docs/how-it-works/testing.md`, and `tests/live/rdma_posix_gates.sh` rebuilt for current devel (positional CLI and automatic formation instead of the removed `--node-id`/`--direct-io` flags, no removed `EFS_COMMANDS`/`EFS_EXPIRY` exports, private 19xxx ports, verbs-device proof per process, a failed clean stop keeps the fixture). No gated code changed (`tests/live/rdma_posix_gates.sh` is not in `make test-all`), so wave 19's intel2 gate (514 commands, 0 FAIL) stands for this tree.
+
 [Task M: fstor007 build and RDMA gates](../status/gate-fstor007-20261027.md):
 COMPLETE scoped on `agent/devel-task-m`, tested7ca545e2b, not merged/pushed.
 Current devel product unchanged; missing libfuse3.12+ prerequisite documented
