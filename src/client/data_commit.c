@@ -52,6 +52,9 @@ static uint64_t node_acked[COMMIT_NODES];
 static struct stripe *g_st;
 static uint32_t g_st_cap, g_st_used, g_st_live, g_st_free;
 static uint32_t g_bucket[STRIPE_BUCKETS];
+#ifndef EFS_COMMIT_LOOKUP_PROBE
+#define EFS_COMMIT_LOOKUP_PROBE() ((void)0)
+#endif
 /* One sweep at a time; PUTs that meet a full table wait for it. */
 static pthread_mutex_t sweep_mu = PTHREAD_MUTEX_INITIALIZER;
 
@@ -75,6 +78,7 @@ static uint32_t bucket_of(efs_ino_t ino)
 static struct stripe *stripe_find(efs_ino_t ino, uint32_t ci, uint64_t object)
 {
     for (uint32_t at = g_bucket[bucket_of(ino)]; at; at = g_st[at - 1].next) {
+        EFS_COMMIT_LOOKUP_PROBE();
         struct stripe *p = &g_st[at - 1];
         if (p->ino == ino && p->ci == ci && p->object == object)
             return p;
@@ -87,6 +91,7 @@ static void stripe_remove(efs_ino_t ino, uint32_t ci, uint64_t object)
 {
     uint32_t *link = &g_bucket[bucket_of(ino)];
     while (*link) {
+        EFS_COMMIT_LOOKUP_PROBE();
         uint32_t at = *link;
         struct stripe *p = &g_st[at - 1];
         if (p->ino == ino && p->ci == ci && p->object == object) {

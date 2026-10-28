@@ -5,7 +5,9 @@
  * EIO (stripe named in the log) with fewer than two, with an uncertain or
  * re-incarnated member holding a needed fragment, or without the mark.
  * Built with a small table so the full-table sweep is reached. */
+#ifndef STRIPE_CAP
 #define STRIPE_CAP 16u
+#endif
 #include "../src/client/data_commit.c"
 #include <assert.h>
 #include <stdio.h>
