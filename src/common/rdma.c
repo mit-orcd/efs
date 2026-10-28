@@ -251,6 +251,42 @@ static int rdma_port_no(void)
 }
 
 /* Native IB uses LID routing; RoCE uses an explicit nonzero local GID. */
+/* Prefer a non-link-local RoCE address when one is available. The first
+ * nonzero table entry is often fe80::; RXE then rejects RTR with
+ * ENETUNREACH even though the same device has a usable IPv4-mapped GID.
+ * Keep the first link-local address only when it is all the device has.
+ * An explicit index is exact: it never silently selects a different GID. */
+static int gid_link_local(const union ibv_gid *gid)
+{
+    return gid->raw[0] == 0xfe && (gid->raw[1] & 0xc0) == 0x80;
+}
+
+static int gid_select(struct ibv_context *ctx, int port, int count, int requested,
+                       union ibv_gid *out)
+{
+    if (requested < -1 || requested >= count)
+        return -1;
+    int selected = -1, first = requested >= 0 ? requested : 0;
+    int last = requested >= 0 ? requested + 1 : count;
+    for (int i = first; i < last; i++) {
+        union ibv_gid candidate;
+        if (ibv_query_gid(ctx, port, i, &candidate))
+            continue;
+        unsigned nonzero = 0;
+        for (unsigned j = 0; j < sizeof(candidate.raw); j++)
+            nonzero |= candidate.raw[j];
+        if (!nonzero)
+            continue;
+        if (selected < 0 || !gid_link_local(&candidate)) {
+            *out = candidate;
+            selected = i;
+        }
+        if (requested >= 0 || !gid_link_local(&candidate))
+            break;
+    }
+    return selected;
+}
+
 static int dev_open(const char *name, struct efs_rdma_dev *out)
 {
     struct ibv_device **list = ibv_get_device_list(NULL);
@@ -284,21 +320,15 @@ static int dev_open(const char *name, struct efs_rdma_dev *out)
     union ibv_gid gid = {0};
     if (roce) {
         const char *env = getenv("EFS_RDMA_GID_INDEX");
-        int first = 0, last = pa.gid_tbl_len;
+        int requested = -1;
         if (env && *env) {
             char *end; long v = strtol(env, &end, 10);
             if (*end || v < 0 || v >= pa.gid_tbl_len) {
                 ibv_close_device(ctx); return -1;
             }
-            first = (int)v; last = first + 1;
+            requested = (int)v;
         }
-        for (int i = first; i < last; i++) {
-            union ibv_gid candidate;
-            if (ibv_query_gid(ctx, rdma_port_no(), i, &candidate)) continue;
-            unsigned nonzero = 0;
-            for (unsigned j = 0; j < sizeof(candidate.raw); j++) nonzero |= candidate.raw[j];
-            if (nonzero) { gid = candidate; gid_index = i; break; }
-        }
+        gid_index = gid_select(ctx, rdma_port_no(), pa.gid_tbl_len, requested, &gid);
         if (gid_index < 0) { ibv_close_device(ctx); return -1; }
     }
     struct ibv_pd *pd = ibv_alloc_pd(ctx);

@@ -208,6 +208,7 @@ test-report-pressure:
 	python3 tests/test_rdma_reply_budget.py
 	python3 tests/test_rdma_progress_ready.py
 	python3 tests/test_rdma_arena.py
+	python3 tests/test_rdma_gid.py
 	python3 tests/test_resync_setup.py
 	python3 tests/test_rdma_setup_reentry.py
 	python3 tests/test_wb_worker_budget.py
