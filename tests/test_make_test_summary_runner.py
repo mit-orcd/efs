@@ -123,16 +123,16 @@ try:
     assert len(Path(d, 'timings.tsv').read_text().splitlines()) == 10
 
     # These real gate names have strict setup clocks (8 s age window and
-    # 90 s L0 prefill), independent of their product-operation deadlines.
-    # Drive the actual scheduler: neither may begin before pooled I/O ends.
+    # 90 s L0 prefill) or a 3 s per-operation fault bound.
+    # Drive the actual scheduler: all must wait until pooled I/O ends.
     cmds = 'sleep 0.2; touch pooled.done; echo pooled >> ran.log\n'
-    for name in ('test_pack_dup_candidate', 'test_w166_authority'):
+    for name in ('test_pack_dup_candidate', 'test_w166_authority', 'test_report_stepdown'):
         cmds += ('test -f pooled.done || exit 9; '
                  'echo "' + name + '" >> ran.log\n')
     rc,s,d=run(cmds,jobs=4);dirs.append(d)
     assert rc==0,(rc,s)
     assert Path(d,'ran.log').read_text().splitlines()==[
-        'pooled','test_pack_dup_candidate','test_w166_authority']
+        'pooled','test_pack_dup_candidate','test_w166_authority','test_report_stepdown']
 
     # Budgets (tests/budgets.tsv, W160): the pool starts the largest budget
     # first, a command takes its declared slots (never more than the pool, so
