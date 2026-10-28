@@ -126,6 +126,43 @@ try:
     hspec = importlib.util.spec_from_file_location('stage2_helpers', root / 'scripts/stage2_helpers.py')
     H = importlib.util.module_from_spec(hspec)
     hspec.loader.exec_module(H)
+    # K52/K10: queries must use explicit posix_spawn even while mounted-I/O
+    # threads exist. Prohibit both Python fork entry points; check outputs,
+    # argument boundaries, nonzero status, timeout and child reaping.
+    from unittest.mock import patch
+    commands = tmp / 'spawn queries' / '.efs'
+    commands.mkdir(parents=True)
+    (commands / 'stats').write_text(
+        'import sys,time\n'
+        'if sys.argv[1] == "sleep": time.sleep(30)\n'
+        'sys.stdout.buffer.write(b"x" * 131072 + sys.argv[1].encode())\n'
+        'sys.stderr.write("diagnostic")\n'
+        'sys.exit(2 if sys.argv[1] == "refuse" else 0)\n')
+    spawned = []
+    real_spawn = os.posix_spawn
+    def tracked_spawn(*args, **kwargs):
+        pid = real_spawn(*args, **kwargs)
+        spawned.append(pid)
+        return pid
+    with patch.object(os, 'posix_spawn', tracked_spawn), \
+         patch.object(os, 'fork', side_effect=AssertionError('fork is unsafe')), \
+         patch('_posixsubprocess.fork_exec', side_effect=AssertionError('fork_exec is unsafe')), \
+         patch.object(H.subprocess, '_fork_exec', side_effect=AssertionError('fork_exec is unsafe'), create=True):
+        arg = 'literal ; $(false) space'
+        rc, stdout, stderr, elapsed = H.efs_cmd(commands.parent, 'stats', arg)
+        assert rc == 0 and stdout == b'x' * 131072 + arg.encode() and stderr == 'diagnostic'
+        assert H.efs_cmd(commands.parent, 'stats', 'refuse')[0] == 2
+        rc, stdout, stderr, elapsed = H.efs_cmd(commands.parent, 'stats', 'sleep', timeout=.03)
+        assert rc == 124 and stderr == 'deadline' and elapsed < 2
+    assert len(spawned) == 3
+    for pid in spawned:
+        try:
+            os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            pass
+        else:
+            raise AssertionError('query child was not reaped')
+
     mismatch = tmp / 'mismatch'
     mismatch.write_bytes(b'bad')
     try:

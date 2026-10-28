@@ -98,10 +98,23 @@ Failed evidence kept; private scratch removed; six-script dependency retained.
 
 [Wave 27 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (blocks alpha): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); whether K52 is K10 needs the new helper's observed bytes before it is closed or kept. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
 
+- [K52 immediate read-back investigation](k52-immediate-readback-20261028.md):
+  Task X, `agent/devel-task-x`, four-host code `ec255dd13`. Original fork/read
+  pattern FAIL: 17 bad first-read buffers retained. Spawn-reader control PASS
+  (22,293 files); corrected fork-free-query D3 PASS (59,112 exact files,
+  22,159 queries). K52 DECIDED under K10/W121 / existing D40 kernel limitation;
+  no kernel/product repair claimed. Historical eight Task V buffers remain
+  individually unclassifiable and its FAIL stands. Diagnostic overall rc 1.
+  Raw 423-file manifest verified on shared ORCD scratch; all four private
+  `/data1/01` task trees cleaned. Separate node9900 code gate remains
+  522 / 5 FAIL / 5 NOTRUN; earlier quota failure unresolved.
+
+[Wave 27 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (then blocking alpha; later Task X DECIDED under K10/D40): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); the later [Task X](k52-immediate-readback-20261028.md) controlled reproduction classifies K52 under existing K10/D40; the original eight buffers remain unavailable. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
+
 [Task V four-host driver rehearsal](a4-lab-topology-dryrun-20261028.md):
 **LIVE FAIL / CODE GATE FAIL**, `agent/devel-task-v`; live `578e2064b`, code
 `b9dfff609`. Eight requested four-host TCP gates PASS; D3 has eight immediate
-read-back mismatches (**K52 OPEN**, blocks alpha), not erased by later exact
+read-back mismatches (**K52 then OPEN**, later Task X DECIDED under K10/D40), not erased by later exact
 reads. E4: all 8,008 payloads cold, 4,000 after deletion exact; two-client 68/68
 and checked restart PASS. Final code gate **522/1 FAIL/12 NOTRUN, 744 s**:
 K48-shaped 95/96 listing after resync, closed fixture retained on intel2.
