@@ -7,7 +7,7 @@ or timeout relaxation. All 96 payloads are fsynced before enumeration.
 import concurrent.futures, hashlib, os, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster, EFSD, FUSE, mgmt
+from k33_daemons import Cluster, EFSD, FUSE, mgmt, place_leaders
 
 def lane(name):
     h=2166136261
@@ -38,15 +38,8 @@ try:
         if ino & 1:break
     else:raise AssertionError('no group-0 directory allocated')
     group=0
-    leader=c.leader_placement(1)[group]
-    if leader==3:
-        rc,out=mgmt(env,'raft-step-down',c.ep(3),str(group));assert rc==0,out
-        end=time.monotonic()+15
-        while time.monotonic()<end:
-            leader=c.leader_placement(1)[group]
-            if leader in (1,2):break
-            time.sleep(.05)
-    assert leader in (1,2),'target needs a healthy-quorum leader before damage'
+    place_leaders(c,1,groups=(group,),timeout=15)
+    assert c.leader_placement(1)[group]==c.node_id(1)
     first=next(f'a{i:05d}' for i in range(1000) if lane(f'a{i:05d}')==1)
     rest=[f'z{i:05d}' for i in range(20000) if lane(f'z{i:05d}')==63][:95]
     expected=[first]+rest;assert len(expected)==96
