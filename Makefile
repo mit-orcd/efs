@@ -419,6 +419,8 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_k37_events.py
 	python3 tests/test_raft_log_entries.py
 	python3 tests/test_env_inventory.py
+	python3 scripts/check_k_register.py
+	python3 tests/test_k_register.py
 	python3 tests/test_leader_placement.py
 	python3 tests/test_env_removed.py
 	python3 tests/test_cli_surface.py
