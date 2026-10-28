@@ -950,6 +950,18 @@ round says which physical or software limiter it hit.
   revoke failure retained. Code gate: 479 commands, 11 FAIL (base's subset),
   6 NOTRUN. This remains one-host regression evidence; the physical-topology
   ledger and product findings stay open.
+  **Oct 28 Task P second rehearsal:** [intel2 three-/five-member matrices](stage2-rehearsal-2-20261027.md)
+  completed at `b8f232f40`: 23 PASS / 1 driver FAIL / 1 NOTRUN and
+  24 PASS / 0 FAIL / 1 NOTRUN. Both rehearsal soaks PASS. The three-member
+  D5 port collision is fixed at `dac2361ba`; targeted identity/D5/end-identity
+  PASS (3/0/0), including 218/218 expiry-enabled POSIX cases. Historical
+  full-run FAIL remains; the corrected final driver has not had another full
+  matrix run. Earlier code gate 516 / 0 FAIL / 14 NOTRUN (858 s); final
+  `dbebab983` code gate 516 / 0 FAIL / 14 NOTRUN (739 s). Three driver
+  fixes have negative controls, including plan mode with no lifecycle
+  effects; raw manifests verified and owned scratch pruned. Both F3
+  rehearsal columns and timing findings are on the page. This does not fill distinct-host cells or
+  endurance RSS/power-loss qualification; F3 stays unchecked.
 - [ ] **F4** Publish alpha limitations: fixed metadata-group count and
   default placement of two three-voter groups (both on 1–3 for N = 3; on
   1–3 and 2–4 for N ≥ 4, D38 as amended), actual packing placement, supported

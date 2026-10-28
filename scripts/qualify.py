@@ -106,7 +106,7 @@ DEFAULT_FIXTURE = dict(
     d3_static_files=200, d3_writers=8, d3_queriers=4, d3_load_s=300, d3_io_deadline_s=10,
     d3_query_deadline_s=30, d3_index_wait_s=600,
     e4_small_per_member=5000, e4_large_per_member=2, e4_large_mib=256, e4_threads=16,
-    e4_query_deadline_s=30, e4_refresh_s=60, e4_reclaim_s=900, soak_hours=4)
+    e4_query_deadline_s=30, e4_refresh_s=60, e4_reclaim_s=900, soak_hours=4, soak_profile='endurance')
 
 
 def delete_command(path):
@@ -1122,12 +1122,23 @@ def b_d5(q, src, work, port):
     --expiry-only): policy off by default, on/off/on at runtime, folder
     coverage, lifecycle, restarts, member and leader loss, physical
     reclamation, then the POSIX core suite with expiry on."""
+    # The default three-member fixture starts at private_base + 40, the
+    # historical D5 range. Keep D5's four sockets clear of the advertised
+    # parent endpoints, including caller-supplied port bases. Other live
+    # gates run serially; their inactive ports need no reservation here.
+    occupied = RESERVED_PORTS | {int(n['addr'].rsplit(':', 1)[1])
+                                  for n in q.cluster.get('nodes', [])}
+    d5_port = port + 40
+    while occupied.intersection(range(d5_port, d5_port + 4)):
+        d5_port += 4
+    if not 1024 < d5_port <= 65532:
+        raise ValueError('no valid D5 range clear of parent endpoints')
     w = shlex.quote(work)
     return [('d5-expiry', f'mkdir -p {w}/r1 {w}/r2 {w}/mnt {w}/peer && python3 tests/posix/posix_expiry.py '
              f'{w}/mnt --suite expiry --root {w}/r1 --root {w}/r2 --peer-mount {w}/peer '
-             f'--port {port + 40} --jobs {q.fixture["posix_jobs"]} --timeout-s {q.fixture["posix_timeout_s"]}',
+             f'--port {d5_port} --jobs {q.fixture["posix_jobs"]} --timeout-s {q.fixture["posix_timeout_s"]}',
              False)], \
-        dict(ports=f'{port + 40}-{port + 43}', members=4, transport='tcp',
+        dict(ports=f'{d5_port}-{d5_port + 3}', members=4, transport='tcp',
              posix_timeout_s=q.fixture['posix_timeout_s'],
              policy='cluster expiry policy off by default, then on/off/on at runtime (D43)')
 
@@ -2390,7 +2401,7 @@ def g_plugin(name, spec):
                       seed=q.cluster.get('seed', ''), mount=(q.mount(0) or {}).get('path', ''),
                       peer_mount=(q.mount(1) or {}).get('path', ''),
                       transport=q.cluster.get('transport', ''),
-                      soak_hours=q.fixture['soak_hours'], candidate=q.cluster.get('candidate', 'unknown'))
+                      soak_hours=q.fixture['soak_hours'], soak_profile=q.fixture['soak_profile'], candidate=q.cluster.get('candidate', 'unknown'))
         if spec.get('requires'):
             need = spec['requires'].format(**values)
             rc, text = g.run('requires', host, f'test -e {shlex.quote(need)}', 60)
@@ -2419,6 +2430,55 @@ def g_plugin(name, spec):
     return gate
 
 
+def g_standalone_plugin(name, spec):
+    """Run an independent private workload with the owned fixture stopped.
+
+    The soak's quiet-host guard must still reject unrelated jobs. Only the
+    driver's own fixture may be suspended, and restart permission is required.
+    """
+    plugin = g_plugin(name, spec)
+
+    def gate(q, g):
+        if not q.control.owned:
+            return NOTRUN, 'standalone plugin cannot suspend an externally managed cluster'
+        if 'restart' not in q.allow:
+            return NOTRUN, 'standalone plugin needs --allow restart'
+        if not q.control.has('stop_cluster', 'start_cluster'):
+            return NOTRUN, 'standalone plugin needs stop/start controls'
+        # A plan records the plugin command; in-process loopback controls
+        # bypass Runner's dry-run guard and must never be called here.
+        if getattr(q, 'plan', False):
+            return plugin(q, g)
+        mounts = q.cluster.get('mounts', [])
+        for m in mounts:
+            rc, text = g.run('fuser-before-standalone', m['host'],
+                             f'fuser -m {shlex.quote(m["path"])} 2>/dev/null', 60)
+            if rc == 0 and text.strip():
+                return NOTRUN, f'standalone fixture mount is in use: {m["path"]}'
+        g.step('restart', f'suspend owned fixture for standalone {name}')
+        for m in mounts:
+            rc, text = q.control.client_stop(g, m)
+            if rc:
+                return stop_failure(q, text, 'standalone clean client stop failed: ', rc)
+        rc, text = q.control.stop_cluster(g)
+        if rc:
+            return FAIL, 'standalone orderly cluster stop failed: ' + outcome_from_rc(rc, text)[1]
+        result = (FAIL, 'standalone plugin did not complete')
+        try:
+            result = plugin(q, g)
+        finally:
+            rc, text = q.control.start_cluster(g)
+            ready_s = q.cluster.get('control', {}).get('ready_timeout_s', 300)
+            if rc or not wait_cluster_ready(q, g, ready_s):
+                raise RuntimeError(f'fixture restore failed after {name}; plugin result: {result}; {text}')
+            for m in mounts:
+                rc, text = q.control.client_start(g, m)
+                if rc:
+                    raise RuntimeError(f'fixture remount failed after {name}: {m["path"]}; {text}')
+        return result
+    return gate
+
+
 def gates(plugins):
     out = [
         Gate('identity', g_identity, 'A1, A2', 'Candidate and profile', deadline_s=600,
@@ -2427,7 +2487,8 @@ def gates(plugins):
              doc='status members = described nodes, all up, distinct hosts; profile recorded'),
     ]
     for name, spec in plugins.items():
-        out.append(Gate(name, g_plugin(name, spec), spec.get('items', 'plugin'),
+        factory = g_standalone_plugin if spec.get('standalone') else g_plugin
+        out.append(Gate(name, factory(name, spec), spec.get('items', 'plugin'),
                         spec.get('ledger', 'Placement/capacity and decode'),
                         needs=spec.get('needs', ()), deadline_s=spec.get('deadline_s', 3600),
                         doc=spec.get('doc', 'pluggable gate: ' + spec['command'][:60])))
@@ -2502,12 +2563,13 @@ def default_plugins(cluster, extra):
                                    ledger='Scale/progress evidence (E4, D4)', deadline_s=7200,
                                    doc='D4 bounded progress under packing, indexing and KV compaction')}
     plugins['soak'] = dict(
+        standalone=True, needs=('restart',),
         command='cd {source} && nice -n 10 python3 scripts/soak.py --work {gate_dir}/runtime '
-                '--out {gate_dir}/soak --hours {soak_hours} --source {candidate}',
+                '--out {gate_dir}/soak --hours {soak_hours} --profile {soak_profile} --source {candidate}',
         host=cluster.get('private', {}).get('host', 'local'),
         requires='{source}/scripts/soak.py', items='E4, D4',
         ledger='Scale/progress evidence (E4, D4)', deadline_s=18000,
-        doc='seeded five-to-seven-member private loopback soak; fixture.soak_hours (default four); not multi-host/RDMA qualification')
+        doc='seeded five-to-seven-member private loopback soak; fixture.soak_hours/profile (default four-hour endurance); not multi-host/RDMA qualification')
     plugins.update(cluster.get('plugins', {}))
     for spec in extra:
         name, _, command = spec.partition('=')

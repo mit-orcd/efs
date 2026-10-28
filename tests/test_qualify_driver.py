@@ -523,6 +523,8 @@ try:
     assert five['gates'] == matrix['topologies']['loopback-3']['gates']
     assert {'a13-node-addition', 'e3-turnover', 'e4-scale'} <= set(five['gates'])
     assert five['fixture'] == matrix['topologies']['loopback-3']['fixture']
+    assert five['fixture']['soak_hours'] == 0.25
+    assert five['fixture']['soak_profile'] == 'rehearsal'
     assert five['port_base'] >= five['private_port_base'] + 140
     rc, text = run('--matrix', str(root / 'scripts/qualify_matrix.json'), '--topology', 'loopback-5',
                    '--out', str(tmp / 'five-plan'), '--plan')

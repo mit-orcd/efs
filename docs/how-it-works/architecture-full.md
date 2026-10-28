@@ -1622,6 +1622,7 @@ Original failures retained. Remaining FUSE geometry duplication removed in
 `240255818`; focused checks PASS and original external Graphify HTML refreshed
 from that source (211 files verified). No merge, push or deployment.
 
+
 Reviewed and reorganized October 15, 2026. This directory is the work queue and
 acceptance index; [backlog](../backlog/README.md) holds detailed work items and
 parked ideas. W numbers identify work, not priority. Explicit human direction
@@ -1655,6 +1656,8 @@ remain user decisions. Linux build fails on macOS; complete command/failure
 NOTRUN inventory and preserved local build/check evidence are recorded.
 No merge, push, cluster change or fresh Linux qualification.
 
+
+[Task P: second Stage 2 rehearsal](../status/stage2-rehearsal-2-20261027.md): **COMPLETE, scoped intel2 loopback**. Both full three-/five-member matrices finished; standalone-soak isolation, D5 port collision and plan-side-effect driver defects fixed with negative controls. Targeted corrected D5 PASS, including 218/218 expiry-enabled POSIX cases; final `dbebab983` code gate **516 commands, 0 FAIL, 14 NOTRUN, 739 s**. Historical three-member driver FAIL remains separate; no final-driver full-matrix rerun is claimed. Both F3 ledgers, doubled-wall findings, verified raw hashes and cleanup recorded. No product defect found; physical/RDMA and endurance RSS acceptance remain open.
 
 [Wave 22 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`a7e881a7a`; gate at the same commit)**: Task O, K50 ([evidence](../status/dir-ops-busy-under-load-20261027.md)): a namespace RPC with a caller deadline keeps retrying transient admission BUSY until that deadline instead of stopping at a fixed 16 attempts, RMDIR gets the same 30 s callback bound as MKDIR, deadline-less callers keep the 16-try cap, and every stop logs its reason. intel1 `make test-all` (8 jobs): 515 commands in 727 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (moved from intel2, where Task P's rehearsal holds the host). W159's broader latency failures, RDMA and multi-host stay open.
 
