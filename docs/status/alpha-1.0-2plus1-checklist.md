@@ -40,7 +40,7 @@ Alpha 1.0 is reached in three stages, in this order:
   blocks again.
 - **Performance comes last.** No performance work is done before Stage 3,
   except where a correctness gate needs it (bounded progress, D4), and the
-  explicitly authorized Stage 1 observability tasks AB–AF below (Oct 28).
+  explicitly authorized Stage 1 serialization tasks AB–AJ below (Oct 28).
   Performance changes never relax correctness or durability checks.
 - **Stage 3 stays inside alpha.** A performance change that needs 2+2, more
   or redistributed metadata groups, leader or voter redistribution (W66),
@@ -456,6 +456,86 @@ run affected tests and applicable sanitizer/concurrency gates. No new user-facin
 A/B flags, reduced durability or relaxed deadlines. A source-level opportunity
 alone is not a measured bottleneck; an unrun gate remains NOTRUN. Suggested order:
 AC first, AB/AE together, then AD/AF according to measurement.
+
+### Stage 1 additional letter tasks — hot-path serialization (AG–AJ)
+
+**User-directed extension, October 28; source reviewed at `08a1606df`.**
+All four are **OPEN / implementation and measurements NOTRUN**. The canonical
+code graph supplied callers; the named source bodies and lock scopes were read
+to verify each mechanism. These are confirmed serialization points, not measured
+bottlenecks or demonstrated correctness bugs. No K-register count changes.
+The Stage 1 exception above applies; P3-A–P3-F and AB–AF retain their own scope.
+
+- [ ] **AG — Client buffer allocation and budget critical section.**
+  Graph path: `chunk_put_worker` / `prefetch_ahead` → allocation wrappers →
+  `src/client/bufpool.c::buf_alloc`. Reservations, allocations, frees and metadata
+  charges share `g_bp_mu` across the mount. A cold-slab allocation holds it while
+  calling `malloc`, publishing a region through `efs_rdma_zc_region_add` (which
+  takes `g_zc_lock`) and filling the free list; heap fallback/free also runs under
+  this lock. Region publication here is not hardware MR registration, which is
+  lazy elsewhere. Measure cold/warm lock hold and wait at mixed read/write loads.
+  Evaluate reserving bounded capacity before allocating outside the lock and/or
+  bounded local freelists. Preserve atomic credit ownership, aggregate hard
+  bounds, metadata bounds, demand-read/drain headroom and thread-exit refunds;
+  do not replace a real resource bound with approximate per-thread accounting.
+  Gates: `test_bufpool`, client allocator/large-allocation and sparse-metadata
+  coverage plus deterministic simultaneous slab growth, allocation failure,
+  thread exit and saturated writers with demand reads. Retain exact accounting
+  and ownership under ASan/TSan; measure end-to-end gain as well as allocator cost.
+- [ ] **AH — Mount-wide chunk-map read/write contention.**
+  `src/client/read.c::chunk_get_worker` and `rdcache_map_gen` take
+  `g_client.idx_mu` to read chunk mappings; `src/client/write.c` takes the same
+  mutex around chunk/base/delta updates (for example `dcache_put_now_budgeted`).
+  Independent files therefore meet at one map lock despite striped data caches.
+  The source explicitly requires the lock because map arrays can realloc; simply
+  removing it or returning unpinned pointers is unsafe. Measure lock frequency,
+  hold/wait and map-growth effects for many independent files. Evaluate stable
+  map ownership with partitioned locking or a safe read-mostly scheme, including
+  all resize/invalidation paths. Gates: concurrent map growth, truncate, span
+  publication/folding, cache invalidation and same-/cross-client exact reads;
+  preserve inode generation/epoch authority, lock order and bounded metadata.
+  Existing `test_sparse_metadata.py` is a starting gate, not proof that readers
+  may race mutations. This task is distinct from network startup and ReadIndex
+  overlap in P3-B/P3-E.
+- [ ] **AI — RDMA completion dispatch lifetime locking.**
+  Graph path: `recv_poller` → `harvest_recv_wcs` → `pend_push` in
+  `src/common/rdma.c`. Every received CQE locks process-wide `g_reg_lock`,
+  validates the slot generation, and publishes the completion (including an
+  eventfd wake when needed) before unlocking. This covers normal completions,
+  unlike AC's unnecessary diagnostic registry scan. Measure lock cost at high
+  message rates, multiple devices and connection churn before choosing per-device
+  registries, shorter pinned-lifetime sections or bounded batch handling.
+  Preserve stale-QP generation rejection, connection teardown safety, single
+  producer ring ownership and lost-wakeup prevention. Do not remove the separate
+  `recv_handoff_mu` polling/repost synchronization introduced for correctness.
+  Gates: existing RDMA handoff/progress/fork/segmentation tests, delayed stale
+  CQEs during destroy/reuse, ring pressure and wakeup races, then real RDMA
+  loaded qualification; TCP-only mocks cannot qualify this optimization.
+- [ ] **AJ — Server export reference acquisition on data I/O.**
+  Graph/source path: GET in `src/server/handler.c::server_handle_conn` and PUT
+  in `src/server/put_upload.c::server_put_upload` acquire an export under
+  `s->lock`; `src/server/store.c::server_export_put` takes that same server-wide
+  lock to release its in-flight reference. Export lookup scans the bounded
+  export table, and first use can initialize an export under the lock. Disk I/O
+  itself is outside this critical section: do not describe it as serialized
+  disk access. Measure acquire/release contention at high small-I/O concurrency.
+  Evaluate stable export references or per-export lifetime synchronization with
+  a separately protected registry. Preserve destroy admission, in-flight drain,
+  geometry initialization and reference balance on every error path. Gates:
+  concurrent first use, GET/PUT against destroy/stop, failed I/O and acquisition
+  failures, plus export-handle and ticketed-upload tests and memory/concurrency
+  checks. No cached reference may outlive its export or bypass ticket authority.
+
+**Deduplication and acceptance:** connection checkout already uses per-node
+`conn_lock[idx]`; the read cache already has striped locks. Neither is a new
+"global lock" finding here. AG concerns resource ownership, not AD's diagnostic
+counters; AH concerns the local map, not metadata consensus placement; AI adds
+normal completion dispatch beyond AC's status scan; AJ concerns export lifetime,
+not AF's management status snapshot. Apply AB–AF's retained-evidence and bounded
+qualification rules. Establish a baseline before selecting a redesign; report
+no-benefit results rather than replacing a necessary lock merely because it is
+shared. Any demonstrated correctness defect gets its own K record. No new runtime
+A/B selectors, weakened durability, expanded format scope or foreign-cluster use.
 
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 

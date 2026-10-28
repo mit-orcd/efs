@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**OPEN / implementation and measurements NOTRUN**: shared client allocation
+budget, mount-wide chunk map, RDMA completion registry and server export lifetime
+locks. Verified source mechanisms at `08a1606df`; no measured bottleneck, new K
+defect or acceptance claim. Distinct from P3-A–P3-F and AB–AF.
+
+[Stage 1 observability tasks AB–AF](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--observability-interference-abaf):
 **OPEN / implementation and measurements NOTRUN**, added by user direction Oct 28:
 Raft-lock logging, unused RDMA status aggregation, shared counter contention,
 pump-thread telemetry and management status snapshots. AA remains W170; no K
