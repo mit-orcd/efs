@@ -1,6 +1,6 @@
 # Task S — K48 intra-call directory migration omission
 
-`agent/devel-task-s`, base `b2d57e421`: qualification NOTRUN/pending. Evidence `docs/status/k48-readdir-omission-20261028.md`; intel1 `~/efs-artifacts/taskS-20261028/`. Deterministic unchanged-base loopback FAIL 95/96 (`a00007` missing); fixed probe PASS 96/96. No release PASS claimed; ten-run regressions and full gate pending. Original 677-file evidence verified unchanged.
+`agent/devel-task-s`, base `b2d57e421`, tested candidate **`947edd15f3ecb6b0b95c2acafe9eb62a241ce910`**: reproduced listing race **FIXED, TCP-loopback qualification PASS** (3/3 deterministic, W130 10/10, K33 payload 10/10). Full gate **523/0 FAIL/12 NOTRUN, INCOMPLETE, 679 s**. K48 remains **OPEN, blocks alpha: yes**, specifically because the original omitted name/RPC interleaving was never captured and historical attribution remains unproven; the demonstrated intra-call defect is corrected. Original 677-file evidence verified unchanged before and after cleanup. No push or merge.
 
 ## Forensic result and limits
 
@@ -26,7 +26,7 @@ Target directory inode **2205**, group 0:
 | Halted node 3 | 95 / 80 (includes tombstones); partial group state | 52 at every tested page size |
 
 Both healthy rows are SPLITTING with bitmap `3ff7dffedbfdfbff`; the halted
-row has only `0000000200000200`. No permanent loss is observed on the healthy
+row has only `0000000200000200`. No permanent dentry loss is observed on the healthy
 quorum. Static pagination alone does not omit a name. **The original
 failure recorded only 95, not the returned name set or serving RPC/cursor
 trace. Its exact missing filename/interleaving cannot be recovered from the
@@ -98,16 +98,19 @@ unit/authority checks, three deterministic live runs, W130 and K33 payload
 ten times each serially/alone, then the eight-job full code gate. It stops
 on the first failure, retains evidence and never retries it into PASS.
 
-## Frozen qualification in progress
+## Frozen qualification results
 
 Candidate `947edd15f3ecb6b0b95c2acafe9eb62a241ce910` (product fix
 `3426111b4`), source `intel1:~/efs-taskS/qualification-v2/src`, detached
 screen `taskS-qualification-v2`. Output:
 `/home/maik/efs-artifacts/taskS-20261028/qualification-947edd15f/`.
-Three deterministic cases PASS (including 10.791/11.241 s cases), unit and
-server-authority controls PASS; the ten strict W130/payload pairs are running.
-First W130 PASS: complete listing, frozen halted group and successful resync;
-first K33 payload PASS in 29.933 s. Full code gate is still NOTRUN/queued.
+Three deterministic cases PASS (12.545/10.791/11.241 s), unit and
+server-authority controls PASS. W130 **10/10 PASS**, including complete
+listings through the healthy quorum, frozen halted-group indices and
+successful snapshot resync. K33 payload **10/10 PASS** across 3→4→5
+additions, concurrent writer, packing, orderly restart and single-member
+outages. No application retry accepts an error. The eight-job full code
+gate completed with **0 failures**, with the host limits below.
 
 The first frozen candidate `cdf67d98f` passed its first deterministic test
 but stopped on fixture leader setup in its second: un-targeted step-down
@@ -126,11 +129,117 @@ or wall time. No target/slot/deadline was relaxed; the required regression's
 15 s/two-slot budget has its measured reason. Per-host budget work belongs
 to Task T. The actual final gate wall will be recorded separately.
 
-## Pending acceptance and retention
+## Final verdict and retention
 
-K48 remains OPEN pending frozen-source qualification and review of the
-historical-causality limit above. Exact tested identity, commands, counts,
-all failures, host/RDMA scope, final raw SHA256SUMS and cleanup receipts will
-be added after the controller closes. No original Task N stores are pruned.
-Own forensic copies/failed fixtures stay only while this investigation is
-open. Raw logs, copied runtime data and profiler/graph outputs are not Git.
+The demonstrated listing-path defect is fixed: unchanged-base controls
+fail with the exact 95/96 signature, while the frozen candidate passes
+the deterministic test and all required repeated regressions. **K48's
+original incident remains precisely OPEN**: retained healthy KVs prove
+all 96 dentries exist, but the original count-only capture cannot identify
+its missing name, serving replica, cursor or exact interleaving. The new
+reproduction is evidence of a real same-signature defect, not proof that
+it was the only possible cause of the original failure. No missing
+payload or permanent healthy-quorum dentry loss is established. The
+coordinator can review that attribution limit separately from this fix;
+this page does not silently close the alpha blocker.
+
+Raw evidence is closed at
+**`intel1:/home/maik/efs-artifacts/taskS-20261028/`**, 330 retained files,
+verified recursive `SHA256SUMS` hash:
+`57157f9dbdca2b6bc8a044a49ce2641d7b41c58d137fa2826da5e184a0322821`.
+It includes original per-replica scans, every baseline/harness failure,
+qualification logs/results/version, full summary/timings, source manifest
+and final verification, 141 copied fixture logs, and cleanup receipts.
+The manifest is computed after all controllers finish and checked against
+every retained file. Original Task N stores remain read-only at the path
+above, with all 677 files reverified against Task N's full-file manifest
+after cleanup.
+
+`PRUNED.txt` records removal via `~/bin/edelete --force --delete` of own
+inactive `~/efs-taskS` source/build/KV copies and six explicitly inventoried
+synthetic `/tmp` fixtures, plus four own archive files. Finalized text logs
+remain; copied runtime stores are reproducible from the method. No Task N/F
+tree, production cluster or other agent's work was removed. Final checks
+found no private maik efsd/efs-fuse processes or Task S mounts.
+
+## Full eight-job gate and remaining coverage
+
+`TOTAL 523 FAIL 0 NOTRUN 12 STATUS INCOMPLETE (679s) OVERBUDGET 4 BUILD 0s`;
+controller wall **680.029 s**, exit **3** (host-limited INCOMPLETE). This is
+not an all-environment PASS. The prebuilt gate contains the new K48 test.
+The earlier `make -j8 test-bins` took 30.495 s; build time is not concealed
+in the gate's reported zero rebuild time.
+
+The 12 NOTRUN commands/subcases are: absent cluster stop/remount checkout
+(one), missing `valgrind/memcheck.h` (one), no usable IB device for
+declaration/RDMA transport/seven segmented modes (nine), and the
+normal-build follower-bound stalled-compactor subcase requiring a fault
+build (one). Detailed command lines and reasons are in `code-gate/summary.txt`.
+No new RDMA, distinct-host, production-scale or ORCD result is claimed;
+those remain NOTRUN for the coordinating release gates.
+
+Four measured commands exceeded their existing budgets, without test
+failure or deadline/slot relaxation:
+
+| Command | Measured / budget seconds |
+| --- | --- |
+| `test_k43_coordinator_kill.py` | 54.2 / 25 |
+| `EFS_QUERY_DELTA_DIRS=1 test_query_delta` | 11.4 / 10 |
+| `test_k22_leader_admission.py` | 44.7 / 30 |
+| `test_kv_lsm` | 10.2 / 10 |
+
+The observed 679 s gate wall is separate from the 1281 s scheduling model
+and its 1100 s target overrun described above. Task S changes only the
+new regression's measured budget; the four pre-existing fits are not
+raised to hide these observations.
+
+Standalone measured walls, seconds (controller wall, including cleanup):
+
+| Check | Serial runs | Verdict |
+| --- | --- | --- |
+| Deterministic K48 | 12.545, 10.791, 11.241 | 3/3 PASS |
+| W130 halt/resync | 29.687, 31.191, 25.176, 21.966, 31.539, 20.662, 26.475, 28.779, 30.687, 25.375 | 10/10 PASS |
+| K33 payload | 29.933, 28.480, 30.082, 28.485, 29.083, 27.830, 29.484, 20.011, 25.874, 24.274 | 10/10 PASS |
+
+Payload fixtures end with 104/101/105/105/105/103/104/99/102/99 exact
+files respectively (1,027 across independent fixtures), each with 56
+small packed files and the remainder large/unpacked. Concurrent writers
+completed 24/21/25/25/25/23/24/19/22/19 files, zero retried writes. Every
+fixture reports packed_total 56; this is full fixture payload checking
+through its prescribed lifecycle, not sampled verification.
+
+## Qualification environment and commands
+
+Intel1: Intel Core Ultra 7 256V, eight CPUs, x86_64, Linux
+`6.12.0-211.67.1.el10_2.x86_64`. Binary identity:
+`efsd 947edd15f3ecb6b0b95c2acafe9eb62a241ce910 (branch agent/devel-task-s, built 2026-10-28T16:07:12Z on intel1)`.
+The isolated source archive is built with `make -j8 test-bins`,
+`EFS_FUSE_PREFIX=/usr`. FUSE access and `fusermount3` are prerequisites.
+The shared production account, mount, stores and ports are untouched.
+
+Three-member TCP loopback fixtures use free ports, O_DIRECT fragment I/O,
+1 GiB per member and normal packing; K33 adds members four and five and
+sets packing age/interval to 500/200 ms. The K48 fixture contains 96
+32-byte deterministic payloads (64 LOCAL, then 32 HASHED), a 64-entry page
+boundary and one deliberately halted replica group. W130 uses its
+unchanged 96-file fixture and serve-first subcase. These are synthetic
+small fixtures, not production-scale, RDMA or distinct-host qualification.
+Expiry and NFS re-export are outside this alpha surface.
+
+Run the committed controller from a fresh exact-commit archive below
+`intel1:~/efs-taskS/` with no private test processes/mounts active:
+
+```sh
+python3 scripts/task_s_qualify.py \
+  947edd15f3ecb6b0b95c2acafe9eb62a241ce910 \
+  /home/maik/efs-artifacts/taskS-20261028/UNIQUE_OUTPUT
+```
+
+It retains every standalone result, checks normal/fault build hook scope,
+and uses `EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8` with
+`scripts/make_test_summary.sh`. Its per-case 900 s outer watchdog does not
+replace or extend any test's own deadlines; the full-gate watchdog is
+3600 s. The first failure stops this qualification, with failed fixture
+retention; successful W130 logs are copied after shutdown before cleanup.
+The fixture and authority tests themselves are the reproduction source;
+no private raw capture is required to reproduce the new omission.
