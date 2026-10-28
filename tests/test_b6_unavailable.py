@@ -43,9 +43,10 @@ In each mode:
     DEGRADED` (down, refuse); slow: that, or W154 already rebuilding the
     marks onto the slow member during the fault (status rebuilt=N rises:
     the member is up and its rebuild PUTs succeed after 8 s).
-    K37: the packer may pack Q* during the fault only into a segment written
-    on the other two fragments and marked (`written degraded` naming node
-    3); those files read exact.
+    K37: down/refuse packing needs the other two fragments and a mark
+    (`written degraded` naming node 3); those files read exact. Full-quota
+    packing may still fit smaller three-fragment segments; every acknowledged
+    small file is read exactly through a fresh mount while still at quota.
  6. Restore in order: fault off, node 3 stopped in order and started again
     (full: with a 1 GiB quota). W154 rebuilds every mark (`Degraded
     chunks: 0`, `Protection: full`), and K37's segment marks end (rebuilt

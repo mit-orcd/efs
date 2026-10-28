@@ -1,8 +1,9 @@
 # Graphify review findings — October 27, 2026
 
 **Branch `graphify-review-fixes`, based on devel `063154e0e815`.
-Implementation committed through `e95cf62b4`; Linux qualification
-RUNNING, not an acceptance claim. Nothing merged, pushed or deployed.**
+Production fixes built at `e95cf62b4`; subsequent changes are tests/docs only.
+Full Linux suite FAIL; corrected focused follow-ups PASS.
+Nine unchanged-base RDMA failures and five NOTRUN checks remain. Nothing merged, pushed or deployed.**
 
 ## Purpose and scope
 
@@ -91,15 +92,77 @@ one changed comment boundary. The final adapters and harness corrections
 address those dependencies without disabling warnings or removing assertions.
 Nine failures are RDMA setup (`CQ moderation off failed`): declaration gate,
 RDMA transport, and seven segmented modes. They remain failures; the unchanged
-base comparison is queued to determine attribution. Complete failed-suite
+base comparison reproduces all nine failures unchanged. Complete failed-suite
 commands, build log, summary and all 40 failure logs are retained at
 `/data1/efs/evidence/graphify-review-c0586c891/`, with a full hash manifest.
 
 `5d403b68f` was superseded while still waiting, before build or tests (rc143,
 not a product failure or gate PASS). Staged `1b83afbf6` was not run.
-**Final-source `e95cf62b4` full suite RUNNING** after the prior suite stopped;
-a guard refused to start if prior processes or mounts remained. The unchanged
-base RDMA run waits for the final suite, so the checks do not compete.
+**`e95cf62b4` complete Linux suite FAIL:** 515 commands, 12 failures,
+5 NOTRUN, 1089 seconds (build 32 seconds), 2 over-budget commands.
+NOTRUN: external cluster scripts absent, follower fault-build prerequisite,
+Valgrind absent, sanitizer runtime absent, and async durability needs XFS.
+None of these is counted as a passing check. Nine
+failures are the RDMA setup cases above. All nine also fail on unchanged
+`063154e0e815`, with CQ-moderation setup errors; this establishes that they
+are not introduced here, not that RDMA works. The host exposes an RDMA device;
+its setup failure has not been diagnosed by this work. No RDMA tests are
+skipped or forced to TCP to obtain a passing label.
+
+The other three failures were two extraction/assertion harness dependencies
+and B6's full-quota packing assertion. `64d991c1e` narrows the WB registry
+extraction and corrects the old GC verdict expectation that APPEND_RSV I/O
+could be consumed at one length. Both pass locally; Linux follow-ups PASS as recorded below. The historical full-suite FAIL is retained.
+
+### B6 follow-up
+
+`6b3991d0a` fixes an independently demonstrated counter defect: the packer
+logs a process-wide cumulative counter, but B6 summed it once per group and
+term. Its deterministic regression fails on the original function and passes
+with the correction. B6 now preserves failed fixtures and records partial
+results and cleanup errors; cleanup errors cannot produce a PASS.
+
+The corrected counter alone produced one full-quota PASS followed by a FAIL
+in two live runs. The retained second fixture shows two segments, each with
+three 16,384-byte fragments on distinct nodes. A quota refusing an ordinary
+64 KiB fragment can still fit a smaller packed fragment; quota exhaustion is
+not the `refuse` fault hook. `6fc24284d` restricts the unavailable-destination
+assertion to down/refuse, keeps full-mode ENOSPC and no-degraded-state checks,
+and adds fresh-mount exact reads of all acknowledged small files while still
+at quota. The subsequent existing post-restore and cold-restart exact reads
+remain. No product timeout, quota or durability rule changes.
+
+The original failed B6 fixture from `e95cf62b4` was deleted by the old
+harness; only its failure log survives. It cannot retrospectively be blamed
+solely on either oracle defect. New B6 fixtures were retained throughout diagnosis. After follow-up,
+logs plus every stored file's size and SHA256 were saved before pruning
+these synthetic stores, per repository policy. Exact-store replay is
+forfeited; reproduction uses the committed recipe. Results and inventories:
+`/data1/efs/evidence/graphify-review-b6-6b3991d0a/`, manifest SHA256
+`c9f06788c9708aaa947d4790981c2bc581df523b7235432fd9871f8114b991a4`.
+The final repeats' stores were pruned the same way, with `PRUNED.txt` and
+inventories in their evidence directory. Original W123 evidence remains untouched.
+Final focused driver `6fc24284d` runs WB/GC/counter regressions and three
+consecutive full-quota cases, each with the original 900-second outer bound,
+under `/data1/efs/evidence/graphify-review-final-6fc24284d/`.
+The reused e95 production binaries are unchanged by intervening commits:
+daemon SHA256 `9c0058741df63f51f495b2550995fa948372fdc063f6405f4adffc3a22fbba1e`,
+mgmt `f8823521cb3d1aafb685dbda111489a7ca9652eda913090fcec8091e610aa752`,
+FUSE `9074b992256a633dc22708c0c5e634c07c37a6443961374161d4656cd6de6de4`.
+All three daemons and mounts use those same-build binaries. This is focused
+follow-up evidence, not a freshly green full-suite result.
+
+**Final focused follow-up PASS:** WB runtime, GC verdict and counter
+regressions pass on Linux. Three consecutive full-quota runs pass in 40.8,
+47.0 and 51.3 seconds. Every acknowledged file is read exactly after restore
+and again after whole-cluster orderly restart: 47, 48 and 48 files respectively.
+This finite synthetic gate does not replace large-scale or power-loss testing.
+Final evidence manifest SHA256
+`58c9c23b55b1f99d247880b383917b75ec5b41674ca54243362a161a80612134`.
+All private daemons and mounts from these runs stopped cleanly; no test
+runner remains active. The branch is ready for review, not a fully qualified
+RDMA release or a green rerun of all 515 commands.
+
 Fourteen focused host/client Python regressions and the participant/prepare
 bounds checks PASS locally. Seven native C regressions (KV, metadata apply,
 simulator, transactions, RAM/disk query catalogs and writer ranges) PASS
@@ -122,5 +185,29 @@ all test binaries, runs every fast and long command, preserves individual
 failures and reports NOTRUN separately. Four test slots respect its exclusive
 command scheduling; no per-test timeout is increased. Raw output is outside
 Git under `/data1/efs/evidence/graphify-review-e95cf62b4/`; the temporary
-source and active run are `/tmp/efs-graphify-e95cf62b4`. Validation results,
-artifact hashes and cleanup status will be finalized after completion.
+source run is `/tmp/efs-graphify-e95cf62b4`. Full-suite text evidence SHA256 manifest:
+`sha256.json`, SHA256 `6fe872945d9b3653a899a87a0d32ab788cd9cfb5e131a817338589cfaffd12ac`.
+Unchanged-base evidence is `/data1/efs/evidence/graphify-review-base-063154e0e815/`,
+manifest SHA256 `33ce1319ec3f013340a776b2e5c27ce39ed4dd3a9b144c8e17d10a13c83e4150`.
+Temporary build trees remain on AMD for the unresolved RDMA setup
+investigation. B6 synthetic stores were retained during diagnosis and then pruned as above;
+no deployed cluster or original W123 store
+was modified. Raw artifacts are not copied into Git.
+
+Focused full-quota reproduction after building this branch's Linux binaries:
+
+```sh
+python3 tests/test_wb_runtime.py
+python3 tests/test_gc_verdict.py
+python3 tests/test_b6_log_accounting.py
+for i in 0 1 2; do
+  EFS_B6_MODES=full EFS_B6_KEEP=1 EFS_B6_ARTIFACTS=/tmp/b6-result-$i \
+    timeout 900 python3 -u tests/test_b6_unavailable.py || break
+done
+```
+
+Use fresh evidence destinations. `EFS_B6_KEEP=1` retains synthetic stores
+for inspection; default cleanup removes passing fixtures, and failures are
+retained automatically. Check logs for cleanup errors before deleting a
+stopped fixture. Device-specific RDMA qualification and a live replicated
+metadata disk-read fault gate remain outside the demonstrated scope.

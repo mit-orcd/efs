@@ -1604,9 +1604,11 @@ this document is the invariant they are measured against.
 
 `graphify-review-fixes` from devel `063154e0e815`; infrastructure-error retry,
 shared byte/geometry/KV helpers and SETATTR codec implemented. Focused checks
-PASS. First full suite FAIL (31 corrected harness dependencies, 9 RDMA setup
-failures; 5 NOTRUN). Final-source `e95cf62b4` full Linux suite RUNNING;
-unchanged-base RDMA comparison queued. No merge, push or deployment.
+PASS. Complete Linux suite FAIL (515 commands, 12 failures, 5 NOTRUN);
+nine RDMA setup failures reproduce on unchanged devel. Two harness fixes and
+two B6 oracle corrections have focused follow-up PASS, including three
+full-quota exact-payload cold-restart repeats. Five checks remain NOTRUN.
+Original failures retained. No merge, push or deployment.
 
 Reviewed and reorganized October 15, 2026. This directory is the work queue and
 acceptance index; [backlog](../backlog/README.md) holds detailed work items and
