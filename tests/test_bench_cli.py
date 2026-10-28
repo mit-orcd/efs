@@ -26,8 +26,8 @@ def main():
     assert '--bench' not in run('efsd', '--help')
     help_text = run('efs-bench', '--help')
     assert '--bench data' in help_text and '--store' not in help_text
-    for args in [('--store',), ('--window', '2'), ('--read',), ('--size', '1M', '--io-size', '17M'), ('--size', '2', '--workers', '3')]:
-        run('efs-bench', '127.0.0.1:1', *args, ok=False)
+    for remote_args in [('--store',), ('--window', '2'), ('--read',), ('--size', '1M', '--io-size', '17M'), ('--size', '2', '--workers', '3')]:
+        run('efs-bench', '127.0.0.1:1', *remote_args, ok=False)
     assert 'no cluster' in run('efs-bench', '--bench', 'data', '--help')
     run('efsd', '--bench', 'meta', ok=False)
     assert 'BENCH_OK kind=blake3' in run('efs-bench', '--bench', 'blake3', '--threads', '1',
