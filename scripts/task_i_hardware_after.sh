@@ -40,7 +40,11 @@ for t in ('rdma','tcp'):
  assert (q/'measurement/exit').exists(),t+' missing workload receipt'
  assert int((q/'controller-exit').read_text()) in (0,1),t+' prerequisite/cleanup failure'
  d=json.loads((q/'measurement/d4-result.json').read_text())
- rows[t]={'verdict':d['verdict'],'reason':d.get('reason','')}
+ workload_exit=int((q/'measurement/exit').read_text())
+ controller_exit=int((q/'controller-exit').read_text())
+ rows[t]={'driver_verdict':d['verdict'],'reason':d.get('reason',''),
+          'workload_exit':workload_exit,'controller_exit':controller_exit,
+          'overall_verdict':'PASS' if d['verdict']=='PASS' and workload_exit==0 and controller_exit==0 else 'FAIL'}
 (out/'prior-results.json').write_text(json.dumps({'prior':str(p),'candidate':sys.argv[3],'results':rows},indent=2)+'\n')
 PY
 [ "$?" -eq 0 ] || exit 77

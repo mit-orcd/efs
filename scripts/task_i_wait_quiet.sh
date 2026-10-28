@@ -23,7 +23,7 @@ while [ "$SECONDS" -lt "$end" ]; do
 import json,sys,time
 from pathlib import Path
 sys.path.insert(0,'scripts')
-from soak import foreign_jobs
+from task_i_host_sample import foreign_jobs
 jobs=foreign_jobs()
 (Path(sys.argv[1])/'last-check.json').write_text(json.dumps({'time':time.time(),'jobs':jobs},indent=2)+'\n')
 raise SystemExit(1 if jobs else 0)

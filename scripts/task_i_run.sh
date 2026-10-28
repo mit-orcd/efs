@@ -27,7 +27,7 @@ python3 - "$background_client" "$art" <<'PY'
 import json,sys
 from pathlib import Path
 sys.path.insert(0,'scripts')
-from soak import foreign_jobs
+from task_i_host_sample import foreign_jobs
 from task_i_host_sample import background_identity
 allowed = background_identity(sys.argv[1]) if sys.argv[1] else None
 jobs=foreign_jobs()

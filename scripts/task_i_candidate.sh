@@ -25,7 +25,7 @@ export EFS_FUSE_PREFIX=/usr EFS_TRANSPORT=tcp
 python3 - <<'PY'
 import sys
 sys.path.insert(0,'scripts')
-from soak import foreign_jobs
+from task_i_host_sample import foreign_jobs
 jobs=foreign_jobs()
 if jobs:raise SystemExit('NOTRUN: quiet host required: '+repr(jobs))
 PY
