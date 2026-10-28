@@ -429,6 +429,21 @@ def grep_count(path, pattern):
         pass
     return n, first
 
+def formation_root(c):
+    """Raw management reads expose NOT_PRIMARY; follow one valid live hint.
+
+    This is readiness discovery, not replay of a failed application write.
+    A second redirect or any refusal remains not-ready for the existing
+    bounded formation loop. Never infer formation from process exit alone.
+    """
+    result=c.mgmt('raft-getattr',c.addr(1),1)
+    if result.returncode==0 and re.search(r'\bstatus=7\b',result.stdout):
+        hint=re.search(r'\bprimary=(\d+)\b',result.stdout)
+        if hint and int(hint.group(1)) in (2,3):
+            result=c.mgmt('raft-getattr',c.addr(int(hint.group(1))),1)
+    return result
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--rel', required=True, type=lambda v: str(Path(v).resolve()),
@@ -476,7 +491,7 @@ def main():
             time.sleep(1)
         # K33: the three members form and create the root themselves.
         for _ in range(120):
-            r = c.mgmt('raft-getattr', c.addr(1), 1)
+            r = formation_root(c)
             if r.returncode == 0 and re.search(r'\bstatus=0\b',r.stdout):
                 break
             time.sleep(1)

@@ -126,3 +126,23 @@ assert af.availability(dict(accounted_failures=0,failed_writes=4),[dict(error_co
 assert not af.availability(dict(accounted_failures=0,failed_writes=0),[dict(error_count=1)])
 assert af.availability(dict(accounted_failures=0,failed_writes=0),[dict(error_count=0)])
 print('append availability: real write/fsync errors fail even when integrity is accounted: pass')
+
+# Formation readiness follows exactly one configured live hint. An exit-zero
+# redirect is never treated as a root, and bogus hints are never contacted.
+from types import SimpleNamespace
+class Formation:
+    def __init__(self,replies):self.replies=list(replies);self.calls=[]
+    def addr(self,n):return f'node{n}'
+    def mgmt(self,*args):
+        self.calls.append(args)
+        return SimpleNamespace(returncode=0,stdout=self.replies.pop(0))
+c=Formation(['raft-getattr status=7 primary=2 ino=0','raft-getattr status=0 primary=2 ino=1'])
+assert 'status=0' in af.formation_root(c).stdout
+assert c.calls==[('raft-getattr','node1',1),('raft-getattr','node2',1)]
+c=Formation(['raft-getattr status=0 primary=1 ino=1'])
+assert 'status=0' in af.formation_root(c).stdout and len(c.calls)==1
+c=Formation(['raft-getattr status=7 primary=99 ino=0'])
+assert 'status=7' in af.formation_root(c).stdout and len(c.calls)==1
+c=Formation(['raft-getattr status=7 primary=2 ino=0','raft-getattr status=7 primary=3 ino=0'])
+assert 'status=7' in af.formation_root(c).stdout and len(c.calls)==2
+print('append formation: one live-hint hop, no false-ready redirect or invalid peer: pass')
