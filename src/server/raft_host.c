@@ -24439,7 +24439,7 @@ static int host_report_exec(void *ctx, int *proposed, const char **phase,
 static const char *host_receipt_how_name(int how)
 {
     return how == EFS_RECEIPT_REPLAY ? "replay" : how == EFS_RECEIPT_JOINED ? "joined" :
-           how == EFS_RECEIPT_WAITING ? "waiting" : "ran";
+           how == EFS_RECEIPT_WAITING ? "waiting" : how == EFS_RECEIPT_REFUSED ? "refused" : "ran";
 }
 
 void server_raft_host_report_receipted(const struct efs_chunk_rec *recs, uint32_t count,

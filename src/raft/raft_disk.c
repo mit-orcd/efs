@@ -431,10 +431,9 @@ static int disk_get(void *ctx, uint64_t index, uint64_t *term, uint8_t *cmd,
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
     first = g->log_base + 1;
-    if (index >= first) {
+    if (index >= first && index - first < (uint64_t)g->n) {
         off = (uint32_t)(index - first);
-        if (off < g->n)
-            goto hit;
+        goto hit;
     }
     /* The snapshot's included index, once its entry has fallen out of
      * the retained window. */
