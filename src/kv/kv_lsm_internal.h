@@ -274,6 +274,11 @@ struct kv_lsm {
     int query_tracking; /* startup policy; protected by mu */
     uint64_t transaction_revision; /* prepare/resolve/decision fence, under mu */
     uint64_t transaction_activity[8]; /* bounded diagnostic hints, not authority */
+#if EFS_FAULTS
+    uint64_t dirty_kind[256][2],dirty_trace_ms;
+    unsigned dirty_trace_records;
+    int dirty_trace_enabled;
+#endif
     struct kv_buf scratch;
 };
 
