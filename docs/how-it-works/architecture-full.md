@@ -1612,6 +1612,11 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+code, fault models/oracles and selected contracts; W127/W145 and W125 contract
+navigation checks PASS. Parser and unresolved-call gaps remain explicit; this
+is not a product acceptance verdict. Rebuild and validation instructions committed.
+
+[Graphify review fixes](../status/graphify-review-findings-20261027.md):
 `graphify-review-fixes` from devel `063154e0e815`; infrastructure-error retry,
 shared byte/geometry/KV helpers and SETATTR codec implemented. Focused checks
 PASS. Complete Linux suite FAIL (515 commands, 12 failures, 5 NOTRUN);

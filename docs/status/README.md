@@ -1,5 +1,10 @@
 # Project status — work queue and evidence
 
+[Defect-navigation graph](graph-scope-validation-20261028.md): directed first-party
+code, fault models/oracles and selected contracts; W127/W145 and W125 contract
+navigation checks PASS. Parser and unresolved-call gaps remain explicit; this
+is not a product acceptance verdict. Rebuild and validation instructions committed.
+
 [Graphify review fixes](graphify-review-findings-20261027.md):
 `graphify-review-fixes` from devel `063154e0e815`; infrastructure-error retry,
 shared byte/geometry/KV helpers and SETATTR codec implemented. Focused checks
