@@ -148,8 +148,8 @@ with tempfile.TemporaryDirectory(prefix='efs-san-gate-') as td:
                     assert rc == 1 and 'FAIL leak: 1 LeakSanitizer reports' in out and 'malloc' in out, (rc, out)
                     print('sanitizer gate (asan): leaking fixture -> FAIL (LeakSanitizer) PASS')
             else:
-                print('sanitizer gate (asan): LeakSanitizer case not run here (no ptrace or not Linux); '
-                      'the AddressSanitizer and UBSan cases above are the gate')
+                print('sanitizer gate: LeakSanitizer fixture NOTRUN (unsupported platform or ptrace policy); '
+                      'the AddressSanitizer and UBSan cases above ran')
     if notrun:
         print('sanitizer gate: real fixtures NOTRUN for %s (this compiler cannot build or run a sanitized program)' % ', '.join(notrun))
 print('sanitizer gate self-test PASS')
