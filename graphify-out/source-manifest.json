@@ -2248,7 +2248,7 @@
     "tests/test_put_tcp_frame.py": "0b29bcc8847e7e9dd4aa2423b8b145b875c0192f1450e4a4447be7cfc88b5148",
     "tests/test_put_ticket.c": "35764af87803d6ca43e58167ea1a1c3fbd04e20e41b1d98d8174e51a2ce77df8",
     "tests/test_put_ticket_batch.py": "860909bf897fcc550fa81189982883d229c20b4e257502dd3ba04e08ab88b871",
-    "tests/test_put_ticket_owner.py": "f8552ec38b5d44fa1faa459ce9e0a61fd85bee9371d868b3831ab38ee8dd75f2",
+    "tests/test_put_ticket_owner.py": "3b8b9e071f3896d7659f8bf00952de853d3357f62fb9b6f67ccbf46a64342822",
     "tests/test_put_ticket_rpc.py": "621b509e99210c474f3ef8539cf13cdb46a477982da097141365a5a780f2578d",
     "tests/test_put_upload_server.c": "9e194440d79d1b683b90f54f5d75f407e644062bd298170c6314cf94ac1449e2",
     "tests/test_put_window_deadline.py": "0ad4de173d1e53fa05d4df2145313888fbd46f290b217a843a76d6a00dcd81a1",
@@ -2473,5 +2473,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "6e6b95b2633c44acf9e961772b9d545a988867b3"
+  "source_commit": "f99cfc72ea1fa93d3846c58809f8fdf400a7532f"
 }

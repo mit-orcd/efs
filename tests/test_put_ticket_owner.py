@@ -14,7 +14,8 @@ parallel load cannot miss its batch (the wait ends when the cohort has
 queued, not on the timer). tests/test_k32_entry_count.py checks the
 production 1 ms bound."""
 from pathlib import Path
-import subprocess,tempfile
+import os,shlex,subprocess,sys,tempfile
+from sanitize_env import cflags, wrap
 root=Path(__file__).resolve().parents[1]
 code=r'''
 #include "client_internal.h"
@@ -212,7 +213,23 @@ int main(void){
  puts("K13 ticket ledger: FileID binding, admission before PUT, lost/stale admission retention, putting protection, sweep, ordered per-stream batched settle, partial and fenced retirement; K32 cohort ADMIT_BATCH per group, single-ADMIT fallback, multi-stream SETTLE_BATCH PASS");
 }
 '''
+# Link the tested owners and their real common helpers directly. This test
+# must not require a prebuilt, possibly differently instrumented libefs.a.
+sources = ['src/meta/put_ticket.c', 'src/kv/kv_key.c',
+           'src/common/publication.c', 'src/common/checksum.c',
+           'src/sim/opid.c', 'src/client/stop_phase.c',
+           'deps/blake3/blake3.c', 'deps/blake3/blake3_dispatch.c',
+           'deps/blake3/blake3_portable.c']
+flags = ['-std=gnu11', '-Wall', '-Wextra', '-Werror',
+         '-I'+str(root/'include'), '-I'+str(root/'src/client'),
+         '-I'+str(root/'deps/blake3'), '-DEFS_PUT_ADMIT_LINGER_US=20000000u',
+         '-DBLAKE3_NO_SSE2', '-DBLAKE3_NO_SSE41', '-DBLAKE3_NO_AVX2',
+         '-DBLAKE3_NO_AVX512', '-DBLAKE3_USE_NEON=0',
+         '-ffunction-sections', '-fdata-sections']
+gc = '-Wl,--gc-sections' if sys.platform.startswith('linux') else '-Wl,-dead_strip'
 with tempfile.TemporaryDirectory(prefix='efs-put-owner-') as d:
  p=Path(d)/'test.c';p.write_text(code)
- subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client'),'-DEFS_PUT_ADMIT_LINGER_US=20000000u',str(p),str(root/'libefs.a'),'-pthread','-lm','-o',str(p.with_suffix(''))],check=True)
- subprocess.run([str(p.with_suffix(''))],check=True)
+ subprocess.run(shlex.split(os.environ.get('CC','cc'))+cflags()+flags+
+                [str(p)]+[str(root/f) for f in sources]+
+                [gc,'-pthread','-lm','-o',str(p.with_suffix(''))],check=True)
+ subprocess.run(wrap()+[str(p.with_suffix(''))],check=True)
