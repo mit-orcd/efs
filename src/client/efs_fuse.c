@@ -6244,7 +6244,14 @@ static void ll_rmdir_run(fuse_req_t req, fuse_ino_t parent, const char *name)
     struct deep_callback_sample path_sample = deep_callback_begin(req, name);
     lookup_memo_mutation_begin();
     t_req = req;
+    /* Same namespace callback budget as MKDIR, covering parent reads and
+     * same-opid admission retries together. Never extend an inherited bound. */
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = stats_now_ms() + 30000;
+    if (previous && previous < deadline) deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
     rc = efs_fuse_rmdir_at(parent, name);
+    efs_client_rpc_set_deadline_ms(previous);
     lookup_memo_mutation_end();
     t_req = NULL;
     deep_callback_reply_begin(&path_sample);

@@ -99,3 +99,4 @@ python3 tests/test_k22_snapshot_import.py	310	2	drives both groups four snapshot
 python3 tests/test_k22_leader_admission.py	30	2	fills the leader's small KV budget past the admission watermark (organically, ~190 s), then proves the move, the drain and clean client service
 python3 tests/test_w130_dir_fault.py	50	2	W165 intel1: 10 strict combined serve/apply fault runs, max 38 s; 1.25x rounded up; healthy-quorum operations and snapshot resync, two slots retained
 python3 tests/test_w166_authority.py	40	1	W166: compressed 1 MiB L0 fill with 4 MiB KV budget, then a read-routing fault; 28.8 s in the xorinox 8-job pool x 1.25 rounded up to 5 s
+python3 tests/test_dir_ops_busy.py	35	2	Task O: four private daemons; twenty pre-admission BUSYs then one same-opid RMDIR; provisional pending pooled measurement
