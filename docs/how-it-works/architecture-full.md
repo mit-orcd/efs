@@ -1630,6 +1630,18 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Task Q: user documentation audit round 3](../status/docs-audit-20261027.md):
+**Docs/static gates PASS; Mac live commands NOTRUN.** Branch
+`agent/devel-task-q`, base `e7e72e267` (waves 9–22), no product change.
+Seventeen documentation findings fixed across the alpha guide, surface, POSIX,
+commands, release notes, testing and D44's W130 gate note. K44 workaround is
+historical; W130/W165 resync is asynchronous and has an operator runbook.
+K43/K48/W166 remain release gaps; stale resync CLI text is reported. L22/L24
+remain user decisions. Linux build fails on macOS; complete command/failure
+NOTRUN inventory and preserved local build/check evidence are recorded.
+No merge, push, cluster change or fresh Linux qualification.
+
+
 [Wave 22 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`a7e881a7a`; gate at the same commit)**: Task O, K50 ([evidence](../status/dir-ops-busy-under-load-20261027.md)): a namespace RPC with a caller deadline keeps retrying transient admission BUSY until that deadline instead of stopping at a fixed 16 attempts, RMDIR gets the same 30 s callback bound as MKDIR, deadline-less callers keep the 16-try cap, and every stop logs its reason. intel1 `make test-all` (8 jobs): 515 commands in 727 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (moved from intel2, where Task P's rehearsal holds the host). W159's broader latency failures, RDMA and multi-host stay open.
 
 [Wave 21 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`d42099faa`)**: Task N, K15/K29 append gates ([evidence](../status/k15-k29-append-gates-20261027.md)): on intel1 (single-host TCP), two W52 20,000-record runs, two W64 8,000-record step-down runs and two 2,000-record lost-reply runs PASS — 59,992 acknowledged records verified in warm-primary, warm-peer and cold-restart reads, eight deliberate failed writes explained, no REPORT timeout or unexplained hole; the K29 near-zero-progress stall did not reproduce. Merged: the hardened live harness `tests/live/append_failover.py` (availability and checked cold stops required, REPORT timeouts counted on both mounts, live root hint followed during formation) with `test_append_failover_accounting.py`, and the Task N controller scripts; no product change. **Found: K48** (blocks alpha), the W130 one-replica halt test listed 95 of 96 names through the healthy quorum in Task N's first full gate; not reproduced since, failed stores kept on intel1. Task N's final `make test-all` 514 commands, 0 FAIL, 14 NOTRUN; no gated product code changed, so wave 19's intel2 gate stands.
@@ -3561,8 +3573,11 @@ remaining gates and limits](../status/v030-release-scope-20261012.md). Execution
 
 `tests/test_k22_snapshot_import.py` and `tests/test_k22_leader_admission.py` (Task B, wave 15) stay in the
 `make test-all` gate rather than becoming a separate target like `make test-soak`. The W160 target is
-therefore 1,100 s (18 min 20 s) at `EFS_TEST_JOBS=8`, recorded in `tests/test_make_test_recipe.py`;
-`test_w130_dir_fault.py` stays its own gate (`make test-w130`) until W165 is fixed.
+therefore 1,100 s (18 min 20 s) at `EFS_TEST_JOBS=8`, recorded in `tests/test_make_test_recipe.py`.
+At this decision, `test_w130_dir_fault.py` stayed its own gate until W165 was fixed.
+**Implementation update, wave 16:** W165 is fixed in merged devel; W130 is
+back in `make test-long` and `make test-w130` has been removed. The 1,100 s
+target is unchanged ([Task F evidence](../status/w165-serve-path-damaged-row-20261026.md)).
 
 ### D43 — `.efs` and expiry ship in alpha 1.0 (user, Oct 25)
 

@@ -69,8 +69,10 @@ NVMe, October 25; docs/status/gate-speed-20261025.md): see that page for
 the serial and 8-job times before and after the budgets.
 
 Verdicts must be identical in serial and pooled runs. A test that fails
-only in the pool belongs in the runner's `EXCLUSIVE` pattern, or takes
-more slots. Do not retry it.
+only in the pool needs investigation: a genuine timing/resource requirement
+may justify the runner's `EXCLUSIVE` pattern or more slots, with measured
+evidence. A product race or shared-state defect must be fixed, not hidden by
+serialization. Keep the failed run; do not retry it into PASS.
 
 Together they run the suites listed in the current Makefile, including the
 simulator, metadata/session/transaction, store, buffer, publication and
@@ -79,6 +81,20 @@ writeback gates. The list evolves; use `TEST_BINS` and the `test` and
 exercise logical behavior; public callbacks, real storage and RDMA require
 their own acceptance gates. [Verification](verification.md) distinguishes
 simulation, process restart and hardware power loss.
+
+The wave-17 [three-run refit](../status/gate-budgets-refit-20261026.md)
+measured 729/723/725 s on quiet eight-CPU intel1; its 1,025 s fitted model
+keeps D44's 1,100 s target and 1,650 s budget bound. These are host-specific
+measurements, not a guarantee for shared disks or a new acceptance threshold.
+K22 snapshot import, K22 leader admission and W130/W165 recovery are all in
+`make test-long`; the temporary `make test-w130` target was removed in wave
+16. The separate four-hour churn gate remains outside `test-all`.
+
+The summary runner returns 0 only for PASS, 1 for FAIL and 3 for INCOMPLETE
+(no failures but one or more NOTRUN/SKIP markers). Read the per-command
+reasons: missing prerequisites and unsupported cases are not successful
+execution. A test process exiting zero alone does not erase its coverage
+markers. `make test-all` by itself is not the whole alpha release matrix.
 
 Everything must be green. There is no accepted-failure list.
 `make check` runs `test-all`, `docs-check` and `leak-check`, and fails if
@@ -297,6 +313,34 @@ The site's `~/git/devops/nuc-efs` drivers select NUC/AMD, while
 portal are not bundled here. The retained
 [AMD matrix driver and evidence](../../results/measure/20261008-v020-amd/README.md)
 document that environment; they are not a general cluster installer.
+
+## Current merged fault gates and open failures
+
+The [round 3 docs audit](../status/docs-audit-20261027.md) indexes merged
+waves 9–22. Current focused gates include:
+
+- `python3 tests/test_w130_dir_fault.py`: apply-first and serve-first stored
+  decoder refusal, healthy-quorum routing and `raft-resync` healing. This
+  is a synthetic fault-build fixture, not an operator command to damage a
+  cluster. K48's intermittent 95/96 listing in this gate stays OPEN despite
+  subsequent passes; never accept an incomplete listing or add a retry.
+- `python3 tests/test_k22_snapshot_import.py` and
+  `python3 tests/test_k22_leader_admission.py`: stalled-follower snapshot
+  import and capacity admission; the production-window/multi-host scopes
+  stay separate from compressed loopback fixtures.
+- `python3 tests/test_k38_shared_chunk_pressure.py`: two writing clients,
+  shared chunks and pressure, including exact acknowledged record checks.
+  W166 keeps the 30 s outer flush bound; original SIGSTOP/RDMA/multi-host
+  gates remain open.
+- `python3 tests/test_dir_ops_busy.py`: K50's finite admission-refusal
+  negative control and inherited namespace deadline; no broader W159
+  latency PASS is implied.
+
+The [Task N append gates](../status/k15-k29-append-gates-20261027.md) are
+scoped single-host TCP PASS with exact warm/peer/cold reads. The
+[Task D soak](../status/task-d-20261025.md) remains FAIL on K43. Keep all
+failed and NOTRUN outcomes alongside later successful results. These
+requirements remain product gates, not accepted alpha limitations.
 
 ## Recorded fcstor cluster gates
 

@@ -140,6 +140,23 @@ view. Refresh failures are shown explicitly while retaining the last available
 snapshot. A server timestamp ahead of the client reports unknown freshness
 rather than a misleading zero age. JSON keeps the exact timestamp and identity.
 
+## Faults and recovery
+
+A query is complete for its published snapshot, not a fresh `readdir` of the
+live tree. A cold or returning publisher may report not indexed yet, an
+explicit refusal, or an older snapshot with freshness/error diagnostics.
+Do not count those as a fresh-query PASS or raise refresh budgets to hide a
+failed default-profile check. Current cold-query acceptance is incomplete
+([Task K](../status/k44-retired-replica-routing-20261026.md),
+[Task M](../status/gate-fstor007-20261027.md)).
+
+Stored-row decoder failures fence the affected metadata replica (W130/W165).
+Preserve evidence and use the [follower resync runbook](alpha-1.0-guide.md#a-metadata-replica-halts-w130w165);
+editing the derived catalog cannot heal authoritative metadata. Query policy
+and quorum checks still apply. K48's incomplete ordinary directory listing
+is an open correctness finding, not snapshot lag and not a permitted partial
+successful result from these commands.
+
 ## Local server cache backend
 
 Publishers use a disk catalog under `<storage>/mdraft/query-cache`. Command syntax and permission checks are unchanged;
