@@ -48,7 +48,10 @@ try:
     assert sorted(int(n) for n, _ in hits) == list(range(20)), hits
     assert len({seq for _, seq in hits}) == 1 and int(hits[0][1]) > 0, hits
     client = m.logp.read_text(errors='replace')
-    assert re.search(r'inode-rpc: slow-ok .*attempts=21 .*saw_busy=1 .*status=0', client), client[-4000:]
+    # Twenty injected refusals need at least 21 attempts. Ordinary transient
+    # retries can add attempts; the exact fault count and opid are checked above.
+    completed = re.search(r'inode-rpc: slow-ok type=51 attempts=(\d+) saw_busy=1 status=0', client)
+    assert completed and int(completed[1]) >= 21, client[-4000:]
     assert elapsed < 30, elapsed
     print(f'Task O directory BUSY: PASS 20 refusals, same opid, one RMDIR in {elapsed:.3f}s', flush=True)
 finally:

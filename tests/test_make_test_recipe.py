@@ -17,7 +17,7 @@ pass silently.
 """
 # Python tests the recipe does not run, each with its reason.
 NOT_WIRED = {
-    'tests/test_code_graph.py': 'Developer-only generated graph validation: make code-graph-check rebuilds with pinned graphify and a Git index; archived runtime-gate trees have neither',
+    'tests/test_code_graph.py': 'Developer-only canonical graph gate: make code-graph-check rebuilds with pinned graphify and validates tracked scope via a Git index; an archived graph snapshot alone is insufficient',
     'tests/test_soak.py': 'Task D 15-minute accelerated endurance run; its own gate (make test-soak), outside the W160 15-minute test-all target',
 }
 from pathlib import Path

@@ -99,8 +99,9 @@ and budget row keep this arm in the full code gate; no product setting changes.
 ### Developer graph validation
 
 `make code-graph-check` performs the canonical graph rebuild and runs
-`tests/test_code_graph.py`. It needs the pinned graphify environment and a real
-Git index. It is explicitly outside the archived-source runtime gate, like the
+`tests/test_code_graph.py`. Rebuilding needs the pinned graphify environment; the scope test needs a real
+Git index. An archived snapshot alone cannot supply that tracked-scope proof.
+It is explicitly outside the archived-source runtime gate, like the
 documentation gate; it is not reported as missing product/hardware coverage.
 See [the graph workflow](../../tools/graphify/README.md). Its exclusion is named
 and checked in `tests/test_make_test_recipe.py`, rather than leaving an unwired
