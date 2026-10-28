@@ -412,6 +412,9 @@ the separate data-commit correctness fixes.
   lock/scan, management totals still include live and retired connections,
   concurrent connect/close/poll is safe, TCP/no-RDMA builds work. Measure poller
   interference and status cost across connection counts.
+  **IN PROGRESS on `agent/devel-task-ac`**, base `1d2852da4`, candidate
+  `5f9ddae71`; TCP/intel1 and RDMA/node9901 comparisons active, no measured
+  slowdown or speedup claimed yet ([AC evidence](ac-iostats-rdma-scan-20261028.md)).
 - [ ] **AD — Bound contention from always-on counters.**
   `src/server/iostats.c::efs_iostats_add` updates shared per-class atomic
   counters, latency sums/maxima and a last-64 sample ring on GET/PUT/disk-write
