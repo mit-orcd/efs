@@ -45,7 +45,8 @@ try:
     # A failed name collision cannot overwrite a previous benchmark fixture.
     bench('--size', total, '--workers', writers, '--id', 170, ok=False)
     bench('--meta', '--export', 'default', '--files', 5, '--dirs', 2,
-          '--size', 4099, '--workers', 2, '--phases', 'mkdir,create', '--keep')
+          '--size', 4099, '--workers', 2, '--phases', 'mkdir,create', '--keep',
+          '--id', '18446744073709551615')
     # Start the reader only after the benchmark processes (and their caches) exit.
     m = k.Mount(c, 3, 'cold-reader')
     parents = sorted(m.path.glob('bench-data-170-w*'))
@@ -56,7 +57,7 @@ try:
         data = (m.path/f'bench-data-170-w{i}/payload').read_bytes()
         assert len(data) == want and data == b'A'*want, (i, len(data), want)
     meta = sorted(m.path.glob('bench-meta-*-d*'))
-    assert len(meta) == 2, meta
+    assert len(meta) == 2 and all('-18446744073709551615-d' in p.name for p in meta), meta
     files = [p for d in meta for p in d.iterdir()]
     assert len(files) == 5
     assert all(p.read_bytes() == b'A'*4099 for p in files)

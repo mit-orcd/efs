@@ -429,7 +429,7 @@ static int published_client_start(const char *seed, const char *export_name)
     }
     efs_dcache_init();
     efs_client_enable_meta_batch(4096);
-    return EFS_OK;
+    return efs_client_view_start();
 }
 
 struct data_worker {
@@ -529,6 +529,7 @@ static int run_data_bench(const char *seed, const char *export_name, int reading
     }
     if (efs_dcache_flush_all() != EFS_OK || efs_client_report_dirty(1) != EFS_OK)
         rc = EFS_ERR_IO;
+    efs_client_view_stop();
     if (efs_client_shutdown() != EFS_OK) rc = EFS_ERR_IO;
     stop_perf_recorder();
     if (!bytes || (!seconds && total && bytes != total)) rc = EFS_ERR_IO;
@@ -940,7 +941,7 @@ static int run_meta_bench(const char *seed, const char *export_name,
     }
 
     {
-        char pidbuf[16], idbuf[16];
+        char pidbuf[16], idbuf[24];
         u64_dec(pidbuf, sizeof(pidbuf), (uint64_t)getpid());
         u64_dec(idbuf, sizeof(idbuf), id);
         snprintf(st.root_name, sizeof(st.root_name), "bench-meta-%s-%s",
@@ -1076,6 +1077,7 @@ static int run_meta_bench(const char *seed, const char *export_name,
     free(st.write_buf);
     free(st.dirs);
     free(st.files);
+    efs_client_view_stop();
     if (efs_client_shutdown() != EFS_OK) any_fail = 1;
     return any_fail ? 1 : 0;
 }
