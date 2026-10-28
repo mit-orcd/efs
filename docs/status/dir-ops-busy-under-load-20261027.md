@@ -1,12 +1,12 @@
 # Task O — directory operations exhausting transient BUSY retries
 
-Branch `agent/devel-task-o`, base devel `063154e0e`, product fix `b78955995`:
-qualification IN PROGRESS; no full-gate PASS claimed. Five standalone K36
-and W159 runs each PASS. Base loaded core: 211/218, seven case timeouts;
-deterministic RMDIR negative control FAIL
-with EBUSY after 16 refusals. Evidence: this page. Real-host/RDMA acceptance
-NOTRUN (assigned xorinox private TCP loopback only). K50: confirmed client
-retry-cap defect, fix committed; acceptance pending.
+Branch `agent/devel-task-o`, base devel `063154e0e`, tested source
+`503e17f2d`, product fix `b78955995`: **K50 FIXED and qualified in scope,
+not merged**. Intel2 full gate: **515 tests, 0 FAIL, 14 NOTRUN, INCOMPLETE
+coverage, 659 s**. K36 and W159 each pass five standalone runs on both hosts;
+intel2 core passes 218/218. Xorinox core/load failures remain failures.
+The original W159 recurrence is not causally closed. RDMA and multi-host
+acceptance remain NOTRUN.
 
 ## Purpose and contract
 
@@ -23,7 +23,7 @@ product code. Negative control `f75257527` adds only a fault-build server
 hook, its inventory entry and the deterministic test. It retains the base
 client unchanged. Product changes at `b78955995`; `50a32db2a` additionally
 preserves W159 failure fixtures and emits the original client/server logs.
-Binary identities and final tested source manifest are owed after the gate.
+Binary identities and the final tested source manifest are recorded below.
 
 Assigned host xorinox, Linux, private trees beneath
 `/home/maik/efs-taskO/`, raw outputs beneath
@@ -173,7 +173,7 @@ to that discarded build.
 | Intel2 K36 alone | **5/5 PASS**, 64/62/68/66/65 s |
 | Intel2 W159 alone | **5/5 PASS**, 51/51/49/52/52 s |
 | Intel2 complete POSIX core | **218/218 PASS**, unchanged deadlines, 33.9 s |
-| Intel2 eight-job full gate | RUNNING, exact source `503e17f2d`, user-authorized alternate idle host |
+| Intel2 eight-job full gate | **515 total, 0 FAIL, 14 NOTRUN, STATUS INCOMPLETE (659 s), OVERBUDGET 3, BUILD 0 s**, exact source `503e17f2d` |
 
 Both original load pools ran to completion: load1
 `TOTAL 87 FAIL 2 NOTRUN 2 STATUS FAIL (1268s) OVERBUDGET 29 BUILD 0s`;
@@ -188,14 +188,24 @@ orcd-test W159 recurrence has the same cause. W159's broader latency findings
 remain OPEN. The fixed quiet core finished before Task I started; the later base core
 comparison overlapped Task I's new gate (start `2026-10-28T01:42:28Z`). These
 are not a controlled latency A/B; all mtime failures remain failures. No POSIX
-deadline was increased and no core PASS is claimed. The failed isolated
+deadline was increased; xorinox core does not qualify as PASS. The failed isolated
 controller result and its manifest remain unchanged when the full gate runs
 separately.
 
-`test_dir_ops_busy.py` is wired in `make test-long`; its provisional 35 s / two
-slot budget must be finalized from the full-pool measurement. Final full-gate
-result, closed top-level manifest/hash and pruning receipt are owed. Real-host
-TCP/RDMA and multi-host acceptance remain NOTRUN for the coordinator.
+`test_dir_ops_busy.py` is wired in `make test-long`. Its measured pooled
+runtime is 19.9 s; the final budget is **25 s / two slots**, using 1.25× and
+rounding up to five seconds. The tested gate used the provisional 35 s budget;
+this subsequent budget-only adjustment changes no product/test behavior or
+verdict. The modeled gate is 1049/1650 s and the D44 target remains 1100 s.
+
+The 14 NOTRUN cases are one external cluster stop/remount prerequisite, one
+RDMA Memcheck headers prerequisite, nine RDMA-device paths, one fault-build
+stalled-compactor subcase, and two leak/sanitizer harness runtime limitations.
+Harness checks are not actual leak/sanitizer qualification. The three
+OVERBUDGET cases are `k38_shared_chunk_pressure` (41.9/35 s), `stop_progress`
+(54.9/50 s), and `k22_leader_admission` (43.5/30 s). Their budgets were not
+raised. Full pooled K36 and W159 took 73.2 s and 50.8 s respectively.
+TCP loopback is qualified here; real multi-host TCP and RDMA remain NOTRUN.
 
 ## Host handoff after concurrent activity
 
@@ -222,8 +232,39 @@ Its source manifest has the identical 2,239-file hash above. Intel2 has eight
 logical GenuineIntel CPUs and Linux `6.12.0-211.67.1.el10_2.x86_64`.
 The repeat uses the same committed controller and assertions; the host change
 does not reclassify xorinox's core failures as passes. Full-gate acceptance and
-raw closure on intel2 are still pending.
+raw closure on intel2 are complete, with the coverage limits above. The environment
+uses GCC 14.3.1, Python 3.12.15, FUSE 3.16.2 and an XFS home filesystem
+(874 GiB, 838 GiB free). All 2,239 source files matched before and after the gate.
 
 K50 is Task O's final checklist identifier. The initial branch used K49; Task L
 independently allocated K49 for its TSan teardown finding, so Task O was renumbered
 before handoff. No product or test behavior changed.
+
+## Final retained evidence and approved cleanup
+
+Raw logs and manifests remain outside Git at each host's
+`/home/maik/efs-artifacts/taskO-20261027/`. Both manifests were closed and
+verified before pruning. SHA-256 of each `SHA256SUMS`:
+
+| Host / scope | Entries | Manifest SHA-256 |
+| --- | ---: | --- |
+| intel2 top level | 225 | `2a33f457e455108afbd0d389f74a5dfc35c0ef09a062607ddfbf578e44f98702` |
+| intel2 qualification | 219 | `de39ef63976a2b5d496538a24e84fde68cf2b74350d2233b6ad1fbf9166aa7d1` |
+| xorinox top level | 278 | `da355f642a833f8f6223777b82ab8f7e26011793fb52256ac6d92ce6e7e5fffe` |
+| xorinox qualification | 169 | `2bb438701a90ba25a5b33eefcbe53c06383c2f14684faf879364f761d850d2a2` |
+
+With explicit user approval, only intel2's `/home/maik/efs-taskO` was removed;
+all 225 raw files verified unchanged afterward. The separate receipt is
+`intel2:/home/maik/efs-artifacts/taskO-cleanup-20261027/cleanup-receipt.json`
+(`cleanup.exit` 0). This supersedes the raw directory's historical retention
+hold without rewriting sealed evidence. Build trees and synthetic stores are
+recreated from the source and controller; their deletion forfeits store replay,
+not the retained original logs and results.
+
+Xorinox's identical approved cleanup is **queued, not complete**: Task I still
+owns processes there. A detached one-shot worker waits for its controller to
+finish and the host's Task I processes to disappear for two checks before
+verifying evidence and deleting only `/home/maik/efs-taskO`. It fails without
+deletion after six hours. Its queue and eventual receipt are separately under
+`xorinox:/home/maik/efs-artifacts/taskO-cleanup-20261027/`. Existing clusters
+and Task I processes are untouched. No bulk raw capture is committed to Git.
