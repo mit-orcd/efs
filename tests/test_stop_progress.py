@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload  # noqa: E402
+from mount_idle import wait_fixture_unused  # noqa: E402
 
 DIRS = 1500
 SMALL_STOP_S = 5
@@ -75,6 +76,7 @@ try:
     with ThreadPoolExecutor(8) as pool:
         list(pool.map(make, range(DIRS)))
     made = time.monotonic() - t
+    wait_fixture_unused(a.path)
     rc, out, took = client('bash', 'scripts/client.sh', 'stop', str(a.path))
     assert rc == 0 and f'Unmounted {a.path}' in out, out + a.logp.read_text(errors='replace')[-3000:]
     assert a.p.wait(timeout=30) == 0
@@ -89,6 +91,7 @@ try:
     b = Mount(c, 2, 'mnt-b')
     mounts.append(b)
     (b.path / 'one').write_bytes(payload('one', 4096))
+    wait_fixture_unused(b.path)
     rc, out, took = client('bash', 'scripts/client.sh', 'stop', str(b.path))
     assert rc == 0 and f'Unmounted {b.path}' in out, out
     assert b.p.wait(timeout=30) == 0
