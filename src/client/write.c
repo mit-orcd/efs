@@ -4531,9 +4531,12 @@ void efs_dcache_init(void)
 
 static uint32_t dcache_slot(efs_ino_t ino, uint32_t ci)
 {
-    uint64_t h = (uint64_t)ino * 0x9E3779B97F4A7C15ULL;
-    h ^= (uint64_t)ci * 0xBF58476D1CE4E5B9ULL;
-    return (uint32_t)(h & (DCACHE_SLOTS - 1));
+    /* Low inode bits name a metadata shard. Masking a product preserved
+     * those bits: files allocated 4096 apart used only 16 cache buckets
+     * and the same I/O mutex for each chunk index, across network I/O.
+     * Mix the allocation counter before selecting either bucket or lock. */
+    uint64_t key = (uint64_t)ino ^ ((uint64_t)ci * UINT64_C(0xBF58476D1CE4E5B9));
+    return efs_ino_lock_slot(key, DCACHE_SLOTS);
 }
 
 static pthread_mutex_t *dcache_mu(uint32_t slot)
@@ -7458,16 +7461,22 @@ int efs_dcache_flush_ino(efs_ino_t ino)
     int rc = dcache_flush_ino_pass(ino, 0);
     int w;
 
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        fprintf(stderr, "dcache-flush-fail ino=%llu stage=put rc=%d\n",
+                (unsigned long long)ino, rc);
         return rc;
+    }
     /* Another flusher (reclaim, a second close) may hold this inode's
      * chunks in a PUT window: entry clean, chunk not yet in the dirty
      * set. Wait for those windows; a failed PUT re-dirties the entry, so
      * one more pass picks it up. Then the caller's REPORT snapshot sees
      * every chunk this inode has written. */
     w = put_win_wait(ino, 8000u);
-    if (w == EFS_ERR_BUSY)
+    if (w == EFS_ERR_BUSY) {
+        fprintf(stderr, "dcache-flush-fail ino=%llu stage=put-window rc=%d\n",
+                (unsigned long long)ino, w);
         return EFS_ERR_BUSY;
+    }
     if (w == 1)
         rc = dcache_flush_ino_pass(ino, 0);
     return rc;

@@ -3351,16 +3351,25 @@ static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)
      * has nothing to publish; the REPORT for it would carry no record. */
     if (!efs_ino_has_unpublished(ino))
         return EFS_OK;
-    if (efs_client_rpc_past_deadline())
+    if (efs_client_rpc_past_deadline()) {
+        fprintf(stderr, "flush-prepare-fail ino=%llu stage=deadline rc=%d\n",
+                (unsigned long long)ino, EFS_ERR_BUSY);
         return EFS_ERR_BUSY;
+    }
     rc = efs_wb_sync_ino(ino);
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        fprintf(stderr, "flush-prepare-fail ino=%llu stage=writeback rc=%d\n",
+                (unsigned long long)ino, rc);
         return rc;
+    }
     if(profile)t1=stats_now_ms();
     amu = append_mu(ino);
     rc = wb_lock_budget(amu);
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        fprintf(stderr, "flush-prepare-fail ino=%llu stage=append-lock rc=%d\n",
+                (unsigned long long)ino, rc);
         return rc;
+    }
     if(profile)t2=stats_now_ms();
     rc = efs_dcache_flush_ino(ino);
     if(profile)t3=stats_now_ms();

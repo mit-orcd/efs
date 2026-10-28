@@ -333,6 +333,7 @@ test-wb-runtime:
 	python3 tests/test_read_ahead_boundary.py
 	python3 tests/test_getchunks_budget.py
 	python3 tests/test_getchunks_collect_retry.py
+	python3 tests/test_dcache_lock_distribution.py
 	python3 tests/test_metadata_retry_budget.py
 	python3 tests/test_inode_writer_view_budget.py
 	python3 tests/test_readdir_reply_boundary.py
