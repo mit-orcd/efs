@@ -1643,7 +1643,8 @@ the original60s recovery bound; corrected gate528/0 FAIL/14 NOTRUN,
 native9/9 PASS; TCP metrics pass but host coverage FAILs275 samples
 of resumed UID1001 W123 work. Clean AMD confirmation remains pending; user-authorized fallback
 final source093415c86 on fstor007: gate528/0 FAIL/15 NOTRUN,
-native hardware RDMA9/9 PASS, unchanged RDMA hour active;
+native hardware RDMA9/9 PASS, final RDMA hour PASS2080exact,pack0/0,
+RSSwithin5%,drain12.2s; unchanged TCP hour active;
 other users’ work is untouched. Qualification
 remains INCOMPLETE.
 Last qualified candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
