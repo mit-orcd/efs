@@ -9,6 +9,7 @@ import argparse
 import errno
 import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -27,9 +28,16 @@ def main():
     p.add_argument('name')
     p.add_argument('--reader', choices=('in-process', 'spawn'), required=True)
     p.add_argument('--load-s', type=float, default=300)
+    p.add_argument('--evidence', type=Path, help='fresh directory outside the mount for every failed read buffer')
     a = p.parse_args()
     if not os.path.ismount(a.mount) or Path(a.name).name != a.name:
         p.error('active private mount and a single fresh fixture name required')
+    if a.evidence:
+        evidence = a.evidence.absolute()
+        mount = a.mount.resolve()
+        if evidence == mount or mount in evidence.parents:
+            p.error('evidence must be outside the tested mount')
+        evidence.mkdir(parents=True, exist_ok=False)
     previous = threading.local()
     def verify(path, expected):
         if a.reader == 'spawn':
@@ -54,6 +62,14 @@ def main():
                 first_mismatch=next((i for i,(x,y) in enumerate(zip(expected,observed)) if x != y),
                                     min(len(expected),len(observed))), reader=a.reader,
                 phase='after write/fsync/close', pid=os.getpid())
+            if a.evidence:
+                record = evidence / (Path(path).parent.name + '-' + Path(path).name)
+                record.mkdir(exist_ok=False)
+                (record/'observed.bin').write_bytes(observed)
+                (record/'expected.bin').write_bytes(expected)
+                if old is not None:
+                    (record/'previous-expected.bin').write_bytes(old)
+                (record/'failure.json').write_text(json.dumps(exc.payload_detail, indent=2)+'\n')
             raise exc
     def original_query(where, cmd, *args, timeout=60):
         t0 = H.time.monotonic()
