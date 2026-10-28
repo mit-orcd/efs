@@ -63,6 +63,25 @@ assert Q.topology_column(three) == '3 physical nodes'
 shared = dict(nodes=[dict(addr=f'10.0.0.1:{p}', host='h1') for p in (1, 2, 3, 4, 5)])
 assert Q.topology_column(shared).startswith('>4 physical nodes (N=5) — NOT distinct hosts (1 host')
 
+# Task V: failed cleanup is observable and never deletes live stores.
+from types import SimpleNamespace
+from unittest.mock import Mock
+for failed_stage in ('teardown-unmount', 'stop'):
+    calls = []
+    qcleanup = SimpleNamespace(cluster=dict(private_cluster=dict(root='/tmp/owned'),
+        nodes=[dict(host='n1', addr='10.0.0.1:19340', store='/tmp/owned/n1')],
+        mounts=[dict(host='n1', path='/tmp/owned/mnt')]), source=lambda h: '/src')
+    control = Q.PrivateCluster(qcleanup)
+    def cleanup_run(label, host, cmd, deadline):
+        calls.append(label)
+        return (1 if label == failed_stage else 0), ''
+    gcleanup = SimpleNamespace(run=cleanup_run, fetch=Mock())
+    control.stop_cluster = lambda g: (1 if failed_stage == 'stop' else 0, '')
+    assert control.owned_teardown(gcleanup)[0] == 1
+    assert 'teardown-delete' not in calls
+    if failed_stage == 'teardown-unmount':
+        gcleanup.fetch.assert_not_called()
+
 tmp = Path(tempfile.mkdtemp(prefix='qualify-test-'))
 try:
     liar = tmp / 'liar.sh'
@@ -518,6 +537,12 @@ try:
         commands = SimpleNamespace(commands=[])
         rc, why = Q.Loopback._logged(loop, commands, 'controller-result', lambda: value)
         assert rc == expected and commands.commands[-1]['rc'] == expected, (value, rc)
+    four = matrix['topologies']['fcstor-4x1-tcp']
+    assert len(Q.distinct_hosts(four['cluster'])) == 4
+    assert len({m['host'] for m in four['cluster']['mounts']}) == 2
+    assert four['fixture'] == matrix['topologies']['loopback-5']['fixture']
+    assert four['cluster']['seed'] == '10.1.223.66:19340'
+    assert not four.get('live_user_cluster')
     five = matrix['topologies']['loopback-5']
     assert five['loopback'] == 5 and five['transport'] == 'tcp'
     assert five['gates'] == matrix['topologies']['loopback-3']['gates']

@@ -880,6 +880,114 @@
     "RDMA",
     "four distinct hosts"
    ]
+  },
+  "fcstor-4x1-tcp": {
+   "transport": "tcp",
+   "purpose": "Task V private distinct-host driver dry run; user selected fcstor012\u2013015 instead of the lab hosts. A4 decision remains open.",
+   "cluster": {
+    "name": "fcstor-4x1-tcp",
+    "candidate": "CANDIDATE",
+    "ssh": "scripts/task_v_ssh.sh",
+    "source": "/tmp/efs-taskV-20261028/src",
+    "seed": "10.1.223.66:19340",
+    "nodes": [
+     {
+      "addr": "10.1.223.66:19340",
+      "host": "fcstor012",
+      "store": "/tmp/efs-taskV-20261028/cluster/n1"
+     },
+     {
+      "addr": "10.1.223.67:19340",
+      "host": "fcstor013",
+      "store": "/tmp/efs-taskV-20261028/cluster/n2"
+     },
+     {
+      "addr": "10.1.223.68:19340",
+      "host": "fcstor014",
+      "store": "/tmp/efs-taskV-20261028/cluster/n3"
+     },
+     {
+      "addr": "10.1.223.69:19340",
+      "host": "fcstor015",
+      "store": "/tmp/efs-taskV-20261028/cluster/n4"
+     }
+    ],
+    "mounts": [
+     {
+      "path": "/tmp/efs-taskV-20261028/cluster/mnt",
+      "host": "fcstor012"
+     },
+     {
+      "path": "/tmp/efs-taskV-20261028/cluster/mnt",
+      "host": "fcstor013"
+     }
+    ],
+    "transport": "tcp",
+    "features": {
+     "packing": "built in",
+     "efs_commands": "default cluster policy",
+     "expiry": "off",
+     "containers": "off"
+    },
+    "quota": "4G per member",
+    "hardware": "four distinct fcstor hosts, wired 10.1.223.66\u201369; inventory recorded at execution",
+    "mgmt_host": "fcstor012",
+    "private": {
+     "host": "fcstor012",
+     "root": "/tmp/efs-taskV-20261028/live",
+     "port_base": 19400
+    },
+    "private_cluster": {
+     "root": "/tmp/efs-taskV-20261028/cluster",
+     "quota": "4G",
+     "ready_timeout_s": 300
+    },
+    "fixture": {
+     "posix_timeout_s": 150,
+     "e4_small_per_member": 2000,
+     "e4_large_per_member": 2,
+     "e4_large_mib": 32,
+     "soak_hours": 0.25,
+     "soak_profile": "rehearsal",
+     "remote_tmp": "/tmp/efs-taskV-20261028/tmp"
+    }
+   },
+   "fixture": {
+    "posix_timeout_s": 150,
+    "e4_small_per_member": 2000,
+    "e4_large_per_member": 2,
+    "e4_large_mib": 32,
+    "soak_hours": 0.25,
+    "soak_profile": "rehearsal"
+   },
+   "gates": [
+    "identity",
+    "topology",
+    "b-checks",
+    "posix-core",
+    "posix-2client",
+    "c5-protocol-live",
+    "e1-manifest",
+    "d3-efs-load",
+    "e4-scale"
+   ],
+   "allow": [
+    "restart",
+    "turnover",
+    "remount"
+   ],
+   "duration": "measure per gate; driver rehearsal only",
+   "covers": [
+    "four distinct wired TCP hosts",
+    "two remote FUSE client hosts",
+    "driver-owned setup, orderly restart and teardown"
+   ],
+   "cannot_cover": [
+    "A4 release acceptance decision",
+    "RDMA",
+    "unclean crash or power loss",
+    "production scale"
+   ]
   }
  },
  "items": {
