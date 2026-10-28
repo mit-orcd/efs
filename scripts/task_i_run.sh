@@ -39,10 +39,14 @@ PY
 [ "$?" -eq 0 ] || exit 77
 printf 'BUILD\n' > "$art/stage"
 { hostname; id; uname -a; nproc; free -h; df -h "$HOME" "$TMPDIR"; gcc --version; pkg-config --modversion fuse3; cat /sys/kernel/mm/transparent_hugepage/enabled; } > "$art/environment.txt" 2>&1
+fuse_libdir="$EFS_FUSE_PREFIX/lib64"
 if [ -d "$EFS_FUSE_PREFIX/lib64/pkgconfig" ]; then
  export PKG_CONFIG_PATH="$EFS_FUSE_PREFIX/lib64/pkgconfig" LD_LIBRARY_PATH="$EFS_FUSE_PREFIX/lib64"
+elif [ -d "$EFS_FUSE_PREFIX/lib/pkgconfig" ]; then
+ fuse_libdir="$EFS_FUSE_PREFIX/lib"
+ export PKG_CONFIG_PATH="$fuse_libdir/pkgconfig" LD_LIBRARY_PATH="$fuse_libdir"
 fi
-fuse_libs="$(pkg-config --libs fuse3) -Wl,-rpath,$EFS_FUSE_PREFIX/lib64"
+fuse_libs="$(pkg-config --libs fuse3) -Wl,-rpath,$fuse_libdir"
 make -j8 FUSE_LIBS="$fuse_libs" all tests/faults/efsd > "$art/build.log" 2>&1
 rc=$?; printf '%s\n' "$rc" > "$art/build-exit"
 [ "$rc" -eq 0 ] || exit "$rc"
