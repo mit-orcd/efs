@@ -1712,6 +1712,18 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
     return error;
 }
 
+/* The exact sent snapshot remains owned until a definite STALE verdict
+ * has reconciled it. A receipt can provide that verdict after transport
+ * returned; rebuilding from live cache rows first loses this authority. */
+static int report_replay_snapshot(struct dirty_snap *ds, efs_ino_t only_ino,
+    const struct efs_chunk_rec *crecs, const uint64_t *cseq, uint32_t cn,
+    const struct efs_ino_size_rec *irecs, uint32_t in)
+{
+    for (uint32_t k=0;k<in;k++)
+        if (irecs[k].ino) (void)report_replay_stale(irecs[k].ino);
+    return stale_repull_replay(ds,only_ino,crecs,cseq,cn);
+}
+
 /* Phase 2b: report the dirty set to the metadata primary (chunk mappings +
  * inode size/mtime) instead of blob-flushing the whole table. The primary
  * applies them to its in-memory table; the server meta-flush thread persists
@@ -2284,14 +2296,10 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
             if (!sync && attempt >= 2)
                 break;
             report_streak_note(&streaks, &nstreaks, crecs, cn);
-            for (k = 0; k < in; k++) {
-                if (irecs[k].ino)
-                    (void)report_replay_stale(irecs[k].ino);
-            }
             {
                 uint64_t t0 = report_mono_ms();
 
-                int replay_rc = stale_repull_replay(&ds, only_ino, crecs, cseq, cn);
+                int replay_rc = report_replay_snapshot(&ds, only_ino, crecs, cseq, cn, irecs, in);
                 if (replay_rc != EFS_OK) {
                     rc = replay_rc;
                     break;
@@ -2431,8 +2439,19 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
         efs_client_rpc_set_deadline_ms(completion_deadline);
         rc = efs_client_rpc_report_resolve(g_client.export_id, crecs, cn, irecs, in, sync,
                                            &pubid, report_sent, rc, only_ino);
+        *resolved_stale = 0;
+        if (sent_rc != EFS_ERR_STALE && rc == EFS_ERR_STALE) {
+            /* PARTIAL is definite, never an acknowledgement. Reconcile the
+             * original snapshot before freeing it or shaping another REPORT.
+             * Use only the remaining absolute completion allowance. */
+            uint64_t before=report_mono_ms();
+            int replay_rc=efs_client_rpc_past_deadline() ? EFS_ERR_BUSY :
+                report_replay_snapshot(&ds,only_ino,crecs,cseq,cn,irecs,in);
+            t_replay_ms+=report_mono_ms()-before;
+            if (replay_rc==EFS_OK) *resolved_stale=1;
+            else rc=replay_rc;
+        }
         efs_client_rpc_set_deadline_ms(outer);
-        *resolved_stale = sent_rc != EFS_ERR_STALE && rc == EFS_ERR_STALE;
     }
     if (dcache_trace_on()) {
         for (uint32_t k = 0; k < cn; k++)
