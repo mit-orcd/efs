@@ -21,8 +21,10 @@ full acceptance are separate states.
 [Task I review](task-i-20261026.md): qualification **INCOMPLETE**.
 Current candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
-observer log I/O. Fresh uninstrumented node9900 GATE and AMD qualification
-have started; all live acceptance remains owed. Prior results follow.
+observer log I/O. Fresh gates: node9900 **527 / 0 FAIL / 18 NOTRUN**,
+AMD **527 / 0 FAIL / 14 NOTRUN**; both native RDMA **9/9 PASS**.
+Uninstrumented node9900 RDMA and AMD TCP hours are ACTIVE; live RSS/drain
+acceptance remains owed. Prior results follow.
 
 `47ca08eaf` xorinox gate 518 / 0 FAIL / 13 NOTRUN, but hour FAIL stored
 data (+~56.8%); RSS PASS, 2080 exact, pack errors 0/0, drain 73.5 s.
