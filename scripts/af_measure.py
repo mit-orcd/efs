@@ -19,6 +19,7 @@ p.add_argument('--out',type=Path,required=True);p.add_argument('--hz',type=int,c
 p.add_argument('--seconds',type=float,default=60);p.add_argument('--rate',type=float,default=5)
 p.add_argument('--transport',choices=['tcp','rdma'],default='tcp')
 p.add_argument('--address',default='127.0.0.1')
+p.add_argument('--catch-up-polls',action='store_true',help='bounded synchronous catch-up instead of discarding late polling ticks; require98%% offered queries')
 a=p.parse_args();assert '/efs-task-af/' in str(ROOT) and a.seconds>=60 and a.rate>0
 a.out.mkdir(parents=True,exist_ok=False)
 scratch=ROOT.parent/'tmp';scratch.mkdir(exist_ok=True)
@@ -66,7 +67,11 @@ def poller(i):
             lp=parse_raft_status(text);node,groups=parse_raft(text)
             assert lp['node']==node==i and set(groups)=={0,2} and set(lp['groups'])=={0,2},text
             status_us[i].append(elapsed);last_status[i]=text
-            tick,waslate=pace(tick,1/a.hz);poll_late[i]+=waslate
+            if a.catch_up_polls:
+                tick+=1/a.hz;wait=tick-time.monotonic();poll_late[i]+=wait<0
+                stop.wait(max(0,wait))
+            else:
+                tick,waslate=pace(tick,1/a.hz);poll_late[i]+=waslate
     except BaseException as e:errors.append(f'poller{i}: {e!r}');stop.set()
 def statter():
     tick=start
@@ -107,7 +112,7 @@ try:
                status={i:quantiles(v) for i,v in status_us.items()},poll_late=poll_late,verified_files=len(versions),packing=packing)
     assert all(n>=a.seconds*a.rate*.8 for n in counts),(counts,late)
     assert len(stat_us)>=a.seconds*8,len(stat_us)
-    assert all(len(v)>=a.seconds*a.hz*.8 for v in status_us.values()),{i:len(v) for i,v in status_us.items()}
+    assert all(len(v)>=a.seconds*a.hz*(.98 if a.catch_up_polls else .8) for v in status_us.values()),{i:len(v) for i,v in status_us.items()}
     (a.out/'last-status.json').write_text(json.dumps(last_status,indent=2))
     ok=True
 except BaseException:

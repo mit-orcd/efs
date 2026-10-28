@@ -2,7 +2,7 @@
 """Three-repeat AF medians/min/max; histogram quantiles are upper bounds."""
 import argparse,json,re,statistics
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('capture',type=Path);a=p.parse_args()
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('capture',type=Path);p.add_argument('--rates',nargs='+',type=int,default=[1,10,50]);a=p.parse_args()
 rows=[]
 for f in sorted(a.capture.glob('trial-*/result.json')):
  d=json.loads(f.read_text());assert d['verdict']=='PASS' and not d['errors'] and d['verified_files']==128,f
@@ -30,7 +30,7 @@ for f in sorted(a.capture.glob('trial-*/result.json')):
   if values:row['raft_'+key+'_us']=max(values)
  rows.append(row)
 summary={}
-for hz in [1,10,50]:
+for hz in a.rates:
  group=[r for r in rows if r['hz']==hz];assert len(group)==3,(hz,len(group));summary[hz]={}
  for k in set.intersection(*(set(r) for r in group)):
   if isinstance(group[0][k],(float,int)):

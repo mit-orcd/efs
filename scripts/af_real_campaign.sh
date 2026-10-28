@@ -33,7 +33,7 @@ for transport in tcp rdma;do
  mkdir "$art/$transport";n=0
  for hz in 1 10 50 10 50 1 50 1 10;do
   n=$((n+1));echo "${transport}_${n}_${hz}Hz" > "$art/stage"
-  (cd "$root/measure/src";python3 -u scripts/af_measure.py --out "$art/$transport/trial-$n-${hz}hz" --hz "$hz" --seconds 60 --rate 5 --transport "$transport" --address 172.16.4.150) > "$art/$transport/trial-$n-${hz}hz.log" 2>&1
+  (cd "$root/measure/src";python3 -u scripts/af_measure.py --out "$art/$transport/trial-$n-${hz}hz" --hz "$hz" --seconds 60 --rate 5 --transport "$transport" --address 172.16.4.150 --catch-up-polls) > "$art/$transport/trial-$n-${hz}hz.log" 2>&1
  done
 done
 echo FINISHED > "$art/stage"
