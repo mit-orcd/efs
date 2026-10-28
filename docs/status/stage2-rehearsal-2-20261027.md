@@ -1,10 +1,10 @@
 # Task P — second Stage 2 rehearsal
 
-`agent/devel-task-p`, base `24dad8e4b`: TOTAL 0 FAIL 0 NOTRUN 2 topology runs, pending nuc handoff; this is not a make-test result. No base comparison yet. Evidence: `docs/status/stage2-rehearsal-2-20261027.md`. Both loopback matrices and final code gate NOTRUN. No product finding yet.
+`agent/devel-task-p`, base `24dad8e4b`: TOTAL 0 FAIL 0 NOTRUN 2 topology runs, preparing intel2; this is not a make-test result. No base comparison yet. Evidence: `docs/status/stage2-rehearsal-2-20261027.md`. Both loopback matrices and final code gate NOTRUN. No product finding yet.
 
 ## Scope and current state
 
-**NOTRUN, awaiting the coordinator's nuc release.** Task P runs all selected
+**Preparing intel2 after the user authorized any available host.** Task P runs all selected
 Stage 2 gates, serially for loopback-3 and loopback-5, then the eight-job
 `make test-all` gate. The assigned work excludes product fixes: a product
 failure gets a K row and retained trace. Driver, gate and environment defects
@@ -14,7 +14,7 @@ external repository is modified.
 The base matrix validates: 26 items, nine topologies. Both requested
 loopback topologies select all 24 named gates. Each also records its final
 identity check. Raw results will be retained outside Git under
-`nuc:/home/maik/efs-artifacts/taskP-20261027/`; no run has started and no
+`intel2:/home/maik/efs-artifacts/taskP-20261027/`; no run has started and no
 closed manifest is claimed yet.
 
 A read-only host check found no running EFS daemon/client, but three Task H
@@ -22,6 +22,15 @@ mounts remain under `~/efs-taskH-repair-20261027/attempt-{37,40,43}`.
 Task H's chat still describes a nuc resync investigation. Those mounts and
 retained trees are not Task P's to clear. Task I moved later qualification
 to xorinox and node9900; that alone is not a coordinator handoff of nuc.
+
+Intel2 preflight: no EFS processes or mounts, no screen jobs, eight CPUs,
+FUSE 3.16.2, approximately 12 GiB available RAM and 838 GiB free disk.
+CPU samples were idle; initial load averages reflect earlier work.
+
+The committed `scripts/task_p_rehearsal.py` serializes build, regressions,
+both full matrices, manifest verification and the final code gate. It
+refuses to advance while Task P processes or mounts remain. Gate failures
+remain failures; no product source changes are authorized.
 
 ## Driver correction prepared
 
@@ -39,12 +48,12 @@ Checks completed locally:
 - `python3 tests/test_qualify_driver.py`: incomplete on macOS. After loopback
   socket permission was granted it reached the Linux-only `/proc/PID/stat`
   identity step and failed there; no driver regression PASS is claimed.
-  The spawned stub was checked absent. The complete test must run on nuc.
+  The spawned stub was checked absent. The complete test must run on Linux.
 
 ## Planned method and comparisons
 
 Freeze the current source and record its full commit, archive hash, build
-identity and tracked-source manifest. Build privately on released nuc with
+identity and tracked-source manifest. Build privately on idle intel2 with
 `EFS_FUSE_PREFIX=/usr`, eight build jobs. Use detached screen, private TMPDIR,
 free 19xxx ports and owned fixture roots only. Run:
 
