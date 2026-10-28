@@ -1017,6 +1017,19 @@ def g_two_client(q, g):
                f'{shlex.quote(a["path"])} {shlex.quote(b["path"])} --results {shlex.quote(res)}')
         host = a['host']
     elif a['path'] == b['path']:
+        if 'remount' not in q.allow:
+            return NOTRUN, 'remote two-client preparation needs --allow remount'
+        rc, text = g.run('prepare', a['host'],
+            f'cd {shlex.quote(src)} && python3 tests/posix/posix_2client.py --prepare {shlex.quote(a["path"])}')
+        if rc:
+            return FAIL, 'two-client fixture preparation: ' + outcome_from_rc(rc, text)[1]
+        g.step('remount', f'remote two-client fixture prepared on {a["host"]}; clean remount {b["host"]}')
+        rc, text = q.control.client_stop(g, b)
+        if rc:
+            return stop_failure(q, text, 'two-client preparation stop failed: ', rc)
+        rc, text = q.control.client_start(g, b)
+        if rc:
+            return FAIL, 'two-client preparation remount failed: ' + outcome_from_rc(rc, text)[1]
         res = str(q.work / 'scratch' / g.gate.name / 'results.tsv')
         (q.work / 'scratch' / g.gate.name).mkdir(parents=True, exist_ok=True)
         cmd = (f'cd {shlex.quote(str(ROOT))} && python3 tests/posix/posix_2client.py --remote '
