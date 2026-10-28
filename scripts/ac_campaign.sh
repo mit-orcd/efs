@@ -65,3 +65,5 @@ else
  done
 fi
 echo FINISHED > "$art/stage"
+# Preserve INCOMPLETE/FAIL in the controller receipt as well as gate-exit.
+exit "${gate_rc:-0}"

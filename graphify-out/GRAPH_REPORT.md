@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `08a1606dfeb8fbc48396264004ad7de0ac94fcf2`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 16,669 nodes, 69,119 directed typed edges, 520 communities.
+Source base: `a0188f940f62a27ac6a5ec88371e55ec127ea654`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 16,710 nodes, 69,237 directed typed edges, 499 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -17,22 +17,22 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 6
-- `calls`: 26129
+- `calls`: 26144
 - `case_of`: 116
-- `contains`: 25263
-- `defines`: 1902
+- `contains`: 25318
+- `defines`: 1905
 - `documents_finding`: 6
 - `exercises`: 6
-- `imports`: 6754
-- `imports_from`: 857
+- `imports`: 6785
+- `imports_from`: 861
 - `indirect_call`: 661
 - `inherits`: 16
 - `invokes`: 2
 - `mentions_symbol`: 2219
 - `method`: 637
-- `rationale_for`: 1255
+- `rationale_for`: 1258
 - `references`: 2101
-- `references_path`: 1093
+- `references_path`: 1100
 - `regression_for`: 6
 - `uses`: 90
 
@@ -44,7 +44,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1457}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1462}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.

@@ -402,7 +402,7 @@ the separate data-commit correctness fixes.
   and important failure/role-change evidence. Gate: deterministic slow/full log
   sink, concurrent proposals and status, shutdown and sanitizer checks; measure
   mutex hold/wait and Raft progress with diagnostics enabled and disabled.
-- [ ] **AC — Avoid unused RDMA totals in routine I/O logging.**
+- [x] **AC — Avoid unused RDMA totals in routine I/O logging.**
   `src/server/iostats.c::efs_iostats_dump` uses `efs_iostats_snapshot`, which
   calls `src/common/rdma.c::efs_rdma_totals`: a scan of 4,096 registry slots
   under `g_reg_lock`, also used by completion dispatch and connection lifetime
@@ -412,9 +412,12 @@ the separate data-commit correctness fixes.
   lock/scan, management totals still include live and retired connections,
   concurrent connect/close/poll is safe, TCP/no-RDMA builds work. Measure poller
   interference and status cost across connection counts.
-  **IN PROGRESS on `agent/devel-task-ac`**, base `1d2852da4`, candidate
-  `5f9ddae71`; TCP/intel1 and RDMA/node9901 comparisons active, no measured
-  slowdown or speedup claimed yet ([AC evidence](ac-iostats-rdma-scan-20261028.md)).
+  **Qualified within executed scope on `agent/devel-task-ac`**, tested
+  `5f9ddae71`, base `1d2852da4`: intel1 full gate546/0FAIL/12NOTRUN
+  (host limits, INCOMPLETE); node9901 native RDMA/management PASS. Three-repeat
+  TCP/RDMA measurements prove scans36→0; no consistent speedup, TCP throughput
+  median0.36% lower. Shared occupancy disclosed; raw evidence retained and
+  scratch pruned ([AC evidence](ac-iostats-rdma-scan-20261028.md)).
 - [ ] **AD — Bound contention from always-on counters.**
   `src/server/iostats.c::efs_iostats_add` updates shared per-class atomic
   counters, latency sums/maxima and a last-64 sample ring on GET/PUT/disk-write
