@@ -1602,6 +1602,11 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+`graphify-review-fixes` from devel `063154e0e815`; infrastructure-error retry,
+shared byte/geometry/KV helpers and SETATTR codec implemented. Focused checks
+PASS; Linux full-suite RUNNING at `c0586c891`, final-source `5d403b68f` queued
+behind it. Prior header/test build failures retained. Not merged, pushed or deployed.
+
 Reviewed and reorganized October 15, 2026. This directory is the work queue and
 acceptance index; [backlog](../backlog/README.md) holds detailed work items and
 parked ideas. W numbers identify work, not priority. Explicit human direction
