@@ -2,6 +2,10 @@
 #include "efs/protocol.h"
 #include "efs/put_ticket.h"
 #include <pthread.h>
+#include <poll.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -272,7 +276,15 @@ void efs_client_stripe_closed(const struct efs_put_ticket *ticket)
     pthread_mutex_unlock(&commit_mu);
 }
 
-struct commit_job { efs_node_id_t node; uint64_t target, epoch, deadline; int rc; };
+/* Reserve time inside the existing sweep bound for metadata proof. This is
+ * not a shorter COMMIT deadline: every worker keeps the original deadline
+ * and is joined before its stack-owned job or notification pipe is released. */
+#define COMMIT_PROOF_HEADROOM_MS 15000u
+struct commit_job {
+    efs_node_id_t node;
+    uint64_t target, epoch, deadline;
+    int rc, done, notify_fd;
+};
 
 /* One COMMIT. rc OK with the reply's verifier in epoch, or the failure. */
 static void *commit_one(void *arg)
@@ -314,6 +326,9 @@ static void *commit_one(void *arg)
             break;
     }
     efs_client_rpc_set_deadline_ms(saved);
+    __atomic_store_n(&j->done, 1, __ATOMIC_RELEASE);
+    /* At most COMMIT_NODES one-byte notices: the pipe cannot fill. */
+    while (write(j->notify_fd, "x", 1) < 0 && errno == EINTR) {}
     return NULL;
 }
 
@@ -355,6 +370,58 @@ static int sweep_expired(uint64_t deadline)
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now)) return 1;
     return (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000 >= deadline;
+}
+
+/* Read job results only after their release-published completion. Missing
+ * replies never prove a fragment durable; epochs and ACK watermarks still
+ * bind every positive proof to this snapshot. */
+static int commit_quorum_ready(const struct stripe *snap, uint32_t ns,
+                               const struct commit_job *jobs, const int *slot)
+{
+    for (uint32_t k = 0; k < ns; k++) {
+        unsigned durable = 0;
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            int at = slot[snap[k].nodes[i]];
+            if (snap[k].state[i] == FRAG_DURABLE ||
+                (snap[k].state[i] == FRAG_PENDING && at >= 0 &&
+                 __atomic_load_n(&jobs[at].done, __ATOMIC_ACQUIRE) &&
+                 jobs[at].rc == EFS_OK && snap[k].seq[i] <= jobs[at].target &&
+                 snap[k].epoch[i] == jobs[at].epoch))
+                durable++;
+        }
+        if (durable < 2) return 0;
+    }
+    return 1;
+}
+
+/* Normally wait for all COMMITs, so a healthy fsync needs no degraded mark.
+ * A stalled third member must not consume the metadata proof's whole budget.
+ * Once two valid fragments per stripe are available in the reserved window,
+ * proceed with proof while that member's original request remains in flight.
+ * poll uses an elapsed-time timeout, avoiding wall-clock condition deadlines. */
+static void commit_wait_proof(struct commit_job *jobs, int n, int fd,
+                              const struct stripe *snap, uint32_t ns,
+                              const int *slot, uint64_t proof_at, uint64_t deadline)
+{
+    for (;;) {
+        int complete = 1;
+        for (int i = 0; i < n; i++)
+            if (!__atomic_load_n(&jobs[i].done, __ATOMIC_ACQUIRE)) complete = 0;
+        if (complete) return;
+        struct timespec ts;
+        if (clock_gettime(CLOCK_MONOTONIC, &ts)) return;
+        uint64_t now = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        if (now >= deadline || (now >= proof_at && commit_quorum_ready(snap, ns, jobs, slot)))
+            return;
+        uint64_t until = now < proof_at ? proof_at : deadline;
+        struct pollfd event = {.fd=fd, .events=POLLIN};
+        int rc = poll(&event, 1, (int)(until - now));
+        if (rc < 0 && errno != EINTR) return;
+        if (rc > 0 && (event.revents & POLLIN)) {
+            char notices[COMMIT_NODES];
+            (void)read(fd, notices, sizeof(notices));
+        }
+    }
 }
 
 /* Prove the recorded stripes of `ino` (all of them when `all`). */
@@ -402,6 +469,18 @@ static int stripe_prove(efs_ino_t ino, int all)
     if (!ns)
         return EFS_OK; /* nothing this client wrote is unproven */
 
+    int completion[2];
+    if (pipe(completion)) { free(snap); return EFS_ERR_IO; }
+    if (fcntl(completion[0], F_SETFD, FD_CLOEXEC) ||
+        fcntl(completion[1], F_SETFD, FD_CLOEXEC)) {
+        close(completion[0]); close(completion[1]); free(snap);
+        return EFS_ERR_IO;
+    }
+    uint64_t start_ms = (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    uint64_t reserve = COMMIT_PROOF_HEADROOM_MS;
+    uint64_t available = deadline > start_ms ? deadline - start_ms : 0;
+    if (reserve > available / 4) reserve = available / 4;
+    uint64_t proof_at = deadline - reserve;
     uint64_t need = 0;
     for (uint32_t k = 0; k < ns; k++)
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
@@ -412,16 +491,15 @@ static int stripe_prove(efs_ino_t ino, int all)
         if (!(need & (1ull << node)))
             continue;
         jobs[n] = (struct commit_job){ .node = node, .target = target[node],
-                                       .deadline = deadline, .rc = EFS_ERR_NET };
+                                       .deadline = deadline, .rc = EFS_ERR_NET,
+                                       .notify_fd = completion[1] };
         slot[node] = n;
         started[n] = pthread_create(&th[n], NULL, commit_one, &jobs[n]) == 0;
         if (!started[n])
             commit_one(&jobs[n]);
         n++;
     }
-    for (int i = 0; i < n; i++)
-        if (started[i])
-            pthread_join(th[i], NULL);
+    commit_wait_proof(jobs, n, completion[0], snap, ns, slot, proof_at, deadline);
 
     /* Fold the COMMIT verdicts into the live records (a concurrent fsync
      * may have proven or retired some meanwhile). */
@@ -434,7 +512,8 @@ static int stripe_prove(efs_ino_t ino, int all)
         }
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             int s = slot[p->nodes[i]];
-            if (p->state[i] != FRAG_PENDING || s < 0 || jobs[s].rc != EFS_OK ||
+            if (p->state[i] != FRAG_PENDING || s < 0 ||
+                !__atomic_load_n(&jobs[s].done, __ATOMIC_ACQUIRE) || jobs[s].rc != EFS_OK ||
                 p->seq[i] > jobs[s].target)
                 continue;
             p->state[i] = p->epoch[i] == jobs[s].epoch ? FRAG_DURABLE : FRAG_LOST;
@@ -534,6 +613,11 @@ static int stripe_prove(efs_ino_t ino, int all)
             fprintf(stderr, "%s: %u more stripes without proof\n", what, logged - 8);
         rc = EFS_ERR_IO;
     }
+    /* Even an early proof cannot release stack jobs or the pipe while a
+     * worker still owns them. Their original absolute deadlines are intact. */
+    for (int i = 0; i < n; i++)
+        if (started[i]) pthread_join(th[i], NULL);
+    close(completion[0]); close(completion[1]);
     efs_client_rpc_set_deadline_ms(parent);
     free(snap);
     return rc;

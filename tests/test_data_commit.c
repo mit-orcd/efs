@@ -34,7 +34,7 @@ static struct efs_conn conns[NN];
 static int commits[NN], fail_io[NN], fail_net[NN], die_in_commit[NN];
 static int hold[NN];          /* reply withheld while set */
 static int down[NN];          /* in cooldown and not listening */
-static uint64_t epochs[NN];
+static uint64_t epochs[NN], commit_deadlines[NN];
 static __thread uint64_t deadline;
 uint64_t efs_client_rpc_deadline_ms(void) { return deadline; }
 void efs_client_rpc_set_deadline_ms(uint64_t d) { deadline = d; }
@@ -46,6 +46,7 @@ int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *p, uint32_t 
 {
     int id = (int)(c - conns);
     assert(type == EFS_MSG_DATA_COMMIT && !p && !n);
+    __atomic_store_n(&commit_deadlines[id], efs_client_rpc_deadline_ms(), __ATOMIC_RELEASE);
     __atomic_fetch_add(&commits[id], 1, __ATOMIC_ACQ_REL);
     return __atomic_load_n(&fail_net[id], __ATOMIC_ACQUIRE) ? -1 : 0;
 }
@@ -93,7 +94,8 @@ int efs_client_rpc_degraded_mark(efs_ino_t ino, uint64_t inode_gen, uint64_t obj
     assert(inode_gen == 5 && object == ino * 1000 + ci);
     __atomic_store_n(&metadata_deadline, efs_client_rpc_deadline_ms(), __ATOMIC_RELEASE);
     if (expire_during_mark) __atomic_store_n(&test_clock_jump_ms, 60001, __ATOMIC_RELEASE);
-    marks++; mark_ino = ino; mark_ci = ci; mark_fi = fi; mark_node = node;
+    mark_ino = ino; mark_ci = ci; mark_fi = fi; mark_node = node;
+    __atomic_fetch_add(&marks, 1, __ATOMIC_RELEASE);
     if (publish_during_mark) {
         struct efs_chunk_rec rec = {.ino=ino, .chunk_index=ci,
             .chunk_generation=object, .file_generation=inode_gen};
@@ -143,6 +145,78 @@ static void *do_fsync(void *arg)
     f->rc = efs_client_data_commit(f->ino);
     __atomic_store_n(&f->done, 1, __ATOMIC_RELEASE);
     return NULL;
+}
+
+static void wait_for_marks(unsigned count)
+{
+    for (unsigned i = 0; i < 2000 && __atomic_load_n(&marks, __ATOMIC_ACQUIRE) < (int)count; i++)
+        usleep(1000);
+    assert(__atomic_load_n(&marks, __ATOMIC_ACQUIRE) >= (int)count);
+}
+
+/* Hold all replies until the request deadlines are installed, advance the
+ * existing test clock into the real production headroom window, then release
+ * only nodes 1 and 2. Their completion notices wake the proof waiter. */
+static void release_commit_quorum(void)
+{
+    for(int n=1;n<=3;n++) {
+        for(unsigned i=0;i<2000 && !__atomic_load_n(&commits[n],__ATOMIC_ACQUIRE);i++)usleep(1000);
+        assert(__atomic_load_n(&commits[n],__ATOMIC_ACQUIRE));
+    }
+    __atomic_store_n(&test_clock_jump_ms,45001,__ATOMIC_RELEASE);
+    __atomic_store_n(&hold[1],0,__ATOMIC_RELEASE);
+    __atomic_store_n(&hold[2],0,__ATOMIC_RELEASE);
+}
+
+static void test_slow_commit_headroom(void)
+{
+    /* B6: the third COMMIT is still held when the other two verifiers and
+     * ACK watermarks prove the stripe. Metadata must run before joining it,
+     * but fsync must not return/release stack jobs until the worker drains. */
+    assert(!live()); heal(); reset();
+    assert(put(967,0,1,2,3,7)==EFS_OK);
+    for(int i=1;i<=3;i++) __atomic_store_n(&hold[i],1,__ATOMIC_RELEASE);
+    struct fsync_thread f={.ino=967};
+    assert(!pthread_create(&f.t,NULL,do_fsync,&f));
+    release_commit_quorum();
+    wait_for_marks(1);
+    assert(!__atomic_load_n(&f.done,__ATOMIC_ACQUIRE));
+    assert(metadata_deadline && mark_node==3);
+    assert(metadata_deadline==commit_deadlines[1] && metadata_deadline==commit_deadlines[3]);
+    __atomic_store_n(&hold[3],0,__ATOMIC_RELEASE);
+    pthread_join(f.t,NULL);
+    assert(f.rc==EFS_OK && !live() && marks==1);
+    test_clock_jump_ms=0;
+
+    /* No mark from a merely successful COMMIT of a different incarnation:
+     * the headroom path still needs two correctly bound durable fragments. */
+    reset(); assert(put(968,0,1,2,3,7)==EFS_OK); epochs[2]++;
+    for(int i=1;i<=3;i++) __atomic_store_n(&hold[i],1,__ATOMIC_RELEASE);
+    fail_io[3]=1;
+    f=(struct fsync_thread){.ino=968};
+    assert(!pthread_create(&f.t,NULL,do_fsync,&f));
+    release_commit_quorum();
+    usleep(20000);
+    assert(!__atomic_load_n(&marks,__ATOMIC_ACQUIRE) && !__atomic_load_n(&f.done,__ATOMIC_ACQUIRE));
+    __atomic_store_n(&hold[3],0,__ATOMIC_RELEASE); pthread_join(f.t,NULL);
+    assert(f.rc==EFS_ERR_IO && live()==1 && !marks);
+    test_clock_jump_ms=0;
+    /* Clean this deliberately unprovable object only by exact, fresh absence. */
+    object_rc=EFS_OK; object_live=0; epochs[3]++; heal();
+    assert(efs_client_data_commit(968)==EFS_OK && !live());
+    object_rc=EFS_ERR_NET; object_live=1;
+
+    /* An early mark failure remains EIO and retains the record. */
+    reset(); assert(put(969,0,1,2,3,7)==EFS_OK); mark_rc=EFS_ERR_NET;
+    for(int i=1;i<=3;i++) __atomic_store_n(&hold[i],1,__ATOMIC_RELEASE);
+    f=(struct fsync_thread){.ino=969};
+    assert(!pthread_create(&f.t,NULL,do_fsync,&f)); release_commit_quorum(); wait_for_marks(1);
+    assert(!__atomic_load_n(&f.done,__ATOMIC_ACQUIRE));
+    __atomic_store_n(&hold[3],0,__ATOMIC_RELEASE); pthread_join(f.t,NULL);
+    assert(f.rc==EFS_ERR_IO && live()==1);
+    test_clock_jump_ms=0;
+    mark_rc=EFS_OK; assert(efs_client_data_commit(969)==EFS_OK && !live());
+    reset();
 }
 
 static void test_sweep_deadline(void)
@@ -212,6 +286,7 @@ int main(int argc, char **argv)
     assert(argc == 1 || (argc == 2 &&
            (!strcmp(argv[1], "deadline") || !strcmp(argv[1], "retirement"))));
     for (int i = 1; i < NN; i++) epochs[i] = 101;
+    if (argc == 1) test_slow_commit_headroom();
     if (argc == 1 || !strcmp(argv[1], "deadline")) test_sweep_deadline();
     if (argc == 1 || !strcmp(argv[1], "retirement")) test_retired_objects();
     if (argc > 1) return 0;
