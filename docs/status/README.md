@@ -18,15 +18,18 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[Task I review](task-i-20261026.md): qualification **INCOMPLETE**.
+[Task I review](task-i-20261026.md): live protocol **PASS (scoped), complete**;
+F1/release coverage remains INCOMPLETE.
 Current candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
 observer log I/O. Fresh gates: node9900 **527 / 0 FAIL / 18 NOTRUN**,
 AMD **527 / 0 FAIL / 14 NOTRUN**; both native RDMA **9/9 PASS**.
 Uninstrumented node9900 RDMA and AMD TCP hours **PASS (scoped)**: 2080
 exact each, pack errors 0/0, drains 77.8/78.9 s; independent RSS passes.
-Node9900 TCP is ACTIVE. Full host-limited gate acceptance and prior
-intermittent-failure investigation remain open. Prior results follow.
+Node9900 TCP also PASS: 2080 exact, pack errors 0/0, independent RSS within
+bounds, drain 147.0 s versus 150 s. Hardware pair exit 0; enclosing full
+gates retain host-limited NOTRUNs. Shared-client scope, narrow drain margin
+and prior intermittent root cause remain explicit. Prior results follow.
 
 `47ca08eaf` xorinox gate 518 / 0 FAIL / 13 NOTRUN, but hour FAIL stored
 data (+~56.8%); RSS PASS, 2080 exact, pack errors 0/0, drain 73.5 s.

@@ -355,3 +355,15 @@ full live acceptance is owed. AMD140 native RDMA9/9 PASS, gate FAIL1/526
 on GCC15's unchecked observer write result; checked-error fix native PASS.
 Drain correction: foreground writes already stop; only reads/queries continue.
 No drain threshold is changed and no prior failed qualification is closed.
+
+
+Task I final Oct 28 12:06 UTC: `a083dcbf3` measured live protocol **PASS
+(scoped), complete**. Node9900 hardware RDMA/TCP and AMD TCP hours each
+verify 2080 exact files, operation/packer errors 0, all five independent
+RSS series within 5%; drains 77.8/147.0/78.9 s. Hardware pair exit 0;
+node9900 scope remains shared-client, AMD's observed interval quiet.
+Both full 527-command gates have zero FAIL, with 18/14 disclosed NOTRUNs;
+native RDMA 9/9 each. F1/release coverage remains incomplete. The 147 s
+drain has only 3 s margin; prior intermittent RSS/drain failure cause is
+not proven by this pass. Failed/investigation stores stay on host.
+[Final counters, hashes and limitations](task-i-20261026.md#final-tcp-pass-and-task-i-live-protocol-completion--oct-28-1206-utc).
