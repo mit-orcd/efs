@@ -1,5 +1,11 @@
 # Project status — work queue and evidence
 
+[Stage 1 wakeup/polling tasks AS–AU](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--wakeups-and-polling-asau):
+**OPEN / implementation and measurements NOTRUN**, source reviewed at `7dc73fb68`:
+demand-read allocation polling, broad PUT-window wakeups, and repeated Raft
+eventfd kicks. Lost-wakeup, overflow, deadline and progress gates required;
+distinct from existing tasks, with no new K defect or measured gain claimed.
+
 [Stage 1 disk-I/O tasks AP–AR](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--disk-io-and-write-amplification-apar):
 **OPEN / implementation and measurements NOTRUN**, source reviewed at `b42015536`:
 separate segment payload/tail reads, segment directory-barrier sharing, and

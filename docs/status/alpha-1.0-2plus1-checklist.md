@@ -40,7 +40,7 @@ Alpha 1.0 is reached in three stages, in this order:
   blocks again.
 - **Performance comes last.** No performance work is done before Stage 3,
   except where a correctness gate needs it (bounded progress, D4), and the
-  explicitly authorized Stage 1 hot-path tasks AB–AR below (Oct 28).
+  explicitly authorized Stage 1 hot-path tasks AB–AU below (Oct 28).
   Performance changes never relax correctness or durability checks.
 - **Stage 3 stays inside alpha.** A performance change that needs 2+2, more
   or redistributed metadata groups, leader or voter redistribution (W66),
@@ -762,6 +762,82 @@ retained raw evidence and unchanged correctness/deadline requirements. Distingui
 logical bytes, syscall bytes, filesystem/device write amplification and barrier
 counts. O_DIRECT is not a durability guarantee. No format change, new knob,
 removed barrier or performance PASS is authorized by merely listing a candidate.
+
+### Stage 1 additional letter tasks — wakeups and polling (AS–AU)
+
+**User-directed extension, October 28; source reviewed at `7dc73fb68`.**
+All three are **OPEN / implementation and measurements NOTRUN**. Graph paths
+through `demand_read_alloc`, `put_win_close` and `host_pump_kick` were verified
+against their callers, wait predicates and source bodies. These establish work
+that occurs, not measured scheduler overhead or a correctness defect. Existing
+failures, K counts and acceptance verdicts are unchanged.
+
+- [ ] **AS — Demand-read capacity: replace repeated timed allocation attempts with bounded notification.**
+  `src/client/read.c::demand_read_alloc` first tries allocation and trims the
+  read cache, then retries allocation with 1 ms sleeps for the first 100 failed
+  loop attempts and 10 ms thereafter. It stops at the inherited RPC deadline,
+  or its existing approximately 30 s fallback without one. Capacity release in
+  `src/client/bufpool.c::efs_buf_free` does not notify these sleepers. This only
+  occurs under allocation pressure, not on every healthy read. Evaluate a
+  capacity-generation/predicate wait with atomic check-and-enqueue against
+  release, avoiding both missed refunds and a broadcast herd. Cover all capacity
+  return paths, including thread-credit destruction, rather than only body free;
+  allocation failure unrelated to budget must still terminate within the bound.
+  Preserve aggregate accounting, read headroom, lock order, fairness to writers,
+  shutdown and deadlines. Gates: bufpool and allocator tests plus a forced free
+  between failed allocation and sleep, mixed allocation sizes, many waiting
+  readers, exhausted writers, thread exit and no capacity return. Measure failed
+  attempts, timed wakeups, context switches and release-to-read latency. Separate
+  this wait policy from AG's allocator critical section and AL's scratch sizing.
+- [ ] **AT — PUT-window completion: wake affected predicates instead of every waiter.**
+  `src/client/write.c::put_win_close` broadcasts on the single `put_win_cv` after
+  every close, even while that inode still has open windows. `put_win_wait`
+  checks an inode-specific predicate under `put_win_mu`, but also wakes at most
+  every 50 ms to recheck the deadline. Thus unrelated inode waiters can wake,
+  acquire the same mutex and go back to sleep. The overflow state deliberately
+  makes every inode busy and is an exception requiring broader notification.
+  Evaluate notification on relevant busy-to-ready transitions, with bounded
+  per-inode/sharded waiter ownership, and deadline waits that do not periodically
+  wake merely to rediscover an unchanged predicate. Do not replace broadcast
+  with an arbitrary single signal: it can select a waiter whose inode is still
+  busy and strand the eligible one. Preserve overflow/global release, multiple
+  waiters per inode, slot reuse, errors and the inherited operation deadline.
+  Gates: `test_put_window_deadline.py`, deterministic simultaneous inode windows,
+  partial closes, overflow entry/exit, completion-before-sleep and shutdown;
+  concurrent flush/read/REPORT exact-data checks. Measure wakes per satisfied
+  waiter, lock reacquisition, timeout accuracy and p95 under independent-file
+  writes. This is not P3-D's COMMIT worker reuse or AM's degraded-object table.
+- [ ] **AU — Raft pump kicks: coalesce notifications without losing work.**
+  `src/server/raft_host.c::host_pump_kick` performs a nonblocking eventfd write
+  for every call from proposal/read/inbox/control paths; the pump later polls
+  and drains the eventfd. The kernel counter already combines notifications,
+  so one kick does not imply one context switch. The candidate is avoiding
+  redundant write syscalls while work is already signaled or being drained,
+  not adding an event-driven pump (it already exists). Evaluate a race-proven
+  pending-work notification protocol or bounded producer batching only after
+  measuring kick rate versus drains, useful pump cycles and scheduler wakeups.
+  An arrival between drain, clearing notification state and sleep must either
+  be processed or leave a readable event; no queue work may rely on a missed
+  wake being rescued by the timer. Preserve retained-slice handling in
+  `host_pump_poll_timeout`, lock-free kick behavior, shutdown, read requests,
+  persistence completion, and wall-time Raft ticks/election cadence. No spinning
+  replacement, arbitrary batching delay or change to durability ordering.
+  Gates: host inbox/read admission coverage and deterministic arrival at each
+  drain/clear/poll boundary, retained work after a bounded slice, eventfd EINTR/
+  EAGAIN, stop and heavy proposals; then loaded leader/follower failover tests.
+  This concerns the Raft pump eventfd, not AI's RDMA completion lifetime lock,
+  AE's logging, or W123 checkpoint persistence.
+
+**Deduplication and acceptance:** GET/PUT worker pools already signal batch
+completion only when the last job finishes, queue-space signals are conditional
+on a previously full queue, and ordinary fragment reads already avoid the old
+per-fragment thread-pool hop. These are not missing optimizations. Keep required
+RDMA wakeups, lifetime synchronization and Raft proof notifications; do not infer
+that a condvar broadcast or timer is unnecessary merely from its presence.
+Apply AB–AR's exact-source, retained-evidence and unchanged-gate requirements.
+Measure idle/low-load and saturated cases, context switches and tail latency,
+including starvation and cancellation. No new switches or performance PASS
+claims; no implementation or live test was run for this review.
 
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 
