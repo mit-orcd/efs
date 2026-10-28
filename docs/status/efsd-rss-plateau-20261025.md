@@ -299,6 +299,8 @@ commands / 0 FAIL / 13 NOTRUN (1024 s +21 s build), its hour active.
 Earlier `03b50dcd5` node9900 TCP now has a full PASS: load RSS +0.44%,
 foreground 0.00%, all 2080 final payloads exact, pack errors 0/0, drain
 80.2 s. RDMA failure remains; the dedicated-mapping product's hardware
-RDMA is now active. AMD is not quiet due to another account's W123 work;
-its additional software-RDMA/gate/hour controller waits with strengthened
-all-account checks. No final memory-fix claim until active hours finish.
+RDMA is now active. AMD became quiet after W123; the first native RDMA
+gate FAILed during RTR setup (link-local GID, ENETUNREACH), not buffer
+registration. `5f07151c2` repairs the automatic RoCE GID default: all nine
+native software-RDMA commands PASS without an override; full TCP gate
+active, hour pending. No final memory-fix claim until active hours finish.

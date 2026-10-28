@@ -895,9 +895,9 @@ round says which physical or software limiter it hit.
   `47ca08eaf` repaired xorinox code gate 518 / 0 FAIL / 13 NOTRUN;
   unchanged hour active. Node9900 earlier `03b50dcd5` TCP full PASS,
   RDMA FAIL; repaired `47ca08eaf` hardware RDMA active, TCP follows.
-  AMD software-RDMA continuation `479df228c` (identical product) waits
-  for UID 1001 W123 work; all-account quiet checks/native regression
-  added. Historical failures preserved; final qualification INCOMPLETE.
+  AMD became quiet: `479df228c` RDMA setup FAIL, localized to link-local
+  GID selection. `5f07151c2` default repair native software-RDMA PASS 9/9,
+  full TCP gate active, hour pending; no GID override. Historical failures preserved; final qualification INCOMPLETE.
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;
   [evidence](f1-memory-concurrency-gates-20261025.md)):** `make leak-check`
