@@ -2,8 +2,9 @@
 """Task Z: record every removed-name refusal without starting a cluster.
 
 Build efsd and efs-fuse from this source, then run with --expected-build ID.
-Each invocation uses --help, so a missing refusal fails the audit without
-binding, opening a store or mounting. JSON lines are raw evidence: redirect
+Each probe omits required arguments, so a missing refusal fails the audit
+without binding, opening a store or mounting. Help/version deliberately
+bypass startup validation and are identity/control checks only. JSON lines: redirect
 outside Git. Existing test_env_removed.py separately checks real startup
 arguments, no store creation, and the clean-environment negative controls.
 """
@@ -39,9 +40,13 @@ def main():
                                  capture_output=True, text=True, timeout=20)
         if control.returncode or ' was removed (' in control.stderr:
             raise RuntimeError(f'{program}: clean help control failed: {control.stderr}')
+        control = subprocess.run([str(binary)], env=env,
+                                 capture_output=True, text=True, timeout=20)
+        if control.returncode == 0 or ' was removed (' in control.stderr:
+            raise RuntimeError(f'{program}: missing-arguments control failed: {control.stderr}')
         for name in names:
             for value in ('1', ''):
-                result = subprocess.run([str(binary), '--help'], env=dict(env, **{name: value}),
+                result = subprocess.run([str(binary)], env=dict(env, **{name: value}),
                                         capture_output=True, text=True, timeout=20)
                 ok = (result.returncode == 1 and
                       f'{program}: {name} was removed (' in result.stderr and
