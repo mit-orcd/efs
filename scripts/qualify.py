@@ -106,7 +106,7 @@ DEFAULT_FIXTURE = dict(
     d3_static_files=200, d3_writers=8, d3_queriers=4, d3_load_s=300, d3_io_deadline_s=10,
     d3_query_deadline_s=30, d3_index_wait_s=600,
     e4_small_per_member=5000, e4_large_per_member=2, e4_large_mib=256, e4_threads=16,
-    e4_query_deadline_s=30, e4_refresh_s=60, e4_reclaim_s=900, soak_hours=4)
+    e4_query_deadline_s=30, e4_refresh_s=60, e4_reclaim_s=900, soak_hours=4, soak_profile='endurance')
 
 
 def delete_command(path):
@@ -2390,7 +2390,7 @@ def g_plugin(name, spec):
                       seed=q.cluster.get('seed', ''), mount=(q.mount(0) or {}).get('path', ''),
                       peer_mount=(q.mount(1) or {}).get('path', ''),
                       transport=q.cluster.get('transport', ''),
-                      soak_hours=q.fixture['soak_hours'], candidate=q.cluster.get('candidate', 'unknown'))
+                      soak_hours=q.fixture['soak_hours'], soak_profile=q.fixture['soak_profile'], candidate=q.cluster.get('candidate', 'unknown'))
         if spec.get('requires'):
             need = spec['requires'].format(**values)
             rc, text = g.run('requires', host, f'test -e {shlex.quote(need)}', 60)
@@ -2503,11 +2503,11 @@ def default_plugins(cluster, extra):
                                    doc='D4 bounded progress under packing, indexing and KV compaction')}
     plugins['soak'] = dict(
         command='cd {source} && nice -n 10 python3 scripts/soak.py --work {gate_dir}/runtime '
-                '--out {gate_dir}/soak --hours {soak_hours} --source {candidate}',
+                '--out {gate_dir}/soak --hours {soak_hours} --profile {soak_profile} --source {candidate}',
         host=cluster.get('private', {}).get('host', 'local'),
         requires='{source}/scripts/soak.py', items='E4, D4',
         ledger='Scale/progress evidence (E4, D4)', deadline_s=18000,
-        doc='seeded five-to-seven-member private loopback soak; fixture.soak_hours (default four); not multi-host/RDMA qualification')
+        doc='seeded five-to-seven-member private loopback soak; fixture.soak_hours/profile (default four-hour endurance); not multi-host/RDMA qualification')
     plugins.update(cluster.get('plugins', {}))
     for spec in extra:
         name, _, command = spec.partition('=')

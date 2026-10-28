@@ -1602,6 +1602,8 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+Task P: [second Stage 2 rehearsal](../status/stage2-rehearsal-2-20261027.md) — NOTRUN, awaiting nuc handoff; loopback rehearsal soak selection corrected, no product finding yet.
+
 Reviewed and reorganized October 15, 2026. This directory is the work queue and
 acceptance index; [backlog](../backlog/README.md) holds detailed work items and
 parked ideas. W numbers identify work, not priority. Explicit human direction

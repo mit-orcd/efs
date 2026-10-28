@@ -67,6 +67,8 @@ spec=importlib.util.spec_from_file_location('qualify',ROOT/'scripts/qualify.py')
 q=importlib.util.module_from_spec(spec);spec.loader.exec_module(q)
 plugins=q.default_plugins({},[])
 assert 'soak' in plugins and '{soak_hours}' in plugins['soak']['command']
+assert '--profile {soak_profile}' in plugins['soak']['command']
+assert q.DEFAULT_FIXTURE['soak_profile'] == 'endurance'
 assert plugins['soak']['deadline_s']>=4*3600
 matrix=json.loads((ROOT/'scripts/qualify_matrix.json').read_text())
 assert not q.matrix_errors(matrix), q.matrix_errors(matrix)
