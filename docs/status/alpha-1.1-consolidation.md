@@ -25,10 +25,28 @@ and the alpha 1.0 feature/support matrix as actually released. No central servic
 mandatory tuning file or new user-visible behavior selector is introduced.
 
 The alpha 1.0 Stage 1 tasks AB–AX and Stage 3 P3-A–P3-F keep their present scope
-and gates. They are not silently deferred to 1.1. Record their final disposition
-at the 1.0 cut; 1.1 may build on their results without counting the same work twice.
-Any newly demonstrated in-scope correctness bug is handled in its owning release
-gate, not postponed because this plan prefers architectural cleanup.
+and gates until the 1.0 cut. At the cut each gets one of three dispositions,
+recorded on its checkbox: **closed** (measured, no change needed, or fixed and
+gated in 1.0); **1.1 input** (a measured cost that was not fixed in 1.0 and
+touches a boundary this plan consolidates — it enters the A11-A inventory as a
+requirement on that slice, not as 1.0 debt); or **1.0 blocker** (it
+demonstrated a correctness failure: it gets its K row and is fixed before the
+cut). Nothing is deferred silently, and nothing is done twice: an AB–AX fix
+that reshapes `write.c` publication, `raft_host.c` status or the buffer pool
+before 1.1 consolidates those same paths is work paid for twice, so unmeasured
+items in those paths wait for their measurement, and measured ones are fixed
+where the fix is local and otherwise become 1.1 input. Any newly demonstrated
+in-scope correctness bug is handled in its owning release gate, not postponed
+because this plan prefers architectural cleanup.
+
+The same rule applies to `agent/task-h-repair` (214 commits, +1,987/−404 lines
+across 30 source files at this writing, IN PROGRESS, unmerged): it is
+consolidation-shaped work (receipt replay, allocator reservation, finisher
+batching, resync image requests, packed-read re-probe) grown out of one
+finding. It is split, not merged whole: each correctness fix with a retained
+failure lands in 1.0 on its own branch under the K rule; the refactors become
+A11-B/A11-C input with their evidence pages, and the branch is retired once
+both halves are accounted for.
 
 ## Why this work is needed
 
@@ -46,6 +64,18 @@ facts, and callers currently participate in transitions across subsystem boundar
 Repairs have added valuable guards; consolidation must preserve those guards'
 proofs while reducing duplicated coordination. Ordinary and packed data also have
 separate implementations of similar buffer, I/O and durability work.
+
+**Baseline at `cb1a6a434` (A11-A refines these; every slice is judged against
+them).** `raft_host.c` 25,580 lines with 60 `h->mu` acquisition sites;
+`write.c` 9,445, `inode_rpc.c` 3,832, `meta_apply.c` 10,862. Nine register
+rows since Oct 23 are repairs to one surface, the client publication/REPORT/
+receipt path and its server side (K13, K14, K38, K39, K40, K43, K47, W166, and
+K32 as its performance face); that surface is where the alpha fixes landed and
+where the next consolidation pays off first. A11-A records, for each operation
+family: the number of call sites that decide completion or retry, the locks a
+REPORT or a read takes end to end, and the number of distinct identities a
+write carries (ticket, publication id, receipt, span base, epoch). Success is
+those counts going down with the failure oracles unchanged.
 
 The graph is navigation evidence only. It does not establish lock ownership,
 happens-before, persistence ordering or complete callback coverage. Every proposed
@@ -136,6 +166,42 @@ fresh-format qualification cluster and fail closed on unsupported data. This pla
 authorizes neither destruction of a particular cluster nor erasure of failed
 investigation evidence.
 
+## Proposed first slices (the user picks the order; record it as a D row)
+
+1. **Client publication coordinator** (A11-B, A11-E): one owner for a REPORT's
+   outcome and remaining obligations — retry identity, receipt resolution,
+   stale-span replay, unit abort, degraded marks — where today `write.c`,
+   `inode_rpc.c`, the dcache and the K38/K39/K40/K43 repairs each infer
+   completion. Oracles that must keep failing on the old code and passing on
+   the new: `test_k38_shared_chunk_pressure.py`, `test_pub_unit_forward_abort.py`,
+   `test_k43_coordinator_kill.py`, `test_get_integrity.py`, `test_report_stepdown.py`,
+   the K35 fsync-degraded and W166 tests. AM, AN, AV and the receipt half of
+   `task-h-repair` are inputs.
+2. **Management and status off the consensus path** (A11-C): `server_raft_host_status`,
+   the retired-replica routing of K44, `raft-mkfs`/`raft-resync` handling and the
+   W130/W165 halt behavior behind one narrow interface, with AF's published
+   snapshot as the mechanism if its measurement justifies it. Oracles: the K44
+   sweep test, `test_w130_dir_fault.py`, `test_k33_*`, `leader_placement.py`.
+3. **Storage path unification** (A11-D): ordinary and packed fragment I/O,
+   tails, directory barriers and placement (K37, K41, AP, AQ, AR inputs) over
+   one validated primitive set, differences kept explicit.
+4. **Client buffer and wait ownership** (A11-E): bufpool, chunk map, demand-read
+   and PUT-window waits (AG, AH, AS, AT inputs) with one lifetime owner per
+   object and one completion mechanism per wait condition.
+
+Slice 1 first: it is the surface with the most repairs and the most retained
+failure oracles, so its before/after is the most measurable.
+
+## Qualification cost per slice
+
+A slice that changes no wire or on-disk format is qualified by the loopback gate
+(`make test-all`, sanitizers) plus the live gates its oracles name; the full
+support matrix (D45 topologies: orcd-test in the 3/4/5/13-storage-host shapes,
+TCP and RDMA) runs **once**, on the integrated 1.1 candidate, with the alpha 1.0
+qualification driver and matrix unchanged. A slice that does change a format
+adds a fresh-format run of the affected gates on one real-host shape before it
+merges. This keeps 1.1 at one campaign, not one per slice.
+
 ## Execution and validation
 
 1. **Freeze the baseline.** Record the released alpha 1.0 source/build, support
@@ -181,6 +247,13 @@ mixed-build running cluster is required.
 - [ ] Matched baseline comparisons cover throughput, p95/p99 latency, CPU,
   memory, RPC/proof counts, disk bytes/barriers and wakeups where affected.
   Bounds agreed before each change are met; no unexamined small-workload regression.
+- [ ] Every AB–AX and P3 item carries its 1.0-cut disposition (closed, 1.1 input,
+  or 1.0 blocker) and every 1.1 input is traceable to the slice that consumed it;
+  `agent/task-h-repair` is split and retired as described above.
+- [ ] Each new boundary has its contract and oracle links in the code graph
+  (`sh scripts/rebuild-code-graph.sh`, `python3 tests/test_code_graph.py`), and
+  A11-A's diagrams cite `graphify path` output plus source lines, so the model
+  is reproducible from the tree.
 - [ ] Architecture, runbooks, status and graph describe the final implementation;
   retained evidence supports an explicit release decision. Tag/merge/push and
   deployment are separate actions, not outcomes of this planning document.
