@@ -1036,7 +1036,6 @@ tests/faults/meta/meta_apply.o: src/meta/meta_apply.c $(wildcard include/efs/*.h
 
 tests/faults/efsd: $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(FAULT_META_OBJS) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(FAULT_META_OBJS) $(LIB) $(LDFLAGS)
-
 # Task W: exercise the parked real LSM compactor, not a plain library whose
 # fault hook is compiled out. Reuse the daemon's fault KV object overrides.
 tests/faults/test_follower_bound: tests/test_follower_bound.c $(FAULT_KV_OBJS) $(LIB) .build_id.stamp
@@ -1086,6 +1085,7 @@ test: test-apply-wait
 # runs both and is what the gates run.
 .PHONY: test-long test-all
 test-long: all $(TEST_SPECIAL_BINS)
+	python3 tests/test_bench_published.py
 	./tests/faults/test_follower_bound --stalled-compactor
 	python3 tests/test_decoder_refusal.py
 	python3 tests/test_shutdown_blocked_io.py

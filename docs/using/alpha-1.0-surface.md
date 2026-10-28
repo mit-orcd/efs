@@ -33,7 +33,7 @@ build switch, no environment variable; findings F7 and F8 closed).
 | `efs-fuse` | in | Linux FUSE client; the only client in alpha (decided Oct 22, W152) |
 | `efs-mgmt` | in, the commands marked in below | Operator status and administration |
 | `scripts/server.sh`, `scripts/client.sh` | in | Start, stop and mount wrappers with orderly-stop checks (`server_processes.py`, `client_processes.py`) |
-| `efs-bench`, `blake3-bench` | out | Developer measurement tools; no user workflow depends on them |
+| `efs-bench`, `blake3-bench` | out | [Developer measurement tools](benchmarks.md); no user workflow depends on them |
 | `tests/cluster.sh`, devops and portal deployment scripts | out | Test-cluster harnesses, not shipped product; the portal is not in this repository |
 | NFS re-export | out | Decided out of alpha (user, Oct 22; beta backlog W152); the switch is removed (D42) |
 | macOS client | out | Decided out of alpha (user, Oct 22; W152) |

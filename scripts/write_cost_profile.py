@@ -3,7 +3,7 @@
 
 A fresh private 3-member TCP/O_DIRECT cluster per case. The measurement-only
 C client and FUSE each write one sequential file per writer. Optional
-bench mode preserves the unmodified benchmark's failure, not a valid baseline.
+bench mode uses the published efs-bench path with the same file/request shape.
 Includes final cluster data-commit; verifies every byte outside measurement.
 strace changes scheduling: timings/CPU describe this instrumented run, not IOR.
 """
@@ -328,7 +328,7 @@ def run_case(work, output, mode, io_size, writers, total):
     mount = None
     tracers = []
     result = dict(mode=mode, io_bytes=io_size, writers=writers, total_bytes=total, verdict='FAIL',
-                  layout='file-per-request' if mode == 'bench' else 'sequential-file-per-writer')
+                  layout='sequential-file-per-writer')
     try:
         c.start(1, quota='8G')
         c.start(2, join=1, quota='8G')
@@ -351,9 +351,9 @@ def run_case(work, output, mode, io_size, writers, total):
         if mode in ('bench', 'direct'):
             workload = ([str(work / 'write-cost-client'), c.ep(1), str(total),
                          str(io_size), str(writers)] if mode == 'direct' else
-                        [str(ROOT / 'efs-bench'), c.ep(1), '--meta', '--phases', 'create', '--keep',
-                         '--size', str(io_size), '--files', str(total // io_size), '--dirs', str(writers),
-                         '--workers', str(writers), '--export', 'default'])
+                        [str(ROOT / 'efs-bench'), c.ep(1), '--size', str(total),
+                         '--io-size', str(io_size), '--workers', str(writers),
+                         '--id', '170', '--export', 'default'])
             argv = ['strace', '-f', '-ff', '-qq', '-ttt', '-xx', '-s', '16', '-e',
                     'trace=sendmsg,writev,read,recvfrom,close', '-o', str(output / 'client-trace'),
                     *clock, *workload]
@@ -403,7 +403,7 @@ def run_case(work, output, mode, io_size, writers, total):
                       tickets_settled_success=settled_ok,
                       before=before, after=after,
                       measurement='create/write/publish plus cluster COMMIT and quiescence; tracing overhead included')
-        result['verification'] = verify(mount.path, total, io_size, writers if mode != 'bench' else None)
+        result['verification'] = verify(mount.path, total, io_size, writers)
         assert reports['report_sends'] > 0 and reports['report_sends'] == reports['report_replies'], dict(reports)
         for n in (1, 2, 3):
             (output / ('io-n%d.txt' % n)).write_text(checked([ROOT / 'efs-mgmt', 'io-stats', c.ep(n)], env=env))

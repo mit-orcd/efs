@@ -1652,6 +1652,17 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+
+[Task AA / W170 published benchmark](../status/w170-efs-bench-20261028.md):
+**FIXED on `agent/devel-task-aa`, not merged**; tested `fe785536e`, budget
+`5a971fb14`. Intel2 final **529/0 FAIL/10 NOTRUN**, INCOMPLETE for RDMA/header
+limits; baseline 528/0/12. Published client writes/reads, checked shutdown,
+unchanged-50ms timer fix, full-width metadata IDs and independent FUSE checks.
+All 12 matched rows verify 12 GiB; 4/6 timing pairs within 10%, no uniform
+agreement. Earlier timings overlap Task T's reported orphan; final new-test
+budget sample and matrix are afterward. Failures/traces kept, private scratch
+removed; no existing cluster or package changed. Task W integrated privately.
+
 [Wave 29 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`f3a447fa3`)**: Task Y, the known-defect register reconciled ([report](../status/k-register-reconciled-20261028.md)): both tables carry exactly one row for each K1–K52, each opening with one canonical disposition (11 FIXED, 0 VERIFIED, 35 VERIFY, 2 DECIDED, 2 CLOSED, 2 OPEN: K48 and K52), with every earlier cell kept as history; `scripts/check_k_register.py` enforces that in `make test` (`tests/test_k_register.py`). No row was promoted to VERIFIED and no gate was rerun. Merged together with D45's K36 scope note and topology row.
 
 [Task Y — K register reconciliation](../status/k-register-reconciled-20261028.md): reviewed wave-28 devel `9e4d66a8c`; 52 canonical rows in each table, 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN. K48/K52 remain OPEN; named live gates remain VERIFY. History preserved, stale merge/acceptance contradictions reported, structural checker in `make test`; no new live qualification or user decision.
@@ -1669,6 +1680,7 @@ without a scale-out write improvement. Evidence manifest verification and
 final health checks are recorded on the page. No release PASS.
 
 [Wave 28 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`c0081d095`; gate at `d951ca293`)**: Task S, K48 ([evidence](../status/k48-readdir-omission-20261028.md)): a directory page is published only if the directory's layout and used lanes are unchanged after its scan (bounded rescans, then BUSY rather than a short page), and lanes that became used during the scan are fenced before the page is served; `test_k48_readdir.py` reproduces the omission on the base. K48 stays OPEN: the original Task N capture lacks the missing name and RPC trace, so its exact cause is unproven. And Task U ([evidence](../status/k32-write-cost-profile-20261028.md)): K32 write-cost profile (FUSE tickets 5.66, sessions 0.48, publication 0.36 Raft entries/MiB), the direct-client harness, operator `raft-resync` admission BUSY retried within the W130 test's recovery deadline; IOR NOTRUN, D4 baseline failure open. Merge-time: `test_code_graph.py` (added unwired by the code-graph commit `3debca7ec`) is now in `make test-long`, and its git-dependent case reports NOTRUN in the gate's git-archive tree. intel2 `make test-all` at `d951ca293`: 526 commands in 702 s, 1 FAIL (that test case, fixed in `c0081d095` and rerun there: OK, one NOTRUN), 12 NOTRUN host limits.
+
 
 [Task W gate-host NOTRUN cleanup](../status/gate-notrun-cleanup-20261028.md):
 **coverage PASS / full gate INCOMPLETE**, `agent/devel-task-w` (not merged),
@@ -3531,6 +3543,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | serve-path-damaged-row | **W165** · the serve path's decode of a damaged stored directory row does not fail closed: a create into a splitting directory whose lane leader holds the damage fails `EIO` persistently instead of halting the group as the apply path does (W130) | correctness / fail-closed | FIXED (intel1 TCP loopback) on `agent/devel-task-f`, merged into devel (wave 16, `9b7a34583`): ten strict runs and two pooled gates PASS scoped, 509/0/14 at `525cf3816`; real-host/RDMA NOTRUN; private bulk retained (cleanup approval blocked) | [item](#w165) · [implementation](../status/w165-serve-path-damaged-row-20261026.md) · [original finding](../status/k22-k6-loopback-taskb-20261025.md) |
 | close-eio-flush-deadline | **W166** · close EIO under member stalls/apply pressure: 30 s PUT and 8+8 s REPORT/receipt paths | availability under pressure | DECIDED: B, 30 s unchanged; responsive-pressure paths implemented and qualified on xorinox (`4bcd52ca0`), both base-failing regressions pass, K22 5/5, 46,014 exact restart reads. Full gate 1 baseline-equivalent shared-chunk FAIL / 13 NOTRUN. Original SIGSTOP/production-window and live RDMA/multi-host acceptance NOTRUN; not a global W166 closure | [item](#w166) · [implementation / evidence](../status/w166-close-eio-flush-deadline-20261026.md) · [original evidence](../status/k22-k6-loopback-taskb-20261025.md) |
 | mkfs-retired-replica | **W167** · after K33 automatic formation and an online addition (orcd-test, devel `394f2b791`), `efs-mgmt raft-mkfs` sent to the seed answers BUSY (`rc=-13 leader_hint=2`) on every attempt while nodes 2 and 3 answer rc=0; the seed's retired group-2 replica stays at `voters=0x7 joint=1 retired=1 unapplied=1`; `orcd-test.py init-export` fails silently | membership / management routing (K33) | **FIXED (scoped, private TCP/RDMA and orcd-mini RDMA)** on `agent/devel-task-k`, tested `00e85a299`, merged into devel (wave 18, `08701031d`); [Task K evidence](../status/k44-retired-replica-routing-20261026.md). Seed/added-member MKFS and policies, exact FUSE/POSIX and steady-state query checks PASS; gate 508/4 FAIL/14 NOTRUN, four shared base LSan instrumentation errors. Authorized orcd-mini fresh formation/online addition, 27-call sweep, 218/218 POSIX core, 68/68 two-client cases and exact cross-mount/warm-query checks PASS; four members and both mounts remain running. Cold-query skips remain INCOMPLETE; merged qualification pending. | [orcd-test 394f2b791 run](../status/orcd-test-devel-rdma-394f2b791-20261027.md) |
+| bench-unpublished | **W170** · remote `efs-bench` raw store mode is refused and metadata-mode payload publication is unqualified (Task U) | developer verification correctness | **FIXED (scoped) on `agent/devel-task-aa`, not merged**: tested `fe785536e`; published normal client path, removed raw modes, timer and full-width ID fixes, independent FUSE regression. Gate 529/0 FAIL/10 NOTRUN; 12 GiB matched rows exact, 4/6 timing pairs within 10% (not uniform calibration). Raw failures/overlap qualification retained, private scratch removed | [item](#w170) · [evidence](../status/w170-efs-bench-20261028.md) |
 | gate-speed | **W160** · the merged-tree code gate (`make test-all` through `scripts/make_test_summary.sh`) grew from 298 s to 2,641 s in a day with the new daemon tests, and at `EFS_TEST_JOBS=8` eight daemon tests at once oversubscribe an 8-CPU host's disk (nuc: 1,209 s, 6 FAIL) | test infrastructure / gate time | Implemented and merged in devel (wave17, Task J median refit; D44 target1100s unchanged). Task M current-tree fstor007 gate:514 commands,0 FAIL,5 NOTRUN,617s, with scoped RDMA GC/POSIX results, documented FUSE prerequisite and7 budget overruns; no real-host refit ([Task M](../status/gate-fstor007-20261027.md)). Historical precursor (branch `claude/devel-gate-speed-8aee30`): runner budgets and disk-weighted slots per `test-long` command (`tests/budgets.tsv`), a drift check in `tests/test_make_test_recipe.py` (per-command bound with a recorded reason, budgeted gate bound), B6 / B geometry / D39 model split into independent commands, parallel verification and fast payloads, status polls for settle sleeps, ports held for a cluster's life. nuc at 8 jobs: 811 s, 839 s (0 FAIL), 989 s (2 pre-existing intermittents); serial 2,754 → 2,311 s. Not reached: three clean runs under 900 s on the nuc's single NVMe. Follow-ups: 15 s unmount storage fence to a down member; 32 s `efs-mgmt status` with a frozen member; intermittents under disk load (payload degraded-read EIO, report step-down 3 s bound, K36 step 11, K35 step 7) | [evidence](../status/gate-speed-20261025.md), [testing guide](testing.md) |
 | nfs-macos-clients | **W152** · NFS re-export and macOS clients | beta backlog | DECIDED out of alpha 1.0 (user, Oct 22); the W55 NFS/macOS triggers move here; alpha publishes "Linux FUSE client only" (F4) | [alpha checklist S1](../status/alpha-1.0-2plus1-checklist.md) |
 | node-cap | **W151** · the code caps a cluster at four nodes (`EFS_MAX_NODES` 4, `EFS_MD_RAFT_N` 3..4, voter sets only for n ≤ 4, placement ring clamped, client `leader_hint` bound), while alpha 1.0 and the spec (§1: 3–64) require >4 | implementation / scope | FIXED, merged into devel Oct 22 (`a2942cb0f`; [evidence](../status/k28-w151-cluster-cap-20261022.md)): cap 16, three voters per group, segments on the data ring; single-host five-daemon TCP/buffered gate scoped PASS ([evidence](../status/gates-xorinox-20261022.md)), with W154 protection finding. Multi-host/RDMA/direct-I/O qualification NOTRUN. Was OPEN; alpha K28 and Stage 2 prerequisite of A3: raise the cap, define voter sets for n ≥ 5, placement/capacity tests at 5..max, membership and client tables, fresh format; no compatibility. Sub-item (D38, user Oct 22): packed segments move from the group's voters to the data ring across all N nodes, which needs a remote linearizable pack-object read for PUT_SEGMENT admission and reclaim on non-voter nodes | [review](../status/alpha-1.0-plan-review-20261022.md) · [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
@@ -10866,6 +10879,26 @@ failures and checked/pruned private fixtures. Original full-process SIGSTOP /
 production-window acceptance plus live RDMA/multi-host gates remain NOTRUN.
 
 
+<a id="w170"></a>
+
+### W170 — publish remote benchmark writes through the supported client
+
+Task U found `efs-bench --store` refused and `--meta --size` lacking normal
+client lifecycle/checked publication. The tool cannot serve as a valid remote
+write baseline. Task AA owns the correction: normal session and ticketed
+write/REPORT, removal of raw synthetic modes, cold FUSE byte/EOF/count regression
+in `make test-long`, full gate and matched direct-client comparison. This is a
+developer measurement defect; it does not itself close K32/D4 or alpha gates.
+
+Status: **FIXED (scoped) on `agent/devel-task-aa`, not merged**, tested
+`fe785536e`, budget `5a971fb14`. Normal published client data and metadata writes,
+strict completion, fresh FUSE byte/EOF/count regression and timed-worker readiness
+are qualified on intel2. Full gate 529/0 FAIL/10 NOTRUN; twelve matched GiB rows
+read exact. Four of six timing pairs agree within 10%; uniform performance
+calibration is not established. Earlier non-quiet timing observations remain
+qualified. [Evidence, failures, method and cleanup](../status/w170-efs-bench-20261028.md).
+
+
 ## Appendix 6 — Naming
 
 *Source: `how-it-works/naming.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
@@ -14149,10 +14182,11 @@ summary with `./efs-bench.sh --analyze <result-directory>`.
 
 Cluster modes require a compatible deployed benchmark binary/build ID and a
 seed. They profile **the benchmark process**, not the remote daemons. A
-fixed-size PUT primes the full GET window; timed PUTs wrap within that window.
-The default working set is 256 MiB logical, configurable through `--store-size`.
-It remains in the dedicated benchmark export after the run. Use a separate
-`--chunk-base` to avoid another benchmark writer. Remote metadata runs all phases
+fixed-size write publishes a real file before readback. The timed write uses a
+second fresh fixture and stops at the duration or byte limit; it does not wrap
+raw fragment indices. The default aggregate bound is 256 MiB, configurable
+through `--store-size`. Files remain in the normal cluster export for independent
+inspection; `--fixture-id` selects ID and ID+1 and must be fresh. Remote metadata runs all phases
 and removes their created names normally; `--export`, `--files` and `--dirs`
 control that workload. With no seed, remote modes are explicitly omitted.
 
