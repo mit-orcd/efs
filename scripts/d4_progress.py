@@ -673,7 +673,8 @@ class Run:
         gens = [s['index']['generation'] for s in load if s['index']]
         lat = {k: {'n': len(v), 'max_s': round(max(v), 3), 'p50_s': round(sorted(v)[len(v) // 2], 3)}
                for k, v in self.ops.items() if v}
-        m = {'fg_ops': sum(len(v) for v in self.ops.values()), 'fg_latency': lat,
+        m = {'load_started_epoch_s': self.t0,
+             'fg_ops': sum(len(v) for v in self.ops.values()), 'fg_latency': lat,
              'fg_overdue': self.overdue, 'client_rss_mib_max': crss and round(crss / 1024, 1),
              'server_rss_mib_max': srss and round(srss / 1024, 1),
              'kv_mt_over_budget': mt_over[:10], 'kv_l0_over_cap': l0_over[:10],

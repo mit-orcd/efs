@@ -548,6 +548,8 @@ struct efs_raft_host {
     uint32_t close_step_cursor_len[HOST_NGROUPS];
     uint8_t reap_cursor[HOST_NGROUPS][11];
     uint32_t reap_cursor_len[HOST_NGROUPS];
+    uint8_t trunc_cursor[HOST_NGROUPS][11];
+    uint32_t trunc_cursor_len[HOST_NGROUPS];
     uint8_t orphan_cursor[HOST_NGROUPS][11];
     uint32_t orphan_cursor_len[HOST_NGROUPS];
     uint8_t orphan_discovery_cursor[HOST_NGROUPS][EFS_KV_KEY_MAX];
@@ -11400,11 +11402,29 @@ static int trunc_sweep_due(efs_ino_t ino, uint64_t target, uint64_t now)
     }
     return now - trunc_age[slot].first_ns >= TRUNC_SWEEP_MIN_AGE_NS;
 }
-struct trunc_scan_ctx { efs_ino_t ino[TRUNC_SCAN_INODES]; uint64_t gen[TRUNC_SCAN_INODES]; uint32_t n; };
+/* Serial truncate proposals must yield to fragment collection too. A
+ * 128-proposal pass took seconds under the fixed-set rewrite workload,
+ * while obsolete fragment records accumulated faster than GC could run.
+ * Permit one proposal even after a slow scan, then stop at the ordinary
+ * per-group GC work budget. Committed lane proofs survive the yield. */
+struct trunc_pass_result { unsigned progress; int capped; };
+static int trunc_pass_room(uint64_t started, uint32_t budget)
+{
+    return budget && (budget == TRUNC_PASS_PROPOSALS ||
+                      now_us_() - started < GC_FRAG_BUDGET_US);
+}
+struct trunc_scan_ctx {
+    efs_ino_t ino[TRUNC_SCAN_INODES];
+    uint64_t gen[TRUNC_SCAN_INODES];
+    uint32_t n, skip_len;
+    uint8_t skip[11];
+};
 static int trunc_scan_cb(void *user, const uint8_t *key, uint32_t klen,
                          const uint8_t *val, uint32_t vlen)
 {
     struct trunc_scan_ctx *c = user;
+    if (klen == c->skip_len && !memcmp(key, c->skip, klen))
+        return 0;
     if (klen != 11 || key[2] != EFS_KV_KIND_TRUNC_PENDING || vlen != 8)
         return 0;
     c->ino[c->n] = rd64be(key + 3);
@@ -11412,17 +11432,21 @@ static int trunc_scan_cb(void *user, const uint8_t *key, uint32_t klen,
     return ++c->n == TRUNC_SCAN_INODES;
 }
 
-static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
+static struct trunc_pass_result host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
 {
+    struct trunc_pass_result result={0};
     static struct trunc_scan_ctx c; /* one GC thread */
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_TRUNC_PENDING};
     uint32_t cs = EFS_DEFAULT_CHUNK_SIZE, budget = TRUNC_PASS_PROPOSALS, swept = 0;
     uint64_t now = now_ns();
+    uint64_t started = now_us_();
+    unsigned gi = group == 0 ? 0 : 1;
+    uint32_t visited = 0;
 
     memset(&c, 0, sizeof(c));
 
     if (!host_hosts(h, EFS_RAFT_GROUP_SHARD) || !host_hosts(h, EFS_RAFT_GROUP_SHARD2))
-        return;
+        return result;
 
     pthread_mutex_lock(&h->s->lock);
     struct efs_export *ex = server_export_acquire_locked(h->s, 1);
@@ -11431,17 +11455,25 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
     pthread_mutex_unlock(&h->s->lock);
     if (ex)
         server_export_put(h->s, ex);
-    if (efs_kv_scan_prefix(h->kv, prefix, sizeof(prefix), trunc_scan_cb, &c) < 0)
-        return;
+    c.skip_len = h->trunc_cursor_len[gi];
+    memcpy(c.skip, h->trunc_cursor[gi], c.skip_len);
+    uint8_t resume[11];
+    uint32_t resume_len = 0;
+    int scan_rc = host_gc_scan_work(h, prefix, sizeof(prefix),
+                                  c.skip_len ? c.skip : NULL, c.skip_len,
+                                  trunc_scan_cb, &c, resume, &resume_len, sizeof(resume));
+    if (scan_rc < 0)
+        return result;
     __atomic_store_n(&h->s->gc_trunc_seen[group == 0 ? 0 : 1], c.n, __ATOMIC_RELAXED);
 #if EFS_FAULTS
     {   /* D25 g6: hold the sweep (a stalled lane) while the file exists;
          * the pending count above stays live. */
         const char *gate = getenv("EFS_FAULT_TRUNC_SWEEP_HOLD_FILE");
-        if (gate && access(gate, F_OK) == 0) return;
+        if (gate && access(gate, F_OK) == 0) return result;
     }
 #endif
-    for (uint32_t i = 0; i < c.n && budget && swept < TRUNC_PASS_INODES; i++) {
+    for (uint32_t i = 0; i < c.n && trunc_pass_room(started, budget) && swept < TRUNC_PASS_INODES; i++) {
+        visited = i + 1;
         struct efs_meta_row row;
         struct efs_fence_history hist;
         uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(c.ino[i]));
@@ -11460,7 +11492,7 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
             wr64be(cmd + 1, c.ino[i]);
             wr64be(cmd + 9, c.gen[i]);
             wr64be(cmd + 17, hist.count && rc == EFS_OK ? hist.entries[hist.count - 1].epoch : 1);
-            (void)host_gc_propose(h, ig, cmd, 25);
+            if(host_gc_propose(h, ig, cmd, 25)==EFS_OK)result.progress++;
             budget--;
             continue;
         }
@@ -11468,7 +11500,7 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
         if (!trunc_sweep_due(c.ino[i], target, now))
             continue;
         swept++;
-        for (uint8_t lane = 0; lane < EFS_META_LANES && budget; lane++) {
+        for (uint8_t lane = 0; lane < EFS_META_LANES && trunc_pass_room(started, budget); lane++) {
             uint64_t swept = 0;
             if (!(row.active_lanes & (1ull << lane)))
                 continue;
@@ -11490,8 +11522,9 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
                 }
                 int src = host_gc_propose(h, efs_raft_shard_group(efs_kv_lane_shard(c.ino[i], lane)),
                                           cmd, 31 + 16 * hist.count);
+                if(src==EFS_OK)result.progress++;
                 budget--;
-                if (src != EFS_OK || !budget ||
+                if (src != EFS_OK || !trunc_pass_room(started, budget) ||
                     efs_meta_get_lane_swept(h->kv, c.ino[i], row.generation, lane, &swept) != EFS_OK ||
                     swept < target)
                     continue;
@@ -11501,19 +11534,39 @@ static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t 
             wr64be(cmd + 9, row.generation);
             cmd[17] = lane;
             wr64be(cmd + 18, target);
-            if (host_gc_propose(h, ig, cmd, 26) == EFS_OK)
+            if (host_gc_propose(h, ig, cmd, 26) == EFS_OK) {
+                result.progress++;
                 pending &= ~(1ull << lane);
+            }
             budget--;
         }
-        if (!pending && budget) {
+        if (!pending && trunc_pass_room(started, budget)) {
             cmd[0] = EFS_MD_CMD_RETIRE;
             wr64be(cmd + 1, c.ino[i]);
             wr64be(cmd + 9, row.generation);
             wr64be(cmd + 17, target);
-            (void)host_gc_propose(h, ig, cmd, 25);
+            if(host_gc_propose(h, ig, cmd, 25)==EFS_OK)result.progress++;
             budget--;
         }
     }
+    /* The scan may have filled a page that this time slice could not finish.
+     * Resume after the last VISITED inode, never past unattempted candidates.
+     * Partial/BUSY inodes retain their durable marker and return on the wrap. */
+    if (visited < c.n && visited) {
+        memcpy(h->trunc_cursor[gi], prefix, sizeof(prefix));
+        wr64be(h->trunc_cursor[gi] + 3, c.ino[visited - 1]);
+        h->trunc_cursor_len[gi] = 11;
+    } else if (visited == c.n && scan_rc > 0 && resume_len) {
+        memcpy(h->trunc_cursor[gi], resume, resume_len);
+        h->trunc_cursor_len[gi] = resume_len;
+    } else if (visited == c.n && !scan_rc) {
+        h->trunc_cursor_len[gi] = 0;
+    }
+    /* A known unfinished page/time slice is backlog, not an idle scan.
+     * Only successful applied proposals authorize the short retry below. */
+    result.capped=visited<c.n || scan_rc>0 || swept>=TRUNC_PASS_INODES ||
+                  !trunc_pass_room(started,budget);
+    return result;
 }
 
 /* ---- W154 rebuild on return ----
@@ -12170,7 +12223,8 @@ static void *host_gc_thread(void *arg)
         uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED) +
                                   host_reap_completed;
         int backlog_capped = 0;
-        int expiry_progress=0;
+        int expiry_progress=0,trunc_capped=0;
+        unsigned trunc_progress=0;
 
         host_expiry_refresh(h);
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
@@ -12228,7 +12282,8 @@ static void *host_gc_thread(void *arg)
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
-            host_gc_trunc_pass(h, h->g[g].group, anchor);
+            struct trunc_pass_result trunc=host_gc_trunc_pass(h,h->g[g].group,anchor);
+            trunc_progress+=trunc.progress;trunc_capped|=trunc.capped;
             backlog_capped |= __atomic_load_n(&h->s->gc_reap_capped[g], __ATOMIC_RELAXED);
             t_reap += now_us_() - ta;
             ta = now_us_();
@@ -12305,6 +12360,12 @@ static void *host_gc_thread(void *arg)
         uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED) +
                                  host_reap_completed;
         unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
+        /* Truncate work used to be invisible here: once fragment deletion
+         * drained, a progressing capped sweep slept the full idle second.
+         * Reuse the existing progress-only retry, then the ordinary metadata
+         * fairness floor; every loop still services fragments and snapshots. */
+        unsigned trunc_idle=host_gc_backlog_idle(h->gc_backlog_idle_ms,trunc_capped,0,trunc_progress);
+        if(trunc_idle<idle_ms)idle_ms=trunc_idle;
         idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress);
         /* W124: capped reclaim reruns after a short idle. When foreground
          * metadata is waiting (and capacity is not pressed), idle at least as
@@ -16386,6 +16447,13 @@ int server_raft_host_pack_state(uint32_t group, uint64_t id, uint64_t gen,
     if (!host_hosts(h, (uint8_t)group))
         return host_pack_object_remote(h, group, id, gen, out, degraded);
     int rc = host_read_index(h, (uint8_t)group, &hint);
+    /* A hosting storage follower may lag its applied prefix under pressure.
+     * An explicit failed local proof is not an absent/cancelled object. Ask
+     * another voter for its own proven object + degraded mask, just as a
+     * data-only node does. The serving RPC never forwards, validates the full
+     * identity and still requires ReadIndex; fatal local errors stay fatal. */
+    if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_PRIMARY)
+        return host_pack_object_remote(h, group, id, gen, out, degraded);
     if (rc != EFS_OK) return rc;
     rc = efs_pack_object_get(h->kv, group, id, gen, out);
     if (rc == EFS_OK && degraded) *degraded = host_pack_degraded_mask(h, group, id, gen);

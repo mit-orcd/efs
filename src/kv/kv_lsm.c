@@ -1091,7 +1091,15 @@ static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len,ui
             if(l->query_tracking && l->cleanup_deferred!=UINT64_MAX)l->cleanup_deferred++;
             break;
         }
-        if(l->query_tracking && l->metadata_revision[shard]!=UINT64_MAX)l->metadata_revision[shard]++;
+        if(l->query_tracking && l->metadata_revision[shard]!=UINT64_MAX) {
+            l->metadata_revision[shard]++;
+#if EFS_FAULTS
+            /* Numeric diagnostic only; count exactly the refresh triggers,
+             * including cleanup that was not deferred by the rule above. */
+            if(l->dirty_trace_enabled && l->dirty_kind[key[2]][op==EFS_KV_DEL]!=UINT64_MAX)
+                l->dirty_kind[key[2]][op==EFS_KV_DEL]++;
+#endif
+        }
         break;
     default: break;
     }
@@ -1451,6 +1459,8 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
     l->l0_cap_bytes = l->cfg.l0_bytes ? l->cfg.l0_bytes : KV_LSM_L0_BYTES;
 #if EFS_FAULTS
     {
+        const char *trace=getenv("EFS_QUERY_STAGE_TRACE");
+        l->dirty_trace_enabled=trace && !strcmp(trace,"1");
         /* W23 test hook: reach the L0 cap without writing 1 GiB. */
         const char *v = getenv("EFS_FAULT_L0_BYTES");
         unsigned long long b = v && v[0] ? strtoull(v, NULL, 0) : 0;
@@ -2158,11 +2168,33 @@ int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n)
     if (!kv || kv->ops!=&lsm_ops || !kv->ctx || !out || n<4096)
         return EFS_ERR_INVAL;
     struct kv_lsm *l=kv->ctx;
+#if EFS_FAULTS
+    uint64_t counts[256][2],trace_ms=0;
+#endif
     lsm_peek_lock(l);
     int rc=l->io_failed ? EFS_ERR_IO : EFS_OK;
     for(unsigned i=0;i<4096 && !rc;i++)if(l->metadata_revision[i]==UINT64_MAX)rc=EFS_ERR_OVERFLOW;
     if (rc==EFS_OK) memcpy(out,l->metadata_revision,sizeof(l->metadata_revision));
+#if EFS_FAULTS
+    if(l->dirty_trace_enabled && l->dirty_trace_records<512) {
+        struct timespec ts;
+        if(!clock_gettime(CLOCK_MONOTONIC,&ts)) {
+            uint64_t now=(uint64_t)ts.tv_sec*1000+(uint64_t)ts.tv_nsec/1000000;
+            if(now-l->dirty_trace_ms>=1000) {
+                trace_ms=now;l->dirty_trace_ms=now;l->dirty_trace_records++;
+                memcpy(counts,l->dirty_kind,sizeof(counts));
+            }
+        }
+    }
+#endif
     lsm_peek_unlock(l);
+#if EFS_FAULTS
+    /* Never print while holding the KV lock. No keys, names or values. */
+    if(trace_ms)for(unsigned kind=0;kind<256;kind++)if(counts[kind][0] || counts[kind][1])
+        fprintf(stderr,"query-dirty: mono_ms=%llu kind=%u put=%llu del=%llu\n",
+            (unsigned long long)trace_ms,kind,(unsigned long long)counts[kind][0],
+            (unsigned long long)counts[kind][1]);
+#endif
     return rc;
 }
 int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,

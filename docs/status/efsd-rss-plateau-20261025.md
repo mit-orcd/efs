@@ -241,3 +241,129 @@ ssh xorinox 'python3 ~/efs-x/scripts/rss_mappings_split.py ~/efs-x-out/mem.jsonl
 
 The fixes' own tests: `./tests/test_reclaim` (`make test-long`) and
 `python3 tests/test_conn_idle_reap.py` (`make test-long`).
+
+## Task I — reviewed October 27: hardware client RSS failure
+
+Nuc RSS PASS but D4 FAIL on stored-data peaks; xorinox PASSed both RSS and
+D4 at `931845748`. On user-selected node9900, both 60-minute confirmations
+at `ff0a6db69` **FAIL on the load client's anonymous RSS growth**: RDMA
++15.25%, TCP +17.72% in independent 10-second sampling, against 5%.
+Every efsd and foreground client passes; all 2080 files are exact on each
+transport, no operation/packer errors, bounded storage, drain 95.6/88.4 s.
+The failures are retained, not replaced by the prior xorinox PASS.
+
+A separate TCP allocator diagnostic at `c6e61c921` is RUNNING, collecting
+malloc_info/mallinfo2 at actual load minutes 20/40/60, without trimming or
+changing allocator policy. It cannot qualify a product fix. Thread,
+socket, stack and file RSS were flat; live heap versus arena retention is
+not yet distinguished.
+
+Xorinox's original gate was `TOTAL 508 FAIL 1 NOTRUN 13 (818s)` on a
+transfer-setup BUSY. Test-only fix `39d3848fd` passes deterministic setup
+checks and all 12 real publication rounds (max 0.51 s); full gate RUNNING.
+Both nuc base attempts are INCOMPLETE, including a contradictory exit-0
+receipt with no terminal stage/summary. No original nuc failure is excused.
+[Tables, source/environment, transport-evidence correction, reproduction,
+verified manifests and outstanding qualification](task-i-20261026.md).
+
+### Allocator candidate, still under qualification
+
+The completed original node9900 diagnostic has 74 load-client arenas.
+Between minute 40 and 60, free arena memory rises 38.42 MiB while allocated
+arena memory rises 1.43 MiB and mmap bytes remain constant. Independent
+RSS still FAILS at +8.34%; this supports allocator retention, not proof of
+bounded live allocations. All six snapshots and computed deltas are retained.
+
+Candidate `bc86327c6` moves the launcher's existing four-arena policy into
+native `efs-fuse` startup and removes its launcher-only switch. The real
+24-worker allocator regression passes with four arenas; its unfixed
+negative control has 25. `971100542` xorinox hour PASS: all five processes
+within 5%, data bounds pass, 2080 exact, zero errors, drain 84 s. Its full
+gate FAILS on K38 and duplicate allocator test wiring (512 / 2 FAIL /
+13 NOTRUN). New integrated `03b50dcd5` incorporates reviewed devel
+`063154e0e` K38/W166 corrections and fast-test wiring repair; xorinox's
+fresh gate-first run is active. Node9900 fixed `971100542` RDMA is active,
+TCP follows. Overall qualification remains INCOMPLETE.
+[Exact sources, results and remaining checks](task-i-20261026.md#candidate-fix-and-qualification).
+
+Current Task I follow-up: four arenas alone do not qualify hardware.
+`971100542` RDMA fails +9.94% load RSS; TCP RSS passes but the outer
+qualification fails one packer read error. `03b50dcd5` RDMA fails +21.79%
+load and +11.99% foreground RSS. Candidate `47ca08eaf` gives registered
+transport buffers explicit mmap/munmap lifetime; unit release/mutation
+checks pass, live proof is pending. Its quiet-host and hardware jobs are
+queued; see [current review](task-i-20261026.md#current-reviewed-gate-and-active-hours).
+
+Task I update: `47ca08eaf` full xorinox code gate completed with 518
+commands / 0 FAIL / 13 NOTRUN (1024 s +21 s build), its hour active.
+Earlier `03b50dcd5` node9900 TCP now has a full PASS: load RSS +0.44%,
+foreground 0.00%, all 2080 final payloads exact, pack errors 0/0, drain
+80.2 s. RDMA failure remains; the dedicated-mapping product's hardware
+RDMA is now active. AMD became quiet after W123; the first native RDMA
+gate FAILed during RTR setup (link-local GID, ENETUNREACH), not buffer
+registration. `5f07151c2` repairs the automatic RoCE GID default: all nine
+native software-RDMA commands PASS without an override; full TCP gate
+active, hour pending. No final memory-fix claim until active hours finish.
+
+Task I Oct 28 UTC: `47ca08eaf` xorinox independent RSS PASS (360 samples,
+load +3.75%, foreground +0.01%, nodes +0.88..3.01%), but whole hour FAIL:
+stored-data peaks grew ~56.8%. All 2080 payloads exact, pack errors 0/0,
+abandoned 33/168257 rewrites, drain 73.5 s. Older xorinox quiet labels are
+withdrawn: a foreign-UID client predates the runs and was not sampled.
+Candidate `6550b678d` bounds/resumes truncate housekeeping so it cannot
+monopolize GC; original-source negative control fails (96 slow proposals),
+fixed unit and native product build PASS, new hours owed. Hardware
+`16ea79db6` queued behind the active pair; AMD `80de5d4c9` waits for W123
+and safe cleanup. [Exact evidence and limits](task-i-20261026.md).
+
+`47ca08eaf` node9900 RDMA also FAILs RSS: load +11.53%, foreground +7.51%,
+servers flat, all 2080 payloads exact, pack errors 0/0, drain 18.4 s;
+TCP also FAILs load RSS +14.05% (foreground +0.02%, servers <=1.98%),
+2080 exact, pack errors 0/0, drain 81.3 s. Candidate `d7e265746` fixes glibc's large-allocation
+threshold at its initial 128 KiB: native 24-worker scratch test releases
+all 96 MiB of large mappings with ~0.5 MiB heap, versus ~96 MiB free heap
+retained by the old four-arena-only control. This is mechanism evidence,
+not a live qualification. Both new hardware and AMD continuations use
+`d7e265746`; hardware full gate FAILs at four LSan runtime attach errors, reproduced
+by an independent clean probe. Corrected harnesses retain functional/negative
+controls and report unavailable sanitizer coverage NOTRUN; fresh gate and hours
+remain owed. `00ccd12f3` full gate is 524 total / 0 FAIL / 18 NOTRUN,
+separate mlx5_0 RDMA 9/9 PASS; hour FAIL foreground RSS +13.04%
+and drain, load +1.08% and servers plateau. All 2080 exact, pack errors 0/0;
+index pending never remains zero twice during drain. TCP hour PASS: independent
+load +1.21%, foreground +0.10%, servers <=1.63%, 2080 exact, pack errors 0/0,
+drain 92.9 s. Overall pair FAIL. Fresh allocator observation is ACTIVE before
+any further lifetime-policy change.
+AMD’s quiet prerequisite expired with no store touched; cleanup/qualification
+NOTRUN. All six node9900 diagnostic captures completed: four arenas each,
+foreground 40→60 allocated +145344/free +104512 bytes, mmap unchanged;
+foreground RSS +0.06%. This did not reproduce the prior failure and is not
+qualification. Mapping lifetime/residency observation follows.
+Old pre-action waiters were superseded without running tests.
+
+AMD became quiet at 09:15 UTC. Strict preservation-link fix `14010248c`
+verified 100 copied files/three links, recovered only the original fixture
+with unchanged binaries, checked all six synthetic lines and stopped peer/
+three daemons cleanly. Fresh qualification is BUILD; earlier failures and
+pre-recovery stores remain on AMD. No RSS/reclaim qualification closure.
+
+Mapping diagnostic0611de678 also completed without reproducing the slope;
+static BSS (mostly dirty-cache metadata) uses 47104 KiB THP per client on
+node9900's THP-always host. Per-range small-page candidate preserves sparse
+contents at 96 KiB versus 48 MiB in the native control on node9900 and AMD;
+full live acceptance is owed. AMD140 native RDMA9/9 PASS, gate FAIL1/526
+on GCC15's unchecked observer write result; checked-error fix native PASS.
+Drain correction: foreground writes already stop; only reads/queries continue.
+No drain threshold is changed and no prior failed qualification is closed.
+
+
+Task I final Oct 28 12:06 UTC: `a083dcbf3` measured live protocol **PASS
+(scoped), complete**. Node9900 hardware RDMA/TCP and AMD TCP hours each
+verify 2080 exact files, operation/packer errors 0, all five independent
+RSS series within 5%; drains 77.8/147.0/78.9 s. Hardware pair exit 0;
+node9900 scope remains shared-client, AMD's observed interval quiet.
+Both full 527-command gates have zero FAIL, with 18/14 disclosed NOTRUNs;
+native RDMA 9/9 each. F1/release coverage remains incomplete. The 147 s
+drain has only 3 s margin; prior intermittent RSS/drain failure cause is
+not proven by this pass. Failed/investigation stores stay on host.
+[Final counters, hashes and limitations](task-i-20261026.md#final-tcp-pass-and-task-i-live-protocol-completion--oct-28-1206-utc).

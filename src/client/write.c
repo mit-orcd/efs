@@ -1,4 +1,5 @@
 #include "client_internal.h"
+#include "sparse_metadata.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/erasure.h"
@@ -4507,6 +4508,8 @@ static void dcache_note_dirty_bytes(int64_t delta)
 
 static void dcache_init(void)
 {
+    if (efs_sparse_metadata_pages(&g_dcache, sizeof(g_dcache)) != 0)
+        fprintf(stderr, "client: sparse metadata small-page hint unavailable errno=%d\n", errno);
     for (int i = 0; i < DCACHE_SHARDS; i++) {
         pthread_mutex_init(&g_dcache.shard[i], NULL);
         pthread_mutex_init(&g_dcache.shard_io[i], NULL);

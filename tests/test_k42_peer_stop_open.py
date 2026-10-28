@@ -73,27 +73,39 @@ def peer_round(c, primary, hold, name, hold_s, cleanup=False):
     for hold_s while the peer unmounts (cleanup: the hook answers the OPEN
     wait instead). Returns the peer's results."""
     peer = Mount(c, 2, name)
-    f = f'{name}.log'
-    append(peer.path / f, f'{name} first\n')
-    append(peer.path / f, f'{name} second\n')
-    ino = (primary.path / f).stat().st_ino
-    hold.write_text('cleanup\n' if cleanup else f'{ino}\n')
-    writer = threading.Thread(target=append, args=(primary.path / f, 'primary held\n'))
-    writer.start()
-    if not cleanup:
-        held(c, ino)  # the primary's reservation is OPEN, its REPORT held
-    t0 = time.monotonic()
-    unmount(peer)
-    remaining = hold_s - (time.monotonic() - t0)
-    if remaining > 0:
-        time.sleep(remaining)
-    hold.unlink()
-    writer.join(timeout=60)
-    assert not writer.is_alive(), 'primary append still blocked after the hold'
-    rc, rev, revoke_s, lines = finish(peer)
-    data = (primary.path / f).read_text()
-    assert data.count('\n') == 3 and 'primary held' in data, data
-    return rc, rev, revoke_s, lines
+    writer = None
+    try:
+        f = f'{name}.log'
+        append(peer.path / f, f'{name} first\n')
+        append(peer.path / f, f'{name} second\n')
+        ino = (primary.path / f).stat().st_ino
+        hold.write_text('cleanup\n' if cleanup else f'{ino}\n')
+        writer = threading.Thread(target=append, args=(primary.path / f, 'primary held\n'))
+        writer.start()
+        if not cleanup:
+            held(c, ino)  # the primary's reservation is OPEN, its REPORT held
+        t0 = time.monotonic()
+        unmount(peer)
+        remaining = hold_s - (time.monotonic() - t0)
+        if remaining > 0:
+            time.sleep(remaining)
+        hold.unlink()
+        writer.join(timeout=60)
+        assert not writer.is_alive(), 'primary append still blocked after the hold'
+        rc, rev, revoke_s, lines = finish(peer)
+        data = (primary.path / f).read_text()
+        assert data.count('\n') == 3 and 'primary held' in data, data
+        return rc, rev, revoke_s, lines
+    finally:
+        # A failed unmount must stay a failure, but must not strand this
+        # synthetic peer or a held REPORT after the enclosing cluster stops.
+        if hold.exists():
+            hold.unlink()
+        if writer is not None:
+            writer.join(timeout=60)
+        if peer.p.poll() is None:
+            peer.close()
+
 
 
 def main():

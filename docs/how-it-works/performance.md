@@ -273,10 +273,11 @@ summary with `./efs-bench.sh --analyze <result-directory>`.
 
 Cluster modes require a compatible deployed benchmark binary/build ID and a
 seed. They profile **the benchmark process**, not the remote daemons. A
-fixed-size PUT primes the full GET window; timed PUTs wrap within that window.
-The default working set is 256 MiB logical, configurable through `--store-size`.
-It remains in the dedicated benchmark export after the run. Use a separate
-`--chunk-base` to avoid another benchmark writer. Remote metadata runs all phases
+fixed-size write publishes a real file before readback. The timed write uses a
+second fresh fixture and stops at the duration or byte limit; it does not wrap
+raw fragment indices. The default aggregate bound is 256 MiB, configurable
+through `--store-size`. Files remain in the normal cluster export for independent
+inspection; `--fixture-id` selects ID and ID+1 and must be fresh. Remote metadata runs all phases
 and removes their created names normally; `--export`, `--files` and `--dirs`
 control that workload. With no seed, remote modes are explicitly omitted.
 

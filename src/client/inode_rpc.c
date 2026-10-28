@@ -2606,6 +2606,40 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
     return EFS_OK;
 }
 
+/* Rare durability cleanup: inspect the complete base/span view for exactly
+ * one chunk. GETCHUNKS supplies the FileID validation and ReadIndex barriers;
+ * it never publishes a repair mark. Do not consult local mapping caches. */
+int efs_client_rpc_object_live(efs_ino_t ino, uint64_t generation, uint32_t ci,
+                               uint64_t object, int *live)
+{
+    if (!ino || !generation || !object || !live) return EFS_ERR_INVAL;
+    /* The current server's GETCHUNKS window has a uint32_t exclusive end.
+     * Its final group wraps; never interpret that empty window as absence. */
+    if ((ci | (EFS_CHUNK_GROUP_SIZE - 1u)) == UINT32_MAX) return EFS_ERR_BUSY;
+    struct efs_chunk_rec rec;
+    uint32_t count = 1;
+    uint64_t resolved = 0;
+    int rc = efs_client_rpc_getchunks_fileid(g_client.export_id, ino, generation,
+                                             ci, &rec, &count, &resolved);
+    if (rc == EFS_ERR_NOT_FOUND) { /* the inode is absent at the read barrier */
+        *live = 0;
+        return EFS_OK;
+    }
+    if (rc != EFS_OK) return rc;
+    if (resolved != generation || count > 1) return EFS_ERR_PROTO;
+    int found = 0;
+    if (count && rec.chunk_index == ci) {
+        if (!(rec.publish_flags & EFS_CHUNK_REC_F_PACKED) &&
+            rec.chunk_generation == object && rec.read_view.parts[0].len)
+            found = 1;
+        for (uint32_t i = 0; i < rec.delta_base_n; i++)
+            if (rec.deltas[i].generation == object && rec.read_view.parts[i + 1].len)
+                found = 1;
+    }
+    *live = found;
+    return EFS_OK;
+}
+
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,
                              uint32_t *inout_count)

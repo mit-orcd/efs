@@ -209,6 +209,8 @@ test-report-pressure:
 	python3 tests/test_resolver_deadline.py
 	python3 tests/test_rdma_reply_budget.py
 	python3 tests/test_rdma_progress_ready.py
+	python3 tests/test_rdma_arena.py
+	python3 tests/test_rdma_gid.py
 	python3 tests/test_rdma_setup_reentry.py
 	python3 tests/test_rdma_handler_alignment.py
 	python3 tests/test_rdma_handoff.py
@@ -368,7 +370,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 # helpers built with extra flags). They are real prerequisites of test and
 # test-long, never built inside a recipe, so test-long works on its own and a
 # parallel make cannot start a test before its binary exists.
-TEST_SPECIAL_BINS = tests/faults/efsd tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
+TEST_SPECIAL_BINS = tests/faults/efsd tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/test_data_commit_index tests/faults/test_kv_compact_crash
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -379,6 +381,13 @@ FORCE:
 # both gates independently and fails if either does.
 docs-check:
 	python3 docs/check-architecture.py
+
+# Developer navigation validation needs the pinned graphify environment and a
+# real Git index, unlike archived Linux code-gate trees. Keep it explicit.
+.PHONY: code-graph-check
+code-graph-check:
+	sh scripts/rebuild-code-graph.sh
+	python3 tests/test_code_graph.py
 
 # Valgrind memcheck leak gate (K26): bounded unit list, one PASS/FAIL line
 # per binary and a verdict; exit 1 on any definite leak, 3 (NOTRUN) without
@@ -444,6 +453,8 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_put_upload_server
 	./tests/test_put_orphan_server
 	./tests/test_data_commit
+	./tests/test_data_commit_index
+	python3 tests/test_orcd_dd_profile.py
 	python3 tests/test_applied_interval.py
 	python3 tests/test_cursor_checkpoint.py
 	python3 tests/test_lookup_errno.py
@@ -546,6 +557,16 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_tiny_fragment_audit.py
 	python3 tests/test_b_checks_driver.py
 	python3 tests/test_d4_driver.py
+	python3 tests/test_pub_unit_setup.py
+	python3 tests/test_client_allocator.py
+	python3 tests/test_client_large_alloc.py
+	python3 tests/test_task_i_host_guard.py
+	python3 tests/test_task_i_preserve.py
+	python3 tests/test_sparse_metadata.py
+	python3 tests/test_b_geometry_status.py
+	python3 tests/test_task_i_alloc_probe.py
+	python3 tests/test_mount_idle.py
+	python3 tests/test_k42_fixture_cleanup.py
 	python3 tests/test_read_recorded_nodes.py
 	python3 tests/test_tmpdir_hygiene.py
 	python3 tests/test_pressure_cohort.py
@@ -703,6 +724,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_gc_inode_fanout.py
 	python3 tests/test_gc_reap_shutdown.py
 	python3 tests/test_reap_fairness.py
+	python3 tests/test_trunc_gc_fairness.py
 	python3 tests/test_tiny_overload_oracle.py
 	python3 tests/test_session_register_verdict.py
 	python3 tests/test_namespace_session_apply.py
@@ -803,6 +825,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_client_allocator.py
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
 	python3 tests/test_recorder_stop.py
@@ -899,10 +922,10 @@ clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
-	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
+	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_follower_bound tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
 	rm -rf tests/faults/server tests/faults/kv
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
-	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
+	rm -f tests/test_data_commit tests/test_data_commit_index tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
@@ -970,7 +993,7 @@ tests/test_put_upload_server: tests/test_put_upload_server.c src/server/put_uplo
 tests/test_put_orphan_server: tests/test_put_orphan_server.c src/server/put_orphan.c src/server/put_fence.c include/efs/put_ticket.h src/server/server_internal.h $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 
-tests/test_data_commit: tests/test_data_commit.c src/client/data_commit.c src/client/client_internal.h include/efs/protocol.h
+tests/test_data_commit tests/test_data_commit_index: %: %.c tests/test_data_commit.c src/client/data_commit.c src/client/client_internal.h include/efs/protocol.h
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< -lpthread
 # Publication coalescing is shared by the real worker and its policy gate.
 src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
@@ -1028,6 +1051,11 @@ tests/faults/meta/meta_apply.o: src/meta/meta_apply.c $(wildcard include/efs/*.h
 
 tests/faults/efsd: $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(FAULT_META_OBJS) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(FAULT_META_OBJS) $(LIB) $(LDFLAGS)
+# Task W: exercise the parked real LSM compactor, not a plain library whose
+# fault hook is compiled out. Reuse the daemon's fault KV object overrides.
+tests/faults/test_follower_bound: tests/test_follower_bound.c $(FAULT_KV_OBJS) $(LIB) .build_id.stamp
+	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -o $@ $< $(FAULT_KV_OBJS) $(LIB) $(LDFLAGS)
+
 
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
 src/kv/kv_lsm.o: src/kv/kv_candidates.h
@@ -1072,7 +1100,8 @@ test: test-apply-wait
 # runs both and is what the gates run.
 .PHONY: test-long test-all
 test-long: all $(TEST_SPECIAL_BINS)
-	python3 tests/test_code_graph.py
+	python3 tests/test_bench_published.py
+	./tests/faults/test_follower_bound --stalled-compactor
 	python3 tests/test_decoder_refusal.py
 	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_w153_formation.py

@@ -129,7 +129,7 @@ def status(c, i):
     return b_checks.parse_status(out), out
 
 
-def wait_status(c, i, m, pred, timeout=30):
+def wait_status(c, i, m, pred, timeout=30, out_pred=None):
     """status on node i once pred holds and mount m's df agrees with its
     capacity (the client refreshes its statfs view every few seconds), or
     the last status after timeout: the caller asserts, so a failure reads as
@@ -138,7 +138,8 @@ def wait_status(c, i, m, pred, timeout=30):
     while True:
         st, out = status(c, i)
         try:
-            ok = pred(st) and b_checks.statfs(m.path)['total'] == st['usable']['capacity'] // 512 * 512
+            ok = pred(st) and (out_pred is None or out_pred(out)) and \
+                b_checks.statfs(m.path)['total'] == st['usable']['capacity'] // 512 * 512
         except (KeyError, TypeError):
             ok = False
         if ok or time.time() >= end:
@@ -361,7 +362,8 @@ def full_phase():
     except OSError as e:
         assert e.errno == errno.ENOSPC, e
     # status follows the refusal within seconds: wait on it, not on a timer.
-    st, out = wait_status(f, 2, fm, lambda st: st['usable']['free'] == 0)
+    st, out = wait_status(f, 2, fm, lambda st: st['usable']['free'] == 0,
+                         out_pred=lambda out: re.search(r'^Degraded chunks: 0 ', out, re.M))
     assert st['usable']['free'] == 0, out
     assert re.search(r'^Degraded chunks: 0 ', out, re.M), out
     flog = fm.logp.read_text(errors='replace')
@@ -375,7 +377,8 @@ def full_phase():
     for i in (1, 2, 3, 4):
         wait_formed(f, i, 4)
     wait_mount(fm, r'added member 4 at .*\(4 members, no remount\)')
-    st, out = wait_status(f, 1, fm, lambda st: st['usable']['capacity'] > 2 * (16 << 20) and st['usable']['free'] > 0)
+    st, out = wait_status(f, 1, fm, lambda st: st['usable']['capacity'] > 2 * (16 << 20) and st['usable']['free'] > 0,
+                         out_pred=lambda out: re.search(r'^Degraded chunks: 0 ', out, re.M))
     assert st['usable']['capacity'] > 2 * (16 << 20) and st['usable']['free'] > 0, out
     df = b_checks.statfs(fm.path)
     assert df['total'] == st['usable']['capacity'] // 512 * 512, (df, st['usable'])

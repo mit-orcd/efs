@@ -11,6 +11,38 @@ No fitted table or confirming gate is accepted; target and slots stay fixed.
 Nuc/intel2 currently have other qualification work; replacement pools wait
 for a clean handoff. Nothing is pushed or merged into devel.
 
+## Authorized host substitution and current-source refresh
+
+The user explicitly authorized AMD, xorinox, node9900, node9901 or fstor007
+as alternatives to waiting for nuc/intel2. Fresh probes find AMD and xorinox
+quiet with supported FUSE/build dependencies. Nuc and intel2 have Task H
+controllers (including queued work); node9900 runs Task AD and an orcd-mini
+client; node9901 serves the existing four-member orcd-mini deployment.
+Those workloads are untouched. Fstor007 is idle but system FUSE is 3.10.2,
+below the required build API; using it would need the already demonstrated
+private newer FUSE prefix. AMD is Ryzen AI MAX+395 (16 cores/32 threads),
+Ubuntu/ext4 with FUSE3.18.2; xorinox is Ryzen9 7940HS (8 cores/16 threads),
+RHEL-family/xfs with FUSE3.16.2. Both calibration pools stay at eight jobs.
+No CPU-count equivalence or results for unmeasured hosts are inferred.
+
+The next cohorts use AMD and xorinox in place of nuc/intel2, with three clean
+serial gates each and one confirming gate each after fitting. The three
+accepted historical intel1 K43 observations remain required evidence, with
+new budget commands absent from that older source explicitly unmeasured
+there. Nuc/intel2 full calibration remains unmeasured; a fitted table on the
+substitutes does not claim timings or zero overruns on those hosts.
+
+Devel moved 147 commits beyond the prior freeze. Task T now merges exact
+`486aa3a46`, including upstream publication-fence/deadline/index repairs,
+truncate-GC fairness, Task W gate coverage and W170. Product source follows
+that devel snapshot; Task T retains its fitter, marked-sample refusal,
+self-contained owner regression and failure retention. Current devel's
+bounded publication setup helper replaces Task T's earlier equivalent
+helper call. Runner regressions retain both exclusive scheduling and
+external-TMPDIR cases. The current recipe has 92 budget rows and passes its
+static model (1533 s/1650 s margin); D44 target1100s is unchanged.
+Old-source scoped passes above/below do not qualify the refreshed source.
+
 ## Contract and source
 
 W160 / D44: three clean serial eight-job gates per supported host. Fit each

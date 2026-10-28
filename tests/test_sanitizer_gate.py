@@ -12,6 +12,48 @@ are prebuilt here and named through EFS_SAN_LIST, so no tree is built.
 from pathlib import Path
 import os, platform, shlex, subprocess, sys, tempfile
 
+# Probe classification must not turn sanitizer findings or arbitrary errors
+# into a host-limit verdict. Exercise this before any host-limited live gates.
+def check_runtime_probe_classification():
+    import contextlib
+    import io
+    from unittest.mock import patch
+    from sanitize_env import asan_runtime_available
+    fatal = ('LeakSanitizer has encountered a fatal error.\n'
+             'Could not attach to thread 123 (errno 1).\n')
+    def invoke(rc, output):
+        with patch('subprocess.run', side_effect=[
+                subprocess.CompletedProcess(['cc'], 0),
+                subprocess.CompletedProcess(['probe'], rc, '', output)]):
+            with contextlib.redirect_stdout(io.StringIO()) as printed:
+                result = asan_runtime_available()
+            return result, printed.getvalue()
+    assert invoke(0, '') == (True, '')
+    available, message = invoke(1, fatal)
+    assert not available and 'NOTRUN: independent ASan/LSan runtime probe' in message
+    for output in ('ordinary failure', fatal.replace('(errno 1)', '(errno 3)'),
+                   fatal + 'ERROR: AddressSanitizer: heap-buffer-overflow',
+                   fatal + 'ERROR: LeakSanitizer: detected memory leaks',
+                   fatal + 'runtime error: signed integer overflow'):
+        try:
+            invoke(1, output)
+        except subprocess.CalledProcessError:
+            pass
+        else:
+            raise AssertionError('probe masked an error: ' + output)
+    for error in (subprocess.CalledProcessError(1, ['cc']),
+                  subprocess.TimeoutExpired(['probe'], 30)):
+        with patch('subprocess.run', side_effect=error):
+            try:
+                asan_runtime_available()
+            except type(error):
+                pass
+            else:
+                raise AssertionError('probe masked compiler failure/timeout')
+    print('sanitizer probe: host attach refusal NOTRUN; findings, errors and timeouts FAIL')
+
+check_runtime_probe_classification()
+
 root = Path(__file__).resolve().parents[1]
 gate = root / 'tests/sanitizer_check.sh'
 cc = shlex.split(os.environ.get('CC', 'cc'))

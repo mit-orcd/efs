@@ -859,6 +859,10 @@ void efs_client_stripe_closed(const struct efs_put_ticket *ticket);
 int efs_client_put_terminal(efs_ino_t ino, uint64_t generation, uint32_t ci,
                             uint64_t object);
 int efs_client_data_commit(efs_ino_t ino);
+/* Read-only, FileID-bound GETCHUNKS: OK and *live=0 proves absence only
+ * after the caller has fenced any later publication. Errors prove nothing. */
+int efs_client_rpc_object_live(efs_ino_t ino, uint64_t generation, uint32_t ci,
+                               uint64_t object, int *live);
 /* EFS_MD_CMD_DEGRADED_MARK on the lane shard's group: OK marked (or
  * already), NOT_FOUND the object is not live (not published yet OR retired),
  * else the failure. */

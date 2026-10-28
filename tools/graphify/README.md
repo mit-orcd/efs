@@ -21,8 +21,7 @@ Install `graphifyy==0.9.97` in a dedicated environment (the build records the ex
 extractor module hash; revalidate on upgrades). From the repository root:
 
 ```sh
-sh scripts/rebuild-code-graph.sh
-python3 tests/test_code_graph.py
+make code-graph-check
 python3 scripts/install-code-graph-hooks.py
 ```
 

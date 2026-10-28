@@ -392,16 +392,15 @@ fi
 note "phase 2: efsd under valgrind (3-node raft group, efs-bench workload)"
 ADDR=127.0.0.1
 start_group_vg_server tcp
-# Workload generators only — a driver abort under the ~30x valgrind slowdown
-# (e.g. a PUT-timeout assert in efs-bench) is not a leak-gate failure. The
-# --meta phase (2400+ ops) is the core metadata coverage; store/read add the
-# data path. Target node 2 (plain, fast); any node bounces to the raft
-# leader, and the valgrind'd follower applies every committed entry.
+# Target node 2 (plain, fast); normal client routing reaches its leaders.
+# A workload error is a coverage failure, never a successful empty leak test.
 LEAD="127.0.0.1:$((PORT + 1))"
 EFS_TRANSPORT=tcp ./efs-bench "$LEAD" --meta --export "$EXPORT" \
-    --files 300 --dirs 4 --workers 4 >/dev/null 2>&1 || true
-EFS_TRANSPORT=tcp ./efs-bench "$LEAD" --store --time 5 >/dev/null 2>&1 || true
-EFS_TRANSPORT=tcp ./efs-bench "$LEAD" --read  --time 3 >/dev/null 2>&1 || true
+    --files 300 --dirs 4 --workers 4 >"$WORK-bench-meta.out" 2>&1 || fail "metadata workload failed"
+EFS_TRANSPORT=tcp ./efs-bench "$LEAD" --size 1M --io-size 64K --id 170 \
+    --export "$EXPORT" >"$WORK-bench-write.out" 2>&1 || fail "published write workload failed"
+EFS_TRANSPORT=tcp ./efs-bench "$LEAD" --read --size 1M --id 170 \
+    --export "$EXPORT" >"$WORK-bench-read.out" 2>&1 || fail "published read workload failed"
 # SIGTERM -> valgrind prints the summary (no stacks on abnormal exit; expected)
 kill_ours TERM
 for i in $(seq 1 20); do grep -q "LEAK SUMMARY" "$WORK-group1.vg" 2>/dev/null && break; sleep 1; done

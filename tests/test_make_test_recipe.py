@@ -17,6 +17,7 @@ pass silently.
 """
 # Python tests the recipe does not run, each with its reason.
 NOT_WIRED = {
+    'tests/test_code_graph.py': 'Developer-only canonical graph gate: make code-graph-check rebuilds with pinned graphify and validates tracked scope via a Git index; an archived graph snapshot alone is insufficient',
     'tests/test_soak.py': 'Task D 15-minute accelerated endurance run; its own gate (make test-soak), outside the W160 15-minute test-all target',
 }
 from pathlib import Path
@@ -52,6 +53,14 @@ unrun = [s for s in scripts if s not in tokens and s not in NOT_WIRED]
 assert not unrun, 'Python tests never run by `make test-all` and not listed with a reason (W139): %s' % unrun
 stale = sorted(s for s in NOT_WIRED if s in tokens or not (root / s).exists())
 assert not stale, 'NOT_WIRED entries that are wired or gone: %s' % stale
+
+assert 'code-graph-check:' in makefile and '\tpython3 tests/test_code_graph.py' in makefile
+
+# Task W: the normal unit binary does not claim a skipped fault arm. The
+# real fault-linked subcase must remain a prerequisite and a gate command.
+assert './tests/faults/test_follower_bound --stalled-compactor' in slow
+assert 'tests/faults/test_follower_bound' in re.search(r'^TEST_SPECIAL_BINS = (.*)$', makefile, re.M).group(1)
+assert 'tests/faults/test_follower_bound: tests/test_follower_bound.c $(FAULT_KV_OBJS) $(LIB)' in makefile
 
 # W160: the gate's time budget. Every test-long command declares in
 # tests/budgets.tsv the seconds it may take at EFS_TEST_JOBS=8 and the pool

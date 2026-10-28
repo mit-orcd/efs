@@ -34,7 +34,9 @@ struct stripe {
     efs_ino_t ino;
     uint64_t inode_gen, object;
     uint32_t ci;
-    uint32_t next; /* bucket chain or free list: index + 1, 0 ends */
+    uint32_t next; /* inode bucket chain or free list: index + 1, 0 ends */
+    uint32_t prev; /* previous inode-bucket entry, 0 at head */
+    uint32_t hash_next; /* exact (ino, ci, object) lookup chain */
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint64_t seq[EFS_NUM_FRAGMENTS], epoch[EFS_NUM_FRAGMENTS];
     uint8_t state[EFS_NUM_FRAGMENTS];
@@ -54,6 +56,10 @@ static uint64_t node_acked[COMMIT_NODES];
 static struct stripe *g_st;
 static uint32_t g_st_cap, g_st_used, g_st_live, g_st_free;
 static uint32_t g_bucket[STRIPE_BUCKETS];
+static uint32_t g_identity[STRIPE_BUCKETS];
+#ifndef EFS_COMMIT_LOOKUP_PROBE
+#define EFS_COMMIT_LOOKUP_PROBE() ((void)0)
+#endif
 /* One sweep at a time; PUTs that meet a full table wait for it. */
 static pthread_mutex_t sweep_mu = PTHREAD_MUTEX_INITIALIZER;
 
@@ -73,10 +79,28 @@ static uint32_t bucket_of(efs_ino_t ino)
     return (uint32_t)(h >> 48) & (STRIPE_BUCKETS - 1);
 }
 
+/* An inode bucket is useful for fsync's one-file snapshot, but a large
+ * file puts every chunk in that bucket. Exact lookups must also hash the
+ * chunk and PUT object: searching the inode chain at each PUT and again
+ * while folding COMMIT replies made both paths quadratic in file size. */
+static uint32_t identity_bucket(efs_ino_t ino, uint32_t ci, uint64_t object)
+{
+    uint64_t h = (uint64_t)ino * 0x9E3779B97F4A7C15ull ^
+                 (uint64_t)ci * 0xBF58476D1CE4E5B9ull ^ object;
+    h ^= h >> 30;
+    h *= 0xBF58476D1CE4E5B9ull;
+    h ^= h >> 27;
+    h *= 0x94D049BB133111EBull;
+    h ^= h >> 31;
+    return (uint32_t)h & (STRIPE_BUCKETS - 1);
+}
+
 /* Caller holds commit_mu. */
 static struct stripe *stripe_find(efs_ino_t ino, uint32_t ci, uint64_t object)
 {
-    for (uint32_t at = g_bucket[bucket_of(ino)]; at; at = g_st[at - 1].next) {
+    for (uint32_t at = g_identity[identity_bucket(ino, ci, object)]; at;
+         at = g_st[at - 1].hash_next) {
+        EFS_COMMIT_LOOKUP_PROBE();
         struct stripe *p = &g_st[at - 1];
         if (p->ino == ino && p->ci == ci && p->object == object)
             return p;
@@ -87,19 +111,26 @@ static struct stripe *stripe_find(efs_ino_t ino, uint32_t ci, uint64_t object)
 /* Caller holds commit_mu. */
 static void stripe_remove(efs_ino_t ino, uint32_t ci, uint64_t object)
 {
-    uint32_t *link = &g_bucket[bucket_of(ino)];
+    uint32_t *link = &g_identity[identity_bucket(ino, ci, object)];
     while (*link) {
+        EFS_COMMIT_LOOKUP_PROBE();
         uint32_t at = *link;
         struct stripe *p = &g_st[at - 1];
         if (p->ino == ino && p->ci == ci && p->object == object) {
-            *link = p->next;
+            *link = p->hash_next;
+            if (p->prev)
+                g_st[p->prev - 1].next = p->next;
+            else
+                g_bucket[bucket_of(ino)] = p->next;
+            if (p->next)
+                g_st[p->next - 1].prev = p->prev;
             memset(p, 0, sizeof(*p));
             p->next = g_st_free;
             g_st_free = at;
             g_st_live--;
             return;
         }
-        link = &p->next;
+        link = &p->hash_next;
     }
 }
 
@@ -128,8 +159,14 @@ static int stripe_insert(const struct stripe *s)
     struct stripe *p = &g_st[at - 1];
     *p = *s;
     uint32_t b = bucket_of(s->ino);
+    p->prev = 0;
     p->next = g_bucket[b];
+    if (p->next)
+        g_st[p->next - 1].prev = at;
     g_bucket[b] = at;
+    b = identity_bucket(s->ino, s->ci, s->object);
+    p->hash_next = g_identity[b];
+    g_identity[b] = at;
     g_st_live++;
     return EFS_OK;
 }
@@ -296,6 +333,30 @@ static void stripe_log(const char *what, const struct stripe *s, int durable,
             frag_letter(s->state[2]), durable, why, rc);
 }
 
+/* Closure/publication is a fence against a later publication of this
+ * object, not proof of absence. The caller must read metadata afterwards. */
+static int stripe_close_for_absence(struct stripe *s)
+{
+    if (s->published || s->closed) return EFS_OK;
+    int rc = efs_client_put_terminal(s->ino, s->inode_gen, s->ci, s->object);
+    pthread_mutex_lock(&commit_mu);
+    struct stripe *live = stripe_find(s->ino, s->ci, s->object);
+    int closed = live && live->inode_gen == s->inode_gen && live->closed;
+    pthread_mutex_unlock(&commit_mu);
+    if (rc == EFS_OK || closed) {
+        s->closed = 1;
+        return EFS_OK;
+    }
+    return rc;
+}
+
+static int sweep_expired(uint64_t deadline)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now)) return 1;
+    return (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000 >= deadline;
+}
+
 /* Prove the recorded stripes of `ino` (all of them when `all`). */
 static int stripe_prove(efs_ino_t ino, int all)
 {
@@ -382,6 +443,10 @@ static int stripe_prove(efs_ino_t ino, int all)
     }
     pthread_mutex_unlock(&commit_mu);
 
+    /* The same absolute budget covers all metadata work, not just COMMIT
+     * workers. In particular the first mark and every retired-object read
+     * must inherit it; restore the caller's TLS value on the single exit. */
+    efs_client_rpc_set_deadline_ms(deadline);
     int rc = EFS_OK;
     unsigned logged = 0, failed = 0, marked = 0;
     const char *what = all ? "data-commit sweep" : "fsync";
@@ -390,6 +455,11 @@ static int stripe_prove(efs_ino_t ino, int all)
         int durable = 0, open = -1, opens = 0, retire = 0;
         if (!s->ino)
             continue;
+        if (sweep_expired(deadline)) {
+            stripe_log(what, s, 0, "sweep deadline exhausted; obligations retained", EFS_ERR_BUSY);
+            failed++;
+            break;
+        }
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             if (s->state[i] == FRAG_DURABLE)
                 durable++;
@@ -411,20 +481,11 @@ static int stripe_prove(efs_ino_t ino, int all)
                  * SETTLE/PUBLISHED/REJECTED are durable fences against a late
                  * REPORT. Then repeat the mark: absence BEFORE that fence is
                  * not evidence of absence AFTER it. */
-                uint64_t saved = efs_client_rpc_deadline_ms();
-                efs_client_rpc_set_deadline_ms(deadline);
-                int trc = efs_client_put_terminal(s->ino, s->inode_gen, s->ci, s->object);
-                pthread_mutex_lock(&commit_mu);
-                struct stripe *live = stripe_find(s->ino, s->ci, s->object);
-                int closed = live && live->inode_gen == s->inode_gen && live->closed;
-                pthread_mutex_unlock(&commit_mu);
-                if (trc == EFS_OK || closed) {
-                    s->closed = 1;
+                if (stripe_close_for_absence(s) == EFS_OK && !sweep_expired(deadline))
                     mrc = efs_client_rpc_degraded_mark(s->ino, s->inode_gen, s->object,
                                                        s->ci, (uint32_t)open, s->nodes[open]);
-                }
-                efs_client_rpc_set_deadline_ms(saved);
             }
+            if (sweep_expired(deadline)) mrc = EFS_ERR_BUSY;
             if (mrc == EFS_OK) {
                 s->state[open] = FRAG_MARKED;
                 if (marked++ < 8)
@@ -440,12 +501,25 @@ static int stripe_prove(efs_ino_t ino, int all)
                 failed++;
             }
         } else {
-            if (logged++ < 8)
-                stripe_log(what, s, durable, s->state[0] == FRAG_LOST || s->state[1] == FRAG_LOST ||
-                           s->state[2] == FRAG_LOST
-                               ? "need 2 (a member of another incarnation lost a fragment)"
-                               : "need 2", EFS_ERR_IO);
-            failed++;
+            /* A closed/superseded object needs no fragment proof once a
+             * fresh authoritative read proves it absent. With fewer than
+             * two durable fragments never write a one-fragment repair mark:
+             * a still-live or uncertain object must keep failing fsync. */
+            int live = 1;
+            int absent = stripe_close_for_absence(s);
+            if (absent == EFS_OK && !sweep_expired(deadline))
+                absent = efs_client_rpc_object_live(s->ino, s->inode_gen, s->ci,
+                                                     s->object, &live);
+            if (absent == EFS_OK && !live && !sweep_expired(deadline)) {
+                retire = 1;
+            } else {
+                if (logged++ < 8)
+                    stripe_log(what, s, durable, s->state[0] == FRAG_LOST || s->state[1] == FRAG_LOST ||
+                               s->state[2] == FRAG_LOST
+                                   ? "need 2 (a member of another incarnation lost a fragment)"
+                                   : "need 2", EFS_ERR_IO);
+                failed++;
+            }
         }
         if (retire) {
             pthread_mutex_lock(&commit_mu);
@@ -460,6 +534,7 @@ static int stripe_prove(efs_ino_t ino, int all)
             fprintf(stderr, "%s: %u more stripes without proof\n", what, logged - 8);
         rc = EFS_ERR_IO;
     }
+    efs_client_rpc_set_deadline_ms(parent);
     free(snap);
     return rc;
 }

@@ -86,6 +86,7 @@ int main(int argc, char **argv)
         efs_client_session_start() != EFS_OK) return 1;
     efs_dcache_init();
     efs_client_enable_meta_batch(4096);
+    if (efs_client_view_start() != EFS_OK) return 1;
     pthread_t threads[8];
     struct worker workers[8];
     unsigned started = 0;
@@ -100,6 +101,7 @@ int main(int argc, char **argv)
     }
     if (efs_dcache_flush_all() != EFS_OK || efs_client_report_dirty(1) != EFS_OK)
         rc = 1;
+    efs_client_view_stop();
     if (efs_client_shutdown() != EFS_OK) rc = 1;
     printf("direct files=%llu bytes=%llu writers=%llu rc=%d\n",
            (unsigned long long)nw, (unsigned long long)total,

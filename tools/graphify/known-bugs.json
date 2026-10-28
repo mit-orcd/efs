@@ -131,6 +131,58 @@
         }
       ],
       "limit": "Exercises real memory and disk stores with alias indices, valid high indices, snapshots and reopening. No claim of a previously reachable client consensus exploit."
+    },
+    {
+      "id": "F4-sweep-metadata-deadline",
+      "contract": "docs/status/graph-defects-20261028.md",
+      "heading": "F4 \u2014 Sweep metadata RPCs miss the shared deadline (P2)",
+      "production": {
+        "file": "src/client/data_commit.c",
+        "symbol": "efs_client_data_commit"
+      },
+      "oracle": "tests/test_data_commit.c",
+      "oracle_caller": {
+        "file": "tests/test_data_commit.c",
+        "symbol": "test_sweep_deadline"
+      },
+      "oracle_literals": [
+        "metadata_deadline==parent && deadline==parent",
+        "expire_during_mark=1",
+        "marks==1 && live()==2 && deadline==0"
+      ],
+      "calls": [
+        {
+          "file": "src/client/data_commit.c",
+          "symbol": "stripe_prove"
+        }
+      ],
+      "limit": "The C oracle calls efs_client_data_commit, which calls stripe_prove. Production bookkeeping with a synthetic monotonic jump and stubbed RPCs; verifies inherited absolute budget and retained obligations. Does not establish a live-cluster wall-clock timing bound."
+    },
+    {
+      "id": "F5-retired-stripe-two-lost",
+      "contract": "docs/status/graph-defects-20261028.md",
+      "heading": "F5 \u2014 Closed absent stripes with fewer than two durable fragments never retire (P2)",
+      "production": {
+        "file": "src/client/data_commit.c",
+        "symbol": "efs_client_data_commit"
+      },
+      "oracle": "tests/test_data_commit.c",
+      "oracle_caller": {
+        "file": "tests/test_data_commit.c",
+        "symbol": "test_retired_objects"
+      },
+      "oracle_literals": [
+        "object_queries==1 && !marks",
+        "expire_during_object=1",
+        "terminal_rc=EFS_ERR_BUSY; object_queries=0"
+      ],
+      "calls": [
+        {
+          "file": "src/client/data_commit.c",
+          "symbol": "stripe_prove"
+        }
+      ],
+      "limit": "The C oracle calls efs_client_data_commit, which calls stripe_prove. Component retirement requires a publication/terminal fence followed by an authoritative absence read. GETCHUNKS transport and base/span/packed/fence cases are exercised separately in test_getchunks_budget.py. No live data-loss claim."
     }
   ]
 }

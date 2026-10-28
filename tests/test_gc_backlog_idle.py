@@ -49,6 +49,9 @@ assert 'maintenance_at = efs_iostats_now_us() + (uint64_t)GC_LOOP_MS * 1000' in 
 assert 'if (maintenance) host_dir_spread_pass(h)' in thread
 assert 'attempts<2 && h->gc_running' in s
 assert 'expiry_at = efs_iostats_now_us() +\n                            20000' in thread
+assert 'trunc_progress+=trunc.progress;trunc_capped|=trunc.capped;' in thread
+assert 'host_gc_backlog_idle(h->gc_backlog_idle_ms,trunc_capped,0,trunc_progress)' in thread
+assert thread.index('if(trunc_idle<idle_ms)') < thread.index('host_gc_metadata_waiting(h)')
 assert 'removed_before' in thread and 'removed_after' in thread
 assert thread.count('host_reap_completed')==2 # reap completions count as progress
 assert 'host_snap_export_pass(h)' in thread and 'if (sleep_us > 20000) sleep_us = 20000' in thread

@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `9c41041f9cc8333961668b7e1b6e324aebbba88e`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 16,395 nodes, 68,374 directed typed edges, 506 communities.
+Source base: `8d413bfd0dc4d6b9d0d2f2829cfe84b5960224cc`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 16,715 nodes, 69,382 directed typed edges, 520 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -13,27 +13,29 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 - F1-stripe-prepublication: PASS — Regression covers pre-publication capacity pressure, wrong FileID and publication racing a NOT_FOUND mark. Storage transport is stubbed; live mount/failover acceptance is separate.
 - F2-pending-receipt-ownership: PASS — Production table and hash, colliding pending owners; duplicate execution is refused. Does not assert a prior duplicate durable publication occurred.
 - F3-raft-index-width: PASS — Exercises real memory and disk stores with alias indices, valid high indices, snapshots and reopening. No claim of a previously reachable client consensus exploit.
+- F4-sweep-metadata-deadline: PASS — The C oracle calls efs_client_data_commit, which calls stripe_prove. Production bookkeeping with a synthetic monotonic jump and stubbed RPCs; verifies inherited absolute budget and retained obligations. Does not establish a live-cluster wall-clock timing bound.
+- F5-retired-stripe-two-lost: PASS — The C oracle calls efs_client_data_commit, which calls stripe_prove. Component retirement requires a publication/terminal fence followed by an authoritative absence read. GETCHUNKS transport and base/span/packed/fence cases are exercised separately in test_getchunks_budget.py. No live data-loss claim.
 
 ## Relationships
 
-- `affects`: 6
-- `calls`: 26060
+- `affects`: 8
+- `calls`: 26154
 - `case_of`: 116
-- `contains`: 24967
-- `defines`: 1845
-- `documents_finding`: 6
-- `exercises`: 6
-- `imports`: 6595
-- `imports_from`: 816
-- `indirect_call`: 654
+- `contains`: 25317
+- `defines`: 1902
+- `documents_finding`: 8
+- `exercises`: 7
+- `imports`: 6778
+- `imports_from`: 862
+- `indirect_call`: 670
 - `inherits`: 16
 - `invokes`: 2
-- `mentions_symbol`: 2167
-- `method`: 627
-- `rationale_for`: 1222
-- `references`: 2101
-- `references_path`: 1072
-- `regression_for`: 6
+- `mentions_symbol`: 2351
+- `method`: 637
+- `rationale_for`: 1257
+- `references`: 2105
+- `references_path`: 1094
+- `regression_for`: 8
 - `uses`: 90
 
 ## Extraction warnings
@@ -44,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1407}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1460}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.

@@ -29,7 +29,7 @@ store that must stay absent (the refusal comes before any store access)
 and an endpoint (127.0.0.1:1) no daemon can bind.
 """
 import argparse, concurrent.futures, errno, hashlib, json, os, random, re, socket, struct
-import subprocess, sys, threading, time
+import signal, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 
 PROTOCOL = 5
@@ -540,14 +540,51 @@ def h_small_mutate(a):
 # ---- d3: .efs commands and concurrent queries under ordinary I/O ----------
 
 def efs_cmd(where, cmd, *args, timeout=60):
+    """Launch queries without forking the address space owning FUSE reads.
+
+    W121/K10: fork during another thread's direct-I/O read can detach its
+    destination page on affected kernels. Use posix_spawn explicitly, rather
+    than relying on subprocess's platform/argument-dependent fast path. Query
+    scripts locate their directory via __file__, not the launcher's cwd.
+    Temporary output files avoid pipe backpressure and retain the same timeout,
+    return-code and exact-answer checks. No read or query retry is added here.
+    """
+    return spawn_capture([sys.executable, str(Path(where).absolute() / '.efs' / cmd), *args], timeout)
+
+
+def spawn_capture(argv, timeout):
     t0 = time.monotonic()
-    try:
-        p = subprocess.run([sys.executable, str(where / '.efs' / cmd), *args], cwd='/', capture_output=True,
-                           timeout=timeout)
-        rc, out, err = p.returncode, p.stdout, p.stderr
-    except subprocess.TimeoutExpired:
-        rc, out, err = 124, b'', b'deadline'
-    return rc, out, err.decode(errors='replace'), time.monotonic() - t0
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        actions = [(os.POSIX_SPAWN_OPEN, 0, os.devnull, os.O_RDONLY, 0),
+                   (os.POSIX_SPAWN_DUP2, out.fileno(), 1),
+                   (os.POSIX_SPAWN_DUP2, err.fileno(), 2)]
+        pid = os.posix_spawn(sys.executable, argv, os.environ, file_actions=actions,
+                             setsigdef=(signal.SIGPIPE,))
+        reaped = False
+        try:
+            while True:
+                done, status = os.waitpid(pid, os.WNOHANG)
+                if done:
+                    reaped = True
+                    rc = os.waitstatus_to_exitcode(status)
+                    break
+                left = timeout - (time.monotonic() - t0)
+                if left <= 0:
+                    os.kill(pid, signal.SIGKILL)
+                    os.waitpid(pid, 0)
+                    reaped = True
+                    return 124, b'', 'deadline', time.monotonic() - t0
+                time.sleep(min(.01, left))
+        finally:
+            if not reaped:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                os.waitpid(pid, 0)
+        out.seek(0)
+        err.seek(0)
+        return rc, out.read(), err.read().decode(errors='replace'), time.monotonic() - t0
 
 
 def wait_indexed(where, timeout):

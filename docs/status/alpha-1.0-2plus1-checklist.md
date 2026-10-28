@@ -5,8 +5,12 @@ candidate or topology acceptance recorded by this checklist.**
 
 Phase 1 finishes and qualifies the existing **two data fragments plus one parity
 fragment** architecture at every supported cluster size. Completion is the
-**alpha 1.0** milestone. Only afterwards do we continue the remaining
+**alpha 1.0** milestone. Afterwards comes [alpha 1.1 architectural
+consolidation](alpha-1.1-consolidation.md), followed by the remaining
 [distributed-cluster roadmap](distributed-cluster-roadmap-20261022.md).
+Alpha 1.1 does not move or waive any task or release gate in this checklist.
+The Stage 1 cross-path due-diligence tasks AY–BB below are correctness audits,
+not a requirement to complete alpha 1.1 restructuring before alpha 1.0.
 This is release sequencing, not a claim that the final D36 design is implemented.
 No tag, merge, push, deployment or data deletion is performed by this document.
 
@@ -39,7 +43,8 @@ Alpha 1.0 is reached in three stages, in this order:
 - **New bugs block.** A bug found in Stage 2 or 3 becomes a new K row and
   blocks again.
 - **Performance comes last.** No performance work is done before Stage 3,
-  except where a correctness gate needs it (bounded progress, D4).
+  except where a correctness gate needs it (bounded progress, D4), and the
+  explicitly authorized Stage 1 hot-path tasks AB–AX below (Oct 28).
   Performance changes never relax correctness or durability checks.
 - **Stage 3 stays inside alpha.** A performance change that needs 2+2, more
   or redistributed metadata groups, leader or voter redistribution (W66),
@@ -121,7 +126,7 @@ Historical October 22 legend (retained):
 | K7 | **W83** transaction decision records are never retired | lifecycle / growth | FIXED, Oct 22 initial/correction waves (`907a5891f`, `85d8dd438`): decision retirement/cursor and exact DECIDE/RETIRE decoding regressions recorded; follow-up decoder limits remain explicit ([integration review](devel-integration-review-20261022.md)). **History (retained):** FIXED, merged Oct 22 (`907a5891f`): replicated `TXN_RETIRE` compacts decisions to tombstones and reclaims them after a 60 s retention from a per-shard cursor; unknown decisions answer STALE (readers retry), never the old value; a sweeper re-drives orphaned decisions. Note: retention must stay above the 5 s recovery age and clock skew (no assert yet) **REOPENED Oct 22 (R2 P2, R3 P2): `efs_txn_scan_decisions` always restarts at the prefix with a 32-record page, so 32 unresolvable live decisions starve every later one; the extended DECIDE and TXN_RETIRE decoders accept trailing bytes (`clen <` minimum instead of exact). FIX: per-shard continuation with wraparound for the live-decision sweep; exact lengths and field validation, malformed entries halt the group through the unsupported-entry path; tests through the real apply**. **R2 and R3 FIXED, merged Oct 22 (`85d8dd438`): per-shard continuation cursor with wraparound (`HOST_DEC_SCAN_WORK` 256 keys per pass; the recovery mark stays armed until a full clean page), exact DECIDE/TXN_RETIRE lengths with shard and verdict validation (malformed entries halt through the unsupported-entry path), retention ≥ 10× the recovery age asserted; tests run through the real apply in `make test`. Follow-up noted by the session: the RESOLVE, DROP and PREPARE decoders still accept a minimum length, not an exact one.** |
 | K8 | **W148** modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file | data correctness | VERIFY: K8 patch merged in Oct 22 wave (`50003197c`, code `7a3a6a18e`); historically cited `71ce4ff35` is not an ancestor but has the same stable patch-id; retained fixed-build W148 rerun still owed after nuc capture loss ([W148 evidence](review-pack-validate-once-20261022.md)). **History (retained):** FIXED, merged Oct 22 (`71ce4ff35` on devel). Root cause: `dcache_apply_init` let a partial write with a loaded base keep the slot's UNCOND base, so the flush published the write-time image (from an unrefreshed local chunk entry: zeros or a peer's lost bytes) as the whole chunk with no merge and no CAS. Reproduced 3× in 9 attempts on node9901 (RDMA, devel `7c510c60f`); a cold read from a fresh client returned the same bad bytes. The two-client regression (`tests/posix/posix_2client.py`) fails 3/3 before and passes 3/3 after. VERIFY: the w125 modify rerun on the fixed build is NOTRUN; the kept W148 stores and hashes are in the session hand-over ([review](review-pack-validate-once-20261022.md)) |
 | K9 | **W87** buffered concurrent append loses records under load | data correctness | CLOSED without resolution by user decision D41: no root cause or fix; reopens on a new record-loss sighting ([D41](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24)). **History (retained):** **CLOSED without resolution (user, Oct 24, [D41](decisions.md)): never reproduced, no root cause, no fix; reopens if a record loss is seen again.** Was: **INCOMPLETE** (Oct 22): not reproduced (23 oracle rounds, 19,597 records, churn/GC/POSIX load on efs2; VM run, not formal evidence; [attempt](w87-append-oracle-efs2-20261022.md)); no root cause, no fix. The exact oracle (`tests/live/append_oracle.py`, `append_oracle_cluster.sh`) and `tests/test_append_oracle.py` are in devel for the parent session to run on the real clusters. **Xorinox (Oct 23, merged Oct 23 (`306a01fd4`)): not reproduced in 110 oracle rounds (84,480 acknowledged records, 27 with three-daemon restart) under churn, GC and POSIX load; all exact, no write errors; W87 stays OPEN ([evidence](gates-xorinox-20261022.md#k9--w87-concurrent-o_append-oracle)).** |
-| K10 | **W121** a read right after a successful fsync returns the previous file's payload (FUSE kernel fork/page-pinning; kernel fix deferred) | data correctness | DECIDED, D40: K10/W121 is an alpha known limitation, not a fixed kernel defect; published trigger stays ([D40](decisions.md#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass)). **History (retained):** DECIDED Oct 23 (D40): known limitation in alpha 1.0, documented with its trigger in the release notes (F4); no client workaround. Was DECIDE |
+| K10 | **W121** a fork racing another thread's FUSE direct-I/O read can leave stale bytes in the caller's buffer (kernel page-pinning fix deferred) | data correctness | DECIDED, D40: K10/W121 is an alpha known limitation, not a fixed kernel defect; published trigger stays ([D40](decisions.md#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass)). **History (retained):** DECIDED Oct 23 (D40): known limitation in alpha 1.0, documented with its trigger in the release notes (F4); no client workaround. Was DECIDE |
 | K11 | **W55** span committed but fragment PUTs never landed | data correctness | VERIFY: coordinator owes Linux-FUSE W55 publication/cold-byte qualification; historical trigger remains unisolated, NFS/macOS moved to W152 ([validation](known-bugs-validation-20261008.md)). **History (retained):** VERIFY Linux FUSE. NFS re-export and macOS clients are **DECIDED out of alpha** (user, Oct 22): beta backlog **W152**; their W55 triggers are not isolated in alpha |
 | K12 | **W58** `O_EXCL` create answered EEXIST (historical trigger not isolated) | correctness | VERIFY: coordinator owes W58 exclusive-create/lost-reply live recheck; historical trigger remains unisolated ([validation](known-bugs-validation-20261008.md)). **History (retained):** VERIFY |
 | K13 | **W88** a folded span retry resurrects after history eviction; **W86** default PUT/flush ticket integration staged | publication correctness | VERIFY: ticket/default, D31 collector and dead-client drain merged (`00c865924`, `e6a21692d`); coordinator owes live abandoned-upload collection, RDMA and distinct-host acceptance ([D31 drain](k13-d31-drain-20261024.md)). **History (retained):** FIX (decided Oct 23, D40): finish the PUT/flush ticket integration W86 and the W88 replay for alpha; W137 stays required. Was FIX or DECIDE . **FIXED on branch `devel-k13` (`c860c3dbd`; devel merged in `a79b59de1`, `make test-all` PASS), not merged (Oct 23, [evidence](k13-w86-ticket-default-20261023.md)): the ticketed PUT/REPORT is the only data path, W88 and W137 pass, `make test` and a private three-daemon gate pass on intel1; the D31 abandoned-upload collector is INCOMPLETE**. **D31 collector of settled abandoned uploads PASS (unit and in-process) on branch `devel-k13d31` (`1a8da8af0`), not merged; cluster gate NOTRUN and dead clients' unsettled tickets still uncollected ([evidence](k13-d31-collection-20261023.md)).** **Oct 24: dead and departing clients closed, merged into devel (`e6a21692d`; tested at `59a2308b8`): revoked-stream drain into the orphan ledger, unmount revokes its own session, RECLAIMING path removed; unit and in-process PASS, amd `make test-all` FAILs are host limits shared with the base; live collection gates NOTRUN ([evidence](k13-d31-drain-20261024.md)).** |
@@ -163,7 +168,9 @@ Historical October 22 legend (retained):
 | K49 | Task L: RDMA request dispatch casts `frame + 5` to naturally aligned structs; UBSan stops a healthy daemon on GETATTR, so the mount cannot serve. Original ASan/RDMA fixtures and a source-extracted negative control reproduce it ([evidence](rdma-gate-node9901-20261027.md)). | RDMA request safety / availability | VERIFY: RDMA alignment fix merged (wave 23 `6967bfda2`, code `f78bd66f9`); retained real-HCA/sanitizer checks PASS scoped, integrated-candidate acceptance remains ([Task L](rdma-gate-node9901-20261027.md)). **History (retained):** Fix on `agent/devel-task-l` (`f78bd66f9`): slide the payload to the aligned allocation base while retaining assembly ownership/accounting through dispatch; wire bytes unchanged. Negative/positive UBSan regression, nine real-RDMA checks, GC/K38 twice, TSan 19/19 and ASan/UBSan 49/49 PASS on fstor007; full gate 517/0 FAIL/3 NOTRUN. Fixed/qualified (scoped), merged into devel (wave 23, `6967bfda2`). Blocks alpha: yes pending merge/merged-candidate acceptance. |
 | K50 | Transient metadata admission BUSY reaches RMDIR as EBUSY after a fixed sixteen-attempt cap, before a 30 s namespace budget could expire. Deterministic four-member negative control at `f75257527` uses an unchanged base client and twenty finite refusals | namespace availability under pressure | VERIFY: RMDIR deadline fix merged (wave 22 `a7e881a7a`, code `b78955995`); scoped negative/positive and repeated gates PASS, broader W159 latency and integrated/live acceptance remain ([Task O](dir-ops-busy-under-load-20261027.md)). **History (retained):** Fix committed `b78955995`, merged into devel (wave 22, `a7e881a7a`): use inherited RPC deadlines and give RMDIR the same 30 s callback bound as MKDIR. Same-opid regression PASS; K36/W159 each 5/5 on two hosts; intel2 core 218/218 and full gate 515/0 FAIL/14 NOTRUN, INCOMPLETE coverage (659 s). Broader W159 latency remains OPEN. **Blocks alpha: yes** until integration and remaining acceptance ([evidence](dir-ops-busy-under-load-20261027.md)). |
 | K51 | Task L: the detached heartbeat can still read expiry/Raft-host status while teardown clears and frees `g_host`; TSan reports the race during recovery/rebuild shutdown ([evidence](rdma-gate-node9901-20261027.md)). | shutdown lifetime safety | VERIFY: heartbeat lifetime fix merged (wave 23 `6967bfda2`, code `f78bd66f9`); TSan/ASan and RDMA checks PASS scoped, integrated-candidate acceptance remains ([Task L](rdma-gate-node9901-20261027.md)). **History (retained):** Fix on `agent/devel-task-l` (`f78bd66f9`): join the heartbeat before Raft-host teardown or peer-pool close, recheck stop after its sleep, atomically unpublish the host. In-flight-reader regression and real-RDMA recovery/rebuild/D4 under TSan PASS (19/19); ASan/UBSan 49/49 PASS, full gate 517/0 FAIL/3 NOTRUN. Fixed/qualified (scoped), merged into devel (wave 23, `6967bfda2`). Blocks alpha: yes pending merge/merged-candidate acceptance. |
-| K52 | Task V: eight immediate read-back comparisons failed after successful write/fsync/close of fresh immutable files under eight writers on four distinct TCP hosts (`578e2064b`). Original helper omitted worker id and observed length/digest; later exact checks of all 64 candidates match on each of two clients. | read-after-write correctness | OPEN, blocks alpha: yes; owner Task X: classify eight Task V immediate read-back mismatches against K10 using retained/new exact observations, no packing or persistent-corruption attribution yet ([Task V](a4-lab-topology-dryrun-20261028.md)). **History (retained):** OPEN, cause unclassified; no persistent corruption established and no packing attribution. A later match does not erase the failed comparison. New helper diagnostics retain full path, expected/observed hashes and lengths without retry. **Blocks alpha: yes** ([Task V](a4-lab-topology-dryrun-20261028.md)). |
+| K52 | Task V: eight immediate read-back comparisons failed after successful write/fsync/close of fresh immutable files under eight writers on four distinct TCP hosts (`578e2064b`). Original helper omitted worker id and observed length/digest; later exact checks of all 64 candidates match on each of two clients. | read-after-write correctness | DECIDED under K10/W121 (D40), blocks alpha: no beyond the accepted K10 limitation; [Task X controlled reproduction](k52-immediate-readback-20261028.md), code `ec255dd13`: original fork/read pattern 17 first-read FAIL, spawned reader 22,293 exact PASS, corrected fork-free query-launcher D3 59,112 exact PASS; no kernel or product repair; the eight Task V failures stay individually unclassified and FAIL. **History (retained):** OPEN, blocks alpha: yes; owner Task X: classify eight Task V immediate read-back mismatches against K10 using retained/new exact observations, no packing or persistent-corruption attribution yet ([Task V](a4-lab-topology-dryrun-20261028.md)). **History (retained):** OPEN, cause unclassified; no persistent corruption established and no packing attribution. A later match does not erase the failed comparison. New helper diagnostics retain full path, expected/observed hashes and lengths without retry. **Blocks alpha: yes** ([Task V](a4-lab-topology-dryrun-20261028.md)). |
+| K53 | ORCD dd-profile full gate (fcstor007, `3769f44bb`): the B6 full-quota case let writer W0 succeed while the other writers got `ENOSPC`, where the oracle requires `ENOSPC` for all. Two guarded parent and two guarded fixed-build repeats PASS; failed store retained on fcstor007. Second occurrence: Task X's node9900 gate (`EFS_B6_MODES=full`, isolated base and later gate PASS; [evidence](k52-immediate-readback-20261028.md)). | quota admission correctness | OPEN, blocks alpha: yes; owner unassigned: reproduce and attribute (reclaimed capacity between fill and probe is one hypothesis, not established) ([evidence](orcd-test-dd-profile-20261028.md)) |
+| K54 | Member-down clean unmount: a clean client stop fails at the session revoke (`revoke rc=-13 phase=storage-fence`) while any member is down, because the storage fence must reach every configured member (open finding U4, found Oct 25). | clean stop with one member down | OPEN, blocks alpha: yes (D46, user Oct 28: required fix, not a limitation); owner unassigned: complete accepted flush/settle and safe durable revocation with one member down, never turn a failed revoke into a clean shutdown ([decision](decisions.md)) |
 
 
 ### Recheck: candidate register reconciliation (October 28)
@@ -186,7 +193,7 @@ standalone rows K15/K16/K27/K28 are added without inventing historical runs.
 | K7 | FIXED, Oct 22 initial/correction waves (`907a5891f`, `85d8dd438`): decision retirement/cursor and exact DECIDE/RETIRE decoding regressions recorded; follow-up decoder limits remain explicit ([integration review](devel-integration-review-20261022.md)). **History (retained):** Fixed Oct 22 (`907a5891f`); R2/R3 fixed and merged Oct 22 (`85d8dd438`); see the K row. |
 | K8 | VERIFY: K8 patch merged in Oct 22 wave (`50003197c`, code `7a3a6a18e`); historically cited `71ce4ff35` is not an ancestor but has the same stable patch-id; retained fixed-build W148 rerun still owed after nuc capture loss ([W148 evidence](review-pack-validate-once-20261022.md)). **History (retained):** Fixed Oct 22 (`71ce4ff35`); see the K row. |
 | K9 | CLOSED without resolution by user decision D41: no root cause or fix; reopens on a new record-loss sighting ([D41](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24)). **History (retained):** K9 CLOSED without resolution (user, Oct 24, D41: never reproduced; reopens on a new sighting); K13 and K14 were decided FIX (D40, Oct 23) and are merged with D31 collection, the D31 drain and K32 batching (live RDMA gates NOTRUN, see their rows); K15 and K16 are fixed (see their rows). |
-| K10 | DECIDED, D40: K10/W121 is an alpha known limitation, not a fixed kernel defect; published trigger stays ([D40](decisions.md#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass)). **History (retained):** Open. User-deferred kernel fix; test harnesses now isolate it (`exclusive_create_visibility.py --spawn`). |
+| K10 | DECIDED, D40: K10/W121 is an alpha known limitation, not a fixed kernel defect; published trigger stays ([D40](decisions.md#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass)); harnesses isolate it (`exclusive_create_visibility.py --spawn`, fork-free Stage 2 query launches; [Task X](k52-immediate-readback-20261028.md)). **History (retained):** Open. User-deferred kernel fix; test harnesses now isolate it (`exclusive_create_visibility.py --spawn`). |
 | K11 | VERIFY: coordinator owes Linux-FUSE W55 publication/cold-byte qualification; historical trigger remains unisolated, NFS/macOS moved to W152 ([validation](known-bugs-validation-20261008.md)). **History (retained):** VERIFY. The fixes are recorded on NUC/AMD/TCP or private stores; the alpha profile on separate hosts is NOTRUN. |
 | K12 | VERIFY: coordinator owes W58 exclusive-create/lost-reply live recheck; historical trigger remains unisolated ([validation](known-bugs-validation-20261008.md)). **History (retained):** VERIFY. The fixes are recorded on NUC/AMD/TCP or private stores; the alpha profile on separate hosts is NOTRUN. |
 | K13 | VERIFY: ticket/default, D31 collector and dead-client drain merged (`00c865924`, `e6a21692d`); coordinator owes live abandoned-upload collection, RDMA and distinct-host acceptance ([D31 drain](k13-d31-drain-20261024.md)). **History (retained):** K9 CLOSED without resolution (user, Oct 24, D41: never reproduced; reopens on a new sighting); K13 and K14 were decided FIX (D40, Oct 23) and are merged with D31 collection, the D31 drain and K32 batching (live RDMA gates NOTRUN, see their rows); K15 and K16 are fixed (see their rows). |
@@ -228,7 +235,9 @@ standalone rows K15/K16/K27/K28 are added without inventing historical runs.
 | K49 | VERIFY: RDMA alignment fix merged (wave 23 `6967bfda2`, code `f78bd66f9`); retained real-HCA/sanitizer checks PASS scoped, integrated-candidate acceptance remains ([Task L](rdma-gate-node9901-20261027.md)). **History (retained):** Found by Task L on node9901; RDMA payload alignment fixed at `f78bd66f9`, source-extracted UBSan negative/positive controls recorded. Real-HCA RDMA, live GC/K38 twice and sanitizer gates PASS on fstor007; code gate 517/0 FAIL/3 NOTRUN; retained failed evidence verified ([evidence](rdma-gate-node9901-20261027.md)). Blocks alpha: yes pending merge/merged-candidate acceptance. |
 | K50 | VERIFY: RMDIR deadline fix merged (wave 22 `a7e881a7a`, code `b78955995`); scoped negative/positive and repeated gates PASS, broader W159 latency and integrated/live acceptance remain ([Task O](dir-ops-busy-under-load-20261027.md)). **History (retained):** Task O: deterministic RMDIR EBUSY after sixteen transient pre-admission refusals (~9.55 s), unchanged client; deadline-bounded fix committed on `agent/devel-task-o`, scoped qualification complete: intel2 gate 515/0 FAIL/14 NOTRUN (659 s), core 218/218, five K36/W159 repeats each on both hosts. Broader latency OPEN; RDMA/multi-host NOTRUN. Blocks alpha: yes pending integration and remaining acceptance ([evidence](dir-ops-busy-under-load-20261027.md)). |
 | K51 | VERIFY: heartbeat lifetime fix merged (wave 23 `6967bfda2`, code `f78bd66f9`); TSan/ASan and RDMA checks PASS scoped, integrated-candidate acceptance remains ([Task L](rdma-gate-node9901-20261027.md)). **History (retained):** Found by Task L TSan on node9901; heartbeat ownership joined before host free at `f78bd66f9`; focused shutdown test PASS. Corrected real-RDMA TSan 19/19 and ASan/UBSan 49/49 PASS on fstor007; code gate 517/0 FAIL/3 NOTRUN ([evidence](rdma-gate-node9901-20261027.md)). Blocks alpha: yes pending merge/merged-candidate acceptance. |
-| K52 | OPEN, blocks alpha: yes; owner Task X: classify eight Task V immediate read-back mismatches against K10 using retained/new exact observations, no packing or persistent-corruption attribution yet ([Task V](a4-lab-topology-dryrun-20261028.md)). **History (retained):** Task V four-host TCP D3 FAIL: 8 immediate read-back mismatches; 37,457 other payloads verified, 64/64 candidate paths later exact on both clients. Original observed bytes unavailable; current failure retained, cause OPEN, no product fix claimed. **Blocks alpha: yes** ([evidence](a4-lab-topology-dryrun-20261028.md)). |
+| K52 | DECIDED under K10/W121 (D40), blocks alpha: no beyond the accepted K10 limitation; [Task X controlled reproduction](k52-immediate-readback-20261028.md), code `ec255dd13`: original fork/read pattern 17 first-read FAIL, spawned reader 22,293 exact PASS, corrected fork-free query-launcher D3 59,112 exact PASS; no kernel or product repair; the eight Task V failures stay individually unclassified and FAIL. **History (retained):** OPEN, blocks alpha: yes; owner Task X: classify eight Task V immediate read-back mismatches against K10 using retained/new exact observations, no packing or persistent-corruption attribution yet ([Task V](a4-lab-topology-dryrun-20261028.md)). **History (retained):** Task V four-host TCP D3 FAIL: 8 immediate read-back mismatches; 37,457 other payloads verified, 64/64 candidate paths later exact on both clients. Original observed bytes unavailable; current failure retained, cause OPEN, no product fix claimed. **Blocks alpha: yes** ([evidence](a4-lab-topology-dryrun-20261028.md)). |
+| K53 | OPEN, blocks alpha: yes; owner unassigned: one B6 full-quota over-admission (W0 succeeded, others `ENOSPC`) in the ORCD dd-profile gate, 4/4 guarded repeats PASS, a second in Task X's node9900 gate, cause OPEN, oracle unchanged ([evidence](orcd-test-dd-profile-20261028.md)) |
+| K54 | OPEN, blocks alpha: yes; owner unassigned: D46 makes the member-down clean unmount (U4, `revoke rc=-13 phase=storage-fence`) a required fix before alpha 1.0 ([decision](decisions.md)) |
 
 **Oct 23 evidence qualification:** nuc capture bundles are reported lost;
 xorinox raw outputs were deleted. Their PASS labels below are historical
@@ -376,6 +385,647 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
     K17–K21. This needs the 3-, 4- and 5-plus-host clusters, so they are
     set up in parallel with steps 2–10.
 
+### Stage 1 additional letter tasks — observability interference (AB–AF)
+
+**User-directed Stage 1 addition, October 28.** AA is already assigned to W170;
+these five tasks continue at **AB**. All are **OPEN; implementation and measured
+qualification NOTRUN**. Source review at `3c866b7bf` identified the paths below;
+it did not measure a slowdown or demonstrate a correctness failure. These are
+lettered investigation/repair tasks, not new confirmed K defects and not changes
+to the K-register counts. If a task demonstrates a correctness failure, register
+it in K with its retained reproduction. The unrelated P3-A–P3-F data/metadata
+performance tasks remain in Stage 3.0. The graphify fixer retains ownership of
+the separate data-commit correctness fixes.
+
+- [ ] **AB — Remove diagnostic output from the Raft critical section.**
+  `src/server/raft_host.c::host_pump` calls `host_obs_dump` before releasing
+  `h->mu`; with `EFS_RAFT_OBS` enabled, it formats and prints role/term and
+  periodic statistics while holding the main Raft mutex. Capture a bounded
+  snapshot under the proper owner locks; format and emit off the critical
+  section and pump path, coordinating with AE. Preserve event identity/order
+  and important failure/role-change evidence. Gate: deterministic slow/full log
+  sink, concurrent proposals and status, shutdown and sanitizer checks; measure
+  mutex hold/wait and Raft progress with diagnostics enabled and disabled.
+- [ ] **AC — Avoid unused RDMA totals in routine I/O logging.**
+  `src/server/iostats.c::efs_iostats_dump` uses `efs_iostats_snapshot`, which
+  calls `src/common/rdma.c::efs_rdma_totals`: a scan of 4,096 registry slots
+  under `g_reg_lock`, also used by completion dispatch and connection lifetime
+  management. The periodic I/O line does not print these RDMA totals. Separate
+  the cheap I/O snapshot from requested RDMA aggregation; retain full totals
+  for the management reply that needs them. Gate: routine dumps take no registry
+  lock/scan, management totals still include live and retired connections,
+  concurrent connect/close/poll is safe, TCP/no-RDMA builds work. Measure poller
+  interference and status cost across connection counts.
+- [ ] **AD — Bound contention from always-on counters.**
+  `src/server/iostats.c::efs_iostats_add` updates shared per-class atomic
+  counters, latency sums/maxima and a last-64 sample ring on GET/PUT/disk-write
+  paths; `src/server/writer.c` also updates shared writer statistics. There is
+  no counter mutex here: investigate cache-line contention, not an invented
+  global-lock defect. Measure per-op cost and scaling before choosing bounded,
+  cache-line-separated worker shards or another collection scheme. Gate:
+  concurrent update/snapshot, worker retirement, bounded memory and preserved
+  counter meaning; state sampling/aggregation semantics explicitly, especially
+  for percentiles. No unbounded thread registry or silent loss of error counts.
+- [ ] **AE — Keep routine logging from blocking the Raft pump.**
+  Even after `h->mu` is released, `host_pump` calls the always-on I/O/KV dumps
+  and optional batch diagnostics synchronously. `src/common/log_ts.c::ts_write`
+  writes to the destination under the stdio stream lock; batch diagnostics also
+  hold `flockfile(stderr)` while formatting a large record. Evaluate a bounded
+  telemetry reporter with periodic-record coalescing and explicit overflow
+  accounting. Moving a write outside `h->mu` alone does not free the pump.
+  Gate: slow/blocked/failed log destination, queue saturation and bounded stop;
+  no unbounded queue, hidden failures or dependence of consensus progress on
+  routine telemetry delivery. Define critical-event retention/error reporting
+  separately; preserve timestamps and whole-record integrity. Coordinate AB
+  so neither task introduces a second incompatible reporting queue.
+- [ ] **AF — Decouple management status from consensus execution.**
+  `src/server/raft_host.c::server_raft_host_status` takes `h->mu` while collecting
+  both groups and their peer progress, then obtains KV statistics and reads salt
+  and root metadata. Measure contention under realistic and aggressive polling.
+  Evaluate a bounded published diagnostic snapshot, with age/version and clearly
+  defined coherence, so pollers do not repeatedly serialize on the pump mutex.
+  Do not use stale diagnostic data as authoritative admission, membership,
+  recovery or durability permission. Gate: term/leader changes, retired groups,
+  concurrent recovery and frequent polling; consumers must handle stale/unavailable
+  snapshots explicitly. Verify current management fields and operational scripts
+  before changing their freshness contract.
+
+**Shared completion rule:** retain original failures, exact baseline/candidate
+builds, commands, host/topology/profile and raw evidence outside Git. Use bounded
+local regressions first, then separately retained loaded checks on owned fixtures;
+never interfere with another session's cluster. Report diagnostic cost separately
+from formal workload timing. Demonstrate the specific interference reduction and
+no correctness, visibility, shutdown, memory-bound or error-reporting regression;
+run affected tests and applicable sanitizer/concurrency gates. No new user-facing
+A/B flags, reduced durability or relaxed deadlines. A source-level opportunity
+alone is not a measured bottleneck; an unrun gate remains NOTRUN. Suggested order:
+AC first, AB/AE together, then AD/AF according to measurement.
+
+### Stage 1 additional letter tasks — hot-path serialization (AG–AJ)
+
+**User-directed extension, October 28; source reviewed at `08a1606df`.**
+All four are **OPEN / implementation and measurements NOTRUN**. The canonical
+code graph supplied callers; the named source bodies and lock scopes were read
+to verify each mechanism. These are confirmed serialization points, not measured
+bottlenecks or demonstrated correctness bugs. No K-register count changes.
+The Stage 1 exception above applies; P3-A–P3-F and AB–AF retain their own scope.
+
+- [ ] **AG — Client buffer allocation and budget critical section.**
+  Graph path: `chunk_put_worker` / `prefetch_ahead` → allocation wrappers →
+  `src/client/bufpool.c::buf_alloc`. Reservations, allocations, frees and metadata
+  charges share `g_bp_mu` across the mount. A cold-slab allocation holds it while
+  calling `malloc`, publishing a region through `efs_rdma_zc_region_add` (which
+  takes `g_zc_lock`) and filling the free list; heap fallback/free also runs under
+  this lock. Region publication here is not hardware MR registration, which is
+  lazy elsewhere. Measure cold/warm lock hold and wait at mixed read/write loads.
+  Evaluate reserving bounded capacity before allocating outside the lock and/or
+  bounded local freelists. Preserve atomic credit ownership, aggregate hard
+  bounds, metadata bounds, demand-read/drain headroom and thread-exit refunds;
+  do not replace a real resource bound with approximate per-thread accounting.
+  Gates: `test_bufpool`, client allocator/large-allocation and sparse-metadata
+  coverage plus deterministic simultaneous slab growth, allocation failure,
+  thread exit and saturated writers with demand reads. Retain exact accounting
+  and ownership under ASan/TSan; measure end-to-end gain as well as allocator cost.
+- [ ] **AH — Mount-wide chunk-map read/write contention.**
+  `src/client/read.c::chunk_get_worker` and `rdcache_map_gen` take
+  `g_client.idx_mu` to read chunk mappings; `src/client/write.c` takes the same
+  mutex around chunk/base/delta updates (for example `dcache_put_now_budgeted`).
+  Independent files therefore meet at one map lock despite striped data caches.
+  The source explicitly requires the lock because map arrays can realloc; simply
+  removing it or returning unpinned pointers is unsafe. Measure lock frequency,
+  hold/wait and map-growth effects for many independent files. Evaluate stable
+  map ownership with partitioned locking or a safe read-mostly scheme, including
+  all resize/invalidation paths. Gates: concurrent map growth, truncate, span
+  publication/folding, cache invalidation and same-/cross-client exact reads;
+  preserve inode generation/epoch authority, lock order and bounded metadata.
+  Existing `test_sparse_metadata.py` is a starting gate, not proof that readers
+  may race mutations. This task is distinct from network startup and ReadIndex
+  overlap in P3-B/P3-E.
+- [ ] **AI — RDMA completion dispatch lifetime locking.**
+  Graph path: `recv_poller` → `harvest_recv_wcs` → `pend_push` in
+  `src/common/rdma.c`. Every received CQE locks process-wide `g_reg_lock`,
+  validates the slot generation, and publishes the completion (including an
+  eventfd wake when needed) before unlocking. This covers normal completions,
+  unlike AC's unnecessary diagnostic registry scan. Measure lock cost at high
+  message rates, multiple devices and connection churn before choosing per-device
+  registries, shorter pinned-lifetime sections or bounded batch handling.
+  Preserve stale-QP generation rejection, connection teardown safety, single
+  producer ring ownership and lost-wakeup prevention. Do not remove the separate
+  `recv_handoff_mu` polling/repost synchronization introduced for correctness.
+  Gates: existing RDMA handoff/progress/fork/segmentation tests, delayed stale
+  CQEs during destroy/reuse, ring pressure and wakeup races, then real RDMA
+  loaded qualification; TCP-only mocks cannot qualify this optimization.
+- [ ] **AJ — Server export reference acquisition on data I/O.**
+  Graph/source path: GET in `src/server/handler.c::server_handle_conn` and PUT
+  in `src/server/put_upload.c::server_put_upload` acquire an export under
+  `s->lock`; `src/server/store.c::server_export_put` takes that same server-wide
+  lock to release its in-flight reference. Export lookup scans the bounded
+  export table, and first use can initialize an export under the lock. Disk I/O
+  itself is outside this critical section: do not describe it as serialized
+  disk access. Measure acquire/release contention at high small-I/O concurrency.
+  Evaluate stable export references or per-export lifetime synchronization with
+  a separately protected registry. Preserve destroy admission, in-flight drain,
+  geometry initialization and reference balance on every error path. Gates:
+  concurrent first use, GET/PUT against destroy/stop, failed I/O and acquisition
+  failures, plus export-handle and ticketed-upload tests and memory/concurrency
+  checks. No cached reference may outlive its export or bypass ticket authority.
+
+**Deduplication and acceptance:** connection checkout already uses per-node
+`conn_lock[idx]`; the read cache already has striped locks. Neither is a new
+"global lock" finding here. AG concerns resource ownership, not AD's diagnostic
+counters; AH concerns the local map, not metadata consensus placement; AI adds
+normal completion dispatch beyond AC's status scan; AJ concerns export lifetime,
+not AF's management status snapshot. Apply AB–AF's retained-evidence and bounded
+qualification rules. Establish a baseline before selecting a redesign; report
+no-benefit results rather than replacing a necessary lock merely because it is
+shared. Any demonstrated correctness defect gets its own K record. No new runtime
+A/B selectors, weakened durability, expanded format scope or foreign-cluster use.
+
+### Stage 1 additional letter tasks — copies, allocation and repeated work (AK–AM)
+
+**User-directed extension, October 28; source reviewed at `327d44a18`.**
+All three are **OPEN / implementation and measurements NOTRUN**. Graph queries
+for `packed_fetch_run`, `efs_packed_read_base_scratch` and
+`efs_client_degraded_flags` identified paths; the source bodies below establish
+the mechanisms. This is a static review, not a runtime profile or a new K defect.
+No binary, cluster, workload or acceptance verdict changed. The Stage 1 exception
+applies; no new behavior flags are proposed.
+
+- [ ] **AK — Packed reads: remove avoidable fragment staging and repeated hashing.**
+  `src/client/read.c::packed_fetch_run` receives an owned whole reply through
+  `efs_conn_recv_msg`, hashes its fragment against the reply digest, copies the
+  entire fragment into the supplied scratch and frees the reply. Then
+  `src/common/packed_reader.c::efs_packed_read_base_scratch` hashes those bytes
+  again against the mapping's expected fragment digest. These are different
+  authorities: retain both comparisons and the segment/record validation.
+  Evaluate one payload hash checked against both expected digests, with explicit
+  immutable-buffer ownership, and a bounded receive into caller storage or
+  ownership transfer. TCP's generic receive allocates; RDMA takes ownership of
+  its message buffer, so do not claim an extra malloc in both transports.
+  The existing `efs_conn_recv_msg_into` assumes a one-byte status layout;
+  GET_SEGMENT has a different reply header and cannot blindly use that helper.
+  Gates: packed-reader and packed-segment tests, corrupt payload, reply digest
+  and mapping digest independently, short/oversized/error replies, all two-of-three
+  fragment combinations, deadline expiry and connection reuse. Compare TCP/RDMA
+  allocated bytes, copied/hashed bytes, CPU and cold packed-read latency with
+  identical integrity checks. This is separate from P3-B's request overlap and
+  does not add an unbounded segment cache or remove client integrity verification.
+- [ ] **AL — Reads: allocate decode scratch only for the selected path.**
+  `src/client/read.c::efs_client_decode_placed_chunk_attempts` calls
+  `decode_frag_scratch(3 * frag_len)` before deciding that the mapping is packed.
+  The packed branch instead allocates its own `5 * geometry / 2` scratch and
+  returns without using the ordinary fragment storage. For ordinary reads where
+  `2 * frag_len == chunk_size`, both data pointers are replaced by the output
+  halves, leaving only the parity fragment needing separate storage. The current
+  scratch is TLS-reused and freed at thread exit, not malloced afresh per read;
+  the opportunity is unnecessary first allocation/growth and retained capacity.
+  Move path selection before ordinary scratch acquisition and evaluate one-fragment
+  scratch for the in-place case, preserving the fallback for other geometry.
+  Gates: packed-only workers, mixed geometries, zero/hole reads, each missing
+  fragment, failed reads and worker exit under ASan/LSan; prove aliasing and
+  reconstruction safety in `src/data/erasure.c::decode`. Measure cold allocation
+  counts and retained bytes across worker counts as well as read latency. This
+  changes the caller's demand, not AG's allocator locking or budget mechanism;
+  preserve demand-read headroom and existing resource bounds.
+- [ ] **AM — REPORT: batch degraded-object bookkeeping without changing publication.**
+  `src/client/inode_rpc.c::efs_client_rpc_report_dirty_pub` calls
+  `efs_client_degraded_flags` separately while serializing every chunk and, after
+  successful publication while degraded state remains pending, calls
+  `efs_client_degraded_drop` for each chunk. Both functions in
+  `src/client/write.c` probe the same object table under `g_dgobj_mu` when its
+  live count is nonzero. A single pending degraded object can therefore cause
+  locks/probes for many unrelated records; the empty-table fast path already
+  avoids these locks and must be included in the baseline. Evaluate bounded
+  batch lookup/retirement to amortize lock acquisition, not an unbounded critical
+  section over a whole REPORT. Capture flags consistently with the publication
+  being serialized; retire only the exact acknowledged object generation, never
+  a replacement or unresolved/failed publication. Preserve missing-fragment
+  marks, receipts, retry identity, deadlines and concurrent insert/repair behavior.
+  Gates: K35 degraded fsync, REPORT partial verdict/resolved retry/session tests,
+  plus forced note/drop/publication interleavings and sparse/dense degraded tables.
+  Measure probes, lock acquisitions/hold/wait and REPORT p95 versus batch size.
+  This is distinct from P3-C's ticket-array compaction and AH's chunk-map lock;
+  generic REPORT buffer reuse is not claimed necessary by this finding.
+
+**Acceptance and deduplication:** preserve the existing zero-fragment hash reuse,
+in-place ordinary decode, worker pools and striped caches. AB–AJ and P3-A–P3-F
+remain unchanged. Apply their retained baseline/comparison evidence rules: exact
+source/build, topology, transport, I/O mode, fixture and concurrency; raw captures
+outside Git; unchanged correctness/deadline gates; memory and p95/p99 results.
+No gain is claimed until measured, and no existing failure evidence is replaced.
+
+### Stage 1 additional letter tasks — RPC and proof batching (AN–AO)
+
+**User-directed extension, October 28; source reviewed at `d62a753d9`.**
+Both tasks are **OPEN / implementation and measurements NOTRUN**. Canonical graph
+queries for `server_put_upload` and `efs_fuse_readdir_ino`, followed by source
+inspection of the downstream handlers, establish the sequences below. They are
+optimization candidates, not measured bottlenecks or permission to delete
+correctness checks. No K count, live gate or failure verdict changes.
+
+- [ ] **AN — PUT storage authority: batch status requests and avoid duplicate proof work.**
+  Every fragment in `src/server/put_upload.c::server_put_upload` submits an exact
+  `PUT_TICKET_STATUS` before storage admission. In
+  `src/server/raft_host.c::server_raft_host_submit`, a nonleader delegates that
+  entire status request to the lane leader (W166); the leader calls
+  `host_session_establish_admit` for authoritative session state, then
+  `host_read_index` for the ticket's group before inspecting the exact ticket
+  and participant session floor. The session helper itself obtains an owner
+  proof, locally or via a remote command. When owner and lane group coincide,
+  this sequence calls ReadIndex twice for one read-only authority request.
+  Three fragment uploads also independently request the same ticket status.
+  Count storage-to-leader status RPCs, session-owner RPCs, proof admissions and
+  actual quorum rounds separately: `host_read_index_admitted` already shares
+  readers needing the same round, so three requests do not imply three separate
+  quorum exchanges. K32 already batches ticket ADMIT/SETTLE; do not duplicate it.
+  First evaluate one fresh, applied proof covering the same-group status reads
+  with explicit scope and term/context validity. Then evaluate bounded status
+  batches per destination/group or safe concurrent request sharing, with a
+  verdict per exact ticket. Different groups still require their own authority.
+  No reusable time-based ADMITTED cache, client assertion or stale follower KV
+  may authorize a PUT. Keep W166 routing, session fencing, storage guards,
+  immutable ticket identity, generation checks, deadlines and stop refusal.
+  Gates: ticket upload/batch/session-admission coverage; deterministic revoke,
+  SETTLE, leader change and halted/lagging follower interleavings between proof,
+  lookup and storage admission; mixed valid/stale batch entries and lost replies.
+  Run normal and degraded multi-client writes on TCP and RDMA, measuring RPCs
+  per fragment, quorum rounds, batching wait and write p95/p99. Bound queue size
+  and residence time; no low-load batching delay may break existing deadlines.
+- [ ] **AO — Directory listing: amortize serial page RPCs and repeated proofs.**
+  `src/client/efs_fuse.c::efs_fuse_readdir_ino` first refreshes the parent via
+  `efs_client_stat_refresh` and checks current permissions, then synchronously
+  loops over `efs_client_rpc_readdir_cur`. Each reply has at most
+  `EFS_READDIR_MAX == 64` entries (`include/efs/protocol.h`): 4096 returned names
+  therefore require at least 64 page RPCs, in addition to the initial refresh.
+  `src/server/raft_host.c::server_raft_host_readdir` reads the parent with
+  ReadIndex on each call and obtains the needed lane proofs; each page starts a
+  new call's coverage. The server already reuses proof coverage within a call,
+  and the FUSE directory handle already retains its collected listing, so do not
+  propose either as a missing optimization. Evaluate bounded larger/variable
+  pages or a bounded multi-page response with explicit byte, scan and time caps.
+  A cursor depends on the preceding reply; blindly sending later page RPCs in
+  parallel is not valid. Do not simply keep proof bits across calls or remove
+  the initial permission refresh. Combining parent authority with enumeration
+  would require an explicit authorization protocol that rejects access before
+  exposing names, including peer chmod and caller group semantics; that is not
+  justified by a cached parent row. Preserve exact source/name cookies, EOF,
+  source-only cursor transitions and K48 layout/bitmap revalidation with fresh
+  authority for newly introduced groups. Gates: readdir permission-authority,
+  reply-boundary, source-cursor, collection and K48 tests; long names, tiny user
+  buffers, concurrent rename/split/unlink, denied access, leader loss and halted
+  replica. Measure first-result and full-list latency, page RPCs, proof rounds,
+  peak client/server memory and fairness against concurrent metadata mutations.
+  Larger pages must not trade bounded progress for fewer network messages.
+
+**Deduplication and acceptance:** AN concerns storage-side ticket authority,
+not P3-A's PUT startup overlap, P3-C's local settlement compaction or AM's REPORT
+bookkeeping. AO concerns directory page transport, not P3-E's GETCHUNKS proofs
+or P3-F's CREATE proofs. Existing ReadIndex round sharing, ticket cohorts,
+REPORT transaction batching and deep-path LOOKUP_PATH support remain intact.
+The path walk's restart-from-root fallback was examined but is not added here:
+current direct callers are the benchmark path, and a separate measured case is
+needed before treating it as a general FUSE hot-path priority. Apply AB–AM's
+unchanged baseline, raw-evidence retention and correctness requirements. No
+new configuration toggle, weakened integrity/authority, or speed claim is part
+of these tasks; implementation and live comparison remain NOTRUN.
+
+### Stage 1 additional letter tasks — disk I/O and write amplification (AP–AR)
+
+**User-directed extension, October 28; source reviewed at `b42015536`.**
+All three are **OPEN / implementation and measurements NOTRUN**. Graph traversal
+of `sg_read_tail`, `sg_write` and `server_write_fragment_to_path`, checked against
+the source bodies, establishes the mechanisms. No new correctness defect or
+measured storage bottleneck is claimed. No live cluster, failure evidence or K
+verdict changes; the Stage 1 exception applies.
+
+- [ ] **AP — Packed segment reads: combine adjacent payload and tail I/O.**
+  `src/server/segment_store.c::server_segment_read` first calls `sg_read_tail`
+  and then `server_frag_pread` for the payload. The helper in
+  `src/server/store.c` rounds the tail-record read to a 4 KiB O_DIRECT read,
+  allocates an aligned bounce for each call, and copies out. Thus a successful
+  segment GET issues separate tail and payload reads even though they are
+  adjacent in the same file. Ordinary `read_file_bytes` already reads payload
+  and tail together; do not report ordinary reads as missing that optimization.
+  Evaluate one bounded aligned read of the payload plus tail, followed by the
+  same full identity, record and payload-hash validation before serving bytes.
+  This saves a read submission/bounce opportunity, not necessarily device bytes:
+  the same payload and tail still need reading. Preserve short/torn-tail errors,
+  exact generation/geometry checks, O_DIRECT and no buffered fallback. Measure
+  syscalls, device requests, bytes, allocations and packed GET p95/p99 on actual
+  storage, including cold and repeated reads. Gates: segment storage/recovery,
+  packed reader, direct-I/O-required and K37 coverage; missing/truncated files,
+  wrong identity, bad payload, read error and concurrent reclaim. Separate this
+  server disk task from AK's client receive copy/double hash work.
+- [ ] **AQ — Segment directory barriers: share only covered namespace fsyncs.**
+  `src/server/segment_store.c::sg_write` writes and fsyncs each newly created
+  fragment file, then `sg_sync_path` opens/fsyncs/closes its directory.
+  `sg_mkdirs` additionally syncs parents for newly created directory levels.
+  Ordinary fragments already use `directory_sync_group_run` through
+  `fragment_directory_group_barrier`; segment directory syncs do not. Evaluate reuse of
+  that bounded grouping mechanism for concurrent segment namespace barriers,
+  retaining each caller's descriptor and matching device/inode identity.
+  Only mutations completed before a batch's barrier starts can share its
+  result; arrivals during I/O require a later barrier. Keep per-file data
+  durability and all required ancestry ordering. No permanent 'directory was
+  synced' cache, arbitrary delay or blanket fsync removal. Segment buckets may
+  distribute jobs so sharing is rare: measure actual same-directory overlap,
+  barrier counts and pack/rebuild latency before selecting this optimization.
+  Gates: `test_directory_sync_group.c`, segment recovery/rebuild tests, injected
+  file/directory fsync failures, new nested directories, descriptor reuse,
+  concurrent creators and crash at each write/barrier boundary. Every successful
+  reply must retain the same durability guarantee. This is distinct from P3-D's
+  client COMMIT workers and the ordinary root barrier, which already groups work.
+- [ ] **AR — Ordinary PUT retries: quantify and reduce identical-object rewrites.**
+  `src/server/store.c::server_write_fragment_to_path` treats EEXIST on the
+  exclusive-create attempt as an overwrite and calls `shard_io_thread` again
+  with `no_create`. That path writes the full padded payload and I25 tail; it
+  does not compare the existing object first. A retry after a lost reply can
+  therefore submit the same object's bytes again. Existing same-size overwrite
+  handling already preserves extents and avoids needless ftruncate: this task
+  concerns bytes rewritten, not that fixed inode-size issue. Establish retry
+  frequency and logical versus submitted/device bytes under delayed/lost replies.
+  Evaluate a bounded, lifetime-safe completion proof for identical immutable
+  objects, or verified existing-object reuse only where it costs less than the
+  write. Reading the entire payload just to skip a write may be worse; compare
+  both costs. A filename, matching tail digest or prior volatile success alone
+  is insufficient: preserve payload integrity, ticket/session authority, exact
+  identity/length, quota accounting and the current root durability epoch/boot
+  proof. Torn or failed writes must be repaired or refused, never acknowledged
+  as already complete. Gates: store overwrite and ticket upload tests; identical
+  concurrent retries, conflicting content, lost reply, quota exhaustion, damaged
+  payload with intact tail, interrupted write, restart and failed root barrier.
+  Measure normal traffic too so the common first PUT gains no extra read probe.
+  This is separate from AN's authority RPC batching and P3-C's ticket compaction.
+
+**Deduplication and acceptance:** KV WAL already shares fdatasync boundaries;
+Raft persistence batching, ordinary directory grouping, range-limited LSM
+compaction, single-write payload/tail layout and same-size extent preservation
+are not new findings. Do not reopen W123 checkpoint work or replace its failed
+measurements with these static observations. Apply AB–AO's exact build/environment,
+retained raw evidence and unchanged correctness/deadline requirements. Distinguish
+logical bytes, syscall bytes, filesystem/device write amplification and barrier
+counts. O_DIRECT is not a durability guarantee. No format change, new knob,
+removed barrier or performance PASS is authorized by merely listing a candidate.
+
+### Stage 1 additional letter tasks — wakeups and polling (AS–AU)
+
+**User-directed extension, October 28; source reviewed at `7dc73fb68`.**
+All three are **OPEN / implementation and measurements NOTRUN**. Graph paths
+through `demand_read_alloc`, `put_win_close` and `host_pump_kick` were verified
+against their callers, wait predicates and source bodies. These establish work
+that occurs, not measured scheduler overhead or a correctness defect. Existing
+failures, K counts and acceptance verdicts are unchanged.
+
+- [ ] **AS — Demand-read capacity: replace repeated timed allocation attempts with bounded notification.**
+  `src/client/read.c::demand_read_alloc` first tries allocation and trims the
+  read cache, then retries allocation with 1 ms sleeps for the first 100 failed
+  loop attempts and 10 ms thereafter. It stops at the inherited RPC deadline,
+  or its existing approximately 30 s fallback without one. Capacity release in
+  `src/client/bufpool.c::efs_buf_free` does not notify these sleepers. This only
+  occurs under allocation pressure, not on every healthy read. Evaluate a
+  capacity-generation/predicate wait with atomic check-and-enqueue against
+  release, avoiding both missed refunds and a broadcast herd. Cover all capacity
+  return paths, including thread-credit destruction, rather than only body free;
+  allocation failure unrelated to budget must still terminate within the bound.
+  Preserve aggregate accounting, read headroom, lock order, fairness to writers,
+  shutdown and deadlines. Gates: bufpool and allocator tests plus a forced free
+  between failed allocation and sleep, mixed allocation sizes, many waiting
+  readers, exhausted writers, thread exit and no capacity return. Measure failed
+  attempts, timed wakeups, context switches and release-to-read latency. Separate
+  this wait policy from AG's allocator critical section and AL's scratch sizing.
+- [ ] **AT — PUT-window completion: wake affected predicates instead of every waiter.**
+  `src/client/write.c::put_win_close` broadcasts on the single `put_win_cv` after
+  every close, even while that inode still has open windows. `put_win_wait`
+  checks an inode-specific predicate under `put_win_mu`, but also wakes at most
+  every 50 ms to recheck the deadline. Thus unrelated inode waiters can wake,
+  acquire the same mutex and go back to sleep. The overflow state deliberately
+  makes every inode busy and is an exception requiring broader notification.
+  Evaluate notification on relevant busy-to-ready transitions, with bounded
+  per-inode/sharded waiter ownership, and deadline waits that do not periodically
+  wake merely to rediscover an unchanged predicate. Do not replace broadcast
+  with an arbitrary single signal: it can select a waiter whose inode is still
+  busy and strand the eligible one. Preserve overflow/global release, multiple
+  waiters per inode, slot reuse, errors and the inherited operation deadline.
+  Gates: `test_put_window_deadline.py`, deterministic simultaneous inode windows,
+  partial closes, overflow entry/exit, completion-before-sleep and shutdown;
+  concurrent flush/read/REPORT exact-data checks. Measure wakes per satisfied
+  waiter, lock reacquisition, timeout accuracy and p95 under independent-file
+  writes. This is not P3-D's COMMIT worker reuse or AM's degraded-object table.
+- [ ] **AU — Raft pump kicks: coalesce notifications without losing work.**
+  `src/server/raft_host.c::host_pump_kick` performs a nonblocking eventfd write
+  for every call from proposal/read/inbox/control paths; the pump later polls
+  and drains the eventfd. The kernel counter already combines notifications,
+  so one kick does not imply one context switch. The candidate is avoiding
+  redundant write syscalls while work is already signaled or being drained,
+  not adding an event-driven pump (it already exists). Evaluate a race-proven
+  pending-work notification protocol or bounded producer batching only after
+  measuring kick rate versus drains, useful pump cycles and scheduler wakeups.
+  An arrival between drain, clearing notification state and sleep must either
+  be processed or leave a readable event; no queue work may rely on a missed
+  wake being rescued by the timer. Preserve retained-slice handling in
+  `host_pump_poll_timeout`, lock-free kick behavior, shutdown, read requests,
+  persistence completion, and wall-time Raft ticks/election cadence. No spinning
+  replacement, arbitrary batching delay or change to durability ordering.
+  Gates: host inbox/read admission coverage and deterministic arrival at each
+  drain/clear/poll boundary, retained work after a bounded slice, eventfd EINTR/
+  EAGAIN, stop and heavy proposals; then loaded leader/follower failover tests.
+  This concerns the Raft pump eventfd, not AI's RDMA completion lifetime lock,
+  AE's logging, or W123 checkpoint persistence.
+
+**Deduplication and acceptance:** GET/PUT worker pools already signal batch
+completion only when the last job finishes, queue-space signals are conditional
+on a previously full queue, and ordinary fragment reads already avoid the old
+per-fragment thread-pool hop. These are not missing optimizations. Keep required
+RDMA wakeups, lifetime synchronization and Raft proof notifications; do not infer
+that a condvar broadcast or timer is unnecessary merely from its presence.
+Apply AB–AR's exact-source, retained-evidence and unchanged-gate requirements.
+Measure idle/low-load and saturated cases, context switches and tail latency,
+including starvation and cancellation. No new switches or performance PASS
+claims; no implementation or live test was run for this review.
+
+### Stage 1 additional letter tasks — workload-sized scans (AV–AX)
+
+**User-directed extension, October 28; source reviewed at `ee66f837b`.**
+All three are **OPEN / implementation and measurements NOTRUN**. Graph queries
+for `server_raft_host_report`, `child_idx_del` and `sync_hardlink_attrs` were
+checked against the function bodies and callers. Complexity below describes
+those loops, not a measured end-to-end slowdown or an unbounded input: message
+and staging limits still apply. No K defect, acceptance or failure verdict changes.
+
+- [ ] **AV — REPORT: index the chunk-to-inode-size join once per request.**
+  In `src/server/raft_host.c::server_raft_host_report`, the main record loop
+  searches `irecs[0..ino_count)` from the start for each of `count` chunk records.
+  This is O(C × I) comparisons in the worst case for C chunks and I inode-size
+  records; with one chunk per distinct inode it can grow quadratically within
+  the bounded frame. This is not the separate `ic[32]` row cache, whose linear
+  lookup has a fixed small bound. Evaluate a bounded request-local inode index
+  or order-preserving indexed join built once, retaining original record order
+  and immutable publication identity. Preserve first-match behavior for duplicate
+  size records unless a separately reviewed validation rule changes it; zero
+  EOF is explicit and absence is not permission to guess size. Preserve deleted
+  inode handling, captured FileID/epoch, partial verdicts, deadlines and allocation
+  failure before any new side effects. Gates: REPORT zero-EOF, frame-boundary,
+  partial-verdict, retry/resolve and K38 bounds; add mixed/duplicate/missing inode
+  records and adversarial order. Measure comparison count, CPU, transient memory
+  and latency while varying C and I independently, including the common one-inode
+  case. This is not AM's degraded-object bookkeeping, AN's status proofs or
+  P3-C's ticket compaction. The client chunk-only-inode fallback has another
+  size-array scan, but it already bypasses normal inodes through `dirty_set_has`;
+  do not label all client REPORT construction quadratic from that rare branch.
+- [ ] **AW — Local child vectors: avoid a parent-sized search on deletion and slot moves.**
+  `src/meta/metadata.c::child_idx_del` searches all slots of the parent's child
+  vector before swap-removing the match. `child_idx_replace_slot` searches that
+  vector again to fix a relocated inode row; `remove_inode_slot` invokes it
+  when swapping the last row into a removed slot. Graph callers include local
+  unlink/forget, rename and RPC-row upsert. For a loaded parent with D children,
+  an operation can scan O(D); an adversarial sequence of D removals can do
+  O(D²) comparisons, even though the actual vector deletion is O(1).
+  This is the in-memory export/staging index, not the authoritative Raft KV
+  directory scan or the split migrator. Evaluate a reverse slot-to-child-position
+  index or equivalent bounded representation. Update it on both vector swaps
+  and inode-row moves, parent rebinding, rebuild and eviction. Preserve hardlink
+  row identity, per-name indexing, root handling, sharded tables, memory charging
+  and failure atomicity; do not cache unstable array pointers across growth.
+  Gates: sparse-metadata/stage-eviction and rename/unlink coverage, with forced
+  realloc, swap of a row from another parent, multiple aliases, repeated grow/
+  delete cycles and allocation failure. Measure comparisons against loaded
+  child count, retained index bytes and local mutation latency. Distinct from
+  AH's chunk-map locking and AO's server READDIR page transport.
+- [ ] **AX — Loaded hardlink aliases: visit aliases rather than unrelated inode rows.**
+  `src/meta/metadata.c::sync_hardlink_attrs` scans `ex->inode_count` to propagate
+  shared attributes for a non-directory with nlink > 1; size, mode, owner, time
+  and RPC upsert callers use it. Single-link files and directories already return
+  immediately. Link/unlink nlink updates also contain full-table scans, and
+  `stamp_ctime_loaded` can visit shard tables for multiply linked inodes. Thus
+  cost depends on unrelated loaded rows, not just the inode's alias count.
+  Evaluate an inode-to-alias-row index, potentially sharing AW's slot-lifetime
+  machinery but with a different key and invariant. Preserve each alias's parent,
+  name/slab ownership and rollups while updating shared attributes, nlink and
+  timestamps. Cover row relocation, unlink with open handles, last alias,
+  remote adoption, cross-shard aliases, eviction/reload and allocation failure.
+  Gates: metadata hardlink semantics, stage eviction, sparse metadata and POSIX
+  link/rename/chmod/truncate cases; compare a fixed number of aliases while
+  increasing unrelated loaded rows, then vary aliases independently. Report
+  index memory and update cost as well as lookup speed. This task does not
+  claim ordinary single-link writes scan the table, nor replace authoritative
+  metadata reads with a local alias index.
+
+**Deduplication and acceptance:** bounded 32-entry REPORT row-cache, 256-entry
+mtime pins, fixed-size node/connection tables and hash-probe loops are not called
+quadratic merely because they contain loops. Existing inode/name/chunk hash
+indexes, hashed READDIR name deduplication and P3-C's repeated ticket memmove
+remain separate. Keep AB–AU's exact build/environment, retained raw evidence,
+unchanged correctness/deadline and memory-bound gates. Use operation/comparison
+counts to establish scaling before proposing data-structure complexity; retain
+small-workload baselines. No new behavior flags, implementation or live
+performance acceptance is included in this documentation review.
+
+### Stage 1 additional letter tasks — cross-path due diligence (AY–BB)
+
+**User-directed correctness review, October 28; source inspected at `cb1a6a434`.**
+These are the **four strongest additional examples** from the reviewed paths,
+not an exhaustive whole-codebase audit or ten items padded with duplicates.
+All are **OPEN / audit qualification NOTRUN**. Graph navigation and source reads
+confirm separate mechanisms; they do not prove a defect. Unlike the optimization
+items above, these are Stage 1 due-diligence gates on authority, lifetime and
+failure semantics. No K defect or performance PASS is inferred from duplication.
+
+- [ ] **AY — Ordinary versus packed upload: what does successful completion prove?**
+  Ordinary `src/server/put_upload.c::server_put_upload` checks the exact ticket
+  under fresh authority, enters a storage-session guard and writes through the
+  export/store path. Ordinary data durability is tracked by root barriers and
+  boot/epoch proofs (`src/server/store.c`, client `data_commit.c`). Packed
+  `src/server/segment_store.c::server_segment_put` checks pack-object authority,
+  uses a segment guard/reclaim fence and packing quota reserve; `sg_write`
+  explicitly fsyncs the file and directory. Rebuild has another admission branch.
+  These are legitimate potential differences, but both paths publish a successful
+  PUT outcome into higher-level publication/protection logic.
+  **Audit:** trace each caller's interpretation of success through metadata
+  publication, fsync, restart and rebuild. Tabulate authority, in-flight owner,
+  acknowledged versus durable state, quota charge/refund, exact duplicate handling
+  and error cleanup. In particular, ordinary retries can overwrite while the
+  normal segment EEXIST path checks the tail/digest without the rebuild branch's
+  full payload check: establish the preconditions that make each retry safe,
+  rather than assuming EEXIST means a proven object. Test partial write, intact
+  tail/corrupt body, lost reply, quota failure, stop and reclaim races with
+  equivalent semantic outcomes. Preserve ticket versus pack-ledger distinctions.
+  **Done:** reviewed completion contracts and cross-path fault results, with
+  defects fixed/retested or explicitly tracked as blockers. AN/AQ/AR still own
+  RPC/barrier/rewrite optimization; this task owns correctness of their contracts.
+- [ ] **AZ — Verification policy across GET, audit and recovery.**
+  Ordinary serving uses `store.c::read_fragment_verified`; packed serving uses
+  `segment_store.c::server_segment_read`; packed audit uses
+  `server_segment_check`; recovery uses the verification paths in `store.c`
+  orchestrated by `recovery.c`. They share `efs_frag_record_verify`, but separately
+  handle file size, payload reads/hash comparison, expected metadata digest,
+  errors and destructive recovery action. Packed audit distinguishes MISSING,
+  BAD and ERROR; a GET returning an I/O error is not proof of absence.
+  **Audit:** build a table of identity/length/digest checks and result categories
+  for each entry point, including which authority supplies the expected identity.
+  Run one semantic fixture matrix through the real wrappers: valid object, wrong
+  kind/generation/holder geometry, short/extra tail, bad body with valid record,
+  wrong metadata digest, ENOENT and injected read/permission errors. A fixture
+  need not have identical bytes across different object formats. No unproven
+  object may be served, and transient I/O failure must not silently become
+  corruption, absence or permission to delete. Verify recovery's durable degraded
+  mark before clearing its fence. Different actions may be correct by context;
+  record their justification. Existing record unit tests alone do not cover this.
+  **Done:** matrix outcomes and retained regressions for gaps; identify reusable
+  policy primitives only after proving the guarantees match. AK/AP retain their
+  hashing/copy/I/O scope; W123/K36 failures and qualification remain independent.
+- [ ] **BA — Ordinary orphan, superseded-object and segment deletion authority.**
+  `src/server/put_orphan.c::server_put_orphan_delete` requires a durable session
+  floor and authoritative orphan status before exact-object deletion and directory
+  cleanup. `store.c::server_gc_superseded_delete` and the reclaim journal handle
+  other ordinary objects. Packed deletion enters through ledger/reclaim authority
+  and `segment_store.c::server_segment_delete`, which unlinks generation-named
+  fragment paths; its low-level helper relies on its caller's fence. Quota credit,
+  physical unlink, namespace durability and journal completion are separate steps.
+  **Audit:** enumerate every reachable caller, including replay/recovery/rebuild,
+  and prove the fence, exact identity and non-resurrection guarantee for each.
+  Trace credit-before-delete, retry and crash behavior; neither absence nor a
+  cached retirement decision alone authorizes all object kinds. Exercise stale
+  generation, concurrent PUT/rebuild, already missing files, unlink/fsync failure
+  and crash between credit, journal, unlink and acknowledgement. Verify no live
+  published object is removed and no retry double-credits space. Do not equate
+  a guard mutex with durable authority or add per-file deletion to live segments.
+  **Done:** a deletion-authority/caller inventory and passing current-format
+  replay/interleaving gates using reclaim, orphan and pack-ledger tests. This is
+  a correctness audit, not AQ's barrier sharing or AR's duplicate-write avoidance.
+- [ ] **BB — Client metadata overlays versus authoritative metadata.**
+  Local `src/meta/metadata.c` inode/name/child/alias indexes and mutators coexist
+  with Raft-backed rows in `src/meta/meta_apply.c`. They are not two equivalent
+  authoritative replicas. `src/client/ops.c::efs_client_adopt_lookup` adopts an
+  RPC row then overlays local state; `efs_client_stat_open` obtains RPC metadata
+  but retains local accepted state with explicit nlink/error handling. FUSE
+  permission-sensitive listing instead refreshes authority before enumeration.
+  **Audit:** document field-by-field authority for size, epoch/generation, nlink,
+  mode/uid/gid, timestamps, names and packing state across lookup, open getattr,
+  refresh, REPORT, truncate and unlink-open. Check implementation rather than
+  comments: the stat-open comment says local-first/RPC-on-miss, while the reviewed
+  body calls RPC even when it has a local row. Correct misleading comments as
+  part of the audit, not by changing behavior to match them. Exercise remote
+  chmod/chown/rename/link/unlink alongside dirty local writes, stale/reordered
+  replies, truncation, eviction/reload and RPC failure. Preserve read-your-writes
+  without promoting a stale cache into permission or namespace authority.
+  **Done:** one reviewed overlay contract and tests for every differing path;
+  repair demonstrated gaps. AW/AX still own index performance; this audit does
+  not replace those tasks or require a new local authority/cache protocol.
+
+**Priority and closure:** start with BA and AY (irreversible deletion and
+successful-write meaning), then AZ and BB. Each audit records source/build,
+actual entry points, owner/authority, ordering, error outcomes, tests and evidence.
+Close only with a reviewed justified-difference result or a fixed and qualified
+finding; an unknown cell remains OPEN/NOTRUN. Put confirmed bugs into the K
+register with preserved failures. Cross-link existing tests and owning tasks
+rather than rerunning or reimplementing them without a gap. No blanket rewrite,
+backwards compatibility, new flags, timeout relaxation or evidence deletion.
+
+These Stage 1 audits do not bring all alpha 1.1 restructuring into alpha 1.0.
+Small necessary correctness repairs belong here; broad ownership/interface
+consolidation remains [alpha 1.1](alpha-1.1-consolidation.md). A demonstrated
+in-scope defect cannot be deferred merely by calling it architectural debt.
+
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 
 - [ ] **A1** Choose one devel candidate commit and identify all daemon/client
@@ -400,7 +1050,10 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
   `fcstor-4x1-tcp` topology (user-selected fcstor012–015 in place of the lab
   hosts); [four-host dry run](a4-lab-topology-dryrun-20261028.md) completed with D3
   FAIL (K52 immediate read-back mismatch); other eight requested gates PASS.
-  Topology defined, acceptance decision open; this rehearsal does not close A4.
+  Topology defined; this rehearsal does not close A4. **D46 (user, Oct 28):**
+  3, 4 and 5 distinct storage hosts on fcstor007–011 (`/data1/01`), each over
+  TCP and RDMA (six cells); alpha 1.0 must also work on all 13 fcstor nodes
+  (fcstor003–015). Execution NOTRUN.
 - [ ] **A5** Record quota, disks, RDMA devices, mount options, clients, concurrency,
   deadlines, fixture counts/sizes and expected results for every topology.
   Fresh-format setup only when a format change requires it; no compatibility work.
@@ -543,7 +1196,8 @@ alternatives reduces both product complexity and the supported test matrix.
   are [real gates](stage2-gates-20261024.md), loopback-3 PASS; B6 and D4 since
   their merge). The original lab-host topology was blocked by firewalld and
   amd's wired link; Task V's user-selected fcstor012–015 private TCP topology
-  has formed and run the private four-host dry run (D3 FAIL, K52 OPEN). A4
+  has formed and run the private four-host dry run (historical D3 FAIL; later
+  Task X corrected D3 PASS, K52 DECIDED under K10/D40). A4
   acceptance remains open; no three-host RDMA topology is qualified by this run.
 - [ ] **A12 — Closure.** Every A/B selector has either been removed with its
   alternative implementation or is an explicitly justified, reviewed support
@@ -656,17 +1310,16 @@ facts for A6, not decisions.
   killed daemon (verified recovery, K36), K34, K37 and `Protection: LOST`.
   Open finding U4: a clean client stop fails at the session revoke
   (`revoke rc=-13 phase=storage-fence`) while any member is down, because
-  the storage fence must reach every configured member; the user decides
-  whether that is an alpha limitation or a fix.
-- [ ] **S4 — Effective settings.** Decide whether **W122**, the listing of
-  effective settings, is in alpha. It supports A8 and A10.
+  the storage fence must reach every configured member. **D46: a required
+  fix before alpha 1.0, K54 (blocks alpha: yes).**
+- [ ] **S4 — Effective settings.** **D46: W122**, the listing of effective
+  settings, is required in alpha 1.0. It supports A8 and A10.
   **STRUCTURE Oct 24 ([effective settings](../using/alpha-1.0-surface.md#s4--effective-settings)):**
   where each effective value is visible today (startup log, `status`,
   `raft-status`, `version`, `sync-status`, `commands-policy get`; tunables
   not at all) and the page layout once A6 lands. The A6 inventory exists
-  and the A7 removals are done (D42); **waits for** the user's W122
-  decision only (described, not decided, in the Oct 25
-  [audit](docs-audit-20261025.md)).
+  and the A7 removals are done (D42); implementation and acceptance NOTRUN
+  (described in the Oct 25 [audit](docs-audit-20261025.md)).
 - [ ] **S5 — User documentation.** Install, configuration, supported
   topologies, the reduced configuration matrix (A11) and the published
   limitations.
@@ -938,11 +1591,121 @@ round says which physical or software limiter it hit.
   reproduced and the reruns pass. Findings parked for post-alpha go to the
   roadmap with their measurement.
 
+### Stage 3.0 letter tasks — data and metadata performance
+
+These **P3-A–P3-F** identifiers belong to Stage 3 of **alpha 1.0**, not the
+alpha 3.0 roadmap or the earlier Stage 1 session letters. All six are
+**OPEN / measurement NOTRUN**. Graph-led source review at `b9c2fad85` found
+optimization candidates, not measured bottlenecks or proven speedups. Planning
+now does not waive the Stage 2 prerequisite above. The separate
+**efs-coding - graphify fixer** session owns the two data-commit correctness
+findings (metadata-RPC deadline propagation and closed-object retirement);
+these performance tasks do not duplicate or close them.
+
+- [ ] **P3-A — Data writes: overlap fragment request startup.**
+  `src/client/write.c::put_fragments_parallel_once` checks out connections
+  sequentially, then polls/sends to each peer sequentially before collecting
+  replies. Measure checkout, send/backpressure and reply time separately on
+  healthy and congested peers. Evaluate bounded concurrent/nonblocking startup
+  so one slow peer does not delay requests to healthy peers. Preserve immutable
+  tickets, distinct-node placement, acknowledgement accounting, transport
+  semantics and the original end-to-end deadline. Gate: payload verification,
+  partial sends, pool exhaustion and peer failure, plus throughput and tail
+  latency on both qualified TCP and RDMA profiles.
+- [ ] **P3-B — Data reads: overlap the two fragment GET starts.**
+  `src/client/read.c::get_two_parallel_run` calls `get_pair_start` serially;
+  connection checkout/send for the first peer can delay the second even though
+  replies are polled together. Measure cold/warm sequential and random reads
+  under pool pressure and a slow peer; evaluate bounded startup overlap.
+  Preserve fragment identity/digest checks, fallback decode, shared deadlines
+  and ownership of outstanding replies/buffers. Gate: exact reads, cancellation,
+  stale mappings and peer failure, with throughput and p95/p99 latency; do not
+  buy a healthy-path gain with unbounded extra requests or memory.
+- [ ] **P3-C — Write bookkeeping: compact settled tickets once per batch.**
+  `src/client/put_ticket_owner.c::settle_forget` removes each retired ticket
+  with a separate suffix `memmove` under `g_ledger.mu`. Measure bytes moved and
+  mutex hold/wait time across ledger occupancy and settlement batch sizes.
+  Evaluate one stable compaction per batch, preserving sequence order, exact
+  retired masks/leading counts, closure notifications and concurrently added
+  or active tickets. Gate: sparse/dense retirement, lost settlement replies,
+  concurrent PUT/settle and bounded-capacity regressions; show reduced copying
+  and lock occupancy and check end-to-end write/close latency.
+- [ ] **P3-D — fsync: reuse bounded COMMIT workers and share covered work.**
+  `src/client/data_commit.c::stripe_prove` creates and joins workers per sweep
+  and participating node. Measure thread creation, overlapping COMMIT RPCs and
+  fsync latency under concurrent files before selecting worker reuse, coalescing
+  or both. A shared result may cover only acknowledgements preceding its COMMIT
+  and matching its storage boot verifier; retain per-stripe proof, degraded
+  marks, caller deadlines and error propagation. Gate: acknowledgements arriving
+  during COMMIT, incarnation changes, failed replies and independent caller
+  deadlines, plus exact data after restart. Never substitute one cluster-wide
+  durability assertion for per-stripe proof.
+- [ ] **P3-E — Metadata reads: overlap GETCHUNKS group proofs.**
+  `src/server/raft_host.c::server_raft_host_getchunks` obtains the second
+  collection's ReadIndex proofs sequentially for the groups it observed.
+  Evaluate the existing `host_read_index_pair` machinery for overlapping those
+  proofs, after auditing its local/remote and split-leader cases. Keep the first
+  and second collections, post-admission proof requirement, applied-index
+  coverage, transaction decisions and inode epoch/history recheck. Gate:
+  concurrent publication/truncate, changed leaders and lagging followers;
+  measure proof wait, retries, RPC count and GETCHUNKS/read p95/p99. No reuse
+  of an earlier completed proof as permission for a new read.
+- [ ] **P3-F — Metadata writes: overlap CREATE routing proofs.**
+  `src/server/raft_host.c::host_create_ex` reads the parent before discovering
+  and fencing an uncovered target group. Measure the extra round on cross-group
+  creates. Evaluate speculative parent/target paired proofs using the existing
+  lookup-planning approach, then revalidate routing against authoritative parent
+  state. A wrong hint must not add an unrelated group's failure as a CREATE
+  dependency. Preserve session/opid receipts, allocation and transaction verdicts.
+  Gate: stale hints, changing directory state, leader changes, lost replies and
+  concurrent same-name creates; compare create/close throughput and p95/p99.
+
+**Suggested order:** baseline first; P3-C and P3-E are the first bounded
+experiments, then P3-A/P3-B, with P3-D/P3-F selected by measured cost. This is
+not a claim that any candidate dominates the workload. Existing persistent
+GET/PUT pools, bounded prefetch, full-chunk copy avoidance and admission batching
+must be accounted for, not proposed again as missing features.
+
+**Shared acceptance:** use P1's frozen workload/topology and three runs per build,
+record exact source/profile and all-user host activity, and compare throughput,
+p50/p95/p99, CPU, allocations/copies, lock/queue wait, RPC/Raft-entry counts and
+memory bounds as relevant. Separate profiler attribution from formal timing.
+Retain failures and raw evidence; reproduce gains on private baseline/candidate
+builds, rerun affected Stage 2 correctness and applicable sanitizer/concurrency
+gates, then record keep/revert under P4. No new user-facing A/B flags, relaxed
+bounds, weaker durability or new format/placement scope. No task is complete
+merely because a microbenchmark improved; the affected end-to-end workload must
+be checked for regressions.
+
 ## F. Release evidence and alpha 1.0 exit
 
 - [ ] **F1** Unit/integration, enabled-feature and applicable memory/concurrency
   checks have explicit PASS/FAIL/NOTRUN results. Docs and code tests both report;
   an unavailable diagnostic is disclosed, never silently counted as passed.
+  **Task I reviewed Oct 28 UTC ([evidence](task-i-20261026.md)):**
+  `47ca08eaf` xorinox gate 518 / 0 FAIL / 13 NOTRUN, hour FAIL stored
+  data +~56.8%; RSS PASS, 2080 exact and zero packer errors. Historical
+  xorinox measurements were shared-client, not proven quiet. Node9900
+  `47ca08eaf` RDMA FAIL RSS; TCP FAIL load RSS +14.05%, 2080 exact,
+  pack errors 0/0, drain 81.3 s. Reclaim-fairness `6550b678d` and
+  allocator lifetime `d7e265746` have native unit evidence, new full gates/
+  hours owed (`d7e265746` hardware gate FAIL: four LSan runtime
+  failures, independently reproduced; corrected `00ccd12f3` gate 524 total /
+  0 FAIL / 18 NOTRUN, native RDMA 9/9 PASS; hour FAIL foreground RSS
+  +13.04% and drain, 2080 exact, pack errors 0/0; TCP hour PASS with
+  all RSS <=1.63%, drain 92.9 s, 2080 exact; overall pair FAIL).
+  AMD native default RoCE PASS 9/9; full gate FAIL 3/520, hour NOTRUN;
+  fixed-harness/cleanup continuation `d7e265746` timed out waiting for W123;
+  no store touched. Fresh `14010248c` preservation/cleanup succeeded: six
+  synthetic lines exact, peer/three daemons stopped cleanly; native RDMA 9/9
+  PASS, gate FAIL 1/526 on observer compilation, corrected unit PASS; fresh
+  small-page candidate `a083dcbf3` live protocol now PASS (scoped): node9900
+  RDMA/TCP and AMD TCP hours, each 2080 exact/pack errors 0/0, independent
+  RSS within bounds; drains 77.8/147.0/78.9 s. Hardware is shared-client;
+  AMD interval quiet. Gates 527/0 FAIL with 18/14 NOTRUN; native RDMA 9/9
+  each. Task I protocol complete, F1 remains unchecked for missing release
+  coverage. Original failures, narrow TCP drain margin and unproven prior
+  intermittent cause remain recorded.
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;
   [evidence](f1-memory-concurrency-gates-20261025.md)):** `make leak-check`
@@ -1022,10 +1785,10 @@ round says which physical or software limiter it hit.
   the open-items paragraph lists K34–K37 as fixed on loopback with live
   runs NOTRUN; L22 and L24 are marked as open user decisions (F12, W122).
   Release-notes entries decided so far (D40, Oct 23), one each:
-  - **K10/W121 readback after fsync:** a read issued right after a
-    successful fsync can return the previous file's payload; triggered by
-    the FUSE kernel fork/page-pinning read path, no client workaround in
-    alpha ([diagnosis](orcd-w121-fork-read-20261016.md)).
+  - **K10/W121 fork/read race:** a fork while another thread has a
+    FUSE direct-I/O read in flight can leave stale bytes in the caller's
+    buffer on affected kernels. Fsync is not the trigger; no client
+    workaround in alpha ([diagnosis](orcd-w121-fork-read-20261016.md)).
   - **Erasure profile:** 2+1 only, on 3, 4 and more than 4 nodes.
   - **Membership:** online addition required; online removal deferred (A13).
   - **Clients:** Linux FUSE client only (no NFS re-export, no macOS; W152).
@@ -1049,14 +1812,14 @@ K9/K27 are CLOSED with their different reasons; K10/K23 are DECIDED with
 D40/D42 scope limits. No K row is promoted to VERIFIED without a
 frozen-candidate gate. Functional decisions and the flag audit remain
 Task Z work; A4 topology, S4/W122, F12 and power-loss scope are not decided
-by this count reconciliation.
+by this count reconciliation (they are decided in D45 and D46).
 
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
-| Known-defect register K (Stage 1; once per candidate) | OPEN — 52 reconciled: 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN; K48 (Task S attribution), K52 (Task X); named VERIFY gates above | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
-| Functional scope S decided (once per candidate) | OPEN | (same) | (same) |
+| Known-defect register K (Stage 1; once per candidate) | OPEN — 54 rows (52 reconciled by Task Y, K53 and K54 added in waves 30–31): 11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN; K48 (Task S attribution), K53 (ORCD full quota), K54 (member-down clean unmount); named VERIFY gates above | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
+| Functional scope S decided (once per candidate) | PARTLY DECIDED — D45 + D46 (user, Oct 28); W122, the K54 fix and the 33-tunable audit are required work; S1 command dispositions and `--writers` remain open | (same) | (same) |
 | Candidate and profile | NOTRUN — reviewed devel `9e4d66a8c`, not a frozen release candidate; K counts above (0 VERIFIED), A1/A2/A5 profile owed | NOTRUN — same counts; A4 decision and frozen profile owed | NOTRUN — K28 cap/layout is implemented (16-node cap); same counts, concrete N/failure domains/profile unqualified; prior “UNSUPPORTED until K28” was historical |
-| Flag audit and A/B removal (A6–A10, A12; once per candidate) | NOTRUN — Task Z reruns A6–A12 on current candidate; K register counts above are not an audit verdict (11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN) | Same audit/decision owner; named K live gates remain | Same audit/decision owner; no new A/B selector or user decision approved by Task Y |
+| Flag audit and A/B removal (A6–A10, A12; once per candidate) | PASS scoped static/startup audit at `9e4d66a8c`, driver `1164b55a4` ([Task Z](stage1-decision-sheet-20261028.md)); A8/A9/A10 and frozen-candidate obligations remain; K register counts above are not an audit verdict (11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN) | Same audit/decision owner; named K live gates remain | Same audit/decision owner; no new A/B selector or user decision approved by Task Y |
 | Reduced-matrix qualification (A11) | NOTRUN | NOTRUN | NOTRUN |
 | Placement/capacity and decode | NOTRUN | NOTRUN | NOTRUN |
 | POSIX and concurrent I/O | NOTRUN | NOTRUN | NOTRUN |

@@ -24,7 +24,7 @@ def run(cmds, timeout=None, jobs=None, budget_rows=None):
     if budget_rows:
         Path(d,'tests').mkdir()
         Path(d,'tests/budgets.tsv').write_text(budget_rows)
-    env = dict(os.environ)
+    env = dict(os.environ, TMPDIR=str(Path(d,"tmp")))
     if timeout is not None:
         env['EFS_TEST_CMD_TIMEOUT'] = str(timeout)
     # Never inherit the outer run's pool size: serial unless a case asks.
@@ -133,6 +133,14 @@ try:
     assert rc==0,(rc,s)
     assert Path(d,'ran.log').read_text().splitlines()==[
         'pooled','test_pack_dup_candidate','test_w166_authority','test_report_stepdown']
+
+    # Explicit external scratch must stay external, including pool children.
+    with tempfile.TemporaryDirectory(prefix='efs-summary-external-') as external:
+        env=dict(os.environ,EFS_TEST_JOBS='2',TMPDIR=external)
+        Path(d,'cmds.txt').write_text('echo "$TMPDIR" > external.txt\n')
+        r=subprocess.run([sys.executable,'-c',runner],cwd=d,env=env,timeout=60)
+        assert r.returncode==0
+        assert Path(d,'external.txt').read_text().strip()==str(Path(external,'case-0'))
 
     # Budgets (tests/budgets.tsv, W160): the pool starts the largest budget
     # first, a command takes its declared slots (never more than the pool, so

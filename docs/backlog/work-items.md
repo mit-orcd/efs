@@ -6703,3 +6703,23 @@ long-TMPDIR cleanup failures were fixed without weakening their assertions.
 record every original failure, the declared quota change, both full-gate
 failures and checked/pruned private fixtures. Original full-process SIGSTOP /
 production-window acceptance plus live RDMA/multi-host gates remain NOTRUN.
+
+
+<a id="w170"></a>
+
+## W170 — publish remote benchmark writes through the supported client
+
+Task U found `efs-bench --store` refused and `--meta --size` lacking normal
+client lifecycle/checked publication. The tool cannot serve as a valid remote
+write baseline. Task AA owns the correction: normal session and ticketed
+write/REPORT, removal of raw synthetic modes, cold FUSE byte/EOF/count regression
+in `make test-long`, full gate and matched direct-client comparison. This is a
+developer measurement defect; it does not itself close K32/D4 or alpha gates.
+
+Status: **FIXED (scoped) on `agent/devel-task-aa`, not merged**, tested
+`fe785536e`, budget `5a971fb14`. Normal published client data and metadata writes,
+strict completion, fresh FUSE byte/EOF/count regression and timed-worker readiness
+are qualified on intel2. Full gate 529/0 FAIL/10 NOTRUN; twelve matched GiB rows
+read exact. Four of six timing pairs agree within 10%; uniform performance
+calibration is not established. Earlier non-quiet timing observations remain
+qualified. [Evidence, failures, method and cleanup](../status/w170-efs-bench-20261028.md).
