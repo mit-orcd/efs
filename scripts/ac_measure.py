@@ -4,7 +4,7 @@ Run from the corresponding PRIVATE instrumented export on its assigned host.
 The original and split sources use identical instrumentation and workload.
 Raw files remain on host. Any payload/operation/cleanup error fails the trial.
 """
-import argparse, hashlib, json, math, os, re, statistics, sys, threading, time
+import argparse, hashlib, json, math, os, re, signal, statistics, sys, threading, time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tests'))
@@ -71,6 +71,7 @@ try:
             name=f'ac-{k}-{n}';body=hashlib.shake_256(name.encode()).digest(65536)
             f=m.path/name;f.write_bytes(body);bodies[name]=body;row.append(f)
         names.append(row)
+    for proc in c.procs.values():os.kill(proc.pid,signal.SIGUSR2)
     before=cpu();start=time.monotonic();end=start+a.seconds
     threads=[threading.Thread(target=writer,args=(k,)) for k in range(a.writers)]
     threads.append(threading.Thread(target=statter))
@@ -78,6 +79,7 @@ try:
     for t in threads:t.join(timeout=a.seconds+30)
     assert all(not t.is_alive() for t in threads),'workload thread stuck'
     elapsed=time.monotonic()-start;after=cpu()
+    for proc in c.procs.values():os.kill(proc.pid,signal.SIGUSR2)
     assert not errors,errors
     for row in names:
         for f in row:assert f.read_bytes()==bodies[f.name],f

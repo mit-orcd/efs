@@ -15,7 +15,7 @@ assert '/efs-task-ac' in str(root) and (root/'src/common/rdma.c').exists(),root
 probe=Path(__file__).with_name('ac_probe.h').read_text()
 def edit(name,scope,fn):
     path=root/name;s=path.read_text();assert 'ac-probe:' not in s
-    s='#define AC_SCOPE "'+scope+'"\n'+probe+'\n'+s
+    s=('#define AC_OWNER 1\n' if scope=='rdma' else '')+'#define AC_SCOPE "'+scope+'"\n'+probe+'\n'+s
     path.write_text(fn(s))
 def rdma(s):
     anchor='static pthread_mutex_t g_reg_lock = PTHREAD_MUTEX_INITIALIZER;'
