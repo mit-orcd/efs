@@ -544,6 +544,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_task_i_host_guard.py
 	python3 tests/test_task_i_preserve.py
 	python3 tests/test_sparse_metadata.py
+	python3 tests/test_b_geometry_status.py
 	python3 tests/test_task_i_alloc_probe.py
 	python3 tests/test_mount_idle.py
 	python3 tests/test_k42_fixture_cleanup.py
