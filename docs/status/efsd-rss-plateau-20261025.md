@@ -324,5 +324,8 @@ threshold at its initial 128 KiB: native 24-worker scratch test releases
 all 96 MiB of large mappings with ~0.5 MiB heap, versus ~96 MiB free heap
 retained by the old four-arena-only control. This is mechanism evidence,
 not a live qualification. Both new hardware and AMD continuations use
-`d7e265746`; hardware full gate is ACTIVE, AMD remains WAIT_QUIET.
+`d7e265746`; hardware full gate FAILs at four LSan runtime attach errors, reproduced
+by an independent clean probe. Corrected harnesses retain functional/negative
+controls and report unavailable sanitizer coverage NOTRUN; fresh gate and hours
+remain owed. AMD remains WAIT_QUIET.
 Old pre-action waiters were superseded without running tests.

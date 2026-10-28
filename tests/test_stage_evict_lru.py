@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Client staging LRU: touch order, O(1) index, pinned second chance, pass cost."""
+from sanitize_env import asan_runtime_available
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root = Path(__file__).resolve().parents[1]
@@ -127,8 +128,9 @@ with tempfile.TemporaryDirectory(prefix='efs-stage-lru-') as d:
     # make leak-check sets EFS_LEAK_WRAP (memcheck): run only the plain build
     # under it, without the wall-clock bound memcheck's slowdown would break.
     wrap=shlex.split(os.environ.get('EFS_LEAK_WRAP',''))
-    variants=([['-DEFS_LEAK_WRAPPED']] if wrap else
-              [[], ['-fsanitize=address,undefined','-fno-omit-frame-pointer']])
+    variants = [['-DEFS_LEAK_WRAPPED']] if wrap else [[]]
+    if not wrap and asan_runtime_available():
+        variants.append(['-fsanitize=address,undefined','-fno-omit-frame-pointer'])
     for extra in variants:
         exe=p.with_suffix('.asan' if '-fno-omit-frame-pointer' in extra else '')
         subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-O2','-Wall','-Wextra','-Werror','-pthread',*extra,str(p),'-o',str(exe)],check=True)

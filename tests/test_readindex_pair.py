@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Two fresh admissions precede either send; older rounds cannot cover them."""
+from sanitize_env import asan_runtime_available
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
@@ -161,10 +162,11 @@ with tempfile.TemporaryDirectory(prefix='efs-read-pair-') as d:
  # make leak-check sets EFS_LEAK_WRAP (memcheck) and skips the ASan build.
  wrap=shlex.split(os.environ.get('EFS_LEAK_WRAP',''))
  subprocess.run([*wrap,str(p.with_suffix(''))],check=True)
- if not wrap:
+ if not wrap and asan_runtime_available():
   sanitized=Path(d)/'sanitized'
   subprocess.run(['cc','-std=gnu11','-pthread','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(root/'include'),str(p),'-o',str(sanitized)],check=True)
   subprocess.run([str(sanitized)],check=True)
+  print("ASan/UBSan execution PASS")
  negative=Path(d)/'late-round.c'
  old='uint64_t begun=__atomic_load_n(&g->ri_begun,__ATOMIC_SEQ_CST);'
  assert old in code
@@ -179,4 +181,4 @@ with tempfile.TemporaryDirectory(prefix='efs-read-pair-') as d:
  result=subprocess.run([str(late_probe.with_suffix(''))],capture_output=True)
  assert result.returncode != 0, 'late-admission probe negative unexpectedly passed'
  print('ReadIndex late-admission negative: an earlier completed round cannot suppress the required fresh probe PASS')
- print('ReadIndex paired floor: lock-free server admission, unknown/follower fallback, ASan/UBSan and unpublished-begin negative PASS')
+ print('ReadIndex paired floor: lock-free server admission, unknown/follower fallback and unpublished-begin negative PASS')
