@@ -42,7 +42,8 @@ def foreign_jobs(source=None, *, proc_root=Path('/proc'), current_uid=None):
                     found.append(dict(pid=int(proc.name),uid=uid,comm=comm,reason='command unreadable'))
                 continue
             runner = any(Path(x).name == 'make_test_summary.sh' for x in args[1:3])
-            traffic = python and any('/tests/' in x or x.startswith('tests/') for x in args[1:])
+            traffic = python and any('/tests/' in x or x.startswith('tests/') or
+                                     Path(x).name in ('efsd','efs-fuse') for x in args[1:])
             if not known and not runner and not traffic:
                 continue
             owned = False
