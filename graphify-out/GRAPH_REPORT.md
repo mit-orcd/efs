@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `7045ca1f9a3804608b343206256c9d4b4df13cff`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 16,232 nodes, 67,773 directed typed edges, 523 communities.
+Source base: `0e3043a7730d941385e450c277f1a84b0e0edd9a`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 16,299 nodes, 68,030 directed typed edges, 486 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -14,22 +14,22 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 3
-- `calls`: 25947
+- `calls`: 26003
 - `case_of`: 116
-- `contains`: 24743
+- `contains`: 24841
 - `defines`: 1845
 - `documents_finding`: 3
 - `exercises`: 3
-- `imports`: 6472
-- `imports_from`: 795
-- `indirect_call`: 636
-- `inherits`: 15
+- `imports`: 6536
+- `imports_from`: 805
+- `indirect_call`: 645
+- `inherits`: 16
 - `invokes`: 2
-- `mentions_symbol`: 2126
-- `method`: 619
-- `rationale_for`: 1205
-- `references`: 2087
-- `references_path`: 1063
+- `mentions_symbol`: 2129
+- `method`: 620
+- `rationale_for`: 1214
+- `references`: 2088
+- `references_path`: 1068
 - `regression_for`: 3
 - `uses`: 90
 
@@ -40,8 +40,8 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
 ## Limits
 
-Health warning: 33 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1353}. These are extraction gaps, not absent dependencies.
+Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
+Unresolved edges omitted: {'calls': 1388}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
