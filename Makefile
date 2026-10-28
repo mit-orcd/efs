@@ -1002,6 +1002,7 @@ tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/
 FAULT_SERVER_OBJS = $(patsubst src/server/%.c,tests/faults/server/%.o,$(SERVER_SRCS))
 FAULT_KV_OBJS = tests/faults/kv/kv_lsm.o tests/faults/kv/kv_compact.o
 FAULT_RAFT_OBJS = tests/faults/raft/raft_disk.o
+FAULT_META_OBJS = tests/faults/meta/meta_apply.o
 tests/faults/server/%.o: src/server/%.c src/server/server_internal.h $(wildcard src/server/*.h) $(wildcard include/efs/*.h) .build_id.stamp
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
@@ -1015,8 +1016,12 @@ tests/faults/kv/%.o: src/kv/%.c src/kv/kv_lsm_internal.h src/kv/kv_candidates.h 
 tests/faults/raft/%.o: src/raft/%.c src/raft/raft_disk_internal.h $(wildcard include/efs/*.h)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
-tests/faults/efsd: $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(LIB) $(LDFLAGS)
+tests/faults/meta/meta_apply.o: src/meta/meta_apply.c $(wildcard include/efs/*.h) .build_id.stamp
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
+
+tests/faults/efsd: $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(FAULT_META_OBJS) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(FAULT_META_OBJS) $(LIB) $(LDFLAGS)
 
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
 src/kv/kv_lsm.o: src/kv/kv_candidates.h
@@ -1112,6 +1117,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k22_snapshot_import.py
 	python3 tests/test_k22_leader_admission.py
 	python3 tests/test_w130_dir_fault.py
+	python3 tests/test_k48_readdir.py
 	python3 tests/test_w166_authority.py
 	./tests/test_kv_lsm
 	python3 tests/test_server_processes.py

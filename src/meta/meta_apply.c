@@ -3459,12 +3459,45 @@ static int hashed_side_claims(struct efs_kv *kv, efs_ino_t dir, const char *name
     return rc;
 }
 
+#if EFS_FAULTS
+#include <stdio.h>
+#include <unistd.h>
+/* Pin a real migration between READDIR's inode cut and its source scan.
+ * No metadata is changed by this hook; the test issues a normal raft-dir
+ * migration on another worker, then releases this bounded pause. */
+static void k48_readdir_layout_pause(efs_ino_t dir)
+{
+    const char *path = getenv("EFS_FAULT_READDIR_LAYOUT_FILE");
+    char ready[EFS_MAX_PATH], release[EFS_MAX_PATH];
+    unsigned long long target = 0;
+    FILE *f;
+    if (!path || !(f = fopen(path, "r")))
+        return;
+    int parsed = fscanf(f, "%llu", &target);
+    fclose(f);
+    if (parsed != 1 || target != dir)
+        return;
+    if (snprintf(ready, sizeof(ready), "%s.ready", path) >= (int)sizeof(ready) ||
+        snprintf(release, sizeof(release), "%s.release", path) >= (int)sizeof(release))
+        return;
+    if (rename(path, ready))
+        return;
+    fprintf(stderr, "fault k48-readdir: paused inode=%llu\n", target);
+    for (unsigned i = 0; i < 1000 && access(release, F_OK); i++)
+        usleep(10000);
+    fprintf(stderr, "fault k48-readdir: released inode=%llu ready=%d\n",
+            target, access(release, F_OK) == 0);
+}
+#endif
+
 int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
                            struct efs_meta_dir_cursor *cur,
                            struct efs_meta_dir_ent *out, uint32_t max,
                            uint32_t *n)
 {
-    struct efs_meta_row row;
+    struct efs_meta_row row, after;
+    struct efs_meta_dir_cursor begin;
+    unsigned retries = 0;
     struct dir_scan s;
     uint32_t last_src;
     int rc;
@@ -3474,11 +3507,18 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
     *n = 0;
     if (cur->done)
         return EFS_OK;
+    begin = *cur;
+retry:
+    *cur = begin;
     rc = efs_meta_apply_get_inode(kv, dir, &row);
     if (rc != EFS_OK)
         return rc;
     if (!S_ISDIR(row.mode))
         return EFS_ERR_INVAL; /* as create_file does for a non-dir parent */
+
+#if EFS_FAULTS
+    k48_readdir_layout_pause(dir);
+#endif
 
     last_src = row.layout == EFS_META_LAYOUT_LOCAL ? 0 : EFS_META_LANES - 1;
 
@@ -3554,6 +3594,24 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
     }
     if (cur->src > last_src)
         cur->done = 1;
+    /* Migration may run between the inode read and a source scan. A new
+     * lane absent from row.used_shards must not be skipped after its LOCAL
+     * name has moved (or was suppressed by hashed_side_claims). Likewise a
+     * LOCAL -> SPLITTING transition must not turn an old source-0-only cut
+     * into EOF. Publish this page/cookie only under the same layout cut.
+     * The bitmap gains at most 64 bits and layout transitions twice, so
+     * valid monotonic migration cannot exhaust this bounded retry count. */
+    rc = efs_meta_apply_get_inode(kv, dir, &after);
+    if (rc != EFS_OK)
+        return rc;
+    if (after.layout != row.layout || after.used_shards != row.used_shards ||
+        after.layout_epoch != row.layout_epoch) {
+        if (++retries > EFS_META_LANES + 2) {
+            *cur = begin;
+            return EFS_ERR_BUSY;
+        }
+        goto retry;
+    }
     *n = s.n;
     return EFS_OK;
 }
