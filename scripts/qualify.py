@@ -2445,6 +2445,10 @@ def g_standalone_plugin(name, spec):
             return NOTRUN, 'standalone plugin needs --allow restart'
         if not q.control.has('stop_cluster', 'start_cluster'):
             return NOTRUN, 'standalone plugin needs stop/start controls'
+        # A plan records the plugin command; in-process loopback controls
+        # bypass Runner's dry-run guard and must never be called here.
+        if getattr(q, 'plan', False):
+            return plugin(q, g)
         mounts = q.cluster.get('mounts', [])
         for m in mounts:
             rc, text = g.run('fuser-before-standalone', m['host'],

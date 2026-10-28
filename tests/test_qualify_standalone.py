@@ -12,7 +12,7 @@ spec.loader.exec_module(Q)
 
 
 def exercise(verdict=Q.PASS, *, owned=True, allow=True, busy=False,
-             stop_rc=0, ready=True, raises=False):
+             stop_rc=0, ready=True, raises=False, plan=False):
     events = []
     mounted = {'value': True}
     running = {'value': True}
@@ -40,7 +40,8 @@ def exercise(verdict=Q.PASS, *, owned=True, allow=True, busy=False,
 
     def plugin(q, g):
         events.append('plugin')
-        assert not running['value'] and not mounted['value'], 'fixture overlaps standalone workload'
+        if not plan:
+            assert not running['value'] and not mounted['value'], 'fixture overlaps standalone workload'
         if raises:
             raise ValueError('original plugin failure')
         return verdict, 'original verdict'
@@ -49,7 +50,7 @@ def exercise(verdict=Q.PASS, *, owned=True, allow=True, busy=False,
         client_stop=client_stop, stop_cluster=stop, start_cluster=start,
         client_start=client_start)
     q = SimpleNamespace(control=control, allow={'restart'} if allow else set(),
-                        cluster=dict(mounts=[m]))
+                        cluster=dict(mounts=[m]), plan=plan)
     g = SimpleNamespace(step=lambda *a: events.append('permission'),
                         run=lambda *a: (0, '1234') if busy else (1, ''))
     with patch.object(Q, 'g_plugin', return_value=plugin), \
@@ -102,3 +103,10 @@ try:Q.b_d5(q,'/source','/owned/d5',65500)
 except ValueError:pass
 else:raise AssertionError('overflow D5 range accepted')
 print('D5 port ownership: three/five/sixteen members, caller overlap, overflow rejection PASS')
+
+
+# --plan must not call in-process controls, wait readiness, or alter mounts.
+result, events, running, mounted = exercise(plan=True, ready=False)
+assert result == (Q.PASS, 'original verdict')
+assert events == ['plugin'] and running and mounted, events
+print('standalone --plan: command only, no stop/start/readiness or mount effects PASS')
