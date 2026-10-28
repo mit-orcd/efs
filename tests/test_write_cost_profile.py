@@ -82,4 +82,10 @@ tr += '1.6 recvfrom(4, "\\x00\\x00", 2, 0, NULL, NULL) = 2\n'
 parsed = m.parse_trace(tr)
 assert parsed['report_sends'] == parsed['report_replies'] == 1, parsed
 assert m.parse_sync_summary(' 50.00 0.1 10 100 fsync\n 50.00 0.1 20 50 1 fdatasync\n') == {'fsync': 100, 'fdatasync': 50}
+with tempfile.TemporaryDirectory(prefix='efs-cost-workload-') as work:
+    m.worker(Path(work), 128, 16, 2)
+    checked = m.verify(Path(work), 128, 16, 2)
+    assert checked['files'] == 2 and checked['bytes'] == 128
+    # Sequential IO must not regress into a new file for every request.
+    assert sorted(p.stat().st_size for p in Path(work).rglob('payload')) == [64, 64]
 print('write cost profile: WAL CRC/window/replication accounting, nested batches, ticket identities, partial replies and failed sends PASS')

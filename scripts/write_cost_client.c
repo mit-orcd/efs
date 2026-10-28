@@ -1,5 +1,5 @@
 /* Measurement-only direct C API workload, not an alternative product client.
- * Same file-per-request layout and close-equivalent REPORT as the FUSE case.
+ * Same sequential file per writer and close-equivalent REPORT as FUSE.
  * Uses the synchronous C write API, not the FUSE dcache acceptance pipeline.
  * Build via write_cost_profile.py against this checkout's normal libefs.a. */
 #include "../src/client/client_internal.h"
@@ -31,19 +31,19 @@ static void *run(void *arg)
     char *buf = malloc(w->size);
     if (!buf) { w->rc = EFS_ERR_NOMEM; return NULL; }
     memset(buf, 'A', w->size);
+    efs_ino_t ino = 0;
+    w->rc = efs_client_create_result(dir, "payload", S_IFREG | 0644,
+                                     getuid(), getgid(), 0, &ino);
+    uint64_t offset = 0;
     for (uint64_t i = w->id; i < w->files && w->rc == EFS_OK; i += w->writers) {
-        efs_ino_t ino = 0;
-        snprintf(name, sizeof(name), "f%llu", (unsigned long long)i);
-        w->rc = efs_client_create_result(dir, name, S_IFREG | 0644,
-                                         getuid(), getgid(), 0, &ino);
         if (w->rc == EFS_OK)
-            w->rc = efs_client_write(ino, 0, w->size, buf);
-        if (w->rc == EFS_OK)
-            w->rc = efs_client_report_dirty_ino(ino, 1);
+            w->rc = efs_client_write(ino, offset, w->size, buf);
+        offset += w->size;
         if (w->rc != EFS_OK)
             fprintf(stderr, "direct worker=%u file=%llu rc=%d\n", w->id,
                     (unsigned long long)i, w->rc);
     }
+    if (w->rc == EFS_OK) w->rc = efs_client_report_dirty_ino(ino, 1);
     free(buf);
     return NULL;
 }
@@ -67,7 +67,7 @@ int main(int argc, char **argv)
         return 2;
     }
     uint64_t total = number(argv[2]), size = number(argv[3]), nw = number(argv[4]);
-    if (total % size || size > (16u << 20) || nw > 8 || total / size < nw)
+    if (total % size || size > (16u << 20) || nw > 8 || (total / size) % nw)
         return 2;
     char host[64]; uint16_t port;
     if (efs_parse_host_port(argv[1], host, sizeof(host), &port)) return 2;
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
         rc = 1;
     if (efs_client_shutdown() != EFS_OK) rc = 1;
     printf("direct files=%llu bytes=%llu writers=%llu rc=%d\n",
-           (unsigned long long)(total / size), (unsigned long long)total,
+           (unsigned long long)nw, (unsigned long long)total,
            (unsigned long long)nw, rc);
     return rc;
 }

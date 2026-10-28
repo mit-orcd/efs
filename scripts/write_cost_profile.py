@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""K32 measurement only: matched file-per-request writes, no product changes.
+"""K32 measurement only: matched sequential writes, no product changes.
 
 A fresh private 3-member TCP/O_DIRECT cluster per case. The measurement-only
-C client and FUSE each create total/io files, one write per file. Optional
+C client and FUSE each write one sequential file per writer. Optional
 bench mode preserves the unmodified benchmark's failure, not a valid baseline.
 Includes final cluster data-commit; verifies every byte outside measurement.
 strace changes scheduling: timings/CPU describe this instrumented run, not IOR.
@@ -276,19 +276,21 @@ def worker(mount, total, io_size, writers):
     def run(w):
         parent = mount / ('writer-%d' % w)
         parent.mkdir()
-        for n in range(w, files, writers):
-            fd = os.open(parent / ('file-%d' % n), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-            try:
+        fd = os.open(parent / 'payload', os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        try:
+            for n in range(w, files, writers):
                 done = os.write(fd, payload)
                 assert done == io_size, ('short write', done, io_size)
-            finally:
-                os.close(fd)
+        finally:
+            os.close(fd)
     with ThreadPoolExecutor(max_workers=writers) as pool:
         list(pool.map(run, range(writers)))
-    print(json.dumps(dict(bytes=total, files=files, wall_s=time.monotonic()-start)), flush=True)
+    print(json.dumps(dict(bytes=total, files=writers, writes=files, wall_s=time.monotonic()-start)), flush=True)
 
 
-def verify(mount, total, io_size):
+def verify(mount, total, io_size, expected_files=None):
+    expected_files = expected_files or total // io_size
+    expected_size = total // expected_files
     count, size = 0, 0
     for parent, dirs, files in os.walk(mount):
         for name in files:
@@ -301,9 +303,9 @@ def verify(mount, total, io_size):
                         break
                     assert block == b'A' * len(block), ('payload mismatch', parent, name, n)
                     n += len(block)
-                assert n == io_size, ('file size', name, n, io_size)
+                assert n == expected_size, ('file size', name, n, expected_size)
                 size += n
-    assert size == total and count == total // io_size, ('namespace/byte count', count, size)
+    assert size == total and count == expected_files, ('namespace/byte count', count, size)
     return dict(files=count, bytes=size, pattern='every byte A; not a version-identity oracle')
 
 
@@ -317,7 +319,8 @@ def run_case(work, output, mode, io_size, writers, total):
     c = k.Cluster(work, output.name, [1, 2, 3], env)
     mount = None
     tracers = []
-    result = dict(mode=mode, io_bytes=io_size, writers=writers, total_bytes=total, verdict='FAIL')
+    result = dict(mode=mode, io_bytes=io_size, writers=writers, total_bytes=total, verdict='FAIL',
+                  layout='file-per-request' if mode == 'bench' else 'sequential-file-per-writer')
     try:
         c.start(1, quota='8G')
         c.start(2, join=1, quota='8G')
@@ -392,7 +395,7 @@ def run_case(work, output, mode, io_size, writers, total):
                       tickets_settled_success=settled_ok,
                       before=before, after=after,
                       measurement='create/write/publish plus cluster COMMIT and quiescence; tracing overhead included')
-        result['verification'] = verify(mount.path, total, io_size)
+        result['verification'] = verify(mount.path, total, io_size, writers if mode != 'bench' else None)
         assert reports['report_sends'] > 0 and reports['report_sends'] == reports['report_replies'], dict(reports)
         for n in (1, 2, 3):
             (output / ('io-n%d.txt' % n)).write_text(checked([ROOT / 'efs-mgmt', 'io-stats', c.ep(n)], env=env))
@@ -447,6 +450,7 @@ def main():
     assert args.total_mib > 0 and all(n in (1, 4, 16) and args.total_mib % n == 0 for n in args.io_mib)
     assert all(n in (1, 8) for n in args.writers)
     assert all(args.total_mib // io >= n for io in args.io_mib for n in args.writers)
+    assert all((args.total_mib // io) % n == 0 for io in args.io_mib for n in args.writers)
     args.work = args.work.resolve()
     args.output = args.output.resolve()
     args.work.mkdir(parents=True, exist_ok=False)
