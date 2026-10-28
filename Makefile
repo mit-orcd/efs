@@ -696,6 +696,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_gc_inode_fanout.py
 	python3 tests/test_gc_reap_shutdown.py
 	python3 tests/test_reap_fairness.py
+	python3 tests/test_trunc_gc_fairness.py
 	python3 tests/test_tiny_overload_oracle.py
 	python3 tests/test_session_register_verdict.py
 	python3 tests/test_namespace_session_apply.py
