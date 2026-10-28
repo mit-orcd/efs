@@ -622,23 +622,32 @@ static void test_stalled_compactor(void)
 }
 #endif
 
-int main(void)
+int main(int argc, char **argv)
 {
-    test_sim();
-    test_leader_admission();
-    test_capacity_leadership();
-    test_tail_campaigns();
-    test_tail_recovery();
-    test_committed_backlog_holds();
+    int stalled = argc == 2 && strcmp(argv[1], "--stalled-compactor") == 0;
+    if (argc != 1 && !stalled) {
+        fprintf(stderr, "usage: %s [--stalled-compactor]\n", argv[0]);
+        return 2;
+    }
+    if (stalled) {
 #if EFS_FAULTS
-    test_stalled_compactor();
+        test_stalled_compactor();
 #else
-    fprintf(stderr, "test_stalled_compactor: NOTRUN (needs make EFS_FAULTS=1)\n");
+        fprintf(stderr, "stalled-compactor requires tests/faults/test_follower_bound\n");
+        return 2;
 #endif
+    } else {
+        test_sim();
+        test_leader_admission();
+        test_capacity_leadership();
+        test_tail_campaigns();
+        test_tail_recovery();
+        test_committed_backlog_holds();
+    }
     if (failures) {
         fprintf(stderr, "test_follower_bound: %d FAILED\n", failures);
         return 1;
     }
-    printf("test_follower_bound: OK\n");
+    printf("test_follower_bound: %sOK\n", stalled ? "stalled-compactor " : "");
     return 0;
 }

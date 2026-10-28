@@ -367,7 +367,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 # helpers built with extra flags). They are real prerequisites of test and
 # test-long, never built inside a recipe, so test-long works on its own and a
 # parallel make cannot start a test before its binary exists.
-TEST_SPECIAL_BINS = tests/faults/efsd tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
+TEST_SPECIAL_BINS = tests/faults/efsd tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -378,6 +378,13 @@ FORCE:
 # both gates independently and fails if either does.
 docs-check:
 	python3 docs/check-architecture.py
+
+# Developer navigation validation needs the pinned graphify environment and a
+# real Git index, unlike archived Linux code-gate trees. Keep it explicit.
+.PHONY: code-graph-check
+code-graph-check:
+	sh scripts/rebuild-code-graph.sh
+	python3 tests/test_code_graph.py
 
 # Valgrind memcheck leak gate (K26): bounded unit list, one PASS/FAIL line
 # per binary and a verdict; exit 1 on any definite leak, 3 (NOTRUN) without
@@ -897,7 +904,7 @@ clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
-	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
+	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_follower_bound tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
 	rm -rf tests/faults/server tests/faults/kv
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
 	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
@@ -1026,6 +1033,11 @@ tests/faults/meta/meta_apply.o: src/meta/meta_apply.c $(wildcard include/efs/*.h
 
 tests/faults/efsd: $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(FAULT_META_OBJS) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(FAULT_RAFT_OBJS) $(FAULT_META_OBJS) $(LIB) $(LDFLAGS)
+# Task W: exercise the parked real LSM compactor, not a plain library whose
+# fault hook is compiled out. Reuse the daemon's fault KV object overrides.
+tests/faults/test_follower_bound: tests/test_follower_bound.c $(FAULT_KV_OBJS) $(LIB) .build_id.stamp
+	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -o $@ $< $(FAULT_KV_OBJS) $(LIB) $(LDFLAGS)
+
 
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
 src/kv/kv_lsm.o: src/kv/kv_candidates.h
@@ -1071,7 +1083,7 @@ test: test-apply-wait
 .PHONY: test-long test-all
 test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_bench_published.py
-	python3 tests/test_code_graph.py
+	./tests/faults/test_follower_bound --stalled-compactor
 	python3 tests/test_decoder_refusal.py
 	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_w153_formation.py

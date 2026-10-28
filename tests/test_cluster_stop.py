@@ -4,7 +4,10 @@ from pathlib import Path
 import os
 import subprocess
 import tempfile
-cluster = Path(os.environ.get('EFS_CLUSTER_SCRIPTS', str(Path.home()/'git/cluster')))
+requested = os.environ.get('EFS_CLUSTER_SCRIPTS')
+cluster = Path(requested or str(Path.home()/'git/cluster'))
+if requested and not cluster.is_dir():
+    raise SystemExit('FAIL: explicit EFS_CLUSTER_SCRIPTS directory is absent: %s' % cluster)
 if not cluster.is_dir():
     print('NOTRUN: cluster stop/remount scripts: %s is absent (EFS_CLUSTER_SCRIPTS)' % cluster);raise SystemExit(0)
 with tempfile.TemporaryDirectory(prefix='efs-cluster-stop-') as directory:
