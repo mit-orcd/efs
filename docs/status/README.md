@@ -19,13 +19,15 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [Task N: K15/K29 append gates](k15-k29-append-gates-20261027.md):
-**IN PROGRESS** on intel1, branch `agent/devel-task-n`. Two sequential runs
-each of W52 20k, W64 leader step-down and lost-reply gates, followed by
-8-job `make test-all`. First W52 20k run PASS: all three full views exact,
-zero write failures/holes/timeouts, final fsync max 0.6765 s. Remaining
-cases/gate pending. Product equals devel `063154e0e`;
-harness now checks clean cold stops, real application availability, actual
-failover events and both client logs. Existing production services untouched.
+**Six completed live gates PASS** on intel1: two W52 20k, two step-down and
+two lost-reply runs, exact warm/peer/cold reads and no unexpected write
+failure. The original lost-2 setup FAIL remains recorded; root readiness
+now follows the actual leader hint. **Initial full gate FAIL: 514 commands,
+1 FAIL, 14 NOTRUN**. New **K48**, healthy-quorum enumeration 95/96 names
+after one replica halts; failed stores copied and SHA256-verified on host.
+Root cause OPEN, blocks alpha; no payload-loss claim. Base/final gates are
+running; no overall acceptance PASS. Branch `agent/devel-task-n`, no product
+changes; multi-host/RDMA append gates remain NOTRUN.
 
 [Wave 19 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`21630289a`; gate at the same commit)**: Task G ([W166](w166-close-eio-flush-deadline-20261026.md), [K38 repair](k38-task-g-repair-20261027.md)): W166 option B as the user decided (30 s deadline unchanged): a lagging storage member delegates the whole ticket STATUS read to the lane leader on the read pool and budget, a forwarded STATUS never forwards again, and a full L0 alone no longer refuses publication; K38 shared-chunk repairs: a definite STALE is kept when a later unit meets BUSY, receipt recovery stays inside the original completion budget, and pressure reclaim drains a bounded cohort instead of waiting for future writes. **Merge decision (user):** Task J's L0 term in `host_kv_pressure` is dropped, so admission and leadership share apply_room plus the unapplied-log watermark; `test_kv_leader_pressure.py` now asserts a full L0 alone is not pressure. intel2 targeted reruns at `7a7b9f420`: K22 leader admission 3/3, K22 snapshot import 2/2, W166 authority 3/3, K38 shared-chunk 5/5, REPORT retry/verdict tests 2/2 each. intel2 `make test-all` (8 jobs): 514 commands in 734 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run had 1 FAIL, `test_read_retry_budget.py`, a merge-resolution error fixed in `21630289a`); OVERBUDGET 5, `test_stop_progress.py` 102 s against 50 s the largest. W166's SIGSTOP, RDMA and multi-host acceptance stays NOTRUN.
 

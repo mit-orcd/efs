@@ -1,6 +1,6 @@
 # Task N — quiet-host K15 / K29 append gates (October 27)
 
-`agent/devel-task-n`, measurement head `da8c836f5`; product source `f98578e697d3` (src/include equal devel `063154e0e`). Gate TOTAL/FAIL/NOTRUN pending: sequential live gates RUNNING, then 8-job full gate. Evidence: `docs/status/k15-k29-append-gates-20261027.md`. Real multi-host/RDMA gates NOTRUN (Task N scope). No product fix yet; harness fixes: checked cold stops, availability verdict, peer REPORT accounting.
+`agent/devel-task-n`, code `040901fd6`; product `f98578e697d3` = devel `063154e0e` src/include. Initial TOTAL 514 FAIL 1 NOTRUN 14; base/final pending. `docs/status/k15-k29-append-gates-20261027.md`. Six completed append gates PASS; original lost-2 setup FAIL retained/fixed. K48 OPEN: healthy-quorum listing 95/96 after one replica halt; stores kept. Multi-host/RDMA NOTRUN.
 
 ## Purpose and current verdict
 
@@ -122,3 +122,50 @@ claim follows from the correlation alone.
 Closed evidence will receive a verified SHA256 manifest before private
 stores, payloads and build bulk are pruned with `edelete`; open failures
 remain preserved until classified. No raw payload/log is committed here.
+
+## New gate failure — K48, W130 partial enumeration
+
+The initial full gate finished **TOTAL 514 FAIL 1 NOTRUN 14 STATUS FAIL
+(723s) OVERBUDGET 5 BUILD 19s**. Its only failing command was
+`python3 tests/test_w130_dir_fault.py` (index 475). The preceding W165
+serve-first case passed its halt, quorum CREATEs and snapshot resync checks.
+In the W130 case, node 3 halted group 0 about six seconds in; all 96 target
+file writes/fsyncs and the unrelated control read succeeded, but the
+healthy-quorum listing returned **95 names**, triggering the unchanged
+`partial listing 95 != 96` assertion.
+
+This is **K48, an OPEN correctness candidate, blocks alpha: yes**. It is
+not an append failure, not evidence of missing payloads, and not yet a
+proven permanent-loss defect. The base and final comparisons are running.
+No test was loosened, removed from the pool, delayed until migration
+finishes, or retried into a renamed PASS. A later passing invocation does
+not erase this observed omission or close K48 without an explanation.
+
+Original closed fixture:
+`/home/maik/efs-taskN-20261027/plain/tmp/case-475/efs-w130-7jltagai`.
+Before another code gate could reuse `case-475`, all **677 files / 55,139,383
+bytes** were copied and checked by full SHA256 into the on-host open
+investigation copy:
+`/home/maik/efs-taskN-20261027/open-w130-initial/efs-w130-7jltagai`.
+`open-w130-initial-files.json` records the original location and every copied
+file hash. Keep these failed stores until K48 is classified; no original
+failed store is copied to the Mac or committed to Git.
+
+## Corrected setup failure, preserved separately
+
+The original `w64-lost-2` attempt ended **FAIL before any writer or payload
+was created**: its root-readiness probe received `status=7 primary=2` and
+never followed node 2, where both groups had elected their leader. This is
+a harness readiness defect, not a failure to form. Driver `f8ba69f36`
+follows exactly one valid configured hint and tests invalid hints, a second
+redirect and direct success. It changes no product deadline or behavior.
+The original FAIL report/logs remain. An independent fresh fixture
+`w64-lost-2-ready1` completed PASS: 1,996 acknowledged records, exactly four
+injected failures/holes, successful abandons, full exact warm/peer/cold
+reads and no additional failed write or REPORT receive timeout.
+
+`scripts/task_n_followup.py` (`2d04cac23`) preserves the initial gate,
+performs that corrected case, then runs an untouched `063154e0e` full gate
+and the final branch full gate sequentially. The active product build stays
+`f98578e697d3`; measurement changes are `77556050e`. All canonical initial,
+base and final summaries remain in separate evidence directories.

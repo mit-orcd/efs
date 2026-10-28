@@ -1621,13 +1621,15 @@ full acceptance are separate states.
 ### Recent evidence and remaining acceptance
 
 [Task N: K15/K29 append gates](../status/k15-k29-append-gates-20261027.md):
-**IN PROGRESS** on intel1, branch `agent/devel-task-n`. Two sequential runs
-each of W52 20k, W64 leader step-down and lost-reply gates, followed by
-8-job `make test-all`. First W52 20k run PASS: all three full views exact,
-zero write failures/holes/timeouts, final fsync max 0.6765 s. Remaining
-cases/gate pending. Product equals devel `063154e0e`;
-harness now checks clean cold stops, real application availability, actual
-failover events and both client logs. Existing production services untouched.
+**Six completed live gates PASS** on intel1: two W52 20k, two step-down and
+two lost-reply runs, exact warm/peer/cold reads and no unexpected write
+failure. The original lost-2 setup FAIL remains recorded; root readiness
+now follows the actual leader hint. **Initial full gate FAIL: 514 commands,
+1 FAIL, 14 NOTRUN**. New **K48**, healthy-quorum enumeration 95/96 names
+after one replica halts; failed stores copied and SHA256-verified on host.
+Root cause OPEN, blocks alpha; no payload-loss claim. Base/final gates are
+running; no overall acceptance PASS. Branch `agent/devel-task-n`, no product
+changes; multi-host/RDMA append gates remain NOTRUN.
 
 [Wave 19 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`21630289a`; gate at the same commit)**: Task G ([W166](../status/w166-close-eio-flush-deadline-20261026.md), [K38 repair](../status/k38-task-g-repair-20261027.md)): W166 option B as the user decided (30 s deadline unchanged): a lagging storage member delegates the whole ticket STATUS read to the lane leader on the read pool and budget, a forwarded STATUS never forwards again, and a full L0 alone no longer refuses publication; K38 shared-chunk repairs: a definite STALE is kept when a later unit meets BUSY, receipt recovery stays inside the original completion budget, and pressure reclaim drains a bounded cohort instead of waiting for future writes. **Merge decision (user):** Task J's L0 term in `host_kv_pressure` is dropped, so admission and leadership share apply_room plus the unapplied-log watermark; `test_kv_leader_pressure.py` now asserts a full L0 alone is not pressure. intel2 targeted reruns at `7a7b9f420`: K22 leader admission 3/3, K22 snapshot import 2/2, W166 authority 3/3, K38 shared-chunk 5/5, REPORT retry/verdict tests 2/2 each. intel2 `make test-all` (8 jobs): 514 commands in 734 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run had 1 FAIL, `test_read_retry_budget.py`, a merge-resolution error fixed in `21630289a`); OVERBUDGET 5, `test_stop_progress.py` 102 s against 50 s the largest. W166's SIGSTOP, RDMA and multi-host acceptance stays NOTRUN.
 
@@ -3350,7 +3352,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | apply-unknown-tag | **W127** · metadata apply accepts unknown command tags as applied | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS, private 3-node gate PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w127) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-unknown-subtag | **W128** · unknown sub-tags and short frames apply as success (DIR/SESSION/TXN) | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w128) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-proto-normalized | **W129** · `host_apply` turns decoder errors into success and commits the cursor | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w129) · [audit](../reviews/dead-code-review-20261021.md) |
-| dir-apply-io | **W130** · DIR apply swallows storage errors; replicas can diverge | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS, one-replica fault injection NOTRUN; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w130) · [audit](../reviews/dead-code-review-20261021.md) |
+| dir-apply-io | **W130** · DIR apply swallows storage errors; replicas can diverge | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS, Task N one-replica fault gate now FAIL on a separate enumeration candidate (K48: 95/96 names through the healthy quorum; original apply-error fix stands), failed stores preserved ([evidence](../status/k15-k29-append-gates-20261027.md)); RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w130) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-missing-kv | **W131** · missing KV engine counts as applied | defensive hardening | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w131) · [audit](../reviews/dead-code-review-20261021.md) |
 | node-left | **W132** · `NODE_LEFT` lets any connection drop a node from membership | correctness / safety | FIXED on `devel-k03` (`8727e3afe`): ID 24 retired, handler and remover deleted; `make test` PASS on efs2 except the pre-existing host-only `test_reclaim` failure (`tests/test_node_left_refused.py` PASS); cluster NOTRUN; not merged into devel | [item](#w132) · [audit](../reviews/dead-code-review-20261021.md) |
 | declaration-gate | **W133** · client protocol declaration gate is fail-open | correctness | FIXED on branch `devel-k04`, not merged: every request except CLIENT_HELLO and HEARTBEAT needs an accepted declaration of exactly protocol 3; unit gates PASS on efs3 (TCP), RDMA unit path and cluster refusal run (`scripts/w125_p3_compat.sh`) NOTRUN; not authentication | [item](#w133) · [audit](../reviews/dead-code-review-20261021.md) |
