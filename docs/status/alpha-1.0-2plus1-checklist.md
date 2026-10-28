@@ -449,6 +449,9 @@ the separate data-commit correctness fixes.
   concurrent recovery and frequent polling; consumers must handle stale/unavailable
   snapshots explicitly. Verify current management fields and operational scripts
   before changing their freshness contract.
+  **IN PROGRESS on `agent/devel-task-af`**, base `486aa3a46`, measurement
+  `f570fb0cd`: xorinox three-repeat1/10/50Hz polling comparison and clean
+  full gate pending ([AF evidence](af-status-snapshot-20261028.md)).
 
 **Shared completion rule:** retain original failures, exact baseline/candidate
 builds, commands, host/topology/profile and raw evidence outside Git. Use bounded

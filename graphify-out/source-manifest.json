@@ -63,6 +63,11 @@
     "include/efs/write_extent.h": 1,
     "include/efs/writer_ranges.h": 12,
     "include/efs/writer_state.h": 1,
+    "scripts/af_campaign.sh": 4,
+    "scripts/af_instrument.py": 1,
+    "scripts/af_measure.py": 7,
+    "scripts/af_probe.h": 5,
+    "scripts/af_summarize.py": 1,
     "scripts/audit_settings_refusals.py": 2,
     "scripts/b6_full_loop.sh": 2,
     "scripts/b_checks.py": 53,
@@ -1281,9 +1286,9 @@
     "docs/how-it-works/testing.md": "52cab1ce06e7ab3e01814482475c2523e24e56826647bb4f664b6210b2e4f569",
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "5ee26069fd1b32fed2e07e760e3c945edbaf5c5640e6bf8ba46479af944e003e",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "b9687a1336c8a4ea82b19880e11f9128e2dd1a24653e4261714d6e61f3f88576",
     "docs/status/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
-    "docs/status/alpha-1.1-consolidation.md": "00cea68f06eef2832d18b7d749d25bd617fe4ddd36295a47cb965c73b5e148e3",
+    "docs/status/alpha-1.1-consolidation.md": "bd0cbe68dab646b3a433afa10500dab2c3d80e0c0f9f1d55cf20f18dd6f523df",
     "docs/status/d39-consolidated-model-20261023.md": "343d1f6023da489ccf29b84f786919ec076c191ea27bf56f5602c0d0fc2b5a6c",
     "docs/status/decisions.md": "ce46e3d7d720b6e7ea80d708fd352cbd431c917d9e0eb7de53518543525cea95",
     "docs/status/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
@@ -1359,6 +1364,11 @@
     "include/efs/write_extent.h": "ae00b427c77dc5f0419faf6e5325227b50b56bf7b69bb60c178b561255425110",
     "include/efs/writer_ranges.h": "a88de8968f0de54fdcae591aab9246b29e23c4986fd7251c9524db12a74dabdd",
     "include/efs/writer_state.h": "1a350f195a79947b772d3a08cf33efffb050ae53fe7c591af241398e8efd25c0",
+    "scripts/af_campaign.sh": "8628ffe862547d3b2c22a2db97ac7f18f7725d1ee0e76a622a58f388e48ec919",
+    "scripts/af_instrument.py": "7eb3a6dc86204267c171e6eb22a9b0c921ea3bdf5edf896b2a8ae5bf852a8ae6",
+    "scripts/af_measure.py": "8f953ca87226dda9a29b340db97c697919bb6737e5dc4d23a9c5d483b11cee8c",
+    "scripts/af_probe.h": "e7f3ac5609700abfbb522432785d56837250fd93ed502dbfab15b07dc6cc3e63",
+    "scripts/af_summarize.py": "6ae02819a45c093a80ff5dfc5669d57e670d51626394290bcd3a47409bf52bf1",
     "scripts/audit_settings_refusals.py": "369bda1f7854e4837b4329be00f8a73615866e562a474cd1b4e7e1b94ccbd095",
     "scripts/b6_full_loop.sh": "3867ffcd6b6417e8244ee41f74dbdcfccb0c824ce4400bc41a0da8094a5dfbde",
     "scripts/b_checks.py": "e1c743c69a0a5bb6ce6000a3ee9dd1eb827d95e8e5c839151413c0fab9fef5de",
@@ -2556,10 +2566,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1463
+    "calls": 1472
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "09d5156753df1a3c99a376407b454b85b61f02ce"
+  "source_commit": "f570fb0cdf56c9bc65d6accfd27903e8bf80e859"
 }
