@@ -118,6 +118,18 @@ int main(void){
  reset();deadline=1010;reply_status=EFS_INODE_RPC_BUSY;mkdir_ready=21;
  assert(rpc_send_recv_dual(EFS_MSG_INODE_CREATE,packet,sizeof(packet),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),100)==EFS_ERR_BUSY);
  assert(calls==1 && now==deadline && freed==1);
+ /* Task O: transient namespace admission outlives 16 tries but not the
+  * inherited deadline. Every retry must preserve the same complete packet. */
+ unsigned char remove[sizeof(struct efs_msg_inode_unlink)+EFS_OPID_WIRE_LEN]={0};
+ ((struct efs_msg_inode_unlink *)remove)->is_dir=1;
+ for(int d=0;d<2;d++){
+  reset();deadline=31000;reply_status=EFS_INODE_RPC_BUSY;mkdir_ready=21;
+  int rc=d?rpc_send_recv_dual(EFS_MSG_INODE_UNLINK,remove,sizeof(remove),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),100):rpc_send_recv_shard(0,EFS_MSG_INODE_UNLINK,remove,sizeof(remove),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),0,NULL);
+  assert(rc==EFS_OK && calls==21 && now<deadline && freed==21);
+  reset();deadline=1500;reply_status=EFS_INODE_RPC_BUSY;mkdir_ready=21;
+  rc=d?rpc_send_recv_dual(EFS_MSG_INODE_UNLINK,remove,sizeof(remove),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),100):rpc_send_recv_shard(0,EFS_MSG_INODE_UNLINK,remove,sizeof(remove),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),0,NULL);
+  assert(rc==EFS_ERR_BUSY && now==deadline && freed==calls);
+ }
  for(unsigned mode=1;mode<=2;mode++){
   struct efs_msg_inode_reply r;reset();failover=mode;g_group_leader[0]=2;
   assert(!run(0,&r)&&routing_sends==3&&calls==(mode==1?3u:2u)&&g_group_leader[0]==0);
@@ -131,4 +143,4 @@ with tempfile.TemporaryDirectory(prefix='efs-metadata-budget-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client')]+shlex.split(os.environ.get('EFS_TEST_CFLAGS',''))+[str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention, lost hinted peer rerouting, concurrent leader retention same-identity MKDIR beyond 16 attempts with shorter deadline enforcement, and exact-packet bounded unlock BUSY retries with immediate grant conflicts PASS')
+print('metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention, lost hinted peer rerouting, same-identity MKDIR/RMDIR beyond 16 attempts with shorter deadline enforcement, and exact-packet bounded unlock BUSY retries with immediate grant conflicts PASS')

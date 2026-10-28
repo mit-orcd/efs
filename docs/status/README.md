@@ -20,6 +20,10 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Wave 22 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`a7e881a7a`; gate at the same commit)**: Task O, K50 ([evidence](dir-ops-busy-under-load-20261027.md)): a namespace RPC with a caller deadline keeps retrying transient admission BUSY until that deadline instead of stopping at a fixed 16 attempts, RMDIR gets the same 30 s callback bound as MKDIR, deadline-less callers keep the 16-try cap, and every stop logs its reason. intel1 `make test-all` (8 jobs): 515 commands in 727 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (moved from intel2, where Task P's rehearsal holds the host). W159's broader latency failures, RDMA and multi-host stay open.
+
+[Wave 21 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`d42099faa`)**: Task N, K15/K29 append gates ([evidence](k15-k29-append-gates-20261027.md)): on intel1 (single-host TCP), two W52 20,000-record runs, two W64 8,000-record step-down runs and two 2,000-record lost-reply runs PASS — 59,992 acknowledged records verified in warm-primary, warm-peer and cold-restart reads, eight deliberate failed writes explained, no REPORT timeout or unexplained hole; the K29 near-zero-progress stall did not reproduce. Merged: the hardened live harness `tests/live/append_failover.py` (availability and checked cold stops required, REPORT timeouts counted on both mounts, live root hint followed during formation) with `test_append_failover_accounting.py`, and the Task N controller scripts; no product change. **Found: K48** (blocks alpha), the W130 one-replica halt test listed 95 of 96 names through the healthy quorum in Task N's first full gate; not reproduced since, failed stores kept on intel1. Task N's final `make test-all` 514 commands, 0 FAIL, 14 NOTRUN; no gated product code changed, so wave 19's intel2 gate stands.
+
 [Wave 20 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`4a20f4ddf`)**: Task M ([evidence](gate-fstor007-20261027.md)): fstor007 full gate on the unchanged wave-19 product, 514 commands, 0 FAIL, 5 NOTRUN, 617 s, once the documented libfuse ≥ 3.12 prerequisite is met (RHEL9's system 3.10.2 cannot build EFS: a missing prerequisite, not a fallback to add); RDMA GC, POSIX all 221/223 (2 SKIP), two-client 68/68 on a private three-member RDMA fixture. Merged: the build-prerequisite section in `docs/how-it-works/testing.md`, and `tests/live/rdma_posix_gates.sh` rebuilt for current devel (positional CLI and automatic formation instead of the removed `--node-id`/`--direct-io` flags, no removed `EFS_COMMANDS`/`EFS_EXPIRY` exports, private 19xxx ports, verbs-device proof per process, a failed clean stop keeps the fixture). No gated code changed (`tests/live/rdma_posix_gates.sh` is not in `make test-all`), so wave 19's intel2 gate (514 commands, 0 FAIL) stands for this tree.
 
 [Task M: fstor007 build and RDMA gates](gate-fstor007-20261027.md):
@@ -30,6 +34,23 @@ and private3.16.2 dependency used. Final gate514 commands,0 FAIL,5 NOTRUN,
 POSIX-all221/223 with2 explicit skips, peer68/68. Two private-launcher defects
 fixed; no product defect found. Original failures, verified closed manifests
 and budget overruns retained;7 scratch roots pruned, no task mounts/processes.
+
+[Task N: K15/K29 append gates](k15-k29-append-gates-20261027.md):
+**Six completed append gates PASS** on intel1: two W52 20k, two step-down,
+two lost-reply cases; 59,992 exact acknowledged records plus eight deliberate
+holes across full warm/peer/cold views, no unexpected application error.
+Original lost-2 setup FAIL retained; my readiness hardening omitted redirect
+handling, now fixed. Final gate **514/0 FAIL/14 NOTRUN**, unchanged base
+**514/0/14**; initial **514/1/14**. **K48 OPEN, blocks alpha:** initial W130
+listing returned 95/96 names after one replica halted; not reproduced in the
+later gates, no payload-loss claim. Closed failed stores kept on intel1;
+212 evidence files SHA256-verified, other bulk pruned and host released.
+Split versus co-located leaders correlated with 5.19× W52 wall variation;
+no placement mode or timeout changed. Branch `agent/devel-task-n`, no product
+changes, not merged; multi-host/RDMA append acceptance NOTRUN. No global
+release PASS while K48 remains open.
+
+[Task O directory BUSY retry exhaustion](dir-ops-busy-under-load-20261027.md): **K50 FIXED scoped, not merged**, `agent/devel-task-o`, tested `503e17f2d`. Intel2 full gate 515/0 FAIL/14 NOTRUN, INCOMPLETE coverage (659 s); core 218/218, K36/W159 each 5/5 on both hosts. Deterministic unchanged-client failure and xorinox latency failures retained. Broader W159 remains OPEN; RDMA/multi-host NOTRUN. Intel2 scratch deleted with verified evidence retained; xorinox cleanup waits for Task I.
 
 [Wave 19 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`21630289a`; gate at the same commit)**: Task G ([W166](w166-close-eio-flush-deadline-20261026.md), [K38 repair](k38-task-g-repair-20261027.md)): W166 option B as the user decided (30 s deadline unchanged): a lagging storage member delegates the whole ticket STATUS read to the lane leader on the read pool and budget, a forwarded STATUS never forwards again, and a full L0 alone no longer refuses publication; K38 shared-chunk repairs: a definite STALE is kept when a later unit meets BUSY, receipt recovery stays inside the original completion budget, and pressure reclaim drains a bounded cohort instead of waiting for future writes. **Merge decision (user):** Task J's L0 term in `host_kv_pressure` is dropped, so admission and leadership share apply_room plus the unapplied-log watermark; `test_kv_leader_pressure.py` now asserts a full L0 alone is not pressure. intel2 targeted reruns at `7a7b9f420`: K22 leader admission 3/3, K22 snapshot import 2/2, W166 authority 3/3, K38 shared-chunk 5/5, REPORT retry/verdict tests 2/2 each. intel2 `make test-all` (8 jobs): 514 commands in 734 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run had 1 FAIL, `test_read_retry_budget.py`, a merge-resolution error fixed in `21630289a`); OVERBUDGET 5, `test_stop_progress.py` 102 s against 50 s the largest. W166's SIGSTOP, RDMA and multi-host acceptance stays NOTRUN.
 

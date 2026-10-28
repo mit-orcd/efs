@@ -43,6 +43,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/eventfd.h>
+#if EFS_FAULTS
+#include <sys/file.h>
+#endif
 #include <dirent.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -20341,6 +20344,38 @@ mkdir_done:
  * child GUARDs used-lane dseqs. A child that is itself SPLITTING stays
  * BUSY (distributed emptiness). A node that does not host a
  * participant group bounces. */
+#if EFS_FAULTS
+/* Task O: consume a shared, finite admission-refusal count before any
+ * namespace read/receipt/proposal. All private fixture members share the
+ * counter, so routing cannot multiply the number of injected refusals. */
+static int host_test_rmdir_busy(const char *name, const struct efs_opid_req *q)
+{
+    const char *path = getenv("EFS_FAULT_RMDIR_BUSY_FILE");
+    char buf[32] = {0};
+    int fd, busy = 0;
+    if (!path || !name || strcmp(name, "task-o-busy") != 0)
+        return 0;
+    fd = open(path, O_RDWR | O_CLOEXEC);
+    if (fd < 0)
+        return 0;
+    if (flock(fd, LOCK_EX) == 0) {
+        ssize_t n = pread(fd, buf, sizeof(buf) - 1, 0);
+        unsigned remaining = n > 0 ? (unsigned)strtoul(buf, NULL, 10) : 0;
+        if (remaining) {
+            int len = snprintf(buf, sizeof(buf), "%u\n", remaining - 1);
+            if (pwrite(fd, buf, (size_t)len, 0) == len && ftruncate(fd, len) == 0) {
+                busy = 1;
+                fprintf(stderr, "raft-host: fault rmdir-admission BUSY remaining=%u seq=%llu\n",
+                        remaining - 1, (unsigned long long)(q ? q->id.seq : 0));
+            }
+        }
+        (void)flock(fd, LOCK_UN);
+    }
+    close(fd);
+    return busy;
+}
+#endif
+
 void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                             const struct efs_opid_req *q,
                             struct efs_msg_inode_reply *out)
@@ -20373,6 +20408,12 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+#if EFS_FAULTS
+    if (host_test_rmdir_busy(name, q)) {
+        out->status = EFS_INODE_RPC_BUSY;
+        return;
+    }
+#endif
     now = now_ns();
     psh = efs_kv_inode_shard(parent);
     hint=host_namespace_leader_hint(h,efs_raft_shard_group(psh));

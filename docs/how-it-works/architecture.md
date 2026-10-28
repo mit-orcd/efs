@@ -1276,6 +1276,16 @@ records enough completed-request state to make ambiguous retries idempotent
 mkdir. One `txid` threads through all participants of a cross-shard
 transaction (§7.2).
 
+The client keeps that identity through transient admission and routing
+refusals. An inherited RPC deadline bounds those retries; an unrelated fixed
+attempt count must not expire first. FUSE MKDIR and RMDIR use a 30-second
+normal-attempt budget covering prerequisite reads and mutation together,
+preserving any tighter inherited deadline. The existing separately bounded
+same-identity receipt-resolution allowance may follow a lost reply; this is
+not a new attempt identity or an unbounded extension. Exhaustion reports the
+RPC, identity and stopping reason and never turns an uncertain operation into
+a successful result.
+
 **That state is a bounded window, not a history.** At this scale "one durable
 record per operation, kept forever" is an unbounded table on every shard, so
 what is retained per `(client_uuid, session_epoch)` is a
