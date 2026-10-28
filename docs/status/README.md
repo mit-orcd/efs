@@ -34,7 +34,9 @@ diagnostic closed: all six snapshots reviewed, original failures not reproduced;
 geometry readiness failure on
 unknown protection status; harness `99f3b1964` preserves the zero-count
 assertion and 30 s bound; AMD99 gate then528/1 FAIL/14 NOTRUN on the recurring B6 full assertion.
-Failure-retaining b994 continuation now uses the closed-predecessor/quiet guards. Qualification
+AMD b994 gate528/1 FAIL/14 NOTRUN retained a W165 resync-admission BUSY.
+Test-only093415c86 uses the existing BUSY-only management helper within
+the original60s recovery bound; fresh continuation uses closed-prior/quiet guards. Qualification
 remains INCOMPLETE.
 Last qualified candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
