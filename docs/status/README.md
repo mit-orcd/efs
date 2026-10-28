@@ -35,6 +35,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Task W gate-host NOTRUN cleanup](gate-notrun-cleanup-20261028.md):
+**IN PROGRESS**, `agent/devel-task-w`, base `3debca7ec`. Baseline full gate
+running on intel2; real fault-linked follower-bound coverage and cluster-script
+prerequisite provisioning prepared. Read-only inventory: Memcheck headers
+missing on intel1/intel2/nuc, present on xorinox; sanitizer runtime packages
+present on all four. No package installation or product behavior change.
+
 [Wave 27 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (blocks alpha): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); whether K52 is K10 needs the new helper's observed bytes before it is closed or kept. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
 
 [Task V four-host driver rehearsal](a4-lab-topology-dryrun-20261028.md):

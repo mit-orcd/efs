@@ -101,3 +101,5 @@ python3 tests/test_k22_leader_admission.py	30	2	fills the leader's small KV budg
 python3 tests/test_w130_dir_fault.py	50	2	W165 intel1: 10 strict combined serve/apply fault runs, max 38 s; 1.25x rounded up; healthy-quorum operations and snapshot resync, two slots retained
 python3 tests/test_w166_authority.py	40	1	W166: compressed 1 MiB L0 fill with 4 MiB KV budget, then a read-routing fault; 28.8 s in the xorinox 8-job pool x 1.25 rounded up to 5 s
 python3 tests/test_dir_ops_busy.py	25	2	Task O: intel2 eight-job pool 19.9 s; 1.25x rounded up to 5 s; four private daemons and twenty pre-admission BUSYs before same-opid RMDIR
+
+./tests/faults/test_follower_bound --stalled-compactor	15	1	Task W: real stalled LSM compactor and bounded follower catch-up; provisional pending eight-job measurement

@@ -26,6 +26,86 @@ device or `valgrind/memcheck.h`; successful compilation does not qualify
 those missing runtime checks. [fstor007 Task M](../status/gate-fstor007-20261027.md)
 records the current ORCD prerequisite and gate results.
 
+## Memcheck and sanitizer host packages
+
+For the distribution GCC on **RHEL/Rocky 9, RHEL/Rocky 10 and Fedora**, the
+package names are:
+
+| Gate | Packages needed in addition to the Linux build prerequisites |
+| --- | --- |
+| `make leak-check` | `gcc`, `make`, `glibc-devel`, `valgrind`; the gate rebuilds its baseline-ISA C binaries and checks actual Memcheck reports |
+| `tests/test_rdma_memcheck.py` | `gcc`, `glibc-devel`, **both `valgrind` and `valgrind-devel`**; the latter supplies `valgrind/memcheck.h` |
+| `make asan-check` | `gcc`, `make`, `glibc-devel`, `libasan`, `libubsan`; GCC's Linux libasan also supplies LeakSanitizer support |
+| `make tsan-check` | `gcc`, `make`, `glibc-devel`, `libtsan` on a supported architecture |
+
+These are prerequisite names, not an instruction to install or change a host.
+Keep runtime packages matched to the compiler selected by `CC`; a separately
+selected GCC Toolset/Clang needs its own matching runtimes, not an assumed system
+library. Optional system debuginfo improves stacks but does not replace a gate.
+Package presence alone does not prove that a runtime starts or that the full
+sanitizer/leak suite passed. The gates' compile-and-run probes are authoritative;
+ptrace restrictions, unsupported address layouts and missing hardware remain
+explicit coverage limits. Do not disable a detector to make its test pass.
+
+Verify without changing packages:
+
+```sh
+rpm -q gcc glibc-devel libasan libubsan libtsan valgrind valgrind-devel
+rpm -qf /usr/include/valgrind/memcheck.h
+cc -print-file-name=libasan.so
+cc -print-file-name=libubsan.so
+cc -print-file-name=libtsan.so
+cat /proc/sys/kernel/yama/ptrace_scope
+```
+
+The header package is listed by [Fedora](https://packages.fedoraproject.org/pkgs/valgrind/valgrind-devel/)
+and the [Rocky 9](https://download.rockylinux.org/vault/rocky/9.7/AppStream/x86_64/os/Packages/v/)
+and [Rocky 10](https://download.rockylinux.org/pub/rocky/10/AppStream/x86_64/os/Packages/v/)
+repositories. GCC runtime package roles are documented for
+[libasan](https://packages.fedoraproject.org/pkgs/gcc/libasan/),
+[libubsan](https://packages.fedoraproject.org/pkgs/gcc/libubsan/) and
+[libtsan](https://packages.fedoraproject.org/pkgs/gcc/libtsan/).
+The [Task W inventory](../status/gate-notrun-cleanup-20261028.md) records actual
+host versions and missing packages; it does not assert cross-distribution runtime
+qualification. No package was installed as part of that inventory.
+
+### External cluster-script test fixture
+
+`tests/test_cluster_stop.py` copies six actual cluster stop/remount scripts into
+an isolated fixture and replaces VM/SSH transports with mocks. It cannot stop a
+live cluster. The prerequisite is a committed export of `cluster.sh`, `ct-up.sh`,
+`gw-up.sh`, `lib/client-stop.sh`, `lib/client-user.sh`, and `lib/transfer.sh`
+from the separate cluster repository. The test reads `~/git/cluster` by default,
+or the existing `EFS_CLUSTER_SCRIPTS` path override. An explicitly configured
+missing path fails; absence of the default prerequisite remains a visible NOTRUN.
+Do not change the external repository to satisfy the test.
+
+Task W provisions just those six committed scripts on intel2, with origin and
+hashes; it does not copy real deployment configuration or credentials. This is a
+test dependency, not another EFS deployment. Future gates use the same default
+path. Keep its recorded revision current when the external scripts change.
+
+### Fault-linked follower-bound subcase
+
+The normal `tests/test_follower_bound` runs its simulated follower/leader cases.
+The real LSM stalled-compactor arm runs separately in `make test-long` as
+`tests/faults/test_follower_bound --stalled-compactor`. It is built with
+`EFS_FAULTS=1` and the fault-enabled KV object overrides, so the compactor really
+parks. The normal binary refuses that argument rather than pretending to run it.
+The fault test asserts memory/lag bounds, observed apply deferral, continued
+healthy-quorum commits and complete follower catch-up after release. A command
+and budget row keep this arm in the full code gate; no product setting changes.
+
+### Developer graph validation
+
+`make code-graph-check` performs the canonical graph rebuild and runs
+`tests/test_code_graph.py`. It needs the pinned graphify environment and a real
+Git index. It is explicitly outside the archived-source runtime gate, like the
+documentation gate; it is not reported as missing product/hardware coverage.
+See [the graph workflow](../../tools/graphify/README.md). Its exclusion is named
+and checked in `tests/test_make_test_recipe.py`, rather than leaving an unwired
+test to break all runtime-gate recipe checks.
+
 ## `make test`, `make test-long` and `make test-all`
 
 The code tests come in two groups, so that the everyday suite stays fast:
