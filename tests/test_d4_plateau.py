@@ -96,6 +96,7 @@ def compactions(c, i, since):
 
 c = Cluster(work, 'd', [1, 2, 3], env)
 mounts = []
+succeeded = False
 try:
     c.start(1, quota=QUOTA)
     c.start(2, join=1, quota=QUOTA)
@@ -150,11 +151,12 @@ try:
           f'{m["index_generations_during_load"]} index generations, KV flushes {m["kv_flushes_during_load"]} '
           f'and compactions {m["kv_compactions_during_load"]} during the load; drained in {m["drain_s"]} s '
           f'<= {DRAIN_S}; {m["load_live_files"] + m["fg_files"]} files exact')
+    succeeded = True
 finally:
     for mt in mounts:
         mt.close()
     c.stop_all()
-    if os.environ.get('EFS_D4_KEEP'):
+    if os.environ.get('EFS_D4_KEEP') or not succeeded:
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)

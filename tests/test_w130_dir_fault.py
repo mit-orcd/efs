@@ -29,6 +29,7 @@ must restore its own direct GETATTR.
 import hashlib, os, re, shutil, signal, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from resync_setup import request_before
 from k33_daemons import Cluster as _Cluster, EFSD, MGMT, FUSE, mgmt as _mgmt  # noqa: E402
 
 for b in (EFSD, MGMT):
@@ -322,11 +323,11 @@ try:
           f'while the leader commits (visible in raft-status)')
 
     # 5. recover: raft-resync pulls the leader's snapshot onto node 3
-    rc, out = mgmt('raft-resync', c.ep(3), str(halt_group))
-    assert rc == 0, f'raft-resync rc={rc}: {out}'
-    deadline = time.time() + RESYNC_DEADLINE
+    deadline = time.monotonic() + RESYNC_DEADLINE
+    tries = request_before(lambda: mgmt('raft-resync', c.ep(3), str(halt_group)), deadline)
+    print(f'[w130] resync accepted after {tries} request(s)')
     served = False
-    while time.time() < deadline:
+    while time.monotonic() < deadline:
         if 'resync: installed snapshot' in c.log(3) or \
            ('INCOMPATIBLE' not in c.last_run(3).split('resync')[-1] and
             group_applied(c, 3, halt_group) > a3):

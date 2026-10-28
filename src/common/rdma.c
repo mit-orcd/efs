@@ -38,6 +38,7 @@
 #include <string.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
+#include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -619,6 +620,7 @@ struct efs_rdma_conn {
     struct ibv_cq *send_cq;
     struct ibv_mr *mr;
     uint8_t *arena;
+    size_t arena_bytes;
     int nrecv;
     uint32_t bufsz;
     uint32_t max_frame; /* min(local, remote) buffer size */
@@ -926,6 +928,31 @@ cq_fail:
     return -1;
 }
 
+/* Registered connection buffers have a connection lifetime, not a malloc
+ * arena lifetime. Fixed-set RDMA qualification still showed anonymous
+ * growth with four malloc arenas. Multi-MiB aligned allocations can retain
+ * holes in those arenas after free; dedicated mappings
+ * return those pages at teardown after QP/MR destruction, independent of
+ * glibc's adaptive mmap threshold and the thread that closes the connection. */
+static int conn_arena_create(struct efs_rdma_conn *rc, size_t bytes)
+{
+    void *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED)
+        return -1;
+    rc->arena = p;
+    rc->arena_bytes = bytes;
+    return 0;
+}
+
+static void conn_arena_destroy(struct efs_rdma_conn *rc)
+{
+    if (rc->arena)
+        munmap(rc->arena, rc->arena_bytes);
+    rc->arena = NULL;
+    rc->arena_bytes = 0;
+}
+
 static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
 {
     struct efs_rdma_conn *rc = calloc(1, sizeof(*rc));
@@ -981,7 +1008,7 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
     size_t recv_stride = rc->bufsz + EFS_RDMA_RECV_STRIDE;
     size_t recv_total = (size_t)rc->nrecv * recv_stride;
     size_t total = recv_total + (size_t)EFS_RDMA_NSEND * rc->bufsz;
-    if (posix_memalign((void **)&rc->arena, 4096, total) != 0)
+    if (conn_arena_create(rc, total) != 0)
         goto fail;
     rc->mr = ibv_reg_mr(dev->pd, rc->arena, recv_total, IBV_ACCESS_LOCAL_WRITE);
     if (!rc->mr)
@@ -1227,7 +1254,7 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
             (unsigned long long)extra_tx,(unsigned long long)extra_rx,(unsigned long long)rc->tcp_app_rx);
     }
     int counted = rc->counted;
-    free(rc->arena);
+    conn_arena_destroy(rc);
     free(rc->recv_bufs);
     free(rc->send_bufs);
     free(rc);
