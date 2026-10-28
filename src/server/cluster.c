@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include "efs/fault_exit.h"
@@ -556,6 +557,31 @@ void server_heartbeat_apply_locked(struct efsd_server *s)
     }
 }
 
+/* The wait mutex is private to the heartbeat lifecycle, never s->lock.
+ * Stop publishes running=0 then takes this mutex to wake the waiter, so it
+ * cannot signal between the predicate check and the atomic wait/unlock.
+ * Spurious wakes keep the same monotonic deadline and do not run probes. */
+static int heartbeat_wait(struct efsd_server *s)
+{
+    struct timespec due;
+    clock_gettime(CLOCK_MONOTONIC, &due);
+    due.tv_sec += EFS_HEARTBEAT_MS / 1000;
+    due.tv_nsec += (EFS_HEARTBEAT_MS % 1000) * 1000000L;
+    if (due.tv_nsec >= 1000000000L) {
+        due.tv_sec++;
+        due.tv_nsec -= 1000000000L;
+    }
+    pthread_mutex_lock(&s->heartbeat_lock);
+    int rc = 0;
+    while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE) && !rc)
+        rc = pthread_cond_timedwait(&s->heartbeat_wake, &s->heartbeat_lock, &due);
+    int run = __atomic_load_n(&s->running, __ATOMIC_ACQUIRE) && rc == ETIMEDOUT;
+    pthread_mutex_unlock(&s->heartbeat_lock);
+    if (rc && rc != ETIMEDOUT)
+        fprintf(stderr, "heartbeat: wait failed: %s\n", strerror(rc));
+    return run;
+}
+
 static void *heartbeat_thread(void *arg)
 {
     struct efsd_server *s = arg;
@@ -573,8 +599,7 @@ static void *heartbeat_thread(void *arg)
 
     uint64_t gc_log_ms = 0, trim_ms = hb_now_ms();
     while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) {
-        usleep(EFS_HEARTBEAT_MS * 1000);
-        if (!__atomic_load_n(&s->running, __ATOMIC_ACQUIRE))
+        if (!heartbeat_wait(s))
             break;
 
         pthread_mutex_lock(&s->lock);
@@ -667,18 +692,40 @@ void server_start_heartbeat(struct efsd_server *s)
 {
     /* Teardown joins before freeing the Raft host or closing peer pools:
      * a heartbeat already inside server_gc_status still owns that host. */
-    if (efsd_pthread_create(&s->heartbeat_tid, heartbeat_thread, s) == 0) {
-        s->heartbeat_started = 1;
-        fprintf(stderr, "heartbeat: enabled (%d ms interval)\n", EFS_HEARTBEAT_MS);
+    pthread_condattr_t attr;
+    int rc = pthread_mutex_init(&s->heartbeat_lock, NULL);
+    if (rc) goto failed;
+    rc = pthread_condattr_init(&attr);
+    if (rc) goto mutex_failed;
+    rc = pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+    if (!rc) rc = pthread_cond_init(&s->heartbeat_wake, &attr);
+    pthread_condattr_destroy(&attr);
+    if (rc) goto mutex_failed;
+    rc = efsd_pthread_create(&s->heartbeat_tid, heartbeat_thread, s);
+    if (rc) {
+        pthread_cond_destroy(&s->heartbeat_wake);
+        goto mutex_failed;
     }
+    s->heartbeat_started = 1;
+    fprintf(stderr, "heartbeat: enabled (%d ms interval)\n", EFS_HEARTBEAT_MS);
+    return;
+mutex_failed:
+    pthread_mutex_destroy(&s->heartbeat_lock);
+failed:
+    fprintf(stderr, "heartbeat: start failed: %s\n", strerror(rc));
 }
 
 void server_stop_heartbeat(struct efsd_server *s)
 {
     __atomic_store_n(&s->running, 0, __ATOMIC_RELEASE);
     if (s->heartbeat_started) {
+        pthread_mutex_lock(&s->heartbeat_lock);
+        pthread_cond_broadcast(&s->heartbeat_wake);
+        pthread_mutex_unlock(&s->heartbeat_lock);
         pthread_join(s->heartbeat_tid, NULL);
         s->heartbeat_started = 0;
+        pthread_cond_destroy(&s->heartbeat_wake);
+        pthread_mutex_destroy(&s->heartbeat_lock);
     }
 }
 

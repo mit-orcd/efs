@@ -78,6 +78,8 @@ struct efsd_server {
     int running;
     pthread_t heartbeat_tid;
     int heartbeat_started;
+    pthread_mutex_t heartbeat_lock;
+    pthread_cond_t heartbeat_wake;
     int join_refused; /* K33: stopped because the cluster refused this node */
 
     pthread_t rejoin_tid; /* background rejoin retry thread */
