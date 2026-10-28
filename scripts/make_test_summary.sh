@@ -33,7 +33,11 @@ cd "$(dirname "$0")/.." || exit 2
 # A previous run's markers and results must never decide this run.
 rm -f build.failed enum.failed summary.txt progress.txt timings.tsv cmds.txt tmp/fail-*.log
 mkdir -p tmp  # C tests mkdtemp under TMPDIR and assert on failure
-export TMPDIR=$PWD/tmp
+# Caller may choose a short XFS directory outside Git (Unix sockets have a
+# small path limit; qualification drivers refuse raw outputs in a worktree).
+export TMPDIR=${TMPDIR:-$PWD/tmp}
+mkdir -p "$TMPDIR" || exit 2
+export TMPDIR=$(cd "$TMPDIR" && pwd)
 # Private libfuse (ORCD/Intel build hosts) when present, else the system one.
 FUSE_PREFIX=${EFS_FUSE_PREFIX:-/data1/efs/deps/libfuse}
 if [ -d "$FUSE_PREFIX/lib64/pkgconfig" ]; then
@@ -147,7 +151,7 @@ else:
     free=jobs; cv=threading.Condition(lock); threads=[]
     def pooled_one(i,c,slots):
         global free
-        try: one(i,c,"tmp/case-%d"%i)
+        try: one(i,c,os.path.join(os.environ.get("TMPDIR",os.path.abspath("tmp")),"case-%d"%i))
         finally:
             with cv: free+=slots; cv.notify_all()
     with cv:

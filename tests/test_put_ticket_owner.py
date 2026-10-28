@@ -28,7 +28,7 @@ code=r'''
 struct efs_client g_client;
 static uint64_t next_seq=1;static unsigned gen_rpcs,admits,sessions,settles;
 static int admit_rc,admit_lost,session_rc,unregistered,settle_rc,gen_rc;
-static uint32_t settle_cap=EFS_PUT_TICKET_SETTLE_MAX;
+static uint32_t settle_cap=EFS_PUT_TICKET_SETTLE_MAX, probe_state=EFS_PUT_TICKET_REJECTED;
 static uint64_t settled[64];static unsigned nsettled;
 static uint64_t referenced_object;
 static pthread_mutex_t mock_mu=PTHREAD_MUTEX_INITIALIZER;
@@ -41,6 +41,7 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t e,efs_ino_t ino,uint64_t g,u
 {(void)e;(void)g;(void)start;(void)r;(void)n;gen_rpcs++;*resolved=ino==4097?7:0;return gen_rc;}
 int efs_client_rpc_put_ticket(const struct efs_put_ticket *t,int probe,uint32_t *state)
 {
+ if(probe){*state=probe_state;return EFS_OK;}
  assert(!probe);*state=0;struct efs_meta_pub p={0};(void)p;
  /* The admitted body is exactly the immutable PUT identity. */
  assert(t->inode_gen==7 && t->member_mask==15 && t->fragment_len==32 && t->coding_profile==EFS_META_PROFILE_K2F1);
@@ -87,6 +88,7 @@ int efs_client_rpc_put_ticket_batch(const struct efs_put_ticket *t,uint32_t n,in
  pthread_mutex_unlock(&mock_mu);
  return EFS_OK;
 }
+void efs_client_stripe_closed(const struct efs_put_ticket *t){assert(t && t->object);}
 int efs_client_put_referenced(efs_ino_t ino,uint32_t ci,uint64_t object){(void)ino;(void)ci;return object==referenced_object;}
 #include "put_ticket_owner.c"
 static const efs_node_id_t nodes[3]={1,2,3};
@@ -188,6 +190,24 @@ int main(void){
  batch_clear_bit=1;s0=settles;
  assert(!efs_client_put_settle() && !efs_client_put_outstanding());
  assert(batch_settles==4 && batch_settled==15 && settles==s0+1);
+ /* Only done, no-longer-putting, exact FileID tickets may be settled by
+  * fsync. An unknown ticket or lost SETTLE never establishes authority. */
+ struct efs_put_ticket abandoned;
+ assert(!admit(48,&abandoned));
+ assert(efs_client_put_terminal(4097,7,48,abandoned.object)==EFS_ERR_BUSY);
+ efs_client_put_release(abandoned.id.seq,1);
+ assert(efs_client_put_terminal(4097,7,48,abandoned.object)==EFS_ERR_BUSY);
+ efs_client_put_done(4097,48,abandoned.object);
+ assert(efs_client_put_terminal(4097,8,48,abandoned.object)==EFS_ERR_NOT_FOUND);
+ settle_rc=EFS_ERR_NET;
+ assert(efs_client_put_terminal(4097,7,48,abandoned.object)==EFS_ERR_NET);
+ settle_rc=EFS_ERR_BUSY;probe_state=EFS_PUT_TICKET_ADMITTED;
+ assert(efs_client_put_terminal(4097,7,48,abandoned.object)==EFS_ERR_BUSY);
+ probe_state=EFS_PUT_TICKET_REJECTED;
+ assert(!efs_client_put_terminal(4097,7,48,abandoned.object));
+ settle_rc=0;
+ assert(!efs_client_put_terminal(4097,7,48,abandoned.object));
+ assert(!efs_client_put_settle() && !efs_client_put_outstanding());
  efs_client_put_settle_stop();
  puts("K13 ticket ledger: FileID binding, admission before PUT, lost/stale admission retention, putting protection, sweep, ordered per-stream batched settle, partial and fenced retirement; K32 cohort ADMIT_BATCH per group, single-ADMIT fallback, multi-stream SETTLE_BATCH PASS");
 }

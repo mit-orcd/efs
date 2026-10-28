@@ -854,6 +854,10 @@ int efs_client_stripe_note(const struct efs_put_ticket *t,
                            const uint64_t seq[EFS_NUM_FRAGMENTS],
                            const uint64_t epoch[EFS_NUM_FRAGMENTS]);
 void efs_client_stripes_published(const struct efs_chunk_rec *recs, uint32_t count);
+/* Terminal ticket proof must precede a fresh absence check; never drops bytes. */
+void efs_client_stripe_closed(const struct efs_put_ticket *ticket);
+int efs_client_put_terminal(efs_ino_t ino, uint64_t generation, uint32_t ci,
+                            uint64_t object);
 int efs_client_data_commit(efs_ino_t ino);
 /* EFS_MD_CMD_DEGRADED_MARK on the lane shard's group: OK marked (or
  * already), NOT_FOUND the object is not live (not published yet OR retired),

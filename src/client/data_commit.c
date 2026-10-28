@@ -39,6 +39,7 @@ struct stripe {
     uint64_t seq[EFS_NUM_FRAGMENTS], epoch[EFS_NUM_FRAGMENTS];
     uint8_t state[EFS_NUM_FRAGMENTS];
     uint8_t published; /* this object had a successful REPORT/receipt */
+    uint8_t closed; /* durable ticket settlement forbids any later publication */
 };
 
 #define STRIPE_BUCKETS (1u << 16)
@@ -223,6 +224,17 @@ void efs_client_stripes_published(const struct efs_chunk_rec *recs, uint32_t cou
     pthread_mutex_unlock(&commit_mu);
 }
 
+/* A durable ticket floor closes publication but says nothing about whether
+ * the object ever published. Only a subsequent NOT_FOUND can retire it. */
+void efs_client_stripe_closed(const struct efs_put_ticket *ticket)
+{
+    if (!ticket) return;
+    pthread_mutex_lock(&commit_mu);
+    struct stripe *s = stripe_find(ticket->ino, ticket->ci, ticket->object);
+    if (s && s->inode_gen == ticket->inode_gen) s->closed = 1;
+    pthread_mutex_unlock(&commit_mu);
+}
+
 struct commit_job { efs_node_id_t node; uint64_t target, epoch, deadline; int rc; };
 
 /* One COMMIT. rc OK with the reply's verifier in epoch, or the failure. */
@@ -392,14 +404,35 @@ static int stripe_prove(efs_ino_t ino, int all)
             /* No tolerance left: the mark must be durable before success. */
             int mrc = efs_client_rpc_degraded_mark(s->ino, s->inode_gen, s->object, s->ci,
                                                    (uint32_t)open, s->nodes[open]);
+            if (mrc == EFS_ERR_NOT_FOUND && !s->published && !s->closed) {
+                /* A replay may have abandoned this PUT without publishing it.
+                 * Local supersession alone is not proof: close its ticket on
+                 * the lane group first, within this sweep's existing bound.
+                 * SETTLE/PUBLISHED/REJECTED are durable fences against a late
+                 * REPORT. Then repeat the mark: absence BEFORE that fence is
+                 * not evidence of absence AFTER it. */
+                uint64_t saved = efs_client_rpc_deadline_ms();
+                efs_client_rpc_set_deadline_ms(deadline);
+                int trc = efs_client_put_terminal(s->ino, s->inode_gen, s->ci, s->object);
+                pthread_mutex_lock(&commit_mu);
+                struct stripe *live = stripe_find(s->ino, s->ci, s->object);
+                int closed = live && live->inode_gen == s->inode_gen && live->closed;
+                pthread_mutex_unlock(&commit_mu);
+                if (trc == EFS_OK || closed) {
+                    s->closed = 1;
+                    mrc = efs_client_rpc_degraded_mark(s->ino, s->inode_gen, s->object,
+                                                       s->ci, (uint32_t)open, s->nodes[open]);
+                }
+                efs_client_rpc_set_deadline_ms(saved);
+            }
             if (mrc == EFS_OK) {
                 s->state[open] = FRAG_MARKED;
                 if (marked++ < 8)
                     stripe_log(what, s, durable, "marked degraded for rebuild on return", mrc);
                 retire = 1;
-            } else if (mrc == EFS_ERR_NOT_FOUND && s->published) {
-                /* This snapshot already knew publication succeeded before
-                 * the mark RPC: absence now proves later retirement. */
+            } else if (mrc == EFS_ERR_NOT_FOUND && (s->published || s->closed)) {
+                /* Publication or a durable terminal ticket preceded this
+                 * mark RPC: absence now proves retirement, never "not yet". */
                 retire = 1;
             } else {
                 if (logged++ < 8)
