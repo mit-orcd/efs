@@ -886,6 +886,9 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
     efs_node_id_t skip = 0;   /* answered NOT_PRIMARY with no hint */
     int prof = rpc_prof_enabled();
     int saw_busy = 0;
+    int deadline_bounded = efs_client_rpc_deadline_ms() != 0;
+    int attempt = 0, tried = 0;
+    unsigned last_status = 255;
     int read_route = type == EFS_MSG_INODE_LOOKUP || type == EFS_MSG_INODE_GETATTR;
     uint64_t read_key = read_route ? efs_meta_read_route_key(type,req,req_len) : 0;
     unsigned long long t_start = rpc_prof_now_us();
@@ -902,10 +905,14 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
         (type==EFS_MSG_INODE_LINK && req_len==sizeof(mutation.link)+EFS_OPID_WIRE_LEN) ||
         (type==EFS_MSG_INODE_RENAME_AT && req_len==sizeof(mutation.rename)+EFS_OPID_WIRE_LEN);
     if (identified_create) { memcpy(create_retry,req,req_len);req=create_retry; }
-    for (int attempt = 0; attempt < 16; attempt++) {
+    /* A caller deadline bounds transient admission/routing refusals. A
+     * fixed attempt count can expire first while the quorum is progressing.
+     * Deadline-less library callers retain the existing finite cap. */
+    for (; deadline_bounded || attempt < 16; attempt++) {
         if (identified_create) opid_retry_ack(create_retry,req_len);
         if (efs_client_rpc_past_deadline())
-            return EFS_ERR_BUSY;
+            goto exhausted;
+        tried = attempt + 1;
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
         unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
@@ -929,11 +936,11 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
             /* One dropped conn is not a failed create. Same 16-attempt
              * budget as BUSY; a hard NET only after it is used up
              * (dir_many_files EIO on a single recv failure). */
-            if (attempt + 1 < 16) {
+            if (deadline_bounded || attempt + 1 < 16) {
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=send\n",
                         type, attempt);
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                    return EFS_ERR_BUSY;
+                    goto exhausted;
                 continue;
             }
             return EFS_ERR_NET;
@@ -955,12 +962,12 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
             rpc_tl_lost++;
             efs_client_conn_drop(nid, conn);
             rpc_retry_peer(shard, nid, &target, &skip, 1);
-            if (attempt + 1 < 16) {
+            if (deadline_bounded || attempt + 1 < 16) {
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
                         "nid=%u id=%s\n", type, attempt, rc, nid,
                         rpc_req_ident(type, req, req_len, ident, sizeof(ident)));
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                    return EFS_ERR_BUSY;
+                    goto exhausted;
                 continue;
             }
             return EFS_ERR_NET;
@@ -970,7 +977,7 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
         if (efs_client_rpc_past_deadline()) {
             free(payload);
             rpc_tl_lost++; /* a reply arrived too late to be used */
-            return EFS_ERR_BUSY;
+            goto exhausted;
         }
         if (rtype != expect || plen < reply_len) {
             fprintf(stderr, "inode-rpc: proto type=%u rtype=%u plen=%u "
@@ -994,6 +1001,7 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
         }
         free(payload);
         struct efs_msg_inode_reply *r = reply;
+        last_status = r->status;
         if (read_route && r->status == EFS_INODE_RPC_OK && r->read_node_id &&
             r->read_node_id <= __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE)) {
             rpc_learn_leader(r);
@@ -1018,8 +1026,8 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
             /* Extra-shard owner is still assembling pages after restart.
              * Same target — do not flip to another node. */
             unsigned long long sleep_start = rpc_prof_now_us();
-            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                return EFS_ERR_BUSY;
+            if ((!deadline_bounded && attempt == 15) || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                goto exhausted;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
@@ -1041,8 +1049,8 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
              * retried here. */
             saw_busy = 1;
             unsigned long long sleep_start = rpc_prof_now_us();
-            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                return EFS_ERR_BUSY;
+            if ((!deadline_bounded && attempt == 15) || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                goto exhausted;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
@@ -1074,25 +1082,26 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
                                  0, __ATOMIC_RELAXED);
             fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=no-hint from=%u\n",
                     type, attempt, nid);
-            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                return EFS_ERR_BUSY;
+            if ((!deadline_bounded && attempt == 15) || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                goto exhausted;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2,
                          rpc_prof_now_us() - sleep_start);
             continue;
         }
         target = r->primary_id;
     }
-    /* Exhausted BUSY retries is not "no primary" — that mapped to EIO
-     * on dir-rename under load (isolated PASS). Say so: an app-visible
-     * EBUSY after 10 s of retries on an idle cluster is a server bug and
-     * the server line (raft-host: mkdir/create/unlink ... rc=) is the pair. */
-    if (saw_busy) {
+exhausted:
+    {
         char ident[64];
-        fprintf(stderr, "inode-rpc: shard=%u type=%u exhausted 16 BUSY/STALE "
-                "retries (%.1f s) -> EBUSY id=%s\n", shard, type, 10.35,
+        int expired = efs_client_rpc_past_deadline();
+        fprintf(stderr, "inode-rpc: retry-stop type=%u attempts=%d reason=%s "
+                "last_status=%u elapsed_ms=%llu deadline_ms=%llu id=%s\n",
+                type, tried, expired ? "deadline" : "attempt-cap",
+                last_status, (rpc_prof_now_us() - t_start) / 1000ull,
+                (unsigned long long)efs_client_rpc_deadline_ms(),
                 rpc_req_ident(type, req, req_len, ident, sizeof(ident)));
+        return saw_busy || expired ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
     }
-    return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 
 /* W155: an identified directory op (I16 op-id) whose reply was lost after
@@ -3046,6 +3055,9 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
     efs_node_id_t target = 0;
     efs_node_id_t skip = 0;
     int saw_busy = 0;
+    int deadline_bounded = efs_client_rpc_deadline_ms() != 0;
+    int attempt = 0, tried = 0;
+    unsigned last_status = 255;
     int prof = rpc_prof_enabled();
     unsigned long long t_start = rpc_prof_now_us();
     union { struct efs_msg_inode_create create; struct efs_msg_inode_unlink unlink;
@@ -3056,19 +3068,16 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
         (type==EFS_MSG_INODE_LINK && req_len==sizeof(mutation.link)+EFS_OPID_WIRE_LEN) ||
         (type==EFS_MSG_INODE_RENAME_AT && req_len==sizeof(mutation.rename)+EFS_OPID_WIRE_LEN);
     if (identified_create) { memcpy(create_retry,req,req_len);req=create_retry; }
-    /* MKDIR owns a bounded callback deadline. Keep its original identity
-     * while a cross-shard prepare drains instead of stopping after 16 tries.
-     * Other users retain the legacy attempt cap. */
-    int attempts = identified_create && type == EFS_MSG_INODE_CREATE &&
-        S_ISDIR(((const struct efs_msg_inode_create *)req)->mode) &&
-        efs_client_rpc_deadline_ms() ? 64 : 16;
-    for (int attempt = 0; attempt < attempts; attempt++) {
+    /* Preserve the caller's deadline and immutable request, not a second
+     * attempt-count deadline. Deadline-less callers still get 16 tries. */
+    for (; deadline_bounded || attempt < 16; attempt++) {
         if (identified_create) opid_retry_ack(create_retry,req_len);
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
         unsigned long long t0;
         if (rpc_past_deadline())
-            return EFS_ERR_BUSY;
+            goto exhausted;
+        tried = attempt + 1;
         t0 = prof ? rpc_prof_now_us() : 0;
         if (target != 0) {
             conn = efs_client_conn_get(target);
@@ -3080,9 +3089,9 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
         if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
             if (conn)
                 efs_client_conn_drop(nid, conn);
-            if (attempt + 1 < attempts) {
+            if (deadline_bounded || attempt + 1 < 16) {
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                    return EFS_ERR_BUSY;
+                    goto exhausted;
                 continue;
             }
             return EFS_ERR_NET;
@@ -3103,7 +3112,7 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
             free(payload);
             rpc_tl_lost++;
             efs_client_conn_drop(nid, conn);
-            if (attempt + 1 < attempts) {
+            if (deadline_bounded || attempt + 1 < 16) {
                 /* recv_ms is the configured bound and wait_ms what this
                  * receive waited; cut= says what ended it: the call's
                  * deadline (a sync REPORT's 8 s budget), the bound, or the
@@ -3118,7 +3127,7 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
                         waited + 50u >= (unsigned long long)bound ? "bound" : "conn", nid,
                         rpc_req_ident(type, req, req_len, ident, sizeof(ident)));
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                    return EFS_ERR_BUSY;
+                    goto exhausted;
                 continue;
             }
             return EFS_ERR_NET;
@@ -3129,7 +3138,7 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
         if (efs_client_rpc_past_deadline()) {
             free(payload);
             rpc_tl_lost++; /* a reply arrived too late to be used */
-            return EFS_ERR_BUSY;
+            goto exhausted;
         }
         if (rtype != expect || plen < reply_len) {
             fprintf(stderr, "inode-rpc: proto type=%u rtype=%u plen=%u "
@@ -3141,13 +3150,14 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
         memcpy(reply, payload, reply_len);
         free(payload);
         struct efs_msg_inode_reply *r = reply;
+        last_status = r->status;
         if (r->status == EFS_INODE_RPC_BUSY) {
             saw_busy = 1;
             skip = nid;
             target = 0;
             unsigned long long sleep_start = rpc_prof_now_us();
-            if (attempt + 1 == attempts || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                return EFS_ERR_BUSY;
+            if ((!deadline_bounded && attempt == 15) || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                goto exhausted;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
@@ -3164,8 +3174,8 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
              * REPORT_CHUNKS owns its STALE (W1). */
             saw_busy = 1;
             unsigned long long sleep_start = rpc_prof_now_us();
-            if (attempt + 1 == attempts || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                return EFS_ERR_BUSY;
+            if ((!deadline_bounded && attempt == 15) || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                goto exhausted;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
@@ -3181,8 +3191,8 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
             unsigned long long sleep_start = rpc_prof_now_us();
             saw_busy = 1;
             target = 0;
-            if (attempt + 1 == attempts || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
-                return EFS_ERR_BUSY;
+            if ((!deadline_bounded && attempt == 15) || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                goto exhausted;
             unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
@@ -3190,10 +3200,18 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
         rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
         target = r->primary_id;
     }
-    if (saw_busy)
-        fprintf(stderr, "inode-rpc: dual type=%u exhausted %d BUSY/STALE "
-                "retries (%.1f s) -> EBUSY\n", type, attempts, (rpc_prof_now_us() - t_start) / 1000000.0);
-    return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
+exhausted:
+    {
+        char ident[64];
+        int expired = efs_client_rpc_past_deadline();
+        fprintf(stderr, "inode-rpc: retry-stop type=%u attempts=%d reason=%s "
+                "last_status=%u elapsed_ms=%llu deadline_ms=%llu id=%s\n",
+                type, tried, expired ? "deadline" : "attempt-cap",
+                last_status, (rpc_prof_now_us() - t_start) / 1000ull,
+                (unsigned long long)efs_client_rpc_deadline_ms(),
+                rpc_req_ident(type, req, req_len, ident, sizeof(ident)));
+        return saw_busy || expired ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
+    }
 }
 
 static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,

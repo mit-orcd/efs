@@ -1088,6 +1088,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_conn_idle_reap.py
 	python3 tests/test_report_stepdown.py
 	python3 tests/test_w159_apply_wait.py
+	python3 tests/test_dir_ops_busy.py
 	python3 tests/test_query_first_catalog.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
