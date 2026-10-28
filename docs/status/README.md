@@ -45,6 +45,18 @@ full acceptance are separate states.
 
 [Task Y — K register reconciliation](k-register-reconciled-20261028.md): reviewed wave-28 devel `9e4d66a8c`; 52 canonical rows in each table, 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN. K48/K52 remain OPEN; named live gates remain VERIFY. History preserved, stale merge/acceptance contradictions reported, structural checker in `make test`; no new live qualification or user decision.
 
+[ORCD-test dd profile and durability index](orcd-test-dd-profile-20261028.md):
+`agent/orcd-dd-profile-20261028`, product fix `3769f44bb`, not merged.
+Client inode-only durability chains consumed 65% of sampled user cycles;
+exact-object indexing raises matched unprofiled median 207 → 332 MiB/s and
+reduces FUSE fsync handling from 8.4–8.8 s to 0.14–0.20 s. Target 1 GB/s
+remains unmet. Focused proof/index, real degraded-fsync, POSIX and full
+nonzero peer/cold-restart readback PASS. Full gate **527/8 FAIL/5 NOTRUN**:
+six runtime failures reproduce on parent, inventory follow-up PASS, quota
+assertion incident open. Original failures and profiles retained. IOR repeat PASS in all four cases,
+without a scale-out write improvement. Evidence manifest verification and
+final health checks are recorded on the page. No release PASS.
+
 [Wave 28 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`c0081d095`; gate at `d951ca293`)**: Task S, K48 ([evidence](k48-readdir-omission-20261028.md)): a directory page is published only if the directory's layout and used lanes are unchanged after its scan (bounded rescans, then BUSY rather than a short page), and lanes that became used during the scan are fenced before the page is served; `test_k48_readdir.py` reproduces the omission on the base. K48 stays OPEN: the original Task N capture lacks the missing name and RPC trace, so its exact cause is unproven. And Task U ([evidence](k32-write-cost-profile-20261028.md)): K32 write-cost profile (FUSE tickets 5.66, sessions 0.48, publication 0.36 Raft entries/MiB), the direct-client harness, operator `raft-resync` admission BUSY retried within the W130 test's recovery deadline; IOR NOTRUN, D4 baseline failure open. Merge-time: `test_code_graph.py` (added unwired by the code-graph commit `3debca7ec`) is now in `make test-long`, and its git-dependent case reports NOTRUN in the gate's git-archive tree. intel2 `make test-all` at `d951ca293`: 526 commands in 702 s, 1 FAIL (that test case, fixed in `c0081d095` and rerun there: OK, one NOTRUN), 12 NOTRUN host limits.
 
 [Task W gate-host NOTRUN cleanup](gate-notrun-cleanup-20261028.md):

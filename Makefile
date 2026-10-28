@@ -368,7 +368,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 # helpers built with extra flags). They are real prerequisites of test and
 # test-long, never built inside a recipe, so test-long works on its own and a
 # parallel make cannot start a test before its binary exists.
-TEST_SPECIAL_BINS = tests/faults/efsd tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
+TEST_SPECIAL_BINS = tests/faults/efsd tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/test_data_commit_index tests/faults/test_kv_compact_crash
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -451,6 +451,8 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_put_upload_server
 	./tests/test_put_orphan_server
 	./tests/test_data_commit
+	./tests/test_data_commit_index
+	python3 tests/test_orcd_dd_profile.py
 	python3 tests/test_applied_interval.py
 	python3 tests/test_cursor_checkpoint.py
 	python3 tests/test_lookup_errno.py
@@ -908,7 +910,7 @@ clean:
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_follower_bound tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
 	rm -rf tests/faults/server tests/faults/kv
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
-	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
+	rm -f tests/test_data_commit tests/test_data_commit_index tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
@@ -976,7 +978,7 @@ tests/test_put_upload_server: tests/test_put_upload_server.c src/server/put_uplo
 tests/test_put_orphan_server: tests/test_put_orphan_server.c src/server/put_orphan.c src/server/put_fence.c include/efs/put_ticket.h src/server/server_internal.h $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 
-tests/test_data_commit: tests/test_data_commit.c src/client/data_commit.c src/client/client_internal.h include/efs/protocol.h
+tests/test_data_commit tests/test_data_commit_index: %: %.c tests/test_data_commit.c src/client/data_commit.c src/client/client_internal.h include/efs/protocol.h
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< -lpthread
 # Publication coalescing is shared by the real worker and its policy gate.
 src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h

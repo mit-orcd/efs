@@ -34,7 +34,9 @@ struct stripe {
     efs_ino_t ino;
     uint64_t inode_gen, object;
     uint32_t ci;
-    uint32_t next; /* bucket chain or free list: index + 1, 0 ends */
+    uint32_t next; /* inode bucket chain or free list: index + 1, 0 ends */
+    uint32_t prev; /* previous inode-bucket entry, 0 at head */
+    uint32_t hash_next; /* exact (ino, ci, object) lookup chain */
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint64_t seq[EFS_NUM_FRAGMENTS], epoch[EFS_NUM_FRAGMENTS];
     uint8_t state[EFS_NUM_FRAGMENTS];
@@ -53,6 +55,10 @@ static uint64_t node_acked[COMMIT_NODES];
 static struct stripe *g_st;
 static uint32_t g_st_cap, g_st_used, g_st_live, g_st_free;
 static uint32_t g_bucket[STRIPE_BUCKETS];
+static uint32_t g_identity[STRIPE_BUCKETS];
+#ifndef EFS_COMMIT_LOOKUP_PROBE
+#define EFS_COMMIT_LOOKUP_PROBE() ((void)0)
+#endif
 /* One sweep at a time; PUTs that meet a full table wait for it. */
 static pthread_mutex_t sweep_mu = PTHREAD_MUTEX_INITIALIZER;
 
@@ -72,10 +78,28 @@ static uint32_t bucket_of(efs_ino_t ino)
     return (uint32_t)(h >> 48) & (STRIPE_BUCKETS - 1);
 }
 
+/* An inode bucket is useful for fsync's one-file snapshot, but a large
+ * file puts every chunk in that bucket. Exact lookups must also hash the
+ * chunk and PUT object: searching the inode chain at each PUT and again
+ * while folding COMMIT replies made both paths quadratic in file size. */
+static uint32_t identity_bucket(efs_ino_t ino, uint32_t ci, uint64_t object)
+{
+    uint64_t h = (uint64_t)ino * 0x9E3779B97F4A7C15ull ^
+                 (uint64_t)ci * 0xBF58476D1CE4E5B9ull ^ object;
+    h ^= h >> 30;
+    h *= 0xBF58476D1CE4E5B9ull;
+    h ^= h >> 27;
+    h *= 0x94D049BB133111EBull;
+    h ^= h >> 31;
+    return (uint32_t)h & (STRIPE_BUCKETS - 1);
+}
+
 /* Caller holds commit_mu. */
 static struct stripe *stripe_find(efs_ino_t ino, uint32_t ci, uint64_t object)
 {
-    for (uint32_t at = g_bucket[bucket_of(ino)]; at; at = g_st[at - 1].next) {
+    for (uint32_t at = g_identity[identity_bucket(ino, ci, object)]; at;
+         at = g_st[at - 1].hash_next) {
+        EFS_COMMIT_LOOKUP_PROBE();
         struct stripe *p = &g_st[at - 1];
         if (p->ino == ino && p->ci == ci && p->object == object)
             return p;
@@ -86,19 +110,26 @@ static struct stripe *stripe_find(efs_ino_t ino, uint32_t ci, uint64_t object)
 /* Caller holds commit_mu. */
 static void stripe_remove(efs_ino_t ino, uint32_t ci, uint64_t object)
 {
-    uint32_t *link = &g_bucket[bucket_of(ino)];
+    uint32_t *link = &g_identity[identity_bucket(ino, ci, object)];
     while (*link) {
+        EFS_COMMIT_LOOKUP_PROBE();
         uint32_t at = *link;
         struct stripe *p = &g_st[at - 1];
         if (p->ino == ino && p->ci == ci && p->object == object) {
-            *link = p->next;
+            *link = p->hash_next;
+            if (p->prev)
+                g_st[p->prev - 1].next = p->next;
+            else
+                g_bucket[bucket_of(ino)] = p->next;
+            if (p->next)
+                g_st[p->next - 1].prev = p->prev;
             memset(p, 0, sizeof(*p));
             p->next = g_st_free;
             g_st_free = at;
             g_st_live--;
             return;
         }
-        link = &p->next;
+        link = &p->hash_next;
     }
 }
 
@@ -127,8 +158,14 @@ static int stripe_insert(const struct stripe *s)
     struct stripe *p = &g_st[at - 1];
     *p = *s;
     uint32_t b = bucket_of(s->ino);
+    p->prev = 0;
     p->next = g_bucket[b];
+    if (p->next)
+        g_st[p->next - 1].prev = at;
     g_bucket[b] = at;
+    b = identity_bucket(s->ino, s->ci, s->object);
+    p->hash_next = g_identity[b];
+    g_identity[b] = at;
     g_st_live++;
     return EFS_OK;
 }

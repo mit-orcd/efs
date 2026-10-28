@@ -477,12 +477,18 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 
 ## Compile-time modes
 
+Oct 28: the durability-index regression adds one compile-only counting seam
+(16 names in the current checker). It is not read from the environment and
+does not add an operational setting or an alternative product strategy. The
+before/after counts earlier on this page describe the original Oct 24 audit.
+
 | Setting | Where | Effect | Kind | Disposition |
 | --- | --- | --- | --- | --- |
 | `EFS_FAULTS` | `Makefile` (`EFS_FAULTS=1`), 48 sites; `tests/faults/efsd`, `test_kv_compact_crash` | compiles every fault hook in; normal builds have none | fault/test build | Keep: test builds only (K24, W149) |
 | `EFS_BUILD_EXPIRY` | `Makefile` (`EFS_BUILD_EXPIRY=1`), `meta_apply.c`, `raft_host.c`, `efs_mgmt.c`, `store.c`, `cli_help.h`; `src/meta/expiry.c` is linked only then | compiles the D33 scratch expiry feature in; product builds have none and refuse its requests | development build | Keep out of every gate: `make test-expiry` in such a tree (D42) |
 | `EFS_BENCH_BUILD` | `src/server/store.c` (6 sites), `src/bench/*.o` | the efs-bench copy of the store/writer code without daemon startup | build variant | Keep: efs-bench only |
 | `EFS_MEMCHECK` | `Makefile` (`EFS_MEMCHECK=1`), `rdma_memcheck.h` | valgrind client requests for RDMA buffers (`make leak-check`) | test build | Keep: leak gate only |
+| `EFS_COMMIT_LOOKUP_PROBE` | `client/data_commit.c`; defined only by `test_data_commit_index.c` | counts inspected durability records so the large-file regression fails on quadratic work without a timing threshold; compiles to nothing in product binaries | test seam | Keep: unit instrumentation only, no environment reader or runtime choice |
 | `EFS_BUILD_ID` | `include/efs/common.h`; `Makefile` from git | build identity, the HELLO cluster gate | build identity | Keep |
 | `EFS_VERSION` | `common/version.c`; `Makefile` | human version string | build identity | Keep |
 | `EFS_GIT_BRANCH` | `common/version.c`; `Makefile` | branch in `--version` | build identity | Keep |
