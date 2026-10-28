@@ -273,19 +273,73 @@ python3 tests/test_k43_coordinator_kill.py
 ```
 
 Every command exited 0. Build took 17.651 s; native owner 0.615 s and
-instrumented owner 2.571 s. The K43 fixture uses loopback TCP, buffered store
-I/O and 1 GiB quota per node; the test's 16 MiB phases and deadlines were
+instrumented owner 2.571 s. Xorinox is an AMD Ryzen 9 7940HS (8 cores/16 threads), Linux x86_64.
+The K43 fixture uses loopback TCP, mandatory O_DIRECT fragment I/O
+(D42, no mode flag) and 1 GiB quota per node; the test's 16 MiB phases and deadlines were
 unchanged. Raw logs, build/binary hashes, environment, exact bounded
 controller and source manifests are retained at
 `xorinox:/home/maik/efs-artifacts/taskT-20261028/xorinox-cb363ba8a-publication/`.
 All 14 manifest entries were verified; SHA-256 of `SHA256SUMS` is
 `ea02f0e0fe97e804cbee5787d9c7250743d2739bc74df648af63c59c71e7be11`.
 Successful K43 fixture cleanup follows the existing test; no failed intel2
-fixture was touched. One broader eight-job Linux integration gate is now
-running at `xorinox-cb363ba8a-scoped-full/`, separately marked non-calibration.
-Nuc and intel2 remain reserved by Task H until its explicit release. This is an integration of one core fix, not a
+fixture was touched. A broader eight-job Linux integration gate at
+`xorinox-cb363ba8a-scoped-full/` reported a **pre-fault setup failure**:
+`test_pub_unit_forward_abort.py` received `raft-step-down rc=-13` (target
+not yet caught up) and asserted immediately, before the publication workload.
+The frozen gate completed **530 commands, 1 FAIL, 12 NOTRUN, 910 s,
+15 OVERBUDGET, build 11 s**. K43 passed in that pool (56.9 s), but the whole
+gate stays FAIL and no timing from it is a calibration input. Its 2,304 source
+files remained unchanged, no contention marker was recorded, and final
+ownership closure found zero owned processes and mounts. All 27 evidence
+manifest entries were verified; `SHA256SUMS` SHA-256 is
+`051e73519241d0a725dc6efbb1877cd2914bb9033f4bd848aa07cdcf34172760`. Preserved
+`fail-471-preserved.log` has SHA-256
+`db783eeac9ed509dd85015847d149a18fb88b2332189c96059764cb01d74604f`.
+That old test's finally block removed its fixture even on failure, so the
+raw assertion survives but that setup's stores do not. This is separate from
+the retained intel2 K43 fixture and does not qualify an abort scenario that
+never began.
+
+`608ea0ea6` adopts only the corresponding harness hunk from Task H
+`bee20f99d`: use the already present `place_leaders` helper, which retries only
+documented pre-fault BUSY within its existing 30-second setup deadline and
+fails on other errors; retain failed fixtures. The twelve measured rounds,
+three-second bound and all payload/abort assertions stay unchanged. This
+avoids adding a second leader-placement helper. Nine graph checks and the
+syntax check pass. One fresh live run on exact source 608ea0ea6 **PASS**:
+all 12 rounds had the forwarded PREPARE refusal, write+fsync max **0.42 s**
+within the unchanged 3.0 s bound, no recovery-age ABORT, every file exact.
+Build took 17.801 s and the test 17.855 s including cleanup. Command:
+`python3 tests/test_pub_unit_forward_abort.py`, after the same explicit-ID
+`make -j8 all tests/faults/efsd` build in a fresh private archived tree.
+The topology is three loopback TCP daemons, mandatory O_DIRECT fragments,
+1 GiB quota per node. All 2,304 source files remained unchanged; final checks
+found zero owned processes and mounts. Raw evidence:
+`xorinox:/home/maik/efs-artifacts/taskT-20261028/xorinox-608ea0ea6-forward-abort/`.
+All 12 manifest entries were verified; `SHA256SUMS` SHA-256 is
+`82598abceedcf2ff85b3b0502d81ffb78167b36198638971b45f49414555f6b9`.
+This targeted result does not turn the preceding full gate into PASS or
+qualify a full gate on 608ea0ea6. The archived cb363ba8a tree was not edited during its run. Candidate source
+`608ea0ea65134d319cc681fdf9e81ca5984fe338` archive SHA-256:
+`0b97f7c169ebf11f1c85a68d01117c3491aa1e9b215f235b995c100781fb0430`.
+Nuc and intel2 remain reserved by Task H until its explicit release.
+The last intel2 check still found Task H's active full suite and queued
+next attempt; no replacement Task T cohort was launched there.
+
+After both xorinox runs closed and repeated zero-owned-process/mount checks,
+`~/bin/edelete --force --delete` pruned only Task T's closed scratch roots
+`/home/maik/efs-taskT-20261028-cb363ba8a-xorinox` and
+`/home/maik/efs-taskT-20261028-608ea0ea6-xorinox`. Their source/build/runtime
+paths are historical and reproducible from the named commits. All cited
+logs, results, manifests and exact controller sources remain under the
+separate evidence roots. Cleanup receipt and `PRUNED.txt` are under
+`xorinox:/home/maik/efs-artifacts/taskT-20261028/xorinox-publication-cleanup/`;
+its three-file manifest SHA-256 is
+`195da9bf9b22edf69f3420b3ef5433568a00bdb8ef5fd9c56315db45705aa9da`.
+No Task T run remains active on xorinox; the original intel2 K43 fixture
+and all earlier unresolved nuc/intel2 evidence remain untouched. This is an integration of one core fix, not a
 claim to qualify Task H's larger repair branch. The canonical graph was rebuilt
-and all nine graph checks passed after both changes.
+and all nine graph checks passed after the source changes.
 
 ## Raw evidence and controls
 
@@ -365,8 +419,9 @@ nuc/intel2 coverage. SSH checks did not use BatchMode.
 
 1. **DONE:** three clean intel1 pools and K43 timings validated; retain the
    explicit rejected attempts and host-limit skips.
-2. Review later devel repairs and freeze the next source; the `fe18612ae`
-   failure is not a result on newer `424d0db8f`. After the host is released,
+2. Fixed candidate 608ea0ea6 is archived after the user-authorized core fix
+   and bounded setup correction. Its scoped passes do not qualify full pools.
+   After the host is released,
    collect three clean supported-profile nuc gates, investigating any failure
    against an untouched same-host baseline. Do not fit failed
    timings or retry them into a claimed PASS.
