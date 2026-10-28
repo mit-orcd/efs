@@ -33,7 +33,7 @@ functional/negative controls and explicit sanitizer NOTRUN. Fresh full gate
 at `00ccd12f3`: 524 total / 0 FAIL / 18 NOTRUN (INCOMPLETE), native mlx5_0
 RDMA 9/9 PASS; hour FAIL foreground RSS +13.04% and drain, with
 2080 exact and pack errors 0/0. TCP ACTIVE; allocator-observer diagnostic
-will follow the pair, with no policy change or qualification claim. AMD `5f07151c2` default-RoCE native PASS 9/9; full
+`f5ef68036` is queued behind the pair, with no policy change or qualification claim. AMD `5f07151c2` default-RoCE native PASS 9/9; full
 gate FAIL 3/520 (two busy unmounts, expected-abort timeout), hour NOTRUN.
 Harness fixes committed; `d7e265746` waits for W123, then preserves and
 cleanly retires its own failed synthetic fixture before new qualification.
