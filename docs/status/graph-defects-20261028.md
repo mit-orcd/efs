@@ -7,12 +7,18 @@ retained below and in the independent evidence commit. The subsequent
 objects that also need a durable terminal-ticket fence before retirement;
 `214c541aa` implements that path with a fresh post-fence metadata check.
 The final Linux run has 529 commands, zero failures and two NOTRUN markers:
-the fault-only arm separately PASSed; LSan remains unavailable. Memcheck
+the fault-only arm separately PASSed; LSan was unavailable on that run. Memcheck
 41/41 and Linux docs 5/5 PASS. The [intel2 LSan follow-up](devel-lsan-intel2-20261028.md)
 then PASSed all 49 instrumented entries with LSan enabled. No multi-host/release
 acceptance is claimed.** Related work:
 W155 joining, K35/D42 stripe durability and W154 rebuild protection, and the
 Raft-store index contract. No broader W-item acceptance is changed.
+
+**Follow-up F4/F5 repaired at `199ad2afd`: scoped native 15/15 and
+ASan/UBSan 11/11 steps PASS; Linux ticket/GETCHUNKS checks and the complete
+data-commit component with ASan/UBSan/LSan PASS. The original `b9c2fad85`
+observations and failing negative controls remain retained below. This is
+component qualification, with no new deployment or full-suite/release verdict.**
 
 ## Repairs and regression gates
 
@@ -138,6 +144,136 @@ and truncate paths have the same narrowing shape and need consistent bounds.
 This confirms an API correctness defect, not an observed Raft consensus failure:
 normal callers often check the log end before querying it. No claim that this
 invalid index is reachable through an ordinary client write is made.
+
+## Follow-up repairs F4/F5 — shared deadline and retired objects
+
+### F4 — Sweep metadata RPCs miss the shared deadline (P2)
+
+On `b9c2fad85`, `stripe_prove` computed a 60-second absolute deadline for its
+COMMIT workers but called the initial degraded-mark RPC with the caller's
+unchanged TLS deadline (zero in the original probe). Each serial mark could
+therefore use its own retry/socket budget. The repair gives every metadata
+operation the same absolute deadline, shortened by any earlier caller deadline,
+checks expiry between stripes and after metadata replies, retains unproven
+obligations on expiry, and restores the caller's TLS value. It does not raise
+the 60-second limit or change the required durability proof.
+
+`test_sweep_deadline` in `tests/test_data_commit.c` checks the initial mark,
+a shorter and a longer caller budget, restoration, and a synthetic monotonic
+jump during the first of two marks. Expiry leaves both obligations recorded;
+a later successful attempt proves them. The deterministic clock jump avoids
+a slow or timing-sensitive 60-second regression.
+
+### F5 — Closed absent stripes with fewer than two durable fragments never retire (P2)
+
+The original closed, unpublished ticket with two changed storage incarnations
+returned EIO on three successive attempts without asking metadata whether the
+object existed. The absence/retirement path was inside the two-durable-fragment
+branch. The repair permits cleanup at any fragment count only after publication
+or durable ticket closure **and then** a fresh authoritative absence read.
+A still-live object, a failed closure, an uncertain/malformed/expired read or an
+identity mismatch retains the obligation and returns EIO.
+
+`efs_client_rpc_object_live` uses the existing FileID-bound GETCHUNKS RPC and
+its ReadIndex/authority checks, bypassing local mapping caches. It inspects the
+exact chunk's base and complete delta list, distinguishing packed references
+and permanently masked zero-length parts. It writes no degraded mark when
+fewer than two fragments are durable. No stored/wire encoding, replica count,
+feature switch, deadline or quota changes.
+
+The complete data-commit test retains the existing pre-publication, late REPORT,
+wrong-FileID, concurrent fsync, COMMIT incarnation and capacity cases. New cases
+cover uncertain/present/expired/absent reads, terminal failure versus success,
+and published retirement with all three old incarnations gone. The existing
+`tests/test_getchunks_budget.py` executes the production RPC and helper against
+bounded transport stubs: live base, live span, other object, packed base, masked
+base/span, missing inode, stale FileID, bad reply and expired reply. This harness
+now honors the shared sanitizer/memcheck environment.
+
+**Fail-closed limit:** the new cleanup read refuses the final 64 chunk indices
+with BUSY because today's server GETCHUNKS exclusive window end wraps there.
+It must not treat that empty window as proof of absence. The general GETCHUNKS
+upper-index issue is outside these repairs; the regression preserves the
+obligation at this boundary. No live two-node-loss recovery or data-loss result
+is claimed by these component tests.
+
+### Commands, results and retained evidence
+
+Tested product/tests are commit `199ad2afd`, rebased onto devel `08a1606df`, retaining its new full-identity durability index.
+Mac: Apple Clang, arm64 macOS, local threads/files only. RPCs are stubbed;
+there is no deployed transport, direct-I/O profile, packing daemon or shared
+cluster. The data-commit table has 16 slots to reach capacity deterministically.
+Native 15 check/build steps and ASan/UBSan 11 steps PASS; the manifests' watched
+input hashes were compared with the committed tree. Mac leak checking is off
+and is not claimed. Fresh external outputs are mandatory:
+
+```sh
+python3 tests/review_graph_20261028/sweep_regression.py --against b9c2fad85 --out /tmp/efs-sweep-original
+# Expected FAIL: build succeeds; deadline and retirement assertions both fail.
+# This is a negative control, never a compatibility or passing-product gate.
+python3 tests/review_graph_20261028/sweep_regression.py --out /tmp/efs-sweep-fixed
+python3 tests/review_graph_20261028/sweep_regression.py --sanitize --out /tmp/efs-sweep-asan
+python3 tests/review_graph_20261028/verify.py --out /tmp/efs-sweep-native-suite
+python3 tests/review_graph_20261028/verify.py --sanitize --out /tmp/efs-sweep-asan-suite
+```
+
+The discriminator bounds compilation at 90 seconds and each separate regression
+at 30 seconds. `verify.py` retains the existing 180-second per-step bound and
+also runs the GETCHUNKS helper natively/sanitized. Normal `make test` already
+runs both extended data-commit and GETCHUNKS tests; no redundant normal recipe
+entry is added.
+
+Linux supplement: idle intel2, Rocky Linux 10.2 x86_64, kernel
+`6.12.0-211.67.1.el10_2`, GCC 14.3.1; isolated source at
+`/tmp/efs-graph-sweep-199ad2afd`. Ten environment/build/check steps all exit 0:
+`make -j8 libefs.a`, ticket owner, K32 entry counts, ticket RPC retry,
+GETCHUNKS, production syntax checking, and the complete data-commit and GETCHUNKS
+components with ASan/UBSan and `ASAN_OPTIONS=detect_leaks=1`,
+`LSAN_OPTIONS=exitcode=66`. No suppressions added; `__asan_init` and linked
+libasan/libubsan were checked. No EFS cluster/process was running at the initial
+host check; these commands start none. No performance or full Linux gate is
+claimed. Reproduce the supplemental commands from a fresh Git export:
+
+```sh
+make -j8 libefs.a
+python3 tests/test_put_ticket_owner.py
+python3 tests/test_k32_entry_count.py
+python3 tests/test_put_ticket_rpc.py
+python3 tests/test_getchunks_budget.py
+cc -std=gnu11 -D_GNU_SOURCE -Wall -Wextra -Werror -fsyntax-only -Iinclude src/client/inode_rpc.c src/client/data_commit.c
+cc -std=gnu11 -Wall -Wextra -Werror -O1 -g -Iinclude -pthread -fsanitize=address,undefined -fno-omit-frame-pointer tests/test_data_commit.c -o /tmp/efs-sweep-asan-component
+ASAN_OPTIONS=detect_leaks=1 LSAN_OPTIONS=exitcode=66 /tmp/efs-sweep-asan-component
+ASAN_OPTIONS=detect_leaks=1 LSAN_OPTIONS=exitcode=66 EFS_TEST_SANITIZE=1 python3 tests/test_getchunks_budget.py
+```
+
+The Linux runner records exact build identity/environment and bounds library
+build at 300 seconds, other checks at 180 seconds. Earlier optional Mac ledger
+attempts failed before testing: missing `libefs.a`, then the Linux-only
+`fopencookie` implementation prevented building that library on macOS. Both logs
+remain separate from the successful Linux supplement; no product change was
+made for those prerequisites.
+
+Original and follow-up Mac evidence stays at
+`/Users/mike/Documents/Codex/artifacts/efs-graph-followup-20261028/`:
+`results.json` is the original bad-behavior discriminator, unchanged;
+`negative-final/` records both failing assertions on original production;
+`fixed-native-final/`, `fixed-asan-final/`, `closed-native-v2/` and
+`closed-asan-ubsan-v2/` hold the initial passing checks on pre-integration
+`b12d5e10e`. Final combined-source checks are in `merged-199ad2afd-native/`
+and `merged-199ad2afd-asan/`; the large-file index regression also PASSes
+natively and sanitized (`merged-index-native.log`, `merged-index-asan.log`). `original-sha256.json`
+(SHA256 c484a0ea1aedf33e520c4661d67a55fb56cb1b57d79e144d3f970bf61af968e6) covers 12 original files, all reverified unchanged.
+`closed-checks-sha256.json` records the closed text results and commands.
+
+Linux logs, exact runner/results and instrumentation remain at
+`intel2:/data1/efs/evidence/graph-sweep-199ad2afd/`.
+Source archive SHA256 `00fca24411a1a3e1309e75a663be6c719e79739975c529d44dc961be31554db2`;
+`closed-sha256.json` SHA256
+`98f6d0bbc0973c41b086d41871ccd06629aa4414818f5cbbdc980365b5e76f3c`.
+Sixteen retained files were verified after pruning only the successful source,
+build and sanitizer binary. `PRUNED.txt` and the process/mount check record the
+cleanup; protected login/user-manager process entries were identified as
+infrastructure, and no process was signaled. Original failures were not pruned.
 
 ## Reproduction and evidence
 

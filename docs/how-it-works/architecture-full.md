@@ -1612,6 +1612,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+`199ad2afd` shares the sweep deadline with metadata RPCs and retires closed absent
+objects only after an authoritative read, including when fewer than two
+fragments remain durable. Both original-source regressions FAIL; repairs PASS
+15 native / 11 ASan/UBSan steps plus Linux ticket/RPC and ASan/UBSan/LSan
+component checks. Original evidence retained; no cluster or full-gate rerun.
+
+[Stage 1 hot-path serialization tasks AG–AJ](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--hot-path-serialization-agaj):
 **OPEN / implementation and measurements NOTRUN**: shared client allocation
 budget, mount-wide chunk map, RDMA completion registry and server export lifetime
 locks. Verified source mechanisms at `08a1606df`; no measured bottleneck, new K

@@ -1,5 +1,12 @@
 # Project status — work queue and evidence
 
+[Graph sweep follow-up F4/F5](graph-defects-20261028.md#follow-up-repairs-f4f5--shared-deadline-and-retired-objects):
+`199ad2afd` shares the sweep deadline with metadata RPCs and retires closed absent
+objects only after an authoritative read, including when fewer than two
+fragments remain durable. Both original-source regressions FAIL; repairs PASS
+15 native / 11 ASan/UBSan steps plus Linux ticket/RPC and ASan/UBSan/LSan
+component checks. Original evidence retained; no cluster or full-gate rerun.
+
 [Stage 1 hot-path serialization tasks AG–AJ](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--hot-path-serialization-agaj):
 **OPEN / implementation and measurements NOTRUN**: shared client allocation
 budget, mount-wide chunk map, RDMA completion registry and server export lifetime
