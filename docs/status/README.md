@@ -37,8 +37,8 @@ RDMA 9/9 PASS; hour FAIL foreground RSS +13.04% and drain, with
 pair FAIL remains; allocator-observer diagnostic `f5ef68036` ACTIVE, with
 no policy change or qualification claim. AMD `5f07151c2` default-RoCE native PASS 9/9; full
 gate FAIL 3/520 (two busy unmounts, expected-abort timeout), hour NOTRUN.
-Harness fixes committed; `d7e265746` waits for W123, then preserves and
-cleanly retires its own failed synthetic fixture before new qualification.
+AMD’s bounded quiet prerequisite expired behind W123, with no store touched;
+cleanup/qualification NOTRUN and the original failed fixture preserved.
 All original failures/stores stay on-host; allocator probe capture hashes
 verified. No other cluster/client touched.
 

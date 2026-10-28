@@ -334,5 +334,6 @@ index pending never remains zero twice during drain. TCP hour PASS: independent
 load +1.21%, foreground +0.10%, servers <=1.63%, 2080 exact, pack errors 0/0,
 drain 92.9 s. Overall pair FAIL. Fresh allocator observation is ACTIVE before
 any further lifetime-policy change.
-AMD remains WAIT_QUIET.
+AMD’s quiet prerequisite expired with no store touched; cleanup/qualification
+NOTRUN. First two node9900 diagnostic captures are present; comparison is pending.
 Old pre-action waiters were superseded without running tests.
