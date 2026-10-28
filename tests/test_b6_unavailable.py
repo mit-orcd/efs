@@ -456,13 +456,26 @@ def run_mode(mode):
     dw = [s for s in degraded_writes(c, snap) if s not in dw_before]
     r.out['segments_written_degraded'] = len(dw)
     assert all(node == '3' for *_, node in dw), f'{mode}: written degraded {dw}'
-    if mode in ('down', 'refuse', 'full'):
+    if mode in ('down', 'refuse'):
         # Node 3 takes no segment fragment: every packed file went into a
         # segment written degraded and marked.
         assert r.out['packed_during_fault'] == 0 or dw, \
             f'{mode}: {r.out["packed_during_fault"]} files packed, no segment written degraded'
     r.out['degraded_segments_during'] = degraded_segments(c)
-    if mode != 'full':
+    if mode == 'full':
+        # Refusing a 64 KiB ordinary fragment does not imply that a smaller
+        # packed fragment cannot fit. This is real quota exhaustion, not
+        # the refuse hook: healthy three-fragment packing is legal. Keep
+        # ENOSPC/no-degraded assertions above and check every acknowledged
+        # small file through a new mount while the quota is still full.
+        b = r.mount('mnt-full-packed')
+        qr = r.read_check(b, [n for n in r.acked if n.startswith(('P', 'FS'))],
+                          'packed at quota')
+        r.unmount(b)
+        assert all(v[0] == 'exact' for v in qr.values()), f'full: packed at quota: {qr}'
+        assert r.out['degraded_segments_during'] == 0, status(c)
+        r.out['reads_packed_at_quota'] = qr
+    else:
         b = r.mount('mnt-q')
         qr = r.read_check(b, [n for n in r.acked if n.startswith('Q')], 'packed during the fault')
         r.unmount(b)
