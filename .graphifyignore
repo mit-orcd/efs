@@ -1,0 +1,27 @@
+# Canonical build: tools/graphify/scope.json and scripts/build-code-graph.py.
+# Also constrain ordinary graphify scans. These are source selection rules,
+# not .gitignore rules; graph.json is intentionally committed.
+/deps/
+/results/
+/artifacts/
+/work/
+/graphify-out/
+/docs/images/
+/docs/archive/
+/docs/reviews/
+/docs/release-notes/
+/docs/status/*
+!/docs/status/decisions.md
+!/docs/status/alpha-1.0-2plus1-checklist.md
+!/docs/status/alpha-1.0-node-addition-20261023.md
+!/docs/status/d39-consolidated-model-20261023.md
+!/docs/status/w100-eof-contract-20261013.md
+/docs/backlog/*
+!/docs/backlog/decision-contracts.md
+!/docs/backlog/work-items.md
+!/docs/backlog/crash-safe-durable-versions.md
+!/docs/backlog/small-file-packing-default.md
+/docs/operations/*
+!/docs/operations/runbooks.md
+/docs/how-it-works/architecture-full.md
+/docs/how-it-works/architecture.html

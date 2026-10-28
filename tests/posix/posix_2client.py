@@ -2228,7 +2228,7 @@ def _remote_ab(ssh, script, host_a, host_b, name, idx, d):
 
     def one(slot, host, ab_side):
         cmd = "python3 %s --exec %s %d %s %s" % (
-            _q(script), _q(name), idx, _q(d), ab_side)
+            _q(script[slot] if isinstance(script, (list, tuple)) else script), _q(name), idx, _q(d), ab_side)
         results[slot] = ssh_cmd(ssh, host, cmd)
 
     ta = threading.Thread(target=one, args=(0, host_a, "a"))
@@ -2288,7 +2288,7 @@ def run_remote(host_a, host_b, mnt, ssh, script, results_file, filt):
                     else:
                         host = host_a if side == "a" else host_b
                         cmd = "python3 %s --exec %s %d %s" % (
-                            _q(script), _q(name), i, _q(d))
+                            _q(script[0 if side == "a" else 1] if isinstance(script, (list, tuple)) else script), _q(name), i, _q(d))
                         rc, out, err = ssh_cmd(ssh, host, cmd)
                         _check_exec_result(side, i, rc, out, err)
                 finally:
@@ -2592,6 +2592,7 @@ def main(argv):
         "EFS_SSH",
         os.path.expanduser("~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh"))
     mnt = None
+    remote_scripts = [None, None]
     i = 0
     # pre-scan common flags (order-independent enough for our callers)
     rest = []
@@ -2611,6 +2612,9 @@ def main(argv):
             i += 2
         elif args[i] == "--mnt":
             mnt = args[i + 1]
+            i += 2
+        elif args[i] in ("--remote-script-a", "--remote-script-b"):
+            remote_scripts[0 if args[i].endswith("-a") else 1] = args[i + 1]
             i += 2
         elif args[i] == "--ssh":
             ssh = args[i + 1]
@@ -2656,7 +2660,7 @@ def main(argv):
         if len(args) < 3 or not mnt:
             print("usage: --remote <host-a> <host-b> --mnt <mnt>")
             return 2
-        script = os.path.abspath(__file__)
+        script = [s or os.path.abspath(__file__) for s in remote_scripts]
         return run_remote(args[1], args[2], mnt, ssh, script,
                           results_file, filt)
 

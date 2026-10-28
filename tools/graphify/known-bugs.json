@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "id": "W127-apply-refusal",
+      "contract": "docs/backlog/work-items.md",
+      "heading": "W127 \u2014 Metadata apply accepts unknown command tags as applied",
+      "production": {
+        "file": "src/server/raft_host.c",
+        "symbol": "host_apply"
+      },
+      "oracle": "tests/test_apply_unsupported.py",
+      "oracle_literals": [
+        "host_apply(&g",
+        "cursor_at(kv,2,1)",
+        "EFS_ERR_UNSUPPORTED"
+      ],
+      "calls": [
+        {
+          "file": "src/kv/kv_lsm.c",
+          "symbol": "efs_kv_lsm_apply_end"
+        }
+      ],
+      "limit": "Python extracts production C into a compiled fixture: a curated exercises link, not a Python-to-C runtime call. Does not prove live group withdrawal or RDMA acceptance."
+    },
+    {
+      "id": "W145-snapshot-unproven-tail",
+      "contract": "docs/backlog/work-items.md",
+      "heading": "W145 \u2014 A follower commits its own unproven log tail after an InstallSnapshot",
+      "production": {
+        "file": "src/raft/raft.c",
+        "symbol": "on_snap_req"
+      },
+      "oracle": "tests/test_raft.c",
+      "oracle_literals": [
+        "test_snapshot_commit_stops_at_snapshot",
+        "snapshot does not commit the unproven tail"
+      ],
+      "calls": [
+        {
+          "file": "src/raft/raft.c",
+          "symbol": "snap_installed"
+        }
+      ],
+      "limit": "Locates the snapshot receive/install path and the concrete commit-bound regression. A graph path is not proof of Raft safety or live failover."
+    },
+    {
+      "id": "W125-packed-source-CAS",
+      "contract": "docs/backlog/work-items.md",
+      "heading": "W125 \u2014 Small-file packing by default (background packer)",
+      "production": {
+        "file": "src/meta/meta_apply.c",
+        "symbol": "efs_meta_apply_pack_switch"
+      },
+      "oracle": "tests/test_pack_switch.c",
+      "oracle_literals": [
+        "its digest is stale",
+        "live == 4",
+        "live == 0",
+        "EFS_ERR_STALE"
+      ],
+      "calls": [],
+      "limit": "C oracle checks stale-source cancellation and ledger outcomes. Does not establish the unresolved W148 mismatch cause or full packing qualification.",
+      "oracle_caller": {
+        "file": "tests/test_pack_switch.c",
+        "symbol": "main"
+      }
+    }
+  ]
+}

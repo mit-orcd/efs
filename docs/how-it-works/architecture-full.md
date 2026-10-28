@@ -1612,6 +1612,11 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+code, fault models/oracles and selected contracts; W127/W145 and W125 contract
+navigation checks PASS. Parser and unresolved-call gaps remain explicit; this
+is not a product acceptance verdict. Rebuild and validation instructions committed.
+
+[Graphify review fixes](../status/graphify-review-findings-20261027.md):
 `graphify-review-fixes` from devel `063154e0e815`; infrastructure-error retry,
 shared byte/geometry/KV helpers and SETATTR codec implemented. Focused checks
 PASS. Complete Linux suite FAIL (515 commands, 12 failures, 5 NOTRUN);
@@ -1642,6 +1647,17 @@ full acceptance are separate states.
 ### Recent evidence and remaining acceptance
 
 [Task T: budgets across hosts](../status/gate-budgets-per-host-20261028.md): **INCOMPLETE** on `agent/devel-task-t`; multi-host maximum-median fitter and synthetic regression PASS. Quiet-host calibration/confirmation NOTRUN while nuc runs Task H and intel2 runs a merge gate. Three new rows will use nuc/intel2 with intel1 explicitly unmeasured, per user decision. Budgets, slots and D44 target unchanged.
+[Wave 27 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](../status/a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (blocks alpha): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); whether K52 is K10 needs the new helper's observed bytes before it is closed or kept. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
+
+[Task V four-host driver rehearsal](../status/a4-lab-topology-dryrun-20261028.md):
+**LIVE FAIL / CODE GATE FAIL**, `agent/devel-task-v`; live `578e2064b`, code
+`b9dfff609`. Eight requested four-host TCP gates PASS; D3 has eight immediate
+read-back mismatches (**K52 OPEN**, blocks alpha), not erased by later exact
+reads. E4: all 8,008 payloads cold, 4,000 after deletion exact; two-client 68/68
+and checked restart PASS. Final code gate **522/1 FAIL/12 NOTRUN, 744 s**:
+K48-shaped 95/96 listing after resync, closed fixture retained on intel2.
+All private fcstor cluster trees and intel2 build scratch removed; sealed raw
+evidence retained. A4 topology defined and dry-run, decision open. No product fix.
 
 [Wave 26 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`4e4f15307`; gate at `4e4f15307`)**: Task E, **K43** ([evidence](../status/k43-coordinator-kill-20261026.md)): a publication stage whose owner transaction has a locally recorded ABORT is reaped on contact by the next unit instead of blocking it until the recovery scan's age gate, a reap's own errors are surfaced instead of collapsing into BUSY, and the K43 gate (`test_k43_coordinator_kill.py`: the coordinator SIGKILLed between PREPARE and COMMIT) fails on the base and passes on the fix; plus the heartbeat shutdown wake-up (`agent/heartbeat-stop-wakeup`: the heartbeat thread waits on a condition with a monotonic deadline and is woken by stop before the join, so an orderly stop no longer waits out a heartbeat interval). intel2 `make test-all` (8 jobs): 522 commands in 667 s, 0 FAIL, 12 NOTRUN host limits, PASS with host limits; OVERBUDGET 6 (intel1-fitted rows on intel2, Task T). **Held back:** `agent/task-h-repair` (187 commits of publication, receipt, Raft pump and client read repairs grown out of Task H): its own evidence page says IN PROGRESS, no overall PASS, with its nuc suite still running and the original K33 EIO cause open, and it conflicts with devel in eleven source files; it merges when its agent reports PASS on a rebase.
 

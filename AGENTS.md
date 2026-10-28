@@ -54,3 +54,12 @@ it with `git show archive/raw-evidence-20261021:<path>`. Devel keeps the
 summaries under `results/`, and links to removed files name the archive path.
 Keep unresolved findings and release verdicts traceable. Do not treat missing raw captures as a passing gate.
 Update `docs/status/README.md` whenever an active status page or verdict changes.
+
+## Canonical defect-navigation graph
+
+When `tools/graphify/scope.json` exists, rebuild with
+`sh scripts/rebuild-code-graph.sh`, not the generic `graphify update .` command.
+See `tools/graphify/README.md` for directed relationship semantics, known-bug
+validation and local hook installation. Run `python3 tests/test_code_graph.py`
+after rebuilding. Treat missing edges and parser warnings as coverage gaps;
+curated test links and literal document mentions are not runtime proof.

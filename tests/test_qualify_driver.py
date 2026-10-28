@@ -63,6 +63,44 @@ assert Q.topology_column(three) == '3 physical nodes'
 shared = dict(nodes=[dict(addr=f'10.0.0.1:{p}', host='h1') for p in (1, 2, 3, 4, 5)])
 assert Q.topology_column(shared).startswith('>4 physical nodes (N=5) — NOT distinct hosts (1 host')
 
+# Task V: failed cleanup is observable and never deletes live stores.
+from types import SimpleNamespace
+from unittest.mock import Mock
+for failed_stage in ('teardown-unmount', 'stop'):
+    calls = []
+    qcleanup = SimpleNamespace(cluster=dict(private_cluster=dict(root='/tmp/owned'),
+        nodes=[dict(host='n1', addr='10.0.0.1:19340', store='/tmp/owned/n1')],
+        mounts=[dict(host='n1', path='/tmp/owned/mnt')]), source=lambda h: '/src')
+    control = Q.PrivateCluster(qcleanup)
+    def cleanup_run(label, host, cmd, deadline):
+        calls.append(label)
+        return (1 if label == failed_stage else 0), ''
+    gcleanup = SimpleNamespace(run=cleanup_run, fetch=Mock())
+    control.stop_cluster = lambda g: (1 if failed_stage == 'stop' else 0, '')
+    assert control.owned_teardown(gcleanup)[0] == 1
+    assert 'teardown-delete' not in calls
+    if failed_stage == 'teardown-unmount':
+        gcleanup.fetch.assert_not_called()
+
+# Distinct client sources must be used on both serial and concurrent steps.
+pspec = importlib.util.spec_from_file_location('posix_remote_paths', root / 'tests/posix/posix_2client.py')
+P = importlib.util.module_from_spec(pspec)
+pspec.loader.exec_module(P)
+remote_calls = []
+def fake_ssh(ssh, host, cmd):
+    remote_calls.append((host, cmd))
+    return 0, ('OK' if cmd.startswith('test -d') else 'RESULT\tPASS\t'), ''
+with __import__('unittest.mock', fromlist=['patch']).patch.object(P, 'ssh_cmd', fake_ssh):
+    P._remote_ab('ssh', ['/source-a/suite.py', '/source-b/suite.py'], 'a', 'b', 'case', 0, '/mnt/case')
+    assert any(h == 'a' and '/source-a/suite.py' in c for h,c in remote_calls)
+    assert any(h == 'b' and '/source-b/suite.py' in c for h,c in remote_calls)
+    remote_calls.clear()
+    P.TESTS = [('case', [('a', None), ('b', None)], '')]
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert P.run_remote('a', 'b', '/mnt', 'ssh', ['/source-a/suite.py', '/source-b/suite.py'], None, '') == 0
+    assert any(h == 'a' and '/source-a/suite.py' in c for h,c in remote_calls)
+    assert any(h == 'b' and '/source-b/suite.py' in c for h,c in remote_calls)
+
 tmp = Path(tempfile.mkdtemp(prefix='qualify-test-'))
 try:
     liar = tmp / 'liar.sh'
@@ -83,6 +121,41 @@ try:
     desc = tmp / 'cluster.json'
     desc.write_text(json.dumps(cluster))
     stubs = ','.join(cluster['plugins'])
+
+    # Immediate mismatch evidence survives even if a later read is correct.
+    hspec = importlib.util.spec_from_file_location('stage2_helpers', root / 'scripts/stage2_helpers.py')
+    H = importlib.util.module_from_spec(hspec)
+    hspec.loader.exec_module(H)
+    mismatch = tmp / 'mismatch'
+    mismatch.write_bytes(b'bad')
+    try:
+        H.verify_payload(mismatch, b'expected')
+        raise AssertionError('wrong payload accepted')
+    except OSError as exc:
+        original = dict(exc.payload_detail)
+        assert exc.errno == 5 and original['path'] == str(mismatch)
+        assert original['observed_len'] == 3 and original['expected_len'] == 8
+        assert original['observed_sha256'] != original['expected_sha256']
+    mismatch.write_bytes(b'expected')
+    H.verify_payload(mismatch, b'expected')
+    assert original['observed_len'] == 3, 'later success must not rewrite original failure evidence'
+
+    # Cleanup failure lowers the run and preserves even controller scratch.
+    from unittest.mock import patch
+    qstop = object.__new__(Q.Qualify)
+    qstop.out = tmp / 'cleanup-failure'
+    qstop.cluster, qstop.allow, qstop.before_sums = {}, set(), None
+    qstop.control = SimpleNamespace(owned=True)
+    qstop.args = SimpleNamespace(keep_work=False)
+    qstop.setup = lambda results: None
+    qstop.run_gates = lambda gates, results, failed: results.append(dict(
+        gate='work', verdict='PASS', reason='', destructive_steps=[]))
+    qstop.teardown = lambda: dict(gate='_teardown', verdict='FAIL', reason='busy mount', destructive_steps=[])
+    qstop.cleanup_scratch = Mock()
+    with patch.object(Q, 'write_sums', return_value={}), patch.object(Q, 'write_summary'):
+        assert qstop.run([]) == 'FAIL'
+    qstop.cleanup_scratch.assert_not_called()
+    assert qstop.args.keep_work
 
     # A failed final identity read must lower the aggregate verdict, not be
     # an unconsumed artifact after the last passing gate.
@@ -518,6 +591,13 @@ try:
         commands = SimpleNamespace(commands=[])
         rc, why = Q.Loopback._logged(loop, commands, 'controller-result', lambda: value)
         assert rc == expected and commands.commands[-1]['rc'] == expected, (value, rc)
+    four = matrix['topologies']['fcstor-4x1-tcp']
+    assert len(Q.distinct_hosts(four['cluster'])) == 4
+    assert len({m['host'] for m in four['cluster']['mounts']}) == 2
+    assert four['fixture'] == matrix['topologies']['loopback-5']['fixture']
+    assert four['cluster']['seed'] == '10.1.223.66:19340'
+    assert not four.get('live_user_cluster')
+    assert 'soak' in four['gates'], 'E4 topologies retain the endurance companion in their full plan'
     five = matrix['topologies']['loopback-5']
     assert five['loopback'] == 5 and five['transport'] == 'tcp'
     assert five['gates'] == matrix['topologies']['loopback-3']['gates']

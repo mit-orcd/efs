@@ -193,7 +193,7 @@ class Runner:
             f'bash -c {shlex.quote(cmd)}'
         if self.ssh:
             return [ssh_program(self.ssh), host, wrapped]
-        return ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=20',
+        return ['ssh', '-o', 'ConnectTimeout=20',
                 '-o', 'ServerAliveInterval=30', host, wrapped]
 
     def run(self, host, cmd, deadline, log_path, stdin_path=None):
@@ -621,22 +621,35 @@ class PrivateCluster(Controller):
         return 0, ''
 
     def owned_teardown(self, g):
+        errors = []
         for m in self.q.cluster.get('mounts', []):
             path = shlex.quote(m['path'])
-            g.run('teardown-unmount', m['host'], f'mountpoint -q {path} || exit 0; '
-                  f'cd {shlex.quote(self.q.source(m["host"]))} && scripts/client.sh stop {path} || '
-                  f'fusermount3 -uz {path}', 300)
-        self.stop_cluster(g)
-        # The daemons' and clients' logs are raw outputs; the stores are not.
+            rc, text = g.run('teardown-unmount', m['host'], f'mountpoint -q {path} || exit 0; '
+                  f'cd {shlex.quote(self.q.source(m["host"]))} && scripts/client.sh stop {path} && '
+                  f'! mountpoint -q {path}', 300)
+            if rc:
+                errors.append(f'unmount {m["host"]}:{m["path"]}: exit {rc}')
+        # Never stop servers underneath a mount whose clean stop failed.
+        if errors:
+            return 1, '; '.join(errors)
+        rc, text = self.stop_cluster(g)
+        if rc:
+            errors.append(f'cluster stop: exit {rc}: {text[-200:]}')
+        # Capture original logs before any scratch deletion.
         for n in self.nodes:
             store = Path(n['store'])
             g.fetch(n['host'], f'{store.parent}/{store.name}.log', f'efsd-{n["addr"].replace(":", "-")}.log')
         for m in self.q.cluster.get('mounts', []):
             mount = Path(m['path'])
             g.fetch(m['host'], f'{mount.parent}/efs-fuse-{mount.name}.log', f'efs-fuse-{m["host"]}-{mount.name}.log')
+        if errors:
+            return 1, '; '.join(errors)
         root = self.pc['root']
         for host in sorted({n['host'] for n in self.nodes} | {m['host'] for m in self.q.cluster.get('mounts', [])}):
-            g.run('teardown-delete', host, delete_command(root), 900)
+            rc, text = g.run('teardown-delete', host, delete_command(root), 900)
+            if rc:
+                errors.append(f'delete {host}:{root}: exit {rc}')
+        return (1, '; '.join(errors)) if errors else (0, '')
 
 
 def check_private_cluster(cluster):
@@ -757,8 +770,14 @@ class Qualify:
             setup_failed = self.setup(results)
             self.run_gates(gates, results, setup_failed)
         finally:
-            self.teardown()
-        self.cleanup_scratch()
+            teardown = self.teardown()
+            if teardown and teardown.get('verdict') == FAIL:
+                results.append(teardown)
+                # A failed stop is not authority to remove a possibly mounted
+                # scratch tree, including the controller's own work directory.
+                self.args.keep_work = True
+        if not self.args.keep_work:
+            self.cleanup_scratch()
         if self.before_sums:
             self.before_sums(self.out)
         verdict = worst(r['verdict'] for r in results)
@@ -800,10 +819,12 @@ class Qualify:
             return
         self.torn_down = True
         g = GateRun(self, Gate('_teardown', None, '', ''), 1800)
-        if not self.args.keep_work:
-            self.control.owned_teardown(g)
-        (g.dir / 'result.json').write_text(json.dumps(dict(g.record, commands=g.commands, end=now(), raw=g.raw,
-                                                           kept=bool(self.args.keep_work))) + '\n')
+        rc, reason = (0, 'kept by request') if self.args.keep_work else (self.control.owned_teardown(g) or (0, ''))
+        record = dict(g.record, commands=g.commands, end=now(), raw=g.raw,
+                      verdict=FAIL if rc else (NOTRUN if self.plan else PASS), reason=reason,
+                      kept=bool(self.args.keep_work), seconds=round(time.monotonic() - g.start, 3))
+        (g.dir / 'result.json').write_text(json.dumps(record) + '\n')
+        return record
 
     def run_gates(self, gates, results, setup_failed):
         for gate in self.selected(gates):
@@ -1000,11 +1021,26 @@ def g_two_client(q, g):
                f'{shlex.quote(a["path"])} {shlex.quote(b["path"])} --results {shlex.quote(res)}')
         host = a['host']
     elif a['path'] == b['path']:
+        if 'remount' not in q.allow:
+            return NOTRUN, 'remote two-client preparation needs --allow remount'
+        rc, text = g.run('prepare', a['host'],
+            f'cd {shlex.quote(src)} && python3 tests/posix/posix_2client.py --prepare {shlex.quote(a["path"])}')
+        if rc:
+            return FAIL, 'two-client fixture preparation: ' + outcome_from_rc(rc, text)[1]
+        g.step('remount', f'remote two-client fixture prepared on {a["host"]}; clean remount {b["host"]}')
+        rc, text = q.control.client_stop(g, b)
+        if rc:
+            return stop_failure(q, text, 'two-client preparation stop failed: ', rc)
+        rc, text = q.control.client_start(g, b)
+        if rc:
+            return FAIL, 'two-client preparation remount failed: ' + outcome_from_rc(rc, text)[1]
         res = str(q.work / 'scratch' / g.gate.name / 'results.tsv')
         (q.work / 'scratch' / g.gate.name).mkdir(parents=True, exist_ok=True)
         cmd = (f'cd {shlex.quote(str(ROOT))} && python3 tests/posix/posix_2client.py --remote '
                f'{shlex.quote(a["host"])} {shlex.quote(b["host"])} --mnt {shlex.quote(a["path"])} '
                f'--ssh {shlex.quote(ssh_program(q.cluster["ssh"]) if q.cluster.get("ssh") else "ssh")} '
+               f'--remote-script-a {shlex.quote(q.source(a["host"]) + "/tests/posix/posix_2client.py")} '
+               f'--remote-script-b {shlex.quote(q.source(b["host"]) + "/tests/posix/posix_2client.py")} '
                f'--results {shlex.quote(res)}')
         host = 'local'
     else:
@@ -3377,7 +3413,7 @@ def main(argv=None):
                 p.error(f'node address {node.get("addr")!r} is not HOST:PORT')
     if a.candidate:
         described_candidate = cluster.get('candidate')
-        if described_candidate and not (described_candidate.startswith(a.candidate) or a.candidate.startswith(described_candidate)):
+        if described_candidate and described_candidate != 'CANDIDATE' and not (described_candidate.startswith(a.candidate) or a.candidate.startswith(described_candidate)):
             p.error('--candidate disagrees with the cluster description')
         cluster['candidate'] = a.candidate
     base = int(cluster.get('private', {}).get('port_base', 18700))
