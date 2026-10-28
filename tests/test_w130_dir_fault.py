@@ -186,9 +186,16 @@ def serve_fault():
         assert rc == 0 and route and int(route[1]) in (0, 7) and int(route[2]) in {1, 2, 3} - {victim}, \
             ('halted replica must forward or redirect to a healthy leader', out)
         mark.unlink()
-        rc, out = mgmt('raft-resync', cluster.ep(victim), str(group))
-        assert rc == 0, out
-        cluster.wait_log(victim, r'snapshot import .*halt cleared, group served again', timeout=60)
+        # Receive persistence may refuse this management request before it
+        # sets resync_requested. Use the same BUSY-only setup helper as the
+        # W130 scenario below; application operations above remain one-shot.
+        # Request admission and snapshot install share the original 60s bound.
+        resync_end = time.monotonic() + 60
+        tries = request_before(
+            lambda: mgmt('raft-resync', cluster.ep(victim), str(group)), resync_end)
+        print(f'[w165] resync accepted after {tries} request(s)', flush=True)
+        cluster.wait_log(victim, r'snapshot import .*halt cleared, group served again',
+                         timeout=max(0, resync_end - time.monotonic()))
         # Normal leader routing may redirect even a fully healed follower.
         # Require the explicit clear, a fresh mutation applied on this replica,
         # and an exact successful read through the returned healthy route.
