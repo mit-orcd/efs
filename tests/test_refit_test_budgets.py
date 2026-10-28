@@ -79,6 +79,11 @@ with tempfile.TemporaryDirectory(prefix='efs-budget-fit-') as tmp:
     refused(lambda: R.read_host('a', [first[0], first[1], second[0]]), 'identical command sequence')
     bad_duration = run_dir('nan', 'NaN')
     refused(lambda: R.read_run(bad_duration), 'invalid duration')
+    for marker in ('CONTAMINATED.json', 'INTERRUPTED.json'):
+        marked = run_dir(marker, 1)
+        (marked / marker).write_text('[]\n')
+        refused(lambda: R.read_host('a', [first[0], first[1], marked]),
+                'contaminated or interrupted')
     budget_file = d / 'budgets.tsv'
     budget_file.write_text('command\tbudget_s\tslots\treason\n' + command + '\t10\t2\tretain this reason\n')
     runner = d / 'runner.sh'

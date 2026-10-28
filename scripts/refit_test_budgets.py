@@ -39,6 +39,10 @@ def command_identity(command):
 
 
 def read_run(path):
+    # A green command summary does not make an overlapped timing sample valid.
+    # Preserve the guard's evidence and require a separate clean measurement.
+    if (path / 'CONTAMINATED.json').exists() or (path / 'INTERRUPTED.json').exists():
+        raise ValueError('contaminated or interrupted run cannot calibrate: ' + str(path))
     cmds = commands(path / 'cmds.txt')
     summary = (path / 'summary.txt').read_text().splitlines()
     match = re.match(r'TOTAL (\d+) FAIL (\d+) NOTRUN (\d+) STATUS (\w+) \((\d+)s\)', summary[0])

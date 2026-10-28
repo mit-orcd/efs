@@ -1410,7 +1410,7 @@
     "scripts/raft_rotate_stall_ab.sh": "9df2eaf04a980bdc09d550e4cbaa49693a07ac03ccf03e29b47e8bb480c220a4",
     "scripts/read_verify_cost.sh": "8d02d82b2e5c7226a828dadff77eff0c89ebb4d30399c2f26919862b0d6f2636",
     "scripts/rebuild-code-graph.sh": "9fb94cc1b977a0315416fbb9d582ac52e43056bd90cdef7ad7ffd3280e4b8d1f",
-    "scripts/refit_test_budgets.py": "a4a2d8903b4a73988f9963f714c340f96a643e11b886370dc24c1c8a0bbb5b3e",
+    "scripts/refit_test_budgets.py": "372d45d49cf6d9284ecb021305ebd43e51683e210fa3d927838e085555865343",
     "scripts/rejoin_fsync_repro.sh": "fb107d3c869f7bd8b0d920933d9ae5d93b7045d13302376948617b4cf1c99829",
     "scripts/report_stepdown_summary.py": "021043c67da0d5a7ba7461b3299aff557ffb6458514fe0a50102220dbad46aaf",
     "scripts/reviews/d38_default_voters.c": "2672b9b913e449373f8297546a2d4506ecee6bb57869d3c59c70bd6c8d01addd",
@@ -2319,7 +2319,7 @@
     "tests/test_recorder_start.py": "ea471e182c187fd05d930a71128ed45e693818d843129ffb1165ab977fe3802f",
     "tests/test_recorder_stop.py": "a9d79622c0a58f332191e1eb822ac4e73221a78fca7e05b645dbba708ef0e032",
     "tests/test_recv_overlap.py": "6cae317e3c6d31b94dde4cd19fbdfc0873d33048e49d592d8c7109970516264e",
-    "tests/test_refit_test_budgets.py": "396b5760244a37d36c61b2743e0ae1285a3de927be31c0eb0db0c2049b36a8db",
+    "tests/test_refit_test_budgets.py": "04bc8ba1b9ad8b314e247889458674c24288fdf3ffe5f8b8c7e2b11763ace99f",
     "tests/test_rename_budget.py": "710c0b76c5004f282b54e496d5e88c83b18020ada1e0bc966a4d5b4a3acca111",
     "tests/test_rename_flags.py": "b43267153e2fd8b013df17b4265d44e7565561c15b898dbe4a95a5477a4c3807",
     "tests/test_replay_fan_budget.py": "13a8d946ff2484a5fec14c9ec22eea47df221d081bdce88f68b84eeb65553bae",
@@ -2456,5 +2456,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "e337662bdbac40bf7e53ff80357a56890e55a65d"
+  "source_commit": "8decb133675ddaec38f1981b0a3dfa5de35b4e96"
 }

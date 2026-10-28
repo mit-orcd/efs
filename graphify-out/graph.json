@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "e337662bdbac40bf7e53ff80357a56890e55a65d"
+      "source_commit": "8decb133675ddaec38f1981b0a3dfa5de35b4e96"
     }
   },
   "links": [
@@ -35441,7 +35441,7 @@
       "source": "efs:file:scripts/refit_test_budgets.py",
       "source_file": "scripts/refit_test_budgets.py",
       "source_location": "L1",
-      "target": "scripts_refit_test_budgets_rationale_67"
+      "target": "scripts_refit_test_budgets_rationale_71"
     },
     {
       "confidence": "EXTRACTED",
@@ -210787,7 +210787,7 @@
       "relation": "contains",
       "source": "scripts_refit_test_budgets",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L143",
+      "source_location": "L147",
       "target": "scripts_refit_test_budgets_fit_rows",
       "weight": 1.0
     },
@@ -210798,7 +210798,7 @@
       "relation": "contains",
       "source": "scripts_refit_test_budgets",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L189",
+      "source_location": "L193",
       "target": "scripts_refit_test_budgets_main",
       "weight": 1.0
     },
@@ -210809,7 +210809,7 @@
       "relation": "contains",
       "source": "scripts_refit_test_budgets",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L120",
+      "source_location": "L124",
       "target": "scripts_refit_test_budgets_read_host",
       "weight": 1.0
     },
@@ -210831,7 +210831,7 @@
       "relation": "contains",
       "source": "scripts_refit_test_budgets",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L66",
+      "source_location": "L70",
       "target": "scripts_refit_test_budgets_schedule",
       "weight": 1.0
     },
@@ -210843,7 +210843,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_main",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L231",
+      "source_location": "L235",
       "target": "scripts_refit_test_budgets_command_identity",
       "weight": 1.0
     },
@@ -210855,7 +210855,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_main",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L216",
+      "source_location": "L220",
       "target": "scripts_refit_test_budgets_fit_rows",
       "weight": 1.0
     },
@@ -210867,7 +210867,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_main",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L202",
+      "source_location": "L206",
       "target": "scripts_refit_test_budgets_read_host",
       "weight": 1.0
     },
@@ -210879,7 +210879,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_main",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L241",
+      "source_location": "L245",
       "target": "scripts_refit_test_budgets_schedule",
       "weight": 1.0
     },
@@ -210892,7 +210892,7 @@
       "relation": "indirect_call",
       "source": "scripts_refit_test_budgets_main",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L202",
+      "source_location": "L206",
       "target": "tests_live_efs_command_options_paths",
       "weight": 1.0
     },
@@ -210912,9 +210912,9 @@
       "confidence": "EXTRACTED",
       "evidence_method": "graphify-ast",
       "relation": "rationale_for",
-      "source": "scripts_refit_test_budgets_rationale_67",
+      "source": "scripts_refit_test_budgets_rationale_71",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L67",
+      "source_location": "L71",
       "target": "scripts_refit_test_budgets_schedule",
       "weight": 1.0
     },
@@ -210926,7 +210926,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_read_host",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L125",
+      "source_location": "L129",
       "target": "scripts_refit_test_budgets_command_identity",
       "weight": 1.0
     },
@@ -210938,7 +210938,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_read_host",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L123",
+      "source_location": "L127",
       "target": "scripts_refit_test_budgets_read_run",
       "weight": 1.0
     },
@@ -210950,7 +210950,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_read_run",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L42",
+      "source_location": "L46",
       "target": "scripts_refit_test_budgets_commands",
       "weight": 1.0
     },
@@ -210962,7 +210962,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_schedule",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L79",
+      "source_location": "L83",
       "target": "scripts_refit_test_budgets_schedule_head",
       "weight": 1.0
     },
@@ -210973,7 +210973,7 @@
       "relation": "contains",
       "source": "scripts_refit_test_budgets_schedule",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L75",
+      "source_location": "L79",
       "target": "scripts_refit_test_budgets_schedule_head",
       "weight": 1.0
     },
@@ -210985,7 +210985,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_schedule",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L79",
+      "source_location": "L83",
       "target": "scripts_refit_test_budgets_schedule_weight",
       "weight": 1.0
     },
@@ -210996,7 +210996,7 @@
       "relation": "contains",
       "source": "scripts_refit_test_budgets_schedule",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L77",
+      "source_location": "L81",
       "target": "scripts_refit_test_budgets_schedule_weight",
       "weight": 1.0
     },
@@ -211008,7 +211008,7 @@
       "relation": "calls",
       "source": "scripts_refit_test_budgets_schedule_weight",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L78",
+      "source_location": "L82",
       "target": "scripts_refit_test_budgets_schedule_head",
       "weight": 1.0
     },
@@ -813186,7 +813186,7 @@
       "id": "scripts_refit_test_budgets_fit_rows",
       "label": "fit_rows()",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L143"
+      "source_location": "L147"
     },
     {
       "_callable": true,
@@ -813197,7 +813197,7 @@
       "id": "scripts_refit_test_budgets_main",
       "label": "main()",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L189"
+      "source_location": "L193"
     },
     {
       "_origin": "ast",
@@ -813214,10 +813214,10 @@
       "community": 258,
       "community_name": "scripts",
       "file_type": "rationale",
-      "id": "scripts_refit_test_budgets_rationale_67",
+      "id": "scripts_refit_test_budgets_rationale_71",
       "label": "Reproduce the runner's weighted priority order, assigning named slots. Each\u2026",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L67"
+      "source_location": "L71"
     },
     {
       "_callable": true,
@@ -813228,7 +813228,7 @@
       "id": "scripts_refit_test_budgets_read_host",
       "label": "read_host()",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L120"
+      "source_location": "L124"
     },
     {
       "_callable": true,
@@ -813250,7 +813250,7 @@
       "id": "scripts_refit_test_budgets_schedule",
       "label": "schedule()",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L66"
+      "source_location": "L70"
     },
     {
       "_callable": true,
@@ -813261,7 +813261,7 @@
       "id": "scripts_refit_test_budgets_schedule_head",
       "label": "head()",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L75"
+      "source_location": "L79"
     },
     {
       "_callable": true,
@@ -813272,7 +813272,7 @@
       "id": "scripts_refit_test_budgets_schedule_weight",
       "label": "weight()",
       "source_file": "scripts/refit_test_budgets.py",
-      "source_location": "L77"
+      "source_location": "L81"
     },
     {
       "_origin": "ast",
