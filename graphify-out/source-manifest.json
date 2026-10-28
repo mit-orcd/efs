@@ -166,7 +166,7 @@
     "scripts/raft_rotate_stall_ab.sh": 2,
     "scripts/read_verify_cost.sh": 9,
     "scripts/rebuild-code-graph.sh": 1,
-    "scripts/refit_test_budgets.py": 9,
+    "scripts/refit_test_budgets.py": 11,
     "scripts/rejoin_fsync_repro.sh": 4,
     "scripts/report_stepdown_summary.py": 4,
     "scripts/reviews/d38_default_voters.c": 1,
@@ -1069,6 +1069,7 @@
     "tests/test_recorder_start.py": 1,
     "tests/test_recorder_stop.py": 1,
     "tests/test_recv_overlap.py": 1,
+    "tests/test_refit_test_budgets.py": 4,
     "tests/test_rename_budget.py": 1,
     "tests/test_rename_flags.py": 1,
     "tests/test_replay_fan_budget.py": 3,
@@ -1200,7 +1201,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "823fb461a8ccf7a938f73ca2de63cf4bd6122d595445af2a4e4ef1398cbe5fd3",
+    "Makefile": "51a0ec825eea75f6025f9fc0869a618ea34d49fb3b39d340a5d7a0032efc882d",
     "README.md": "15b25db8e5545f8c3c67ef24e217ae50a820e158bbaa8af416dba7c20885855d",
     "docs/backlog/crash-safe-durable-versions.md": "5ddb729585e675eabfa3e0bfa71caaac14286b7a8bf3646fbac8e74b6aef592f",
     "docs/backlog/decision-contracts.md": "a952ac8bd45907895542fbaa9dc9119735c89241c389d3049885a537b93bc04f",
@@ -1397,7 +1398,7 @@
     "scripts/raft_rotate_stall_ab.sh": "9df2eaf04a980bdc09d550e4cbaa49693a07ac03ccf03e29b47e8bb480c220a4",
     "scripts/read_verify_cost.sh": "8d02d82b2e5c7226a828dadff77eff0c89ebb4d30399c2f26919862b0d6f2636",
     "scripts/rebuild-code-graph.sh": "9fb94cc1b977a0315416fbb9d582ac52e43056bd90cdef7ad7ffd3280e4b8d1f",
-    "scripts/refit_test_budgets.py": "a697b269916735a809d651774678f01d8f9ccfb892472462fdb7ce9bb31f5f02",
+    "scripts/refit_test_budgets.py": "a4a2d8903b4a73988f9963f714c340f96a643e11b886370dc24c1c8a0bbb5b3e",
     "scripts/rejoin_fsync_repro.sh": "fb107d3c869f7bd8b0d920933d9ae5d93b7045d13302376948617b4cf1c99829",
     "scripts/report_stepdown_summary.py": "021043c67da0d5a7ba7461b3299aff557ffb6458514fe0a50102220dbad46aaf",
     "scripts/reviews/d38_default_voters.c": "2672b9b913e449373f8297546a2d4506ecee6bb57869d3c59c70bd6c8d01addd",
@@ -2300,6 +2301,7 @@
     "tests/test_recorder_start.py": "ea471e182c187fd05d930a71128ed45e693818d843129ffb1165ab977fe3802f",
     "tests/test_recorder_stop.py": "a9d79622c0a58f332191e1eb822ac4e73221a78fca7e05b645dbba708ef0e032",
     "tests/test_recv_overlap.py": "6cae317e3c6d31b94dde4cd19fbdfc0873d33048e49d592d8c7109970516264e",
+    "tests/test_refit_test_budgets.py": "396b5760244a37d36c61b2743e0ae1285a3de927be31c0eb0db0c2049b36a8db",
     "tests/test_rename_budget.py": "710c0b76c5004f282b54e496d5e88c83b18020ada1e0bc966a4d5b4a3acca111",
     "tests/test_rename_flags.py": "b43267153e2fd8b013df17b4265d44e7565561c15b898dbe4a95a5477a4c3807",
     "tests/test_replay_fan_budget.py": "13a8d946ff2484a5fec14c9ec22eea47df221d081bdce88f68b84eeb65553bae",
@@ -2429,10 +2431,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1353
+    "calls": 1350
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 33,
-  "source_commit": "7045ca1f9a3804608b343206256c9d4b4df13cff"
+  "source_commit": "234b307757eaee0d4294ab33d31cc37e162e1804"
 }
