@@ -209,6 +209,8 @@ test-report-pressure:
 	python3 tests/test_resolver_deadline.py
 	python3 tests/test_rdma_reply_budget.py
 	python3 tests/test_rdma_progress_ready.py
+	python3 tests/test_rdma_arena.py
+	python3 tests/test_rdma_gid.py
 	python3 tests/test_rdma_setup_reentry.py
 	python3 tests/test_rdma_handler_alignment.py
 	python3 tests/test_rdma_handoff.py
@@ -555,6 +557,16 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_tiny_fragment_audit.py
 	python3 tests/test_b_checks_driver.py
 	python3 tests/test_d4_driver.py
+	python3 tests/test_pub_unit_setup.py
+	python3 tests/test_client_allocator.py
+	python3 tests/test_client_large_alloc.py
+	python3 tests/test_task_i_host_guard.py
+	python3 tests/test_task_i_preserve.py
+	python3 tests/test_sparse_metadata.py
+	python3 tests/test_b_geometry_status.py
+	python3 tests/test_task_i_alloc_probe.py
+	python3 tests/test_mount_idle.py
+	python3 tests/test_k42_fixture_cleanup.py
 	python3 tests/test_read_recorded_nodes.py
 	python3 tests/test_tmpdir_hygiene.py
 	python3 tests/test_pressure_cohort.py
@@ -711,6 +723,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_gc_inode_fanout.py
 	python3 tests/test_gc_reap_shutdown.py
 	python3 tests/test_reap_fairness.py
+	python3 tests/test_trunc_gc_fairness.py
 	python3 tests/test_tiny_overload_oracle.py
 	python3 tests/test_session_register_verdict.py
 	python3 tests/test_namespace_session_apply.py
@@ -811,6 +824,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_client_memory.py
+	python3 tests/test_client_allocator.py
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
 	python3 tests/test_recorder_stop.py

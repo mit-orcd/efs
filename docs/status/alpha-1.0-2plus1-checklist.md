@@ -945,6 +945,30 @@ round says which physical or software limiter it hit.
 - [ ] **F1** Unit/integration, enabled-feature and applicable memory/concurrency
   checks have explicit PASS/FAIL/NOTRUN results. Docs and code tests both report;
   an unavailable diagnostic is disclosed, never silently counted as passed.
+  **Task I reviewed Oct 28 UTC ([evidence](task-i-20261026.md)):**
+  `47ca08eaf` xorinox gate 518 / 0 FAIL / 13 NOTRUN, hour FAIL stored
+  data +~56.8%; RSS PASS, 2080 exact and zero packer errors. Historical
+  xorinox measurements were shared-client, not proven quiet. Node9900
+  `47ca08eaf` RDMA FAIL RSS; TCP FAIL load RSS +14.05%, 2080 exact,
+  pack errors 0/0, drain 81.3 s. Reclaim-fairness `6550b678d` and
+  allocator lifetime `d7e265746` have native unit evidence, new full gates/
+  hours owed (`d7e265746` hardware gate FAIL: four LSan runtime
+  failures, independently reproduced; corrected `00ccd12f3` gate 524 total /
+  0 FAIL / 18 NOTRUN, native RDMA 9/9 PASS; hour FAIL foreground RSS
+  +13.04% and drain, 2080 exact, pack errors 0/0; TCP hour PASS with
+  all RSS <=1.63%, drain 92.9 s, 2080 exact; overall pair FAIL).
+  AMD native default RoCE PASS 9/9; full gate FAIL 3/520, hour NOTRUN;
+  fixed-harness/cleanup continuation `d7e265746` timed out waiting for W123;
+  no store touched. Fresh `14010248c` preservation/cleanup succeeded: six
+  synthetic lines exact, peer/three daemons stopped cleanly; native RDMA 9/9
+  PASS, gate FAIL 1/526 on observer compilation, corrected unit PASS; fresh
+  small-page candidate `a083dcbf3` live protocol now PASS (scoped): node9900
+  RDMA/TCP and AMD TCP hours, each 2080 exact/pack errors 0/0, independent
+  RSS within bounds; drains 77.8/147.0/78.9 s. Hardware is shared-client;
+  AMD interval quiet. Gates 527/0 FAIL with 18/14 NOTRUN; native RDMA 9/9
+  each. Task I protocol complete, F1 remains unchecked for missing release
+  coverage. Original failures, narrow TCP drain margin and unproven prior
+  intermittent cause remain recorded.
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;
   [evidence](f1-memory-concurrency-gates-20261025.md)):** `make leak-check`

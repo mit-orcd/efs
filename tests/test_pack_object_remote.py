@@ -8,7 +8,7 @@ NOT_FOUND only after a successful ReadIndex."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=Path(os.environ.get('EFS_PACK_READ_SOURCE',str(root/'src/server/raft_host.c'))).read_text()
 a=s.index('static uint32_t host_pack_degraded_mask(')
 b=s.index('\n}',s.index('int server_raft_host_pack_object(uint32_t group'))+2
 code=r'''
@@ -95,7 +95,16 @@ int main(void){
  remote_degraded=0;
  /* A hosting node reads locally: ReadIndex then the KV, no RPC. */
  reset();hosted=1;reads=0;host.raft_id=1;assert(server_raft_host_pack_object(2,77,3,&o)==EFS_OK&&!calls&&reads==1);
- read_rc=EFS_ERR_BUSY;assert(server_raft_host_pack_object(2,77,3,&o)==EFS_ERR_BUSY&&!calls);read_rc=0;
+ /* A lagging hosted voter needs another voter's fresh proof, not a failed PUT. */
+ reset();read_rc=EFS_ERR_NOT_PRIMARY;remote_degraded=4;
+ assert(server_raft_host_pack_state(2,77,3,&o,&dg)==EFS_OK && calls==1 && asked[2] && dg==4);
+ reset();read_rc=EFS_ERR_BUSY;
+ assert(server_raft_host_pack_object(2,77,3,&o)==EFS_OK && calls==1);
+ reset();fail[2]=fail[3]=1;
+ assert(server_raft_host_pack_object(2,77,3,&o)==EFS_ERR_BUSY && calls==2);
+ reset();read_rc=EFS_ERR_UNSUPPORTED;
+ assert(server_raft_host_pack_object(2,77,3,&o)==EFS_ERR_UNSUPPORTED && !calls);
+ read_rc=0;remote_degraded=0;reset();
  /* K37 local read: unmarked 0, the mark's mask, an unreadable mark BAD. */
  assert(server_raft_host_pack_state(2,77,3,&o,&dg)==EFS_OK&&dg==0);
  mark_rc=EFS_OK;mark_mask=2;assert(server_raft_host_pack_state(2,77,3,&o,&dg)==EFS_OK&&dg==2);
@@ -124,4 +133,4 @@ with tempfile.TemporaryDirectory(prefix='efs-pack-object-remote-') as directory:
     p=Path(directory)/'t.c';p.write_text(code)
     subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root),'-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
     subprocess.run([str(p.with_suffix(''))],check=True)
-print('pack object remote read: leader then voters, hosting-voter ReadIndex only, every failure BUSY (never NOT_FOUND), local path unchanged, K37 degraded mask beside the object PASS')
+print('pack object remote read: leader then voters, hosting-voter ReadIndex only, every failure BUSY (never NOT_FOUND), local successful proof stays local, lagging proof uses another voter, fatal proof stays fatal, K37 degraded mask beside the object PASS')

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise production priority replacement with interleaved Raft groups."""
+from sanitize_env import asan_runtime_available
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
@@ -183,10 +184,11 @@ with tempfile.TemporaryDirectory(prefix='efs-host-outbox-') as d:
  # make leak-check sets EFS_LEAK_WRAP (memcheck) and skips the ASan build.
  wrap=shlex.split(os.environ.get('EFS_LEAK_WRAP',''))
  subprocess.run([*wrap,str(binary)],check=True)
- if not wrap:
+ if not wrap and asan_runtime_available():
   sanitized=Path(d)/'sanitized'
   subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer',str(p),'-o',str(sanitized)],check=True)
   subprocess.run([str(sanitized)],check=True)
+  print("ASan/UBSan execution PASS")
  p.write_text(code.replace('if(read_vote && rd64be(tx->pri[i].buf+28)>rd64be(buf+28))', 'if(0 && read_vote && rd64be(tx->pri[i].buf+28)>rd64be(buf+28))'))
  negative=Path(d)/'late-context-negative'
  subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',str(p),'-o',str(negative)],check=True)
@@ -195,5 +197,5 @@ with tempfile.TemporaryDirectory(prefix='efs-host-outbox-') as d:
  p.write_text(code.replace('(buf[0]==EFS_RAFT_MSG_AE_REQ && buf[3]==0)', '(0 && buf[0]==EFS_RAFT_MSG_AE_REQ && buf[3]==0)'))
  subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',str(p),'-o',str(negative)],check=True)
  assert subprocess.run([str(negative)],capture_output=True).returncode!=0,'request-bound negative unexpectedly passed'
- print('host outbox: canonical request/vote bounded across1000rounds, delayed context refusal, all header guards, ASan/UBSan and late-context negative PASS')
+ print('host outbox: canonical request/vote bounded across1000rounds, delayed context refusal, all header guards and late-context negative PASS')
 print('host outbox: group/class/read-context/prefix retention, vote eviction and bounded replacement PASS')

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Real Raft invariants with and without ACK-window protection, sanitizers and old-window negative."""
+from sanitize_env import asan_runtime_available
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
@@ -13,7 +14,8 @@ with tempfile.TemporaryDirectory(prefix='efs-raft-ack-window-') as directory:
  p=Path(directory);binary=p/'positive'
  # make leak-check sets EFS_LEAK_WRAP (memcheck); ASan and memcheck cannot share a process.
  wrap=shlex.split(os.environ.get('EFS_LEAK_WRAP',''))
- flags=shlex.split(os.environ.get('EFS_TEST_CFLAGS','-O1 -g' if wrap else '-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer'))
+ sanitized = not wrap and asan_runtime_available()
+ flags=shlex.split(os.environ.get('EFS_TEST_CFLAGS','-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer' if sanitized else '-O1 -g'))
  command=[os.environ.get('CC','cc'),'-std=c99','-D_GNU_SOURCE','-Wall','-Wextra','-pthread','-I'+str(root/'include')]
  dependencies=[str(root/'tests/test_raft.c'),str(root/'src/raft/raft_mem.c'),str(root/'src/common/batch_obs.c')]
  subprocess.run([*command,*flags,*dependencies,str(root/'src/raft/raft.c'),'-o',str(binary)],check=True)
@@ -23,4 +25,5 @@ with tempfile.TemporaryDirectory(prefix='efs-raft-ack-window-') as directory:
  subprocess.run([*command,'-O1','-g',*dependencies,str(old),'-o',str(binary)],check=True)
  result=subprocess.run([str(binary)],capture_output=True,text=True)
  assert result.returncode!=0 and 'duplicate preserves newer window when enabled' in result.stderr,'old-retirement negative did not expose the intended defect'
- print('raft ACK window: real dual-policy invariants/sanitizers PASS; original-retirement negative refused')
+ print('raft ACK window: real dual-policy invariants PASS; original-retirement negative refused')
+ if sanitized: print('raft ACK window: sanitizer execution PASS')

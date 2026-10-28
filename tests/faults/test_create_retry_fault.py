@@ -32,6 +32,9 @@ code = r'''
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 '''+function+r'''
 static void exercise(unsigned retained, unsigned mismatch) {
     struct efs_msg_create_retained request={0};
@@ -87,6 +90,12 @@ static void exercise(unsigned retained, unsigned mismatch) {
 }
 int main(void) {
     struct rlimit limit={0,0};assert(!setrlimit(RLIMIT_CORE,&limit));
+#ifdef __linux__
+    /* RLIMIT_CORE does not suppress a piped core_pattern collector. These
+     * intentional SIGABRT children need only their wait status, not apport
+     * or systemd-coredump work outside the test's 30-second deadline. */
+    assert(!prctl(PR_SET_DUMPABLE,0));
+#endif
     for(unsigned retained=0;retained<2;retained++) {
         unsigned max=retained?7:5;
         for(unsigned mismatch=0;mismatch<=max;mismatch++) {

@@ -38,6 +38,7 @@
 #include <string.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
+#include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -254,6 +255,42 @@ static int rdma_port_no(void)
 }
 
 /* Native IB uses LID routing; RoCE uses an explicit nonzero local GID. */
+/* Prefer a non-link-local RoCE address when one is available. The first
+ * nonzero table entry is often fe80::; RXE then rejects RTR with
+ * ENETUNREACH even though the same device has a usable IPv4-mapped GID.
+ * Keep the first link-local address only when it is all the device has.
+ * An explicit index is exact: it never silently selects a different GID. */
+static int gid_link_local(const union ibv_gid *gid)
+{
+    return gid->raw[0] == 0xfe && (gid->raw[1] & 0xc0) == 0x80;
+}
+
+static int gid_select(struct ibv_context *ctx, int port, int count, int requested,
+                       union ibv_gid *out)
+{
+    if (requested < -1 || requested >= count)
+        return -1;
+    int selected = -1, first = requested >= 0 ? requested : 0;
+    int last = requested >= 0 ? requested + 1 : count;
+    for (int i = first; i < last; i++) {
+        union ibv_gid candidate;
+        if (ibv_query_gid(ctx, port, i, &candidate))
+            continue;
+        unsigned nonzero = 0;
+        for (unsigned j = 0; j < sizeof(candidate.raw); j++)
+            nonzero |= candidate.raw[j];
+        if (!nonzero)
+            continue;
+        if (selected < 0 || !gid_link_local(&candidate)) {
+            *out = candidate;
+            selected = i;
+        }
+        if (requested >= 0 || !gid_link_local(&candidate))
+            break;
+    }
+    return selected;
+}
+
 static int dev_open(const char *name, struct efs_rdma_dev *out)
 {
     struct ibv_device **list = ibv_get_device_list(NULL);
@@ -287,21 +324,15 @@ static int dev_open(const char *name, struct efs_rdma_dev *out)
     union ibv_gid gid = {0};
     if (roce) {
         const char *env = getenv("EFS_RDMA_GID_INDEX");
-        int first = 0, last = pa.gid_tbl_len;
+        int requested = -1;
         if (env && *env) {
             char *end; long v = strtol(env, &end, 10);
             if (*end || v < 0 || v >= pa.gid_tbl_len) {
                 ibv_close_device(ctx); return -1;
             }
-            first = (int)v; last = first + 1;
+            requested = (int)v;
         }
-        for (int i = first; i < last; i++) {
-            union ibv_gid candidate;
-            if (ibv_query_gid(ctx, rdma_port_no(), i, &candidate)) continue;
-            unsigned nonzero = 0;
-            for (unsigned j = 0; j < sizeof(candidate.raw); j++) nonzero |= candidate.raw[j];
-            if (nonzero) { gid = candidate; gid_index = i; break; }
-        }
+        gid_index = gid_select(ctx, rdma_port_no(), pa.gid_tbl_len, requested, &gid);
         if (gid_index < 0) { ibv_close_device(ctx); return -1; }
     }
     struct ibv_pd *pd = ibv_alloc_pd(ctx);
@@ -624,6 +655,7 @@ struct efs_rdma_conn {
     struct ibv_cq *send_cq;
     struct ibv_mr *mr;
     uint8_t *arena;
+    size_t arena_bytes;
     int nrecv;
     uint32_t bufsz;
     uint32_t max_frame; /* min(local, remote) buffer size */
@@ -944,6 +976,31 @@ cq_fail:
     return -1;
 }
 
+/* Registered connection buffers have a connection lifetime, not a malloc
+ * arena lifetime. Fixed-set RDMA qualification still showed anonymous
+ * growth with four malloc arenas. Multi-MiB aligned allocations can retain
+ * holes in those arenas after free; dedicated mappings
+ * return those pages at teardown after QP/MR destruction, independent of
+ * glibc's adaptive mmap threshold and the thread that closes the connection. */
+static int conn_arena_create(struct efs_rdma_conn *rc, size_t bytes)
+{
+    void *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED)
+        return -1;
+    rc->arena = p;
+    rc->arena_bytes = bytes;
+    return 0;
+}
+
+static void conn_arena_destroy(struct efs_rdma_conn *rc)
+{
+    if (rc->arena)
+        munmap(rc->arena, rc->arena_bytes);
+    rc->arena = NULL;
+    rc->arena_bytes = 0;
+}
+
 static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
 {
     struct efs_rdma_conn *rc = calloc(1, sizeof(*rc));
@@ -999,7 +1056,7 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
     size_t recv_stride = rc->bufsz + EFS_RDMA_RECV_STRIDE;
     size_t recv_total = (size_t)rc->nrecv * recv_stride;
     size_t total = recv_total + (size_t)EFS_RDMA_NSEND * rc->bufsz;
-    if (posix_memalign((void **)&rc->arena, 4096, total) != 0)
+    if (conn_arena_create(rc, total) != 0)
         goto fail;
     rc->mr = ibv_reg_mr(dev->pd, rc->arena, recv_total, IBV_ACCESS_LOCAL_WRITE);
     if (!rc->mr)
@@ -1245,7 +1302,7 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
             (unsigned long long)extra_tx,(unsigned long long)extra_rx,(unsigned long long)rc->tcp_app_rx);
     }
     int counted = rc->counted;
-    free(rc->arena);
+    conn_arena_destroy(rc);
     free(rc->recv_bufs);
     free(rc->send_bufs);
     free(rc);
