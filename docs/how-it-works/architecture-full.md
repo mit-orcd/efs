@@ -1641,7 +1641,8 @@ AMD b994 gate528/1 FAIL/14 NOTRUN retained a W165 resync-admission BUSY.
 Test-only093415c86 uses the existing BUSY-only management helper within
 the original60s recovery bound; corrected gate528/0 FAIL/14 NOTRUN,
 native9/9 PASS; TCP metrics pass but host coverage FAILs275 samples
-of resumed UID1001 W123 work. Clean AMD confirmation remains pending;
+of resumed UID1001 W123 work. Clean AMD confirmation remains pending; user-authorized fallback
+final source093415c86 is now qualifying on idle fstor007;
 other users’ work is untouched. Qualification
 remains INCOMPLETE.
 Last qualified candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
