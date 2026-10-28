@@ -1,199 +1,250 @@
-# Task P — second Stage 2 rehearsal
+# Task P — second Stage 2 rehearsal (October 27–28)
 
-`agent/devel-task-p` @ `b8f232f40`: full-gate TOTAL line pending (NOTRUN,
-queued); base comparison pending. Evidence: `docs/status/stage2-rehearsal-2-20261027.md`.
-Original three-member matrix RUNNING on intel2; current-develop follow-up QUEUED.
-No product defect confirmed. Driver defect D-P1 fixed, live check pending.
-Physical-host/RDMA release acceptance NOTRUN: single-host TCP rehearsal only.
+`agent/devel-task-p` (tested `dbebab983`): TOTAL 516 FAIL 0 NOTRUN 14 (739s); prior 516/0/14 (887s). Evidence `docs/status/stage2-rehearsal-2-20261027.md`; intel2 `~/efs-artifacts/taskP-20261027*`. NOTRUN RDMA/physical domains: one-host TCP. No product defect; three driver fixes. Task P COMPLETE; release acceptance OPEN.
 
-## Scope and current state
+## Verdict and frozen sources
 
-**RUNNING on intel2 after the user authorized any available host.** Task P runs all selected
-Stage 2 gates, serially for loopback-3 and loopback-5, then the eight-job
-`make test-all` gate. The assigned work excludes product fixes: a product
-failure gets a K row and retained trace. Driver, gate and environment defects
-may be corrected. No real cluster, shared checkout, Task H/I fixture or
-external repository is modified.
+**Task P COMPLETE as a scoped rehearsal with three corrected driver findings.**
+Both full matrices, the targeted D5 follow-up and final plan-fixed code gate
+finished. This is not a new full-matrix PASS for the final driver: the
+three-member historical FAIL and targeted correction are reported separately.
+Task P is a scoped rehearsal, not alpha release acceptance. All 24 selected
+gates plus the end-identity check ran on each topology. The original
+three-member expiry failure remains FAIL; it is not relabelled after a fix.
+The five-member corrected full run has no FAIL. Physical failure domains
+remain NOTRUN because every member shares intel2.
 
-The base matrix validates: 26 items, nine topologies. Both requested
-loopback topologies select all 24 named gates. Each also records its final
-identity check. Raw results will be retained outside Git under
-`intel2:/home/maik/efs-artifacts/taskP-20261027/`; the first run is active and no
-closed manifest is claimed yet.
+The user authorized any available host rather than waiting for nuc.
+Intel2 was idle with no private EFS process, mount or detached test job.
+Task H/I/N data and running real clusters were left alone. Nothing was
+pushed or merged into devel by Task P. Product fixes are outside this task's scope; no
+product defect requiring a new K row was observed.
 
-A read-only host check found no running EFS daemon/client, but three Task H
-mounts remain under `~/efs-taskH-repair-20261027/attempt-{37,40,43}`.
-Task H's chat still describes a nuc resync investigation. Those mounts and
-retained trees are not Task P's to clear. Task I moved later qualification
-to xorinox and node9900; that alone is not a coordinator handoff of nuc.
+| Source | Base and role | Exact build identity |
+| --- | --- | --- |
+| `3ca4f7e6b233d381c1236ca5752d7f011cc40cec` | devel `24dad8e4b`, original two full matrices and code gate | `efsd 3ca4f7e6b233d381c1236ca5752d7f011cc40cec (branch agent/devel-task-p, built 2026-10-28T02:16:24Z on intel2)` |
+| `b8f232f4023692a3d5161d12ed7e979bf66b29a9` | devel `e7e72e267` merged at `194c7f3d2`; D-P1 isolation fix; two full matrices and code gate | `efsd b8f232f4023692a3d5161d12ed7e979bf66b29a9 (branch agent/devel-task-p, built 2026-10-28T04:49:57Z on intel2)` |
+| `dac2361ba4b70649dcf6207666eb7bc3ecb5333a` | same product as `b8f232f40`; D-P2 port fix; targeted D5 and code gate | `efsd dac2361ba4b70649dcf6207666eb7bc3ecb5333a (branch agent/devel-task-p, built 2026-10-28T12:49:51Z on intel2)` |
+| `dbebab98382b5111d6be0b372782857c7d77630e` | same product and recipe; D-P3 plan fix; final code gate | `efsd dbebab98382b5111d6be0b372782857c7d77630e (branch agent/devel-task-p, built 2026-10-28T13:10:14Z on intel2)` |
 
-Intel2 preflight: no EFS processes or mounts, no screen jobs, eight CPUs,
-FUSE 3.16.2, approximately 12 GiB available RAM and 838 GiB free disk.
-CPU samples were idle; initial load averages reflect earlier work.
+Product sources and Makefile are unchanged from `b8f232f40` through
+`dbebab983`; only the driver and its regression differ. Later devel commits
+are not qualified by these frozen runs. The task does not chase a moving
+HEAD or claim final-release qualification for another candidate.
 
-The committed `scripts/task_p_rehearsal.py` serializes build, regressions,
-both full matrices, manifest verification and the final code gate. It
-refuses to advance while Task P processes or mounts remain. Gate failures
-remain failures; no product source changes are authorized.
+## Environment and reproduction
 
-Frozen source `3ca4f7e6b233d381c1236ca5752d7f011cc40cec`, based on devel
-`24dad8e4b`. Detached screen `taskP-rehearsal`; source `~/efs-taskP/src`.
-Archive SHA256 `d4c6b0ba97fa56c4a125253f90a265fcf2f9cb795364f892e75b82fc9938d912`.
-Build: `efsd 3ca4f7e6b233d381c1236ca5752d7f011cc40cec (branch agent/devel-task-p, built 2026-10-28T02:16:24Z on intel2)`.
-Build PASS 29.752 s; full Linux driver regression PASS 4.015 s; soak
-regression PASS 0.188 s. The Mac limitation below is superseded by this
-Linux regression result, not erased.
+Intel2: Intel Core Ultra 7 256V, eight CPUs, approximately 15 GiB RAM,
+FUSE 3.16.2, private home/XFS storage with 838 GiB available at preflight.
+Eight build/test jobs. TCP loopback, O_DIRECT fragment I/O, 2+1 profile,
+packing and `.efs` enabled, containers off. Main fixtures use 4 GiB/member,
+three or five daemons and two FUSE mounts. E4 uses 2,000 small files/member
+and two 32 MiB files/member. Private helper gates may use their own member
+counts: D5 and GC use four; A13 grows three to five; soak grows five to seven.
+Thus passing a helper is not proof it used the parent topology.
 
-`identity` passed; `topology` reports the expected one-host failure-domain
-NOTRUN. Remaining gates are running/queued, not yet qualification evidence.
-The original controller owns both serial matrices and its final code gate.
-The corrected current-develop controller waits for it to finish; it never
-rebuilds or changes the active original source tree. `scripts/task_p_compare.py ARTIFACT_ROOT`
-extracts Task A's corrected wall table and flags doubled observed walls.
+The loopback matrix now explicitly selects the existing **900-second
+rehearsal** soak profile. Other topology defaults retain four-hour endurance.
+This workload choice introduces no product flag. Rehearsal RSS growth is
+explicitly NOTRUN: the interrupted short windows cannot qualify endurance.
 
-## Driver correction prepared
-
-The matrix selected a four-hour endurance soak for both loopback rehearsals.
-Task P specifies the rehearsal profile. The loopback fixtures now explicitly
-select `soak_hours=0.25`, `soak_profile=rehearsal`; the driver passes that
-profile to the existing soak script. All other topology defaults remain
-four-hour endurance. This is a test-workload selection, not an EFS product
-behavior switch. Rehearsal does not qualify the endurance RSS window.
-
-Checks completed locally:
-
-- `python3 scripts/qualify.py plan --check --matrix scripts/qualify_matrix.json`: PASS.
-- `python3 tests/test_soak_driver.py`: PASS, including schedule, refusal and corruption controls.
-- `python3 tests/test_qualify_driver.py`: incomplete on macOS. After loopback
-  socket permission was granted it reached the Linux-only `/proc/PID/stat`
-  identity step and failed there; no driver regression PASS is claimed.
-  The spawned stub was checked absent. The complete test must run on Linux.
-
-## Planned method and comparisons
-
-Freeze the current source and record its full commit, archive hash, build
-identity and tracked-source manifest. Build privately on idle intel2 with
-`EFS_FUSE_PREFIX=/usr`, eight build jobs. Use detached screen, private TMPDIR,
-free 19xxx ports and owned fixture roots only. Run:
+Committed serial controller `scripts/task_p_rehearsal.py` records commands,
+process walls and exit codes; runs each matrix to its end despite gate
+failures; verifies its manifest; then runs `make test-all` with eight jobs.
+It refuses to advance with owned processes/mounts still active. The second
+freeze waited for the original controller, never altered an active tree and
+never overlapped measurements. Use a fresh output/source root per freeze:
 
 ```sh
-python3 scripts/qualify.py plan --check --matrix scripts/qualify_matrix.json
-python3 tests/test_qualify_driver.py
-python3 scripts/qualify.py run --matrix scripts/qualify_matrix.json \
-  --topology loopback-3 --candidate FULL_COMMIT --allow all \
-  --out "$HOME/efs-artifacts/taskP-20261027/loopback-3" \
-  --work "$HOME/efs-taskP/work-3"
-python3 scripts/qualify.py run --matrix scripts/qualify_matrix.json \
-  --topology loopback-5 --candidate FULL_COMMIT --allow all \
-  --out "$HOME/efs-artifacts/taskP-20261027/loopback-5" \
-  --work "$HOME/efs-taskP/work-5"
-EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh
+# Exact Git archive exported to ~/efs-taskP-UNIQUE/src on intel2.
+export EFS_GIT_ID=FULL_COMMIT EFS_GIT_DESCRIBE=FULL_COMMIT
+export EFS_GIT_BRANCH=agent/devel-task-p EFS_FUSE_PREFIX=/usr
+export EFS_BUILD_JOBS=8 EFS_TEST_JOBS=8 EFS_TEST_TARGET=test-all
+SCREENDIR="$HOME/.screen" screen -dmS taskP-UNIQUE bash -c \
+ 'cd "$HOME/efs-taskP-UNIQUE/src" && python3 scripts/task_p_rehearsal.py FULL_COMMIT "$HOME/efs-artifacts/taskP-20261027-UNIQUE"'
 ```
 
-Each full matrix continues through gate verdicts; a failed topology is not
-retried into PASS. Preserve failure logs and classify each non-PASS. Compare
-per-gate wall times with Task A's corrected runs in
-[Task A](task-a-20261025.md); doubled walls are findings, with different
-hardware/load and added D5/soak scope explicitly separated from regressions.
-Record outer process wall and gate-sequence wall separately.
+The controller executes plan validation, the Linux driver, standalone and
+soak regressions, both matrix `run` commands with `--allow all`,
+`qualify.py verify-sums` and `scripts/make_test_summary.sh`. D-P2 targeted
+command is the same three-member matrix with `--gates identity,d5-expiry`,
+then a separate eight-job code gate. The exact detached shell controller,
+commands and exit receipts are retained in the D5 evidence root.
+Mac driver testing reached the Linux-only `/proc` identity step and could
+not complete; both later Linux runs passed. The Mac failure is not counted
+as a Linux qualification pass.
+
+## Results and classifications
+
+| Frozen source / stage | PASS / FAIL / NOTRUN | Gate-sequence / outer wall (s) |
+| --- | --- | --- |
+| Original `3ca4f7e6b`, loopback-3 | 22 / 1 / 2 | 3615.588 / 3624.467 |
+| Original `3ca4f7e6b`, loopback-5 | 23 / 0 / 2 | 4775.805 / 4793.591 |
+| Corrected `b8f232f40`, loopback-3 | 23 / 1 / 1 | 4859.454 / 4869.844 |
+| Corrected `b8f232f40`, loopback-5 | 24 / 0 / 1 | 5494.414 / 5507.773 |
+| `dac2361ba`, targeted three-member identity/D5/end-identity | 3 / 0 / 0 | 283.707 / 290.23 |
+
+No untouched same-host devel A/B is claimed: the original source already
+contains the rehearsal-selection correction. The original code gate: **TOTAL 514 FAIL 0 NOTRUN 14 STATUS INCOMPLETE
+(740s), OVERBUDGET 2, BUILD 0s**. Corrected full-matrix freeze:
+**TOTAL 516 FAIL 0 NOTRUN 14 STATUS INCOMPLETE (858s), OVERBUDGET 4,
+BUILD 0s**. Both durations include command scheduling, not their earlier
+29.752/29.744-second initial builds. They are different source freezes;
+this is not a controlled throughput A/B. D-P2 code gate: **TOTAL 516 FAIL 0 NOTRUN 14 STATUS INCOMPLETE (887s),
+OVERBUDGET 2, BUILD 0s**. D-P3 final driver-only code gate: **TOTAL 516 FAIL 0 NOTRUN 14 STATUS
+INCOMPLETE (739s), OVERBUDGET 4, BUILD 0s**. W160 target remains 1100 s;
+no budgets, slots or timeouts changed.
+
+Every non-PASS is classified:
+
+- **D-P1, driver:** original soak NOTRUN on both topologies because its
+  quiet-host guard detected the driver's parent daemons. Fixed at `b8f232f40`:
+  suspend only the owned fixture with restart permission, check mount users,
+  require clean stops, then restore readiness and mounts. The quiet-host guard
+  is unchanged. External-cluster ownership, missing permission, stop/restore
+  failures, original plugin failures and exceptions have negative controls.
+  The new regression fails against `194c7f3d2`; fixed driver passes. Both
+  corrected full runs' soaks PASS (1151.845/1105.593 s), all nine events:
+  five clean member stops, one SIGKILL, client restart, additions six/seven.
+  Each checks 512 current file slots and acknowledged appends on both mounts.
+- **D-P2, driver:** original and corrected three-member D5 FAIL before
+  workload (`Address already in use`). Main endpoints 18940–18942 overlapped
+  D5's requested 18940–18943. Five-member D5 used 19640–19643 and passed.
+  `dac2361ba` advances the four-port D5 range past advertised parent endpoints
+  and reserved ports, rejecting overflow. Regression covers three/five/sixteen
+  members and caller overlap; unchanged old driver fails exactly the
+  three-member collision assertion. Corrected D5 PASS in 282.985 s on ports 18944–18947, including 218/218 POSIX cases with expiry enabled.
+- **D-P3, driver (introduced by D-P1):** standalone `--plan` entered the
+  in-process loopback stop/start path, bypassing Runner's command dry-run
+  guard. The driver regression grew from 4.015 to 187.334 s. Fixed at
+  `dbebab983`: plan mode records only the plugin, with no lifecycle/readiness
+  effects. A mock-state negative control requires unchanged running/mounted
+  state and only one plugin call; it fails against `dac2361ba`. Final Linux
+  driver PASS in 4.02 s (from 187.334 s); the eight-job code gate PASSes
+  every command that ran (516 commands, 14 scope markers) in 739 s. It ran
+  after D-P2's closed gate, in a fresh source tree.
+- **Environment/scope:** `topology` NOTRUN in all complete runs: one physical
+  host is not three/five failure domains. POSIX extras pass four cases but
+  skip `mmap_write_read` with ENODEV; mmap coverage is not claimed. Soak's
+  RSS sub-verdict is NOTRUN by rehearsal design, not a passing memory gate.
+- **Code-gate limits:** 14 NOTRUN markers comprise absent external cluster
+  scripts; absent `valgrind/memcheck.h`; nine RDMA paths without usable IB;
+  the fault-build-only follower-bound subcase; and two deliberate missing-tool
+  selftest markers. The last two do not establish real tool absence.
+  The marked RDMA/fault subcases do not make their entire enclosing command
+  untested. None is converted to a product pass.
+
+Corrected full-run POSIX core passes 218/218 on each parent topology;
+two-client passes 68/68 each. D4 reports zero workload errors and zero bad
+payloads; 129,871/124,615 surviving load files, drain 113.1/103.3 s under the
+900 s limit. E4 verifies 6,000 small + six 32 MiB files, then 10,000 + ten,
+from cold readers and verifies the retained subset after deletion/reclaim.
+D1 verifies overwritten, truncated, unlinked and retained packed content
+before/after packing, compaction and cold restart. These are fixture-specific
+payload checks, not a verification of an arbitrary retained cluster.
+
+## Per-gate wall comparison with Task A
+
+`scripts/task_p_compare.py ARTIFACT_ROOT` reads Task A's corrected full-run
+table and these closed result files. Every wall appears below. Task A ran
+on AMD with overlapping matrices/other work; Task P is serial on intel2.
+D5 and soak have no Task A corrected-full baseline. D5's failed 0.723 s is
+setup refusal, not an expiry measurement. GC's Task A baseline was FAIL.
+
+| Gate | Task A 3 / 5 (s) | Task P 3 / 5 (s) | Doubled vs Task A |
+| --- | --- | --- | --- |
+| _identity-end | 0.253 / 0.305 | 0.721 / 0.717 | 3, 5 |
+| a13-node-addition | 56.708 / 58.557 | 48.636 / 28.401 | — |
+| append-failover | 484.524 / 359.030 | 742.203 / 701.914 | — |
+| b-checks | 67.013 / 72.759 | 67.300 / 73.997 | — |
+| b6-member-down | 81.204 / 79.947 | 78.014 / 83.003 | — |
+| c5-protocol-live | 3.057 / 2.565 | 4.372 / 4.049 | — |
+| d1-packing | 202.646 / 176.469 | 227.383 / 181.803 | — |
+| d3-efs-load | 899.292 / 624.489 | 601.968 / 523.350 | — |
+| d4-progress | 1079.868 / 1090.926 | 1189.930 / 1193.161 | — |
+| d5-expiry | — / — | 0.723 / 185.623 | — |
+| e1-manifest | 29.073 / 27.100 | 26.515 / 69.831 | 5 |
+| e2-client-stop | 8.497 / 9.575 | 11.641 / 13.124 | — |
+| e3-turnover | 63.599 / 62.964 | 84.384 / 74.830 | — |
+| e4-scale | 335.949 / 430.095 | 92.898 / 580.707 | — |
+| fragment-integrity | 10.629 / 8.724 | 10.846 / 10.773 | — |
+| gc-reclamation | 280.261 / 281.698 | 204.772 / 183.569 | — |
+| identity | 0.249 / 0.254 | 0.720 / 0.851 | 3, 5 |
+| k13-tickets | 41.962 / 41.690 | 38.270 / 45.578 | — |
+| k14-torn-read | 172.907 / 168.834 | 172.263 / 171.102 | — |
+| posix-2client | 39.013 / 35.066 | 23.785 / 99.299 | 5 |
+| posix-core | 28.602 / 35.424 | 29.745 / 60.803 | — |
+| posix-durability | 29.909 / 28.170 | 17.578 / 40.987 | — |
+| posix-extras | 30.551 / 22.950 | 32.200 / 60.326 | 5 |
+| soak | — / — | 1151.845 / 1105.593 | — |
+| topology | 0.293 / 0.249 | 0.457 / 0.723 | 5 |
+
+**Timing findings:** T-P1: five-member E1 is 2.577×; T-P2: five-member
+two-client POSIX is 2.832×; T-P3: five-member extras is 2.629× Task A's walls.
+T-P4: identity, end-identity and five-member topology also double, but remain
+sub-second. All are recorded findings;
+no cause or product regression is proven across these different hosts/loads.
+Append failover is slower (1.532×/1.955×) but below the doubling threshold.
+No assertion, deadline, budget or slot was relaxed. The `b8f232f40` code gate's
+four overbudget rows are K33 growth 138.2/135 s, K33 payload 55.5/45 s,
+K22 admission 39.9/30 s and KV LSM 10.2/10 s. Final `dbebab983`
+overbudget rows are K38 pressure 43.8/35 s, stop-progress 59.5/50 s, query
+delta 10.2/10 s and K22 admission 42.8/30 s. These remain timing findings,
+not hidden by a budget increase.
 
 ## F3 rehearsal ledger
 
-These cells describe one physical host, not the checklist's distinct-host
-release acceptance. Replace with the driver's exact F3 rows after completion.
+The two full-run ledgers are retained verbatim in `loopback-N/f3-row.md`.
+Their literal status is preserved below; a targeted correction does not
+rewrite a historical full run. These are **loopback members, one physical
+host**, not the distinct-host acceptance cells in the alpha checklist.
 
-| Evidence | loopback-3 | loopback-5 |
+| Evidence | Three members, `b8f232f40` full run | Five members, `b8f232f40` full run |
 | --- | --- | --- |
-| Candidate and profile | Identity PASS; physical failure domains NOTRUN (one host) | NOTRUN — queued |
-| Placement/capacity and decode | B-checks PASS; B6 pending | NOTRUN — queued |
-| POSIX and concurrent I/O | core/extras/two-client/durability PASS; remaining gates pending | NOTRUN — queued |
-| Packing/shared-fragment GC | NOTRUN | NOTRUN |
-| Enabled `.efs` under load | NOTRUN | NOTRUN |
-| Full payloads + orderly restart | NOTRUN | NOTRUN |
-| Scale/progress evidence (E4, D4) | D4 PASS; soak NOTRUN (D-P1); E4 pending | NOTRUN — queued |
+| Candidate and profile | NOTRUN (identity/end PASS; physical topology NOTRUN) | NOTRUN (identity/end PASS; physical topology NOTRUN) |
+| Placement/capacity and decode | PASS (B checks, integrity, B6, A13) | PASS (same gates) |
+| POSIX and concurrent I/O | PASS, with mmap skip above | PASS, with mmap skip above |
+| Packing/shared-fragment GC | **FAIL D-P2** (GC/D1 PASS; D5 port collision); targeted D5 correction PASS at `dac2361ba` | PASS (GC/D1/D5) |
+| Enabled `.efs` under load | PASS | PASS |
+| Full payloads + orderly restart | PASS | PASS |
+| Scale/progress evidence (E4, D4) | PASS (D4, rehearsal soak, E4); endurance RSS NOTRUN | PASS (same gates); endurance RSS NOTRUN |
 
-After closure, verify driver manifests, retain exact methods/build identities
-and full SHA256SUMS outside Git, then prune only inactive Task P bulk with
-`edelete` and record PRUNED.txt. Real-host TCP/RDMA and physical-node release
-acceptance remain outside this single-host rehearsal.
+## Retention and remaining scope
 
-## Continuation on current devel — October 27/28
+All raw evidence remains outside Git on intel2:
 
-The original freeze predates merged waves 21–22. Its controller stays unchanged
-and is allowed to finish both complete matrices and its code gate. The branch
-merged devel `e7e72e2674e892e3667c3dbdb1a53eb8911b644c` at `194c7f3d2`,
-including the K50 namespace retry fix. The user's authorization to use any
-available host was verified from the original Task P session; intel2 remains
-the assigned active host. Nuc's Task H fixtures were inspected read-only and
-left untouched. No new ORCD stage or duplicate host run is launched.
+| Stage | Absolute path | Closed manifest |
+| --- | --- | --- |
+| Original two matrices/code gate | `/home/maik/efs-artifacts/taskP-20261027/` | 1,146 files; `6bc3d8b1ece4448ab6a9ca4b2736e239d083611574516588c8ba0ce692b58c2f` |
+| D-P1 old/fixed regression | `/home/maik/efs-artifacts/taskP-20261027-driver-fix/` | 10 files; `7936d650b15987a197bd46f3ec34818d56011d6ab1b532bfc9cad93490ed30ce` |
+| Corrected full matrices/code gate | `/home/maik/efs-artifacts/taskP-20261027-current-b8f232f40/` | 1,247 files; `19680855d3dddd287a69bd18b5e40c90594de1305e71a10a6a0edd80566d2739` |
+| D-P2 negative/live/code gate | `/home/maik/efs-artifacts/taskP-20261027-d5-dac2361ba/` | 86 files; `199110e4ad9876c8b0bc130388f24f6cc95ac8f826cfe4ea8cad9dcafbfca734` |
+| D-P3 negative/final gate | `/home/maik/efs-artifacts/taskP-20261027-plan-dbebab983/` | 30 files; `46377a3dd632e6af80efe1fef53f6c9b03ceddf5852d69fa15ec7d8a9b985d2d` |
 
-### D-P1 — standalone soak overlaps the driver's own fixture
-
-**Driver defect, fixed in `b8f232f40`; live corrected matrix pending.** The
-original three-member soak returned NOTRUN in 0.322 s: `foreign_jobs()` found
-the qualification fixture's live `efsd` processes. This is not an environment
-skip to accept for Task P; the standalone soak starts its own cluster and
-needs the parent fixture quiesced. Its original result and detailed command
-log remain at `intel2:~/efs-artifacts/taskP-20261027/loopback-3/gates/soak/`.
-
-The driver now suspends only a driver-owned fixture, with explicit restart
-permission and an in-use mount check, before invoking the standalone plugin.
-It requires clean client/daemon stops; after the plugin it checks cluster
-readiness and remounts. Plugin FAIL/NOTRUN and exceptions remain failures or
-NOTRUN, and failed restoration never becomes PASS. An externally managed
-cluster is refused rather than stopped. The soak's process ownership check
-is unchanged: no PID/path allowlist or quiet-host bypass was added.
-
-New fast regression `tests/test_qualify_standalone.py` checks stopped-fixture
-isolation, refusal without ownership/permission or with a busy mount,
-plugin PASS/FAIL/NOTRUN preservation, stop failure, restore failure and
-exception restoration. On intel2 the negative-control driver `194c7f3d2`
-fails the new test; the fixed driver passes. Source/test copies and both logs
-remain in `~/efs-artifacts/taskP-20261027-driver-fix/` (open evidence, no closed
-manifest yet). The committed-source matrix plan, standalone regression and
-`test_soak_driver.py` also PASS on intel2. The complete Linux
-`test_qualify_driver.py` regression then PASSes on committed `b8f232f40`; its
-closed log is `taskP-20261027-driver-fix/full-driver-regression.log`.
-The full code gate and corrected live matrices remain queued.
-
-### Frozen corrected follow-up
-
-Exact source `b8f232f4023692a3d5161d12ed7e979bf66b29a9`, based on devel
-`e7e72e267`. Archive SHA256:
+Source archives: original SHA256
+`d4c6b0ba97fa56c4a125253f90a265fcf2f9cb795364f892e75b82fc9938d912`;
+corrected full-run SHA256
 `6c220c88df8e723da40a2abf7cea2e7cd9aeffac43c34fda09ef1d0cf40e98fd`.
-Private source is `intel2:~/efs-taskP-current-b8f232f40/src`; evidence is
-`~/efs-artifacts/taskP-20261027-current-b8f232f40/`. Detached screen
-`taskP-current-b8f232` waits for the original controller's FINISHED marker,
-then refuses to start if old mounts, `efsd`, make or gmake remain active.
-Its wait is bounded at 12 hours; a stopped or leaking original run blocks the
-follow-up with a retained error instead of killing anything or overlapping.
+Both completed source trees pass their tracked-file hash manifests; the
+corrected tree has 2,249 archived source files. All five driver manifests and the first three source manifests
+passed before cleanup. Their inactive source/build/store trees, regression staging
+and source archives have been pruned with `edelete`/PRUNED.txt, preserving
+text methods/results and closed hashes. D-P3's source manifest and final raw manifest also verify. Its source/build,
+payload/store tree and archives were pruned after the zero-failure gate.
+Final archive SHA256:
+`6493fda96ff1216a5be91dafc092d625427a07d12f8efbfcfc8101fbb4a140be`.
+Both cleanup guards refused any failed/unexpected gate scope, checked mounts
+and owned processes, and ran only after measurements closed. Final independent
+inspection found no Task P trees, processes, mounts or detached screens.
+The Mac branch/worktree remains for coordinator review; Task P is not
+merged into devel or pushed. Each cited outer manifest was verified with `sha256sum -c`.
+No active source was modified. No failed result was overwritten.
+The driver's final outer loopback teardown is cleanup, not an additional
+durability gate: its exit receipts are not separately retained. Checked
+orderly restart/unmount evidence comes from E1, E2 and D1; final absence
+checks establish cleanup only, not an extra durability proof.
 
-The launcher then executes the committed controller:
-
-```sh
-cd "$HOME/efs-taskP-current-b8f232f40/src"
-python3 scripts/task_p_rehearsal.py \
-  b8f232f4023692a3d5161d12ed7e979bf66b29a9 \
-  "$HOME/efs-artifacts/taskP-20261027-current-b8f232f40"
-```
-
-That controller builds and checks the frozen source, runs both full selected
-matrices serially, verifies their manifests and runs the eight-job code gate.
-Unique source/work/output roots keep original evidence intact. Build identity,
-full per-gate results, both final F3 ledgers, Task A wall comparison, classified
-failures and final hashes remain pending. No qualification PASS or task
-completion is claimed. No product fixes were made by Task P.
-
-At the continuation checkpoint nine three-member gates have closed: identity,
-B-checks, D4 and four POSIX suites PASS; physical topology NOTRUN; soak NOTRUN
-as D-P1 above. D4 took 1102.989 s. The partial Task A comparison flags no
-doubled completed gate so far. Append failover is actively creating/verifying
-records, not declared stalled. Five-member and both code gates remain queued.
-These partial observations do not replace final ledgers or closed evidence.
-
-Later checkpoint: append-failover PASS (747.245 s); the original three-member
-matrix has eight PASS and two NOTRUN results and is running K14 torn-read.
-The current-source queue is WAITING_FOR_ORIGINAL_CONTROLLER. No FAIL has
-closed at this checkpoint; uncompleted gates are not credited as passes.
-The partial comparison still has no doubled completed gate. These are
-progress markers, not the final task verdict.
+Physical-host TCP/RDMA acceptance, four physical members, endurance RSS and
+power-loss qualification remain NOTRUN. A later devel/release candidate needs
+its own integrated acceptance. User-authorized SIGKILL in the rehearsal is
+not power-loss proof. No changes to devops/cluster repositories are needed.
