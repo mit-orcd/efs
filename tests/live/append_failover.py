@@ -35,6 +35,8 @@ Accounting rule (K15/K29, account() below; tests/test_append_failover_accounting
     (the reservation may never have applied, or session/last-close cleanup
     resolved it); a failure with no abandon (refused before reserving)
     leaves none. Accounted failures and holes are reported separately.
+  * Availability is separate: every non-injected write/fsync/close error
+    fails the overall gate, even if its absent record and hole are explained.
   * MISMATCH: an acknowledged record missing, duplicated, torn, corrupt or
     out of order; a failed write's record visible; an unknown block; more
     holes than the abandons explain or fewer than the retirements require;
@@ -189,10 +191,28 @@ def account(failed, lost, abandons):
                 holes_min=holes_min, holes_max=holes_max, mismatches=mismatches,
                 ok=not mismatches)
 
-def writer_main(index, path, count, fsync_every, q):
+def availability(accounting, results):
+    """Explained holes preserve integrity, never excuse an application error.
+
+    Injected reserve losses deliberately fail one write each. Every other
+    failed write, fsync error or short write fails the availability gate.
+    """
+    return (accounting['accounted_failures'] == 0 and
+            sum(r['error_count'] for r in results) == accounting['failed_writes'])
+
+
+def writer_main(index, path, count, fsync_every, q, progress_dir=None):
     acked, failed, lat, errors = [], [], [], []
     fd = os.open(path, os.O_WRONLY | os.O_APPEND)
-    t0 = time.monotonic()
+    t0 = checkpoint = time.monotonic()
+    progress = Path(progress_dir) / f'writer-{index}-progress.json' if progress_dir else None
+    def note(phase, done):
+        if progress:
+            tmp = progress.with_suffix('.tmp')
+            tmp.write_text(json.dumps(dict(writer=index,phase=phase,completed=done,
+                acknowledged=len(acked),failed=len(failed),wall=time.time(),elapsed_s=time.monotonic()-t0)))
+            tmp.replace(progress)
+    note('writes',0)
     for seq in range(count):
         data = body(index, seq)
         b = time.monotonic()
@@ -207,6 +227,9 @@ def writer_main(index, path, count, fsync_every, q):
             errors.append(f'write seq={seq} errno={e.errno}')
             failed.append(seq)
         lat.append(time.monotonic() - b)
+        if time.monotonic()-checkpoint >= 10:
+            note('writes',seq+1)
+            checkpoint=time.monotonic()
         if fsync_every and (seq + 1) % fsync_every == 0:
             b = time.monotonic()
             try:
@@ -214,6 +237,7 @@ def writer_main(index, path, count, fsync_every, q):
             except OSError as e:
                 errors.append(f'mid fsync seq={seq} errno={e.errno} s={time.monotonic()-b:.3f}')
     writes = time.monotonic() - t0
+    note('final-fsync',count)
     b = time.monotonic()
     fsync_rc = 0
     try:
@@ -222,7 +246,13 @@ def writer_main(index, path, count, fsync_every, q):
         fsync_rc = e.errno
         errors.append(f'final fsync errno={e.errno}')
     fsync_s = time.monotonic() - b
-    os.close(fd)
+    try:
+        os.close(fd)
+    except OSError as e:
+        errors.append(f'close errno={e.errno}')
+    note('done',count)
+    if progress_dir:
+        (Path(progress_dir)/f'writer-{index}-latencies.json').write_text(json.dumps(lat))
     lat.sort()
     pct = {str(p): lat[min(len(lat) - 1, int(p / 100 * len(lat)))] for p in (50, 99, 100)} if lat else {}
     q.put(dict(writer=index, acked=acked, failed=failed, write_seconds=writes,
@@ -299,20 +329,36 @@ class Cluster:
 
     def unmount(self, name):
         m = self.root / name
-        subprocess.run([str(self.rel / 'scripts/client.sh'), 'stop', str(m)],
-                       capture_output=True, timeout=180)
-        p = self.clients.pop(name, None)
+        result = subprocess.run([str(self.rel / 'scripts/client.sh'), 'stop', str(m)],
+                                capture_output=True, text=True, timeout=660)
+        with (self.root/'logs'/'clean-stops.log').open('a') as log:
+            log.write(f'client {name} rc={result.returncode}\n{result.stdout}{result.stderr}')
+        if result.returncode or os.path.ismount(m):
+            raise RuntimeError(f'client {name} clean stop failed; retained: {result.stdout}{result.stderr}')
+        p = self.clients.get(name)
         if p:
-            try:
-                p.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                p.kill(); p.wait()
+            p.wait(timeout=30)
+            if p.returncode != 0:
+                raise RuntimeError(f'client {name} exited {p.returncode}, not a clean cold restart')
+            self.clients.pop(name)
 
     def stop_all(self):
         for name in list(self.clients):
             self.unmount(name)
         for i in list(self.procs):
-            self.kill_node(i, signal.SIGTERM)
+            p = self.procs[i]
+            if p.poll() is None:
+                p.send_signal(signal.SIGTERM)
+                p.wait(timeout=90)
+            from importlib.util import spec_from_file_location, module_from_spec
+            spec=spec_from_file_location('task_n_server_processes',self.rel/'scripts/server_processes.py')
+            owner=module_from_spec(spec);spec.loader.exec_module(owner)
+            record=owner.read_exit_record(self.root/f'n{i}'/'log/efsd.exit')
+            outcome,message=owner.classify(p.pid,record)
+            with (self.root/'logs'/'clean-stops.log').open('a') as log:
+                log.write(message+'\n')
+            if p.returncode != 0 or outcome != 'orderly':
+                raise RuntimeError(f'node {i}: {message}; stores retained')
         self.procs.clear()
 
     def status(self, i):
@@ -353,6 +399,7 @@ def failover_loop(c, a, stop_evt, events):
             if node is None:
                 ev['skipped'] = 'no leader observed'
             elif a.failover == 'step-down':
+                ev['old_term'] = c.status(node)[group][2]
                 r = c.mgmt('raft-step-down', c.addr(node), group)
                 ev['rc'] = r.returncode
                 ev['out'] = (r.stdout + r.stderr).strip()[-200:]
@@ -364,6 +411,8 @@ def failover_loop(c, a, stop_evt, events):
                 ev['restarted'] = node
             time.sleep(3)
             ev['new_leader'] = c.leader_node(group)
+            if ev['new_leader'] is not None:
+                ev['new_term'] = c.status(ev['new_leader'])[group][2]
             events.append(ev)
             print('failover', json.dumps(ev), flush=True)
         stop_evt.wait(a.interval)
@@ -381,6 +430,21 @@ def grep_count(path, pattern):
     except FileNotFoundError:
         pass
     return n, first
+
+def formation_root(c):
+    """Raw management reads expose NOT_PRIMARY; follow one valid live hint.
+
+    This is readiness discovery, not replay of a failed application write.
+    A second redirect or any refusal remains not-ready for the existing
+    bounded formation loop. Never infer formation from process exit alone.
+    """
+    result=c.mgmt('raft-getattr',c.addr(1),1)
+    if result.returncode==0 and re.search(r'\bstatus=7\b',result.stdout):
+        hint=re.search(r'\bprimary=(\d+)\b',result.stdout)
+        if hint and int(hint.group(1)) in (2,3):
+            result=c.mgmt('raft-getattr',c.addr(int(hint.group(1))),1)
+    return result
+
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -429,8 +493,8 @@ def main():
             time.sleep(1)
         # K33: the three members form and create the root themselves.
         for _ in range(120):
-            r = c.mgmt('raft-getattr', c.addr(1), 1)
-            if r.returncode == 0:
+            r = formation_root(c)
+            if r.returncode == 0 and re.search(r'\bstatus=0\b',r.stdout):
                 break
             time.sleep(1)
         else:
@@ -448,7 +512,7 @@ def main():
         nw = a.writers + a.peer_writers
         per = a.records // nw
         ws = [mp.Process(target=writer_main,
-                         args=(w, str(path if w < a.writers else peer / path.name), per, a.fsync_every, q))
+                         args=(w, str(path if w < a.writers else peer / path.name), per, a.fsync_every, q, str(root)))
               for w in range(nw)]
         events = []
         import threading
@@ -457,14 +521,24 @@ def main():
         for w in ws:
             w.start()
         ft = None
+        failover_errors = []
+        def checked_failover():
+            try:
+                failover_loop(c,a,stop_evt,events)
+            except BaseException as exc:
+                failover_errors.append(repr(exc))
+                print('failover controller failed:',repr(exc),flush=True)
         if a.failover != 'none':
-            ft = threading.Thread(target=failover_loop, args=(c, a, stop_evt, events), daemon=True)
+            ft = threading.Thread(target=checked_failover, daemon=True)
             ft.start()
         results = []
         while len(results) < nw:
             try:
                 results.append(q.get(timeout=30))
             except Exception:
+                dead=[dict(pid=w.pid,exit=w.exitcode) for w in ws if w.exitcode not in (None,0)]
+                if dead:
+                    raise RuntimeError(f'writer exited without a result: {dead}')
                 el = time.monotonic() - t0
                 try:
                     sz = path.stat().st_size // REC
@@ -486,15 +560,25 @@ def main():
                              dict(acked=len(r['acked']), failed=len(r['failed'])) for r in results]
         report['wall_seconds'] = wall
         report['events'] = events
+        report['failover_errors'] = failover_errors
+        report['checks']['failover_exercised'] = (a.failover == 'none' or
+            (bool(events) and not failover_errors and not ft.is_alive() and all(
+                e.get('rc') == 0 and 'rc=0' in e.get('out','') and
+                e.get('new_term',0) > e.get('old_term',0)
+                if a.failover == 'step-down' else 'restarted' in e
+                for e in events)))
         fs = [r['final_fsync_seconds'] for r in results]
         report['checks']['final_fsync_zero'] = all(r['final_fsync_errno'] == 0 for r in results)
         report['checks']['final_fsync_max_s'] = max(fs)
         report['checks']['final_fsync_within_bound'] = max(fs) <= a.report_bound
         flog = root / 'logs' / 'fuse-mnt.log'
-        n67, first67 = grep_count(flog, r'inode-rpc: retry type=67 .*why=recv')
+        client_logs = [root/'logs'/f'fuse-{name}.log' for name in ('mnt','peer')]
+        retries = [grep_count(log,r'inode-rpc: retry type=67 .*why=recv') for log in client_logs]
+        n67 = sum(count for count,_lines in retries)
+        first67 = [dict(client=log.name,line=line) for log,(_count,lines) in zip(client_logs,retries) for line in lines][:10]
         report['checks']['report_recv_timeouts'] = n67
         report['checks']['report_recv_timeout_lines'] = first67
-        ftext = flog.read_text(errors='replace') if flog.exists() else ''
+        ftext = '\n'.join(log.read_text(errors='replace') for log in client_logs if log.exists())
         slow67, over = [], []
         for stamp, us in re.findall(r'^(\S+)Z inode-rpc: slow-ok type=67 .*us=(\d+)', ftext, re.M):
             end = calendar.timegm(time.strptime(stamp[:19], '%Y-%m-%dT%H:%M:%S')) + float('0' + stamp[19:])
@@ -533,6 +617,7 @@ def main():
         report['checks']['accounting'] = acct
         holes, holes_max = acct['holes_min'], acct['holes_max']
         ok_l = acct['ok']
+        report['checks']['availability'] = availability(acct,results)
         if a.lose_reserve_every:
             # Each injected loss follows a committed reservation; the frontier
             # must never strand the peer session (W64).
@@ -557,8 +642,9 @@ def main():
         report['checks']['views_identical'] = same
         all_fsync_ok = report['checks']['final_fsync_zero'] and report['checks']['final_fsync_within_bound']
         report['verdict'] = 'PASS' if (ok_w and ok_p and ok_c and same and ok_l and all_fsync_ok and n67 == 0
-                                       and report_lat_ok) else 'FAIL'
-        # Accounted failures never fail the integrity verdict; they are listed.
+                                       and report_lat_ok and report['checks']['availability']
+                                       and report['checks']['failover_exercised']) else 'FAIL'
+        # Accounted failures do not fail integrity, but do fail availability.
         report['integrity'] = 'PASS' if (ok_w and ok_p and ok_c and same and acct['ok']) else 'FAIL'
         report['accounted_failures'] = acct['accounted_failures']
         rc = 0 if report['verdict'] == 'PASS' else 1
@@ -566,14 +652,17 @@ def main():
         report['exception'] = repr(e)
         raise
     finally:
+        try:
+            c.stop_all()
+        except Exception as e:
+            report['cleanup_error']=repr(e)
+            report['verdict']='FAIL'
+            rc=1
+            print('stop failed, fixture retained:',e,flush=True)
         report['finished'] = time.time()
         out.write_text(json.dumps(report, indent=2, default=str))
         print(json.dumps({k: report.get(k) for k in ('label', 'verdict', 'integrity', 'accounted_failures',
                                                      'wall_seconds', 'checks')}, indent=1, default=str)[:6000], flush=True)
-        try:
-            c.stop_all()
-        except Exception as e:
-            print('stop failed', e)
     sys.exit(rc)
 
 if __name__ == '__main__':
