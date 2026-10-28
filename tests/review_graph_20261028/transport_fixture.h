@@ -89,3 +89,6 @@ static void *do_fsync(void *arg)
     return NULL;
 }
 
+
+int efs_client_put_terminal(efs_ino_t ino,uint64_t gen,uint32_t ci,uint64_t obj)
+{ (void)ino;(void)gen;(void)ci;(void)obj;return EFS_ERR_BUSY; }

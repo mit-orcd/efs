@@ -49,6 +49,13 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **p, uint32_t *n)
     *type = EFS_MSG_DATA_COMMIT_REPLY; *p = r; *n = sizeof(*r);
     return 0;
 }
+static int terminal_rc = EFS_ERR_BUSY, terminal_calls;
+int efs_client_put_terminal(efs_ino_t ino, uint64_t gen, uint32_t ci, uint64_t object)
+{
+    assert(ino && gen && object); (void)ci;
+    terminal_calls++;
+    return terminal_rc;
+}
 static int marks, mark_rc = EFS_OK, publish_during_mark;
 static efs_ino_t mark_ino; static uint32_t mark_ci, mark_fi; static efs_node_id_t mark_node;
 int efs_client_rpc_degraded_mark(efs_ino_t ino, uint64_t inode_gen, uint64_t object,
@@ -136,6 +143,23 @@ int main(void)
     assert(live()==1 && stripe_find(950,0,950000)->published);
     mark_rc=EFS_OK;
     reset(); assert(efs_client_data_commit(950)==EFS_OK && marks==1 && !live());
+    /* A replay's abandoned object: local done/missing state does not
+     * authorize retirement. A durable terminal ticket AND a new absence
+     * check do; a present mapping still needs its degraded mark. */
+    assert(put_unpublished(951,0,1,2,3,7)==EFS_OK);
+    down[3]=1;mark_rc=EFS_ERR_NOT_FOUND;terminal_rc=EFS_ERR_BUSY;
+    reset();assert(efs_client_data_commit(951)==EFS_ERR_IO && live()==1 && marks==1);
+    terminal_rc=EFS_ERR_NET;
+    reset();assert(efs_client_data_commit(951)==EFS_ERR_IO && live()==1 && marks==1);
+    terminal_rc=EFS_OK;
+    reset();assert(efs_client_data_commit(951)==EFS_OK && !live() && marks==2);
+    assert(put_unpublished(952,0,1,2,3,7)==EFS_OK);
+    struct efs_put_ticket wrong_ticket={.ino=952,.inode_gen=6,.object=952000};
+    efs_client_stripe_closed(&wrong_ticket);
+    assert(!stripe_find(952,0,952000)->closed);
+    wrong_ticket.inode_gen=5;efs_client_stripe_closed(&wrong_ticket);
+    reset();assert(efs_client_data_commit(952)==EFS_OK && !live() && marks==1);
+    terminal_rc=EFS_ERR_BUSY;mark_rc=EFS_OK;heal();
     /* Nothing written: nothing to prove, no COMMIT. */
     reset(); assert(efs_client_data_commit(9) == EFS_OK && !commits[1]);
     assert(efs_client_data_commit(0) == EFS_ERR_INVAL);
