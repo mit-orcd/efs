@@ -7405,11 +7405,15 @@ ready:
  * of CPU count and whether the launcher was used. Per-core glibc defaults
  * retained tens of MiB of free holes across 74+ arenas under fixed-set
  * rewrites on large hosts. This is process policy, never a mode switch.
- * Other allocators do not expose glibc's per-core arena policy. */
+ * Keep glibc's initial large-allocation threshold fixed as well: otherwise
+ * freeing a large transfer can raise it to MiB, putting later transient
+ * frames into retained heap holes despite the bounded arena count. This
+ * preserves malloc/free ownership while letting large buffers return their
+ * pages on free. Other allocators do not expose these glibc policies. */
 static int fuse_allocator_init(void)
 {
 #ifdef __GLIBC__
-    if (!mallopt(M_ARENA_MAX, 4))
+    if (!mallopt(M_ARENA_MAX, 4) || !mallopt(M_MMAP_THRESHOLD, 128 * 1024))
         return -1;
 #endif
     return 0;
@@ -7419,7 +7423,7 @@ int main(int argc, char **argv)
 {
     /* Before transport, client pools or FUSE start any worker threads. */
     if (fuse_allocator_init()) {
-        fprintf(stderr, "efs-fuse: cannot establish allocator arena policy\n");
+        fprintf(stderr, "efs-fuse: cannot establish allocator policy\n");
         return 1;
     }
     if (argc==2 && !strcmp(argv[1],"--help-fuse")) {
