@@ -4,9 +4,10 @@ set -eu
 root=${1:?private root};prior=${2:?closed campaign};art=${3:?fresh evidence};driver_commit=${4:?driver commit}
 [[ $(hostname -s) == xorinox && $root == "$HOME/efs-task-af/run-3" ]] || exit 2
 [[ $(cat "$prior/stage") == FINISHED ]] || exit 77
-gate=$(cat "$prior/gate-exit");[[ $gate == 0 || $gate == 3 ]] || exit 77
+gate=$(cat "$prior/gate-exit");[[ $gate == 0 || $gate == 1 || $gate == 3 ]] || exit 77
 mkdir "$art";exec >"$art/controller.log" 2>&1
 trap 'rc=$?;echo "$rc" > "$art/controller-exit"' EXIT
+echo "$gate" > "$art/prior-gate-exit" # diagnostic does not override a failed gate
 mkdir "$root/confirm"
 cp -a "$root/measure/src" "$root/confirm/src"
 cp "$(dirname "$0")/af_measure.py" "$root/confirm/src/scripts/af_measure.py"
