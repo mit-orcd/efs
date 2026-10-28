@@ -335,5 +335,8 @@ load +1.21%, foreground +0.10%, servers <=1.63%, 2080 exact, pack errors 0/0,
 drain 92.9 s. Overall pair FAIL. Fresh allocator observation is ACTIVE before
 any further lifetime-policy change.
 AMD’s quiet prerequisite expired with no store touched; cleanup/qualification
-NOTRUN. First two node9900 diagnostic captures are present; comparison is pending.
+NOTRUN. All six node9900 diagnostic captures completed: four arenas each,
+foreground 40→60 allocated +145344/free +104512 bytes, mmap unchanged;
+foreground RSS +0.06%. This did not reproduce the prior failure and is not
+qualification. Mapping lifetime/residency observation follows.
 Old pre-action waiters were superseded without running tests.
