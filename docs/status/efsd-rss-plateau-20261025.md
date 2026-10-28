@@ -318,9 +318,11 @@ and safe cleanup. [Exact evidence and limits](task-i-20261026.md).
 
 `47ca08eaf` node9900 RDMA also FAILs RSS: load +11.53%, foreground +7.51%,
 servers flat, all 2080 payloads exact, pack errors 0/0, drain 18.4 s;
-TCP remains active. Candidate `d7e265746` fixes glibc's large-allocation
+TCP also FAILs load RSS +14.05% (foreground +0.02%, servers <=1.98%),
+2080 exact, pack errors 0/0, drain 81.3 s. Candidate `d7e265746` fixes glibc's large-allocation
 threshold at its initial 128 KiB: native 24-worker scratch test releases
 all 96 MiB of large mappings with ~0.5 MiB heap, versus ~96 MiB free heap
 retained by the old four-arena-only control. This is mechanism evidence,
 not a live qualification. Both new hardware and AMD continuations use
-`d7e265746`; old pre-action waiters were superseded without running tests.
+`d7e265746`; hardware full gate is ACTIVE, AMD remains WAIT_QUIET.
+Old pre-action waiters were superseded without running tests.

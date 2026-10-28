@@ -895,9 +895,10 @@ round says which physical or software limiter it hit.
   `47ca08eaf` xorinox gate 518 / 0 FAIL / 13 NOTRUN, hour FAIL stored
   data +~56.8%; RSS PASS, 2080 exact and zero packer errors. Historical
   xorinox measurements were shared-client, not proven quiet. Node9900
-  `47ca08eaf` RDMA FAIL RSS, TCP active. Reclaim-fairness `6550b678d` and
+  `47ca08eaf` RDMA FAIL RSS; TCP FAIL load RSS +14.05%, 2080 exact,
+  pack errors 0/0, drain 81.3 s. Reclaim-fairness `6550b678d` and
   allocator lifetime `d7e265746` have native unit evidence, new full gates/
-  hours owed (`d7e265746` queued).
+  hours owed (`d7e265746` hardware gate ACTIVE).
   AMD native default RoCE PASS 9/9; full gate FAIL 3/520, hour NOTRUN;
   fixed-harness/cleanup continuation `d7e265746` waits for W123. Original
   failures preserved. Final qualification INCOMPLETE.

@@ -1626,9 +1626,10 @@ data (+~56.8%); RSS PASS, 2080 exact, pack errors 0/0, drain 73.5 s.
 Earlier xorinox quiet claims corrected: an unobserved foreign-UID client
 predates all runs. New truncate-GC fairness product `6550b678d` yields and
 resumes; native build/unit PASS, hour owed. Node9900 `47ca08eaf` RDMA FAIL RSS
-(+11.53% load, +7.51% foreground), TCP active. Candidate `d7e265746` fixes
+(+11.53% load, +7.51% foreground); TCP FAIL load RSS +14.05%, with
+2080 exact, pack errors 0/0, drain 81.3 s. Candidate `d7e265746` fixes
 large-allocation policy; native positive/negative controls PASS, new hardware
-full gate and native RDMA/hours queued. AMD `5f07151c2` default-RoCE native PASS 9/9; full
+full gate ACTIVE, native RDMA/hours owed. AMD `5f07151c2` default-RoCE native PASS 9/9; full
 gate FAIL 3/520 (two busy unmounts, expected-abort timeout), hour NOTRUN.
 Harness fixes committed; `d7e265746` waits for W123, then preserves and
 cleanly retires its own failed synthetic fixture before new qualification.
