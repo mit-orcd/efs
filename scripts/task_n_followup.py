@@ -5,7 +5,7 @@ Run after the original controller exits, with the corrected measurement files
 already staged and an untouched devel 063154e0e export at WORK/base. Never
 replaces a prior case, never overlaps the code gate with append workloads.
 """
-import argparse,json,os,shutil,subprocess,time
+import argparse,json,os,shutil,subprocess,sys,time
 from pathlib import Path
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('--work',type=Path,required=True);p.add_argument('--out',type=Path,required=True)
 a=p.parse_args();assert os.uname().nodename.split('.')[0]=='intel1'
@@ -61,3 +61,5 @@ except BaseException as exc:
     (a.out/'followup-failure.txt').write_text(repr(exc)+'\n');raise
 finally:
     (a.out/'followup-stage').write_text('FINISHED\n')
+
+sys.exit(1 if any(r["exit"] not in ((0,3) if r["label"].endswith("gate") else (0,)) for r in rows) else (3 if any(r["exit"]==3 for r in rows) else 0))
