@@ -29,4 +29,13 @@ with tempfile.TemporaryDirectory(prefix='efs-host-guard-') as d:
  # A known process with missing metadata is not silently classified quiet.
  (p/'15/cmdline').unlink();found=foreign_jobs(src,proc_root=p)
  assert any(x['pid']==15 and 'unreadable' in x.get('reason','') for x in found)
+ # A proven zombie is not running work; empty live/unknown processes still
+ # block quiet, including when owned-looking path metadata has disappeared.
+ for pid,state in ((20,'Z'),(21,'S'),(22,None)):
+  proc(pid,'efs-fuse',[])
+  if state:(p/str(pid)/'stat').write_text(f'{pid} (efs-fuse) {state} 1 0')
+ found={x['pid'] for x in foreign_jobs(src,proc_root=p)}
+ assert 20 not in found and {21,22} <= found
+ found={x['pid'] for x in foreign_jobs(src,proc_root=p,current_uid=other_uid)}
+ assert 20 not in found and {21,22} <= found
 print('Task I host guard: all-user EFS/traffic/build discovery, own-source UID proof, unknown metadata refuses quiet PASS')

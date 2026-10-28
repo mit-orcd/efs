@@ -51,6 +51,17 @@ def foreign_jobs(source=None, *, proc_root=Path('/proc'), current_uid=None):
                 if proc.exists() and (known or python):
                     found.append(dict(pid=int(proc.name),uid=uid,comm=comm,reason='command unreadable'))
                 continue
+            if not any(args):
+                # An observed zombie cannot execute work. During teardown
+                # cmdline/cwd disappear before the parent reaps it. Never
+                # infer this from an empty/unreadable command alone: running
+                # or unknown states stay foreign, regardless of UID.
+                try:
+                    state = (proc/'stat').read_text().rsplit(')', 1)[1].split()[0]
+                except (OSError, ValueError, IndexError):
+                    state = None
+                if state == 'Z':
+                    continue
             runner = any(Path(x).name == 'make_test_summary.sh' for x in args[1:3])
             project = any('/efs/' in x or '/efs-' in x or '/efs_' in x for x in args[1:])
             traffic = python and (project or any('/tests/' in x or x.startswith('tests/') or

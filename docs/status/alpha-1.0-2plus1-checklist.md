@@ -900,7 +900,8 @@ round says which physical or software limiter it hit.
   allocator lifetime `d7e265746` have native unit evidence, new full gates/
   hours owed (`d7e265746` hardware gate FAIL: four LSan runtime
   failures, independently reproduced; corrected `00ccd12f3` gate 524 total /
-  0 FAIL / 18 NOTRUN, native RDMA 9/9 PASS, RDMA hour ACTIVE, TCP owed).
+  0 FAIL / 18 NOTRUN, native RDMA 9/9 PASS; hour FAIL foreground RSS
+  +13.04% and drain, 2080 exact, pack errors 0/0; TCP ACTIVE).
   AMD native default RoCE PASS 9/9; full gate FAIL 3/520, hour NOTRUN;
   fixed-harness/cleanup continuation `d7e265746` waits for W123. Original
   failures preserved. Final qualification INCOMPLETE.

@@ -328,6 +328,9 @@ not a live qualification. Both new hardware and AMD continuations use
 by an independent clean probe. Corrected harnesses retain functional/negative
 controls and report unavailable sanitizer coverage NOTRUN; fresh gate and hours
 remain owed. `00ccd12f3` full gate is 524 total / 0 FAIL / 18 NOTRUN,
-separate mlx5_0 RDMA 9/9 PASS; unchanged RDMA hour ACTIVE, TCP follows.
+separate mlx5_0 RDMA 9/9 PASS; hour FAIL foreground RSS +13.04%
+and drain, load +1.08% and servers plateau. All 2080 exact, pack errors 0/0;
+index pending never remains zero twice during drain. TCP ACTIVE; fresh
+allocator observation follows before any further lifetime-policy change.
 AMD remains WAIT_QUIET.
 Old pre-action waiters were superseded without running tests.
