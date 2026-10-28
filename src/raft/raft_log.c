@@ -15,29 +15,17 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static void put_u32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
 
 static void put_u64(uint8_t *p, uint64_t v)
 {
-    put_u32(p, (uint32_t)(v >> 32));
-    put_u32(p + 4, (uint32_t)v);
+    efs_store_be32(p, (uint32_t)(v >> 32));
+    efs_store_be32(p + 4, (uint32_t)v);
 }
 
-static uint32_t get_u32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static uint64_t get_u64(const uint8_t *p)
 {
-    return ((uint64_t)get_u32(p) << 32) | (uint64_t)get_u32(p + 4);
+    return ((uint64_t)efs_load_be32(p) << 32) | (uint64_t)efs_load_be32(p + 4);
 }
 
 /* Read evicted commands from their checked original frame, under d->mu.
@@ -55,10 +43,10 @@ int raft_log_read_command(struct raft_disk_group *g,uint32_t slot,int fd,uint8_t
         if(n<=0)return EFS_ERR_IO;
         done+=(uint32_t)n;
     }
-    if(get_u32(record+4)!=size-8 || efs_crc32(record+8,size-8)!=get_u32(record) ||
-       record[8]!=RAFT_REC_ENTRY || get_u32(record+9)!=g->group ||
+    if(efs_load_be32(record+4)!=size-8 || efs_crc32(record+8,size-8)!=efs_load_be32(record) ||
+       record[8]!=RAFT_REC_ENTRY || efs_load_be32(record+9)!=g->group ||
        get_u64(record+13)!=g->log_base+slot+1 || get_u64(record+21)!=e.term ||
-       get_u32(record+29)!=e.clen)return EFS_ERR_PROTO;
+       efs_load_be32(record+29)!=e.clen)return EFS_ERR_PROTO;
     memcpy(out,record+33,e.clen);return EFS_OK;
 }
 
@@ -72,13 +60,13 @@ static uint32_t rec_encode(uint8_t *p, uint8_t type,
     uint32_t off = 8;
 
     p[off++] = type;
-    put_u32(p + off, group);
+    efs_store_be32(p + off, group);
     off += 4;
     switch (type) {
     case RAFT_REC_HARD:
         put_u64(p + off, a);
         off += 8;
-        put_u32(p + off, (uint32_t)b);
+        efs_store_be32(p + off, (uint32_t)b);
         off += 4;
         break;
     case RAFT_REC_ENTRY:
@@ -88,7 +76,7 @@ static uint32_t rec_encode(uint8_t *p, uint8_t type,
         off += 8;
         put_u64(p + off, b);
         off += 8;
-        put_u32(p + off, clen);
+        efs_store_be32(p + off, clen);
         off += 4;
         if (clen) {
             memcpy(p + off, cmd, clen);
@@ -115,9 +103,9 @@ static uint32_t rec_encode(uint8_t *p, uint8_t type,
         }
         break;
     case RAFT_REC_CFG:
-        put_u32(p + off, (uint32_t)a);
+        efs_store_be32(p + off, (uint32_t)a);
         off += 4;
-        put_u32(p + off, (uint32_t)b);
+        efs_store_be32(p + off, (uint32_t)b);
         off += 4;
         break;
     default:
@@ -125,8 +113,8 @@ static uint32_t rec_encode(uint8_t *p, uint8_t type,
     }
     if (off > RAFT_REC_MAX)
         return 0;
-    put_u32(p, record_crc ? *record_crc : efs_crc32(p + 8, off - 8));
-    put_u32(p + 4, off - 8);
+    efs_store_be32(p, record_crc ? *record_crc : efs_crc32(p + 8, off - 8));
+    efs_store_be32(p + 4, off - 8);
     return off;
 }
 
@@ -303,7 +291,7 @@ int raft_log_append(struct efs_raft_disk *d, uint8_t type,
     /* Capture before log_sync_locked can drop d->mu and another writer
      * replaces d->rec. Commands are immutable until removed from the log. */
     if (record_crc)
-        *record_crc = get_u32(d->rec);
+        *record_crc = efs_load_be32(d->rec);
     if(record_end)*record_end=d->base+d->bytes;
     /* Count new append requests, not old records copied during rotation. */
     if (BO_ON() && type == RAFT_REC_ENTRY)
@@ -387,7 +375,7 @@ static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len, u
     if (len < 5)
         return EFS_ERR_PROTO;
     type = p[off++];
-    group = get_u32(p + off);
+    group = efs_load_be32(p + off);
     off += 4;
     if (group >= RAFT_DISK_MAX_GROUPS)
         return EFS_ERR_PROTO;
@@ -399,7 +387,7 @@ static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len, u
         if (len - off != 12)
             return EFS_ERR_PROTO;
         g->term = get_u64(p + off);
-        g->voted_for = (int32_t)get_u32(p + off + 8);
+        g->voted_for = (int32_t)efs_load_be32(p + off + 8);
         return EFS_OK;
     case RAFT_REC_ENTRY: {
         uint64_t index, term;
@@ -409,7 +397,7 @@ static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len, u
             return EFS_ERR_PROTO;
         index = get_u64(p + off);
         term = get_u64(p + off + 8);
-        clen = get_u32(p + off + 16);
+        clen = efs_load_be32(p + off + 16);
         off += 20;
         if (clen > RAFT_CMD_MAX || len - off != clen)
             return EFS_ERR_PROTO;
@@ -436,8 +424,8 @@ static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len, u
     case RAFT_REC_CFG:
         if (len - off != 8)
             return EFS_ERR_PROTO;
-        g->cfg_old = get_u32(p + off);
-        g->cfg_new = get_u32(p + off + 4);
+        g->cfg_old = efs_load_be32(p + off);
+        g->cfg_new = efs_load_be32(p + off + 4);
         g->have_cfg = 1;
         return EFS_OK;
     default:
@@ -474,8 +462,8 @@ int raft_log_replay(struct efs_raft_disk *d)
     int rc = EFS_OK;
 
     if (d->bytes == 0) {
-        put_u32(hdr, RAFT_DISK_MAGIC);
-        put_u32(hdr + 4, RAFT_DISK_VERSION);
+        efs_store_be32(hdr, RAFT_DISK_MAGIC);
+        efs_store_be32(hdr + 4, RAFT_DISK_VERSION);
         rc = write_all(d->fd, hdr, sizeof(hdr), 0);
         if (rc != EFS_OK)
             return rc;
@@ -488,7 +476,7 @@ int raft_log_replay(struct efs_raft_disk *d)
     rc = replay_read(&reader, hdr, sizeof(hdr), 0);
     if (rc != EFS_OK)
         return rc == EFS_ERR_NOT_FOUND ? EFS_ERR_PROTO : rc;
-    if (get_u32(hdr) != RAFT_DISK_MAGIC || get_u32(hdr + 4) != RAFT_DISK_VERSION)
+    if (efs_load_be32(hdr) != RAFT_DISK_MAGIC || efs_load_be32(hdr + 4) != RAFT_DISK_VERSION)
         return EFS_ERR_PROTO;
     while (off + 8 <= d->bytes) {
         uint8_t fr[8];
@@ -499,8 +487,8 @@ int raft_log_replay(struct efs_raft_disk *d)
             if (rc != EFS_ERR_NOT_FOUND) { free(buf); return rc; }
             break;
         }
-        crc = get_u32(fr);
-        paylen = get_u32(fr + 4);
+        crc = efs_load_be32(fr);
+        paylen = efs_load_be32(fr + 4);
         if (paylen == 0 || paylen > RAFT_REC_MAX)
             break; /* garbage length: treat as the crash point */
         if (off + 8 + paylen > d->bytes)
@@ -896,8 +884,8 @@ static int rotate_run(struct efs_raft_disk *d, int drop)
         rc = EFS_ERR_IO;
         goto done;
     }
-    put_u32(small, RAFT_DISK_MAGIC);
-    put_u32(small + 4, RAFT_DISK_VERSION);
+    efs_store_be32(small, RAFT_DISK_MAGIC);
+    efs_store_be32(small + 4, RAFT_DISK_VERSION);
     rc = rot_put(&out, small, RAFT_DISK_HDR_LEN);
     for (i = 0; rc == EFS_OK && i < ng; i++) {
         struct rot_group *r = &rg[i];
@@ -945,10 +933,10 @@ static int rotate_run(struct efs_raft_disk *d, int drop)
                 else
                     rc = rot_read(&in, m->phys - 33, size, x, &f);
                 if (rc == EFS_OK &&
-                    (get_u32(f) != m->crc || get_u32(f + 4) != size - 8 ||
-                     f[8] != RAFT_REC_ENTRY || get_u32(f + 9) != group ||
+                    (efs_load_be32(f) != m->crc || efs_load_be32(f + 4) != size - 8 ||
+                     f[8] != RAFT_REC_ENTRY || efs_load_be32(f + 9) != group ||
                      get_u64(f + 13) != index || get_u64(f + 21) != m->term ||
-                     get_u32(f + 29) != m->clen ||
+                     efs_load_be32(f + 29) != m->clen ||
                      efs_crc32(f + 8, size - 8) != m->crc)) {
                     fprintf(stderr, "raft-log: rotate bad frame group=%u "
                             "index=%llu off=%llu\n", group,

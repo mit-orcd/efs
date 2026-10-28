@@ -160,29 +160,17 @@ static uint16_t rd16(const uint8_t *p)
     return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
 }
 
-static void be32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
 
 static void be64(uint8_t *p, uint64_t v)
 {
-    be32(p, (uint32_t)(v >> 32));
-    be32(p + 4, (uint32_t)v);
+    efs_store_be32(p, (uint32_t)(v >> 32));
+    efs_store_be32(p + 4, (uint32_t)v);
 }
 
-static uint32_t rd32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static uint64_t rd64(const uint8_t *p)
 {
-    return ((uint64_t)rd32(p) << 32) | rd32(p + 4);
+    return ((uint64_t)efs_load_be32(p) << 32) | efs_load_be32(p + 4);
 }
 
 static uint64_t max_u64(uint64_t a, uint64_t b)
@@ -350,19 +338,19 @@ static void pack_inode(uint8_t *p, const struct efs_meta_row *r)
 {
     be64(p + 0, r->ino);
     be64(p + 8, r->generation);
-    be32(p + 16, r->mode);
-    be32(p + 20, r->nlink);
+    efs_store_be32(p + 16, r->mode);
+    efs_store_be32(p + 20, r->nlink);
     be64(p + 24, r->parent);
     be64(p + 32, r->base_size);
     be64(p + 40, r->active_lanes);
     be64(p + 48, r->content_epoch);
     p[56] = r->layout;
     memset(p + 57, 0, 3);
-    be32(p + 60, r->nents);
+    efs_store_be32(p + 60, r->nents);
     be64(p + 64, r->layout_epoch);
     be64(p + 72, r->used_shards);
-    be32(p + 80, r->uid);
-    be32(p + 84, r->gid);
+    efs_store_be32(p + 80, r->uid);
+    efs_store_be32(p + 84, r->gid);
     be64(p + 88, r->base_mtime);
     be64(p + 96, r->base_atime);
     be64(p + 104, r->base_ctime);
@@ -377,18 +365,18 @@ static int unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r)
     memset(r, 0, sizeof(*r));
     r->ino = rd64(p + 0);
     r->generation = rd64(p + 8);
-    r->mode = rd32(p + 16);
-    r->nlink = rd32(p + 20);
+    r->mode = efs_load_be32(p + 16);
+    r->nlink = efs_load_be32(p + 20);
     r->parent = rd64(p + 24);
     r->base_size = rd64(p + 32);
     r->active_lanes = rd64(p + 40);
     r->content_epoch = rd64(p + 48);
     r->layout = p[56];
-    r->nents = rd32(p + 60);
+    r->nents = efs_load_be32(p + 60);
     r->layout_epoch = rd64(p + 64);
     r->used_shards = rd64(p + 72);
-    r->uid = rd32(p + 80);
-    r->gid = rd32(p + 84);
+    r->uid = efs_load_be32(p + 80);
+    r->gid = efs_load_be32(p + 84);
     r->base_mtime = rd64(p + 88);
     r->base_atime = rd64(p + 96);
     r->base_ctime = rd64(p + 104);
@@ -410,8 +398,8 @@ int efs_meta_pack_fence_history(const struct efs_fence_history *h,
     need = 16u + h->count * 24u;
     if (cap < need)
         return EFS_ERR_INVAL;
-    be32(out, 2);
-    be32(out + 4, h->count);
+    efs_store_be32(out, 2);
+    efs_store_be32(out + 4, h->count);
     be64(out + 8, h->revision);
     for (uint32_t i = 0; i < h->count; ++i) {
         be64(out + 16 + i * 24, h->entries[i].epoch);
@@ -426,9 +414,9 @@ int efs_meta_unpack_fence_history(const uint8_t *value, uint32_t len,
                                   struct efs_fence_history *out)
 {
     struct efs_fence_history h = {0};
-    if (!value || !out || len < 16 || rd32(value) != 2)
+    if (!value || !out || len < 16 || efs_load_be32(value) != 2)
         return EFS_ERR_PROTO;
-    h.count = rd32(value + 4);
+    h.count = efs_load_be32(value + 4);
     if (h.count > EFS_FENCE_HISTORY_MAX || len != 16u + h.count * 24u)
         return EFS_ERR_PROTO;
     h.revision = rd64(value + 8);
@@ -511,18 +499,18 @@ static int lane_authority_key(efs_ino_t ino, uint64_t gen, uint8_t lane,
 static void pack_lane_authority(uint8_t *v, uint32_t cs, uint64_t epoch, uint64_t floor)
 {
     memset(v, 0, EFS_META_LANE_AUTHORITY_BYTES);
-    be32(v, 1); be32(v + 4, cs); be64(v + 8, epoch); be64(v + 16, floor);
-    be32(v + 24, EFS_META_LANES);
+    efs_store_be32(v, 1); efs_store_be32(v + 4, cs); be64(v + 8, epoch); be64(v + 16, floor);
+    efs_store_be32(v + 24, EFS_META_LANES);
 }
 
 static int unpack_lane_authority(const uint8_t *v, uint32_t len, uint32_t *cs,
                                   uint64_t *epoch, uint64_t *floor)
 {
-    if (len != EFS_META_LANE_AUTHORITY_BYTES || rd32(v) != 1 ||
-        !efs_chunk_size_valid(rd32(v + 4)) || rd32(v + 24) != EFS_META_LANES ||
-        rd32(v + 28) || rd64(v + 16) > rd64(v + 8))
+    if (len != EFS_META_LANE_AUTHORITY_BYTES || efs_load_be32(v) != 1 ||
+        !efs_chunk_size_valid(efs_load_be32(v + 4)) || efs_load_be32(v + 24) != EFS_META_LANES ||
+        efs_load_be32(v + 28) || rd64(v + 16) > rd64(v + 8))
         return EFS_ERR_PROTO;
-    *cs = rd32(v + 4); *epoch = rd64(v + 8); *floor = rd64(v + 16);
+    *cs = efs_load_be32(v + 4); *epoch = rd64(v + 8); *floor = rd64(v + 16);
     return EFS_OK;
 }
 
@@ -530,7 +518,7 @@ static void pack_dentry(uint8_t *p, const struct efs_meta_dentry *d)
 {
     be64(p + 0, d->ino);
     be64(p + 8, d->generation);
-    be32(p + 16, d->type);
+    efs_store_be32(p + 16, d->type);
 }
 
 static int unpack_dentry(const uint8_t *p, uint32_t n, struct efs_meta_dentry *d)
@@ -540,7 +528,7 @@ static int unpack_dentry(const uint8_t *p, uint32_t n, struct efs_meta_dentry *d
     memset(d, 0, sizeof(*d));
     d->ino = rd64(p + 0);
     d->generation = rd64(p + 8);
-    d->type = rd32(p + 16);
+    d->type = efs_load_be32(p + 16);
     return EFS_OK;
 }
 
@@ -2139,7 +2127,7 @@ static int xattr_check_blob(const uint8_t *b, uint32_t n, uint32_t *count)
     }
     if (n < 4 || n > EFS_XATTR_BLOB_MAX)
         return EFS_ERR_PROTO;
-    c = rd32(b);
+    c = efs_load_be32(b);
     pos = 4;
     for (i = 0; i < c; i++) {
         uint16_t nl;
@@ -2148,7 +2136,7 @@ static int xattr_check_blob(const uint8_t *b, uint32_t n, uint32_t *count)
         if (pos > n || n - pos < 6)
             return EFS_ERR_PROTO;
         nl = rd16(b + pos);
-        vl = rd32(b + pos + 2);
+        vl = efs_load_be32(b + pos + 2);
         if (nl == 0 || nl > EFS_XATTR_NAME_MAX || vl > EFS_XATTR_VALUE_MAX)
             return EFS_ERR_PROTO;
         step = 6u + (uint32_t)nl + vl;
@@ -2187,7 +2175,7 @@ static int blob_put(uint8_t *dst, uint32_t cap, uint32_t *dp, const uint8_t *nam
     if (need < 6 || *dp > cap || cap - *dp < need)
         return EFS_ERR_INVAL;
     be16(dst + *dp, nlen);
-    be32(dst + *dp + 2, vlen);
+    efs_store_be32(dst + *dp + 2, vlen);
     memcpy(dst + *dp + 6, name, nlen);
     if (vlen)
         memcpy(dst + *dp + 6 + nlen, val, vlen);
@@ -2273,7 +2261,7 @@ int efs_meta_apply_xattr(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     pos = blen ? 4 : 0;
     for (i = 0; i < count; i++) {
         uint16_t nl = rd16(blob + pos);
-        uint32_t vl = rd32(blob + pos + 2);
+        uint32_t vl = efs_load_be32(blob + pos + 2);
         const uint8_t *nm = blob + pos + 6;
         const uint8_t *vv = nm + nl;
         uint32_t step = 6u + (uint32_t)nl + vl;
@@ -2309,7 +2297,7 @@ int efs_meta_apply_xattr(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     }
     if (op == EFS_XATTR_REMOVE && !replaced)
         return EFS_ERR_NODATA;
-    be32(neu, nc);
+    efs_store_be32(neu, nc);
     row.base_ctime = max_u64(row.base_ctime, now);
     rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
     if (rc != EFS_OK)
@@ -2362,7 +2350,7 @@ int efs_meta_xattr_get(struct efs_kv *kv, efs_ino_t ino, const uint8_t *name,
     pos = blen ? 4 : 0;
     for (i = 0; i < count; i++) {
         uint16_t nl = rd16(blob + pos);
-        uint32_t vl = rd32(blob + pos + 2);
+        uint32_t vl = efs_load_be32(blob + pos + 2);
         const uint8_t *nm = blob + pos + 6;
         const uint8_t *vv = nm + nl;
 
@@ -2407,7 +2395,7 @@ int efs_meta_xattr_list(struct efs_kv *kv, efs_ino_t ino, uint8_t *buf,
     pos = blen ? 4 : 0;
     for (i = 0; i < count; i++) {
         uint16_t nl = rd16(blob + pos);
-        uint32_t vl = rd32(blob + pos + 2);
+        uint32_t vl = efs_load_be32(blob + pos + 2);
         const uint8_t *nm = blob + pos + 6;
         uint32_t piece = (uint32_t)nl + 1;
 
@@ -3867,7 +3855,7 @@ int efs_meta_apply_orphan_reclaim(struct efs_kv *kv, efs_ino_t ino, uint64_t gen
 static uint32_t chunk_header_size(const uint8_t *p, uint32_t n)
 {
     if (!p || n < CHUNK_VAL) return CHUNK_VAL;
-    return CHUNK_VAL + (rd32(p + 8) == EFS_META_PROFILE_PACK ? EFS_PACK_REF_BYTES : 0);
+    return CHUNK_VAL + (efs_load_be32(p + 8) == EFS_META_PROFILE_PACK ? EFS_PACK_REF_BYTES : 0);
 }
 
 static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
@@ -3875,11 +3863,11 @@ static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
     int i;
 
     be64(p + 0, ch->generation);
-    be32(p + 8, ch->coding_profile_id);
+    efs_store_be32(p + 8, ch->coding_profile_id);
     be64(p + 12, ch->content_epoch);
-    be32(p + 20, ch->base_clip);
+    efs_store_be32(p + 20, ch->base_clip);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        be32(p + CHUNK_HDR + (uint32_t)i * 4u, ch->nodes[i]);
+        efs_store_be32(p + CHUNK_HDR + (uint32_t)i * 4u, ch->nodes[i]);
     memcpy(p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS, ch->checksums,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     if (ch->coding_profile_id == EFS_META_PROFILE_PACK)
@@ -3894,11 +3882,11 @@ static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
         return EFS_ERR_PROTO;
     memset(ch, 0, sizeof(*ch));
     ch->generation = rd64(p + 0);
-    ch->coding_profile_id = rd32(p + 8);
+    ch->coding_profile_id = efs_load_be32(p + 8);
     ch->content_epoch = rd64(p + 12);
-    ch->base_clip = rd32(p + 20);
+    ch->base_clip = efs_load_be32(p + 20);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        ch->nodes[i] = rd32(p + CHUNK_HDR + (uint32_t)i * 4u);
+        ch->nodes[i] = efs_load_be32(p + CHUNK_HDR + (uint32_t)i * 4u);
     memcpy(ch->checksums, p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     /* Rows with the reserved profile are not readable here; never
@@ -3931,13 +3919,13 @@ static void pack_delta_rec(uint8_t *p, const struct efs_meta_delta *d)
 {
     int i;
 
-    be32(p + 0, d->off);
-    be32(p + 4, d->len);
+    efs_store_be32(p + 0, d->off);
+    efs_store_be32(p + 4, d->len);
     be64(p + 8, d->generation);
     be64(p + 16, d->content_epoch);
     be64(p + 24, d->seq);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        be32(p + 32 + (uint32_t)i * 4u, d->nodes[i]);
+        efs_store_be32(p + 32 + (uint32_t)i * 4u, d->nodes[i]);
     memcpy(p + 32 + 4 * EFS_NUM_FRAGMENTS, d->checksums,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
 }
@@ -3947,13 +3935,13 @@ static int unpack_delta_rec(const uint8_t *p, struct efs_meta_delta *d)
     int i;
 
     memset(d, 0, sizeof(*d));
-    d->off = rd32(p + 0);
-    d->len = rd32(p + 4);
+    d->off = efs_load_be32(p + 0);
+    d->len = efs_load_be32(p + 4);
     d->generation = rd64(p + 8);
     d->content_epoch = rd64(p + 16);
     d->seq = rd64(p + 24);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        d->nodes[i] = rd32(p + 32 + (uint32_t)i * 4u);
+        d->nodes[i] = efs_load_be32(p + 32 + (uint32_t)i * 4u);
     memcpy(d->checksums, p + 32 + 4 * EFS_NUM_FRAGMENTS,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     return EFS_OK;
@@ -4038,7 +4026,7 @@ void efs_meta_pack_gc(uint8_t *p, const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
     int i;
 
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        be32(p + (uint32_t)i * 4u, nodes[i]);
+        efs_store_be32(p + (uint32_t)i * 4u, nodes[i]);
     p[4 * EFS_NUM_FRAGMENTS] = ack_bits;
     memset(p + 4 * EFS_NUM_FRAGMENTS + 1, 0, 3);
     memcpy(p + 4 * EFS_NUM_FRAGMENTS + 4, sums,
@@ -4055,7 +4043,7 @@ int efs_meta_unpack_gc(const uint8_t *p, uint32_t n,
     if (!p || n < EFS_META_GC_VAL)
         return EFS_ERR_PROTO;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        nodes[i] = rd32(p + (uint32_t)i * 4u);
+        nodes[i] = efs_load_be32(p + (uint32_t)i * 4u);
     *ack_bits = p[4 * EFS_NUM_FRAGMENTS];
     memcpy(sums, p + 4 * EFS_NUM_FRAGMENTS + 4,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
@@ -4281,7 +4269,7 @@ void efs_meta_pack_degraded(uint8_t *p, const struct efs_meta_degraded *d)
     p[8] = d->missing_mask;
     p[9] = p[10] = p[11] = 0;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        be32(p + 12 + (uint32_t)i * 4u, d->nodes[i]);
+        efs_store_be32(p + 12 + (uint32_t)i * 4u, d->nodes[i]);
     memcpy(p + 12 + 4 * EFS_NUM_FRAGMENTS, d->checksums,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
 }
@@ -4300,11 +4288,11 @@ int efs_meta_unpack_degraded(const uint8_t *key, uint32_t klen,
     out->ino = rd64(key + 3);
     out->object_gen = rd64(key + 11);
     out->lane = key[19];
-    out->chunk_index = rd32(key + 20);
+    out->chunk_index = efs_load_be32(key + 20);
     out->inode_gen = rd64(val);
     out->missing_mask = val[8];
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        out->nodes[i] = rd32(val + 12 + (uint32_t)i * 4u);
+        out->nodes[i] = efs_load_be32(val + 12 + (uint32_t)i * 4u);
     memcpy(out->checksums, val + 12 + 4 * EFS_NUM_FRAGMENTS,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     shard = ((uint32_t)key[0] << 8) | key[1];
@@ -4576,7 +4564,7 @@ static int chunk_ref_emit(const uint8_t *key, uint64_t object_gen,
             continue;
         struct efs_meta_degraded r = {
             .ino = rd64(key + 3), .inode_gen = rd64(key + 11), .object_gen = object_gen,
-            .chunk_index = rd32(key + 20), .lane = key[19], .missing_mask = (uint8_t)(1u << i)};
+            .chunk_index = efs_load_be32(key + 20), .lane = key[19], .missing_mask = (uint8_t)(1u << i)};
         memcpy(r.nodes, nodes, sizeof(r.nodes));
         memcpy(r.checksums, sums, sizeof(r.checksums));
         int stop = cb(user, &r, key, EFS_KV_CHUNK_KEY_LEN);
@@ -4728,7 +4716,7 @@ static void pack_append_cur(uint8_t *p, const struct append_cur *c)
 {
     be64(p + 0, c->watermark);
     be64(p + 8, c->frontier);
-    be32(p + 16, c->nopen);
+    efs_store_be32(p + 16, c->nopen);
     memset(p + 20, 0, 4);
 }
 
@@ -4739,7 +4727,7 @@ static int unpack_append_cur(const uint8_t *p, uint32_t n, struct append_cur *c)
     memset(c, 0, sizeof(*c));
     c->watermark = rd64(p + 0);
     c->frontier = rd64(p + 8);
-    c->nopen = rd32(p + 16);
+    c->nopen = efs_load_be32(p + 16);
     return EFS_OK;
 }
 
@@ -4748,7 +4736,7 @@ static void pack_append_rsv(uint8_t *p, const struct append_rsv *r)
     be64(p + 0, r->off);
     be64(p + 8, r->len);
     memcpy(p + 16, r->uuid, EFS_OPID_UUID_LEN);
-    be32(p + 32, r->epoch);
+    efs_store_be32(p + 32, r->epoch);
     be64(p + 36, r->seq);
     p[44] = r->state;
     p[45] = r->outcome;
@@ -4763,7 +4751,7 @@ static int unpack_append_rsv(const uint8_t *p, uint32_t n, struct append_rsv *r)
     r->off = rd64(p + 0);
     r->len = rd64(p + 8);
     memcpy(r->uuid, p + 16, EFS_OPID_UUID_LEN);
-    r->epoch = rd32(p + 32);
+    r->epoch = efs_load_be32(p + 32);
     r->seq = rd64(p + 36);
     r->state = p[44];
     r->outcome = n > 45 ? p[45] : 0;
@@ -4812,9 +4800,9 @@ static void publication_key(const struct efs_meta_pub *p, uint8_t key[51])
 {
     uint32_t shard=efs_kv_lane_shard(p->ino,p->chunk_index%EFS_META_LANES);
     key[0]=(uint8_t)(shard>>8);key[1]=(uint8_t)shard;key[2]=EFS_KV_KIND_PUBLICATION;
-    be64(key+3,p->ino);be64(key+11,p->inode_gen);be32(key+19,p->chunk_index);
+    be64(key+3,p->ino);be64(key+11,p->inode_gen);efs_store_be32(key+19,p->chunk_index);
     memcpy(key+23,p->publication_id.client_uuid,EFS_OPID_UUID_LEN);
-    be32(key+39,p->publication_id.session_epoch);be64(key+43,p->publication_id.seq);
+    efs_store_be32(key+39,p->publication_id.session_epoch);be64(key+43,p->publication_id.seq);
 }
 /* One compact floor per FileID/chunk/mount-session. The floor survives receipt
  * deletion and inode deletion: neither expiry nor reuse may re-enable replay. */
@@ -4825,7 +4813,7 @@ static int publication_floor(struct efs_kv *kv, const struct efs_meta_pub *p, ui
     int rc=efs_kv_get(kv,key,43,value,&len);
     if(rc==EFS_ERR_NOT_FOUND) { *floor=0; return EFS_OK; }
     if(rc!=EFS_OK)return rc;
-    if(len!=sizeof(value) || rd32(value)!=1 || !rd64(value+4))return EFS_ERR_PROTO;
+    if(len!=sizeof(value) || efs_load_be32(value)!=1 || !rd64(value+4))return EFS_ERR_PROTO;
     *floor=rd64(value+4); return EFS_OK;
 }
 #define PUBLICATION_RECEIPT_V1 (8u+EFS_HASH_SIZE)
@@ -4837,21 +4825,21 @@ static int publication_locator_valid(const struct efs_publication_locator *p)
 
 static int publication_receipt_valid(const uint8_t *v,uint32_t n)
 {
-    if (n<PUBLICATION_RECEIPT_V1 || rd32(v+4)<1 || rd32(v+4)>4) return 0;
-    if (n==PUBLICATION_RECEIPT_V1) return rd32(v)==1;
-    return n==PUBLICATION_RECEIPT_V2 && rd32(v)==2 &&
-           (rd32(v+PUBLICATION_RECEIPT_V1)==0 || rd32(v+PUBLICATION_RECEIPT_V1)==2) &&
-           !rd32(v+PUBLICATION_RECEIPT_V1+4) &&
+    if (n<PUBLICATION_RECEIPT_V1 || efs_load_be32(v+4)<1 || efs_load_be32(v+4)>4) return 0;
+    if (n==PUBLICATION_RECEIPT_V1) return efs_load_be32(v)==1;
+    return n==PUBLICATION_RECEIPT_V2 && efs_load_be32(v)==2 &&
+           (efs_load_be32(v+PUBLICATION_RECEIPT_V1)==0 || efs_load_be32(v+PUBLICATION_RECEIPT_V1)==2) &&
+           !efs_load_be32(v+PUBLICATION_RECEIPT_V1+4) &&
            rd64(v+PUBLICATION_RECEIPT_V1+8) && rd64(v+PUBLICATION_RECEIPT_V1+16);
 }
 static uint32_t publication_receipt_pack(uint8_t *v,const struct efs_meta_pub *p,
                                         uint32_t state,const uint8_t *digest)
 {
-    be32(v,p->receipt_locator.index?2:1);be32(v+4,state);
+    efs_store_be32(v,p->receipt_locator.index?2:1);efs_store_be32(v+4,state);
     memcpy(v+8,digest,EFS_HASH_SIZE);
     if (!p->receipt_locator.index) return PUBLICATION_RECEIPT_V1;
-    be32(v+PUBLICATION_RECEIPT_V1,p->receipt_locator.group);
-    be32(v+PUBLICATION_RECEIPT_V1+4,0);
+    efs_store_be32(v+PUBLICATION_RECEIPT_V1,p->receipt_locator.group);
+    efs_store_be32(v+PUBLICATION_RECEIPT_V1+4,0);
     be64(v+PUBLICATION_RECEIPT_V1+8,p->receipt_locator.index);
     be64(v+PUBLICATION_RECEIPT_V1+16,p->receipt_locator.term);
     return PUBLICATION_RECEIPT_V2;
@@ -4919,7 +4907,7 @@ int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pu
     /* Never discard another unresolved receipt while advancing the floor. */
     if(!scan.count || scan.first!=p->publication_id.seq)return EFS_ERR_BUSY;
     uint8_t key[51],fk[51],value[12];publication_key(p,key);memcpy(fk,key,sizeof(fk));
-    fk[2]=EFS_KV_KIND_PUBLICATION_FLOOR;be32(value,1);be64(value+4,p->publication_id.seq);
+    fk[2]=EFS_KV_KIND_PUBLICATION_FLOOR;efs_store_be32(value,1);be64(value+4,p->publication_id.seq);
     struct efs_kv_item items[2]={{EFS_KV_DEL,key,sizeof(key),NULL,0},
         {EFS_KV_PUT,fk,43,value,sizeof(value)}};
     return meta_write_batch(kv,items,2);
@@ -4937,12 +4925,12 @@ int efs_meta_publication_receipt(struct efs_kv *kv, const struct efs_meta_pub *p
     if(!publication_receipt_valid(v,len) ||
        memcmp(v+8,digest,sizeof(digest)))return EFS_ERR_PROTO;
     if(locator && len==PUBLICATION_RECEIPT_V2) {
-        locator->group=rd32(v+PUBLICATION_RECEIPT_V1);
+        locator->group=efs_load_be32(v+PUBLICATION_RECEIPT_V1);
         locator->index=rd64(v+PUBLICATION_RECEIPT_V1+8);
         locator->term=rd64(v+PUBLICATION_RECEIPT_V1+16);
     }
-    *verdict=rd32(v+4)==1?EFS_OK:rd32(v+4)==2?EFS_ERR_STALE:
-        rd32(v+4)==3?EFS_ERR_INVAL:EFS_META_PUBLICATION_PENDING;
+    *verdict=efs_load_be32(v+4)==1?EFS_OK:efs_load_be32(v+4)==2?EFS_ERR_STALE:
+        efs_load_be32(v+4)==3?EFS_ERR_INVAL:EFS_META_PUBLICATION_PENDING;
     return EFS_OK;
 }
 int efs_meta_publication_result(struct efs_kv *kv,const struct efs_meta_pub *p,int *verdict)
@@ -5556,7 +5544,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     int found=efs_meta_publication_result(kv,p,&verdict);
     if(found==EFS_OK && verdict!=EFS_META_PUBLICATION_PENDING)return verdict;
     if(found!=EFS_ERR_NOT_FOUND && found!=EFS_OK)return found;
-    be32(value+4,rc==EFS_OK?1:rc==EFS_ERR_STALE?2:3);
+    efs_store_be32(value+4,rc==EFS_OK?1:rc==EFS_ERR_STALE?2:3);
     struct efs_kv_item completed[2] = {receipt}; unsigned completed_n = 1;
     uint8_t tk[EFS_PUT_TICKET_KEY_LEN], tv[EFS_PUT_TICKET_VAL_LEN];
     if (p->ticketed && rc == EFS_OK) {
@@ -5598,34 +5586,34 @@ int efs_meta_pub_stage_encode(const struct efs_meta_pub *p, const struct efs_opi
         return EFS_ERR_INVAL;
     out[0] = EFS_PUB_STAGE_VERSION;
     be64(out + 1, p->ino);
-    be32(out + 9, p->chunk_index);
+    efs_store_be32(out + 9, p->chunk_index);
     be64(out + 13, p->new_size);
     be64(out + 21, p->now);
     be64(out + 29, p->expected_gen);
     be64(out + 37, p->candidate_gen);
     be64(out + 45, p->content_epoch);
-    be32(out + 53, p->coding_profile_id);
+    efs_store_be32(out + 53, p->coding_profile_id);
     be64(out + 57, p->inode_gen);
     be64(out + 65, p->mtime_gen);
     out[73] = (uint8_t)((p->lane_local ? PUB_STAGE_F_LANE_LOCAL : 0) |
                         (p->fresh_object ? PUB_STAGE_F_FRESH_OBJECT : 0) | PUB_STAGE_F_TICKETED |
                         (p->unconditional ? PUB_STAGE_F_UNCONDITIONAL : 0) |
                         ((uint32_t)p->missing_mask << PUB_STAGE_F_MISSING_SHIFT));
-    be32(out + 74, p->delta_off);
-    be32(out + 78, p->delta_len);
-    be32(out + 82, p->delta_base_n);
+    efs_store_be32(out + 74, p->delta_off);
+    efs_store_be32(out + 78, p->delta_len);
+    efs_store_be32(out + 82, p->delta_base_n);
     be64(out + 86, p->delta_base_seq);
     q = out + 94;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++, q += 4)
-        be32(q, p->ch.nodes[i]);
+        efs_store_be32(q, p->ch.nodes[i]);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++, q += EFS_HASH_SIZE)
         memcpy(q, p->ch.checksums[i], EFS_HASH_SIZE);
     memcpy(q, session->client_uuid, EFS_OPID_UUID_LEN);
-    be32(q + EFS_OPID_UUID_LEN, session->session_epoch);
+    efs_store_be32(q + EFS_OPID_UUID_LEN, session->session_epoch);
     q += EFS_OPID_UUID_LEN + 4;
     be64(q, p->put_id.seq);
-    be32(q + 8, p->put_fragment_len);
-    be32(q + 12, p->put_member_mask);
+    efs_store_be32(q + 8, p->put_fragment_len);
+    efs_store_be32(q + 12, p->put_member_mask);
     return EFS_OK;
 }
 
@@ -5643,39 +5631,39 @@ int efs_meta_pub_stage_decode(const uint8_t *in, uint32_t n, struct efs_meta_pub
         return EFS_ERR_PROTO;
     memset(p, 0, sizeof(*p));
     p->ino = rd64(in + 1);
-    p->chunk_index = rd32(in + 9);
+    p->chunk_index = efs_load_be32(in + 9);
     p->new_size = rd64(in + 13);
     p->now = rd64(in + 21);
     p->expected_gen = rd64(in + 29);
     p->candidate_gen = rd64(in + 37);
     p->content_epoch = rd64(in + 45);
-    p->coding_profile_id = rd32(in + 53);
+    p->coding_profile_id = efs_load_be32(in + 53);
     p->inode_gen = rd64(in + 57);
     p->mtime_gen = rd64(in + 65);
     p->lane_local = !!(in[73] & PUB_STAGE_F_LANE_LOCAL);
     p->fresh_object = !!(in[73] & PUB_STAGE_F_FRESH_OBJECT);
     p->unconditional = !!(in[73] & PUB_STAGE_F_UNCONDITIONAL);
     p->missing_mask = (uint8_t)((in[73] & PUB_STAGE_F_MISSING_MASK) >> PUB_STAGE_F_MISSING_SHIFT);
-    p->delta_off = rd32(in + 74);
-    p->delta_len = rd32(in + 78);
-    p->delta_base_n = rd32(in + 82);
+    p->delta_off = efs_load_be32(in + 74);
+    p->delta_len = efs_load_be32(in + 78);
+    p->delta_base_n = efs_load_be32(in + 82);
     p->delta_base_seq = rd64(in + 86);
     q = in + 94;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++, q += 4)
-        p->ch.nodes[i] = rd32(q);
+        p->ch.nodes[i] = efs_load_be32(q);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++, q += EFS_HASH_SIZE)
         memcpy(p->ch.checksums[i], q, EFS_HASH_SIZE);
     p->ticketed = 1;
     memcpy(p->put_id.client_uuid, q, EFS_OPID_UUID_LEN);
-    p->put_id.session_epoch = rd32(q + EFS_OPID_UUID_LEN);
+    p->put_id.session_epoch = efs_load_be32(q + EFS_OPID_UUID_LEN);
     p->put_id.seq = rd64(q + EFS_OPID_UUID_LEN + 4);
-    p->put_fragment_len = rd32(q + EFS_OPID_UUID_LEN + 12);
-    p->put_member_mask = rd32(q + EFS_OPID_UUID_LEN + 16);
+    p->put_fragment_len = efs_load_be32(q + EFS_OPID_UUID_LEN + 12);
+    p->put_member_mask = efs_load_be32(q + EFS_OPID_UUID_LEN + 16);
     p->publication_id = p->put_id;
     if (session) {
         memset(session, 0, sizeof(*session));
         memcpy(session->client_uuid, q, EFS_OPID_UUID_LEN);
-        session->session_epoch = rd32(q + EFS_OPID_UUID_LEN);
+        session->session_epoch = efs_load_be32(q + EFS_OPID_UUID_LEN);
         session->seq = 1;
     }
     if (!p->ino || !p->inode_gen || p->coding_profile_id == EFS_META_PROFILE_PACK)
@@ -5716,7 +5704,7 @@ static void pub_pin_prefix(efs_ino_t ino, uint64_t gen, uint8_t key[24])
     be64(key + 3, ino);
     be64(key + 11, gen);
     key[19] = EFS_PUB_STAGE_PIN_LANE;
-    be32(key + 20, UINT32_MAX);
+    efs_store_be32(key + 20, UINT32_MAX);
 }
 
 static int pub_stage_owner(struct efs_kv *kv, const uint8_t *chunk_key,
@@ -6600,7 +6588,7 @@ int efs_meta_encode_lane_bootstrap(const struct efs_meta_lane_bootstrap *q,
     be64(pay + 16, q->view.authority_epoch); be64(pay + 24, q->view.oldest_complete_epoch);
     be64(pay + 32, q->active_lanes); be64(pay + 40, q->base_size);
     be64(pay + 48, q->lane_epoch); be64(pay + 56, q->lane_seq);
-    be32(pay + 64, q->chunk_size); pay[68] = q->lane; pay[69] = q->lane_present;
+    efs_store_be32(pay + 64, q->chunk_size); pay[68] = q->lane; pay[69] = q->lane_present;
     pay[70] = authority; be64(pay + 72, q->mtime_gen);
     uint32_t len;
     return efs_meta_pack_fence_history(&q->view.history, pay + 80, EFS_META_FENCE_BYTES, &len);
@@ -6618,15 +6606,15 @@ int efs_meta_apply_lane_bootstrap(struct efs_kv *kv, const struct efs_txid *t,
     uint32_t len, hkl, akl, old_len = sizeof(old), hlen = sizeof(hv), vl;
     struct efs_txn_value_cas requests[3];
     if (!kv || !t || !parts || !key || !pay || plen != EFS_META_LANE_BOOTSTRAP_BYTES ||
-        rd32(pay + 80 + 4) > EFS_FENCE_HISTORY_MAX)
+        efs_load_be32(pay + 80 + 4) > EFS_FENCE_HISTORY_MAX)
         return EFS_ERR_PROTO;
     q.view.ino = rd64(pay); q.view.generation = rd64(pay + 8);
     q.view.authority_epoch = rd64(pay + 16); q.view.oldest_complete_epoch = rd64(pay + 24);
     q.active_lanes = rd64(pay + 32); q.base_size = rd64(pay + 40);
     q.lane_epoch = rd64(pay + 48); q.lane_seq = rd64(pay + 56);
-    q.chunk_size = rd32(pay + 64); q.lane = pay[68]; q.lane_present = pay[69];
+    q.chunk_size = efs_load_be32(pay + 64); q.lane = pay[68]; q.lane_present = pay[69];
     uint8_t authority = pay[70]; q.mtime_gen = rd64(pay + 72);
-    int rc = efs_meta_unpack_fence_history(pay + 80, 16u + 24u * rd32(pay + 84), &q.view.history);
+    int rc = efs_meta_unpack_fence_history(pay + 80, 16u + 24u * efs_load_be32(pay + 84), &q.view.history);
     if (rc != EFS_OK || efs_meta_encode_lane_bootstrap(&q, authority, expected, &len, encoded) != EFS_OK ||
         kl != len || memcmp(key, expected, kl) || memcmp(pay, encoded, plen))
         return EFS_ERR_PROTO;
@@ -6997,7 +6985,7 @@ static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
     ino = rd64(key + 3);
     gen = rd64(key + 11);
     lane = key[19];
-    ci = rd32(key + 20);
+    ci = efs_load_be32(key + 20);
     if (ino != ss->ino || gen != ss->gen)
         return 0;
     ss->rc = unpack_chunk(val, vlen, &dead);
@@ -7119,7 +7107,7 @@ static int sweep_select_cb(void *user, const uint8_t *key, uint32_t klen,
     struct sweep_selection *s = user;
     (void)val; (void)vlen;
     if (klen != 24) return EFS_ERR_PROTO;
-    s->indices[s->n++] = rd32(key + 20);
+    s->indices[s->n++] = efs_load_be32(key + 20);
     return s->n == EFS_META_SWEEP_BATCH_MAX ? 1 : 0;
 }
 
@@ -8109,7 +8097,7 @@ static int append_receipt_load(struct efs_kv *kv, efs_ino_t ino,
     key[2] = EFS_KV_KIND_APPEND_RECEIPT;
     memcpy(key + *kl, q->id.client_uuid, EFS_OPID_UUID_LEN);
     *kl += EFS_OPID_UUID_LEN;
-    be32(key + *kl, q->id.session_epoch); *kl += 4;
+    efs_store_be32(key + *kl, q->id.session_epoch); *kl += 4;
     rc = efs_kv_get(kv, key, *kl, value, vl);
     if (rc == EFS_ERR_NOT_FOUND) { *vl = 0; return EFS_OK; }
     return rc;
@@ -8152,7 +8140,7 @@ static int truncate_receipt_load(struct efs_kv *kv, efs_ino_t ino,
     key[2] = EFS_KV_KIND_TRUNCATE_RECEIPT;
     memcpy(key + *kl, q->id.client_uuid, EFS_OPID_UUID_LEN);
     *kl += EFS_OPID_UUID_LEN;
-    be32(key + *kl, q->id.session_epoch); *kl += 4;
+    efs_store_be32(key + *kl, q->id.session_epoch); *kl += 4;
     rc = efs_kv_get(kv, key, *kl, value, vl);
     if (rc == EFS_ERR_NOT_FOUND) { *vl = 0; return EFS_OK; }
     return rc;
@@ -8647,7 +8635,7 @@ int efs_meta_execute_append(const struct efs_meta_append_plan *plan,
             rc = efs_kv_key_inode(efs_kv_inode_shard(row.ino), row.ino, key, &kl);
             key[2] = EFS_KV_KIND_APPEND_RECEIPT;
             memcpy(key + kl, reservation.uuid, EFS_OPID_UUID_LEN); kl += EFS_OPID_UUID_LEN;
-            be32(key + kl, reservation.epoch); kl += 4;
+            efs_store_be32(key + kl, reservation.epoch); kl += 4;
             struct efs_opid id = {.session_epoch = reservation.epoch, .seq = reservation.seq};
             struct efs_opid_reply result;
             memcpy(id.client_uuid, reservation.uuid, EFS_OPID_UUID_LEN);
@@ -9840,29 +9828,29 @@ static int check_cb(void *user, const uint8_t *key, uint32_t klen,
     if (key[2] == EFS_KV_KIND_APPEND_RECEIPT ||
         key[2] == EFS_KV_KIND_TRUNCATE_RECEIPT) {
         struct efs_opid_window window;
-        if (klen != 31 || !rd64(key + 3) || !rd32(key + 27) ||
+        if (klen != 31 || !rd64(key + 3) || !efs_load_be32(key + 27) ||
             efs_kv_inode_shard(rd64(key + 3)) != (((uint32_t)key[0] << 8) | key[1]) ||
             efs_opid_window_unpack(&window, val, vlen) != EFS_OK ||
             memcmp(window.client_uuid, key + 11, EFS_OPID_UUID_LEN) ||
-            window.session_epoch != rd32(key + 27)) {
+            window.session_epoch != efs_load_be32(key + 27)) {
             c->rc = EFS_ERR_PROTO; return 1;
         }
         return 0;
     }
     if (key[2] == EFS_KV_KIND_PUBLICATION_FLOOR) {
-        if(klen!=43 || !rd64(key+3) || !rd64(key+11) || !rd32(key+39) ||
-           efs_kv_lane_shard(rd64(key+3),rd32(key+19)%EFS_META_LANES)!=
-             (((uint32_t)key[0]<<8)|key[1]) || vlen!=12 || rd32(val)!=1 || !rd64(val+4)) {
+        if(klen!=43 || !rd64(key+3) || !rd64(key+11) || !efs_load_be32(key+39) ||
+           efs_kv_lane_shard(rd64(key+3),efs_load_be32(key+19)%EFS_META_LANES)!=
+             (((uint32_t)key[0]<<8)|key[1]) || vlen!=12 || efs_load_be32(val)!=1 || !rd64(val+4)) {
             c->rc=EFS_ERR_PROTO;return 1;
         }
         return 0;
     }
     if (key[2] == EFS_KV_KIND_PUBLICATION) {
-        uint32_t ci = klen == 51 ? rd32(key + 19) : 0;
+        uint32_t ci = klen == 51 ? efs_load_be32(key + 19) : 0;
         if (klen != 51 || !rd64(key + 3) || !rd64(key + 11) ||
             efs_kv_lane_shard(rd64(key + 3), ci % EFS_META_LANES) !=
                 (((uint32_t)key[0] << 8) | key[1]) ||
-            !rd32(key + 39) || !rd64(key + 43) ||
+            !efs_load_be32(key + 39) || !rd64(key + 43) ||
             !publication_receipt_valid(val,vlen)) {
             c->rc = EFS_ERR_PROTO;
             return 1;
@@ -10338,7 +10326,7 @@ static int tsweep_scan_cb(void *user, const uint8_t *key, uint32_t klen,
     if (klen > EFS_KV_KEY_MAX || vlen > CHUNK_VAL_MAX)
         return 1;
     struct tsweep_row *r = &sc->rows[sc->n++];
-    r->ci = rd32(key + 20);
+    r->ci = efs_load_be32(key + 20);
     r->klen = klen;
     r->vlen = vlen;
     memcpy(r->key, key, klen);
@@ -10745,7 +10733,7 @@ int efs_meta_apply_pack_index(struct efs_kv *kv, uint32_t group, uint32_t next_s
     }
     if (rc == EFS_OK) rc = efs_pack_candidate_key(anchor, EFS_PACK_CURSOR_EPOCH, 1, keys[n]);
     if (rc == EFS_OK) {
-        be32(vals[n], next_shard);
+        efs_store_be32(vals[n], next_shard);
         vals[n][4] = done ? 1 : 0;
         it[n] = (struct efs_kv_item){EFS_KV_PUT, keys[n], EFS_PACK_CANDIDATE_KEY_BYTES, vals[n], 5};
         rc = meta_write_batch(kv, it, n + 1);
@@ -10766,7 +10754,7 @@ int efs_meta_pack_backfill_cursor(struct efs_kv *kv, uint32_t group, uint32_t *n
     if (rc == EFS_ERR_NOT_FOUND) return EFS_OK;
     if (rc != EFS_OK) return rc;
     if (vl != 5) return EFS_ERR_PROTO;
-    *next_shard = rd32(v);
+    *next_shard = efs_load_be32(v);
     *done = v[4] != 0;
     return EFS_OK;
 }

@@ -1,3 +1,4 @@
+#include "kv_order.h"
 #include "efs/kv.h"
 #include <stdlib.h>
 #include <string.h>
@@ -18,24 +19,12 @@ struct kv_mem {
     struct kv_rec *head;
 };
 
-static int key_cmp(const uint8_t *a, uint32_t al, const uint8_t *b, uint32_t bl)
-{
-    uint32_t n = al < bl ? al : bl;
-    int c = n ? memcmp(a, b, n) : 0;
-    if (c != 0)
-        return c;
-    if (al < bl)
-        return -1;
-    if (al > bl)
-        return 1;
-    return 0;
-}
 
 static struct kv_rec **find_slot(struct kv_mem *m, const uint8_t *key, uint32_t klen)
 {
     struct kv_rec **pp = &m->head;
     while (*pp) {
-        int c = key_cmp((*pp)->key, (*pp)->klen, key, klen);
+        int c = kv_key_cmp((*pp)->key, (*pp)->klen, key, klen);
         if (c >= 0)
             return pp;
         pp = &(*pp)->next;
@@ -116,7 +105,7 @@ static int mem_put(void *ctx, const uint8_t *key, uint32_t klen,
         return EFS_ERR_NOMEM;
     }
     pp = find_slot(m, key, klen);
-    if (*pp && key_cmp((*pp)->key, (*pp)->klen, key, klen) == 0) {
+    if (*pp && kv_key_cmp((*pp)->key, (*pp)->klen, key, klen) == 0) {
         free((*pp)->key);
         free((*pp)->val);
         (*pp)->key = kcopy;
@@ -150,7 +139,7 @@ static int mem_get(void *ctx, const uint8_t *key, uint32_t klen,
     if (!m || !key || klen == 0 || !vlen)
         return EFS_ERR_INVAL;
     pp = find_slot(m, key, klen);
-    if (!*pp || key_cmp((*pp)->key, (*pp)->klen, key, klen) != 0)
+    if (!*pp || kv_key_cmp((*pp)->key, (*pp)->klen, key, klen) != 0)
         return EFS_ERR_NOT_FOUND;
     need = (*pp)->vlen;
     if (*vlen < need || (need > 0 && !val)) {
@@ -172,7 +161,7 @@ static int mem_del(void *ctx, const uint8_t *key, uint32_t klen)
     if (!m || !key || klen == 0)
         return EFS_ERR_INVAL;
     pp = find_slot(m, key, klen);
-    if (!*pp || key_cmp((*pp)->key, (*pp)->klen, key, klen) != 0)
+    if (!*pp || kv_key_cmp((*pp)->key, (*pp)->klen, key, klen) != 0)
         return EFS_ERR_NOT_FOUND;
     r = *pp;
     *pp = r->next;
@@ -215,7 +204,7 @@ static int mem_scan_from(void *ctx, const uint8_t *prefix, uint32_t plen,
         int past;
         int rc;
 
-        if (slen && key_cmp(r->key, r->klen, start, slen) < 0)
+        if (slen && kv_key_cmp(r->key, r->klen, start, slen) < 0)
             continue;
         if (plen == 0 || (r->klen >= plen && memcmp(r->key, prefix, plen) == 0)) {
             rc = cb(user, r->key, r->klen, r->val, r->vlen);
@@ -223,7 +212,7 @@ static int mem_scan_from(void *ctx, const uint8_t *prefix, uint32_t plen,
                 return rc;
             continue;
         }
-        past = key_cmp(r->key, r->klen < plen ? r->klen : plen, prefix, plen);
+        past = kv_key_cmp(r->key, r->klen < plen ? r->klen : plen, prefix, plen);
         if (past > 0)
             break;
     }

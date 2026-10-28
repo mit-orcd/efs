@@ -146,22 +146,6 @@ static int dcache_cycle_verdict(efs_ino_t ino, uint32_t ci,
                                 const struct efs_chunk_entry *ce,
                                 uint64_t object_seq);
 
-static uint32_t data_chunk_size(void)
-{
-    uint32_t cs = g_client.export.chunk_size;
-    return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
-}
-
-static uint32_t data_frag_size(void)
-{
-    return efs_frag_size(data_chunk_size());
-}
-
-static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FRAGMENTS])
-{
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        frags[i] = buf + (size_t)i * frag_len;
-}
 
 /* chunk_keys / chunks realloc under set/reserve. Lookups must hold idx_mu. */
 static int export_chunk_exists(efs_ino_t ino, uint32_t ci)
@@ -2175,7 +2159,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
         for (uint32_t c = 0; c < cn; c++)
             if (crecs[c].ino == repair[r]) {
                 uint64_t end = ((uint64_t)crecs[c].chunk_index + 1) *
-                               data_chunk_size();
+                               efs_client_chunk_size();
                 if (end > cover)
                     cover = end;
             }
@@ -2698,7 +2682,6 @@ void efs_client_enable_meta_batch(uint32_t every_n_ops)
     /* Bound the staging table (client-cache design Part A). */
     efs_client_stage_evict_start();
 }
-
 
 
 void efs_client_stop_meta_flush(void)
@@ -5071,7 +5054,6 @@ int efs_dcache_put_win_wait(efs_ino_t ino)
 }
 
 
-
 int efs_dcache_has(efs_ino_t ino, uint32_t ci)
 {
     uint32_t s = dcache_slot(ino, ci);
@@ -5707,7 +5689,6 @@ int efs_dcache_publication_result(efs_ino_t ino, uint64_t generation, uint32_t c
 }
 
 
-
 static int dcache_pending_of(efs_ino_t ino, uint32_t ci)
 {
     int pending;
@@ -6117,7 +6098,7 @@ static int dcache_try_patch_run(efs_ino_t ino, uint64_t offset, uint32_t len,
 {
     if (!src || !len)
         return -1;
-    uint32_t cs = data_chunk_size();
+    uint32_t cs = efs_client_chunk_size();
     if (efs_write_extent_valid(offset, len, cs) != EFS_OK)
         return -1;
     uint64_t remaining = len;
@@ -6244,7 +6225,7 @@ static int dcache_try_patch_sparse_run(efs_ino_t ino, uint64_t offset, uint32_t 
 {
     if (!src || !len)
         return -1;
-    uint32_t cs = data_chunk_size();
+    uint32_t cs = efs_client_chunk_size();
     if (efs_write_extent_valid(offset, len, cs) != EFS_OK)
         return -1;
     uint64_t remaining = len;
@@ -7091,7 +7072,7 @@ uint64_t efs_dcache_pending_records(const char *discard_cause)
             for (uint32_t k = 0; k < ranges; ++k) {
                 uint32_t off = e->nrange ? e->roff[k] : e->object_delta_off;
                 uint32_t len = e->nrange ? e->rlen[k] :
-                    e->object_delta_len ? e->object_delta_len : data_chunk_size();
+                    e->object_delta_len ? e->object_delta_len : efs_client_chunk_size();
                 fprintf(stderr, "force-discard ino=%llu ci=%u off=%u len=%u cause=%s\n",
                         (unsigned long long)e->ino, e->ci, off, len, discard_cause);
             }
@@ -7646,7 +7627,7 @@ static struct unit_ino *unit_find(efs_ino_t ino, int create)
 
 static int unit_range(uint64_t offset, uint64_t len, uint32_t *lo, uint32_t *hi)
 {
-    uint32_t cs = data_chunk_size();
+    uint32_t cs = efs_client_chunk_size();
 
     if (!cs || !len || len > UINT64_MAX - offset)
         return 0;
@@ -8196,7 +8177,7 @@ static int replay_span_without_body(efs_ino_t ino, uint32_t ci, int absent)
     struct dcache_ent *e;
     struct efs_chunk_entry obs;
     struct efs_chunk_delta d;
-    uint32_t s = dcache_slot(ino, ci), len = data_chunk_size();
+    uint32_t s = dcache_slot(ino, ci), len = efs_client_chunk_size();
     uint64_t newer = 0, committed = 0, seq;
     uint8_t *img;
     int have = 0, have_obs = 0, rc;
@@ -8993,8 +8974,8 @@ static void *chunk_put_worker(void *arg)
                                  job->flush_have_obs ? &job->flush_obs : NULL);
         return NULL;
     }
-    chunk_size = data_chunk_size();
-    frag_len = data_frag_size();
+    chunk_size = efs_client_chunk_size();
+    frag_len = efs_client_frag_size();
     chunk_start = (uint64_t)job->ci * chunk_size;
     wr_start = (job->offset > chunk_start) ? job->offset : chunk_start;
     wr_end = (job->end < chunk_start + chunk_size)
@@ -9086,7 +9067,7 @@ static void *chunk_put_worker(void *arg)
         job->rc = EFS_ERR_NOMEM;
         return NULL;
     }
-    frag_ptrs(frag_buf, frag_len, frags);
+    efs_client_frag_ptrs(frag_buf, frag_len, frags);
 
     int from_zero = 0;
     int arc = assemble_write_chunk(job->ino, job->old_size, job->offset,
@@ -9146,8 +9127,8 @@ static int client_write_run(efs_ino_t ino, uint64_t offset, size_t size, const c
     efs_client_unlock_dir(ino);
 
     uint64_t end = offset + size;
-    uint32_t chunk_size = data_chunk_size();
-    uint32_t frag_len = data_frag_size();
+    uint32_t chunk_size = efs_client_chunk_size();
+    uint32_t frag_len = efs_client_frag_size();
     /* Only touch chunks that overlap [offset, end). Rewriting every prior
      * chunk on each append was an O(n^2) amplification of sequential writes. */
     uint32_t first_ci = (uint32_t)(offset / chunk_size);
@@ -9171,7 +9152,7 @@ static int client_write_run(efs_ino_t ino, uint64_t offset, size_t size, const c
                 free(frag_buf);
             return EFS_ERR_NOMEM;
         }
-        frag_ptrs(frag_buf, frag_len, frags);
+        efs_client_frag_ptrs(frag_buf, frag_len, frags);
         int from_zero = 0;
         int arc = assemble_write_chunk(ino, old_size, offset, buf,
                                        chunk_start, wr_start, wr_end,
@@ -9256,7 +9237,7 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
         return EFS_ERR_IO;
     if (!size)
         return EFS_OK;
-    uint64_t cs = data_chunk_size();
+    uint64_t cs = efs_client_chunk_size();
     if (size > UINT64_MAX - offset)
         return EFS_ERR_INVAL;
     int rc = efs_client_report_admit(2 * (size / cs + 2) + 1);
@@ -9309,7 +9290,7 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
 {
 
     uint64_t end = offset + size;
-    uint32_t chunk_size = data_chunk_size();
+    uint32_t chunk_size = efs_client_chunk_size();
     uint32_t first_ci = (uint32_t)(offset / chunk_size);
     uint32_t last_ci = (uint32_t)((end - 1) / chunk_size);
     uint32_t nchunks = last_ci - first_ci + 1;

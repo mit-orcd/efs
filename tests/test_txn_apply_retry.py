@@ -28,6 +28,14 @@ int main(void) {
   assert(policy(txn[i],0,EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
   for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++)assert(policy(txn[i],0,business[j])==EFS_OK);
  }
+ /* A storage/read failure is never a replicated business verdict, for
+  * ANY tag/subtag. In particular SETATTR/UNLINK/UTIMENS/XATTR were omitted
+  * from the host's second command list and silently consumed IO/NOMEM. */
+ for(unsigned tag=0;tag<256;tag++) for(unsigned sub=0;sub<256;sub++) {
+  assert(policy(tag,sub,EFS_ERR_IO)==EFS_ERR_IO);
+  assert(policy(tag,sub,EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
+  assert(policy(tag,sub,EFS_ERR_UNSUPPORTED)==EFS_ERR_UNSUPPORTED);
+ }
  unsigned sessions[]={EFS_MD_SESS_REGISTER,EFS_MD_SESS_ESTABLISH,EFS_MD_SESS_FINISH};
  for(unsigned i=0;i<sizeof(sessions)/sizeof(sessions[0]);i++) {
   for(unsigned j=0;j<sizeof(business)/sizeof(business[0]);j++)

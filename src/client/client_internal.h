@@ -2,6 +2,7 @@
 #define EFS_CLIENT_INTERNAL_H
 
 #include "efs/common.h"
+#include "efs/erasure.h"
 #include "efs/wb_recovery.h"
 #include "efs/metadata.h"
 #include "efs/network.h"
@@ -515,6 +516,23 @@ int efs_client_set_chunk(struct efs_export *ex, efs_ino_t ino,
 void efs_client_table_unlock(void);
 
 extern struct efs_client g_client;
+
+static inline uint32_t efs_client_chunk_size(void)
+{
+    uint32_t cs = g_client.export.chunk_size;
+    return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
+}
+static inline uint32_t efs_client_frag_size(void)
+{
+    return efs_frag_size(efs_client_chunk_size());
+}
+static inline void efs_client_frag_ptrs(uint8_t *buf, uint32_t frag_len,
+                                        uint8_t *frags[EFS_NUM_FRAGMENTS])
+{
+    for (int i=0; i<EFS_NUM_FRAGMENTS; i++)
+        frags[i]=buf+(size_t)i*frag_len;
+}
+
 
 /* Resolve a path to an inode number. Returns 0 on success. */
 int efs_client_lookup(const char *path, struct efs_inode *out);

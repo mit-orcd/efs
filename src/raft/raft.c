@@ -155,13 +155,6 @@ struct efs_raft {
     uint64_t durable_idx;
 };
 
-static void wr32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
 
 static void wr64(uint8_t *p, uint64_t v)
 {
@@ -173,11 +166,6 @@ static void wr64(uint8_t *p, uint64_t v)
     }
 }
 
-static uint32_t rd32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static int popc(uint32_t x)
 {
@@ -404,14 +392,14 @@ static void install_log_cfg(struct efs_raft *r, const uint8_t *cmd,
 
     if (!is_cfg_cmd(cmd, clen))
         return;
-    a = rd32(cmd + 1);
-    b = cmd[0] == EFS_RAFT_CMD_JOINT ? rd32(cmd + 5) : 0;
+    a = efs_load_be32(cmd + 1);
+    b = cmd[0] == EFS_RAFT_CMD_JOINT ? efs_load_be32(cmd + 5) : 0;
     if (a != r->log_old || b != r->log_new) {
         read_proof_forget(r);
         r->read_in_flight = 0;
     }
     if (cmd[0] == EFS_RAFT_CMD_JOINT) {
-        b = rd32(cmd + 5);
+        b = efs_load_be32(cmd + 5);
         r->log_old = a;
         r->log_new = b;
         r->joint_idx = idx;
@@ -622,10 +610,10 @@ static int apply_committed(struct efs_raft *r)
         }
         if (is_cfg_cmd(cmd, clen)) {
             if (cmd[0] == EFS_RAFT_CMD_JOINT) {
-                __atomic_store_n(&r->app_old, rd32(cmd + 1), __ATOMIC_RELEASE);
-                __atomic_store_n(&r->app_new, rd32(cmd + 5), __ATOMIC_RELEASE);
+                __atomic_store_n(&r->app_old, efs_load_be32(cmd + 1), __ATOMIC_RELEASE);
+                __atomic_store_n(&r->app_new, efs_load_be32(cmd + 5), __ATOMIC_RELEASE);
             } else {
-                __atomic_store_n(&r->app_old, rd32(cmd + 1), __ATOMIC_RELEASE);
+                __atomic_store_n(&r->app_old, efs_load_be32(cmd + 1), __ATOMIC_RELEASE);
                 __atomic_store_n(&r->app_new, 0, __ATOMIC_RELEASE);
             }
             rc = save_cfg(r);
@@ -807,8 +795,8 @@ static int send_snap(struct efs_raft *r, int to)
     if (!pay)
         return EFS_ERR_NOMEM;
     if (off == 0) {
-        wr32(pay, r->app_old);
-        wr32(pay + 4, r->app_new);
+        efs_store_be32(pay, r->app_old);
+        efs_store_be32(pay + 4, r->app_new);
     }
     if (user_n) {
         if (!r->snap_read) {
@@ -1111,7 +1099,7 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
                         free(frame);
                         frame = big;
                         wr64(frame + EFS_WIRE_RAFT_HDR_LEN, eterm);
-                        wr32(frame + EFS_WIRE_RAFT_HDR_LEN + 8, ec);
+                        efs_store_be32(frame + EFS_WIRE_RAFT_HDR_LEN + 8, ec);
                         m.entries[0].term = eterm;
                         m.entries[0].clen = ec;
                         m.entries[0].cmd = big + EFS_WIRE_RAFT_HDR_LEN + 12;
@@ -1129,7 +1117,7 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
                     return rc;
                 }
                 wr64(frame + off, eterm);
-                wr32(frame + off + 8, ec);
+                efs_store_be32(frame + off + 8, ec);
                 m.entries[m.nentries].term = eterm;
                 m.entries[m.nentries].clen = ec;
                 m.entries[m.nentries].cmd = frame + off + 12;
@@ -1208,7 +1196,7 @@ static int maybe_append_cold(struct efs_raft *r)
     if (r->cold_idx > r->joint_idx)
         return EFS_OK;
     cmd[0] = EFS_RAFT_CMD_COLD;
-    wr32(cmd + 1, r->log_new);
+    efs_store_be32(cmd + 1, r->log_new);
     rc = append_local(r, r->current_term, cmd, 5, &ix);
     if (rc != EFS_OK)
         return rc;
@@ -2184,14 +2172,14 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
     if (offset == 0) {
         if (plen < 8 || !pay || !r->snap_chunk)
             return snap_reject(r, &m, last_i);
-        if (!efs_raft_voters_valid(rd32(pay)) ||
-            (rd32(pay + 4) && !efs_raft_voters_valid(rd32(pay + 4))))
+        if (!efs_raft_voters_valid(efs_load_be32(pay)) ||
+            (efs_load_be32(pay + 4) && !efs_raft_voters_valid(efs_load_be32(pay + 4))))
             return snap_reject(r, &m, last_i);
         r->rx_incl = incl;
         r->rx_term = incl_t;
         r->rx_off = 0;
-        r->rx_old = rd32(pay);
-        r->rx_new = rd32(pay + 4);
+        r->rx_old = efs_load_be32(pay);
+        r->rx_new = efs_load_be32(pay + 4);
         user = pay + 8;
         ulen = plen - 8;
     } else {
@@ -2927,8 +2915,8 @@ int efs_raft_change(struct efs_raft *r, uint32_t new_voters)
         }
     }
     cmd[0] = EFS_RAFT_CMD_JOINT;
-    wr32(cmd + 1, r->log_old);
-    wr32(cmd + 5, new_voters);
+    efs_store_be32(cmd + 1, r->log_old);
+    efs_store_be32(cmd + 5, new_voters);
     rc = append_local(r, r->current_term, cmd, 9, &ix);
     if (rc != EFS_OK)
         return rc;

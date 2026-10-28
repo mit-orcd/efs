@@ -11,29 +11,17 @@
 #define LOCK_RELEASE EFS_MD_LOCK_RELEASE
 #define CMD_MAX      80
 
-static void wr32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
 
 static void wr64(uint8_t *p, uint64_t v)
 {
-    wr32(p, (uint32_t)(v >> 32));
-    wr32(p + 4, (uint32_t)v);
+    efs_store_be32(p, (uint32_t)(v >> 32));
+    efs_store_be32(p + 4, (uint32_t)v);
 }
 
-static uint32_t rd32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static uint64_t rd64(const uint8_t *p)
 {
-    return ((uint64_t)rd32(p) << 32) | rd32(p + 4);
+    return ((uint64_t)efs_load_be32(p) << 32) | efs_load_be32(p + 4);
 }
 
 static int pack_lock(uint8_t *out, uint32_t *len, uint8_t kind,
@@ -53,7 +41,7 @@ static int pack_lock(uint8_t *out, uint32_t *len, uint8_t kind,
     wr64(out + 37, r->owner.id);
     p = out + 45;
     memcpy(p, r->owner.uuid, EFS_OPID_UUID_LEN);
-    wr32(p + EFS_OPID_UUID_LEN, r->owner.epoch);
+    efs_store_be32(p + EFS_OPID_UUID_LEN, r->owner.epoch);
     *len = 45 + EFS_OPID_UUID_LEN + 4;
     return EFS_OK;
 }
@@ -75,7 +63,7 @@ static int unpack_lock(const uint8_t *cmd, uint32_t clen, struct efs_lock_req *r
     r->owner.id = rd64(cmd + 37);
     p = cmd + 45;
     memcpy(r->owner.uuid, p, EFS_OPID_UUID_LEN);
-    r->owner.epoch = rd32(p + EFS_OPID_UUID_LEN);
+    r->owner.epoch = efs_load_be32(p + EFS_OPID_UUID_LEN);
     return EFS_OK;
 }
 

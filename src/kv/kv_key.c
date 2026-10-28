@@ -7,18 +7,11 @@ static void be16(uint8_t *p, uint16_t v)
     p[1] = (uint8_t)v;
 }
 
-static void be32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
 
 static void be64(uint8_t *p, uint64_t v)
 {
-    be32(p, (uint32_t)(v >> 32));
-    be32(p + 4, (uint32_t)v);
+    efs_store_be32(p, (uint32_t)(v >> 32));
+    efs_store_be32(p + 4, (uint32_t)v);
 }
 
 static int start(uint8_t *out, uint32_t *len, uint32_t shard, uint8_t kind,
@@ -152,7 +145,7 @@ int efs_kv_key_chunk(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
     be64(out + 3, ino);
     be64(out + 11, gen);
     out[19] = lane;
-    be32(out + 20, chunk_index);
+    efs_store_be32(out + 20, chunk_index);
     return EFS_OK;
 }
 
@@ -180,7 +173,7 @@ int efs_kv_key_opid(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],
     if (rc != EFS_OK)
         return rc;
     memcpy(out + 3, uuid, EFS_OPID_UUID_LEN);
-    be32(out + 3 + EFS_OPID_UUID_LEN, epoch);
+    efs_store_be32(out + 3 + EFS_OPID_UUID_LEN, epoch);
     return EFS_OK;
 }
 
@@ -384,7 +377,7 @@ int efs_kv_key_lease(uint32_t shard, efs_ino_t ino, uint64_t gen,
     be64(out + 3, ino);
     be64(out + 11, gen);
     memcpy(out + 19, uuid, EFS_OPID_UUID_LEN);
-    be32(out + 19 + EFS_OPID_UUID_LEN, epoch);
+    efs_store_be32(out + 19 + EFS_OPID_UUID_LEN, epoch);
     return EFS_OK;
 }
 
@@ -427,7 +420,7 @@ int efs_kv_key_lock(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t domain,
     out[36] = owner_kind;
     be64(out + 37, owner_id);
     memcpy(out + 45, uuid, EFS_OPID_UUID_LEN);
-    be32(out + 45 + EFS_OPID_UUID_LEN, epoch);
+    efs_store_be32(out + 45 + EFS_OPID_UUID_LEN, epoch);
     return EFS_OK;
 }
 
@@ -517,7 +510,7 @@ int efs_kv_key_gc(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
     be64(out + 3, ino);
     be64(out + 11, gen);
     out[19] = lane;
-    be32(out + 20, chunk_index);
+    efs_store_be32(out + 20, chunk_index);
     return EFS_OK;
 }
 

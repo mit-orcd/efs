@@ -111,6 +111,27 @@ int main(int argc,char **argv){
     struct efs_raft r2={EFS_RAFT_LEADER,1,0};h.kv=kv;
     struct host_group g0={.group=0,.r=&r2,.host=&h};
     verdict=EFS_OK;assert(host_apply(&g0,1,3,create,40)==EFS_OK && cursor_at(kv,0,1));
+    /* Infrastructure errors abort even partially staged effects. The old
+     * command-specific retry list omitted these ordinary metadata commands.
+     * Restart must still see the previous cursor; retry then applies once. */
+    unsigned tags[]={EFS_MD_CMD_SETATTR,EFS_MD_CMD_XATTR,EFS_MD_CMD_UNLINK,
+                     EFS_MD_CMD_UTIMENS,EFS_MD_CMD_RMDIR,EFS_MD_CMD_TRUNCATE};
+    int failures[]={EFS_ERR_IO,EFS_ERR_NOMEM};
+    uint64_t at=2;
+    for(unsigned t=0;t<sizeof(tags)/sizeof(tags[0]);t++) {
+        create[0]=(uint8_t)tags[t];
+        for(unsigned f=0;f<sizeof(failures)/sizeof(failures[0]);f++) {
+            verdict=failures[f];
+            assert(host_apply(&g0,at,3,create,40)==verdict);
+            assert(!row(kv,at) && cursor_at(kv,0,at-1) && !g0.incompatible);
+            efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(argv[1],&cfg);assert(kv);
+            h.kv=kv;
+            assert(!row(kv,at) && cursor_at(kv,0,at-1));
+            verdict=EFS_OK;
+            assert(host_apply(&g0,at,3,create,40)==EFS_OK && row(kv,at) && cursor_at(kv,0,at));
+            at++;
+        }
+    }
     /* W131: no KV engine is refused, never consumed; a no-op still applies. */
     struct efs_raft_host none={0};struct host_group gn={.group=0,.r=&r2,.host=&none};
     before=dispatched;assert(host_apply(&gn,5,3,create,40)==EFS_ERR_IO && dispatched==before);

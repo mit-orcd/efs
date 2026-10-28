@@ -1350,13 +1350,6 @@ static int cmd_raft_mkfs(int argc, char **argv)
     }
 }
 
-static void wr32be_mgmt(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
 
 static void wr64be_mgmt(uint8_t *p, uint64_t v)
 {
@@ -1526,7 +1519,7 @@ static int cmd_commands_policy(int argc,char **argv)
         errno=0;unsigned long long version=strtoull(argv[3],&end,10);
         if(errno || !argv[3][0] || argv[3][0]=='-' || *end)return 1;
         payload[1]=EFS_MD_CMD_QUERY_POLICY;wr64be_mgmt(payload+2,version);
-        wr32be_mgmt(payload+10,(uint32_t)mask);length=14;
+        efs_store_be32(payload+10,(uint32_t)mask);length=14;
     }
     struct efs_msg_raft_mkfs_reply reply;int rc=sess_rpc(host,port,payload,length,&reply);
     printf("commands-policy rc=%d version=%llu mask=%llu leader_hint=%d\n",rc,
@@ -1546,7 +1539,7 @@ static int cmd_expiry_clock(int argc,char **argv)
     char host[64];uint16_t port;
     if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
     uint8_t payload[6]={0,reset?EFS_MD_REQ_EXPIRY_CLOCK_RESET:EFS_MD_REQ_EXPIRY_CLOCK};
-    if(reset)wr32be_mgmt(payload+2,(uint32_t)geteuid());
+    if(reset)efs_store_be32(payload+2,(uint32_t)geteuid());
     struct efs_msg_raft_mkfs_reply r;int rc=sess_rpc(host,port,payload,reset?6:2,&r);
     printf("expiry-clock rc=%d enabled=%s healthy=%s uncertain=%s wall_ns=%llu monotonic_ns=%llu\n",
         rc,(r.index&4)?"yes":"no",(r.index&1)?"yes":"no",(r.index&2)?"yes":"no",
@@ -1591,7 +1584,7 @@ static int cmd_expiry_enable(int argc,char **argv)
     uint8_t payload[55+EFS_MAX_NAME]={0};
     payload[0]=efs_raft_shard_group(efs_kv_inode_shard(ino));payload[1]=EFS_MD_REQ_EXPIRY_ENABLE;
     wr64be_mgmt(payload+2,ino);wr64be_mgmt(payload+10,gen);
-    wr32be_mgmt(payload+18,(uint32_t)geteuid());wr64be_mgmt(payload+38,deadline);
+    efs_store_be32(payload+18,(uint32_t)geteuid());wr64be_mgmt(payload+38,deadline);
     wr64be_mgmt(payload+46,parent);payload[54]=(uint8_t)n;memcpy(payload+55,argv[4],n);
     struct efs_msg_raft_mkfs_reply r;int rc=sess_rpc(host,port,payload,(uint32_t)(55+n),&r);
     printf("expiry-enable rc=%d revision=%llu deadline_ns=%llu root_ino=%llu leader_hint=%d\n",
@@ -1819,7 +1812,7 @@ static int cmd_expiry(int argc,char **argv,int policy)
                       (get?EFS_MD_REQ_EXPIRY_RECORD:EFS_MD_CMD_EXPIRY_RENEW);
     wr64be_mgmt(payload+2,n[0]);wr64be_mgmt(payload+10,n[1]);uint32_t length=18;
     if(mutate) {
-        wr32be_mgmt(payload+18,(uint32_t)geteuid());wr64be_mgmt(payload+22,n[2]);
+        efs_store_be32(payload+18,(uint32_t)geteuid());wr64be_mgmt(payload+22,n[2]);
         if(policy) {wr64be_mgmt(payload+30,n[3]);wr64be_mgmt(payload+38,n[4]);payload[46]=(uint8_t)n[5];length=47;}
         else {wr64be_mgmt(payload+38,n[3]);length=46;}
     }
@@ -2018,14 +2011,14 @@ static int cmd_raft_session(int argc, char **argv)
     payload[2] = sub;
     memcpy(payload + 3, uuid, EFS_OPID_UUID_LEN);
     if (sub == 0) {
-        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, shard);
+        efs_store_be32(payload + 3 + EFS_OPID_UUID_LEN, shard);
         plen = 1 + 18 + 4;
     } else if (sub == EFS_MD_SESS_CREATE) {
-        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
+        efs_store_be32(payload + 3 + EFS_OPID_UUID_LEN, epoch);
         plen = 1 + 22;
     } else {
-        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
-        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN + 4, shard);
+        efs_store_be32(payload + 3 + EFS_OPID_UUID_LEN, epoch);
+        efs_store_be32(payload + 3 + EFS_OPID_UUID_LEN + 4, shard);
         plen = 1 + 26;
     }
     struct efs_msg_raft_mkfs_reply result;
@@ -2070,8 +2063,8 @@ static int mgmt_session_cmd(const char *host, uint16_t port, uint8_t group,
     uint8_t payload[1 + 26];
     struct efs_msg_raft_mkfs_reply reply;
     sess_pack_hdr(payload, group, sub, s->uuid);
-    wr32be_mgmt(payload + 19, s->epoch);
-    wr32be_mgmt(payload + 23, shard);
+    efs_store_be32(payload + 19, s->epoch);
+    efs_store_be32(payload + 23, shard);
     int rc = sess_rpc(host, port, payload, with_shard ? 27 : 23, &reply);
     return rc != EFS_OK ? rc : reply.rc;
 }

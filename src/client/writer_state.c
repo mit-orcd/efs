@@ -49,12 +49,6 @@ int efs_writer_state_write(struct efs_writer_state **slot,
     return EFS_OK;
 }
 
-/* Compare distances rather than pointer ends: no wrap at UINTPTR_MAX. */
-static int writer_storage_overlaps(const void *a, size_t an, const void *b, size_t bn)
-{
-    uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
-    return an && bn && (x <= y ? y - x < an : x - y < bn);
-}
 
 int efs_writer_state_snapshot(const struct efs_writer_state *state,
                               const struct efs_msg_inode_writer_view_reply *view,
@@ -63,11 +57,11 @@ int efs_writer_state_snapshot(const struct efs_writer_state *state,
                               struct efs_writer_plan *out_plan,
                               uint8_t *out_body)
 {
-    if (!state || !body || !out_body || !out_plan || writer_storage_overlaps(body, body_len, out_body, body_len) ||
-        writer_storage_overlaps(state, sizeof(*state), out_body, body_len) ||
-        writer_storage_overlaps(body, body_len, out_plan, sizeof(*out_plan)) ||
-        writer_storage_overlaps(state, sizeof(*state), out_plan, sizeof(*out_plan)) ||
-        writer_storage_overlaps(out_body, body_len, out_plan, sizeof(*out_plan)) ||
+    if (!state || !body || !out_body || !out_plan || efs_writer_buffers_overlap(body, body_len, out_body, body_len) ||
+        efs_writer_buffers_overlap(state, sizeof(*state), out_body, body_len) ||
+        efs_writer_buffers_overlap(body, body_len, out_plan, sizeof(*out_plan)) ||
+        efs_writer_buffers_overlap(state, sizeof(*state), out_plan, sizeof(*out_plan)) ||
+        efs_writer_buffers_overlap(out_body, body_len, out_plan, sizeof(*out_plan)) ||
         !efs_chunk_size_valid(body_len) || state->ranges.bytes.chunk_size != body_len)
         return EFS_ERR_INVAL;
     /* One sidecar has one publication token. Drain REPORT before capturing
