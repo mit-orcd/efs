@@ -21,6 +21,8 @@ files=[p for p in sorted(source.rglob('*')) if p.is_file()]
 def quiet():
  ps=subprocess.check_output(['ps','-u',str(os.getuid()),'-o','pid=,comm=,args='],text=True)
  bad=[l for l in ps.splitlines() if any('/'+name+' ' in l for name in ('efsd','efs-fuse'))]
+ mounts=subprocess.run(['findmnt','-rn','-o','TARGET'],capture_output=True,text=True).stdout.splitlines()
+ bad += [m for m in mounts if str(source.parent)+'/' in m]
  assert not bad,'private EFS still active: '+str(bad)
 def run(label,cmd,timeout=900):
  (art/'stage').write_text(label+'\n');start=time.monotonic()
