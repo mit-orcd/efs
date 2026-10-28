@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**OPEN / implementation and measurements NOTRUN**, source reviewed at `d62a753d9`:
+per-fragment ticket STATUS/session proofs and serial 64-entry directory pages.
+Existing read-round sharing, admission batches and permission checks explicitly
+retained; distinct from AB–AM and P3-A–P3-F. No new K defect or measured gain.
+
+[Stage 1 copies/allocation tasks AK–AM](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--copies-allocation-and-repeated-work-akam):
 **OPEN / implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
 packed-fragment staging/double hashing, unnecessary decode scratch, and REPORT
 degraded-object batch bookkeeping. Distinct from AB–AJ and P3-A–P3-F; no K defect

@@ -40,7 +40,7 @@ Alpha 1.0 is reached in three stages, in this order:
   blocks again.
 - **Performance comes last.** No performance work is done before Stage 3,
   except where a correctness gate needs it (bounded progress, D4), and the
-  explicitly authorized Stage 1 hot-path tasks AB–AM below (Oct 28).
+  explicitly authorized Stage 1 hot-path tasks AB–AO below (Oct 28).
   Performance changes never relax correctness or durability checks.
 - **Stage 3 stays inside alpha.** A performance change that needs 2+2, more
   or redistributed metadata groups, leader or voter redistribution (W66),
@@ -609,6 +609,81 @@ remain unchanged. Apply their retained baseline/comparison evidence rules: exact
 source/build, topology, transport, I/O mode, fixture and concurrency; raw captures
 outside Git; unchanged correctness/deadline gates; memory and p95/p99 results.
 No gain is claimed until measured, and no existing failure evidence is replaced.
+
+### Stage 1 additional letter tasks — RPC and proof batching (AN–AO)
+
+**User-directed extension, October 28; source reviewed at `d62a753d9`.**
+Both tasks are **OPEN / implementation and measurements NOTRUN**. Canonical graph
+queries for `server_put_upload` and `efs_fuse_readdir_ino`, followed by source
+inspection of the downstream handlers, establish the sequences below. They are
+optimization candidates, not measured bottlenecks or permission to delete
+correctness checks. No K count, live gate or failure verdict changes.
+
+- [ ] **AN — PUT storage authority: batch status requests and avoid duplicate proof work.**
+  Every fragment in `src/server/put_upload.c::server_put_upload` submits an exact
+  `PUT_TICKET_STATUS` before storage admission. In
+  `src/server/raft_host.c::server_raft_host_submit`, a nonleader delegates that
+  entire status request to the lane leader (W166); the leader calls
+  `host_session_establish_admit` for authoritative session state, then
+  `host_read_index` for the ticket's group before inspecting the exact ticket
+  and participant session floor. The session helper itself obtains an owner
+  proof, locally or via a remote command. When owner and lane group coincide,
+  this sequence calls ReadIndex twice for one read-only authority request.
+  Three fragment uploads also independently request the same ticket status.
+  Count storage-to-leader status RPCs, session-owner RPCs, proof admissions and
+  actual quorum rounds separately: `host_read_index_admitted` already shares
+  readers needing the same round, so three requests do not imply three separate
+  quorum exchanges. K32 already batches ticket ADMIT/SETTLE; do not duplicate it.
+  First evaluate one fresh, applied proof covering the same-group status reads
+  with explicit scope and term/context validity. Then evaluate bounded status
+  batches per destination/group or safe concurrent request sharing, with a
+  verdict per exact ticket. Different groups still require their own authority.
+  No reusable time-based ADMITTED cache, client assertion or stale follower KV
+  may authorize a PUT. Keep W166 routing, session fencing, storage guards,
+  immutable ticket identity, generation checks, deadlines and stop refusal.
+  Gates: ticket upload/batch/session-admission coverage; deterministic revoke,
+  SETTLE, leader change and halted/lagging follower interleavings between proof,
+  lookup and storage admission; mixed valid/stale batch entries and lost replies.
+  Run normal and degraded multi-client writes on TCP and RDMA, measuring RPCs
+  per fragment, quorum rounds, batching wait and write p95/p99. Bound queue size
+  and residence time; no low-load batching delay may break existing deadlines.
+- [ ] **AO — Directory listing: amortize serial page RPCs and repeated proofs.**
+  `src/client/efs_fuse.c::efs_fuse_readdir_ino` first refreshes the parent via
+  `efs_client_stat_refresh` and checks current permissions, then synchronously
+  loops over `efs_client_rpc_readdir_cur`. Each reply has at most
+  `EFS_READDIR_MAX == 64` entries (`include/efs/protocol.h`): 4096 returned names
+  therefore require at least 64 page RPCs, in addition to the initial refresh.
+  `src/server/raft_host.c::server_raft_host_readdir` reads the parent with
+  ReadIndex on each call and obtains the needed lane proofs; each page starts a
+  new call's coverage. The server already reuses proof coverage within a call,
+  and the FUSE directory handle already retains its collected listing, so do not
+  propose either as a missing optimization. Evaluate bounded larger/variable
+  pages or a bounded multi-page response with explicit byte, scan and time caps.
+  A cursor depends on the preceding reply; blindly sending later page RPCs in
+  parallel is not valid. Do not simply keep proof bits across calls or remove
+  the initial permission refresh. Combining parent authority with enumeration
+  would require an explicit authorization protocol that rejects access before
+  exposing names, including peer chmod and caller group semantics; that is not
+  justified by a cached parent row. Preserve exact source/name cookies, EOF,
+  source-only cursor transitions and K48 layout/bitmap revalidation with fresh
+  authority for newly introduced groups. Gates: readdir permission-authority,
+  reply-boundary, source-cursor, collection and K48 tests; long names, tiny user
+  buffers, concurrent rename/split/unlink, denied access, leader loss and halted
+  replica. Measure first-result and full-list latency, page RPCs, proof rounds,
+  peak client/server memory and fairness against concurrent metadata mutations.
+  Larger pages must not trade bounded progress for fewer network messages.
+
+**Deduplication and acceptance:** AN concerns storage-side ticket authority,
+not P3-A's PUT startup overlap, P3-C's local settlement compaction or AM's REPORT
+bookkeeping. AO concerns directory page transport, not P3-E's GETCHUNKS proofs
+or P3-F's CREATE proofs. Existing ReadIndex round sharing, ticket cohorts,
+REPORT transaction batching and deep-path LOOKUP_PATH support remain intact.
+The path walk's restart-from-root fallback was examined but is not added here:
+current direct callers are the benchmark path, and a separate measured case is
+needed before treating it as a general FUSE hot-path priority. Apply AB–AM's
+unchanged baseline, raw-evidence retention and correctness requirements. No
+new configuration toggle, weakened integrity/authority, or speed claim is part
+of these tasks; implementation and live comparison remain NOTRUN.
 
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 
