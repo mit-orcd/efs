@@ -23,8 +23,10 @@ Current candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
 observer log I/O. Fresh gates: node9900 **527 / 0 FAIL / 18 NOTRUN**,
 AMD **527 / 0 FAIL / 14 NOTRUN**; both native RDMA **9/9 PASS**.
-Uninstrumented node9900 RDMA and AMD TCP hours are ACTIVE; live RSS/drain
-acceptance remains owed. Prior results follow.
+Uninstrumented node9900 RDMA and AMD TCP hours **PASS (scoped)**: 2080
+exact each, pack errors 0/0, drains 77.8/78.9 s; independent RSS passes.
+Node9900 TCP is ACTIVE. Full host-limited gate acceptance and prior
+intermittent-failure investigation remain open. Prior results follow.
 
 `47ca08eaf` xorinox gate 518 / 0 FAIL / 13 NOTRUN, but hour FAIL stored
 data (+~56.8%); RSS PASS, 2080 exact, pack errors 0/0, drain 73.5 s.
