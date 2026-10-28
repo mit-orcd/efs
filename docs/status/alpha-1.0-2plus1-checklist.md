@@ -892,13 +892,13 @@ round says which physical or software limiter it hit.
   checks have explicit PASS/FAIL/NOTRUN results. Docs and code tests both report;
   an unavailable diagnostic is disclosed, never silently counted as passed.
   **Task I reviewed Oct 27 ([evidence](task-i-20261026.md)):**
-  `971100542` xorinox hour PASS, but full gate FAIL 2/512 (K38 and duplicate
-  allocator wiring), 13 NOTRUN. New candidate `03b50dcd5` integrates devel
-  `063154e0e` K38/W166 repairs plus wiring fix; xorinox gate-first run active.
-  Node9900 diagnostic completed: free arena retention dominates observed
-  growth; instrumented RSS FAIL +8.34%. Fixed uninstrumented RDMA active,
-  TCP follows. Earlier failures preserved; final-candidate qualification
-  INCOMPLETE, no release closure claimed.
+  K38 passes at `03b50dcd5`, but the 516-command gate fails D4 packer PUT
+  and W130 resync setup (13 NOTRUN); hour NOTRUN. Fixed hardware still
+  fails: RDMA RSS and TCP packer read. Integrated RDMA also fails client
+  RSS. Candidate `47ca08eaf` adds registered-buffer mappings, a tested
+  lagging-proof voter fallback, bounded resync setup and read diagnostics.
+  Quiet xorinox waits for Task O; node9900 waits for the current TCP run.
+  Unresolved source-read/abandonment errors remain failures. No closure.
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;
   [evidence](f1-memory-concurrency-gates-20261025.md)):** `make leak-check`

@@ -285,3 +285,11 @@ gate FAILS on K38 and duplicate allocator test wiring (512 / 2 FAIL /
 fresh gate-first run is active. Node9900 fixed `971100542` RDMA is active,
 TCP follows. Overall qualification remains INCOMPLETE.
 [Exact sources, results and remaining checks](task-i-20261026.md#candidate-fix-and-qualification).
+
+Current Task I follow-up: four arenas alone do not qualify hardware.
+`971100542` RDMA fails +9.94% load RSS; TCP RSS passes but the outer
+qualification fails one packer read error. `03b50dcd5` RDMA fails +21.79%
+load and +11.99% foreground RSS. Candidate `47ca08eaf` gives registered
+transport buffers explicit mmap/munmap lifetime; unit release/mutation
+checks pass, live proof is pending. Its quiet-host and hardware jobs are
+queued; see [current review](task-i-20261026.md#current-jobs-and-exact-source).

@@ -18,16 +18,17 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[Task I RSS confirmation](task-i-20261026.md): `971100542` xorinox hour
-PASS (2080 exact, zero errors, drain 84 s, all RSS/data bounds), but full
-gate FAIL 2/512 (K38 and my duplicate allocator wiring), 13 NOTRUN.
-Integrated candidate `03b50dcd5` includes reviewed devel `063154e0e` K38/W166
-repairs and wiring fix `b634565c2`; fresh gate-first run is active on xorinox.
-Node9900 diagnostic COMPLETE, RSS FAIL +8.34%; 40→60 min growth is dominated
-by +38.42 MiB free arenas versus +1.43 MiB allocated. Fixed uninstrumented
-`971100542` RDMA RUNNING, TCP follows; final `03b50dcd5` hardware pair
-is queued behind both with bounded wait and prerequisite checks. All failures retained and closed
-captures hashed. Qualification INCOMPLETE; nuc comparisons INCOMPLETE.
+[Task I review](task-i-20261026.md): K38 PASS at `03b50dcd5`, but full gate
+516 / 2 FAIL (D4 packer PUT and W130 resync BUSY) / 13 NOTRUN; hour NOTRUN.
+Node9900 `971100542` RDMA FAIL RSS; TCP RSS PASS but whole run FAIL one
+packer read. Integrated `03b50dcd5` RDMA FAIL (load +21.79%, foreground
++11.99%); TCP active. Loaded retained D4 reproduction caught two degraded
+segments on a lagging follower plus 74 abandoned uploads (bound 73).
+Current `47ca08eaf`: dedicated RDMA mappings, proven pack-proof fallback,
+bounded resync setup, failure retention and read diagnostics; deterministic
+checks PASS. Quiet xorinox waits for Task O; hardware queued behind current
+TCP. Graphify helped exact-symbol navigation, not causal proof. Qualification
+INCOMPLETE; all failures retained and closed captures hashed.
 
 [Wave 19 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`21630289a`; gate at the same commit)**: Task G ([W166](w166-close-eio-flush-deadline-20261026.md), [K38 repair](k38-task-g-repair-20261027.md)): W166 option B as the user decided (30 s deadline unchanged): a lagging storage member delegates the whole ticket STATUS read to the lane leader on the read pool and budget, a forwarded STATUS never forwards again, and a full L0 alone no longer refuses publication; K38 shared-chunk repairs: a definite STALE is kept when a later unit meets BUSY, receipt recovery stays inside the original completion budget, and pressure reclaim drains a bounded cohort instead of waiting for future writes. **Merge decision (user):** Task J's L0 term in `host_kv_pressure` is dropped, so admission and leadership share apply_room plus the unapplied-log watermark; `test_kv_leader_pressure.py` now asserts a full L0 alone is not pressure. intel2 targeted reruns at `7a7b9f420`: K22 leader admission 3/3, K22 snapshot import 2/2, W166 authority 3/3, K38 shared-chunk 5/5, REPORT retry/verdict tests 2/2 each. intel2 `make test-all` (8 jobs): 514 commands in 734 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run had 1 FAIL, `test_read_retry_budget.py`, a merge-resolution error fixed in `21630289a`); OVERBUDGET 5, `test_stop_progress.py` 102 s against 50 s the largest. W166's SIGSTOP, RDMA and multi-host acceptance stays NOTRUN.
 
