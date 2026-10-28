@@ -34,7 +34,7 @@ Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 import os, re, shutil, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster, EFSD, MGMT, SLOW, Mount, fuse_ok, mgmt, payload  # noqa: E402
+from k33_daemons import Cluster, EFSD, MGMT, SLOW, Mount, fuse_ok, mgmt, payload, place_leaders  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -69,12 +69,7 @@ try:
     if place[0] == place[2]:
         by_id = {c.node_id(i): i for i in (1, 2, 3)}
         target = next(n for n in sorted(by_id) if n != place[0])
-        rc, out = mgmt(c.env, 'raft-step-down', c.ep(by_id[place[2]]), '2', str(target))
-        assert rc == 0, out
-        end = time.time() + 30 * SLOW
-        while place[0] == place[2] and time.time() < end:
-            time.sleep(0.5)
-            place = c.leader_placement(1)
+        place = place_leaders(c, by_id[target], groups=(2,))
     assert place[0] != place[2], f'one member leads both groups: {place}'
     led = set(place.values())
     via = next((i for i in (1, 2, 3) if c.node_id(i) not in led), None)
@@ -119,7 +114,7 @@ finally:
     for mt in mounts:
         mt.close()
     c.stop_all()
-    if os.environ.get('EFS_PUFA_KEEP'):
+    if os.environ.get('EFS_PUFA_KEEP') or sys.exc_info()[0] is not None:
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)
