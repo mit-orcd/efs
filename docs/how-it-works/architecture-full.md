@@ -1632,11 +1632,11 @@ Repair `773284b5d`: node9900 gate 527/0 FAIL/18 NOTRUN, native RDMA9/9
 PASS, RDMA hour FAIL load RSS +6.07% and raw packer read error1; all2080
 exact, drain12.1s. TCP metrics pass (drain30.2s), with host-coverage FAIL from this session’s
 source-staging tar; that observation is retained. Allocator/error-detail
-diagnostic active; future staging waits for measurements to close. AMD gate closed 527/1 FAIL/14 NOTRUN on a
+diagnostic closed: all six snapshots reviewed, original failures not reproduced; future staging waits for measurements to close. AMD gate closed 527/1 FAIL/14 NOTRUN on a
 geometry readiness failure on
 unknown protection status; harness `99f3b1964` preserves the zero-count
-assertion and 30 s bound; fresh continuation waits for separate W123 work
-to release AMD. Qualification
+assertion and 30 s bound; AMD99 gate then528/1 FAIL/14 NOTRUN on the recurring B6 full assertion.
+Failure-retaining b994 continuation now uses the closed-predecessor/quiet guards. Qualification
 remains INCOMPLETE.
 Last qualified candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
