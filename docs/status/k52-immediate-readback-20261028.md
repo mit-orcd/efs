@@ -1,11 +1,49 @@
 # K52 — immediate read-back under `.efs` load
 
-`agent/devel-task-x`, tested code `86035a633`, base `3debca7ec`.
+`agent/devel-task-x`, node9900 code `86035a633`, four-host code `ec255dd13`, base `3debca7ec`.
 **TOTAL 522 FAIL 5 NOTRUN 5 (662s)**; all five failing commands reproduce
 on base. Earlier quota failure stays unresolved. Evidence:
 `docs/status/k52-immediate-readback-20261028.md`. D3: 46,443 exact files;
-K52 OPEN, original buffers missing, four-host follow-up awaiting approval.
+K52 OPEN; four-host follow-up approved and RUNNING (17 first-read failures, controls pending).
 Raw: `/home/erbmi1/efs-artifacts/taskX-20261028/`. Assigned-host work complete.
+
+## Approved four-host follow-up — RUNNING
+
+The user approved fcstor012–015 and requested existing storage subdirectories
+under `/data1/01`, followed by cleanup. Every host has an initially empty,
+writable `/data1/01` on a local 7 TB NVMe filesystem. The new private root is
+`/data1/01/efs-taskX4-20261028`; ports 19680–19683 on wired
+10.1.223.66–69, TCP, O_DIRECT, packing/default commands on, 4 GiB/member.
+Existing `/tmp/efs-mount` clients on fcstor012/013 belong to another cluster
+and are left untouched. Existing user clusters are outside this study.
+
+Test source `ec255dd13` adds only diagnostic/orchestration code. All four
+native builds PASS, source verification covers 2,283 files/host without a
+mismatch, and the focused driver suite passes on fcstor012. Controller:
+`tests/live/k52_four_host.py`; raw root on shared ORCD scratch:
+`/home/erbmi1/orcd/scratch/efs/taskX4-20261028/`.
+
+Fresh stores are used for each of three declared comparisons. Checked
+teardown stops only owned mounts/daemons and keeps the stores until evidence
+is verified. Every failed comparison now retains observed, expected and
+previous expected buffers plus lengths, digests and phase outside EFS;
+`tests/live/k52_readback.py --evidence NEW_DIRECTORY` implements this.
+
+The original in-process reader/fork-launching-query stage **FAILS** with
+17 first-read mismatches, 56,913 successful iterations and 10,757 queries
+without query errors. All 56,913 successful-file payloads later verify exact.
+The catalog contains 56,930 files: its excess is exactly the 17
+write-complete/read-failed files omitted from the successful list, not an
+independently established catalog defect. The returned lengths match expected
+lengths; inspected examples differ only in a leading partial page, with the
+remaining pages exact. No whole-buffer previous-payload match is observed.
+All 17 failed paths subsequently read exact once through fcstor013's independent
+peer mount, with retained expected bytes independently recomputed from the
+seed. That later observation does not erase the failed first reads.
+
+The spawned-reader control and corrected query-launcher gate are pending.
+K52 stays OPEN until those controls and evidence review complete. Historical
+Task V buffers remain unavailable; new captures do not recreate them.
 
 ## Purpose and current scope
 
@@ -297,9 +335,8 @@ alpha**; changing its row to FIXED or DECIDED would overstate this evidence.
 
 The assignment's per-original-mismatch causal classification is impossible
 from the retained observations. A new four-host TCP reproduction with the rich
-diagnostics is the useful next test. Approval was requested for fresh private
-fcstor012–015 scratch, 4 GiB/member, ports 19680–19683; Task X explicitly
-requires permission before reusing those hosts. No reuse has occurred.
-Distinct-host follow-up, D3 over RDMA and patched-kernel verification remain
-NOTRUN. The five baseline-reproduced full-gate failures and the intermittent
+diagnostics is the useful next test. The user subsequently approved fresh private fcstor012–015 scratch,
+4 GiB/member, ports 19680–19683, and selected `/data1/01` storage. That follow-up
+is RUNNING as described above. D3 over RDMA and patched-kernel verification
+remain NOTRUN. The five baseline-reproduced full-gate failures and the intermittent
 quota-oracle observation remain separate integration/qualification work.

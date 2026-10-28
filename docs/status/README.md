@@ -43,7 +43,9 @@ full acceptance are separate states.
   five failures reproduce on base, earlier quota failure remains unresolved.
   Nine RDMA commands now pass with the inherited TCP override removed.
   Raw manifest verified, failed quota stores retained, private scratch cleaned.
-  Four-host follow-up awaits the approval required by Task X.
+  Four-host follow-up approved and RUNNING from private `/data1/01` roots:
+  original fork/read pattern reproduces 17 retained first-read failures;
+  spawned-reader and corrected-launcher controls pending.
 
 [Wave 27 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (blocks alpha): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); whether K52 is K10 needs the new helper's observed bytes before it is closed or kept. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
 
