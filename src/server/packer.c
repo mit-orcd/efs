@@ -269,6 +269,20 @@ static const struct efs_node *pk_node(const struct efs_node *nodes, uint32_t cou
 /* One fragment of a per-file chunk, checksum-verified: local store or a
  * GET_CHUNK to its node. */
 struct pk_object { const efs_node_id_t *nodes; const uint8_t (*sums)[EFS_HASH_SIZE]; uint64_t gen; };
+/* Preserve the cause before the caller's coarse EIO result. Bounded numeric
+ * diagnostics only: a missing body, refused proof and bad checksum must not
+ * become indistinguishable when investigating a retained packer failure. */
+static void pk_fragment_failure(const char *where,const struct efs_pack_candidate *c,
+                                const struct pk_object *obj,uint32_t fi,int rc,
+                                uint32_t want,uint32_t got,int status,int verified,int reply_type)
+{
+    static uint64_t noted;
+    uint64_t n=__atomic_add_fetch(&noted,1,__ATOMIC_RELAXED);
+    if(n<=256 || !(n%1024))
+        fprintf(stderr,"packer: fragment-read source=%s ino=%016llx generation=%llx fi=%u node=%u rc=%d want=%u got=%u status=%d verified=%d reply_type=%d failure=%llu\n",
+            where,(unsigned long long)c->ino,(unsigned long long)obj->gen,fi,obj->nodes[fi],
+            rc,want,got,status,verified,reply_type,(unsigned long long)n);
+}
 static int pk_get_fragment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_candidate *c,
                            const struct pk_object *obj, uint32_t fi, uint8_t *out, uint32_t len)
 {
@@ -288,7 +302,10 @@ static int pk_get_fragment(const struct efs_node *nodes, uint32_t count, const s
         efs_store_nvme_bind(&st, &nctx, pk.s, ex);
         int rc = efs_store_get(&st, &fid, out, &got, sum, &sum_ok);
         server_export_put(pk.s, ex);
-        if (rc || got != len || !sum_ok) return EFS_ERR_IO;
+        if (rc || got != len || !sum_ok) {
+            pk_fragment_failure("local",c,obj,fi,rc,len,got,-1,sum_ok,-1);
+            return EFS_ERR_IO;
+        }
     } else {
         const struct efs_node *n = pk_node(nodes, count, id);
         if (!n) return EFS_ERR_IO;
@@ -309,12 +326,18 @@ static int pk_get_fragment(const struct efs_node *nodes, uint32_t count, const s
         const uint8_t *r = reply;
         int ok = type == EFS_MSG_GET_CHUNK_REPLY && rlen == 1 + EFS_HASH_SIZE + len && r[0] == EFS_GET_CHUNK_OK;
         if (ok) { memcpy(sum, r + 1, EFS_HASH_SIZE); memcpy(out, r + 1 + EFS_HASH_SIZE, len); }
+        if (!ok) pk_fragment_failure("remote",c,obj,fi,EFS_ERR_IO,len,rlen,
+                                     rlen ? r[0] : -1,0,type);
         free(reply);
         if (!ok) return EFS_ERR_IO;
     }
     uint8_t h[EFS_HASH_SIZE];
     efs_hash(out, len, h);
-    return memcmp(h, obj->sums[fi], EFS_HASH_SIZE) ? EFS_ERR_CHECKSUM : EFS_OK;
+    if(memcmp(h,obj->sums[fi],EFS_HASH_SIZE)) {
+        pk_fragment_failure("checksum",c,obj,fi,EFS_ERR_CHECKSUM,len,len,-1,0,-1);
+        return EFS_ERR_CHECKSUM;
+    }
+    return EFS_OK;
 }
 /* Data fragment 0 (the chunk's first half) of one chunk generation, or
  * fragments 1 and 2 XORed. */
