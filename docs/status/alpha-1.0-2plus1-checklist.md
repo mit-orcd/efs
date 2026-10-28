@@ -39,7 +39,8 @@ Alpha 1.0 is reached in three stages, in this order:
 - **New bugs block.** A bug found in Stage 2 or 3 becomes a new K row and
   blocks again.
 - **Performance comes last.** No performance work is done before Stage 3,
-  except where a correctness gate needs it (bounded progress, D4).
+  except where a correctness gate needs it (bounded progress, D4), and the
+  explicitly authorized Stage 1 observability tasks AB–AF below (Oct 28).
   Performance changes never relax correctness or durability checks.
 - **Stage 3 stays inside alpha.** A performance change that needs 2+2, more
   or redistributed metadata groups, leader or voter redistribution (W66),
@@ -379,6 +380,82 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
 11. **VERIFY sweep on separate hosts with one candidate:** K6, K11, K12,
     K17–K21. This needs the 3-, 4- and 5-plus-host clusters, so they are
     set up in parallel with steps 2–10.
+
+### Stage 1 additional letter tasks — observability interference (AB–AF)
+
+**User-directed Stage 1 addition, October 28.** AA is already assigned to W170;
+these five tasks continue at **AB**. All are **OPEN; implementation and measured
+qualification NOTRUN**. Source review at `3c866b7bf` identified the paths below;
+it did not measure a slowdown or demonstrate a correctness failure. These are
+lettered investigation/repair tasks, not new confirmed K defects and not changes
+to the K-register counts. If a task demonstrates a correctness failure, register
+it in K with its retained reproduction. The unrelated P3-A–P3-F data/metadata
+performance tasks remain in Stage 3.0. The graphify fixer retains ownership of
+the separate data-commit correctness fixes.
+
+- [ ] **AB — Remove diagnostic output from the Raft critical section.**
+  `src/server/raft_host.c::host_pump` calls `host_obs_dump` before releasing
+  `h->mu`; with `EFS_RAFT_OBS` enabled, it formats and prints role/term and
+  periodic statistics while holding the main Raft mutex. Capture a bounded
+  snapshot under the proper owner locks; format and emit off the critical
+  section and pump path, coordinating with AE. Preserve event identity/order
+  and important failure/role-change evidence. Gate: deterministic slow/full log
+  sink, concurrent proposals and status, shutdown and sanitizer checks; measure
+  mutex hold/wait and Raft progress with diagnostics enabled and disabled.
+- [ ] **AC — Avoid unused RDMA totals in routine I/O logging.**
+  `src/server/iostats.c::efs_iostats_dump` uses `efs_iostats_snapshot`, which
+  calls `src/common/rdma.c::efs_rdma_totals`: a scan of 4,096 registry slots
+  under `g_reg_lock`, also used by completion dispatch and connection lifetime
+  management. The periodic I/O line does not print these RDMA totals. Separate
+  the cheap I/O snapshot from requested RDMA aggregation; retain full totals
+  for the management reply that needs them. Gate: routine dumps take no registry
+  lock/scan, management totals still include live and retired connections,
+  concurrent connect/close/poll is safe, TCP/no-RDMA builds work. Measure poller
+  interference and status cost across connection counts.
+- [ ] **AD — Bound contention from always-on counters.**
+  `src/server/iostats.c::efs_iostats_add` updates shared per-class atomic
+  counters, latency sums/maxima and a last-64 sample ring on GET/PUT/disk-write
+  paths; `src/server/writer.c` also updates shared writer statistics. There is
+  no counter mutex here: investigate cache-line contention, not an invented
+  global-lock defect. Measure per-op cost and scaling before choosing bounded,
+  cache-line-separated worker shards or another collection scheme. Gate:
+  concurrent update/snapshot, worker retirement, bounded memory and preserved
+  counter meaning; state sampling/aggregation semantics explicitly, especially
+  for percentiles. No unbounded thread registry or silent loss of error counts.
+- [ ] **AE — Keep routine logging from blocking the Raft pump.**
+  Even after `h->mu` is released, `host_pump` calls the always-on I/O/KV dumps
+  and optional batch diagnostics synchronously. `src/common/log_ts.c::ts_write`
+  writes to the destination under the stdio stream lock; batch diagnostics also
+  hold `flockfile(stderr)` while formatting a large record. Evaluate a bounded
+  telemetry reporter with periodic-record coalescing and explicit overflow
+  accounting. Moving a write outside `h->mu` alone does not free the pump.
+  Gate: slow/blocked/failed log destination, queue saturation and bounded stop;
+  no unbounded queue, hidden failures or dependence of consensus progress on
+  routine telemetry delivery. Define critical-event retention/error reporting
+  separately; preserve timestamps and whole-record integrity. Coordinate AB
+  so neither task introduces a second incompatible reporting queue.
+- [ ] **AF — Decouple management status from consensus execution.**
+  `src/server/raft_host.c::server_raft_host_status` takes `h->mu` while collecting
+  both groups and their peer progress, then obtains KV statistics and reads salt
+  and root metadata. Measure contention under realistic and aggressive polling.
+  Evaluate a bounded published diagnostic snapshot, with age/version and clearly
+  defined coherence, so pollers do not repeatedly serialize on the pump mutex.
+  Do not use stale diagnostic data as authoritative admission, membership,
+  recovery or durability permission. Gate: term/leader changes, retired groups,
+  concurrent recovery and frequent polling; consumers must handle stale/unavailable
+  snapshots explicitly. Verify current management fields and operational scripts
+  before changing their freshness contract.
+
+**Shared completion rule:** retain original failures, exact baseline/candidate
+builds, commands, host/topology/profile and raw evidence outside Git. Use bounded
+local regressions first, then separately retained loaded checks on owned fixtures;
+never interfere with another session's cluster. Report diagnostic cost separately
+from formal workload timing. Demonstrate the specific interference reduction and
+no correctness, visibility, shutdown, memory-bound or error-reporting regression;
+run affected tests and applicable sanitizer/concurrency gates. No new user-facing
+A/B flags, reduced durability or relaxed deadlines. A source-level opportunity
+alone is not a measured bottleneck; an unrun gate remains NOTRUN. Suggested order:
+AC first, AB/AE together, then AD/AF according to measurement.
 
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 

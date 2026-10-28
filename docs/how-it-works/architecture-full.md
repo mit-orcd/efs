@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**OPEN / implementation and measurements NOTRUN**, added by user direction Oct 28:
+Raft-lock logging, unused RDMA status aggregation, shared counter contention,
+pump-thread telemetry and management status snapshots. AA remains W170; no K
+counts or acceptance verdicts change. P3-A–P3-F remain Stage 3.0 work.
+
+[Alpha 1.0 Stage 3.0 performance tasks](../status/alpha-1.0-2plus1-checklist.md#stage-30-letter-tasks--data-and-metadata-performance):
 **P3-A–P3-F OPEN / measurements NOTRUN**: fragment PUT/GET startup overlap,
 batched ticket-ledger compaction, bounded COMMIT reuse/coalescing, GETCHUNKS
 proof overlap and CREATE routing proofs. Planning only; Stage 2 prerequisite,
