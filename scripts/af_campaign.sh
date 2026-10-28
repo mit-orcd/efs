@@ -2,7 +2,8 @@
 # Assigned xorinox; no real cluster/store/client operation.
 set -eu
 root=${1:?private root};art=${2:?new evidence};commit=${3:?source identity}
-[[ $(hostname -s) == xorinox && $root == "$HOME/efs-task-af" ]] || exit 2
+[[ $(hostname -s) == xorinox ]] || exit 2
+[[ $root == "$HOME/efs-task-af" || $(dirname "$root") == "$HOME/efs-task-af" ]] || exit 2
 mkdir "$art";exec >"$art/controller.log" 2>&1
 mkdir "$root/lock" || exit 77
 trap 'rc=$?;rmdir "$root/lock";echo "$rc" > "$art/controller-exit"' EXIT

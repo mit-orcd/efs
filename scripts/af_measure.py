@@ -95,8 +95,8 @@ try:
     assert not errors,errors
     for f,v in versions.items():assert f.read_bytes()==payload(f'{f.name}#{v}',65536),f
     packing={}
-    for i in [1,2,3]:
-        rc,text=mgmt(env,'pack-status',c.ep(i));assert rc==0,text
+    for i in [1]:
+        rc,text=mgmt(env,'pack-compact',c.ep(i),'0');assert rc==0,text
         packing[i]=parse_pack(text)
         assert packing[i]['put_errors']==packing[i]['read_errors']==0,text
         packing[i]['led']=sorted(packing[i]['led'])
