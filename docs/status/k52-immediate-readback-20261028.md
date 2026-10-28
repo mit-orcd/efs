@@ -1,49 +1,117 @@
 # K52 — immediate read-back under `.efs` load
 
 `agent/devel-task-x`, node9900 code `86035a633`, four-host code `ec255dd13`, base `3debca7ec`.
-**TOTAL 522 FAIL 5 NOTRUN 5 (662s)**; all five failing commands reproduce
-on base. Earlier quota failure stays unresolved. Evidence:
-`docs/status/k52-immediate-readback-20261028.md`. D3: 46,443 exact files;
-K52 OPEN; four-host follow-up approved and RUNNING (17 first-read failures, controls pending).
-Raw: `/home/erbmi1/efs-artifacts/taskX-20261028/`. Assigned-host work complete.
+**K52 DECIDED under K10/W121 / existing D40 kernel limitation**, supported by
+controlled four-host reproduction. The unsafe test query launcher is fixed;
+no kernel or product read-path fix is claimed. Historical Task V's eight
+failed buffers remain individually unclassifiable and its FAIL is preserved.
+Corrected four-host D3 **PASS: 59,112 exact payloads**. Diagnostic campaign
+**FAIL (rc 1)** deliberately retains the original-pattern failures.
+The separate node9900 code gate remains **522 / 5 FAIL / 5 NOTRUN**;
+the earlier quota observation remains unresolved. This is not whole-alpha acceptance.
 
-## Approved four-host follow-up — RUNNING
+## Approved four-host follow-up — complete
 
-The user approved fcstor012–015 and requested existing storage subdirectories
-under `/data1/01`, followed by cleanup. Every host has an initially empty,
-writable `/data1/01` on a local 7 TB NVMe filesystem. The new private root is
-`/data1/01/efs-taskX4-20261028`; ports 19680–19683 on wired
-10.1.223.66–69, TCP, O_DIRECT, packing/default commands on, 4 GiB/member.
-Existing `/tmp/efs-mount` clients on fcstor012/013 belong to another cluster
-and are left untouched. Existing user clusters are outside this study.
+The user approved fcstor012–015, existing `/data1/01` storage subdirectories,
+and subsequent cleanup. Each parent existed on a local 7 TB NVMe filesystem.
+Only `/data1/01/efs-taskX4-20261028` was used on each host. Wired endpoints
+10.1.223.66–69:19680–19683, TCP, O_DIRECT, packing/default commands on,
+expiry/containers off, 4 GiB/member; mounts on fcstor012 and fcstor013.
+Fresh stores were formed for each stage. Existing `/tmp/efs-mount` clients
+belong to another cluster and were outside the controller's target paths.
+This was not a quiet-host performance comparison.
 
-Test source `ec255dd13` adds only diagnostic/orchestration code. All four
-native builds PASS, source verification covers 2,283 files/host without a
-mismatch, and the focused driver suite passes on fcstor012. Controller:
-`tests/live/k52_four_host.py`; raw root on shared ORCD scratch:
-`/home/erbmi1/orcd/scratch/efs/taskX4-20261028/`.
+Native builds of `ec255dd13` PASS on all four hosts (binary build timestamps
+2026-10-28T21:11:56/57Z). All 2,283 tracked source files/host match their Git
+blob identities both before and after testing. Product C/headers equal the
+base and Task V's `b2d57e421`. The focused driver regression suite PASS on
+fcstor012. Hosts: RHEL 9 kernel `5.14.0-687.39.1.el9_8`, 24 logical CPUs each,
+Python 3.9, private libfuse 3.16.2 from
+`/home/erbmi1/orcd/scratch/efs/orcd-test/deps/libfuse` (rpath and pkg-config).
 
-Fresh stores are used for each of three declared comparisons. Checked
-teardown stops only owned mounts/daemons and keeps the stores until evidence
-is verified. Every failed comparison now retains observed, expected and
-previous expected buffers plus lengths, digests and phase outside EFS;
-`tests/live/k52_readback.py --evidence NEW_DIRECTORY` implements this.
+| Stage | Outcome | Successful files, all exact on final verification | Failed first reads | Queries / query errors |
+| --- | --- | ---: | ---: | ---: |
+| Original in-process reader, fork-launching queries | FAIL | 56,913 | 17 | 10,757 / 0 |
+| Spawned reader, original queries | PASS | 22,293 | 0 | 6,318 / 0 |
+| Normal in-process reader, corrected posix_spawn queries | PASS | 59,112 | 0 | 22,159 / 0 |
 
-The original in-process reader/fork-launching-query stage **FAILS** with
-17 first-read mismatches, 56,913 successful iterations and 10,757 queries
-without query errors. All 56,913 successful-file payloads later verify exact.
-The catalog contains 56,930 files: its excess is exactly the 17
-write-complete/read-failed files omitted from the successful list, not an
-independently established catalog defect. The returned lengths match expected
-lengths; inspected examples differ only in a leading partial page, with the
-remaining pages exact. No whole-buffer previous-payload match is observed.
-All 17 failed paths subsequently read exact once through fcstor013's independent
-peer mount, with retained expected bytes independently recomputed from the
-seed. That later observation does not erase the failed first reads.
+Every stage's identity, four-distinct-host topology and checked teardown gates
+PASS. Workload: 200 static files, eight writers, four queriers, 300-second
+load, unchanged 10-second I/O and 30-second query deadlines. Corrected stage:
+I/O maximum 0.232 s, query maximum 9.970 s, query p99 0.0808 s, five index
+generations, catalog convergence 60.496 s. Original/spawn query maxima were
+24.191/17.733 s. Original successful-iteration timing does not measure its
+failed iterations. Spawn process startup reduces throughput; no performance
+speedup is attributed to either control.
 
-The spawned-reader control and corrected query-launcher gate are pending.
-K52 stays OPEN until those controls and evidence review complete. Historical
-Task V buffers remain unavailable; new captures do not recreate them.
+All 17 wrong first-read buffers, expected and previous expected bytes, lengths,
+SHA-256s, phase and parent PID are retained outside EFS. Returned lengths are
+correct. Sixteen errors occupy only a small leading region; the seventeenth
+(`w7-f01981`) occupies the trailing 2,256 bytes of a 24,576-byte buffer
+(2,249 changed bytes), with the rest exact. Every erroneous range is under
+4 KiB; buffer addresses were not recorded, so physical-page alignment was
+not measured. No full previous-payload equality is observed or required.
+Expected buffers were independently regenerated from seed and pathname;
+all saved lengths and hashes match. `original-boundary-analysis.json` records
+these ranges. No direct FUSE-reply trace or patched-kernel A/B was performed.
+
+After timed load ended, an independent fcstor013 peer reader read each of the
+17 failed paths exactly once and matched its independently regenerated expected
+bytes. These are **later observations**, not retries counted as passing first
+reads. The original catalog count 56,930 is successful files plus the 17
+write-complete/read-failed files omitted from the helper's success list;
+`load_converged=false` is not a separately established catalog defect.
+
+The original pattern now reproduces while two independent isolation controls
+pass, including a corrected normal-reader run with more successful files and
+queries. Together with the independent fork/spawn kernel control below, this
+supports classifying K52 with K10/W121 under the existing D40 policy. It does
+not reconstruct the eight historical Task V failures, prove every future
+mismatch has this cause, or qualify RDMA D3. A new mismatch without the fork
+trigger still needs investigation. No packing change is justified here.
+
+### Four-host reproduction and retention
+
+Use frozen `ec255dd13`, native builds with the libfuse prefix above and the
+retained `cluster.json` as a configuration template. Replace source, private
+root and evidence output with new approved paths; do not reuse old stores or
+outputs. `scripts/task_v_ssh.sh` requires forwarded SSH to the four hosts.
+From the controller source tree on fcstor012:
+
+```sh
+python3 tests/live/k52_four_host.py --cluster NEW_CONFIG.json \
+  --candidate ec255dd13 --out OUTSIDE_GIT/NEW_RUN
+```
+
+The committed controller runs original, spawned-reader and corrected stages
+on fresh stores and stops only owned mounts/daemons. It retains stopped stores
+until separate evidence-preserving cleanup; rc 1 is expected if the original
+pattern fails. Do not substitute generic `--keep-work` teardown behavior.
+`tests/live/k52_readback.py --evidence NEW_DIRECTORY` captures each failed
+buffer without retry. Config, launch/build/collection/cleanup commands and
+stage result manifests are retained with the raw evidence.
+
+Stable shared raw root:
+`/home/erbmi1/orcd/scratch/efs/taskX4-20261028/`
+(canonical `/orcd/scratch/orcd/001/erbmi1/efs/taskX4-20261028/`).
+Final `SHA256SUMS`: **423 files**, every hash verified; manifest SHA-256:
+`ec105b607e7d4bea7c2e42b86d5587e44b8fbe8b11fdc722242edb35838a2d72`.
+The pre-cleanup manifest covered 401 files, SHA-256
+`cdc3ec26a6ac5913aaf6171e69c0d5b918f2387510e709dcca8e8b0022c45af1`.
+Closed logs, full wrong/expected buffers, all results, source identities,
+per-host runtime inventories and cleanup receipts remain. Stage output hashes
+were verified before deletion (`stage-verification.json` reports hash-check
+statuses, not workload verdicts).
+
+After checked shutdown and preservation, `~/bin/edelete --force --delete`
+removed only the private task root on each host, all rc 0, with zero owned
+processes/mounts before and after. `/data1/01` remains. External clients were
+unchanged across each cleanup check; no claim is made that their PIDs stayed
+constant throughout the study. Runtime inventories cover 300,590 files and
+22,172,063,486 summed file-length bytes, **not allocated blocks**. Source/build
+trees, runtime stores and bulk successful payloads were pruned as recorded in
+`PRUNED.txt`; exact-store replay is forfeited. Failed application buffers and
+expected bytes remain. The reproducible code/profile replace those bulk trees.
 
 ## Purpose and current scope
 
@@ -326,17 +394,15 @@ Existing user clusters and their data were not stopped, reformatted or deployed.
 
 ## Verdict and remaining work
 
-The fork-free query launcher and its regression are implemented and exercised;
-the corrected one-host D3 gate passes. The known kernel race is independently
-reproduced, but both original-query D3 controls pass too. No new product read
-failure is demonstrated, no packing change is justified, and the eight
-historical buffers cannot be reconstructed. **K52 remains OPEN and blocks
-alpha**; changing its row to FIXED or DECIDED would overstate this evidence.
+The initial one-host evidence alone left K52 OPEN: both original-query D3
+patterns passed despite an independently reproduced kernel control. The
+completed four-host comparison above supersedes that interim assessment:
+**K52 DECIDED under existing K10/W121 / D40**, with the fork-free test launcher
+implemented and its four-host D3 gate PASS. No kernel/data-path repair shipped.
+Historical Task V first reads remain FAIL and individually unclassifiable.
 
-The assignment's per-original-mismatch causal classification is impossible
-from the retained observations. A new four-host TCP reproduction with the rich
-diagnostics is the useful next test. The user subsequently approved fresh private fcstor012–015 scratch,
-4 GiB/member, ports 19680–19683, and selected `/data1/01` storage. That follow-up
-is RUNNING as described above. D3 over RDMA and patched-kernel verification
-remain NOTRUN. The five baseline-reproduced full-gate failures and the intermittent
-quota-oracle observation remain separate integration/qualification work.
+All approved four-host work and cleanup are complete. D3 over RDMA and a
+patched-kernel comparison remain NOTRUN. The separate node9900 code-gate
+failures and intermittent quota-oracle observation remain unresolved; none
+is cleared by the successful scoped D3 gate. No merge, push or deployment to
+an existing user cluster is part of this work.
