@@ -16,14 +16,18 @@ for file in sorted(a.evidence.glob('*-report.json')):
         report_max_ms=c.get('report_max_ms'),report_budget_exhausted=c.get('report_budget_exhausted'),
         accounting=c.get('accounting'),warm=c.get('warm_primary'),peer=c.get('warm_peer'),cold=c.get('cold'),
         cleanup_error=r.get('cleanup_error'),exception=r.get('exception')))
-samples={};previous=None
-for line in (a.evidence/'host-samples.jsonl').read_text().splitlines():
-    r=json.loads(line);v=list(map(int,r['cpu'].split()[1:9]))
-    if previous and previous['stage']==r['stage']:
-        old=list(map(int,previous['cpu'].split()[1:9]));delta=[x-y for x,y in zip(v,old)]
-        if sum(delta)>0:
-            samples.setdefault(r['stage'],[]).append(100*delta[4]/sum(delta))
-    previous=r
+samples={}
+for file in (a.evidence/'host-samples.jsonl',a.evidence/'followup-host-samples.jsonl'):
+    if not file.exists():continue
+    previous=None
+    for line in file.read_text().splitlines():
+        r=json.loads(line);v=list(map(int,r['cpu'].split()[1:9]))
+        if previous and previous['stage']==r['stage']:
+            old=list(map(int,previous['cpu'].split()[1:9]));delta=[x-y for x,y in zip(v,old)]
+            if sum(delta)>0:
+                samples.setdefault(r['stage'],[]).append(100*delta[4]/sum(delta))
+        previous=r
+
 io={}
 for label,values in samples.items():
     values.sort();io[label]=dict(samples=len(values),mean_percent=sum(values)/len(values),
