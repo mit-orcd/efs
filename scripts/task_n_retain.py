@@ -24,11 +24,15 @@ for proc in Path('/proc').glob('[0-9]*'):
 mounts=[s for s in Path('/proc/self/mountinfo').read_text().splitlines() if str(work)+'/' in s]
 assert not left and not mounts,(left,mounts)
 labels=[f'{kind}-{n}' for kind in ('w52','w64-stepdown','w64-lost') for n in (1,2)]
-for label in labels:
+success_labels=[label if label!='w64-lost-2' else 'w64-lost-2-ready1' for label in labels]
+for label in success_labels:
     report=json.loads((work/'runs'/label/'report.json').read_text())
     assert report['verdict']=='PASS',(label,report.get('exception'),report.get('checks'))
 summary=(work/'plain/summary.txt').read_text()
 assert ' FAIL 0 ' in summary.splitlines()[0],summary[:1000]
+failed_setup=json.loads((work/'runs/w64-lost-2/report.json').read_text())
+assert failed_setup['verdict']=='FAIL' and not failed_setup['checks'] and 'cluster never formed' in failed_setup.get('exception','')
+assert not list((work/'runs/w64-lost-2').glob('writer-*-progress.json'))
 checks=[]
 def digest(path):
     h=hashlib.sha256()
@@ -41,7 +45,7 @@ def copy(source,dest):
     before=digest(source);shutil.copyfile(source,dest);after=digest(dest)
     assert before==after,(source,dest)
     checks.append(dict(source=str(source),destination=str(dest.relative_to(out)),sha256=before))
-for label in labels:
+for label in labels+['w64-lost-2-ready1']:
     root=work/'runs'/label
     for file in root.glob('*.json'):copy(file,out/'cases'/label/file.name)
     for file in (root/'logs').glob('*.log'):copy(file,out/'cases'/label/'logs'/file.name)
@@ -56,8 +60,9 @@ for build in ('plain','fault'):
     (out/(build+'-final-identity.txt')).write_text(result)
 (out/'copy-check.json').write_text(json.dumps(checks,indent=2)+'\n')
 (out/'final-state.json').write_text(json.dumps(dict(wall=time.time(),private_processes=left,
-    private_mounts=mounts,live_cases=labels,gate=summary.splitlines()[0]),indent=2)+'\n')
-(out/'PRUNED.txt').write_text('After verifying all six live cases PASS, the full gate has zero FAIL, no private owner/mount remains, and every copied log/result SHA256 matches its closed source: remove '+str(work)+'. This prunes all successful synthetic stores/payloads, source/build trees and gate scratch. No copied runtime WAL/store is kept in evidence. Exact store replay is forfeited; committed source, commands, full record-oracle reports, latency files and text logs reproduce the results. Existing production services/stores are untouched.\n')
+    private_mounts=mounts,successful_live_cases=success_labels,
+    classified_setup_failure='w64-lost-2',gate=summary.splitlines()[0]),indent=2)+'\n')
+(out/'PRUNED.txt').write_text('After verifying all six completed live cases PASS, and preserving the original w64-lost-2 setup FAIL (raw NOT_PRIMARY hint was not followed; no writer or payload was created), the full gate has zero FAIL, no private owner/mount remains, and every copied log/result SHA256 matches its closed source: remove '+str(work)+'. This prunes all successful synthetic stores/payloads, source/build trees and gate scratch. No copied runtime WAL/store is kept in evidence. Exact store replay is forfeited; committed source, commands, full record-oracle reports, latency files and text logs reproduce the results. Existing production services/stores are untouched.\n')
 with (out/'prune.log').open('w') as stream:
     subprocess.run([str(Path.home()/'bin/edelete'),'--force','--delete',str(work)],stdout=stream,stderr=subprocess.STDOUT,check=True)
 # No output stream in this directory remains open after this point.

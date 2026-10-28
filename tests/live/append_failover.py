@@ -35,6 +35,8 @@ Accounting rule (K15/K29, account() below; tests/test_append_failover_accounting
     (the reservation may never have applied, or session/last-close cleanup
     resolved it); a failure with no abandon (refused before reserving)
     leaves none. Accounted failures and holes are reported separately.
+  * Availability is separate: every non-injected write/fsync/close error
+    fails the overall gate, even if its absent record and hole are explained.
   * MISMATCH: an acknowledged record missing, duplicated, torn, corrupt or
     out of order; a failed write's record visible; an unknown block; more
     holes than the abandons explain or fewer than the retirements require;
