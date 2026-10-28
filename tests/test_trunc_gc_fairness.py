@@ -49,7 +49,8 @@ static int host_gc_propose(struct efs_raft_host *h,uint8_t group,const uint8_t *
  return EFS_OK;}
 typedef int (*visit_fn)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t);
 static int scan(const uint8_t *prefix,const uint8_t *start,uint32_t sn,visit_fn cb,void *user,uint8_t *last,uint32_t *last_len){
- if(scan_error)return EFS_ERR_IO;unsigned visited=0;
+ if(scan_error)return EFS_ERR_IO;
+ unsigned visited=0;
  for(unsigned i=1;i<=N;i++){
   uint8_t key[11],value[8];memcpy(key,prefix,3);wr64be(key+3,i);wr64be(value,1);
   if(sn&&memcmp(key,start,sn)<0)continue;
