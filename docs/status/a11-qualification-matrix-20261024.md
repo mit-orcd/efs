@@ -1,5 +1,12 @@
 # A11 reduced qualification matrix and the Stage 2 run plan, Oct 24
 
+**Current-source audit, Oct 28:** [Task Z](stage1-decision-sheet-20261028.md)
+pins devel `9e4d66a8c`: 139 readers, 33 refused names, no new A/B selector;
+expiry compiled into every build under D43, READ_VERIFY replaced by built-in
+client hashing. Historical counts/branch states and compiled-out expiry prose
+below describe their dated source, not the current candidate. Task Z is not
+full retained-path or topology qualification.
+
 **Verdict: plan PASS (scoped): the matrix, the Stage 2 item plan and the
 runnable topologies are published; every gate the plan names exists and
 `qualify.py plan` checks that it does. Qualification itself NOTRUN: no

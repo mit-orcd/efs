@@ -1,5 +1,14 @@
 # Project status — work queue and evidence
 
+[Task Z candidate audit and decision sheet](stage1-decision-sheet-20261028.md):
+source `9e4d66a8c`, driver `1164b55a4`; seven static/startup audit groups PASS
+on Intel1, including all33 removed names set/empty on both binaries (132 probes).
+139 readers, all classified; all15 added readers since the Oct25 closure are
+fault-only, no new A/B selector. Expiry is compiled in under D43. No cluster
+started; full make test-all/real-host behavior NOTRUN here. S stays OPEN:
+four named choices plus proposed-surface and member-down revoke qualifications.
+Raw audit evidence retained on Intel1; private build pruned. No product change.
+
 [Defect-navigation graph](graph-scope-validation-20261028.md): directed first-party
 code, fault models/oracles and selected contracts; W127/W145 and W125 contract
 navigation checks PASS. Parser and unresolved-call gaps remain explicit; this

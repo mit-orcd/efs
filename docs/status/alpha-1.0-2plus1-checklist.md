@@ -1003,9 +1003,9 @@ round says which physical or software limiter it hit.
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
 | Known-defect register K (Stage 1; once per candidate) | OPEN | (same) | (same) |
-| Functional scope S decided (once per candidate) | OPEN | (same) | (same) |
+| Functional scope S decided (once per candidate) | OPEN — [Task Z decision sheet](stage1-decision-sheet-20261028.md) at `9e4d66a8c`; four named choices plus S1/U4 qualifications; audit code `1164b55a4` | (same) | (same) |
 | Candidate and profile | NOTRUN | NOTRUN | UNSUPPORTED until K28 |
-| Flag audit and A/B removal (A6–A10, A12; once per candidate) | NOTRUN | (same) | (same) |
+| Flag audit and A/B removal (A6–A10, A12; once per candidate) | PASS scoped static/startup audit at `9e4d66a8c`, driver `1164b55a4` ([Task Z](stage1-decision-sheet-20261028.md)); A8/A9/A10 and frozen-candidate obligations remain | (same) | (same) |
 | Reduced-matrix qualification (A11) | NOTRUN | NOTRUN | NOTRUN |
 | Placement/capacity and decode | NOTRUN | NOTRUN | NOTRUN |
 | POSIX and concurrent I/O | NOTRUN | NOTRUN | NOTRUN |

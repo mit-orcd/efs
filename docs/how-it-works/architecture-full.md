@@ -1612,6 +1612,15 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+source `9e4d66a8c`, driver `1164b55a4`; seven static/startup audit groups PASS
+on Intel1, including all33 removed names set/empty on both binaries (132 probes).
+139 readers, all classified; all15 added readers since the Oct25 closure are
+fault-only, no new A/B selector. Expiry is compiled in under D43. No cluster
+started; full make test-all/real-host behavior NOTRUN here. S stays OPEN:
+four named choices plus proposed-surface and member-down revoke qualifications.
+Raw audit evidence retained on Intel1; private build pruned. No product change.
+
+[Defect-navigation graph](../status/graph-scope-validation-20261028.md): directed first-party
 code, fault models/oracles and selected contracts; W127/W145 and W125 contract
 navigation checks PASS. Parser and unresolved-call gaps remain explicit; this
 is not a product acceptance verdict. Rebuild and validation instructions committed.
