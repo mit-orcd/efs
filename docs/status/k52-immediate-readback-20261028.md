@@ -1,12 +1,11 @@
 # K52 — immediate read-back under `.efs` load
 
 `agent/devel-task-x`, tested code `86035a633`, base `3debca7ec`.
-First gate: **TOTAL 522 FAIL 6 NOTRUN 14 (584s)**; base reproduces the recipe
-failure, other controls pending. D3: 46,443 exact files; kernel fork control
-FAIL. K52 remains OPEN (historical buffers unavailable). Evidence:
-`docs/status/k52-immediate-readback-20261028.md`. Raw:
-`/home/erbmi1/efs-artifacts/taskX-20261028/`; qualification still RUNNING.
-
+**TOTAL 522 FAIL 5 NOTRUN 5 (662s)**; all five failing commands reproduce
+on base. Earlier quota failure stays unresolved. Evidence:
+`docs/status/k52-immediate-readback-20261028.md`. D3: 46,443 exact files;
+K52 OPEN, original buffers missing, four-host follow-up awaiting approval.
+Raw: `/home/erbmi1/efs-artifacts/taskX-20261028/`. Assigned-host work complete.
 
 ## Purpose and current scope
 
@@ -99,6 +98,22 @@ python3 tests/live/orcd_raft_kv/fork_repro.py PRIVATE_MOUNT/NEW_FORK fork --seco
 python3 tests/live/orcd_raft_kv/fork_repro.py PRIVATE_MOUNT/NEW_SPAWN spawn --seconds 30
 ```
 
+Run the code gate in detached screen from the frozen source, preserving its
+output before another run:
+
+```sh
+env -u EFS_TRANSPORT EFS_FUSE_PREFIX=/data1/efs/deps/libfuse \
+  EFS_GIT_ID=86035a633 EFS_GIT_BRANCH=agent/devel-task-x \
+  EFS_GIT_DESCRIBE=86035a633 EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 \
+  scripts/make_test_summary.sh
+```
+
+Base controls use the same Python commands listed in the failure table,
+fresh private TMPDIRs, base identity `3debca7ec`, and a separate
+`ASAN_OPTIONS=detect_leaks=0` invocation for address-only coverage. B6:
+`EFS_B6_MODES=full EFS_B6_KEEP=1 EFS_B6_ARTIFACTS=NEW_OUTPUT python3 tests/test_b6_unavailable.py`.
+It retains its original 16 MiB limiting-member quota and existing deadlines.
+
 The `fork` control deliberately exercises the known kernel limitation; its
 failure is preserved, never waived as a passing data-path check. Stop clients
 cleanly, prove mount absence, stop only owned daemons and preserve failed
@@ -125,21 +140,58 @@ TOTAL 522 FAIL 6 NOTRUN 14 STATUS FAIL (584s) OVERBUDGET 4 BUILD 10s
 
 | Failing command | Recorded observation | Base/control status |
 | --- | --- | --- |
-| test_readindex_pair.py | LSan fatal, ptrace unavailable | pending |
-| test_host_outbox.py | same | pending |
-| test_raft_ack_window.py | same | pending |
-| test_stage_evict_lru.py | same | pending |
-| EFS_B6_MODES=full test_b6_unavailable.py | W0 succeeds; test expected every later write ENOSPC | pending; original failed fixture retained |
+| test_readindex_pair.py | LSan fatal, ptrace unavailable | same fatal on untouched base; address-only PASS |
+| test_host_outbox.py | same | same fatal on untouched base; address-only PASS |
+| test_raft_ack_window.py | same | same fatal on untouched base; address-only PASS |
+| test_stage_evict_lru.py | same | same fatal on untouched base; address-only PASS |
+| EFS_B6_MODES=full test_b6_unavailable.py | W0 succeeds; test expected every later write ENOSPC | isolated base PASS; later candidate gate PASS; original failure remains unresolved |
 | test_make_test_recipe.py | test_code_graph.py neither wired nor listed with reason | reproduces on untouched 3debca7ec |
 
-The first gate inherited `EFS_TRANSPORT=tcp` from the D3 controller. Node9900
-has an ACTIVE mlx5_0 port; its RDMA skips cannot establish absent hardware.
-A second complete gate with that override removed is queued, preserving this
-first result. No leak suppression is applied to either complete gate. Focused
-address-only controls will be labelled as such, with leak qualification NOTRUN.
-The first gate's other skipped capabilities are missing external cluster
-scripts, valgrind, a normal-build fault-only subcase and the sanitizer runtime
-probe. Full skip lists and timing overruns remain in the original summary.
+The first gate inherited `EFS_TRANSPORT=tcp` from the D3 controller. This
+incorrectly constrained the RDMA capability checks despite an ACTIVE mlx5_0
+port. The original result is retained; a second complete gate removed that
+override (and did not suppress sanitizer checks):
+
+```text
+TOTAL 522 FAIL 5 NOTRUN 5 STATUS FAIL (662s) OVERBUDGET 6 BUILD 0s
+```
+
+Nine RDMA commands now ran successfully: declaration frame path,
+`test_rdma_xprt`, and seven segmented modes. This is hardware unit coverage,
+not a D3 RDMA profile or distinct-host RDMA qualification. Remaining NOTRUNs:
+external cluster stop/remount scripts absent; RDMA Memcheck and real leak
+fixtures lack valgrind; normal `test_follower_bound` lacks its fault-only
+subcase; sanitizer runtime-probe fixtures are unavailable on this host.
+
+Four LSan fatal failures and the graph-test recipe failure remain, and each
+reproduces in an unchanged-base focused invocation on the same host. Host
+policy is `ptrace_scope=2`, `TracerPid=0`, seccomp off and SELinux disabled.
+All four focused address-only controls (`ASAN_OPTIONS=detect_leaks=0`) PASS;
+they **do not qualify leaks**. Neither complete gate used that suppression.
+The actual gate status remains FAIL. Full-suite baseline was not run; the
+base comparison is these focused commands, not a paired whole-gate A/B.
+
+The graph file itself is tracked. The missing wiring is a test-integration
+issue: `test_code_graph.py` includes Git-backed source selection and hook
+fixtures. Its owner should wire it with its prerequisites or give an explicit
+dedicated-gate reason; silently omitting it is what the recipe check refuses.
+No graph-acceptance result is claimed by Task X.
+
+The B6 failure is separate and **not cleared by its later passes**. Its
+three-member fixture fills node 3's 16 MiB quota until a 1 MiB file is refused,
+then expects every 300,000-byte/small write to fail. That inference needs
+review: residual capacity and concurrent packing/reclaim can admit smaller
+fully protected writes. The closed failed client log has no degraded-ack
+lines, but later full-mode assertions and cold checks were skipped by the
+failure, so W0's protection is not qualified here. The isolated unchanged-base
+control passed all checks, including 48 acknowledged files exact after restart;
+the second candidate gate also passed B6. Neither proves this first observation
+harmless. The original stores remain archived for investigation. No B6 oracle,
+quota, durability or product behavior was changed.
+
+No timeout or budget was increased. The first gate has four timing overruns;
+the second has six (K38, stop-progress, K43, and three D39 model shards), all
+listed with measured durations in their retained summaries.
 
 Baseline `3debca7ec`: D3 **PASS**, K52 **NOT REPRODUCED** on this run.
 37,506 successful I/O operations and every one of their payloads exact on
@@ -170,12 +222,23 @@ The first queued in-process comparison refused port 19640 before starting a
 daemon or workload: the next owned fixed qualification already held the port.
 The refusal and rc 1 remain in `inproc-controller.log` / `inproc.rc`; no data
 comparison ran. The original queue pause did not prevent that scheduling race.
-A fresh in-process comparison is queued after the gate on ports 19660–19663,
-with new `inproc2` fixture/output paths. No occupied-port check was bypassed.
+The subsequent in-process comparison used fresh ports 19660–19663 and new
+`inproc2` fixture/output paths after the first gate finished. No occupied-port
+check was bypassed.
+
+Same-mount in-process D3 with the **original fork-launching queries PASS**:
+36,105 successful files exact immediately and on final read-back, 5,519 queries
+over six generations, zero I/O/query errors, I/O maximum 0.314 seconds, query
+maximum 17.642 seconds. Five bounded query BUSY refusals were handled under
+the original rule (longest episode 17.501 seconds). Thus K52 is **NOT
+REPRODUCED**, including the closer same-mount pattern. All clients and daemons
+stopped cleanly. This prevents the stronger claim that only in-process readers
+fail, or that these runs establish K52 equals K10.
 
 Candidate driver regression suite **PASS** on node9900. Source content
 verified against Git objects: base 2,280 files and candidate 2,281 files, no
-mismatch. Candidate binary:
+mismatch; candidate verified again after both gates. Product `src/` and
+`include/` equal Task V's `b2d57e421` and have no Task X changes. Candidate binary:
 `efsd 86035a633 (branch agent/devel-task-x, built 2026-10-28T19:32:40Z on node9900)`.
 
 Host: AMD EPYC 9474F, 192 logical CPUs, 385,951 MiB RAM; RHEL kernel
@@ -187,5 +250,56 @@ Python entry-point instrumentation records the original command selecting
 `_posixsubprocess.fork_exec` and the explicit replacement selecting
 `os.posix_spawn`; it is not a syscall trace.
 
-No historical failure or release gate is closed by the proposed fix.
-Distinct-host rerun, RDMA and patched-kernel verification are NOTRUN.
+## Evidence retention and cleanup
+
+Stable raw root on **node9900**:
+`/home/erbmi1/efs-artifacts/taskX-20261028/`.
+Final `SHA256SUMS`: **281 files**, verified with `sha256sum -c`;
+manifest SHA-256:
+`a1a86a2eedcaa125c9eda5cc807853a80b219cc0faacf9dff181ca67c88a6a90`.
+`gate-first/` and `gate-auto/` keep separate summaries, timings, exact command
+lists and every failure log. Original/corrected D3 outputs and closed daemon
+and client logs, controls, build/source manifests, controller scripts and
+cleanup receipts remain. Available preliminary Mac-driver logs are retained
+separately; those attempts encountered sandbox/Linux `/proc` limitations and
+are not qualification results. The vendor-private fork interception was fixed
+before the qualified Linux driver run.
+
+Eight critical Task V files were copied and hash-verified without modifying
+the original evidence: original D3 result/output, run/cluster descriptions,
+original manifests and the two later-read JSON records. This is a critical
+subset, not a copy of every Task V capture. The copied original top manifest
+matches its published hash
+`16cb6e720c06b8b2e8972ee1a8726f3b988563c0530d01a732a3bfd205f351c5`.
+
+The failed B6 fixture is **kept for the OPEN investigation**:
+`failed-b6-first-0.tar.gz`, 52,397,982 bytes, all **915 regular files** verified
+against closed-source lengths and SHA-256s, plus full gzip validation;
+archive SHA-256:
+`6c2002946b9b0a06997743995454428eca6444334727b143987861720c483fd4`.
+Its member inventory and retention record are included in the master manifest.
+
+Only after preservation verified did `~/bin/edelete --force --delete` remove
+`/tmp/efs-taskX-20261028`. Cleanup rc 0; the tree is absent, with zero owned
+processes/mounts before and after. `PRUNED.txt` names removed source/build trees,
+passed D3 stores/payloads, successful B6 control stores and test scratch.
+Exact-store replay for passing D3 runs is forfeited; committed recipes remain.
+Existing user clusters and their data were not stopped, reformatted or deployed.
+
+## Verdict and remaining work
+
+The fork-free query launcher and its regression are implemented and exercised;
+the corrected one-host D3 gate passes. The known kernel race is independently
+reproduced, but both original-query D3 controls pass too. No new product read
+failure is demonstrated, no packing change is justified, and the eight
+historical buffers cannot be reconstructed. **K52 remains OPEN and blocks
+alpha**; changing its row to FIXED or DECIDED would overstate this evidence.
+
+The assignment's per-original-mismatch causal classification is impossible
+from the retained observations. A new four-host TCP reproduction with the rich
+diagnostics is the useful next test. Approval was requested for fresh private
+fcstor012–015 scratch, 4 GiB/member, ports 19680–19683; Task X explicitly
+requires permission before reusing those hosts. No reuse has occurred.
+Distinct-host follow-up, D3 over RDMA and patched-kernel verification remain
+NOTRUN. The five baseline-reproduced full-gate failures and the intermittent
+quota-oracle observation remain separate integration/qualification work.
