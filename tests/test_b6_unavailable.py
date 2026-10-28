@@ -505,6 +505,7 @@ def run_mode(mode):
 
 
 runs = []
+completed = False
 try:
     for mode in modes:
         run_mode(mode)
@@ -525,7 +526,10 @@ try:
         r.out['refused'] = {k: errno.errorcode.get(v, str(v)) for k, v in r.refused.items()}
         print(f'B6 {r.mode}: whole-cluster orderly restart, {len(r.acked)} acknowledged files '
               'exact PASS')
+    completed = True
 finally:
+    # A failing gate must keep the daemon logs and stores needed to explain
+    # its first failure. Successful fixtures retain the existing cleanup.
     for r in runs:
         r.close()
     if artifacts:
@@ -534,8 +538,8 @@ finally:
         # four commands and their results must not overwrite each other.
         tag = '' if modes == ['down', 'refuse', 'slow', 'full'] else '-' + '-'.join(modes)
         (artifacts / f'b6-result{tag}.json').write_text(json.dumps(result, indent=1, sort_keys=True))
-    if os.environ.get('EFS_B6_KEEP'):
-        print('kept', work)
+    if not completed or os.environ.get('EFS_B6_KEEP'):
+        print('kept', work, '(failure)' if not completed else '(requested)', flush=True)
     else:
         shutil.rmtree(work, ignore_errors=True)
 print(f'B6 unavailable fragment destination ({",".join(modes)}): reads reconstruct, writes and '
