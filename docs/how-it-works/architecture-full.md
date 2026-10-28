@@ -1646,6 +1646,15 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[ORCD-test second profiling cycle](../status/orcd-test-dd-round2-20261028.md):
+Copy-elision candidate `8c20f501d` is unqualified and withdrawn by
+`1f8c56e14`; slowdown also persists after rollback, so causality remains open.
+The original durability-index fix remains. IOR exit-status/readiness fixes
+`2499242de` stay. Restored POSIX 222/223 (0 FAIL, 1 SKIP), four IOR cases and
+full peer payload check PASS. Full gate 529/3 FAIL/5 NOTRUN: missing budget
+rows corrected in `ebac01ded` (five native focused checks PASS); two TSan
+link failures remain. No release PASS; cluster running, evidence retained.
+
 [ORCD-test dd profile and durability index](../status/orcd-test-dd-profile-20261028.md):
 `agent/orcd-dd-profile-20261028`, product fix `3769f44bb`, not merged.
 Client inode-only durability chains consumed 65% of sampled user cycles;
