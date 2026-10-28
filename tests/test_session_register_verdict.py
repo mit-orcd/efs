@@ -8,7 +8,7 @@ a = s.index('    if (cmd[1] ==', s.index('    if (required_failure)'))
 b = s.index('\n}', a)
 verdict = s[a:b]
 a = s.index('    if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&', s.index('static int host_apply('))
-b = s.index('    /* Storage failure must retry', a)
+b = s.index('    /* Infrastructure failures are never replicated business verdicts.', a)
 advance = s[a:b]
 code = r'''
 #include "efs/common.h"
