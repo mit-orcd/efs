@@ -18,43 +18,19 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[Task I review](task-i-20261026.md): live protocol **PASS (scoped), complete**;
-F1/release coverage remains INCOMPLETE. User-selected quiet fstor007 qualification at
-`8e1db244f` stopped: 528/1 FAIL/15 NOTRUN, B6 full packing assertion;
-failure-retaining B6 diagnostic `b9947abb6` passes alone (48 exact);
-loaded gate528/0 FAIL/15 NOTRUN, native hardware RDMA9/9 PASS,
-unchanged quiet-host RDMA hour PASS:2080exact,pack0/0,RSSwithin5%,
-drain13.7s; TCP also PASS2080exact,pack0/0,drain25.8s; earlier B6 intermittent remains unresolved;
-node9901 was occupied and left untouched. User-requested drain follow-up
-identified ongoing lane-row refresh triggers and a truncate scheduling gap.
-Repair `773284b5d`: node9900 gate 527/0 FAIL/18 NOTRUN, native RDMA9/9
-PASS, RDMA hour FAIL load RSS +6.07% and raw packer read error1; all2080
-exact, drain12.1s. TCP metrics pass (drain30.2s), with host-coverage FAIL from this session’s
-source-staging tar; that observation is retained. Allocator/error-detail
-diagnostic closed: all six snapshots reviewed, original failures not reproduced; future staging waits for measurements to close. AMD gate closed 527/1 FAIL/14 NOTRUN on a
-geometry readiness failure on
-unknown protection status; harness `99f3b1964` preserves the zero-count
-assertion and 30 s bound; AMD99 gate then528/1 FAIL/14 NOTRUN on the recurring B6 full assertion.
-AMD b994 gate528/1 FAIL/14 NOTRUN retained a W165 resync-admission BUSY.
-Test-only093415c86 uses the existing BUSY-only management helper within
-the original60s recovery bound; corrected gate528/0 FAIL/14 NOTRUN,
-native9/9 PASS; TCP metrics pass but host coverage FAILs275 samples
-of resumed UID1001 W123 work. Clean AMD confirmation remains pending; user-authorized fallback
-final source093415c86 on fstor007: gate528/0 FAIL/15 NOTRUN,
-native hardware RDMA9/9 PASS, final RDMA hour PASS2080exact,pack0/0,
-RSSwithin5%,drain12.2s; unchanged TCP hour active;
-other users’ work is untouched. Qualification
-remains INCOMPLETE.
-Last qualified candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
-native test 96 KiB versus 48 MiB THP with exact contents, plus checked
-observer log I/O. Fresh gates: node9900 **527 / 0 FAIL / 18 NOTRUN**,
-AMD **527 / 0 FAIL / 14 NOTRUN**; both native RDMA **9/9 PASS**.
-Uninstrumented node9900 RDMA and AMD TCP hours **PASS (scoped)**: 2080
-exact each, pack errors 0/0, drains 77.8/78.9 s; independent RSS passes.
-Node9900 TCP also PASS: 2080 exact, pack errors 0/0, independent RSS within
-bounds, drain 147.0 s versus 150 s. Hardware pair exit 0; enclosing full
-gates retain host-limited NOTRUNs. Shared-client scope, narrow drain margin
-and prior intermittent root cause remain explicit. Prior results follow.
+[Task I review](task-i-20261026.md): user-requested clean fallback
+qualification **COMPLETE, PASS (scoped)** at source `093415c86` on quiet
+fstor007, branch `agent/devel-task-i`, not merged or pushed. Full8-job gate
+**528 / 0 FAIL / 15 explicit NOTRUN**; native hardware mlx5_2 RDMA **9/9 PASS**.
+Unchanged3600s RDMA/TCP hours: **2080 exact each**, operation/packer errors0,
+independent RSS within5%, clean ownership, drains **12.2/14.7s**. All
+owned processes/mounts absent after cleanup; binary identities and four
+closed manifests verified. Failed captures and investigation stores stay
+on their original hosts. AMD's foreign-W123 overlap remains FAIL; earlier
+node9900 RSS/packer and B6 intermittent causes remain unproven, including
+explicit old-harness B6 evidence gaps. F1/release coverage stays INCOMPLETE
+for host-limited checks. Completion monitoring stops; no new run queued.
+Prior results follow.
 
 `47ca08eaf` xorinox gate 518 / 0 FAIL / 13 NOTRUN, but hour FAIL stored
 data (+~56.8%); RSS PASS, 2080 exact, pack errors 0/0, drain 73.5 s.
