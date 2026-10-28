@@ -26,12 +26,24 @@ def run(host, command, timeout=150):
     return r.stdout
 
 
+def verify_source(expected):
+    """Fail before creating a capture when any target has another snapshot."""
+    for host in HOSTS:
+        actual = run(host, 'cat /tmp/efs/.orcd-test-revision').strip()
+        if actual != expected:
+            raise RuntimeError('source mismatch on '+host+': expected '+expected+
+                               ', observed '+actual)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--label', required=True)
+    ap.add_argument('--source', required=True, help='expected full installed source commit')
     ap.add_argument('--seconds', type=int, default=120)
     a = ap.parse_args()
     assert a.label.replace('-', '').replace('_', '').isalnum()
+    assert len(a.source) == 40 and all(c in '0123456789abcdef' for c in a.source)
+    verify_source(a.source)
     root = '/home/erbmi1/orcd/scratch/efs/orcd-test/dd-profile-20261028/'+a.label
     capture = Path(__file__).with_name('orcd_dd_capture.py').read_text()
     command = 'test ! -e '+shlex.quote(root)+' && mkdir -p '+shlex.quote(root)+" && cat > "+shlex.quote(root+'/capture.py')

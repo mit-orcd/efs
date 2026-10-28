@@ -1160,6 +1160,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_create_retry_ack.py
 	python3 tests/test_apply_ring.py
 	python3 tests/test_posix_phase_trace.py
+	python3 tests/test_orcd_dd_profile.py
 
 test-all: test test-long
 

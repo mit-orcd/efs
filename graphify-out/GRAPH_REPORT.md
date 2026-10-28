@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `0e3043a7730d941385e450c277f1a84b0e0edd9a`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 16,299 nodes, 68,030 directed typed edges, 486 communities.
+Source base: `3769f44bb2ada18aa6959a4dc66d110a661bd1de`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 16,329 nodes, 68,132 directed typed edges, 518 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -14,22 +14,22 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 3
-- `calls`: 26003
+- `calls`: 26020
 - `case_of`: 116
-- `contains`: 24841
+- `contains`: 24878
 - `defines`: 1845
 - `documents_finding`: 3
 - `exercises`: 3
-- `imports`: 6536
-- `imports_from`: 805
-- `indirect_call`: 645
+- `imports`: 6560
+- `imports_from`: 810
+- `indirect_call`: 650
 - `inherits`: 16
 - `invokes`: 2
 - `mentions_symbol`: 2129
-- `method`: 620
-- `rationale_for`: 1214
-- `references`: 2088
-- `references_path`: 1068
+- `method`: 623
+- `rationale_for`: 1219
+- `references`: 2089
+- `references_path`: 1073
 - `regression_for`: 3
 - `uses`: 90
 
@@ -41,7 +41,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1388}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1406}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
