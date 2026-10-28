@@ -68,6 +68,24 @@ def write_exact(path, data, flags=os.O_WRONLY | os.O_CREAT | os.O_EXCL, sync=Tru
         os.close(fd)
 
 
+def verify_payload(path, expected):
+    """One immediate exact read; mismatch evidence is captured before unwinding.
+
+    No retry or any-version acceptance: a later matching read cannot turn this
+    operation into success. Keep hashes/lengths rather than bulk payloads.
+    """
+    observed = Path(path).read_bytes()
+    if observed != expected:
+        detail = dict(path=str(path), expected_len=len(expected), observed_len=len(observed),
+                      expected_sha256=hashlib.sha256(expected).hexdigest(),
+                      observed_sha256=hashlib.sha256(observed).hexdigest(),
+                      first_mismatch=next((i for i, (a, b) in enumerate(zip(expected, observed))
+                                           if a != b), min(len(expected), len(observed))))
+        exc = OSError(errno.EIO, 'read-back mismatch')
+        exc.payload_detail = detail
+        raise exc
+
+
 def entry(d, name, data):
     st = os.stat(d / name)
     return dict(name=name, size=len(data), sha256=hashlib.sha256(data).hexdigest(),
@@ -99,8 +117,7 @@ def h_load(a):
             t0 = time.monotonic()
             try:
                 write_exact(d / name, data)
-                if (d / name).read_bytes() != data:
-                    raise OSError(errno.EIO, 'read-back mismatch')
+                verify_payload(d / name, data)
                 e = entry(d, name, data)
                 t1 = time.monotonic()
                 with lock:
@@ -111,7 +128,8 @@ def h_load(a):
                         slow.append(dict(name=name, seconds=round(t1 - t0, 3), at=now()))
             except OSError as exc:
                 with lock:
-                    errors.append(dict(name=name, errno=exc.errno, error=str(exc), at=now()))
+                    errors.append(dict(name=name, errno=exc.errno, error=str(exc), at=now(),
+                                       **getattr(exc, 'payload_detail', {})))
             with lock:
                 ops[0] += 1
             i += 1
@@ -606,8 +624,7 @@ def h_d3(a):
             t = time.monotonic()
             try:
                 write_exact(d / name, data)
-                if (d / name).read_bytes() != data:
-                    raise OSError(errno.EIO, 'read-back mismatch')
+                verify_payload(d / name, data)
                 os.stat(d)
                 os.listdir(d)
                 if i % 5 == 4:  # ordinary namespace churn too
@@ -622,7 +639,9 @@ def h_d3(a):
                         res['io_over'].append(dict(op=name, seconds=round(dt, 3)))
             except OSError as exc:
                 with lock:
-                    res['io_errors'].append(dict(op=name, errno=exc.errno, error=str(exc), at=now()))
+                    res['io_errors'].append(dict(op=name, writer=w, path=str(d / name),
+                                                 errno=exc.errno, error=str(exc), at=now(),
+                                                 **{k: v for k, v in getattr(exc, 'payload_detail', {}).items() if k != 'path'}))
             i += 1
 
     def check_query(kind):

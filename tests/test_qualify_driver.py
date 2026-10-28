@@ -122,6 +122,24 @@ try:
     desc.write_text(json.dumps(cluster))
     stubs = ','.join(cluster['plugins'])
 
+    # Immediate mismatch evidence survives even if a later read is correct.
+    hspec = importlib.util.spec_from_file_location('stage2_helpers', root / 'scripts/stage2_helpers.py')
+    H = importlib.util.module_from_spec(hspec)
+    hspec.loader.exec_module(H)
+    mismatch = tmp / 'mismatch'
+    mismatch.write_bytes(b'bad')
+    try:
+        H.verify_payload(mismatch, b'expected')
+        raise AssertionError('wrong payload accepted')
+    except OSError as exc:
+        original = dict(exc.payload_detail)
+        assert exc.errno == 5 and original['path'] == str(mismatch)
+        assert original['observed_len'] == 3 and original['expected_len'] == 8
+        assert original['observed_sha256'] != original['expected_sha256']
+    mismatch.write_bytes(b'expected')
+    H.verify_payload(mismatch, b'expected')
+    assert original['observed_len'] == 3, 'later success must not rewrite original failure evidence'
+
     # Cleanup failure lowers the run and preserves even controller scratch.
     from unittest.mock import patch
     qstop = object.__new__(Q.Qualify)
