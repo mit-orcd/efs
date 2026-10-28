@@ -42,6 +42,7 @@ os.dup2(log.fileno(), 2)
 sys.path.insert(0, str(source/'scripts'))
 sys.path.insert(0, str(source/'tests'))
 from task_i_host_sample import foreign_jobs
+from task_i_preserve import verify_fixture_copy
 from mount_idle import wait_fixture_unused
 
 def stage(s):
@@ -103,17 +104,9 @@ try:
     hold = fixture.parent/'append-hold'
     if hold.exists():
         shutil.copyfile(hold, saved/'append-hold')
-    rows = []
-    for f in sorted(saved.rglob('*')):
-        if f.is_symlink():
-            raise AssertionError('unexpected symlink in synthetic evidence')
-        if f.is_file():
-            relative = f.relative_to(saved)
-            digest = hashlib.sha256(f.read_bytes()).hexdigest()
-            if relative.parts[0] in ('n1', 'n2', 'n3'):
-                assert hashlib.sha256((fixture/relative).read_bytes()).hexdigest() == digest, 'store copy differs'
-            rows.append(digest+'  '+str(relative)+'\n')
+    rows, links = verify_fixture_copy(saved, fixture)
     (saved/'SHA256SUMS').write_text(''.join(rows))
+    (saved/'SYMLINKS.json').write_text(json.dumps(links,indent=2)+'\n')
     stage('RECOVER_ORIGINAL_FOR_CLEANUP')
     argv, endpoints = [], []
     for n in (1, 2, 3):

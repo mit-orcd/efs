@@ -39,8 +39,9 @@ reproducing foreground growth (not qualification). Address-level mapping/
 residency diagnostic `0611de678` has started; no further allocator policy change
 is justified yet. AMD `5f07151c2` default-RoCE native PASS 9/9; full
 gate FAIL 3/520 (two busy unmounts, expected-abort timeout), hour NOTRUN.
-AMD’s bounded quiet prerequisite expired behind W123, with no store touched;
-cleanup/qualification NOTRUN and the original failed fixture preserved.
+AMD became quiet; fresh preservation copied the fixture but refused normal
+internal query-cache links before any restart. Strict copy/link validation is
+fixed and tested (100 copied files match); fresh cleanup/qualification follows.
 All original failures/stores stay on-host; allocator probe capture hashes
 verified. No other cluster/client touched.
 
