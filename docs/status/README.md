@@ -35,6 +35,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Task AA / W170 published benchmark](w170-efs-bench-20261028.md):
+**IN PROGRESS** on `agent/devel-task-aa`, base `fe18612ae`; reserved intel2,
+loopback only. Replace raw fragment modes with normal ticketed client writes,
+checked publication and cold FUSE regression; Task U direct/bench comparison
+and full gate pending. Task W coverage dependency integrated privately.
+
 [Wave 29 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`f3a447fa3`)**: Task Y, the known-defect register reconciled ([report](k-register-reconciled-20261028.md)): both tables carry exactly one row for each K1–K52, each opening with one canonical disposition (11 FIXED, 0 VERIFIED, 35 VERIFY, 2 DECIDED, 2 CLOSED, 2 OPEN: K48 and K52), with every earlier cell kept as history; `scripts/check_k_register.py` enforces that in `make test` (`tests/test_k_register.py`). No row was promoted to VERIFIED and no gate was rerun. Merged together with D45's K36 scope note and topology row.
 
 [Task Y — K register reconciliation](k-register-reconciled-20261028.md): reviewed wave-28 devel `9e4d66a8c`; 52 canonical rows in each table, 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN. K48/K52 remain OPEN; named live gates remain VERIFY. History preserved, stale merge/acceptance contradictions reported, structural checker in `make test`; no new live qualification or user decision.

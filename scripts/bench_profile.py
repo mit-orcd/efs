@@ -92,7 +92,7 @@ def parser():
     p.add_argument('--files', type=int, default=5000, help='remote metadata files')
     p.add_argument('--dirs', type=int, default=64, help='remote metadata directories')
     p.add_argument('--store-size', type=sizes, default=sizes('256M'), help='bounded remote read/write working set')
-    p.add_argument('--chunk-base', type=int, default=0, help='remote benchmark chunk-index base; avoid other writers')
+    p.add_argument('--fixture-id', type=int, default=0, help='fresh published benchmark ID; uses ID and ID+1, retained for readback')
     p.add_argument('--strace', action='store_true', help='separate syscall-traced rerun, after baseline and perf')
     p.add_argument('--strace-expr', help='strace -e expression, e.g. trace=writev,fsync,futex')
     p.add_argument('--frequency', type=int, default=499)
@@ -153,8 +153,8 @@ def cases_for(a, cpus):
         raise ValueError('--writers must be 0..64')
     if len(a.store_size) != 1 or a.store_size[0] < 131072 or a.store_size[0] % 131072:
         raise ValueError('--store-size must be one multiple of the 128 KiB logical chunk')
-    if a.chunk_base < 0 or a.chunk_base + a.store_size[0] // 131072 >= 2**32:
-        raise ValueError('remote working set exceeds chunk-index range')
+    if a.fixture_id < 0 or a.fixture_id >= 2**64-1:
+        raise ValueError('--fixture-id must leave room for the following unsigned 64-bit ID')
     duration = str(a.time)
     cases = []
 
@@ -216,16 +216,15 @@ def cases_for(a, cpus):
                 (['--sync'] if a.data_sync else []))
     if 'meta' in modes:
         add('meta-local', 'meta', ['--bench', 'meta', '--time', duration])
-    # A fixed-size PUT primes the entire read window; no reads of uninitialized
-    # chunks, and timed PUTs wrap inside this bounded working set.
-    chunks = a.store_size[0] // 131072
-    common = [a.seed, '--id', str(a.chunk_base)] if a.seed else []
+    # Publish a complete fixture before readback. A timed write uses another
+    # fresh identity and stops at the duration or byte limit; no hidden overwrite.
+    common = [a.seed, '--id', str(a.fixture_id)] if a.seed else []
     if 'net' in modes:
         add('net', 'net', [a.seed, '--time', duration])
     if 'store' in modes or 'read' in modes:
         add('store-prime', 'store', common + ['--size', str(a.store_size[0])], prerequisite=True)
     if 'store' in modes:
-        add('store-timed', 'store', [a.seed, '--id', str(a.chunk_base + 1), '--size', str(a.store_size[0]), '--time', duration])
+        add('store-timed', 'store', [a.seed, '--id', str(a.fixture_id + 1), '--size', str(a.store_size[0]), '--time', duration])
     if 'read' in modes:
         add('read', 'read', common + ['--read', '--time', duration])
     if 'remote-meta' in modes:

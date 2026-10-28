@@ -39,7 +39,7 @@ try:
     c.start(3, join=1, quota='1G')
     c.wait_members((1, 2, 3), 3)
     c.wait_voters((1, 2, 3), lambda n, v: k.voters_ok(n, v, 3))
-    total, writers = 2*1024*1024+67, 3
+    total, writers = 2*1024*1024+68, 3
     out = bench('--size', total, '--io-size', '64K', '--workers', writers, '--id', 170)
     assert f'BENCH_OK kind=write logical_bytes={total} ' in out, out
     # A failed name collision cannot overwrite a previous benchmark fixture.

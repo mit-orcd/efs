@@ -3,7 +3,7 @@
 
 A fresh private 3-member TCP/O_DIRECT cluster per case. The measurement-only
 C client and FUSE each write one sequential file per writer. Optional
-bench mode preserves the unmodified benchmark's failure, not a valid baseline.
+bench mode uses the published efs-bench path with the same file/request shape.
 Includes final cluster data-commit; verifies every byte outside measurement.
 strace changes scheduling: timings/CPU describe this instrumented run, not IOR.
 """

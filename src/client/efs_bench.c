@@ -352,7 +352,6 @@ struct worker_arg {
     int id;
     double deadline;      /* network ceiling */
     uint64_t bytes;       /* fragment bytes sent/received */
-    uint64_t logical_bytes;
     uint64_t chunks_ok;
     uint64_t chunks_fail;
     uint64_t per_node_bytes[EFS_MAX_NODES]; /* indexed by membership slot */
@@ -379,21 +378,20 @@ static void *worker_main(void *arg)
         sticky[i] = NULL;
 
     while (now_sec() < a->deadline) {
-            uint64_t seq = next_chunk();
-            uint32_t chunk_index = (uint32_t)(seq & 0xffffffffu);
-            efs_ino_t net_ino = ino + (seq >> 20);
-            efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
-            efs_place_fragments(g_client.nodes, g_client.node_count, net_ino,
-                                chunk_index, nodes);
-            int rc = put_chunk_fanout(net_ino, chunk_index, nodes, a->zero_frag,
-                                      a->checksum, a->per_node_bytes, sticky);
-            if (rc == EFS_OK) {
-                a->chunks_ok++;
-                a->bytes += (uint64_t)EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE;
-                a->logical_bytes += EFS_CHUNK_SIZE;
-            } else {
-                a->chunks_fail++;
-            }
+        uint64_t seq = next_chunk();
+        uint32_t chunk_index = (uint32_t)(seq & 0xffffffffu);
+        efs_ino_t net_ino = ino + (seq >> 20);
+        efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+        efs_place_fragments(g_client.nodes, g_client.node_count, net_ino,
+                            chunk_index, nodes);
+        int rc = put_chunk_fanout(net_ino, chunk_index, nodes, a->zero_frag,
+                                  a->checksum, a->per_node_bytes, sticky);
+        if (rc == EFS_OK) {
+            a->chunks_ok++;
+            a->bytes += (uint64_t)EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE;
+        } else {
+            a->chunks_fail++;
+        }
     }
 
     for (uint32_t i = 0; i < g_client.node_count; i++) {
@@ -505,7 +503,8 @@ static int run_data_bench(const char *seed, const char *export_name, int reading
     snprintf(name, sizeof(name), "bench-data-%llu-w*/payload", (unsigned long long)id);
     if (want_perf) {
         char path[512]; const char *p = getenv("EFS_PERF_PATH");
-        snprintf(path, sizeof(path), "%s", p && *p ? p : "/tmp/efs-bench-perf.data");
+        if (p && *p) snprintf(path, sizeof(path), "%s", p);
+        else snprintf(path, sizeof(path), "/tmp/efs-bench-perf-%d/perf.data", (int)getpid());
         g_perf_pid = efs_start_perf_recorder(getpid(), path);
         if (g_perf_pid < 0) rc = EFS_ERR_IO;
     }
@@ -521,7 +520,11 @@ static int run_data_bench(const char *seed, const char *export_name, int reading
     }
     uint64_t bytes = 0;
     for (unsigned i = 0; i < launched; i++) {
-        if (pthread_join(threads[i], NULL) || workers[i].rc) rc=EFS_ERR_IO;
+        if (pthread_join(threads[i], NULL) || workers[i].rc || !workers[i].bytes) {
+            fprintf(stderr, "bench worker=%u bytes=%llu rc=%d\n", i,
+                    (unsigned long long)workers[i].bytes, workers[i].rc);
+            rc=EFS_ERR_IO;
+        }
         bytes += workers[i].bytes;
     }
     if (efs_dcache_flush_all() != EFS_OK || efs_client_report_dirty(1) != EFS_OK)
@@ -1330,12 +1333,11 @@ int main(int argc, char **argv)
     if (wall < 1e-6)
         wall = 1e-6;
 
-    uint64_t total = 0, logical = 0, ok = 0, fail = 0;
+    uint64_t total = 0, ok = 0, fail = 0;
     uint64_t per_node[EFS_MAX_NODES];
     memset(per_node, 0, sizeof(per_node));
     for (int i = 0; i < nworkers; i++) {
         total += args[i].bytes;
-        logical += args[i].logical_bytes;
         ok += args[i].chunks_ok;
         fail += args[i].chunks_fail;
         for (uint32_t n = 0; n < g_client.node_count && n < EFS_MAX_NODES; n++)
@@ -1344,8 +1346,6 @@ int main(int argc, char **argv)
 
     double gib = (double)total / (1024.0 * 1024.0 * 1024.0);
     double gib_s = gib / wall;
-    double logical_gib = (double)logical / (1024.0 * 1024.0 * 1024.0);
-    double logical_gib_s = logical_gib / wall;
 
     printf("per_server_bytes:");
     for (uint32_t i = 0; i < g_client.node_count; i++) {
@@ -1354,7 +1354,7 @@ int main(int argc, char **argv)
     }
     printf("\n");
 
-        printf("BENCH_OK kind=net wall_s=%.3f bytes=%llu GiB_s=%.3f workers=%d "
+    printf("BENCH_OK kind=net wall_s=%.3f bytes=%llu GiB_s=%.3f workers=%d "
                "chunks_ok=%llu chunks_fail=%llu nodes=%u\n",
                wall, (unsigned long long)total, gib_s, nworkers,
                (unsigned long long)ok, (unsigned long long)fail,
