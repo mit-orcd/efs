@@ -55,7 +55,7 @@
    ]
   },
   "4-host": {
-   "tcp": "bare-metal-4-tcp (BLOCKED)",
+   "tcp": "fcstor-4x1-tcp (Task V private driver rehearsal; A4 decision open)",
    "rdma": "none",
    "nearest_today": [
     "intel-4x2-tcp"
@@ -883,7 +883,7 @@
   },
   "fcstor-4x1-tcp": {
    "transport": "tcp",
-   "purpose": "Task V private distinct-host driver dry run; user selected fcstor012\u2013015 instead of the lab hosts. A4 decision remains open.",
+   "purpose": "Task V private distinct-host driver dry run; user selected fcstor012\u2013015 instead of the lab hosts. A4 decision remains open. The Task V rehearsal explicitly selects its nine non-soak gates; E4 retains the matrix endurance companion for a later full run.",
    "cluster": {
     "name": "fcstor-4x1-tcp",
     "candidate": "CANDIDATE",
@@ -969,7 +969,8 @@
     "c5-protocol-live",
     "e1-manifest",
     "d3-efs-load",
-    "e4-scale"
+    "e4-scale",
+    "soak"
    ],
    "allow": [
     "restart",

@@ -579,6 +579,7 @@ try:
     assert four['fixture'] == matrix['topologies']['loopback-5']['fixture']
     assert four['cluster']['seed'] == '10.1.223.66:19340'
     assert not four.get('live_user_cluster')
+    assert 'soak' in four['gates'], 'E4 topologies retain the endurance companion in their full plan'
     five = matrix['topologies']['loopback-5']
     assert five['loopback'] == 5 and five['transport'] == 'tcp'
     assert five['gates'] == matrix['topologies']['loopback-3']['gates']
