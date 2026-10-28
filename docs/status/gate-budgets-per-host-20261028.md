@@ -1,6 +1,6 @@
 # Task T — gate budgets across supported hosts
 
-**INCOMPLETE / nuc calibration blocked.** The multi-host fitter is implemented;
+**INCOMPLETE / awaiting nuc and intel2 release.** The multi-host fitter is implemented;
 no fitted budget table or confirming gate is accepted. Three clean intel1
 pools now supply the required K43 measurements: 54.9/54.9/55.0 s, median
 54.9 s. Untouched `fe18612ae` fails the eight-job nuc gate. Later devel
@@ -15,7 +15,7 @@ slots and reason prefixes. Keep `GATE_TARGET_S=1100`; do not raise it to fit
 the measurements. Report model time separately from measured wall time.
 A failed or contaminated gate never becomes a calibration sample.
 
-Branch `agent/devel-task-t`: fitter implementation `292034404`; current
+Branch `agent/devel-task-t`: fitter implementation `292034404`; completed intel1
 measurement source `9638c34e0273fe9ff291ab7deae7ec1940516886`, merging
 wave-29 devel `fe18612ae`. Against that untouched base, selected source
 changes are only the fitter, its regression and one Makefile invocation:
@@ -30,6 +30,15 @@ validation remains separate. Archive SHA-256:
 
 - Task T `9638c34e0`: `4aaf2ded75cfe46f198722edde12fe5da45710244622c39764850872e86a4ce2`.
 - Untouched `fe18612ae`: `6b0968f3d2addfbe5baa986dc9a524ee603718303d4c4666f4f110e4a309016f`.
+
+The branch now includes newer devel `424d0db8f` through `da9509fdd`, with
+receipt/stripe/Raft repairs. Scoped component checks on devel are not a full
+Linux gate; old failed `fe18612ae` results do not certify or condemn this new
+source. Future cohorts will freeze a new commit once the hosts are released.
+D4 progress now keeps its fixture only on failure, matching the already merged
+plateau retention rule. Passing-test cleanup, workload and assertions stay the
+same; this avoids losing the next failed fixture without changing calibration
+costs with an always-keep environment override.
 
 ## Coverage and fitter
 
@@ -171,6 +180,7 @@ identity and final results are retained. No payload/store was exported.
 | intel1 / `intel1-9638c34e0` | 54 | `81d3e8e2477a0302ddf6113704f1e0f20bf928d9859ac09288f20d8c1578bbcf` |
 | intel1 / `intel1-9638c34e0-replacement1` | 22 | `6cd80c0fd6d004d425332702a8213a89f7874553fdc62871bc366bd72a47ff33` |
 | intel1 / `intel1-cleanup-9638c34e0` | 3 | `c5c5575f51ba4348e08b02a4d4d4a5fc704a000769625c7a3563f99ecbdd196c` |
+| intel2 / `intel2-owned-closure` | 3 | `93b71174ac5cf4deb7108cbf4c21d1b1e225b13da5ae7b32afb627230db26cde` |
 
 Corrected intel1 evidence: `intel1-9638c34e0/`, detached screen
 `taskT-intel1-9638`, source `~/efs-taskT-20261028-9638c34e0/src`.
@@ -219,7 +229,10 @@ found no owned process remaining. Logs and `orphan-cleanup.json` /
 `overlap-window.json` are retained. This session's cleanup mistake means
 other gates overlapping it are not quiet-host timing evidence; it does not
 prove that the daemon caused any failure. Future interruption closure needs
-repeated ownership scans and mount checks, not one descendant snapshot. Xorinox was idle when checked; it cannot replace the required
+repeated ownership scans and mount checks, not one descendant snapshot.
+A later closure check verified zero Task T-owned processes and mounts and
+copied the final stopped-daemon log. With explicit user authorization, both
+Task H and Task AA were notified of the overlap and its qualification limits. Xorinox was idle when checked; it cannot replace the required
 nuc/intel2 coverage. SSH checks did not use BatchMode.
 
 ## Completion still required

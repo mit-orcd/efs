@@ -2015,7 +2015,7 @@
     "tests/test_d39_model.py": "b3d3c516b701d914b1eaef42c4d827de3a9c44bbc8ca7c363e87054a43c49186",
     "tests/test_d4_driver.py": "7e79ea6db02a662b38ebc630ab3c12fbf2fe4e9f8b6524578717c3c6ef3d7174",
     "tests/test_d4_plateau.py": "02f21450d21a3440f9d0ec5477a0de2f51aca4aa6812a034466f18edd1f77810",
-    "tests/test_d4_progress.py": "2d81f2878bf8f37061f3b5d92ea43c46334929531e617d6124f3c22e4ab38f5a",
+    "tests/test_d4_progress.py": "f252b39764e5de934baf57871babe02d5068befbed828e1061ca570659ea9f15",
     "tests/test_data.c": "d49cc31522e9b90d651b7692a363642b689f648622ca11185987960c32f2d8d7",
     "tests/test_data_commit.c": "a14f1d8985a8ed45e80d7b5187e1abd5fa8c4ea8e6f2028d8bf664130031f41f",
     "tests/test_declaration_gate.c": "0576925ea85404e1dbbf29b7218654f6a7b59d6a8a737db8408c74012258405a",
@@ -2473,5 +2473,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "ae8e863b17437a1f58352f5419a11674e51c6a25"
+  "source_commit": "da9509fdda61103f086c1c05a9442c1ade66fad2"
 }
