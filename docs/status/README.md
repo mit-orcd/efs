@@ -2,8 +2,9 @@
 
 [Graph-led defects](graph-defects-20261028.md): three component failures confirmed
 on `3debca7ec`: pre-publication stripe retirement, receipt pending-owner eviction,
-and Raft index aliasing. Original native/sanitizer evidence retained; repairs
-and regression gates in progress. No live data-loss or acceptance claim.
+and Raft index aliasing. Original native/sanitizer evidence retained; three repairs and scoped native/
+ASan/UBSan regressions PASS. Full Linux/live-cluster qualification remains NOTRUN;
+no broader acceptance claim.
 
 [Defect-navigation graph](graph-scope-validation-20261028.md): directed first-party
 code, fault models/oracles and selected contracts; W127/W145 and W125 contract

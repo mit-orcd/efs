@@ -1,12 +1,67 @@
 # Graph-led defect review and repairs — October 28, 2026
 
-**Reviewed source `3debca7ec`: three component defects reproduced (FAIL against
-the required behavior), natively and under ASan/UBSan. Fixes pending in this
-initial evidence commit.** This is a focused review, not an exhaustive audit or
-cluster qualification. Related work: W155 request joining, K35/D42 per-stripe
-fsync proof and W154 rebuild protection, and the Raft-store index contract.
+**Repairs implemented; scoped native and ASan/UBSan checks PASS at
+`5ecc915d7`. Original source `3debca7ec` has three reproduced component failures,
+retained below and in the independent evidence commit. No full Linux suite,
+live mount/failover, multi-host or RDMA qualification is claimed.** Related work:
+W155 joining, K35/D42 stripe durability and W154 rebuild protection, and the
+Raft-store index contract. No broader W-item acceptance is changed.
 
-## Findings
+## Repairs and regression gates
+
+- **F1:** stripe records remember an acknowledged publication separately from
+  PUT acknowledgements. Direct REPORT success and resolved APPLIED receipts
+  notify matching FileID/object records. A NOT_FOUND mark retires the obligation
+  only when the sweep snapshot already knew publication succeeded before the
+  mark RPC. Otherwise it retains the record and fails closed. The regression
+  covers full capacity before publication, a wrong FileID, publication racing
+  the mark response, successful marking on retry, and existing legitimate
+  post-publication retirement. This adds no product flag or stored/wire format.
+- **F2:** pending receipt slots remain reserved through execution. An all-pending
+  probe window refuses new identities BUSY without executing their callback;
+  the distinct REFUSED result makes the server return BUSY rather than leave
+  its zero-initialized reply looking successful. Existing owners/duplicates
+  still join, complete, replay and evict completed receipts normally.
+- **F3:** memory/disk lookups, memory append/truncate and snapshot coverage
+  compare full 64-bit distances before narrowing. Existing on-disk tests now
+  check alias rejection, no-op beyond-end truncation, a large snapshot jump,
+  legitimate indices above 2^32 and reopening. No persistent encoding changes.
+
+All three behavioral requirements fail on the preserved original source using
+`tests/review_graph_20261028/regression.py --against ef19b1b74`; all three pass
+on the repairs, natively and with ASan/UBSan. This is a regression negative
+control, not mixed-build/format compatibility testing. The original diagnostic
+`run.py` remains unchanged and is deliberately for the original-source checkout;
+it must not be interpreted as a post-fix passing test.
+
+The normal test matrix runs the new `test_receipt_pending_pressure.py`, and the
+existing `test_data_commit` and `test_raft_store` binaries carry the other new
+cases. The existing REPORT frame/receipt-resolution tests now require publication
+notifications too. `test_make_test_recipe.py` passes; no test budget or deadline
+was raised. The manual discriminator is additional evidence, not a duplicate
+command in `make test`.
+
+Committed reproduction of the scoped verification (fresh output required):
+
+```sh
+python3 tests/review_graph_20261028/verify.py --out /tmp/efs-graph-fixes-native
+python3 tests/review_graph_20261028/verify.py --sanitize --out /tmp/efs-graph-fixes-asan
+```
+
+The verification runner records the tested commit, platform/compiler, relevant
+hashes, every command, exit status and log hash. It runs the full standalone Raft
+and Raft-store suites, the full data-commit unit suite, receipt ownership/join and
+REPORT resolution/identified-operation tests. ASan/UBSan uses the supported
+harnesses; native-only recipe/frame/policy checks are not mislabelled sanitized.
+Apple Clang arm64 macOS, local files/threads only, no shared cluster. Leak checking
+is not claimed. The checked production paths use no test-only source replacement.
+
+Closed runs at the initial repair commit have 14 native check/build steps and
+10 sanitizer check/build steps, all exit 0. Logs are under the stable evidence
+root below in `final-5ecc915d7-native/` and `final-5ecc915d7-asan-ubsan/`.
+Native/sanitizer original-failure logs and their original hashes remain intact.
+
+## Original findings (before repair)
 
 ### F1 — Sweep can retire a stripe that has not been published (P1)
 
