@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Fast deterministic K32 measurement accounting tests; no cluster needed."""
 import importlib.util
+import ctypes
+import os
 from pathlib import Path
 import struct
 import tempfile
@@ -83,7 +85,18 @@ parsed = m.parse_trace(tr)
 assert parsed['report_sends'] == parsed['report_replies'] == 1, parsed
 assert m.parse_sync_summary(' 50.00 0.1 10 100 fsync\n 50.00 0.1 20 50 1 fdatasync\n') == {'fsync': 100, 'fdatasync': 50}
 with tempfile.TemporaryDirectory(prefix='efs-cost-workload-') as work:
-    m.worker(Path(work), 128, 16, 2)
+    original_write = os.write
+    sizes = []
+    def aligned_write(fd, buf):
+        assert ctypes.addressof(ctypes.c_char.from_buffer(buf)) % os.sysconf('SC_PAGESIZE') == 0
+        sizes.append(len(buf))
+        return original_write(fd, buf)
+    os.write = aligned_write
+    try:
+        m.worker(Path(work), 128, 16, 2)
+    finally:
+        os.write = original_write
+    assert sizes == [16] * 8
     checked = m.verify(Path(work), 128, 16, 2)
     assert checked['files'] == 2 and checked['bytes'] == 128
     # Sequential IO must not regress into a new file for every request.

@@ -11,6 +11,7 @@ import argparse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 import json
+import mmap
 import os
 from pathlib import Path
 import re
@@ -271,7 +272,11 @@ def quiet(c, output, label):
 
 def worker(mount, total, io_size, writers):
     files = total // io_size
-    payload = b'A' * io_size
+    # Like IOR's aligned buffers: a Python bytes object's page offset can
+    # split a 1 MiB direct-I/O request into 1 MiB-48 and a 48-byte tail.
+    # That changes chunk/publication work and contaminates the comparison.
+    payload = mmap.mmap(-1, io_size)
+    payload[:] = b'A' * io_size
     start = time.monotonic()
     def run(w):
         parent = mount / ('writer-%d' % w)
@@ -283,8 +288,11 @@ def worker(mount, total, io_size, writers):
                 assert done == io_size, ('short write', done, io_size)
         finally:
             os.close(fd)
-    with ThreadPoolExecutor(max_workers=writers) as pool:
-        list(pool.map(run, range(writers)))
+    try:
+        with ThreadPoolExecutor(max_workers=writers) as pool:
+            list(pool.map(run, range(writers)))
+    finally:
+        payload.close()
     print(json.dumps(dict(bytes=total, files=writers, writes=files, wall_s=time.monotonic()-start)), flush=True)
 
 
