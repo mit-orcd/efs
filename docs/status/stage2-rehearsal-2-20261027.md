@@ -1,10 +1,10 @@
 # Task P — second Stage 2 rehearsal
 
-`agent/devel-task-p`, base `24dad8e4b`: TOTAL 0 FAIL 0 NOTRUN 2 topology runs, preparing intel2; this is not a make-test result. No base comparison yet. Evidence: `docs/status/stage2-rehearsal-2-20261027.md`. Both loopback matrices and final code gate NOTRUN. No product finding yet.
+`agent/devel-task-p`, base `24dad8e4b`: TOTAL 0 FAIL 0 NOTRUN 2 topology runs, RUNNING on intel2; this is not a make-test result. No base comparison yet. Evidence: `docs/status/stage2-rehearsal-2-20261027.md`. Three-member matrix RUNNING; five-member matrix and final code gate queued. No product finding yet.
 
 ## Scope and current state
 
-**Preparing intel2 after the user authorized any available host.** Task P runs all selected
+**RUNNING on intel2 after the user authorized any available host.** Task P runs all selected
 Stage 2 gates, serially for loopback-3 and loopback-5, then the eight-job
 `make test-all` gate. The assigned work excludes product fixes: a product
 failure gets a K row and retained trace. Driver, gate and environment defects
@@ -14,7 +14,7 @@ external repository is modified.
 The base matrix validates: 26 items, nine topologies. Both requested
 loopback topologies select all 24 named gates. Each also records its final
 identity check. Raw results will be retained outside Git under
-`intel2:/home/maik/efs-artifacts/taskP-20261027/`; no run has started and no
+`intel2:/home/maik/efs-artifacts/taskP-20261027/`; the first run is active and no
 closed manifest is claimed yet.
 
 A read-only host check found no running EFS daemon/client, but three Task H
@@ -31,6 +31,20 @@ The committed `scripts/task_p_rehearsal.py` serializes build, regressions,
 both full matrices, manifest verification and the final code gate. It
 refuses to advance while Task P processes or mounts remain. Gate failures
 remain failures; no product source changes are authorized.
+
+Frozen source `3ca4f7e6b233d381c1236ca5752d7f011cc40cec`, based on devel
+`24dad8e4b`. Detached screen `taskP-rehearsal`; source `~/efs-taskP/src`.
+Archive SHA256 `d4c6b0ba97fa56c4a125253f90a265fcf2f9cb795364f892e75b82fc9938d912`.
+Build: `efsd 3ca4f7e6b233d381c1236ca5752d7f011cc40cec (branch agent/devel-task-p, built 2026-10-28T02:16:24Z on intel2)`.
+Build PASS 29.752 s; full Linux driver regression PASS 4.015 s; soak
+regression PASS 0.188 s. The Mac limitation below is superseded by this
+Linux regression result, not erased.
+
+`identity` passed; `topology` reports the expected one-host failure-domain
+NOTRUN. Remaining gates are running/queued, not yet qualification evidence.
+The controller owns both serial matrices and the final code gate; no
+duplicate run should be launched. `scripts/task_p_compare.py ARTIFACT_ROOT`
+extracts Task A's corrected wall table and flags doubled observed walls.
 
 ## Driver correction prepared
 

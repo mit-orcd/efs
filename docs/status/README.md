@@ -1,6 +1,6 @@
 # Project status — work queue and evidence
 
-Task P: [second Stage 2 rehearsal](stage2-rehearsal-2-20261027.md) — preparing on idle intel2 (user-approved host substitution); loopback rehearsal soak selection corrected, no product finding yet.
+Task P: [second Stage 2 rehearsal](stage2-rehearsal-2-20261027.md) — RUNNING serially on intel2 (user-approved host substitution), frozen `3ca4f7e6b`; loopback rehearsal soak selection corrected, no product finding yet.
 
 Reviewed and reorganized October 15, 2026. This directory is the work queue and
 acceptance index; [backlog](../backlog/README.md) holds detailed work items and
