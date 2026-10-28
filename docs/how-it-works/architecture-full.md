@@ -1622,9 +1622,10 @@ full acceptance are separate states.
 
 [Task I review](../status/task-i-20261026.md): live protocol **PASS (scoped), complete**;
 F1/release coverage remains INCOMPLETE. User-requested drain follow-up
-is ACTIVE: bounded fault-build diagnostic `9dfe9d979` on AMD; not another
-qualification hour.
-Current candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
+identified ongoing lane-row refresh triggers and a truncate scheduling gap.
+Repair `773284b5d` has bounded-progress/fairness unit PASS; fresh AMD and
+node9900 full gates/hours ACTIVE, candidate qualification INCOMPLETE.
+Last qualified candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
 observer log I/O. Fresh gates: node9900 **527 / 0 FAIL / 18 NOTRUN**,
 AMD **527 / 0 FAIL / 14 NOTRUN**; both native RDMA **9/9 PASS**.
