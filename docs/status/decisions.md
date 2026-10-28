@@ -29,6 +29,14 @@ repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
 
+## D45 — Stage 1 decisions taken Oct 28 (user, in one pass)
+
+1. **A4, the distinct-host qualification topology:** the orcd-test cluster, in four shapes — 3 storage hosts fcstor003–005 with fcstor006–015 as test clients; 4 hosts fcstor003–006 with fcstor007–015 as clients; 5 hosts fcstor003–007 with fcstor008–015 as clients; and 13 hosts fcstor003–015 all storage, with Slurm and the cluster generating the I/O payload. The lab hosts (intel1, intel2, nuc, xorinox) stay loopback gate hosts; Task V's `fcstor-4x1-tcp` dry run is the template for the matrix entries, which the A4 campaign defines when it starts (D45 item 5).
+2. **S4 / W122 effective-settings listing:** out of alpha 1.0; limitation L24 stays, W122 moves to the beta backlog. The A6 inventory page is alpha's settings catalog.
+3. **F12 cluster-port authentication:** no authentication in any alpha release; limitation L22 stays as the documented trusted-network requirement; the first beta item.
+4. **K36 scope:** alpha claims verified recovery after unclean *process* stops (crash, SIGKILL, forced exit); recovery after real power loss is not claimed — K23/W71 stay deferred (D40 reaffirmed), the fail-closed refusal of an unverified store holds for any unclean stop, and the release notes carry the limitation.
+5. **Live-gate campaign:** starts after Task S (K48) and Task X (K52) report, on a frozen candidate, in this order: orcd-mini RDMA reruns (K38/K40/K41 ior hard, K27/K32 ior easy A/B, K17 C1), then the orcd-test A4 matrix TCP then RDMA (K6, K11, K12, K18, K19, K21, K33 and K15 multi-host), then the four-hour soak on the four-host shape (E4/D4 with K43).
+
 ## D44 — the K22 release gates stay in `make test-long` (user, Oct 26)
 
 `tests/test_k22_snapshot_import.py` and `tests/test_k22_leader_admission.py` (Task B, wave 15) stay in the
