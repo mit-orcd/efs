@@ -153,14 +153,17 @@ def rebuilt(c, i=1):
 
 
 def packed_total(c, snap=None):
-    """Files the packers switched, summed over every daemon run and group."""
+    """Sum the process-wide counter once per daemon run, not group/term.
+
+    Every group's pass prints the SAME pk.st.files_packed counter. Summing
+    those observations invents packs when a second group logs, or a leader
+    term changes, even if no new segment was written during the fault.
+    """
     total = 0
     for i, text in (snap if snap is not None else snapshot(c)).items():
         for run in text.split('==== start')[1:]:
-            last = {}
-            for g, t, n in re.findall(r'packer: group=(\d+) term=(\d+) .*?packed_total=(\d+)', run):
-                last[(g, t)] = int(n)
-            total += sum(last.values())
+            values = re.findall(r'packer: group=\d+ term=\d+ .*?packed_total=(\d+)', run)
+            total += max((int(n) for n in values), default=0)
     return total
 
 
@@ -526,18 +529,32 @@ try:
         print(f'B6 {r.mode}: whole-cluster orderly restart, {len(r.acked)} acknowledged files '
               'exact PASS')
 finally:
+    original_error = sys.exc_info()[0] is not None
+    cleanup_errors = []
     for r in runs:
-        r.close()
+        try:
+            r.close()
+        except Exception as error:
+            cleanup_errors.append(f'{r.mode}: {type(error).__name__}: {error}')
+    failed = original_error or bool(cleanup_errors)
+    # A failed oracle needs its logs and stores to diagnose the observation.
+    # Never erase them merely because the opt-in KEEP flag was not supplied.
+    if failed or os.environ.get('EFS_B6_KEEP'):
+        print('kept', work, flush=True)
+    result['verdict'] = 'FAIL' if failed else 'PASS'
+    result['work'] = str(work)
+    result['cleanup_errors'] = cleanup_errors
+    for r in runs:
+        result['modes'][r.mode] = dict(r.out, acknowledged_files=dict(r.acked),
+                                     refused_files=dict(r.refused))
     if artifacts:
         artifacts.mkdir(parents=True, exist_ok=True)
-        # One file per mode selection: the recipe runs the four modes as
-        # four commands and their results must not overwrite each other.
         tag = '' if modes == ['down', 'refuse', 'slow', 'full'] else '-' + '-'.join(modes)
         (artifacts / f'b6-result{tag}.json').write_text(json.dumps(result, indent=1, sort_keys=True))
-    if os.environ.get('EFS_B6_KEEP'):
-        print('kept', work)
-    else:
+    if not failed and not os.environ.get('EFS_B6_KEEP'):
         shutil.rmtree(work, ignore_errors=True)
+    if cleanup_errors and not original_error:
+        raise RuntimeError('B6 cleanup failed: ' + '; '.join(cleanup_errors))
 print(f'B6 unavailable fragment destination ({",".join(modes)}): reads reconstruct, writes and '
       f'fsync only with proof, W154 clears after the restore, exact after restart: PASS '
       f'({time.time() - t0:.1f} s)')
