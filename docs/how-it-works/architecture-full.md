@@ -1646,6 +1646,13 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+- [K52 immediate read-back investigation](../status/k52-immediate-readback-20261028.md):
+  Task X, `agent/devel-task-x`, candidate `86035a633`. Node9900 unchanged
+  baseline: 37,506 exact payloads and 3,881 queries, zero errors; K52 not
+  reproduced. Query-launch isolation and diagnostic controls implemented;
+  qualification RUNNING, full gate pending. Historical eight comparisons
+  remain OPEN because their failed buffers/hashes were never captured.
+
 [Wave 27 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](../status/a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (blocks alpha): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); whether K52 is K10 needs the new helper's observed bytes before it is closed or kept. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
 
 [Task V four-host driver rehearsal](../status/a4-lab-topology-dryrun-20261028.md):
