@@ -18,6 +18,7 @@ with tempfile.TemporaryDirectory(prefix='efs-host-guard-') as d:
  proc(16,'python3',['python3','/tmp/old-fixture/tree/efsd','endpoint'])
  proc(17,'python3',['python3','/data1/efs/w123/run-component.py'])
  proc(18,'tar',['tar','-cf','/data1/efs/w123/stores.tar'])
+ proc(os.getpid(),'python3',['python3','-',str(p/'efs-artifacts/taskI')])
  # An owned source is allowed during sampling; unrelated traffic/builds are not.
  assert {x['pid'] for x in foreign_jobs(src,proc_root=p)}=={11,15,16,17,18}
  # Preflight owns no workload, including leftovers of the same source.

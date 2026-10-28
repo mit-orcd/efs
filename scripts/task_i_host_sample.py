@@ -26,8 +26,18 @@ def foreign_jobs(source=None, *, proc_root=Path('/proc'), current_uid=None):
     """
     current_uid = os.getuid() if current_uid is None else current_uid
     source = Path(source).resolve() if source else None
+    allowed = set()
+    pid = os.getpid()
+    while pid > 1:
+        allowed.add(pid)
+        try:
+            pid = int((proc_root/str(pid)/'stat').read_text().rsplit(')',1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
     found = []
     for proc in proc_root.glob('[0-9]*'):
+        if int(proc.name) in allowed:
+            continue
         try:
             uid = proc.stat().st_uid
             comm = (proc/'comm').read_text().strip()
