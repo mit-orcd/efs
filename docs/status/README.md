@@ -5,8 +5,13 @@ source `9e4d66a8c`, driver `1164b55a4`; seven static/startup audit groups PASS
 on Intel1, including all33 removed names set/empty on both binaries (132 probes).
 139 readers, all classified; all15 added readers since the Oct25 closure are
 fault-only, no new A/B selector. Expiry is compiled in under D43. No cluster
-started; full make test-all/real-host behavior NOTRUN here. S stays OPEN:
-four named choices plus proposed-surface and member-down revoke qualifications.
+started; full make test-all/real-host behavior NOTRUN here. **D46 accepted by
+the user Oct28:** A4 uses fcstor007–011 and `/data1/01` for 3/4/5-host TCP/RDMA
+tests; W122 required; trusted-network-only alpha; broad power-loss qualification
+deferred, crash recovery mandatory. Support sync-status/tested raft-resync,
+remove public writer tuning; routine packing automatic. **Member-down clean
+unmount must be fixed before alpha 1.0 (blocker).** Choices decided; all
+implementation and live-qualification obligations remain.
 Raw audit evidence retained on Intel1; private build pruned. No product change.
 
 [Defect-navigation graph](graph-scope-validation-20261028.md): directed first-party

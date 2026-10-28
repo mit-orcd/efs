@@ -8,9 +8,8 @@ is NOTRUN because the Linux build fails there. The October 25 binary audit
 is historical evidence, not a fresh qualification. `tests/test_cli_docs.py`
 (`make test`) keeps this page and the CLI help in step.** "In" marks a surface the alpha
 release supports and qualifies; "out" marks one the release does not
-support, with the reason. Rows marked *proposed* are this draft's
-recommendation and wait for the user; the others follow a recorded
-decision. A surface marked out may still exist in the binaries; using it is
+support, with the reason. Task Z's former proposed CLI dispositions were decided in D46 (Oct28);
+required implementation and qualification are distinct from scope approval. A surface marked out may still exist in the binaries; using it is
 outside the alpha support claim.
 
 [Alpha guide](alpha-1.0-guide.md) · [POSIX subset](alpha-1.0-posix.md) ·
@@ -51,7 +50,7 @@ build switch, no environment variable; findings F7 and F8 closed).
 | `--quota SIZE` | in | Deployment input; default is the automatic safe quota |
 | `--direct-io`, `--no-direct-io` | removed | Fragment I/O is always `O_DIRECT`; efsd refuses both flags and a root without `O_DIRECT` (D42) |
 | `--meta-storage PATH` | in | Deployment input: Raft/KV on another root; it does not move an existing `mdraft/` |
-| `--writers N` | out, *proposed* | Tuning switch (default 8); A8 has not justified it as operator configuration |
+| `--writers N` | removal required (D46) | Public override must go; retain a tested built-in worker policy. Parser removal is pending, not implemented by this decision |
 | `--no-persist` | removed | Membership is always persisted; efsd refuses the flag (D42, finding F6) |
 | `--perf`, `--strace` | out | Profiling; needs `perf`/`strace` and `ptrace_scope` 0; not a supported operation |
 | `--help`, `--version` | in | |
@@ -76,14 +75,14 @@ build switch, no environment variable; findings F7 and F8 closed).
 | `status` | in | Members, reachability, quota/usage, usable 2+1 capacity, cluster state, degraded chunks and packed segments, `Protection:`, abandoned uploads, build identity of every member, metadata leader placement; exits 1 with a member down |
 | `raft-status` | in | Per-group term, commit, applied, voters and follower bound |
 | `version`, `io-stats`, `gc-status` | in | Read-only diagnostics |
-| `sync-status` | in, *proposed* | Read-only durability state per root, and the phase and result of a verified recovery after an unclean stop (K36) |
+| `sync-status` | in (D46) | Read-only durability state per root, and the phase and result of a verified recovery after an unclean stop (K36) |
 | `mkfs` / `raft-mkfs` | in | Optional: forms at once before automatic formation; afterwards a no-op |
 | `commands-policy` | in | `.efs` is in the alpha profile; the durable versioned mask |
-| `pack-compact` | in, *proposed* | Packing control: summary (`0`) or on-demand compaction of shared segments |
-| `raft-resync` | in, *proposed* | Asynchronous recovery of an eligible, non-retired follower from its healthy leader snapshot, including W130/W165 halts; leader/retired targets refuse. Request acceptance is not completion; verify catch-up and readback ([runbook](alpha-1.0-guide.md#a-metadata-replica-halts-w130w165)) |
-| `shrink-quota` | out, *proposed* | Reduces the running quota only; lost at restart; no migration. Use `--quota` |
-| `raft-step-down` | out, *proposed* | Leader transfer used by the failover harness; no operator workflow |
-| `data-commit` | out, *proposed* | Durability barrier; the orderly stop already runs it |
+| `pack-compact` | out (D46) | Developer/diagnostic packing control; routine packing is automatic, no manual command required for supported operation |
+| `raft-resync` | in (D46; workflow qualification required) | Asynchronous recovery of an eligible, non-retired follower from its healthy leader snapshot, including W130/W165 halts; leader/retired targets refuse. Request acceptance is not completion; verify catch-up and readback ([runbook](alpha-1.0-guide.md#a-metadata-replica-halts-w130w165)) |
+| `shrink-quota` | out (D46) | Reduces the running quota only; lost at restart; no migration. Use `--quota` |
+| `raft-step-down` | out (D46) | Leader transfer used by the failover harness; no operator workflow |
+| `data-commit` | out (D46) | Durability barrier; the orderly stop already runs it |
 | `raft-change` | out | Manual voter change; K33 changes the voters itself, and a manual change leaves the default layout |
 | `raft-dir`, `raft-session` and every `raft-<op>`: `raft-getattr`, `raft-lookup`, `raft-lookup-path`, `raft-create`, `raft-unlink`, `raft-rmdir`, `raft-link`, `raft-setattr`, `raft-rename`, `raft-readdir`, `raft-publish`, `raft-getchunks`, `raft-append`, `raft-hold`, `raft-flock`, `raft-fcntl` | out | Debug commands that bypass FUSE and read or change metadata directly; `raft-session fence` is also the way to resume a failed mount-session revoke |
 | `add-node` | removed | Refused, naming `efsd --join`: one way to add a node (K33, finding F4) |
@@ -92,9 +91,10 @@ build switch, no environment variable; findings F7 and F8 closed).
 | `expiry`, `expiry-status`, `expiry-clock`, `expiry-enable`, `expiry-id` | in | D43: path and deadline inspection, renewal, worker status, clock health and existing-file deadlines; refused (rc -16) while the cluster expiry policy is off |
 
 `efs-mgmt` has no authentication: any host that reaches a daemon port can
-run every command, including the mutating ones (finding F12; the user's
-scope decision is still open, so this is the current state, not a
-decision). Keep the cluster ports on a trusted network. A command the
+run every command, including mutating ones. D46 accepts **trusted-network-only
+alpha 1.0** with authentication deferred (F12/L22). Restrict port access
+externally; no untrusted/shared-network or authenticated security-boundary
+support is claimed. A command the
 build does not have (a misspelt name)
 answers `Unknown command: NAME` and exits 1; the removed `add-node` and
 `add-storage` are refused by name with the replacement and exit 2.
@@ -138,10 +138,10 @@ descriptions are not a support statement.
 **Status: structure only. The A6 inventory exists**
 ([settings inventory](../status/a6-settings-inventory-20261024.md): every
 setting the binaries read, its kind, default and disposition) **and the
-A7 removals are done; the user's decision whether W122 (an
-effective-settings listing) is in alpha is still open.** Until then an
-operator sees effective settings only through the channels below; no
-command lists them.
+A7 removals are done. D46 requires W122
+(a minimal read-only effective-settings listing) in alpha 1.0.** Implementation
+and acceptance remain pending; today the channels below exist and no command
+lists every effective setting. This gap must close before alpha.
 
 | Setting | Where the operator sees the effective value today |
 | --- | --- |
@@ -155,12 +155,13 @@ command lists them.
 | Transport | Daemon and client logs; not in any status command |
 | Retained environment tunables | Not shown. An unset variable gives the built-in default; a set one is visible only in the process environment. Some invalid values are logged (`query-config: …`) |
 
-Structure for the S4 page once W122 is decided: one row per inventoried
+Required S4 listing (W122, decided D46): one row per inventoried
 setting (the A6 inventory already has the rows), with its disposition
 (deployment input, justified tuning, observability, removed), its default,
 whether its effective value is visible and where, and the A11 configuration
-dimension it belongs to. If W122 is taken into alpha, its listing replaces
-the last three rows of the table above; if not, F4 keeps "no
-effective-settings listing" as limitation L24.
+dimension it belongs to. Include actual active policies, resolved transport
+and build identity, with bounded output and no new behavior switch. The
+absence of this listing is a required implementation gap, not an accepted
+L24 limitation. No command name or existing endpoint is invented here.
 
 Removed settings (A6, `docs/status/a6-settings-inventory-20261024.md`) such as `EFS_FEATURES_TTL_MS`, `EFS_QUERY_CATALOG_MIB`, `EFS_GC_DISABLE` and `EFS_KV_COMPACT_DIE` are not settings any more: efsd and efs-fuse stop with a message naming one that is still set.

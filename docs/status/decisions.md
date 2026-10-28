@@ -1,4 +1,4 @@
-# Decisions — taken and pending (register D1–D37)
+# Decisions — taken and pending (register D1–D46)
 
 **October 15 reconciliation:** [Review of stale claims and remaining gates](open-item-reconciliation-20261015.md). Read these annotations before treating dated implementation descriptions as current tasks. No new global acceptance or deployment is implied.
 
@@ -11,7 +11,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-#### Decisions — taken and pending (register D1–D37)
+#### Decisions — taken and pending (register D1–D46)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -28,6 +28,38 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
+
+## D46 — Task Z alpha 1.0 decisions and A4 host assignment (user, Oct 28)
+
+The user accepted Task Z's recommendations and explicitly required the
+member-down clean-unmount fix before alpha 1.0. These are **accepted scope
+and implementation requirements, not completed implementation or passing gates**.
+[Decision sheet and audit](stage1-decision-sheet-20261028.md).
+
+This newer instruction supersedes the affected parts of the earlier D45
+entry already on devel: A4's host allocation and W122's alpha deferral.
+D45's unrelated campaign prerequisites/order are not waived. This amendment
+covers alpha 1.0 and makes no new decision about later alpha releases.
+
+| Item | Accepted decision / required work |
+| --- | --- |
+| A4 | Qualify 2+1 on **3, 4 and 5 distinct physical storage hosts**, each over **TCP and RDMA**: six required topology/transport cells. Use **fcstor007, fcstor008, fcstor009, fcstor010, fcstor011**, with test storage under **`/data1/01` on each participating host**. Suggested nested subsets: 007–009, 007–010, 007–011; node identities still come from formation/join. No substitution of co-located daemons for independent failure domains. |
+| S4 / W122 | **Required in alpha 1.0:** a minimal read-only effective-settings listing showing actual values, defaults/provenance, active policies, actual transport and build. Bound the output and use authoritative sources; no new behavior knob. An inventory of possible settings is not this runtime listing. |
+| F12 / L22 | **Trusted-network-only alpha 1.0, authentication deferred.** Anyone who can reach a daemon port can issue management mutations; deployments must restrict network access externally. No untrusted/shared-network or authenticated security-boundary claim. |
+| K36 / power loss | **Verified crash recovery remains mandatory.** Broad sudden host power-off/device-cache-loss qualification is deferred; successful fsync guarantees and every durability barrier remain. SIGKILL and O_DIRECT are not power-loss proof. An unverified store still fails closed. |
+| S1 supported operations | Support **`sync-status` and tested `raft-resync`**. Routine packing is automatic. Manual `pack-compact`, `shrink-quota`, `raft-step-down` and `data-commit` stay outside the supported alpha operator workflow; their diagnostic/test use is not a requirement on normal operators. |
+| Public writer tuning | **Remove the public `--writers` override**, retaining a tested built-in worker policy. This is a required change, not a claim the parser has already been removed. |
+| Member-down clean unmount (S3 / round-2 U4) | **Must be fixed and qualified before alpha 1.0; blocks alpha: yes.** Clean stop with one member down must complete accepted flush/settle and safe durable revocation without spurious failure. Preserve rejection/deletion authority and unresolved-write retention; never turn a failed revoke into clean shutdown. No limitation waiver. |
+| Remaining 33 numeric tunables | Audit the concrete operational justification and bounds; remove unjustified overrides in favor of tested built-in or automatic policies. This is engineering work under the existing fewer-knobs direction, not 33 fresh user decisions. Typed inventory alone is not completion. |
+
+A4 host/path selection authorizes test use of that pool, not indiscriminate
+removal of existing data. Use owned run directories under `/data1/01`, verify
+ownership/availability, and leave other agents' clusters and stores alone.
+Record actual interfaces/RDMA devices, quotas, clients, fixture sizes and
+retained evidence under A5 before execution. No host was contacted or test
+started by this decision-recording change; **A4 execution remains NOTRUN**.
+No new mandatory controller, cluster file, compatibility path or operator
+switch is introduced. No tag, main merge or push is authorized here.
 
 ## D44 — the K22 release gates stay in `make test-long` (user, Oct 26)
 

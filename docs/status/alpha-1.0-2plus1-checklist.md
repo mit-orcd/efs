@@ -363,7 +363,12 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
   `fcstor-4x1-tcp` topology (user-selected fcstor012–015 in place of the lab
   hosts); [four-host dry run](a4-lab-topology-dryrun-20261028.md) completed with D3
   FAIL (K52 immediate read-back mismatch); other eight requested gates PASS.
-  Topology defined, acceptance decision open; this rehearsal does not close A4.
+  Historical rehearsal only; it does not close A4. **D46 (user, Oct 28):**
+  qualify 3/4/5 distinct storage hosts over TCP and RDMA using fcstor007–011,
+  owned test run directories under `/data1/01` on each host. Nested sets
+  007–009, 007–010, 007–011. Host allocation supersedes D45's earlier A4
+  allocation; unrelated campaign prerequisites remain. Actual A5 parameters,
+  all six required cells and acceptance remain NOTRUN.
 - [ ] **A5** Record quota, disks, RDMA devices, mount options, clients, concurrency,
   deadlines, fixture counts/sizes and expected results for every topology.
   Fresh-format setup only when a format change requires it; no compatibility work.
@@ -458,6 +463,10 @@ alternatives reduces both product complexity and the supported test matrix.
   product; 19 removed names stop efsd and efs-fuse at startup. Open: the
   33 remaining numeric tunables need a qualified built-in value or bound,
   and the A7 decisions.**
+  **D46 (user, Oct28):** the remaining33 numeric overrides need engineering
+  justification/bounds or removal in favor of tested built-in/automatic
+  policies; no new user decisions or hidden behavior selectors. Inventory
+  classification alone does not finish A8.
 - [ ] **A9 — Metadata leadership.** Remove `EFS_METADATA_BALANCE` as an operator
   choice after selecting and qualifying the automatic policy. Do not force its
   present common-voter/co-located-leader preference on as a substitute for that
@@ -576,17 +585,22 @@ facts for A6, not decisions.
   option, `efs-mgmt` and `.efs` command and user-settable environment
   variable marked in or out with a reason, checked against `a2326a369`.
   Rows marked *proposed* (for example `--no-direct-io`, `--writers`,
-  `--no-persist`, `add-node`, `shrink-quota`, `raft-step-down`) wait for the
-  user; findings F2–F8, F11, F12 list help-text gaps and profile defaults.
+  `--no-persist`, `add-node`, `shrink-quota`, `raft-step-down`) awaited the
+  user at that time; D42/D46 dispositions below supersede that draft.
+  Findings F2–F8, F11, F12 record help-text gaps and profile defaults.
   **Audited Oct 25 against `ec3e09306` ([audit](docs-audit-20261025.md)):**
   every binary, option, `efs-mgmt` and `.efs` command and refusal exercised
   on a loopback cluster of that build; the page lists every `raft-<op>`,
   `status`'s sections and exit status, and the removed `EFS_COMMANDS`;
   `tests/test_cli_docs.py` (`make test`) fails when `cli_help.h` and the
-  user pages name different commands or options. Still *proposed*:
-  `--writers`, `sync-status`, `pack-compact`, `raft-resync`, `shrink-quota`,
-  `raft-step-down`, `data-commit`; F12 (port authentication) waits for the
-  user. **Scope change Oct 25 (D43, user):** expiry and `.efs` ship in
+  user pages name different commands or options. At that audit seven CLI
+  dispositions and F12 were still proposed. **D46 (user, Oct28):** support
+  `sync-status` and tested `raft-resync`; normal packing automatic. Manual
+  `pack-compact`, `shrink-quota`, `raft-step-down` and `data-commit` are outside
+  the alpha operator workflow. Remove public `--writers`, retaining a tested
+  built-in worker policy; parser cleanup and workflow qualification remain.
+  F12 is decided trusted-network-only alpha 1.0, authentication deferred.
+  **Scope change Oct 25 (D43, user):** expiry and `.efs` ship in
   alpha 1.0; the surface list, guide, POSIX page and release notes say so.
   At `ec3e09306` expiry is still compiled out of the product build and
   being re-enabled (audit finding U19).
@@ -619,17 +633,21 @@ facts for A6, not decisions.
   killed daemon (verified recovery, K36), K34, K37 and `Protection: LOST`.
   Open finding U4: a clean client stop fails at the session revoke
   (`revoke rc=-13 phase=storage-fence`) while any member is down, because
-  the storage fence must reach every configured member; the user decides
-  whether that is an alpha limitation or a fix.
-- [ ] **S4 — Effective settings.** Decide whether **W122**, the listing of
-  effective settings, is in alpha. It supports A8 and A10.
+  the storage fence must reach every configured member. **D46: required fix
+  before alpha 1.0; blocks alpha: yes.** Qualify clean unmount with one member
+  down while preserving flush/settle, durable revocation and unresolved-write
+  retention. A failed revoke must not be reported as clean; no waiver.
+- [ ] **S4 — Effective settings.** **D46: W122 is required in alpha 1.0.**
+  Implement and qualify a bounded read-only listing of actual values,
+  defaults/provenance, policies, actual transport and build, without a new
+  behavior knob. It supports A8 and A10.
   **STRUCTURE Oct 24 ([effective settings](../using/alpha-1.0-surface.md#s4--effective-settings)):**
   where each effective value is visible today (startup log, `status`,
   `raft-status`, `version`, `sync-status`, `commands-policy get`; tunables
   not at all) and the page layout once A6 lands. The A6 inventory exists
-  and the A7 removals are done (D42); **waits for** the user's W122
-  decision only (described, not decided, in the Oct 25
-  [audit](docs-audit-20261025.md)).
+  and the A7 removals are done (D42). The Oct25 audit's pending decision
+  and D45's deferral are superseded by D46; implementation/acceptance remain
+  OPEN. The static inventory is not an effective-value listing.
 - [ ] **S5 — User documentation.** Install, configuration, supported
   topologies, the reduced configuration matrix (A11) and the published
   limitations.
@@ -983,7 +1001,9 @@ round says which physical or software limiter it hit.
   D40–D42 and the K rows at `ec3e09306`: L6, L7, L8 and L28 now describe
   verified recovery and segment rebuild (K36, K37) instead of "deferred";
   the open-items paragraph lists K34–K37 as fixed on loopback with live
-  runs NOTRUN; L22 and L24 are marked as open user decisions (F12, W122).
+  runs NOTRUN. D46 decides L22 as trusted-network-only alpha 1.0 and requires
+  W122 before alpha; absence of the listing is no longer an accepted scope
+  option (former proposed L24).
   Release-notes entries decided so far (D40, Oct 23), one each:
   - **K10/W121 readback after fsync:** a read issued right after a
     successful fsync can return the previous file's payload; triggered by
@@ -1003,7 +1023,7 @@ round says which physical or software limiter it hit.
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
 | Known-defect register K (Stage 1; once per candidate) | OPEN | (same) | (same) |
-| Functional scope S decided (once per candidate) | OPEN — [Task Z decision sheet](stage1-decision-sheet-20261028.md) at `9e4d66a8c`; four named choices plus S1/U4 qualifications; audit code `1164b55a4` | (same) | (same) |
+| Functional scope S decided (once per candidate) | DECIDED — D46, user Oct28 ([Task Z](stage1-decision-sheet-20261028.md)); W122, writer-override removal, member-down clean-unmount fix and S1–S5 implementation/qualification remain OPEN | (same) | (same) |
 | Candidate and profile | NOTRUN | NOTRUN | UNSUPPORTED until K28 |
 | Flag audit and A/B removal (A6–A10, A12; once per candidate) | PASS scoped static/startup audit at `9e4d66a8c`, driver `1164b55a4` ([Task Z](stage1-decision-sheet-20261028.md)); A8/A9/A10 and frozen-candidate obligations remain | (same) | (same) |
 | Reduced-matrix qualification (A11) | NOTRUN | NOTRUN | NOTRUN |

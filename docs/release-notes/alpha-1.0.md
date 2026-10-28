@@ -50,7 +50,6 @@ cluster expiry policy is off until an operator turns it on (L20).
 | L7 | No sudden power-loss qualification | Host power-off or kernel crash | Not qualified: acknowledged writes may or may not survive. The restart runs the same verified recovery as after a crash (K36); what it cannot prove is dropped and rebuilt from the other members | W71, W123 (K23); D42 (F23) |
 | L27 | `fsync` with a member down leaves stripes without tolerance (decided D42) | A storage node down or unreachable | `fsync` and `fdatasync` succeed with two fragments proven durable, after marking the stripe degraded (the client log names each stripe); the stripe survives no further loss until the rebuild on return; with two of a stripe's nodes down they return `EIO` | K35 (D42), finding F22 |
 | L28 | A node back from an unclean stop proves nothing until its verified recovery is done (decided D42) | A daemon crash, `SIGKILL`, forced exit (rc 3) or power loss, then restart | Until `sync-status` shows `recovery verified`, that node refuses COMMIT: `fsync` marks every stripe with a fragment there degraded and returns `EIO` for a stripe that needs it. Recovery proves the store (K36, D42), drops what it cannot prove and has it rebuilt from the other members; a write the crashed run acknowledged but had not committed is treated as lost on that node. A stop during the recovery leaves the store fenced (`server.sh stop` rc 4) until the next start verifies it. A recovery that fails leaves the node fenced; there is no repair or replacement for it (L5, L6) | K36; finding F23 |
-| L29 | A clean client stop does not complete while a member is down, *proposed* (found Oct 25, user decision open) | `client.sh stop` or a clean unmount with any storage node down | The October 25 run flushed and settled its writes; this is not a general durability proof for failed stops. The mount session's revoke must seal every configured member and fails after 15 s (`revoke rc=-13 phase=storage-fence`); `client.sh stop` exits 1, the client exits, the session's leases and locks stay until the member is back | [audit finding U4](../status/docs-audit-20261025.md); `session_revoke.c`, `host_storage_fence_members` |
 | L8 | Degraded state is shown to the operator only | One node down, degraded stripes or packed segments | `efs-mgmt status`: `Cluster state: DEGRADED`, `Degraded chunks: N`, `Degraded segments: M`, `Protection: DEGRADED` or `LOST`, exit status 1 with a member down. The mount and applications get no indication | W154, K37; finding F10 |
 
 ### Client and POSIX
@@ -75,13 +74,29 @@ cluster expiry policy is off until an operator turns it on (L20).
 | --- | --- | --- | --- | --- |
 | L20 | Containers removed; expiry only through `efs-mgmt` | `EFS_EXPIRY=1`, `.efs` expiry options | efsd refuses `EFS_EXPIRY` and names `efs-mgmt expiry-policy NODE:PORT cluster`; the `.efs` commands reject expiry options. Expiry ships (D43), off by default; a deadline acts only while the cluster policy is on and its source folder policy enabled | D33, D37, D43, A2 |
 | L21 | One export per cluster | Any | No export label, no second export | `efs-fuse`, `mkfs` |
-| L22 | No authentication on the cluster ports, *proposed* (user decision open) | Any host that reaches a daemon port | Can run every `efs-mgmt` command, including mutating ones; keep the network trusted | Finding F12 |
+| L22 | Trusted-network-only alpha 1.0; authentication deferred (D46) | Any host that reaches a daemon port | Can run every `efs-mgmt` command, including mutating ones; keep the network trusted | Finding F12; D46 |
 | L23 | Same build everywhere; no upgrade in place | A peer or client of another build; a format change | The connection is refused; a format change needs a fresh format, no migration and no downgrade | AGENTS.md (no backward compatibility) |
-| L24 | No effective-settings listing, unless W122 enters alpha (user decision open) | An operator wants every effective value | Only the startup log and the status commands show settings; the [A6 inventory](../status/a6-settings-inventory-20261024.md) lists every setting and its default | S4, W122 |
 | L25 | Full RDMA topology qualification across independent storage hosts remains open | RDMA with 3/4/>4 distinct storage hosts | Task K's node9900 client to four co-located node9901 daemons has scoped RDMA POSIX/management PASS; Task M has single-host native RDMA evidence. Neither qualifies independent storage failure domains or the complete RDMA release matrix | W106, A2; [Task K](../status/k44-retired-replica-routing-20261026.md), [Task M](../status/gate-fstor007-20261027.md) |
 | L26 | The alpha profile is the only behavior (A7, D42) | — | Fragment I/O is always `O_DIRECT`, `.efs` follows the cluster commands-policy, expiry follows the cluster expiry policy (D43); removed settings are refused at startup | Findings F7, F8 (closed by A7) |
 
 ## Open items that are not yet limitations
+
+**Member-down clean-unmount defect (former proposed L29, round-2 U4): OPEN,
+blocks alpha.** The recorded stop failed `revoke rc=-13 phase=storage-fence`
+after flush/settle because every configured member had to be sealed; the
+client exited1 and leases/locks remained. That run is not general durability
+proof for failed stops. D46 rejects treating this as an alpha limitation:
+fix and qualify safe durable revocation with one member down. See
+[original U4 evidence](../status/docs-audit-20261025.md), `session_revoke.c`
+and `host_storage_fence_members`. Historical failure evidence remains valid.
+
+**D46 (user, Oct28):** W122's minimal read-only effective-settings listing
+is required before alpha (the former proposed L24 exclusion is withdrawn).
+Member-down clean unmount must be fixed and qualified before alpha, preserving
+flush/settle and safe durable revocation; it is an alpha blocker, not a clean-stop
+waiver. Remove the public writer override and qualify the supported operator
+surface. Verified process-crash recovery remains required; broad sudden-power-loss
+qualification is deferred, without weakening fsync guarantees or barriers.
 
 The requirements below remain release gates, not accepted limitations. This
 summary supersedes the October 25 open-item list; the
@@ -124,5 +139,5 @@ summary supersedes the October 25 open-item list; the
   of fixed rows still need acceptance. Task M's RDMA POSIX/GC evidence
   does not qualify every K34–K37 scenario; cold-query skips remain
   incomplete coverage. Zero FAIL with NOTRUN is INCOMPLETE, not a full gate
-  PASS. L22 (authentication) and L24 (effective settings) remain open user
-  decisions.
+  PASS. D46 accepts trusted-network-only alpha 1.0 (L22) and requires
+  effective settings W122; implementation/qualification remain outstanding.

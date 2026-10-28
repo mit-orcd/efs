@@ -1,14 +1,14 @@
 # Task Z — candidate settings audit and Stage 1 decision sheet
 
-`agent/devel-task-z`, audit code `1164b55a4`, base `9e4d66a8c`: audit 7/7 PASS; full `make test-all` NOTRUN (startup/docs-only scope), base product unchanged. Evidence: `docs/status/stage1-decision-sheet-20261028.md`. Real-host/RDMA behavior qualification NOTRUN here. No product defect found or fixed; four named user decisions and the S1/U4 scope qualifications below remain open.
+`agent/devel-task-z`, audit code `1164b55a4`, base `9e4d66a8c`: audit 7/7 PASS; full `make test-all` NOTRUN (startup/docs-only scope), base product unchanged. Evidence: `docs/status/stage1-decision-sheet-20261028.md`. Real-host/RDMA behavior qualification NOTRUN here. No product defect found or fixed. Task Z choices accepted in D46; implementation and qualification remain open.
 
 ## Verdict and exact scope
 
 **Inventory and startup-refusal audit PASS on devel `9e4d66a8c` (wave 28).
-Functional scope S remains OPEN; this page records choices, it approves none.**
+Task Z scope choices are DECIDED in D46; implementation and S1–S5 qualification remain OPEN.**
 The source is pinned for this audit, not declared the frozen alpha candidate.
 A1 must choose that candidate; rerun the audit if its product readers, help,
-refusals or policy surface change. No tag, merge, push or deployment is authorized.
+refusals or policy surface change. No tag, merge or push is authorized; A4 test resources are assigned in D46.
 
 The graph located the inventory, CLI and decision pages; the committed source
 and actual binary results establish the findings. No product source, format,
@@ -180,40 +180,35 @@ are authoritative; old chronology is not a competing configuration.
 | Gate budget | K22 import/admission gates stay in test-long; W160 target1100s at8jobs | D44; no target increase or gate omission is approved here |
 | Broader recovery/repair | W71/W74/W123 deferred as broader release scope, qualified by D42's required crash-recovery subset | D40/K23 then D42; power-loss/recovery claims must name the tested fault model |
 
-## Four named user decisions — choices and costs
+## Decisions accepted by the user — October 28 (D46)
 
-Each row is still **OPEN**. Recommendations below are review opinions, not
-new decisions. Approving a topology or feature does not authorize destructive
-operations on a particular cluster; deployments/stops/formats need their own scope.
+The user accepted the recommendations and assigned A4 to fcstor007–011 and
+`/data1/01`. [D46 in the decision register](decisions.md) is authoritative;
+it supersedes D45's conflicting host allocation and W122 deferral already on
+devel, without waiving unrelated campaign prerequisites. No open choice from
+the Task Z recommendation package remains; execution is not thereby complete.
 
-| Decision | Answer A: what alpha gets / cost | Answer B: what alpha gets / cost | My recommendation |
-| --- | --- | --- | --- |
-| **A4: exact distinct-host matrix** | Adopt a concrete TCP/RDMA ×3/4/5 physical-host release matrix; name hosts, quotas and approved lifecycle. Cost: retained full runs, fixing all mandatory failures and RDMA-capable resources | Narrow advertised transports/topologies explicitly; qualify only approved cells. Cost: smaller support claim; a 4-host TCP rehearsal alone cannot cover promised 3/4/>4-node alpha | Keep the promised 3/4/5 topology coverage; approve exact resources next. Task V prepared fcstor012–015 TCP only, found K52, then cleaned it up; it did not qualify RDMA or choose A4 |
-| **S4/W122: effective settings** | Include a read-only effective-settings listing: actual values, defaults/provenance, active policies and actual transport/build. Cost: implement, bound output, ensure one source of truth and tests; no new behavior knob | Defer listing, keep startup/status/raft-status/sync-status/policy commands and publish L24. Cost: operators must reconcile several channels; tunables are not all visible | Include a minimal read-only listing if it can finish before freeze; do not pretend the existing inventory is an effective-value endpoint |
-| **F12/L22: port authentication** | Accept explicitly trusted-network-only alpha with no authentication. Cost: restrict network access externally; any reachable peer can issue management mutations; do not claim a security boundary | Require authentication/authorization before alpha. Cost: identity/key lifecycle, join/management policy, wire/negative tests and broader qualification; one-off passwords on management commands are insufficient | Only accept trusted-network scope deliberately in an isolated alpha environment; otherwise make auth a release blocker. Neither choice is currently recorded |
-| **K36: power-loss qualification** | Keep verified crash recovery mandatory; exclude sudden host power-off/device-cache loss from the alpha qualification claim and publish the limit. Cost: narrower durability evidence, no inference from SIGKILL/O_DIRECT | Require a defined power-loss fault model before alpha. Cost: approved disposable hardware/VM failure campaigns, exact acknowledged-version oracle, replay/cleanup and retained failures | Defer broad power-loss qualification consistently with K23, while retaining K36 crash gates. This is a recommendation; D42 left this qualification choice separate |
+| Topic | Accepted answer | Remaining work |
+| --- | --- | --- |
+| A4 | 2+1, 3/4/5 distinct physical hosts, TCP and RDMA; fcstor007–011, owned test directories under `/data1/01` | Six topology/transport cells, actual A5 parameters and retained full verification; NOTRUN by this task |
+| S4 / W122 | Minimal read-only effective-settings listing required in alpha | Implement/bound/test actual values, defaults/provenance, policies, transport and build; no new knob |
+| F12 / L22 | Trusted-network-only alpha 1.0; authentication deferred | Publish the unrestricted management-port consequence and externally restrict access; no security-boundary claim |
+| K36 | Verified crash recovery required; broad sudden-power-loss qualification deferred | Preserve fsync guarantees/barriers; qualify the crash model and publish the separate power-loss evidence limit |
+| S1 supported CLI | `sync-status` and tested `raft-resync` supported; routine packing automatic | Qualify those workflows; manual pack-compact/quota shrink/leader transfer/data-commit remain outside the supported operator workflow |
+| `--writers` | Remove the public override; keep tested built-in worker policy | Parser/docs/test cleanup is required; this decision does not implement it |
+| S3 / round-2 U4 | **Member-down clean unmount must be fixed before alpha 1.0; blocks alpha: yes** | Complete flush/settle and safe durable revocation with one member down, retain unresolved writes and authority, qualify the fix; no false clean-stop or limitation waiver |
+| Numeric tunables | Justify/bound remaining33 overrides, remove unjustified ones | Engineering audit and removal/qualification, not more user configuration decisions |
 
-## Additional S qualifications the four answers do not silently close
+A4's nested storage-host sets are fcstor007–009 (3), fcstor007–010 (4) and
+fcstor007–011 (5), over each transport. `/data1/01` is assigned test storage,
+not a claim that it is empty: use owned run subdirectories and do not touch
+another agent's cluster/data. Record actual storage headroom/quota, interfaces,
+RDMA devices, client placement, fixtures and evidence before running. This
+commit records the assignment only; no remote operation or test was performed.
 
-**S1's proposed CLI dispositions still need ratification or a recorded mapping
-from an existing decision.** The current surface page labels seven entries as
-proposed: `--writers`, `sync-status`, `pack-compact`, `raft-resync`,
-`shrink-quota`, `raft-step-down`, `data-commit`. Suggested package: support
-read-only `sync-status` plus tested `raft-resync`/packing workflows; keep
-writer overrides, live quota shrink, manual leader transfer and raw data-commit
-outside the alpha operator surface. Cost of including a proposed operation:
-its workflow/diagnostics and failure contract need qualification. Cost of
-excluding it: document developer-only surface; binary presence is not approval.
-This page does not accept that package for the user.
-
-**Round-2 U4 remains a separate lifecycle finding**, not F12 or K36: member-down
-clean unmount can fail its all-member storage-fence revoke. Round-3 U5/U16
-explicitly retain the gap despite K42's healthy-cluster bounded retry fix.
-Fix and qualify that workflow, or get an explicit user decision to publish
-its narrow limitation; never report failed revoke as clean shutdown or broaden
-it into an EIO waiver. S3 cannot be checked merely because a decision sheet exists.
-
-Before marking “Functional scope S decided” complete: resolve the four named
-choices, ratify the remaining proposed surface, classify U4, and reconcile
-any new candidate findings. S2/S3/S5 documentation and live gates still require
-review. The decision sheet is complete as a review artifact; S is not closed.
+S1's seven former proposed dispositions are now decided as above. The
+all-member storage-fence clean-unmount gap is **required fix**, not an accepted
+limitation. K42's healthy-cluster retry fix does not prove that workflow.
+S2/S3/S5 reviews, W122, writer-override removal, the numeric-tunable audit and
+live qualification still need to finish before alpha. The Stage 1 scope row
+records DECIDED choices with those implementation/qualification obligations.

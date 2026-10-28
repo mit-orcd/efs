@@ -172,8 +172,9 @@ exits 1, so a script can use its exit status. `raft-status` shows each
 metadata group's term, commit and applied index, voters and follower bound.
 `efs-mgmt version`, `io-stats`, `gc-status` and `sync-status` (the
 durability window of each root, and the state of a verified recovery) are
-further read-only views; `pack-compact NODE:PORT 0` prints the packer and
-segment summary without compacting.
+further supported read-only views (D46). Routine packing is automatic;
+manual `pack-compact NODE:PORT 0` remains a developer/diagnostic command,
+outside the supported alpha operator workflow.
 
 ### Mount and unmount a client
 
