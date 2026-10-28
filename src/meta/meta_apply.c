@@ -5806,6 +5806,39 @@ static int pub_parts_member(const struct efs_txn_parts *p, uint32_t shard)
 
 /* A matching record of the same transaction is an idempotent re-PREPARE;
  * the same txid with another request is STALE (never a silent retry). */
+/* K43: a stage row whose owner txn has a recorded ABORT is a resolve in
+ * flight. The abort's resolve of such a row is the delete itself, so a
+ * later unit that meets the row resolves it on contact instead of waiting
+ * out the resolve — a lost coordinator's aborted unit otherwise blocked the
+ * rebuild until the recovery scan's age gate (the K43 8 s window: the
+ * client's resend lost its CAS and its REPORT budget ran out 0.13 s before
+ * the scan). Only a locally recorded ABORT qualifies: without the decision
+ * row this replica cannot tell the stage from a live one, so BUSY stands.
+ * The txn record head carries the parts, so the coordinator shard is known;
+ * the decision row is in this KV whenever this replica applied the DECIDE.
+ */
+static int pub_stage_reap_if_aborted(struct efs_kv *kv, const uint8_t *key,
+                                     uint32_t klen, const uint8_t *have,
+                                     uint32_t hl)
+{
+    struct efs_txid owner;
+    struct efs_txn_parts parts;
+    int dec = -1, rc;
+
+    rc = efs_txn_record_head_parse(have, hl, &owner, &parts, NULL);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_txn_decision_get(kv, efs_txn_coordinator(&owner, &parts),
+                              &owner, &dec);
+    if (rc != EFS_OK || dec != EFS_TXN_ABORT)
+        return EFS_ERR_BUSY;
+    rc = efs_kv_del(kv, key, klen);
+    if (rc == EFS_OK)
+        fprintf(stderr, "meta: reaped a publication stage on contact: owner "
+                "txn was decided ABORT\n");
+    return rc == EFS_ERR_NOT_FOUND ? EFS_OK : rc;
+}
+
 static int pub_record_same(const uint8_t *have, uint32_t hl, const struct efs_txid *t,
                            const uint8_t *pay, uint32_t plen)
 {
@@ -5903,8 +5936,19 @@ int efs_meta_apply_publication_stage(struct efs_kv *kv, const struct efs_txid *t
     if (memcmp(ck, key, sizeof(ck)))
         return EFS_ERR_INVAL; /* never stage under another chunk's key */
     rc = efs_kv_get(kv, sk, sizeof(sk), have, &hl);
-    if (rc == EFS_OK)
-        return pub_record_same(have, hl, t, pay, plen);
+    if (rc == EFS_OK) {
+        rc = pub_record_same(have, hl, t, pay, plen);
+        if (rc == EFS_ERR_BUSY) {
+            int rrc = pub_stage_reap_if_aborted(kv, sk, sizeof(sk), have, hl);
+            if (rrc == EFS_ERR_BUSY)
+                return rc;   /* undecided or commit-decided: BUSY stands */
+            if (rrc != EFS_OK)
+                return rrc;  /* a corrupt stage row is not a retry loop */
+            rc = efs_kv_get(kv, sk, sizeof(sk), have, &hl); /* re-read: reaped */
+        }
+        if (rc == EFS_OK || rc != EFS_ERR_NOT_FOUND)
+            return rc;
+    }
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
     rc = efs_session_accept(kv, shard, session.client_uuid, session.session_epoch);

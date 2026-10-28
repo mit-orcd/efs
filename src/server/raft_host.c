@@ -9973,6 +9973,40 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
         }
         usleep(HOST_FIN_POLL_US);
     }
+#if EFS_FAULTS
+    /* Test hook (K43 gate): EFS_FAULT_PUB_BARRIER content "abort-resolve"
+     * parks the finisher after the abort's decision is known and before the
+     * RESOLVEs, holding the decided unit's intents — the incident's
+     * decision-to-resolution window. Same file protocol as the unit
+     * barrier: <file>.ready while parked, released when the file is removed,
+     * at most 15 s. */
+    {
+        const char *bp = getenv("EFS_FAULT_PUB_BARRIER");
+        char wanted[24] = {0}, ready[4096];
+        int fd;
+        if (bp && it->retire_only == HOST_FIN_ABORT && dec == EFS_TXN_ABORT &&
+            (fd = open(bp, O_RDONLY)) >= 0) {
+            ssize_t got = read(fd, wanted, sizeof(wanted) - 1);
+            close(fd);
+            while (got > 0 && (wanted[got - 1] == '\n' || wanted[got - 1] == ' '))
+                wanted[--got] = 0;
+            if (!strcmp(wanted, "abort-resolve") &&
+                snprintf(ready, sizeof(ready), "%s.ready", bp) < (int)sizeof(ready)) {
+                fd = open(ready, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+                if (fd >= 0)
+                    close(fd);
+                fprintf(stderr, "raft-host: K43 fault: finisher parked before "
+                        "the abort's RESOLVEs\n");
+                uint64_t end = now_us_() + 15000000;
+                while (__atomic_load_n(&h->running, __ATOMIC_ACQUIRE) &&
+                       __atomic_load_n(&h->s->running, __ATOMIC_ACQUIRE) &&
+                       access(bp, F_OK) == 0 && now_us_() < end)
+                    usleep(1000);
+                unlink(ready);
+            }
+        }
+    }
+#endif
     for (i = 0; i < it->parts.n; i++) {
         uint32_t sh = it->parts.shard[i];
 
@@ -23634,6 +23668,25 @@ static int host_pub_unit_commit(struct efs_raft_host *h, const struct host_pub_u
     rc = host_pub_unit_txn(u, nunits, session, pubid, &t, &parts);
     if (rc != EFS_OK)
         return rc;
+#if EFS_FAULTS
+    /* Test hook (K43 gate): while the marker file exists, the next unit on
+     * this host aborts its transaction and is refused NOT_PRIMARY before
+     * anything new is staged — the resend-after-coordinator-kill window in
+     * which the failover host cannot admit the unit yet (the soak
+     * incident's `fail=unit/-15`). The txn id comes from the publication
+     * id, so the abort decides the killed coordinator's parked PREPAREs.
+     * One-shot. */
+    {
+        const char *np = getenv("EFS_FAULT_PUB_UNIT_NP_FILE");
+        if (np && *np && access(np, F_OK) == 0) {
+            unlink(np);
+            fprintf(stderr, "raft-host: K43 fault: unit refused NOT_PRIMARY before staging\n");
+            host_fin_add(h, &t, &parts, efs_txn_coordinator(&t, &parts),
+                         HOST_FIN_ABORT);
+            return EFS_ERR_NOT_PRIMARY;
+        }
+    }
+#endif
     /* K32: one TXN_BATCH entry per group (split at EFS_MD_TXN_BATCH_MAX),
      * proposed as each fills and at the end; every verdict is waited below. */
     host_txn_batch_init(&batch, HOST_TXN_BATCH_BYTES, 0, refs, &k, HOST_PUB_SET_REFS);
