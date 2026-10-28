@@ -146,6 +146,7 @@ try:
         return pid
     with patch.object(os, 'posix_spawn', tracked_spawn), \
          patch.object(os, 'fork', side_effect=AssertionError('fork is unsafe')), \
+         patch('_posixsubprocess.fork_exec', side_effect=AssertionError('fork_exec is unsafe')), \
          patch.object(H.subprocess, '_fork_exec', side_effect=AssertionError('fork_exec is unsafe'), create=True):
         arg = 'literal ; $(false) space'
         rc, stdout, stderr, elapsed = H.efs_cmd(commands.parent, 'stats', arg)
