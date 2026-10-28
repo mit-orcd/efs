@@ -1,11 +1,15 @@
 # Task T — gate budgets across supported hosts
 
-**INCOMPLETE / awaiting nuc and intel2 release.** The multi-host fitter is implemented;
-no fitted budget table or confirming gate is accepted. Three clean intel1
-pools now supply the required K43 measurements: 54.9/54.9/55.0 s, median
-54.9 s. Untouched `fe18612ae` fails the eight-job nuc gate. Later devel
-`424d0db8f` arrived after these frozen runs and is not qualified by them.
-Nuc/intel2 are occupied by other qualification work. Nothing is pushed or merged into devel.
+**INCOMPLETE / qualifying the authorized publication-fence repair.** Three
+clean intel1 pools supply K43 measurements (54.9/54.9/55.0 s; median 54.9 s).
+The fresh intel2 `6e6b95b26` gate failed K43 with fsync EIO after coordinator
+SIGKILL; no timings from that gate enter the fit. Its six-node fixture and
+logs remain on intel2. The user authorized expanding measurement-only Task T
+to integrate and qualify Task H's `214c541aa` repair: core integration
+`f99cfc72e`, self-contained instrumented owner regression `cb363ba8a`.
+No fitted table or confirming gate is accepted; target and slots stay fixed.
+Nuc/intel2 currently have other qualification work; replacement pools wait
+for a clean handoff. Nothing is pushed or merged into devel.
 
 ## Contract and source
 
@@ -94,6 +98,7 @@ cluster, Task H mount/store or other user's infrastructure was stopped.
 | nuc / `babeea640` | 523 commands, 7 FAIL, 12 NOTRUN, 1461 s, 45 OVERBUDGET, build 50 s | Rejected; stopped before run 2 |
 | intel1 / `babeea640` | 523 commands, 2 FAIL, 12 NOTRUN, 727 s, 4 OVERBUDGET, build 30 s | Rejected; stopped before run 2 |
 | nuc / untouched `fe18612ae` | 528 commands, 4 FAIL, 13 NOTRUN, 1405 s, 43 OVERBUDGET, build 60 s | Failed baseline; not a calibration input |
+| intel2 / `6e6b95b26`, run 1 | 530 commands, 1 FAIL, 12 NOTRUN, 913 s, 3 OVERBUDGET, build 31 s | K43 fsync EIO after coordinator kill; rejected, fixture retained |
 | intel2 / `9638c34e0` | Interrupted during build after Task H started independent daemons | Contaminated; no test timings |
 | intel1 / `9638c34e0`, run 1 | 529 commands, 0 FAIL, 13 NOTRUN, 734 s, 4 OVERBUDGET, build 31 s | Clean gate with recorded host limits; K43 54.9 s |
 | intel1 / `9638c34e0`, run 2 | 529 commands, 0 FAIL, 13 NOTRUN, 751 s, 5 OVERBUDGET, build 1 s | Clean gate with recorded host limits; K43 54.9 s |
@@ -171,6 +176,116 @@ The fitter's schedule model reads that same EXCLUSIVE classification.
 the existing 1650 s margin guard. This is not a refitted total or measured wall
 time; the user target remains 1100 s. The final fit must report its own actual-
 command reference model and the rows that exceed that target.
+
+## Intel2 K43 publication-fence failure and authorized integration
+
+Fresh source `6e6b95b2633c44acf9e961772b9d545a988867b3` includes devel
+`424d0db8f`, Task T tooling/retention and Task H's runner-only isolation;
+it does **not** contain Task H's product-repair branch. After the previous
+owner's explicit release and quiet checks, its first full intel2 gate ran
+530 commands in 913 s: **1 FAIL, 12 NOTRUN, 3 OVERBUDGET**, build 31 s.
+Only K43 failed. The controller stopped before run 2 and all 2,304 tracked
+source files remained unchanged. No failed timing is a calibration input.
+Archive SHA-256: `3bf85a270f54615319c91d34b59116ab68bee1a0ac04176448f109fd6cc2706d`.
+
+K43 used its unchanged six-node loopback TCP fixture and 16 MiB baseline.
+Baseline payload verification succeeded before the fault. The test parked
+publication after PREPARE on node 2, SIGKILLed that coordinator, then failed
+on the writer's fsync EIO. The client logged two durable fragments but no
+durable degraded marker (`NOT_FOUND`, -3) for several stripe obligations.
+There was **no post-fault payload verification**: this is neither proof of
+corruption nor proof of successful durable publication. The hypothesis is
+unclosed publication authority for abandoned replay PUTs, matching the core
+repair below; integration qualification must establish whether it fixes this
+failure rather than relying on Task H's broader branch results.
+
+The original fixture stays unchanged at
+`intel2:/home/maik/efs-taskT-20261028-6e6b95b26-v3/src/tmp/case-472/efs-k43-hvxyg4sb`.
+Evidence root is
+`intel2:/home/maik/efs-artifacts/taskT-20261028/intel2-6e6b95b26-v3/`:
+`fail-472.log`, all seven client/daemon logs copied under `failure-k43/`,
+binary hashes and build identity, and `fixture-manifest.json` inventorying
+all original fixture files. That inventory is preservation evidence, not a
+payload oracle. Every evidence manifest hash was rechecked; SHA-256 of
+`SHA256SUMS` is `3d8a4cebc3081010f07b37d227b32f646d842a71f7996d1333c7ade2feba58b2`;
+fixture manifest SHA-256 is
+`2c2588383d95b663891eaa9769b1064a80123d0b1d4e8d7b39feeda04f314d52`.
+Final ownership closure records zero owned processes and zero owned mounts.
+No failed store or payload was copied to the Mac.
+
+With explicit user approval, `f99cfc72e` ports the core of Task H
+`214c541aa68a1c6611746365a1fc03a7a5543ec4`: an unreferenced, no-longer-putting
+PUT needs durable SETTLE or exact terminal ticket state, followed by a fresh
+metadata absence check, before fsync may retire its stripe obligation.
+BUSY, missing ticket state and transport errors prove no closure. FileID and
+object matching remain exact. There is no encoding change and no relaxed
+fsync verdict. Unit regressions cover those negative outcomes, a late fence
+requiring the second lookup, and generation mismatch.
+
+The first portable verification attempt retained a harness failure: the newly
+added ticket-owner test linked an absent prebuilt `libefs.a`. All other scoped
+checks passed, but the attempt remains FAIL. `cb363ba8a` makes that test link
+its real common helpers directly and honor sanitizer/memcheck plumbing.
+On exact source `cb363ba8a7fa2bd9779b8642ca467cf63e718100`, all **15 native**
+steps and **11 ASan/UBSan** steps of the portable verifier pass on the arm64
+Mac (Apple clang; no leak claim). Both include the real ticket owner,
+receipt/resolve tests, full data-commit test and Raft memory/disk tests;
+native additionally covers frame, transaction retry, recipe and defect
+regressions. Commands, compiler/platform, per-step logs and source hashes
+are retained outside Git:
+
+```sh
+python3 tests/review_graph_20261028/verify.py --out NEW_NATIVE_DIRECTORY
+python3 tests/review_graph_20261028/verify.py --sanitize --out NEW_SANITIZER_DIRECTORY
+```
+
+Local raw root:
+`/Users/mike/Documents/Codex/artifacts/taskT-20261028/`.
+Closed `SHA256SUMS` digests:
+
+| Directory | Verdict | SHA-256 of manifest |
+| --- | --- | --- |
+| `qualification-publication-fence-native` | FAIL: missing library prerequisite on f99cfc72e | `af5df73da666df3e1b94025924200ae10a6e49e9585dd750b24e6d5f41866cf6` |
+| `qualification-publication-fence-asan-ubsan` | FAIL: same prerequisite | `06d2055ecf9a1ec5fbed0a9ed9132a738a22d185e7ef5a61e2021bd58f1a6340` |
+| `qualification-publication-fence-portable-native` | PASS scoped, cb363ba8a | `85a19f443fadb260a8bad0babb2dcda99fbce30cec8da46041b5c7f0bcb23ac9` |
+| `qualification-publication-fence-portable-asan-ubsan` | PASS scoped, cb363ba8a | `60e109cc97b260a66dfbd45dd038ac06c74890ecb7430a0d0c50da83fd285c41` |
+
+The fixed source archive's SHA-256 is
+`adc45a0f3656555bb95237a3a35a2b971aa38bffec4c1c59d692894c4d171508`.
+Required-host Linux pools and confirmations remain unqualified. On xorinox,
+after two quiet checks, the same archived source built successfully and the
+native plus ASan/UBSan owner checks passed. **One six-node K43 run passed**:
+both overwrite clients completed after coordinator SIGKILL, no recovery-age
+abort was observed, and a fresh mount read the final 16 MiB payload exactly.
+The K43 subprocess took **55.854 s including cleanup** (the test's earlier
+8.9 s PASS print precedes cleanup). All 2,304 source files remained unchanged.
+This is a scoped cross-host result, not a same-host before/after proof for
+intel2's failure, nor a substitute for its full calibration pools.
+
+Commands on a fresh archived tree, with explicit source/build ID and private
+TMPDIR, in order:
+
+```sh
+python3 tests/test_put_ticket_owner.py
+EFS_TEST_SANITIZE=1 ASAN_OPTIONS=detect_leaks=0 python3 tests/test_put_ticket_owner.py
+make -j8 all tests/faults/efsd
+python3 tests/test_k43_coordinator_kill.py
+```
+
+Every command exited 0. Build took 17.651 s; native owner 0.615 s and
+instrumented owner 2.571 s. The K43 fixture uses loopback TCP, buffered store
+I/O and 1 GiB quota per node; the test's 16 MiB phases and deadlines were
+unchanged. Raw logs, build/binary hashes, environment, exact bounded
+controller and source manifests are retained at
+`xorinox:/home/maik/efs-artifacts/taskT-20261028/xorinox-cb363ba8a-publication/`.
+All 14 manifest entries were verified; SHA-256 of `SHA256SUMS` is
+`ea02f0e0fe97e804cbee5787d9c7250743d2739bc74df648af63c59c71e7be11`.
+Successful K43 fixture cleanup follows the existing test; no failed intel2
+fixture was touched. One broader eight-job Linux integration gate is now
+running at `xorinox-cb363ba8a-scoped-full/`, separately marked non-calibration.
+Nuc and intel2 remain reserved by Task H until its explicit release. This is an integration of one core fix, not a
+claim to qualify Task H's larger repair branch. The canonical graph was rebuilt
+and all nine graph checks passed after both changes.
 
 ## Raw evidence and controls
 
