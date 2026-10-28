@@ -292,4 +292,13 @@ qualification fails one packer read error. `03b50dcd5` RDMA fails +21.79%
 load and +11.99% foreground RSS. Candidate `47ca08eaf` gives registered
 transport buffers explicit mmap/munmap lifetime; unit release/mutation
 checks pass, live proof is pending. Its quiet-host and hardware jobs are
-queued; see [current review](task-i-20261026.md#current-jobs-and-exact-source).
+queued; see [current review](task-i-20261026.md#current-reviewed-gate-and-active-hours).
+
+Task I update: `47ca08eaf` full xorinox code gate completed with 518
+commands / 0 FAIL / 13 NOTRUN (1024 s +21 s build), its hour active.
+Earlier `03b50dcd5` node9900 TCP now has a full PASS: load RSS +0.44%,
+foreground 0.00%, all 2080 final payloads exact, pack errors 0/0, drain
+80.2 s. RDMA failure remains; the dedicated-mapping product's hardware
+RDMA is now active. AMD is not quiet due to another account's W123 work;
+its additional software-RDMA/gate/hour controller waits with strengthened
+all-account checks. No final memory-fix claim until active hours finish.

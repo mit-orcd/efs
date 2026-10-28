@@ -892,13 +892,12 @@ round says which physical or software limiter it hit.
   checks have explicit PASS/FAIL/NOTRUN results. Docs and code tests both report;
   an unavailable diagnostic is disclosed, never silently counted as passed.
   **Task I reviewed Oct 27 ([evidence](task-i-20261026.md)):**
-  K38 passes at `03b50dcd5`, but the 516-command gate fails D4 packer PUT
-  and W130 resync setup (13 NOTRUN); hour NOTRUN. Fixed hardware still
-  fails: RDMA RSS and TCP packer read. Integrated RDMA also fails client
-  RSS. Candidate `47ca08eaf` adds registered-buffer mappings, a tested
-  lagging-proof voter fallback, bounded resync setup and read diagnostics.
-  Quiet xorinox waits for Task O; node9900 waits for the current TCP run.
-  Unresolved source-read/abandonment errors remain failures. No closure.
+  `47ca08eaf` repaired xorinox code gate 518 / 0 FAIL / 13 NOTRUN;
+  unchanged hour active. Node9900 earlier `03b50dcd5` TCP full PASS,
+  RDMA FAIL; repaired `47ca08eaf` hardware RDMA active, TCP follows.
+  AMD software-RDMA continuation `479df228c` (identical product) waits
+  for UID 1001 W123 work; all-account quiet checks/native regression
+  added. Historical failures preserved; final qualification INCOMPLETE.
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;
   [evidence](f1-memory-concurrency-gates-20261025.md)):** `make leak-check`
