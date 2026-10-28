@@ -16400,6 +16400,13 @@ int server_raft_host_pack_state(uint32_t group, uint64_t id, uint64_t gen,
     if (!host_hosts(h, (uint8_t)group))
         return host_pack_object_remote(h, group, id, gen, out, degraded);
     int rc = host_read_index(h, (uint8_t)group, &hint);
+    /* A hosting storage follower may lag its applied prefix under pressure.
+     * An explicit failed local proof is not an absent/cancelled object. Ask
+     * another voter for its own proven object + degraded mask, just as a
+     * data-only node does. The serving RPC never forwards, validates the full
+     * identity and still requires ReadIndex; fatal local errors stay fatal. */
+    if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_PRIMARY)
+        return host_pack_object_remote(h, group, id, gen, out, degraded);
     if (rc != EFS_OK) return rc;
     rc = efs_pack_object_get(h->kv, group, id, gen, out);
     if (rc == EFS_OK && degraded) *degraded = host_pack_degraded_mask(h, group, id, gen);
