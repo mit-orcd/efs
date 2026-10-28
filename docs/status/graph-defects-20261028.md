@@ -1,7 +1,7 @@
 # Graph-led defect review and repairs — October 28, 2026
 
 **Repairs implemented; scoped native and ASan/UBSan checks PASS at
-`5ecc915d7`. Original source `3debca7ec` has three reproduced component failures,
+`4ea10be40` (repair commit `dd6d2c5c2`). Original source `3debca7ec` has three reproduced component failures,
 retained below and in the independent evidence commit. No full Linux suite,
 live mount/failover, multi-host or RDMA qualification is claimed.** Related work:
 W155 joining, K35/D42 stripe durability and W154 rebuild protection, and the
@@ -28,7 +28,7 @@ Raft-store index contract. No broader W-item acceptance is changed.
   legitimate indices above 2^32 and reopening. No persistent encoding changes.
 
 All three behavioral requirements fail on the preserved original source using
-`tests/review_graph_20261028/regression.py --against ef19b1b74`; all three pass
+`tests/review_graph_20261028/regression.py --against 3debca7ec`; all three pass
 on the repairs, natively and with ASan/UBSan. This is a regression negative
 control, not mixed-build/format compatibility testing. The original diagnostic
 `run.py` remains unchanged and is deliberately for the original-source checkout;
@@ -56,10 +56,15 @@ harnesses; native-only recipe/frame/policy checks are not mislabelled sanitized.
 Apple Clang arm64 macOS, local files/threads only, no shared cluster. Leak checking
 is not claimed. The checked production paths use no test-only source replacement.
 
-Closed runs at the initial repair commit have 14 native check/build steps and
+Closed runs on merged `4ea10be40` have 14 native check/build steps and
 10 sanitizer check/build steps, all exit 0. Logs are under the stable evidence
-root below in `final-5ecc915d7-native/` and `final-5ecc915d7-asan-ubsan/`.
-Native/sanitizer original-failure logs and their original hashes remain intact.
+root below in `merged-4ea10be40-native/` and `merged-4ea10be40-asan-ubsan/`.
+The earlier pre-rebase runs remain in `final-5ecc915d7-*`; they are not overwritten.
+`regressions-original-3debca7ec.log` independently records all three requirements
+failing on the original production source. Every hash in `baseline-sha256.json`
+was rechecked unchanged after the repairs; `final-checks-sha256.json` records the
+retained closed verification logs and result manifests. No original failure was
+relabeled as a pass.
 
 ## Original findings (before repair)
 
