@@ -344,8 +344,11 @@ static void test_commit(void)
           "a changed request under one txid is STALE");
     CHECK(prep_pin(&f, &t, &parts, f.row.content_epoch) == EFS_OK, "pin re-PREPAREs");
     CHECK(efs_txn_scan_pending(f.kv, f.lsh1, recs, 8, &n) == EFS_OK && n == 1 &&
-          !memcmp(recs[0].t.bytes, t.bytes, EFS_TXN_ID_LEN),
-          "recovery finds the staged publication");
+          !memcmp(recs[0].t.bytes, t.bytes, EFS_TXN_ID_LEN) && !recs[0].pin_only,
+          "recovery finds the staged publication, not just a retention pin");
+
+    CHECK(efs_txn_scan_pending(f.kv, f.ish, recs, 8, &n) == EFS_OK && n == 1 &&
+          !recs[0].pin_only, "chunk stage plus a pin remains unresolved work");
 
     /* 2. the pin keeps the epoch still */
     CHECK(epoch_fence(&f) == EFS_ERR_BUSY, "epoch fence BUSY while pinned");
@@ -400,6 +403,8 @@ static void test_commit(void)
     CHECK(prep_chunk(&f, &t2, &parts2, &other) == EFS_ERR_STALE,
           "a publication built on the old base is STALE after commit");
     CHECK(shrink(&f) == EFS_ERR_BUSY, "the pin outlives RESOLVE");
+    CHECK(efs_txn_scan_pending(f.kv, f.ish, recs, 8, &n) == EFS_OK && n == 1 &&
+          recs[0].pin_only, "resolved publication retains only its decision pin");
     CHECK(efs_meta_apply_txn_retire(f.kv, f.ish, &t, T0 + 1000) == EFS_OK, "retire");
     CHECK(efs_meta_pub_pinned(f.kv, f.ino, f.row.generation) == EFS_OK, "unpinned");
     CHECK(efs_txn_scan_pending(f.kv, f.ish, recs, 8, &n) == EFS_OK && n == 0,

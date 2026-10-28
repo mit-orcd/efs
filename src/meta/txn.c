@@ -1980,15 +1980,20 @@ static int pend_cb(void *user, const uint8_t *key, uint32_t klen,
     /* Every record kind starts its value with txid[16] + parts. */
     if (parse_parts_txid(val, vlen, &t, &p, &used) != EFS_OK)
         return 0;
+    int pin = key[2] == EFS_KV_KIND_PUB_STAGE && klen == 24u + EFS_TXN_ID_LEN;
     for (i = 0; i < a->n; i++)
-        if (same_txid(a->out[i].t.bytes, &t))
+        if (same_txid(a->out[i].t.bytes, &t)) {
+            if (!pin)
+                a->out[i].pin_only = 0;
             return 0;
+        }
     if (a->n >= a->cap) {
         a->overflow = 1;
         return 1;
     }
     a->out[a->n].t = t;
     a->out[a->n].parts = p;
+    a->out[a->n].pin_only = (uint8_t)pin;
     a->n++;
     return 0;
 }

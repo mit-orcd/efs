@@ -10240,9 +10240,11 @@ static void host_txn_recover_one(struct efs_raft_host *h, uint32_t shard,
     }
     h->rec_resolved++;
     fprintf(stderr, "raft-host: txn-recover shard=%u coord=%u parts=%u "
-            "age=%.1fs -> %s\n", shard, coord, rec->parts.n,
+            "age=%.1fs -> %s pin_only=%u tx=%016llx%016llx\n", shard, coord, rec->parts.n,
             (double)(now_ns() - txid_ns(&rec->t)) / 1e9,
-            dec == EFS_TXN_COMMIT ? "COMMIT (resolved)" : "ABORT");
+            dec == EFS_TXN_COMMIT ? "COMMIT (resolved)" : "ABORT",
+            (unsigned)rec->pin_only, (unsigned long long)rd64be(rec->t.bytes),
+            (unsigned long long)rd64be(rec->t.bytes + 8));
     /* Every participant resolved with the established verdict (each
      * proposal above returned its OK verdict): retire the decision. */
     host_txn_retire(h, &rec->t, coord);
@@ -10344,6 +10346,20 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
 
             if (born > now || now - born < HOST_REC_AGE_NS)
                 continue;
+            if (recs[i].pin_only &&
+                efs_txn_coordinator(&recs[i].t, &recs[i].parts) == shard) {
+                int decision = EFS_TXN_UNDECIDED;
+                int drc = efs_txn_decision_get(h->kv, shard, &recs[i].t, &decision);
+                /* A decided publication's retained pin belongs to the
+                 * decision sweeper below. Re-deciding ABORT and resolving
+                 * every participant here mistakes retention for stranded
+                 * payload, delaying real recovery with redundant work.
+                 * Missing/retired history still takes normal recovery;
+                 * an unreadable verdict is never authority to abort. */
+                if (drc == EFS_OK ||
+                    (drc != EFS_ERR_NOT_FOUND && drc != EFS_ERR_STALE))
+                    continue;
+            }
             host_txn_recover_one(h, shard, &recs[i]);
         }
         /* The coordinator shard is always a participant, so its PREPARE

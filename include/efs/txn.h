@@ -405,6 +405,10 @@ int efs_txn_resolve(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard,
 struct efs_txn_pending_rec {
     struct efs_txid t;
     struct efs_txn_parts parts;
+    /* In-memory scan classification, never a stored encoding. A pin alone
+     * retains a publication decision until RETIRE; it is not an unresolved
+     * publication payload. An undecided pin still requires recovery. */
+    uint8_t pin_only;
 };
 int efs_txn_scan_pending(struct efs_kv *kv, uint32_t shard,
                          struct efs_txn_pending_rec *out, uint32_t cap,
