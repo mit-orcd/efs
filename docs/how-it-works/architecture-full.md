@@ -1640,6 +1640,16 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Heartbeat shutdown wakeup](../status/heartbeat-stop-wakeup-20261028.md):
+**Implemented on `agent/heartbeat-stop-wakeup`; not merged.** K51's join is
+preserved; a monotonic condition wait replaces the uninterruptible two-second
+sleep and shutdown wakes it before joining. Product/regression `6dc0bafa8`,
+driver `a9bd8600c`. Intel1 focused normal/TSan/ASan checks PASS; restored-sleep
+negative control fails as intended. No budget changes. Real-daemon A/B and
+full `make test-all` NOTRUN pending approval to stage source archives; raw
+logs and verified hashes retained. No deployment or full speedup claim.
+
+
 [Wave 24 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`59b0f5b56`)**: Task Q, docs audit round 3 through wave 22 ([audit](../status/docs-audit-20261027.md)): 17 operator-page fixes (guide, POSIX, surface, `.efs` commands, release notes, testing), a metadata-replica halt runbook for W130/W165 with `raft-resync`, the release notes' open-item list rewritten for the current state (K43, K48, W166, W159 still open; K44, K45–K47, K50 fixed), the guide's duplicated Expiry section merged. Docs only: docs gate 5/5; live command checks NOTRUN (the Linux tree does not build on the Mac); wave 23's changes (K49/K51, apply errors, shared codecs) are not yet in these pages.
 
 [Wave 23 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`6967bfda2`; gate at the same commit)**: Task L ([evidence](../status/rdma-gate-node9901-20261027.md)): **K49** RDMA request payloads moved to an aligned base before dispatch casts them, the RDMA receive poll and buffer repost serialized per device, **K51** (renumbered from Task L's K50, which Task O holds) the heartbeat thread joined before the Raft host is freed; fstor007 hardware RDMA, TSan 19/19, ASan/UBSan 49/49. And `graphify-review-fixes` ([evidence](../status/graphify-review-findings-20261027.md)): `host_apply` keeps I/O, allocation and unsupported-encoding errors for every command family (SETATTR, XATTR, UNLINK, UTIMENS, RMDIR and TRUNCATE were missing, so such an error was consumed with the cursor advanced), plus shared byte-order, KV ordering, snapshot group filter, SETATTR codec and FUSE geometry helpers with unchanged formats. intel1 `make test-all` (8 jobs): 520 commands in 794 s, 0 FAIL, 12 NOTRUN host limits, PASS with host limits; OVERBUDGET 11, all daemon tests with repeated stops (`test_member_limit` 34.7/20 s, `test_k33_autoid` 55.3/40 s, `test_k22_leader_admission` 44.3/30 s the largest): a daemon stop now waits for the heartbeat's current sleep.
