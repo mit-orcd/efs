@@ -10,6 +10,13 @@
 #include <execinfo.h>
 
 
+
+/* Named test seams delegate to the shared client geometry rules. */
+static uint32_t data_chunk_size(void)
+{
+    return efs_client_chunk_size();
+}
+
 static uint64_t now(void)
 {
     struct timespec ts;
@@ -952,7 +959,7 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
 
 static void invalidate_file_layout(const struct efs_inode *rpc, int drop_dcache)
 {
-    uint32_t cs = efs_client_chunk_size();
+    uint32_t cs = data_chunk_size();
     uint32_t nci = 0;
     if (cs && rpc->size)
         nci = (uint32_t)((rpc->size + cs - 1) / cs);
@@ -1684,7 +1691,7 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
     pthread_mutex_lock(&g_client.idx_mu);
     uint32_t drop = 0, old_nci = 0;
     if (size < old_size) {
-        uint32_t cs = efs_client_chunk_size();
+        uint32_t cs = data_chunk_size();
         /* The boundary chunk's row stays, now masked; its local entry
          * and cached image predate the mask and must be pulled again. */
         drop = cs ? (uint32_t)(size / cs) : 0;

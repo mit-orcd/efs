@@ -18,6 +18,21 @@
 #include <poll.h>
 #include <errno.h>
 
+
+/* Named test seams delegate to the shared client geometry rules. */
+static uint32_t data_chunk_size(void)
+{
+    return efs_client_chunk_size();
+}
+static uint32_t data_frag_size(void)
+{
+    return efs_client_frag_size();
+}
+static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FRAGMENTS])
+{
+    efs_client_frag_ptrs(buf,frag_len,frags);
+}
+
 static void *demand_read_alloc(uint32_t len);
 
 
@@ -464,7 +479,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     frag_buf = decode_frag_scratch(EFS_NUM_FRAGMENTS * frag_len);
     if (!frag_buf)
         return EFS_ERR_NOMEM;
-    efs_client_frag_ptrs(frag_buf, frag_len, frags);
+    frag_ptrs(frag_buf, frag_len, frags);
     /* The two data fragments are received straight into the chunk's
      * halves; only parity needs scratch. efs_decode_chunk skips the
      * copy of a fragment that is already in place (Oct 1 read review:
@@ -768,13 +783,13 @@ static int fetch_published_once(efs_ino_t ino, uint32_t ci, uint8_t *buf,
                                 uint32_t len, struct efs_chunk_entry *obs,
                                 int *have_obs)
 {
-    uint32_t cs = efs_client_chunk_size();
+    uint32_t cs = data_chunk_size();
     if (!buf || !cs || len != cs)
         return EFS_ERR_INVAL;
     int published = 0;
     int stub = 0;
     struct efs_chunk_entry ce;
-    uint32_t frag_len = efs_client_frag_size();
+    uint32_t frag_len = data_frag_size();
     uint8_t zck[EFS_HASH_SIZE];
 
     memset(&ce, 0, sizeof(ce));
@@ -1526,7 +1541,7 @@ struct chunk_get_job {
     int ext;   /* chunk points into the caller's read buffer: no pool
                 * buffer, no copy-out, never freed here */
     int rc;
-    uint8_t *chunk; /* efs_client_chunk_size() bytes, owned by caller unless owned */
+    uint8_t *chunk; /* data_chunk_size() bytes, owned by caller unless owned */
     struct get_batch *bp;
     uint64_t deadline;
 };
@@ -1567,7 +1582,7 @@ static void rdcache_cancel(efs_ino_t ino, uint32_t ci);
 static void *chunk_get_worker(void *arg)
 {
     struct chunk_get_job *job = arg;
-    uint32_t chunk_size = efs_client_chunk_size();
+    uint32_t chunk_size = data_chunk_size();
     int acq;
     /* Same-mount read of a chunk this client still holds. efs_dcache_copy
      * serves a current image and refuses one the map does not name. */
@@ -1730,7 +1745,7 @@ static void *get_pool_thread(void *arg)
         get_job_run(job);
 
         if (job->owned) {
-            uint32_t cs = efs_client_chunk_size();
+            uint32_t cs = data_chunk_size();
             if (job->chunk)
                 efs_buf_free(job->chunk, cs);
             free(job);
@@ -2049,7 +2064,7 @@ _Static_assert(EFS_READ_PREFETCH_DEPTH <= EFS_WRITE_PIPELINE, "prefetch within t
 
 static void prefetch_ahead(efs_ino_t ino, uint32_t from_ci, uint64_t file_size)
 {
-    uint32_t cs = efs_client_chunk_size();
+    uint32_t cs = data_chunk_size();
     uint32_t depth = EFS_READ_PREFETCH_DEPTH;
     uint32_t max_ci;
     uint32_t i;
@@ -2104,7 +2119,7 @@ void efs_client_prefetch_open(efs_ino_t ino, uint64_t size)
     /* Below one chunk a read fetches only the fragment range it needs;
      * a whole-chunk prefetch would add RPCs (Oct 16 smoke: 4 GET_CHUNK per
      * 61-byte file instead of 1). */
-    if (size < efs_client_chunk_size())
+    if (size < data_chunk_size())
         return;
     prefetch_ahead(ino, 0, size);
 }
@@ -2112,7 +2127,7 @@ void efs_client_prefetch_open(efs_ino_t ino, uint64_t size)
 static void maybe_prefetch(int want, efs_ino_t ino, uint64_t end_off,
                            uint64_t file_size)
 {
-    uint32_t cs = efs_client_chunk_size();
+    uint32_t cs = data_chunk_size();
     uint32_t next_ci;
 
     if (!want || !cs)
@@ -2163,7 +2178,7 @@ static __thread int t_seq_run;
 static uint32_t refresh_end(uint32_t ci0, uint32_t ci1, int sequential,
                             uint64_t file_size)
 {
-    uint32_t cs = efs_client_chunk_size();
+    uint32_t cs = data_chunk_size();
     if (!sequential || !cs)
         return ci1;
     uint64_t file_chunks = (file_size + cs - 1) / cs;
@@ -2176,7 +2191,7 @@ static uint32_t refresh_end(uint32_t ci0, uint32_t ci1, int sequential,
 int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
                          struct efs_read_ref *refs, int max_refs)
 {
-    uint32_t cs = efs_client_chunk_size();
+    uint32_t cs = data_chunk_size();
 
     if (!refs || max_refs <= 0)
         return EFS_ERR_INVAL;
@@ -2256,7 +2271,7 @@ static int client_read_run(efs_ino_t ino, uint64_t offset, size_t size, char *bu
     if (!out_len || (!buf && size))
         return EFS_ERR_INVAL;
     *out_len = 0;
-    if (size && efs_write_extent_valid(offset, size, efs_client_chunk_size()) != EFS_OK)
+    if (size && efs_write_extent_valid(offset, size, data_chunk_size()) != EFS_OK)
         return EFS_ERR_INVAL;
     if (size && efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
@@ -2285,7 +2300,7 @@ static int client_read_run(efs_ino_t ino, uint64_t offset, size_t size, char *bu
         if (stat_rc != EFS_OK) {
             if (stat_rc != EFS_ERR_NOT_FOUND)
                 return stat_rc;
-            uint32_t cs = efs_client_chunk_size();
+            uint32_t cs = data_chunk_size();
             if (cs && size > 0 &&
                 (offset / cs) == ((offset + size - 1) / cs)) {
                 uint32_t ci = (uint32_t)(offset / cs);
@@ -2314,7 +2329,7 @@ static int client_read_run(efs_ino_t ino, uint64_t offset, size_t size, char *bu
     if (offset >= file_size) {
         /* Size not yet reflected (dentry stub / unlink-open ghost): still
          * serve unpublished dirty ranges from this same fd. */
-        uint32_t cs = efs_client_chunk_size();
+        uint32_t cs = data_chunk_size();
         if (cs && size > 0 &&
             (offset / cs) == ((offset + size - 1) / cs)) {
             uint32_t ci = (uint32_t)(offset / cs);
@@ -2337,7 +2352,7 @@ static int client_read_run(efs_ino_t ino, uint64_t offset, size_t size, char *bu
         t_seq_run = 1;
     t_seq_ino = ino;
     t_seq_next = offset + size;
-    chunk_size = efs_client_chunk_size();
+    chunk_size = data_chunk_size();
     want_pf = (t_seq_run >= 2) || (size >= chunk_size);
 
     size_t total = 0;
