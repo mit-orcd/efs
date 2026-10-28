@@ -82,6 +82,25 @@ for failed_stage in ('teardown-unmount', 'stop'):
     if failed_stage == 'teardown-unmount':
         gcleanup.fetch.assert_not_called()
 
+# Distinct client sources must be used on both serial and concurrent steps.
+pspec = importlib.util.spec_from_file_location('posix_remote_paths', root / 'tests/posix/posix_2client.py')
+P = importlib.util.module_from_spec(pspec)
+pspec.loader.exec_module(P)
+remote_calls = []
+def fake_ssh(ssh, host, cmd):
+    remote_calls.append((host, cmd))
+    return 0, ('OK' if cmd.startswith('test -d') else 'RESULT\tPASS\t'), ''
+with __import__('unittest.mock', fromlist=['patch']).patch.object(P, 'ssh_cmd', fake_ssh):
+    P._remote_ab('ssh', ['/source-a/suite.py', '/source-b/suite.py'], 'a', 'b', 'case', 0, '/mnt/case')
+    assert any(h == 'a' and '/source-a/suite.py' in c for h,c in remote_calls)
+    assert any(h == 'b' and '/source-b/suite.py' in c for h,c in remote_calls)
+    remote_calls.clear()
+    P.TESTS = [('case', [('a', None), ('b', None)], '')]
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert P.run_remote('a', 'b', '/mnt', 'ssh', ['/source-a/suite.py', '/source-b/suite.py'], None, '') == 0
+    assert any(h == 'a' and '/source-a/suite.py' in c for h,c in remote_calls)
+    assert any(h == 'b' and '/source-b/suite.py' in c for h,c in remote_calls)
+
 tmp = Path(tempfile.mkdtemp(prefix='qualify-test-'))
 try:
     liar = tmp / 'liar.sh'
