@@ -1,5 +1,11 @@
 # Project status — work queue and evidence
 
+[Stage 1 disk-I/O tasks AP–AR](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--disk-io-and-write-amplification-apar):
+**OPEN / implementation and measurements NOTRUN**, source reviewed at `b42015536`:
+separate segment payload/tail reads, segment directory-barrier sharing, and
+identical ordinary PUT retry rewrites. Existing durability barriers and prior
+optimizations explicitly retained; distinct from AB–AO, P3 tasks and W123.
+
 [Stage 1 RPC/proof batching tasks AN–AO](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--rpc-and-proof-batching-anao):
 **OPEN / implementation and measurements NOTRUN**, source reviewed at `d62a753d9`:
 per-fragment ticket STATUS/session proofs and serial 64-entry directory pages.

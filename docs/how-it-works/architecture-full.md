@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**OPEN / implementation and measurements NOTRUN**, source reviewed at `b42015536`:
+separate segment payload/tail reads, segment directory-barrier sharing, and
+identical ordinary PUT retry rewrites. Existing durability barriers and prior
+optimizations explicitly retained; distinct from AB–AO, P3 tasks and W123.
+
+[Stage 1 RPC/proof batching tasks AN–AO](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--rpc-and-proof-batching-anao):
 **OPEN / implementation and measurements NOTRUN**, source reviewed at `d62a753d9`:
 per-fragment ticket STATUS/session proofs and serial 64-entry directory pages.
 Existing read-round sharing, admission batches and permission checks explicitly

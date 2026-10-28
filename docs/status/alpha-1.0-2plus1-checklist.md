@@ -40,7 +40,7 @@ Alpha 1.0 is reached in three stages, in this order:
   blocks again.
 - **Performance comes last.** No performance work is done before Stage 3,
   except where a correctness gate needs it (bounded progress, D4), and the
-  explicitly authorized Stage 1 hot-path tasks AB–AO below (Oct 28).
+  explicitly authorized Stage 1 hot-path tasks AB–AR below (Oct 28).
   Performance changes never relax correctness or durability checks.
 - **Stage 3 stays inside alpha.** A performance change that needs 2+2, more
   or redistributed metadata groups, leader or voter redistribution (W66),
@@ -684,6 +684,84 @@ needed before treating it as a general FUSE hot-path priority. Apply AB–AM's
 unchanged baseline, raw-evidence retention and correctness requirements. No
 new configuration toggle, weakened integrity/authority, or speed claim is part
 of these tasks; implementation and live comparison remain NOTRUN.
+
+### Stage 1 additional letter tasks — disk I/O and write amplification (AP–AR)
+
+**User-directed extension, October 28; source reviewed at `b42015536`.**
+All three are **OPEN / implementation and measurements NOTRUN**. Graph traversal
+of `sg_read_tail`, `sg_write` and `server_write_fragment_to_path`, checked against
+the source bodies, establishes the mechanisms. No new correctness defect or
+measured storage bottleneck is claimed. No live cluster, failure evidence or K
+verdict changes; the Stage 1 exception applies.
+
+- [ ] **AP — Packed segment reads: combine adjacent payload and tail I/O.**
+  `src/server/segment_store.c::server_segment_read` first calls `sg_read_tail`
+  and then `server_frag_pread` for the payload. The helper in
+  `src/server/store.c` rounds the tail-record read to a 4 KiB O_DIRECT read,
+  allocates an aligned bounce for each call, and copies out. Thus a successful
+  segment GET issues separate tail and payload reads even though they are
+  adjacent in the same file. Ordinary `read_file_bytes` already reads payload
+  and tail together; do not report ordinary reads as missing that optimization.
+  Evaluate one bounded aligned read of the payload plus tail, followed by the
+  same full identity, record and payload-hash validation before serving bytes.
+  This saves a read submission/bounce opportunity, not necessarily device bytes:
+  the same payload and tail still need reading. Preserve short/torn-tail errors,
+  exact generation/geometry checks, O_DIRECT and no buffered fallback. Measure
+  syscalls, device requests, bytes, allocations and packed GET p95/p99 on actual
+  storage, including cold and repeated reads. Gates: segment storage/recovery,
+  packed reader, direct-I/O-required and K37 coverage; missing/truncated files,
+  wrong identity, bad payload, read error and concurrent reclaim. Separate this
+  server disk task from AK's client receive copy/double hash work.
+- [ ] **AQ — Segment directory barriers: share only covered namespace fsyncs.**
+  `src/server/segment_store.c::sg_write` writes and fsyncs each newly created
+  fragment file, then `sg_sync_path` opens/fsyncs/closes its directory.
+  `sg_mkdirs` additionally syncs parents for newly created directory levels.
+  Ordinary fragments already use `directory_sync_group_run` through
+  `fragment_directory_group_barrier`; segment directory syncs do not. Evaluate reuse of
+  that bounded grouping mechanism for concurrent segment namespace barriers,
+  retaining each caller's descriptor and matching device/inode identity.
+  Only mutations completed before a batch's barrier starts can share its
+  result; arrivals during I/O require a later barrier. Keep per-file data
+  durability and all required ancestry ordering. No permanent 'directory was
+  synced' cache, arbitrary delay or blanket fsync removal. Segment buckets may
+  distribute jobs so sharing is rare: measure actual same-directory overlap,
+  barrier counts and pack/rebuild latency before selecting this optimization.
+  Gates: `test_directory_sync_group.c`, segment recovery/rebuild tests, injected
+  file/directory fsync failures, new nested directories, descriptor reuse,
+  concurrent creators and crash at each write/barrier boundary. Every successful
+  reply must retain the same durability guarantee. This is distinct from P3-D's
+  client COMMIT workers and the ordinary root barrier, which already groups work.
+- [ ] **AR — Ordinary PUT retries: quantify and reduce identical-object rewrites.**
+  `src/server/store.c::server_write_fragment_to_path` treats EEXIST on the
+  exclusive-create attempt as an overwrite and calls `shard_io_thread` again
+  with `no_create`. That path writes the full padded payload and I25 tail; it
+  does not compare the existing object first. A retry after a lost reply can
+  therefore submit the same object's bytes again. Existing same-size overwrite
+  handling already preserves extents and avoids needless ftruncate: this task
+  concerns bytes rewritten, not that fixed inode-size issue. Establish retry
+  frequency and logical versus submitted/device bytes under delayed/lost replies.
+  Evaluate a bounded, lifetime-safe completion proof for identical immutable
+  objects, or verified existing-object reuse only where it costs less than the
+  write. Reading the entire payload just to skip a write may be worse; compare
+  both costs. A filename, matching tail digest or prior volatile success alone
+  is insufficient: preserve payload integrity, ticket/session authority, exact
+  identity/length, quota accounting and the current root durability epoch/boot
+  proof. Torn or failed writes must be repaired or refused, never acknowledged
+  as already complete. Gates: store overwrite and ticket upload tests; identical
+  concurrent retries, conflicting content, lost reply, quota exhaustion, damaged
+  payload with intact tail, interrupted write, restart and failed root barrier.
+  Measure normal traffic too so the common first PUT gains no extra read probe.
+  This is separate from AN's authority RPC batching and P3-C's ticket compaction.
+
+**Deduplication and acceptance:** KV WAL already shares fdatasync boundaries;
+Raft persistence batching, ordinary directory grouping, range-limited LSM
+compaction, single-write payload/tail layout and same-size extent preservation
+are not new findings. Do not reopen W123 checkpoint work or replace its failed
+measurements with these static observations. Apply AB–AO's exact build/environment,
+retained raw evidence and unchanged correctness/deadline requirements. Distinguish
+logical bytes, syscall bytes, filesystem/device write amplification and barrier
+counts. O_DIRECT is not a durability guarantee. No format change, new knob,
+removed barrier or performance PASS is authorized by merely listing a candidate.
 
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 
