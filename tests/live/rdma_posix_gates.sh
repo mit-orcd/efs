@@ -1,65 +1,109 @@
 #!/usr/bin/env bash
-# Isolated same-host gates. Does not touch the installed cluster or stores.
+# Private three-member POSIX-all and peer gate; only owned stores/processes.
+# Usage: EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_GATE_ROOT=/tmp/owned bash "$0" [19xxx-base-port]
 set -euo pipefail
 src=$(cd "$(dirname "$0")/../.." && pwd)
 mode=${EFS_TRANSPORT:-rdma}
 case "$mode" in tcp|rdma) ;; *) echo 'Use explicit tcp or rdma' >&2; exit 2;; esac
 export EFS_TRANSPORT=$mode
-export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
 export EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0}
 if [ "$mode" = rdma ]; then
-    test -d "/sys/class/infiniband/$EFS_RDMA_DEV" || { echo 'RDMA device missing; gates NOT RUN' >&2; exit 77; }
-    "$src/tests/test_rdma_segmented"
-    "$src/tests/test_rdma_xprt" > /tmp/efs-rdma-preflight-$$.log 2>&1
-    cat /tmp/efs-rdma-preflight-$$.log
-    grep -q SKIP /tmp/efs-rdma-preflight-$$.log && { echo 'RDMA preflight skipped; gates NOT RUN' >&2; exit 77; }
+    test -d "/sys/class/infiniband/$EFS_RDMA_DEV" || { echo 'RDMA device missing; gates NOTRUN' >&2; exit 3; }
 fi
-run=$(mktemp -d "${EFS_GATE_ROOT:-/home/efs/efs-rdma}/gate-$mode-XXXXXX")
-chmod 755 "$run" # mount helper must traverse the fixture directory
-mkdir -p "$run/mnt" "$run/mnt2"; pids=()
+port=${1:-19390}
+python3 - "$port" <<'PY'
+import socket,sys
+base=int(sys.argv[1]);assert 19000 <= base <= 19997, 'use a private 19xxx range'
+held=[]
+for p in range(base,base+3):
+    s=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+    s.bind(('127.0.0.1',p));held.append(s)
+PY
+run=$(mktemp -d "${EFS_GATE_ROOT:-${TMPDIR:-/tmp}}/gate-$mode-XXXXXX")
+chmod 755 "$run"
+printf 'Evidence: %s\n' "$run"
+mkdir "$run/mnt" "$run/mnt2"; pids=()
 cleanup() {
+    rc=$?; trap - EXIT
+    # A failed clean stop retains the private daemons and stores for diagnosis.
+    # Never lazy-detach or kill the client to manufacture successful cleanup.
     for m in "$run/mnt" "$run/mnt2"; do
-        if mountpoint -q "$m"; then
-            "$src/scripts/client.sh" stop "$m" || {
-                if mountpoint -q "$m"; then echo "Retained cluster: clean stop failed at $m" >&2; return 1; fi
-            }
+        if ! "$src/scripts/client.sh" stop "$m" >> "$run/cleanup.log" 2>&1; then
+            echo "Retained private fixture: clean client stop failed at $m" >&2
+            exit 1
         fi
     done
-    for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done
-    for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null || true; done
+    for pid in "${pids[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
+    end=$((SECONDS+60))
+    for pid in "${pids[@]}"; do
+        while kill -0 "$pid" 2>/dev/null; do
+            if (( SECONDS >= end )); then
+                echo "Private daemon $pid did not stop within 60 s; fixture retained" >&2
+                exit 1
+            fi
+            sleep .1
+        done
+        if ! wait "$pid"; then rc=1; fi
+    done
+    printf '%s\n' "$rc" > "$run/exit-status"
+    exit "$rc"
 }
 trap cleanup EXIT
-for id in 1 2 3 4; do
-    port=$((27431+id)); join=(); [ "$id" = 1 ] || join=(--join 127.0.0.1:27432)
-    "$src/efsd" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$run/n$id" --quota 4G --direct-io "${join[@]}" > "$run/n$id.log" 2>&1 &
+for id in 1 2 3; do
+    ep=127.0.0.1:$((port+id-1)); join=()
+    [ "$id" = 1 ] || join=(--join "127.0.0.1:$port" --listen "$ep")
+    if [ "$id" = 1 ]; then join=("$ep"); fi
+    "$src/efsd" "${join[@]}" "$run/n$id" --quota 4G --discovery-port 0 > "$run/n$id.log" 2>&1 &
     pids+=("$!")
     ready=0
     for attempt in $(seq 1 60); do
-        if grep -q listening "$run/n$id.log"; then ready=1; break; fi
-        kill -0 "${pids[-1]}" || break; sleep .5
+        # A second member is admitted but cannot finish its listener until
+        # the third joins. Wait for admission here, not completed formation.
+        if grep -q 'listening on' "$run/n$id.log" ||
+           { [ "$id" = 2 ] && grep -q 'forming (2 joined; formation needs 3)' "$run/n$id.log"; }; then
+            ready=1; break
+        fi
+        kill -0 "${pids[-1]}" 2>/dev/null || break; sleep .5
     done
     [ "$ready" = 1 ] || { cat "$run/n$id.log"; exit 1; }
 done
-# W153: formation commits the members joined at that moment; wait for all four.
-for attempt in $(seq 1 120); do
-    "$src/efs-mgmt" status 127.0.0.1:27432 2>/dev/null | grep -q 'Cluster nodes (4)' && break
-    sleep .5
-done
-formatted=0
-for attempt in $(seq 1 60); do
-    output=$("$src/efs-mgmt" raft-mkfs 127.0.0.1:27432)
-    if [[ "$output" == *'rc=0 '* ]]; then formatted=1; break; fi
-    sleep .5
-done
-[ "$formatted" = 1 ] || { echo "Failed fresh formatting: $output"; exit 1; }
-for m in "$run/mnt" "$run/mnt2"; do "$src/scripts/client.sh" 127.0.0.1:27432 "$m"; done
+python3 - "$src" "127.0.0.1:$port" <<'PY'
+from pathlib import Path
+import sys
+sys.path.insert(0,str(Path(sys.argv[1])/'tests/live'))
+from raft_form import form
+form(Path(sys.argv[1])/'efs-mgmt',sys.argv[2])
+PY
+for m in "$run/mnt" "$run/mnt2"; do "$src/scripts/client.sh" "127.0.0.1:$port" "$m"; done
+python3 - "$src" "$run" "$mode" "${pids[@]}" <<'PY'
+from pathlib import Path
+import json,os,sys,time
+src,run=map(Path,sys.argv[1:3]);pids=list(map(int,sys.argv[4:]));mounts={str(run/'mnt'),str(run/'mnt2')}
+for proc in Path('/proc').iterdir():
+    if not proc.name.isdigit():continue
+    try:
+        args=[a.decode() for a in (proc/'cmdline').read_bytes().split(b'\0') if a]
+        if args and Path(args[0]).resolve()==src/'efs-fuse' and mounts.intersection(args):
+            assert proc.stat().st_uid==os.getuid();pids.append(int(proc.name))
+    except (FileNotFoundError,PermissionError,ProcessLookupError):continue
+assert len(set(pids))==5,pids
+proof=[]
+for pid in pids:
+    fds=Path('/proc')/str(pid)/'fd';devices=[];end=time.monotonic()+20
+    while True:
+        for fd in fds.iterdir():
+            try:target=os.readlink(fd)
+            except FileNotFoundError:continue
+            if target.startswith('/dev/infiniband/uverbs'):devices.append(target)
+        if devices or sys.argv[3]!='rdma' or time.monotonic()>=end:break
+        time.sleep(.1)
+    assert devices or sys.argv[3]!='rdma',('no verbs device',pid)
+    proof.append(dict(pid=pid,verbs_devices=sorted(set(devices))))
+(run/'transport-proof.json').write_text(json.dumps(proof,indent=2)+'\n')
+PY
 rc=0
-python3 "$src/tests/posix/posix_suite.py" "$run/mnt" --suite core --jobs 1 --results "$run/posix.tsv" > "$run/posix.log" 2>&1 || rc=1
+python3 "$src/tests/posix/posix_suite.py" "$run/mnt" --suite all --jobs 1 --results "$run/posix.tsv" > "$run/posix.log" 2>&1 || rc=1
 python3 "$src/tests/posix/posix_2client.py" --local "$run/mnt" "$run/mnt2" --parent rdma-peer-gate --results "$run/posix2.tsv" > "$run/posix2.log" 2>&1 || rc=1
-if [ "$mode" = rdma ]; then
-    for id in 1 2 3 4; do grep -q 'RDMA transport up' "$run/n$id.log" || rc=1; done
-    for label in mnt mnt2; do grep -q 'RDMA transport up' "$run/efs-fuse-$label.log" || rc=1; done
-fi
-"$src/efs-mgmt" status 127.0.0.1:27432 > "$run/status.txt"
-tail -5 "$run/posix.log"; tail -5 "$run/posix2.log"; echo "Evidence: $run"
+"$src/efs-mgmt" status "127.0.0.1:$port" > "$run/status.txt" || rc=1
+tail -5 "$run/posix.log"; tail -5 "$run/posix2.log"
 exit "$rc"

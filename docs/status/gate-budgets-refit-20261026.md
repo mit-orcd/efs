@@ -1175,3 +1175,20 @@ this does not negate the deterministic negative controls or fixed-build
 qualification, nor turn the old failures into PASS. Task J's remaining
 416MiB source tree contains that failed58 fixture. No shared devel edit,
 merge, push, Task F evidence, real cluster or devops repository changed.
+
+### Task M: additional current-tree fstor007 measurement — Oct27
+
+[Task M](gate-fstor007-20261027.md), tested7ca545e2b with the unchanged
+063154e0e devel product and documented libfuse3.12+ prerequisite satisfied
+by the supplied private3.16.2 library: **514 commands,0 FAIL,5 NOTRUN,
+INCOMPLETE,617s, build0s**, after a separately measured21.664s build.
+No timing here is an input to the Intel refit; budgets/slots/D44 unchanged.
+Seven per-command budget overruns and all coverage limits remain on its page.
+This adds the requested third completed real-host measurement, across two
+ORCD hosts: historical node9901 Task J769s (FAIL), historical fstor007
+Task J750s (FAIL), current fstor007 Task M617s (zero failures, scoped skips).
+These are different source/test sets, not a controlled speedup comparison.
+Task J's original system-FUSE and compatible-FUSE failures stay unchanged.
+Task M's final raw manifest is
+`fstor007:/home/erbmi1/efs-artifacts/taskM-20261027/fstor007/candidate-7ca545e2b/SHA256SUMS`,
+SHA256 `542913e6b2c99cf0f7853f916fb2affa6a477b23e81b8809a670e3ae723d04ce`.
