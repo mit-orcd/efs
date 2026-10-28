@@ -106,6 +106,8 @@ static int efs_client_session_check(void){return EFS_OK;}
 static void efs_client_session_fence(int rc){(void)rc;assert(0);}
 static int efs_client_publication_id(uint64_t seq,struct efs_opid *id){memset(id,0,sizeof(*id));id->client_uuid[0]=0x55;id->client_uuid[1]=0x15;id->session_epoch=7;id->seq=seq;return EFS_OK;}
 static uint32_t efs_client_degraded_flags(efs_ino_t i,uint32_t c,uint64_t g){(void)i;(void)c;(void)g;return 0;}
+static unsigned stripe_notifications;
+static void efs_client_stripes_published(const struct efs_chunk_rec *r,uint32_t n){assert(r&&n);stripe_notifications++;}
 static uint64_t efs_client_degraded_pending(void){return 0;}
 static void efs_client_degraded_drop(efs_ino_t i,uint32_t c,uint64_t g){(void)i;(void)c;(void)g;}
 static int rpc_prof_enabled(void){return 0;}
@@ -230,6 +232,7 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *t,void **p,uint32_t *n){
  c->have=0;*t=EFS_MSG_REPORT_CHUNKS_REPLY;*p=malloc(c->len);assert(*p);memcpy(*p,c->buf,c->len);*n=c->len;return 0;}
 '''+client+r'''
 static void reset(void){
+ stripe_notifications=0;
  now=1000;deadline=0;phase=0;drop_request=drop_reply=busy_after_apply=down_after_loss=lose_first=pending_mode=0;recv_wait=30000;
  bg_release=bg_started=0;
  up[1]=up[2]=up[3]=1;memset(conns,0,sizeof(conns));memset(committed,0,sizeof(committed));
@@ -247,6 +250,7 @@ static int report(struct efs_chunk_rec *recs,uint32_t n){
  deadline=0;phase=2;
  fprintf(stderr,"case first_rc=%d sent=%llx\n",rc,(unsigned long long)sent);
  if(sent && n) rc=efs_client_rpc_report_resolve(1,recs,n,&irec,1,1,&pid,sent,rc,4242);
+ if(rc==EFS_OK)assert(stripe_notifications);
  return rc;
 }
 static void recs2(struct efs_chunk_rec *r){

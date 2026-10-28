@@ -8,10 +8,11 @@ code=r'''
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-static unsigned allocations,rpcs;static int expired;
+static unsigned allocations,rpcs,published;static int expired;
 static int efs_client_publication_id(uint64_t seq,struct efs_opid *id){memset(id,0,sizeof(*id));id->client_uuid[0]=9;id->session_epoch=4;id->seq=seq;return EFS_OK;}
 /* W154: no degraded objects in this harness. */
 static uint32_t efs_client_degraded_flags(efs_ino_t i,uint32_t c,uint64_t g){(void)i;(void)c;(void)g;return 0;}
+static void efs_client_stripes_published(const struct efs_chunk_rec *r,uint32_t n){assert(r&&n==1);published++;}
 static uint64_t efs_client_degraded_pending(void){return 0;}
 static void efs_client_degraded_drop(efs_ino_t i,uint32_t c,uint64_t g){(void)i;(void)c;(void)g;}
 int efs_client_rpc_past_deadline(void){return expired;}
@@ -35,7 +36,7 @@ int main(void){struct efs_chunk_rec rec={0};struct efs_ino_size_rec ino={0};
  assert(!efs_client_rpc_report_dirty_raft(1,&rec,1,&ino,1,1)&&allocations==1&&rpcs==1);
  /* W77: the publication id rides directly before the session suffix. */
  struct efs_report_pubid pid={77,5};with_pubid=1;
- assert(!efs_client_rpc_report_dirty_pub(1,&rec,1,&ino,1,1,&pid)&&allocations==2&&rpcs==2);return 0;}
+ assert(!efs_client_rpc_report_dirty_pub(1,&rec,1,&ino,1,1,&pid)&&allocations==2&&rpcs==2&&published==2);return 0;}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-report-frame-') as d:
  p=Path(d)/'t.c';p.write_text(code)

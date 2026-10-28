@@ -35,6 +35,7 @@
 #define EFS_RECEIPT_REPLAY  1 /* answered from an APPLIED receipt, not run */
 #define EFS_RECEIPT_JOINED  2 /* waited for a running attempt and took its rc */
 #define EFS_RECEIPT_WAITING 3 /* the running attempt outlived the join wait: BUSY */
+#define EFS_RECEIPT_REFUSED 4 /* probe window full of pending owners: BUSY, not run */
 
 struct efs_receipt_key {
     uint8_t uuid[16];
@@ -91,7 +92,9 @@ int efs_receipt_lookup(struct efs_receipt_table *t, const struct efs_receipt_key
  * answered OK without running. A duplicate of a running attempt waits up to
  * join_ms for it: APPLIED/PARTIAL take that rc; any other end runs again
  * (same identity, idempotent); still running answers EFS_ERR_BUSY.
- * *how is one of EFS_RECEIPT_RAN..WAITING; *out the receipt afterwards. */
+ * Pending owners are never evicted. A full pending probe window refuses new
+ * identities with BUSY/REFUSED without running exec or creating a receipt.
+ * *how is one of EFS_RECEIPT_RAN..REFUSED; *out the receipt afterwards. */
 typedef int (*efs_receipt_exec_fn)(void *ctx, int *proposed, const char **phase,
                                    struct efs_receipt_stale *stale);
 int efs_receipt_run(struct efs_receipt_table *t, const struct efs_receipt_key *k,

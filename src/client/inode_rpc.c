@@ -3376,6 +3376,8 @@ int efs_client_rpc_report_resolve(efs_export_id_t export_id,
     }
 done:
     efs_client_rpc_set_deadline_ms(previous);
+    if (rc == EFS_OK)
+        efs_client_stripes_published(recs, count);
     /* K38: name the record that stayed behind (the host's first CAS loser,
      * with this REPORT's object for it), so the error is traceable from
      * this line alone. */
@@ -3539,6 +3541,8 @@ int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
     if (rc != EFS_OK)
         return rc;
     rc = rpc_status_to_efs(r.status);
+    if (rc == EFS_OK)
+        efs_client_stripes_published(recs, count);
     if (rc == EFS_OK && efs_client_degraded_pending())
         for (i = 0; i < count; i++)
             efs_client_degraded_drop(recs[i].ino, recs[i].chunk_index,

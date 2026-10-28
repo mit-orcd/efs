@@ -843,8 +843,9 @@ int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4 *
                                        struct efs_msg_query_snapshot_reply *reply,char **text);
 /* Async server durability, K35 (data_commit.c). commit_note counts one
  * acknowledged PUT on node and returns its sequence; stripe_note records
- * the acknowledged fragments of an object (seq[i] 0: not acknowledged,
- * published degraded); data_commit proves every recorded stripe of ino:
+ * the acknowledged fragments of an object before publication (seq[i] 0:
+ * not acknowledged; publication must carry its degraded mark). A successful
+ * REPORT or APPLIED receipt calls stripes_published; data_commit proves ino:
  * at least two fragments durable by COMMIT, a third that is not covered
  * by a durable degraded mark (proposed here when needed). */
 struct efs_put_ticket;
@@ -852,9 +853,11 @@ uint64_t efs_client_commit_note(efs_node_id_t node);
 int efs_client_stripe_note(const struct efs_put_ticket *t,
                            const uint64_t seq[EFS_NUM_FRAGMENTS],
                            const uint64_t epoch[EFS_NUM_FRAGMENTS]);
+void efs_client_stripes_published(const struct efs_chunk_rec *recs, uint32_t count);
 int efs_client_data_commit(efs_ino_t ino);
 /* EFS_MD_CMD_DEGRADED_MARK on the lane shard's group: OK marked (or
- * already), NOT_FOUND the object is no longer live, else the failure. */
+ * already), NOT_FOUND the object is not live (not published yet OR retired),
+ * else the failure. */
 int efs_client_rpc_degraded_mark(efs_ino_t ino, uint64_t inode_gen, uint64_t object,
                                  uint32_t ci, uint32_t fi, efs_node_id_t node);
 

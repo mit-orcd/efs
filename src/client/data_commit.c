@@ -38,6 +38,7 @@ struct stripe {
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint64_t seq[EFS_NUM_FRAGMENTS], epoch[EFS_NUM_FRAGMENTS];
     uint8_t state[EFS_NUM_FRAGMENTS];
+    uint8_t published; /* this object had a successful REPORT/receipt */
 };
 
 #define STRIPE_BUCKETS (1u << 16)
@@ -205,6 +206,21 @@ int efs_client_stripe_note(const struct efs_put_ticket *t,
         rc = EFS_ERR_BUSY;
     }
     return rc;
+}
+
+/* REPORT success proves publication, not storage durability. A snapshot taken
+ * before this notification must still treat NOT_FOUND as "possibly not yet". */
+void efs_client_stripes_published(const struct efs_chunk_rec *recs, uint32_t count)
+{
+    if (!recs) return;
+    pthread_mutex_lock(&commit_mu);
+    for (uint32_t i = 0; i < count; i++) {
+        struct stripe *s = stripe_find(recs[i].ino, recs[i].chunk_index,
+                                      recs[i].chunk_generation);
+        if (s && s->inode_gen == recs[i].file_generation)
+            s->published = 1;
+    }
+    pthread_mutex_unlock(&commit_mu);
 }
 
 struct commit_job { efs_node_id_t node; uint64_t target, epoch, deadline; int rc; };
@@ -381,9 +397,9 @@ static int stripe_prove(efs_ino_t ino, int all)
                 if (marked++ < 8)
                     stripe_log(what, s, durable, "marked degraded for rebuild on return", mrc);
                 retire = 1;
-            } else if (mrc == EFS_ERR_NOT_FOUND) {
-                /* Rewritten, truncated, packed or unlinked since: this object
-                 * is no longer the published version. */
+            } else if (mrc == EFS_ERR_NOT_FOUND && s->published) {
+                /* This snapshot already knew publication succeeded before
+                 * the mark RPC: absence now proves later retirement. */
                 retire = 1;
             } else {
                 if (logged++ < 8)

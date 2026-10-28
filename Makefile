@@ -334,6 +334,7 @@ test-wb-runtime:
 	python3 tests/test_report_zero_eof.py
 	python3 tests/test_report_retry_eof.py
 	python3 tests/test_w155_receipt_table.py
+	python3 tests/test_receipt_pending_pressure.py
 	python3 tests/test_w155_report_resolve.py
 	python3 tests/test_w155_identified_resolve.py
 	python3 tests/test_report_span_base.py

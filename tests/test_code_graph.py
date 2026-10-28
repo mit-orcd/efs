@@ -23,7 +23,7 @@ class GraphChecks(unittest.TestCase):
         cls.cases = json.loads((ROOT / "tools/graphify/known-bugs.json").read_text())["cases"]
 
     def test_real_known_paths(self):
-        self.assertEqual(len(m.validate(self.graph, ROOT, self.cases)), 3)
+        self.assertEqual(len(m.validate(self.graph, ROOT, self.cases)), len(self.cases))
 
     def test_missing_production_call_refused(self):
         g = copy.deepcopy(self.graph)

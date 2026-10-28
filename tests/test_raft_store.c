@@ -1043,11 +1043,51 @@ done:
     efs_raft_disk_close(d);rmtree(g_dir);
 }
 
+/* Lookup/mutation bounds must be checked before narrowing a 64-bit index.
+ * Also prove that legitimate indices above 2^32 still work after a snapshot. */
+static void index64_backend(struct efs_raft_store *s)
+{
+    const uint64_t high=UINT64_C(1)<<32;
+    uint8_t buf[8];uint64_t term=0,last=0;uint32_t len=sizeof(buf);
+    CHECK(s->append(s,1,7,(const uint8_t*)"A",1)==EFS_OK,"index64 seed");
+    CHECK(s->get(s,high+1,&term,buf,&len)==EFS_ERR_NOT_FOUND,"index64 get cannot alias");
+    CHECK(s->append(s,high+1,8,(const uint8_t*)"B",1)==EFS_ERR_INVAL,"index64 append cannot alias");
+    CHECK(s->truncate_from(s,high+1)==EFS_OK,"index64 beyond-end truncate noop");
+    CHECK(s->last(s,&last,&term)==EFS_OK && last==1 && term==7,"index64 original survives");
+    CHECK(s->save_snap(s,high,9)==EFS_OK,"index64 large snapshot");
+    CHECK(s->last(s,&last,&term)==EFS_OK && last==high && term==9,"index64 snapshot drops prefix");
+    CHECK(s->append(s,high+1,10,(const uint8_t*)"C",1)==EFS_OK,"index64 real high append");
+    len=sizeof(buf);
+    CHECK(s->get(s,high+1,&term,buf,&len)==EFS_OK && term==10 && len==1 && buf[0]=='C',"index64 real high get");
+    len=sizeof(buf);
+    CHECK(s->get(s,2*high+1,&term,buf,&len)==EFS_ERR_NOT_FOUND,"index64 high window cannot alias");
+}
+static void test_index64_bounds(void)
+{
+    struct efs_raft_store *m=efs_raft_mem_create();
+    CHECK(m!=NULL,"index64 memory open");if(!m)return;
+    index64_backend(m);efs_raft_mem_free(m);
+    char dir[1024];snprintf(dir,sizeof(dir),"%s-index64",g_dir);rmtree(dir);
+    struct efs_raft_disk *d=efs_raft_disk_open(dir,EFS_RAFT_DISK_NOSYNC);
+    CHECK(d!=NULL,"index64 disk open");if(!d)return;
+    index64_backend(efs_raft_disk_group(d,0));efs_raft_disk_close(d);
+    d=efs_raft_disk_open(dir,EFS_RAFT_DISK_NOSYNC);
+    CHECK(d!=NULL,"index64 disk reopen");
+    if(d){
+        uint8_t buf[8];uint32_t len=sizeof(buf);uint64_t term=0;
+        struct efs_raft_store *s=efs_raft_disk_group(d,0);
+        CHECK(s->get(s,(UINT64_C(2)<<32)+1,&term,buf,&len)==EFS_ERR_NOT_FOUND,"index64 reopened bounds");
+        efs_raft_disk_close(d);
+    }
+    rmtree(dir);
+}
+
 int main(void)
 {
     efs_test_own(efs_test_path(g_dir,sizeof(g_dir),"efs-raftstore-test-%d",(int)getpid()));
     rmtree(g_dir);
 
+    test_index64_bounds();
     test_index_reserve_failure();
     test_bounded_history_cache();
     test_four_voter_permanent_loss();

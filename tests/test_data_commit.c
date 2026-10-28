@@ -47,13 +47,19 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **p, uint32_t *n)
     *type = EFS_MSG_DATA_COMMIT_REPLY; *p = r; *n = sizeof(*r);
     return 0;
 }
-static int marks, mark_rc = EFS_OK;
+static int marks, mark_rc = EFS_OK, publish_during_mark;
 static efs_ino_t mark_ino; static uint32_t mark_ci, mark_fi; static efs_node_id_t mark_node;
 int efs_client_rpc_degraded_mark(efs_ino_t ino, uint64_t inode_gen, uint64_t object,
                                  uint32_t ci, uint32_t fi, efs_node_id_t node)
 {
     assert(inode_gen == 5 && object == ino * 1000 + ci);
     marks++; mark_ino = ino; mark_ci = ci; mark_fi = fi; mark_node = node;
+    if (publish_during_mark) {
+        struct efs_chunk_rec rec = {.ino=ino, .chunk_index=ci,
+            .chunk_generation=object, .file_generation=inode_gen};
+        publish_during_mark = 0;
+        efs_client_stripes_published(&rec, 1);
+    }
     return mark_rc;
 }
 
@@ -64,7 +70,7 @@ static void heal(void)
     memset(die_in_commit, 0, sizeof(die_in_commit)); memset(down, 0, sizeof(down));
 }
 /* One acknowledged PUT object: ack bit i set = fragment i acknowledged. */
-static int put(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs_node_id_t c,
+static int put_unpublished(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs_node_id_t c,
                unsigned ack)
 {
     struct efs_put_ticket t;
@@ -75,6 +81,18 @@ static int put(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs
     for (int i = 0; i < 3; i++)
         if (ack & (1u << i)) { seq[i] = efs_client_commit_note(t.nodes[i]); ep[i] = epochs[t.nodes[i]]; }
     return efs_client_stripe_note(&t, seq, ep);
+}
+/* Existing cases model an acknowledged REPORT before their fsync. */
+static int put(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs_node_id_t c,
+               unsigned ack)
+{
+    int rc = put_unpublished(ino, ci, a, b, c, ack);
+    if (rc == EFS_OK) {
+        struct efs_chunk_rec rec = {.ino=ino, .chunk_index=ci,
+            .chunk_generation=ino*1000+ci, .file_generation=5};
+        efs_client_stripes_published(&rec, 1);
+    }
+    return rc;
 }
 static int live(void) { pthread_mutex_lock(&commit_mu); int n = (int)g_st_live; pthread_mutex_unlock(&commit_mu); return n; }
 
@@ -90,6 +108,32 @@ static void *do_fsync(void *arg)
 int main(void)
 {
     for (int i = 1; i < NN; i++) epochs[i] = 101;
+    /* Full-table pressure before REPORT: NOT_FOUND is not a retirement
+     * certificate. All obligations survive, and the new PUT gets BUSY. */
+    for (efs_ino_t ino=900; ino<916; ino++)
+        assert(put_unpublished(ino,0,1,2,3,7)==EFS_OK);
+    epochs[3]++;
+    mark_rc=EFS_ERR_NOT_FOUND;
+    reset(); assert(put_unpublished(916,0,1,2,3,7)==EFS_ERR_BUSY);
+    assert(marks==16 && live()==16 && stripe_find(900,0,900000));
+    mark_rc=EFS_OK;
+    for (efs_ino_t ino=900; ino<916; ino++) {
+        struct efs_chunk_rec rec={.ino=ino,.chunk_generation=ino*1000,.file_generation=5};
+        efs_client_stripes_published(&rec,1);
+        assert(efs_client_data_commit(ino)==EFS_OK);
+    }
+    assert(!live());
+    /* A publication acknowledgement during the mark RPC is too late to
+     * justify this RPC's earlier NOT_FOUND. Retry must actually mark. */
+    assert(put_unpublished(950,0,1,2,3,7)==EFS_OK);
+    struct efs_chunk_rec wrong={.ino=950,.chunk_generation=950000,.file_generation=6};
+    efs_client_stripes_published(&wrong,1);
+    assert(!stripe_find(950,0,950000)->published);
+    epochs[3]++; mark_rc=EFS_ERR_NOT_FOUND; publish_during_mark=1;
+    reset(); assert(efs_client_data_commit(950)==EFS_ERR_IO);
+    assert(live()==1 && stripe_find(950,0,950000)->published);
+    mark_rc=EFS_OK;
+    reset(); assert(efs_client_data_commit(950)==EFS_OK && marks==1 && !live());
     /* Nothing written: nothing to prove, no COMMIT. */
     reset(); assert(efs_client_data_commit(9) == EFS_OK && !commits[1]);
     assert(efs_client_data_commit(0) == EFS_ERR_INVAL);
