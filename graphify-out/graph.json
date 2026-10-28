@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "3769f44bb2ada18aa6959a4dc66d110a661bd1de"
+      "source_commit": "e5bba0a4386d81969450dabfc7cf5d22b1551f80"
     }
   },
   "links": [
@@ -280138,7 +280138,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8977",
+      "source_location": "L8991",
       "target": "src_client_write_chunk_put_worker",
       "weight": 1.0
     },
@@ -280149,7 +280149,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9126",
+      "source_location": "L9140",
       "target": "src_client_write_client_write_run",
       "weight": 1.0
     },
@@ -280160,7 +280160,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7351",
+      "source_location": "L7365",
       "target": "src_client_write_cmp_u32",
       "weight": 1.0
     },
@@ -280226,7 +280226,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7506",
+      "source_location": "L7520",
       "target": "src_client_write_dcache_base_gen_of",
       "weight": 1.0
     },
@@ -280237,7 +280237,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L6705",
+      "source_location": "L6716",
       "target": "src_client_write_dcache_body_to_rdcache",
       "weight": 1.0
     },
@@ -280248,7 +280248,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7104",
+      "source_location": "L7117",
       "target": "src_client_write_dcache_chain_has",
       "weight": 1.0
     },
@@ -280270,7 +280270,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8070",
+      "source_location": "L8084",
       "target": "src_client_write_dcache_cycle_sent",
       "weight": 1.0
     },
@@ -280281,7 +280281,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8083",
+      "source_location": "L8097",
       "target": "src_client_write_dcache_cycle_verdict",
       "weight": 1.0
     },
@@ -280292,7 +280292,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7363",
+      "source_location": "L7377",
       "target": "src_client_write_dcache_dirty_cis_of",
       "weight": 1.0
     },
@@ -280347,7 +280347,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L6736",
+      "source_location": "L6747",
       "target": "src_client_write_dcache_fetch_merge_base",
       "weight": 1.0
     },
@@ -280391,7 +280391,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7333",
+      "source_location": "L7347",
       "target": "src_client_write_dcache_flush_all_slots",
       "weight": 1.0
     },
@@ -280402,7 +280402,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7402",
+      "source_location": "L7416",
       "target": "src_client_write_dcache_flush_ino_pass",
       "weight": 1.0
     },
@@ -280413,7 +280413,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L6968",
+      "source_location": "L6979",
       "target": "src_client_write_dcache_flush_keep",
       "weight": 1.0
     },
@@ -280424,7 +280424,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7326",
+      "source_location": "L7340",
       "target": "src_client_write_dcache_flush_slot",
       "weight": 1.0
     },
@@ -280435,7 +280435,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7314",
+      "source_location": "L7328",
       "target": "src_client_write_dcache_flush_slot_inner",
       "weight": 1.0
     },
@@ -280446,7 +280446,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7114",
+      "source_location": "L7127",
       "target": "src_client_write_dcache_flush_slot_inner_budgeted",
       "weight": 1.0
     },
@@ -280468,7 +280468,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8157",
+      "source_location": "L8171",
       "target": "src_client_write_dcache_identity_abandon",
       "weight": 1.0
     },
@@ -280490,7 +280490,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L6726",
+      "source_location": "L6737",
       "target": "src_client_write_dcache_img_to_rdcache",
       "weight": 1.0
     },
@@ -280556,7 +280556,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8750",
+      "source_location": "L8764",
       "target": "src_client_write_dcache_kick_complete",
       "weight": 1.0
     },
@@ -280622,7 +280622,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7995",
+      "source_location": "L8009",
       "target": "src_client_write_dcache_note_committed",
       "weight": 1.0
     },
@@ -280655,7 +280655,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7524",
+      "source_location": "L7538",
       "target": "src_client_write_dcache_object_of",
       "weight": 1.0
     },
@@ -280666,7 +280666,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7560",
+      "source_location": "L7574",
       "target": "src_client_write_dcache_object_seq_of",
       "weight": 1.0
     },
@@ -280787,7 +280787,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8530",
+      "source_location": "L8544",
       "target": "src_client_write_dcache_reclaim_limit",
       "weight": 1.0
     },
@@ -280798,7 +280798,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8555",
+      "source_location": "L8569",
       "target": "src_client_write_dcache_reclaim_main",
       "weight": 1.0
     },
@@ -280809,7 +280809,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8736",
+      "source_location": "L8750",
       "target": "src_client_write_dcache_reclaim_start",
       "weight": 1.0
     },
@@ -280820,7 +280820,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8475",
+      "source_location": "L8489",
       "target": "src_client_write_dcache_replay_stale_ex",
       "weight": 1.0
     },
@@ -280831,7 +280831,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8283",
+      "source_location": "L8297",
       "target": "src_client_write_dcache_replay_stale_ex_budgeted",
       "weight": 1.0
     },
@@ -280897,7 +280897,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L6949",
+      "source_location": "L6960",
       "target": "src_client_write_dcache_steal_dirty",
       "weight": 1.0
     },
@@ -280908,7 +280908,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L6805",
+      "source_location": "L6816",
       "target": "src_client_write_dcache_steal_dirty_budgeted",
       "weight": 1.0
     },
@@ -281370,7 +281370,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7580",
+      "source_location": "L7594",
       "target": "src_client_write_efs_client_put_referenced",
       "weight": 1.0
     },
@@ -281469,7 +281469,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7656",
+      "source_location": "L7670",
       "target": "src_client_write_efs_client_unit_begin",
       "weight": 1.0
     },
@@ -281480,7 +281480,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7707",
+      "source_location": "L7721",
       "target": "src_client_write_efs_client_unit_end",
       "weight": 1.0
     },
@@ -281491,7 +281491,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9249",
+      "source_location": "L9263",
       "target": "src_client_write_efs_client_write",
       "weight": 1.0
     },
@@ -281502,7 +281502,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9272",
+      "source_location": "L9286",
       "target": "src_client_write_efs_client_write_no_replicate",
       "weight": 1.0
     },
@@ -281601,7 +281601,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7478",
+      "source_location": "L7492",
       "target": "src_client_write_efs_dcache_drain_pending",
       "weight": 1.0
     },
@@ -281645,7 +281645,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7501",
+      "source_location": "L7515",
       "target": "src_client_write_efs_dcache_flush_all",
       "weight": 1.0
     },
@@ -281656,7 +281656,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7453",
+      "source_location": "L7467",
       "target": "src_client_write_efs_dcache_flush_ino",
       "weight": 1.0
     },
@@ -281667,7 +281667,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7448",
+      "source_location": "L7462",
       "target": "src_client_write_efs_dcache_flush_pressure_ino",
       "weight": 1.0
     },
@@ -281722,7 +281722,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8757",
+      "source_location": "L8771",
       "target": "src_client_write_efs_dcache_maybe_reclaim",
       "weight": 1.0
     },
@@ -281755,7 +281755,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7074",
+      "source_location": "L7087",
       "target": "src_client_write_efs_dcache_pending_records",
       "weight": 1.0
     },
@@ -281832,7 +281832,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8790",
+      "source_location": "L8804",
       "target": "src_client_write_efs_dcache_reclaim_stop",
       "weight": 1.0
     },
@@ -282030,7 +282030,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8144",
+      "source_location": "L8158",
       "target": "src_client_write_export_forget_unreported",
       "weight": 1.0
     },
@@ -282052,7 +282052,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7031",
+      "source_location": "L7044",
       "target": "src_client_write_flush_pipe_add",
       "weight": 1.0
     },
@@ -282063,7 +282063,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7009",
+      "source_location": "L7020",
       "target": "src_client_write_flush_pipe_drain",
       "weight": 1.0
     },
@@ -282074,7 +282074,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7004",
+      "source_location": "L7015",
       "target": "src_client_write_flush_pipe_init",
       "weight": 1.0
     },
@@ -282327,7 +282327,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8863",
+      "source_location": "L8877",
       "target": "src_client_write_put_pool_ensure",
       "weight": 1.0
     },
@@ -282338,7 +282338,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8904",
+      "source_location": "L8918",
       "target": "src_client_write_put_pool_run",
       "weight": 1.0
     },
@@ -282349,7 +282349,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8820",
+      "source_location": "L8834",
       "target": "src_client_write_put_pool_thread",
       "weight": 1.0
     },
@@ -282536,7 +282536,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8726",
+      "source_location": "L8740",
       "target": "src_client_write_reclaim_kick",
       "weight": 1.0
     },
@@ -282547,7 +282547,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8547",
+      "source_location": "L8561",
       "target": "src_client_write_reclaim_now_ns",
       "weight": 1.0
     },
@@ -282580,7 +282580,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8189",
+      "source_location": "L8203",
       "target": "src_client_write_replay_span_without_body",
       "weight": 1.0
     },
@@ -282723,7 +282723,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L8131",
+      "source_location": "L8145",
       "target": "src_client_write_report_replay_stale",
       "weight": 1.0
     },
@@ -282833,7 +282833,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7956",
+      "source_location": "L7970",
       "target": "src_client_write_report_units_published",
       "weight": 1.0
     },
@@ -282844,7 +282844,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7972",
+      "source_location": "L7986",
       "target": "src_client_write_report_units_remark",
       "weight": 1.0
     },
@@ -282855,7 +282855,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7832",
+      "source_location": "L7846",
       "target": "src_client_write_report_units_shape",
       "weight": 1.0
     },
@@ -282877,7 +282877,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L6759",
+      "source_location": "L6770",
       "target": "src_client_write_span_of",
       "weight": 1.0
     },
@@ -282932,7 +282932,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7758",
+      "source_location": "L7772",
       "target": "src_client_write_unit_chunk_state",
       "weight": 1.0
     },
@@ -282943,7 +282943,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7625",
+      "source_location": "L7639",
       "target": "src_client_write_unit_find",
       "weight": 1.0
     },
@@ -282954,7 +282954,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7800",
+      "source_location": "L7814",
       "target": "src_client_write_unit_ord_cmp",
       "weight": 1.0
     },
@@ -282965,7 +282965,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7643",
+      "source_location": "L7657",
       "target": "src_client_write_unit_range",
       "weight": 1.0
     },
@@ -282976,7 +282976,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7810",
+      "source_location": "L7824",
       "target": "src_client_write_unit_rec_find",
       "weight": 1.0
     },
@@ -282987,7 +282987,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L7726",
+      "source_location": "L7740",
       "target": "src_client_write_unit_wait_idle",
       "weight": 1.0
     },
@@ -283064,7 +283064,7 @@
       "relation": "contains",
       "source": "src_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9303",
+      "source_location": "L9317",
       "target": "src_client_write_write_chunks_no_replicate",
       "weight": 1.0
     },
@@ -283152,7 +283152,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9073",
+      "source_location": "L9087",
       "target": "src_client_bufpool_efs_buf_alloc",
       "weight": 1.0
     },
@@ -283165,7 +283165,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9079",
+      "source_location": "L9093",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -283178,7 +283178,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9022",
+      "source_location": "L9036",
       "target": "src_client_put_ticket_owner_efs_client_put_admit",
       "weight": 1.0
     },
@@ -283191,7 +283191,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9060",
+      "source_location": "L9074",
       "target": "src_client_read_efs_rdcache_invalidate",
       "weight": 1.0
     },
@@ -283203,7 +283203,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9088",
+      "source_location": "L9102",
       "target": "src_client_write_assemble_write_chunk",
       "weight": 1.0
     },
@@ -283215,7 +283215,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L8992",
+      "source_location": "L9006",
       "target": "src_client_write_data_chunk_size",
       "weight": 1.0
     },
@@ -283227,7 +283227,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L8993",
+      "source_location": "L9007",
       "target": "src_client_write_data_frag_size",
       "weight": 1.0
     },
@@ -283239,7 +283239,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L8985",
+      "source_location": "L8999",
       "target": "src_client_write_dcache_put_now",
       "weight": 1.0
     },
@@ -283251,7 +283251,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9064",
+      "source_location": "L9078",
       "target": "src_client_write_dcache_store",
       "weight": 1.0
     },
@@ -283263,7 +283263,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9054",
+      "source_location": "L9068",
       "target": "src_client_write_efs_client_put_fragments_parallel",
       "weight": 1.0
     },
@@ -283275,7 +283275,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9016",
+      "source_location": "L9030",
       "target": "src_client_write_efs_dcache_drop",
       "weight": 1.0
     },
@@ -283287,7 +283287,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9085",
+      "source_location": "L9099",
       "target": "src_client_write_frag_ptrs",
       "weight": 1.0
     },
@@ -283299,7 +283299,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9050",
+      "source_location": "L9064",
       "target": "src_client_write_hash_write_fragments",
       "weight": 1.0
     },
@@ -283312,7 +283312,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9006",
+      "source_location": "L9020",
       "target": "src_common_checksum_efs_bytes_are_zero",
       "weight": 1.0
     },
@@ -283325,7 +283325,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9007",
+      "source_location": "L9021",
       "target": "src_common_checksum_efs_hash_zero_fragment_len",
       "weight": 1.0
     },
@@ -283338,7 +283338,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9010",
+      "source_location": "L9024",
       "target": "src_common_placement_efs_place_fragments",
       "weight": 1.0
     },
@@ -283351,7 +283351,7 @@
       "relation": "calls",
       "source": "src_client_write_chunk_put_worker",
       "source_file": "src/client/write.c",
-      "source_location": "L9048",
+      "source_location": "L9062",
       "target": "src_data_erasure_efs_encode_chunk",
       "weight": 1.0
     },
@@ -283364,7 +283364,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9159",
+      "source_location": "L9173",
       "target": "src_client_bufpool_efs_buf_alloc",
       "weight": 1.0
     },
@@ -283377,7 +283377,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9165",
+      "source_location": "L9179",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -283390,7 +283390,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9205",
+      "source_location": "L9219",
       "target": "src_client_ops_efs_client_ensure_meta_room",
       "weight": 1.0
     },
@@ -283403,7 +283403,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9132",
+      "source_location": "L9146",
       "target": "src_client_ops_efs_client_lock_dir",
       "weight": 1.0
     },
@@ -283416,7 +283416,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9215",
+      "source_location": "L9229",
       "target": "src_client_ops_efs_client_set_chunk",
       "weight": 1.0
     },
@@ -283429,7 +283429,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9137",
+      "source_location": "L9151",
       "target": "src_client_ops_efs_client_unlock_dir",
       "weight": 1.0
     },
@@ -283442,7 +283442,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9207",
+      "source_location": "L9221",
       "target": "src_client_put_ticket_owner_efs_client_put_release",
       "weight": 1.0
     },
@@ -283454,7 +283454,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9172",
+      "source_location": "L9186",
       "target": "src_client_write_assemble_write_chunk",
       "weight": 1.0
     },
@@ -283466,7 +283466,7 @@
       "relation": "references",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9126",
+      "source_location": "L9140",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -283478,7 +283478,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9145",
+      "source_location": "L9159",
       "target": "src_client_write_data_chunk_size",
       "weight": 1.0
     },
@@ -283490,7 +283490,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9146",
+      "source_location": "L9160",
       "target": "src_client_write_data_frag_size",
       "weight": 1.0
     },
@@ -283502,7 +283502,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9222",
+      "source_location": "L9236",
       "target": "src_client_write_efs_client_mark_chunk_dirty",
       "weight": 1.0
     },
@@ -283514,7 +283514,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9239",
+      "source_location": "L9253",
       "target": "src_client_write_efs_client_mark_ino_dirty",
       "weight": 1.0
     },
@@ -283526,7 +283526,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9128",
+      "source_location": "L9142",
       "target": "src_client_write_efs_client_mtime_unpin",
       "weight": 1.0
     },
@@ -283538,7 +283538,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9244",
+      "source_location": "L9258",
       "target": "src_client_write_efs_client_note_meta_change",
       "weight": 1.0
     },
@@ -283550,7 +283550,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9195",
+      "source_location": "L9209",
       "target": "src_client_write_efs_client_put_fragments_parallel",
       "weight": 1.0
     },
@@ -283562,7 +283562,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9204",
+      "source_location": "L9218",
       "target": "src_client_write_export_chunk_exists",
       "weight": 1.0
     },
@@ -283574,7 +283574,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9212",
+      "source_location": "L9226",
       "target": "src_client_write_export_reserve_chunks_locked",
       "weight": 1.0
     },
@@ -283586,7 +283586,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9170",
+      "source_location": "L9184",
       "target": "src_client_write_frag_ptrs",
       "weight": 1.0
     },
@@ -283598,7 +283598,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9191",
+      "source_location": "L9205",
       "target": "src_client_write_hash_write_fragments",
       "weight": 1.0
     },
@@ -283610,7 +283610,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9235",
+      "source_location": "L9249",
       "target": "src_client_write_now_ns",
       "weight": 1.0
     },
@@ -283622,7 +283622,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9220",
+      "source_location": "L9234",
       "target": "src_client_write_putid_note",
       "weight": 1.0
     },
@@ -283635,7 +283635,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9185",
+      "source_location": "L9199",
       "target": "src_common_placement_efs_place_fragments",
       "weight": 1.0
     },
@@ -283648,7 +283648,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9182",
+      "source_location": "L9196",
       "target": "src_data_erasure_efs_encode_chunk",
       "weight": 1.0
     },
@@ -283661,7 +283661,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9135",
+      "source_location": "L9149",
       "target": "src_meta_metadata_efs_export_get_inode",
       "weight": 1.0
     },
@@ -283674,7 +283674,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9211",
+      "source_location": "L9225",
       "target": "src_meta_metadata_efs_export_needs_chunk_grow",
       "weight": 1.0
     },
@@ -283687,7 +283687,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9216",
+      "source_location": "L9230",
       "target": "src_meta_metadata_efs_export_set_chunk_gen",
       "weight": 1.0
     },
@@ -283700,7 +283700,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9236",
+      "source_location": "L9250",
       "target": "src_meta_metadata_efs_export_set_mtime_ns_norollup",
       "weight": 1.0
     },
@@ -283713,7 +283713,7 @@
       "relation": "calls",
       "source": "src_client_write_client_write_run",
       "source_file": "src/client/write.c",
-      "source_location": "L9231",
+      "source_location": "L9245",
       "target": "src_meta_metadata_efs_export_set_size_norollup",
       "weight": 1.0
     },
@@ -283889,7 +283889,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_base_gen_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7506",
+      "source_location": "L7520",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -283901,7 +283901,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_base_gen_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7514",
+      "source_location": "L7528",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -283913,7 +283913,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_base_gen_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7517",
+      "source_location": "L7531",
       "target": "src_client_write_dcache_find_meta",
       "weight": 1.0
     },
@@ -283925,7 +283925,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_base_gen_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7516",
+      "source_location": "L7530",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -283937,7 +283937,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_base_gen_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7515",
+      "source_location": "L7529",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -283974,7 +283974,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_sent",
       "source_file": "src/client/write.c",
-      "source_location": "L8074",
+      "source_location": "L8088",
       "target": "src_client_write_dcache_find_meta",
       "weight": 1.0
     },
@@ -283986,7 +283986,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_sent",
       "source_file": "src/client/write.c",
-      "source_location": "L8073",
+      "source_location": "L8087",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -283998,7 +283998,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_sent",
       "source_file": "src/client/write.c",
-      "source_location": "L8072",
+      "source_location": "L8086",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -284011,7 +284011,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_verdict",
       "source_file": "src/client/write.c",
-      "source_location": "L8105",
+      "source_location": "L8119",
       "target": "include_efs_wb_recovery_efs_wb_cycle_complete",
       "weight": 1.0
     },
@@ -284024,7 +284024,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_verdict",
       "source_file": "src/client/write.c",
-      "source_location": "L8104",
+      "source_location": "L8118",
       "target": "include_efs_wb_recovery_efs_wb_cycle_reset",
       "weight": 1.0
     },
@@ -284036,7 +284036,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_cycle_verdict",
       "source_file": "src/client/write.c",
-      "source_location": "L8083",
+      "source_location": "L8097",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -284048,7 +284048,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_verdict",
       "source_file": "src/client/write.c",
-      "source_location": "L8090",
+      "source_location": "L8104",
       "target": "src_client_write_dcache_find_meta",
       "weight": 1.0
     },
@@ -284060,7 +284060,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_verdict",
       "source_file": "src/client/write.c",
-      "source_location": "L8089",
+      "source_location": "L8103",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -284072,7 +284072,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_verdict",
       "source_file": "src/client/write.c",
-      "source_location": "L8109",
+      "source_location": "L8123",
       "target": "src_client_write_dcache_pin_add",
       "weight": 1.0
     },
@@ -284084,7 +284084,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_verdict",
       "source_file": "src/client/write.c",
-      "source_location": "L8087",
+      "source_location": "L8101",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -284096,7 +284096,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_cycle_verdict",
       "source_file": "src/client/write.c",
-      "source_location": "L8107",
+      "source_location": "L8121",
       "target": "src_client_write_wb_error_record_add",
       "weight": 1.0
     },
@@ -284108,7 +284108,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_dirty_cis_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7363",
+      "source_location": "L7377",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -284282,7 +284282,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_fetch_merge_base",
       "source_file": "src/client/write.c",
-      "source_location": "L6741",
+      "source_location": "L6752",
       "target": "src_client_ops_efs_client_pull_chunks_range_absent",
       "weight": 1.0
     },
@@ -284295,7 +284295,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_fetch_merge_base",
       "source_file": "src/client/write.c",
-      "source_location": "L6752",
+      "source_location": "L6763",
       "target": "src_client_read_efs_client_fetch_published_chunk_obs",
       "weight": 1.0
     },
@@ -284307,7 +284307,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_fetch_merge_base",
       "source_file": "src/client/write.c",
-      "source_location": "L6736",
+      "source_location": "L6747",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -284467,7 +284467,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_all_slots",
       "source_file": "src/client/write.c",
-      "source_location": "L7338",
+      "source_location": "L7352",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -284479,7 +284479,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_all_slots",
       "source_file": "src/client/write.c",
-      "source_location": "L7343",
+      "source_location": "L7357",
       "target": "src_client_write_dcache_flush_slot",
       "weight": 1.0
     },
@@ -284492,7 +284492,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_ino_pass",
       "source_file": "src/client/write.c",
-      "source_location": "L7418",
+      "source_location": "L7432",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -284505,7 +284505,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_ino_pass",
       "source_file": "src/client/write.c",
-      "source_location": "L7419",
+      "source_location": "L7433",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -284517,7 +284517,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_flush_ino_pass",
       "source_file": "src/client/write.c",
-      "source_location": "L7402",
+      "source_location": "L7416",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -284529,7 +284529,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_ino_pass",
       "source_file": "src/client/write.c",
-      "source_location": "L7409",
+      "source_location": "L7423",
       "target": "src_client_write_dcache_dirty_cis_of",
       "weight": 1.0
     },
@@ -284541,7 +284541,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_ino_pass",
       "source_file": "src/client/write.c",
-      "source_location": "L7408",
+      "source_location": "L7422",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -284553,7 +284553,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_ino_pass",
       "source_file": "src/client/write.c",
-      "source_location": "L7429",
+      "source_location": "L7443",
       "target": "src_client_write_dcache_steal_dirty",
       "weight": 1.0
     },
@@ -284565,7 +284565,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_ino_pass",
       "source_file": "src/client/write.c",
-      "source_location": "L7435",
+      "source_location": "L7449",
       "target": "src_client_write_flush_pipe_add",
       "weight": 1.0
     },
@@ -284577,7 +284577,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_ino_pass",
       "source_file": "src/client/write.c",
-      "source_location": "L7439",
+      "source_location": "L7453",
       "target": "src_client_write_flush_pipe_drain",
       "weight": 1.0
     },
@@ -284589,7 +284589,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_ino_pass",
       "source_file": "src/client/write.c",
-      "source_location": "L7414",
+      "source_location": "L7428",
       "target": "src_client_write_flush_pipe_init",
       "weight": 1.0
     },
@@ -284601,7 +284601,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_flush_keep",
       "source_file": "src/client/write.c",
-      "source_location": "L6968",
+      "source_location": "L6979",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -284613,7 +284613,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_keep",
       "source_file": "src/client/write.c",
-      "source_location": "L6976",
+      "source_location": "L6987",
       "target": "src_client_write_dcache_find",
       "weight": 1.0
     },
@@ -284625,7 +284625,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_keep",
       "source_file": "src/client/write.c",
-      "source_location": "L6988",
+      "source_location": "L6999",
       "target": "src_client_write_dcache_install_image",
       "weight": 1.0
     },
@@ -284637,7 +284637,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_keep",
       "source_file": "src/client/write.c",
-      "source_location": "L6972",
+      "source_location": "L6983",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -284649,7 +284649,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_keep",
       "source_file": "src/client/write.c",
-      "source_location": "L6980",
+      "source_location": "L6991",
       "target": "src_client_write_dcache_note_dirty_bytes",
       "weight": 1.0
     },
@@ -284661,7 +284661,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_keep",
       "source_file": "src/client/write.c",
-      "source_location": "L6979",
+      "source_location": "L6990",
       "target": "src_client_write_dcache_set_dirty",
       "weight": 1.0
     },
@@ -284673,7 +284673,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_keep",
       "source_file": "src/client/write.c",
-      "source_location": "L6971",
+      "source_location": "L6982",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -284685,7 +284685,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_flush_slot",
       "source_file": "src/client/write.c",
-      "source_location": "L7326",
+      "source_location": "L7340",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -284697,7 +284697,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot",
       "source_file": "src/client/write.c",
-      "source_location": "L7328",
+      "source_location": "L7342",
       "target": "src_client_write_dcache_flush_slot_inner",
       "weight": 1.0
     },
@@ -284710,7 +284710,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner",
       "source_file": "src/client/write.c",
-      "source_location": "L7317",
+      "source_location": "L7331",
       "target": "src_client_bufpool_efs_buf_drain_enter",
       "weight": 1.0
     },
@@ -284723,7 +284723,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner",
       "source_file": "src/client/write.c",
-      "source_location": "L7319",
+      "source_location": "L7333",
       "target": "src_client_bufpool_efs_buf_drain_leave",
       "weight": 1.0
     },
@@ -284735,7 +284735,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_flush_slot_inner",
       "source_file": "src/client/write.c",
-      "source_location": "L7314",
+      "source_location": "L7328",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -284747,7 +284747,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner",
       "source_file": "src/client/write.c",
-      "source_location": "L7318",
+      "source_location": "L7332",
       "target": "src_client_write_dcache_flush_slot_inner_budgeted",
       "weight": 1.0
     },
@@ -284760,7 +284760,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7132",
+      "source_location": "L7145",
       "target": "include_efs_writer_state_efs_writer_state_owned",
       "weight": 1.0
     },
@@ -284773,7 +284773,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7159",
+      "source_location": "L7172",
       "target": "src_client_bufpool_efs_buf_alloc",
       "weight": 1.0
     },
@@ -284786,7 +284786,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7180",
+      "source_location": "L7193",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -284798,7 +284798,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7114",
+      "source_location": "L7127",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -284810,7 +284810,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7236",
+      "source_location": "L7249",
       "target": "src_client_write_dcache_chain_has",
       "weight": 1.0
     },
@@ -284822,7 +284822,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7168",
+      "source_location": "L7181",
       "target": "src_client_write_dcache_dirty_unlink",
       "weight": 1.0
     },
@@ -284834,7 +284834,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7193",
+      "source_location": "L7206",
       "target": "src_client_write_dcache_fetch_merge_base",
       "weight": 1.0
     },
@@ -284846,7 +284846,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7183",
+      "source_location": "L7196",
       "target": "src_client_write_dcache_find",
       "weight": 1.0
     },
@@ -284858,140 +284858,8 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7241",
+      "source_location": "L7254",
       "target": "src_client_write_dcache_find_meta",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7157",
-      "target": "src_client_write_dcache_full_overwrite",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7292",
-      "target": "src_client_write_dcache_install_image",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7116",
-      "target": "src_client_write_dcache_io_mu",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7117",
-      "target": "src_client_write_dcache_mu",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7169",
-      "target": "src_client_write_dcache_note_dirty_bytes",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7252",
-      "target": "src_client_write_dcache_pin_add",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7294",
-      "target": "src_client_write_dcache_pin_release",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7227",
-      "target": "src_client_write_dcache_put_now",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7156",
-      "target": "src_client_write_dcache_seq_next",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7185",
-      "target": "src_client_write_dcache_set_dirty",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
-      "source_file": "src/client/write.c",
-      "source_location": "L7190",
-      "target": "src_client_write_put_win_close",
       "weight": 1.0
     },
     {
@@ -285003,6 +284871,138 @@
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
       "source_location": "L7170",
+      "target": "src_client_write_dcache_full_overwrite",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7305",
+      "target": "src_client_write_dcache_install_image",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7129",
+      "target": "src_client_write_dcache_io_mu",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7130",
+      "target": "src_client_write_dcache_mu",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7182",
+      "target": "src_client_write_dcache_note_dirty_bytes",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7265",
+      "target": "src_client_write_dcache_pin_add",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7308",
+      "target": "src_client_write_dcache_pin_release",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7240",
+      "target": "src_client_write_dcache_put_now",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7169",
+      "target": "src_client_write_dcache_seq_next",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7198",
+      "target": "src_client_write_dcache_set_dirty",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7203",
+      "target": "src_client_write_put_win_close",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_flush_slot_inner_budgeted",
+      "source_file": "src/client/write.c",
+      "source_location": "L7183",
       "target": "src_client_write_put_win_open",
       "weight": 1.0
     },
@@ -285014,7 +285014,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_flush_slot_inner_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L7226",
+      "source_location": "L7239",
       "target": "src_client_write_span_of",
       "weight": 1.0
     },
@@ -285026,7 +285026,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_identity_abandon",
       "source_file": "src/client/write.c",
-      "source_location": "L8157",
+      "source_location": "L8171",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -285038,7 +285038,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_identity_abandon",
       "source_file": "src/client/write.c",
-      "source_location": "L8164",
+      "source_location": "L8178",
       "target": "src_client_write_dcache_find_meta",
       "weight": 1.0
     },
@@ -285050,7 +285050,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_identity_abandon",
       "source_file": "src/client/write.c",
-      "source_location": "L8163",
+      "source_location": "L8177",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -285062,7 +285062,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_identity_abandon",
       "source_file": "src/client/write.c",
-      "source_location": "L8169",
+      "source_location": "L8183",
       "target": "src_client_write_dcache_pin_release",
       "weight": 1.0
     },
@@ -285074,7 +285074,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_identity_abandon",
       "source_file": "src/client/write.c",
-      "source_location": "L8160",
+      "source_location": "L8174",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -285112,7 +285112,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_img_to_rdcache",
       "source_file": "src/client/write.c",
-      "source_location": "L6730",
+      "source_location": "L6741",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -285125,7 +285125,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_img_to_rdcache",
       "source_file": "src/client/write.c",
-      "source_location": "L6729",
+      "source_location": "L6740",
       "target": "src_client_read_efs_rdcache_put_owned",
       "weight": 1.0
     },
@@ -285137,7 +285137,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_img_to_rdcache",
       "source_file": "src/client/write.c",
-      "source_location": "L6726",
+      "source_location": "L6737",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -285186,7 +285186,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_kick_complete",
       "source_file": "src/client/write.c",
-      "source_location": "L8754",
+      "source_location": "L8768",
       "target": "src_client_write_reclaim_kick",
       "weight": 1.0
     },
@@ -285605,7 +285605,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8029",
+      "source_location": "L8043",
       "target": "include_efs_wb_recovery_efs_wb_cycle_reset",
       "weight": 1.0
     },
@@ -285618,7 +285618,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8043",
+      "source_location": "L8057",
       "target": "include_efs_writer_state_efs_writer_state_owned",
       "weight": 1.0
     },
@@ -285631,7 +285631,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8056",
+      "source_location": "L8070",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -285643,7 +285643,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L7995",
+      "source_location": "L8009",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -285655,7 +285655,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8061",
+      "source_location": "L8075",
       "target": "src_client_write_dcache_body_to_rdcache",
       "weight": 1.0
     },
@@ -285667,7 +285667,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8006",
+      "source_location": "L8020",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -285679,7 +285679,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8009",
+      "source_location": "L8023",
       "target": "src_client_write_dcache_find_meta",
       "weight": 1.0
     },
@@ -285691,7 +285691,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8066",
+      "source_location": "L8080",
       "target": "src_client_write_dcache_img_to_rdcache",
       "weight": 1.0
     },
@@ -285703,7 +285703,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8008",
+      "source_location": "L8022",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -285715,7 +285715,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8046",
+      "source_location": "L8060",
       "target": "src_client_write_dcache_pin_release",
       "weight": 1.0
     },
@@ -285727,7 +285727,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8007",
+      "source_location": "L8021",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -285739,7 +285739,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8024",
+      "source_location": "L8038",
       "target": "src_client_write_wb_error_record_resolve",
       "weight": 1.0
     },
@@ -285752,7 +285752,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_note_committed",
       "source_file": "src/client/write.c",
-      "source_location": "L8014",
+      "source_location": "L8028",
       "target": "src_client_writer_state_efs_writer_state_report",
       "weight": 1.0
     },
@@ -285877,7 +285877,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_object_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7524",
+      "source_location": "L7538",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -285889,56 +285889,8 @@
       "relation": "calls",
       "source": "src_client_write_dcache_object_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7533",
+      "source_location": "L7547",
       "target": "src_client_write_dcache_ensure",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_object_of",
-      "source_file": "src/client/write.c",
-      "source_location": "L7536",
-      "target": "src_client_write_dcache_find_meta",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_object_of",
-      "source_file": "src/client/write.c",
-      "source_location": "L7535",
-      "target": "src_client_write_dcache_mu",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_object_of",
-      "source_file": "src/client/write.c",
-      "source_location": "L7534",
-      "target": "src_client_write_dcache_slot",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_write_dcache_object_of",
-      "source_file": "src/client/write.c",
-      "source_location": "L7537",
-      "target": "src_client_write_dcache_unpublished",
       "weight": 1.0
     },
     {
@@ -285950,6 +285902,54 @@
       "source": "src_client_write_dcache_object_of",
       "source_file": "src/client/write.c",
       "source_location": "L7550",
+      "target": "src_client_write_dcache_find_meta",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_object_of",
+      "source_file": "src/client/write.c",
+      "source_location": "L7549",
+      "target": "src_client_write_dcache_mu",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_object_of",
+      "source_file": "src/client/write.c",
+      "source_location": "L7548",
+      "target": "src_client_write_dcache_slot",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_object_of",
+      "source_file": "src/client/write.c",
+      "source_location": "L7551",
+      "target": "src_client_write_dcache_unpublished",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_write_dcache_object_of",
+      "source_file": "src/client/write.c",
+      "source_location": "L7564",
       "target": "src_client_write_rec_ticket",
       "weight": 1.0
     },
@@ -285961,7 +285961,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_object_seq_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7560",
+      "source_location": "L7574",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -285973,7 +285973,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_object_seq_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7568",
+      "source_location": "L7582",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -285985,7 +285985,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_object_seq_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7571",
+      "source_location": "L7585",
       "target": "src_client_write_dcache_find_meta",
       "weight": 1.0
     },
@@ -285997,7 +285997,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_object_seq_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7570",
+      "source_location": "L7584",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -286009,7 +286009,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_object_seq_of",
       "source_file": "src/client/write.c",
-      "source_location": "L7569",
+      "source_location": "L7583",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -286895,7 +286895,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_reclaim_main",
       "source_file": "src/client/write.c",
-      "source_location": "L8650",
+      "source_location": "L8664",
       "target": "src_client_write_dcache_full_overwrite",
       "weight": 1.0
     },
@@ -286907,7 +286907,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_reclaim_main",
       "source_file": "src/client/write.c",
-      "source_location": "L8680",
+      "source_location": "L8694",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -286919,7 +286919,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_reclaim_main",
       "source_file": "src/client/write.c",
-      "source_location": "L8679",
+      "source_location": "L8693",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -286931,7 +286931,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_reclaim_main",
       "source_file": "src/client/write.c",
-      "source_location": "L8675",
+      "source_location": "L8689",
       "target": "src_client_write_dcache_steal_dirty",
       "weight": 1.0
     },
@@ -286943,7 +286943,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_reclaim_main",
       "source_file": "src/client/write.c",
-      "source_location": "L8694",
+      "source_location": "L8708",
       "target": "src_client_write_flush_pipe_add",
       "weight": 1.0
     },
@@ -286955,7 +286955,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_reclaim_main",
       "source_file": "src/client/write.c",
-      "source_location": "L8698",
+      "source_location": "L8712",
       "target": "src_client_write_flush_pipe_drain",
       "weight": 1.0
     },
@@ -286967,7 +286967,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_reclaim_main",
       "source_file": "src/client/write.c",
-      "source_location": "L8618",
+      "source_location": "L8632",
       "target": "src_client_write_flush_pipe_init",
       "weight": 1.0
     },
@@ -286979,7 +286979,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_reclaim_main",
       "source_file": "src/client/write.c",
-      "source_location": "L8588",
+      "source_location": "L8602",
       "target": "src_client_write_reclaim_now_ns",
       "weight": 1.0
     },
@@ -286991,7 +286991,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_reclaim_start",
       "source_file": "src/client/write.c",
-      "source_location": "L8738",
+      "source_location": "L8752",
       "target": "src_client_write_dcache_reclaim_limit",
       "weight": 1.0
     },
@@ -287004,7 +287004,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex",
       "source_file": "src/client/write.c",
-      "source_location": "L8478",
+      "source_location": "L8492",
       "target": "src_client_bufpool_efs_buf_drain_enter",
       "weight": 1.0
     },
@@ -287017,7 +287017,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex",
       "source_file": "src/client/write.c",
-      "source_location": "L8480",
+      "source_location": "L8494",
       "target": "src_client_bufpool_efs_buf_drain_leave",
       "weight": 1.0
     },
@@ -287029,7 +287029,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_replay_stale_ex",
       "source_file": "src/client/write.c",
-      "source_location": "L8475",
+      "source_location": "L8489",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -287041,7 +287041,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex",
       "source_file": "src/client/write.c",
-      "source_location": "L8479",
+      "source_location": "L8493",
       "target": "src_client_write_dcache_replay_stale_ex_budgeted",
       "weight": 1.0
     },
@@ -287054,7 +287054,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8327",
+      "source_location": "L8341",
       "target": "src_client_bufpool_efs_buf_alloc",
       "weight": 1.0
     },
@@ -287067,7 +287067,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8348",
+      "source_location": "L8362",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -287080,7 +287080,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8456",
+      "source_location": "L8470",
       "target": "src_client_ops_efs_client_epoch_get",
       "weight": 1.0
     },
@@ -287093,7 +287093,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8364",
+      "source_location": "L8378",
       "target": "src_client_read_efs_client_fetch_published_chunk_obs",
       "weight": 1.0
     },
@@ -287105,7 +287105,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8283",
+      "source_location": "L8297",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -287117,7 +287117,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8419",
+      "source_location": "L8433",
       "target": "src_client_write_chunk_obs_has_live_spans",
       "weight": 1.0
     },
@@ -287129,7 +287129,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8419",
+      "source_location": "L8433",
       "target": "src_client_write_chunk_obs_masked",
       "weight": 1.0
     },
@@ -287141,7 +287141,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8302",
+      "source_location": "L8316",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -287153,7 +287153,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8309",
+      "source_location": "L8323",
       "target": "src_client_write_dcache_find",
       "weight": 1.0
     },
@@ -287165,7 +287165,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8457",
+      "source_location": "L8471",
       "target": "src_client_write_dcache_install_image",
       "weight": 1.0
     },
@@ -287177,7 +287177,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8306",
+      "source_location": "L8320",
       "target": "src_client_write_dcache_io_mu",
       "weight": 1.0
     },
@@ -287189,7 +287189,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8308",
+      "source_location": "L8322",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -287201,7 +287201,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8446",
+      "source_location": "L8460",
       "target": "src_client_write_dcache_put_now",
       "weight": 1.0
     },
@@ -287213,7 +287213,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8335",
+      "source_location": "L8349",
       "target": "src_client_write_dcache_seq_next",
       "weight": 1.0
     },
@@ -287225,7 +287225,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8305",
+      "source_location": "L8319",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -287237,7 +287237,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8374",
+      "source_location": "L8388",
       "target": "src_client_write_dcache_trace_on",
       "weight": 1.0
     },
@@ -287249,7 +287249,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8343",
+      "source_location": "L8357",
       "target": "src_client_write_export_chunk_copy",
       "weight": 1.0
     },
@@ -287261,7 +287261,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8304",
+      "source_location": "L8318",
       "target": "src_client_write_export_forget_unreported",
       "weight": 1.0
     },
@@ -287273,7 +287273,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_replay_stale_ex_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L8312",
+      "source_location": "L8326",
       "target": "src_client_write_replay_span_without_body",
       "weight": 1.0
     },
@@ -287420,7 +287420,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty",
       "source_file": "src/client/write.c",
-      "source_location": "L6957",
+      "source_location": "L6968",
       "target": "src_client_bufpool_efs_buf_drain_enter",
       "weight": 1.0
     },
@@ -287433,7 +287433,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty",
       "source_file": "src/client/write.c",
-      "source_location": "L6961",
+      "source_location": "L6972",
       "target": "src_client_bufpool_efs_buf_drain_leave",
       "weight": 1.0
     },
@@ -287445,7 +287445,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_steal_dirty",
       "source_file": "src/client/write.c",
-      "source_location": "L6949",
+      "source_location": "L6960",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -287457,7 +287457,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty",
       "source_file": "src/client/write.c",
-      "source_location": "L6958",
+      "source_location": "L6969",
       "target": "src_client_write_dcache_steal_dirty_budgeted",
       "weight": 1.0
     },
@@ -287470,7 +287470,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6840",
+      "source_location": "L6851",
       "target": "include_efs_writer_state_efs_writer_state_owned",
       "weight": 1.0
     },
@@ -287483,7 +287483,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6856",
+      "source_location": "L6867",
       "target": "src_client_bufpool_efs_buf_alloc",
       "weight": 1.0
     },
@@ -287496,7 +287496,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6879",
+      "source_location": "L6890",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -287508,7 +287508,7 @@
       "relation": "references",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6805",
+      "source_location": "L6816",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -287520,7 +287520,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6865",
+      "source_location": "L6876",
       "target": "src_client_write_dcache_dirty_unlink",
       "weight": 1.0
     },
@@ -287532,7 +287532,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6893",
+      "source_location": "L6904",
       "target": "src_client_write_dcache_fetch_merge_base",
       "weight": 1.0
     },
@@ -287544,7 +287544,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6881",
+      "source_location": "L6892",
       "target": "src_client_write_dcache_find",
       "weight": 1.0
     },
@@ -287556,7 +287556,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6944",
+      "source_location": "L6955",
       "target": "src_client_write_dcache_full_overwrite",
       "weight": 1.0
     },
@@ -287568,7 +287568,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6813",
+      "source_location": "L6824",
       "target": "src_client_write_dcache_io_mu",
       "weight": 1.0
     },
@@ -287580,7 +287580,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6814",
+      "source_location": "L6825",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -287592,7 +287592,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6866",
+      "source_location": "L6877",
       "target": "src_client_write_dcache_note_dirty_bytes",
       "weight": 1.0
     },
@@ -287604,7 +287604,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6853",
+      "source_location": "L6864",
       "target": "src_client_write_dcache_seq_next",
       "weight": 1.0
     },
@@ -287616,7 +287616,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6883",
+      "source_location": "L6894",
       "target": "src_client_write_dcache_set_dirty",
       "weight": 1.0
     },
@@ -287628,7 +287628,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6812",
+      "source_location": "L6823",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -287640,7 +287640,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6887",
+      "source_location": "L6898",
       "target": "src_client_write_put_win_close",
       "weight": 1.0
     },
@@ -287652,7 +287652,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6869",
+      "source_location": "L6880",
       "target": "src_client_write_put_win_open",
       "weight": 1.0
     },
@@ -287664,7 +287664,7 @@
       "relation": "calls",
       "source": "src_client_write_dcache_steal_dirty_budgeted",
       "source_file": "src/client/write.c",
-      "source_location": "L6945",
+      "source_location": "L6956",
       "target": "src_client_write_span_of",
       "weight": 1.0
     },
@@ -289298,7 +289298,7 @@
       "relation": "references",
       "source": "src_client_write_efs_client_put_referenced",
       "source_file": "src/client/write.c",
-      "source_location": "L7580",
+      "source_location": "L7594",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -289310,7 +289310,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_put_referenced",
       "source_file": "src/client/write.c",
-      "source_location": "L7591",
+      "source_location": "L7605",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -289322,7 +289322,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_put_referenced",
       "source_file": "src/client/write.c",
-      "source_location": "L7594",
+      "source_location": "L7608",
       "target": "src_client_write_dcache_find_meta",
       "weight": 1.0
     },
@@ -289334,7 +289334,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_put_referenced",
       "source_file": "src/client/write.c",
-      "source_location": "L7593",
+      "source_location": "L7607",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -289346,7 +289346,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_put_referenced",
       "source_file": "src/client/write.c",
-      "source_location": "L7592",
+      "source_location": "L7606",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -289358,7 +289358,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_put_referenced",
       "source_file": "src/client/write.c",
-      "source_location": "L7586",
+      "source_location": "L7600",
       "target": "src_client_write_putid_find",
       "weight": 1.0
     },
@@ -289578,7 +289578,7 @@
       "relation": "references",
       "source": "src_client_write_efs_client_unit_begin",
       "source_file": "src/client/write.c",
-      "source_location": "L7656",
+      "source_location": "L7670",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -289590,7 +289590,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_unit_begin",
       "source_file": "src/client/write.c",
-      "source_location": "L7665",
+      "source_location": "L7679",
       "target": "src_client_write_unit_find",
       "weight": 1.0
     },
@@ -289602,7 +289602,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_unit_begin",
       "source_file": "src/client/write.c",
-      "source_location": "L7662",
+      "source_location": "L7676",
       "target": "src_client_write_unit_range",
       "weight": 1.0
     },
@@ -289614,7 +289614,7 @@
       "relation": "references",
       "source": "src_client_write_efs_client_unit_end",
       "source_file": "src/client/write.c",
-      "source_location": "L7707",
+      "source_location": "L7721",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -289626,7 +289626,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_unit_end",
       "source_file": "src/client/write.c",
-      "source_location": "L7715",
+      "source_location": "L7729",
       "target": "src_client_write_unit_find",
       "weight": 1.0
     },
@@ -289638,7 +289638,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_unit_end",
       "source_file": "src/client/write.c",
-      "source_location": "L7712",
+      "source_location": "L7726",
       "target": "src_client_write_unit_range",
       "weight": 1.0
     },
@@ -289650,7 +289650,7 @@
       "relation": "references",
       "source": "src_client_write_efs_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9249",
+      "source_location": "L9263",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -289662,7 +289662,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9266",
+      "source_location": "L9280",
       "target": "src_client_write_client_write_run",
       "weight": 1.0
     },
@@ -289674,7 +289674,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9255",
+      "source_location": "L9269",
       "target": "src_client_write_data_chunk_size",
       "weight": 1.0
     },
@@ -289686,7 +289686,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9258",
+      "source_location": "L9272",
       "target": "src_client_write_efs_client_report_admit",
       "weight": 1.0
     },
@@ -289698,7 +289698,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9263",
+      "source_location": "L9277",
       "target": "src_client_write_efs_client_report_unreserve",
       "weight": 1.0
     },
@@ -289710,7 +289710,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9251",
+      "source_location": "L9265",
       "target": "src_client_write_efs_wb_inode_stalled",
       "weight": 1.0
     },
@@ -289722,7 +289722,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9261",
+      "source_location": "L9275",
       "target": "src_client_write_write_accept_begin",
       "weight": 1.0
     },
@@ -289734,7 +289734,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write",
       "source_file": "src/client/write.c",
-      "source_location": "L9267",
+      "source_location": "L9281",
       "target": "src_client_write_write_accept_end",
       "weight": 1.0
     },
@@ -289747,7 +289747,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9280",
+      "source_location": "L9294",
       "target": "src_client_ops_efs_client_lock_dir",
       "weight": 1.0
     },
@@ -289760,7 +289760,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9285",
+      "source_location": "L9299",
       "target": "src_client_ops_efs_client_unlock_dir",
       "weight": 1.0
     },
@@ -289772,7 +289772,7 @@
       "relation": "references",
       "source": "src_client_write_efs_client_write_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9272",
+      "source_location": "L9286",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -289784,7 +289784,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9276",
+      "source_location": "L9290",
       "target": "src_client_write_efs_client_mtime_unpin",
       "weight": 1.0
     },
@@ -289796,7 +289796,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9274",
+      "source_location": "L9288",
       "target": "src_client_write_efs_wb_inode_stalled",
       "weight": 1.0
     },
@@ -289808,7 +289808,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9295",
+      "source_location": "L9309",
       "target": "src_client_write_write_accept_begin",
       "weight": 1.0
     },
@@ -289820,7 +289820,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9299",
+      "source_location": "L9313",
       "target": "src_client_write_write_accept_end",
       "weight": 1.0
     },
@@ -289832,7 +289832,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9298",
+      "source_location": "L9312",
       "target": "src_client_write_write_chunks_no_replicate",
       "weight": 1.0
     },
@@ -289845,7 +289845,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_client_write_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9283",
+      "source_location": "L9297",
       "target": "src_meta_metadata_efs_export_get_inode",
       "weight": 1.0
     },
@@ -290702,7 +290702,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_drain_pending",
       "source_file": "src/client/write.c",
-      "source_location": "L7494",
+      "source_location": "L7508",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -290714,7 +290714,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_drain_pending",
       "source_file": "src/client/write.c",
-      "source_location": "L7481",
+      "source_location": "L7495",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -290726,7 +290726,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_drain_pending",
       "source_file": "src/client/write.c",
-      "source_location": "L7483",
+      "source_location": "L7497",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -290738,7 +290738,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_drain_pending",
       "source_file": "src/client/write.c",
-      "source_location": "L7495",
+      "source_location": "L7509",
       "target": "src_client_write_efs_dcache_flush_ino",
       "weight": 1.0
     },
@@ -290884,7 +290884,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_flush_all",
       "source_file": "src/client/write.c",
-      "source_location": "L7503",
+      "source_location": "L7517",
       "target": "src_client_write_dcache_flush_all_slots",
       "weight": 1.0
     },
@@ -290896,7 +290896,7 @@
       "relation": "references",
       "source": "src_client_write_efs_dcache_flush_ino",
       "source_file": "src/client/write.c",
-      "source_location": "L7453",
+      "source_location": "L7467",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -290908,7 +290908,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_flush_ino",
       "source_file": "src/client/write.c",
-      "source_location": "L7455",
+      "source_location": "L7469",
       "target": "src_client_write_dcache_flush_ino_pass",
       "weight": 1.0
     },
@@ -290920,7 +290920,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_flush_ino",
       "source_file": "src/client/write.c",
-      "source_location": "L7465",
+      "source_location": "L7479",
       "target": "src_client_write_put_win_wait",
       "weight": 1.0
     },
@@ -290932,7 +290932,7 @@
       "relation": "references",
       "source": "src_client_write_efs_dcache_flush_pressure_ino",
       "source_file": "src/client/write.c",
-      "source_location": "L7448",
+      "source_location": "L7462",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -290944,7 +290944,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_flush_pressure_ino",
       "source_file": "src/client/write.c",
-      "source_location": "L7450",
+      "source_location": "L7464",
       "target": "src_client_write_dcache_flush_ino_pass",
       "weight": 1.0
     },
@@ -291052,7 +291052,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_maybe_reclaim",
       "source_file": "src/client/write.c",
-      "source_location": "L8779",
+      "source_location": "L8793",
       "target": "src_client_write_dcache_flush_slot",
       "weight": 1.0
     },
@@ -291064,7 +291064,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_maybe_reclaim",
       "source_file": "src/client/write.c",
-      "source_location": "L8763",
+      "source_location": "L8777",
       "target": "src_client_write_dcache_reclaim_limit",
       "weight": 1.0
     },
@@ -291076,7 +291076,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_maybe_reclaim",
       "source_file": "src/client/write.c",
-      "source_location": "L8769",
+      "source_location": "L8783",
       "target": "src_client_write_reclaim_kick",
       "weight": 1.0
     },
@@ -291296,7 +291296,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_pending_records",
       "source_file": "src/client/write.c",
-      "source_location": "L7090",
+      "source_location": "L7103",
       "target": "src_client_write_data_chunk_size",
       "weight": 1.0
     },
@@ -291308,7 +291308,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_pending_records",
       "source_file": "src/client/write.c",
-      "source_location": "L7077",
+      "source_location": "L7090",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -291320,7 +291320,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_pending_records",
       "source_file": "src/client/write.c",
-      "source_location": "L7081",
+      "source_location": "L7094",
       "target": "src_client_write_dcache_keep_on_drop",
       "weight": 1.0
     },
@@ -291332,7 +291332,7 @@
       "relation": "calls",
       "source": "src_client_write_efs_dcache_pending_records",
       "source_file": "src/client/write.c",
-      "source_location": "L7079",
+      "source_location": "L7092",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -292445,7 +292445,7 @@
       "relation": "calls",
       "source": "src_client_write_export_forget_unreported",
       "source_file": "src/client/write.c",
-      "source_location": "L8146",
+      "source_location": "L8160",
       "target": "src_client_ops_efs_client_lock_dir",
       "weight": 1.0
     },
@@ -292458,7 +292458,7 @@
       "relation": "calls",
       "source": "src_client_write_export_forget_unreported",
       "source_file": "src/client/write.c",
-      "source_location": "L8151",
+      "source_location": "L8165",
       "target": "src_client_ops_efs_client_unlock_dir",
       "weight": 1.0
     },
@@ -292470,7 +292470,7 @@
       "relation": "references",
       "source": "src_client_write_export_forget_unreported",
       "source_file": "src/client/write.c",
-      "source_location": "L8144",
+      "source_location": "L8158",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -292483,7 +292483,7 @@
       "relation": "calls",
       "source": "src_client_write_export_forget_unreported",
       "source_file": "src/client/write.c",
-      "source_location": "L8149",
+      "source_location": "L8163",
       "target": "src_meta_metadata_efs_export_set_chunk_deltas",
       "weight": 1.0
     },
@@ -292496,7 +292496,7 @@
       "relation": "calls",
       "source": "src_client_write_export_forget_unreported",
       "source_file": "src/client/write.c",
-      "source_location": "L8148",
+      "source_location": "L8162",
       "target": "src_meta_metadata_efs_export_set_chunk_gen",
       "weight": 1.0
     },
@@ -292548,7 +292548,7 @@
       "relation": "calls",
       "source": "src_client_write_flush_pipe_add",
       "source_file": "src/client/write.c",
-      "source_location": "L7045",
+      "source_location": "L7058",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -292560,7 +292560,7 @@
       "relation": "references",
       "source": "src_client_write_flush_pipe_add",
       "source_file": "src/client/write.c",
-      "source_location": "L7031",
+      "source_location": "L7044",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -292572,7 +292572,7 @@
       "relation": "calls",
       "source": "src_client_write_flush_pipe_add",
       "source_file": "src/client/write.c",
-      "source_location": "L7044",
+      "source_location": "L7057",
       "target": "src_client_write_dcache_flush_keep",
       "weight": 1.0
     },
@@ -292584,7 +292584,7 @@
       "relation": "calls",
       "source": "src_client_write_flush_pipe_add",
       "source_file": "src/client/write.c",
-      "source_location": "L7039",
+      "source_location": "L7052",
       "target": "src_client_write_flush_pipe_drain",
       "weight": 1.0
     },
@@ -292596,7 +292596,7 @@
       "relation": "calls",
       "source": "src_client_write_flush_pipe_add",
       "source_file": "src/client/write.c",
-      "source_location": "L7046",
+      "source_location": "L7059",
       "target": "src_client_write_put_win_close",
       "weight": 1.0
     },
@@ -292609,7 +292609,7 @@
       "relation": "calls",
       "source": "src_client_write_flush_pipe_drain",
       "source_file": "src/client/write.c",
-      "source_location": "L7021",
+      "source_location": "L7034",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -292621,7 +292621,7 @@
       "relation": "calls",
       "source": "src_client_write_flush_pipe_drain",
       "source_file": "src/client/write.c",
-      "source_location": "L7019",
+      "source_location": "L7030",
       "target": "src_client_write_dcache_flush_keep",
       "weight": 1.0
     },
@@ -292633,7 +292633,7 @@
       "relation": "calls",
       "source": "src_client_write_flush_pipe_drain",
       "source_file": "src/client/write.c",
-      "source_location": "L7015",
+      "source_location": "L7026",
       "target": "src_client_write_put_pool_run",
       "weight": 1.0
     },
@@ -292645,7 +292645,7 @@
       "relation": "calls",
       "source": "src_client_write_flush_pipe_drain",
       "source_file": "src/client/write.c",
-      "source_location": "L7023",
+      "source_location": "L7036",
       "target": "src_client_write_put_win_close",
       "weight": 1.0
     },
@@ -293230,7 +293230,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_run",
       "source_file": "src/client/write.c",
-      "source_location": "L8907",
+      "source_location": "L8921",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -293243,7 +293243,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_run",
       "source_file": "src/client/write.c",
-      "source_location": "L8915",
+      "source_location": "L8929",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -293256,7 +293256,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_run",
       "source_file": "src/client/write.c",
-      "source_location": "L8912",
+      "source_location": "L8926",
       "target": "src_client_inode_rpc_efs_client_rpc_set_deadline_ms",
       "weight": 1.0
     },
@@ -293268,7 +293268,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_run",
       "source_file": "src/client/write.c",
-      "source_location": "L8918",
+      "source_location": "L8932",
       "target": "src_client_write_chunk_put_worker",
       "weight": 1.0
     },
@@ -293280,7 +293280,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_run",
       "source_file": "src/client/write.c",
-      "source_location": "L8913",
+      "source_location": "L8927",
       "target": "src_client_write_put_pool_ensure",
       "weight": 1.0
     },
@@ -293292,7 +293292,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_run",
       "source_file": "src/client/write.c",
-      "source_location": "L8911",
+      "source_location": "L8925",
       "target": "src_client_write_report_clock_ms",
       "weight": 1.0
     },
@@ -293305,7 +293305,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_thread",
       "source_file": "src/client/write.c",
-      "source_location": "L8842",
+      "source_location": "L8856",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -293318,7 +293318,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_thread",
       "source_file": "src/client/write.c",
-      "source_location": "L8844",
+      "source_location": "L8858",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -293331,7 +293331,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_thread",
       "source_file": "src/client/write.c",
-      "source_location": "L8843",
+      "source_location": "L8857",
       "target": "src_client_inode_rpc_efs_client_rpc_set_deadline_ms",
       "weight": 1.0
     },
@@ -293344,7 +293344,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_thread",
       "source_file": "src/client/write.c",
-      "source_location": "L8847",
+      "source_location": "L8861",
       "target": "src_client_put_ticket_owner_efs_client_put_cohort_enter",
       "weight": 1.0
     },
@@ -293357,7 +293357,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_thread",
       "source_file": "src/client/write.c",
-      "source_location": "L8849",
+      "source_location": "L8863",
       "target": "src_client_put_ticket_owner_efs_client_put_cohort_leave",
       "weight": 1.0
     },
@@ -293369,7 +293369,7 @@
       "relation": "calls",
       "source": "src_client_write_put_pool_thread",
       "source_file": "src/client/write.c",
-      "source_location": "L8848",
+      "source_location": "L8862",
       "target": "src_client_write_chunk_put_worker",
       "weight": 1.0
     },
@@ -293985,7 +293985,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8223",
+      "source_location": "L8237",
       "target": "src_client_bufpool_efs_buf_alloc",
       "weight": 1.0
     },
@@ -293998,7 +293998,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8253",
+      "source_location": "L8267",
       "target": "src_client_bufpool_efs_buf_free",
       "weight": 1.0
     },
@@ -294011,7 +294011,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8232",
+      "source_location": "L8246",
       "target": "src_client_read_efs_client_fetch_published_chunk_obs",
       "weight": 1.0
     },
@@ -294024,7 +294024,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8242",
+      "source_location": "L8256",
       "target": "src_client_read_efs_client_overlay_span",
       "weight": 1.0
     },
@@ -294036,7 +294036,7 @@
       "relation": "references",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8189",
+      "source_location": "L8203",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -294048,7 +294048,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8195",
+      "source_location": "L8209",
       "target": "src_client_write_data_chunk_size",
       "weight": 1.0
     },
@@ -294060,7 +294060,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8210",
+      "source_location": "L8224",
       "target": "src_client_write_dcache_find_meta",
       "weight": 1.0
     },
@@ -294072,7 +294072,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8251",
+      "source_location": "L8265",
       "target": "src_client_write_dcache_identity_abandon",
       "weight": 1.0
     },
@@ -294084,7 +294084,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8209",
+      "source_location": "L8223",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -294096,7 +294096,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8273",
+      "source_location": "L8287",
       "target": "src_client_write_dcache_put_now",
       "weight": 1.0
     },
@@ -294108,7 +294108,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8265",
+      "source_location": "L8279",
       "target": "src_client_write_dcache_seq_next",
       "weight": 1.0
     },
@@ -294120,7 +294120,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8195",
+      "source_location": "L8209",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -294132,7 +294132,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8267",
+      "source_location": "L8281",
       "target": "src_client_write_dcache_trace_on",
       "weight": 1.0
     },
@@ -294144,7 +294144,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8220",
+      "source_location": "L8234",
       "target": "src_client_write_putid_drop_snapshot",
       "weight": 1.0
     },
@@ -294156,7 +294156,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8201",
+      "source_location": "L8215",
       "target": "src_client_write_putid_find",
       "weight": 1.0
     },
@@ -294168,7 +294168,7 @@
       "relation": "calls",
       "source": "src_client_write_replay_span_without_body",
       "source_file": "src/client/write.c",
-      "source_location": "L8250",
+      "source_location": "L8264",
       "target": "src_client_write_wb_error_record_add",
       "weight": 1.0
     },
@@ -295022,7 +295022,7 @@
       "relation": "references",
       "source": "src_client_write_report_replay_stale",
       "source_file": "src/client/write.c",
-      "source_location": "L8131",
+      "source_location": "L8145",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -295245,7 +295245,7 @@
       "relation": "calls",
       "source": "src_client_write_report_units_published",
       "source_file": "src/client/write.c",
-      "source_location": "L7960",
+      "source_location": "L7974",
       "target": "src_client_write_unit_find",
       "weight": 1.0
     },
@@ -295257,7 +295257,7 @@
       "relation": "calls",
       "source": "src_client_write_report_units_remark",
       "source_file": "src/client/write.c",
-      "source_location": "L7975",
+      "source_location": "L7989",
       "target": "src_client_write_efs_client_mark_chunk_dirty",
       "weight": 1.0
     },
@@ -295269,7 +295269,7 @@
       "relation": "calls",
       "source": "src_client_write_report_units_remark",
       "source_file": "src/client/write.c",
-      "source_location": "L7976",
+      "source_location": "L7990",
       "target": "src_client_write_efs_client_mark_ino_dirty",
       "weight": 1.0
     },
@@ -295281,7 +295281,7 @@
       "relation": "calls",
       "source": "src_client_write_report_units_shape",
       "source_file": "src/client/write.c",
-      "source_location": "L7871",
+      "source_location": "L7885",
       "target": "src_client_write_unit_chunk_state",
       "weight": 1.0
     },
@@ -295293,7 +295293,7 @@
       "relation": "calls",
       "source": "src_client_write_report_units_shape",
       "source_file": "src/client/write.c",
-      "source_location": "L7860",
+      "source_location": "L7874",
       "target": "src_client_write_unit_find",
       "weight": 1.0
     },
@@ -295305,7 +295305,7 @@
       "relation": "calls",
       "source": "src_client_write_report_units_shape",
       "source_file": "src/client/write.c",
-      "source_location": "L7868",
+      "source_location": "L7882",
       "target": "src_client_write_unit_rec_find",
       "weight": 1.0
     },
@@ -295403,7 +295403,7 @@
       "relation": "references",
       "source": "src_client_write_span_of",
       "source_file": "src/client/write.c",
-      "source_location": "L6759",
+      "source_location": "L6770",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -295415,7 +295415,7 @@
       "relation": "calls",
       "source": "src_client_write_span_of",
       "source_file": "src/client/write.c",
-      "source_location": "L6770",
+      "source_location": "L6781",
       "target": "src_client_write_export_chunk_copy",
       "weight": 1.0
     },
@@ -295427,7 +295427,7 @@
       "relation": "calls",
       "source": "src_client_write_span_of",
       "source_file": "src/client/write.c",
-      "source_location": "L6786",
+      "source_location": "L6797",
       "target": "src_client_write_putid_fill",
       "weight": 1.0
     },
@@ -295636,7 +295636,7 @@
       "relation": "references",
       "source": "src_client_write_unit_chunk_state",
       "source_file": "src/client/write.c",
-      "source_location": "L7758",
+      "source_location": "L7772",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -295648,7 +295648,7 @@
       "relation": "calls",
       "source": "src_client_write_unit_chunk_state",
       "source_file": "src/client/write.c",
-      "source_location": "L7771",
+      "source_location": "L7785",
       "target": "src_client_write_dcache_ensure",
       "weight": 1.0
     },
@@ -295660,7 +295660,7 @@
       "relation": "calls",
       "source": "src_client_write_unit_chunk_state",
       "source_file": "src/client/write.c",
-      "source_location": "L7774",
+      "source_location": "L7788",
       "target": "src_client_write_dcache_find_meta",
       "weight": 1.0
     },
@@ -295672,7 +295672,7 @@
       "relation": "calls",
       "source": "src_client_write_unit_chunk_state",
       "source_file": "src/client/write.c",
-      "source_location": "L7773",
+      "source_location": "L7787",
       "target": "src_client_write_dcache_mu",
       "weight": 1.0
     },
@@ -295684,7 +295684,7 @@
       "relation": "calls",
       "source": "src_client_write_unit_chunk_state",
       "source_file": "src/client/write.c",
-      "source_location": "L7772",
+      "source_location": "L7786",
       "target": "src_client_write_dcache_slot",
       "weight": 1.0
     },
@@ -295696,7 +295696,7 @@
       "relation": "calls",
       "source": "src_client_write_unit_chunk_state",
       "source_file": "src/client/write.c",
-      "source_location": "L7778",
+      "source_location": "L7792",
       "target": "src_client_write_dcache_unpublished",
       "weight": 1.0
     },
@@ -295708,7 +295708,7 @@
       "relation": "calls",
       "source": "src_client_write_unit_chunk_state",
       "source_file": "src/client/write.c",
-      "source_location": "L7767",
+      "source_location": "L7781",
       "target": "src_client_write_putid_find",
       "weight": 1.0
     },
@@ -295720,7 +295720,7 @@
       "relation": "references",
       "source": "src_client_write_unit_find",
       "source_file": "src/client/write.c",
-      "source_location": "L7625",
+      "source_location": "L7639",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -295732,7 +295732,7 @@
       "relation": "calls",
       "source": "src_client_write_unit_range",
       "source_file": "src/client/write.c",
-      "source_location": "L7645",
+      "source_location": "L7659",
       "target": "src_client_write_data_chunk_size",
       "weight": 1.0
     },
@@ -295745,7 +295745,7 @@
       "relation": "calls",
       "source": "src_client_write_unit_wait_idle",
       "source_file": "src/client/write.c",
-      "source_location": "L7740",
+      "source_location": "L7754",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -295757,7 +295757,7 @@
       "relation": "references",
       "source": "src_client_write_unit_wait_idle",
       "source_file": "src/client/write.c",
-      "source_location": "L7726",
+      "source_location": "L7740",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -295941,7 +295941,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9344",
+      "source_location": "L9358",
       "target": "src_client_ops_efs_client_ensure_meta_room",
       "weight": 1.0
     },
@@ -295954,7 +295954,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9353",
+      "source_location": "L9367",
       "target": "src_client_ops_efs_client_lock_dir",
       "weight": 1.0
     },
@@ -295967,7 +295967,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9366",
+      "source_location": "L9380",
       "target": "src_client_ops_efs_client_set_chunk",
       "weight": 1.0
     },
@@ -295980,7 +295980,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9389",
+      "source_location": "L9403",
       "target": "src_client_ops_efs_client_unlock_dir",
       "weight": 1.0
     },
@@ -295993,7 +295993,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9346",
+      "source_location": "L9360",
       "target": "src_client_put_ticket_owner_efs_client_put_release",
       "weight": 1.0
     },
@@ -296005,7 +296005,7 @@
       "relation": "references",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9303",
+      "source_location": "L9317",
       "target": "src_client_write_c_efs_ino_t",
       "weight": 1.0
     },
@@ -296017,7 +296017,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9308",
+      "source_location": "L9322",
       "target": "src_client_write_data_chunk_size",
       "weight": 1.0
     },
@@ -296029,7 +296029,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9403",
+      "source_location": "L9417",
       "target": "src_client_write_efs_client_mark_chunk_dirty",
       "weight": 1.0
     },
@@ -296041,7 +296041,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9408",
+      "source_location": "L9422",
       "target": "src_client_write_efs_client_mark_ino_dirty",
       "weight": 1.0
     },
@@ -296053,7 +296053,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9343",
+      "source_location": "L9357",
       "target": "src_client_write_export_chunk_exists",
       "weight": 1.0
     },
@@ -296065,7 +296065,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9352",
+      "source_location": "L9366",
       "target": "src_client_write_export_reserve_chunks_locked",
       "weight": 1.0
     },
@@ -296077,7 +296077,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9433",
+      "source_location": "L9447",
       "target": "src_client_write_now_ns",
       "weight": 1.0
     },
@@ -296089,7 +296089,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9338",
+      "source_location": "L9352",
       "target": "src_client_write_put_pool_run",
       "weight": 1.0
     },
@@ -296101,7 +296101,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9390",
+      "source_location": "L9404",
       "target": "src_client_write_putid_note",
       "weight": 1.0
     },
@@ -296114,7 +296114,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9357",
+      "source_location": "L9371",
       "target": "src_meta_metadata_efs_export_get_chunk",
       "weight": 1.0
     },
@@ -296127,7 +296127,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9383",
+      "source_location": "L9397",
       "target": "src_meta_metadata_efs_export_get_inode",
       "weight": 1.0
     },
@@ -296140,7 +296140,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9351",
+      "source_location": "L9365",
       "target": "src_meta_metadata_efs_export_needs_chunk_grow",
       "weight": 1.0
     },
@@ -296153,7 +296153,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9368",
+      "source_location": "L9382",
       "target": "src_meta_metadata_efs_export_set_chunk_gen",
       "weight": 1.0
     },
@@ -296166,7 +296166,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9434",
+      "source_location": "L9448",
       "target": "src_meta_metadata_efs_export_set_mtime_ns_norollup",
       "weight": 1.0
     },
@@ -296179,7 +296179,7 @@
       "relation": "calls",
       "source": "src_client_write_write_chunks_no_replicate",
       "source_file": "src/client/write.c",
-      "source_location": "L9385",
+      "source_location": "L9399",
       "target": "src_meta_metadata_efs_export_set_size_norollup",
       "weight": 1.0
     },
@@ -831881,7 +831881,7 @@
       "id": "src_client_write_chunk_put_worker",
       "label": "chunk_put_worker()",
       "source_file": "src/client/write.c",
-      "source_location": "L8977"
+      "source_location": "L8991"
     },
     {
       "_callable": true,
@@ -831892,7 +831892,7 @@
       "id": "src_client_write_client_write_run",
       "label": "client_write_run()",
       "source_file": "src/client/write.c",
-      "source_location": "L9126"
+      "source_location": "L9140"
     },
     {
       "_callable": true,
@@ -831903,7 +831903,7 @@
       "id": "src_client_write_cmp_u32",
       "label": "cmp_u32()",
       "source_file": "src/client/write.c",
-      "source_location": "L7351"
+      "source_location": "L7365"
     },
     {
       "_callable": true,
@@ -831969,7 +831969,7 @@
       "id": "src_client_write_dcache_base_gen_of",
       "label": "dcache_base_gen_of()",
       "source_file": "src/client/write.c",
-      "source_location": "L7506"
+      "source_location": "L7520"
     },
     {
       "_callable": true,
@@ -831980,7 +831980,7 @@
       "id": "src_client_write_dcache_body_to_rdcache",
       "label": "dcache_body_to_rdcache()",
       "source_file": "src/client/write.c",
-      "source_location": "L6705"
+      "source_location": "L6716"
     },
     {
       "_callable": true,
@@ -831991,7 +831991,7 @@
       "id": "src_client_write_dcache_chain_has",
       "label": "dcache_chain_has()",
       "source_file": "src/client/write.c",
-      "source_location": "L7104"
+      "source_location": "L7117"
     },
     {
       "_callable": true,
@@ -832013,7 +832013,7 @@
       "id": "src_client_write_dcache_cycle_sent",
       "label": "dcache_cycle_sent()",
       "source_file": "src/client/write.c",
-      "source_location": "L8070"
+      "source_location": "L8084"
     },
     {
       "_callable": true,
@@ -832024,7 +832024,7 @@
       "id": "src_client_write_dcache_cycle_verdict",
       "label": "dcache_cycle_verdict()",
       "source_file": "src/client/write.c",
-      "source_location": "L8083"
+      "source_location": "L8097"
     },
     {
       "_callable": true,
@@ -832035,7 +832035,7 @@
       "id": "src_client_write_dcache_dirty_cis_of",
       "label": "dcache_dirty_cis_of()",
       "source_file": "src/client/write.c",
-      "source_location": "L7363"
+      "source_location": "L7377"
     },
     {
       "_callable": true,
@@ -832090,7 +832090,7 @@
       "id": "src_client_write_dcache_fetch_merge_base",
       "label": "dcache_fetch_merge_base()",
       "source_file": "src/client/write.c",
-      "source_location": "L6736"
+      "source_location": "L6747"
     },
     {
       "_callable": true,
@@ -832134,7 +832134,7 @@
       "id": "src_client_write_dcache_flush_all_slots",
       "label": "dcache_flush_all_slots()",
       "source_file": "src/client/write.c",
-      "source_location": "L7333"
+      "source_location": "L7347"
     },
     {
       "_callable": true,
@@ -832145,7 +832145,7 @@
       "id": "src_client_write_dcache_flush_ino_pass",
       "label": "dcache_flush_ino_pass()",
       "source_file": "src/client/write.c",
-      "source_location": "L7402"
+      "source_location": "L7416"
     },
     {
       "_callable": true,
@@ -832156,7 +832156,7 @@
       "id": "src_client_write_dcache_flush_keep",
       "label": "dcache_flush_keep()",
       "source_file": "src/client/write.c",
-      "source_location": "L6968"
+      "source_location": "L6979"
     },
     {
       "_callable": true,
@@ -832167,7 +832167,7 @@
       "id": "src_client_write_dcache_flush_slot",
       "label": "dcache_flush_slot()",
       "source_file": "src/client/write.c",
-      "source_location": "L7326"
+      "source_location": "L7340"
     },
     {
       "_callable": true,
@@ -832178,7 +832178,7 @@
       "id": "src_client_write_dcache_flush_slot_inner",
       "label": "dcache_flush_slot_inner()",
       "source_file": "src/client/write.c",
-      "source_location": "L7314"
+      "source_location": "L7328"
     },
     {
       "_callable": true,
@@ -832189,7 +832189,7 @@
       "id": "src_client_write_dcache_flush_slot_inner_budgeted",
       "label": "dcache_flush_slot_inner_budgeted()",
       "source_file": "src/client/write.c",
-      "source_location": "L7114"
+      "source_location": "L7127"
     },
     {
       "_callable": true,
@@ -832211,7 +832211,7 @@
       "id": "src_client_write_dcache_identity_abandon",
       "label": "dcache_identity_abandon()",
       "source_file": "src/client/write.c",
-      "source_location": "L8157"
+      "source_location": "L8171"
     },
     {
       "_callable": true,
@@ -832233,7 +832233,7 @@
       "id": "src_client_write_dcache_img_to_rdcache",
       "label": "dcache_img_to_rdcache()",
       "source_file": "src/client/write.c",
-      "source_location": "L6726"
+      "source_location": "L6737"
     },
     {
       "_callable": true,
@@ -832299,7 +832299,7 @@
       "id": "src_client_write_dcache_kick_complete",
       "label": "dcache_kick_complete()",
       "source_file": "src/client/write.c",
-      "source_location": "L8750"
+      "source_location": "L8764"
     },
     {
       "_callable": true,
@@ -832365,7 +832365,7 @@
       "id": "src_client_write_dcache_note_committed",
       "label": "dcache_note_committed()",
       "source_file": "src/client/write.c",
-      "source_location": "L7995"
+      "source_location": "L8009"
     },
     {
       "_callable": true,
@@ -832398,7 +832398,7 @@
       "id": "src_client_write_dcache_object_of",
       "label": "dcache_object_of()",
       "source_file": "src/client/write.c",
-      "source_location": "L7524"
+      "source_location": "L7538"
     },
     {
       "_callable": true,
@@ -832409,7 +832409,7 @@
       "id": "src_client_write_dcache_object_seq_of",
       "label": "dcache_object_seq_of()",
       "source_file": "src/client/write.c",
-      "source_location": "L7560"
+      "source_location": "L7574"
     },
     {
       "_callable": true,
@@ -832530,7 +832530,7 @@
       "id": "src_client_write_dcache_reclaim_limit",
       "label": "dcache_reclaim_limit()",
       "source_file": "src/client/write.c",
-      "source_location": "L8530"
+      "source_location": "L8544"
     },
     {
       "_callable": true,
@@ -832541,7 +832541,7 @@
       "id": "src_client_write_dcache_reclaim_main",
       "label": "dcache_reclaim_main()",
       "source_file": "src/client/write.c",
-      "source_location": "L8555"
+      "source_location": "L8569"
     },
     {
       "_callable": true,
@@ -832552,7 +832552,7 @@
       "id": "src_client_write_dcache_reclaim_start",
       "label": "dcache_reclaim_start()",
       "source_file": "src/client/write.c",
-      "source_location": "L8736"
+      "source_location": "L8750"
     },
     {
       "_callable": true,
@@ -832563,7 +832563,7 @@
       "id": "src_client_write_dcache_replay_stale_ex",
       "label": "dcache_replay_stale_ex()",
       "source_file": "src/client/write.c",
-      "source_location": "L8475"
+      "source_location": "L8489"
     },
     {
       "_callable": true,
@@ -832574,7 +832574,7 @@
       "id": "src_client_write_dcache_replay_stale_ex_budgeted",
       "label": "dcache_replay_stale_ex_budgeted()",
       "source_file": "src/client/write.c",
-      "source_location": "L8283"
+      "source_location": "L8297"
     },
     {
       "_callable": true,
@@ -832640,7 +832640,7 @@
       "id": "src_client_write_dcache_steal_dirty",
       "label": "dcache_steal_dirty()",
       "source_file": "src/client/write.c",
-      "source_location": "L6949"
+      "source_location": "L6960"
     },
     {
       "_callable": true,
@@ -832651,7 +832651,7 @@
       "id": "src_client_write_dcache_steal_dirty_budgeted",
       "label": "dcache_steal_dirty_budgeted()",
       "source_file": "src/client/write.c",
-      "source_location": "L6805"
+      "source_location": "L6816"
     },
     {
       "_callable": true,
@@ -833113,7 +833113,7 @@
       "id": "src_client_write_efs_client_put_referenced",
       "label": "efs_client_put_referenced()",
       "source_file": "src/client/write.c",
-      "source_location": "L7580"
+      "source_location": "L7594"
     },
     {
       "_callable": true,
@@ -833212,7 +833212,7 @@
       "id": "src_client_write_efs_client_unit_begin",
       "label": "efs_client_unit_begin()",
       "source_file": "src/client/write.c",
-      "source_location": "L7656"
+      "source_location": "L7670"
     },
     {
       "_callable": true,
@@ -833223,7 +833223,7 @@
       "id": "src_client_write_efs_client_unit_end",
       "label": "efs_client_unit_end()",
       "source_file": "src/client/write.c",
-      "source_location": "L7707"
+      "source_location": "L7721"
     },
     {
       "_callable": true,
@@ -833234,7 +833234,7 @@
       "id": "src_client_write_efs_client_write",
       "label": "efs_client_write()",
       "source_file": "src/client/write.c",
-      "source_location": "L9249"
+      "source_location": "L9263"
     },
     {
       "_callable": true,
@@ -833245,7 +833245,7 @@
       "id": "src_client_write_efs_client_write_no_replicate",
       "label": "efs_client_write_no_replicate()",
       "source_file": "src/client/write.c",
-      "source_location": "L9272"
+      "source_location": "L9286"
     },
     {
       "_callable": true,
@@ -833344,7 +833344,7 @@
       "id": "src_client_write_efs_dcache_drain_pending",
       "label": "efs_dcache_drain_pending()",
       "source_file": "src/client/write.c",
-      "source_location": "L7478"
+      "source_location": "L7492"
     },
     {
       "_callable": true,
@@ -833388,7 +833388,7 @@
       "id": "src_client_write_efs_dcache_flush_all",
       "label": "efs_dcache_flush_all()",
       "source_file": "src/client/write.c",
-      "source_location": "L7501"
+      "source_location": "L7515"
     },
     {
       "_callable": true,
@@ -833399,7 +833399,7 @@
       "id": "src_client_write_efs_dcache_flush_ino",
       "label": "efs_dcache_flush_ino()",
       "source_file": "src/client/write.c",
-      "source_location": "L7453"
+      "source_location": "L7467"
     },
     {
       "_callable": true,
@@ -833410,7 +833410,7 @@
       "id": "src_client_write_efs_dcache_flush_pressure_ino",
       "label": "efs_dcache_flush_pressure_ino()",
       "source_file": "src/client/write.c",
-      "source_location": "L7448"
+      "source_location": "L7462"
     },
     {
       "_callable": true,
@@ -833465,7 +833465,7 @@
       "id": "src_client_write_efs_dcache_maybe_reclaim",
       "label": "efs_dcache_maybe_reclaim()",
       "source_file": "src/client/write.c",
-      "source_location": "L8757"
+      "source_location": "L8771"
     },
     {
       "_callable": true,
@@ -833498,7 +833498,7 @@
       "id": "src_client_write_efs_dcache_pending_records",
       "label": "efs_dcache_pending_records()",
       "source_file": "src/client/write.c",
-      "source_location": "L7074"
+      "source_location": "L7087"
     },
     {
       "_callable": true,
@@ -833575,7 +833575,7 @@
       "id": "src_client_write_efs_dcache_reclaim_stop",
       "label": "efs_dcache_reclaim_stop()",
       "source_file": "src/client/write.c",
-      "source_location": "L8790"
+      "source_location": "L8804"
     },
     {
       "_callable": true,
@@ -833773,7 +833773,7 @@
       "id": "src_client_write_export_forget_unreported",
       "label": "export_forget_unreported()",
       "source_file": "src/client/write.c",
-      "source_location": "L8144"
+      "source_location": "L8158"
     },
     {
       "_callable": true,
@@ -833795,7 +833795,7 @@
       "id": "src_client_write_flush_pipe_add",
       "label": "flush_pipe_add()",
       "source_file": "src/client/write.c",
-      "source_location": "L7031"
+      "source_location": "L7044"
     },
     {
       "_callable": true,
@@ -833806,7 +833806,7 @@
       "id": "src_client_write_flush_pipe_drain",
       "label": "flush_pipe_drain()",
       "source_file": "src/client/write.c",
-      "source_location": "L7009"
+      "source_location": "L7020"
     },
     {
       "_callable": true,
@@ -833817,7 +833817,7 @@
       "id": "src_client_write_flush_pipe_init",
       "label": "flush_pipe_init()",
       "source_file": "src/client/write.c",
-      "source_location": "L7004"
+      "source_location": "L7015"
     },
     {
       "_callable": true,
@@ -834070,7 +834070,7 @@
       "id": "src_client_write_put_pool_ensure",
       "label": "put_pool_ensure()",
       "source_file": "src/client/write.c",
-      "source_location": "L8863"
+      "source_location": "L8877"
     },
     {
       "_callable": true,
@@ -834081,7 +834081,7 @@
       "id": "src_client_write_put_pool_run",
       "label": "put_pool_run()",
       "source_file": "src/client/write.c",
-      "source_location": "L8904"
+      "source_location": "L8918"
     },
     {
       "_callable": true,
@@ -834092,7 +834092,7 @@
       "id": "src_client_write_put_pool_thread",
       "label": "put_pool_thread()",
       "source_file": "src/client/write.c",
-      "source_location": "L8820"
+      "source_location": "L8834"
     },
     {
       "_callable": true,
@@ -834279,7 +834279,7 @@
       "id": "src_client_write_reclaim_kick",
       "label": "reclaim_kick()",
       "source_file": "src/client/write.c",
-      "source_location": "L8726"
+      "source_location": "L8740"
     },
     {
       "_callable": true,
@@ -834290,7 +834290,7 @@
       "id": "src_client_write_reclaim_now_ns",
       "label": "reclaim_now_ns()",
       "source_file": "src/client/write.c",
-      "source_location": "L8547"
+      "source_location": "L8561"
     },
     {
       "_callable": true,
@@ -834323,7 +834323,7 @@
       "id": "src_client_write_replay_span_without_body",
       "label": "replay_span_without_body()",
       "source_file": "src/client/write.c",
-      "source_location": "L8189"
+      "source_location": "L8203"
     },
     {
       "_callable": true,
@@ -834466,7 +834466,7 @@
       "id": "src_client_write_report_replay_stale",
       "label": "report_replay_stale()",
       "source_file": "src/client/write.c",
-      "source_location": "L8131"
+      "source_location": "L8145"
     },
     {
       "_callable": true,
@@ -834576,7 +834576,7 @@
       "id": "src_client_write_report_units_published",
       "label": "report_units_published()",
       "source_file": "src/client/write.c",
-      "source_location": "L7956"
+      "source_location": "L7970"
     },
     {
       "_callable": true,
@@ -834587,7 +834587,7 @@
       "id": "src_client_write_report_units_remark",
       "label": "report_units_remark()",
       "source_file": "src/client/write.c",
-      "source_location": "L7972"
+      "source_location": "L7986"
     },
     {
       "_callable": true,
@@ -834598,7 +834598,7 @@
       "id": "src_client_write_report_units_shape",
       "label": "report_units_shape()",
       "source_file": "src/client/write.c",
-      "source_location": "L7832"
+      "source_location": "L7846"
     },
     {
       "_callable": true,
@@ -834620,7 +834620,7 @@
       "id": "src_client_write_span_of",
       "label": "span_of()",
       "source_file": "src/client/write.c",
-      "source_location": "L6759"
+      "source_location": "L6770"
     },
     {
       "_callable": true,
@@ -834675,7 +834675,7 @@
       "id": "src_client_write_unit_chunk_state",
       "label": "unit_chunk_state()",
       "source_file": "src/client/write.c",
-      "source_location": "L7758"
+      "source_location": "L7772"
     },
     {
       "_callable": true,
@@ -834686,7 +834686,7 @@
       "id": "src_client_write_unit_find",
       "label": "unit_find()",
       "source_file": "src/client/write.c",
-      "source_location": "L7625"
+      "source_location": "L7639"
     },
     {
       "_callable": true,
@@ -834697,7 +834697,7 @@
       "id": "src_client_write_unit_ord_cmp",
       "label": "unit_ord_cmp()",
       "source_file": "src/client/write.c",
-      "source_location": "L7800"
+      "source_location": "L7814"
     },
     {
       "_callable": true,
@@ -834708,7 +834708,7 @@
       "id": "src_client_write_unit_range",
       "label": "unit_range()",
       "source_file": "src/client/write.c",
-      "source_location": "L7643"
+      "source_location": "L7657"
     },
     {
       "_callable": true,
@@ -834719,7 +834719,7 @@
       "id": "src_client_write_unit_rec_find",
       "label": "unit_rec_find()",
       "source_file": "src/client/write.c",
-      "source_location": "L7810"
+      "source_location": "L7824"
     },
     {
       "_callable": true,
@@ -834730,7 +834730,7 @@
       "id": "src_client_write_unit_wait_idle",
       "label": "unit_wait_idle()",
       "source_file": "src/client/write.c",
-      "source_location": "L7726"
+      "source_location": "L7740"
     },
     {
       "_callable": true,
@@ -834807,7 +834807,7 @@
       "id": "src_client_write_write_chunks_no_replicate",
       "label": "write_chunks_no_replicate()",
       "source_file": "src/client/write.c",
-      "source_location": "L9303"
+      "source_location": "L9317"
     },
     {
       "_origin": "ast",

@@ -6641,7 +6641,7 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
  * NULs, identical on a peer). Keeping e->data untouched instead left a
  * sparse zeros+ranges image flagged have_base=1. */
 static void dcache_install_image(struct dcache_ent *e, uint8_t *img,
-                                 uint32_t len, uint64_t seq)
+                                 uint32_t len, uint64_t seq, int unmerged_full)
 {
     if (!e || !e->data || e->len < len)
         return;
@@ -6653,6 +6653,17 @@ static void dcache_install_image(struct dcache_ent *e, uint8_t *img,
         return;
     }
     DTRACE(e, "install len=%u seq=%llu", len, (unsigned long long)seq);
+    /* An unmerged whole-chunk snapshot is a byte-for-byte copy of the
+     * retained body. With no later write or snapshot, copying it back
+     * after PUT only burns bandwidth under the shard lock. The caller
+     * must prove that no fetched base altered this image; replay always
+     * takes the normal install path. All sequence/dirty guards still
+     * apply, so a late PUT cannot bypass the overlay of newer bytes. */
+    if (unmerged_full && seq && seq == e->snap_seq && !e->dirty &&
+        !e->nrange && e->have_base && e->len == len) {
+        e->img_seq = seq;
+        return;
+    }
     if (seq)
         e->img_seq = seq;
     /* A newer snapshot already cleared dirty: bytes patched after this
@@ -6966,7 +6977,7 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
  * (same as flush_slot_inner — dropping the slot made concurrent_appends
  * read zeros). Re-dirty on PUT failure. */
 static void dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
-                              uint32_t len, int put_ok, uint64_t seq)
+                              uint32_t len, int put_ok, uint64_t seq, int unmerged_full)
 {
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
@@ -6985,7 +6996,7 @@ static void dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
     }
     /* Every snapshot keeps its local body through REPORT. */
     if (e && e->ino == ino && e->ci == ci)
-        dcache_install_image(e, copy, len, seq);
+        dcache_install_image(e, copy, len, seq, unmerged_full);
     /* PUT is not publication: retain the row pin while the immutable
      * object still needs REPORT. Otherwise an evictor can remove its
      * recovery metadata after the dirty snapshot detaches its marks.
@@ -7017,7 +7028,9 @@ static int flush_pipe_drain(struct flush_pipe *p)
         int pok = (p->jobs[i].rc == EFS_OK);
 
         dcache_flush_keep(p->jobs[i].ino, p->jobs[i].ci, p->copies[i],
-                          p->lens[i], pok, p->jobs[i].flush_seq);
+                          p->lens[i], pok, p->jobs[i].flush_seq,
+                          p->jobs[i].flush_base_gen == EFS_CHUNK_BASE_UNCOND &&
+                          !p->jobs[i].flush_have_obs && !p->jobs[i].flush_delta_len);
         efs_buf_free(p->copies[i], p->lens[i]);
         p->copies[i] = NULL;
         put_win_close(p->jobs[i].ino);
@@ -7041,7 +7054,7 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
         if (drc != EFS_OK) {
             /* This snapshot already cleared dirty state before the pipe
              * drained. Restore retry eligibility even with a retained body. */
-            dcache_flush_keep(ino, ci, copy, len, 0, seq);
+            dcache_flush_keep(ino, ci, copy, len, 0, seq, 0);
             efs_buf_free(copy, len);
             put_win_close(ino);
             p->rc = drc;
@@ -7289,7 +7302,8 @@ static int dcache_flush_slot_inner_budgeted(uint32_t s, efs_ino_t only_ino, int 
              * Concurrent dirty ranges remain overlaid on the image. */
             if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
                 e->base_gen = slot_bg;
-            dcache_install_image(e, copy, len, seq);
+            dcache_install_image(e, copy, len, seq,
+                                 full && slot_bg == EFS_CHUNK_BASE_UNCOND);
         } else if (!full && !e->dirty && e->ino == ino && e->ci == ci) {
             dcache_pin_release(e);
             efs_buf_free(e->data, e->len);
@@ -8454,7 +8468,7 @@ static int dcache_replay_stale_ex_budgeted(efs_ino_t ino, uint32_t ci, int absen
          * whose GETCHUNKS still carried the inode epoch). */
         e->image_epoch = have_obs && obs.read_view.count ? obs.read_view.fence_epoch :
                          efs_client_epoch_get(ino);
-        dcache_install_image(e, base, len, seq);
+        dcache_install_image(e, base, len, seq, 0);
         if (rc == EFS_OK && (absent || obs.read_view.count) &&
             e->mutation == mutation && e->object_seq == seq) {
             e->pending_cycle = (struct efs_wb_cycle_state){

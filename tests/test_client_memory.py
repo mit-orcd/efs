@@ -210,7 +210,7 @@ int main(void) {
     struct dcache_init full={.full=1};
     assert(!dcache_store_owned(1,0,p,EFS_CHUNK_SIZE,&full));
     e=entry(0);e->dirty=0;e->on_dirty=0;e->object_gen=12;e->object_seq=20;
-    dcache_flush_keep(1,0,p,EFS_CHUNK_SIZE,1,20);
+    dcache_flush_keep(1,0,p,EFS_CHUNK_SIZE,1,20,0);
     assert(e->data==p&&e->data[0]==77&&e->pin_held&&dcache_keep_on_drop(e));
     e->stalled=1;
     dcache_drop_locked(1,0,0);assert(e->data==p); /* even explicit cache drop */
@@ -230,7 +230,7 @@ int main(void) {
     e=entry(0);e->dirty=0;e->on_dirty=0;dirty_bytes-=EFS_CHUNK_SIZE;
     uint8_t *failed_copy=efs_buf_alloc(EFS_CHUNK_SIZE);assert(failed_copy);
     memcpy(failed_copy,p,EFS_CHUNK_SIZE);
-    dcache_flush_keep(1,0,failed_copy,EFS_CHUNK_SIZE,0,7);
+    dcache_flush_keep(1,0,failed_copy,EFS_CHUNK_SIZE,0,7,0);
     assert(e->data==p && e->dirty && e->data[0]==44);
     assert(g_live==2*EFS_CHUNK_SIZE);
     efs_buf_free(failed_copy,EFS_CHUNK_SIZE);
