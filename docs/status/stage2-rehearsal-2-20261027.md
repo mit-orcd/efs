@@ -151,7 +151,10 @@ exception restoration. On intel2 the negative-control driver `194c7f3d2`
 fails the new test; the fixed driver passes. Source/test copies and both logs
 remain in `~/efs-artifacts/taskP-20261027-driver-fix/` (open evidence, no closed
 manifest yet). The committed-source matrix plan, standalone regression and
-`test_soak_driver.py` also PASS on intel2. Full driver and code gates are queued.
+`test_soak_driver.py` also PASS on intel2. The complete Linux
+`test_qualify_driver.py` regression then PASSes on committed `b8f232f40`; its
+closed log is `taskP-20261027-driver-fix/full-driver-regression.log`.
+The full code gate and corrected live matrices remain queued.
 
 ### Frozen corrected follow-up
 
@@ -187,3 +190,10 @@ as D-P1 above. D4 took 1102.989 s. The partial Task A comparison flags no
 doubled completed gate so far. Append failover is actively creating/verifying
 records, not declared stalled. Five-member and both code gates remain queued.
 These partial observations do not replace final ledgers or closed evidence.
+
+Later checkpoint: append-failover PASS (747.245 s); the original three-member
+matrix has eight PASS and two NOTRUN results and is running K14 torn-read.
+The current-source queue is WAITING_FOR_ORIGINAL_CONTROLLER. No FAIL has
+closed at this checkpoint; uncompleted gates are not credited as passes.
+The partial comparison still has no doubled completed gate. These are
+progress markers, not the final task verdict.
