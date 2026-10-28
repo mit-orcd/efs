@@ -80,14 +80,16 @@ def flatten(command):
 def wal_cost(before, after, applied_before, applied_after):
     assert before['inode'] == after['inode'], 'log rotated: this window needs rotation accounting'
     assert after['end'] >= before['end']
-    selected = [r for r in after['records'] if r['start'] >= before['end']]
+    appended = [r for r in after['records'] if r['start'] >= before['end']]
+    # Status and WAL reads cannot be atomic with background append/apply.
+    # Reconcile commands by each group's applied index, not by file offset.
+    # Keep physical appended bytes separately, including boundary appends.
+    selected = [r for r in after['records'] if r['kind'] == 2 and
+                applied_before[r['group']] < r['index'] <= applied_after[r['group']]]
     entries, commands, nested = Counter(), Counter(), Counter()
     admitted, settled = set(), set()
     for row in selected:
-        if row['kind'] != 2:
-            continue
         g, i, cmd = row['group'], row['index'], row['command']
-        assert applied_before[g] < i <= applied_after[g], ('outside applied window', g, i)
         entries[g] += 1
         commands[cmd[0]] += 1
         for c in flatten(cmd):
@@ -104,11 +106,17 @@ def wal_cost(before, after, applied_before, applied_after):
                     target.add(c[3 + k * TICKET_BYTES:31 + k * TICKET_BYTES].hex())
     for g in (0, 2):
         assert entries[g] == applied_after[g] - applied_before[g], ('entry reconciliation', g)
+        assert {r['index'] for r in selected if r['group'] == g} == set(
+            range(applied_before[g] + 1, applied_after[g] + 1)), ('index gap/duplicate', g)
     return dict(entries=dict(entries), top_commands=dict(commands), nested_commands=dict(nested),
                 admitted_unique=len(admitted), settle_items_unique=len(settled),
                 settle_not_in_admit=len(settled - admitted),
-                valid_record_bytes=sum(r['bytes'] for r in selected),
-                entry_bytes=sum(r['bytes'] for r in selected if r['kind'] == 2))
+                valid_record_bytes=sum(r['bytes'] for r in appended),
+                entry_bytes=sum(r['bytes'] for r in selected),
+                boundary_appends_outside_applied=sum(r['kind'] == 2 and
+                    not (applied_before[r['group']] < r['index'] <= applied_after[r['group']])
+                    for r in appended),
+                applied_entries_already_appended=sum(r['start'] < before['end'] for r in selected))
 
 
 _HEX = re.compile(r'\\x([0-9a-fA-F]{2})')

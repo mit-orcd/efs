@@ -39,6 +39,20 @@ with tempfile.TemporaryDirectory(prefix='efs-cost-parser-') as work:
     assert out['entries'] == {0: 2, 2: 1} and out['admitted_unique'] == out['settle_items_unique'] == 2
     assert out['nested_commands'][5] == out['nested_commands'][7] == 1
     assert out['valid_record_bytes'] == len(data) - 8
+    # Background appends may follow the status sample, and a previously
+    # appended entry may apply after the before sample. Neither disappears.
+    late = frame(0, 3, bytes([9]))
+    p.write_bytes(data + late)
+    later = m.read_wal(p)
+    bounded = m.wal_cost(before, later, {0: 0, 2: 0}, {0: 2, 2: 1})
+    assert bounded['entries'] == out['entries']
+    assert bounded['entry_bytes'] == out['entry_bytes']
+    assert bounded['valid_record_bytes'] == len(data + late) - 8
+    assert bounded['boundary_appends_outside_applied'] == 1
+    delayed = m.wal_cost(after, later, {0: 1, 2: 1}, {0: 3, 2: 1})
+    assert delayed['entries'] == {0: 2}
+    assert delayed['applied_entries_already_appended'] == 1
+    assert delayed['valid_record_bytes'] == len(late)
     p.write_bytes(data[:-1])
     try:
         m.read_wal(p)
