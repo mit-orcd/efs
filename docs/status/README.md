@@ -36,7 +36,8 @@ RDMA 9/9 PASS; hour FAIL foreground RSS +13.04% and drain, with
 +0.10%, servers <=1.63%, drain 92.9 s, 2080 exact, pack errors 0/0. Overall
 pair FAIL remains; allocator-observer diagnostic `f5ef68036` completed without
 reproducing foreground growth (not qualification). Address-level mapping/
-residency observation follows; no further allocator policy change is justified yet. AMD `5f07151c2` default-RoCE native PASS 9/9; full
+residency diagnostic `0611de678` has started; no further allocator policy change
+is justified yet. AMD `5f07151c2` default-RoCE native PASS 9/9; full
 gate FAIL 3/520 (two busy unmounts, expected-abort timeout), hour NOTRUN.
 AMD’s bounded quiet prerequisite expired behind W123, with no store touched;
 cleanup/qualification NOTRUN and the original failed fixture preserved.
