@@ -1612,7 +1612,7 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-Task P: [second Stage 2 rehearsal](../status/stage2-rehearsal-2-20261027.md) — RUNNING serially on intel2 (user-approved host substitution), frozen `3ca4f7e6b`; loopback rehearsal soak selection corrected, no product finding yet.
+Task P: [second Stage 2 rehearsal](../status/stage2-rehearsal-2-20261027.md) — original matrix RUNNING serially on intel2; current-develop `b8f232f40` follow-up QUEUED behind it. Fixed standalone-soak overlap with the owned fixture (D-P1); regression PASS, live check pending. No completion or product finding claimed.
 
 Reviewed and reorganized October 15, 2026. This directory is the work queue and
 acceptance index; [backlog](../backlog/README.md) holds detailed work items and

@@ -1,6 +1,10 @@
 # Task P — second Stage 2 rehearsal
 
-`agent/devel-task-p`, base `24dad8e4b`: TOTAL 0 FAIL 0 NOTRUN 2 topology runs, RUNNING on intel2; this is not a make-test result. No base comparison yet. Evidence: `docs/status/stage2-rehearsal-2-20261027.md`. Three-member matrix RUNNING; five-member matrix and final code gate queued. No product finding yet.
+`agent/devel-task-p` @ `b8f232f40`: full-gate TOTAL line pending (NOTRUN,
+queued); base comparison pending. Evidence: `docs/status/stage2-rehearsal-2-20261027.md`.
+Original three-member matrix RUNNING on intel2; current-develop follow-up QUEUED.
+No product defect confirmed. Driver defect D-P1 fixed, live check pending.
+Physical-host/RDMA release acceptance NOTRUN: single-host TCP rehearsal only.
 
 ## Scope and current state
 
@@ -42,8 +46,9 @@ Linux regression result, not erased.
 
 `identity` passed; `topology` reports the expected one-host failure-domain
 NOTRUN. Remaining gates are running/queued, not yet qualification evidence.
-The controller owns both serial matrices and the final code gate; no
-duplicate run should be launched. `scripts/task_p_compare.py ARTIFACT_ROOT`
+The original controller owns both serial matrices and its final code gate.
+The corrected current-develop controller waits for it to finish; it never
+rebuilds or changes the active original source tree. `scripts/task_p_compare.py ARTIFACT_ROOT`
 extracts Task A's corrected wall table and flags doubled observed walls.
 
 ## Driver correction prepared
@@ -99,15 +104,86 @@ release acceptance. Replace with the driver's exact F3 rows after completion.
 
 | Evidence | loopback-3 | loopback-5 |
 | --- | --- | --- |
-| Candidate and profile | NOTRUN — host handoff | NOTRUN — host handoff |
-| Placement/capacity and decode | NOTRUN | NOTRUN |
-| POSIX and concurrent I/O | NOTRUN | NOTRUN |
+| Candidate and profile | Identity PASS; physical failure domains NOTRUN (one host) | NOTRUN — queued |
+| Placement/capacity and decode | B-checks PASS; B6 pending | NOTRUN — queued |
+| POSIX and concurrent I/O | core/extras/two-client/durability PASS; remaining gates pending | NOTRUN — queued |
 | Packing/shared-fragment GC | NOTRUN | NOTRUN |
 | Enabled `.efs` under load | NOTRUN | NOTRUN |
 | Full payloads + orderly restart | NOTRUN | NOTRUN |
-| Scale/progress evidence (E4, D4) | NOTRUN | NOTRUN |
+| Scale/progress evidence (E4, D4) | D4 PASS; soak NOTRUN (D-P1); E4 pending | NOTRUN — queued |
 
 After closure, verify driver manifests, retain exact methods/build identities
 and full SHA256SUMS outside Git, then prune only inactive Task P bulk with
 `edelete` and record PRUNED.txt. Real-host TCP/RDMA and physical-node release
 acceptance remain outside this single-host rehearsal.
+
+## Continuation on current devel — October 27/28
+
+The original freeze predates merged waves 21–22. Its controller stays unchanged
+and is allowed to finish both complete matrices and its code gate. The branch
+merged devel `e7e72e2674e892e3667c3dbdb1a53eb8911b644c` at `194c7f3d2`,
+including the K50 namespace retry fix. The user's authorization to use any
+available host was verified from the original Task P session; intel2 remains
+the assigned active host. Nuc's Task H fixtures were inspected read-only and
+left untouched. No new ORCD stage or duplicate host run is launched.
+
+### D-P1 — standalone soak overlaps the driver's own fixture
+
+**Driver defect, fixed in `b8f232f40`; live corrected matrix pending.** The
+original three-member soak returned NOTRUN in 0.322 s: `foreign_jobs()` found
+the qualification fixture's live `efsd` processes. This is not an environment
+skip to accept for Task P; the standalone soak starts its own cluster and
+needs the parent fixture quiesced. Its original result and detailed command
+log remain at `intel2:~/efs-artifacts/taskP-20261027/loopback-3/gates/soak/`.
+
+The driver now suspends only a driver-owned fixture, with explicit restart
+permission and an in-use mount check, before invoking the standalone plugin.
+It requires clean client/daemon stops; after the plugin it checks cluster
+readiness and remounts. Plugin FAIL/NOTRUN and exceptions remain failures or
+NOTRUN, and failed restoration never becomes PASS. An externally managed
+cluster is refused rather than stopped. The soak's process ownership check
+is unchanged: no PID/path allowlist or quiet-host bypass was added.
+
+New fast regression `tests/test_qualify_standalone.py` checks stopped-fixture
+isolation, refusal without ownership/permission or with a busy mount,
+plugin PASS/FAIL/NOTRUN preservation, stop failure, restore failure and
+exception restoration. On intel2 the negative-control driver `194c7f3d2`
+fails the new test; the fixed driver passes. Source/test copies and both logs
+remain in `~/efs-artifacts/taskP-20261027-driver-fix/` (open evidence, no closed
+manifest yet). The committed-source matrix plan, standalone regression and
+`test_soak_driver.py` also PASS on intel2. Full driver and code gates are queued.
+
+### Frozen corrected follow-up
+
+Exact source `b8f232f4023692a3d5161d12ed7e979bf66b29a9`, based on devel
+`e7e72e267`. Archive SHA256:
+`6c220c88df8e723da40a2abf7cea2e7cd9aeffac43c34fda09ef1d0cf40e98fd`.
+Private source is `intel2:~/efs-taskP-current-b8f232f40/src`; evidence is
+`~/efs-artifacts/taskP-20261027-current-b8f232f40/`. Detached screen
+`taskP-current-b8f232` waits for the original controller's FINISHED marker,
+then refuses to start if old mounts, `efsd`, make or gmake remain active.
+Its wait is bounded at 12 hours; a stopped or leaking original run blocks the
+follow-up with a retained error instead of killing anything or overlapping.
+
+The launcher then executes the committed controller:
+
+```sh
+cd "$HOME/efs-taskP-current-b8f232f40/src"
+python3 scripts/task_p_rehearsal.py \
+  b8f232f4023692a3d5161d12ed7e979bf66b29a9 \
+  "$HOME/efs-artifacts/taskP-20261027-current-b8f232f40"
+```
+
+That controller builds and checks the frozen source, runs both full selected
+matrices serially, verifies their manifests and runs the eight-job code gate.
+Unique source/work/output roots keep original evidence intact. Build identity,
+full per-gate results, both final F3 ledgers, Task A wall comparison, classified
+failures and final hashes remain pending. No qualification PASS or task
+completion is claimed. No product fixes were made by Task P.
+
+At the continuation checkpoint nine three-member gates have closed: identity,
+B-checks, D4 and four POSIX suites PASS; physical topology NOTRUN; soak NOTRUN
+as D-P1 above. D4 took 1102.989 s. The partial Task A comparison flags no
+doubled completed gate so far. Append failover is actively creating/verifying
+records, not declared stalled. Five-member and both code gates remain queued.
+These partial observations do not replace final ledgers or closed evidence.
