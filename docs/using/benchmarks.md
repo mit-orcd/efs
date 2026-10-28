@@ -28,6 +28,7 @@ cost workload; this is a byte/length check, not a version-identity oracle.
 A read requires the original ID and worker count. Optional `--size` also checks
 each file's expected EOF. Without `--time`, it reads every file once. With
 `--time`, it repeatedly checks blocks until the duration expires. A timed write
+starts its common I/O clock after all workers finish namespace/buffer setup,
 stops at the first of its byte limit or duration, publishes the completed bytes
 and retains its actual-length files. Timed read results describe only bytes
 actually checked; they never qualify a whole fixture implicitly. All errors

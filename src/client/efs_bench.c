@@ -432,11 +432,19 @@ static int published_client_start(const char *seed, const char *export_name)
     return efs_client_view_start();
 }
 
+struct data_gate {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    unsigned ready;
+    int go, cancel;
+    double deadline;
+};
+
 struct data_worker {
+    struct data_gate *gate;
     unsigned id;
     uint64_t limit, bytes;
     size_t io_size;
-    double deadline;
     uint64_t run_id;
     int reading, rc;
 };
@@ -446,31 +454,46 @@ static void *data_worker_main(void *arg)
     struct data_worker *w = arg;
     char name[80]; struct efs_inode row;
     efs_ino_t ino = 0, dir = 0;
+    char *buf = NULL;
+    double deadline;
+    int cancel;
     snprintf(name, sizeof(name), "bench-data-%llu-w%u",
              (unsigned long long)w->run_id, w->id);
     if (w->reading) {
         char path[160];
         snprintf(path, sizeof(path), "/%s/payload", name);
         w->rc = efs_client_lookup(path, &row);
-        if (w->rc != EFS_OK) return NULL;
+        if (w->rc != EFS_OK) goto ready;
         ino = row.ino;
-        if (w->limit && w->limit != row.size) { w->rc = EFS_ERR_IO; return NULL; }
+        if (w->limit && w->limit != row.size) { w->rc = EFS_ERR_IO; goto ready; }
         w->limit = row.size;
-        if (!w->limit) { w->rc = EFS_ERR_IO; return NULL; }
+        if (!w->limit) { w->rc = EFS_ERR_IO; goto ready; }
     } else {
         w->rc = efs_client_create_result(EFS_ROOT_INO, name, S_IFDIR | 0755,
                                          getuid(), getgid(), 0, &dir);
         if (w->rc == EFS_OK)
             w->rc = efs_client_create_result(dir, "payload", S_IFREG | 0644,
                                              getuid(), getgid(), 0, &ino);
-        if (w->rc != EFS_OK) return NULL;
+        if (w->rc != EFS_OK) goto ready;
     }
-    char *buf = malloc(w->io_size);
-    if (!buf) { w->rc = EFS_ERR_NOMEM; return NULL; }
+    buf = malloc(w->io_size);
+    if (!buf) { w->rc = EFS_ERR_NOMEM; goto ready; }
     memset(buf, 'A', w->io_size);
+ready:
+    /* Namespace discovery/creation and buffers are setup, not timed I/O.
+     * Every launched worker arrives even on setup failure; creation failure
+     * cannot strand a fixed-count pthread barrier. Main publishes one clock. */
+    pthread_mutex_lock(&w->gate->mu);
+    w->gate->ready++;
+    pthread_cond_broadcast(&w->gate->cv);
+    while (!w->gate->go) pthread_cond_wait(&w->gate->cv, &w->gate->mu);
+    deadline = w->gate->deadline;
+    cancel = w->gate->cancel;
+    pthread_mutex_unlock(&w->gate->mu);
+    if (cancel || w->rc != EFS_OK) goto done;
     do {
         uint64_t offset = 0;
-        while (offset < w->limit && (!w->deadline || now_sec() < w->deadline)) {
+        while (offset < w->limit && (!deadline || now_sec() < deadline)) {
             size_t n = w->limit - offset < w->io_size ? (size_t)(w->limit-offset) : w->io_size;
             if (w->reading) {
                 size_t got = 0;
@@ -484,10 +507,11 @@ static void *data_worker_main(void *arg)
             if (w->rc != EFS_OK) break;
             offset += n; w->bytes += n;
         }
-        if (w->rc || !w->reading || !w->deadline) break;
-    } while (now_sec() < w->deadline);
+        if (w->rc || !w->reading || !deadline) break;
+    } while (now_sec() < deadline);
     if (!w->reading && w->rc == EFS_OK)
         w->rc = efs_client_report_dirty_ino(ino, 1);
+done:
     free(buf);
     return NULL;
 }
@@ -509,15 +533,23 @@ static int run_data_bench(const char *seed, const char *export_name, int reading
         if (g_perf_pid < 0) rc = EFS_ERR_IO;
     }
     pthread_t threads[64]; struct data_worker workers[64];
-    double deadline = seconds ? now_sec()+seconds : 0;
+    struct data_gate gate = {.mu=PTHREAD_MUTEX_INITIALIZER, .cv=PTHREAD_COND_INITIALIZER};
     unsigned launched = 0;
     for (unsigned i = 0; rc == EFS_OK && i < nw; i++) {
         workers[i] = (struct data_worker){.id=i, .limit=total/nw+(i<total%nw),
-            .io_size=io_size, .run_id=id, .reading=reading,
-            .deadline=deadline};
+            .io_size=io_size, .run_id=id, .reading=reading, .gate=&gate};
         if (pthread_create(&threads[i], NULL, data_worker_main, &workers[i])) rc=EFS_ERR_IO;
         else launched++;
     }
+    pthread_mutex_lock(&gate.mu);
+    while (gate.ready < launched) pthread_cond_wait(&gate.cv, &gate.mu);
+    for (unsigned i = 0; i < launched; i++)
+        if (workers[i].rc != EFS_OK) rc = workers[i].rc;
+    gate.cancel = rc != EFS_OK;
+    gate.deadline = seconds ? now_sec()+seconds : 0;
+    gate.go = 1;
+    pthread_cond_broadcast(&gate.cv);
+    pthread_mutex_unlock(&gate.mu);
     uint64_t bytes = 0;
     for (unsigned i = 0; i < launched; i++) {
         if (pthread_join(threads[i], NULL) || workers[i].rc || !workers[i].bytes) {
@@ -527,6 +559,8 @@ static int run_data_bench(const char *seed, const char *export_name, int reading
         }
         bytes += workers[i].bytes;
     }
+    pthread_cond_destroy(&gate.cv);
+    pthread_mutex_destroy(&gate.mu);
     if (efs_dcache_flush_all() != EFS_OK || efs_client_report_dirty(1) != EFS_OK)
         rc = EFS_ERR_IO;
     efs_client_view_stop();
