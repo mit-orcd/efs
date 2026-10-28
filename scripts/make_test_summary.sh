@@ -105,10 +105,13 @@ def run(c,env=None):
         out,_=p.communicate()
         return 124,text(out)+"\nTIMEOUT after %gs\n"%command_limit
 # Commands that observe real processes or devices, or assert on wall-clock
-# timing under load, run alone after the parallel pool.
+# timing under load, run alone after the parallel pool. The packing epoch
+# and W166 authority tests also require bounded prefill before their fault
+# oracle is valid: unrelated test clusters must not consume that allowance.
+# Their workloads, age windows and deadlines remain unchanged.
 EXCLUSIVE=re.compile(r"rdma|shutdown|client_processes|server_processes|cluster_stop|opid_admission|"
                      r"tsan|leak|make_test|fork_oracle|stage_evict_lru|storage_root_inventory|"
-                     r"bench|test_soak\.py")
+                     r"bench|test_soak\.py|test_pack_dup_candidate|test_w166_authority")
 jobs=max(1,int(os.environ.get("EFS_TEST_JOBS","1")))
 fails=[]; notrun=[]; times=[]; t0=time.time(); done=0
 import threading
