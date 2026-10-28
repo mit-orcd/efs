@@ -304,3 +304,23 @@ gate FAILed during RTR setup (link-local GID, ENETUNREACH), not buffer
 registration. `5f07151c2` repairs the automatic RoCE GID default: all nine
 native software-RDMA commands PASS without an override; full TCP gate
 active, hour pending. No final memory-fix claim until active hours finish.
+
+Task I Oct 28 UTC: `47ca08eaf` xorinox independent RSS PASS (360 samples,
+load +3.75%, foreground +0.01%, nodes +0.88..3.01%), but whole hour FAIL:
+stored-data peaks grew ~56.8%. All 2080 payloads exact, pack errors 0/0,
+abandoned 33/168257 rewrites, drain 73.5 s. Older xorinox quiet labels are
+withdrawn: a foreign-UID client predates the runs and was not sampled.
+Candidate `6550b678d` bounds/resumes truncate housekeeping so it cannot
+monopolize GC; original-source negative control fails (96 slow proposals),
+fixed unit and native product build PASS, new hours owed. Hardware
+`16ea79db6` queued behind the active pair; AMD `80de5d4c9` waits for W123
+and safe cleanup. [Exact evidence and limits](task-i-20261026.md).
+
+`47ca08eaf` node9900 RDMA also FAILs RSS: load +11.53%, foreground +7.51%,
+servers flat, all 2080 payloads exact, pack errors 0/0, drain 18.4 s;
+TCP remains active. Candidate `d7e265746` fixes glibc's large-allocation
+threshold at its initial 128 KiB: native 24-worker scratch test releases
+all 96 MiB of large mappings with ~0.5 MiB heap, versus ~96 MiB free heap
+retained by the old four-arena-only control. This is mechanism evidence,
+not a live qualification. Both new hardware and AMD continuations use
+`d7e265746`; old pre-action waiters were superseded without running tests.
