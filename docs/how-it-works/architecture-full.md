@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**P3-A–P3-F OPEN / measurements NOTRUN**: fragment PUT/GET startup overlap,
+batched ticket-ledger compaction, bounded COMMIT reuse/coalescing, GETCHUNKS
+proof overlap and CREATE routing proofs. Planning only; Stage 2 prerequisite,
+current alpha scope and correctness gates remain unchanged.
+
+[LeakSanitizer follow-up](../status/devel-lsan-intel2-20261028.md): devel `f029a66d5`
 on idle intel2, **49/49 ASan/UBSan/LSan entries PASS**, zero reports/NOTRUN;
 clean and deliberate-leak controls PASS. This closes the earlier LSan coverage
 gap across hosts, without rewriting the historical ORCD INCOMPLETE verdict.

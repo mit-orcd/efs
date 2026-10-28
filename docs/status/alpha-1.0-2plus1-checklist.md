@@ -938,6 +938,92 @@ round says which physical or software limiter it hit.
   reproduced and the reruns pass. Findings parked for post-alpha go to the
   roadmap with their measurement.
 
+### Stage 3.0 letter tasks — data and metadata performance
+
+These **P3-A–P3-F** identifiers belong to Stage 3 of **alpha 1.0**, not the
+alpha 3.0 roadmap or the earlier Stage 1 session letters. All six are
+**OPEN / measurement NOTRUN**. Graph-led source review at `b9c2fad85` found
+optimization candidates, not measured bottlenecks or proven speedups. Planning
+now does not waive the Stage 2 prerequisite above. The separate
+**efs-coding - graphify fixer** session owns the two data-commit correctness
+findings (metadata-RPC deadline propagation and closed-object retirement);
+these performance tasks do not duplicate or close them.
+
+- [ ] **P3-A — Data writes: overlap fragment request startup.**
+  `src/client/write.c::put_fragments_parallel_once` checks out connections
+  sequentially, then polls/sends to each peer sequentially before collecting
+  replies. Measure checkout, send/backpressure and reply time separately on
+  healthy and congested peers. Evaluate bounded concurrent/nonblocking startup
+  so one slow peer does not delay requests to healthy peers. Preserve immutable
+  tickets, distinct-node placement, acknowledgement accounting, transport
+  semantics and the original end-to-end deadline. Gate: payload verification,
+  partial sends, pool exhaustion and peer failure, plus throughput and tail
+  latency on both qualified TCP and RDMA profiles.
+- [ ] **P3-B — Data reads: overlap the two fragment GET starts.**
+  `src/client/read.c::get_two_parallel_run` calls `get_pair_start` serially;
+  connection checkout/send for the first peer can delay the second even though
+  replies are polled together. Measure cold/warm sequential and random reads
+  under pool pressure and a slow peer; evaluate bounded startup overlap.
+  Preserve fragment identity/digest checks, fallback decode, shared deadlines
+  and ownership of outstanding replies/buffers. Gate: exact reads, cancellation,
+  stale mappings and peer failure, with throughput and p95/p99 latency; do not
+  buy a healthy-path gain with unbounded extra requests or memory.
+- [ ] **P3-C — Write bookkeeping: compact settled tickets once per batch.**
+  `src/client/put_ticket_owner.c::settle_forget` removes each retired ticket
+  with a separate suffix `memmove` under `g_ledger.mu`. Measure bytes moved and
+  mutex hold/wait time across ledger occupancy and settlement batch sizes.
+  Evaluate one stable compaction per batch, preserving sequence order, exact
+  retired masks/leading counts, closure notifications and concurrently added
+  or active tickets. Gate: sparse/dense retirement, lost settlement replies,
+  concurrent PUT/settle and bounded-capacity regressions; show reduced copying
+  and lock occupancy and check end-to-end write/close latency.
+- [ ] **P3-D — fsync: reuse bounded COMMIT workers and share covered work.**
+  `src/client/data_commit.c::stripe_prove` creates and joins workers per sweep
+  and participating node. Measure thread creation, overlapping COMMIT RPCs and
+  fsync latency under concurrent files before selecting worker reuse, coalescing
+  or both. A shared result may cover only acknowledgements preceding its COMMIT
+  and matching its storage boot verifier; retain per-stripe proof, degraded
+  marks, caller deadlines and error propagation. Gate: acknowledgements arriving
+  during COMMIT, incarnation changes, failed replies and independent caller
+  deadlines, plus exact data after restart. Never substitute one cluster-wide
+  durability assertion for per-stripe proof.
+- [ ] **P3-E — Metadata reads: overlap GETCHUNKS group proofs.**
+  `src/server/raft_host.c::server_raft_host_getchunks` obtains the second
+  collection's ReadIndex proofs sequentially for the groups it observed.
+  Evaluate the existing `host_read_index_pair` machinery for overlapping those
+  proofs, after auditing its local/remote and split-leader cases. Keep the first
+  and second collections, post-admission proof requirement, applied-index
+  coverage, transaction decisions and inode epoch/history recheck. Gate:
+  concurrent publication/truncate, changed leaders and lagging followers;
+  measure proof wait, retries, RPC count and GETCHUNKS/read p95/p99. No reuse
+  of an earlier completed proof as permission for a new read.
+- [ ] **P3-F — Metadata writes: overlap CREATE routing proofs.**
+  `src/server/raft_host.c::host_create_ex` reads the parent before discovering
+  and fencing an uncovered target group. Measure the extra round on cross-group
+  creates. Evaluate speculative parent/target paired proofs using the existing
+  lookup-planning approach, then revalidate routing against authoritative parent
+  state. A wrong hint must not add an unrelated group's failure as a CREATE
+  dependency. Preserve session/opid receipts, allocation and transaction verdicts.
+  Gate: stale hints, changing directory state, leader changes, lost replies and
+  concurrent same-name creates; compare create/close throughput and p95/p99.
+
+**Suggested order:** baseline first; P3-C and P3-E are the first bounded
+experiments, then P3-A/P3-B, with P3-D/P3-F selected by measured cost. This is
+not a claim that any candidate dominates the workload. Existing persistent
+GET/PUT pools, bounded prefetch, full-chunk copy avoidance and admission batching
+must be accounted for, not proposed again as missing features.
+
+**Shared acceptance:** use P1's frozen workload/topology and three runs per build,
+record exact source/profile and all-user host activity, and compare throughput,
+p50/p95/p99, CPU, allocations/copies, lock/queue wait, RPC/Raft-entry counts and
+memory bounds as relevant. Separate profiler attribution from formal timing.
+Retain failures and raw evidence; reproduce gains on private baseline/candidate
+builds, rerun affected Stage 2 correctness and applicable sanitizer/concurrency
+gates, then record keep/revert under P4. No new user-facing A/B flags, relaxed
+bounds, weaker durability or new format/placement scope. No task is complete
+merely because a microbenchmark improved; the affected end-to-end workload must
+be checked for regressions.
+
 ## F. Release evidence and alpha 1.0 exit
 
 - [ ] **F1** Unit/integration, enabled-feature and applicable memory/concurrency
