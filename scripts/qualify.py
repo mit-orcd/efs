@@ -1122,12 +1122,23 @@ def b_d5(q, src, work, port):
     --expiry-only): policy off by default, on/off/on at runtime, folder
     coverage, lifecycle, restarts, member and leader loss, physical
     reclamation, then the POSIX core suite with expiry on."""
+    # The default three-member fixture starts at private_base + 40, the
+    # historical D5 range. Keep D5's four sockets clear of the advertised
+    # parent endpoints, including caller-supplied port bases. Other live
+    # gates run serially; their inactive ports need no reservation here.
+    occupied = RESERVED_PORTS | {int(n['addr'].rsplit(':', 1)[1])
+                                  for n in q.cluster.get('nodes', [])}
+    d5_port = port + 40
+    while occupied.intersection(range(d5_port, d5_port + 4)):
+        d5_port += 4
+    if not 1024 < d5_port <= 65532:
+        raise ValueError('no valid D5 range clear of parent endpoints')
     w = shlex.quote(work)
     return [('d5-expiry', f'mkdir -p {w}/r1 {w}/r2 {w}/mnt {w}/peer && python3 tests/posix/posix_expiry.py '
              f'{w}/mnt --suite expiry --root {w}/r1 --root {w}/r2 --peer-mount {w}/peer '
-             f'--port {port + 40} --jobs {q.fixture["posix_jobs"]} --timeout-s {q.fixture["posix_timeout_s"]}',
+             f'--port {d5_port} --jobs {q.fixture["posix_jobs"]} --timeout-s {q.fixture["posix_timeout_s"]}',
              False)], \
-        dict(ports=f'{port + 40}-{port + 43}', members=4, transport='tcp',
+        dict(ports=f'{d5_port}-{d5_port + 3}', members=4, transport='tcp',
              posix_timeout_s=q.fixture['posix_timeout_s'],
              policy='cluster expiry policy off by default, then on/off/on at runtime (D43)')
 

@@ -80,3 +80,25 @@ assert running and mounted and events[-2:] == ['start', 'mount']
 plugin = Q.default_plugins({}, [])['soak']
 assert plugin['standalone'] and 'restart' in plugin['needs']
 print('standalone gate: no overlapping fixture, no external stop, checked restore, original failures retained PASS')
+
+
+# D5 owns four sockets; never collide with the live parent fixture. The
+# original loopback-3 used 18940 for both and failed before expiry ran.
+for base, first, count in ((18900, 18940, 3), (19600, 19740, 5),
+                           (18700, 18740, 16), (19000, 19044, 3)):
+    q = SimpleNamespace(cluster={'nodes': [dict(addr=f'127.0.0.1:{p}')
+                         for p in range(first, first + count)]},
+                        fixture=dict(posix_jobs=4, posix_timeout_s=150))
+    commands, fixture = Q.b_d5(q, '/source', '/owned/d5', base)
+    start, end = map(int, fixture['ports'].split('-'))
+    assert end == start + 3
+    assert not set(range(start,end+1)) & set(range(first,first+count)), (base,fixture)
+    assert not set(range(start,end+1)) & Q.RESERVED_PORTS
+    assert f'--port {start} ' in commands[0][1]
+    if base == 19600:
+        assert start == 19640, 'non-overlapping five-member range need not change'
+q = SimpleNamespace(cluster={'nodes': []},fixture=dict(posix_jobs=4,posix_timeout_s=150))
+try:Q.b_d5(q,'/source','/owned/d5',65500)
+except ValueError:pass
+else:raise AssertionError('overflow D5 range accepted')
+print('D5 port ownership: three/five/sixteen members, caller overlap, overflow rejection PASS')
