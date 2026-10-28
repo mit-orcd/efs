@@ -1624,9 +1624,11 @@ full acceptance are separate states.
 F1/release coverage remains INCOMPLETE. User-requested drain follow-up
 identified ongoing lane-row refresh triggers and a truncate scheduling gap.
 Repair `773284b5d`: node9900 gate 527/0 FAIL/18 NOTRUN, native RDMA9/9
-PASS, RDMA hour ACTIVE. AMD gate found a geometry readiness failure on
+PASS, RDMA hour ACTIVE. AMD gate closed 527/1 FAIL/14 NOTRUN on a
+geometry readiness failure on
 unknown protection status; harness `99f3b1964` preserves the zero-count
-assertion and 30 s bound, with a fresh continuation queued. Qualification
+assertion and 30 s bound; fresh continuation waits for separate W123 work
+to release AMD. Qualification
 remains INCOMPLETE.
 Last qualified candidate **`a083dcbf3`**: per-range base pages for sparse metadata,
 native test 96 KiB versus 48 MiB THP with exact contents, plus checked
