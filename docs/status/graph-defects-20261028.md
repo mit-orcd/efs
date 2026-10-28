@@ -2,8 +2,13 @@
 
 **Repairs implemented; scoped native and ASan/UBSan checks PASS at
 `4ea10be40` (repair commit `dd6d2c5c2`). Original source `3debca7ec` has three reproduced component failures,
-retained below and in the independent evidence commit. No full Linux suite,
-live mount/failover, multi-host or RDMA qualification is claimed.** Related work:
+retained below and in the independent evidence commit. The subsequent
+[full Linux run](devel-linux-orcd-mini-20261028.md) exposed abandoned replay
+objects that also need a durable terminal-ticket fence before retirement;
+`214c541aa` implements that path with a fresh post-fence metadata check.
+The final Linux run has 529 commands, zero failures and two NOTRUN markers:
+the fault-only arm separately PASSed; LSan remains unavailable. Memcheck
+41/41 and Linux docs 5/5 PASS. No multi-host/release acceptance is claimed.** Related work:
 W155 joining, K35/D42 stripe durability and W154 rebuild protection, and the
 Raft-store index contract. No broader W-item acceptance is changed.
 

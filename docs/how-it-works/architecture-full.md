@@ -1612,10 +1612,19 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+`5b1f43c44` on orcd-mini node9900: 529 commands, **0 FAIL, 2 NOTRUN**, runner
+INCOMPLETE; fault-only follower arm separately PASS, Memcheck 41/41 PASS,
+Linux docs 5/5 PASS. LSan remains unavailable under host ptrace policy.
+`214c541aa` repairs abandoned replay-stripe proof and honors external scratch.
+Original failures/stores retained; other agents' clusters and ordinary deployment
+untouched. Successful final build/scratch bulk pruned with checked receipts.
+
+[Graph-led defects](../status/graph-defects-20261028.md): three component failures confirmed
 on `3debca7ec`: pre-publication stripe retirement, receipt pending-owner eviction,
 and Raft index aliasing. Original native/sanitizer evidence retained; three repairs and scoped native/
-ASan/UBSan regressions PASS. Full Linux/live-cluster qualification remains NOTRUN;
-no broader acceptance claim.
+ASan/UBSan regressions PASS. Subsequent [Linux qualification](../status/devel-linux-orcd-mini-20261028.md)
+closed with zero failures, explicit LSan limitation and an additional terminal-ticket
+repair; no broader release acceptance claim.
 
 [Defect-navigation graph](../status/graph-scope-validation-20261028.md): directed first-party
 code, fault models/oracles and selected contracts; W127/W145 and W125 contract
