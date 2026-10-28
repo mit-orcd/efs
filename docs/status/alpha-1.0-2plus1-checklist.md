@@ -9,6 +9,8 @@ fragment** architecture at every supported cluster size. Completion is the
 consolidation](alpha-1.1-consolidation.md), followed by the remaining
 [distributed-cluster roadmap](distributed-cluster-roadmap-20261022.md).
 Alpha 1.1 does not move or waive any task or release gate in this checklist.
+The Stage 1 cross-path due-diligence tasks AY–BB below are correctness audits,
+not a requirement to complete alpha 1.1 restructuring before alpha 1.0.
 This is release sequencing, not a claim that the final D36 design is implemented.
 No tag, merge, push, deployment or data deletion is performed by this document.
 
@@ -917,6 +919,112 @@ unchanged correctness/deadline and memory-bound gates. Use operation/comparison
 counts to establish scaling before proposing data-structure complexity; retain
 small-workload baselines. No new behavior flags, implementation or live
 performance acceptance is included in this documentation review.
+
+### Stage 1 additional letter tasks — cross-path due diligence (AY–BB)
+
+**User-directed correctness review, October 28; source inspected at `cb1a6a434`.**
+These are the **four strongest additional examples** from the reviewed paths,
+not an exhaustive whole-codebase audit or ten items padded with duplicates.
+All are **OPEN / audit qualification NOTRUN**. Graph navigation and source reads
+confirm separate mechanisms; they do not prove a defect. Unlike the optimization
+items above, these are Stage 1 due-diligence gates on authority, lifetime and
+failure semantics. No K defect or performance PASS is inferred from duplication.
+
+- [ ] **AY — Ordinary versus packed upload: what does successful completion prove?**
+  Ordinary `src/server/put_upload.c::server_put_upload` checks the exact ticket
+  under fresh authority, enters a storage-session guard and writes through the
+  export/store path. Ordinary data durability is tracked by root barriers and
+  boot/epoch proofs (`src/server/store.c`, client `data_commit.c`). Packed
+  `src/server/segment_store.c::server_segment_put` checks pack-object authority,
+  uses a segment guard/reclaim fence and packing quota reserve; `sg_write`
+  explicitly fsyncs the file and directory. Rebuild has another admission branch.
+  These are legitimate potential differences, but both paths publish a successful
+  PUT outcome into higher-level publication/protection logic.
+  **Audit:** trace each caller's interpretation of success through metadata
+  publication, fsync, restart and rebuild. Tabulate authority, in-flight owner,
+  acknowledged versus durable state, quota charge/refund, exact duplicate handling
+  and error cleanup. In particular, ordinary retries can overwrite while the
+  normal segment EEXIST path checks the tail/digest without the rebuild branch's
+  full payload check: establish the preconditions that make each retry safe,
+  rather than assuming EEXIST means a proven object. Test partial write, intact
+  tail/corrupt body, lost reply, quota failure, stop and reclaim races with
+  equivalent semantic outcomes. Preserve ticket versus pack-ledger distinctions.
+  **Done:** reviewed completion contracts and cross-path fault results, with
+  defects fixed/retested or explicitly tracked as blockers. AN/AQ/AR still own
+  RPC/barrier/rewrite optimization; this task owns correctness of their contracts.
+- [ ] **AZ — Verification policy across GET, audit and recovery.**
+  Ordinary serving uses `store.c::read_fragment_verified`; packed serving uses
+  `segment_store.c::server_segment_read`; packed audit uses
+  `server_segment_check`; recovery uses the verification paths in `store.c`
+  orchestrated by `recovery.c`. They share `efs_frag_record_verify`, but separately
+  handle file size, payload reads/hash comparison, expected metadata digest,
+  errors and destructive recovery action. Packed audit distinguishes MISSING,
+  BAD and ERROR; a GET returning an I/O error is not proof of absence.
+  **Audit:** build a table of identity/length/digest checks and result categories
+  for each entry point, including which authority supplies the expected identity.
+  Run one semantic fixture matrix through the real wrappers: valid object, wrong
+  kind/generation/holder geometry, short/extra tail, bad body with valid record,
+  wrong metadata digest, ENOENT and injected read/permission errors. A fixture
+  need not have identical bytes across different object formats. No unproven
+  object may be served, and transient I/O failure must not silently become
+  corruption, absence or permission to delete. Verify recovery's durable degraded
+  mark before clearing its fence. Different actions may be correct by context;
+  record their justification. Existing record unit tests alone do not cover this.
+  **Done:** matrix outcomes and retained regressions for gaps; identify reusable
+  policy primitives only after proving the guarantees match. AK/AP retain their
+  hashing/copy/I/O scope; W123/K36 failures and qualification remain independent.
+- [ ] **BA — Ordinary orphan, superseded-object and segment deletion authority.**
+  `src/server/put_orphan.c::server_put_orphan_delete` requires a durable session
+  floor and authoritative orphan status before exact-object deletion and directory
+  cleanup. `store.c::server_gc_superseded_delete` and the reclaim journal handle
+  other ordinary objects. Packed deletion enters through ledger/reclaim authority
+  and `segment_store.c::server_segment_delete`, which unlinks generation-named
+  fragment paths; its low-level helper relies on its caller's fence. Quota credit,
+  physical unlink, namespace durability and journal completion are separate steps.
+  **Audit:** enumerate every reachable caller, including replay/recovery/rebuild,
+  and prove the fence, exact identity and non-resurrection guarantee for each.
+  Trace credit-before-delete, retry and crash behavior; neither absence nor a
+  cached retirement decision alone authorizes all object kinds. Exercise stale
+  generation, concurrent PUT/rebuild, already missing files, unlink/fsync failure
+  and crash between credit, journal, unlink and acknowledgement. Verify no live
+  published object is removed and no retry double-credits space. Do not equate
+  a guard mutex with durable authority or add per-file deletion to live segments.
+  **Done:** a deletion-authority/caller inventory and passing current-format
+  replay/interleaving gates using reclaim, orphan and pack-ledger tests. This is
+  a correctness audit, not AQ's barrier sharing or AR's duplicate-write avoidance.
+- [ ] **BB — Client metadata overlays versus authoritative metadata.**
+  Local `src/meta/metadata.c` inode/name/child/alias indexes and mutators coexist
+  with Raft-backed rows in `src/meta/meta_apply.c`. They are not two equivalent
+  authoritative replicas. `src/client/ops.c::efs_client_adopt_lookup` adopts an
+  RPC row then overlays local state; `efs_client_stat_open` obtains RPC metadata
+  but retains local accepted state with explicit nlink/error handling. FUSE
+  permission-sensitive listing instead refreshes authority before enumeration.
+  **Audit:** document field-by-field authority for size, epoch/generation, nlink,
+  mode/uid/gid, timestamps, names and packing state across lookup, open getattr,
+  refresh, REPORT, truncate and unlink-open. Check implementation rather than
+  comments: the stat-open comment says local-first/RPC-on-miss, while the reviewed
+  body calls RPC even when it has a local row. Correct misleading comments as
+  part of the audit, not by changing behavior to match them. Exercise remote
+  chmod/chown/rename/link/unlink alongside dirty local writes, stale/reordered
+  replies, truncation, eviction/reload and RPC failure. Preserve read-your-writes
+  without promoting a stale cache into permission or namespace authority.
+  **Done:** one reviewed overlay contract and tests for every differing path;
+  repair demonstrated gaps. AW/AX still own index performance; this audit does
+  not replace those tasks or require a new local authority/cache protocol.
+
+**Priority and closure:** start with BA and AY (irreversible deletion and
+successful-write meaning), then AZ and BB. Each audit records source/build,
+actual entry points, owner/authority, ordering, error outcomes, tests and evidence.
+Close only with a reviewed justified-difference result or a fixed and qualified
+finding; an unknown cell remains OPEN/NOTRUN. Put confirmed bugs into the K
+register with preserved failures. Cross-link existing tests and owning tasks
+rather than rerunning or reimplementing them without a gap. No blanket rewrite,
+backwards compatibility, new flags, timeout relaxation or evidence deletion.
+
+These Stage 1 audits do not bring all alpha 1.1 restructuring into alpha 1.0.
+Small necessary correctness repairs belong here; broad ownership/interface
+consolidation remains [alpha 1.1](alpha-1.1-consolidation.md). A demonstrated
+in-scope defect cannot be deferred merely by calling it architectural debt.
 
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 

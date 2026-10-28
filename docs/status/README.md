@@ -1,5 +1,11 @@
 # Project status — work queue and evidence
 
+[Stage 1 cross-path due diligence AY–BB](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
+**OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
+upload completion, serve/audit/recovery validation, deletion authority, and
+client metadata overlays. Audit justified differences and failure semantics;
+no defect inferred from duplication and no blanket alpha 1.1 refactor required.
+
 [Alpha 1.1 — architectural consolidation](alpha-1.1-consolidation.md):
 **OPEN / implementation and qualification NOTRUN.** User-directed intermediate
 release after alpha 1.0, before alpha 2.0: explicit operation ownership, narrower

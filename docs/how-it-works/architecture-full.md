@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
+upload completion, serve/audit/recovery validation, deletion authority, and
+client metadata overlays. Audit justified differences and failure semantics;
+no defect inferred from duplication and no blanket alpha 1.1 refactor required.
+
+[Alpha 1.1 — architectural consolidation](../status/alpha-1.1-consolidation.md):
 **OPEN / implementation and qualification NOTRUN.** User-directed intermediate
 release after alpha 1.0, before alpha 2.0: explicit operation ownership, narrower
 consensus/publication interfaces, shared storage primitives and removal of

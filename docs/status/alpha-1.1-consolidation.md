@@ -24,7 +24,8 @@ metadata placement/protection contract, simple startup and supported node additi
 and the alpha 1.0 feature/support matrix as actually released. No central service,
 mandatory tuning file or new user-visible behavior selector is introduced.
 
-The alpha 1.0 Stage 1 tasks AB–AX and Stage 3 P3-A–P3-F keep their present scope
+The alpha 1.0 Stage 1 tasks AB–AX, cross-path due-diligence audits AY–BB,
+and Stage 3 P3-A–P3-F keep their present scope
 and gates. They are not silently deferred to 1.1. Record their final disposition
 at the 1.0 cut; 1.1 may build on their results without counting the same work twice.
 Any newly demonstrated in-scope correctness bug is handled in its owning release
