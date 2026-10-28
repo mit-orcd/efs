@@ -1,5 +1,11 @@
 # Project status — work queue and evidence
 
+[Stage 1 copies/allocation tasks AK–AM](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--copies-allocation-and-repeated-work-akam):
+**OPEN / implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
+packed-fragment staging/double hashing, unnecessary decode scratch, and REPORT
+degraded-object batch bookkeeping. Distinct from AB–AJ and P3-A–P3-F; no K defect
+or performance acceptance claimed. Integrity, publication and memory bounds stay.
+
 [Graph sweep follow-up F4/F5](graph-defects-20261028.md#follow-up-repairs-f4f5--shared-deadline-and-retired-objects):
 `199ad2afd` shares the sweep deadline with metadata RPCs and retires closed absent
 objects only after an authoritative read, including when fewer than two

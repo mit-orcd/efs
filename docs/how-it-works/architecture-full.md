@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**OPEN / implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
+packed-fragment staging/double hashing, unnecessary decode scratch, and REPORT
+degraded-object batch bookkeeping. Distinct from AB–AJ and P3-A–P3-F; no K defect
+or performance acceptance claimed. Integrity, publication and memory bounds stay.
+
+[Graph sweep follow-up F4/F5](../status/graph-defects-20261028.md#follow-up-repairs-f4f5--shared-deadline-and-retired-objects):
 `199ad2afd` shares the sweep deadline with metadata RPCs and retires closed absent
 objects only after an authoritative read, including when fewer than two
 fragments remain durable. Both original-source regressions FAIL; repairs PASS

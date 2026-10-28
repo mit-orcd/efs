@@ -40,7 +40,7 @@ Alpha 1.0 is reached in three stages, in this order:
   blocks again.
 - **Performance comes last.** No performance work is done before Stage 3,
   except where a correctness gate needs it (bounded progress, D4), and the
-  explicitly authorized Stage 1 serialization tasks AB–AJ below (Oct 28).
+  explicitly authorized Stage 1 hot-path tasks AB–AM below (Oct 28).
   Performance changes never relax correctness or durability checks.
 - **Stage 3 stays inside alpha.** A performance change that needs 2+2, more
   or redistributed metadata groups, leader or voter redistribution (W66),
@@ -536,6 +536,79 @@ qualification rules. Establish a baseline before selecting a redesign; report
 no-benefit results rather than replacing a necessary lock merely because it is
 shared. Any demonstrated correctness defect gets its own K record. No new runtime
 A/B selectors, weakened durability, expanded format scope or foreign-cluster use.
+
+### Stage 1 additional letter tasks — copies, allocation and repeated work (AK–AM)
+
+**User-directed extension, October 28; source reviewed at `327d44a18`.**
+All three are **OPEN / implementation and measurements NOTRUN**. Graph queries
+for `packed_fetch_run`, `efs_packed_read_base_scratch` and
+`efs_client_degraded_flags` identified paths; the source bodies below establish
+the mechanisms. This is a static review, not a runtime profile or a new K defect.
+No binary, cluster, workload or acceptance verdict changed. The Stage 1 exception
+applies; no new behavior flags are proposed.
+
+- [ ] **AK — Packed reads: remove avoidable fragment staging and repeated hashing.**
+  `src/client/read.c::packed_fetch_run` receives an owned whole reply through
+  `efs_conn_recv_msg`, hashes its fragment against the reply digest, copies the
+  entire fragment into the supplied scratch and frees the reply. Then
+  `src/common/packed_reader.c::efs_packed_read_base_scratch` hashes those bytes
+  again against the mapping's expected fragment digest. These are different
+  authorities: retain both comparisons and the segment/record validation.
+  Evaluate one payload hash checked against both expected digests, with explicit
+  immutable-buffer ownership, and a bounded receive into caller storage or
+  ownership transfer. TCP's generic receive allocates; RDMA takes ownership of
+  its message buffer, so do not claim an extra malloc in both transports.
+  The existing `efs_conn_recv_msg_into` assumes a one-byte status layout;
+  GET_SEGMENT has a different reply header and cannot blindly use that helper.
+  Gates: packed-reader and packed-segment tests, corrupt payload, reply digest
+  and mapping digest independently, short/oversized/error replies, all two-of-three
+  fragment combinations, deadline expiry and connection reuse. Compare TCP/RDMA
+  allocated bytes, copied/hashed bytes, CPU and cold packed-read latency with
+  identical integrity checks. This is separate from P3-B's request overlap and
+  does not add an unbounded segment cache or remove client integrity verification.
+- [ ] **AL — Reads: allocate decode scratch only for the selected path.**
+  `src/client/read.c::efs_client_decode_placed_chunk_attempts` calls
+  `decode_frag_scratch(3 * frag_len)` before deciding that the mapping is packed.
+  The packed branch instead allocates its own `5 * geometry / 2` scratch and
+  returns without using the ordinary fragment storage. For ordinary reads where
+  `2 * frag_len == chunk_size`, both data pointers are replaced by the output
+  halves, leaving only the parity fragment needing separate storage. The current
+  scratch is TLS-reused and freed at thread exit, not malloced afresh per read;
+  the opportunity is unnecessary first allocation/growth and retained capacity.
+  Move path selection before ordinary scratch acquisition and evaluate one-fragment
+  scratch for the in-place case, preserving the fallback for other geometry.
+  Gates: packed-only workers, mixed geometries, zero/hole reads, each missing
+  fragment, failed reads and worker exit under ASan/LSan; prove aliasing and
+  reconstruction safety in `src/data/erasure.c::decode`. Measure cold allocation
+  counts and retained bytes across worker counts as well as read latency. This
+  changes the caller's demand, not AG's allocator locking or budget mechanism;
+  preserve demand-read headroom and existing resource bounds.
+- [ ] **AM — REPORT: batch degraded-object bookkeeping without changing publication.**
+  `src/client/inode_rpc.c::efs_client_rpc_report_dirty_pub` calls
+  `efs_client_degraded_flags` separately while serializing every chunk and, after
+  successful publication while degraded state remains pending, calls
+  `efs_client_degraded_drop` for each chunk. Both functions in
+  `src/client/write.c` probe the same object table under `g_dgobj_mu` when its
+  live count is nonzero. A single pending degraded object can therefore cause
+  locks/probes for many unrelated records; the empty-table fast path already
+  avoids these locks and must be included in the baseline. Evaluate bounded
+  batch lookup/retirement to amortize lock acquisition, not an unbounded critical
+  section over a whole REPORT. Capture flags consistently with the publication
+  being serialized; retire only the exact acknowledged object generation, never
+  a replacement or unresolved/failed publication. Preserve missing-fragment
+  marks, receipts, retry identity, deadlines and concurrent insert/repair behavior.
+  Gates: K35 degraded fsync, REPORT partial verdict/resolved retry/session tests,
+  plus forced note/drop/publication interleavings and sparse/dense degraded tables.
+  Measure probes, lock acquisitions/hold/wait and REPORT p95 versus batch size.
+  This is distinct from P3-C's ticket-array compaction and AH's chunk-map lock;
+  generic REPORT buffer reuse is not claimed necessary by this finding.
+
+**Acceptance and deduplication:** preserve the existing zero-fragment hash reuse,
+in-place ordinary decode, worker pools and striped caches. AB–AJ and P3-A–P3-F
+remain unchanged. Apply their retained baseline/comparison evidence rules: exact
+source/build, topology, transport, I/O mode, fixture and concurrency; raw captures
+outside Git; unchanged correctness/deadline gates; memory and p95/p99 results.
+No gain is claimed until measured, and no existing failure evidence is replaced.
 
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 
