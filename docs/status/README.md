@@ -36,10 +36,14 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [Task AA / W170 published benchmark](w170-efs-bench-20261028.md):
-**IN PROGRESS** on `agent/devel-task-aa`, base `fe18612ae`; reserved intel2,
-loopback only. Replace raw fragment modes with normal ticketed client writes,
-checked publication and cold FUSE regression; Task U direct/bench comparison
-and full gate pending. Task W coverage dependency integrated privately.
+**FIXED on `agent/devel-task-aa`, not merged**; tested `fe785536e`, budget
+`5a971fb14`. Intel2 final **529/0 FAIL/10 NOTRUN**, INCOMPLETE for RDMA/header
+limits; baseline 528/0/12. Published client writes/reads, checked shutdown,
+unchanged-50ms timer fix, full-width metadata IDs and independent FUSE checks.
+All 12 matched rows verify 12 GiB; 4/6 timing pairs within 10%, no uniform
+agreement. Earlier timings overlap Task T's reported orphan; final new-test
+budget sample and matrix are afterward. Failures/traces kept, private scratch
+removed; no existing cluster or package changed. Task W integrated privately.
 
 [Wave 29 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`f3a447fa3`)**: Task Y, the known-defect register reconciled ([report](k-register-reconciled-20261028.md)): both tables carry exactly one row for each K1–K52, each opening with one canonical disposition (11 FIXED, 0 VERIFIED, 35 VERIFY, 2 DECIDED, 2 CLOSED, 2 OPEN: K48 and K52), with every earlier cell kept as history; `scripts/check_k_register.py` enforces that in `make test` (`tests/test_k_register.py`). No row was promoted to VERIFIED and no gate was rerun. Merged together with D45's K36 scope note and topology row.
 

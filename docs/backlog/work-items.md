@@ -6716,5 +6716,10 @@ write/REPORT, removal of raw synthetic modes, cold FUSE byte/EOF/count regressio
 in `make test-long`, full gate and matched direct-client comparison. This is a
 developer measurement defect; it does not itself close K32/D4 or alpha gates.
 
-Status: **OPEN**, implementation/qualification on `agent/devel-task-aa`, not
-merged. [Evidence and acceptance](../status/w170-efs-bench-20261028.md).
+Status: **FIXED (scoped) on `agent/devel-task-aa`, not merged**, tested
+`fe785536e`, budget `5a971fb14`. Normal published client data and metadata writes,
+strict completion, fresh FUSE byte/EOF/count regression and timed-worker readiness
+are qualified on intel2. Full gate 529/0 FAIL/10 NOTRUN; twelve matched GiB rows
+read exact. Four of six timing pairs agree within 10%; uniform performance
+calibration is not established. Earlier non-quiet timing observations remain
+qualified. [Evidence, failures, method and cleanup](../status/w170-efs-bench-20261028.md).
