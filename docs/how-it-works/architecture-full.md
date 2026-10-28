@@ -1612,6 +1612,11 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+on `3debca7ec`: pre-publication stripe retirement, receipt pending-owner eviction,
+and Raft index aliasing. Original native/sanitizer evidence retained; repairs
+and regression gates in progress. No live data-loss or acceptance claim.
+
+[Defect-navigation graph](../status/graph-scope-validation-20261028.md): directed first-party
 code, fault models/oracles and selected contracts; W127/W145 and W125 contract
 navigation checks PASS. Parser and unresolved-call gaps remain explicit; this
 is not a product acceptance verdict. Rebuild and validation instructions committed.
