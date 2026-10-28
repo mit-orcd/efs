@@ -76,6 +76,8 @@ struct efsd_server {
     pthread_mutex_t lock;
     int listen_fd;
     int running;
+    pthread_t heartbeat_tid;
+    int heartbeat_started;
     int join_refused; /* K33: stopped because the cluster refused this node */
 
     pthread_t rejoin_tid; /* background rejoin retry thread */
@@ -398,6 +400,7 @@ void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello 
 
 /* Start the background heartbeat thread. */
 void server_start_heartbeat(struct efsd_server *s);
+void server_stop_heartbeat(struct efsd_server *s);
 /* efsd.c: return free malloc pages to the OS (heartbeat, every EFSD_MALLOC_TRIM_MS). */
 #define EFSD_MALLOC_TRIM_MS 15000
 void efsd_malloc_trim(void);

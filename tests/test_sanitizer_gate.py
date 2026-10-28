@@ -99,7 +99,7 @@ with tempfile.TemporaryDirectory(prefix='efs-san-gate-') as td:
     for mode in ('tsan', 'asan'):
         rc, out = run_gate(d, mode, [('x', '/bin/true')], CC='/bin/false')
         assert rc == 3 and out.startswith(f'NOTRUN: {mode} runtime missing'), (mode, rc, out)
-    print('sanitizer gate: runtime missing -> NOTRUN exit 3 PASS')
+    print('sanitizer gate: missing-runtime refusal control PASS (expected exit 3)')
 
     notrun = []
     for mode, flags in (('tsan', ['-fsanitize=thread']), ('asan', ['-fsanitize=address,undefined'])):
@@ -138,12 +138,18 @@ with tempfile.TemporaryDirectory(prefix='efs-san-gate-') as td:
             print('sanitizer gate (asan): heap overflow and signed overflow -> FAIL with the report, clean sibling PASS')
             if lsan_possible():
                 leak = build(d, 'leak', LEAK, flags)
-                rc, out = run_gate(d, mode, [('leak', str(leak))])
-                assert rc == 1 and 'FAIL leak: 1 LeakSanitizer reports' in out and 'malloc' in out, (rc, out)
-                print('sanitizer gate (asan): leaking fixture -> FAIL (LeakSanitizer) PASS')
+                # This negative control must enable the check it tests even
+                # when the surrounding host gate explicitly excludes LSan.
+                # The kernel policy alone does not prove the runtime works.
+                rc, out = run_gate(d, mode, [('leak', str(leak))], ASAN_OPTIONS='detect_leaks=1')
+                if rc == 3:
+                    print('sanitizer gate: LeakSanitizer fixture NOTRUN (runtime probe failed)')
+                else:
+                    assert rc == 1 and 'FAIL leak: 1 LeakSanitizer reports' in out and 'malloc' in out, (rc, out)
+                    print('sanitizer gate (asan): leaking fixture -> FAIL (LeakSanitizer) PASS')
             else:
-                print('sanitizer gate (asan): LeakSanitizer case not run here (no ptrace or not Linux); '
-                      'the AddressSanitizer and UBSan cases above are the gate')
+                print('sanitizer gate: LeakSanitizer fixture NOTRUN (unsupported platform or ptrace policy); '
+                      'the AddressSanitizer and UBSan cases above ran')
     if notrun:
         print('sanitizer gate: real fixtures NOTRUN for %s (this compiler cannot build or run a sanitized program)' % ', '.join(notrun))
 print('sanitizer gate self-test PASS')

@@ -367,7 +367,12 @@ static int sd_usage(struct efsd_server *s)
 }
 /* Nothing to replay on the way down: the Raft log is the durability
  * boundary and recovery is WAL replay at next start. */
-static int sd_raft(struct efsd_server *s) { (void)s; server_raft_host_stop(); return 0; }
+static int sd_raft(struct efsd_server *s)
+{
+    server_stop_heartbeat(s);
+    server_raft_host_stop();
+    return 0;
+}
 static int sd_peers(struct efsd_server *s) { (void)s; server_peer_pool_shutdown(); return 0; }
 static int sd_roots(struct efsd_server *s) { server_storage_roots_close(s); return 0; }
 

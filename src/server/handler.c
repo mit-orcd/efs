@@ -187,8 +187,13 @@ void server_handle_conn(struct efs_conn *conn)
                 break;
             }
             type = frame[4];
-            payload = frame + 5;
             payload_len = nlen - 1;
+            /* The wire header is five bytes, but dispatch casts payloads
+             * to naturally aligned request structs. Keep the allocation
+             * charged/owned by the assembly queue until dispatch ends;
+             * slide only its payload to the malloc-aligned base. */
+            memmove(frame, frame + 5, payload_len);
+            payload = frame;
             rdma_frame = 1;
         } else {
             uint32_t len = 0;

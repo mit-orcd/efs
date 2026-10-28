@@ -74,3 +74,27 @@ with patch.object(k, 'mgmt', assigned_mgmt):
     assert k.place_leaders(c, 2, timeout=20) == {0: 3, 2: 3}
 assert all(a[1] == 'node1' and a[3] == '3' for a in calls), calls
 print('K33 pressure setup: assigned target identity, independent of process start order PASS')
+
+# A failed mount constructor cannot put itself in the caller's cleanup list.
+# Preserve diagnostics but stop its process on immediate exit and timeout.
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import Mock
+for failed_exit in (False, True):
+    with tempfile.TemporaryDirectory(prefix='efs-mount-setup-') as directory:
+        c = SimpleNamespace(dir=Path(directory), env={}, ep=lambda i: '127.0.0.1:19999')
+        process = Mock()
+        process.poll.return_value = 1 if failed_exit else None
+        process.wait.return_value = 0
+        with patch.object(k.subprocess, 'Popen', return_value=process), \
+             patch.object(k.subprocess, 'run'), patch.object(k.os.path, 'ismount', return_value=False), \
+             patch.object(k.time, 'time', side_effect=[0, 0 if failed_exit else 31]):
+            try:
+                k.Mount(c, 1, 'mount')
+            except AssertionError:
+                pass
+            else:
+                raise AssertionError('failed mount falsely succeeded')
+        process.wait.assert_called_once()
+        assert (c.dir / 'mount.log').exists()
+print('K33 failed mount constructor: child joined, fixture/log retained on exit and timeout PASS')

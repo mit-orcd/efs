@@ -324,12 +324,19 @@ class Mount:
         self.p = subprocess.Popen([str(FUSE), c.ep(node), str(self.path), '-f'],
                                   stdout=self.log, stderr=subprocess.STDOUT,
                                   env=env or c.env)
-        end = time.time() + 30 * SLOW
-        while time.time() < end and not os.path.ismount(self.path):
-            if self.p.poll() is not None:
-                raise AssertionError(self.logp.read_text()[-2000:])
-            time.sleep(0.1)
-        assert os.path.ismount(self.path), self.logp.read_text()[-2000:]
+        try:
+            end = time.time() + 30 * SLOW
+            while time.time() < end and not os.path.ismount(self.path):
+                if self.p.poll() is not None:
+                    raise AssertionError(self.logp.read_text()[-2000:])
+                time.sleep(0.1)
+            assert os.path.ismount(self.path), self.logp.read_text()[-2000:]
+        except BaseException:
+            # A failed constructor never reaches its caller's mount list.
+            # Keep its log/fixture, but do not orphan a live FUSE process.
+            self.close()
+            self.log.close()
+            raise
 
     def close(self):
         subprocess.run(['fusermount3', '-u', str(self.path)], capture_output=True)
