@@ -119,4 +119,13 @@ finally:
     if mount:
         mount.close()
     c.stop_all()
-    shutil.rmtree(work, ignore_errors=True)
+    # Keep the ladder and server wait counters before discarding fixtures.
+    # A failed workload stays available for investigation, never log-and-delete.
+    failed = sys.exc_info()[0] is not None
+    for log in c.dir.glob('*.log'):
+        print(f'==== {log.name} ====\n'+log.read_text(errors='replace'), flush=True)
+    if failed:
+        print(f'W159 failed fixture retained: {work}', flush=True)
+    else:
+        subprocess.run([str(Path.home() / 'bin/edelete'), '--force', '--delete', str(work)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
