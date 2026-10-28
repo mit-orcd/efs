@@ -83,7 +83,7 @@ with tempfile.TemporaryDirectory(prefix='efs-leak-gate-') as td:
     # valgrind absent -> NOTRUN, exit 3, never 0.
     rc, out = run_gate(d, [('x', '/bin/true')], EFS_VALGRIND=str(d / 'no-such-valgrind'))
     assert rc == 3 and out.strip() == 'NOTRUN: valgrind missing', (rc, out)
-    print('leak gate: valgrind absent -> NOTRUN exit 3 PASS')
+    print('leak gate: missing-valgrind refusal control PASS (expected exit 3)')
 
     # A "valgrind" that runs the program but writes no report cannot PASS.
     fake = d / 'fake-valgrind'
