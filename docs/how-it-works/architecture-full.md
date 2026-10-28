@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**OPEN / implementation and qualification NOTRUN.** User-directed intermediate
+release after alpha 1.0, before alpha 2.0: explicit operation ownership, narrower
+consensus/publication interfaces, shared storage primitives and removal of
+superseded machinery. Alpha 1.0 tasks/gates and D38 alpha 2.0–4.0 remain intact.
+
+[Stage 1 scan/index tasks AV–AX](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--workload-sized-scans-avax):
 **OPEN / implementation and measurements NOTRUN**, source reviewed at `ee66f837b`:
 REPORT chunk/size nested search, local child-vector deletion/relocation scans,
 and loaded hardlink-alias scans. Scope and fixed-size fast paths distinguished;

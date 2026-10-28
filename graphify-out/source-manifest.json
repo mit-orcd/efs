@@ -1281,8 +1281,9 @@
     "docs/how-it-works/testing.md": "52cab1ce06e7ab3e01814482475c2523e24e56826647bb4f664b6210b2e4f569",
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "bd6ae960d7d3980f1baa84b76f139b4748a7f523036124aadacb65c5a4c9c023",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "5ee26069fd1b32fed2e07e760e3c945edbaf5c5640e6bf8ba46479af944e003e",
     "docs/status/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
+    "docs/status/alpha-1.1-consolidation.md": "00cea68f06eef2832d18b7d749d25bd617fe4ddd36295a47cb965c73b5e148e3",
     "docs/status/d39-consolidated-model-20261023.md": "343d1f6023da489ccf29b84f786919ec076c191ea27bf56f5602c0d0fc2b5a6c",
     "docs/status/decisions.md": "ce46e3d7d720b6e7ea80d708fd352cbd431c917d9e0eb7de53518543525cea95",
     "docs/status/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
@@ -2551,7 +2552,7 @@
     "tests/wipe_cluster.sh": "84c22d5dc42f3450603b956f81a965a699943591abbcb2a135a26d99b6277627",
     "tools/graphify/README.md": "58b2a8d692aa89b7c7e73f9b2799ba18107263256c3df4e761552c3d85062455",
     "tools/graphify/known-bugs.json": "96de1f68684b8289038b2877a301a592381e4fa51266c7f80c2190fc8bed9281",
-    "tools/graphify/scope.json": "3f23e7771062d9f54c87efc318e5810006aa6430a45de829586d1ee160353911"
+    "tools/graphify/scope.json": "7cc466cced99fa324f0d765143900220837ff4345a173422caafd46486dffc99"
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
@@ -2560,5 +2561,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "ee66f837bdbc2066719b0bb2dabb4f400b2ff7e9"
+  "source_commit": "09d5156753df1a3c99a376407b454b85b61f02ce"
 }

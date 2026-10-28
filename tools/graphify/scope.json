@@ -30,7 +30,8 @@
     "docs/status/d39-consolidated-model-20261023.md",
     "docs/status/w100-eof-contract-20261013.md",
     "tools/graphify/README.md",
-    "docs/status/graph-defects-20261028.md"
+    "docs/status/graph-defects-20261028.md",
+    "docs/status/alpha-1.1-consolidation.md"
   ],
   "build_files": [
     "Makefile"

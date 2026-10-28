@@ -5,8 +5,10 @@ candidate or topology acceptance recorded by this checklist.**
 
 Phase 1 finishes and qualifies the existing **two data fragments plus one parity
 fragment** architecture at every supported cluster size. Completion is the
-**alpha 1.0** milestone. Only afterwards do we continue the remaining
+**alpha 1.0** milestone. Afterwards comes [alpha 1.1 architectural
+consolidation](alpha-1.1-consolidation.md), followed by the remaining
 [distributed-cluster roadmap](distributed-cluster-roadmap-20261022.md).
+Alpha 1.1 does not move or waive any task or release gate in this checklist.
 This is release sequencing, not a claim that the final D36 design is implemented.
 No tag, merge, push, deployment or data deletion is performed by this document.
 

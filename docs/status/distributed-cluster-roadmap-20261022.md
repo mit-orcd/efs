@@ -8,13 +8,18 @@ change or new cluster test is part of this document.
 [W66 metadata scaling](metadata-scaling.md) ·
 [W98 all-node metadata/query service](all-node-metadata-queries-20261009.md)
 
-## Release sequencing — updated October 22
+## Release sequencing — updated October 28
 
 **Phase 1 is now alpha 1.0: finish 2+1 on 3, 4 and >4 nodes.**
 **Oct 23 membership amendment:** alpha includes [simple startup and node addition](alpha-1.0-node-addition-20261023.md) (automatic formation, live additions, no mandatory member-list file); removal is deferred.
 The [alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md) is the release gate,
 including A6–A12: audit behavior switches, choose built-in policies, remove
 competing A/B paths and reduce the combinatorial qualification matrix.
+**October 28: [alpha 1.1 architectural consolidation](alpha-1.1-consolidation.md)**
+comes after alpha 1.0 acceptance and before alpha 2.0. It preserves the released
+1.0 behavior while consolidating lifecycle ownership and subsystem boundaries;
+implementation/qualification NOTRUN. It does not defer existing 1.0 tasks.
+
 **Metadata placement ladder ([D38](decisions.md), October 22):** alpha 1.0
 keeps two three-voter metadata groups: both on nodes 1–3 for N = 3, and
 on 1–3 and 2–4 for N ≥ 4 (default layout; D38 amendment). Data uses every
@@ -172,6 +177,7 @@ flowchart TB
 | Stage | Work and ownership | Exit evidence |
 | --- | --- | --- |
 | **1 · alpha 1.0** | **Finish current 2+1 at 3, 4 and >4 nodes**; enabled-path correctness, placement/accounting, packing, queries and orderly lifecycle | [Mandatory checklist and topology matrix](alpha-1.0-2plus1-checklist.md); exact full payloads, bounded progress and explicit limitations |
+| **1.1 · alpha 1.1** | **Architectural consolidation** within released alpha 1.0 behavior; explicit ownership, narrow interfaces and removal of superseded mechanisms | [A11-A–F and exit gates](alpha-1.1-consolidation.md); retained failure oracles, matched baseline and full requalification |
 | 2A | W74/D36 codec, placement and durable protection for both chunks and packing | Exact full payload checks; no duplicate placement within a stripe; durable publication identity and correct accounting; D36 loss matrix |
 | 2B | W66/W98/W81 leader distribution, configurable groups, bounded routing and directory policy; D36 metadata mechanism | Independent-directory and hot-directory tests; verified group/slot/leader mappings; metadata loss matrix and safe partition behavior; no common-leader routing dependency |
 | 3 | W125 packing, W92/W98 indexing, W124 reclaim and W126 KV maintenance | Bounded progress with foreground correctness; per-node work distribution; no repeated full validation or unbounded prefix rescans; latency/resource evidence |
