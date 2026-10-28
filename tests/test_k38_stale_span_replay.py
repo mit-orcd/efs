@@ -99,8 +99,8 @@ int efs_client_overlay_span(efs_ino_t ino,uint32_t ci,uint8_t *buf,uint32_t len,
  assert((uint64_t)d->off+d->len<=len);memset(buf+d->off,'A',d->len);return EFS_OK;}
 static int dcache_trace_on(void){return 0;}
 static uint32_t data_chunk_size(void){return LEN;}
-static void dcache_install_image(struct dcache_ent *e,uint8_t *img,uint32_t len,uint64_t seq,int unmerged_full)
-{(void)e;(void)img;(void)len;(void)seq;(void)unmerged_full;}
+static void dcache_install_image(struct dcache_ent *e,uint8_t *img,uint32_t len,uint64_t seq)
+{(void)e;(void)img;(void)len;(void)seq;}
 uint64_t efs_client_epoch_get(efs_ino_t ino){(void)ino;return 0;}
 int efs_client_pull_chunks_range_absent(efs_ino_t ino,uint32_t lo,uint32_t hi,uint8_t *bits)
 {(void)ino;(void)lo;(void)hi;bits[0]=0;return EFS_OK;}

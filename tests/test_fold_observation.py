@@ -213,7 +213,7 @@ static void put_tests(void) {
     assert(!notes && !dirty_marks && !replacements && !memcmp(&map,&before,sizeof(map)));
     assert(puts_sent==1 && released_given_up==1 && !released_landed); /* span ticket abandoned */
     assert(!slot.object_delta_len && slot.object_seq==17);
-    dcache_flush_keep(1,0,slot.data,CS,0,1,0);
+    dcache_flush_keep(1,0,slot.data,CS,0,1);
     assert(slot.dirty && slot.nrange==1 && slot.data[100]=='N');free(slot.data);
     reset();map=remote;map.ndelta=EFS_CHUNK_DELTA_MAX;add_error=EFS_ERR_NOMEM;
     remote.read_view.count=1;remote.read_view.fence_epoch=6;

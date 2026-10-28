@@ -83,8 +83,8 @@ static int dcache_put_now(efs_ino_t ino,uint32_t ci,const uint8_t *body,uint32_t
     memset(&sent_obs,0,sizeof(sent_obs));if(obs)sent_obs=*obs;
     return EFS_OK;
 }
-static void dcache_install_image(struct dcache_ent *e,uint8_t *body,uint32_t len,uint64_t seq,int unmerged_full) {
-    (void)seq;(void)unmerged_full;memcpy(e->data,body,len);installs++;
+static void dcache_install_image(struct dcache_ent *e,uint8_t *body,uint32_t len,uint64_t seq) {
+    (void)seq;memcpy(e->data,body,len);installs++;
 }
 ''' + '\n' + function('dcache_full_overwrite') + '\n'
 if 'static int dcache_fetch_merge_base(' in write:
