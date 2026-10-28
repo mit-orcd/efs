@@ -1455,11 +1455,13 @@ int main(int argc, char **argv)
     server_start_heartbeat(&server);
     if (server_raft_host_start(&server) != 0) {
         fprintf(stderr, "raft-host: start failed\n");
+        server_stop_heartbeat(&server);
         server_writer_pool_stop(&server);
         return 1;
     }
     if (server_packer_start(&server) != 0) {
         fprintf(stderr, "packer: start failed\n");
+        server_stop_heartbeat(&server);
         server_raft_host_stop();
         server_writer_pool_stop(&server);
         return 1;
@@ -1600,9 +1602,8 @@ int main(int argc, char **argv)
     int exit_rc = shutdown_bounded(&server, stop_t0);
     if (!exit_rc && __atomic_load_n(&server.join_refused, __ATOMIC_ACQUIRE))
         exit_rc = 1; /* K33: refused by the cluster, as at the first HELLO */
-    /* server.lock lives as long as the process: the detached heartbeat
-     * thread (cluster.c) may still take it between here and exit, and
-     * destroying it bought nothing (TSan: use of a destroyed mutex). */
+    /* server.lock lives as long as the process: the detached rejoin thread
+     * may still take it before exit. The heartbeat was joined by sd_raft. */
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);
     return exit_rc;
