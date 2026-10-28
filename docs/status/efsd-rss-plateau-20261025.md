@@ -327,5 +327,7 @@ not a live qualification. Both new hardware and AMD continuations use
 `d7e265746`; hardware full gate FAILs at four LSan runtime attach errors, reproduced
 by an independent clean probe. Corrected harnesses retain functional/negative
 controls and report unavailable sanitizer coverage NOTRUN; fresh gate and hours
-remain owed. AMD remains WAIT_QUIET.
+remain owed. `00ccd12f3` full gate is 524 total / 0 FAIL / 18 NOTRUN,
+separate mlx5_0 RDMA 9/9 PASS; unchanged RDMA hour ACTIVE, TCP follows.
+AMD remains WAIT_QUIET.
 Old pre-action waiters were superseded without running tests.
