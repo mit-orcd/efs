@@ -102,3 +102,4 @@ python3 tests/test_w130_dir_fault.py	50	2	W165 intel1: 10 strict combined serve/
 python3 tests/test_w166_authority.py	40	1	W166: compressed 1 MiB L0 fill with 4 MiB KV budget, then a read-routing fault; 28.8 s in the xorinox 8-job pool x 1.25 rounded up to 5 s
 python3 tests/test_dir_ops_busy.py	25	2	Task O: intel2 eight-job pool 19.9 s; 1.25x rounded up to 5 s; four private daemons and twenty pre-admission BUSYs before same-opid RMDIR
 python3 tests/test_code_graph.py	5	1	validates the committed defect-navigation graph against tools/graphify/known-bugs.json; 3.3 s on the Mac
+python3 tests/test_k48_readdir.py	15	2	Task S intel1 standalone 11.91s; 1.25x rounded up to 5s; three daemons and one FUSE client, pinned consensus migration and one-replica halt
