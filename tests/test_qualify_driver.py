@@ -122,6 +122,23 @@ try:
     desc.write_text(json.dumps(cluster))
     stubs = ','.join(cluster['plugins'])
 
+    # Cleanup failure lowers the run and preserves even controller scratch.
+    from unittest.mock import patch
+    qstop = object.__new__(Q.Qualify)
+    qstop.out = tmp / 'cleanup-failure'
+    qstop.cluster, qstop.allow, qstop.before_sums = {}, set(), None
+    qstop.control = SimpleNamespace(owned=True)
+    qstop.args = SimpleNamespace(keep_work=False)
+    qstop.setup = lambda results: None
+    qstop.run_gates = lambda gates, results, failed: results.append(dict(
+        gate='work', verdict='PASS', reason='', destructive_steps=[]))
+    qstop.teardown = lambda: dict(gate='_teardown', verdict='FAIL', reason='busy mount', destructive_steps=[])
+    qstop.cleanup_scratch = Mock()
+    with patch.object(Q, 'write_sums', return_value={}), patch.object(Q, 'write_summary'):
+        assert qstop.run([]) == 'FAIL'
+    qstop.cleanup_scratch.assert_not_called()
+    assert qstop.args.keep_work
+
     # A failed final identity read must lower the aggregate verdict, not be
     # an unconsumed artifact after the last passing gate.
     end_out = tmp / 'end-identity'

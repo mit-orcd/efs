@@ -773,7 +773,11 @@ class Qualify:
             teardown = self.teardown()
             if teardown and teardown.get('verdict') == FAIL:
                 results.append(teardown)
-        self.cleanup_scratch()
+                # A failed stop is not authority to remove a possibly mounted
+                # scratch tree, including the controller's own work directory.
+                self.args.keep_work = True
+        if not self.args.keep_work:
+            self.cleanup_scratch()
         if self.before_sums:
             self.before_sums(self.out)
         verdict = worst(r['verdict'] for r in results)
