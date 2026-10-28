@@ -98,6 +98,34 @@ unit/authority checks, three deterministic live runs, W130 and K33 payload
 ten times each serially/alone, then the eight-job full code gate. It stops
 on the first failure, retains evidence and never retries it into PASS.
 
+## Frozen qualification in progress
+
+Candidate `947edd15f3ecb6b0b95c2acafe9eb62a241ce910` (product fix
+`3426111b4`), source `intel1:~/efs-taskS/qualification-v2/src`, detached
+screen `taskS-qualification-v2`. Output:
+`/home/maik/efs-artifacts/taskS-20261028/qualification-947edd15f/`.
+Three deterministic cases PASS (including 10.791/11.241 s cases), unit and
+server-authority controls PASS; the ten strict W130/payload pairs are running.
+First W130 PASS: complete listing, frozen halted group and successful resync;
+first K33 payload PASS in 29.933 s. Full code gate is still NOTRUN/queued.
+
+The first frozen candidate `cdf67d98f` passed its first deterministic test
+but stopped on fixture leader setup in its second: un-targeted step-down
+re-elected node 3, so the healthy-leader premise was not established before
+fault arming. This is retained as a setup failure, not an omission or a
+qualification PASS. The fixture now uses the existing targeted
+`place_leaders` transfer, with the same 15 s setup bound; it does not retry
+an application outcome. Production code is identical between the two
+qualification freezes.
+
+The built-source recipe model is **1281 s** (pool plus exclusive tail),
+versus **1277 s** with the K48 command omitted; the new test adds 4 modeled
+seconds. Both exceed D44's **1100 s target**, while remaining under its
+existing **1650 s bound**. These are scheduling estimates, not observed starts
+or wall time. No target/slot/deadline was relaxed; the required regression's
+15 s/two-slot budget has its measured reason. Per-host budget work belongs
+to Task T. The actual final gate wall will be recorded separately.
+
 ## Pending acceptance and retention
 
 K48 remains OPEN pending frozen-source qualification and review of the
