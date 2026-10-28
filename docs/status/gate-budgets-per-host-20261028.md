@@ -1,8 +1,8 @@
 # Task T — gate budgets across supported hosts
 
 `agent/devel-task-t`, implementation `292034404`, base devel `b2d57e421`.
-Full-gate TOTAL line unavailable: calibration and confirmation NOTRUN, hosts
-busy. Evidence `docs/status/gate-budgets-per-host-20261028.md`. Synthetic tool
+Full-gate TOTAL line pending: nuc calibration RUNNING; intel2 calibration
+and confirmations NOTRUN. Evidence `docs/status/gate-budgets-per-host-20261028.md`. Synthetic tool
 regression PASS on intel2; no product change or product finding. Task T INCOMPLETE.
 
 ## Scope and status
@@ -13,16 +13,44 @@ seconds with a five-second floor. Preserve slots/reason prefixes and the
 user's `GATE_TARGET_S=1100`; never raise it to accommodate the fit.
 
 The fitting tool and its fast regression are committed. No replacement
-`tests/budgets.tsv` has been fitted or committed. Calibration, the modeled
-new total, per-row host medians and confirming gates remain NOTRUN. This is
+`tests/budgets.tsv` has been fitted or committed. Nuc calibration is RUNNING;
+intel2 measurements, the modeled total and confirming gates remain pending. This is
 not a gate PASS or a completed calibration.
 
-At the latest read-only preflight nuc is running Task H's full gate
-(attempt 71; retained older Task H mounts also remain). Intel2 is running
-merge-wave29's gate. Neither host is quiet enough for calibration. No Task H
-fixture, running gate or shared cluster has been stopped or modified.
-There is no detached Task T calibration queued that could overlap these runs.
-The measurements begin only after host handoff and a quiet preflight.
+Current source is frozen at `babeea6404df2008d4393a461adb4480f9acab65`,
+after merging devel `3debca7ec` at `234b30775`. Its archive SHA256 is
+`3a3cf46a5faa62fbd383f8709d2883e3428f38efc8c635f15750ab5ae8c7abb7`.
+The canonical graph was rebuilt per the merged AGENTS instructions; its nine
+navigation tests PASS. No product source or budget value was changed.
+
+The user requested another availability check and continuation to completion.
+Nuc's Task H gate had finished; repeated checks found no active EFS/build/test
+processes. Four older retained Task H mounts remain untouched. Intel1 and
+xorinox were quiet, but their timing cannot substitute for the requested nuc
+and intel2 measurements. Intel2 still had overlapping Task W/merge gates; none
+of those overlapping observations will be used as clean calibration inputs.
+
+Nuc is now running three serial eight-job gates in detached screen
+`taskT-nuc-babeea`, owned source `~/efs-taskT-20261028-babeea640/src`, output
+`~/efs-artifacts/taskT-20261028/nuc-babeea640/`. Its build succeeded and the
+first gate is RUNNING. A five-second process monitor records any competing
+EFS/compiler/make workload; a contaminated run is rejected and no subsequent
+calibration run starts. Failures are preserved, never retried by the controller.
+Only owned fixtures are created; no Task H mount or existing cluster is stopped.
+Intel2 has no Task T workload yet.
+
+The source archive has no Git metadata. A private index was initialized from
+its exact tracked-path list for `test_code_graph.py`'s `git ls-files` check;
+this does not alter source bytes. Explicit build variables identify the actual
+frozen source commit, not the temporary index commit. Per-file source hashes
+are recorded before/after, plus every run's command list, timing, summary,
+budget table, preflight, binary hashes, version and exit status. The external
+controller's exact source is retained beside the output as `controller-source.py`.
+
+Task J's twelve copied timing/summary/budget/command files have been checked
+against its original closed SHA256 manifest. Those small inputs are kept
+outside Git at `/Users/mike/Documents/Codex/artifacts/taskT-20261028/inputs/intel1/`.
+No payloads or runtime stores were copied.
 
 ## Coverage decision
 
