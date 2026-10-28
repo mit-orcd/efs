@@ -473,8 +473,12 @@ try:
     assert 'b_checks.py --seed S' in filled and 'exit $rc' in filled and '${TMPDIR:-/tmp}' in filled
 
     # 9. ssh wrapper replaces ssh; relative wrappers resolve in the tree.
-    argv = Q.Runner(ssh='scripts/orcd_mini_ssh.sh').argv('node9901', 'echo hi', 10)
+    from unittest.mock import patch
+    with patch.object(Q, 'is_local', return_value=False):
+        argv = Q.Runner(ssh='scripts/orcd_mini_ssh.sh').argv('node9901', 'echo hi', 10)
     assert argv[:2] == [str(root / 'scripts/orcd_mini_ssh.sh'), 'node9901'] and 'echo hi' in argv[2]
+    with patch.object(Q, 'is_local', return_value=True):
+        assert Q.Runner(ssh='scripts/orcd_mini_ssh.sh').argv('node9901', 'echo hi', 10) == ['bash', '-c', 'echo hi']
 
     # 10. The committed matrix validates; broken ones are caught.
     with contextlib.redirect_stdout(io.StringIO()) as buf:

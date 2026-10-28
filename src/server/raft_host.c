@@ -13508,7 +13508,7 @@ int server_raft_host_start(struct efsd_server *s)
     __atomic_store_n(&g_host, h, __ATOMIC_RELEASE);
     if (efsd_pthread_create(&h->tid, host_pump, h) != 0) {
         fprintf(stderr, "raft-host: pump thread failed\n");
-        g_host = NULL;
+        __atomic_store_n(&g_host, NULL, __ATOMIC_RELEASE);
         __atomic_store_n(&h->running, 0, __ATOMIC_RELEASE);
         host_stop_senders(h);
         efs_raft_free(h->g[0].r);
@@ -13694,7 +13694,7 @@ void server_raft_host_stop(void)
         pthread_cond_destroy(&h->tx[i].cv);
     if (h->pump_efd >= 0)
         close(h->pump_efd);
-    g_host = NULL;
+    __atomic_store_n(&g_host, NULL, __ATOMIC_RELEASE);
     free(h);
 }
 

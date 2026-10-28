@@ -574,6 +574,8 @@ static void *heartbeat_thread(void *arg)
     uint64_t gc_log_ms = 0, trim_ms = hb_now_ms();
     while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) {
         usleep(EFS_HEARTBEAT_MS * 1000);
+        if (!__atomic_load_n(&s->running, __ATOMIC_ACQUIRE))
+            break;
 
         pthread_mutex_lock(&s->lock);
         uint32_t node_count = s->node_count;
@@ -663,13 +665,20 @@ static void *heartbeat_thread(void *arg)
 
 void server_start_heartbeat(struct efsd_server *s)
 {
-    pthread_t tid;
-    /* Detached by intent: it runs until the process exits (the attr the
-     * wrapper could not take left it joinable and never joined: TSan
-     * thread leak). */
-    if (efsd_pthread_create(&tid, heartbeat_thread, s) == 0) {
-        pthread_detach(tid);
+    /* Teardown joins before freeing the Raft host or closing peer pools:
+     * a heartbeat already inside server_gc_status still owns that host. */
+    if (efsd_pthread_create(&s->heartbeat_tid, heartbeat_thread, s) == 0) {
+        s->heartbeat_started = 1;
         fprintf(stderr, "heartbeat: enabled (%d ms interval)\n", EFS_HEARTBEAT_MS);
+    }
+}
+
+void server_stop_heartbeat(struct efsd_server *s)
+{
+    __atomic_store_n(&s->running, 0, __ATOMIC_RELEASE);
+    if (s->heartbeat_started) {
+        pthread_join(s->heartbeat_tid, NULL);
+        s->heartbeat_started = 0;
     }
 }
 

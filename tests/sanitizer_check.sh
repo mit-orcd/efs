@@ -116,6 +116,7 @@ member_view|tests/test_member_view
 # Harnesses that build their own TSan binary (W138 rules: run or fail).
 apply_ring|tests/test_apply_ring.py
 session_latch|tests/test_session_latch_tsan.py
+heartbeat_shutdown|tests/test_heartbeat_shutdown.py
 # E2 parallel revoke, W155 receipt table, K32 ticket batches on the TSan libefs.a.
 revoke_parallel|tests/test_session_revoke_parallel.py
 receipt_table|tests/test_w155_receipt_table.py
@@ -135,6 +136,8 @@ cat <<'LEOF'
 readindex_pair|tests/test_readindex_pair.py
 raft_ack_window|tests/test_raft_ack_window.py
 host_outbox|tests/test_host_outbox.py
+heartbeat_shutdown|tests/test_heartbeat_shutdown.py
+rdma_handler_alignment|tests/test_rdma_handler_alignment.py
 stage_evict_lru|tests/test_stage_evict_lru.py
 # Harnesses with an ASan switch (EFS_TEST_SANITIZE / EFS_SANITIZE / --sanitize).
 address_parser|tests/test_address_parser.py --sanitize

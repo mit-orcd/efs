@@ -161,6 +161,10 @@ struct efs_rdma_dev {
      * per-conn SPSC rings. Replaces per-conn CQs, whose spin-polling by
      * every conn thread was the top CPU consumer on client AND server. */
     struct ibv_cq *recv_cq;
+    /* A provider may copy inline CQE bytes into the posted receive buffer
+     * inside poll_cq. Serialize polling with repost so CPU buffer accesses
+     * before ownership returns to verbs precede that provider copy too. */
+    pthread_mutex_t recv_handoff_mu;
     int recv_capacity, recv_reserved;
     struct ibv_comp_channel *recv_chan;
     pthread_t poller;
@@ -313,6 +317,7 @@ static int dev_open(const char *name, struct efs_rdma_dev *out)
     out->lid = pa.lid;
     out->mtu = pa.active_mtu;
     out->roce = roce; out->gid_index = gid_index; out->gid = gid;
+    pthread_mutex_init(&out->recv_handoff_mu, NULL);
     return 0;
 }
 
@@ -687,8 +692,21 @@ static int post_recv(struct efs_rdma_conn *rc, int idx)
         .sg_list = &sge,
     };
     struct ibv_recv_wr *bad = NULL;
+    pthread_mutex_lock(&rc->dev->recv_handoff_mu);
     rdma_memcheck_post_recv((void *)(uintptr_t)sge.addr, sge.length);
-    return ibv_post_recv(rc->qp, &wr, &bad);
+    int result = ibv_post_recv(rc->qp, &wr, &bad);
+    pthread_mutex_unlock(&rc->dev->recv_handoff_mu);
+    return result;
+}
+
+/* Nonblocking CQ access only: never hold the handoff lock while waiting
+ * for an event, harvesting the registry, decoding, or sending a reply. */
+static int recv_poll(struct efs_rdma_dev *dev, int count, struct ibv_wc *wcs)
+{
+    pthread_mutex_lock(&dev->recv_handoff_mu);
+    int result = ibv_poll_cq(dev->recv_cq, count, wcs);
+    pthread_mutex_unlock(&dev->recv_handoff_mu);
+    return result;
 }
 
 /* Push one harvested recv completion onto the conn's pend ring. Called only
@@ -826,7 +844,7 @@ static void *recv_poller(void *arg)
     struct ibv_wc wcs[32];
     unsigned empty = 0;
     for (;;) {
-        int n = ibv_poll_cq(dev->recv_cq, 32, wcs);
+        int n = recv_poll(dev, 32, wcs);
         if (n < 0) {
             usleep(1000);
             continue;
@@ -851,7 +869,7 @@ static void *recv_poller(void *arg)
             usleep(1000);
             continue;
         }
-        n = ibv_poll_cq(dev->recv_cq, 32, wcs);
+        n = recv_poll(dev, 32, wcs);
         if (n < 0) {
             usleep(1000);
             continue;

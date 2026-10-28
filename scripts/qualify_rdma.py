@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -112,6 +113,12 @@ def main():
         path = source / name
         if path.exists():
             (output / name).write_bytes(path.read_bytes())
+    failures = output / 'full-gate-failures'
+    failures.mkdir()
+    for path in (source / 'tmp').glob('fail-*.log'):
+        shutil.copy2(path, failures / path.name)
+    with (output / 'version.txt').open('x') as log:
+        subprocess.run(['./efsd', '--version'], cwd=source, stdout=log, stderr=subprocess.STDOUT)
     (output / 'binaries.sha256').write_text(''.join(
         hashlib.sha256((source / name).read_bytes()).hexdigest() + '  ' + name + '\n'
         for name in ('efsd', 'efs-fuse', 'efs-mgmt', 'tests/faults/efsd') if (source / name).exists()))
