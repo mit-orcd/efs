@@ -17,7 +17,7 @@ n=0
 # Latin square: each frequency occupies each position once.
 for hz in 1 10 50 10 50 1 50 1 10;do
  n=$((n+1));echo "MEASURE_${n}_${hz}Hz" > "$art/stage"
- (cd "$root/measure/src";python3 -u scripts/af_measure.py --out "$art/trial-$n-${hz}hz" --hz "$hz" --seconds 60 --rate 10) > "$art/trial-$n-${hz}hz.log" 2>&1
+ (cd "$root/measure/src";python3 -u scripts/af_measure.py --out "$art/trial-$n-${hz}hz" --hz "$hz" --seconds 60 --rate 5) > "$art/trial-$n-${hz}hz.log" 2>&1
 done
 echo BUILD_CLEAN > "$art/stage"
 cd "$root/candidate/src"

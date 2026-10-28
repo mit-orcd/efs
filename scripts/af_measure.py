@@ -16,7 +16,7 @@ from leader_placement import parse_raft_status
 from qualify import parse_raft
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--out',type=Path,required=True);p.add_argument('--hz',type=int,choices=[1,10,50],required=True)
-p.add_argument('--seconds',type=float,default=60);p.add_argument('--rate',type=float,default=10)
+p.add_argument('--seconds',type=float,default=60);p.add_argument('--rate',type=float,default=5)
 a=p.parse_args();assert '/efs-task-af/' in str(ROOT) and a.seconds>=60 and a.rate>0
 a.out.mkdir(parents=True,exist_ok=False)
 scratch=ROOT.parent/'tmp';scratch.mkdir(exist_ok=True)
@@ -100,12 +100,12 @@ try:
         packing[i]=parse_pack(text)
         assert packing[i]['put_errors']==packing[i]['read_errors']==0,text
         packing[i]['led']=sorted(packing[i]['led'])
-    assert all(n>=a.seconds*a.rate*.8 for n in counts),(counts,late)
-    assert len(stat_us)>=a.seconds*8,len(stat_us)
-    assert all(len(v)>=a.seconds*a.hz*.8 for v in status_us.values()),{i:len(v) for i,v in status_us.items()}
     doc.update(seconds=elapsed,writes=counts,write_late=late,mib_s=sum(counts)/16/elapsed,
                daemon_cpu_s={i:after[i]-before[i] for i in before},stat=quantiles(stat_us),
                status={i:quantiles(v) for i,v in status_us.items()},poll_late=poll_late,verified_files=len(versions),packing=packing)
+    assert all(n>=a.seconds*a.rate*.8 for n in counts),(counts,late)
+    assert len(stat_us)>=a.seconds*8,len(stat_us)
+    assert all(len(v)>=a.seconds*a.hz*.8 for v in status_us.values()),{i:len(v) for i,v in status_us.items()}
     (a.out/'last-status.json').write_text(json.dumps(last_status,indent=2))
     ok=True
 except BaseException:
