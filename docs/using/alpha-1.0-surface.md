@@ -1,9 +1,11 @@
 # Alpha 1.0 — supported surface and effective settings (draft)
 
-**Draft for user approval, October 24, 2026, revised October 25; checklist
+**Draft for user approval, October 24, 2026, audited through `e7e72e267` (waves 9–22); checklist
 items S1 and S4 of the [alpha 1.0 checklist](../status/alpha-1.0-2plus1-checklist.md#s-stage-2-functional-scope).
-Checked against the code and the binaries at `ec3e09306`
-([audit](../status/docs-audit-20261025.md)); `tests/test_cli_docs.py`
+Checked against current source and merged evidence
+([round 3 audit](../status/docs-audit-20261027.md)); live execution on the Mac
+is NOTRUN because the Linux build fails there. The October 25 binary audit
+is historical evidence, not a fresh qualification. `tests/test_cli_docs.py`
 (`make test`) keeps this page and the CLI help in step.** "In" marks a surface the alpha
 release supports and qualifies; "out" marks one the release does not
 support, with the reason. Rows marked *proposed* are this draft's
@@ -78,7 +80,7 @@ build switch, no environment variable; findings F7 and F8 closed).
 | `mkfs` / `raft-mkfs` | in | Optional: forms at once before automatic formation; afterwards a no-op |
 | `commands-policy` | in | `.efs` is in the alpha profile; the durable versioned mask |
 | `pack-compact` | in, *proposed* | Packing control: summary (`0`) or on-demand compaction of shared segments |
-| `raft-resync` | in, *proposed* | Recovery of a follower's group from the leader snapshot; daemon test `tests/test_operator_workflows.py` (finding F20) |
+| `raft-resync` | in, *proposed* | Asynchronous recovery of an eligible, non-retired follower from its healthy leader snapshot, including W130/W165 halts; leader/retired targets refuse. Request acceptance is not completion; verify catch-up and readback ([runbook](alpha-1.0-guide.md#a-metadata-replica-halts-w130w165)) |
 | `shrink-quota` | out, *proposed* | Reduces the running quota only; lost at restart; no migration. Use `--quota` |
 | `raft-step-down` | out, *proposed* | Leader transfer used by the failover harness; no operator workflow |
 | `data-commit` | out, *proposed* | Durability barrier; the orderly stop already runs it |
@@ -108,8 +110,9 @@ answers `Unknown command: NAME` and exits 1; the removed `add-node` and
 ## Environment variables
 
 Only the rows marked in are part of the alpha deployment surface. Everything
-else is an internal tunable, an A/B selector, observability or a test hook,
-and waits for the A6 inventory and the A7/A8 decisions.
+else is a documented internal tunable, observability setting or test hook.
+A7 removed the A/B selectors; the remaining tuning/support decisions are
+tracked in A8, not an invitation to restore alternate product behaviors.
 
 | Variable | Side | Alpha | Reason |
 | --- | --- | --- | --- |
@@ -146,10 +149,11 @@ command lists them.
 | Membership, member count, metadata voters, formation | `efs-mgmt status` (members), `efs-mgmt raft-status` (voters per group), log line `raft-host: formed: N members, g0 voters …, g2 voters …` |
 | Build identity | `--version` on each binary, `efs-mgmt version NODE:PORT` |
 | Durability window per root | `efs-mgmt sync-status NODE:PORT` (`window 200 ms / 256 MiB`, unsynced bytes, barriers) |
+| Cluster expiry policy | `efs-mgmt expiry-policy NODE:PORT cluster get` (version, on/off, enabled folder count) |
 | `.efs` policy | `efs-mgmt commands-policy NODE:PORT get` (the only switch; `EFS_COMMANDS` is removed) |
 | Recovery state after an unclean stop | `efs-mgmt sync-status NODE:PORT` (`recovery running\|verified\|FAILED`) |
 | Transport | Daemon and client logs; not in any status command |
-| Environment tunables and A/B selectors | Not shown. An unset variable gives the built-in default; a set one is visible only in the process environment. Some invalid values are logged (`query-config: …`) |
+| Retained environment tunables | Not shown. An unset variable gives the built-in default; a set one is visible only in the process environment. Some invalid values are logged (`query-config: …`) |
 
 Structure for the S4 page once W122 is decided: one row per inventoried
 setting (the A6 inventory already has the rows), with its disposition

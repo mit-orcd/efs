@@ -33,8 +33,11 @@ remaining gates and limits](v030-release-scope-20261012.md). Execution stays sto
 
 `tests/test_k22_snapshot_import.py` and `tests/test_k22_leader_admission.py` (Task B, wave 15) stay in the
 `make test-all` gate rather than becoming a separate target like `make test-soak`. The W160 target is
-therefore 1,100 s (18 min 20 s) at `EFS_TEST_JOBS=8`, recorded in `tests/test_make_test_recipe.py`;
-`test_w130_dir_fault.py` stays its own gate (`make test-w130`) until W165 is fixed.
+therefore 1,100 s (18 min 20 s) at `EFS_TEST_JOBS=8`, recorded in `tests/test_make_test_recipe.py`.
+At this decision, `test_w130_dir_fault.py` stayed its own gate until W165 was fixed.
+**Implementation update, wave 16:** W165 is fixed in merged devel; W130 is
+back in `make test-long` and `make test-w130` has been removed. The 1,100 s
+target is unchanged ([Task F evidence](w165-serve-path-damaged-row-20261026.md)).
 
 ## D43 — `.efs` and expiry ship in alpha 1.0 (user, Oct 25)
 

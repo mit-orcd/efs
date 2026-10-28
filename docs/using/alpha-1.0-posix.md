@@ -1,10 +1,11 @@
 # Alpha 1.0 — POSIX subset (draft)
 
-**Draft, October 24, 2026, revised October 25; checklist item S2.** The
+**Draft, October 24, 2026, audited through `e7e72e267` (waves 9–22); checklist item S2.** The
 supported operations and every known deviation of a Linux EFS FUSE mount,
 derived from the suites in `tests/posix/` and their recorded results, and
-checked against the client code at `ec3e09306`
-([audit](../status/docs-audit-20261025.md)). A deviation is either a limitation of alpha (listed in
+checked against source and merged evidence
+([round 3 audit](../status/docs-audit-20261027.md)). No POSIX suite was run on
+the Mac in this audit: the Linux build fails there. A deviation is either a limitation of alpha (listed in
 the [release notes draft](../release-notes/alpha-1.0.md)) or a gap still to
 fix; none counts as PASS.
 
@@ -21,17 +22,25 @@ fix; none counts as PASS.
 | Durability | `tests/posix/posix_persist.py` | 27 | Prepare, orderly unmount and remount, then verify bytes and metadata |
 | Expiry | `tests/posix/posix_expiry.py` | `d5-expiry` | Expiry lifecycle on a private four-node fixture: the cluster expiry policy off by default, on/off at runtime, folder coverage, restarts and member loss, physical reclamation, then the core suite with expiry on (D43) |
 
-The most recent recorded runs (both before the base commit; nothing has been
-recorded on `ec3e09306` itself, and the C1 runs on 3, 4 and more than 4
-distinct hosts are NOTRUN):
+Selected recorded results are below. Each row applies to its named source,
+not the audit base. Complete C1 qualification on 3, 4 and more than 4
+distinct storage hosts remains NOTRUN; a cross-host client does not make
+co-located storage daemons independent failure domains.
 
 | Run | Build | Core | Extras | Two-client | Durability |
 | --- | --- | --- | --- | --- | --- |
+| [Task M, fstor007, Oct 27](../status/gate-fstor007-20261027.md): three daemons on one host, RDMA, O_DIRECT | `7ca545e2b` (wave-19 product unchanged) | 218/218 (combined all-suite run) | 3/5, 2 SKIP | 68/68 | NOTRUN |
+| [Task K, orcd-mini, Oct 27](../status/k44-retired-replica-routing-20261026.md): four daemons on one host, RDMA, cross-host client | `00e85a299` | 218/218 | cold-query coverage INCOMPLETE | 68/68 | NOTRUN |
+| [Task O, intel2](../status/dir-ops-busy-under-load-20261027.md): four loopback daemons, TCP | `503e17f2d` | 218/218 | NOTRUN | NOTRUN | NOTRUN |
 | [orcd-mini, Oct 24](../status/orcd-mini-deploy-cb970ca7c-20261024.md): three daemons on one host, RDMA, direct I/O | `cb970ca7c` | 216/216 | 4/5, 1 SKIP | 68/68 | 27/27 |
 | [Intel, Oct 23](../status/intel-devel-testing-posix-20261023.md): four daemons on two hosts, TCP, direct I/O | `163241584` | 216/216 | 4/5, 1 SKIP | 68/68 | 27/27 |
 
-The one SKIP in both runs is `mmap_write_read` (writable shared mmap,
-W104). One known failure exists outside these runs: W159 (below).
+The one SKIP in the October 23–24 runs is `mmap_write_read` (writable shared
+mmap, W104). Task M's 221/223 combined result additionally skips a cold-query
+case; that skip is incomplete query coverage, not an unsupported filesystem
+operation or a PASS. Default-profile cold-query coverage remains incomplete.
+W159, K43, K48 and W166 retain failed or unqualified scenarios (below and in
+the release notes).
 The two F13 cases added after these runs (`dir_rename_noreplace_free_name`,
 `mknod_special_files_refused`) run on a private loopback mount in
 `tests/test_operator_workflows.py` (`make test-long`); see
@@ -39,7 +48,8 @@ The two F13 cases added after these runs (`dir_rename_noreplace_free_name`,
 
 ## Supported operations
 
-Each line is covered by the named suite cases, all PASS in both runs above.
+Each line names its suite coverage. Consult the dated rows above and the
+known gaps below; a coverage claim is not fresh execution on this audit base.
 
 - **Regular files:** create, open (`O_CREAT`, `O_EXCL`, `O_TRUNC`, `O_APPEND`,
   `O_NOFOLLOW`, `O_DIRECTORY`), read, write, `pread`/`pwrite`, `readv`/`writev`,
@@ -119,9 +129,17 @@ Each line is covered by the named suite cases, all PASS in both runs above.
 | P10 | Unpublished buffered writes | Writes not yet closed or synced are lost if the client process dies (D28); an orderly stop drains them or refuses | `posix_persist.py` covers orderly remounts only | Limitation (D28) |
 | P11 | Large namespace operations | An operation touching more than 144 metadata participants is refused at once and atomically (D32) | Not in the POSIX suites | Limitation (D32) |
 | P12 | Reserved `.efs` name | With `.efs` on, every directory resolves `.efs` to the command directory unless a real `.efs` entry exists, which wins; the command directory is not listed and not writable | `virt_find_not_a_real_dir` (not listed, not writable); the precedence of a real `.efs` has no POSIX case | Documented behavior |
-| P13 | W159 | On a private four-member fixture on one host, the closing core run failed `dir_times_mkdir_rmdir` with `rmdir` `EBUSY` (orcd-mini) or timed out `dir_many_files` and `concurrent_creates_same_dir` (Intel); the same builds passed on the clusters. Diagnosis in progress (Oct 25): the fixture's members share one slow disk, and the metadata path's per-member `fsync` cost pushes apply waits past a fixed 400 ms budget, so RPCs take seconds; a fix is on a branch, not merged | `dir_times_mkdir_rmdir`, `dir_many_files`, `concurrent_creates_same_dir` | OPEN |
+| P13 | W159: namespace latency under load | Fixed-progress apply waits merged in wave 9. K50's separate sixteen-attempt exhaustion is fixed in wave 22: transient admission retries use the inherited callback deadline; RMDIR now has the same 30 s bound as MKDIR. Real deadline exhaustion still fails. The original loaded-core timeouts, including mtime and directory cases on xorinox, are not causally closed by these fixes | `dir_times_mkdir_rmdir`, `dir_many_files`, `concurrent_creates_same_dir`; `tests/test_dir_ops_busy.py` | Broader W159 remains OPEN; [Task O evidence](../status/dir-ops-busy-under-load-20261027.md) |
 | P14 | Concurrent `O_APPEND` record loss (K9/W87) was never reproduced and has no root cause | No known symptom; the item reopens if a loss is seen | `concurrent_appends`, `peer_concurrent_append` PASS | Closed without resolution (D41) |
-| P15 | `fsync` with a member down is degraded | `fsync`/`fdatasync` succeed when two fragments of every stripe the file's writes touched are proven durable and a third that is not is marked degraded; `EIO` with two of a stripe's nodes down or unproven. A member back from an unclean stop proves nothing until its verified recovery (K36) is done, which on a small store takes seconds | `tests/test_data_commit.c`, `tests/test_k35_fsync_degraded.py` (K35), `tests/test_k36_recovery.py` (K36); not in the POSIX suites | Limitation, *proposed* (findings F22, F23) |
+| P15 | `fsync` with a member down is degraded | `fsync`/`fdatasync` succeed when two fragments of every stripe the file's writes touched are proven durable and a third that is not is marked degraded; `EIO` with two of a stripe's nodes down or unproven. A member back from an unclean stop proves nothing until its verified recovery (K36) is done, which on a small store takes seconds | `tests/test_data_commit.c`, `tests/test_k35_fsync_degraded.py` (K35), `tests/test_k36_recovery.py` (K36); not in the POSIX suites | Decided D42 (findings F22, F23); implementation qualified only in the cited scopes |
+
+These requirements are **not waived as alpha limitations**: no unexplained
+loss of acknowledged bytes or directory names, and no EIO from ordinary
+writes on a healthy cluster. K38/K40 responsive-pressure fixes are merged
+(waves 9 and 19); K43 still records writer BUSY after coordinator SIGKILL,
+K48 an unexplained 95/96 listing after a replica halt, and W166 retains its
+stalled-follower/production-window gates. Later passes do not close those
+failures. See [release blockers](../release-notes/alpha-1.0.md#open-items-that-are-not-yet-limitations).
 
 Not POSIX deviations, but limits a user meets: no expiry options in the
 `.efs` commands (expiry is operated with `efs-mgmt`, off by default; with

@@ -1,9 +1,11 @@
 # Alpha 1.0 — install, configure and operate (draft)
 
-**Draft, October 24, 2026, revised October 25; checklist items S3 and S5.
-Every command is the current CLI at `ec3e09306`, and every workflow and
-failure case below was run on a loopback cluster of that build
-([audit](../status/docs-audit-20261025.md)).** This is the user guide for
+**Draft, October 24, 2026, audited through devel `e7e72e267` (waves 9–22);
+checklist items S3 and S5.** CLI and behavior were checked against source and
+the merged evidence in the [round 3 audit](../status/docs-audit-20261027.md).
+Live commands and failure cases were **NOTRUN on the Mac** (the Linux tree
+does not build there); the [October 25 loopback audit](../status/docs-audit-20261025.md)
+is historical evidence on `ec3e09306`, not a run of this revision. This is the user guide for
 the alpha 1.0 milestone: 2+1 erasure coding on 3 to 16 nodes with the Linux
 FUSE client. The alpha release is not approved yet; the qualification gates
 of the [checklist](../status/alpha-1.0-2plus1-checklist.md) are open.
@@ -44,8 +46,14 @@ wrapper scripts and the `.efs` commands); Linux pidfd support.
 ```bash
 git clone <efs repository> efs && cd efs
 make            # efsd, efs-fuse, efs-mgmt, efs-bench and the tests
-make test       # fast unit tests, about a minute
+make test       # fast group; use make test-all before a merge/release gate
 ```
+
+For the full code gate, use `EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh`
+(`test-all` by default). Its D44 target is 1,100 s, excluding build time,
+with actual duration and overruns recorded per host. A zero-failure result
+with NOTRUN cases is **INCOMPLETE**, not full acceptance; see
+[testing](../how-it-works/testing.md).
 
 The wrapper scripts run the binaries from the checkout (`./efsd`,
 `./efs-fuse`); start them from any directory, they change to the checkout.
@@ -83,8 +91,11 @@ headroom; refusing startup`), for example a small tmpfs.
   start without a usable device and never falls back. Native InfiniBand needs an
   active port; RoCE needs an active Ethernet verbs device and a nonzero GID
   (`EFS_RDMA_GID_INDEX` pins one). Set the same transport variables on every
-  daemon and client. The recorded RDMA runs use one host's devices or
-  software RXE; cross-host RDMA acceptance is NOTRUN.
+  daemon and client. Task K records a scoped cross-host RDMA client run
+  (node9900 client to four node9901 daemons); Task M records single-host
+  native RDMA. Full RDMA qualification with 3/4/>4 independent storage
+  hosts remains NOTRUN; see the source-specific results in the
+  [POSIX page](alpha-1.0-posix.md).
 - **Direct fragment I/O.** efsd reads and writes fragments only with
   `O_DIRECT` (D42), independent of the transport and of the client, which
   always bypasses the kernel page cache. `O_DIRECT` alone does not make a
@@ -101,8 +112,8 @@ commands are given too.
 
 A fresh store becomes a new cluster when started with an address and
 without `--join`. Formatting is automatic: once the first node and two
-joiners are present, the cluster forms (node ids 1, 2, 3 in endpoint
-order) and starts serving.
+joiners are present, the cluster forms and starts serving. The first node is id 1;
+the cluster allocates the joiners' ids, not the operator.
 
 ```bash
 # host 10.0.0.11: first node, creates the cluster
@@ -193,8 +204,11 @@ A clean stop prints `Unmounting`, `Retiring drained efs-fuse PID N`,
 with 400 directories and files touched it took under 2 s on one host. A
 stall, or a failed flush, settle or revoke, is reported with its reason
 (`client stop stalled … no progress for 30 s in phase revoking`, or the
-record's `failed` reason) and the client is not killed; a failed revoke is
-resumed by `efs-mgmt raft-session fence`. `client.sh stop --force-discard
+record's `failed` reason) and the client is not killed. K42 retries only
+server-certified no-op cleanup waits within 20 s per shard, retaining the
+same session identity; an uncertified or exhausted wait remains a failure
+with `shard=N reason=...`. This does not bypass the all-member storage fence
+below. A failed revoke is resumed by `efs-mgmt raft-session fence`. `client.sh stop --force-discard
 /mnt/efs` (or `efs-fuse --stop /mnt/efs --force-discard`) detaches and
 **loses** the unresolved writes; use it only when that loss is accepted.
 Signals and a plain `umount` bypass the drain.
@@ -205,27 +219,13 @@ must seal every configured member, so it fails after 15 s with
 flush rc=0 settle rc=0 revoke rc=-13`; the member that ran the fence logs
 `storage-fence: member=N … transport unavailable`), `client.sh stop`
 prints `ERROR: client stop for /mnt/efs failed: revoke rc=-13 …` and exits
-1. The writes were flushed and settled first, the mount is gone and the
+1. In the October 25 run, writes were flushed and settled first; verify those
+results for the actual stop. The mount is gone and the
 client has exited; only the mount session's leases and locks stay
 unrevoked until the member is back and `efs-mgmt raft-session fence` or
 the next session cleanup retires them. Whether alpha keeps this as a
 limitation or changes it is an open user decision
 ([audit finding U4](../status/docs-audit-20261025.md)).
-
-### Expiry
-
-Scratch expiry ships in alpha 1.0 (D43, user, Oct 25; D42's exclusion is
-reversed). A root gets a policy with
-`efs-mgmt expiry-policy NODE:PORT set ROOT GENERATION EXPECTED_REV
---expire-after 24h [--renewal-limit DURATION] --flags 1` (operator UID 0;
-`get ROOT GENERATION` reads it); new files under it get a deadline that far
-from creation, `efs-mgmt expiry NODE:PORT show PATH` shows a path's
-deadline and `renew` extends it up to the renewal limit; reading or
-writing does not renew; `expiry-status` shows the worker, its backlog and
-its removals, `expiry-clock` the node clock health. A changed
-`--expire-after` affects only future files. Expiry is in every build
-(D43); every `expiry*` command is refused (rc -16) until the cluster
-expiry policy is set on.
 
 ### `df`
 
@@ -263,9 +263,20 @@ change needs a quorum of both the old and the new voters, so it waits while
 one of nodes 1–4 is down); members five and up add storage only. New writes
 use the new node at once; existing data stays where it is (no rebalancing).
 Mounted clients learn the new member without a remount. Online removal is
-not available in alpha. The loopback daemon tests of additions pass; the
-multi-host addition gates, including addition under client load, are
-NOTRUN.
+not available in alpha. Loopback addition tests and the scoped four-member
+orcd-mini RDMA run in [Task K](../status/k44-retired-replica-routing-20261026.md)
+pass. Task K has a cross-host client and management sweep, but all four
+daemons share node9901. Addition across distinct storage hosts, including
+under client load, remains NOTRUN.
+
+**Management after addition (K44/W167):** the first member retires its local
+group-2 replica. `raft-status` can still show `retired=1` and frozen historical
+indices there; these are not a failed current voter. Management requests now
+route to live voters, and repeating `mkfs` through the seed or added member
+keeps the formed cluster unchanged. Before the wave-18 fix, a seed `mkfs`
+could return BUSY by waiting on its retired cursor; targeting a live member
+was the workaround. It is historical, not required on this devel. Never wipe
+or reformat an existing cluster to work around that response.
 
 ### Add storage
 
@@ -356,7 +367,43 @@ efs-mgmt expiry-policy 10.0.0.11:17432 cluster set off 1     # pause everywhere
   clock needs an operator reset) and for both metadata groups; the space is
   reclaimed like an unlink, after the last open descriptor closes.
 
+### A metadata replica halts (W130/W165)
+
+A refused stored-row encoding fences that replica's affected group: it stops
+serving, applying and campaigning, and logs `apply halted, group not served`
+with the group and entry. The apply cursor does not skip the entry. A
+serve-path detection follows the same halt; requests route to healthy voters
+instead of repeatedly reading the damaged local row. The healthy quorum is
+still required. Save the logs, source/build identity and affected stores
+before recovery; do not edit metadata or erase the store.
+
+Inspect every member with `efs-mgmt raft-status NODE:PORT`, including the
+voters, `retired=`, commit/applied indices and `resync=1`. On the affected
+**non-retired follower** request a snapshot from its healthy leader:
+
+```bash
+./efs-mgmt raft-resync 10.0.0.13:17432 0  # affected member and group (0 or 2)
+./efs-mgmt raft-status 10.0.0.13:17432
+```
+
+Exit 0 from `raft-resync` means **requested**, not healed. Wait for snapshot
+installation, the `halt cleared, group served again` log, catch-up and exact
+namespace/payload checks. A leader or retired replica refuses resync; do not
+resync an unrelated group. A replica with resync pending cannot campaign
+(K46). A snapshot the build cannot decode leaves the halt in place; no
+migration or format fallback is attempted. The CLI's sentence about the
+"next conflicting AppendEntries" is stale: the implemented resync explicitly
+requests an image even when the logs agree.
+
 ## Failure behavior
+
+**Required alpha behavior, not a blanket qualification claim:** ordinary I/O
+must continue with a healthy quorum and enough fragments; healthy-cluster
+writes must not fail with EIO. Merged K38–K47 fixes address specific failures.
+K43 (writer BUSY after coordinator loss), K48 (95/96 names after a replica
+halt) and W166's unqualified stalled-follower window remain release gaps.
+A later successful read or retry never changes an earlier failed operation
+to PASS. See the [release blockers](../release-notes/alpha-1.0.md#open-items-that-are-not-yet-limitations).
 
 | Event | What happens | What the user sees |
 | --- | --- | --- |
@@ -365,7 +412,8 @@ efs-mgmt expiry-policy 10.0.0.11:17432 cluster set off 1     # pause everywhere
 | A node hangs without exiting | Untested gray failure | Requests to it time out after 30 s; an `open` was seen to return `EIO` (W154 notes) |
 | The node returns | Rebuild on return (W154): each group leader rebuilds the missing fragment of every degraded stripe, at most 256 per pass, and clears its mark; degraded packed segments are rebuilt and verified the same way (K37), and the leader audits the returned member's segment fragments once its stores are settled | `Degraded chunks` and `Degraded segments` fall to 0, `rebuilt=` rises, `Protection: full`, `Cluster state: OK` (run: 33 chunks in 12 s, 1,515 chunks in 84 s on one host). No other repair exists |
 | A node lost for good | Degraded stripes stay degraded; there is no rebuild to another node and no removal | Data stays readable while every other node is up; a second loss then makes those stripes unreadable. `fsync` goes on, marking the stripes on that node degraded |
-| A client is stopped while a node is down | The drain and settle succeed; the session revoke's storage fence needs every configured member and fails (`EFS_ERR_BUSY`) | `client.sh stop` exits 1 after 15 s with `revoke rc=-13 phase=storage-fence`; no write is lost, the mount is gone, the session's leases stay until the member returns (open decision U4) |
+| A metadata decoder refuses a stored row | The affected replica/group halts; healthy voters serve; operator `raft-resync` can heal an eligible follower as above | Halt diagnostic and frozen local apply cursor; resync is asynchronous. K48's intermittent incomplete healthy-quorum listing remains OPEN, not an accepted limitation |
+| A client is stopped while a node is down | The recorded case completed drain and settle; the session revoke's storage fence needs every configured member and fails (`EFS_ERR_BUSY`) | `client.sh stop` exits 1 after 15 s with `revoke rc=-13 phase=storage-fence`; this is not a successful clean stop: check the separate flush/settle results; the mount is gone, the session's leases stay until the member returns (open decision U4) |
 | Two nodes down at once | Stripes with fragments on both are unreadable; a metadata group with two of its three voters down has no quorum | `EIO` or timeouts for the affected files; `fsync`/`fdatasync` of a file with such a stripe return `EIO` and the client log names the stripe (`1 of 3 durable; need 2`) until a node returns; with two of nodes 1–4 down in one group, metadata operations on that group stop until a node returns |
 | Client process dies | Writes it had not yet published are lost (D28); its abandoned uploads are collected | `Abandoned uploads` counters in `status` |
 | A daemon crashes, is killed or stops forced (rc 3) | Its roots restart "recovery uncertain". Verified recovery (K36) proves the boot counter, the reclaim journal, the session certificates, every local fragment and every published reference, drops what it cannot prove, marks those stripes and packed segments for rebuild on return and then clears the fence | While the node is away, writes and reads go on as with one node down, and `fsync` succeeds with two durable fragments and a mark (run: `fsync` OK before, during and after the kill; files exact). After the restart and until recovery is verified the node refuses COMMIT: `fsync` marks every stripe with a fragment on that node degraded and returns `EIO` only for a stripe that needs that fragment. Afterwards the node COMMITs again and the marked stripes are rebuilt on it. A write acknowledged by the crashed run and not yet committed is not proven by recovery (K35 treats that fragment as lost). The log says `recovery: verified in N ms`; `sync-status` shows `recovery running phase=…`, then `recovery verified` with its counts (`segments checked= missing= marked= … rebuilt=`), or `recovery FAILED` and the reason (the node then stays fenced until a restart verifies it) |
