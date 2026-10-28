@@ -127,5 +127,4 @@ finally:
     if failed:
         print(f'W159 failed fixture retained: {work}', flush=True)
     else:
-        subprocess.run([str(Path.home() / 'bin/edelete'), '--force', '--delete', str(work)],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        print(f'W159 fixture ready for runner pruning: {work}', flush=True)

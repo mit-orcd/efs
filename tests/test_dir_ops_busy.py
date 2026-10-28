@@ -4,12 +4,11 @@
 Four private fault daemons; one normal FUSE client, TCP/O_DIRECT, 1 GiB/node.
 One syscall, no application retry: twenty counted pre-admission refusals then
 ordinary RMDIR. Check exact refusals, one immutable opid, and final absence.
-Stores/logs stay in TMPDIR on failure; logs are printed before cleanup on PASS.
+Stores/logs stay in TMPDIR for the runner to archive and prune; logs are emitted.
 """
 import os
 from pathlib import Path
 import re
-import subprocess
 import sys
 import tempfile
 import time
@@ -25,7 +24,6 @@ env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
 env.update(EFS_FAULT_RMDIR_BUSY_FILE=str(marker), EFS_TRANSPORT='tcp')
 c = Cluster(work, 'rmdir', [1, 2, 3, 4], env)
 m = None
-passed = False
 try:
     c.start(1)
     c.start(2, join=1)
@@ -53,7 +51,6 @@ try:
     assert re.search(r'inode-rpc: slow-ok .*attempts=21 .*saw_busy=1 .*status=0', client), client[-4000:]
     assert elapsed < 30, elapsed
     print(f'Task O directory BUSY: PASS 20 refusals, same opid, one RMDIR in {elapsed:.3f}s', flush=True)
-    passed = True
 finally:
     if m:
         m.close()
@@ -61,6 +58,5 @@ finally:
     print(f'Task O fixture: {work}', flush=True)
     for log in c.dir.glob('*.log'):
         print(f'==== {log.name} ====\n'+log.read_text(errors='replace'), flush=True)
-    if passed:
-        subprocess.run([str(Path.home() / 'bin/edelete'), '--force', '--delete', str(work)],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    # The runner owns TMPDIR retention/pruning; do not depend on a private
+    # host cleanup binary or delete a failure before its logs are captured.
