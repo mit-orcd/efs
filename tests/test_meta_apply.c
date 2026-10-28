@@ -1258,7 +1258,7 @@ static void test_i8_spread(void)
 /* Collects a whole directory by paging with `page` entries at a time, so the
  * same assertions cover a single-page listing and a heavily paged one. */
 struct dir_list {
-    char names[64][EFS_MAX_NAME];
+    char names[128][EFS_MAX_NAME];
     uint32_t n;
     uint32_t calls;
 };
@@ -1267,14 +1267,14 @@ static int list_dir(struct efs_kv *kv, efs_ino_t dir, uint32_t page,
                     struct dir_list *l)
 {
     struct efs_meta_dir_cursor cur;
-    struct efs_meta_dir_ent ent[16];
+    struct efs_meta_dir_ent ent[128];
     uint32_t got, i;
     int rc;
 
     memset(&cur, 0, sizeof(cur));
     memset(l, 0, sizeof(*l));
-    if (page > 16)
-        page = 16;
+    if (page > 128)
+        page = 128;
     while (!cur.done) {
         rc = efs_meta_apply_readdir(kv, dir, &cur, ent, page, &got);
         if (rc != EFS_OK)
@@ -1283,7 +1283,7 @@ static int list_dir(struct efs_kv *kv, efs_ino_t dir, uint32_t page,
         if (l->calls > 500)
             return EFS_ERR_IO; /* cursor is not advancing */
         for (i = 0; i < got; i++) {
-            if (l->n >= 64)
+            if (l->n >= 128)
                 return EFS_ERR_NOMEM;
             snprintf(l->names[l->n], EFS_MAX_NAME, "%s", ent[i].name);
             l->n++;
@@ -1318,7 +1318,7 @@ static void test_readdir_local(void)
     struct efs_kv *kv = efs_kv_mem_create();
     struct dir_list l;
     struct efs_meta_dir_cursor cur;
-    struct efs_meta_dir_ent ent[16];
+    struct efs_meta_dir_ent ent[128];
     efs_ino_t ino = 0;
     uint32_t got = 0, pages[] = { 1, 2, 3, 16 };
     char nm[32];
@@ -1528,6 +1528,46 @@ static void test_readdir_concurrent_split(void)
     CHECK(list_while_splitting(3, 0) == 40, "three names migrate per page");
     for (uint32_t at = 1; at <= 40; at += 13)
         CHECK(list_while_splitting(1, at) == 40, "split finishes mid-listing");
+}
+
+/* K48: move a name after READDIR copied its inode/bitmap, before its scan.
+ * Sixty-four LOCAL entries plus 32 HASHED entries cross the 64-entry wire
+ * boundary. The first LOCAL name's new lane is absent from the copied row. */
+static struct {struct efs_kv *kv; const struct efs_kv_ops *ops; int fired; int local;} k48_race;
+static int k48_racing_get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t *vl)
+{
+    int rc=k48_race.ops->get(ctx,key,kl,value,vl);
+    if(rc==EFS_OK && kl==11 && key[2]==EFS_KV_KIND_INODE && !k48_race.fired){
+        const struct efs_kv_ops *wrapped=k48_race.kv->ops;
+        k48_race.fired=1;k48_race.kv->ops=k48_race.ops;
+        if(k48_race.local)CHECK(efs_meta_dir_begin_split(k48_race.kv,EFS_ROOT_INO)==EFS_OK,"K48 concurrent begin");
+        CHECK(efs_meta_dir_migrate_one(k48_race.kv,EFS_ROOT_INO)==EFS_OK,"K48 concurrent move");
+        k48_race.kv->ops=wrapped;
+    }
+    return rc;
+}
+static void test_readdir_intra_page_split(void)
+{
+    for(unsigned local=0;local<2;local++)for(unsigned page=1;page<=128;page*=2){
+        struct efs_kv *kv=efs_kv_mem_create();struct efs_kv_ops wrapped;
+        struct dir_list list;efs_ino_t ino;char first[32],nm[32];unsigned chosen=0;
+        CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"K48 init");
+        for(unsigned i=0;;i++){snprintf(first,sizeof first,"a%05u",i);if(efs_kv_dir_lane(first)==1)break;}
+        CHECK(efs_meta_apply_create_file(kv,&g_at,EFS_ROOT_INO,S_IFREG|0644,first,&ino)==EFS_OK,"K48 first");
+        for(unsigned i=0;chosen<95;i++){
+            snprintf(nm,sizeof nm,"z%05u",i);if(efs_kv_dir_lane(nm)!=63)continue;
+            if(chosen==63 && !local)CHECK(efs_meta_dir_begin_split(kv,EFS_ROOT_INO)==EFS_OK,"K48 split");
+            CHECK(efs_meta_apply_create_file(kv,&g_at,EFS_ROOT_INO,S_IFREG|0644,nm,&ino)==EFS_OK,"K48 create");chosen++;
+        }
+        memset(&k48_race,0,sizeof k48_race);k48_race.kv=kv;k48_race.ops=kv->ops;k48_race.local=local;
+        wrapped=*kv->ops;wrapped.get=k48_racing_get;kv->ops=&wrapped;
+        int rc=list_dir(kv,EFS_ROOT_INO,page,&list);
+        kv->ops=k48_race.ops;
+        if(rc!=EFS_OK||list.n!=96||!list_has(&list,first))fprintf(stderr,"K48 local=%u page=%u first=%s count=%u rc=%d\n",local,page,first,list.n,rc);
+        CHECK(k48_race.fired,"K48 race fired");
+        CHECK(rc==EFS_OK && list.n==96 && list_has(&list,first),"K48 intra-page split retains all 96 names");
+        efs_kv_mem_free(kv);
+    }
 }
 
 /* Dir lane 0 is the directory's own inode shard, so a lane-0 name occupies
@@ -6794,6 +6834,7 @@ int main(void)
     test_readdir_spread();
     test_readdir_lane0();
     test_readdir_concurrent_split();
+    test_readdir_intra_page_split();
     test_setattr_mode_owner();
     test_stat_collect();
     test_stat_committed_unresolved_row();

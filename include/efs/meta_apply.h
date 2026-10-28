@@ -914,9 +914,12 @@ struct efs_meta_dir_ent {
  * result.
  *
  * The guarantee is deliberately weak (architecture.md §3): every name
- * returned existed at some point during the scan and no name is returned
- * twice, but this is NOT a snapshot — a concurrent create or unlink may or
- * may not be observed. */
+ * returned existed at some point during the scan, but this is NOT a snapshot:
+ * a concurrent create or unlink may or may not be observed. Migration may
+ * repeat a name across pages; the client collector deduplicates names. */
+/* A page/cookie is published only after its layout and used-lane bitmap
+ * remain stable across the scan. Monotonic migration permits bounded retries;
+ * this is a weak listing, not a snapshot spanning separate page calls. */
 int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
                            struct efs_meta_dir_cursor *cur,
                            struct efs_meta_dir_ent *out, uint32_t max,

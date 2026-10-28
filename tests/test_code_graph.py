@@ -110,6 +110,11 @@ class GraphChecks(unittest.TestCase):
             self.assertEqual((root / ".git/hooks/post-commit.before-efs-code-graph").read_text(), original)
 
     def test_scope_retains_models_excludes_history(self):
+        # select_files lists tracked files; the gate runs from a git archive.
+        if subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=ROOT,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+            print("NOTRUN: code-graph scope selection needs a git checkout (git ls-files)", flush=True)
+            self.skipTest("no git checkout")
         config = json.loads((ROOT / 'tools/graphify/scope.json').read_text())
         code, docs = m.select_files(ROOT, config)
         self.assertIn('tests/d39_model.py', code)

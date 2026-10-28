@@ -35,6 +35,8 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Wave 28 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`c0081d095`; gate at `d951ca293`)**: Task S, K48 ([evidence](k48-readdir-omission-20261028.md)): a directory page is published only if the directory's layout and used lanes are unchanged after its scan (bounded rescans, then BUSY rather than a short page), and lanes that became used during the scan are fenced before the page is served; `test_k48_readdir.py` reproduces the omission on the base. K48 stays OPEN: the original Task N capture lacks the missing name and RPC trace, so its exact cause is unproven. And Task U ([evidence](k32-write-cost-profile-20261028.md)): K32 write-cost profile (FUSE tickets 5.66, sessions 0.48, publication 0.36 Raft entries/MiB), the direct-client harness, operator `raft-resync` admission BUSY retried within the W130 test's recovery deadline; IOR NOTRUN, D4 baseline failure open. Merge-time: `test_code_graph.py` (added unwired by the code-graph commit `3debca7ec`) is now in `make test-long`, and its git-dependent case reports NOTRUN in the gate's git-archive tree. intel2 `make test-all` at `d951ca293`: 526 commands in 702 s, 1 FAIL (that test case, fixed in `c0081d095` and rerun there: OK, one NOTRUN), 12 NOTRUN host limits.
+
 [Wave 27 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (blocks alpha): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); whether K52 is K10 needs the new helper's observed bytes before it is closed or kept. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
 
 [Task V four-host driver rehearsal](a4-lab-topology-dryrun-20261028.md):
@@ -46,6 +48,20 @@ and checked restart PASS. Final code gate **522/1 FAIL/12 NOTRUN, 744 s**:
 K48-shaped 95/96 listing after resync, closed fixture retained on intel2.
 All private fcstor cluster trees and intel2 build scratch removed; sealed raw
 evidence retained. A4 topology defined and dry-run, decision open. No product fix.
+
+[K32 write cost profile](k32-write-cost-profile-20261028.md): **Task U complete
+in scope**, no product source changes. Twelve 1 GiB direct/aligned-FUSE cases
+pass filesystem byte-pattern checks (FUSE reads are cache-warm);
+ticket/session/publication work averages 5.657/0.484/0.356
+entries per MiB in the six FUSE rows. Final `75db7afb0` xorinox gate:
+**524 commands, 0 FAIL, 11 NOTRUN, INCOMPLETE**, 824 s. Benchmark failure,
+unaligned diagnostics and earlier full-gate failures retained. W130's
+pre-admission BUSY test handling fixed within its original deadline; D4's
+packer error reproduced on untouched base and remains OPEN. Captures hashed,
+failed stores archived, scratch pruned and host free. **Real-host IOR gate
+NOTRUN; K32 remains open.**
+
+[Task S — K48 directory omission](k48-readdir-omission-20261028.md): same-signature migration race fixed; frozen `947edd15f` passes deterministic 3/3, W130/payload 10/10 each and full gate 523/0 FAIL/12 NOTRUN (679 s). Original 677 files unchanged; count-only historical incident attribution remains OPEN. Raw manifest verified; own scratch pruned.
 
 [Wave 26 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`4e4f15307`; gate at `4e4f15307`)**: Task E, **K43** ([evidence](k43-coordinator-kill-20261026.md)): a publication stage whose owner transaction has a locally recorded ABORT is reaped on contact by the next unit instead of blocking it until the recovery scan's age gate, a reap's own errors are surfaced instead of collapsing into BUSY, and the K43 gate (`test_k43_coordinator_kill.py`: the coordinator SIGKILLed between PREPARE and COMMIT) fails on the base and passes on the fix; plus the heartbeat shutdown wake-up (`agent/heartbeat-stop-wakeup`: the heartbeat thread waits on a condition with a monotonic deadline and is woken by stop before the join, so an orderly stop no longer waits out a heartbeat interval). intel2 `make test-all` (8 jobs): 522 commands in 667 s, 0 FAIL, 12 NOTRUN host limits, PASS with host limits; OVERBUDGET 6 (intel1-fitted rows on intel2, Task T). **Held back:** `agent/task-h-repair` (187 commits of publication, receipt, Raft pump and client read repairs grown out of Task H): its own evidence page says IN PROGRESS, no overall PASS, with its nuc suite still running and the original K33 EIO cause open, and it conflicts with devel in eleven source files; it merges when its agent reports PASS on a rebase.
 
@@ -1018,7 +1034,7 @@ persisted; ior write regression needs a K row.
 
 [Simple startup and node addition](alpha-1.0-node-addition-20261023.md): **user decision Oct 23: the `--cluster` file feature is removed; the D39 admission merge is reverted on devel; seed/`--join` is the only startup.** Alpha needs W153 (member count and voters from the committed membership, formation at three) and then node addition (K33/W157).
 
-[K32 write regression](k32-write-regression-20261023.md): **OPEN; code fix on a branch ([fix evidence](k32-write-fix-20261023.md)).** orcd-mini (devel `757d76844`, fresh format) passes but ior easy write fell to ~0.36–0.5 GiB/s: K14 publishes every multi-chunk write as its own cross-group transaction (~20 Raft entries per 1 MiB write), K13 adds ~9.
+[K32 write regression](k32-write-regression-20261023.md): **OPEN; code fix merged (`ea2dc4443`), real-host IOR gate NOTRUN ([fix evidence](k32-write-fix-20261023.md), [Oct 28 cost profile](k32-write-cost-profile-20261028.md)).** The Oct 23 orcd-mini run (devel `757d76844`, fresh format) passed its functional checks but measured ior easy write at ~0.36–0.5 GiB/s. Its unbatched K14 profile published each multi-chunk write separately (~20 Raft entries per 1 MiB write); K13 added ~9. Current measured costs are in the Oct 28 profile.
 
 [K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
