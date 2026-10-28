@@ -1,11 +1,13 @@
 # tests/budgets.tsv (W160): every `make test-long` command, its wall-time budget in
-# seconds at EFS_TEST_JOBS=8 on an 8-CPU host with one NVMe (1.25 x the nuc run of
-# Oct 25), the pool slots it occupies while it runs, and, for a budget above the bound
+# seconds at EFS_TEST_JOBS=8, retained historical estimates pending Task T's
+# maximum-host-median refit, the pool slots reserved while pooled, and, above the bound
 # in tests/test_make_test_recipe.py, why. Slots weigh disk use, not CPU (the daemon
 # tests use 0.15-0.3 CPU each but their stores fsync on one disk): 6 the report
-# step-down test, whose 3 s latency bound needs a quiet disk (it starts first; D4, whose
-# packer PUT deadlines need the same, is the first two-slot command and runs beside
-# it); 3 a test whose driver or writers fsync for most of its run (B growth, stop
+# step-down test's historical reservation; timing/setup-sensitive cases listed in
+# the runner's EXCLUSIVE set now run alone, independent of fitted cost. Their slot
+# values and reason prefixes are retained as provenance; old first-window claims
+# do not override current runner isolation. 3 a test whose driver or writers fsync
+# for most of its run (B growth, stop
 # progress), so at most two overlap; 2 a daemon test that writes a moderate set with fsync;
 # 1 a test that mostly waits on daemon timers (member-down detection, unmount fences,
 # the slow member's deliberate delays) or a CPU-bound process. scripts/make_test_summary.sh starts the

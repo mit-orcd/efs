@@ -157,9 +157,20 @@ first wave is report-stepdown (6 slots, 440 s) plus snapshot-import (2 slots,
 claimed by its reason text. This is a deterministic scheduling calculation,
 not observed process start timestamps. Updating time estimates can therefore
 change overlap; the safe-neighbor assumption is not a stable invariant.
-The follow-up should separate latency protection from fitted cost and retain
-all test bounds and intrinsic workloads. Task T's measurement-only scope has
-not changed execution policy or slot counts to obtain a green gate.
+Task H independently reproduced a 3.85 s REPORT operation under the unchanged
+3 s bound while snapshot import shared its disk. Its committed runner-only
+fixes `ea2b9a342` and `f1ed2ccd8` are adopted as `7a292ac53` and `c7a70201f`:
+packing-epoch setup, W166 setup and REPORT step-down now run alone. Workloads,
+assertions, deadlines and declared slots are unchanged; there is one current
+policy, no A/B selector. The runner regression and fitter regression PASS.
+Budget header comments now distinguish historical reason text from actual
+isolation. Old intel1 observations retain their old policy/source identity;
+new nuc/intel2 measurements and confirmations must use the corrected policy.
+The fitter's schedule model reads that same EXCLUSIVE classification.
+`test_make_test_recipe.py` passes: 91 rows, static recipe model 1519 s against
+the existing 1650 s margin guard. This is not a refitted total or measured wall
+time; the user target remains 1100 s. The final fit must report its own actual-
+command reference model and the rows that exceed that target.
 
 ## Raw evidence and controls
 
