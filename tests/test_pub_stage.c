@@ -405,6 +405,11 @@ static void test_commit(void)
     CHECK(shrink(&f) == EFS_ERR_BUSY, "the pin outlives RESOLVE");
     CHECK(efs_txn_scan_pending(f.kv, f.ish, recs, 8, &n) == EFS_OK && n == 1 &&
           recs[0].pin_only, "resolved publication retains only its decision pin");
+    CHECK(prep_pin(&f, &t2, &parts2, f.row.content_epoch) == EFS_OK,
+          "second publication pin for scan overflow");
+    CHECK(efs_txn_scan_pending(f.kv, f.ish, recs, 1, &n) == EFS_OK && n == 1 &&
+          !recs[0].pin_only, "a partial page never certifies pin-only ownership");
+    CHECK(efs_txn_drop(f.kv, &t2, f.ish) == EFS_OK, "drop second scan pin");
     CHECK(efs_meta_apply_txn_retire(f.kv, f.ish, &t, T0 + 1000) == EFS_OK, "retire");
     CHECK(efs_meta_pub_pinned(f.kv, f.ino, f.row.generation) == EFS_OK, "unpinned");
     CHECK(efs_txn_scan_pending(f.kv, f.ish, recs, 8, &n) == EFS_OK && n == 0,

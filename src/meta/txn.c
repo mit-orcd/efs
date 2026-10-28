@@ -2013,7 +2013,12 @@ int efs_txn_scan_pending(struct efs_kv *kv, uint32_t shard,
     a.cap = cap;
     rc = txn_scan_kinds(kv, shard, pend_cb, &a);
     *n = a.n;
-    if (a.overflow)
+    if (a.overflow) {
+        /* A later record of a returned transaction may be a chunk stage.
+         * A partial page cannot certify that it saw pins only. */
+        for (uint32_t i = 0; i < a.n; i++)
+            out[i].pin_only = 0;
         return EFS_OK; /* a full page; the caller sweeps again */
+    }
     return rc;
 }
