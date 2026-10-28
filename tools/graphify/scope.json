@@ -29,7 +29,8 @@
     "docs/status/alpha-1.0-node-addition-20261023.md",
     "docs/status/d39-consolidated-model-20261023.md",
     "docs/status/w100-eof-contract-20261013.md",
-    "tools/graphify/README.md"
+    "tools/graphify/README.md",
+    "docs/status/graph-defects-20261028.md"
   ],
   "build_files": [
     "Makefile"

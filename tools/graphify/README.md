@@ -66,7 +66,8 @@ Markdown headings and literal symbol mentions are indexed deterministically.
 Ambiguous symbol names are left unlinked. `references_path` from the Makefile is
 only a literal path mention, not evidence every platform builds or runs it.
 
-`known-bugs.json` supplies three reviewed navigation checks. `documents_finding`,
+`known-bugs.json` supplies reviewed navigation checks, including the confirmed
+receipt, pre-publication durability and index-width defects found with this graph. `documents_finding`,
 `affects`, `exercises` and `regression_for` are explicitly curated relationships,
 not independently discovered AST calls. Validation also requires actual AST calls
 on the W127/W145 production paths and the W125 C oracle-to-implementation edge,

@@ -65,6 +65,72 @@
         "file": "tests/test_pack_switch.c",
         "symbol": "main"
       }
+    },
+    {
+      "id": "F1-stripe-prepublication",
+      "contract": "docs/status/graph-defects-20261028.md",
+      "heading": "F1 \u2014 Sweep can retire a stripe that has not been published (P1)",
+      "production": {
+        "file": "src/client/data_commit.c",
+        "symbol": "stripe_prove"
+      },
+      "oracle": "tests/test_data_commit.c",
+      "oracle_literals": [
+        "put_unpublished(916,0,1,2,3,7)==EFS_ERR_BUSY",
+        "publish_during_mark=1",
+        "!stripe_find(950,0,950000)->published"
+      ],
+      "calls": [
+        {
+          "file": "src/client/inode_rpc.c",
+          "symbol": "efs_client_rpc_degraded_mark"
+        }
+      ],
+      "limit": "Regression covers pre-publication capacity pressure, wrong FileID and publication racing a NOT_FOUND mark. Storage transport is stubbed; live mount/failover acceptance is separate."
+    },
+    {
+      "id": "F2-pending-receipt-ownership",
+      "contract": "docs/status/graph-defects-20261028.md",
+      "heading": "F2 \u2014 Receipt pressure permits concurrent execution of one identity (P2)",
+      "production": {
+        "file": "src/common/request_receipt.c",
+        "symbol": "receipt_insert"
+      },
+      "oracle": "tests/test_receipt_pending_pressure.py",
+      "oracle_literals": [
+        "peak_first == 1",
+        "ninth.rc == EFS_ERR_BUSY",
+        "!ninth.entered"
+      ],
+      "calls": [
+        {
+          "file": "src/common/request_receipt.c",
+          "symbol": "receipt_hash"
+        }
+      ],
+      "limit": "Production table and hash, colliding pending owners; duplicate execution is refused. Does not assert a prior duplicate durable publication occurred."
+    },
+    {
+      "id": "F3-raft-index-width",
+      "contract": "docs/status/graph-defects-20261028.md",
+      "heading": "F3 \u2014 Raft lookup aliases indices separated by 2^32 (P2)",
+      "production": {
+        "file": "src/raft/raft_disk.c",
+        "symbol": "disk_get"
+      },
+      "oracle": "tests/test_raft_store.c",
+      "oracle_literals": [
+        "index64 get cannot alias",
+        "index64 real high get",
+        "index64 reopened bounds"
+      ],
+      "calls": [
+        {
+          "file": "src/raft/raft_log.c",
+          "symbol": "raft_log_read_command"
+        }
+      ],
+      "limit": "Exercises real memory and disk stores with alias indices, valid high indices, snapshots and reopening. No claim of a previously reachable client consensus exploit."
     }
   ]
 }

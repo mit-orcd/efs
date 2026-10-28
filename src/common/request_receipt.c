@@ -124,14 +124,14 @@ static struct efs_receipt *receipt_find(struct efs_receipt_table *t,
     return NULL;
 }
 
-/* Caller holds t->mu. An empty slot first, then the oldest finished
- * receipt, then the oldest of all: a running attempt that loses its slot
- * re-inserts itself when it finishes. */
+/* Caller holds t->mu. A pending slot is the running attempt's reservation:
+ * never evict it or a duplicate can start another execution. Return NULL
+ * when the bounded probe window has no empty or completed slot. */
 static struct efs_receipt *receipt_insert(struct efs_receipt_table *t,
                                           const struct efs_receipt_key *k)
 {
     uint32_t h = receipt_hash(k);
-    struct efs_receipt *pick = NULL, *done = NULL, *any = NULL;
+    struct efs_receipt *pick = NULL, *done = NULL;
 
     for (uint32_t i = 0; i < RECEIPT_PROBE; i++) {
         struct efs_receipt *r = &t->slot[(h + i) & t->mask];
@@ -141,11 +141,11 @@ static struct efs_receipt *receipt_insert(struct efs_receipt_table *t,
         }
         if (r->state == EFS_RECEIPT_STATE_DONE && (!done || r->end_ms < done->end_ms))
             done = r;
-        if (!any || r->begin_ms < any->begin_ms)
-            any = r;
     }
     if (!pick) {
-        pick = done ? done : any;
+        if (!done)
+            return NULL;
+        pick = done;
         t->evictions++;
     }
     memset(pick, 0, sizeof(*pick));
@@ -243,8 +243,15 @@ int efs_receipt_run(struct efs_receipt_table *t, const struct efs_receipt_key *k
             }
         }
     }
-    if (!r)
+    if (!r) {
         r = receipt_insert(t, k);
+        if (!r) {
+            if (how) *how = EFS_RECEIPT_REFUSED;
+            if (out) memset(out, 0, sizeof(*out));
+            pthread_mutex_unlock(&t->mu);
+            return EFS_ERR_BUSY;
+        }
+    }
     r->state = EFS_RECEIPT_STATE_PENDING;
     r->attempts++;
     r->ino = ino;
@@ -257,14 +264,7 @@ int efs_receipt_run(struct efs_receipt_table *t, const struct efs_receipt_key *k
     rc = exec(ctx, &proposed, &phase, &stale);
 
     pthread_mutex_lock(&t->mu);
-    r = receipt_find(t, k);
-    if (!r) {
-        r = receipt_insert(t, k); /* evicted while running */
-        r->attempts = 1;
-        r->ino = ino;
-        r->nrec = nrec;
-        r->begin_ms = receipt_now_ms();
-    }
+    /* The pending reservation cannot be evicted while exec runs. */
     r->state = EFS_RECEIPT_STATE_DONE;
     r->rc = rc;
     r->outcome = efs_receipt_merge(r->outcome, efs_receipt_outcome(rc, proposed));

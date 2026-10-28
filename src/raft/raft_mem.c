@@ -71,9 +71,9 @@ static int mem_append(void *ctx, uint64_t index, uint64_t term,
     first = m->snap_idx + 1;
     if (index < first)
         return EFS_ERR_INVAL;
-    off = (uint32_t)(index - first);
-    if (off > m->n)
+    if (index - first > (uint64_t)m->n)
         return EFS_ERR_INVAL;
+    off = (uint32_t)(index - first);
     if (clen > 0) {
         if (!cmd)
             return EFS_ERR_INVAL;
@@ -111,9 +111,9 @@ static int mem_truncate_from(void *ctx, uint64_t index)
     first = m->snap_idx + 1;
     if (index <= m->snap_idx)
         return EFS_ERR_INVAL;
-    off = (uint32_t)(index - first);
-    if (off >= m->n)
+    if (index - first >= (uint64_t)m->n)
         return EFS_OK;
+    off = (uint32_t)(index - first);
     for (i = off; i < m->n; i++)
         free(m->log[i].cmd);
     m->n = off;
@@ -137,9 +137,9 @@ static int mem_get(void *ctx, uint64_t index, uint64_t *term, uint8_t *cmd,
     first = m->snap_idx + 1;
     if (index < first)
         return EFS_ERR_NOT_FOUND;
-    off = (uint32_t)(index - first);
-    if (off >= m->n)
+    if (index - first >= (uint64_t)m->n)
         return EFS_ERR_NOT_FOUND;
+    off = (uint32_t)(index - first);
     need = m->log[off].clen;
     *term = m->log[off].term;
     if (*clen < need) {
@@ -174,18 +174,15 @@ static int mem_last(void *ctx, uint64_t *index, uint64_t *term)
 static int mem_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
 {
     struct raft_mem_box *m = box_of(ctx);
-    uint64_t first;
     uint32_t drop, i;
 
     if (!m || last_index < m->snap_idx)
         return EFS_ERR_INVAL;
-    first = m->snap_idx + 1;
-    if (last_index >= first) {
-        drop = (uint32_t)(last_index - first + 1);
+    if (last_index > m->snap_idx) {
+        uint64_t covered = last_index - m->snap_idx;
+        drop = covered > (uint64_t)m->n ? m->n : (uint32_t)covered;
         /* Empty / behind learner: InstallSnapshot jumps snap_idx past a
          * log that never held 1..last_included. Same clamp as raft_disk. */
-        if (drop > m->n)
-            drop = m->n;
         for (i = 0; i < drop; i++)
             free(m->log[i].cmd);
         if (m->n > drop)
