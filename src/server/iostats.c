@@ -87,7 +87,9 @@ static uint64_t class_p50(const struct iostat_class *c)
     return samp[cnt / 2];
 }
 
-void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out)
+/* Routine diagnostics need only the lock-free I/O counters. Keep registry
+ * aggregation on the explicit management snapshot path. */
+static void snapshot_io(struct efs_msg_io_stats_reply *out)
 {
     uint64_t start = __atomic_load_n(&g_start_us, __ATOMIC_RELAXED);
     int i;
@@ -104,7 +106,13 @@ void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out)
         out->cls[i].us_max = __atomic_load_n(&c->us_max, __ATOMIC_RELAXED);
         out->cls[i].p50_us = class_p50(c);
     }
+}
+
+void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out)
+{
     struct efs_rdma_totals t;
+
+    snapshot_io(out);
     efs_rdma_totals(&t);
     out->rdma = (struct efs_io_stats_rdma){t.live_conns, t.data_frames_tx, t.data_bytes_tx,
                                           t.data_frames_rx, t.data_bytes_rx, t.credit_stalls};
@@ -121,7 +129,7 @@ void efs_iostats_dump(int force)
 
     if (!force && now - g_last_dump_us < 5000000ull)
         return;
-    efs_iostats_snapshot(&r);
+    snapshot_io(&r);
     for (i = 0; i < EFS_IO_STATS_CLASSES; i++)
         if (r.cls[i].ops)
             any = 1;

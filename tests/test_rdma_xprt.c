@@ -240,9 +240,28 @@ int main(void)
 
     /* Let the echo thread observe everything, then tear down. */
     usleep(100000);
+    struct efs_rdma_totals before_close, one_live, retired, repeated;
+    efs_rdma_totals(&before_close);
+    CHECK(before_close.live_conns == 2, "totals count both live connections");
     efs_conn_destroy(cli);
     pthread_join(eth, NULL);
+    efs_rdma_totals(&one_live);
+    CHECK(one_live.live_conns == 1, "totals retain one live connection");
+    CHECK(one_live.data_frames_tx >= before_close.data_frames_tx &&
+          one_live.data_frames_rx >= before_close.data_frames_rx,
+          "retiring a connection loses no frame counters");
     efs_conn_destroy(srv);
+    efs_rdma_totals(&retired);
+    CHECK(retired.live_conns == 0, "retired totals have no live connections");
+    CHECK(retired.data_frames_tx == one_live.data_frames_tx &&
+          retired.data_bytes_tx == one_live.data_bytes_tx &&
+          retired.data_frames_rx == one_live.data_frames_rx &&
+          retired.data_bytes_rx == one_live.data_bytes_rx &&
+          retired.credit_stalls == one_live.credit_stalls,
+          "live plus retired counters counted exactly once");
+    efs_rdma_totals(&repeated);
+    CHECK(!memcmp(&retired, &repeated, sizeof(retired)),
+          "repeated management totals do not recount retired connections");
 
     CHECK(sc.saw_rdma >= 2, "server saw RDMA frames");
     CHECK(sc.saw_tcp_big == 0, "no application TCP after segmented upgrade");
