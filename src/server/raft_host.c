@@ -25125,6 +25125,11 @@ static int host_getchunks_collect(struct efs_raft_host *h, efs_ino_t ino, uint32
             uint32_t nd = 0, di;
             uint64_t newest = 0;
 
+            /* A failed/moved collect restarts with count=0 in the same
+             * reply. This slot can now name a folded or different chunk:
+             * clear old delta counts, packed flags/ref and all other fields
+             * before constructing the current snapshot's record. */
+            memset(&out->recs[out->count], 0, sizeof(out->recs[out->count]));
             ch = view.base;
             nd = view.ndelta;
             newest = view.delta_seq;
