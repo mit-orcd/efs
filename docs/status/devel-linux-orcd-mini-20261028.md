@@ -6,6 +6,11 @@ in a separate fault build. LeakSanitizer remains NOTRUN under the hosts'
 `ptrace_scope=2`; it is not relabelled PASS. The existing Memcheck gate PASSed
 all 41 entries (300 s), and Linux docs PASSed all five checks.
 
+**Follow-up:** [intel2 LSan qualification](devel-lsan-intel2-20261028.md) on
+`f029a66d5` (identical product code) PASSed all 49 ASan/UBSan/LSan entries,
+including leak-refusal controls. This closes the coverage gap on a capable
+host; the historical ORCD results and policy limitation above remain unchanged.
+
 Tested source: `5b1f43c4469e7dcb94eafa5608c6f97160fe0f45`, based on devel
 `424d0db8f` plus repair `214c541aa` and its graph refresh. This follows the
 [graph-led repairs](graph-defects-20261028.md), particularly F1, K35/D42,

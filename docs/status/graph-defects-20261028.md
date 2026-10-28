@@ -8,7 +8,9 @@ objects that also need a durable terminal-ticket fence before retirement;
 `214c541aa` implements that path with a fresh post-fence metadata check.
 The final Linux run has 529 commands, zero failures and two NOTRUN markers:
 the fault-only arm separately PASSed; LSan remains unavailable. Memcheck
-41/41 and Linux docs 5/5 PASS. No multi-host/release acceptance is claimed.** Related work:
+41/41 and Linux docs 5/5 PASS. The [intel2 LSan follow-up](devel-lsan-intel2-20261028.md)
+then PASSed all 49 instrumented entries with LSan enabled. No multi-host/release
+acceptance is claimed.** Related work:
 W155 joining, K35/D42 stripe durability and W154 rebuild protection, and the
 Raft-store index contract. No broader W-item acceptance is changed.
 

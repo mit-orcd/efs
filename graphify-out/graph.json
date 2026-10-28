@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "5b1f43c4469e7dcb94eafa5608c6f97160fe0f45"
+      "source_commit": "f029a66d575ecd917614d1d25fbe90f4762dab54"
     }
   },
   "links": [
@@ -12850,8 +12850,8 @@
       "relation": "contains",
       "source": "efs:file:docs/status/graph-defects-20261028.md",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L104",
-      "target": "efs:section:docs/status/graph-defects-20261028.md:104"
+      "source_location": "L106",
+      "target": "efs:section:docs/status/graph-defects-20261028.md:106"
     },
     {
       "confidence": "EXTRACTED",
@@ -12859,8 +12859,8 @@
       "relation": "contains",
       "source": "efs:file:docs/status/graph-defects-20261028.md",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L125",
-      "target": "efs:section:docs/status/graph-defects-20261028.md:125"
+      "source_location": "L127",
+      "target": "efs:section:docs/status/graph-defects-20261028.md:127"
     },
     {
       "confidence": "EXTRACTED",
@@ -12868,8 +12868,8 @@
       "relation": "contains",
       "source": "efs:file:docs/status/graph-defects-20261028.md",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L140",
-      "target": "efs:section:docs/status/graph-defects-20261028.md:140"
+      "source_location": "L142",
+      "target": "efs:section:docs/status/graph-defects-20261028.md:142"
     },
     {
       "confidence": "EXTRACTED",
@@ -12877,17 +12877,8 @@
       "relation": "contains",
       "source": "efs:file:docs/status/graph-defects-20261028.md",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L15",
-      "target": "efs:section:docs/status/graph-defects-20261028.md:15"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "contains",
-      "source": "efs:file:docs/status/graph-defects-20261028.md",
-      "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L74",
-      "target": "efs:section:docs/status/graph-defects-20261028.md:74"
+      "source_location": "L17",
+      "target": "efs:section:docs/status/graph-defects-20261028.md:17"
     },
     {
       "confidence": "EXTRACTED",
@@ -12897,6 +12888,15 @@
       "source_file": "docs/status/graph-defects-20261028.md",
       "source_location": "L76",
       "target": "efs:section:docs/status/graph-defects-20261028.md:76"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "contains",
+      "source": "efs:file:docs/status/graph-defects-20261028.md",
+      "source_file": "docs/status/graph-defects-20261028.md",
+      "source_location": "L78",
+      "target": "efs:section:docs/status/graph-defects-20261028.md:78"
     },
     {
       "confidence": "EXTRACTED",
@@ -161177,261 +161177,261 @@
       "confidence": "EXTRACTED",
       "evidence_method": "reviewed-known-bug-manifest",
       "relation": "documents_finding",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L104",
+      "source_location": "L106",
       "target": "efs:bug:F2-pending-receipt-ownership"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L106",
+      "source_location": "L108",
       "target": "src_common_request_receipt_efs_receipt_run"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L107",
+      "source_location": "L109",
       "target": "src_common_request_receipt_receipt_insert"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L113",
+      "source_location": "L115",
       "target": "src_meta_pack_mapping_slot"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L123",
+      "source_location": "L125",
       "target": "src_meta_pack_mapping_slot"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
+      "source_file": "docs/status/graph-defects-20261028.md",
+      "source_location": "L110",
+      "target": "src_meta_query_disk_pending"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
+      "source_file": "docs/status/graph-defects-20261028.md",
+      "source_location": "L120",
+      "target": "src_meta_query_disk_pending"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
+      "source_file": "docs/status/graph-defects-20261028.md",
+      "source_location": "L121",
+      "target": "src_meta_query_disk_pending"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
       "source_file": "docs/status/graph-defects-20261028.md",
       "source_location": "L108",
-      "target": "src_meta_query_disk_pending"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
-      "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L118",
-      "target": "src_meta_query_disk_pending"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
-      "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L119",
-      "target": "src_meta_query_disk_pending"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
-      "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L106",
       "target": "src_server_raft_host_server_raft_host_report_receipted"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:104",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:106",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L113",
+      "source_location": "L115",
       "target": "src_server_storage_roots_barrier"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "reviewed-known-bug-manifest",
       "relation": "documents_finding",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:125",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:127",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L125",
+      "source_location": "L127",
       "target": "efs:bug:F3-raft-index-width"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:125",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:127",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L125",
+      "source_location": "L127",
       "target": "src_kv_kv_lsm_lookup"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:125",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:127",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L127",
+      "source_location": "L129",
       "target": "src_raft_raft_disk_disk_get"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:125",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:127",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L138",
+      "source_location": "L140",
       "target": "src_sim_sim_raft_reachable"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:140",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:142",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L145",
+      "source_location": "L147",
       "target": "src_client_commands_command_run"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:140",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:142",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L146",
+      "source_location": "L148",
       "target": "src_client_commands_command_run"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:140",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:142",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L150",
+      "source_location": "L152",
       "target": "src_meta_query_catalog_stopped"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:15",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:17",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L39",
+      "source_location": "L41",
       "target": "src_client_commands_command_run"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:15",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:17",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L31",
+      "source_location": "L33",
       "target": "src_client_ops_now"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:15",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:17",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L44",
+      "source_location": "L46",
       "target": "src_client_ops_now"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:15",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:17",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L35",
+      "source_location": "L37",
       "target": "src_common_rdma_message_fail"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:15",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:17",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L25",
+      "source_location": "L27",
       "target": "src_meta_query_disk_pending"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "reviewed-known-bug-manifest",
       "relation": "documents_finding",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:76",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:78",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L76",
+      "source_location": "L78",
       "target": "efs:bug:F1-stripe-prepublication"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:76",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:78",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L79",
+      "source_location": "L81",
       "target": "src_client_data_commit_efs_client_stripe_note"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:76",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:78",
+      "source_file": "docs/status/graph-defects-20261028.md",
+      "source_location": "L82",
+      "target": "src_client_data_commit_stripe_prove"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:78",
+      "source_file": "docs/status/graph-defects-20261028.md",
+      "source_location": "L83",
+      "target": "src_client_data_commit_stripe_prove"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:78",
       "source_file": "docs/status/graph-defects-20261028.md",
       "source_location": "L80",
-      "target": "src_client_data_commit_stripe_prove"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:76",
-      "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L81",
-      "target": "src_client_data_commit_stripe_prove"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:76",
-      "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L78",
       "target": "src_client_write_efs_client_put_fragments_parallel"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:76",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:78",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L98",
+      "source_location": "L100",
       "target": "src_common_rdma_message_fail"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/status/graph-defects-20261028.md:76",
+      "source": "efs:section:docs/status/graph-defects-20261028.md:78",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L84",
+      "source_location": "L86",
       "target": "src_meta_meta_apply_efs_meta_apply_degraded_mark"
     },
     {
@@ -769254,7 +769254,7 @@
       "kind": "known_finding",
       "label": "F1-stripe-prepublication",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L76"
+      "source_location": "L78"
     },
     {
       "_origin": "semantic",
@@ -769265,7 +769265,7 @@
       "kind": "known_finding",
       "label": "F2-pending-receipt-ownership",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L104"
+      "source_location": "L106"
     },
     {
       "_origin": "semantic",
@@ -769276,7 +769276,7 @@
       "kind": "known_finding",
       "label": "F3-raft-index-width",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L125"
+      "source_location": "L127"
     },
     {
       "_origin": "semantic",
@@ -787924,66 +787924,66 @@
       "community": 87,
       "community_name": "docs/backlog",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/status/graph-defects-20261028.md:104",
+      "id": "efs:section:docs/status/graph-defects-20261028.md:106",
       "kind": "document_section",
       "label": "F2 \u2014 Receipt pressure permits concurrent execution of one identity (P2)",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L104"
+      "source_location": "L106"
     },
     {
       "_origin": "semantic",
       "community": 87,
       "community_name": "docs/backlog",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/status/graph-defects-20261028.md:125",
+      "id": "efs:section:docs/status/graph-defects-20261028.md:127",
       "kind": "document_section",
       "label": "F3 \u2014 Raft lookup aliases indices separated by 2^32 (P2)",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L125"
+      "source_location": "L127"
     },
     {
       "_origin": "semantic",
       "community": 87,
       "community_name": "docs/backlog",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/status/graph-defects-20261028.md:140",
+      "id": "efs:section:docs/status/graph-defects-20261028.md:142",
       "kind": "document_section",
       "label": "Reproduction and evidence",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L140"
+      "source_location": "L142"
     },
     {
       "_origin": "semantic",
       "community": 87,
       "community_name": "docs/backlog",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/status/graph-defects-20261028.md:15",
+      "id": "efs:section:docs/status/graph-defects-20261028.md:17",
       "kind": "document_section",
       "label": "Repairs and regression gates",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L15"
+      "source_location": "L17"
     },
     {
       "_origin": "semantic",
       "community": 87,
       "community_name": "docs/backlog",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/status/graph-defects-20261028.md:74",
+      "id": "efs:section:docs/status/graph-defects-20261028.md:76",
       "kind": "document_section",
       "label": "Original findings (before repair)",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L74"
+      "source_location": "L76"
     },
     {
       "_origin": "semantic",
       "community": 75,
       "community_name": "tests/review_graph_20261028",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/status/graph-defects-20261028.md:76",
+      "id": "efs:section:docs/status/graph-defects-20261028.md:78",
       "kind": "document_section",
       "label": "F1 \u2014 Sweep can retire a stripe that has not been published (P1)",
       "source_file": "docs/status/graph-defects-20261028.md",
-      "source_location": "L76"
+      "source_location": "L78"
     },
     {
       "_origin": "semantic",

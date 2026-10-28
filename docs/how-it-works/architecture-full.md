@@ -1612,9 +1612,16 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+on idle intel2, **49/49 ASan/UBSan/LSan entries PASS**, zero reports/NOTRUN;
+clean and deliberate-leak controls PASS. This closes the earlier LSan coverage
+gap across hosts, without rewriting the historical ORCD INCOMPLETE verdict.
+All original failures retained; other agents' clusters untouched.
+
+[Full Linux devel suite](../status/devel-linux-orcd-mini-20261028.md): repaired source
 `5b1f43c44` on orcd-mini node9900: 529 commands, **0 FAIL, 2 NOTRUN**, runner
 INCOMPLETE; fault-only follower arm separately PASS, Memcheck 41/41 PASS,
-Linux docs 5/5 PASS. LSan remains unavailable under host ptrace policy.
+Linux docs 5/5 PASS. LSan remains unavailable locally under ORCD ptrace policy;
+[subsequent intel2 coverage](../status/devel-lsan-intel2-20261028.md) PASSes all 49 entries.
 `214c541aa` repairs abandoned replay-stripe proof and honors external scratch.
 Original failures/stores retained; other agents' clusters and ordinary deployment
 untouched. Successful final build/scratch bulk pruned with checked receipts.
