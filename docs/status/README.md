@@ -19,7 +19,9 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [Task I review](task-i-20261026.md): live protocol **PASS (scoped), complete**;
-F1/release coverage remains INCOMPLETE. User-requested drain follow-up
+F1/release coverage remains INCOMPLETE. User-selected quiet fstor007 qualification at
+`8e1db244f` has started (full gate, native mlx5_2 RDMA, unchanged hours);
+node9901 was occupied and left untouched. User-requested drain follow-up
 identified ongoing lane-row refresh triggers and a truncate scheduling gap.
 Repair `773284b5d`: node9900 gate 527/0 FAIL/18 NOTRUN, native RDMA9/9
 PASS, RDMA hour FAIL load RSS +6.07% and raw packer read error1; all2080
