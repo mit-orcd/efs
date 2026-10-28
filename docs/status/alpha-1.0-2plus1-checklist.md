@@ -165,6 +165,7 @@ Historical October 22 legend (retained):
 | K51 | Task L: the detached heartbeat can still read expiry/Raft-host status while teardown clears and frees `g_host`; TSan reports the race during recovery/rebuild shutdown ([evidence](rdma-gate-node9901-20261027.md)). | shutdown lifetime safety | VERIFY: heartbeat lifetime fix merged (wave 23 `6967bfda2`, code `f78bd66f9`); TSan/ASan and RDMA checks PASS scoped, integrated-candidate acceptance remains ([Task L](rdma-gate-node9901-20261027.md)). **History (retained):** Fix on `agent/devel-task-l` (`f78bd66f9`): join the heartbeat before Raft-host teardown or peer-pool close, recheck stop after its sleep, atomically unpublish the host. In-flight-reader regression and real-RDMA recovery/rebuild/D4 under TSan PASS (19/19); ASan/UBSan 49/49 PASS, full gate 517/0 FAIL/3 NOTRUN. Fixed/qualified (scoped), merged into devel (wave 23, `6967bfda2`). Blocks alpha: yes pending merge/merged-candidate acceptance. |
 | K52 | Task V: eight immediate read-back comparisons failed after successful write/fsync/close of fresh immutable files under eight writers on four distinct TCP hosts (`578e2064b`). Original helper omitted worker id and observed length/digest; later exact checks of all 64 candidates match on each of two clients. | read-after-write correctness | OPEN, blocks alpha: yes; owner Task X: classify eight Task V immediate read-back mismatches against K10 using retained/new exact observations, no packing or persistent-corruption attribution yet ([Task V](a4-lab-topology-dryrun-20261028.md)). **History (retained):** OPEN, cause unclassified; no persistent corruption established and no packing attribution. A later match does not erase the failed comparison. New helper diagnostics retain full path, expected/observed hashes and lengths without retry. **Blocks alpha: yes** ([Task V](a4-lab-topology-dryrun-20261028.md)). |
 | K53 | ORCD dd-profile full gate (fcstor007, `3769f44bb`): the B6 full-quota case let writer W0 succeed while the other writers got `ENOSPC`, where the oracle requires `ENOSPC` for all. Two guarded parent and two guarded fixed-build repeats PASS; failed store retained on fcstor007. | quota admission correctness | OPEN, blocks alpha: yes; owner unassigned: reproduce and attribute (reclaimed capacity between fill and probe is one hypothesis, not established) ([evidence](orcd-test-dd-profile-20261028.md)) |
+| K54 | Member-down clean unmount: a clean client stop fails at the session revoke (`revoke rc=-13 phase=storage-fence`) while any member is down, because the storage fence must reach every configured member (open finding U4, found Oct 25). | clean stop with one member down | OPEN, blocks alpha: yes (D46, user Oct 28: required fix, not a limitation); owner unassigned: complete accepted flush/settle and safe durable revocation with one member down, never turn a failed revoke into a clean shutdown ([decision](decisions.md)) |
 
 
 ### Recheck: candidate register reconciliation (October 28)
@@ -231,6 +232,7 @@ standalone rows K15/K16/K27/K28 are added without inventing historical runs.
 | K51 | VERIFY: heartbeat lifetime fix merged (wave 23 `6967bfda2`, code `f78bd66f9`); TSan/ASan and RDMA checks PASS scoped, integrated-candidate acceptance remains ([Task L](rdma-gate-node9901-20261027.md)). **History (retained):** Found by Task L TSan on node9901; heartbeat ownership joined before host free at `f78bd66f9`; focused shutdown test PASS. Corrected real-RDMA TSan 19/19 and ASan/UBSan 49/49 PASS on fstor007; code gate 517/0 FAIL/3 NOTRUN ([evidence](rdma-gate-node9901-20261027.md)). Blocks alpha: yes pending merge/merged-candidate acceptance. |
 | K52 | OPEN, blocks alpha: yes; owner Task X: classify eight Task V immediate read-back mismatches against K10 using retained/new exact observations, no packing or persistent-corruption attribution yet ([Task V](a4-lab-topology-dryrun-20261028.md)). **History (retained):** Task V four-host TCP D3 FAIL: 8 immediate read-back mismatches; 37,457 other payloads verified, 64/64 candidate paths later exact on both clients. Original observed bytes unavailable; current failure retained, cause OPEN, no product fix claimed. **Blocks alpha: yes** ([evidence](a4-lab-topology-dryrun-20261028.md)). |
 | K53 | OPEN, blocks alpha: yes; owner unassigned: one B6 full-quota over-admission (W0 succeeded, others `ENOSPC`) in the ORCD dd-profile gate, 4/4 guarded repeats PASS, cause OPEN, oracle unchanged ([evidence](orcd-test-dd-profile-20261028.md)) |
+| K54 | OPEN, blocks alpha: yes; owner unassigned: D46 makes the member-down clean unmount (U4, `revoke rc=-13 phase=storage-fence`) a required fix before alpha 1.0 ([decision](decisions.md)) |
 
 **Oct 23 evidence qualification:** nuc capture bundles are reported lost;
 xorinox raw outputs were deleted. Their PASS labels below are historical
@@ -402,7 +404,10 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
   `fcstor-4x1-tcp` topology (user-selected fcstor012–015 in place of the lab
   hosts); [four-host dry run](a4-lab-topology-dryrun-20261028.md) completed with D3
   FAIL (K52 immediate read-back mismatch); other eight requested gates PASS.
-  Topology defined, acceptance decision open; this rehearsal does not close A4.
+  Topology defined; this rehearsal does not close A4. **D46 (user, Oct 28):**
+  3, 4 and 5 distinct storage hosts on fcstor007–011 (`/data1/01`), each over
+  TCP and RDMA (six cells); alpha 1.0 must also work on all 13 fcstor nodes
+  (fcstor003–015). Execution NOTRUN.
 - [ ] **A5** Record quota, disks, RDMA devices, mount options, clients, concurrency,
   deadlines, fixture counts/sizes and expected results for every topology.
   Fresh-format setup only when a format change requires it; no compatibility work.
@@ -658,17 +663,16 @@ facts for A6, not decisions.
   killed daemon (verified recovery, K36), K34, K37 and `Protection: LOST`.
   Open finding U4: a clean client stop fails at the session revoke
   (`revoke rc=-13 phase=storage-fence`) while any member is down, because
-  the storage fence must reach every configured member; the user decides
-  whether that is an alpha limitation or a fix.
-- [ ] **S4 — Effective settings.** Decide whether **W122**, the listing of
-  effective settings, is in alpha. It supports A8 and A10.
+  the storage fence must reach every configured member. **D46: a required
+  fix before alpha 1.0, K54 (blocks alpha: yes).**
+- [ ] **S4 — Effective settings.** **D46: W122**, the listing of effective
+  settings, is required in alpha 1.0. It supports A8 and A10.
   **STRUCTURE Oct 24 ([effective settings](../using/alpha-1.0-surface.md#s4--effective-settings)):**
   where each effective value is visible today (startup log, `status`,
   `raft-status`, `version`, `sync-status`, `commands-policy get`; tunables
   not at all) and the page layout once A6 lands. The A6 inventory exists
-  and the A7 removals are done (D42); **waits for** the user's W122
-  decision only (described, not decided, in the Oct 25
-  [audit](docs-audit-20261025.md)).
+  and the A7 removals are done (D42); implementation and acceptance NOTRUN
+  (described in the Oct 25 [audit](docs-audit-20261025.md)).
 - [ ] **S5 — User documentation.** Install, configuration, supported
   topologies, the reduced configuration matrix (A11) and the published
   limitations.
@@ -1075,14 +1079,14 @@ K9/K27 are CLOSED with their different reasons; K10/K23 are DECIDED with
 D40/D42 scope limits. No K row is promoted to VERIFIED without a
 frozen-candidate gate. Functional decisions and the flag audit remain
 Task Z work; A4 topology, S4/W122, F12 and power-loss scope are not decided
-by this count reconciliation.
+by this count reconciliation (they are decided in D45 and D46).
 
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
-| Known-defect register K (Stage 1; once per candidate) | OPEN — 52 reconciled: 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN; K48 (Task S attribution), K52 (Task X); named VERIFY gates above | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
-| Functional scope S decided (once per candidate) | OPEN | (same) | (same) |
+| Known-defect register K (Stage 1; once per candidate) | OPEN — 54 rows (52 reconciled by Task Y, K53 and K54 added in waves 30–31): 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 4 OPEN; K48 (Task S attribution), K52 (Task X), K53 (ORCD full quota), K54 (member-down clean unmount); named VERIFY gates above | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
+| Functional scope S decided (once per candidate) | PARTLY DECIDED — D45 + D46 (user, Oct 28); W122, the K54 fix and the 33-tunable audit are required work; S1 command dispositions and `--writers` remain open | (same) | (same) |
 | Candidate and profile | NOTRUN — reviewed devel `9e4d66a8c`, not a frozen release candidate; K counts above (0 VERIFIED), A1/A2/A5 profile owed | NOTRUN — same counts; A4 decision and frozen profile owed | NOTRUN — K28 cap/layout is implemented (16-node cap); same counts, concrete N/failure domains/profile unqualified; prior “UNSUPPORTED until K28” was historical |
-| Flag audit and A/B removal (A6–A10, A12; once per candidate) | NOTRUN — Task Z reruns A6–A12 on current candidate; K register counts above are not an audit verdict (11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN) | Same audit/decision owner; named K live gates remain | Same audit/decision owner; no new A/B selector or user decision approved by Task Y |
+| Flag audit and A/B removal (A6–A10, A12; once per candidate) | PASS scoped static/startup audit at `9e4d66a8c`, driver `1164b55a4` ([Task Z](stage1-decision-sheet-20261028.md)); A8/A9/A10 and frozen-candidate obligations remain; K register counts above are not an audit verdict (11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 4 OPEN) | Same audit/decision owner; named K live gates remain | Same audit/decision owner; no new A/B selector or user decision approved by Task Y |
 | Reduced-matrix qualification (A11) | NOTRUN | NOTRUN | NOTRUN |
 | Placement/capacity and decode | NOTRUN | NOTRUN | NOTRUN |
 | POSIX and concurrent I/O | NOTRUN | NOTRUN | NOTRUN |

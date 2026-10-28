@@ -1,5 +1,12 @@
 # A6 settings inventory, and the decision-free part of A7/A8 (Oct 24)
 
+**Current-source audit, Oct 28:** [Task Z](stage1-decision-sheet-20261028.md)
+pins devel `9e4d66a8c`: 139 readers, 33 refused names, no new A/B selector;
+expiry compiled into every build under D43, READ_VERIFY replaced by built-in
+client hashing. Historical counts/branch states and compiled-out expiry prose
+below describe their dated source, not the current candidate. Task Z is not
+full retained-path or topology qualification.
+
 **Verdict: PASS (scoped).** On amd at `ed9e3e26d`, `make test-all` through
 the summary runner fails only the 10 commands that also fail on the
 untouched base (RDMA on software rxe0 and one fault test that times out on

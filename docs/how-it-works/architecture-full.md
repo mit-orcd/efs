@@ -3546,7 +3546,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | DEFERRED to beta (D45, user, Oct 28); was PROPOSED: role-specific supported settings, defaults, effective values and startup/runtime scope; backend implementation and acceptance NOTRUN | [feature and gates](#w122) |
+| settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | REQUIRED FOR ALPHA 1.0 (D46, user, Oct 28; supersedes the D45 beta deferral); was PROPOSED: role-specific supported settings, defaults, effective values and startup/runtime scope; backend implementation and acceptance NOTRUN | [feature and gates](#w122) |
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
 | small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
@@ -3711,7 +3711,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-##### Decisions — taken and pending (register D1–D37)
+##### Decisions — taken and pending (register D1–D46)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -3728,6 +3728,21 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
+
+### D46 — Task Z decisions, item by item (user, Oct 28)
+
+The user ruled on Task Z's [decision sheet](../status/stage1-decision-sheet-20261028.md)
+item by item against D45. These are accepted scope and required work, not
+completed implementation or passing gates.
+
+1. **A4 (supersedes D45 item 1):** qualify 2+1 on 3, 4 and 5 distinct physical storage hosts, each over TCP and RDMA (six cells), on **fcstor007–011** with test storage under **`/data1/01`** on each participating host; nested subsets 007–009, 007–010, 007–011. Use owned run directories, verify ownership, leave other agents' clusters and stores alone; co-located daemons never stand in for failure domains. Execution NOTRUN.
+2. **All 13 fcstor nodes:** alpha 1.0 must also work on all 13 fcstor nodes, fcstor003–015. This decision does not set that run's storage/client split or transports.
+3. **S4 / W122 (supersedes D45 item 2):** required in alpha 1.0: a minimal, bounded, read-only effective-settings listing (actual values, defaults and provenance, active policies, transport, build); no new behavior knob. L24 leaves the release notes when it ships.
+4. **F12:** D45 item 3 stands: no authentication in any alpha release; L22 stays.
+5. **K36 power loss and the live-gate campaign order:** D45 items 4 and 5 stand.
+6. **Member-down clean unmount (U4, K54):** must be fixed and qualified before alpha 1.0; **blocks alpha: yes**. A clean stop with one member down completes accepted flush/settle and safe durable revocation without spurious failure; a failed revoke never becomes a clean shutdown. Not an alpha limitation.
+7. **Remaining 33 numeric tunables:** audit each one's justification and bounds; remove unjustified overrides in favor of tested built-in or automatic policies. Engineering work, not 33 new user decisions.
+8. **Not adopted:** Task Z's S1 operator-command dispositions (`sync-status` and `raft-resync` in; `pack-compact`, `shrink-quota`, `raft-step-down`, `data-commit` out) and removal of the public `--writers` override. Both stay as before D46: proposed, user decision open.
 
 ### D45 — Stage 1 decisions taken Oct 28 (user, in one pass)
 
