@@ -1015,6 +1015,19 @@ static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const s
     if (rc == EFS_OK) rc = efs_pack_view_open(image, g, view);
     return rc;
 }
+/* A counted source read failure must be diagnosable after the fixture is
+ * stopped. Keep the counter unchanged; bound text even during an outage. */
+static void pk_read_failure(const char *kind, uint8_t group, uint64_t object,
+                             uint64_t generation, int rc)
+{
+    static uint64_t noted;
+    uint64_t n = __atomic_add_fetch(&noted, 1, __ATOMIC_RELAXED);
+    if (n <= 256 || !(n % 1024))
+        fprintf(stderr, "packer: %s-read g%u object=%016llx generation=%llx rc=%d failure=%llu\n",
+                kind, group, (unsigned long long)object, (unsigned long long)generation,
+                rc, (unsigned long long)n);
+}
+
 static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
                            const struct efs_node *nodes, uint32_t count)
 {
@@ -1043,7 +1056,10 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
     for (uint32_t si = 0; si < sc.n && nfiles < EFS_PACK_MAX_RECORDS; si++) {
         const struct efs_pack_object *o = &sc.s[si].o;
         struct efs_pack_view view;
-        if (pk_read_segment(nodes, count, o, work, &view) != EFS_OK) {
+        int read_rc = pk_read_segment(nodes, count, o, work, &view);
+        if (read_rc != EFS_OK) {
+            pk_read_failure("segment", group, o->ledger.segment_id,
+                            o->ledger.segment_generation, read_rc);
             STAT_ADD(read_errors, 1);
             continue;
         }
@@ -1394,6 +1410,9 @@ static int pk_group(uint8_t group, uint64_t term)
             uint32_t k = jobs[q].start;
             for (uint32_t x = jobs[q].start; x < jobs[q].end; x++) {
                 if (!rcs || rcs[x - first] != EFS_OK) {
+                    pk_read_failure("candidate", group, files[x].c.ino,
+                                    files[x].c.base.generation,
+                                    rcs ? rcs[x - first] : EFS_ERR_NOMEM);
                     STAT_ADD(read_errors, 1);
                     free(files[x].data);
                     files[x].data = NULL;
