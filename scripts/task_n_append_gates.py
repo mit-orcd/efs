@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
 
 p=argparse.ArgumentParser(description=__doc__)
@@ -81,10 +82,15 @@ try:
         if src.exists():(a.out/('gate-'+name)).write_bytes(src.read_bytes())
     for src in (plain/'tmp').glob('fail-*.log'):
         (a.out/src.name).write_bytes(src.read_bytes())
+    failed=any(row['exit']!=0 for row in rows if row['label']!='gate') or rc not in (0,3)
+    verdict='FAIL' if failed else ('INCOMPLETE' if rc==3 else 'PASS')
+    exit_status=1 if failed else (3 if rc==3 else 0)
     (a.out/'controller-result.json').write_text(json.dumps(dict(finished=time.time(),
-        verdict='PASS' if all(row['exit']==0 for row in rows) else 'FAIL',commands=rows),indent=2)+'\n')
+        verdict=verdict,commands=rows),indent=2)+'\n')
 except BaseException as exc:
     (a.out/'controller-failure.txt').write_text(repr(exc)+'\n')
     raise
 finally:
     (a.out/'stage').write_text('FINISHED\n')
+
+sys.exit(exit_status)
