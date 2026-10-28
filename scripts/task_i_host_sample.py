@@ -33,7 +33,7 @@ def foreign_jobs(source=None, *, proc_root=Path('/proc'), current_uid=None):
             comm = (proc/'comm').read_text().strip()
             known = comm in ('make', 'gmake', 'efsd', 'efs-fuse', 'gcc', 'cc1', 'cc1plus')
             python = comm.startswith('python')
-            if not known and not python and comm not in ('bash', 'sh'):
+            if not known and not python and comm not in ('bash', 'sh', 'tar', 'zstd', 'rsync', 'perf'):
                 continue
             try:
                 args = (proc/'cmdline').read_bytes().decode(errors='replace').split('\0')
@@ -42,9 +42,11 @@ def foreign_jobs(source=None, *, proc_root=Path('/proc'), current_uid=None):
                     found.append(dict(pid=int(proc.name),uid=uid,comm=comm,reason='command unreadable'))
                 continue
             runner = any(Path(x).name == 'make_test_summary.sh' for x in args[1:3])
-            traffic = python and any('/tests/' in x or x.startswith('tests/') or
-                                     Path(x).name in ('efsd','efs-fuse') for x in args[1:])
-            if not known and not runner and not traffic:
+            project = any('/efs/' in x or '/efs-' in x or '/efs_' in x for x in args[1:])
+            traffic = python and (project or any('/tests/' in x or x.startswith('tests/') or
+                                     Path(x).name in ('efsd','efs-fuse') for x in args[1:]))
+            archive = comm in ('tar','zstd','rsync','perf') and project
+            if not known and not runner and not traffic and not archive:
                 continue
             owned = False
             if source is not None and uid == current_uid:
