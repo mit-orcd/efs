@@ -423,6 +423,8 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_env_removed.py
 	python3 tests/test_cli_surface.py
 	python3 tests/test_cli_docs.py
+	python3 tests/test_write_cost_profile.py
+	python3 tests/test_resync_admission.py
 	python3 tests/test_direct_io_required.py
 	python3 tests/test_rdma_trace.py
 	python3 tests/test_transport_select.py

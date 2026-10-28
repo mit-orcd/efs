@@ -154,7 +154,7 @@ finally:
     for mt in mounts:
         mt.close()
     c.stop_all()
-    if os.environ.get('EFS_D4_KEEP'):
+    if os.environ.get('EFS_D4_KEEP') or sys.exc_info()[0] is not None:
         print('kept', work)
     else:
         shutil.rmtree(work, ignore_errors=True)
