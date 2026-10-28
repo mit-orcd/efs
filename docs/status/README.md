@@ -30,6 +30,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Task V four-host driver rehearsal](a4-lab-topology-dryrun-20261028.md):
+**IN PROGRESS**, `agent/devel-task-v`; user-selected private fcstor012–015
+TCP cluster, one member per wired host and two client hosts. Frozen live source
+`578e2064b`: formation, identity, topology, placement and 218/218 POSIX core
+PASS; remaining remote gates running. Per-host script paths, remote fixture
+preparation and checked teardown corrected. A4 decision stays OPEN; existing
+clusters untouched; private cluster and scratch will be removed after capture.
+
 [Wave 26 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`4e4f15307`; gate at `4e4f15307`)**: Task E, **K43** ([evidence](k43-coordinator-kill-20261026.md)): a publication stage whose owner transaction has a locally recorded ABORT is reaped on contact by the next unit instead of blocking it until the recovery scan's age gate, a reap's own errors are surfaced instead of collapsing into BUSY, and the K43 gate (`test_k43_coordinator_kill.py`: the coordinator SIGKILLed between PREPARE and COMMIT) fails on the base and passes on the fix; plus the heartbeat shutdown wake-up (`agent/heartbeat-stop-wakeup`: the heartbeat thread waits on a condition with a monotonic deadline and is woken by stop before the join, so an orderly stop no longer waits out a heartbeat interval). intel2 `make test-all` (8 jobs): 522 commands in 667 s, 0 FAIL, 12 NOTRUN host limits, PASS with host limits; OVERBUDGET 6 (intel1-fitted rows on intel2, Task T). **Held back:** `agent/task-h-repair` (187 commits of publication, receipt, Raft pump and client read repairs grown out of Task H): its own evidence page says IN PROGRESS, no overall PASS, with its nuc suite still running and the original K33 EIO cause open, and it conflicts with devel in eleven source files; it merges when its agent reports PASS on a rebase.
 
 [Wave 25 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`269a59c97`)**: Task P, second Stage 2 rehearsal ([evidence](stage2-rehearsal-2-20261027.md)): both loopback topologies ran the full matrix (24 gates plus the end-identity check) on intel2; three qualification-driver defects fixed with their original failures kept (the standalone soak overlapping the driver's own fixture, expiry fixture ports colliding with parent endpoints, the standalone plan touching fixtures); the three-member historical expiry FAIL stays recorded, the five-member corrected run has no FAIL. Task P's final `make test-all` at `dbebab983`: 516 commands, 0 FAIL, 14 NOTRUN, 739 s. Merged: `scripts/qualify.py`, the matrix, `tests/test_qualify_standalone.py` and the rehearsal scripts; no product change, so wave 23's intel1 gate stands for the product. Physical-host and RDMA acceptance stay NOTRUN.

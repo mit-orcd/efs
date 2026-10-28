@@ -357,7 +357,10 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
   qualify arbitrary cluster sizes.
 - [ ] **A4** Use distinct physical hosts for distributed acceptance. A private
   cluster with three daemons on one host is useful regression evidence, not
-  proof of three independent node/failure domains.
+  proof of three independent node/failure domains. Task V defines a private
+  `fcstor-4x1-tcp` topology (user-selected fcstor012–015 in place of the lab
+  hosts); [four-host dry run](a4-lab-topology-dryrun-20261028.md) IN PROGRESS.
+  Topology defined, acceptance decision open; this rehearsal does not close A4.
 - [ ] **A5** Record quota, disks, RDMA devices, mount options, clients, concurrency,
   deadlines, fixture counts/sizes and expected results for every topology.
   Fresh-format setup only when a format change requires it; no compatibility work.
@@ -492,15 +495,16 @@ alternatives reduces both product complexity and the supported test matrix.
   members 3–16, `O_DIRECT` only, one root per node, one or two client
   mounts, one feature profile, 33 numeric tunables at built-in values.
   Selector × transport × member count: 1,376,256 before A6/A7, 28 now
-  (A/B selectors 15 → 0). Qualified exhaustively: TCP/RDMA × 3, 4, 5
+  (A/B selectors 15 → 0). Required exhaustive qualification: TCP/RDMA × 3, 4, 5
   distinct hosts (six full runs); 6–16 sampled (loopback 6–8 only). Every
   Stage 2 item is mapped to its gates, cells, duration and prerequisites in
   `scripts/qualify_matrix.json`; `qualify.py run --matrix … --topology NAME`
   runs one topology. No stub gate is left (Oct 25: A13, C5, D1/D2, D3 and E4
   are [real gates](stage2-gates-20261024.md), loopback-3 PASS; B6 and D4 since
-  their merge). **Blocks A4:** no distinct-host topology can
-  form today (firewalld on the Rocky hosts allows only ssh; amd has no wired
-  link; no RDMA fabric across three hosts).
+  their merge). The original lab-host topology was blocked by firewalld and
+  amd's wired link; Task V's user-selected fcstor012–015 private TCP topology
+  has now formed on four distinct hosts (driver dry run IN PROGRESS). A4
+  acceptance remains open; no three-host RDMA topology is qualified by this run.
 - [ ] **A12 — Closure.** Every A/B selector has either been removed with its
   alternative implementation or is an explicitly justified, reviewed support
   dimension under A8. No unexplained experimental, legacy or correctness-policy
