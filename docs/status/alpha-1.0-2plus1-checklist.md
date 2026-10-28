@@ -905,7 +905,8 @@ round says which physical or software limiter it hit.
   all RSS <=1.63%, drain 92.9 s, 2080 exact; overall pair FAIL).
   AMD native default RoCE PASS 9/9; full gate FAIL 3/520, hour NOTRUN;
   fixed-harness/cleanup continuation `d7e265746` timed out waiting for W123;
-  no store touched, cleanup/qualification NOTRUN. Original
+  no store touched. Fresh `14010248c` preservation/cleanup succeeded: six
+  synthetic lines exact, peer/three daemons stopped cleanly; qualification BUILD. Original
   failures preserved. Final qualification INCOMPLETE.
   **Memory and concurrency gates run on the candidate Oct 25 (xorinox, branch
   `claude/devel-f1-gates-46ff64` on `merge-wave7`;

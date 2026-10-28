@@ -340,3 +340,9 @@ foreground 40→60 allocated +145344/free +104512 bytes, mmap unchanged;
 foreground RSS +0.06%. This did not reproduce the prior failure and is not
 qualification. Mapping lifetime/residency observation follows.
 Old pre-action waiters were superseded without running tests.
+
+AMD became quiet at 09:15 UTC. Strict preservation-link fix `14010248c`
+verified 100 copied files/three links, recovered only the original fixture
+with unchanged binaries, checked all six synthetic lines and stopped peer/
+three daemons cleanly. Fresh qualification is BUILD; earlier failures and
+pre-recovery stores remain on AMD. No RSS/reclaim qualification closure.
