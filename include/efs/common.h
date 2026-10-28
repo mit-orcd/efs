@@ -2,6 +2,7 @@
 #define EFS_COMMON_H
 
 #include <stdint.h>
+#include "efs/byteorder.h"
 #include <stddef.h>
 #include <stdbool.h>
 #include <limits.h>

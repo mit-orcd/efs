@@ -18,12 +18,23 @@
 #include <poll.h>
 #include <errno.h>
 
-static void *demand_read_alloc(uint32_t len);
+
+/* Named test seams delegate to the shared client geometry rules. */
 static uint32_t data_chunk_size(void)
 {
-    uint32_t cs = g_client.export.chunk_size;
-    return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
+    return efs_client_chunk_size();
 }
+static uint32_t data_frag_size(void)
+{
+    return efs_client_frag_size();
+}
+static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FRAGMENTS])
+{
+    efs_client_frag_ptrs(buf,frag_len,frags);
+}
+
+static void *demand_read_alloc(uint32_t len);
+
 
 static int read_retry_pause(unsigned delay_us)
 {
@@ -33,17 +44,6 @@ static int read_retry_pause(unsigned delay_us)
         return EFS_ERR_BUSY;
     usleep((unsigned)remaining * 1000u);
     return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
-}
-
-static uint32_t data_frag_size(void)
-{
-    return efs_frag_size(data_chunk_size());
-}
-
-static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FRAGMENTS])
-{
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        frags[i] = buf + (size_t)i * frag_len;
 }
 
 
@@ -1297,7 +1297,6 @@ static int overlay_chunk_deltas_ce(efs_ino_t ino, uint32_t ci, uint8_t *buf,
     }
     return rc;
 }
-
 
 
 int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)

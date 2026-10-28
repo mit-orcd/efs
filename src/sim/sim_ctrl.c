@@ -9,19 +9,6 @@
 #define CTRL_WAIT   200
 #define CONV_WAIT   800
 
-static void wr32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
-
-static uint32_t rd32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static int ctrl_apply(void *app, uint64_t index, uint64_t term,
                       const uint8_t *cmd, uint32_t clen)
@@ -33,7 +20,7 @@ static int ctrl_apply(void *app, uint64_t index, uint64_t term,
     if (!s || !s->sim || !cmd || clen < 5)
         return EFS_OK;
     if (cmd[0] == CMD_DESIRED)
-        s->sim->desired_voters = rd32(cmd + 1);
+        s->sim->desired_voters = efs_load_be32(cmd + 1);
     return EFS_OK;
 }
 
@@ -183,7 +170,7 @@ int efs_sim_ctrl_set_desired(struct efs_sim *sim, uint32_t voters)
     if (!sim)
         return EFS_ERR_INVAL;
     cmd[0] = CMD_DESIRED;
-    wr32(cmd + 1, voters);
+    efs_store_be32(cmd + 1, voters);
     lid = -1;
     for (t = 0; t < CTRL_WAIT; t++) {
         lid = ctrl_leader(sim);

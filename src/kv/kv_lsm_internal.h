@@ -1,5 +1,6 @@
 #ifndef EFS_KV_LSM_INTERNAL_H
 #define EFS_KV_LSM_INTERNAL_H
+#include "kv_order.h"
 
 #include "efs/checksum.h"
 #include <time.h>
@@ -54,20 +55,6 @@
 #define KV_OP_PUT 1
 #define KV_OP_DEL 2 /* tombstone: shadows older segments, never returned */
 
-static inline int kv_key_cmp(const uint8_t *a, uint32_t al, const uint8_t *b,
-                             uint32_t bl)
-{
-    uint32_t n = al < bl ? al : bl;
-    int c = n ? memcmp(a, b, n) : 0;
-
-    if (c != 0)
-        return c;
-    if (al < bl)
-        return -1;
-    if (al > bl)
-        return 1;
-    return 0;
-}
 
 static inline int kv_has_prefix(const uint8_t *k, uint32_t kl,
                                 const uint8_t *p, uint32_t pl)

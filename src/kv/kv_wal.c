@@ -74,19 +74,6 @@ static int wal_grow(struct kv_wal *w, uint32_t need)
     return EFS_OK;
 }
 
-static void put_u32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v & 0xFF);
-    p[1] = (uint8_t)((v >> 8) & 0xFF);
-    p[2] = (uint8_t)((v >> 16) & 0xFF);
-    p[3] = (uint8_t)((v >> 24) & 0xFF);
-}
-
-static uint32_t get_u32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[3] << 24);
-}
 
 static int write_all(int fd, const uint8_t *p, size_t n, uint64_t off)
 {
@@ -210,14 +197,14 @@ static int wal_encode(struct kv_wal *w, const struct efs_kv_item *items,
     if (rc != EFS_OK)
         return rc;
     off = 8;
-    put_u32(w->rec + off, n);
+    efs_store_le32(w->rec + off, n);
     off += 4;
     for (i = 0; i < n; i++) {
         uint32_t vlen = items[i].op == EFS_KV_PUT ? items[i].vlen : 0;
         w->rec[off++] = (uint8_t)(items[i].op == EFS_KV_PUT ? KV_OP_PUT : KV_OP_DEL);
-        put_u32(w->rec + off, items[i].klen);
+        efs_store_le32(w->rec + off, items[i].klen);
         off += 4;
-        put_u32(w->rec + off, vlen);
+        efs_store_le32(w->rec + off, vlen);
         off += 4;
         memcpy(w->rec + off, items[i].key, items[i].klen);
         off += items[i].klen;
@@ -226,8 +213,8 @@ static int wal_encode(struct kv_wal *w, const struct efs_kv_item *items,
             off += vlen;
         }
     }
-    put_u32(w->rec, efs_crc32(w->rec + 8, off - 8));
-    put_u32(w->rec + 4, off - 8);
+    efs_store_le32(w->rec, efs_crc32(w->rec + 8, off - 8));
+    efs_store_le32(w->rec + 4, off - 8);
     *out_len = off;
     return EFS_OK;
 }
@@ -434,8 +421,8 @@ int kv_wal_replay(const char *path,
             }
             break;
         }
-        crc = get_u32(hdr);
-        paylen = get_u32(hdr + 4);
+        crc = efs_load_le32(hdr);
+        paylen = efs_load_le32(hdr + 4);
         if (paylen < 4 || paylen > KV_LSM_REC_MAX) {
             repair_tail = 1;
             break;
@@ -455,7 +442,7 @@ int kv_wal_replay(const char *path,
             break;
         }
         if (efs_crc32(buf, paylen) != crc) { repair_tail = 1; break; }
-        n = get_u32(buf);
+        n = efs_load_le32(buf);
         if (!n || n > (paylen - 4) / 10) { rc = EFS_ERR_PROTO; break; }
         /* Validate the entire atomic batch before applying its first item.
          * CRC-valid malformed data is an error, not authority to truncate. */
@@ -469,9 +456,9 @@ int kv_wal_replay(const char *path,
                 break;
             }
             op = buf[off++];
-            klen = get_u32(buf + off);
+            klen = efs_load_le32(buf + off);
             off += 4;
-            vlen = get_u32(buf + off);
+            vlen = efs_load_le32(buf + off);
             off += 4;
             if ((op != KV_OP_PUT && op != KV_OP_DEL) || !klen ||
                 klen > KV_LSM_KLEN_MAX || vlen > KV_LSM_VLEN_MAX ||
@@ -487,8 +474,8 @@ int kv_wal_replay(const char *path,
         off = 4;
         for (i = 0; i < n; i++) {
             uint8_t op = buf[off++];
-            uint32_t klen = get_u32(buf + off); off += 4;
-            uint32_t vlen = get_u32(buf + off); off += 4;
+            uint32_t klen = efs_load_le32(buf + off); off += 4;
+            uint32_t vlen = efs_load_le32(buf + off); off += 4;
             rc = cb(user, op, buf + off, klen, buf + off + klen, vlen);
             if (rc != EFS_OK) break;
             off += klen + vlen;

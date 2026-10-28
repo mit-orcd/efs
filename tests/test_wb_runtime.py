@@ -10,6 +10,10 @@ def function(text,name):
     if not m: raise RuntimeError(name)
     return text[m.start():text.index('\n}',m.end())+2]
 registry=w[w.index('#define WB_ERROR_BUCKETS'):w.index('static void dcache_cycle_sent(const struct efs_chunk_rec *r, uint64_t seq);')]
+# Geometry seams are unrelated to the D27 registry. They now delegate to
+# client_internal.h and must not be copied into this minimal registry TU.
+for name in ('data_chunk_size', 'data_frag_size', 'frag_ptrs'):
+    registry = registry.replace(function(w, name), '')
 entry=w[w.index('struct dcache_ent {'):w.index('\n};',w.index('struct dcache_ent {'))+3]
 handles=f[f.index('#define EFS_FILE_FH_TAG'):f.index('static int virt_kind(')]
 source=r'''

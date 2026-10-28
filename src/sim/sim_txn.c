@@ -20,29 +20,17 @@
 #define TXN_DECISION 2
 #define TXN_RESOLVE  3
 
-static void wr32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
 
 static void wr64(uint8_t *p, uint64_t v)
 {
-    wr32(p, (uint32_t)(v >> 32));
-    wr32(p + 4, (uint32_t)v);
+    efs_store_be32(p, (uint32_t)(v >> 32));
+    efs_store_be32(p + 4, (uint32_t)v);
 }
 
-static uint32_t rd32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static uint64_t rd64(const uint8_t *p)
 {
-    return ((uint64_t)rd32(p) << 32) | rd32(p + 4);
+    return ((uint64_t)efs_load_be32(p) << 32) | efs_load_be32(p + 4);
 }
 
 static int raft2_apply(void *app, uint64_t index, uint64_t term,
@@ -185,7 +173,7 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         {
             uint8_t i;
             for (i = 0; i < p.n; i++)
-                p.shard[i] = rd32(cmd + off + (uint32_t)i * 4u);
+                p.shard[i] = efs_load_be32(cmd + off + (uint32_t)i * 4u);
         }
         off += (uint32_t)p.n * 4u;
         /* 2-byte klen, same as raft_host apply_txn_cmd (dentry keys with
@@ -203,7 +191,7 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         if (clen < 1 + 16 + 4 + 1)
             break;
         memcpy(t.bytes, cmd + 1, 16);
-        shard = rd32(cmd + 17);
+        shard = efs_load_be32(cmd + 17);
         dec = cmd[21];
         rc = efs_txn_decide(s->disk, shard, &t, dec);
         break;
@@ -211,7 +199,7 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         if (clen < 1 + 16 + 4 + 1)
             break;
         memcpy(t.bytes, cmd + 1, 16);
-        shard = rd32(cmd + 17);
+        shard = efs_load_be32(cmd + 17);
         dec = cmd[21];
         rc = efs_meta_apply_txn_resolve(s->disk, &t, shard, dec);
         break;
@@ -219,7 +207,7 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         if (clen < 1 + 16 + 4)
             break;
         memcpy(t.bytes, cmd + 1, 16);
-        shard = rd32(cmd + 17);
+        shard = efs_load_be32(cmd + 17);
         rc = efs_txn_drop(s->disk, &t, shard);
         break;
     default:
@@ -244,7 +232,7 @@ static uint32_t pack_prep(uint8_t *out, int kind, const struct efs_txid *t,
     out[18] = p->n;
     n = 19;
     for (i = 0; i < p->n; i++) {
-        wr32(out + n, p->shard[i]);
+        efs_store_be32(out + n, p->shard[i]);
         n += 4;
     }
     out[n++] = (uint8_t)(klen >> 8);
@@ -254,7 +242,7 @@ static uint32_t pack_prep(uint8_t *out, int kind, const struct efs_txid *t,
     if (kind == EFS_TXN_EXCL) {
         wr64(out + n, expected);
         out[n + 8] = (uint8_t)op;
-        wr32(out + n + 9, vlen);
+        efs_store_be32(out + n + 9, vlen);
         n += 13;
         if (vlen) {
             memcpy(out + n, val, vlen);
@@ -299,7 +287,7 @@ static int propose_decide(struct efs_sim *sim, uint32_t coord, const struct efs_
 
     cmd[0] = CMD_DECIDE;
     memcpy(cmd + 1, t->bytes, 16);
-    wr32(cmd + 17, coord);
+    efs_store_be32(cmd + 17, coord);
     cmd[21] = (uint8_t)dec;
     return sim_raft_propose_group(sim, sim_shard_group(coord), cmd, 22);
 }
@@ -311,7 +299,7 @@ static int propose_resolve(struct efs_sim *sim, uint32_t shard,
 
     cmd[0] = CMD_RESOLVE;
     memcpy(cmd + 1, t->bytes, 16);
-    wr32(cmd + 17, shard);
+    efs_store_be32(cmd + 17, shard);
     cmd[21] = (uint8_t)dec;
     return sim_raft_propose_group(sim, sim_shard_group(shard), cmd, 22);
 }
@@ -322,7 +310,7 @@ static int propose_drop(struct efs_sim *sim, uint32_t shard, const struct efs_tx
 
     cmd[0] = CMD_DROP;
     memcpy(cmd + 1, t->bytes, 16);
-    wr32(cmd + 17, shard);
+    efs_store_be32(cmd + 17, shard);
     return sim_raft_propose_group(sim, sim_shard_group(shard), cmd, 21);
 }
 

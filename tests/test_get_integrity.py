@@ -48,6 +48,16 @@ parts = [function(n) for n in names]
 parts.append(block('struct frag_get_job {', '\n};\n'))
 parts.append(block('struct packed_fetch_ctx {', '};\n'))
 production = '\n'.join(text for _, text in sorted(parts))
+# The named read seams now delegate to shared client geometry. Compile those
+# exact inline bodies too; keep the intentionally tiny fake g_client below.
+geometry = (root / 'src/client/client_internal.h').read_text()
+shared = []
+for name in ('efs_client_chunk_size', 'efs_client_frag_size', 'efs_client_frag_ptrs'):
+    m = re.search(r'^static inline [^\n;]*\b' + name + r'\([^;]*?\)\n\{', geometry, re.M)
+    assert m, name
+    shared.append(geometry[m.start():geometry.index('\n}', m.end()) + 2])
+production = '\n'.join(shared) + '\n' + production
+
 
 # The read cache is filled only from a fetch that returned EFS_OK.
 worker = function('chunk_get_worker')[1]

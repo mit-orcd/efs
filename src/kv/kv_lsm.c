@@ -2262,13 +2262,7 @@ int efs_kv_lsm_snapshot_get(struct efs_kv_lsm_snapshot *s,
  * memtable before the pin, so the view is the whole state. Newest
  * segment wins; tombstones are dropped. File format matches
  * efs_kv_group_import (little-endian nitems, then PUT items). */
-static void vx_put_u32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v & 0xFF);
-    p[1] = (uint8_t)((v >> 8) & 0xFF);
-    p[2] = (uint8_t)((v >> 16) & 0xFF);
-    p[3] = (uint8_t)((v >> 24) & 0xFF);
-}
+
 
 /* One write() per key was the top of efsd during posix: the export
  * walks the whole table on the GC thread, and each item was three
@@ -2337,17 +2331,6 @@ static int vx_write(struct vx_buf *b, const void *p, size_t n)
     return EFS_OK;
 }
 
-static int vx_in_group(const uint8_t *key, uint32_t klen, uint8_t group)
-{
-    uint32_t shard;
-
-    if (klen < 2)
-        return 0;
-    shard = ((uint32_t)key[0] << 8) | (uint32_t)key[1];
-    if (shard > EFS_KV_SHARD_MASK)
-        return 0;
-    return efs_raft_shard_group(shard) == group;
-}
 
 struct vx_src {
     struct kv_seg *seg;
@@ -2526,14 +2509,14 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
         uint32_t wl;
 
         if (src[win].op == KV_OP_PUT &&
-            vx_in_group(src[win].key, src[win].klen, group)) {
+            kv_key_in_group(src[win].key, src[win].klen, group)) {
             if (nitems == 0xffffffffu) {
                 rc = EFS_ERR_NOMEM;
                 goto out;
             }
             hdr[0] = KV_OP_PUT;
-            vx_put_u32(hdr + 1, src[win].klen);
-            vx_put_u32(hdr + 5, src[win].vlen);
+            efs_store_le32(hdr + 1, src[win].klen);
+            efs_store_le32(hdr + 5, src[win].vlen);
             rc = vx_write(&outb, hdr, 9);
             if (rc == EFS_OK && src[win].klen)
                 rc = vx_write(&outb, src[win].key, src[win].klen);
@@ -2580,7 +2563,7 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
     }
     {
         uint8_t nb[4];
-        vx_put_u32(nb, nitems);
+        efs_store_le32(nb, nitems);
         rc = vx_write(&outb, nb, 4);
         if (rc == EFS_OK)
             rc = vx_flush(&outb);

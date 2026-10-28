@@ -9,10 +9,12 @@
 #include <sys/stat.h>
 #include <execinfo.h>
 
+
+
+/* Named test seams delegate to the shared client geometry rules. */
 static uint32_t data_chunk_size(void)
 {
-    uint32_t cs = g_client.export.chunk_size;
-    return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
+    return efs_client_chunk_size();
 }
 
 static uint64_t now(void)

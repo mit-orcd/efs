@@ -1,5 +1,16 @@
 # Project status — work queue and evidence
 
+[Graphify review fixes](graphify-review-findings-20261027.md):
+`graphify-review-fixes` from devel `063154e0e815`; infrastructure-error retry,
+shared byte/geometry/KV helpers and SETATTR codec implemented. Focused checks
+PASS. Complete Linux suite FAIL (515 commands, 12 failures, 5 NOTRUN);
+nine RDMA setup failures reproduce on unchanged devel. Two harness fixes and
+two B6 oracle corrections have focused follow-up PASS, including three
+full-quota exact-payload cold-restart repeats. Five checks remain NOTRUN.
+Original failures retained. Remaining FUSE geometry duplication removed in
+`240255818`; focused checks PASS and original external Graphify HTML refreshed
+from that source (211 files verified). No merge, push or deployment.
+
 Reviewed and reorganized October 15, 2026. This directory is the work queue and
 acceptance index; [backlog](../backlog/README.md) holds detailed work items and
 parked ideas. W numbers identify work, not priority. Explicit human direction

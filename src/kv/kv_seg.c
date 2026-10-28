@@ -12,29 +12,16 @@
 #include <nmmintrin.h>
 #endif
 
-static void put_u32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v & 0xFF);
-    p[1] = (uint8_t)((v >> 8) & 0xFF);
-    p[2] = (uint8_t)((v >> 16) & 0xFF);
-    p[3] = (uint8_t)((v >> 24) & 0xFF);
-}
-
-static uint32_t get_u32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[3] << 24);
-}
 
 static void put_u64(uint8_t *p, uint64_t v)
 {
-    put_u32(p, (uint32_t)(v & 0xFFFFFFFFu));
-    put_u32(p + 4, (uint32_t)(v >> 32));
+    efs_store_le32(p, (uint32_t)(v & 0xFFFFFFFFu));
+    efs_store_le32(p + 4, (uint32_t)(v >> 32));
 }
 
 static uint64_t get_u64(const uint8_t *p)
 {
-    return (uint64_t)get_u32(p) | ((uint64_t)get_u32(p + 4) << 32);
+    return (uint64_t)efs_load_le32(p) | ((uint64_t)efs_load_le32(p + 4) << 32);
 }
 
 struct blk_ref {
@@ -164,7 +151,7 @@ static int w_flush_block(struct kv_seg_w *w)
         return EFS_ERR_IO;
     r = &w->idx[w->nblocks];
     /* The block's first key is at a known offset inside the buffer. */
-    r->klen = get_u32(w->blk + 1);
+    r->klen = efs_load_le32(w->blk + 1);
     r->key = malloc(r->klen ? r->klen : 1);
     if (!r->key)
         return EFS_ERR_NOMEM;
@@ -248,8 +235,8 @@ int kv_seg_w_add(struct kv_seg_w *w, uint8_t op, const uint8_t *key,
         w->blk_cap = w->blk_len + need;
     }
     w->blk[w->blk_len] = op;
-    put_u32(w->blk + w->blk_len + 1, klen);
-    put_u32(w->blk + w->blk_len + 5, vlen);
+    efs_store_le32(w->blk + w->blk_len + 1, klen);
+    efs_store_le32(w->blk + w->blk_len + 5, vlen);
     memcpy(w->blk + w->blk_len + 9, key, klen);
     if (vlen)
         memcpy(w->blk + w->blk_len + 9 + klen, val, vlen);
@@ -308,14 +295,14 @@ int kv_seg_w_finish(struct kv_seg_w *w)
         uint8_t hdr[4];
         uint8_t tail[12];
 
-        put_u32(hdr, w->idx[i].klen);
+        efs_store_le32(hdr, w->idx[i].klen);
         if (fwrite(hdr, 1, 4, w->f) != 4 ||
             fwrite(w->idx[i].key, 1, w->idx[i].klen, w->f) != w->idx[i].klen) {
             rc = EFS_ERR_IO;
             goto out_abort;
         }
         put_u64(tail, w->idx[i].off);
-        put_u32(tail + 8, w->idx[i].len);
+        efs_store_le32(tail + 8, w->idx[i].len);
         if (fwrite(tail, 1, 12, w->f) != 12) {
             rc = EFS_ERR_IO;
             goto out_abort;
@@ -324,11 +311,11 @@ int kv_seg_w_finish(struct kv_seg_w *w)
     }
     memset(foot, 0, sizeof(foot));
     put_u64(foot, idx_off);
-    put_u32(foot + 8, idx_len);
-    put_u32(foot + 12, w->nblocks);
-    put_u32(foot + 16, KV_LSM_SEG_MAGIC);
-    put_u32(foot + 20, KV_LSM_SEG_VERSION);
-    put_u32(foot + 24, efs_crc32(foot, 24));
+    efs_store_le32(foot + 8, idx_len);
+    efs_store_le32(foot + 12, w->nblocks);
+    efs_store_le32(foot + 16, KV_LSM_SEG_MAGIC);
+    efs_store_le32(foot + 20, KV_LSM_SEG_VERSION);
+    efs_store_le32(foot + 24, efs_crc32(foot, 24));
     if (fwrite(foot, 1, sizeof(foot), w->f) != sizeof(foot)) {
         rc = EFS_ERR_IO;
         goto out_abort;
@@ -436,15 +423,15 @@ int kv_seg_open(const char *path, struct kv_seg **out)
                    (uint64_t)fsz - KV_LSM_FOOTER_LEN);
     if (rc != EFS_OK)
         goto fail;
-    if (get_u32(foot + 16) != KV_LSM_SEG_MAGIC ||
-        get_u32(foot + 20) != KV_LSM_SEG_VERSION ||
-        get_u32(foot + 24) != efs_crc32(foot, 24)) {
+    if (efs_load_le32(foot + 16) != KV_LSM_SEG_MAGIC ||
+        efs_load_le32(foot + 20) != KV_LSM_SEG_VERSION ||
+        efs_load_le32(foot + 24) != efs_crc32(foot, 24)) {
         rc = EFS_ERR_PROTO;
         goto fail;
     }
     idx_off = get_u64(foot);
-    idx_len = get_u32(foot + 8);
-    nblocks = get_u32(foot + 12);
+    idx_len = efs_load_le32(foot + 8);
+    nblocks = efs_load_le32(foot + 12);
     if (nblocks == 0 || nblocks > (1u << 24) || idx_len == 0 ||
         idx_off + idx_len + KV_LSM_FOOTER_LEN > (uint64_t)fsz) {
         rc = EFS_ERR_PROTO;
@@ -466,7 +453,7 @@ int kv_seg_open(const char *path, struct kv_seg **out)
             rc = EFS_ERR_PROTO;
             goto fail;
         }
-        klen = get_u32(ibuf + off);
+        klen = efs_load_le32(ibuf + off);
         off += 4;
         if (klen == 0 || klen > KV_LSM_KLEN_MAX || off + klen + 12 > idx_len) {
             rc = EFS_ERR_PROTO;
@@ -481,7 +468,7 @@ int kv_seg_open(const char *path, struct kv_seg **out)
         s->idx[i].klen = klen;
         off += klen;
         s->idx[i].off = get_u64(ibuf + off);
-        s->idx[i].len = get_u32(ibuf + off + 8);
+        s->idx[i].len = efs_load_le32(ibuf + off + 8);
         off += 12;
         s->nblocks = i + 1;
         if (s->idx[i].off + s->idx[i].len > idx_off) {
@@ -643,8 +630,8 @@ int kv_seg_last_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen)
         uint32_t tail_kl = 0;
 
         while (off + 9 <= r->len) {
-            uint32_t kl = get_u32(blk + off + 1);
-            uint32_t vl = get_u32(blk + off + 5);
+            uint32_t kl = efs_load_le32(blk + off + 1);
+            uint32_t vl = efs_load_le32(blk + off + 5);
 
             if (off + 9 + kl + vl > r->len)
                 break;
@@ -692,7 +679,7 @@ static int index_block(const uint8_t *blk, uint32_t len,
     const uint8_t *prev = NULL; uint32_t prev_len = 0;
     while (off < len) {
         if (len - off < 9) return EFS_ERR_PROTO;
-        uint32_t kl = get_u32(blk + off + 1), vl = get_u32(blk + off + 5);
+        uint32_t kl = efs_load_le32(blk + off + 1), vl = efs_load_le32(blk + off + 5);
         if (!kl || kl > KV_LSM_KLEN_MAX || vl > KV_LSM_VLEN_MAX ||
             kl > len - off - 9 || vl > len - off - 9 - kl ||
             (blk[off] != KV_OP_PUT && blk[off] != KV_OP_DEL) ||
@@ -708,7 +695,7 @@ static int index_block(const uint8_t *blk, uint32_t len,
     off = 0;
     for (uint32_t i = 0; i < n; ++i) {
         idx[i] = off;
-        off += 9 + get_u32(blk + off + 1) + get_u32(blk + off + 5);
+        off += 9 + efs_load_le32(blk + off + 1) + efs_load_le32(blk + off + 5);
     }
     *entries = idx; *count = n;
     return EFS_OK;
@@ -721,13 +708,13 @@ static int search_block_binary(const struct seg_cslot *c, const uint8_t *key,
     while (lo < hi) {
         uint32_t mid = lo + (hi - lo) / 2;
         uint32_t off = c->entries[mid];
-        uint32_t kl = get_u32(c->blk + off + 1);
+        uint32_t kl = efs_load_le32(c->blk + off + 1);
         int cmp = kv_key_cmp(c->blk + off + 9, kl, key, klen);
         if (cmp < 0) lo = mid + 1;
         else if (cmp > 0) hi = mid;
         else {
             *op = c->blk[off];
-            return kv_buf_set(val, c->blk + off + 9 + kl, get_u32(c->blk + off + 5));
+            return kv_buf_set(val, c->blk + off + 9 + kl, efs_load_le32(c->blk + off + 5));
         }
     }
     return EFS_ERR_NOT_FOUND;
@@ -793,7 +780,7 @@ static uint32_t block_hash_build(struct seg_cslot *c, uint32_t available)
     if (!table)
         return 0;
     for (uint32_t i = 0; i < c->nentries; ++i) {
-        uint32_t off = c->entries[i], kl = get_u32(c->blk + off + 1);
+        uint32_t off = c->entries[i], kl = efs_load_le32(c->blk + off + 1);
         uint32_t at = (uint32_t)block_key_hash(c->blk + off + 9, kl) & (slots - 1);
         while (table[at])
             at = (at + 1) & (slots - 1);
@@ -812,11 +799,11 @@ static int search_block(const struct seg_cslot *c, const uint8_t *key,
     uint32_t at = (uint32_t)block_key_hash(key, klen) & (c->hash_slots - 1);
     while (c->hash[at]) {
         uint32_t off = c->hash[at] - 1;
-        if (get_u32(c->blk + off + 1) == klen &&
+        if (efs_load_le32(c->blk + off + 1) == klen &&
             !memcmp(c->blk + off + 9, key, klen)) {
             *op = c->blk[off];
             return kv_buf_set(val, c->blk + off + 9 + klen,
-                              get_u32(c->blk + off + 5));
+                              efs_load_le32(c->blk + off + 5));
         }
         at = (at + 1) & (c->hash_slots - 1);
     }
@@ -891,7 +878,7 @@ static void seg_bloom_build(struct kv_seg *s)
         }
         for (uint32_t i = 0; i < count; i++)
             hs[n++] = seg_bloom_hash(blk + entries[i] + 9,
-                                     get_u32(blk + entries[i] + 1));
+                                     efs_load_le32(blk + entries[i] + 1));
         free(entries);
     }
     {
@@ -1066,12 +1053,12 @@ static int seg_block_index(struct kv_seg *s, uint32_t bi, uint8_t *blk, uint32_t
                            uint32_t **entries, uint32_t *count)
 {
     int rc = index_block(blk, len, entries, count);
-    if (rc == EFS_OK && kv_key_cmp(blk + 9, get_u32(blk + 1),
+    if (rc == EFS_OK && kv_key_cmp(blk + 9, efs_load_le32(blk + 1),
                                    s->idx[bi].key, s->idx[bi].klen))
         rc = EFS_ERR_PROTO;
     if (rc == EFS_OK && bi + 1 < s->nblocks) {
         uint32_t tail = (*entries)[*count - 1];
-        if (kv_key_cmp(blk + tail + 9, get_u32(blk + tail + 1),
+        if (kv_key_cmp(blk + tail + 9, efs_load_le32(blk + tail + 1),
                         s->idx[bi + 1].key, s->idx[bi + 1].klen) >= 0)
             rc = EFS_ERR_PROTO;
     }
@@ -1103,7 +1090,7 @@ static struct seg_cslot *seg_slot_install_locked(struct kv_seg *s, uint32_t bi,
     }
     if (bi + 1 == s->nblocks) {
         uint32_t tail = entries[count - 1];
-        seg_note_last(s, blk + tail + 9, get_u32(blk + tail + 1));
+        seg_note_last(s, blk + tail + 9, efs_load_le32(blk + tail + 1));
     }
     return c;
 }
@@ -1215,7 +1202,7 @@ int kv_seg_snapshot_excludes(struct kv_seg *s,const uint8_t *seek,uint32_t slen,
     uint32_t offset=0,length=0;const uint8_t *last=NULL;
     while(offset<r->len){
         if(r->len-offset<9)return EFS_ERR_PROTO;
-        uint32_t kl=get_u32(block+offset+1),vl=get_u32(block+offset+5);
+        uint32_t kl=efs_load_le32(block+offset+1),vl=efs_load_le32(block+offset+5);
         if(!kl || kl>r->len-offset-9 || vl>r->len-offset-9-kl)return EFS_ERR_PROTO;
         last=block+offset+9;length=kl;offset+=9+kl+vl;
     }
@@ -1318,7 +1305,7 @@ static int iter_load_cached(struct kv_seg_iter *it, const struct blk_ref *r,
         while (lo < hi) {
             uint32_t mid = lo + (hi - lo) / 2;
             uint32_t eo = c->entries[mid];
-            if (kv_key_cmp(c->blk + eo + 9, get_u32(c->blk + eo + 1),
+            if (kv_key_cmp(c->blk + eo + 9, efs_load_le32(c->blk + eo + 1),
                            seek, slen) < 0)
                 lo = mid + 1;
             else
@@ -1435,8 +1422,8 @@ int kv_seg_iter_next(struct kv_seg_iter *it, const uint8_t **key, uint32_t *klen
             it->loaded = 0;
             continue;
         }
-        kl = get_u32(it->blk + it->off + 1);
-        vl = get_u32(it->blk + it->off + 5);
+        kl = efs_load_le32(it->blk + it->off + 1);
+        vl = efs_load_le32(it->blk + it->off + 5);
         if (it->off + 9 + kl + vl > it->blk_len)
             return EFS_ERR_PROTO;
         *op = it->blk[it->off];

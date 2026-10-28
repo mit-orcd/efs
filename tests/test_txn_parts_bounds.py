@@ -9,7 +9,7 @@ code=r'''
 #include "efs/txn.h"
 #include <assert.h>
 #include <string.h>
-'''+fn('void be32(')+'\n'+fn('int pack_parts(')+r'''
+'''+fn('int pack_parts(')+r'''
 int main(void){
  struct efs_txn_parts p={0};uint8_t out[EFS_TXN_PARTS_BYTES+2],saved[sizeof(out)];
  p.n=EFS_TXN_MAX_PART;for(unsigned i=0;i<p.n;i++)p.shard[i]=0x01020300u+i;

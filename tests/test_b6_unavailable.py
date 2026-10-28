@@ -43,9 +43,10 @@ In each mode:
     DEGRADED` (down, refuse); slow: that, or W154 already rebuilding the
     marks onto the slow member during the fault (status rebuilt=N rises:
     the member is up and its rebuild PUTs succeed after 8 s).
-    K37: the packer may pack Q* during the fault only into a segment written
-    on the other two fragments and marked (`written degraded` naming node
-    3); those files read exact.
+    K37: down/refuse packing needs the other two fragments and a mark
+    (`written degraded` naming node 3); those files read exact. Full-quota
+    packing may still fit smaller three-fragment segments; every acknowledged
+    small file is read exactly through a fresh mount while still at quota.
  6. Restore in order: fault off, node 3 stopped in order and started again
     (full: with a 1 GiB quota). W154 rebuilds every mark (`Degraded
     chunks: 0`, `Protection: full`), and K37's segment marks end (rebuilt
@@ -153,14 +154,17 @@ def rebuilt(c, i=1):
 
 
 def packed_total(c, snap=None):
-    """Files the packers switched, summed over every daemon run and group."""
+    """Sum the process-wide counter once per daemon run, not group/term.
+
+    Every group's pass prints the SAME pk.st.files_packed counter. Summing
+    those observations invents packs when a second group logs, or a leader
+    term changes, even if no new segment was written during the fault.
+    """
     total = 0
     for i, text in (snap if snap is not None else snapshot(c)).items():
         for run in text.split('==== start')[1:]:
-            last = {}
-            for g, t, n in re.findall(r'packer: group=(\d+) term=(\d+) .*?packed_total=(\d+)', run):
-                last[(g, t)] = int(n)
-            total += sum(last.values())
+            values = re.findall(r'packer: group=\d+ term=\d+ .*?packed_total=(\d+)', run)
+            total += max((int(n) for n in values), default=0)
     return total
 
 
@@ -453,13 +457,26 @@ def run_mode(mode):
     dw = [s for s in degraded_writes(c, snap) if s not in dw_before]
     r.out['segments_written_degraded'] = len(dw)
     assert all(node == '3' for *_, node in dw), f'{mode}: written degraded {dw}'
-    if mode in ('down', 'refuse', 'full'):
+    if mode in ('down', 'refuse'):
         # Node 3 takes no segment fragment: every packed file went into a
         # segment written degraded and marked.
         assert r.out['packed_during_fault'] == 0 or dw, \
             f'{mode}: {r.out["packed_during_fault"]} files packed, no segment written degraded'
     r.out['degraded_segments_during'] = degraded_segments(c)
-    if mode != 'full':
+    if mode == 'full':
+        # Refusing a 64 KiB ordinary fragment does not imply that a smaller
+        # packed fragment cannot fit. This is real quota exhaustion, not
+        # the refuse hook: healthy three-fragment packing is legal. Keep
+        # ENOSPC/no-degraded assertions above and check every acknowledged
+        # small file through a new mount while the quota is still full.
+        b = r.mount('mnt-full-packed')
+        qr = r.read_check(b, [n for n in r.acked if n.startswith(('P', 'FS'))],
+                          'packed at quota')
+        r.unmount(b)
+        assert all(v[0] == 'exact' for v in qr.values()), f'full: packed at quota: {qr}'
+        assert r.out['degraded_segments_during'] == 0, status(c)
+        r.out['reads_packed_at_quota'] = qr
+    else:
         b = r.mount('mnt-q')
         qr = r.read_check(b, [n for n in r.acked if n.startswith('Q')], 'packed during the fault')
         r.unmount(b)
@@ -526,18 +543,32 @@ try:
         print(f'B6 {r.mode}: whole-cluster orderly restart, {len(r.acked)} acknowledged files '
               'exact PASS')
 finally:
+    original_error = sys.exc_info()[0] is not None
+    cleanup_errors = []
     for r in runs:
-        r.close()
+        try:
+            r.close()
+        except Exception as error:
+            cleanup_errors.append(f'{r.mode}: {type(error).__name__}: {error}')
+    failed = original_error or bool(cleanup_errors)
+    # A failed oracle needs its logs and stores to diagnose the observation.
+    # Never erase them merely because the opt-in KEEP flag was not supplied.
+    if failed or os.environ.get('EFS_B6_KEEP'):
+        print('kept', work, flush=True)
+    result['verdict'] = 'FAIL' if failed else 'PASS'
+    result['work'] = str(work)
+    result['cleanup_errors'] = cleanup_errors
+    for r in runs:
+        result['modes'][r.mode] = dict(r.out, acknowledged_files=dict(r.acked),
+                                     refused_files=dict(r.refused))
     if artifacts:
         artifacts.mkdir(parents=True, exist_ok=True)
-        # One file per mode selection: the recipe runs the four modes as
-        # four commands and their results must not overwrite each other.
         tag = '' if modes == ['down', 'refuse', 'slow', 'full'] else '-' + '-'.join(modes)
         (artifacts / f'b6-result{tag}.json').write_text(json.dumps(result, indent=1, sort_keys=True))
-    if os.environ.get('EFS_B6_KEEP'):
-        print('kept', work)
-    else:
+    if not failed and not os.environ.get('EFS_B6_KEEP'):
         shutil.rmtree(work, ignore_errors=True)
+    if cleanup_errors and not original_error:
+        raise RuntimeError('B6 cleanup failed: ' + '; '.join(cleanup_errors))
 print(f'B6 unavailable fragment destination ({",".join(modes)}): reads reconstruct, writes and '
       f'fsync only with proof, W154 clears after the restore, exact after restart: PASS '
       f'({time.time() - t0:.1f} s)')

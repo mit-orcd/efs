@@ -9,15 +9,10 @@
 #define SCAN_MAX 64
 #define LOCK_KLEN 65
 
-static uint32_t rd32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static uint64_t rd64(const uint8_t *p)
 {
-    return ((uint64_t)rd32(p) << 32) | rd32(p + 4);
+    return ((uint64_t)efs_load_be32(p) << 32) | efs_load_be32(p + 4);
 }
 
 static int owner_eq(const struct efs_lock_owner *a, const struct efs_lock_owner *b)
@@ -44,7 +39,7 @@ static int parse_key(const uint8_t *key, uint32_t klen, struct efs_lock_req *r)
     r->owner.kind = key[36];
     r->owner.id = rd64(key + 37);
     memcpy(r->owner.uuid, key + 45, EFS_OPID_UUID_LEN);
-    r->owner.epoch = rd32(key + 45 + EFS_OPID_UUID_LEN);
+    r->owner.epoch = efs_load_be32(key + 45 + EFS_OPID_UUID_LEN);
     return EFS_OK;
 }
 
@@ -386,7 +381,7 @@ static int drop_cb(void *user, const uint8_t *key, uint32_t klen,
         return 0;
     if (memcmp(key + 45, a->uuid, EFS_OPID_UUID_LEN) != 0)
         return 0;
-    ep = rd32(key + 45 + EFS_OPID_UUID_LEN);
+    ep = efs_load_be32(key + 45 + EFS_OPID_UUID_LEN);
     if (ep != a->epoch)
         return 0;
     if (a->n >= DROP_MAX) {

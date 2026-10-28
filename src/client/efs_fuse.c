@@ -194,8 +194,7 @@ static ino_t stats_synthetic_ino(efs_ino_t parent_ino)
 /* du(1) sums st_blocks (512-byte units), not st_size. */
 static uint32_t fuse_chunk_size(void)
 {
-    uint32_t cs = g_client.export.chunk_size;
-    return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
+    return efs_client_chunk_size();
 }
 
 static void stat_set_size_blocks(struct stat *stbuf, uint64_t size,

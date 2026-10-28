@@ -28,22 +28,16 @@ static void ms_err(char *err, size_t errlen, const char *fmt, ...)
     va_end(ap);
 }
 
-static void put32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24); p[1] = (uint8_t)(v >> 16); p[2] = (uint8_t)(v >> 8); p[3] = (uint8_t)v;
-}
+
 static void put64(uint8_t *p, uint64_t v)
 {
-    put32(p, (uint32_t)(v >> 32));
-    put32(p + 4, (uint32_t)v);
+    efs_store_be32(p, (uint32_t)(v >> 32));
+    efs_store_be32(p + 4, (uint32_t)v);
 }
-static uint32_t get32(const uint8_t *p)
-{
-    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
-}
+
 static uint64_t get64(const uint8_t *p)
 {
-    return (uint64_t)get32(p) << 32 | get32(p + 4);
+    return (uint64_t)efs_load_be32(p) << 32 | efs_load_be32(p + 4);
 }
 static uint64_t check64(const uint8_t *p, size_t n)
 {
@@ -56,7 +50,7 @@ void member_store_boot_encode(uint64_t counter, uint8_t out[EFS_BOOT_FILE_LEN])
 {
     memset(out, 0, EFS_BOOT_FILE_LEN);
     memcpy(out, boot_magic, 8);
-    put32(out + 8, BOOT_VERSION);
+    efs_store_be32(out + 8, BOOT_VERSION);
     put64(out + 16, counter);
     put64(out + 24, check64(out, 24));
 }
@@ -65,7 +59,7 @@ int member_store_boot_decode(const uint8_t *in, size_t len, uint64_t *counter)
 {
     if (!in || !counter || len != EFS_BOOT_FILE_LEN)
         return EFS_ERR_DECODE;
-    if (memcmp(in, boot_magic, 8) || get32(in + 8) != BOOT_VERSION || get32(in + 12))
+    if (memcmp(in, boot_magic, 8) || efs_load_be32(in + 8) != BOOT_VERSION || efs_load_be32(in + 12))
         return EFS_ERR_UNSUPPORTED;
     if (get64(in + 24) != check64(in, 24))
         return EFS_ERR_CHECKSUM;
@@ -88,9 +82,9 @@ int member_store_identity_encode(const struct member_store *ms, uint8_t out[EFS_
     size_t rlen = 0, alen = strlen(ms->addr);
     memset(out, 0, EFS_IDENTITY_FILE_LEN);
     memcpy(out, ident_magic, 8);
-    put32(out + 8, IDENT_VERSION);
-    put32(out + 12, ms->member_id);
-    put32(out + 16, ms->state);
+    efs_store_be32(out + 8, IDENT_VERSION);
+    efs_store_be32(out + 12, ms->member_id);
+    efs_store_be32(out + 16, ms->state);
     put64(out + 24, ms->token);
     put64(out + 32, ms->cluster);
     out[40] = (uint8_t)(ms->port >> 8);
@@ -103,7 +97,7 @@ int member_store_identity_encode(const struct member_store *ms, uint8_t out[EFS_
         efs_membership_encode(&ms->members, out + IDENT_REC_AT, EFS_MEMBERSHIP_MAX_LEN,
                               &rlen) != EFS_OK)
         return EFS_ERR_INVAL;
-    put32(out + 20, (uint32_t)rlen);
+    efs_store_be32(out + 20, (uint32_t)rlen);
     efs_hash(out, IDENT_SUM_AT, out + IDENT_SUM_AT);
     return EFS_OK;
 }
@@ -115,8 +109,8 @@ int member_store_identity_decode(const uint8_t *buf, size_t got,
     if (buf && got == EFS_IDENTITY_FILE_LEN)
         efs_hash(buf, IDENT_SUM_AT, sum);
     if (!buf || !ms || got != EFS_IDENTITY_FILE_LEN || memcmp(buf, ident_magic, 8) ||
-        get32(buf + 8) != IDENT_VERSION || memcmp(sum, buf + IDENT_SUM_AT, EFS_HASH_SIZE) ||
-        get32(buf + 16) > EFS_MEMBER_PROMISED || get32(buf + 20) > EFS_MEMBERSHIP_MAX_LEN ||
+        efs_load_be32(buf + 8) != IDENT_VERSION || memcmp(sum, buf + IDENT_SUM_AT, EFS_HASH_SIZE) ||
+        efs_load_be32(buf + 16) > EFS_MEMBER_PROMISED || efs_load_be32(buf + 20) > EFS_MEMBERSHIP_MAX_LEN ||
         buf[42] > EFS_MEMBER_ADDR_MAX) {
         ms_err(err, errlen, "store %s: identity.bin is unreadable, short, corrupt or of "
                "another version", "record");
@@ -125,8 +119,8 @@ int member_store_identity_decode(const uint8_t *buf, size_t got,
     struct member_store decoded = *ms;
     struct member_store *out = ms;
     ms = &decoded;
-    ms->member_id = get32(buf + 12);
-    ms->state = get32(buf + 16);
+    ms->member_id = efs_load_be32(buf + 12);
+    ms->state = efs_load_be32(buf + 16);
     ms->token = get64(buf + 24);
     ms->cluster = get64(buf + 32);
     ms->port = (uint16_t)(buf[40] << 8 | buf[41]);
@@ -137,7 +131,7 @@ int member_store_identity_decode(const uint8_t *buf, size_t got,
             ms_err(err, errlen, "identity.bin: invalid endpoint");
             return EFS_ERR_UNSUPPORTED;
         }
-    uint32_t rlen = get32(buf + 20);
+    uint32_t rlen = efs_load_be32(buf + 20);
     const struct efs_member *self = NULL;
     int has_rec = ms->state == EFS_MEMBER_FORMED || ms->state == EFS_MEMBER_PROMISED;
     if (rlen && efs_membership_decode(buf + IDENT_REC_AT, rlen, &ms->members) == EFS_OK)

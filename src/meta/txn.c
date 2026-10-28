@@ -14,29 +14,17 @@
 #define VAL_MAX EFS_TXN_RECORD_MAX
 #define KEY_MAX EFS_KV_KEY_MAX
 
-static void be32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
 
 static void be64(uint8_t *p, uint64_t v)
 {
-    be32(p, (uint32_t)(v >> 32));
-    be32(p + 4, (uint32_t)v);
+    efs_store_be32(p, (uint32_t)(v >> 32));
+    efs_store_be32(p + 4, (uint32_t)v);
 }
 
-static uint32_t rd32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static uint64_t rd64(const uint8_t *p)
 {
-    return ((uint64_t)rd32(p) << 32) | rd32(p + 4);
+    return ((uint64_t)efs_load_be32(p) << 32) | efs_load_be32(p + 4);
 }
 
 uint32_t efs_txn_hash(const struct efs_txid *t)
@@ -97,7 +85,7 @@ static int pack_parts(uint8_t *out, uint32_t cap,
     /* Validate before writing, and use the checked count throughout. */
     out[0] = (uint8_t)count;
     for (uint32_t i = 0; i < count; i++)
-        be32(out + 1u + i * 4u, p->shard[i]);
+        efs_store_be32(out + 1u + i * 4u, p->shard[i]);
     return (int)need;
 }
 
@@ -119,7 +107,7 @@ static int unpack_parts(const uint8_t *in, uint32_t n, struct efs_txn_parts *p,
         memset(p, 0, sizeof(*p));
         p->n = np;
         for (i = 0; i < np; i++)
-            p->shard[i] = rd32(in + 1 + (uint32_t)i * 4u);
+            p->shard[i] = efs_load_be32(in + 1 + (uint32_t)i * 4u);
     }
     if (used)
         *used = need;
@@ -316,7 +304,7 @@ static int pack_excl(uint8_t *out, uint32_t cap, uint32_t *n,
     out[16 + (uint32_t)pn] = EFS_TXN_EXCL;
     be64(out + 16 + (uint32_t)pn + 1, expected);
     out[16 + (uint32_t)pn + 1 + 8] = (uint8_t)op;
-    be32(out + 16 + (uint32_t)pn + 1 + 8 + 1, vlen);
+    efs_store_be32(out + 16 + (uint32_t)pn + 1 + 8 + 1, vlen);
     if (vlen)
         memcpy(out + 16 + (uint32_t)pn + 1 + 8 + 1 + 4, val, vlen);
     *n = off;
@@ -341,7 +329,7 @@ static int parse_excl(const uint8_t *in, uint32_t n, struct efs_txid *t,
         return EFS_ERR_PROTO;
     if (op)
         *op = in[off + 1 + 8];
-    vl = rd32(in + off + 1 + 8 + 1);
+    vl = efs_load_be32(in + off + 1 + 8 + 1);
     if (vl > EFS_TXN_VALUE_MAX || vl > n - (off + 1 + 8 + 1 + 4) ||
         (in[off + 1 + 8] != EFS_TXN_PUT && in[off + 1 + 8] != EFS_TXN_DEL) ||
         (in[off + 1 + 8] == EFS_TXN_DEL && vl))
@@ -460,7 +448,7 @@ int efs_txn_encode_excl_value(uint8_t *out, uint32_t cap, uint32_t *len,
         (op == EFS_TXN_DEL && vn) || cap < 9u + bytes + vn)
         return EFS_ERR_INVAL;
     out[0] = (uint8_t)op;
-    be32(out + 1, en); be32(out + 5, vn);
+    efs_store_be32(out + 1, en); efs_store_be32(out + 5, vn);
     if (bytes) memcpy(out + 9, expected, bytes);
     if (vn) memcpy(out + 9 + bytes, value, vn);
     *len = 9u + bytes + vn;
@@ -663,26 +651,26 @@ void efs_txn_encode_reduce(uint8_t out[EFS_TXN_REDUCE_WIRE],
 void efs_txn_encode_ino_delta(uint8_t out[EFS_TXN_REDUCE_INO_WIRE],
                               const struct efs_txn_ino_delta *d)
 {
-    be32(out, (uint32_t)d->d_nlink);
-    be32(out + 4, (uint32_t)d->d_nents);
+    efs_store_be32(out, (uint32_t)d->d_nlink);
+    efs_store_be32(out + 4, (uint32_t)d->d_nents);
     be64(out + 8, d->max_mtime);
     be64(out + 16, d->max_ctime);
     be64(out + 24, d->or_used_shards);
     be64(out + 32, d->set_parent);
-    be32(out + 40, (uint32_t)d->d_pver);
-    be32(out + 44, 0);
+    efs_store_be32(out + 40, (uint32_t)d->d_pver);
+    efs_store_be32(out + 44, 0);
 }
 
 /* Decoder shared by apply (PREPARE) and resolve (fold). */
 static void decode_ino_delta(const uint8_t *pay, struct efs_txn_ino_delta *d)
 {
-    d->d_nlink = (int32_t)rd32(pay);
-    d->d_nents = (int32_t)rd32(pay + 4);
+    d->d_nlink = (int32_t)efs_load_be32(pay);
+    d->d_nents = (int32_t)efs_load_be32(pay + 4);
     d->max_mtime = rd64(pay + 8);
     d->max_ctime = rd64(pay + 16);
     d->or_used_shards = rd64(pay + 24);
     d->set_parent = rd64(pay + 32);
-    d->d_pver = (int32_t)rd32(pay + 40);
+    d->d_pver = (int32_t)efs_load_be32(pay + 40);
 }
 
 void efs_txn_encode_add(uint8_t out[EFS_TXN_REDUCE_ADD_WIRE], uint64_t add)
@@ -695,7 +683,7 @@ void efs_txn_encode_opid(uint8_t out[EFS_TXN_REDUCE_OPID_WIRE],
                          const struct efs_opid_reply *reply)
 {
     be64(out, q->id.seq);
-    be32(out + 8, (uint32_t)reply->rc);
+    efs_store_be32(out + 8, (uint32_t)reply->rc);
     be64(out + 12, reply->ino);
     be64(out + 20, reply->extra);
     be64(out + 28, q->ack);
@@ -713,10 +701,10 @@ static int decode_opid(const uint8_t *key, uint32_t klen, const uint8_t *pay,
     memset(q, 0, sizeof(*q));
     memset(rep, 0, sizeof(*rep));
     memcpy(q->id.client_uuid, key + 3, EFS_OPID_UUID_LEN);
-    q->id.session_epoch = rd32(key + 3 + EFS_OPID_UUID_LEN);
+    q->id.session_epoch = efs_load_be32(key + 3 + EFS_OPID_UUID_LEN);
     q->id.seq = rd64(pay);
     rep->seq = q->id.seq;
-    rep->rc = (int)(int32_t)rd32(pay + 8);
+    rep->rc = (int)(int32_t)efs_load_be32(pay + 8);
     rep->ino = rd64(pay + 12);
     rep->extra = rd64(pay + 20);
     q->ack = rd64(pay + 28);
@@ -814,7 +802,7 @@ int efs_txn_prepare_opid(struct efs_kv *kv, const struct efs_txid *t,
     if (!q || !reply || !key || key_kind(key, klen) != EFS_KV_KIND_OPID ||
         klen != 3 + EFS_OPID_UUID_LEN + 4 || !efs_opid_req_valid(q) ||
         q->ack>=q->id.seq || memcmp(key+3,q->id.client_uuid,EFS_OPID_UUID_LEN) ||
-        rd32(key+19)!=q->id.session_epoch || !kv || !t || !parts_ok(p))
+        efs_load_be32(key+19)!=q->id.session_epoch || !kv || !t || !parts_ok(p))
         return EFS_ERR_INVAL;
     int rc=efs_session_prepare_namespace(kv,key_shard(key),&q->id,t,p);
     if(rc!=EFS_OK)return rc;
@@ -841,7 +829,7 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
             return EFS_ERR_PROTO;
         expected = rd64(pay);
         op = pay[8];
-        vlen = rd32(pay + 9);
+        vlen = efs_load_be32(pay + 9);
         if (vlen > EFS_TXN_VALUE_MAX || vlen > plen - 13)
             return EFS_ERR_PROTO;
         return efs_txn_prepare_excl(kv, t, p, key, klen, expected, op,
@@ -851,7 +839,7 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
         uint32_t en, vn, bytes;
         int op;
         if (plen < 9) return EFS_ERR_PROTO;
-        op = pay[0]; en = rd32(pay + 1); vn = rd32(pay + 5);
+        op = pay[0]; en = efs_load_be32(pay + 1); vn = efs_load_be32(pay + 5);
         bytes = en == EFS_TXN_ABSENT ? 0 : en;
         if (bytes > EFS_TXN_VALUE_MAX || vn > EFS_TXN_VALUE_MAX ||
             plen != 9u + bytes + vn || (op != EFS_TXN_PUT && op != EFS_TXN_DEL) ||
@@ -1129,7 +1117,7 @@ int efs_txn_decide_parts(struct efs_kv *kv, uint32_t coord_shard,
     val[n++] = (uint8_t)decision;
     val[n++] = parts ? parts->n : 0;
     for (i = 0; parts && i < parts->n; i++) {
-        be32(val + n, parts->shard[i]);
+        efs_store_be32(val + n, parts->shard[i]);
         n += 4;
     }
     return efs_kv_put(kv, key, klen, val, n);
@@ -1319,7 +1307,7 @@ static int dpage_cb(void *user, const uint8_t *key, uint32_t klen,
             r->decision = val[0];
             r->parts.n = val[1];
             for (i = 0; i < r->parts.n; i++)
-                r->parts.shard[i] = rd32(val + 2 + 4 * i);
+                r->parts.shard[i] = efs_load_be32(val + 2 + 4 * i);
         }
     }
     return a->visited >= a->work || a->n >= a->cap;

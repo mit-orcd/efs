@@ -33,8 +33,8 @@ static void block_checks(int measure)
     for(unsigned i=0;n<64;++i){key_for(i*2,key);if((block_key_hash(key,12)&127)==0)ids[n++]=i*2;}
     for(unsigned i=0;i<n;++i){
         key_for(ids[i],key);block[off]=i%7?KV_OP_PUT:KV_OP_DEL;
-        put_u32(block+off+1,12);put_u32(block+off+5,i%7?4:0);
-        memcpy(block+off+9,key,12);if(i%7)put_u32(block+off+21,ids[i]);
+        efs_store_le32(block+off+1,12);efs_store_le32(block+off+5,i%7?4:0);
+        memcpy(block+off+9,key,12);if(i%7)efs_store_le32(block+off+21,ids[i]);
         off+=21+(i%7?4:0);
     }
     struct seg_cslot c={.blk=block};assert(!index_block(block,off,&c.entries,&c.nentries));
@@ -47,20 +47,20 @@ static void block_checks(int measure)
     /* Mixed key lengths and embedded zero, including strict prefix keys. */
     const uint8_t keys[8][3]={{0},{0,0},{0,0,0},{0,0,1},{0,1},{1},{1,0},{255}};
     const unsigned lens[8]={1,2,3,3,2,1,2,1};off=0;
-    for(unsigned i=0;i<8;++i){block[off]=i%2?KV_OP_PUT:KV_OP_DEL;put_u32(block+off+1,lens[i]);put_u32(block+off+5,0);memcpy(block+off+9,keys[i],lens[i]);off+=9+lens[i];}
+    for(unsigned i=0;i<8;++i){block[off]=i%2?KV_OP_PUT:KV_OP_DEL;efs_store_le32(block+off+1,lens[i]);efs_store_le32(block+off+5,0);memcpy(block+off+9,keys[i],lens[i]);off+=9+lens[i];}
     memset(&c,0,sizeof(c));c.blk=block;assert(!index_block(block,off,&c.entries,&c.nentries));assert(block_hash_build(&c,1024));
     for(unsigned i=0;i<8;++i)check(&c,keys[i],lens[i]);
     check(&c,(const uint8_t *)"missing",7);free(c.hash);free(c.entries);
     /* Word boundaries and long unaligned keys must hash every byte. */
     off=0;uint8_t mixed[256];
     for(unsigned i=0;i<32;++i){unsigned kl=i*7+1;memset(mixed,0,kl);mixed[0]=(uint8_t)(i+1);if(kl>1)mixed[kl-1]=255;
-        block[off]=KV_OP_PUT;put_u32(block+off+1,kl);put_u32(block+off+5,0);memcpy(block+off+9,mixed,kl);off+=9+kl;}
+        block[off]=KV_OP_PUT;efs_store_le32(block+off+1,kl);efs_store_le32(block+off+5,0);memcpy(block+off+9,mixed,kl);off+=9+kl;}
     memset(&c,0,sizeof(c));c.blk=block;assert(!index_block(block,off,&c.entries,&c.nentries));assert(block_hash_build(&c,1024));
     for(unsigned i=0;i<32;++i){unsigned kl=i*7+1;memset(mixed,0,kl);mixed[0]=(uint8_t)(i+1);if(kl>1)mixed[kl-1]=255;check(&c,mixed,kl);mixed[kl-1]^=1;check(&c,mixed,kl);}
     free(c.hash);free(c.entries);
     /* Representative dense metadata block; identical warmed bytes in A/B. */
     off=0;
-    for(unsigned i=0;i<256;++i){key_for(2*i,key);block[off]=KV_OP_PUT;put_u32(block+off+1,12);put_u32(block+off+5,8);memcpy(block+off+9,key,12);put_u64(block+off+21,i);off+=29;}
+    for(unsigned i=0;i<256;++i){key_for(2*i,key);block[off]=KV_OP_PUT;efs_store_le32(block+off+1,12);efs_store_le32(block+off+5,8);memcpy(block+off+9,key,12);put_u64(block+off+21,i);off+=29;}
     memset(&c,0,sizeof(c));c.blk=block;assert(!index_block(block,off,&c.entries,&c.nentries));assert(block_hash_build(&c,KV_BLOCK_HASH_BYTES_MAX));
     for(unsigned i=0;i<512;++i){key_for(i,key);check(&c,key,12);}
     if(measure){

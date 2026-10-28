@@ -110,10 +110,10 @@ static void allocation_fallback(void) {
 static void malformed_batch(void) {
     char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-wal-malformed-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);
     uint8_t bytes[24]={0};
-    put_u32(bytes+4,16);put_u32(bytes+8,2);
-    bytes[12]=KV_OP_PUT;put_u32(bytes+13,1);put_u32(bytes+17,1);
+    efs_store_le32(bytes+4,16);efs_store_le32(bytes+8,2);
+    bytes[12]=KV_OP_PUT;efs_store_le32(bytes+13,1);efs_store_le32(bytes+17,1);
     bytes[21]='A';bytes[22]='a';bytes[23]=KV_OP_PUT;
-    put_u32(bytes,efs_crc32(bytes+8,16));
+    efs_store_le32(bytes,efs_crc32(bytes+8,16));
     assert(write(fd,bytes,sizeof(bytes))==sizeof(bytes));close(fd);
     mask=0;assert(kv_wal_replay(path,record,NULL)==EFS_ERR_PROTO && mask==0);
     fd=open(path,O_RDONLY);assert(fd>=0);assert(lseek(fd,0,SEEK_END)==24);close(fd);unlink(path);

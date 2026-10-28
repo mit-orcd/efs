@@ -20,17 +20,11 @@ static const uint8_t disc_magic[8] = {'E', 'F', 'S', 'D', 'I', 'S', 'C', 1};
 #define DISC_ANSWER 2u
 
 static void put16(uint8_t *p, uint16_t v) { p[0] = (uint8_t)(v >> 8); p[1] = (uint8_t)v; }
-static void put32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24); p[1] = (uint8_t)(v >> 16); p[2] = (uint8_t)(v >> 8); p[3] = (uint8_t)v;
-}
-static void put64(uint8_t *p, uint64_t v) { put32(p, (uint32_t)(v >> 32)); put32(p + 4, (uint32_t)v); }
+
+static void put64(uint8_t *p, uint64_t v) { efs_store_be32(p, (uint32_t)(v >> 32)); efs_store_be32(p + 4, (uint32_t)v); }
 static uint16_t get16(const uint8_t *p) { return (uint16_t)(p[0] << 8 | p[1]); }
-static uint32_t get32(const uint8_t *p)
-{
-    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
-}
-static uint64_t get64(const uint8_t *p) { return (uint64_t)get32(p) << 32 | get32(p + 4); }
+
+static uint64_t get64(const uint8_t *p) { return (uint64_t)efs_load_be32(p) << 32 | efs_load_be32(p + 4); }
 
 void efs_disc_probe_encode(uint8_t out[EFS_DISC_PROBE_LEN], uint64_t nonce)
 {
@@ -68,7 +62,7 @@ size_t efs_disc_answer_encode(uint8_t *out, size_t cap, uint64_t nonce,
     out[8] = DISC_ANSWER;
     put64(out + 9, nonce);
     put64(out + 17, a->cluster);
-    put32(out + 25, a->count);
+    efs_store_be32(out + 25, a->count);
     out[29] = a->formed ? 1 : 0;
     put16(out + 30, a->port);
     out[32] = (uint8_t)alen;
@@ -92,7 +86,7 @@ int efs_disc_answer_decode(const uint8_t *in, size_t len, uint64_t nonce,
     struct efs_disc_answer decoded = {0};
     struct efs_disc_answer *dst = &decoded;
     dst->cluster = get64(in + 17);
-    dst->count = get32(in + 25);
+    dst->count = efs_load_be32(in + 25);
     dst->formed = in[29];
     dst->port = get16(in + 30);
     memcpy(dst->addr, in + 33, alen);

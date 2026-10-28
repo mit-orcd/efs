@@ -9,29 +9,17 @@
 
 #define CMD_MAX        64
 
-static void wr32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
 
 static void wr64(uint8_t *p, uint64_t v)
 {
-    wr32(p, (uint32_t)(v >> 32));
-    wr32(p + 4, (uint32_t)v);
+    efs_store_be32(p, (uint32_t)(v >> 32));
+    efs_store_be32(p + 4, (uint32_t)v);
 }
 
-static uint32_t rd32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static uint64_t rd64(const uint8_t *p)
 {
-    return ((uint64_t)rd32(p) << 32) | rd32(p + 4);
+    return ((uint64_t)efs_load_be32(p) << 32) | efs_load_be32(p + 4);
 }
 
 static int pack_hdr(uint8_t *out, uint8_t sub, const uint8_t *uuid)
@@ -112,14 +100,14 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     case EFS_MD_SESS_CREATE:
         if (clen < 22)
             break;
-        epoch = rd32(cmd + 18);
+        epoch = efs_load_be32(cmd + 18);
         rc = efs_session_create(s->disk, uuid, epoch);
         break;
     case EFS_MD_SESS_REGISTER:
         if (clen < 26)
             break;
-        epoch = rd32(cmd + 18);
-        shard = rd32(cmd + 22);
+        epoch = efs_load_be32(cmd + 18);
+        shard = efs_load_be32(cmd + 22);
         rc = efs_session_register(s->disk, uuid, epoch, shard);
         break;
     case EFS_MD_SESS_BEGIN:
@@ -128,14 +116,14 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     case EFS_MD_SESS_FENCE_LOC:
         if (clen < 26)
             break;
-        epoch = rd32(cmd + 18);
-        shard = rd32(cmd + 22);
+        epoch = efs_load_be32(cmd + 18);
+        shard = efs_load_be32(cmd + 22);
         rc = efs_session_fence_local(s->disk, shard, uuid, epoch);
         break;
     case EFS_MD_SESS_ACK:
         if (clen < 22)
             break;
-        shard = rd32(cmd + 18);
+        shard = efs_load_be32(cmd + 18);
         rc = efs_session_ack_fence(s->disk, uuid, shard);
         break;
     case EFS_MD_SESS_FINISH:
@@ -144,14 +132,14 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     case EFS_MD_SESS_ESTABLISH:
         if (clen < 26)
             break;
-        epoch = rd32(cmd + 18);
-        shard = rd32(cmd + 22);
+        epoch = efs_load_be32(cmd + 18);
+        shard = efs_load_be32(cmd + 22);
         rc = efs_session_establish(s->disk, shard, uuid, epoch);
         break;
     case EFS_MD_SESS_LEASE_OPEN:
         if (clen < 38)
             break;
-        epoch = rd32(cmd + 18);
+        epoch = efs_load_be32(cmd + 18);
         ino = rd64(cmd + 22);
         gen = rd64(cmd + 30);
         rc = efs_lease_open(s->disk, ino, gen, uuid, epoch);
@@ -159,7 +147,7 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     case EFS_MD_SESS_LEASE_CLOSE:
         if (clen < 38)
             break;
-        epoch = rd32(cmd + 18);
+        epoch = efs_load_be32(cmd + 18);
         ino = rd64(cmd + 22);
         gen = rd64(cmd + 30);
         rc = efs_lease_close(s->disk, ino, gen, uuid, epoch);
@@ -190,8 +178,8 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     case EFS_MD_SESS_LEASE_DROP:
         if (clen < 26)
             break;
-        epoch = rd32(cmd + 18);
-        shard = rd32(cmd + 22);
+        epoch = efs_load_be32(cmd + 18);
+        shard = efs_load_be32(cmd + 22);
         rc = efs_lease_drop_session(s->disk, shard, uuid, epoch);
         if (rc == EFS_OK || rc == EFS_ERR_NOT_FOUND) {
             int r2 = efs_lock_drop_session(s->disk, shard, uuid, epoch);
@@ -275,15 +263,15 @@ int sim_sess_ensure_id(struct efs_sim *sim, const uint8_t *uuid, uint32_t epoch,
         return rc; /* OK, FENCED or a storage error: nothing to admit */
     ssh = efs_kv_session_shard(uuid);
     n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_REGISTER, uuid);
-    wr32(cmd + n, epoch);
-    wr32(cmd + n + 4, shard);
+    efs_store_be32(cmd + n, epoch);
+    efs_store_be32(cmd + n + 4, shard);
     n += 8;
     rc = propose_sess(sim, ssh, cmd, n);
     if (rc != EFS_OK)
         return rc;
     n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_ESTABLISH, uuid);
-    wr32(cmd + n, epoch);
-    wr32(cmd + n + 4, shard);
+    efs_store_be32(cmd + n, epoch);
+    efs_store_be32(cmd + n + 4, shard);
     n += 8;
     return propose_sess(sim, shard, cmd, n);
 }
@@ -347,8 +335,8 @@ int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until)
         if (!efs_session_bit_get(rec.touched, i))
             continue;
         n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_FENCE_LOC, uuid);
-        wr32(cmd + n, rec.epoch);
-        wr32(cmd + n + 4, i);
+        efs_store_be32(cmd + n, rec.epoch);
+        efs_store_be32(cmd + n + 4, i);
         n += 8;
         rc = propose_sess(sim, i, cmd, n);
         if (rc != EFS_OK)
@@ -360,7 +348,7 @@ int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until)
         if (!efs_session_bit_get(rec.touched, i))
             continue;
         n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_ACK, uuid);
-        wr32(cmd + n, i);
+        efs_store_be32(cmd + n, i);
         n += 4;
         rc = propose_sess(sim, ssh, cmd, n);
         if (rc != EFS_OK)
@@ -383,8 +371,8 @@ int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until)
         if (!efs_session_bit_get(rec.touched, i))
             continue;
         n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_LEASE_DROP, uuid);
-        wr32(cmd + n, old_epoch);
-        wr32(cmd + n + 4, i);
+        efs_store_be32(cmd + n, old_epoch);
+        efs_store_be32(cmd + n + 4, i);
         n += 8;
         rc = propose_sess(sim, i, cmd, n);
         if (rc != EFS_OK)
@@ -455,7 +443,7 @@ int efs_sim_open(struct efs_sim *sim, int client, efs_ino_t ino)
     if (rc != EFS_OK)
         return rc;
     n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_LEASE_OPEN, uuid);
-    wr32(cmd + n, epoch);
+    efs_store_be32(cmd + n, epoch);
     wr64(cmd + n + 4, ino);
     wr64(cmd + n + 12, gen);
     n += 20;
@@ -481,7 +469,7 @@ int efs_sim_close(struct efs_sim *sim, int client, efs_ino_t ino)
     if (rc != EFS_OK)
         return rc;
     n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_LEASE_CLOSE, uuid);
-    wr32(cmd + n, epoch);
+    efs_store_be32(cmd + n, epoch);
     wr64(cmd + n + 4, ino);
     wr64(cmd + n + 12, gen);
     n += 20;

@@ -38,6 +38,21 @@ struct efs_wb_description {
     struct wb_inode_error *inode;
     uint64_t cursor;
 };
+
+/* Named test seams delegate to the shared client geometry rules. */
+static uint32_t data_chunk_size(void)
+{
+    return efs_client_chunk_size();
+}
+static uint32_t data_frag_size(void)
+{
+    return efs_client_frag_size();
+}
+static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FRAGMENTS])
+{
+    efs_client_frag_ptrs(buf,frag_len,frags);
+}
+
 static pthread_mutex_t g_wb_error_mu = PTHREAD_MUTEX_INITIALIZER;
 static struct wb_inode_error *g_wb_errors[WB_ERROR_BUCKETS];
 
@@ -146,22 +161,6 @@ static int dcache_cycle_verdict(efs_ino_t ino, uint32_t ci,
                                 const struct efs_chunk_entry *ce,
                                 uint64_t object_seq);
 
-static uint32_t data_chunk_size(void)
-{
-    uint32_t cs = g_client.export.chunk_size;
-    return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
-}
-
-static uint32_t data_frag_size(void)
-{
-    return efs_frag_size(data_chunk_size());
-}
-
-static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FRAGMENTS])
-{
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        frags[i] = buf + (size_t)i * frag_len;
-}
 
 /* chunk_keys / chunks realloc under set/reserve. Lookups must hold idx_mu. */
 static int export_chunk_exists(efs_ino_t ino, uint32_t ci)
@@ -2700,7 +2699,6 @@ void efs_client_enable_meta_batch(uint32_t every_n_ops)
 }
 
 
-
 void efs_client_stop_meta_flush(void)
 {
     if (!g_client.meta_flush_started)
@@ -5071,7 +5069,6 @@ int efs_dcache_put_win_wait(efs_ino_t ino)
 }
 
 
-
 int efs_dcache_has(efs_ino_t ino, uint32_t ci)
 {
     uint32_t s = dcache_slot(ino, ci);
@@ -5705,7 +5702,6 @@ int efs_dcache_publication_result(efs_ino_t ino, uint64_t generation, uint32_t c
     int consumed;
     return efs_dcache_consume_publication(ino,generation,ci,object,sequence,reply,&consumed);
 }
-
 
 
 static int dcache_pending_of(efs_ino_t ino, uint32_t ci)

@@ -1,3 +1,4 @@
+#include "kv_order.h"
 #include "efs/kv_snap.h"
 #include "efs/kv_key.h"
 #include "efs/kv_lsm.h"
@@ -10,31 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 
-static void put_u32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v & 0xFF);
-    p[1] = (uint8_t)((v >> 8) & 0xFF);
-    p[2] = (uint8_t)((v >> 16) & 0xFF);
-    p[3] = (uint8_t)((v >> 24) & 0xFF);
-}
 
-static uint32_t get_u32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[3] << 24);
-}
-
-static int key_in_group(const uint8_t *key, uint32_t klen, uint8_t group)
-{
-    uint32_t shard;
-
-    if (klen < 2)
-        return 0;
-    shard = ((uint32_t)key[0] << 8) | (uint32_t)key[1];
-    if (shard > EFS_KV_SHARD_MASK)
-        return 0;
-    return efs_raft_shard_group(shard) == group;
-}
 
 /* Inspect the entire incoming image, including unchanged rows omitted from
  * the diff. Reserved KV kinds or a chunk with the reserved coding profile
@@ -100,7 +77,7 @@ static int exp_cb(void *user, const uint8_t *key, uint32_t klen,
 
     if (a->rc != EFS_OK)
         return a->rc;
-    if (!key_in_group(key, klen, a->group))
+    if (!kv_key_in_group(key, klen, a->group))
         return EFS_OK;
     add = 9u + klen + vlen;
     need = a->len + add;
@@ -113,9 +90,9 @@ static int exp_cb(void *user, const uint8_t *key, uint32_t klen,
         return EFS_ERR_NOMEM;
     }
     a->buf[a->len++] = 1; /* KV_OP_PUT */
-    put_u32(a->buf + a->len, klen);
+    efs_store_le32(a->buf + a->len, klen);
     a->len += 4;
-    put_u32(a->buf + a->len, vlen);
+    efs_store_le32(a->buf + a->len, vlen);
     a->len += 4;
     memcpy(a->buf + a->len, key, klen);
     a->len += klen;
@@ -152,7 +129,7 @@ int efs_kv_group_export(struct efs_kv *kv, uint8_t group, uint32_t max_bytes,
         free(a.buf);
         return rc;
     }
-    put_u32(a.buf, a.n);
+    efs_store_le32(a.buf, a.n);
     *data = a.buf;
     *len = a.len;
     return EFS_OK;
@@ -229,7 +206,7 @@ static int col_cb(void *user, const uint8_t *key, uint32_t klen,
 
     if (c->rc != EFS_OK)
         return c->rc;
-    if (!key_in_group(key, klen, c->group))
+    if (!kv_key_in_group(key, klen, c->group))
         return EFS_OK;
     if (klen > UINT32_MAX - c->alen || vlen > UINT32_MAX - c->alen - klen) {
         c->rc = EFS_ERR_NOMEM;
@@ -285,7 +262,7 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
         return EFS_ERR_INVAL;
     if (len < 4)
         return EFS_ERR_PROTO;
-    n = get_u32(data);
+    n = efs_load_le32(data);
     if (n > (len - 4) / 9)
         return EFS_ERR_PROTO;
     off = 4;
@@ -304,12 +281,12 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
             return EFS_ERR_PROTO;
         }
         off++;
-        klen = get_u32(data + off);
+        klen = efs_load_le32(data + off);
         off += 4;
-        vlen = get_u32(data + off);
+        vlen = efs_load_le32(data + off);
         off += 4;
         if (klen > len - off || vlen > len - off - klen ||
-            !key_in_group(data + off, klen, group)) {
+            !kv_key_in_group(data + off, klen, group)) {
             free(items);
             return EFS_ERR_PROTO;
         }
@@ -474,7 +451,7 @@ static int parse_image(const uint8_t *data, uint64_t len, uint8_t group,
     *n_out = 0;
     if (len < 4)
         return EFS_ERR_PROTO;
-    n = get_u32(data);
+    n = efs_load_le32(data);
     if (n > (len - 4) / 9)
         return EFS_ERR_PROTO;
     items = calloc(n ? n : 1, sizeof(*items));
@@ -489,12 +466,12 @@ static int parse_image(const uint8_t *data, uint64_t len, uint8_t group,
             return EFS_ERR_PROTO;
         }
         off++;
-        klen = get_u32(data + off);
+        klen = efs_load_le32(data + off);
         off += 4;
-        vlen = get_u32(data + off);
+        vlen = efs_load_le32(data + off);
         off += 4;
         if (klen > len - off || vlen > len - off - klen ||
-            !key_in_group(data + off, klen, group)) {
+            !kv_key_in_group(data + off, klen, group)) {
             free(items);
             return EFS_ERR_PROTO;
         }

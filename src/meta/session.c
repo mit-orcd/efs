@@ -9,19 +9,6 @@
 #include <string.h>
 #include <sys/stat.h>
 
-static void be32(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
-
-static uint32_t rd32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static void bit_set(uint8_t *map, uint32_t shard)
 {
@@ -48,8 +35,8 @@ static int bits_covered(const uint8_t *need, const uint8_t *have)
 
 static void pack_rec(uint8_t *p, const struct efs_session_rec *r)
 {
-    be32(p, r->epoch);
-    be32(p + 4, r->state);
+    efs_store_be32(p, r->epoch);
+    efs_store_be32(p + 4, r->state);
     memcpy(p + 8, r->touched, EFS_SESSION_BITMAP);
     memcpy(p + 8 + EFS_SESSION_BITMAP, r->acked, EFS_SESSION_BITMAP);
 }
@@ -59,8 +46,8 @@ static int unpack_rec(const uint8_t *p, uint32_t n, struct efs_session_rec *r)
     if (!p || !r || n < EFS_SESSION_VAL)
         return EFS_ERR_PROTO;
     memset(r, 0, sizeof(*r));
-    r->epoch = rd32(p);
-    r->state = (uint8_t)rd32(p + 4);
+    r->epoch = efs_load_be32(p);
+    r->state = (uint8_t)efs_load_be32(p + 4);
     memcpy(r->touched, p + 8, EFS_SESSION_BITMAP);
     memcpy(r->acked, p + 8 + EFS_SESSION_BITMAP, EFS_SESSION_BITMAP);
     return EFS_OK;
@@ -118,8 +105,8 @@ static int load_local(struct efs_kv *kv, uint32_t shard, const uint8_t *uuid,
         return rc;
     if (vlen < EFS_SESS_LOCAL_VAL)
         return EFS_ERR_PROTO;
-    loc->established = rd32(val);
-    loc->reject_below = rd32(val + 4);
+    loc->established = efs_load_be32(val);
+    loc->reject_below = efs_load_be32(val + 4);
     return EFS_OK;
 }
 
@@ -139,8 +126,8 @@ static int store_local(struct efs_kv *kv, uint32_t shard, const uint8_t *uuid,
     rc = efs_txn_key_exclusive(kv, key, klen);
     if(rc==EFS_OK)rc=efs_txn_key_guarded(kv,key,klen);
     if (rc != EFS_OK) return rc;
-    be32(val, loc->established);
-    be32(val + 4, loc->reject_below);
+    efs_store_be32(val, loc->established);
+    efs_store_be32(val + 4, loc->reject_below);
     return efs_kv_put(kv, key, klen, val, EFS_SESS_LOCAL_VAL);
 }
 
@@ -226,7 +213,7 @@ int efs_session_register_establish(struct efs_kv *kv,
     }
     if(rc)return rc;
     bit_set(r.touched,shard);pack_rec(global,&r);
-    be32(local,epoch);be32(local+4,loc.reject_below);
+    efs_store_be32(local,epoch);efs_store_be32(local+4,loc.reject_below);
     struct efs_kv_item items[2]={
         {EFS_KV_PUT,keys[0],lengths[0],global,sizeof(global)},
         {EFS_KV_PUT,keys[1],lengths[1],local,sizeof(local)}
@@ -530,8 +517,8 @@ int efs_session_prepare_owner(struct efs_kv *kv, uint32_t shard,
     rc = efs_kv_key_sess_local(shard, uuid, key, &len);
     if (rc != EFS_OK)
         return rc;
-    be32(value, local.established);
-    be32(value + 4, local.reject_below);
+    efs_store_be32(value, local.established);
+    efs_store_be32(value + 4, local.reject_below);
     return efs_txn_prepare_excl_value(kv, txid, parts, key, len, value, sizeof(value), EFS_TXN_PUT,
                                       value, sizeof(value));
 }
@@ -728,7 +715,7 @@ int efs_session_cleanup_floor(struct efs_kv *kv, uint32_t shard,
 
 static uint64_t cleanup_rd64(const uint8_t *p)
 {
-    return (uint64_t)rd32(p)<<32 | rd32(p+4);
+    return (uint64_t)efs_load_be32(p)<<32 | efs_load_be32(p+4);
 }
 
 static int cleanup_key(const uint8_t *key, uint32_t len, uint32_t shard,
@@ -739,7 +726,7 @@ static int cleanup_key(const uint8_t *key, uint32_t len, uint32_t shard,
     else if (len==65 && key[2]==EFS_KV_KIND_LOCK) owner=45;
     else return EFS_ERR_INVAL;
     if (((uint32_t)key[0]<<8 | key[1])!=shard ||
-        memcmp(key+owner,uuid,EFS_OPID_UUID_LEN) || rd32(key+owner+16)!=epoch ||
+        memcmp(key+owner,uuid,EFS_OPID_UUID_LEN) || efs_load_be32(key+owner+16)!=epoch ||
         !cleanup_rd64(key+3) || !cleanup_rd64(key+11) ||
         efs_kv_inode_shard(cleanup_rd64(key+3))!=shard)
         return EFS_ERR_INVAL;
@@ -760,7 +747,7 @@ static int cleanup_cb(void *user,const uint8_t *key,uint32_t len,
     uint32_t expected=key[2]==EFS_KV_KIND_LEASE ? 39 : 65;
     if (len!=expected) {scan->rc=EFS_ERR_PROTO;return 1;}
     uint32_t owner=expected==39 ? 19 : 45;
-    if (memcmp(key+owner,scan->uuid,16) || rd32(key+owner+16)!=scan->epoch) return 0;
+    if (memcmp(key+owner,scan->uuid,16) || efs_load_be32(key+owner+16)!=scan->epoch) return 0;
     if (cleanup_key(key,len,scan->shard,scan->uuid,scan->epoch)!=EFS_OK) {
         scan->rc=EFS_ERR_PROTO;return 1;
     }
@@ -840,7 +827,7 @@ int efs_session_cleanup_apply(struct efs_kv *kv,uint32_t shard,
         rc=efs_txn_key_exclusive(kv,markers[marked],len);
         if (rc!=EFS_OK) return rc;
         memcpy(identities[marked],key+11,8);memcpy(identities[marked]+8,uuid,16);
-        be32(identities[marked]+24,epoch);
+        efs_store_be32(identities[marked]+24,epoch);
         for(unsigned b=0;b<8;b++)identities[marked][28+b]=(uint8_t)(EFS_CLOSE_SESSION_SEQ>>(56-8*b));
         items[count++]=(struct efs_kv_item){EFS_KV_PUT,markers[marked],len,identities[marked],EFS_CLOSE_STEP_VALUE};
         marked++;
@@ -951,11 +938,11 @@ struct edge_lease {
 };
 static uint64_t edge_rd64(const uint8_t *p)
 {
-    return ((uint64_t)rd32(p) << 32) | rd32(p+4);
+    return ((uint64_t)efs_load_be32(p) << 32) | efs_load_be32(p+4);
 }
 static void edge_be64(uint8_t *p, uint64_t n)
 {
-    be32(p, (uint32_t)(n >> 32)); be32(p+4, (uint32_t)n);
+    efs_store_be32(p, (uint32_t)(n >> 32)); efs_store_be32(p+4, (uint32_t)n);
 }
 static int edge_window_key(uint32_t shard, const uint8_t *uuid, uint32_t epoch,
                            uint8_t *key, uint32_t *len)
@@ -973,11 +960,11 @@ static int edge_window_load(struct efs_kv *kv, const uint8_t *key, uint32_t klen
     if (rc == EFS_ERR_NOT_FOUND) return EFS_OK;
     if (rc != EFS_OK) return rc;
     if (len < 13 || value[0] != 1) return EFS_ERR_PROTO;
-    w->floor = edge_rd64(value+1); w->count = rd32(value+9);
+    w->floor = edge_rd64(value+1); w->count = efs_load_be32(value+9);
     if (w->count > EDGE_SLOTS || len != 13u + w->count*60u) return EFS_ERR_PROTO;
     for (unsigned i = 0; i < w->count; i++) {
         const uint8_t *p = value+13+i*60; struct edge_reply *r = &w->replies[i];
-        r->seq=edge_rd64(p); r->rc=(int)rd32(p+8);
+        r->seq=edge_rd64(p); r->rc=(int)efs_load_be32(p+8);
         r->ino=edge_rd64(p+12); r->gen=edge_rd64(p+20);
         memcpy(r->digest,p+28,32);
         if (r->seq <= w->floor || r->seq-w->floor > EFS_OPID_BITMAP_BITS ||
@@ -989,10 +976,10 @@ static int edge_window_load(struct efs_kv *kv, const uint8_t *key, uint32_t klen
 }
 static uint32_t edge_window_pack(const struct edge_window *w, uint8_t *value)
 {
-    value[0]=1; edge_be64(value+1,w->floor); be32(value+9,w->count);
+    value[0]=1; edge_be64(value+1,w->floor); efs_store_be32(value+9,w->count);
     for(unsigned i=0;i<w->count;i++) {
         uint8_t *p=value+13+i*60; const struct edge_reply *r=&w->replies[i];
-        edge_be64(p,r->seq); be32(p+8,(uint32_t)r->rc);
+        edge_be64(p,r->seq); efs_store_be32(p+8,(uint32_t)r->rc);
         edge_be64(p+12,r->ino); edge_be64(p+20,r->gen); memcpy(p+28,r->digest,32);
     }
     return 13+w->count*60;
@@ -1087,8 +1074,8 @@ static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
     if(rc!=EFS_OK)return rc;
     for (unsigned i=0;i<window.count;i++)
         if (efs_kv_inode_shard(window.replies[i].ino)!=shard) return EFS_ERR_PROTO;
-    edge_be64(identity,ino);edge_be64(identity+8,gen);be32(identity+16,flags);
-    edge_be64(identity+20,token);be32(identity+28,deferred?UINT32_C(0x434c4f53):UINT32_C(0x4c454153));
+    edge_be64(identity,ino);edge_be64(identity+8,gen);efs_store_be32(identity+16,flags);
+    edge_be64(identity+20,token);efs_store_be32(identity+28,deferred?UINT32_C(0x434c4f53):UINT32_C(0x4c454153));
     efs_hash(identity,sizeof(identity),digest);
     if(q->id.seq<=window.floor)return EFS_ERR_STALE;
     for(unsigned i=0;i<window.count;i++)if(window.replies[i].seq==q->id.seq)
@@ -1161,7 +1148,7 @@ static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
             }
             if(!empty) {
                 edge_be64(close_value,gen);memcpy(close_value+8,q->id.client_uuid,16);
-                be32(close_value+24,q->id.session_epoch);edge_be64(close_value+28,q->id.seq);
+                efs_store_be32(close_value+24,q->id.session_epoch);edge_be64(close_value+28,q->id.seq);
                 items[count++]=(struct efs_kv_item){EFS_KV_PUT,close_key,close_len,
                                                  close_value,sizeof(close_value)};
             }
@@ -1232,8 +1219,8 @@ static int lease_guarded_probe(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
     for(unsigned i=0;i<window.count;i++)
         if(efs_kv_inode_shard(window.replies[i].ino)!=shard)return EFS_ERR_PROTO;
     if(q->id.seq<=window.floor)return EFS_ERR_STALE;
-    edge_be64(identity,ino);edge_be64(identity+8,gen);be32(identity+16,flags);
-    edge_be64(identity+20,token);be32(identity+28,deferred?UINT32_C(0x434c4f53):UINT32_C(0x4c454153));
+    edge_be64(identity,ino);edge_be64(identity+8,gen);efs_store_be32(identity+16,flags);
+    edge_be64(identity+20,token);efs_store_be32(identity+28,deferred?UINT32_C(0x434c4f53):UINT32_C(0x4c454153));
     efs_hash(identity,sizeof(identity),digest);
     for(unsigned i=0;i<window.count;i++) {
         const struct edge_reply *reply=&window.replies[i];
@@ -1266,7 +1253,7 @@ int efs_close_step_apply(struct efs_kv *kv,efs_ino_t ino,
     if(!kv || !ino || !identity ||
        (phase!=EFS_CLOSE_STEP_LOCKS && phase!=EFS_CLOSE_STEP_RETIRE))return EFS_ERR_INVAL;
     uint64_t gen=cleanup_rd64(identity);
-    if(!gen || !rd32(identity+24) || !cleanup_rd64(identity+28))return EFS_ERR_INVAL;
+    if(!gen || !efs_load_be32(identity+24) || !cleanup_rd64(identity+28))return EFS_ERR_INVAL;
     uint32_t shard=efs_kv_inode_shard(ino),len=0,vl=EFS_CLOSE_STEP_VALUE;
     uint8_t key[EFS_KV_KEY_MAX],value[EFS_CLOSE_STEP_VALUE];
     int rc=efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,key,&len);

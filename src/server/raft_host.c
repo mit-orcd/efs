@@ -1,3 +1,4 @@
+#include "efs/meta_setattr_command.h"
 #include "efs/record_decode.h"
 #include "../common/query_stage_trace.h"
 #include "efs/query_policy.h"
@@ -102,7 +103,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
                           uint64_t gen, const uint8_t uuid[EFS_OPID_UUID_LEN],
                           uint32_t epoch);
 #define HOST_CMD_MAX       512 /* stack size for small cmds, not a wire cap */
-#define HOST_SETATTR_LEN   61
+#define HOST_SETATTR_LEN   EFS_META_SETATTR_COMMAND_LEN
 #define HOST_XATTR_HDR     48 /* 28 + session uuid/epoch (K5) */
 #define HOST_UTIMENS_LEN   93 /* 73 + session uuid/epoch (K5) */
 /* D25 single-entry TRUNCATE (protocol §1.2): tag kind ino:8 inode_gen:8
@@ -625,6 +626,17 @@ static __thread struct {
 } host_report_note;
 
 
+/* Local spelling is retained for host slice harnesses; encoding lives in
+ * byteorder.h, shared with the simulator, wire and metadata code. */
+static void wr32be(uint8_t *p, uint32_t v)
+{
+    efs_store_be32(p,v);
+}
+static uint32_t rd32be(const uint8_t *p)
+{
+    return efs_load_be32(p);
+}
+
 static void wr64be(uint8_t *p, uint64_t v)
 {
     int i;
@@ -643,19 +655,6 @@ static uint64_t rd64be(const uint8_t *p)
     return v;
 }
 
-static void wr32be(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
-
-static uint32_t rd32be(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 /* Op-id trailer on the log-path directory commands (I16): the LAST
  * HOST_OPID_TRAILER bytes of the command, big-endian, present when the
@@ -1838,25 +1837,13 @@ static int apply_rmdir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 static int apply_setattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
 {
-    struct efs_meta_setattr sa;
-    efs_ino_t ino;
-    uint64_t now;
-    int rc;
-
-    if (clen < HOST_SETATTR_LEN)
-        return EFS_ERR_UNSUPPORTED;
-    ino = rd64be(cmd + 1);
-    now = rd64be(cmd + 9);
-    memset(&sa, 0, sizeof(sa));
-    sa.expect_gen = rd64be(cmd + 17);
-    sa.mask = rd32be(cmd + 25);
-    sa.mode = rd32be(cmd + 29);
-    sa.uid = rd32be(cmd + 33);
-    sa.gid = rd32be(cmd + 37);
-    rc = efs_session_accept(h->kv, efs_kv_inode_shard(ino), cmd + 41,
-                            rd32be(cmd + 41 + EFS_OPID_UUID_LEN));
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_setattr(h->kv, ino, now, &sa);
+    struct efs_meta_setattr_command q;
+    int rc=efs_meta_setattr_command_decode(cmd,clen,&q);
+    if (rc!=EFS_OK) return rc;
+    efs_ino_t ino=q.ino;
+    struct efs_meta_setattr sa=q.attrs;
+    rc=efs_session_accept(h->kv,efs_kv_inode_shard(ino),q.uuid,q.epoch);
+    if (rc==EFS_OK) rc=efs_meta_apply_setattr(h->kv,ino,q.now,&sa);
     /* W45: the rc is the ring verdict (SETATTR is ring-only in
      * host_apply). NOT_FOUND = the row went away after the leader's
      * pre-read → ENOENT. The handler packs expect_gen = 0, so STALE is
@@ -3639,36 +3626,11 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[1] == EFS_MD_SESS_LEASE_CLOSE) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
         ret = EFS_OK;
-    /* Storage failure must retry this entry on every replica, rather than
-     * advance a follower past cleanup it did not durably perform. */
-    if ((cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
-         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
-         cmd[0] == EFS_MD_CMD_TXN_RETIRE || cmd[0] == EFS_MD_CMD_TXN_BATCH ||
-         cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
-         cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-         cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX || cmd[0] == EFS_MD_CMD_PACK_DEGRADED ||
-         cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
-         cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_DEGRADED_MARK ||
-           cmd[0] == EFS_MD_CMD_RECOVERY_MARK ||
-           cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
-         cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN ||
-         cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
-         cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
-         cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH || cmd[0] == EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH ||
-         cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
-         cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE || cmd[0] == EFS_MD_CMD_TRUNC_SWEEP ||
-         cmd[0] == EFS_MD_CMD_SWEEP_DONE || cmd[0] == EFS_MD_CMD_RETIRE ||
-         cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
-         cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
-         cmd[0] == EFS_MD_CMD_MEMBERS ||
-         (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
-         cmd[0] == EFS_MD_CMD_APPEND_COMPLETE_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_ATOMIC ||
-         (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
-        (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
-        ret = rc;
-    /* W127-W129: no normalization above may turn an unsupported or
-     * malformed entry into an applied one. */
-    if (rc == EFS_ERR_UNSUPPORTED)
+    /* Infrastructure failures are never replicated business verdicts. This
+     * applies to every command, including failures of reads before any KV
+     * write can poison the apply scope. One rule avoids a second command
+     * list drifting from the normalization list above. */
+    if (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM || rc == EFS_ERR_UNSUPPORTED)
         ret = rc;
     /* Finish the atomic apply scope before publishing its verdict. */
     if (scope_rc!=EFS_OK) ret=rc=scope_rc;
@@ -4423,7 +4385,6 @@ static int host_halted_hint(struct efs_raft_host *h, uint8_t group)
     host_view_get(h, group, &v);
     return v.leader >= 0 && v.leader != h->raft_id ? v.leader : -1;
 }
-
 
 
 static int host_view_covers(const struct host_view *v, uint64_t want,
@@ -6960,16 +6921,7 @@ static int pack_setattr_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
 {
     if (!sa || !id)
         return EFS_ERR_INVAL;
-    out[0] = EFS_MD_CMD_SETATTR;
-    wr64be(out + 1, ino);
-    wr64be(out + 9, now);
-    wr64be(out + 17, sa->expect_gen);
-    wr32be(out + 25, sa->mask);
-    wr32be(out + 29, sa->mode);
-    wr32be(out + 33, sa->uid);
-    wr32be(out + 37, sa->gid);
-    memcpy(out + 41, id->client_uuid, EFS_OPID_UUID_LEN);
-    wr32be(out + 41 + EFS_OPID_UUID_LEN, id->session_epoch);
+    efs_meta_setattr_command_encode(out,ino,now,sa,id->client_uuid,id->session_epoch);
     *len = HOST_SETATTR_LEN;
     return EFS_OK;
 }
@@ -9378,7 +9330,6 @@ static struct efs_export *host_gc_export(struct efs_raft_host *h)
 }
 
 
-
 /* Reap markers are the durable retry ledger for unreferenced PUT bodies too.
  * All members must install a death fence and finish their bounded inventory
  * before REAP_DONE removes that ledger. Never use the live-inode collector. */
@@ -9698,7 +9649,6 @@ static void host_pack_retire_pass(struct efs_raft_host *h, uint8_t group, uint32
     }
     free(ps);
 }
-
 
 
 /* Callback row limits cannot see tombstones. Bound physical merged-key work
@@ -10486,7 +10436,6 @@ out:
     free(rc);
     free(it);
 }
-
 
 
 /* REAP pass over one group's anchor shard: sweep every active lane of
