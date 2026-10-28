@@ -4,7 +4,7 @@ import os, subprocess, tempfile
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_TRUNC_GC_SOURCE',root/'src/server/raft_host.c')).read_text()
-a=s.index('static int trunc_pass_room(') if 'static int trunc_pass_room(' in s else s.index('struct trunc_scan_ctx {')
+a=s.index('struct trunc_pass_result {') if 'struct trunc_pass_result {' in s else s.index('static int trunc_pass_room(') if 'static int trunc_pass_room(' in s else s.index('struct trunc_scan_ctx {')
 b=s.index('/* ---- W154 rebuild on return',a)
 code=r'''
 #include "efs/meta_apply.h"
@@ -66,7 +66,8 @@ int efs_kv_scan_prefix(struct efs_kv *kv,const uint8_t *prefix,uint32_t pn,visit
 static void reset(struct efs_raft_host *h){memset(h->trunc_cursor_len,0,sizeof(h->trunc_cursor_len));memset(lane_swept,0,sizeof(lane_swept));memset(done,0,sizeof(done));memset(retired,0,sizeof(retired));for(unsigned i=1;i<=N;i++)pending[i]=1;clock_us=0;calls=blocked=scan_error=0;page_limit=4096;}
 int main(void){struct fake_server server={0};pthread_mutex_init(&server.lock,NULL);struct efs_raft_host h={.s=&server};
  for(unsigned group=0;group<=2;group+=2){
-  reset(&h);host_gc_trunc_pass(&h,group,group?2:1);
+  reset(&h);struct trunc_pass_result result=host_gc_trunc_pass(&h,group,group?2:1);
+  assert(result.progress==4 && result.capped);
   /* An individual slow proposal may cross the budget; never start the next. */
   if(calls>4){fprintf(stderr,"truncate monopolized GC: %u slow proposals\n",calls);return 10;}
   assert(calls==4&&clock_us==240000);
@@ -76,6 +77,9 @@ int main(void){struct fake_server server={0};pthread_mutex_init(&server.lock,NUL
   for(unsigned i=1;i<=N;i++)assert(retired[i]==1&&!pending[i]);
   /* Block the prefix permanently: later inodes still retire and a wrap
    * retries those markers after their authority becomes available. */
+  reset(&h);blocked=N;
+  result=host_gc_trunc_pass(&h,group,group?2:1);
+  assert(result.capped && result.progress==0); /* blocked work cannot spin */
   reset(&h);blocked=32;
   for(unsigned pass=0;pass<100;pass++)host_gc_trunc_pass(&h,group,group?2:1);
   for(unsigned i=1;i<=N;i++)assert(i<=blocked?pending[i]&&!retired[i]:retired[i]==1);
