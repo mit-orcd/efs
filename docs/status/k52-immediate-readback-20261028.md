@@ -1,10 +1,12 @@
 # K52 — immediate read-back under `.efs` load
 
-`agent/devel-task-x`, candidate `86035a633`, base `3debca7ec`.
-Qualification RUNNING on node9900; full gate NOTRUN pending the sequential
-live controls. Historical Task V failures remain OPEN. Evidence page:
+`agent/devel-task-x`, tested code `86035a633`, base `3debca7ec`.
+First gate: **TOTAL 522 FAIL 6 NOTRUN 14 (584s)**; base reproduces the recipe
+failure, other controls pending. D3: 46,443 exact files; kernel fork control
+FAIL. K52 remains OPEN (historical buffers unavailable). Evidence:
 `docs/status/k52-immediate-readback-20261028.md`. Raw:
-`/home/erbmi1/efs-artifacts/taskX-20261028/`. No product source changed.
+`/home/erbmi1/efs-artifacts/taskX-20261028/`; qualification still RUNNING.
+
 
 ## Purpose and current scope
 
@@ -104,6 +106,41 @@ fixtures until investigated. Never operate on existing user clusters.
 
 ## Qualification results
 
+Corrected D3 `86035a633` **PASS**: 46,443 I/O operations and all 46,443
+successful files exact on final read-back, 6,515 queries over six generations,
+zero I/O/query errors and no deadline violations. I/O maximum 0.226 seconds;
+query maximum 15.282 seconds; load converged in 54.303 seconds. The existing
+bounded BUSY rule handled 12 query refusals (longest episode 20.879 seconds,
+within the unchanged 30-second deadline); data writes returned no BUSY/EIO.
+The body took 503.577 seconds. Overall rc 3 still records single-host topology
+NOTRUN. Timing/throughput differences from baseline are not a controlled
+performance attribution: salts, placement, election history and scheduling
+are not held identical.
+
+First code gate on the same candidate:
+
+```text
+TOTAL 522 FAIL 6 NOTRUN 14 STATUS FAIL (584s) OVERBUDGET 4 BUILD 10s
+```
+
+| Failing command | Recorded observation | Base/control status |
+| --- | --- | --- |
+| test_readindex_pair.py | LSan fatal, ptrace unavailable | pending |
+| test_host_outbox.py | same | pending |
+| test_raft_ack_window.py | same | pending |
+| test_stage_evict_lru.py | same | pending |
+| EFS_B6_MODES=full test_b6_unavailable.py | W0 succeeds; test expected every later write ENOSPC | pending; original failed fixture retained |
+| test_make_test_recipe.py | test_code_graph.py neither wired nor listed with reason | reproduces on untouched 3debca7ec |
+
+The first gate inherited `EFS_TRANSPORT=tcp` from the D3 controller. Node9900
+has an ACTIVE mlx5_0 port; its RDMA skips cannot establish absent hardware.
+A second complete gate with that override removed is queued, preserving this
+first result. No leak suppression is applied to either complete gate. Focused
+address-only controls will be labelled as such, with leak qualification NOTRUN.
+The first gate's other skipped capabilities are missing external cluster
+scripts, valgrind, a normal-build fault-only subcase and the sanitizer runtime
+probe. Full skip lists and timing overruns remain in the original summary.
+
 Baseline `3debca7ec`: D3 **PASS**, K52 **NOT REPRODUCED** on this run.
 37,506 successful I/O operations and every one of their payloads exact on
 final read-back; 3,881 queries over six generations, zero I/O/query errors,
@@ -111,7 +148,30 @@ I/O maximum 0.311 seconds, query maximum 17.948 seconds. Load catalog
 converged in 48.889 seconds. Gate body 1,192.783 seconds. The driver overall
 is NOTRUN (rc 3) because four members on one host do not satisfy the topology
 gate. This run used queries on the second local mount; Task V used the writer
-mount. The same-mount controls are separate and pending.
+mount. The same-mount controls are separate.
+
+Spawned-reader same-mount D3 **PASS**: 17,995 files exact immediately in their
+spawned readers and again in the final read-back, 6,037 queries over six
+generations, zero I/O/query errors, I/O maximum 0.441 seconds, query maximum
+9.782 seconds; load convergence 60.236 seconds. Original fork-launching queries
+remain in this control. Reader process startup reduces write throughput, so
+this is not an equal-throughput performance A/B or proof about the eight
+historical buffers.
+
+The existing 30-second fixed-file kernel control reproduces W121/K10:
+**78,689 wrong reads / 240,982 with fork**, all eight readers affected; the
+first recorded successful 512-byte reads left the caller's `?` prefill in
+place. The spawn control has **0 wrong reads / 294,327**. The former is an
+expected deliberate exposure of the documented kernel limitation, recorded as
+a failing control, not a passing correctness check. All diagnostic clients and
+four daemons then stopped cleanly, rc 0 and mounts absent.
+
+The first queued in-process comparison refused port 19640 before starting a
+daemon or workload: the next owned fixed qualification already held the port.
+The refusal and rc 1 remain in `inproc-controller.log` / `inproc.rc`; no data
+comparison ran. The original queue pause did not prevent that scheduling race.
+A fresh in-process comparison is queued after the gate on ports 19660–19663,
+with new `inproc2` fixture/output paths. No occupied-port check was bypassed.
 
 Candidate driver regression suite **PASS** on node9900. Source content
 verified against Git objects: base 2,280 files and candidate 2,281 files, no
@@ -119,7 +179,7 @@ mismatch. Candidate binary:
 `efsd 86035a633 (branch agent/devel-task-x, built 2026-10-28T19:32:40Z on node9900)`.
 
 Host: AMD EPYC 9474F, 192 logical CPUs, 385,951 MiB RAM; RHEL kernel
-`5.14.0-687.39.1.el9_8.x86_64`, Python 3.9.25, private libfuse from
+`5.14.0-687.39.1.el9_8.x86_64`, Python 3.9.25, private libfuse 3.16.2 from
 `/data1/efs/deps/libfuse` (system 3.10.2 is insufficient). Relevant fuse module
 strings include `iov_iter_get_pages2`; this is supporting API evidence, not
 a patched-kernel A/B. Ptrace is disallowed, so syscall tracing is NOTRUN.
