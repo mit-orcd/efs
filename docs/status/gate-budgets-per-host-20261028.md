@@ -1,242 +1,254 @@
 # Task T — gate budgets across supported hosts
 
-`agent/devel-task-t`, implementation `292034404`, base devel `b2d57e421`.
-Nuc first attempt: **TOTAL 523 FAIL 7 NOTRUN 12 STATUS FAIL (1461s)
-OVERBUDGET 45 BUILD 50s**. Baseline comparison RUNNING; intel1 first K43
-pool attempt RUNNING; intel2 calibration and confirmations NOTRUN. Evidence `docs/status/gate-budgets-per-host-20261028.md`. Synthetic tool
-regression PASS on intel2; no product change or product finding. Task T INCOMPLETE.
+**INCOMPLETE / nuc calibration blocked.** The multi-host fitter is implemented;
+no fitted budget table or confirming gate is accepted. Three clean intel1
+pools now supply the required K43 measurements: 54.9/54.9/55.0 s, median
+54.9 s. Untouched `fe18612ae` fails the eight-job nuc gate. Later devel
+`424d0db8f` arrived after these frozen runs and is not qualified by them.
+Nuc/intel2 are occupied by other qualification work. Nothing is pushed or merged into devel.
 
-## Scope and status
+## Contract and source
 
-W160 / D44: derive one budget table from three clean eight-job gates per
-host, using 1.25 times the **maximum host median**, rounded upward to five
-seconds with a five-second floor. Preserve slots/reason prefixes and the
-user's `GATE_TARGET_S=1100`; never raise it to accommodate the fit.
+W160 / D44: three clean serial eight-job gates per supported host. Fit each
+row to `ceil_to_5s(1.25 × max(host medians))`, minimum five seconds. Preserve
+slots and reason prefixes. Keep `GATE_TARGET_S=1100`; do not raise it to fit
+the measurements. Report model time separately from measured wall time.
+A failed or contaminated gate never becomes a calibration sample.
 
-The fitting tool and its fast regression are committed. No replacement
-`tests/budgets.tsv` has been fitted or committed. Nuc run 1 failed; the
-controller stopped before run 2. Corrected intel1 measurements are RUNNING; intel2
-measurements, the modeled total and confirming gates remain pending. This is
-not a gate PASS or a completed calibration.
+Branch `agent/devel-task-t`: fitter implementation `292034404`; current
+measurement source `9638c34e0273fe9ff291ab7deae7ec1940516886`, merging
+wave-29 devel `fe18612ae`. Against that untouched base, selected source
+changes are only the fitter, its regression and one Makefile invocation:
+no product-code or Task T budget/slot change. Devel's graph/K48 budget rows
+are inherited. All nine rebuilt graph checks, the fitter regression and
+52-row K-register checker pass locally; docs check passes 5/5.
 
-Current source is frozen at `babeea6404df2008d4393a461adb4480f9acab65`,
-after merging devel `3debca7ec` at `234b30775`. Its archive SHA256 is
-`3a3cf46a5faa62fbd383f8709d2883e3428f38efc8c635f15750ab5ae8c7abb7`.
-The canonical graph was rebuilt per the merged AGENTS instructions; its nine
-navigation tests PASS. No product source or budget value was changed.
+Source archives contain tracked files, with explicit build ID/description
+and branch variables. Corrected archives have **no Git index**. The graph
+scope subcase reports NOTRUN there, per devel `c0081d095`; full local graph
+validation remains separate. Archive SHA-256:
 
-The user requested another availability check and continuation to completion.
-Nuc's Task H gate had finished; repeated checks found no active EFS/build/test
-processes. Four older retained Task H mounts remain untouched. Intel1 and
-xorinox were quiet, but their timing cannot substitute for the requested nuc
-and intel2 measurements. Intel2 still had overlapping Task W/merge gates; none
-of those overlapping observations will be used as clean calibration inputs.
+- Task T `9638c34e0`: `4aaf2ded75cfe46f198722edde12fe5da45710244622c39764850872e86a4ce2`.
+- Untouched `fe18612ae`: `6b0968f3d2addfbe5baa986dc9a524ee603718303d4c4666f4f110e4a309016f`.
 
-Nuc is now running three serial eight-job gates in detached screen
-`taskT-nuc-babeea`, owned source `~/efs-taskT-20261028-babeea640/src`, output
-`~/efs-artifacts/taskT-20261028/nuc-babeea640/`. Its build succeeded and the
-first gate finished FAIL with failures recorded below. A five-second process monitor records any competing
-EFS/compiler/make workload; a contaminated run is rejected and no subsequent
-calibration run starts. Failures are preserved, never retried by the controller.
-Only owned fixtures are created; no Task H mount or existing cluster is stopped.
-Intel2 has no Task T workload yet.
+## Coverage and fitter
 
-The source archive has no Git metadata. A private index was initialized from
-its exact tracked-path list for `test_code_graph.py`'s `git ls-files` check;
-this does not alter source bytes. Explicit build variables identify the actual
-frozen source commit, not the temporary index commit. Per-file source hashes
-are recorded before/after, plus every run's command list, timing, summary,
-budget table, preflight, binary hashes, version and exit status. The external
-controller's exact source is retained beside the output as `controller-source.py`.
+Task J's historical intel1 source `49e5ffd71` has three zero-failure gates
+(729/723/725 s, 509 commands, 14 NOTRUN each). Its copied small inputs were
+checked against the original manifest. They predate K43, W130, W166 and
+`dir_ops_busy`, plus the newly inherited graph/K48 rows. The first coverage
+audit missed K43; that omission is corrected here.
 
-Task J's twelve copied timing/summary/budget/command files have been checked
-against its original closed SHA256 manifest. Those small inputs are kept
-outside Git at `/Users/mike/Documents/Codex/artifacts/taskT-20261028/inputs/intel1/`.
-No payloads or runtime stores were copied.
+The user allowed nuc/intel2-only measurements for W130/W166/directory BUSY,
+then specifically required **three intel1 pool measurements for K43**. The
+fresh intel1 pools observe every current row, including those three. Keep
+that actual coverage; do not label observed cells unmeasured or mix its
+command sequence with Task J's older cohort. Historical inputs remain at
+`/Users/mike/Documents/Codex/artifacts/taskT-20261028/inputs/intel1/` and
+`intel1:/home/maik/efs-artifacts/taskJ-20261026/intel1-calibration-49e5ffd71/`.
 
-## Coverage decision
+Marker refusal is hardened in `db4908040`: a contamination/interruption
+marker rejects even a zero-failure timing file; focused regression PASS.
 
-Task J's three clean intel1 measurements are retained at
-`/home/maik/efs-artifacts/taskJ-20261026/intel1-calibration-49e5ffd71/run-{1,2,3}`.
-Their totals are 509 commands, zero FAIL and 14 NOTRUN each (729/723/725 s).
-They predate four current commands entirely:
+`scripts/refit_test_budgets.py` accepts repeatable `--host-runs HOST RUN1
+RUN2 RUN3`. It requires three distinct clean directories per host, identical
+within-host command sequences and recorded priorities, valid unique timing
+indices and finite nonnegative durations. Only the informational build-time
+stamp is normalized. Different host cohorts match exact budget commands;
+the fullest cohort supplies the scheduling reference. Every current row
+must be measured on every host unless explicitly declared `--unmeasured`.
+Unknown/stale declarations and all-host gaps are refused; absence is never
+zero. Reports retain observations, medians, limiting host and skip markers.
 
-- `python3 tests/test_k43_coordinator_kill.py`
-- `python3 tests/test_w130_dir_fault.py`
-- `python3 tests/test_w166_authority.py`
-- `python3 tests/test_dir_ops_busy.py`
+Regression `python3 tests/test_refit_test_budgets.py` distinguishes the maximum
+of host medians from pooled medians or one outlier; checks rounding, floor,
+slots/reasons, explicit gaps, failures, changed priorities and CLI/reference
+coverage. Linux regression PASS on intel2, log
+`/home/maik/efs-artifacts/taskT-20261028/tool-check/refit.log`, SHA-256
+`b33b051e73e9e5a8f9543cf6196d7f12a0e9f13c4018a8a31743a68653239ed8`.
+It uses synthetic inputs, not a cluster qualification.
 
-The initial coverage audit missed K43. The user chose nuc/intel2-only coverage
-for W130, W166 and directory BUSY retries, then explicitly required **three
-intel1 pool measurements for K43**. Three new full eight-job intel1 gates
-are therefore planned on the same frozen `babeea640` source; the controller
-stops on failure. They also observe the other newer rows. Keep these fresh
-observations separate from Task J's older cohort; never label an observed
-cell unmeasured or silently combine different within-host command sequences.
-The final fit must state which complete cohorts it uses.
+## Actual runs
 
-Intel1 series started at approximately 19:32 UTC October 28, screen
-`taskT-intel1-babeea`, source `~/efs-taskT-20261028-babeea640/src`, evidence
-`~/efs-artifacts/taskT-20261028/intel1-babeea640/`. No competing test/build
-job under the test account was present. Existing infrastructure owned by
-`efs` was left untouched; the process guard covers competing jobs under
-`maik`, not all activity by other users. This limitation applies to quiet-host
-classification and must be reviewed against the final preflights.
+All full gates use `EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 EFS_BUILD_JOBS=8`
+with `EFS_FUSE_PREFIX=/usr`, private archived source, isolated test fixtures,
+loopback TCP and each test's unchanged workload, quota, durability and
+internal deadlines. Nuc is an i5-1135G7 (four cores/eight threads);
+intel1/intel2 are Core Ultra 7 256V (eight cores/eight threads), all x86_64.
+Scratch is under each host's HOME; preflights retain filesystem/kernel details.
+Equal logical CPU counts are not equal physical execution or storage capacity.
+Host-limit NOTRUNs are not passing coverage. No real
+cluster, Task H mount/store or other user's infrastructure was stopped.
 
-## Observed nuc failures — qualification remains incomplete
+| Host / source / attempt | Full-gate result | Calibration disposition |
+| --- | --- | --- |
+| nuc / `babeea640` | 523 commands, 7 FAIL, 12 NOTRUN, 1461 s, 45 OVERBUDGET, build 50 s | Rejected; stopped before run 2 |
+| intel1 / `babeea640` | 523 commands, 2 FAIL, 12 NOTRUN, 727 s, 4 OVERBUDGET, build 30 s | Rejected; stopped before run 2 |
+| nuc / untouched `fe18612ae` | 528 commands, 4 FAIL, 13 NOTRUN, 1405 s, 43 OVERBUDGET, build 60 s | Failed baseline; not a calibration input |
+| intel2 / `9638c34e0` | Interrupted during build after Task H started independent daemons | Contaminated; no test timings |
+| intel1 / `9638c34e0`, run 1 | 529 commands, 0 FAIL, 13 NOTRUN, 734 s, 4 OVERBUDGET, build 31 s | Clean gate with recorded host limits; K43 54.9 s |
+| intel1 / `9638c34e0`, run 2 | 529 commands, 0 FAIL, 13 NOTRUN, 751 s, 5 OVERBUDGET, build 1 s | Clean gate with recorded host limits; K43 54.9 s |
+| intel1 / `9638c34e0`, run 3 | 529 commands, 0 FAIL, 13 NOTRUN, 738 s, 2 OVERBUDGET, build 0 s; K43 55.0 s | Rejected: one unclassified process observation |
+| intel1 / `9638c34e0`, replacement | 529 commands, 0 FAIL, 13 NOTRUN, 663 s, 3 OVERBUDGET, build 0 s | Accepted third clean observation; K43 55.0 s |
 
-Run 1 finished **523 commands, 7 FAIL, 12 NOTRUN, 45 OVERBUDGET**,
-1461 s test wall and 50 s build. These failures are not calibration samples:
+The original attempts used a synthetic Git index to satisfy the graph test.
+That was this session's setup error: it made `test_qualify_driver.py` reject
+its output as inside Git. The original graph test was also unwired; devel
+fixed that in `8106dab79`. Those two failures account for intel1's original
+failed attempt. Its K43 exited zero in 55.3 s, but that is an attempted
+observation, not one of the three required clean measurements.
 
-| Command | Observed failure |
-| --- | --- |
-| `test_d4_progress.py` | One foreground 1 MiB write+fsync took 11.04 s against 10 s; reported payload verification had no mismatches. |
-| `test_d4_plateau.py` | Packer reported 11 PUT errors; no read errors in the final sample. |
-| `test_pub_unit_forward_abort.py` | One write+fsync took 3.20 s against 3 s. |
-| `test_w130_dir_fault.py` | `raft-resync` returned `rc=-13` after the injected fault. |
+The other original nuc failures were:
 
-Two more runtime/setup failures were observed near the end: `test_w166_authority.py`
-failed (full diagnostics retained), and `test_qualify_driver.py` rejected its
-output as inside a Git worktree. The latter was caused by this session's
-synthetic Git index setup, not a product regression. That index made the graph
-scope test run but changed the qualification-driver environment. This attempt
-is invalid for calibration even apart from its runtime failures. Devel's
-`c0081d095` now reports the graph scope check NOTRUN for Git-free archives;
-the next cohort will use that fix and no synthetic index. The same setup was
-used for the ongoing intel1 attempt, so it cannot count as a clean cohort.
-Keep its K43 observations as attempted pool evidence only.
+- D4 progress: a 1 MiB write+fsync took 11.04 s against 10 s; the reported
+  payload checks had no mismatch.
+- D4 plateau: 11 packer PUT errors, no read errors in the final sample.
+- Forwarded-PREPARE progress: one write+fsync took 3.20 s against 3 s.
+- W130: operator resync returned `-13`.
+- W166: leadership moved during its L0-cap setup; the placement assertion
+  failed before the intended write test.
 
-The seventh failure, `test_make_test_recipe.py`, detected the unwired
-`test_code_graph.py`; devel already fixed that in `8106dab79`.
+The corrected source inherits devel's bounded pre-admission resync helper
+and failed-plateau retention; no bound or workload was relaxed by Task T.
+The untouched nuc baseline still failed:
 
-Raw command outputs were copied to `nuc-babeea640/run-1/`. The closed text
-manifest covers 30 files, all rechecked; `SHA256SUMS` SHA-256 is
-`5099b1004ab99fbe584e39a17b8b602d9aeb784b23d0b84260d79c23ddbfa29f`.
-The controller rechecked 2,282 tracked source files with no changes. Surviving failed fixtures remain for investigation; the original D4 tests
-self-cleaned their stores, so their retained stdout is not a recoverable
-store capture. The baseline enables D4 retention explicitly. No deadline, slot count,
-workload or product behavior has been relaxed. The process monitor has not
-reported competing same-account workloads at this checkpoint; that is not
-proof of no external I/O. An untouched same-host baseline comparison is
-RUNNING at devel `fe18612ae` in `~/efs-taskT-base-fe18612ae/src`, evidence
-`~/efs-artifacts/taskT-20261028/nuc-base-fe18612ae/`, screen
-`taskT-nuc-base-fe`. It is one full eight-job gate, no synthetic Git index;
-`EFS_D4_KEEP=1` retains D4 diagnostics without changing workload or bounds. No claim of a Task T regression or a product fix is made.
+- **D4 plateau:** one load rewrite returned EIO; four foreground operations
+  exceeded 10 s (write+fsync up to 13.512 s, `.efs/stats` 11.64 s); 56
+  abandoned uploads after 480 rewrites exceeded the bound of 24.
+- **K43 setup:** `raft-step-down` returned BUSY before the coordinator kill.
+  This is not a reproduced coordinator-kill corruption.
+- **Expiry:** `restricted` disappeared before `stat` in `expiry_lifecycle.py`.
+- **W130:** the snapshot-import/halt-clear condition missed its recovery
+  deadline, despite the new pre-admission helper.
 
-Task T merged current wave-29 devel at `9638c34e0`, retaining upstream fixes
-for archived-source graph testing, W130 operator resync pre-admission BUSY,
-and failed plateau-fixture retention. The graph was rebuilt and all nine
-navigation tests PASS; the multi-host fitter regression and 52-row register
-checker PASS. Relative to untouched `fe18612ae`, selected source changes
-remain only the fitter, its test and one Makefile test invocation: no product
-code or Task T budget/slot change. New devel budget rows for the graph and
-K48 tests are inherited, and need measured coverage in the fresh cohort.
+These are distinct failures, not proof of a common root cause. Task U already
+retains an independent untouched-base D4 packer failure with `NOT_PRIMARY`
+PUT retries ([report](k32-write-cost-profile-20261028.md)); that open issue
+is not erased by later individual passes.
 
-## Tool change and validation
+## Quiet-host diagnostic and scheduling finding
 
-`scripts/refit_test_budgets.py` accepts repeatable `--host-runs HOST RUN1 RUN2
-RUN3`. Each host needs three distinct clean result directories with the same
-command sequence and recorded budget priorities within that host. Timestamp
-normalization remains limited to the informational compile-time stamp;
-compiler flags, source/build identity or workload differences are not erased.
-Different host command sets are matched by the exact budgeted command. The
-fullest measured gate is the scheduling reference, so an older, shorter
-intel1 gate cannot remove newer commands from the model.
-
-`--unmeasured HOST COMMAND` declares a specific absent cell. Unknown hosts or
-commands, undeclared gaps, stale declarations for observed commands, failed
-commands, changed within-host priorities and invalid durations are refused.
-The report includes every observation, host median, limiting host, explicit
-coverage gap and NOTRUN marker. Marker-bearing command costs are not proof
-that their skipped subcases ran. The deterministic slot model is kept separate
-from measured wall time and does not claim real process start timestamps.
-
-The new `tests/test_refit_test_budgets.py` passes on intel2 (Linux
-6.12.0-211.67.1.el10_2 x86_64, Python 3). It uses synthetic result directories,
-not a live cluster: it distinguishes max host median from pooled median,
-last/first host and a single-run outlier; checks decimal rounding and the
-five-second floor, preserved slots/reason prefixes, explicit gaps, invalid
-inputs, differing host command sets and the CLI/model reference. It is wired
-into the fast test recipe. No long-test command, slot or deadline changes.
-
-Exact check:
+After the nuc baseline stopped, run each D4 test **once, serially**, on its
+unchanged `fe18612ae` binaries, with `EFS_D4_KEEP=1` and a fresh private TMPDIR:
 
 ```sh
-python3 tests/test_refit_test_budgets.py
+python3 tests/test_d4_progress.py
+python3 tests/test_d4_plateau.py
 ```
 
-Closed regression log: `intel2:/home/maik/efs-artifacts/taskT-20261028/tool-check/refit.log`.
-SHA256: `b33b051e73e9e5a8f9543cf6196d7f12a0e9f13c4018a8a31743a68653239ed8`.
-No baseline/full-gate comparison is yet claimed. The small synthetic check
-finished before intel2's later merge gate started.
+Both pass: **73.376 s** and **168.553 s**, original bounds/workloads unchanged.
+This is diagnostic contrast, not a calibration or a replacement for the
+failed pool. It supports investigating cross-test contention; it does not
+prove the EIO harmless or establish its low-level cause. Detailed fixtures
+and control logs remain for that open investigation.
 
-## Remaining measurements and reproduction
+The runner sorts pooled commands by slots, then decreasing budget. Current
+first wave is report-stepdown (6 slots, 440 s) plus snapshot-import (2 slots,
+310 s). D4 progress (2 slots, 260 s) cannot occupy the first two-slot window
+claimed by its reason text. This is a deterministic scheduling calculation,
+not observed process start timestamps. Updating time estimates can therefore
+change overlap; the safe-neighbor assumption is not a stable invariant.
+The follow-up should separate latency protection from fitted cost and retain
+all test bounds and intrinsic workloads. Task T's measurement-only scope has
+not changed execution policy or slot counts to obtain a green gate.
 
-On a frozen current-develop source in an owned tree, run the committed
-`scripts/calibrate_test_budgets.sh FULL_COMMIT ARTIFACT_ROOT BRANCH` on quiet
-nuc, then quiet intel2. It records three serial eight-job gates, preserves
-failures and stops on failure. Retain commands, timings, summaries, source
-and binary identities, budget tables and host preflights. Do not use failed
-or overlapping gates as successful workload costs. Compare any failure with
-the untouched same-host base rather than adjusting tests to manufacture PASS.
+## Raw evidence and controls
 
-If all three fresh intel1 gates are clean, they provide actual observations
-for all current rows, so the fitting invocation needs no missing-cell
-declarations. Keep the historical Task J cohort separate:
+Host roots below are under `/home/maik/efs-artifacts/taskT-20261028/`.
+All listed text manifests were closed and every hash rechecked. Sources were
+rechecked with no tracked changes (2,282 files in the original attempts;
+2,293 in untouched devel). Archive sources, exact external controller source,
+preflight/process state, commands/timings, failures, budgets, build/binary
+identity and final results are retained. No payload/store was exported.
+
+| Host / evidence root | Files | SHA-256 of `SHA256SUMS` |
+| --- | ---: | --- |
+| nuc / `nuc-babeea640` | 30 | `5099b1004ab99fbe584e39a17b8b602d9aeb784b23d0b84260d79c23ddbfa29f` |
+| intel1 / `intel1-babeea640` | 25 | `ae857a0b8a3e6ca7517115281fca17b6bdfd019206ea7662523c4f4bbcfb76c4` |
+| intel2 / `intel2-9638c34e0` | 25 | `5374fbca8d57d7293895f94d7e99fa43f9200616ac44251a0b4fcb9ec154e323` |
+| nuc / `nuc-base-fe18612ae` | 27 | `83b2b2af66d0a75bbbd66711a701f97c270003340b676fd7d72673b00231e752` |
+| nuc / `nuc-base-fe18612ae-serial-d4` | 11 | `8219f072db9268190bb2b77afa2c2ae2d179cd19f0ed39d4ff50782eb8348489` |
+| intel1 / `intel1-9638c34e0` | 54 | `81d3e8e2477a0302ddf6113704f1e0f20bf928d9859ac09288f20d8c1578bbcf` |
+| intel1 / `intel1-9638c34e0-replacement1` | 22 | `6cd80c0fd6d004d425332702a8213a89f7874553fdc62871bc366bd72a47ff33` |
+| intel1 / `intel1-cleanup-9638c34e0` | 3 | `c5c5575f51ba4348e08b02a4d4d4a5fc704a000769625c7a3563f99ecbdd196c` |
+
+Corrected intel1 evidence: `intel1-9638c34e0/`, detached screen
+`taskT-intel1-9638`, source `~/efs-taskT-20261028-9638c34e0/src`.
+The initial three-run controller stopped after one guard sample in run 3:
+`cc1`, PID 1705236, with no readable executable/cwd paths. It recorded no
+parent/start identity, so this is unclassified, not proven foreign work and
+not a clean sample. Its source check found all 2,295 files unchanged. The
+replacement observer records parent/start identity and arguments, checks
+process identity again after inspection, audits exited/reused samples and
+still rejects live unidentified or foreign work. Replacement output is
+`intel1-9638c34e0-replacement1/`; it finished with no contamination or observer
+race records, no tracked source changes and controller exit 0. Accepted inputs
+are original run 1, original run 2 and replacement run 1; the rejected run 3
+stays unchanged. The current fitter validated their identical 529-command
+sequences and priorities, zero failing commands, and all 91 budgeted commands
+present exactly once. It refused the actual marked run 3.
+
+61 copied small run-input files were checked against their host manifests at
+`/Users/mike/Documents/Codex/artifacts/taskT-20261028/inputs/intel1-corrected/`.
+`validation.json` records accepted paths, summaries and the 54.9 s K43 median;
+SHA-256 `596cba31405ef2e96b78c0bcd49a0d826ee1be8d38e5c65fd13473e51555340e`.
+No global budget is inferred from this one-host median. After zero-owned-process
+and zero-owned-mount checks, both stopped intel1 source/build trees were pruned
+with edelete; `intel1-cleanup-9638c34e0/PRUNED.txt` and its receipt name exactly
+what was removed. Raw evidence directories and failed/indeterminate results
+were retained. Tested source paths above are historical, reproducible from Git.
+Untouched nuc source is `~/efs-taskT-base-fe18612ae/src`; the failed D4,
+K43, expiry and W130 fixtures there, plus serial D4 controls under
+`~/efs-taskT-base-fe18612ae/serial-d4-tmp`, are kept for open investigation.
+The original nuc D4 tests self-cleaned their stores; their stdout is retained
+but cannot reconstruct those deleted fixtures. Retention in the new baseline
+was explicit, not a claim that old evidence was recovered.
+
+Controllers stop before a next calibration run on failure/contamination.
+The five-second guard observes competing EFS/build jobs under the test
+account (`maik`); it does not prove no other-user or external I/O activity.
+Preflights record all processes. Existing intel1 infrastructure owned by
+`efs` stays untouched. Intel2's interruption records exactly Task T's
+terminated children; Task H's processes/stores were not touched. Its
+missing-summary controller diagnostic is from interruption, not a test
+assertion. A later root-ownership scan found one surviving Task T daemon
+(PID 1472455), spawned during the earlier descendant-snapshot termination
+race. It ran **19:44:52–20:30:47 UTC**, overlapping other intel2 work. Only
+that owned daemon was signalled: TERM, then KILL after 20 s; a repeat scan
+found no owned process remaining. Logs and `orphan-cleanup.json` /
+`overlap-window.json` are retained. This session's cleanup mistake means
+other gates overlapping it are not quiet-host timing evidence; it does not
+prove that the daemon caused any failure. Future interruption closure needs
+repeated ownership scans and mount checks, not one descendant snapshot. Xorinox was idle when checked; it cannot replace the required
+nuc/intel2 coverage. SSH checks did not use BatchMode.
+
+## Completion still required
+
+1. **DONE:** three clean intel1 pools and K43 timings validated; retain the
+   explicit rejected attempts and host-limit skips.
+2. Review later devel repairs and freeze the next source; the `fe18612ae`
+   failure is not a result on newer `424d0db8f`. After the host is released,
+   collect three clean supported-profile nuc gates, investigating any failure
+   against an untouched same-host baseline. Do not fit failed
+   timings or retry them into a claimed PASS.
+3. Collect three clean intel2 gates after Task H releases it, with a new
+   quiet preflight and evidence directory.
+4. Fit complete cohorts, review every limiting row and modeled total against
+   1100 s, and report any excess without changing D44. Example:
 
 ```sh
 python3 scripts/refit_test_budgets.py \
   --budgets tests/budgets.tsv --runner scripts/make_test_summary.sh \
-  --host-runs intel1 INTEL1_RUN1 INTEL1_RUN2 INTEL1_RUN3 \
+  --host-runs intel1 I1_RUN1 I1_RUN2 I1_RUN3 \
   --host-runs nuc NUC_RUN1 NUC_RUN2 NUC_RUN3 \
-  --host-runs intel2 INTEL2_RUN1 INTEL2_RUN2 INTEL2_RUN3 \
-  --output NEW_ARTIFACT_DIRECTORY
+  --host-runs intel2 I2_RUN1 I2_RUN2 I2_RUN3 \
+  --output NEW_DIRECTORY
 ```
 
-Commit the fitted rows only after reviewing coverage and the modeled gate
-against 1100 s (and its existing margin bound). Report the limiting rows if
-the target is exceeded; leave D44 unchanged. Then run one confirming gate on
-nuc and one on intel2. Record every OVERBUDGET outcome; a median fit does not
-guarantee a single run cannot exceed it. Do not retry or widen budgets merely
-to obtain zero overruns. Final raw manifests, source verification, cleanup
-receipts and both confirming gate lines remain pending. Nothing is pushed
-or merged into devel.
-
-
-## Corrected measurements and retained invalid attempts
-
-Intel1's original `babeea640` attempt finished **TOTAL 523 FAIL 2 NOTRUN 12
-STATUS FAIL (727s) OVERBUDGET 4 BUILD 30s**. Both failures were the synthetic
-index / qualification-driver interaction and unwired graph test. K43 exited
-zero in 55.3 s in that pool, but this is an attempted observation, **not one
-of the three required clean measurements**. Source verification found no
-tracked changes. Three corrected full serial pools started on `9638c34e0`
-without Git metadata, screen `taskT-intel1-9638`, evidence
-`intel1:/home/maik/efs-artifacts/taskT-20261028/intel1-9638c34e0/`.
-All current rows are observed; historical Task J data stays separate.
-
-Intel2's `9638c34e0` attempt was interrupted during build after the guard
-observed Task H starting independent daemons after our preflight. Only
-Task T's child processes were terminated, with their identities recorded
-in `INTERRUPTED.json`. No test timings exist and no calibration run counts.
-The controller exited with missing-summary diagnostics after termination;
-this is an interrupted/contaminated setup, not a product test failure.
-Task H's processes/stores were left untouched. Further intel2 measurement
-must wait for its queued work to finish and a new quiet preflight.
-
-Closed evidence roots (under each host's `/home/maik/efs-artifacts/taskT-20261028/`):
-
-| Host / root | Files | SHA-256 of checked `SHA256SUMS` |
-| --- | ---: | --- |
-| nuc / `nuc-babeea640` | 30 | `5099b1004ab99fbe584e39a17b8b602d9aeb784b23d0b84260d79c23ddbfa29f` |
-| intel1 / `intel1-babeea640` | 25 | `ae857a0b8a3e6ca7517115281fca17b6bdfd019206ea7662523c4f4bbcfb76c4` |
-| intel2 / `intel2-9638c34e0` | 22 | `c0eb7c392361a4d02923a734eca15aa13a999a33587b24afb24e1c522f4401d1` |
-
-The untouched nuc baseline has already observed a POSIX expiry failure:
-`restricted` disappeared before `stat` in `expiry_lifecycle.py`. Its fixture
-is retained. Baseline is not a clean calibration input, regardless of later
-results; its final summary and the D4 comparison remain pending. Task U also
-records an independent untouched-base D4 plateau failure and retained stores
-([report](k32-write-cost-profile-20261028.md)); that issue remains OPEN even
-when an individual rerun passes. No Task T product fix or relaxed gate is
-claimed.
+5. Commit the reviewed table and run one confirming gate on nuc and intel2;
+   record actual OVERBUDGET counts. Zero is expected, not guaranteed by a
+   median fit. Preserve failures and inspect any excess without relaxing
+   durability, test bounds, slots or the target to manufacture success.
+6. Finalize manifests and prune closed bulk only after checking no owned
+   processes/mounts remain, using `~/bin/edelete --force --delete`. Keep open
+   investigation stores. Raw logs/captures stay outside Git.
