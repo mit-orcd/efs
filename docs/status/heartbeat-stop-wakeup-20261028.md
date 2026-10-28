@@ -1,10 +1,11 @@
 # Heartbeat shutdown wakeup — October 28, 2026
 
 Branch `agent/heartbeat-stop-wakeup`, base `69e7c0821`; product/regression
-commit `6dc0bafa8`, measurement driver `a9bd8600c`. **Implemented; focused
-normal, TSan and ASan/UBSan checks PASS on intel1. Full daemon timing A/B
-and `make test-all` NOTRUN, pending source-transfer approval.** No merge,
-push, deployment or budget refit.
+`6dc0bafa8`, tested build and measurement driver `a9bd8600c`.
+**Qualified in scope on intel1:** eighteen checked real-daemon stops PASS;
+focused normal/TSan/ASan checks PASS; full gate **520 commands, 0 FAIL,
+12 NOTRUN / INCOMPLETE, 652 s, 5 OVERBUDGET, 12 s build**. Budgets unchanged.
+No merge, push or deployment. Missing hardware/external-tool scopes stay open.
 
 ## Problem and change
 
@@ -32,7 +33,8 @@ compatibility mechanism is added. Makefile and `tests/budgets.tsv` unchanged.
 
 ## Verification
 
-Intel1, private account `maik`: Linux
+Intel1, private account `maik`, Intel Core Ultra 7 256V, eight CPUs,
+15,774,852 KiB RAM: Linux
 `6.12.0-211.67.1.el10_2.x86_64`, GCC 14.3.1, Python 3.12.15; host was idle at
 preflight (load 0.08/0.11/1.29, no test-account daemon/build workload).
 Only the changed source excerpts and harness were staged under
@@ -46,7 +48,7 @@ it is **not a complete efsd binary or hardware RDMA test**. The source hashes
 of all four changed production/test files match `6dc0bafa8` and are recorded
 in `SOURCE.sha256`. Build identity: the harness is compiled from those exact
 excerpts with GCC, `-std=gnu11 -Wall -Wextra -Werror -pthread` plus the mode's
-sanitizer flags; no new efsd build identity exists yet.
+sanitizer flags. The later complete-daemon build is identified below.
 
 ```sh
 python3 tests/test_heartbeat_shutdown.py
@@ -77,7 +79,7 @@ It fails at the prompt-stop assertion after the ten-second sleep, rc 1;
 this deliberate counterexample is preserved in `unit-negative.log`. It is
 not counted as an unclassified product failure or silently retried.
 
-## Remaining Linux gates and reproducible comparison
+## Linux comparison and full-gate qualification
 
 The committed driver `scripts/measure_heartbeat_stop.py` runs nine checked
 SIGTERM stops per source (three repetitions at each of 0.05/0.3/0.8 s after
@@ -87,7 +89,7 @@ process rc 0 and an orderly exit record with all three barriers `done`, and
 keeps closed logs/results. This isolates idle startup/shutdown; it does not
 qualify three-member recovery or in-flight payload durability.
 
-Once source staging is approved, build clean baseline `69e7c0821` and
+The user explicitly approved the source-only upload. Build clean baseline `69e7c0821` and
 candidate `a9bd8600c` trees on the same idle Linux host with exact
 `EFS_GIT_ID`, `EFS_GIT_BRANCH` and `EFS_GIT_DESCRIBE`. For each:
 
@@ -109,22 +111,104 @@ build trees using `~/bin/edelete --force --delete` on the explicitly owned
 scratch paths. No test mount is needed for the timing driver; full-gate
 mount cleanup must be checked separately.
 
-**Why NOTRUN:** automatic approval review rejected the attempted full-source
-archive upload to intel1 as a possible private-code export. No full archives
-were sent. Read-only checks found only older scratch sources, not a usable
-current baseline; they were left untouched. Explicit approval is requested
-for the source-only transfer and remains pending. macOS cannot build the
-Linux daemon locally. This does not invalidate the already completed
-focused Linux checks, and no full-suite or real-daemon speedup is claimed.
+**Execution:** the user explicitly approved the source-only upload after
+its initial automatic-review refusal. Clean baseline/candidate archives were
+transferred, hashed, extracted separately and built on the same quiet host.
+`screen` refused the system `/run/screen` mode; detached `nohup` was used
+without changing host settings. The controller and exact archive/source
+manifests are retained with the results.
 
-## Retained evidence
+| Checked idle-daemon stops | Runs | Minimum | Median | Maximum |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline `69e7c0821` | 9 | 1.218 s | 1.718 s | 1.972 s |
+| Candidate `a9bd8600c` | 9 | 0.114 s | 0.164 s | 0.315 s |
 
-`intel1:/home/maik/efs-artifacts/heartbeat-wakeup-20261028/`:
-normal/TSan/ASan logs, deliberate negative-control log, mode exit statuses and
-`SOURCE.sha256`. Closed `SHA256SUMS` covers eight files, verified with
-`sha256sum -c`; manifest SHA-256:
+Every stop exited rc 0 with `outcome=orderly` and PUT-sync, reclaim-journal
+and usage-flush barriers all `done`. These are complete idle-daemon stop
+times on an unformed single-seed fixture, not a latency guarantee for an
+in-flight probe, a dirty store or a formed cluster. The full suite below
+exercises broader daemon lifecycle cases.
+
+Binary identities: baseline `efsd 69e7c0821` built
+`2026-10-28T03:38:07Z`; candidate `efsd a9bd8600c` built
+`2026-10-28T03:38:45Z`, both branch `agent/heartbeat-stop-wakeup` on intel1.
+Baseline/candidate and final full-gate binary SHA-256 lists are retained.
+All archived source files passed content-hash verification after their
+measurements, including the candidate after the full gate.
+
+### Full gate and timing comparison
+
+Fresh candidate `make test-all`, eight jobs, system FUSE 3.16.2, private
+TMPDIR and loopback fault fixtures on O_DIRECT-capable XFS:
+
+```text
+TOTAL 520 FAIL 0 NOTRUN 12 STATUS INCOMPLETE (652s) OVERBUDGET 5 BUILD 12s
+```
+
+The retained wave-23 intel1 gate at `6967bfda2` reported 794 s, 11 budget
+overruns, 0 FAIL and the **same twelve NOTRUN commands and reasons**. The
+new wall is 142 s lower. This is one new full run compared with a dated
+same-host run, not a repeated/interleaved whole-suite A/B or a promise of
+18% speedup on every host. The controlled nine-per-version stop comparison
+above isolates the sleep cost more directly.
+
+| Previously over budget | Wave 23 s | Candidate s | Unchanged budget s |
+| --- | ---: | ---: | ---: |
+| formation | 19.4 | 9.2 | 15 |
+| K33 autoid | 55.3 | 28.4 | 40 |
+| K33 client view | 25.9 | 19.1 | 25 |
+| K33 interrupted join | 15.0 | 6.1 | 10 |
+| K33 payload | 47.3 | 31.5 | 45 |
+| K38 shared-chunk pressure | 41.4 | 41.4 | 35 |
+| stop progress | 65.4 | 57.3 | 50 |
+| operator workflows | 19.8 | 13.2 | 15 |
+| member limit | 34.7 | 12.6 | 20 |
+| B6 refuse | 48.5 | 22.5 | 45 |
+| K22 leader admission | 44.3 | 37.7 | 30 |
+
+Eight of the original eleven now meet budget. The remaining five measured
+overruns are K35 degraded fsync **80.8/80 s**, K38 **41.4/35 s**, stop
+progress **57.3/50 s**, query-delta with `EFS_QUERY_DELTA_DIRS=1`
+**12.1/10 s**, and K22 leader admission **37.7/30 s**. All passed their
+assertions; no timing row, workload, pool slot or timeout was raised.
+Those measurements stay visible rather than being absorbed into a refit.
+The 652 s code-test wall meets D44's unchanged 1,100 s target.
+
+The twelve NOTRUN entries are: external cluster stop/remount scripts absent;
+`valgrind/memcheck.h` absent; declaration-gate RDMA subcase, native RDMA
+transport and seven segmented modes lack usable IB; follower-bound's
+stalled-compactor subcase needs the fault build. Other subcases ran. This
+is a TCP-host qualification, not new RDMA-hardware, cross-host, power-loss
+or complete sanitizer-suite acceptance. Focused TSan/ASan results above
+remain distinct from the normal full gate. No application failure was
+retried away and no product failure occurred in this qualification.
+
+## Retained evidence and cleanup
+
+`intel1:/home/maik/efs-artifacts/heartbeat-wakeup-20261028/` retains normal,
+TSan and ASan logs, the deliberate negative control, both checked-stop
+series and exit records, the complete full-gate summary/timings/build output,
+the prior wave-23 comparison text, controller, source/archive and binary
+hashes, source verification and quiescence records. No raw output is in Git.
+
+The original eight-file focused manifest is preserved unchanged as
+`focused-SHA256SUMS`, SHA-256
 `97f5b8f84196deb761150861b36bcba0b29f148f76a1a5fe41a663b81f9bd962`.
-No raw outputs are committed. The small preflight source is retained pending
-qualification; generated unit binaries/temp directories were removed by the
-harness. No test process or mount remains. Local architecture docs gate
-5/5 PASS; whitespace check PASS. Broader code gates remain NOTRUN as above.
+All **83** pre-cleanup evidence files were independently verified from the
+correct directory (`BEFORE-PRUNE.sha256`). An earlier check used the wrong
+working directory and reported missing relative paths; the files existed,
+and cleanup was blocked until the successful corrected verification. No
+evidence was lost.
+
+Fresh checks found zero owned daemons or mounts. After successful source,
+result and hash checks, `~/bin/edelete --force --delete` removed only
+`/home/maik/efs-hb-wakeup-20261028` (821 MiB of source archives, builds,
+preflight source and passing synthetic stores). There were no unresolved
+failed workload stores. `PRUNED.txt` and `prune.log` record cleanup; the
+intentional negative-control logs remain. The final **86-file** manifest
+verified again after cleanup, SHA-256:
+`904958a3f589643d986ed00bf6d540629036d5159eedd6bf95bc01637df5a5e2`.
+
+Local architecture docs gate **5/5 PASS**, environment inventory PASS,
+whitespace check PASS. The implementation/driver commits are ready for
+integration; a host-limited INCOMPLETE is not promoted to global release PASS.

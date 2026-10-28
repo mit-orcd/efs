@@ -1641,14 +1641,16 @@ full acceptance are separate states.
 ### Recent evidence and remaining acceptance
 
 [Heartbeat shutdown wakeup](../status/heartbeat-stop-wakeup-20261028.md):
-**Implemented on `agent/heartbeat-stop-wakeup`; not merged.** K51's join is
-preserved; a monotonic condition wait replaces the uninterruptible two-second
-sleep and shutdown wakes it before joining. Product/regression `6dc0bafa8`,
-driver `a9bd8600c`. Intel1 focused normal/TSan/ASan checks PASS; restored-sleep
-negative control fails as intended. No budget changes. Real-daemon A/B and
-full `make test-all` NOTRUN pending approval to stage source archives; raw
-logs and verified hashes retained. No deployment or full speedup claim.
-
+**Qualified in scope, `agent/heartbeat-stop-wakeup`, not merged.** K51's join
+is preserved; shutdown wakes a monotonic condition wait instead of waiting
+out the two-second sleep. Product `6dc0bafa8`, tested `a9bd8600c`. Intel1
+normal/TSan/ASan focused checks PASS; deliberate restored-sleep control FAIL.
+Checked real stops: 9 per build, median **1.718 s → 0.164 s**, all barriers
+done. Full gate **520/0 FAIL/12 NOTRUN, INCOMPLETE, 652 s, 5 OVERBUDGET**
+(prior wave 23: 794 s / 11 overruns); eight prior overruns now meet budget.
+No budget, timeout or workload changed. Exact skip set unchanged; remaining
+overruns recorded. Closed evidence/hashes verified, owned scratch pruned,
+no daemon/mount left, no deployment or full-hardware qualification claim.
 
 [Wave 24 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`59b0f5b56`)**: Task Q, docs audit round 3 through wave 22 ([audit](../status/docs-audit-20261027.md)): 17 operator-page fixes (guide, POSIX, surface, `.efs` commands, release notes, testing), a metadata-replica halt runbook for W130/W165 with `raft-resync`, the release notes' open-item list rewritten for the current state (K43, K48, W166, W159 still open; K44, K45–K47, K50 fixed), the guide's duplicated Expiry section merged. Docs only: docs gate 5/5; live command checks NOTRUN (the Linux tree does not build on the Mac); wave 23's changes (K49/K51, apply errors, shared codecs) are not yet in these pages.
 
