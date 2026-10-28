@@ -2419,6 +2419,51 @@ def g_plugin(name, spec):
     return gate
 
 
+def g_standalone_plugin(name, spec):
+    """Run an independent private workload with the owned fixture stopped.
+
+    The soak's quiet-host guard must still reject unrelated jobs. Only the
+    driver's own fixture may be suspended, and restart permission is required.
+    """
+    plugin = g_plugin(name, spec)
+
+    def gate(q, g):
+        if not q.control.owned:
+            return NOTRUN, 'standalone plugin cannot suspend an externally managed cluster'
+        if 'restart' not in q.allow:
+            return NOTRUN, 'standalone plugin needs --allow restart'
+        if not q.control.has('stop_cluster', 'start_cluster'):
+            return NOTRUN, 'standalone plugin needs stop/start controls'
+        mounts = q.cluster.get('mounts', [])
+        for m in mounts:
+            rc, text = g.run('fuser-before-standalone', m['host'],
+                             f'fuser -m {shlex.quote(m["path"])} 2>/dev/null', 60)
+            if rc == 0 and text.strip():
+                return NOTRUN, f'standalone fixture mount is in use: {m["path"]}'
+        g.step('restart', f'suspend owned fixture for standalone {name}')
+        for m in mounts:
+            rc, text = q.control.client_stop(g, m)
+            if rc:
+                return stop_failure(q, text, 'standalone clean client stop failed: ', rc)
+        rc, text = q.control.stop_cluster(g)
+        if rc:
+            return FAIL, 'standalone orderly cluster stop failed: ' + outcome_from_rc(rc, text)[1]
+        result = (FAIL, 'standalone plugin did not complete')
+        try:
+            result = plugin(q, g)
+        finally:
+            rc, text = q.control.start_cluster(g)
+            ready_s = q.cluster.get('control', {}).get('ready_timeout_s', 300)
+            if rc or not wait_cluster_ready(q, g, ready_s):
+                raise RuntimeError(f'fixture restore failed after {name}; plugin result: {result}; {text}')
+            for m in mounts:
+                rc, text = q.control.client_start(g, m)
+                if rc:
+                    raise RuntimeError(f'fixture remount failed after {name}: {m["path"]}; {text}')
+        return result
+    return gate
+
+
 def gates(plugins):
     out = [
         Gate('identity', g_identity, 'A1, A2', 'Candidate and profile', deadline_s=600,
@@ -2427,7 +2472,8 @@ def gates(plugins):
              doc='status members = described nodes, all up, distinct hosts; profile recorded'),
     ]
     for name, spec in plugins.items():
-        out.append(Gate(name, g_plugin(name, spec), spec.get('items', 'plugin'),
+        factory = g_standalone_plugin if spec.get('standalone') else g_plugin
+        out.append(Gate(name, factory(name, spec), spec.get('items', 'plugin'),
                         spec.get('ledger', 'Placement/capacity and decode'),
                         needs=spec.get('needs', ()), deadline_s=spec.get('deadline_s', 3600),
                         doc=spec.get('doc', 'pluggable gate: ' + spec['command'][:60])))
@@ -2502,6 +2548,7 @@ def default_plugins(cluster, extra):
                                    ledger='Scale/progress evidence (E4, D4)', deadline_s=7200,
                                    doc='D4 bounded progress under packing, indexing and KV compaction')}
     plugins['soak'] = dict(
+        standalone=True, needs=('restart',),
         command='cd {source} && nice -n 10 python3 scripts/soak.py --work {gate_dir}/runtime '
                 '--out {gate_dir}/soak --hours {soak_hours} --profile {soak_profile} --source {candidate}',
         host=cluster.get('private', {}).get('host', 'local'),
