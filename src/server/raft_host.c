@@ -17549,6 +17549,44 @@ static void host_opid_reply_ino(struct efs_raft_host *h, efs_ino_t parent,
     strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
 }
 
+#if EFS_FAULTS
+/* W165: stage the target in the split worker, but expose damage only once
+ * the intended CREATE passed ReadIndex and is about to read its parent.
+ * Corrupting from maintenance first lets an unrelated reader latch it. */
+static int host_test_dir_serve_read(struct efs_raft_host *h, efs_ino_t parent, uint8_t pg)
+{
+    const char *path = getenv("EFS_FAULT_DIR_SERVE_FILE");
+    char ready[EFS_MAX_PATH], arm[EFS_MAX_PATH];
+    if (!path || access(path, F_OK) != 0)
+        return EFS_OK;
+    snprintf(ready, sizeof(ready), "%s.ready", path);
+    snprintf(arm, sizeof(arm), "%s.arm", path);
+    if (access(arm, F_OK) != 0)
+        return EFS_OK;
+    FILE *fp = fopen(ready, "r");
+    if (!fp)
+        return EFS_OK;
+    unsigned long long target = 0;
+    int parsed = fscanf(fp, "%llu", &target);
+    fclose(fp);
+    if (parsed != 1)
+        return EFS_ERR_IO;
+    if (target != (unsigned long long)parent)
+        return EFS_OK;
+    if (unlink(arm) != 0)
+        return errno == ENOENT ? EFS_OK : EFS_ERR_IO;
+    uint8_t key[EFS_KV_KEY_MAX], junk[16];
+    uint32_t kl = 0;
+    memset(junk, 0xEE, sizeof(junk));
+    int rc = efs_kv_key_inode(efs_kv_inode_shard(parent), parent, key, &kl);
+    if (rc == EFS_OK)
+        rc = efs_kv_put(h->kv, key, kl, junk, sizeof(junk));
+    fprintf(stderr, "raft-host: fault dir-serve-corrupt: CREATE parent=%llu group=%u before parent read rc=%d\n",
+            (unsigned long long)parent, (unsigned)pg, rc);
+    return rc;
+}
+#endif
+
 static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
                              uint32_t uid, uint32_t gid, uint32_t flags,
                              uint64_t owner, const struct efs_opid_req *q,
@@ -17615,6 +17653,10 @@ static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
     }
     rc = (covered&(1u<<pg))?EFS_OK:host_read_index(h, pg, &hint);
     if(rc==EFS_OK)covered|=(uint8_t)(1u<<pg);
+#if EFS_FAULTS
+    if (rc == EFS_OK)
+        rc = host_test_dir_serve_read(h, parent, pg);
+#endif
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
     if (rc == EFS_OK && !S_ISDIR(prow.mode))
@@ -19557,8 +19599,8 @@ static void host_dir_spread_pass(struct efs_raft_host *h)
         wr64be(cmd + 2, dir);
         hint = -1;
 #if EFS_FAULTS
-        /* W165: keep the split worker off a damaged row so the next
-         * request, not DIR apply or another worker pass, observes it. */
+        /* W165: hold migration and stage its target. CREATE itself injects
+         * immediately before its parent read; maintenance never damages it. */
         const char *serve_fault = getenv("EFS_FAULT_DIR_SERVE_FILE");
         char serve_ready[EFS_MAX_PATH], serve_arm[EFS_MAX_PATH];
         if (serve_fault) {
@@ -19580,19 +19622,15 @@ static void host_dir_spread_pass(struct efs_raft_host *h)
                 continue;
 #if EFS_FAULTS
             if (serve_fault && access(serve_fault, F_OK) == 0) {
-                uint8_t key[EFS_KV_KEY_MAX], junk[16];
-                uint32_t kl = 0;
-                memset(junk, 0xEE, sizeof(junk));
-                int damaged = efs_kv_key_inode(efs_kv_inode_shard(dir), dir, key, &kl);
-                if (!damaged) damaged = efs_kv_put(h->kv, key, kl, junk, sizeof(junk));
-                if (!damaged) {
-                    FILE *ready = fopen(serve_ready, "w");
-                    if (ready) {
-                        fprintf(ready, "%llu\n", (unsigned long long)dir);
-                        fclose(ready);
-                    }
-                    fprintf(stderr, "raft-host: fault dir-serve-corrupt: damaged ino=%llu group=%u; before DIR propose\n",
-                            (unsigned long long)dir, (unsigned)pg);
+                char tmp[EFS_MAX_PATH + 8];
+                snprintf(tmp, sizeof(tmp), "%s.tmp", serve_ready);
+                FILE *ready = fopen(tmp, "w");
+                if (ready) {
+                    fprintf(ready, "%llu\n", (unsigned long long)dir);
+                    int written = fclose(ready) == 0;
+                    if (written && rename(tmp, serve_ready) == 0)
+                        fprintf(stderr, "raft-host: fault dir-serve-corrupt: staged ino=%llu group=%u; DIR held, CREATE will inject\n",
+                                (unsigned long long)dir, (unsigned)pg);
                 }
                 efs_dir_spread_note(dir);
                 return;

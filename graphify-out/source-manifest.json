@@ -403,7 +403,7 @@
     "src/server/put_upload.c": 10,
     "src/server/query_export_lease.h": 2,
     "src/server/query_refresh.h": 11,
-    "src/server/raft_host.c": 624,
+    "src/server/raft_host.c": 625,
     "src/server/read_index_pair_remote.h": 4,
     "src/server/reclaim.c": 47,
     "src/server/recovery.c": 37,
@@ -1700,7 +1700,7 @@
     "src/server/put_upload.c": "7bb1ad8e30e371c8b53e0316684460fb858091d70012ac46949665bc5d4bbc2e",
     "src/server/query_export_lease.h": "c1bf2e3bd646f19595ea7519057e1e04fbc4a402aa30445efe43aad198edcac4",
     "src/server/query_refresh.h": "e9508ec752fc826ed93079d1b9a9b12589631fe6eee9e5a81eef922f65ceff16",
-    "src/server/raft_host.c": "e374d68bb7b0698e5e20c3eeffc2adbacc1f04720774143cff3ea112dd8869db",
+    "src/server/raft_host.c": "ff4122a39055703f9487762db06f04bc7e9d82b5c199a3b2827b220662c8498e",
     "src/server/read_index_pair_remote.h": "1a0b0bb46af5847d2ee4e6acabc474d044c26e4ed1f0cddacd3d6ac863624d62",
     "src/server/reclaim.c": "be2ab100ff18bc51a702b42c549cc4dd1c436aaf7bd0b54b71d02b9fa1d97556",
     "src/server/recovery.c": "ef245bfe358ba9d10dcc9077e60c6bf7400ea9083f556a5c29d5dfbcd899a52a",
@@ -2519,7 +2519,7 @@
     "tests/test_valgrind_verdict.py": "d9028427347634f93c7345f514131216d5ca12f0939f838d843c0c4ef57c7ff3",
     "tests/test_virtual_export_handles.py": "0bc639986aac45763a8d720e1d2d8709074b7848e5321d308bdccd15793d760c",
     "tests/test_w125_harness.py": "658b9c0cfb36fa6fffea7f92e0f5262d6516be445b4ed3af8c732f65915280ef",
-    "tests/test_w130_dir_fault.py": "4a8cf53b53c9e67d1c09dbc40cf9a7958df0ba343bea5d04843b2f1154dd081a",
+    "tests/test_w130_dir_fault.py": "02f345c27acc1aab060144cabfa513882244e6ab32e8fafc879c48470d5c120e",
     "tests/test_w153_formation.py": "7a9eda8127057c9efc8dda6e5ff534b65548cc730c0c17e2fd91fa10a80aca29",
     "tests/test_w155_identified_resolve.py": "42b506e2230a40b95b875e1c4575503f4f8bafbe3c2816580d856ddf12e64de0",
     "tests/test_w155_receipt_table.py": "fd775e727f0c1d33075c9cb871478e558465ad9002274f0dc92e69aa81e582d7",
@@ -2563,5 +2563,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "8b75067893ca91fbd37914ff655fe500023fee3b"
+  "source_commit": "d2edef6e94555f540f93f82d7a0f0b8024aeb2cb"
 }
