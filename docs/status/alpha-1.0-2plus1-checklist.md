@@ -418,16 +418,25 @@ the separate data-commit correctness fixes.
   lock/scan, management totals still include live and retired connections,
   concurrent connect/close/poll is safe, TCP/no-RDMA builds work. Measure poller
   interference and status cost across connection counts.
-- [ ] **AD — Bound contention from always-on counters.**
+- [x] **AD — Bound contention from always-on counters: measured, no change.**
   `src/server/iostats.c::efs_iostats_add` updates shared per-class atomic
   counters, latency sums/maxima and a last-64 sample ring on GET/PUT/disk-write
-  paths; `src/server/writer.c` also updates shared writer statistics. There is
+  paths; detailed writer statistics are enabled by benchmarks/tests, not the
+  daemon. There is
   no counter mutex here: investigate cache-line contention, not an invented
   global-lock defect. Measure per-op cost and scaling before choosing bounded,
   cache-line-separated worker shards or another collection scheme. Gate:
   concurrent update/snapshot, worker retirement, bounded memory and preserved
   counter meaning; state sampling/aggregation semantics explicitly, especially
   for percentiles. No unbounded thread registry or silent loss of error counts.
+  **Oct 28 outcome:** [node9900 measurements](ad-counter-contention-20261028.md)
+  at `1d2852da4`: three baseline/no-op repeats at 8/16/32 writers on TCP and
+  RDMA. At 32 writers every daemon is below 0.036% sampled counter-body CPU,
+  below the explicit 1% stop criterion; leave the bounded shared counters and
+  current p50/error semantics unchanged. 42 original D4 cases and a clean
+  paired capture repair pass; one original IBS capture remains partial. Full
+  `test-all`: 545 commands, 0 FAIL / 4 NOTRUN (host limits/self-test marker),
+  690 s plus 15 s build, six individual overbudgets. No product change or toggle.
 - [ ] **AE — Keep routine logging from blocking the Raft pump.**
   Even after `h->mu` is released, `host_pump` calls the always-on I/O/KV dumps
   and optional batch diagnostics synchronously. `src/common/log_ts.c::ts_write`
