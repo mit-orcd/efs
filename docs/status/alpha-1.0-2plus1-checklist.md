@@ -776,7 +776,7 @@ against their callers, wait predicates and source bodies. These establish work
 that occurs, not measured scheduler overhead or a correctness defect. Existing
 failures, K counts and acceptance verdicts are unchanged.
 
-- [ ] **AS — Demand-read capacity: replace repeated timed allocation attempts with bounded notification.**
+- [x] **AS — Demand-read capacity: replace repeated timed allocation attempts with bounded notification.**
   `src/client/read.c::demand_read_alloc` first tries allocation and trims the
   read cache, then retries allocation with 1 ms sleeps for the first 100 failed
   loop attempts and 10 ms thereafter. It stops at the inherited RPC deadline,
@@ -793,6 +793,11 @@ failures, K counts and acceptance verdicts are unchanged.
   readers, exhausted writers, thread exit and no capacity return. Measure failed
   attempts, timed wakeups, context switches and release-to-read latency. Separate
   this wait policy from AG's allocator critical section and AL's scratch sizing.
+  **Measured 2026-10-29, no change** (`docs/status/as-demand-read-wait-20261028.md`):
+  the wait loop never engaged — zero first-failures in ~5.1M demand allocations
+  across 10 runs (32 readers over a 2 GiB working set with 0/8/32 saturating
+  writers, plus a clamped 32 MiB/tier budget); there is no wake-up cost to
+  remove, and the retry ladder stays as the pathological-case safety net.
 - [ ] **AT — PUT-window completion: wake affected predicates instead of every waiter.**
   `src/client/write.c::put_win_close` broadcasts on the single `put_win_cv` after
   every close, even while that inode still has open windows. `put_win_wait`
