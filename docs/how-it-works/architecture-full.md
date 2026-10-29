@@ -1753,6 +1753,15 @@ removed; no existing cluster or package changed. Task W integrated privately.
 [Wave 29 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`f3a447fa3`)**: Task Y, the known-defect register reconciled ([report](../status/k-register-reconciled-20261028.md)): both tables carry exactly one row for each K1–K52, each opening with one canonical disposition (11 FIXED, 0 VERIFIED, 35 VERIFY, 2 DECIDED, 2 CLOSED, 2 OPEN: K48 and K52), with every earlier cell kept as history; `scripts/check_k_register.py` enforces that in `make test` (`tests/test_k_register.py`). No row was promoted to VERIFIED and no gate was rerun. Merged together with D45's K36 scope note and topology row.
 
 [Task Y — K register reconciliation](../status/k-register-reconciled-20261028.md): reviewed wave-28 devel `9e4d66a8c`; 52 canonical rows in each table, 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN. K48/K52 remain OPEN; named live gates remain VERIFY. History preserved, stale merge/acceptance contradictions reported, structural checker in `make test`; no new live qualification or user decision.
+[ORCD-test second profiling cycle](../status/orcd-test-dd-round2-20261028.md):
+Copy-elision candidate `8c20f501d` is unqualified and withdrawn by
+`1f8c56e14`; slowdown also persists after rollback, so causality remains open.
+The original durability-index fix remains. IOR exit-status/readiness fixes
+`2499242de` are integrated with this merge; mocked IOR checks join devel
+`make test`, alongside the already moved profiling guard. Restored POSIX 222/223 (0 FAIL, 1 SKIP), four IOR cases and
+full peer payload check PASS. Full gate 529/3 FAIL/5 NOTRUN: missing budget
+rows corrected in `ebac01ded` (five native focused checks PASS); two TSan
+link failures remain. No release PASS; cluster running, evidence retained.
 
 [ORCD-test dd profile and durability index](../status/orcd-test-dd-profile-20261028.md):
 `agent/orcd-dd-profile-20261028`, product fix `3769f44bb`, merged into devel (wave 30, `833f25fe8`; quota incident K53).

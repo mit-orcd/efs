@@ -21,7 +21,9 @@ def inspect(binary, address):
     groups = {}
     for match in re.finditer(r'group (\d+) hosted=(\d+) role=(\S+) leader=(-?\d+) term=(\d+) commit=(\d+) applied=(\d+) voters=0x([0-9a-f]+) joint=(\d+)', result.stdout):
         group, hosted, role, leader, term, commit, applied, voters, joint = match.groups()
-        groups[int(group)] = dict(hosted=int(hosted), role=role, leader=int(leader),
+        line = result.stdout[match.start():].split('\n', 1)[0]
+        retired = bool(re.search(r'\bretired=1\b', line))
+        groups[int(group)] = dict(hosted=int(hosted), retired=retired, role=role, leader=int(leader),
             term=int(term), commit=int(commit), applied=int(applied), voters=int(voters, 16), joint=int(joint))
     return dict(node=int(header[1]), root=int(header[2]), salt=int(header[3]), groups=groups,
                 address=address, raw=result.stdout)
@@ -35,7 +37,10 @@ def ready(states):
     assert all(set(s['groups']) == groups for s in states), 'incomplete group view'
     leaders = {}
     for group in groups:
-        hosted = [s for s in states if s['groups'][group]['hosted']]
+        # A retained retired replica is not a current voter. The equality below
+        # still refuses every missing member of the committed voter mask.
+        hosted = [s for s in states if s['groups'][group]['hosted'] and
+                  not s['groups'][group].get('retired', False)]
         own = [s for s in hosted if s['groups'][group]['role'] == 'LEADER']
         assert len(own) == 1, ('leader unavailable', group)
         leader = own[0]; g = leader['groups'][group]

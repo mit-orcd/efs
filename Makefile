@@ -455,6 +455,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_data_commit
 	./tests/test_data_commit_index
 	python3 tests/test_orcd_dd_profile.py
+	python3 tests/test_orcd_ior_exit.py
 	python3 tests/test_applied_interval.py
 	python3 tests/test_cursor_checkpoint.py
 	python3 tests/test_lookup_errno.py
@@ -1191,6 +1192,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_create_retry_ack.py
 	python3 tests/test_apply_ring.py
 	python3 tests/test_posix_phase_trace.py
+
 
 test-all: test test-long
 

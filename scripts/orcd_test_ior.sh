@@ -47,4 +47,4 @@ run little-hard 1 "$H1" -t 47008 -b 47008 -s 20000 -o "$DIR/hard/little"
 run wide-easy "$NWIDE" "$WIDE_HOSTS" -F -C -t 1m -b 2g -o "$DIR/easy/wide"
 run wide-hard "$NWIDE" "$WIDE_HOSTS" -C -t 47008 -b 47008 -s 1900 -o "$DIR/hard/wide"
 rmdir "$DIR/easy" "$DIR/hard" "$DIR" 2>/dev/null
-awk -F'\t' 'NR>1 && $2!=0 {bad++} END {print (bad ? "FAIL " bad : "PASS all"), "cases"}' "$OUT/summary.tsv"
+awk -F'\t' 'NR>1 && $2!=0 {bad++} END {print (bad ? "FAIL " bad : "PASS all"), "cases"; exit (bad ? 1 : 0)}' "$OUT/summary.tsv"
