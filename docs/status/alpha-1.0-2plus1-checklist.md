@@ -761,11 +761,7 @@ verdict changes; the Stage 1 exception applies.
   concurrent creators and crash at each write/barrier boundary. Every successful
   reply must retain the same durability guarantee. This is distinct from P3-D's
   client COMMIT workers and the ordinary root barrier, which already groups work.
-  **Measured 2026-10-29, no change** (`docs/status/aq-segment-dir-barriers-20261028.md`):
-  same-directory in-flight overlap 0.20–1.27 % at full packer rate (threshold
-  10 %), 0 % under K37 rebuilds, median directory fsync 1 µs; the sync group
-  is not adopted for segment directories.
-- [ ] **AR — Ordinary PUT retries: quantify and reduce identical-object rewrites.**
+
   `src/server/store.c::server_write_fragment_to_path` treats EEXIST on the
   exclusive-create attempt as an overwrite and calls `shard_io_thread` again
   with `no_create`. That path writes the full padded payload and I25 tail; it

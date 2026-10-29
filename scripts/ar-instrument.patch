@@ -1,0 +1,58 @@
+diff --git a/src/server/iostats.c b/src/server/iostats.c
+index ac65565f4..e54e871ae 100644
+--- a/src/server/iostats.c
++++ b/src/server/iostats.c
+@@ -114,6 +114,8 @@ void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out)
+  * has seen an op. */
+ void efs_iostats_dump(int force)
+ {
++    /* TEMP-AR: uncommitted measurement instrumentation; never committed. */
++    extern uint64_t g_ar_overwrites, g_ar_bytes;
+     struct efs_msg_io_stats_reply r;
+     uint64_t now = efs_iostats_now_us();
+     int any = 0;
+@@ -134,7 +136,7 @@ void efs_iostats_dump(int force)
+             "put ops=%llu bytes=%llu errors=%llu avg_us=%llu "
+             "p50_us=%llu max_us=%llu "
+             "wdisk ops=%llu bytes=%llu errors=%llu avg_us=%llu "
+-            "p50_us=%llu max_us=%llu\n",
++            "p50_us=%llu max_us=%llu ar_over=%llu ar_bytes=%llu\n",
+             (unsigned long long)r.cls[EFS_IOSTAT_GET].ops,
+             (unsigned long long)r.cls[EFS_IOSTAT_GET].bytes,
+             (unsigned long long)r.cls[EFS_IOSTAT_GET].errors,
+@@ -161,5 +163,7 @@ void efs_iostats_dump(int force)
+                                            r.cls[EFS_IOSTAT_DISK_WRITE].ops
+                                      : 0),
+             (unsigned long long)r.cls[EFS_IOSTAT_DISK_WRITE].p50_us,
+-            (unsigned long long)r.cls[EFS_IOSTAT_DISK_WRITE].us_max);
++            (unsigned long long)r.cls[EFS_IOSTAT_DISK_WRITE].us_max,
++            (unsigned long long)g_ar_overwrites,
++            (unsigned long long)g_ar_bytes);
+ }
+diff --git a/src/server/store.c b/src/server/store.c
+index d4c1d9494..d511e48e9 100644
+--- a/src/server/store.c
++++ b/src/server/store.c
+@@ -3027,6 +3027,9 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
+  * 4 KiB-padded payload: a 4 KiB tail page written with O_DIRECT. checksum
+  * is the payload digest the caller already verified (data PUT) or NULL,
+  * in which case the payload is hashed here. */
++/* TEMP-AR: uncommitted measurement instrumentation; never committed. */
++uint64_t g_ar_overwrites, g_ar_bytes;
++
+ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_export *ex,
+                                          efs_ino_t ino, uint32_t chunk_index,
+                                          uint32_t fragment_index,
+@@ -3106,7 +3109,11 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
+             shard_io_thread(&arg);
+             if (arg.result == EFS_OK)
+                 do_charge = 1; /* created; charge below, do not write again */
+-            else if (arg.result != EFS_ERR_EXIST)
++            else if (arg.result == EFS_ERR_EXIST) {
++                /* TEMP-AR: an existing object is rewritten, never compared. */
++                g_ar_overwrites++;
++                g_ar_bytes += arg.len;
++            } else
+                 return EFS_ERR_IO;
+         }
+         if (!do_charge) {
