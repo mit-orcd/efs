@@ -486,7 +486,7 @@ The Stage 1 exception above applies; P3-A–P3-F and AB–AF retain their own sc
   coverage plus deterministic simultaneous slab growth, allocation failure,
   thread exit and saturated writers with demand reads. Retain exact accounting
   and ownership under ASan/TSan; measure end-to-end gain as well as allocator cost.
-- [ ] **AH — Mount-wide chunk-map read/write contention.**
+- [x] **AH — Mount-wide chunk-map read/write contention.** MEASURED, no change: `g_client.idx_mu` sees 2.4-5.6k acquisitions/s, flat with writer count (the fsync-patterned workload is the limiter); trylock misses reach 25-30 % at 32 writers but the median contended wait is ≈0.35 us and the aggregate wait stays ≤0.15 % of wall — far below the stated action threshold (~1 % of wall or contention visibly capping throughput). Nothing was partitioned. [evidence](ah-chunk-map-lock-20261028.md)
   `src/client/read.c::chunk_get_worker` and `rdcache_map_gen` take
   `g_client.idx_mu` to read chunk mappings; `src/client/write.c` takes the same
   mutex around chunk/base/delta updates (for example `dcache_put_now_budgeted`).
