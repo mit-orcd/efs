@@ -35,6 +35,13 @@ static int commits[NN], fail_io[NN], fail_net[NN], die_in_commit[NN];
 static int hold[NN];          /* reply withheld while set */
 static int down[NN];          /* in cooldown and not listening */
 static uint64_t epochs[NN];
+static uint64_t reply_at[NN], commit_deadlines[NN], mark_at;
+static int expire_commit[NN];
+static uint64_t mono_ms(void)
+{
+    struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
 static __thread uint64_t deadline;
 uint64_t efs_client_rpc_deadline_ms(void) { return deadline; }
 void efs_client_rpc_set_deadline_ms(uint64_t d) { deadline = d; }
@@ -46,6 +53,7 @@ int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *p, uint32_t 
 {
     int id = (int)(c - conns);
     assert(type == EFS_MSG_DATA_COMMIT && !p && !n);
+    __atomic_store_n(&commit_deadlines[id], efs_client_rpc_deadline_ms(), __ATOMIC_RELEASE);
     __atomic_fetch_add(&commits[id], 1, __ATOMIC_ACQ_REL);
     return __atomic_load_n(&fail_net[id], __ATOMIC_ACQUIRE) ? -1 : 0;
 }
@@ -54,6 +62,8 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **p, uint32_t *n)
     int id = (int)(c - conns);
     while (__atomic_load_n(&hold[id], __ATOMIC_ACQUIRE))
         usleep(1000);
+    while (mono_ms() < reply_at[id]) usleep(1000);
+    if (expire_commit[id]) return -1;
     if (die_in_commit[id]) { /* the member died after the request arrived */
         down[id] = 1;
         return -1;
@@ -93,6 +103,7 @@ int efs_client_rpc_degraded_mark(efs_ino_t ino, uint64_t inode_gen, uint64_t obj
     assert(inode_gen == 5 && object == ino * 1000 + ci);
     __atomic_store_n(&metadata_deadline, efs_client_rpc_deadline_ms(), __ATOMIC_RELEASE);
     if (expire_during_mark) __atomic_store_n(&test_clock_jump_ms, 60001, __ATOMIC_RELEASE);
+    mark_at = mono_ms();
     marks++; mark_ino = ino; mark_ci = ci; mark_fi = fi; mark_node = node;
     if (publish_during_mark) {
         struct efs_chunk_rec rec = {.ino=ino, .chunk_index=ci,
@@ -108,6 +119,7 @@ static void heal(void)
 {
     memset(fail_io, 0, sizeof(fail_io)); memset(fail_net, 0, sizeof(fail_net));
     memset(die_in_commit, 0, sizeof(die_in_commit)); memset(down, 0, sizeof(down));
+    memset(reply_at, 0, sizeof(reply_at)); memset(expire_commit, 0, sizeof(expire_commit));
 }
 /* One acknowledged PUT object: ack bit i set = fragment i acknowledged. */
 static int put_unpublished(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs_node_id_t c,
@@ -143,6 +155,56 @@ static void *do_fsync(void *arg)
     f->rc = efs_client_data_commit(f->ino);
     __atomic_store_n(&f->done, 1, __ATOMIC_RELEASE);
     return NULL;
+}
+
+static void test_slow_commit_proof(void)
+{
+    /* A slow third COMMIT retains its full caller deadline. Two matching
+     * durable fragments must obtain a mark before that deadline, not after
+     * joining the slow worker. Scale only the caller budget, not product
+     * timeouts: this is the real production proof path. */
+    heal(); assert(!live());
+    assert(put(970,0,1,2,3,7)==EFS_OK);
+    uint64_t parent=mono_ms()+1000;
+    deadline=parent; reply_at[3]=parent+2; expire_commit[3]=1;reset();
+    assert(efs_client_data_commit(970)==EFS_OK);
+    assert(marks==1 && mark_fi==2 && !live());
+    assert(mark_at<parent && metadata_deadline==parent && deadline==parent);
+    for(int i=1;i<=3;i++)assert(commit_deadlines[i]==parent);
+    deadline=0;heal();
+
+    /* A failed mark is not retried on the worker notification and cannot
+     * be replaced with two-fragment success. Obligations survive. */
+    assert(put(971,0,1,2,3,7)==EFS_OK);
+    parent=mono_ms()+1000;deadline=parent;reply_at[3]=parent+2;expire_commit[3]=1;
+    mark_rc=EFS_ERR_IO;reset();
+    assert(efs_client_data_commit(971)==EFS_ERR_IO && marks==1 && live()==1);
+    assert(deadline==parent && mark_at<parent);
+    deadline=0;mark_rc=EFS_OK;heal();reset();
+    assert(efs_client_data_commit(971)==EFS_OK && !live());
+
+    /* One durable fragment is never enough, even while another is late. */
+    assert(put(972,0,1,2,3,7)==EFS_OK);
+    parent=mono_ms()+1000;deadline=parent;reply_at[3]=parent+2;expire_commit[3]=1;fail_io[2]=1;reset();
+    assert(efs_client_data_commit(972)==EFS_ERR_IO && !marks && live()==1);
+    deadline=0;heal();reset();assert(efs_client_data_commit(972)==EFS_OK && !live());
+
+    /* Do not shorten storage RPC deadlines to reserve metadata time: all
+     * three COMMITs may validly finish after the early-proof point. */
+    assert(put(973,0,1,2,3,7)==EFS_OK);
+    parent=mono_ms()+1000;deadline=parent;
+    for(int i=1;i<=3;i++)reply_at[i]=parent-200;
+    reset();assert(efs_client_data_commit(973)==EFS_OK && !marks && !live());
+    for(int i=1;i<=3;i++)assert(commit_deadlines[i]==parent);
+    deadline=0;heal();
+
+    /* A late third success is independent durability proof, so a failed
+     * early mark need not be retried or weaken fsync to two fragments. */
+    assert(put(974,0,1,2,3,7)==EFS_OK);
+    parent=mono_ms()+1000;deadline=parent;reply_at[3]=parent-200;mark_rc=EFS_ERR_IO;reset();
+    assert(efs_client_data_commit(974)==EFS_OK && marks==1 && !live());
+    deadline=0;mark_rc=EFS_OK;heal();
+    puts("slow COMMIT: proof precedes unchanged deadline; missing/failed proof retains obligations PASS");
 }
 
 static void test_sweep_deadline(void)
@@ -210,8 +272,9 @@ static void test_retired_objects(void)
 int main(int argc, char **argv)
 {
     assert(argc == 1 || (argc == 2 &&
-           (!strcmp(argv[1], "deadline") || !strcmp(argv[1], "retirement"))));
+           (!strcmp(argv[1], "deadline") || !strcmp(argv[1], "retirement") || !strcmp(argv[1], "slow-proof"))));
     for (int i = 1; i < NN; i++) epochs[i] = 101;
+    if (argc == 1 || !strcmp(argv[1], "slow-proof")) test_slow_commit_proof();
     if (argc == 1 || !strcmp(argv[1], "deadline")) test_sweep_deadline();
     if (argc == 1 || !strcmp(argv[1], "retirement")) test_retired_objects();
     if (argc > 1) return 0;
