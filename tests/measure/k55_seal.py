@@ -36,7 +36,9 @@ def main():
     assert root == Path('/data1/01/efs-k55-20261028')
     assert root.stat().st_uid == os.getuid() and root in run.parents
     assert not out.exists() and not out.is_symlink()
-    assert out.parent.resolve(strict=True) == Path.home() / 'efs-artifacts/k55-20261028/fcstor015'
+    expected_parent = (Path.home() / 'efs-artifacts/k55-20261028/fcstor015').resolve(strict=True)
+    assert out.parent.resolve(strict=True) == expected_parent
+    assert expected_parent.stat().st_uid == os.getuid()
     state = json.loads((run / 'state.json').read_text())
     assert state['verdict'] in ('FAIL', 'PASS_SCOPED', 'PASS_EXECUTED_WITH_HOST_LIMITS')
     assert (root / 'src/EXPORT_COMPLETE').read_text().strip() == state['source']
