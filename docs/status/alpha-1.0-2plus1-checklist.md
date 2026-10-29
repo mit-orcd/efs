@@ -551,7 +551,18 @@ the mechanisms. This is a static review, not a runtime profile or a new K defect
 No binary, cluster, workload or acceptance verdict changed. The Stage 1 exception
 applies; no new behavior flags are proposed.
 
-- [ ] **AK — Packed reads: remove avoidable fragment staging and repeated hashing.**
+- [x] **AK — Packed reads: remove avoidable fragment staging and repeated hashing.**
+  **DONE on branch `agent/devel-taskak` (`1c2fd4188`), not merged** (Oct 29,
+  [evidence](ak-packed-read-staging-20261028.md)): one fragment hash verified
+  against both authorities (reply digest, then mapping digest, the failing
+  authority named); TCP receives into caller scratch, RDMA transfers
+  message-buffer ownership; segment/record validation unchanged. Gates:
+  packed-reader/packed-segment/wire-shape units PASS on intel2 and node9901;
+  the eight RDMA-device gate commands PASS on node9901; `make test-all` on
+  intel2 is 547/1/12 — the one FAIL (`test_b6_unavailable.py` slow mode)
+  reproduces identically on devel `9c4bfd171` (write path, pre-existing).
+  Cold packed-read client CPU −26…−34 % on TCP; blake3 share 41.4→33.6 %
+  (TCP), 27.9→22.2 % (RDMA, wait-dominated host).
   `src/client/read.c::packed_fetch_run` receives an owned whole reply through
   `efs_conn_recv_msg`, hashes its fragment against the reply digest, copies the
   entire fragment into the supplied scratch and frees the reply. Then

@@ -1612,6 +1612,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**DONE on branch `agent/devel-taskak` (`1c2fd4188`), not merged.** One fragment
+hash checked against both reply and mapping digests; TCP receive-into-scratch,
+RDMA ownership transfer. Unit + RDMA gates PASS; test-all 547/1/12 with the one
+FAIL pre-existing on devel (b6 slow-mode fsync, write path). TCP client CPU
+−26…−34 % on cold packed reads.
+
+[Stage 1 cross-path due diligence AY–BB](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
 upload completion, serve/audit/recovery validation, deletion authority, and
 client metadata overlays. Audit justified differences and failure semantics;
@@ -1648,9 +1655,10 @@ Existing read-round sharing, admission batches and permission checks explicitly
 retained; distinct from AB–AM and P3-A–P3-F. No new K defect or measured gain.
 
 [Stage 1 copies/allocation tasks AK–AM](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--copies-allocation-and-repeated-work-akam):
-**OPEN / implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
-packed-fragment staging/double hashing, unnecessary decode scratch, and REPORT
-degraded-object batch bookkeeping. Distinct from AB–AJ and P3-A–P3-F; no K defect
+**AK DONE on `agent/devel-taskak` (`1c2fd4188`, not merged; [evidence](../status/ak-packed-read-staging-20261028.md));
+AL and AM OPEN / implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
+packed-fragment staging/double hashing (AK), unnecessary decode scratch (AL), and REPORT
+degraded-object batch bookkeeping (AM). Distinct from AB–AJ and P3-A–P3-F; no K defect
 or performance acceptance claimed. Integrity, publication and memory bounds stay.
 
 [Graph sweep follow-up F4/F5](../status/graph-defects-20261028.md#follow-up-repairs-f4f5--shared-deadline-and-retired-objects):
