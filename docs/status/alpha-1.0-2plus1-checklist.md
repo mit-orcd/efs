@@ -735,7 +735,19 @@ verdict changes; the Stage 1 exception applies.
   concurrent creators and crash at each write/barrier boundary. Every successful
   reply must retain the same durability guarantee. This is distinct from P3-D's
   client COMMIT workers and the ordinary root barrier, which already groups work.
-- [ ] **AR — Ordinary PUT retries: quantify and reduce identical-object rewrites.**
+- [x] **AR — Ordinary PUT retries: quantify and reduce identical-object rewrites.**
+  **MEASURED, NO CHANGE (record and stop) on branch `agent/devel-taskar`
+  (`9b5de147e`, measurement assets only), not merged** (Oct 29,
+  [evidence](ar-put-retry-rewrites-20261028.md)): zero EEXIST rewrites in the
+  D4 small-file load, the append_failover baseline and its
+  --lose-reserve-every gate (all three daemons, ar_over=0; reserve-reply loss
+  writes new objects, never re-PUTs an existing one). Counter validated by
+  forcing one lost PUT reply per fragment
+  (EFS_FAULT_PUT_REPLY_COLLISION=1): exactly one 64 KiB rewrite per node.
+  Below the 1 % threshold in both loads; no completion-proof or verified-reuse
+  design is built. Named gates PASS (store overwrite, PUT ticket, PUT upload,
+  PUT ticket RPC); test-all on intel1 546/1/12 with the one FAIL the
+  pre-existing devel b6 slow-mode defect.
   `src/server/store.c::server_write_fragment_to_path` treats EEXIST on the
   exclusive-create attempt as an overwrite and calls `shard_io_thread` again
   with `no_create`. That path writes the full padded payload and I25 tail; it

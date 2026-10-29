@@ -1612,6 +1612,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**MEASURED, NO CHANGE on branch `agent/devel-taskar` (`9b5de147e`), not merged.**
+Zero EEXIST rewrites in the D4 load and both append-failover variants; the
+counter is validated by a forced lost PUT reply (one 64 KiB rewrite per node).
+Below the 1 % threshold; named gates PASS; test-all 546/1/12 with the one
+FAIL the pre-existing devel b6 slow defect.
+
+[Stage 1 cross-path due diligence AY–BB](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
 upload completion, serve/audit/recovery validation, deletion authority, and
 client metadata overlays. Audit justified differences and failure semantics;
@@ -1636,9 +1643,11 @@ eventfd kicks. Lost-wakeup, overflow, deadline and progress gates required;
 distinct from existing tasks, with no new K defect or measured gain claimed.
 
 [Stage 1 disk-I/O tasks AP–AR](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--disk-io-and-write-amplification-apar):
-**OPEN / implementation and measurements NOTRUN**, source reviewed at `b42015536`:
-separate segment payload/tail reads, segment directory-barrier sharing, and
-identical ordinary PUT retry rewrites. Existing durability barriers and prior
+**AR MEASURED, NO CHANGE on `agent/devel-taskar` (`9b5de147e`, not merged;
+[evidence](../status/ar-put-retry-rewrites-20261028.md)); AP and AQ OPEN /
+implementation and measurements NOTRUN**, source reviewed at `b42015536`:
+separate segment payload/tail reads (AP), segment directory-barrier sharing (AQ), and
+identical ordinary PUT retry rewrites (AR). Existing durability barriers and prior
 optimizations explicitly retained; distinct from AB–AO, P3 tasks and W123.
 
 [Stage 1 RPC/proof batching tasks AN–AO](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--rpc-and-proof-batching-anao):
