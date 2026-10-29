@@ -474,21 +474,6 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     if (max_attempts < 1)
         max_attempts = 1;
 
-    /* Heap / TLS: three fragments on a FUSE/main stack overflows easily and
-     * SIGSEGV handlers without an alt stack cannot even log. */
-    frag_buf = decode_frag_scratch(EFS_NUM_FRAGMENTS * frag_len);
-    if (!frag_buf)
-        return EFS_ERR_NOMEM;
-    frag_ptrs(frag_buf, frag_len, frags);
-    /* The two data fragments are received straight into the chunk's
-     * halves; only parity needs scratch. efs_decode_chunk skips the
-     * copy of a fragment that is already in place (Oct 1 read review:
-     * the assemble memcpy was 21 % of client cycles on a cold read). */
-    if ((size_t)frag_len * 2 == chunk_size) {
-        frags[0] = chunk_out;
-        frags[1] = chunk_out + frag_len;
-    }
-
     memset(&ce, 0, sizeof(ce));
     if (cep) {
         /* The caller's row: the same one its span overlay and its
@@ -551,6 +536,26 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     if (!have_ce || !efs_fragment_nodes_valid(ce.fragment_nodes))
         return EFS_ERR_PROTO;
     memcpy(nodes, ce.fragment_nodes, sizeof(nodes));
+
+    /* Heap / TLS: three fragments on a FUSE/main stack overflows easily and
+     * SIGSEGV handlers without an alt stack cannot even log. Acquired only
+     * for the ordinary path (a packed base uses its own scratch) and sized
+     * for it: the two data fragments are received straight into the chunk's
+     * halves, so only parity needs scratch (efs_decode_chunk skips the copy
+     * of a fragment that is already in place, Oct 1 read review). Other
+     * geometries receive all three into scratch. */
+    int in_place = (size_t)frag_len * 2 == chunk_size;
+    frag_buf = decode_frag_scratch(in_place ? frag_len
+                                            : EFS_NUM_FRAGMENTS * frag_len);
+    if (!frag_buf)
+        return EFS_ERR_NOMEM;
+    if (in_place) {
+        frags[0] = chunk_out;
+        frags[1] = chunk_out + frag_len;
+        frags[2] = frag_buf;
+    } else {
+        frag_ptrs(frag_buf, frag_len, frags);
+    }
 
     int order[EFS_NUM_FRAGMENTS] = {0, 1, 2};
     if (g_client.local_node_id != 0) {

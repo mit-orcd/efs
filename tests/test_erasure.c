@@ -59,6 +59,71 @@ out:
     free(frag_buf);
 }
 
+/* AL: the client receives data fragments straight into the chunk's halves
+ * and keeps only parity in separate scratch, so decode runs with
+ * fragments[0]/fragments[1] aliased to the output chunk and its second half.
+ * Exercise that exact aliasing for every missing-fragment position,
+ * including the parity reconstructions that write into a chunk half while
+ * reading the other. */
+static void test_roundtrip_inplace(const char *label, size_t chunk_size, size_t len)
+{
+    size_t frag_len = chunk_size / 2;
+    uint8_t *chunk = malloc(chunk_size);
+    uint8_t *work = malloc(chunk_size);
+    uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * frag_len);
+    uint8_t *parity = malloc(frag_len);
+    if (!chunk || !work || !frag_buf || !parity) {
+        fprintf(stderr, "FAIL %s oom\n", label);
+        failures++;
+        goto out;
+    }
+    for (size_t i = 0; i < len; i++)
+        chunk[i] = (uint8_t)(rand() & 0xFF);
+    if (len < chunk_size)
+        memset(chunk + len, 0, chunk_size - len);
+    uint8_t *fragments[EFS_NUM_FRAGMENTS] = {
+        frag_buf, frag_buf + frag_len, frag_buf + 2 * frag_len
+    };
+    int rc = efs_encode_chunk(chunk, len, chunk_size, fragments);
+    if (rc != 0) {
+        fprintf(stderr, "FAIL %s encode: %d\n", label, rc);
+        failures++;
+        goto out;
+    }
+    for (int missing = 0; missing < EFS_NUM_FRAGMENTS; missing++) {
+        int a = (missing + 1) % EFS_NUM_FRAGMENTS;
+        int b = (missing + 2) % EFS_NUM_FRAGMENTS;
+        /* The client's layout: data fragments already at their output
+         * positions, parity alone in scratch. The missing slot is never
+         * read; its pointer still names a valid buffer. */
+        memset(work, 0xA5, chunk_size);
+        if (missing != 0)
+            memcpy(work, frag_buf, frag_len);
+        if (missing != 1)
+            memcpy(work + frag_len, frag_buf + frag_len, frag_len);
+        memcpy(parity, frag_buf + 2 * frag_len, frag_len);
+        uint8_t *in[EFS_NUM_FRAGMENTS] = {work, work + frag_len, parity};
+        rc = efs_decode_chunk(in, chunk_size, a, b, missing, work, len);
+        if (rc != 0) {
+            fprintf(stderr, "FAIL %s in-place decode missing=%d: %d\n",
+                    label, missing, rc);
+            failures++;
+            continue;
+        }
+        if (memcmp(chunk, work, len) != 0) {
+            fprintf(stderr, "FAIL %s in-place decode missing=%d data mismatch\n",
+                    label, missing);
+            failures++;
+        }
+    }
+
+out:
+    free(chunk);
+    free(work);
+    free(frag_buf);
+    free(parity);
+}
+
 int main(void)
 {
     srand((unsigned)time(NULL));
@@ -73,6 +138,10 @@ int main(void)
     test_roundtrip("1M-empty", meg, 0);
     test_roundtrip("1M-partial", meg, meg / 2 - 1);
     test_roundtrip("1M-full", meg, meg);
+
+    test_roundtrip_inplace("inplace-partial", EFS_CHUNK_SIZE, EFS_FRAGMENT_SIZE - 1);
+    test_roundtrip_inplace("inplace-full", EFS_CHUNK_SIZE, EFS_CHUNK_SIZE);
+    test_roundtrip_inplace("inplace-1M-full", meg, meg);
 
     /* In-place encode: fragments[0]/[1] alias the source (write hot path). */
     {
