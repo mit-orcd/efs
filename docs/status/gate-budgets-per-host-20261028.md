@@ -1,23 +1,23 @@
 # Task T — gate budgets across supported hosts
 
-**INCOMPLETE / fitting cohorts pending.** Final correctness candidate
-`547d9e1d0` contains the B6 proof-headroom repair and preserves a full,
-on-time three-fragment proof when a speculative degraded mark fails.
-Intel1 completed three clean eight-job gates on frozen `458f75e21`;
-Xorinox also completed three clean458 gates; fstor007's `547d9e1d0`
-series is running.
-Nuc and AMD completed failed gates and are excluded from calibration.
-All failures remain open evidence. No fitted budget, slot or D44 target
-change has been made. Task T is not merged or pushed.
+**INCOMPLETE / collecting timing cohorts.** Candidate `f27251313`
+contains final durability correction547d9e1d0, stable B6 quota fixture
+d2edef6e9 and a fault-only W165 boundary correction. Intel1/xorinox have
+three-run d2 cohorts underway (first gates0FAIL,911/929s); fstor007's d2
+gate failed W165 before its intended request and is preserved. Its fresh
+f272 cohort is running. AMD passes three focused f272 W165 checks, not a
+full calibration. No final fit or confirmations are accepted. Nuc/AMD full
+failures stay open; slots, deadlines and target1100s stay unchanged. Nothing
+is merged or pushed.
 
 ## Authorized host substitution and current-source refresh
 
 The user explicitly authorized AMD, xorinox, node9900, node9901 or fstor007
-as alternatives to waiting for nuc/intel2. Fresh probes find AMD and xorinox
-quiet with supported FUSE/build dependencies. Nuc and intel2 have Task H
+as alternatives to waiting for nuc/intel2. Initial probes found AMD and xorinox
+quiet with supported FUSE/build dependencies. Nuc and intel2 then had Task H
 controllers (including queued work); node9900 runs Task AD and an orcd-mini
 client; node9901 serves the existing four-member orcd-mini deployment.
-Those workloads are untouched. Fstor007 is idle but system FUSE is 3.10.2,
+Those workloads are untouched. Fstor007 was idle but system FUSE was 3.10.2,
 below the required build API; using it would need the already demonstrated
 private newer FUSE prefix. AMD is Ryzen AI MAX+395 (16 cores/32 threads),
 Ubuntu/ext4 with FUSE3.18.2; xorinox is Ryzen9 7940HS (8 cores/16 threads),
@@ -61,7 +61,7 @@ retention. Archive SHA-256:
 | AMD /458f75e21 calibration8 | 546 commands,1 FAIL,3 NOTRUN,825s,9 OVERBUDGET | Rejected: recurring GVFS busy-unmount refusal; no unchanged retry |
 | nuc /458f75e21 calibration9 | 546 commands,5 FAIL,12 NOTRUN,1276s,34 OVERBUDGET | Rejected; stopped before run2; failures detailed below |
 | xorinox /458f75e21 calibration9 | Three gates954/988/1001s;546 commands each,0 FAIL,11 NOTRUN;14/14/15 OVERBUDGET | Accepted timing observations; final547 confirmation still owed |
-| fstor007 /547d9e1d0 calibration10 | First gate805s;546 commands,0 FAIL,4 NOTRUN,7 OVERBUDGET | Second gate running; cohort not yet complete |
+| fstor007 /547d9e1d0 calibration10 | Gates805/835/967s; third FAIL1 on B6 full | Closed/rejected for final fit; retained quota fixture and new correction below |
 
 At the user's direction **no message was sent to Task AF**. The xorinox
 interruption stopped its spawning controller first, then repeatedly scanned
@@ -83,6 +83,105 @@ Dependency archive SHA-256:
 `b42c7df2e4d3aedd8f9d775c587454ef2f3d34c03086d127723713fed4013dde`.
 No package or existing deployment changed. This is real-HCA coverage in the
 failed baseline, not full fixed-source RDMA qualification.
+
+### B6 full-storage setup: failed third sample and unchanged oracle
+
+The547 fstor007 cohort ended with805/835/967s gates; the third has1 FAIL,
+4 NOTRUN and8 OVERBUDGET. It failed only B6 full mode: W0 and W1 succeeded,
+then W2 and Q0–Q3 returned ENOSPC. This is not accepted calibration or a
+passing quota gate. Its final node3 usage was16,736,256B under its16,777,216B
+quota. The packer moved the FS seeds at00:54:25.030UTC, between the first
+quota refusal at00:54:24.793 and the later writes. A refused1MiB upload also
+does not prove there is no room for a smaller upload. No quota overrun or
+payload mismatch was established; there was no contamination marker.
+
+`d2edef6e94555f540f93f82d7a0f0b8024aeb2cb` keeps the exact all-ENOSPC,
+no-degraded-acknowledgement and later exact-payload assertions. It changes
+only how the full fault is established: wait for every P/FS seed to pack,
+then for their old ordinary fragments to disappear on all three nodes;
+validate those inventory paths against R0 so absence cannot pass vacuously;
+fill with pinned128KiB files (one64KiB fragment per member), rather than
+partially filling/refusing a multi-chunk1MiB file; require exact node3
+quota headroom below64KiB. The seed settle shares the existing PACK_BOUND_S,
+no test deadline is raised. The filler cap now bounds512 single-chunk files
+rather than64 eight-chunk files, the same maximum data amount. No GC,
+packer, quota check or success/error oracle is disabled or relaxed.
+
+The graph's quota-setup call chain was checked against source and retained
+logs. Python syntax, graph9/9 and the recipe/model gate pass; live validation
+of the corrected fixture is pending. Its archive SHA-256 is
+`e8f6bd54e856c9f808329c91e2ceb538aed89ded5e056fb3ba75acb65b306bcc`.
+The workload changed, so even the previous clean intel1/xorinox cohorts are
+historical observations, not the final fit inputs. All three selected hosts
+now have fresh three-run controllers with that same source, at eight jobs.
+The earlier bounded idle holds were released cooperatively before launch.
+
+Current scratch: intel1/xorinox
+`/home/maik/efs-taskT-20261028-d2edef6e9-calibration12/src`; fstor007
+`/tmp/efs-taskT-20261028-d2edef6e9-calibration12/src`. Evidence on each host:
+`/data1/efs/evidence/taskT-20261028/HOST-d2edef6e9-calibration12/`.
+The failed previous fstor007 cohort is closed at
+`/data1/efs/evidence/taskT-20261028/fstor007-547d9e1d0-calibration10/`,
+64-file manifest SHA-256
+`a2942abb10e9eb589f3772ac8203c27c51f7f9e9131f0ffd9297c3d542c5f509`.
+Its seven B6 logs are copied there; its original stopped stores remain at
+`/tmp/efs-taskT-20261028-547d9e1d0-calibration10/tmp/case-483/efs-b6-rfa0dv3o/full`
+for the open investigation. Closing checks found no owned EFS process or
+mount. No Task AF message was sent.
+
+### W165 fault boundary: premature observation, corrected under EFS_FAULTS
+
+Fstor007's first d2 gate ends546 commands,1 FAIL,4 NOTRUN,805s,7 OVERBUDGET,
+with no contention marker. The only failure is W130's serve-first W165
+scenario: it sees INCOMPATIBLE before issuing its direct CREATE requests.
+The hook damages the row in maintenance at01:14:12.831UTC; the shared
+stored-row diagnostic appears5ms later. That diagnostic does **not** identify
+which reader observed it, so the test's old “prior apply” wording is not
+proof that apply was the consumer. Query/maintenance reads can also observe
+stored rows during that window. This gate remains FAIL, not fitted. Its
+B6 full case did complete successfully after the d2 fixture correction;
+that scoped observation does not make the whole gate valid calibration.
+
+`f2725131366377f4f6710b9d5f8bd287a066b28d` changes only the EFS_FAULTS
+boundary and its oracle: the split worker holds migration and atomically
+publishes a target inode; after the intended CREATE passes ReadIndex, the
+hook claims its arm file once, damages that matching parent row, and the
+normal parent read handles it. The test still requires no prior halt,
+three distinct direct CREATEs, healthy-quorum application operations without
+retries, a frozen halted cursor and recovery by snapshot resync. It now also
+requires an explicit successful CREATE-boundary injection diagnostic. No
+normal-build admission or recovery rule changes, and no production toggle
+is added. Atomic rename prevents exposing an empty ready file.
+
+AMD was quiet for a private eight-job compile plus three serial focused
+`python3 tests/test_w130_dir_fault.py` runs, TCP loopback, three nodes,
+O_DIRECT, at f272:21.961/19.657/19.404s, all PASS, each consuming the hook.
+No mounts or owned EFS processes remain, and2358 tracked files are unchanged.
+These are scoped diagnostics; AMD's failed full gate remains FAIL.
+Exact build/test controller, finalized daemon/mount logs, binary identities
+and41-file manifest are retained at
+`/data1/efs/evidence/taskT-20261028/amd-f27251313-focus-w165/`, manifest SHA-256
+`2a589bb9b7a418512bfb7f55c4701bbf9a294f6747563e91f56da8622e2a32b6`.
+The f272 source archive SHA-256 is
+`442105245f94b762198a933c04f8a335be034834d0afd475e5a9b282f12006dd`.
+
+The failed fstor007 d2 gate is closed at
+`/data1/efs/evidence/taskT-20261028/fstor007-d2edef6e9-calibration12/`,
+32-file manifest SHA-256
+`62ab21e16d4bbdd9d5b11ffebb1ffecee8dab5a4ccfda5b54351e36d75dee3a9`.
+Its original stopped W165 stores remain at
+`/tmp/efs-taskT-20261028-d2edef6e9-calibration12/tmp/case-506/efs-w130-li6i1s7c/w165-serve`;
+closing scans found no owned process/mount. No failed case was retried inside
+that cohort. Fstor007 now has three fresh serial f272 gates, raw evidence
+`/data1/efs/evidence/taskT-20261028/fstor007-f27251313-calibration14/`,
+scratch `/tmp/efs-taskT-20261028-f27251313-calibration14/src`.
+
+Intel1/xorinox continue their unchanged d2 cohorts rather than editing a
+running source. Their successful W165 runs exercised the intended requests
+without a premature halt; f272 makes that boundary deterministic. Sources
+must be reported separately. All92 budget commands and slots remain the
+same; final fitted-table confirmations on every selected host must use f272
+plus the table, explicitly qualifying the new hook on intel1/xorinox too.
 
 ### B6: proof starts too late when the third COMMIT exhausts the sweep
 
@@ -139,8 +238,7 @@ Repaired source archive SHA-256:
 `b7a530603a46032a7269fb4d8b8454e6e7785640a059e86326a9fa4e19110d74`.
 All cohorts retain exact controllers, before/after tracked-source hashes,
 per-run build identity, commands,timings,failures and guard evidence. They
-stop before a next run on any failure or contamination. Source paths and
-progress, while active:
+stop before a next run on any failure or contamination. Historical source and evidence paths (superseded):
 
 - intel1:`/home/maik/efs-taskT-20261028-458f75e21-calibration8/src`, evidence
   `/home/maik/efs-artifacts/taskT-20261028/intel1-458f75e21-calibration8/`.
@@ -172,10 +270,11 @@ local manifests under the raw root above:
 | `final-proof-547d9e1d0-tsan` | `427d718f6a0e8849943ddee7f08b538de56db5d8b6e17cad02a580aeccaec1c0` |
 | `control/late-proof-negative` | `9a97867532aaad72d006d3de31b1b86272afb3593818d97b191dcf439ed62b74` |
 
-The intel1/xorinox timing sources remain frozen458; fstor007 uses547.
+The superseded intel1/xorinox timing sources remain frozen458; the
+superseded fstor007 series uses547.
 These have the same92 budget commands/slot recipe, but458 does not prove
 547's new late-full-proof oracle. Final fitted-table confirmations must use
-547 plus the budget commit on all three selected hosts. No running source
+f27251313 plus the budget commit on all three selected hosts. No running source
 is edited. Fstor007's547 archive SHA-256 is
 `76c2d2cab22dd4da53f727998a4387a9537773e8383b32945b635e785a73335c`.
 
@@ -203,10 +302,9 @@ Closed text evidence was copied on-host and every file hash verified under
 | `amd-458f75e21-calibration8` (AMD) | `4e348c987aba1c1d4067234afe9ee1c948bdb3d5710e7bec54edfc795c5634ff` |
 
 Failed scratch fixtures stay in their original roots for open investigation;
-no stores or payloads were exported. Intel1 and xorinox have visible two-hour bounded
-idle reservations, with no EFS workload, pending final confirmation. Each must
-be cooperatively released before that gate; it never authorizes stopping
-another campaign. No message was sent to Task AF.
+no stores or payloads were exported. Intel1 and xorinox had visible two-hour bounded
+idle reservations, with no EFS workload. Both were cooperatively released
+before the d2edef6e9 cohorts; they never authorized stopping another campaign. No message was sent to Task AF.
 
 Original failed roots remain unchanged for open investigation:
 AMD:`/home/maik/efs-taskT-20261028-4e0883560-calibration6/tmp/case-482/efs-b6-4x0lapse`;
