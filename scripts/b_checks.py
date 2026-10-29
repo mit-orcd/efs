@@ -5,7 +5,7 @@
         [--store ID=PATH ...] [--out result.json]
 
 Read-only apart from its own test directory (created under the first mount,
-removed at the end unless --keep): it writes files there, reads them back,
+removed after success unless --keep): it writes files there, reads them back,
 and asks the cluster with `efs-mgmt status`, `raft-status` and
 `raft-getchunks`. It never changes membership, quotas or configuration and
 never touches files outside the test directory or any store.
@@ -38,7 +38,7 @@ The result file is JSON: {"verdict": "PASS"|"FAIL", "items": {"B1": {...}},
 On a cluster with other writers the B5 cost figures include their bytes;
 run it on a quiet cluster.
 """
-import argparse, hashlib, json, os, re, socket, struct, subprocess, sys, time
+import argparse, copy, hashlib, json, os, re, socket, struct, subprocess, sys, time
 from pathlib import Path
 
 CHUNK = 128 * 1024
@@ -282,12 +282,61 @@ def inventory_check(rows_by_file, inv_by_node, export_hint=None):
                     if want in have:
                         checked += 1
                         if want not in where:
-                            bad.append(f'{name}: {"segment" if key[0] == 2 else "ci=%d gen=%d" % (r["ci"], key[3])} '
+                            bad.append(f'{name}: {("segment=%d gen=%d group=%d" % (key[1], key[3], r["packed"]["group"])) if key[0] == 2 else "ci=%d gen=%d" % (r["ci"], key[3])} '
                                        f'role {fi} not on node {want} (found on {where})')
                     stray = [n for n in where if n != want]
                     if stray:
                         bad.append(f'{name}: role {fi} of {key} also on {stray}')
     return bad, checked
+
+
+def capture_inventory(read_rows, read_inventory, timeout, clock=time.monotonic):
+    """Validate a stable mapping view around each physical inventory scan.
+
+    A changed reference is an inconclusive observation, never proof of a
+    lost fragment. Keep its full before/after rows and missing-record report;
+    require a stable capture within the deadline. Stable damage still fails.
+    Metadata read/validation errors propagate; no application call is retried.
+    """
+    end = clock() + timeout
+    observations = []
+    while True:
+        before = copy.deepcopy(read_rows())
+        inventory = read_inventory()
+        after = copy.deepcopy(read_rows())
+        changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+        missing, checked = inventory_check(before, inventory)
+        expired = clock() >= end
+        observations.append({'stable': not changed, 'expired': expired,
+                             'inventory_checked': checked, 'inventory_failures': missing,
+                             'before': [{'name': k[0], 'ino': k[1], 'rows': v}
+                                        for k, v in sorted(before.items())],
+                             'after': [{'name': k[0], 'ino': k[1], 'rows': v}
+                                       for k, v in sorted(after.items())],
+                             'inventory': [{'node': n, 'records': recs}
+                                           for n, recs in sorted(inventory.items())],
+                             'changed': [{'name': k[0], 'ino': k[1],
+                                          'before': before.get(k), 'after': after.get(k)} for k in changed]})
+        if not changed and not expired:
+            return before, inventory, observations, True
+        if expired:
+            return after, {}, observations, False
+
+
+def cleanup_successful_fixture(path, keep, failed):
+    """Never remove the workload that explains an exception or failed check."""
+    if keep or failed:
+        return False
+    for child in sorted(path.iterdir()):
+        try:
+            child.unlink()
+        except OSError:
+            pass
+    try:
+        path.rmdir()
+    except OSError:
+        pass
+    return not path.exists()
 
 
 def file_costs(rows_by_file, inv_by_node):
@@ -652,18 +701,30 @@ def main(argv=None):
         else:
             b4.notrun.append('not selected')
 
-        # B1 persisted inventory. Rows again first: files the packer switched
-        # meanwhile now name their segment, and reclaim may already have
-        # removed the fragments their old rows named.
+        # A pack switch or compaction can retire records during the scan.
+        # Require matching references before AND after inventory; do not
+        # explain away a stable missing record or malformed metadata row.
         if a.store:
-            for key in list(rows_by_file):
-                rows = c.chunks(key[1], eps)
-                for msg in check_rows(key[0], files[key[0]], rows, members, cs):
-                    (b1 if 'stripe' in msg or 'malformed' in msg else b2).check(False, msg)
-                rows_by_file[key] = rows
-        for spec in a.store:
-            nid, path = spec.split('=', 1)
-            inv[int(nid)] = store_inventory(path)
+            def read_rows():
+                current = {}
+                keys = list(rows_by_file)
+                captured = pmap(lambda key: c.chunks(key[1], eps), keys, a.parallel)
+                for key, rows in zip(keys, captured):
+                    for msg in check_rows(key[0], files[key[0]], rows, members, cs):
+                        (b1 if 'stripe' in msg or 'malformed' in msg else b2).check(False, msg)
+                    current[key] = rows
+                return current
+            def read_inventory():
+                current = {}
+                for spec in a.store:
+                    nid, path = spec.split('=', 1)
+                    current[int(nid)] = store_inventory(path)
+                return current
+            rows_by_file, inv, observations, stable = capture_inventory(
+                read_rows, read_inventory, a.pack_wait)
+            b1.info['inventory_capture'] = observations
+            b1.check(stable, f'no stable mapping/inventory capture within {a.pack_wait:g} s')
+
         if inv:
             bad, checked = inventory_check(rows_by_file, inv)
             for msg in bad:
@@ -674,7 +735,8 @@ def main(argv=None):
             if set(inv) != set(ids):
                 b1.notrun.append(f'inventory on stores {sorted(set(ids) - set(inv))} (not readable here)')
         else:
-            b1.notrun.append('persisted inventory (no --store given)')
+            b1.notrun.append('persisted inventory (mapping view did not stabilize)' if a.store else
+                             'persisted inventory (no --store given)')
 
         # B5: status on every member, df on every mount, costs.
         b5 = items['B5']
@@ -773,16 +835,15 @@ def main(argv=None):
         b5.notrun += ['full member (changes the cluster)', 'capacity after an addition (changes membership)',
                       'ENOSPC (changes the cluster)']
     finally:
-        if not a.keep:
-            for p in sorted(tdir.iterdir()):
-                try:
-                    p.unlink()
-                except OSError:
-                    pass
-            try:
-                tdir.rmdir()
-            except OSError:
-                pass
+        failed = sys.exc_info()[0] is not None or any(it.fail for it in items.values())
+        if failed:
+            result['preserved_fixture'] = str(tdir)
+            print(f'b_checks: kept failed fixture {tdir}', flush=True)
+            result['verdict'] = 'FAIL'
+            result['exception'] = repr(sys.exc_info()[1]) if sys.exc_info()[0] else None
+            result['items'] = {k: items[k].result() for k in want}
+            Path(a.out).write_text(json.dumps(result, indent=1, sort_keys=True) + '\n')
+        cleanup_successful_fixture(tdir, a.keep, failed)
 
     for k, it in items.items():
         if k in want:

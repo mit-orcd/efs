@@ -156,6 +156,18 @@ local range**; the migrator's moves are idempotent (a dentry already moved is
 a no-op), so a crash mid-split resumes cleanly; readdir merges both. The
 layout epoch `e` lets a client cache the layout and detect a stale decision.
 
+A cross-group background move first commits a copy transaction: it retains
+the local row, inserts the hashed row and records the destination lane's
+first-use bit. PREPARE compares the captured local bytes and hashed absence,
+so it cannot restore a concurrently changed name or overwrite a tombstone.
+Participants may resolve in either order. The existing DIR cleanup removes
+the local copy only after neither key has a pending transaction. READDIR
+defers a local live name to its hashed copy only when its captured bitmap
+includes that lane; otherwise it keeps the local name until the bitmap
+materializes. Hashed tombstones always dominate. This avoids a physical
+missing-name window both when the source resolves first and when the
+destination precedes its first-use bitmap update.
+
 **Mutations of not-yet-migrated entries use a dominating tombstone** — this
 is what enforces I8 (no resurrection) during the split. "Writes go to the
 hashed location" is not enough on its own: if `unlink(foo)` only wrote the

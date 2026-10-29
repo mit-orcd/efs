@@ -13,7 +13,7 @@ from pathlib import Path
 import ast, os, shutil, subprocess, sys, tempfile, time, types
 
 root = Path(__file__).resolve().parents[1]
-source = (root / 'scripts/make_test_summary.sh').read_text()
+source = Path(os.environ.get('EFS_SUMMARY_RUNNER_SOURCE', root / 'scripts/make_test_summary.sh')).read_text()
 runner = source.split('python3 - <<"EOP"\n', 1)[1].rsplit('\nEOP', 1)[0]
 
 
@@ -121,6 +121,18 @@ try:
     assert rows[-1].split() == ['shutdown', '6'], rows  # alone, after every pooled case
     assert elapsed < 2.5, elapsed  # six 0.5 s cases on four workers, not 3 s serial
     assert len(Path(d, 'timings.tsv').read_text().splitlines()) == 10
+
+    # These real gate names have strict setup clocks (8 s age window and
+    # 90 s L0 prefill) or a 3 s per-operation fault bound.
+    # Drive the actual scheduler: all must wait until pooled I/O ends.
+    cmds = 'sleep 0.2; touch pooled.done; echo pooled >> ran.log\n'
+    for name in ('test_pack_dup_candidate', 'test_w166_authority', 'test_report_stepdown'):
+        cmds += ('test -f pooled.done || exit 9; '
+                 'echo "' + name + '" >> ran.log\n')
+    rc,s,d=run(cmds,jobs=4);dirs.append(d)
+    assert rc==0,(rc,s)
+    assert Path(d,'ran.log').read_text().splitlines()==[
+        'pooled','test_pack_dup_candidate','test_w166_authority','test_report_stepdown']
 
     # Explicit external scratch must stay external, including pool children.
     with tempfile.TemporaryDirectory(prefix='efs-summary-external-') as external:

@@ -133,8 +133,11 @@ def record_parked_case(step, port):
     assert read_record(store) is None, read_record(store)
     assert rc == 4 and 'outcome unknown (no exit record from this process)' in out, (rc, out)
     assert 'forced' not in out and 'orderly' not in out.replace('not an orderly stop', ''), out
-    log = daemon.tail()
-    assert f'deadline {TOTAL_MS} ms passed in phase packer' in log, log
+    # The deadline marker is history from this one fresh daemon, not a
+    # diagnostic tail: concurrent Raft tracing can push it out while the
+    # blocked exit-record helper waits out its unchanged report bound.
+    log = (daemon.store/'log/efsd.log').read_text()
+    assert f'deadline {TOTAL_MS} ms passed in phase packer' in log, daemon.tail()
     print(f'record-{step}-parked: efsd rc 3, stop wall {wall_ms:.0f} ms (bound {BOUND_MS} ms), '
           'no record, stop script "unknown" rc 4 PASS', flush=True)
 

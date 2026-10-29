@@ -23,7 +23,7 @@ static int reply_status,fail_recv,fail_send,bad_type,expire_recv;
 static unsigned read_hint;
 static unsigned mkdir_ready, mkdir_packet_len;
 static unsigned char mkdir_packet[1024];
-static unsigned failover,routing_sends,stale_hint;
+static unsigned failover,routing_sends,stale_hint,read_stale_loop,read_sends,read_nodes[32];
 struct efs_conn {unsigned node;};static struct efs_conn connection;
 static void rpc_learn_leader(const struct efs_msg_inode_reply*r){(void)r;}
 static unsigned g_group_leader[2];
@@ -40,7 +40,7 @@ static void test_free(void*p){if(p)freed++;free(p);}
 #define clock_gettime fake_clock
 #define usleep fake_sleep
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){connection.node=n;return &connection;}
-static struct efs_conn *raft_voter_conn_skip(uint32_t s,efs_node_id_t*n,efs_node_id_t skip){(void)s;*n=(failover&&skip==2)?3:1;connection.node=*n;return &connection;}
+static struct efs_conn *raft_voter_conn_skip(uint32_t s,efs_node_id_t*n,efs_node_id_t skip){(void)s;*n=read_stale_loop?(skip==1?3:1):(failover&&skip==2)?3:1;connection.node=*n;return &connection;}
 static struct efs_conn *raft_dual_voter_conn(efs_node_id_t*n,efs_node_id_t skip){return raft_voter_conn_skip(0,n,skip);}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;releases++;}
@@ -54,18 +54,42 @@ static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
 static unsigned efs_raft_shard_group(uint32_t s){(void)s;return 0;}
 static unsigned rpc_leader_of(unsigned g){(void)g;return 1;}
 static void efs_conn_set_recv_timeout(struct efs_conn*c,int n){(void)c;(void)n;}
-int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)t;if(stale_hint && calls)assert(c->node==3);if(mkdir_ready){assert(n<=sizeof(mkdir_packet));if(!mkdir_packet_len){memcpy(mkdir_packet,p,n);mkdir_packet_len=n;}else assert(n==mkdir_packet_len&&!memcmp(mkdir_packet,p,n));}if(failover){routing_sends++;if(routing_sends==2){assert(c->node==2);if(failover==2)return 1;}if(routing_sends==3)assert(c->node==3);}return fail_send;}
-int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->read_node_id=read_hint;r->status=mkdir_ready && calls>=mkdir_ready ? EFS_INODE_RPC_OK : reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;if(stale_hint && calls==1){r->status=EFS_INODE_RPC_STALE;r->primary_id=3;}if(failover){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(failover==1&&calls==2)return 1;else assert(c->node==3);}return fail_recv;}
+int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)t;if(read_stale_loop){assert(read_sends<32);read_nodes[read_sends++]=c->node;if(c->node==2 && (read_stale_loop==1 || read_sends==2))return 1;}if(stale_hint && calls)assert(c->node==3);if(mkdir_ready){assert(n<=sizeof(mkdir_packet));if(!mkdir_packet_len){memcpy(mkdir_packet,p,n);mkdir_packet_len=n;}else assert(n==mkdir_packet_len&&!memcmp(mkdir_packet,p,n));}if(failover){routing_sends++;if(routing_sends==2){assert(c->node==2);if(failover==2)return 1;}if(routing_sends==3)assert(c->node==3);}return fail_send;}
+int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->read_node_id=read_hint;r->status=mkdir_ready && calls>=mkdir_ready ? EFS_INODE_RPC_OK : reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;if(stale_hint && calls==1){r->status=EFS_INODE_RPC_STALE;r->primary_id=3;}if(failover){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(failover==1&&calls==2)return 1;else assert(c->node==3);}if(read_stale_loop){int hinted=c->node==1 || (read_stale_loop==2 && c->node==3);r->status=hinted?EFS_INODE_RPC_NOT_PRIMARY:EFS_INODE_RPC_OK;r->primary_id=hinted?2:0;}return fail_recv;}
 static void opid_retry_ack(void *packet,uint32_t length){(void)packet;(void)length;}
 static int efs_client_session_check(void){return EFS_OK;} /* K5 mount session, ready */
 static __thread uint64_t rpc_tl_sent;static __thread unsigned rpc_tl_lost; /* W155 */
 static void efs_client_rpc_set_deadline_ms(uint64_t d){deadline=d;}
 static int rpc_send_recv_dual_once(uint8_t,const void*,uint32_t,uint8_t,void*,uint32_t,int);
 '''+fn('static int rpc_writer_retry_pause(' ,True)+fn('static void rpc_retry_peer(')+fn('static int rpc_type_mutates(')+fn('static int rpc_identified(')+fn('static const char *rpc_req_ident(')+fn('static uint64_t rpc_resolve_ms(')+fn('static int rpc_send_recv_shard_once(')+fn('static int rpc_resolve_identified(')+fn('static int rpc_send_recv_shard(')+fn('static int rpc_send_recv_dual_once(',True)+fn('static int rpc_send_recv_dual(',True)+r'''
-static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;failover=routing_sends=mkdir_ready=mkdir_packet_len=stale_hint=0;g_group_leader[0]=0;read_hint=0;memset(g_read_routes.slot,0,sizeof(g_read_routes.slot));}
+static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;failover=routing_sends=mkdir_ready=mkdir_packet_len=stale_hint=0;g_group_leader[0]=0;read_hint=read_stale_loop=read_sends=0;memset(g_read_routes.slot,0,sizeof(g_read_routes.slot));}
 static int run(int dual,struct efs_msg_inode_reply*r){return dual?rpc_send_recv_dual(EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),100):rpc_send_recv_shard(0,EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),0,NULL);}
 int main(void){
  struct efs_msg_inode_reply route_reply;
+ /* K33 live trace: a follower repeatedly redirects a read at a stopped
+  * leader, while the third voter can answer. No attempt/budget increase. */
+ const uint8_t read_types[]={EFS_MSG_INODE_LOOKUP,EFS_MSG_INODE_GETATTR};
+ for(unsigned k=0;k<2;k++){
+  reset();read_stale_loop=1;
+  int stale_rc=rpc_send_recv_shard(0,read_types[k],NULL,0,EFS_MSG_INODE_GETATTR_REPLY,&route_reply,sizeof(route_reply),0,NULL);
+  fprintf(stderr,"read stale hint: type=%u rc=%d sends=%u replies=%u clock_ms=%llu\n",
+          read_types[k],stale_rc,read_sends,calls,(unsigned long long)now);
+  assert(stale_rc==EFS_OK && read_sends==4 && calls==3 && drops==1 && freed==3);
+  assert(read_nodes[0]==1 && read_nodes[1]==2 && read_nodes[2]==1 && read_nodes[3]==3);
+  /* Even a cached failed endpoint cannot defeat the one exploration. */
+  reset();read_stale_loop=1;
+  efs_meta_read_route_note(&g_read_routes,efs_meta_read_route_key(read_types[k],NULL,0),2);
+  assert(!rpc_send_recv_shard(0,read_types[k],NULL,0,EFS_MSG_INODE_GETATTR_REPLY,&route_reply,sizeof(route_reply),0,NULL));
+  assert(read_sends==3 && read_nodes[0]==2 && read_nodes[1]==1 && read_nodes[2]==3);
+  /* The other voter can redirect to the recovered peer. No blacklist is
+   * retained after it has been given a turn. */
+  reset();read_stale_loop=2;
+  assert(!rpc_send_recv_shard(0,read_types[k],NULL,0,EFS_MSG_INODE_GETATTR_REPLY,&route_reply,sizeof(route_reply),0,NULL));
+  assert(read_sends==5 && read_nodes[3]==3 && read_nodes[4]==2);
+  reset();read_stale_loop=1;deadline=1010;
+  assert(rpc_send_recv_shard(0,read_types[k],NULL,0,EFS_MSG_INODE_GETATTR_REPLY,&route_reply,sizeof(route_reply),0,NULL)==EFS_ERR_BUSY);
+  assert(read_sends==2 && calls==1 && now==deadline);
+ }
  reset();read_hint=2;assert(!run(0,&route_reply));
  uint64_t key=efs_meta_read_route_key(EFS_MSG_INODE_GETATTR,NULL,0);
  assert(efs_meta_read_route_get(&g_read_routes,key)==2);

@@ -112,15 +112,27 @@ def degraded_segments(c, i=1):
     return int(m.group(1)) if m else None
 
 
+def completed_pack_log(text):
+    """Cut each process run at its last complete pack-pass summary.
+
+    One read can still land between a segment's degraded line and the
+    later packed_total line. A baseline must include both or neither.
+    pk_main runs group passes serially and pk_group joins its segment
+    workers before printing the counter, so that summary closes the pass.
+    Keep process restarts separate because their counters reset.
+    """
+    runs = text.split('==== start')
+    for i in range(1, len(runs)):
+        ends = list(re.finditer(r'^.*packer: group=\d+ term=\d+ [^\n]*packed_total=\d+[^\n]*\n',
+                                runs[i], re.M))
+        runs[i] = runs[i][:ends[-1].end()] if ends else runs[i].split('\n', 1)[0] + '\n'
+    return '==== start'.join(runs)
+
+
 def snapshot(c):
-    """Every member's log, read once. The packer logs a segment's `written
-    degraded` line and the pass-end `packed_total=` line a few ms apart;
-    counts that must agree (files packed, segments written degraded) come
-    from one snapshot, never from two reads that a pass end can straddle
-    (two reads 4 ms apart counted 3 files as packed during the fault while
-    their segment's degraded line was already "before": 1 of 21 gate runs
-    and 1 of 8 alone, Oct 25)."""
-    return {i: c.log(i) for i in c.ports if (c.dir / f'n{i}.log').exists()}
+    """One completed-pass prefix per member; never split a counter cohort."""
+    return {i: completed_pack_log(c.log(i)) for i in c.ports
+            if (c.dir / f'n{i}.log').exists()}
 
 
 def degraded_writes(c, snap=None):
@@ -286,18 +298,49 @@ def fault_on(r):
     elif r.mode == 'slow':
         r.set_fault(f'slow:{SLOW_MS} ' + DATA_OPS)
     elif r.mode == 'full':
-        # Fill node 3 (16 MiB quota): every stripe has a fragment there, so
-        # writes fill it until one is refused ENOSPC. Nothing degraded.
+        # First remove the seed files' future packing/reclaim headroom.
+        # A packed mapping is not enough: wait for its old fragments to go.
+        # Otherwise a pack between ENOSPC and W0 can legitimately free room.
         a = r.a
+        end = time.monotonic() + PACK_BOUND_S
+        wait_packed(r.c, 2 * len(SMALL), 'full: pack every small seed',
+                    timeout=max(0, end - time.monotonic()))
+        def first_chunk_dir(node, name):
+            # src/common/common.c: efs_ino_path_segments uses five decimal
+            # base-10000 components; the fixture's default export is 1.
+            digits = f'{(a.path / name).stat().st_ino:020d}'
+            parts = [digits[i:i + 4] for i in range(0, 20, 4)]
+            return r.c.dir / f'n{node}' / 'data' / 'exports' / '1' / Path(*parts) / '0'
+        # Prove the inventory address against an unpacked seed; an incorrect
+        # path must not turn the absence check below into a vacuous pass.
+        for node in (1, 2, 3):
+            assert list(first_chunk_dir(node, 'R0').glob('0.*')), 'full: seed inventory missing'
+        old_dirs = [first_chunk_dir(node, f'{prefix}{i}') for node in (1, 2, 3)
+                    for prefix in ('P', 'FS') for i in range(len(SMALL))]
+        while any(list(d.glob('0.*')) for d in old_dirs):
+            assert time.monotonic() < end, 'full: packed seed fragments not retired'
+            time.sleep(0.05)
+        r.out['full_seed_fragments_retired'] = True
+        # One 128 KiB chunk charges one 64 KiB fragment per node. These
+        # pinned files are too large to pack. A refused 1 MiB upload could
+        # leave room for several smaller writes and partially stored data;
+        # a single-chunk refusal establishes the granularity W*/Q* need.
         k = 0
         while True:
-            v, _ = r.write(a, f'fill-{k}', 1 << 20)
+            v, _ = r.write(a, f'fill-{k}', 128 * 1024)
             if v != 'ok':
                 assert v == 'ENOSPC', v
                 break
             k += 1
-            assert k < 64, 'node 3 never filled'
+            assert k < 512, 'node 3 never filled'
         r.out['fill_files'] = k
+        text = status(r.c, 3)
+        node = re.search(r'^  node 3:[\s\S]*?(?=^  node |\Z)', text, re.M)
+        match = re.search(r'^\s+bytes: used=(\d+) quota=(\d+)', node[0], re.M) if node else None
+        assert match, text
+        used, quota = map(int, match.groups())
+        r.out['full_usage'] = {'used': used, 'quota': quota, 'fragment_bytes': 65536}
+        assert quota == 16 * 1024 * 1024 and 0 <= quota - used < 65536, text
 
 
 def run_mode(mode):

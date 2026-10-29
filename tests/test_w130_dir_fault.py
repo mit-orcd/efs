@@ -120,7 +120,7 @@ def group_applied(c, i, g):
 
 
 def serve_fault():
-    """Hold DIR before corrupting its leader: CREATE must be the first reader.
+    """Hold DIR; expose damage only after the intended CREATE's ReadIndex.
 
     Three distinct direct CREATEs expose persistent base EIO without retries;
     the fixed node must redirect (or forward), then FUSE creates succeed.
@@ -150,10 +150,10 @@ def serve_fault():
         deadline = time.monotonic() + 30
         while not ready.exists() and time.monotonic() < deadline:
             time.sleep(.05)
-        assert ready.exists(), 'serve damage did not reach its deterministic boundary'
+        assert ready.exists(), 'serve target did not reach its deterministic boundary'
         assert int(ready.read_text()) == inode, ('wrong fault target', ready.read_text(), inode)
-        assert 'INCOMPATIBLE' not in cluster.log(victim), 'a prior apply consumed the damage'
-        print(f'[w165] damaged leader node={victim} group={group} inode={inode}; DIR held', flush=True)
+        assert 'INCOMPATIBLE' not in cluster.log(victim), 'group halted before the CREATE-boundary injection'
+        print(f'[w165] armed leader node={victim} group={group} inode={inode}; DIR held', flush=True)
         replies = []
         for k in range(3):
             rc, out = mgmt('raft-create', cluster.ep(victim), str(inode), f'direct-{k}')
@@ -162,6 +162,8 @@ def serve_fault():
             assert match, out
             replies.append(tuple(map(int, match.groups())))
         print('[w165] three distinct CREATE replies:', replies, flush=True)
+        assert f'CREATE parent={inode} group={group} before parent read rc=0' in cluster.log(victim), \
+            'CREATE did not consume the staged corruption hook'
         # A raw RPC may say BUSY (5) while the new leader is elected.
         # This is not an application retry: the FUSE operations below must
         # still complete once, including fsync and exact readback. Base's

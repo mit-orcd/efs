@@ -2,7 +2,7 @@
 """scripts/b_checks.py (alpha 1.0 B1-B5 driver): its parsers and checks on
 canned efs-mgmt output and synthetic fragment records, with negative
 controls, so a wrong parse cannot turn a cluster run into a false PASS."""
-import importlib.util, struct, sys, tempfile
+import importlib.util, json, struct, sys, tempfile
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
@@ -143,6 +143,50 @@ with tempfile.TemporaryDirectory(prefix='efs-b-checks-') as d:
     by_file = {('f', 81927): rows, ('p', 9): prow, ('s', 16385): srows}
     bad, checked = b.inventory_check(by_file, inv)
     assert bad == [] and checked == 21, (bad, checked)
+    # Deterministic pack-switch schedule: old mapping -> physical scan
+    # after its records retire -> new mapping. Only a later stable capture
+    # can pass. Preserve the torn observation and both references.
+    import copy
+    switched = {('p', 9): copy.deepcopy(prow)}
+    switched[('p', 9)][0]['packed']['segment'] = 4321
+    old = {('p', 9): copy.deepcopy(prow)}
+    newer = {nid: [dict(rec, object=4321) if rec['kind'] == 2 else rec
+                   for rec in recs] for nid, recs in inv.items()}
+    seq = iter([old, switched, switched, switched])
+    stable_rows, stable_inv, observations, stable = b.capture_inventory(
+        lambda: next(seq), lambda: newer, 1, clock=lambda: 0)
+    assert stable and stable_rows == switched and len(observations) == 2
+    assert len(observations[0]['inventory_failures']) == 3 and observations[0]['changed']
+    assert observations[0]['changed'][0]['before'] == prow
+    saved = json.loads(json.dumps(observations[0]))
+    replay_rows = {(x['name'], x['ino']): x['rows'] for x in saved['before']}
+    replay_inv = {x['node']: x['records'] for x in saved['inventory']}
+    assert b.inventory_check(replay_rows, replay_inv)[0] == saved['inventory_failures']
+    assert b.inventory_check(stable_rows, stable_inv)[0] == []
+    # A stable missing record is never retried or forgiven.
+    reads = []
+    def stable_missing_rows():
+        reads.append(1)
+        return old
+    stable_rows, stable_inv, observations, stable = b.capture_inventory(
+        stable_missing_rows, lambda: newer, 1, clock=lambda: 0)
+    assert stable and len(reads) == 2 and len(observations) == 1
+    assert len(b.inventory_check(stable_rows, stable_inv)[0]) == 3
+    # Continuous changes expire; no incoherent inventory escapes for costs
+    # or a passing B1. Metadata read exceptions also propagate immediately.
+    ticks = iter([0, 1, 2])
+    seq = iter([old, switched, old, switched])
+    _, expired_inv, observations, stable = b.capture_inventory(
+        lambda: next(seq), lambda: newer, 2, clock=lambda: next(ticks))
+    assert not stable and expired_inv == {} and len(observations) == 2
+    def failed_read():
+        raise OSError('metadata read failed')
+    try:
+        b.capture_inventory(failed_read, lambda: newer, 1, clock=lambda: 0)
+    except OSError:
+        pass
+    else:
+        raise AssertionError('metadata error was masked')
     # The span's fragment missing on its node is found.
     nospan = {k: [r for r in v if not (r['object'] == 16385 and r['gen'] == 66 and r['fi'] == 2)] for k, v in inv.items()}
     bad, _ = b.inventory_check(by_file, nospan)
@@ -182,5 +226,19 @@ with tempfile.TemporaryDirectory(prefix='efs-b-checks-') as d:
     assert b.read_record(d / 'n1/data/exports/1/a/junk') is None
     assert b.parse_record(b'EFSFRAG\0' + bytes(120)) is None
 
+# Evidence retention is an acceptance property: failed fixtures and --keep
+# survive, while an ordinary successful temporary workload is removed.
+with tempfile.TemporaryDirectory(prefix='b-check-retain-') as td:
+    for keep, failed in ((False, True), (True, False), (True, True)):
+        fixture = Path(td) / f'case-{keep}-{failed}'
+        fixture.mkdir()
+        original = b'failed-workload-evidence'
+        (fixture / 'payload').write_bytes(original)
+        assert not b.cleanup_successful_fixture(fixture, keep, failed)
+        assert (fixture / 'payload').read_bytes() == original
+    fixture = Path(td) / 'passed'
+    fixture.mkdir()
+    (fixture / 'payload').write_bytes(b'ok')
+    assert b.cleanup_successful_fixture(fixture, False, False) and not fixture.exists()
 print('b_checks driver: status/raft-status/getchunks parsing, row shape, capacity model and'
       ' persisted-inventory checks with negative controls PASS')
