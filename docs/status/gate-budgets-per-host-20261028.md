@@ -5,8 +5,9 @@ three gates each on intel1 and fstor007, but xorinox stopped after W130's
 95/96 listing and a B6 counter-cohort failure. Its failed run is excluded.
 The user authorized the resulting [directory-visibility repair](task-t-directory-visibility-20261029.md).
 Candidate `35a6e41b0` closes source-first and destination-first copy windows,
-with deterministic negative controls; isolated live checks precede fresh
-three-run full measurements. The B6 accounting correction has three focused
+with deterministic negative controls and isolated K48 3/3, W130 10/10
+and B6 refuse passes. Fresh three-run full measurements are now running on
+all three hosts. The B6 accounting correction has three focused
 passes with unchanged product binaries. The current92 bounds, slots,
 deadlines,1100s target and1650s margin remain unchanged (model1504s).
 No full qualification or new fit is claimed yet. Nuc/AMD failures remain open;
@@ -35,9 +36,9 @@ mapping capture from the first63c6c9cb9 failure or establish its cause.
 
 Fresh source `35a6e41b042e84982268f8569cc31ddc739be5e1` is staged on all
 three hosts at `HOST-35a6e41b0-calibration19/`. Intel1 and fstor007 have begun
-three serial eight-job full gates. Xorinox first completes the separate
-`xorinox-35a6e41b0-directory-focus19/` series on the same immutable source,
-with no overlap between controllers. The new deterministic unit adds one
+three serial eight-job full gates. Xorinox completed the separate
+`xorinox-35a6e41b0-directory-focus19/` series before starting its full gates
+on the same immutable source, with no overlap between controllers. The new deterministic unit adds one
 executed command:548 in the refreshed full gate. All92 budget rows and their
 priority settings are unchanged. No failing or contaminated run may enter
 the next fit.

@@ -1,12 +1,14 @@
 # Task T — directory visibility during cross-group migration
 
-**Qualification in progress**, on `agent/devel-task-t`; no merge or push.
+**Isolated TCP qualification PASS; full-gate qualification in progress**, on
+`agent/devel-task-t`; no merge or push.
 This is a new counterexample relevant to [K48](k48-readdir-omission-20261028.md)
 and [Task T's full-gate measurements](gate-budgets-per-host-20261028.md).
 The user explicitly authorized fixing and qualifying it in this branch.
 The current candidate is `35a6e41b042e84982268f8569cc31ddc739be5e1`.
-Its deterministic controls pass; isolated live regressions and fresh full
-measurements must finish before this page claims qualification.
+Its deterministic controls, three K48 runs, ten W130 runs and B6 refuse
+pass in the isolated scope below. Fresh full measurements are still running;
+no complete full-gate qualification is claimed.
 
 ## Discovery and preserved evidence
 
@@ -95,14 +97,19 @@ packing at 500 ms minimum age / 200 ms interval, and the tests' normal quotas.
 The malformed-row and READDIR pause hooks exist only in the fault daemon.
 No existing deployment, other agent's campaign or Task AF was changed.
 
-Current isolated raw capture:
+Finalized isolated raw capture (270 files, manifest SHA-256
+`b2d4f965e2cf43e05bdb203de29ec5de86189b35ba1ff927fa80eb3338a70a4e`):
 `/data1/efs/evidence/taskT-20261028/xorinox-35a6e41b0-directory-focus19/`.
-It runs build, deterministic/current and negative controls, metadata and
-transaction units, READDIR cursor/reply controls, recipe checks, three K48
-live runs, ten W130 runs and one B6 refuse run. Its immutable source root is
+All 24 expected outcomes passed: build, deterministic/current and negative
+controls, metadata and transaction units, READDIR cursor/reply controls,
+recipe checks, three K48 live runs (8.622/11.690/10.324 s), ten W130 runs
+(21.282–33.197 s) and B6 refuse (34.976 s). Source hashes are unchanged,
+there is no contention marker, and closure found no owned EFS process or
+mount. Finalized B6 and W130 logs are retained. Its immutable source root is
 `/home/maik/efs-taskT-20261028-35a6e41b0-calibration19/src`.
-The full measurement controller on that root starts only after the isolated
-controller has finished and closure checks prove no owned process/mount.
+The full measurement controller on that root started only after isolated
+closure proved no owned process/mount. It never overlapped the isolated
+controller.
 Fresh three-run full measurements use the same candidate on intel1,
 xorinox and fstor007; their verdict belongs on Task T's evidence page.
 
