@@ -469,6 +469,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_chown_permissions.py
 	python3 tests/test_readdir_collection.py
 	python3 tests/test_readdir_source_cursor.py
+	python3 tests/test_dir_migrate_visibility.py
 	python3 tests/test_access_permissions.py
 	python3 tests/test_rename_flags.py
 	python3 tests/test_attribute_authority_errno.py
@@ -593,6 +594,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_live_fixture_names.py
 	python3 tests/test_qualify_driver.py
 	python3 tests/test_qualify_standalone.py
+	python3 tests/test_refit_test_budgets.py
 	python3 tests/test_soak_driver.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view

@@ -152,3 +152,54 @@ with tempfile.TemporaryDirectory(prefix='efs-shutdown-') as d:
     out = subprocess.run([str(path.with_suffix(''))], check=True, capture_output=True, text=True)
     print(out.stdout.strip())
 print('test_shutdown_bounded: OK')
+
+# K33: a stopping leader must release its readers before handler drain closes
+# the reply paths needed for fresh quorum proofs. Execute the host helper with
+# the actual core step-down/campaign functions, including persistence fencing.
+raft_host = (root/'src/server/raft_host.c').read_text()
+raft_core = (root/'src/raft/raft.c').read_text()
+pump = fn(raft_host, 'static void *host_pump(void *arg)')
+stop_call = 'host_stop_leading(h, h->s && server_stop_requested());'
+assert pump.index('pthread_mutex_lock(&h->mu);') < pump.index(stop_call) < pump.index('host_pending_reads(h);')
+assert pump.index('drain_inbox(h);') < pump.rindex(stop_call) < pump.index('(void)efs_raft_tick(')
+code = r'''
+#include "efs/raft.h"
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+#define HOST_NGROUPS 2
+struct efs_raft {int recv_persisting,role,leader,allow_campaign,read_in_flight;
+ uint64_t current_term,vote_bits,commit_index,applied;unsigned resets,exits;};
+struct host_group {int hosted;struct efs_raft *r;unsigned group;};
+struct efs_raft_host {struct host_group g[HOST_NGROUPS];unsigned published;};
+static void leader_exit_note(struct efs_raft*r,uint64_t t,const char*why){assert(t==r->current_term&&why);r->exits++;}
+static void read_proof_forget(struct efs_raft*r){r->read_in_flight=0;}
+static void reset_election(struct efs_raft*r){r->resets++;}
+static void host_publish_group(struct efs_raft_host*h,unsigned g){h->published|=1u<<g;}
+''' + fn(raft_core, 'int efs_raft_role(') + fn(raft_core, 'int efs_raft_step_down(') + fn(raft_core, 'void efs_raft_allow_campaign(') + fn(raft_host, 'static void host_stop_leading(') + r'''
+int main(void){
+ struct efs_raft a={.role=EFS_RAFT_LEADER,.leader=0,.allow_campaign=1,
+  .current_term=7,.read_in_flight=1,.commit_index=19,.applied=18};
+ struct efs_raft b={.role=EFS_RAFT_CANDIDATE,.leader=-1,.allow_campaign=1,
+  .current_term=9,.recv_persisting=1,.commit_index=25,.applied=24};
+ struct efs_raft_host h={.g={{1,&a,0},{1,&b,2}}};
+ host_stop_leading(&h,0);assert(a.role==EFS_RAFT_LEADER&&a.allow_campaign&&b.allow_campaign&&!h.published);
+ host_stop_leading(&h,1);
+ assert(a.role==EFS_RAFT_FOLLOWER&&!a.allow_campaign&&!a.read_in_flight&&a.exits==1&&a.resets==1);
+ assert(b.role==EFS_RAFT_CANDIDATE&&!b.allow_campaign&&!b.resets&&h.published==1);
+ b.recv_persisting=0;host_stop_leading(&h,1);
+ assert(b.role==EFS_RAFT_FOLLOWER&&b.resets==1&&h.published==5);
+ host_stop_leading(&h,1);assert(a.exits==1&&a.resets==1&&b.resets==1);
+ assert(a.current_term==7&&a.commit_index==19&&a.applied==18);
+ assert(b.current_term==9&&b.commit_index==25&&b.applied==24);
+ h.g[0].hosted=0;a.role=EFS_RAFT_LEADER;a.allow_campaign=1;
+ host_stop_leading(&h,1);assert(a.role==EFS_RAFT_LEADER&&a.allow_campaign);
+ h.g[0].hosted=1;h.g[0].r=NULL;host_stop_leading(&h,1);
+ puts("shutdown leadership: pump-owned demotion before proof/tick, no campaign, receive-persistence fence retained, committed/apply state unchanged PASS");
+}
+'''
+with tempfile.TemporaryDirectory(prefix='efs-stop-leadership-') as d:
+    p=Path(d)/'test.c';p.write_text(code)
+    subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror',
+                   '-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
+    subprocess.run([str(p.with_suffix(''))],check=True,timeout=10)

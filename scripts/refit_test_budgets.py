@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""W160 offline three-run calibration; does not execute or alter any test.
+"""W160 offline multi-host calibration; does not execute or alter any test.
 
-Read three summary-runner result directories (cmds.txt, timings.tsv,
-summary.txt). Emit a proposed budgets.tsv, aggregate medians and deterministic
-slot-reservation schedules. Measured gate walls and modeled schedules stay
-separate: timings.tsv does not record actual command start times.
+Each --host-runs supplies a host and three clean result directories. Fit each
+row to 1.25 times the largest host median, rounded upward to five seconds.
+Declare specific absent observations with --unmeasured HOST COMMAND; never
+substitute zero. Slots/reason prefixes and D44's target remain unchanged.
 """
 import argparse
 import ast
@@ -39,10 +39,14 @@ def command_identity(command):
 
 
 def read_run(path):
+    # A green command summary does not make an overlapped timing sample valid.
+    # Preserve the guard's evidence and require a separate clean measurement.
+    if (path / 'CONTAMINATED.json').exists() or (path / 'INTERRUPTED.json').exists():
+        raise ValueError('contaminated or interrupted run cannot calibrate: ' + str(path))
     cmds = commands(path / 'cmds.txt')
     summary = (path / 'summary.txt').read_text().splitlines()
     match = re.match(r'TOTAL (\d+) FAIL (\d+) NOTRUN (\d+) STATUS (\w+) \((\d+)s\)', summary[0])
-    if not match or int(match[1]) != len(cmds):
+    if not match or not cmds or int(match[1]) != len(cmds):
         raise ValueError('incomplete summary: ' + str(path))
     with (path / 'timings.tsv').open() as stream:
         rows = list(csv.DictReader(stream, delimiter='\t'))
@@ -52,8 +56,9 @@ def read_run(path):
     for i, row in enumerate(rows):
         if row['command'] != cmds[i].split('\n')[0][:150]:
             raise ValueError('timing does not identify enumerated command: ' + str(path))
-        if Decimal(row['seconds']) < 0:
-            raise ValueError('negative duration: ' + str(path))
+        duration = Decimal(row['seconds'])
+        if not duration.is_finite() or duration < 0:
+            raise ValueError('invalid duration: ' + str(path))
     notrun_ids = {int(line.split('\t', 2)[1]) for line in summary[1:] if line.startswith('NOTRUN\t')}
     if len(notrun_ids) != int(match[3]) or not notrun_ids <= set(range(len(cmds))):
         raise ValueError('inconsistent NOTRUN accounting: ' + str(path))
@@ -116,23 +121,89 @@ def schedule(cmds, budgets, durations, exclusive, jobs=8):
                 exclusive=[dict(index=i, command=head(i), duration_s=float(durations[i])) for i in alone])
 
 
+def read_host(name, paths):
+    if len(paths) != 3 or len({Path(p).resolve() for p in paths}) != 3:
+        raise ValueError(f'{name}: supply three distinct runs')
+    runs = [read_run(Path(p)) for p in paths]
+    cmds = runs[0]['commands']
+    identities = [command_identity(c) for c in cmds]
+    if any([command_identity(c) for c in r['commands']] != identities for r in runs[1:]):
+        raise ValueError(f'{name}: three runs did not enumerate the identical command sequence')
+    if any(r['fail'] or any(int(x['rc']) for x in r['timings']) for r in runs):
+        raise ValueError(f'{name}: failed commands cannot calibrate successful workload costs')
+    # Historical hosts may have different tables, but the three observations
+    # within each host must use the same priority-setting budget values.
+    priority = [x.get('budget', '') for x in runs[0]['timings']]
+    if any([x.get('budget', '') for x in r['timings']] != priority for r in runs[1:]):
+        raise ValueError(f'{name}: measured budget priorities changed between runs')
+    medians = [statistics.median(Decimal(r['timings'][i]['seconds']) for r in runs)
+               for i in range(len(cmds))]
+    indices = {}
+    for i, c in enumerate(cmds):
+        indices.setdefault(c.split('\n')[0].strip(), []).append(i)
+    return dict(name=name, runs=runs, commands=cmds, medians=medians, indices=indices)
+
+
+def fit_rows(budgets, hosts, unmeasured=()):
+    permitted = set(unmeasured)
+    valid = {(h, c) for h in hosts for c in budgets}
+    if permitted - valid:
+        raise ValueError('unknown unmeasured host/command: ' + repr(sorted(permitted - valid)))
+    fitted, rows = {}, []
+    for command, (old, slots, original_reason) in budgets.items():
+        host_values, host_medians, notrun, missing = {}, {}, {}, []
+        for name, host in hosts.items():
+            matches = host['indices'].get(command, [])
+            if not matches:
+                if (name, command) not in permitted:
+                    raise ValueError(f'{name}: budget command absent: {command}; declare --unmeasured explicitly')
+                host_values[name] = host_medians[name] = None
+                missing.append(name)
+                continue
+            if len(matches) != 1:
+                raise ValueError(f'{name}: repeated budget command: {command}')
+            if (name, command) in permitted:
+                raise ValueError(f'{name}: stale unmeasured declaration; command was observed: {command}')
+            i = matches[0]
+            values = [Decimal(r['timings'][i]['seconds']) for r in host['runs']]
+            host_values[name] = [float(v) for v in values]
+            host_medians[name] = statistics.median(values)
+            notrun[name] = [n + 1 for n, r in enumerate(host['runs']) if i in r['notrun_ids']]
+        observed = [v for v in host_medians.values() if v is not None]
+        if not observed:
+            raise ValueError('no measured host for budget command: ' + command)
+        slowest = max(observed)
+        slow_hosts = [h for h, v in host_medians.items() if v == slowest]
+        new = max(5, int((slowest * Decimal('1.25') / 5).to_integral_value(rounding=ROUND_CEILING)) * 5)
+        reason = original_reason
+        if new > old or new > 300:
+            note = (f'Task T: slowest host median {slowest} s ({", ".join(slow_hosts)}); '
+                    f'three runs/host, 1.25x rounded up to 5 s; previous budget {old} s')
+            reason += ('; ' if reason else '') + note
+        fitted[command] = (Decimal(new), slots, reason)
+        rows.append(dict(command=command, host_runs_s=host_values,
+                         host_medians_s={h: float(v) if v is not None else None for h, v in host_medians.items()},
+                         unmeasured_hosts=missing, max_host_median_s=float(slowest), slowest_hosts=slow_hosts,
+                         old_budget_s=float(old), new_budget_s=new, slots=slots, notrun_runs=notrun,
+                         classification='slack' if old > 2 * slowest else
+                         'tight' if old < Decimal('1.25') * slowest else 'within-margin'))
+    return fitted, rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--budgets', type=Path, required=True)
     parser.add_argument('--runner', type=Path, required=True)
-    parser.add_argument('--host', required=True)
+    parser.add_argument('--host-runs', nargs=4, action='append', required=True,
+                        metavar=('HOST', 'RUN1', 'RUN2', 'RUN3'))
+    parser.add_argument('--unmeasured', nargs=2, action='append', default=[], metavar=('HOST', 'COMMAND'))
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('runs', type=Path, nargs=3)
     args = parser.parse_args()
-    runs = [read_run(p) for p in args.runs]
-    cmds = runs[0]['commands']
-    if any([command_identity(c) for c in run['commands']] !=
-           [command_identity(c) for c in cmds] for run in runs[1:]):
-        raise ValueError('three runs did not enumerate the identical command sequence')
-    # A failed/partial test's duration is not a successful workload cost.
-    if any(run['fail'] or any(int(row['rc']) for row in run['timings']) for run in runs):
-        raise ValueError('failed commands: preserve/report failures; do not fit truncated workloads')
-    rows = []
+    hosts = {}
+    for name, *paths in args.host_runs:
+        if name in hosts:
+            raise ValueError('duplicate host: ' + name)
+        hosts[name] = read_host(name, paths)
     budgets = {}
     lines = args.budgets.read_text().splitlines()
     for line in lines:
@@ -142,47 +213,37 @@ def main():
         if len(fields) != 4 or fields[0] in budgets:
             raise ValueError('malformed/duplicate budget row: ' + line)
         command, seconds, slots, reason = fields
-        if Decimal(seconds) <= 0 or not 1 <= int(slots) <= 8:
+        value = Decimal(seconds)
+        if not value.is_finite() or value <= 0 or not 1 <= int(slots) <= 8:
             raise ValueError('invalid budget/slot count: ' + line)
-        budgets[command] = (Decimal(seconds), int(slots), reason)
-    indices = {}
-    for i, command in enumerate(cmds):
-        indices.setdefault(command.split('\n')[0].strip(), []).append(i)
-    for run in runs:
-        for i, row in enumerate(run['timings']):
-            command = cmds[i].split('\n')[0].strip()
-            expected = budgets.get(command)
-            observed = row.get('budget', '')
-            if ((expected is None) != (observed == '') or
-                    (expected is not None and Decimal(observed) != expected[0])):
-                raise ValueError('measurement used another budget table: ' + command)
-    medians = [statistics.median([Decimal(run['timings'][i]['seconds']) for run in runs]) for i in range(len(cmds))]
-    fitted = {}
-    for command, (old, slots, reason) in budgets.items():
-        if len(indices.get(command, [])) != 1:
-            raise ValueError('budget command absent or repeated in gate: ' + command)
-        i = indices[command][0]
-        values = [Decimal(run['timings'][i]['seconds']) for run in runs]
-        median = medians[i]
-        new = max(5, int((median * Decimal('1.25') / 5).to_integral_value(rounding=ROUND_CEILING)) * 5)
-        if median > old or (new > 300 and not reason):
-            note = f'Task J: {args.host} three-run median {median} s; previous budget {old} s; 1.25x rounded up to 5 s'
-            reason += ('; ' if reason else '') + note
-        fitted[command] = (Decimal(new), slots, reason)
-        rows.append(dict(command=command, runs_s=[float(v) for v in values], median_s=float(median),
-                         old_budget_s=float(old), new_budget_s=new, slots=slots,
-                         notrun_runs=[n + 1 for n, run in enumerate(runs) if i in run['notrun_ids']],
-                         classification='slack' if old > 2 * median else 'tight' if old < Decimal('1.25') * median else 'within-margin'))
+        budgets[command] = (value, int(slots), reason)
+    fitted, rows = fit_rows(budgets, hosts, map(tuple, args.unmeasured))
     source = args.runner.read_text()
     match = re.search(r'EXCLUSIVE=re\.compile\((.*?)\)\n', source, re.S)
     if not match:
         raise ValueError('runner EXCLUSIVE expression not found')
     exclusive = re.compile(ast.literal_eval('(' + match[1] + ')'))
+    # Model the fullest measured gate, not an older host's smaller command
+    # list. Cross-host matching uses logical commands; build identities and
+    # compiler flags are never erased to manufacture shared observations.
+    reference = max(hosts.values(), key=lambda h: len(h['commands']))
+    cmds = reference['commands']
+    if any(len(reference['indices'].get(c, [])) != 1 for c in budgets):
+        raise ValueError('the fullest measured gate does not cover every current budget row')
+    maximum_medians = []
+    for command in cmds:
+        identity = command_identity(command)
+        values = []
+        for h in hosts.values():
+            matches = [i for i, c in enumerate(h['commands']) if command_identity(c) == identity]
+            if len(matches) == 1:
+                values.append(h['medians'][matches[0]])
+        maximum_medians.append(max(values))
     modeled = {}
     for label, table in (('before', budgets), ('after', fitted)):
         declared = [table.get(c.split('\n')[0].strip(), (Decimal(1), 1, ''))[0] for c in cmds]
         modeled[label + '_budget'] = schedule(cmds, table, declared, exclusive)
-        modeled[label + '_median'] = schedule(cmds, table, medians, exclusive)
+        modeled[label + '_max_median'] = schedule(cmds, table, maximum_medians, exclusive)
     args.output.mkdir(parents=True, exist_ok=False)
     out = []
     for line in lines:
@@ -192,18 +253,22 @@ def main():
             line = f'{key}\t{seconds}\t{slots}\t{reason}'
         out.append(line)
     (args.output / 'budgets.tsv').write_text('\n'.join(out) + '\n')
-    report = dict(host=args.host, runs=[{k:r[k] for k in ('path','summary','wall_s','fail','notrun')} for r in runs],
-                  rows=rows, modeled=modeled,
-                  limitation='Schedules are deterministic models using rounded measured durations, not observed command start times or new post-refit wall measurements.')
+    report = dict(hosts={name: dict(runs=[{k: r[k] for k in ('path', 'summary', 'wall_s', 'fail', 'notrun')}
+                                        for r in h['runs']]) for name, h in hosts.items()},
+                  rows=rows, modeled=modeled, schedule_host=reference['name'],
+                  unmeasured=[dict(host=h, command=c) for h, c in args.unmeasured],
+                  limitation='Maximum-host medians and modeled slot schedules are synthetic bounds, not observed starts, post-refit walls, or qualification of NOTRUN subcases.')
     (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
-    table = ['| Command | Run 1 s | Run 2 s | Run 3 s | Median s | Old s | New s | Slots | Assessment | NOTRUN runs |',
-             '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |']
+    names = list(hosts)
+    table = ['| Command | ' + ' | '.join(n + ' median s' for n in names) + ' | Max s | Old s | New s | Slots |',
+             '| --- | ' + ' | '.join('---:' for _ in names) + ' | ---: | ---: | ---: | ---: |']
     for row in rows:
-        values = row['runs_s']
-        table.append('| `' + row['command'].replace('|', '\\|') + '` | ' + ' | '.join(f'{v:g}' for v in values) +
-                     f" | {row['median_s']:g} | {row['old_budget_s']:g} | {row['new_budget_s']} | {row['slots']} | {row['classification']} | {','.join(map(str, row['notrun_runs'])) or 'none'} |")
+        values = ['unmeasured' if row['host_medians_s'][n] is None else f'{row["host_medians_s"][n]:g}' for n in names]
+        table.append('| `' + row['command'].replace('|', '\\|') + '` | ' + ' | '.join(values) +
+                     f' | {row["max_host_median_s"]:g} | {row["old_budget_s"]:g} | {row["new_budget_s"]} | {row["slots"]} |')
     (args.output / 'medians.md').write_text('\n'.join(table) + '\n')
-    print(json.dumps({key: {k:v for k,v in value.items() if k in ('pool_s','exclusive_s','total_s')} for key,value in modeled.items()}, indent=2))
+    print(json.dumps({key: {k: v for k, v in value.items() if k in ('pool_s', 'exclusive_s', 'total_s')}
+                      for key, value in modeled.items()}, indent=2))
 
 
 if __name__ == '__main__':
