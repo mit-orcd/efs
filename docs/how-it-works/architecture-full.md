@@ -1654,7 +1654,7 @@ Below the 1 % threshold; named gates PASS; test-all 546/1/12 with the one
 FAIL the pre-existing devel b6 slow defect.
 
 [AK — packed reads: one hash, no staging copy](../status/ak-packed-read-staging-20261028.md):
-**DONE on branch `agent/devel-taskak` (`1c2fd4188`), not merged.** One fragment
+**DONE on branch `agent/devel-taskak` (`1c2fd4188`), merged into devel (wave 33, `550b00e47`).** One fragment
 hash checked against both reply and mapping digests; TCP receive-into-scratch,
 RDMA ownership transfer. Unit + RDMA gates PASS; test-all 547/1/12 with the one
 FAIL pre-existing on devel (b6 slow-mode fsync, write path). TCP client CPU
@@ -1703,7 +1703,7 @@ retained; distinct from AB–AM and P3-A–P3-F. No new K defect or measured gai
 [evidence](../status/am-report-degraded-batch-20261028.md)); AK and AL OPEN /
 implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
 
-**AK DONE on `agent/devel-taskak` (`1c2fd4188`, not merged; [evidence](../status/ak-packed-read-staging-20261028.md));
+**AK DONE on `agent/devel-taskak` (`1c2fd4188`, merged into devel, wave 33; [evidence](../status/ak-packed-read-staging-20261028.md));
 AL and AM OPEN / implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
 packed-fragment staging/double hashing (AK), unnecessary decode scratch (AL), and REPORT
 degraded-object batch bookkeeping (AM). Distinct from AB–AJ and P3-A–P3-F; no K defect
@@ -1800,6 +1800,8 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Wave 33 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`550b00e47`; gate at `550b00e47`)**: Task AL ([evidence](../status/al-decode-scratch-20261028.md)): reads allocate decode scratch only for the path taken, retained decode scratch per mount 17.3 → 8.0 MiB (`read.c`), in-place aliasing pinned by `test_erasure`; Task AK ([evidence](../status/ak-packed-read-staging-20261028.md)): packed reads hash each fragment once and receive it without a staging copy (TCP into the caller's slot, RDMA hands over its message buffer); the one hash is checked against both the reply digest and the mapping's committed digest, so neither authority is dropped, and a mismatch names which one failed; no wire change (`efs_conn_recv_segment_reply` is a new client-side helper); Task AC ([evidence](../status/ac-iostats-rdma-scan-20261028.md)): the periodic `iostats:` line no longer scans the RDMA registry (36 scans → 0 in the instrumented runs; no consistent speedup, TCP throughput median 0.36 % lower). Merge-time: AL and AK both edit `read.c` and merged without a source conflict; the checklist conflicts were only the order of AL/AC's status paragraphs against the already-merged AM/AD blocks. intel1 `make test-all` (8 jobs) at `550b00e47`: **549 / 0 FAIL / 12 NOTRUN** (host limits), 773 s, INCOMPLETE. Known: the Mac build of `data_commit.c` has failed since wave 32 (`pthread_condattr_setclock` is glibc-only); Linux gates build it.
+
 [Wave 32 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`4e4b7ec75`; gate at `4e4b7ec75`)**: **K55 FIXED** ([evidence](../status/k55-slow-commit-20261028.md)): `stripe_prove` joins the COMMIT workers only until a reserve slice (a quarter of the remaining budget, at most 5 s) before the 60 s deadline, so the required durable degraded mark can run while one slow COMMIT keeps its own deadline; B6 slow-mode fsync no longer returns EIO (it had failed deterministically since `199ad2afd`, 3/3 on devel `d62a753d9`); no storage RPC deadline is shortened and an expired sweep still retains its obligations and fails closed. Carries Task AI ([evidence](../status/ai-rdma-registry-lock-20261028.md)): measured, no change. Measured-no-change evidence, no product change: AG ([buffer pool lock](../status/ag-bufpool-lock-20261028.md)), AJ ([export acquire/release](../status/aj-export-reference-lock-20261028.md)), AH ([chunk-map lock](../status/ah-chunk-map-lock-20261028.md)), AP ([segment GET combined read](../status/ap-segment-read-combined-20261028.md)), AQ ([segment directory barriers](../status/aq-segment-dir-barriers-20261028.md)), AM ([REPORT degraded batch](../status/am-report-degraded-batch-20261028.md)), AR ([PUT retry rewrites](../status/ar-put-retry-rewrites-20261028.md)), AD ([counter contention](../status/ad-counter-contention-20261028.md), from `agent/devel-task-ad`; the duplicate `agent/devel-taskad` is not merged). Merge-time: K55 row = the fix branch's FIXED row over AJ's OPEN registration. intel1 `make test-all` (8 jobs) at `4e4b7ec75`: **547 / 0 FAIL / 12 NOTRUN** (host limits), 786 s, INCOMPLETE; B6 slow PASS. K register: 55 rows, 12 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN (K48, K53, K54).
 
 [Task AG](../status/ag-bufpool-lock-20261028.md): **PASS — measured, no change**, devel
@@ -1851,7 +1853,7 @@ remote-step timeouts and 28-instance stress **5,658 PASS / 488 FAIL / 49 SKIP /
 All four servers and seven mounts healthy/running; no push or release PASS.
 
 [Task AC — routine I/O RDMA scan](../status/ac-iostats-rdma-scan-20261028.md): **qualified within executed scope**,
-branch `agent/devel-task-ac`, tested product `5f9ddae71`, base `1d2852da4`.
+branch `agent/devel-task-ac` (merged into devel, wave 33), tested product `5f9ddae71`, base `1d2852da4`.
 Intel1 full gate546/0FAIL/12NOTRUN (host limits, INCOMPLETE); native hardware
 RDMA and management smoke PASS on node9901. Three-repeat TCP/RDMA comparisons
 remove36 unused registry acquisitions/trial; no consistent speedup, TCP median
