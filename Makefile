@@ -126,8 +126,8 @@ TEST_BINS += tests/test_membership
 TEST_SRCS += tests/test_member_view.c
 TEST_BINS += tests/test_member_view
 TEST_SRCS += tests/test_directory_sync_group.c
-TEST_SRCS += tests/test_b_geometry.c tests/test_frag_record.c tests/test_small_segment.c tests/test_packed_segment.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c tests/test_pack_switch.c tests/test_packed_reader.c tests/test_pack_validate_once.c
-TEST_BINS += tests/test_b_geometry tests/test_frag_record tests/test_small_segment tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch tests/test_packed_reader tests/test_pack_validate_once
+TEST_SRCS += tests/test_b_geometry.c tests/test_frag_record.c tests/test_small_segment.c tests/test_packed_segment.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c tests/test_pack_switch.c tests/test_packed_reader.c tests/test_pack_validate_once.c tests/test_segment_reply.c
+TEST_BINS += tests/test_b_geometry tests/test_frag_record tests/test_small_segment tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch tests/test_packed_reader tests/test_pack_validate_once tests/test_segment_reply
 TEST_BINS += tests/test_directory_sync_group
 TEST_SRCS += tests/test_kv_insertion_buffer.c tests/test_session_owned_capture.c
 TEST_BINS += tests/test_kv_insertion_buffer tests/test_session_owned_capture
@@ -759,6 +759,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_pack_ledger_recovery
 	./tests/test_pack_switch
 	./tests/test_packed_reader
+	./tests/test_segment_reply
 	./tests/test_pack_validate_once
 	./tests/test_kv_reader_gate
 	./tests/test_placement
@@ -1220,7 +1221,7 @@ src/server/store.o src/server/segment_store.o src/bench/store.o: include/efs/fra
 src/common/packed_segment.o: include/efs/packed_segment.h include/efs/erasure.h
 src/common/pack_ledger.o: include/efs/pack_ledger.h include/efs/packed_segment.h
 src/meta/pack_mapping.o: include/efs/pack_mapping.h include/efs/pack_ledger.h include/efs/meta_apply.h include/efs/kv_key.h include/efs/kv_lsm.h
-tests/test_b_geometry tests/test_frag_record tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch tests/test_packed_reader tests/test_pack_validate_once: %: %.c $(LIB)
+tests/test_b_geometry tests/test_frag_record tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch tests/test_packed_reader tests/test_pack_validate_once tests/test_segment_reply: %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
 
 tests/test_directory_sync_group: tests/test_directory_sync_group.c src/server/directory_sync_group.h

@@ -1861,6 +1861,21 @@ int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status);
 int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
                             uint8_t *path, uint64_t *epoch);
 
+/* GET_SEGMENT reply: 4-byte BE status, 4-byte BE bytes, 32-byte digest, then
+ * the fragment (EFS_SEGMENT_GET_REPLY header). TCP receives a success body
+ * straight into caller storage (no allocation, no staging copy); RDMA takes
+ * ownership of the whole message buffer and sets *owned (normal free()
+ * ownership; the fragment is at *owned + EFS_SEGMENT_GET_REPLY). hdr always
+ * holds the reply header on a fully received frame.
+ * Returns EFS_OK (body == capacity bytes received), a negative server status
+ * (error reply), EFS_ERR_PROTO for a malformed but fully consumed frame
+ * (conn reusable), or EFS_ERR_NET on transport failure / insane frame length
+ * (conn dirty, drop it). */
+int efs_conn_recv_segment_reply(struct efs_conn *c,
+                                uint8_t hdr[EFS_SEGMENT_GET_REPLY],
+                                uint8_t *body, uint32_t body_cap,
+                                uint8_t **owned);
+
 /* Wait for the next request on either channel. Returns EFS_CONN_TCP /
  * EFS_CONN_RDMA, or -1 on error / peer close. Pure-TCP conns return
  * EFS_CONN_TCP immediately (caller blocks in recv). Shared so the xprt

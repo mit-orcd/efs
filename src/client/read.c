@@ -324,12 +324,19 @@ static uint64_t read_peer_now_ms(void)
 }
 
 /* W125: one fragment of a packed segment (GET_SEGMENT). The group rides
- * in the reference; the fetch reader checks the length and the hash. */
+ * in the reference. AK: the reply is received without a staging copy (TCP
+ * reads the fragment straight into the caller's scratch slot; RDMA hands
+ * over its message buffer), and the fragment is hashed once, checked by
+ * efs_packed_fragment_verify against both the reply digest and the
+ * mapping's committed digest. */
 struct packed_fetch_ctx { uint32_t group; int rc[EFS_NUM_FRAGMENTS], tried[EFS_NUM_FRAGMENTS]; };
 static int packed_fetch_run(void *context, efs_node_id_t node, uint64_t id, uint64_t generation,
-                            uint32_t fi, uint32_t geometry, uint8_t *out, uint32_t capacity)
+                            uint32_t fi, uint32_t geometry, uint8_t *out, uint32_t capacity,
+                            const uint8_t *expected_sum, const uint8_t **fragp, uint8_t **ownedp)
 {
     const struct packed_fetch_ctx *pc = context;
+    *fragp = NULL;
+    *ownedp = NULL;
     if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
     if (efs_client_node_is_down(node)) return EFS_ERR_NET;
     struct efs_conn *conn = efs_client_conn_get(node);
@@ -342,36 +349,40 @@ static int packed_fetch_run(void *context, efs_node_id_t node, uint64_t id, uint
         req[8 + i] = (uint8_t)(id >> (56 - 8 * i));
         req[16 + i] = (uint8_t)(generation >> (56 - 8 * i));
     }
-    uint8_t type = 0;
-    void *payload = NULL;
-    uint32_t len = 0;
-    if (efs_conn_send_msg(conn, EFS_MSG_GET_SEGMENT, req, sizeof(req)) ||
-        efs_conn_recv_msg(conn, &type, &payload, &len)) {
-        free(payload);
+    if (efs_conn_send_msg(conn, EFS_MSG_GET_SEGMENT, req, sizeof(req))) {
         efs_client_conn_drop(node, conn);
         efs_client_node_note_fail(node);
         return EFS_ERR_NET;
     }
-    int rc = EFS_ERR_PROTO;
-    if (type == EFS_MSG_GET_SEGMENT_REPLY && len >= EFS_SEGMENT_GET_REPLY) {
-        const uint8_t *p = payload;
-        uint32_t status = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
-        uint32_t bytes = ((uint32_t)p[4] << 24) | ((uint32_t)p[5] << 16) | ((uint32_t)p[6] << 8) | p[7];
-        rc = (int32_t)status;
-        if (rc) { if (bytes || len != EFS_SEGMENT_GET_REPLY) rc = EFS_ERR_PROTO; }
-        else if (bytes != geometry / 2 || bytes != capacity || len != EFS_SEGMENT_GET_REPLY + bytes) rc = EFS_ERR_PROTO;
-        else {
-            uint8_t hash[EFS_HASH_SIZE];
-            efs_hash(p + EFS_SEGMENT_GET_REPLY, bytes, hash);
-            if (memcmp(hash, p + 8, sizeof(hash))) rc = EFS_ERR_CHECKSUM;
-            else memcpy(out, p + EFS_SEGMENT_GET_REPLY, bytes);
-        }
+    uint8_t hdr[EFS_SEGMENT_GET_REPLY];
+    uint8_t *owned = NULL;
+    int rc = efs_conn_recv_segment_reply(conn, hdr, out, capacity, &owned);
+    if (rc == EFS_ERR_NET) {
+        efs_client_conn_drop(node, conn);
+        efs_client_node_note_fail(node);
+        return EFS_ERR_NET;
     }
-    free(payload);
     efs_client_conn_release(node, conn);
-    if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
-    if (!rc) efs_client_node_note_ok(node);
-    return rc;
+    const uint8_t *frag = owned ? owned + EFS_SEGMENT_GET_REPLY : out;
+    uint32_t bytes = ((uint32_t)hdr[4] << 24) | ((uint32_t)hdr[5] << 16) |
+                     ((uint32_t)hdr[6] << 8) | hdr[7];
+    if (!rc && bytes != geometry / 2)
+        rc = EFS_ERR_PROTO;
+    if (!rc) {
+        int which = 0;
+        rc = efs_packed_fragment_verify(frag, bytes, hdr + 8, expected_sum, &which);
+        if (rc)
+            fprintf(stderr, "efs: packed read segment id=%016llx gen=%llx fi=%u node=%u: "
+                    "%s digest mismatch\n", (unsigned long long)id,
+                    (unsigned long long)generation, fi, (unsigned)node,
+                    which == 1 ? "reply" : "mapping");
+    }
+    if (efs_client_rpc_past_deadline()) { free(owned); return EFS_ERR_BUSY; }
+    if (rc) { free(owned); return rc; }
+    efs_client_node_note_ok(node);
+    *fragp = frag;
+    *ownedp = owned;
+    return EFS_OK;
 }
 
 /* B6: one segment fragment waits at most read_frag_timeout_ms, as a chunk
@@ -382,7 +393,8 @@ static int packed_fetch_run(void *context, efs_node_id_t node, uint64_t id, uint
  * of its own bound, not the read's, is that member failing (NET): the
  * reader goes on to the next fragment. Never extends an inherited deadline. */
 static int packed_fetch(void *context, efs_node_id_t node, uint64_t id, uint64_t generation,
-                        uint32_t fi, uint32_t geometry, uint8_t *out, uint32_t capacity)
+                        uint32_t fi, uint32_t geometry, uint8_t *out, uint32_t capacity,
+                        const uint8_t *expected_sum, const uint8_t **fragp, uint8_t **ownedp)
 {
     if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
     uint64_t previous = efs_client_rpc_deadline_ms();
@@ -390,7 +402,8 @@ static int packed_fetch(void *context, efs_node_id_t node, uint64_t id, uint64_t
     if (previous && previous < deadline)
         deadline = previous;
     efs_client_rpc_set_deadline_ms(deadline);
-    int rc = packed_fetch_run(context, node, id, generation, fi, geometry, out, capacity);
+    int rc = packed_fetch_run(context, node, id, generation, fi, geometry, out, capacity,
+                              expected_sum, fragp, ownedp);
     efs_client_rpc_set_deadline_ms(previous);
     if (rc == EFS_ERR_BUSY && !efs_client_rpc_past_deadline())
         rc = EFS_ERR_NET;
