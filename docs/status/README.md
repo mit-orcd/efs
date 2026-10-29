@@ -124,6 +124,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Task AP](ap-segment-read-combined-20261028.md): **PASS — measured, no change**,
+devel `9c4bfd171` on intel2 (NVMe): the packed-GET tail+payload split costs one
+pread and one bounce per GET, but no end-to-end number leaves the spread —
+cold and repeated small-file reads at 1/8 readers have identical p95/p99 within
+a 2–4× wider rep spread; the combined read does not qualify. node9901 cold-read
+column NOTRUN (ORCD keyboard-interactive login; no credentials provided).
+
 [ORCD-test merged devel qualification](orcd-test-devel-qualification-20261028.md):
 **FAIL overall**, deployed `714d7e6fc`; profiling branch merged and deleted.
 Serial and seven-client POSIX, restart persistence, both expiry runs and all
