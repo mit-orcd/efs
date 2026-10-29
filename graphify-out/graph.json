@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "68f8c7fc0f041091bd7a7835ed4efcf5acd1bea1"
+      "source_commit": "ea77b3a3505656f1bc46332dc640b72c70bb8cce"
     }
   },
   "links": [
@@ -753058,7 +753058,7 @@
       "relation": "contains",
       "source": "tests_test_shutdown_blocked_io",
       "source_file": "tests/test_shutdown_blocked_io.py",
-      "source_location": "L192",
+      "source_location": "L195",
       "target": "tests_test_shutdown_blocked_io_run_case",
       "weight": 1.0
     },
@@ -753069,7 +753069,7 @@
       "relation": "contains",
       "source": "tests_test_shutdown_blocked_io",
       "source_file": "tests/test_shutdown_blocked_io.py",
-      "source_location": "L142",
+      "source_location": "L145",
       "target": "tests_test_shutdown_blocked_io_stderr_blocked_case",
       "weight": 1.0
     },
@@ -753082,7 +753082,7 @@
       "relation": "indirect_call",
       "source": "tests_test_shutdown_blocked_io",
       "source_file": "tests/test_shutdown_blocked_io.py",
-      "source_location": "L186",
+      "source_location": "L189",
       "target": "tests_test_shutdown_blocked_io_stderr_blocked_case",
       "weight": 1.0
     },
@@ -753258,7 +753258,7 @@
       "relation": "calls",
       "source": "tests_test_shutdown_blocked_io_stderr_blocked_case",
       "source_file": "tests/test_shutdown_blocked_io.py",
-      "source_location": "L146",
+      "source_location": "L149",
       "target": "tests_test_shutdown_blocked_io_daemon",
       "weight": 1.0
     },
@@ -753270,7 +753270,7 @@
       "relation": "calls",
       "source": "tests_test_shutdown_blocked_io_stderr_blocked_case",
       "source_file": "tests/test_shutdown_blocked_io.py",
-      "source_location": "L175",
+      "source_location": "L178",
       "target": "tests_test_shutdown_blocked_io_read_record",
       "weight": 1.0
     },
@@ -958959,7 +958959,7 @@
       "id": "tests_test_shutdown_blocked_io_run_case",
       "label": "run_case()",
       "source_file": "tests/test_shutdown_blocked_io.py",
-      "source_location": "L192"
+      "source_location": "L195"
     },
     {
       "_callable": true,
@@ -958970,7 +958970,7 @@
       "id": "tests_test_shutdown_blocked_io_stderr_blocked_case",
       "label": "stderr_blocked_case()",
       "source_file": "tests/test_shutdown_blocked_io.py",
-      "source_location": "L142"
+      "source_location": "L145"
     },
     {
       "_origin": "ast",
