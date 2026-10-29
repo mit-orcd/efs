@@ -65,7 +65,7 @@
     "include/efs/writer_state.h": 1,
     "scripts/audit_settings_refusals.py": 2,
     "scripts/b6_full_loop.sh": 2,
-    "scripts/b_checks.py": 53,
+    "scripts/b_checks.py": 59,
     "scripts/bench_profile.py": 21,
     "scripts/bigdir_readdir_repro.sh": 1,
     "scripts/build-code-graph.py": 13,
@@ -753,7 +753,7 @@
     "tests/test_attribute_authority_errno.py": 2,
     "tests/test_b6_log_accounting.py": 2,
     "tests/test_b6_unavailable.py": 35,
-    "tests/test_b_checks_driver.py": 2,
+    "tests/test_b_checks_driver.py": 4,
     "tests/test_b_geometry.c": 15,
     "tests/test_b_geometry.py": 20,
     "tests/test_b_geometry_status.py": 3,
@@ -1363,7 +1363,7 @@
     "include/efs/writer_state.h": "1a350f195a79947b772d3a08cf33efffb050ae53fe7c591af241398e8efd25c0",
     "scripts/audit_settings_refusals.py": "369bda1f7854e4837b4329be00f8a73615866e562a474cd1b4e7e1b94ccbd095",
     "scripts/b6_full_loop.sh": "3867ffcd6b6417e8244ee41f74dbdcfccb0c824ce4400bc41a0da8094a5dfbde",
-    "scripts/b_checks.py": "e1c743c69a0a5bb6ce6000a3ee9dd1eb827d95e8e5c839151413c0fab9fef5de",
+    "scripts/b_checks.py": "5e2366aaf81e76b5ff2eea2c2867e7e45bea4697926757911b2ea24881cea4e4",
     "scripts/bench_profile.py": "73de02e1fed4f1d2d19a260d73299ea98370c9f0d18c22d33489ef8a1d38dab8",
     "scripts/bigdir_readdir_repro.sh": "6b0bab51be32a06a70e17e550af4192bf7026492fcbf01b19aa2a5c9e0f8a471",
     "scripts/build-code-graph.py": "021090044ea0064f49b849b039c417380b54a3516d32d9466a353e9a4eabc84b",
@@ -2051,9 +2051,9 @@
     "tests/test_attribute_authority_errno.py": "71391b28cb6dd5abb82a648d17bc46b74ebe70384780ccfa46648d1a14e038a7",
     "tests/test_b6_log_accounting.py": "2211429581ad3db7f30736bee1c7be01d8d6dc8737bdafd91db774ea0e7bbf08",
     "tests/test_b6_unavailable.py": "f35fe9091fde832e5026b52bf8d8dfe5dd1d996e064a0a6cd6fa4181b0b591cd",
-    "tests/test_b_checks_driver.py": "584dc48e237547e84cc276ebb57d9abcd788dbc31d497ce635435aca67aedb3e",
+    "tests/test_b_checks_driver.py": "236166dcaef5dc0a9f5e771f4dbf29d40463d8ff89a0ccdaa9bc886064e87d1e",
     "tests/test_b_geometry.c": "7cba398dece45479a667e20b7a0a248bf1e2f742d2d3a989212ed54b68f9caa3",
-    "tests/test_b_geometry.py": "ae9ee0d7c336c000503c852d0fdd3bb92139a3525b0309f59a6bac0594b5dfc1",
+    "tests/test_b_geometry.py": "55218d40141786589906e66343b3626e06aa952680bede4e70693abb2fcac42b",
     "tests/test_b_geometry_status.py": "d8b3c1607c3dd6b47041284c7535e19c09cb2b5ca9d5690e07e7d01d0f5ee67b",
     "tests/test_bench_cli.py": "5dc63c1f7b3ef9dfca2cd2cd8600fed7950816f498f33b40e40f49781da6187a",
     "tests/test_bench_latency.c": "995ad6f2e8a2f9ae0e8280f7a881e73b8bd0704efcc8a39bb4272e21933b7983",
@@ -2560,10 +2560,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1462
+    "calls": 1464
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "f030747441a418ed99e68c97e2c5bdf102150ece"
+  "source_commit": "63c6c9cb967f97fc3e675f1ec96a89956d43df87"
 }

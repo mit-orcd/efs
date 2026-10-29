@@ -58,7 +58,8 @@ env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200')
 env.pop('EFS_GC_DISABLE', None)
 CS = 128 * 1024
 G = 1 << 30
-artifacts = Path(os.environ['EFS_B_ARTIFACTS']) if os.environ.get('EFS_B_ARTIFACTS') else None
+artifacts = (Path(os.environ['EFS_B_ARTIFACTS']) / work.name
+             if os.environ.get('EFS_B_ARTIFACTS') else None)
 summary = {}
 phases = set((os.environ.get('EFS_B_PHASES') or 'grow,full').split(','))
 
