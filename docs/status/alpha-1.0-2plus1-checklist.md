@@ -530,7 +530,7 @@ The Stage 1 exception above applies; P3-A–P3-F and AB–AF retain their own sc
   Gates: existing RDMA handoff/progress/fork/segmentation tests, delayed stale
   CQEs during destroy/reuse, ring pressure and wakeup races, then real RDMA
   loaded qualification; TCP-only mocks cannot qualify this optimization.
-- [ ] **AJ — Server export reference acquisition on data I/O.**
+- [x] **AJ — Server export reference acquisition on data I/O.**
   Graph/source path: GET in `src/server/handler.c::server_handle_conn` and PUT
   in `src/server/put_upload.c::server_put_upload` acquire an export under
   `s->lock`; `src/server/store.c::server_export_put` takes that same server-wide
@@ -544,6 +544,10 @@ The Stage 1 exception above applies; P3-A–P3-F and AB–AF retain their own sc
   concurrent first use, GET/PUT against destroy/stop, failed I/O and acquisition
   failures, plus export-handle and ticketed-upload tests and memory/concurrency
   checks. No cached reference may outlive its export or bypass ticket authority.
+  **Measured 2026-10-28, no change** (`docs/status/aj-export-reference-lock-20261028.md`):
+  `s->lock` wait share ≤ 0.021 % at 64 connections / ~59k GET/s (threshold 5 %),
+  flat mean wait ~100 ns at 8/32/64 connections, no 1-vs-8-export effect; the
+  lock stays as is.
 
 **Deduplication and acceptance:** connection checkout already uses per-node
 `conn_lock[idx]`; the read cache already has striped locks. Neither is a new
@@ -1831,7 +1835,7 @@ by this count reconciliation (they are decided in D45 and D46).
 
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
-| Known-defect register K (Stage 1; once per candidate) | OPEN — 54 rows (52 reconciled by Task Y, K53 and K54 added in waves 30–31): 11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN; K48 (Task S attribution), K53 (ORCD full quota), K54 (member-down clean unmount); named VERIFY gates above | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
+| Known-defect register K (Stage 1; once per candidate) | OPEN — 55 rows (52 reconciled by Task Y, K53 and K54 added in waves 30–31, K55 by the Task AG/AJ gates): 11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 4 OPEN; K48 (Task S attribution), K53 (ORCD full quota), K54 (member-down clean unmount), K55 (B6 slow-member fsync EIO) | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
 | Functional scope S decided (once per candidate) | PARTLY DECIDED — D45 + D46 (user, Oct 28); W122, the K54 fix and the 33-tunable audit are required work; S1 command dispositions and `--writers` remain open | (same) | (same) |
 | Candidate and profile | NOTRUN — reviewed devel `9e4d66a8c`, not a frozen release candidate; K counts above (0 VERIFIED), A1/A2/A5 profile owed | NOTRUN — same counts; A4 decision and frozen profile owed | NOTRUN — K28 cap/layout is implemented (16-node cap); same counts, concrete N/failure domains/profile unqualified; prior “UNSUPPORTED until K28” was historical |
 | Flag audit and A/B removal (A6–A10, A12; once per candidate) | PASS scoped static/startup audit at `9e4d66a8c`, driver `1164b55a4` ([Task Z](stage1-decision-sheet-20261028.md)); A8/A9/A10 and frozen-candidate obligations remain; K register counts above are not an audit verdict (11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN) | Same audit/decision owner; named K live gates remain | Same audit/decision owner; no new A/B selector or user decision approved by Task Y |

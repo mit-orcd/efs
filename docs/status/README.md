@@ -158,6 +158,12 @@ full acceptance are separate states.
 holds it 25–54 µs a handful of times per client lifetime; the lock stays as is.
 AG checkbox ticked.
 
+[Task AJ](aj-export-reference-lock-20261028.md): **PASS — measured, no change**,
+devel `9c4bfd171` on intel1: export acquire/release under `s->lock` costs at
+most 0.021 % wait share at 64 connections / ~59k GET/s (task threshold 5 %);
+mean wait ~100 ns flat from 8 to 64 connections, 1 vs 8 exports
+indistinguishable; the lock stays as is. AJ checkbox ticked.
+
 [ORCD-test merged devel qualification](orcd-test-devel-qualification-20261028.md):
 **FAIL overall**, deployed `714d7e6fc`; profiling branch merged and deleted.
 Serial and seven-client POSIX, restart persistence, both expiry runs and all
