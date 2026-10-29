@@ -1,5 +1,10 @@
 # ORCD-test: quadratic client durability lookup — October 28, 2026
 
+Subsequent integration: the remaining profiling work was merged into devel at
+`714d7e6fc` and its branch deleted. See the
+[current merged-build qualification](orcd-test-devel-qualification-20261028.md).
+Deployment/unmerged statements below describe their historical test phases.
+
 **Purpose:** profile the slow single-stream `dd`, fix its largest demonstrated
 cost, and retest (K32 write cost; K35 durability proof). **Scoped fix PASS:**
 client durability bookkeeping consumed 65.21% of baseline user-cycle samples;

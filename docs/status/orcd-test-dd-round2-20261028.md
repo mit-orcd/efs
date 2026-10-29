@@ -1,5 +1,10 @@
 # ORCD-test second profile cycle: no validated new speedup — October 28, 2026
 
+Subsequent integration: the remaining profiling work was merged into devel at
+`714d7e6fc` and its branch deleted. See the
+[current merged-build qualification](orcd-test-devel-qualification-20261028.md).
+Deployment/unmerged statements below describe their historical test phases.
+
 K32 write cost, K38 writeback ordering, and reliable qualification tooling.
 **Copy optimization UNQUALIFIED and withdrawn; later slowdown remains OPEN.** Candidate
 `8c20f501dac94348d72f19a980bce4eb090d9dc6` remains in branch history but is
