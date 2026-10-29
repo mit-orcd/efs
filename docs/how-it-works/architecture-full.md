@@ -1613,7 +1613,7 @@ this document is the invariant they are measured against.
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
-source `5185bfcd3`; no merge/push. Attributed K35 fix passes native/index,
+source `5185bfcd3`; merged into devel (wave 32, `4e4b7ec75`). Attributed K35 fix passes native/index,
 ASan/UBSan/leak, TSan, the old-source negative control, four planned TCP/RDMA
 slow-COMMIT runs (22 exact files each), both degraded-fsync gates, RDMA
 transport, reclamation and POSIX (218 core / 68 peer). Full gate:
@@ -1640,14 +1640,14 @@ pruned; all seven failed roots and 8,698 failed regular files verified unchanged
 Own processes/mounts retired, other clusters untouched; no alpha release PASS.
 
 [AM — REPORT degraded-object bookkeeping: measured, no change](../status/am-report-degraded-batch-20261028.md):
-**MEASURED, NO CHANGE on branch `agent/devel-taskam` (`3fe865d98`), not merged.**
+**MEASURED, NO CHANGE on branch `agent/devel-taskam` (`3fe865d98`), merged into devel (wave 32).**
 Zero `g_dgobj_mu` acquisitions with an empty table at any concurrency; ~300 ns
 per flags/drop pair with entries, 0.0025 % of REPORT wall at 32 writers — two
 orders below the 5 % threshold on intel1 and node9901. Named gates PASS;
 test-all 546/1/12 with the one FAIL the pre-existing devel b6 slow defect.
 
 [AR — PUT retries and identical-object rewrites: measured, no change](../status/ar-put-retry-rewrites-20261028.md):
-**MEASURED, NO CHANGE on branch `agent/devel-taskar` (`9b5de147e`), not merged.**
+**MEASURED, NO CHANGE on branch `agent/devel-taskar` (`9b5de147e`), merged into devel (wave 32).**
 Zero EEXIST rewrites in the D4 load and both append-failover variants; the
 counter is validated by a forced lost PUT reply (one 64 KiB rewrite per node).
 Below the 1 % threshold; named gates PASS; test-all 546/1/12 with the one
@@ -1678,7 +1678,7 @@ eventfd kicks. Lost-wakeup, overflow, deadline and progress gates required;
 distinct from existing tasks, with no new K defect or measured gain claimed.
 
 [Stage 1 disk-I/O tasks AP–AR](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--disk-io-and-write-amplification-apar):
-**AR MEASURED, NO CHANGE on `agent/devel-taskar` (`9b5de147e`, not merged;
+**AR MEASURED, NO CHANGE on `agent/devel-taskar` (`9b5de147e`, merged into devel, wave 32;
 [evidence](../status/ar-put-retry-rewrites-20261028.md)); AP and AQ OPEN /
 implementation and measurements NOTRUN**, source reviewed at `b42015536`:
 separate segment payload/tail reads (AP), segment directory-barrier sharing (AQ), and
@@ -1692,7 +1692,7 @@ Existing read-round sharing, admission batches and permission checks explicitly
 retained; distinct from AB–AM and P3-A–P3-F. No new K defect or measured gain.
 
 [Stage 1 copies/allocation tasks AK–AM](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--copies-allocation-and-repeated-work-akam):
-**AM MEASURED, NO CHANGE on `agent/devel-taskam` (`3fe865d98`, not merged;
+**AM MEASURED, NO CHANGE on `agent/devel-taskam` (`3fe865d98`, merged into devel, wave 32;
 [evidence](../status/am-report-degraded-batch-20261028.md)); AK and AL OPEN /
 implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
 packed-fragment staging/double hashing (AK), unnecessary decode scratch (AL), and REPORT
@@ -1789,6 +1789,8 @@ full acceptance are separate states.
 | Earlier assignments, chronology and superseded captures | [Status archive](../status/archive/README.md), [project archive](../archive/README.md) |
 
 ### Recent evidence and remaining acceptance
+
+[Wave 32 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`4e4b7ec75`; gate at `4e4b7ec75`)**: **K55 FIXED** ([evidence](../status/k55-slow-commit-20261028.md)): `stripe_prove` joins the COMMIT workers only until a reserve slice (a quarter of the remaining budget, at most 5 s) before the 60 s deadline, so the required durable degraded mark can run while one slow COMMIT keeps its own deadline; B6 slow-mode fsync no longer returns EIO (it had failed deterministically since `199ad2afd`, 3/3 on devel `d62a753d9`); no storage RPC deadline is shortened and an expired sweep still retains its obligations and fails closed. Carries Task AI ([evidence](../status/ai-rdma-registry-lock-20261028.md)): measured, no change. Measured-no-change evidence, no product change: AG ([buffer pool lock](../status/ag-bufpool-lock-20261028.md)), AJ ([export acquire/release](../status/aj-export-reference-lock-20261028.md)), AH ([chunk-map lock](../status/ah-chunk-map-lock-20261028.md)), AP ([segment GET combined read](../status/ap-segment-read-combined-20261028.md)), AQ ([segment directory barriers](../status/aq-segment-dir-barriers-20261028.md)), AM ([REPORT degraded batch](../status/am-report-degraded-batch-20261028.md)), AR ([PUT retry rewrites](../status/ar-put-retry-rewrites-20261028.md)), AD ([counter contention](../status/ad-counter-contention-20261028.md), from `agent/devel-task-ad`; the duplicate `agent/devel-taskad` is not merged). Merge-time: K55 row = the fix branch's FIXED row over AJ's OPEN registration. intel1 `make test-all` (8 jobs) at `4e4b7ec75`: **547 / 0 FAIL / 12 NOTRUN** (host limits), 786 s, INCOMPLETE; B6 slow PASS. K register: 55 rows, 12 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN (K48, K53, K54).
 
 [Task AG](../status/ag-bufpool-lock-20261028.md): **PASS — measured, no change**, devel
 `9c4bfd171` on xorinox: the client buffer pool mutex `g_bp_mu` shows at most
