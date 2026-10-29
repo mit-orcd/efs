@@ -1,8 +1,7 @@
 # Project status — work queue and evidence
 
 [Task AI — RDMA registry lifetime lock](ai-rdma-registry-lock-20261028.md):
-**OPEN / measurements COMPLETE scoped; full code gate RUNNING**, no product
-locking change. User-authorized
+**COMPLETE scoped, measured no-change**, no product locking change. User-authorized
 fcstor015 `/data1/01` substitutes for busy node9901; existing clusters untouched.
 Real mlx5_0 transport and one-rank filesystem/IOR smoke PASS scoped, with
 checked cleanup. All 27 TCP/native RDMA/probe RDMA matrix cells and concurrent
@@ -10,9 +9,13 @@ teardown/churn diagnostics passed; acquisition fractions below the 5% trigger,
 so keep the current lifetime lock in this single-device scope. RDMA reclamation,
 218/218 core POSIX and peer/restart checks passed. Native IOR medians/spread
 are also on the K32 page; bounded geometry and cache limits do not close K32.
-The running full gate has retained B6 failures: slow-member fsync K55
-(new OPEN alpha blocker) and full-quota K53 recurrence; no green code gate
-or Task AI closure is claimed.
+Corrected full gate at `7d5e065bd`: **546/1 FAIL/4 NOTRUN**, 725 s; sole failure
+K55 independently reproduced on untouched base `486aa3a46`. Fixture transport
+environment/wiring fixes and real TSan checks pass; original **545/7 FAIL**
+gate remains retained. K55 is a new OPEN alpha blocker; K53's earlier quota
+failure is not waived. Sealed 520-file capture bundle, 1,091 passed targets
+pruned; all seven failed roots and 8,698 failed regular files verified unchanged.
+Own processes/mounts retired, other clusters untouched; no alpha release PASS.
 
 [Stage 1 cross-path due diligence AY–BB](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed

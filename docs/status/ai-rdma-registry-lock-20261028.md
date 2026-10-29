@@ -1,13 +1,16 @@
 # Task AI — RDMA registry lifetime lock, October 28, 2026
 
-**OPEN; measurements COMPLETE scoped, full code gate RUNNING; no product
-locking change.** Task AI in the
+**COMPLETE, scoped measured no-change; alpha qualification is not PASS.** Task AI in the
 [alpha checklist](alpha-1.0-2plus1-checklist.md) measures before choosing an
 optimization. Native real-RDMA transport smoke and one-rank filesystem/IOR
 smoke PASS scoped. All 27 matrix cells and the stream/churn measurements
 completed. The measured acquisition fraction stays below the 5% trigger;
 **keep the current lifetime lock for this single-device scope**. No throughput
-improvement from changing that lock has been demonstrated.
+improvement from changing that lock has been demonstrated. Corrected full gate:
+**546 commands, 1 FAIL (K55, independently reproduced on the untouched base),
+4 NOTRUN, 725 seconds; build 34 seconds, 7 overbudget.** The task sheet allows
+the base's same failure; it remains an OPEN alpha blocker, not a passing B6
+gate. No existing cluster was changed, and no merge or push was performed.
 
 ## Placement and source
 
@@ -25,6 +28,8 @@ node9901-only assignment. These are single-host hardware-RDMA measurements,
 not multi-host fabric qualification or a two-device scaling result. mlx5_0's
 link layer is Ethernet/RoCE, firmware `16.34.1002`, active MTU 1024. Do not
 describe this as multi-host InfiniBand qualification.
+All three logical members share this host/NVMe: no physical-node-loss or
+power-loss protection acceptance follows from this fixture.
 
 Branch `agent/devel-task-ai`, base `486aa3a46`. Exact native export and
 binaries: `d1bf8e2bd`, whose only changes from that base are measurement tools.
@@ -102,16 +107,18 @@ Every echo is checked and all connection/assembly ownership must return to
 zero. Its non-RDMA microbenchmark control uses **AF_UNIX socketpair byte
 streams**, despite the `tcp` dispatch label; it is not a TCP/IP benchmark.
 Only the filesystem matrix above supplies the actual TCP/IP IOR control.
-Its extra wake diagnostic reports **poll-return to first successful
-pending-ring publication**, excluding kernel wake-to-run and NIC-to-CQE delay.
+Its extra wake diagnostic reports **poll-return to the first completed,
+non-broken pending-ring dispatch**, including the eventfd handoff. The timestamp
+is after `pend_push` returns, not at its earlier head publication store. It
+excludes kernel wake-to-run, NIC-to-CQE and consumer-handler dispatch delay.
 No broader wake latency claim follows from that measurement.
 
 Real-RDMA `test_rdma_xprt`, all seven segmented modes, handoff/progress/fork
 tests, physical reclamation and POSIX over an RDMA mount passed. Core POSIX:
 218/218, no fail/skip/notrun. Peer checks, rejoin/restart reclamation and
 empty physical inventories also passed. The full `make test-all` summary is
-RUNNING. Its NOTRUN entries must be
-reported individually; exit zero alone is not proof of every live gate.
+complete with the base failure and four explicit host limits recorded below;
+exit zero alone is not proof of every live gate.
 
 Task criterion: investigate an optimization if 32-stream waiting exceeds 5%
 or a demonstrated end-to-end gain justifies it. Below threshold, measured
@@ -127,7 +134,7 @@ for each receive-poller record, across three repeats and four processes/cell.
 It includes clock/lock-call overhead and startup/background/shutdown intervals;
 it is not an exact production blocking-time or CPU-wait metric.
 
-| Streams | Matrix acquisition fraction, min–max | Validated CQEs/s, min–max | Mean hold, min–max |
+| Streams | Matrix acquisition fraction, min–max | Harvest lock acquisitions/s, min–max | Mean hold, min–max |
 | --- | --- | --- | --- |
 | 1 | 0.0037–0.0241% | 1,005–6,999 | 867–1,310 ns |
 | 8 | 0.0266–0.1396% | 6,982–39,104 | 893–1,612 ns |
@@ -137,7 +144,10 @@ The heavier same-process real-RDMA echo/churn diagnostic completed three
 repeats at each concurrency, 25,000 echoes/stream plus 32 connection cycles.
 Every cycle completed both endpoints' teardown while load was still active;
 all payloads matched and live connections/assemblies returned to zero.
-Each 32-stream run validated 3,200,512 CQEs, including protocol control frames.
+Each 32-stream run recorded 3,200,512 harvest lock acquisitions, including
+protocol control frames. This counts CQEs with an in-range registry index
+before checking generation/status; rejected stale completions would count too.
+It is not a NIC-wide completion or successfully published-CQE counter.
 
 | Streams | Registry-only acquisition fraction, three repeats | Native RDMA median echoes/s | Probe median echoes/s |
 | --- | --- | --- | --- |
@@ -146,7 +156,7 @@ Each 32-stream run validated 3,200,512 CQEs, including protocol control frames.
 | 32 | 2.8104–2.8448% | 243,538 | 228,319 |
 
 At 32 streams, mean acquisition interval is 30.7–31.3 ns, mean hold
-802–809 ns and validated completion rate 908,275–916,284/s. Instrumentation
+802–809 ns and harvest acquisition rate 908,275–916,284/s. Instrumentation
 reduces median component throughput about 6.25% there (about 10.13% at eight
 streams); it is not free. These are diagnostic measurements, not a claim of
 the native application's exact mutex-blocking percentage. Holding the lock
@@ -218,14 +228,22 @@ tested or established; multi-device partitioning remains unmeasured.
   policy for the copied production translation unit; new workload code retains
   `-Werror`. No completed matrix or measured failure was rerun or replaced.
 
-## Full code-gate findings (gate still running)
+## Full code-gate findings and corrected recheck
 
-The full gate has retained failures; it is **not PASS**. No `src/`, `include/`
+Initial full gate at `d1bf8e2bd`: **545 commands, 7 FAIL, 4 NOTRUN,
+977 seconds, 9 overbudget; build 17 seconds. Not PASS.** No `src/`, `include/`
 or Makefile content differs between the tested `d1bf8e2bd` and base
 `486aa3a46` (`git diff 486aa3a46 d1bf8e2bd -- src include Makefile` is empty).
 This rules out a Task AI product-code delta; it does not waive the failures
-or establish that every base run reproduces them. Independent base checks
-are pending after the full gate, without competing test workloads.
+or establish that every base run reproduces them. Independent serial base
+checks ran afterwards, without another EFS/test workload. Controller
+`7028c56e4` compared 213 product/Make/test/helper inputs byte-for-byte before
+building untouched `486aa3a46`; combined input hash
+`df5f1f37205325476848377022dc902d878d51e0201b68bcd7a28b04efcf63ba`.
+The slow case reproduced F0 EIO at 60.04 s (151.69 s case); the full-quota
+case passed once (47.22 s). That is not an eight-job base full-gate rerun or
+a fix/waiver for intermittent K53. Base failed fixture:
+`/data1/01/efs-taskAI-20261028/base-tmp/efs-b6-hg8zq5fj`.
 
 - **K55, slow-member fsync availability, OPEN:**
   `EFS_B6_MODES=slow python3 tests/test_b6_unavailable.py`, case 481,
@@ -252,22 +270,110 @@ are pending after the full gate, without competing test workloads.
   This matches the already-open full-quota admission finding's signature;
   the exact cause remains unproven. The unchanged oracle still fails.
 
+Other initial failures and corrections:
+
+| Case | Classification | Correction / current evidence |
+| --- | --- | --- |
+| 503, K22 snapshot import | Test transport environment: its cluster/FUSE explicitly used TCP, but four `efs-bench` loaders inherited parent strict RDMA and silently failed initialization; insufficient metadata load, wrapper timeout at 900 s | `18eb32bd4` passes `env=env` to that subprocess. Four required snapshot advances and all deadlines unchanged; corrected full-gate case 504 PASS, 275.8 s |
+| 507, W166 authority | Same missing environment on its `efs-bench` L0-filling subprocess; raw output says segmented RDMA setup failed against its intentionally TCP fixture | `18eb32bd4` passes the fixture environment; assertions/budgets unchanged; corrected case 508 PASS, 10.3 s |
+| 533, session latch TSan; 543, apply-ring TSan | Host dependency failure: GCC 11 linker script names absent `/usr/lib64/libtsan.so.0.0.0`; package not installed | Matching signed runtime privately extracted; actual positive/negative gates PASS, corrected cases 534/544, 0.7/1.2 s, not merely startup acceptance |
+| 540, make recipe | Task AI's new parser test was not wired | `18eb32bd4` adds it to the fast suite; local recipe/parser checks PASS. No slow-test budget added. `7d5e065bd` labels its completed parser-only scope without a misleading missing-hardware marker |
+
+Matching dependency `libtsan-11.5.0-14.el9.x86_64.rpm`, obtained using the
+host's configured repositories and private DNF cache/state/log paths;
+`rpmkeys --checksig`: digests/signatures OK. SHA-256
+`4e407df94292ad96486d01fd1b0e272ecd599ed3dfbef959fe61a2eb4032f13a`.
+It is extracted under `deps/tsan-root`, not installed system-wide. The
+private `gcc-private-tsan` wrapper executes `/usr/bin/gcc` with a `-B` prefix
+to that library directory; the private unversioned link names this matching
+runtime. Runtime lookup uses that directory in this gate's `LD_LIBRARY_PATH`.
+No system package, library, ASLR setting or other agent's environment changed.
+
+The timed-out K22 test left one disconnected mount, kernel identity `0:61`,
+under case 503. After checking its exact path/uid and absence of live owned
+EFS processes, **normal** `fusermount3 -u` returned zero and mount absence
+was verified; no lazy detach, force-discard or store modification.
+Receipt `k22-timeout-unmount.json` is retained. A first queued base check
+refused an incomplete source transfer before any build/test; that error is
+retained. The complete export then passed the 213-input comparison and ran
+once. The corrected gate requires `EXPORT_COMPLETE` before starting.
+
+Corrected full code export **`7d5e065bd`**, controller `b31419c5e`, output
+`recheck-7d5e065bd`: complete after the base checks, **546/1 FAIL/4 NOTRUN**.
+The one failure is K55 again: F0 EIO at 60.01 s; failed fixture
+`/data1/01/efs-taskAI-20261028/recheck-tmp/case-482/efs-b6-hdcpfewb`.
+K53's full-quota command passed on this attempt, which does not waive its
+earlier failure. Product `src/` and
+`include/` still have zero diff from the measured/native source; only test
+wiring and the two fixture environment corrections affect the gate recipe.
+This is not another performance attempt. All original failures remain intact.
+
+The four host limits are: THP negative control not materialized (small-page
+proof ran); external cluster stop/remount scripts absent; RDMA Memcheck's
+`valgrind/memcheck.h` absent; generic sanitizer-gate host attach refusal.
+The separate TSan latch and ring checks did run successfully. Overbudget
+commands remain reported (K35 degraded fsync, K43 coordinator kill, Raft ACK
+window, K22 leader admission and three D39 model shards); no budget was raised.
+Current Linux collector `--native` also PASS: eight joined threads, 8,000
+paired acquisitions and complete counters, in addition to its parser checks.
+
 ## Raw evidence and remaining work
 
 Host raw build/launcher logs and binary manifests:
 `fcstor015:/home/erbmi1/efs-artifacts/taskAI-20261028/fcstor015/`.
-Private source, diagnostic trees, closed smoke/matrix and running code gate:
-follow-up: `fcstor015:/data1/01/efs-taskAI-20261028/`.
-`matrix-d433ab689/state.json` and `followup-3/state.json` are the current
-stage records. Raw output is outside Git; failed evidence stays on the host.
+Private retained diagnostic outputs and open-finding builds:
+`fcstor015:/data1/01/efs-taskAI-20261028/`.
+`matrix-d433ab689/state.json`, `base-check-complete-export/state.json` and
+`recheck-7d5e065bd/state.json` are the phase records. The initial failing
+`followup-3/state.json` remains unchanged. Raw output is outside Git; failed
+evidence stays on the host.
 Closed non-store measurement manifest: `closed-measurements-manifest-v2.json`
 in the raw host directory, 412 files,
 SHA-256 `3adb47d1e64f89e299554fbcfc646f75928512deed21513667d5304c7b723f72`.
 The original manifest is retained unchanged; v2 explicitly excludes 81 runtime
-Raft logs accidentally matched by the original broad `*.log` glob. Final gate
-hashes and pruning are owed at closure; no absent hash or capture is counted
-as verified.
+Raft logs accidentally matched by the original broad `*.log` glob.
 
-Still owed: final full code-gate/base classifications, final evidence manifest
-and checked own-fixture cleanup. K32 controls are cross-referenced on its page.
-The AI checkbox remains open. No change to an existing cluster, merge or push.
+Final retained bundle: the same raw directory's **`sealed-final/`**, 520 copied
+closed records/captures, component executables and dependency/provenance files.
+Every copy was checked against its original SHA-256 and fsynced, with metadata
+and directory entries, **before** any passed fixture was removed.
+
+| Retained record | SHA-256 |
+| --- | --- |
+| `manifest.json` | `f65ef820843becf200ab35f647af919bfe26c48c1cc626b54fdb24f354257a6c` |
+| `failed-fixture-inventory.json` | `dfcf428123f87a9bc919a25efc9e175f2fa4ba5a26ff11463b5d37d1ebb185ff` |
+| `closure-receipts.json` | `524d6f0b35e0e577b69728a5e448ba9bc4f012f592b6020000bb5507dbf7aea8` |
+| `cleanup-complete.json` | `9c09105987c7f0eeabd7ad03f06f37469d8f3f592613a8e5b0a2acf4ebfdaefc` |
+
+Additional raw `open-build-fingerprints.json` records 15 retained product/fault
+binary hashes at declared builds `d1bf8e2bd`, `486aa3a46` and `7d5e065bd`,
+SHA-256 `0e5d5cd670ff9d1fd3c31b034810f0bb3e013ef48c2021b89ee6b453c9e688e5`.
+The retained native efsd, FUSE, management and transport-test binaries still
+match all four original pre-measurement hashes.
+
+Closure tool `498c9b18a`, `tests/measure/rdma_registry_close.py`: inspect the
+sealed `prune-plan.json`, then its `prune` subcommand uses only
+`~/bin/edelete --force --delete` on explicitly passed, owned, unmounted targets.
+It refuses observed foreign EFS/test work. **1,091 targets pruned**: 1,002
+passed command temporary directories, 81 matrix node stores, three passed
+smoke node stores, two passed GC roots, the diagnostic probe build and two
+private DNF cache/state directories. No live export was mutated for a new run.
+
+**All seven failed roots remain on fcstor015** (exact roots in the inventory
+and prune plan). All 8,698 failed regular files were rehashed before and after
+pruning, and their inventory/modes/owners/link metadata compared equal. The
+native, untouched-base and corrected-gate builds are deliberately retained
+for OPEN K55/K53 investigation and original failed-gate review. This is the
+remaining bulk-retention exception; it is not a claim that the failures are
+fixed. Passed store replay is forfeited after pruning; recreate those stores
+from the scripts and exact source instead. Logs/results/counters are retained.
+`PRUNED.txt` and the complete deletion receipts record every removed target.
+Final checks found no owned EFS processes or mounts and no observed foreign
+EFS/test workload; this is not an exclusive host lease. Other clusters and
+system libraries were untouched.
+
+Task AI is complete under its measured-no-change/base-failure allowance.
+Kernel scheduling/NIC-arrival latency, multiple-HCA contention, multi-host
+fabric performance, the full K32 IOR geometry and alpha release acceptance
+remain outside these measurements. **K55 still needs its own fix and gate;
+K53 remains open.** K32 controls are cross-referenced on its page.

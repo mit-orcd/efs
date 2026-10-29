@@ -16,7 +16,10 @@ unchanged from `486aa3a46`), three private loopback daemons, 16 GiB/node,
 O_DIRECT, eight writers/node, one FUSE mount, default background work.
 Existing clusters were untouched. Three repeats at 1/8/32 local MPI ranks,
 all final rewrite bytes, IOR checked reads and clean shutdowns passed; sampled
-foreign EFS/test work was empty. The AI full code gate is still RUNNING.
+foreign EFS/test work was empty. AI's corrected full code gate is **546/1
+FAIL/4 NOTRUN** (725 s), the sole failure independently reproduced on the
+untouched base and tracked as K55; no release PASS. Captures are sealed,
+passed fixtures pruned, failed evidence retained and own processes/mounts retired.
 
 These are bounded controls, **not the original K32 real-cluster IOR acceptance
 gate**, which remains NOTRUN. Easy is only 64 MiB/rank with 1 MiB transfers;

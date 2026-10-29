@@ -17,8 +17,9 @@ ANCHOR = 'static pthread_mutex_t g_reg_lock = PTHREAD_MUTEX_INITIALIZER;'
 FUNCTION = re.compile(r'^[A-Za-z_][\w \t\*]*?\b([A-Za-z_]\w*)\s*\([^;{}]*?\)\s*\{', re.M)
 EXPECTED = {'harvest_recv_wcs', 'conn_create', 'efs_rdma_conn_destroy', 'efs_rdma_totals'}
 
-# Separate follow-up diagnostic: poll() return to the first successful pending
-# ring publication. Excludes kernel wake-to-run and NIC-to-CQE delay. This is
+# Separate follow-up diagnostic: poll() return to the first completed,
+# non-broken pend_push (including eventfd handoff, after head publication).
+# Excludes kernel wake-to-run, NIC-to-CQE and consumer dispatch delay. This is
 # not enabled in formal runs or in the initial registry-only diagnostic build.
 WAKE_HEADER = r'''
 static __thread uint64_t ai_channel_return_ns;
