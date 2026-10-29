@@ -1612,6 +1612,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+on private fcstor015 fixtures, branch `agent/devel-k55`, source `5185bfcd3`.
+Reuses the attributed K35 fix; native/index, ASan/UBSan/leak, TSan and old-source
+negative control passed. First TCP and RDMA slow-COMMIT cases pass; planned
+repeats and broader live/full gates are pending. Original Task AI failures stay
+retained unchanged; K55 is not closed, K53/K54 are not waived.
+
+[Task AI — RDMA registry lifetime lock](../status/ai-rdma-registry-lock-20261028.md):
 **COMPLETE scoped, measured no-change**, no product locking change. User-authorized
 fcstor015 `/data1/01` substitutes for busy node9901; existing clusters untouched.
 Real mlx5_0 transport and one-rank filesystem/IOR smoke PASS scoped, with
