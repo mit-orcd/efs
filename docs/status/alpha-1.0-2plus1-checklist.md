@@ -863,7 +863,7 @@ against their callers, wait predicates and source bodies. These establish work
 that occurs, not measured scheduler overhead or a correctness defect. Existing
 failures, K counts and acceptance verdicts are unchanged.
 
-- [ ] **AS — Demand-read capacity: replace repeated timed allocation attempts with bounded notification.**
+- [x] **AS — Demand-read capacity: replace repeated timed allocation attempts with bounded notification.**
   `src/client/read.c::demand_read_alloc` first tries allocation and trims the
   read cache, then retries allocation with 1 ms sleeps for the first 100 failed
   loop attempts and 10 ms thereafter. It stops at the inherited RPC deadline,
@@ -880,9 +880,14 @@ failures, K counts and acceptance verdicts are unchanged.
   readers, exhausted writers, thread exit and no capacity return. Measure failed
   attempts, timed wakeups, context switches and release-to-read latency. Separate
   this wait policy from AG's allocator critical section and AL's scratch sizing.
+  **Measured 2026-10-29, no change** (`docs/status/as-demand-read-wait-20261028.md`):
+  the wait loop never engaged — zero first-failures in ~5.1M demand allocations
+  across 10 runs (32 readers over a 2 GiB working set with 0/8/32 saturating
+  writers, plus a clamped 32 MiB/tier budget); there is no wake-up cost to
+  remove, and the retry ladder stays as the pathological-case safety net.
 - [x] **AT — PUT-window completion: wake affected predicates instead of every waiter.**
   **MEASURED, NO CHANGE (record and stop) on branch `agent/devel-taskat`
-  (`dfd5fd191`, measurement assets only), not merged** (Oct 29,
+  (`dfd5fd191`, measurement assets only), merged into devel (wave 36)** (Oct 29,
   [evidence](at-put-window-wakeups-20261028.md)): 3.5/17.9/84.6 wakes per
   satisfied waiter at 1/8/32 independent-file writers, zero deadline
   timeouts. Wait durations track PUT completion time (2–8 ms at 1 writer,

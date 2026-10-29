@@ -1856,6 +1856,13 @@ new in-place erasure aliasing test for every missing-fragment position; TSan
 ASan-built efs-fuse refuses to start ("cannot establish allocator policy"),
 identical on clean and fixed trees — needs an owner (K row suggested).
 
+[Task AS](../status/as-demand-read-wait-20261028.md): **PASS — measured, no change**,
+devel `9c4bfd171` on xorinox: the `demand_read_alloc` wait loop never engaged
+in ~5.1M demand allocations over 10 runs (32 readers above the client budget
+with 0/8/32 saturating writers, plus a clamped 32 MiB/tier budget) — zero
+first-failures, sleeps or waits, so there is no notification cost to remove.
+AS checkbox ticked.
+
 [ORCD-test merged devel qualification](../status/orcd-test-devel-qualification-20261028.md):
 **FAIL overall**, deployed `714d7e6fc`; profiling branch merged and deleted.
 Serial and seven-client POSIX, restart persistence, both expiry runs and all
