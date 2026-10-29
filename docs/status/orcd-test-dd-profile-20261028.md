@@ -11,8 +11,10 @@ on the parent; the probe-inventory omission has a passing focused correction;
 the full-quota assertion remains an unresolved incident. No release PASS.
 
 Branch `agent/orcd-dd-profile-20261028`, from devel `9e4d66a8c`. Reproducer and
-sampler `f5b782726`; product fix **`3769f44bb`**. Later changes on this branch
-are tests, inventory/evidence and the regenerated navigation graph. No merge
+sampler `f5b782726`; product fix **`3769f44bb`**. The later
+[second profiling cycle](orcd-test-dd-round2-20261028.md) withdraws a
+writeback-copy experiment and retains two harness fixes; this report describes
+only the first cycle. No merge
 or push. The cluster is intentionally left on the fixed product snapshot.
 
 ## Environment and source control
@@ -225,13 +227,17 @@ quota store remains at
 `open-quota/` retains its archive, per-file hashes and archive-byte verification.
 It is kept for the OPEN quota incident. Exact profiled executables are copied
 and byte-compared under `symbols/HOST/REVISION/`; source backups remain as
-open performance-analysis dependencies. No fixtures or build trees were
-pruned: automatic approval review rejected the broad cleanup/upload action,
-so those remain temporarily alongside the evidence. No controller-directory
-upload or remote deletion was performed by that rejected action. Final
-readiness, all eleven installed identities and seven mounts are checked;
-the fixed cluster stays running. The final manifest digest is recorded below. No raw run
-artifact is committed. No production-mode or release-completion claim.
+open performance-analysis dependencies. After the user explicitly approved
+scoped cleanup, eight passed dd payloads, the passed POSIX fixture and passed
+B6 scratch paths were removed. Every original failed fixture, the full failing
+regression tree, invalid attempts, raw captures, logs and symbol dependencies
+remain. No controller-directory upload was performed. `PRUNED.txt` and
+`cleanup-approved.json` record exact paths; the original evidence manifest
+passed again both before and after deletion. `CLEANUP.sha256` has digest
+`784ae76fefe2be8bc6baaa46d8a8ec9bd26a8917ab7c3630c7e08628f147763d`.
+Final readiness, all eleven installed identities and seven mounts were checked;
+the fixed cluster stayed running. The final original manifest digest is below.
+No raw run artifact is committed. No production-mode or release-completion claim.
 
 
 Evidence seal: `SHA256SUMS` covers 360 retained files; its SHA-256 is
