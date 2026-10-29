@@ -61,13 +61,41 @@ def evidence_files(root):
                 yield p
 
 
+def sync_seal(out):
+    manifest=json.loads((out/'manifest.json').read_text())
+    directories={out}
+    for row in manifest:
+        p=Path(row['retained'])
+        assert str(p).startswith(str(out)+'/') and not p.is_symlink() and digest(p)==row['sha256']
+        with p.open('rb') as f:os.fsync(f.fileno())
+        directories.update(p.parents)
+    names=('manifest.json','failed-fixture-inventory.json','prune-plan.json')
+    for name in names:
+        with (out/name).open('rb') as f:os.fsync(f.fileno())
+    for p in sorted((p for p in directories if p==out or out in p.parents),key=lambda p:len(p.parts),reverse=True):
+        fd=os.open(p,os.O_RDONLY|os.O_DIRECTORY)
+        try:os.fsync(fd)
+        finally:os.close(fd)
+    receipt=dict(files_verified_and_synced=len(manifest),
+                 metadata_sha256={name:digest(out/name) for name in names})
+    with (out/'seal-complete.json').open('x') as f:
+        json.dump(receipt,f,indent=2);f.write('\n');f.flush();os.fsync(f.fileno())
+    fd=os.open(out,os.O_RDONLY|os.O_DIRECTORY)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('mode',choices=('seal','prune'));ap.add_argument('private',type=Path)
+    ap.add_argument('mode',choices=('seal','sync','prune'));ap.add_argument('private',type=Path)
     ap.add_argument('retained',type=Path);a=ap.parse_args();root=a.private.resolve();out=a.retained.resolve()
     assert root.name=='efs-taskAI-20261028' and root.stat().st_uid==os.getuid()
     quiet(root)
+    if a.mode=='sync':
+        sync_seal(out);return
     if a.mode=='prune':
+        seal=json.loads((out/'seal-complete.json').read_text())
+        assert all(digest(out/name)==h for name,h in seal['metadata_sha256'].items())
         plan=json.loads((out/'prune-plan.json').read_text())
         assert plan['private']==str(root)
         before=json.loads((out/'failed-fixture-inventory.json').read_text())
@@ -153,6 +181,7 @@ def main():
     (out/'failed-fixture-inventory.json').write_text(json.dumps(snap,indent=2)+'\n')
     (out/'prune-plan.json').write_text(json.dumps(dict(private=str(root),targets=list(map(str,sorted(set(targets)))),
         kept_failed_roots=list(map(str,failed)),kept_builds_for_open_findings=['native','base-486aa3a46','gate-7d5e065bd']),indent=2)+'\n')
+    sync_seal(out)
     print(json.dumps(dict(retained_files=len(manifest),failed_roots=len(failed),proposed_deletions=len(set(targets)),
                          manifest_sha256=digest(out/'manifest.json'))))
 
