@@ -50,7 +50,7 @@ FAIL pre-existing on devel (b6 slow-mode fsync, write path). TCP client CPU
 −26…−34 % on cold packed reads.
 
 [AT — PUT-window completion wake-ups: measured, no change](at-put-window-wakeups-20261028.md):
-**MEASURED, NO CHANGE on branch `agent/devel-taskat` (`dfd5fd191`), not merged.**
+**MEASURED, NO CHANGE on branch `agent/devel-taskat` (`dfd5fd191`), merged into devel (wave 36).**
 ~85 wakes per satisfied waiter at 32 writers but zero deadline timeouts; wait
 durations track PUT completion, not wake latency, and broadcast-wake CPU is
 ~0.05 % of the host — no end-to-end gain from per-inode wake ownership.
@@ -75,7 +75,7 @@ and loaded hardlink-alias scans. Scope and fixed-size fast paths distinguished;
 no new K defect or measured slowdown claimed. Existing tasks remain separate.
 
 [Stage 1 wakeup/polling tasks AS–AU](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--wakeups-and-polling-asau):
-**AT MEASURED, NO CHANGE on `agent/devel-taskat` (`dfd5fd191`, not merged;
+**AT MEASURED, NO CHANGE on `agent/devel-taskat` (`dfd5fd191`, merged into devel, wave 36;
 [evidence](at-put-window-wakeups-20261028.md)); AS and AU OPEN /
 implementation and measurements NOTRUN**, source reviewed at `7dc73fb68`:
 demand-read allocation polling (AS), broad PUT-window wakeups (AT), and repeated Raft
@@ -197,6 +197,8 @@ full acceptance are separate states.
 | Earlier assignments, chronology and superseded captures | [Status archive](archive/README.md), [project archive](../archive/README.md) |
 
 ## Recent evidence and remaining acceptance
+
+[Wave 36 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`4fdf8ddd2`; local checks only, no new full gate: docs, measurement scripts and one ASan-only line)**: **K56 FIXED** ([evidence](k56-asan-fuse-allocator-20261029.md)): the ASan-built `efs-fuse` no longer refuses to start (`cannot establish allocator policy`; Task I's `mallopt` policy cannot succeed under ASan's allocator), skipped under `__SANITIZE_ADDRESS__` and still fatal in every other glibc build; `make asan-check` 49 run / 5 failed → 49 run / 0 failed on xorinox. Measured, no change: AT ([PUT-window wake-ups](at-put-window-wakeups-20261028.md)), AS ([demand-read wait loop](as-demand-read-wait-20261028.md), never engaged in about 5.1M allocations), AU ([Raft pump kicks](au-pump-kicks-20261028.md); its gate recorded a K48 recurrence, `test_w130_dir_fault.py` partial listing 95 != 96, on an untouched base, which keeps K48 OPEN). Also this wave: the wave 32 merges had dropped the checklist text of AG, AH, AP, AQ and AR (a merge helper discarded the non-table lines of conflicting hunks); the entries were rebuilt from their branches in `6b3b3bad5`. Task list: AB and AE (qualification incomplete), AN and AO (in progress) are the Stage 1 items still open with evidence on branches; AV, AW, AX, AY–BB and P3-A–F have no commits yet.
 
 [Wave 35 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`5367beeca`; gate at `2195fd863`)**: `agent/devel-k35-slow-fsync` ([K35](k35-slow-fsync-20261029.md), [FIN accounting](fin-tcp-accounting-20261029.md), [FIN gate closure](fin-gate-notrun-closure-20261029.md)): strict TCP accounting (`tcp_counts.h`, `rdma.c`, `test_tcp_counts`: post-setup TCP counters, a one-byte violation control that still detects payload), the closure of thirteen gate prerequisites on isolated fcstor014 (546 / 0 FAIL / 0 NOTRUN with real Valgrind, sanitizers and hardware RDMA), and Task AF ([evidence](af-status-snapshot-20261028.md)): measured, no product change. Its `data_commit.c` slow-COMMIT change is identical to K55's already on devel, so that file is unchanged by the merge. Merge-time: both sides added a test entry in the same Makefile spot (kept both); `test_sanitizer_gate.py` differed only in a printed message (kept wave 34's). intel1 `make test-all` (8 jobs) at `2195fd863` (wave 34 plus K35): **552 / 0 FAIL / 11 NOTRUN** (host limits), 870 s, INCOMPLETE. Not claimed: the FIN branch's zero-NOTRUN gate needs fcstor014's Valgrind and sanitizer attach, which intel1 lacks.
 
