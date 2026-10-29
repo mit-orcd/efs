@@ -1612,11 +1612,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-on private fcstor015 fixtures, branch `agent/devel-k55`, source `5185bfcd3`.
-Reuses the attributed K35 fix; native/index, ASan/UBSan/leak, TSan and old-source
-negative control passed. First TCP and RDMA slow-COMMIT cases pass; planned
-repeats and broader live/full gates are pending. Original Task AI failures stay
-retained unchanged; K55 is not closed, K53/K54 are not waived.
+`agent/devel-k55`, independent focused qualification PASS** on fcstor015,
+source `5185bfcd3`; no merge/push. Attributed K35 fix passes native/index,
+ASan/UBSan/leak, TSan, the old-source negative control, four planned TCP/RDMA
+slow-COMMIT runs (22 exact files each), both degraded-fsync gates, RDMA
+transport, reclamation and POSIX (218 core / 68 peer). Full gate:
+**546 commands / 0 FAIL / 4 host-limited NOTRUN**, INCOMPLETE as a blanket gate.
+165-file capture sealed and verified; all original failures and three new K54
+unclean-unmount observations/fixtures retained on fcstor015. K53/K54 remain open.
 
 [Task AI — RDMA registry lifetime lock](../status/ai-rdma-registry-lock-20261028.md):
 **COMPLETE scoped, measured no-change**, no product locking change. User-authorized
@@ -1630,8 +1633,9 @@ are also on the K32 page; bounded geometry and cache limits do not close K32.
 Corrected full gate at `7d5e065bd`: **546/1 FAIL/4 NOTRUN**, 725 s; sole failure
 K55 independently reproduced on untouched base `486aa3a46`. Fixture transport
 environment/wiring fixes and real TSan checks pass; original **545/7 FAIL**
-gate remains retained. K55 is a new OPEN alpha blocker; K53's earlier quota
-failure is not waived. Sealed 520-file capture bundle, 1,091 passed targets
+gate remains retained. K55's original failure remains retained; its subsequent
+branch fix and independent qualification are linked above, pending integration. K53's earlier
+quota failure is not waived. Sealed 520-file capture bundle, 1,091 passed targets
 pruned; all seven failed roots and 8,698 failed regular files verified unchanged.
 Own processes/mounts retired, other clusters untouched; no alpha release PASS.
 

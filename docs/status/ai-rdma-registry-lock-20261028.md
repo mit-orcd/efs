@@ -12,6 +12,10 @@ improvement from changing that lock has been demonstrated. Corrected full gate:
 the base's same failure; it remains an OPEN alpha blocker, not a passing B6
 gate. No existing cluster was changed, and no merge or push was performed.
 
+Subsequent K55 work is independently qualified on its own branch: see
+[the fix and retained results](k55-slow-commit-20261028.md). That does not
+change this page's historical failed gate or waive K53/K54.
+
 ## Placement and source
 
 The user authorized trying fstor007, node9900 and fcstor007–015, with
