@@ -707,6 +707,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_txn
 	./tests/test_txn_resolve_faults
 	python3 tests/test_txn_decision_sweep.py
+	python3 tests/test_txn_recovery_priority.py
 	python3 tests/test_txn_apply_exact.py
 	./tests/test_shared_primitives
 	python3 tests/test_txn_apply_retry.py
