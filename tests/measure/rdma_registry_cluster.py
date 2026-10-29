@@ -68,6 +68,12 @@ def run(cmd, log, env, timeout=600):
     return result
 
 
+def cpu_seconds(pid):
+    # comm may contain spaces; fields after its final ')' start at state (3).
+    fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
+    return (int(fields[11])+int(fields[12]))/os.sysconf('SC_CLK_TCK')
+
+
 def fixed_rewrites(mount, streams, seconds):
     """20 fsynced 4-KiB rewrites/s/stream, 8 fixed files each; no timing retries."""
     root = mount / 'fixed-rewrites'; root.mkdir()
@@ -121,12 +127,17 @@ def cell(args, k, out, label, streams, repeat, source, transport):
     observer = None
     try:
         for i in (1,2,3):
-            c.start(i, join=None if i==1 else 1, quota='16G', args=('--writers','8','--direct-io'))
+            # D42 removed the I/O selector: fragment I/O is always O_DIRECT.
+            c.start(i, join=None if i==1 else 1, quota='16G', args=('--writers','8'))
         for i in (1,2,3):
             c.wait_log(i, 'raft-host: formed: 3 members', timeout=90)
         result['members'] = c.wait_members([1,2,3], 3)
         mount = k.Mount(c, 1, 'mnt')
         (mount.path/'stat-target').write_bytes(b'AI\n')
+        pids = {str(i):p.pid for i,p in c.procs.items()}
+        pids['client'] = mount.p.pid
+        cpu_before = {i:cpu_seconds(pid) for i,pid in pids.items()}
+        work_start = time.monotonic()
         observer = threading.Thread(target=observe); observer.start()
         result['rewrites'] = fixed_rewrites(mount.path, streams, 5 if args.smoke else 30)
         result['ior'] = []
@@ -142,6 +153,8 @@ def cell(args, k, out, label, streams, repeat, source, transport):
                 row = run(cmd, path/f'ior-{geometry}-{mode}.log', env, timeout=1800)
                 row.update(geometry=geometry, mode=mode); result['ior'].append(row)
         observer_stop.set(); observer.join()
+        result['work_elapsed_s'] = time.monotonic()-work_start
+        result['cpu_seconds'] = {i:cpu_seconds(pid)-cpu_before[i] for i,pid in pids.items()}
         result.update(stat_syscall_s=samples, observed_foreign_work=overlaps,
                       stat_limit='FUSE attribute cache applies; syscall latency, not per-RPC proof')
         if overlaps:
