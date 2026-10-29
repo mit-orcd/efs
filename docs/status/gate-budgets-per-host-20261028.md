@@ -1,15 +1,14 @@
 # Task T — gate budgets across supported hosts
 
-**INCOMPLETE / qualifying the authorized publication-fence repair.** Three
-clean intel1 pools supply K43 measurements (54.9/54.9/55.0 s; median 54.9 s).
-The fresh intel2 `6e6b95b26` gate failed K43 with fsync EIO after coordinator
-SIGKILL; no timings from that gate enter the fit. Its six-node fixture and
-logs remain on intel2. The user authorized expanding measurement-only Task T
-to integrate and qualify Task H's `214c541aa` repair: core integration
-`f99cfc72e`, self-contained instrumented owner regression `cb363ba8a`.
-No fitted table or confirming gate is accepted; target and slots stay fixed.
-Nuc/intel2 currently have other qualification work; replacement pools wait
-for a clean handoff. Nothing is pushed or merged into devel.
+**INCOMPLETE / fitting cohorts pending.** Final correctness candidate
+`547d9e1d0` contains the B6 proof-headroom repair and preserves a full,
+on-time three-fragment proof when a speculative degraded mark fails.
+Intel1 completed three clean eight-job gates on frozen `458f75e21`;
+Xorinox also completed three clean458 gates; fstor007's `547d9e1d0`
+series is running.
+Nuc and AMD completed failed gates and are excluded from calibration.
+All failures remain open evidence. No fitted budget, slot or D44 target
+change has been made. Task T is not merged or pushed.
 
 ## Authorized host substitution and current-source refresh
 
@@ -25,12 +24,13 @@ Ubuntu/ext4 with FUSE3.18.2; xorinox is Ryzen9 7940HS (8 cores/16 threads),
 RHEL-family/xfs with FUSE3.16.2. Both calibration pools stay at eight jobs.
 No CPU-count equivalence or results for unmeasured hosts are inferred.
 
-The next cohorts use AMD and xorinox in place of nuc/intel2, with three clean
-serial gates each and one confirming gate each after fitting. The three
-accepted historical intel1 K43 observations remain required evidence, with
-new budget commands absent from that older source explicitly unmeasured
-there. Nuc/intel2 full calibration remains unmeasured; a fitted table on the
-substitutes does not claim timings or zero overruns on those hosts.
+The selected calibration hosts are now intel1, xorinox and fstor007,
+under the user's explicit substitution authorization. Nuc and AMD failed
+on the refreshed source; neither supplies successful-cost observations.
+Intel2 remains occupied by other work. The new intel1 cohort covers all
+92 budget rows, including the three newer tests and K43, so historical
+intel1 observations are not silently pooled with its fresh measurements.
+Substitute-host success cannot qualify nuc/AMD or erase their failures.
 
 Devel moved 147 commits beyond the prior freeze. Task T now merges exact
 `486aa3a46`, including upstream publication-fence/deadline/index repairs,
@@ -42,6 +42,182 @@ helper call. Runner regressions retain both exclusive scheduling and
 external-TMPDIR cases. The current recipe has 92 budget rows and passes its
 static model (1533 s/1650 s margin); D44 target1100s is unchanged.
 Old-source scoped passes above/below do not qualify the refreshed source.
+
+## Current-source failures, repair and replacement cohorts
+
+Source `4e088356021e7fdbaf573fb94603d0f0d34439e8` is Task T's resolved
+merge of devel486aa3a46. Its product files match that devel snapshot exactly;
+Task T keeps measurement tools, source-bound owner checks and fixture
+retention. Archive SHA-256:
+`3524c5a12b9362ce21c5a3de573a115c104ad00cbbee2dec3e9cce10085a6348`.
+
+| Host / attempt | Result | Disposition |
+| --- | --- | --- |
+| xorinox /4e0883560 calibration6 | Guard recorded Task AF starting after preflight; Task T interrupted | Rejected;17-file manifest verified; repeated ownership scan0 processes/0 mounts; other task untouched |
+| AMD /4e0883560 calibration6 | 546 commands,2 FAIL,3 NOTRUN,735s,8 OVERBUDGET,build23s | Rejected; GVFS reopening a test mount caused clean-unmount refusal; B6 slow F0 fsync EIO at60.0s |
+| fstor007 /4e0883560 calibration7 | 546 commands,1 FAIL,4 NOTRUN,787s,8 OVERBUDGET,build22s | Rejected; same B6 slow F0 fsync EIO60.0s; no contamination marker |
+| fstor007 /458f75e21 calibration8 | Guard refused before run1 because another campaign began | No test or timing collected; prerequisites/source staged only |
+| intel1 /458f75e21 calibration8 | Three gates:792/988/818s;546 commands each,0 FAIL,12 NOTRUN;4/5/6 OVERBUDGET | Accepted timing observations; final547 confirmation still owed |
+| AMD /458f75e21 calibration8 | 546 commands,1 FAIL,3 NOTRUN,825s,9 OVERBUDGET | Rejected: recurring GVFS busy-unmount refusal; no unchanged retry |
+| nuc /458f75e21 calibration9 | 546 commands,5 FAIL,12 NOTRUN,1276s,34 OVERBUDGET | Rejected; stopped before run2; failures detailed below |
+| xorinox /458f75e21 calibration9 | Three gates954/988/1001s;546 commands each,0 FAIL,11 NOTRUN;14/14/15 OVERBUDGET | Accepted timing observations; final547 confirmation still owed |
+| fstor007 /547d9e1d0 calibration10 | First gate805s;546 commands,0 FAIL,4 NOTRUN,7 OVERBUDGET | Second gate running; cohort not yet complete |
+
+At the user's direction **no message was sent to Task AF**. The xorinox
+interruption stopped its spawning controller first, then repeatedly scanned
+and drained only Task T's root-owned processes; no other task was signalled.
+The interrupted root stays for the open overlap investigation. Nuc later
+became genuinely free: Task H's prior controller recorded COMPLETED and
+exited, with no remaining observed test jobs; xorinox also became quiet.
+Nuc's completed failed cohort is excluded; the chosen substitute cohorts
+remain explicitly authorized by the user. AMD's unrelated desktop opener is not disabled,
+ignored or claimed fixed, and its failed gates never enter the fit.
+
+The fstor007 attempts use private local `/tmp` scratch and raw evidence under
+`/data1/efs/evidence/taskT-20261028/`,96 visible CPUs with eight test/build jobs,
+mlx5_0 and mandatory O_DIRECT fragment I/O. Its system FUSE3.10.2 is too old:
+the supplied node9901 `/data1/efs/deps/libfuse`3.16.2 package was copied
+read-only into the private scratch prefix. Header/library bytes and relative
+symlinks were verified unchanged; only the pkg-config prefix was relocated.
+Dependency archive SHA-256:
+`b42c7df2e4d3aedd8f9d775c587454ef2f3d34c03086d127723713fed4013dde`.
+No package or existing deployment changed. This is real-HCA coverage in the
+failed baseline, not full fixed-source RDMA qualification.
+
+### B6: proof starts too late when the third COMMIT exhausts the sweep
+
+Both original current-source hosts fail identically: B6 deliberately delays
+one member's COMMIT65s. The sweep now shares one60s absolute deadline with
+metadata, but joins all COMMIT workers before issuing any degraded mark.
+Two fragments are already durable; at60s the remaining worker times out and
+the sweep refuses metadata because its budget is exhausted. The record stays
+and fsync returns EIO. The retained AMD client log shows fragmentsPDD and
+“sweep deadline exhausted; obligations retained.” No payload corruption is
+inferred from that refusal; the failed gate does not complete its later
+verification phases.
+
+`458f75e2139c0559f59bc0e29b28ab772a566303` preserves the original COMMIT
+and whole-sweep deadlines. Healthy fsync still waits for all workers and
+needs no degraded mark. In the final reserved quarter of the sweep (at most
+15s), two valid fragments per recorded stripe permit metadata proof while
+the slow third COMMIT remains in flight. A bounded notification pipe and
+release/acquire completion flags avoid reading unfinished worker results.
+Every worker is joined before its stack-owned job or pipe is released.
+Epochs, ACK watermarks, publication closure, fresh absence checks and durable
+marks retain their existing requirements. Fewer than two valid proofs or a
+failed mark without a valid full on-time proof stays EIO; no public flag or alternate product mode is added.
+
+The deterministic regression holds all replies, advances the existing test
+clock into the production proof window, then releases only the two valid
+nodes. It requires the mark before the third worker drains and requires
+fsync not to return until that worker finishes. It also checks mismatched
+storage verifier and failed-mark cases retain obligations. The new test against
+the original4e0883560 implementation fails at `wait_for_marks`, as expected;
+the corrected whole durability unit passes native,ASan/UBSan and TSan.
+The broader source-bound verifier passes16 native steps and12 ASan/UBSan
+steps on the arm64 Mac. No leak qualification is claimed.
+
+Reproduction uses the committed full `tests/test_data_commit.c` and portable
+`tests/review_graph_20261028/verify.py`; the real B6 gate is unchanged:
+
+```sh
+python3 tests/review_graph_20261028/verify.py --out NEW_NATIVE_DIRECTORY
+python3 tests/review_graph_20261028/verify.py --sanitize --out NEW_SANITIZER_DIRECTORY
+EFS_B6_MODES=slow python3 tests/test_b6_unavailable.py
+```
+
+Raw local root `/Users/mike/Documents/Codex/artifacts/taskT-20261028/`:
+
+| Scoped evidence | SHA-256 of closed `SHA256SUMS` |
+| --- | --- |
+| `control/headroom-negative` | `46b0b8faf6fd12468bb2f482b01bdaf4cdf414a4cc3df6c96a6215447a9a5137` |
+| `headroom-458f75e21-native` | `b9798715f7b48cfb7a5e61cb3cf50f4b42bb0fb3da3f2557219bc8c77fd613eb` |
+| `headroom-458f75e21-asan-ubsan` | `6a961dc73eed3b01197e657a8cc79ea6171985e4f7c1afb47780d6f7774f1f5f` |
+| `headroom-458f75e21-tsan` | `cd0839a64ba771270f0f81b2d7e9b8d058de05816963be5d1ca66a63a66f1430` |
+
+Repaired source archive SHA-256:
+`b7a530603a46032a7269fb4d8b8454e6e7785640a059e86326a9fa4e19110d74`.
+All cohorts retain exact controllers, before/after tracked-source hashes,
+per-run build identity, commands,timings,failures and guard evidence. They
+stop before a next run on any failure or contamination. Source paths and
+progress, while active:
+
+- intel1:`/home/maik/efs-taskT-20261028-458f75e21-calibration8/src`, evidence
+  `/home/maik/efs-artifacts/taskT-20261028/intel1-458f75e21-calibration8/`.
+- nuc,xorinox:`/home/maik/efs-taskT-20261028-458f75e21-calibration9/src`, evidence
+  `/home/maik/efs-artifacts/taskT-20261028/HOST-458f75e21-calibration9/`.
+- AMD rejected candidate:`/home/maik/efs-artifacts/taskT-20261028/amd-458f75e21-calibration8/`.
+
+### Final proof refinement and source boundaries
+
+`547d9e1d07c8a3f233c283ae44bdcef5e90dab18` adds a conservative full-proof
+fallback: a failed speculative degraded mark does not defeat three valid
+COMMIT proofs completed before the original sweep deadline. Each worker
+release-publishes its completion timestamp; the common proof predicate
+checks storage-verifier epoch, ACK watermark and deadline. The original
+entry certificates remain unchanged, and live entries are checked again;
+new ACKs or replies arriving after the deadline cannot rescue old proof.
+Every worker is still joined before releasing its job or notification pipe.
+The 65,536-chunk index regression uses455,108 probes, below32*N.
+
+The new late-full-proof regression fails against458 and passes against547;
+after-deadline completion and insufficient proof remain EIO. Native16/16,
+ASan/UBSan12/12 and the TSan durability unit pass on the arm64 Mac. Closed
+local manifests under the raw root above:
+
+| Evidence | SHA-256 of `SHA256SUMS` |
+| --- | --- |
+| `final-proof-547d9e1d0-native` | `f3a0efa8b7ee70150ff28ecc940329cb4783ac51c8523c7be0b9ea982b502a94` |
+| `final-proof-547d9e1d0-asan-ubsan` | `8492eaeba8a79c1aba282d55ce53a9f0216e3e9e4c24aae0b513c5caf7c59eea` |
+| `final-proof-547d9e1d0-tsan` | `427d718f6a0e8849943ddee7f08b538de56db5d8b6e17cad02a580aeccaec1c0` |
+| `control/late-proof-negative` | `9a97867532aaad72d006d3de31b1b86272afb3593818d97b191dcf439ed62b74` |
+
+The intel1/xorinox timing sources remain frozen458; fstor007 uses547.
+These have the same92 budget commands/slot recipe, but458 does not prove
+547's new late-full-proof oracle. Final fitted-table confirmations must use
+547 plus the budget commit on all three selected hosts. No running source
+is edited. Fstor007's547 archive SHA-256 is
+`76c2d2cab22dd4da53f727998a4387a9537773e8383b32945b635e785a73335c`.
+
+### Failed refreshed host coverage remains open
+
+Nuc's eight-job458 gate fails five assertions: K38 shared-chunk pressure
+reports REPORT BUSY converted to flush EIO; clean unmount fails session
+revoke at phase finish; operator follower catch-up sees commit724/applied486;
+D4 records one create EIO (1023/1024 files), an11.2s foreground write+fsync
+over its10s bound, and too few space samples; publication-abort setup records
+one3.15s operation over its unchanged3s bound. Those failures are retained,
+not labelled merely slow, not fitted and not repaired by host substitution.
+AMD's only failure is the recurring busy unmount. No desktop service was
+changed. Both controllers stopped before run2. Their2358 tracked files are
+unchanged; closing scans show no owned EFS process or mount left.
+
+Closed text evidence was copied on-host and every file hash verified under
+`/data1/efs/evidence/taskT-20261028/`:
+
+| Evidence directory | SHA-256 of `SHA256SUMS` |
+| --- | --- |
+| `intel1-458f75e21-calibration8` (intel1) | `e3d7e288f62a0ef99c5a077c1057e4c2640868a9274d5dd6271366f5cfa23461` |
+| `nuc-458f75e21-calibration9` (nuc) | `c2aaf9231d0a4452e7223a9898c90f02620d08dc5ca56fa6f5bd157bef48df72` |
+| `xorinox-458f75e21-calibration9` (xorinox) | `9000a011965dba0767d423402fb5e24858bc9ec19e09bc074ef96cd352db7dfa` |
+| `amd-458f75e21-calibration8` (AMD) | `4e348c987aba1c1d4067234afe9ee1c948bdb3d5710e7bec54edfc795c5634ff` |
+
+Failed scratch fixtures stay in their original roots for open investigation;
+no stores or payloads were exported. Intel1 and xorinox have visible two-hour bounded
+idle reservations, with no EFS workload, pending final confirmation. Each must
+be cooperatively released before that gate; it never authorizes stopping
+another campaign. No message was sent to Task AF.
+
+Original failed roots remain unchanged for open investigation:
+AMD:`/home/maik/efs-taskT-20261028-4e0883560-calibration6/tmp/case-482/efs-b6-4x0lapse`;
+fstor007:`/tmp/efs-taskT-20261028-4e0883560-calibration7/tmp/case-482/efs-b6-35g9ox4h`.
+Closed baseline evidence manifests were verified:
+
+| Host / evidence root | Files | SHA-256 of `SHA256SUMS` |
+| --- | ---: | --- |
+| AMD:`/home/maik/efs-artifacts/taskT-20261028/amd-4e0883560-calibration6/` |34| `5683732e691966ae4917419e458f5f4f031a60aa87c2f6815fe8c9da39247d77` |
+| fstor007:`/data1/efs/evidence/taskT-20261028/fstor007-4e0883560-calibration7/` |34| `03e3cd84a9a2198e51e09990ee0264f86027fb1608c3e4d7085eec0da89d4cf4` |
+| xorinox:`/home/maik/efs-artifacts/taskT-20261028/xorinox-4e0883560-calibration6/` |17| `7b18a2bf121f22d5fa724ff2a10a108512561876f23a8eda21851f1932da7088` |
 
 ## Contract and source
 
