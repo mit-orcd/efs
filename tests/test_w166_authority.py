@@ -99,7 +99,7 @@ try:
             p = subprocess.run([str(root / 'efs-bench'), c.ep(2), '--meta',
                                 '--files', '512', '--dirs', '16', '--workers', '16',
                                 '--phases', 'mkdir,create', '--keep', '--id', str(iteration)],
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
+                               env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
             with (work / 'fill.log').open('ab') as f:
                 f.write(p.stdout)
             assert p.returncode == 0, p.stdout[-2000:]
