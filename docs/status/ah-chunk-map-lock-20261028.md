@@ -1,7 +1,6 @@
 # AH — one mutex for every chunk-map lookup and update on a mount (2026-10-28)
 
-**Report:** (first paragraph filled at the end: branch + head, gate line,
-NOTRUN list, one line per product defect.)
+**Report: branch `agent/devel-taskah`, head `5513d2bb1` (from devel `9c4bfd171`; never pushed; zero product diff — docs plus the committed measurement driver). Verdict: measured, no change — `g_client.idx_mu` sees 2.4-5.6k acquisitions/s, flat with writer count; trylock misses reach 25-30 % at 32 writers but the median contended wait is ≈0.35 µs and the aggregate wait stays ≤0.15 % of wall — nothing partitioned. Gates on xorinox at the head: `tests/test_sparse_metadata.py` PASS; `make tsan-check` 19/19 PASS; `make test-all`: `TOTAL 546 FAIL 1 NOTRUN 11 STATUS FAIL (808s)` — the FAIL is `EFS_B6_MODES=slow tests/test_b6_unavailable.py`: F0's fsync EIO at the 60 s COMMIT deadline, 3/3 standalone on xorinox AND 3/3 on node9901 (task AD's gate there hit the same), PASSING in intel2's gate — and it passed on xorinox yesterday at devel `5af760ff1` (task-B gate), so this is a host-sensitive devel regression introduced in `5af760ff1..9c4bfd171`, registered for the coordinator; my branch carries no product change, so base behavior is identical by construction. NOTRUN 11 = host limits (no RDMA device, no valgrind, no cluster scripts); OVERBUDGET 13 are host-fit rows (Task T). Product defects found by this task: none in the lock; the b6-slow regression is the finding. Evidence: this page; raw xorinox `~/efs-artifacts/taskAH-20261028/` (SHA256SUMS manifest `ef3d2fa0…`, 8 files).**
 
 ## Purpose and item
 
@@ -55,7 +54,14 @@ two orders below. **Recorded; nothing partitioned.**
 - `tests/test_sparse_metadata.py` (the unchanged map's existing gate):
   PASS on xorinox.
 - TSan client tests (`make tsan-check`): 19/19 PASS, rc=0.
-- `make test-all` on xorinox at the head: (filled when it lands).
+- `make test-all` on xorinox at the head: `TOTAL 546 FAIL 1 NOTRUN 11
+  STATUS FAIL (808s)`. The one FAIL is `EFS_B6_MODES=slow
+  tests/test_b6_unavailable.py` — F0's fsync EIO at the client 60 s COMMIT
+  deadline, 3/3 standalone on xorinox and 3/3 on node9901 (task AD's gate
+  there saw it too), PASS in intel2's gate, and PASS on xorinox the day
+  before at devel `5af760ff1` — a host-sensitive devel regression in
+  `5af760ff1..9c4bfd171`, not this branch (zero product diff; the gate's
+  binaries are base-identical). Registered for the coordinator/Task Y.
 
 ## Artifacts
 
