@@ -735,11 +735,7 @@ verdict changes; the Stage 1 exception applies.
   packed reader, direct-I/O-required and K37 coverage; missing/truncated files,
   wrong identity, bad payload, read error and concurrent reclaim. Separate this
   server disk task from AK's client receive copy/double hash work.
-  **Measured 2026-10-29, no change** (`docs/status/ap-segment-read-combined-20261028.md`):
-  a combined read saves one pread + one bounce per packed GET, but cold and
-  repeated packed-read p95/p99 are identical within a 2–4× wider rep spread on
-  intel2 NVMe at 1/8 readers; the threshold is not met and the code stays as is.
-- [ ] **AQ — Segment directory barriers: share only covered namespace fsyncs.**
+
   `src/server/segment_store.c::sg_write` writes and fsyncs each newly created
   fragment file, then `sg_sync_path` opens/fsyncs/closes its directory.
   `sg_mkdirs` additionally syncs parents for newly created directory levels.
@@ -758,6 +754,10 @@ verdict changes; the Stage 1 exception applies.
   concurrent creators and crash at each write/barrier boundary. Every successful
   reply must retain the same durability guarantee. This is distinct from P3-D's
   client COMMIT workers and the ordinary root barrier, which already groups work.
+  **Measured 2026-10-29, no change** (`docs/status/aq-segment-dir-barriers-20261028.md`):
+  same-directory in-flight overlap 0.20–1.27 % at full packer rate (threshold
+  10 %), 0 % under K37 rebuilds, median directory fsync 1 µs; the sync group
+  is not adopted for segment directories.
 - [ ] **AR — Ordinary PUT retries: quantify and reduce identical-object rewrites.**
   `src/server/store.c::server_write_fragment_to_path` treats EEXIST on the
   exclusive-create attempt as an overwrite and calls `shard_io_thread` again

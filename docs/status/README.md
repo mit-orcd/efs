@@ -171,6 +171,13 @@ cold and repeated small-file reads at 1/8 readers have identical p95/p99 within
 a 2–4× wider rep spread; the combined read does not qualify. node9901 cold-read
 column NOTRUN (ORCD keyboard-interactive login; no credentials provided).
 
+[Task AQ](aq-segment-dir-barriers-20261028.md): **PASS — measured, no change**,
+devel `9c4bfd171` on intel2: segment directory fsyncs show 0.20–1.27 %
+same-directory in-flight overlap at full packer rate (threshold 10 %) and 0 %
+under K37 rebuilds; median directory fsync 1 µs. The existing
+`directory_sync_group_run` is not adopted for segment directories. AQ checkbox
+ticked.
+
 [ORCD-test merged devel qualification](orcd-test-devel-qualification-20261028.md):
 **FAIL overall**, deployed `714d7e6fc`; profiling branch merged and deleted.
 Serial and seven-client POSIX, restart persistence, both expiry runs and all
