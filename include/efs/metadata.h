@@ -247,6 +247,15 @@ struct efs_export {
     struct efs_child_vec *child_vecs;
     uint64_t child_vec_count;
     uint64_t child_vec_cap;
+    /* ino -> efs_alias_vec of every row slot holding that ino on THIS table,
+     * kept for hard-linked inos only (ino_idx holds one slot per ino).
+     * In-memory only; rebuilt with ino_idx. alias_bytes is the vectors'
+     * heap, charged to the stage estimate. */
+    uint64_t *alias_keys;
+    uint64_t *alias_vals;
+    uint64_t alias_mask;
+    uint64_t alias_inos;
+    uint64_t alias_bytes;
     /* Running sums of the two walks in the staging-byte estimate: per-slab
      * row and name arenas, and each child vector's slot array. The rest of
      * the estimate is capacities and index masks, read in constant time.
