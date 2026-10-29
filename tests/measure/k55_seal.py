@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Copy and verify closed K55 text evidence on fcstor015; delete nothing.
 
-Runtime stores, generated payloads and original Task AI fixtures are never
-copied or modified. Candidate bulk remains explicitly kept for the open K55
-review and K54 cleanup investigation. Use a fresh retained directory.
+Runtime store directories and original Task AI fixtures are never copied or
+modified. Text files are selected with the committed evidence-file filter;
+this is a capture bundle, not a general store backup. Candidate bulk remains
+kept for the open K55 review and K54 cleanup investigation. Use a fresh retained
+directory.
 """
 import argparse
 import hashlib
@@ -76,7 +78,8 @@ def main():
                              sha256=before))
     metadata = dict(verdict=state['verdict'], source=state['source'],
                     no_observed_efs_test_work=True, no_owned_mounts=True,
-                    originals_removed=0, payloads_copied=0,
+                    originals_removed=0, runtime_store_directories_copied=0,
+                    selection="text evidence filter; original fixtures remain authoritative",
                     retained_bulk='candidate fixtures/build kept for open K55 review and K54 cleanup investigation',
                     original_Task_AI='untouched; see its sealed-final manifest')
     (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
