@@ -125,10 +125,12 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [Task AF — management status contention](af-status-snapshot-20261028.md):
-**IN PROGRESS**, branch `agent/devel-task-af`, base `486aa3a46`, measurement
-head `f570fb0cd`. Assigned xorinox: three-repeat1/10/50Hz all-member polling
-under fixed-rate D4-derived rewrites; no product snapshot without measured
-interference. Clean full gate follows. Existing real client untouched.
+**Measured, no product change**, `agent/devel-task-af`, tested `f570fb0cd`,
+base `486aa3a46`. Thirty closed trials across xorinox and fstor007 TCP/RDMA:
+no observed10Hz pump/write bottleneck outside spread; hardware CPU/stat costs
+retained. Gate545/1FAIL/11NOTRUN: K35 slow-fsync EIO60s reproduces on untouched
+base. Both failed investigations retained; successful scratch pruned, evidence
+hashed. Full release PASS is not claimed.
 
 [Wave 31 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`3c866b7bf`; gate at `d891c106e`)**: Task I ([review](task-i-20261026.md)): efs-fuse bounded malloc arenas and fixed mmap threshold, client cache small-page hint, RDMA connection buffers in dedicated mappings, non-link-local GID preference, truncate sweep yields to fragment GC with a resume cursor, pack-state proof falls back to another voter on BUSY/NOT_PRIMARY; fstor007 RDMA/TCP hours 2,080 exact files each; merge-time: devel's newer keep-on-failure and BUSY-resync fixes kept, Task I's duplicate `tests/resync_setup.py` removed. devel's own `214c541aa`…`b9c2fad85` (terminal ticket proof before fsync retires an abandoned replay PUT; 49/49 sanitizer checks on intel2) and `7b7c9007f` (Stage 3 plan) merged in. Task Z / **D46** ([decision](decisions.md), [sheet](stage1-decision-sheet-20261028.md)) as the user ruled it item by item: A4 on fcstor007–011 (`/data1/01`), 3/4/5 hosts × TCP/RDMA, and alpha 1.0 also on all 13 fcstor nodes; W122 required in alpha 1.0; member-down clean unmount a required fix (**K54**, OPEN, blocks alpha: yes); 33-tunable audit; F12 stays D45 (no authentication in any alpha); S1 command dispositions and `--writers` removal not adopted. Task X ([evidence](k52-immediate-readback-20261028.md)): Stage 2 query launches use `posix_spawn`; **K52 DECIDED under K10/W121 (D40)** after four-host controls (fork/read 17 FAIL; spawned reader 22,293 and fork-free D3 59,112 exact PASS), the eight Task V failures stay unclassified; its node9900 B6 full-quota failure is K53's second occurrence. Task X's harness test passed on intel1 against the merged tree; the full gate predates Task X and the Stage 3 docs. K register: 54 rows, 11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN (K48, K53, K54).
 
