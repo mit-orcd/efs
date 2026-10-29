@@ -1612,11 +1612,15 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**OPEN / measurements RUNNING**, no product locking change. User-authorized
+**OPEN / measurements COMPLETE scoped; full code gate RUNNING**, no product
+locking change. User-authorized
 fcstor015 `/data1/01` substitutes for busy node9901; existing clusters untouched.
 Real mlx5_0 transport and one-rank filesystem/IOR smoke PASS scoped, with
-checked cleanup. Three-repeat TCP/native RDMA/probe RDMA matrix at 1/8/32
-streams active; threshold verdict, churn and full correctness gates pending.
+checked cleanup. All 27 TCP/native RDMA/probe RDMA matrix cells and concurrent
+teardown/churn diagnostics passed; acquisition fractions below the 5% trigger,
+so keep the current lifetime lock in this single-device scope. RDMA reclamation,
+218/218 core POSIX and peer/restart checks passed. Native IOR medians/spread
+are also on the K32 page; bounded geometry and cache limits do not close K32.
 
 [Stage 1 cross-path due diligence AY–BB](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed

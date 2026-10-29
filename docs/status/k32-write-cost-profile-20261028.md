@@ -7,6 +7,40 @@ checks; no product source changed. **IOR NOTRUN; D4 baseline failure OPEN.**
 Benchmark and earlier gate failures remain recorded. This does not close
 K32 or D4; the readback/coherence limits below apply.
 
+## Task AI bounded hardware-RDMA control — October 28
+
+[Task AI](ai-rdma-registry-lock-20261028.md) supplies a separate, completed
+27-cell transport/diagnostic matrix on user-authorized fcstor015 (EPYC 7402P,
+24 cores, mlx5_0 Ethernet/RoCE). Exact native source `d1bf8e2bd` (product C
+unchanged from `486aa3a46`), three private loopback daemons, 16 GiB/node,
+O_DIRECT, eight writers/node, one FUSE mount, default background work.
+Existing clusters were untouched. Three repeats at 1/8/32 local MPI ranks,
+all final rewrite bytes, IOR checked reads and clean shutdowns passed; sampled
+foreign EFS/test work was empty. The AI full code gate is still RUNNING.
+
+These are bounded controls, **not the original K32 real-cluster IOR acceptance
+gate**, which remains NOTRUN. Easy is only 64 MiB/rank with 1 MiB transfers;
+hard is a shared file with 128 segments/rank of 47,008 bytes. Checked reads
+reuse the writer mount and may hit caches. Fresh elections/background work,
+broad write spread and oversubscription at 32 ranks prevent a causal transport
+ranking or an optimization-win claim. The Task AI microbenchmark's non-RDMA
+socketpair control is not TCP/IP and is excluded from this table.
+
+Native IOR median (min–max) MiB/s, three repeats:
+
+| Ranks/transport | Easy write | Hard write | Easy checked read | Hard checked read |
+| --- | --- | --- | --- | --- |
+| 1 TCP | 160.18 (156.51–309.62) | 53.41 (10.23–86.20) | 1004.12 (941.83–1072.82) | 188.00 (174.87–190.30) |
+| 1 RDMA | 140.80 (121.95–262.79) | 21.35 (7.79–82.41) | 904.65 (894.09–979.37) | 173.73 (152.73–193.43) |
+| 8 TCP | 179.56 (176.84–183.72) | 12.49 (12.18–16.79) | 1112.54 (934.97–1685.82) | 127.40 (126.91–201.47) |
+| 8 RDMA | 201.58 (191.60–370.15) | 14.71 (13.58–44.08) | 945.88 (859.94–1315.19) | 161.18 (159.31–182.60) |
+| 32 TCP | 322.26 (175.60–322.42) | 36.99 (13.06–41.33) | 949.33 (906.06–956.37) | 137.80 (133.78–153.31) |
+| 32 RDMA | 165.71 (153.01–300.99) | 13.06 (12.95–35.62) | 896.07 (842.00–939.91) | 299.88 (289.52–302.88) |
+
+Reproduction, diagnostic overhead, latency limits and raw host locations are
+on the Task AI page. Its measured registry acquisition fraction stayed below
+the 5% trigger; no product locking change was selected. K32 and D4 stay open.
+
 ## Scope and method
 
 Xorinox, Ryzen 9 7940HS (8 cores / 16 threads), Rocky/RHEL 10, kernel

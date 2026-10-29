@@ -1,10 +1,13 @@
 # Task AI — RDMA registry lifetime lock, October 28, 2026
 
-**OPEN; qualification RUNNING, no product locking change.** Task AI in the
+**OPEN; measurements COMPLETE scoped, full code gate RUNNING; no product
+locking change.** Task AI in the
 [alpha checklist](alpha-1.0-2plus1-checklist.md) measures before choosing an
 optimization. Native real-RDMA transport smoke and one-rank filesystem/IOR
-smoke PASS scoped. The matched matrix and follow-up gates are not yet complete;
-there is no threshold verdict or throughput improvement claim.
+smoke PASS scoped. All 27 matrix cells and the stream/churn measurements
+completed. The measured acquisition fraction stays below the 5% trigger;
+**keep the current lifetime lock for this single-device scope**. No throughput
+improvement from changing that lock has been demonstrated.
 
 ## Placement and source
 
@@ -14,11 +17,14 @@ and fcstor012 also showed other EFS/test work. No existing cluster was stopped
 or changed. fcstor015 showed no EFS/test workload in the preflight and has
 active mlx5_0 and mlx5_2 devices. Measurements select **mlx5_0 only**.
 
-fcstor015: RHEL 9.8, kernel `5.14.0-687.39.1.el9_8.x86_64`, 24 logical CPUs,
+fcstor015: AMD EPYC 7402P, 24 cores/logical CPUs, two NUMA nodes, RHEL 9.8,
+kernel `5.14.0-687.39.1.el9_8.x86_64`,
 `/data1/01` on `/dev/nvme0n1`, approximately 7 TiB free at preflight.
 The user's directory authorization supersedes the task sheet's original
 node9901-only assignment. These are single-host hardware-RDMA measurements,
-not multi-host fabric qualification or a two-device scaling result.
+not multi-host fabric qualification or a two-device scaling result. mlx5_0's
+link layer is Ethernet/RoCE, firmware `16.34.1002`, active MTU 1024. Do not
+describe this as multi-host InfiniBand qualification.
 
 Branch `agent/devel-task-ai`, base `486aa3a46`. Exact native export and
 binaries: `d1bf8e2bd`, whose only changes from that base are measurement tools.
@@ -88,19 +94,23 @@ exclusive host lease. No profiler runs during this matrix. IOR commands have
 and all three daemon exits zero are required. A failure preserves its live
 state/stores for diagnosis, without lazy detach or forced shutdown.
 
-Follow-up runner `b2f120f06` waits for this existing matrix; it never launches
-a duplicate. It runs source-bound, real-verbs 1/8/32-stream request/reply
+Follow-up runner `4ea7a9885` continues after this existing matrix; it never
+launches a duplicate. It runs source-bound, real-verbs 1/8/32-stream request/reply
 checks with concurrent connection destruction/reuse (32 cycles, overlap
 count recorded), three repeats and separate TCP/native/probe controls.
 Every echo is checked and all connection/assembly ownership must return to
-zero. Its extra wake diagnostic reports **poll-return to first successful
+zero. Its non-RDMA microbenchmark control uses **AF_UNIX socketpair byte
+streams**, despite the `tcp` dispatch label; it is not a TCP/IP benchmark.
+Only the filesystem matrix above supplies the actual TCP/IP IOR control.
+Its extra wake diagnostic reports **poll-return to first successful
 pending-ring publication**, excluding kernel wake-to-run and NIC-to-CQE delay.
 No broader wake latency claim follows from that measurement.
 
-The planned correctness gates are real-RDMA `test_rdma_xprt`, all seven
-segmented modes, handoff/progress/fork tests, physical reclamation and POSIX
-over an RDMA mount, then the full `make test-all` summary. They remain NOTRUN
-until their retained outputs close. The full gate's NOTRUN entries must be
+Real-RDMA `test_rdma_xprt`, all seven segmented modes, handoff/progress/fork
+tests, physical reclamation and POSIX over an RDMA mount passed. Core POSIX:
+218/218, no fail/skip/notrun. Peer checks, rejoin/restart reclamation and
+empty physical inventories also passed. The full `make test-all` summary is
+RUNNING. Its NOTRUN entries must be
 reported individually; exit zero alone is not proof of every live gate.
 
 Task criterion: investigate an optimization if 32-stream waiting exceeds 5%
@@ -109,6 +119,81 @@ no-change is valid. No lifetime pinning, registry partitioning or dispatch
 batching has been implemented or selected.
 
 ## Closed results and retained failure
+
+All 27 fresh-cluster cells passed final rewrite payloads, IOR checked reads,
+sampled no-foreign-work checks, clean mount stop and all daemon exits. The
+acquisition percentage below is `sum(acquisition interval)/first-to-last span`
+for each receive-poller record, across three repeats and four processes/cell.
+It includes clock/lock-call overhead and startup/background/shutdown intervals;
+it is not an exact production blocking-time or CPU-wait metric.
+
+| Streams | Matrix acquisition fraction, min–max | Validated CQEs/s, min–max | Mean hold, min–max |
+| --- | --- | --- | --- |
+| 1 | 0.0037–0.0241% | 1,005–6,999 | 867–1,310 ns |
+| 8 | 0.0266–0.1396% | 6,982–39,104 | 893–1,612 ns |
+| 32 | 0.0614–0.2429% | 15,457–64,215 | 981–1,683 ns |
+
+The heavier same-process real-RDMA echo/churn diagnostic completed three
+repeats at each concurrency, 25,000 echoes/stream plus 32 connection cycles.
+Every cycle completed both endpoints' teardown while load was still active;
+all payloads matched and live connections/assemblies returned to zero.
+Each 32-stream run validated 3,200,512 CQEs, including protocol control frames.
+
+| Streams | Registry-only acquisition fraction, three repeats | Native RDMA median echoes/s | Probe median echoes/s |
+| --- | --- | --- | --- |
+| 1 | 0.4970–0.5307% | 40,509 | 39,874 |
+| 8 | 2.5101–2.6775% | 226,683 | 203,712 |
+| 32 | 2.8104–2.8448% | 243,538 | 228,319 |
+
+At 32 streams, mean acquisition interval is 30.7–31.3 ns, mean hold
+802–809 ns and validated completion rate 908,275–916,284/s. Instrumentation
+reduces median component throughput about 6.25% there (about 10.13% at eight
+streams); it is not free. These are diagnostic measurements, not a claim of
+the native application's exact mutex-blocking percentage. Holding the lock
+also contains useful generation/lifetime/publication work: low acquisition
+delay does not prove the poller or that work has no cost. The native echo
+rate's plateau from eight to 32 streams is a separate finding, not evidence
+that removing this mutex would improve it.
+
+Wake diagnostics: one stream produced 49,987–49,995 channel-return samples
+per repeat, mean 2.63–2.93 microseconds; eight streams produced 143–282,
+mean 3.43–5.08 microseconds; 32 streams produced only 9–35, mean 3.32–6.57
+microseconds. Busy polling normally harvests those high-load completions
+without sleeping, so the 32-stream wake sample is small. The largest observed
+channel-return delay was 323.331 microseconds in an eight-stream repeat.
+No kernel wake-to-run, NIC arrival-to-dispatch, or high-percentile guarantee
+is inferred from these samples.
+
+Actual TCP/IP IOR medians and min–max spread (MiB/s), three repeats:
+
+| Streams/transport | Easy write | Easy checked read | Hard write | Hard checked read |
+| --- | --- | --- | --- | --- |
+| 1 TCP | 160.18 (156.51–309.62) | 1004.12 (941.83–1072.82) | 53.41 (10.23–86.20) | 188.00 (174.87–190.30) |
+| 1 RDMA | 140.80 (121.95–262.79) | 904.65 (894.09–979.37) | 21.35 (7.79–82.41) | 173.73 (152.73–193.43) |
+| 8 TCP | 179.56 (176.84–183.72) | 1112.54 (934.97–1685.82) | 12.49 (12.18–16.79) | 127.40 (126.91–201.47) |
+| 8 RDMA | 201.58 (191.60–370.15) | 945.88 (859.94–1315.19) | 14.71 (13.58–44.08) | 161.18 (159.31–182.60) |
+| 32 TCP | 322.26 (175.60–322.42) | 949.33 (906.06–956.37) | 36.99 (13.06–41.33) | 137.80 (133.78–153.31) |
+| 32 RDMA | 165.71 (153.01–300.99) | 896.07 (842.00–939.91) | 13.06 (12.95–35.62) | 299.88 (289.52–302.88) |
+
+These short IOR geometries have broad write spread, fresh elections and
+default background activity; leader placement was not experimentally fixed.
+Reads use the writer mount and may hit caches. Do not infer a causal TCP/RDMA
+ranking, storage bandwidth, or K32 acceptance from these numbers. They supply
+the requested bounded control, not a repeat-until-green performance claim.
+
+Median per-repeat p99 stat syscall latency at 1/8/32 streams: native TCP
+50.92/46.98/82.97 ms, RDMA 13.24/41.41/130.08 ms. Median per-repeat p95 whole
+rewrite operation: TCP 52.64/66.16/89.48 ms, RDMA 11.67/35.89/91.18 ms.
+The raw array's historical `fsync_syscall_s` name includes open, write, fsync
+and close; it is **not isolated fsync latency**. CPU records cover the three
+daemons and FUSE client, excluding MPI ranks. Their 32-stream median summed
+CPU/work-wall ratios are 3.29 cores TCP and 2.98 RDMA, not a host or per-thread
+CPU saturation proof. Raw per-process deltas and phase maxima remain retained.
+
+**Recommendation:** measured no-change for Task AI's single-device profile.
+Keep generation rejection, teardown lifetime protection, SPSC ownership,
+wakeup ordering and `recv_handoff_mu`. No lock-removal throughput gain was
+tested or established; multi-device partitioning remains unmeasured.
 
 - Native `test_rdma_xprt`: real mlx5_0 transport PASS; 68 application frames,
   174,703 application bytes per endpoint, zero measured/bootstrap/post-setup
@@ -124,19 +209,65 @@ batching has been implemented or selected.
   output remain retained. Runner `d433ab689` removes the obsolete argument;
   mandatory direct I/O is unchanged. This is a runner prerequisite correction,
   not an EFS correctness or performance regression.
+- Waiting follow-up 1 was superseded before any workload, with its exact PID,
+  argv, uid and waiting state retained in `superseded-before-work.json`, to
+  require a whole connection cycle (including destruction) to overlap load.
+  Follow-up 2 stopped while compiling the wake-only diagnostic: the standalone
+  command used `-Werror` without the production Makefile's existing
+  `-Wno-stringop-truncation` policy. Follow-up 3 (`4ea7a9885`) matches that
+  policy for the copied production translation unit; new workload code retains
+  `-Werror`. No completed matrix or measured failure was rerun or replaced.
+
+## Full code-gate findings (gate still running)
+
+The full gate has retained failures; it is **not PASS**. No `src/`, `include/`
+or Makefile content differs between the tested `d1bf8e2bd` and base
+`486aa3a46` (`git diff 486aa3a46 d1bf8e2bd -- src include Makefile` is empty).
+This rules out a Task AI product-code delta; it does not waive the failures
+or establish that every base run reproduces them. Independent base checks
+are pending after the full gate, without competing test workloads.
+
+- **K55, slow-member fsync availability, OPEN:**
+  `EFS_B6_MODES=slow python3 tests/test_b6_unavailable.py`, case 481,
+  failed because F0 returned EIO at 60.01 s; the other six fsyncs returned
+  success in approximately eight seconds each. The first fsync deliberately
+  slows one storage COMMIT to 65 seconds. Retained fixture:
+  `/data1/01/efs-taskAI-20261028/tmp/case-481/efs-b6-_axe6l25`.
+  Its client log records `fragments=PDD`, then `sweep deadline exhausted;
+  obligations retained`, not a degraded mark. The printed `0 of 3 durable`
+  is logged before counting that PDD snapshot and does **not** mean that the
+  two D fragments lack proof. Source `stripe_prove` starts COMMIT workers
+  concurrently but joins every worker before marking; `commit_one` may use
+  both transport attempts inside the same 60-second sweep deadline. After
+  the slow worker consumes it, the sweep refuses before installing its
+  required degraded mark. That is a source-supported explanation; a focused
+  interleaving/transport isolation test is still owed. No false durability
+  success or rollback is inferred. The fix must preserve the absolute bound,
+  proof requirements and durable degraded mark, not ignore the slow member
+  or turn EIO into success. Distinct from K54's clean-unmount revoke problem.
+- **K53 recurrence, full-quota oracle, OPEN:**
+  `EFS_B6_MODES=full python3 tests/test_b6_unavailable.py`, case 482,
+  returned ENOSPC for W0–W2 and Q0–Q2, but Q3 succeeded. Retained fixture:
+  `/data1/01/efs-taskAI-20261028/tmp/case-482/efs-b6-jicq6e20`.
+  This matches the already-open full-quota admission finding's signature;
+  the exact cause remains unproven. The unchanged oracle still fails.
 
 ## Raw evidence and remaining work
 
 Host raw build/launcher logs and binary manifests:
 `fcstor015:/home/erbmi1/efs-artifacts/taskAI-20261028/fcstor015/`.
-Private source, diagnostic trees, closed smoke, active matrix and waiting
+Private source, diagnostic trees, closed smoke/matrix and running code gate:
 follow-up: `fcstor015:/data1/01/efs-taskAI-20261028/`.
-`matrix-d433ab689/state.json` and `followup-1/state.json` are the current
+`matrix-d433ab689/state.json` and `followup-3/state.json` are the current
 stage records. Raw output is outside Git; failed evidence stays on the host.
-Full final capture hashes and pruning are owed at closure; no absent hash or
-capture is counted as verified.
+Closed non-store measurement manifest: `closed-measurements-manifest-v2.json`
+in the raw host directory, 412 files,
+SHA-256 `3adb47d1e64f89e299554fbcfc646f75928512deed21513667d5304c7b723f72`.
+The original manifest is retained unchanged; v2 explicitly excludes 81 runtime
+Raft logs accidentally matched by the original broad `*.log` glob. Final gate
+hashes and pruning are owed at closure; no absent hash or capture is counted
+as verified.
 
-Still owed: matrix medians/spread, 32-stream registry/overhead assessment,
-connection-churn and dispatch results, correctness gate classifications,
-K32 control table, final evidence manifest and checked own-fixture cleanup.
+Still owed: final full code-gate/base classifications, final evidence manifest
+and checked own-fixture cleanup. K32 controls are cross-referenced on its page.
 The AI checkbox remains open. No change to an existing cluster, merge or push.

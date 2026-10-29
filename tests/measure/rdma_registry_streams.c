@@ -2,7 +2,8 @@
  * connection destruction/reuse. Not a filesystem or multi-host throughput gate.
  * Compile against the native and disposable diagnostic libefs.a separately.
  * Usage: binary STREAMS ROUNDS CHURN_CYCLES (1..32, >0, >=0).
- * Every 4096-byte echo is compared. TCP is a separate control, not an RDMA pass.
+ * Every 4096-byte echo is compared. The non-RDMA control is AF_UNIX byte
+ * streams using the TCP protocol dispatch; it is not a TCP/IP benchmark.
  */
 #include "efs/rdma.h"
 #include "efs/rdma_message.h"
