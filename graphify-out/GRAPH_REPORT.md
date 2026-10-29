@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `ea77b3a3505656f1bc46332dc640b72c70bb8cce`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 16,746 nodes, 69,508 directed typed edges, 526 communities.
+Source base: `74d34d588cd42257fdf44803c89245b9f5613477`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,084 nodes, 70,520 directed typed edges, 557 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,22 +19,22 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 26188
+- `calls`: 26333
 - `case_of`: 116
-- `contains`: 25365
-- `defines`: 1902
+- `contains`: 25803
+- `defines`: 1964
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 6799
-- `imports_from`: 867
-- `indirect_call`: 673
+- `imports`: 7054
+- `imports_from`: 898
+- `indirect_call`: 688
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 2353
+- `mentions_symbol`: 2371
 - `method`: 640
-- `rationale_for`: 1263
-- `references`: 2106
-- `references_path`: 1096
+- `rationale_for`: 1292
+- `references`: 2108
+- `references_path`: 1113
 - `regression_for`: 8
 - `uses`: 90
 
@@ -46,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1466}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1586}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
