@@ -13,6 +13,7 @@ not that the product passed. Never run this against a preserved store.
 import argparse
 import os
 from pathlib import Path
+import resource
 import shlex
 import subprocess
 import tempfile
@@ -21,6 +22,8 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
 parser.add_argument('--expect-gap', action='store_true')
 args = parser.parse_args()
+# The unchanged-source negative control deliberately trips a C assertion.
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 root = args.root.resolve()
 source = (root / 'src/server/raft_host.c').read_text()
 start = source.index('static int host_dir_migrate_txn(')

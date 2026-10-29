@@ -2104,7 +2104,7 @@
     "tests/test_decoder_inputs.py": "d41d8a71949ed3e36db7aa0f0cc88d921ac86d0594504ce566bdc745b2028663",
     "tests/test_decoder_refusal.py": "af68e54e6c5d3cdb0a9778b877bb4fb3b8ecbbde08cd1389bed81c764aa31bd8",
     "tests/test_deepsteps_transparent.py": "9e7b664af607162bd42c20a7d55775d9131a47f0acdbea819a73c6a21e4ae883",
-    "tests/test_dir_migrate_visibility.py": "f682990b2d827c06e32432d4b1b99040fd9acdf711ccfafb171d00f2b13a05f5",
+    "tests/test_dir_migrate_visibility.py": "84d8082f6e1aafd885c5bc27d90d4a828e0afc27517cbd09683f9dde40c9a03b",
     "tests/test_dir_ops_busy.py": "4b1805738f6eb2dab4b509b785c966bc7eeafc8a40de13802574e4cd3a646f70",
     "tests/test_direct_io_required.py": "29a8e68d2cc15e4e39ec4c038bba8856c34aec8549d9eea18619a17fdfac2a54",
     "tests/test_direct_read_fork_oracle.py": "24fa6648f91c98f0f34135b33ceaf7103a051ed9a62597f8d50bd8dd796cef9b",
@@ -2567,5 +2567,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "780b6caba7ed022e88e3be41b63d6abfdb684e53"
+  "source_commit": "dabcf937a72241098290e33e77b43930b64393c7"
 }
