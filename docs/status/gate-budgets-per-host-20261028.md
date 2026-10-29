@@ -1,6 +1,6 @@
 # Task T — gate budgets across supported hosts
 
-**FITTED / focused repair qualification only.** The user narrowed remaining
+**Focused repair qualification PASS (scoped); budget completion held.** The user narrowed remaining
 work on October29 to focused testing. Full calibration, budget refitting and
 confirmation gates are held; the task is not declared complete. Directory
 candidate `35a6e41b0` passed three full gates each on intel1 and xorinox
@@ -8,7 +8,7 @@ candidate `35a6e41b0` passed three full gates each on intel1 and xorinox
 Fstor007 stopped after a separate K34 REPORT BUSY-to-write-EIO failure.
 Candidate `288cb4e65` adds stopping-leader release, failed-read-hint exploration
 and a complete fresh-log shutdown-marker check. Focused RDMA qualification
-is pending below. No passing result is claimed for this candidate yet.
+passed below; this is not an overall full-gate or Task T PASS.
 All92 bounds, slots, deadlines,1100s target and1650s margin remain unchanged
 (model1504s). No merge into devel or push.
 
@@ -20,7 +20,8 @@ read-routing repairs, plus test-only `288cb4e65`. Local deterministic native
 controls passed; the read-routing negative control fails on the earlier
 source and ASan/UBSan passed. These do not establish live RDMA correctness.
 
-Run on idle fstor007, three loopback daemons with real RDMA (`mlx5_0`),
+Run on idle fstor007: K34 uses three loopback daemons, K43 six, and
+blocked-shutdown cases use private single-node daemons. Real RDMA (`mlx5_0`),
 mandatory direct I/O and private FUSE3.16.2: build `make -j8 test-bins`, then
 `python3 tests/test_shutdown_bounded.py`, `test_metadata_retry_budget.py`,
 `test_pub_unit_setup.py`, `test_dir_migrate_visibility.py`; ten serial
@@ -33,8 +34,56 @@ K34 forces the stopping node to lead both groups before any workload;
 Stop at the first unexpected failure, NOTRUN or competing workload. Diagnostic
 times are not calibration inputs. Canonical capture is
 `fstor007:/data1/efs/evidence/taskT-20261028/fstor007-288cb4e65-k34-focus20/`;
-manifest and result are pending. Exact source archive SHA-256:
+the214-file closed manifest SHA-256 is
+`a1c88cdd597f5e0147d931efbca7971fc10924a0e12dd0960507fa347ff9bfc2`.
+All files were copied outside Git on the Mac and verified against that
+manifest. Exact source archive SHA-256:
 `08bd44e0a41b6689efc4cd0d6eb3c3ad0ed7729688b80cb813e35c1c934d96c1`.
+
+### Focused result — PASS, with limits
+
+All21 steps (build,4 unit controls and16 live invocations) returned zero;
+no NOTRUN, contention marker, source drift or owned daemon/mount remained.
+Build22.608s. K34 ten runs:36.883–39.935s; blocked shutdown three runs:
+11.337–11.338s; K43 three runs:52.767–53.114s including cleanup. Timing is
+diagnostic only, excluded from calibration. No assertion or deadline was
+relaxed and no failing invocation was retried into this result.
+
+- **K34:** stopping node2 led both metadata groups in all ten runs. Each
+  wrote8MiB+5 bytes during the stop, verified the exact payload with node2
+  down through the existing and fresh mounts and after restart, and checked
+  a packed4KiB payload with node3 down before node2's stale down-mark expired.
+  Degraded acknowledgements named only the stopped node2.
+- **Blocked shutdown:** all three invocations exercised parked exit-record
+  write, parked exit-record fsync and blocked stderr (nine subcases total).
+  Approximately11.04s stops stayed within15s. Missing records remained
+  recovery-uncertain: stop helper rc4, never an orderly-stop claim; the
+  recorded forced stop returned rc3. This tests bounded reporting, not crash
+  durability or verified recovery.
+- **K43:** three coordinator SIGKILLs after PREPARE, held resolution and a
+  second-client overwrite all completed without application errors. A fresh
+  reader verified the final16MiB expected version byte-for-byte; no transaction
+  recovery age-gate abort was observed.
+
+Saved daemon/client logs confirm build288cb4e65, actual segmented RDMA on
+mlx5_0 and `direct_io=on`; FUSE3.16.2 is private to the test root. Main daemon
+SHA-256 `cf42e215d62e2522c0d58e7b2deaba525a4a78399a08a69cd64f7ca415b7f020`;
+fault daemon SHA-256
+`71077e3a3a44ca3aa8e0e32ab144e63bb842396e39f8e8818a80090c599fc1f7`.
+Client/mgmt hashes, commands, dependency provenance and all outcomes are in
+the closed capture. Runtime log copies were compared against every retained
+original log before pruning successful scratch bulk; the separate
+`closure-supplement/PRUNED.txt` records that cleanup (supplement manifest
+SHA-256 `db3a39a53fc296b793d90d20fa3823f1029864bb0c1a9842ac44e71e8d49ee63`). Historical failed stores
+and captures were untouched.
+
+**Limits:** all daemons ran on one physical host with a real HCA, not a
+multi-host fabric campaign. These focused checks qualify their tested
+interleavings; they do not reconstruct the lost original35a6 K34 fixture,
+prove that incident's cause, qualify the whole merged test suite, or finish
+the92-row fit. Full calibration/refit/confirmation remains held by the user's
+focused-only instruction. Historical Nuc/AMD failures and budget overruns
+remain open. No full test gate was launched for this candidate.
 
 ### Completed directory-candidate full gates
 
