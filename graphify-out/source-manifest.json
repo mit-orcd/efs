@@ -2454,7 +2454,7 @@
     "tests/test_rollup_allocation_failure.py": "a7d9d3aaeab0e5cc3a535eb2614b80b1b96730902dc870e860df8a4abe24a248",
     "tests/test_rollup_budget.py": "578f5d8b0344bdd1085dc5f35f195386a85e49b700cbc4b48a2c1ab83223488e",
     "tests/test_runtime_exe_identity.py": "dfc9be5418d1f9ca2a6dbe93d8379061b0a031603bec636ef161813dad72a3c3",
-    "tests/test_sanitizer_gate.py": "c51f1914124a5e9c5a5c8ffb89dd02faaa8e6854dd39fc89abd4ea12bc38c50e",
+    "tests/test_sanitizer_gate.py": "50227ad1687ad495faa5150e6f838ba46a7c963fae8a7e32f94a33ce2311302c",
     "tests/test_server_processes.py": "f85223a247f04a69460c727bd8b8143cc9b9dec443bccae326eaaa08834b7890",
     "tests/test_session.c": "6c2440c04ac34ada1faafef9a8836184b5d30b1c584c64fcc74e4872911b3d69",
     "tests/test_session_admission.py": "f76f77edaee1e6b0b315a29d38da56548ea7a6dd2563df3f133683a28870345a",
@@ -2521,7 +2521,7 @@
     "tests/test_valgrind_verdict.py": "d9028427347634f93c7345f514131216d5ca12f0939f838d843c0c4ef57c7ff3",
     "tests/test_virtual_export_handles.py": "0bc639986aac45763a8d720e1d2d8709074b7848e5321d308bdccd15793d760c",
     "tests/test_w125_harness.py": "658b9c0cfb36fa6fffea7f92e0f5262d6516be445b4ed3af8c732f65915280ef",
-    "tests/test_w130_dir_fault.py": "02f345c27acc1aab060144cabfa513882244e6ab32e8fafc879c48470d5c120e",
+    "tests/test_w130_dir_fault.py": "d856f857bb9cf34a10663a1454619edf8c2df5724626bd185b641f008c6801c0",
     "tests/test_w153_formation.py": "7a9eda8127057c9efc8dda6e5ff534b65548cc730c0c17e2fd91fa10a80aca29",
     "tests/test_w155_identified_resolve.py": "42b506e2230a40b95b875e1c4575503f4f8bafbe3c2816580d856ddf12e64de0",
     "tests/test_w155_receipt_table.py": "fd775e727f0c1d33075c9cb871478e558465ad9002274f0dc92e69aa81e582d7",
@@ -2565,5 +2565,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "53f0b8abc8ad5c395d958548d4900da380258f17"
+  "source_commit": "7a52ea349c89f16c8030dcf5261791027290c2f2"
 }

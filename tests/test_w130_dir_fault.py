@@ -120,7 +120,7 @@ def group_applied(c, i, g):
 
 
 def serve_fault():
-    """Hold DIR before corrupting its leader: CREATE must be the first reader.
+    """Hold DIR; expose damage only after the intended CREATE's ReadIndex.
 
     Three distinct direct CREATEs expose persistent base EIO without retries;
     the fixed node must redirect (or forward), then FUSE creates succeed.

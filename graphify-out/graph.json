@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "53f0b8abc8ad5c395d958548d4900da380258f17"
+      "source_commit": "7a52ea349c89f16c8030dcf5261791027290c2f2"
     }
   },
   "links": [
@@ -962128,7 +962128,7 @@
       "community_name": "tests",
       "file_type": "rationale",
       "id": "tests_test_w130_dir_fault_rationale_123",
-      "label": "Hold DIR before corrupting its leader: CREATE must be the first reader. Three\u2026",
+      "label": "Hold DIR; expose damage only after the intended CREATE's ReadIndex. Three\u2026",
       "source_file": "tests/test_w130_dir_fault.py",
       "source_location": "L123"
     },
