@@ -8,7 +8,6 @@ I0; a source test's permission to report other refusals is not used to qualify.
 No performance claims, deadline/oracle changes, or repeat-until-green.
 """
 import argparse
-import concurrent.futures
 import hashlib
 import importlib.util
 import json
@@ -45,7 +44,7 @@ def main():
     env={k:v for k,v in os.environ.items() if not k.startswith('EFS_')}
     env.update(EFS_GIT_ID=a.commit,EFS_GIT_DESCRIBE=a.commit,EFS_GIT_BRANCH='agent/devel-k55',
                EFS_FUSE_PREFIX=os.environ['EFS_FUSE_PREFIX'],EFS_RDMA_DEV='mlx5_0')
-    runtime=Path('/data1/01/efs-taskAI-20261028/deps')
+    runtime=a.private/'deps'
     env.update(CC=str(runtime/'gcc-private-tsan'),
                LD_LIBRARY_PATH=str(runtime/'tsan-root/usr/lib64')+':'+env.get('LD_LIBRARY_PATH',''))
     def run(name,cmd,transport='tcp',extra=None,timeout=900,expected=0):
@@ -110,8 +109,7 @@ def main():
                         marked=m['fsync_marked'],acknowledged=m['acknowledged'])
         # Planned repetitions: both cases must pass, never select a good repeat.
         for repeat in (1,2):
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-                cases=list(pool.map(lambda t:slow_case(t,repeat),('tcp','rdma')))
+            cases=[slow_case(t,repeat) for t in ('tcp','rdma')]
             state['stages'].extend(cases);save()
         for transport in ('tcp','rdma'):
             _,text=run('k35-'+transport,['python3','tests/test_k35_fsync_degraded.py'],transport=transport,
