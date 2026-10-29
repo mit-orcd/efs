@@ -1612,6 +1612,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**MEASURED, NO CHANGE on branch `agent/devel-taskat` (`dfd5fd191`), not merged.**
+~85 wakes per satisfied waiter at 32 writers but zero deadline timeouts; wait
+durations track PUT completion, not wake latency, and broadcast-wake CPU is
+~0.05 % of the host — no end-to-end gain from per-inode wake ownership.
+Named gates PASS; test-all 546/1/11 with the one FAIL the pre-existing b6 defect.
+
+[Stage 1 cross-path due diligence AY–BB](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
 upload completion, serve/audit/recovery validation, deletion authority, and
 client metadata overlays. Audit justified differences and failure semantics;
@@ -1630,9 +1637,11 @@ and loaded hardlink-alias scans. Scope and fixed-size fast paths distinguished;
 no new K defect or measured slowdown claimed. Existing tasks remain separate.
 
 [Stage 1 wakeup/polling tasks AS–AU](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--wakeups-and-polling-asau):
-**OPEN / implementation and measurements NOTRUN**, source reviewed at `7dc73fb68`:
-demand-read allocation polling, broad PUT-window wakeups, and repeated Raft
-eventfd kicks. Lost-wakeup, overflow, deadline and progress gates required;
+**AT MEASURED, NO CHANGE on `agent/devel-taskat` (`dfd5fd191`, not merged;
+[evidence](../status/at-put-window-wakeups-20261028.md)); AS and AU OPEN /
+implementation and measurements NOTRUN**, source reviewed at `7dc73fb68`:
+demand-read allocation polling (AS), broad PUT-window wakeups (AT), and repeated Raft
+eventfd kicks (AU). Lost-wakeup, overflow, deadline and progress gates required;
 distinct from existing tasks, with no new K defect or measured gain claimed.
 
 [Stage 1 disk-I/O tasks AP–AR](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--disk-io-and-write-amplification-apar):

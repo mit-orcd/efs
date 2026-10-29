@@ -793,7 +793,17 @@ failures, K counts and acceptance verdicts are unchanged.
   readers, exhausted writers, thread exit and no capacity return. Measure failed
   attempts, timed wakeups, context switches and release-to-read latency. Separate
   this wait policy from AG's allocator critical section and AL's scratch sizing.
-- [ ] **AT — PUT-window completion: wake affected predicates instead of every waiter.**
+- [x] **AT — PUT-window completion: wake affected predicates instead of every waiter.**
+  **MEASURED, NO CHANGE (record and stop) on branch `agent/devel-taskat`
+  (`dfd5fd191`, measurement assets only), not merged** (Oct 29,
+  [evidence](at-put-window-wakeups-20261028.md)): 3.5/17.9/84.6 wakes per
+  satisfied waiter at 1/8/32 independent-file writers, zero deadline
+  timeouts. Wait durations track PUT completion time (2–8 ms at 1 writer,
+  256 ms–1 s at 32), not wake latency, and broadcast-wake CPU is ~0.05 % of
+  the 16-core host: no measurable end-to-end gain from per-inode wake
+  ownership, and the lost-wake invariant is untouched. Named gates PASS
+  (put_window_deadline, k38 shared-chunk, k35 fsync-degraded); test-all on
+  xorinox 546/1/11 with the one FAIL the pre-existing devel b6 slow defect.
   `src/client/write.c::put_win_close` broadcasts on the single `put_win_cv` after
   every close, even while that inode still has open windows. `put_win_wait`
   checks an inode-specific predicate under `put_win_mu`, but also wakes at most
