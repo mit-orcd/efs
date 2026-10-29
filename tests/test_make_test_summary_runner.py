@@ -10,7 +10,7 @@ exited 0 before the fix. Runs the extracted Python block in a temporary
 directory: no build, no make, no cluster.
 """
 from pathlib import Path
-import ast, os, shutil, subprocess, sys, tempfile, time, types
+import ast, contextlib, io, os, shlex, shutil, subprocess, sys, tempfile, time, types
 
 root = Path(__file__).resolve().parents[1]
 source = (root / 'scripts/make_test_summary.sh').read_text()
@@ -96,6 +96,24 @@ try:
     head(s[0], 2, 0, 1, 'INCOMPLETE')
     assert s[1] == "NOTRUN\t1\techo 'NOTRUN: no RDMA device'\tNOTRUN: no RDMA device", s
 
+    # Successful mocked prerequisite-refusal controls must not label the
+    # containing live sanitizer command unexecuted. Real missing-prerequisite
+    # output above still produces INCOMPLETE; the runner rule is unchanged.
+    tree = ast.parse((root/'tests/test_sanitizer_gate.py').read_text())
+    classify = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and
+                    n.name == 'check_runtime_probe_classification')
+    ns = {'subprocess': subprocess}
+    exec(compile(ast.Module(body=[classify], type_ignores=[]), '<sanitizer classification>', 'exec'), ns)
+    with contextlib.redirect_stdout(io.StringIO()) as printed:
+        ns['check_runtime_probe_classification']()
+    report = printed.getvalue()
+    assert report.strip(), report
+    report_file = Path(d, 'sanitizer-control-report.txt')
+    report_file.write_text(report)
+    rc, s, d = run('cat ' + shlex.quote(str(report_file)) + '\n'); dirs.append(d)
+    assert rc == 0, (rc, s, report)
+    head(s[0], 1, 0, 0, 'PASS')
+
     # No commands at all is not a pass.
     rc, s, d = run("\n"); dirs.append(d)
     assert rc == 1, rc
@@ -168,5 +186,8 @@ try:
     assert tsv[0] == 'index\tseconds\trc\tcommand\tbudget' and len(tsv) == 5, tsv
     assert {l.split('\t')[4] for l in tsv[1:]} == {'100', '90', '0.1', ''}, tsv
 finally:
-    for d in dirs: shutil.rmtree(d, ignore_errors=True)
+    if sys.exc_info()[0] is None:
+        for d in dirs: shutil.rmtree(d, ignore_errors=True)
+    else:
+        print('kept failed runner fixtures: ' + ', '.join(dirs), file=sys.stderr)
 print('make_test_summary runner: pass 0, failure 1, timeout 1, incomplete 3, empty 1, parallel pool exactly-once/TMPDIR/exclusive, budgets largest-first/slots/OVERBUDGET, full failure logs PASS')

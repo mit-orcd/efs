@@ -50,7 +50,7 @@ def check_runtime_probe_classification():
                 pass
             else:
                 raise AssertionError('probe masked compiler failure/timeout')
-    print('sanitizer probe: host attach refusal NOTRUN; findings, errors and timeouts FAIL')
+    print('sanitizer probe classification controls PASS: attach refusal classified; findings, errors and timeouts fail')
 
 check_runtime_probe_classification()
 
