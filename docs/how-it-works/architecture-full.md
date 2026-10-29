@@ -1736,13 +1736,13 @@ full acceptance are separate states.
 ### Recent evidence and remaining acceptance
 
 [FIN thirteen-check closure](../status/fin-gate-notrun-closure-20261029.md):
-**IN PROGRESS**, source `c571b862f`, isolated fcstor014 hardware IB.
-All thirteen missing prerequisites now execute: real Valgrind and
-TSan/ASan/UBSan/LSan controls, isolated cluster-script contract and nine
-native RDMA checks PASS. First gate 546/0 FAIL/1 NOTRUN (THP globally
-disabled); stronger private collapse control proves 96 KiB fixed versus
-48 MiB old negative, removed-policy control fails. Fresh full gate running;
-final result and closed hashes pending. Prior failures/fixtures retained.
+**PASS (scoped)**, source `c571b862f`, isolated fcstor014 hardware IB.
+Full gate **546/0 FAIL/0 NOTRUN**, 679 s + 17 s build; all 546 exits reviewed.
+Real Valgrind, TSan/ASan/UBSan/LSan controls, isolated cluster-script contract
+and nine native RDMA checks PASS. Private THP collapse proves 96 KiB fixed
+versus 48 MiB old negative; removed-policy control fails. All 73 ownership
+samples clear; cleanup verified. Seven advisory overruns retained, hard bounds
+unchanged. Prior failures/fixtures and closed hashes retained; no merge/push.
 
 [FIN accounting follow-up](../status/fin-tcp-accounting-20261029.md): **FIXED (scoped,
 branch only)**, product `38f3cecba` on `agent/devel-k35-slow-fsync`. Strict

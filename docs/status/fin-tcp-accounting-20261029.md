@@ -6,6 +6,10 @@
 Full gate 546 / 0 FAIL / 13 NOTRUN, INCOMPLETE for disclosed profile/host limits.
 Original failed audit and all fixtures retained unchanged. No merge/push.
 
+The [isolated prerequisite follow-up](fin-gate-notrun-closure-20261029.md) now
+passes the full gate: **546 / 0 FAIL / 0 NOTRUN** at `c571b862f`. The earlier
+TCP-profile incomplete result and its original evidence remain historical.
+
 ## Failure and accounting rule
 
 The [K35 qualification](k35-slow-fsync-20261029.md) passed durability but its

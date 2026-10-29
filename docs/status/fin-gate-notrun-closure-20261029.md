@@ -1,12 +1,15 @@
 # FIN gate — closing the thirteen missing checks
 
-**IN PROGRESS**, branch `agent/devel-k35-slow-fsync`, tested source
-`c571b862f`. The thirteen prerequisites absent from the earlier
-[546-command TCP-profile gate](fin-tcp-accounting-20261029.md) have executed
-successfully on isolated fcstor014. Its first full gate at `6ff653b7d` was
-546 / 0 FAIL / 1 NOTRUN (797 s + 16 s build): a newly exposed host THP limit.
-A stronger private THP control is committed; the fresh full gate is running;
-this is not yet a full-gate PASS. No merge/push or real-cluster changes.
+**PASS (full test-all gate, scoped)**, branch `agent/devel-k35-slow-fsync`,
+tested source `c571b862f`: **546 / 0 FAIL / 0 NOTRUN**, controller/gate exits
+0/0, 679 s plus 17 s build. All thirteen prerequisites absent from the earlier
+[546-command TCP-profile gate](fin-tcp-accounting-20261029.md) executed on
+isolated fcstor014, with real Valgrind and sanitizer controls and hardware RDMA.
+All 546 individual receipts are zero; all 73 ownership samples have no foreign
+jobs/background clients, and post-run EFS processes/mounts are absent. Seven
+advisory budget overruns remain recorded; hard deadlines are unchanged.
+Original failures, incomplete runs and retained B6/K35 fixtures stay on origin.
+No merge/push or real-cluster changes.
 
 ## Change and controls
 
@@ -21,7 +24,8 @@ self-test executes the actual classification function through the real runner.
 The old reporter reproduces exit 3 / 1 NOTRUN; the corrected reporter passes.
 Failed local synthetic fixtures are retained after a separate retention repair.
 
-The remaining NOTRUN was the sparse-metadata negative: fcstor014 has THP
+The first `6ff653b7d` full gate was 546 / 0 FAIL / 1 NOTRUN (797 s + 16 s
+build, nine advisory overruns). That NOTRUN was the sparse-metadata negative: fcstor014 has THP
 globally set to never, so MADV_HUGEPAGE alone did not create a huge page.
 `c571b862f` adds a synchronous MADV_COLLAPSE request only to each private
 48 MiB test mapping where the Linux headers expose it. The actual fixed
@@ -44,7 +48,10 @@ EFS client, daemon or mount; two all-account quiet checks twenty seconds apart,
 then ten-second ownership sampling. No pinned-client exception or suppression.
 RDMA is enabled with `EFS_TRANSPORT=auto`; the previous TCP-profile gate remains
 separate. Existing workloads, deadlines, durability and zero-application-TCP
-checks are unchanged. B6 and K35 fixture retention is explicitly enabled.
+checks are unchanged. Same-host three-member B6 fixtures use a 16 MiB quota
+on the full node and 1 GiB on return; K35 exercises three, four and five
+members with buffered FUSE I/O. All other default fixture sizes and modes are
+pinned by the test-all recipes. B6 and K35 fixture retention is enabled.
 
 Default GCC's TSan shared library was missing. The matching signed RHEL
 `libtsan-11.5.0-5.el9.x86_64.rpm` was verified with `rpm -K` and extracted only
@@ -103,11 +110,21 @@ segmentation 9/9, original 50 ms deadline, application-byte violation rejection,
 bursts and sixteen reconnect/interruption cycles pass. The generic Soft-RoCE
 label in the segmented output does not change the actual hardware device.
 
-The first gate's efsd reports `6ff653b7d`, built 2026-10-29T04:13:04Z on fcstor014;
-SHA256 `1bf2f3316656f28c5d607f8386ea8a926747214e5911d1f8599756457e23af49`.
+Final efsd reports `c571b862f`, built 2026-10-29T04:36:58Z on fcstor014;
+SHA256 `0b93ec8da84f9edd4aa1d6ab6dd11db1ec35fd26019fa28a2063a488ab7fa083`.
 efs-fuse SHA256
-`656486121805203c2abd96d3406c87cc2222cd10638783b5e1aac28c2a71b126`.
-Full binary/source identities remain with the capture.
+`e993364de41aecde9e4ad1a1fc5e50701934a22d8c34c023613e46224754ef07`.
+Full binary/source identities remain with both captures.
+
+All four B6 JSON verdicts PASS with no cleanup errors: down/refuse/slow each
+22 acknowledged files, full 48; full-quota fault writes remain ENOSPC, with
+exact read-back and restore/restart checks. K35's individual gate exit is zero.
+Its 154.3 s total exceeds the advisory 80 s budget; the individual fsync and
+proof deadlines still pass. Other advisory overruns: K38, K43, Raft ACK-window
+and three D39 shards; no timeout was extended. Source store trees remain,
+and 56 B6/K35 daemon/client logs per run were copied into their origin capture
+for hashing. `fixture-index.json` gives all ten retained fixture roots across
+the two gates; payloads and stores were not copied or deleted.
 
 Current capture:
 fcstor014:/data1/01/efs/evidence/fin-complete-20261029-c571b862f;
@@ -131,7 +148,9 @@ Linux header. Fixed/removed-policy controls are retained at
 
 AMD preflight refused newly active UID 1001 W123 work; its capture remains at
 AMD:/home/maik/efs-artifacts/fin-complete-20261029-6ff653b7d. Fstor007, intel2,
-intel1/xorinox, nuc, fcstor013 and fcstor015 were occupied and left untouched.
+intel1/xorinox, nuc, fcstor011/012/013 and fcstor015 were occupied and left
+untouched. Both original xorinox slow-fsync failures still contain all three
+node stores and daemon/client logs; directory metadata rechecked after closure.
 Original failed FIN audit, original K35 fixtures and their manifests remain at
 the paths on the linked FIN/K35 pages. No old capture, store or payload is
 deleted. Local development logs and retained synthetic fixtures remain at
@@ -139,12 +158,27 @@ deleted. Local development logs and retained synthetic fixtures remain at
 predates the retention fix and its synthetic directories were cleaned by the
 inherited finally. Its log remains. Raw evidence is not committed to Git.
 
-Final full-gate result, ownership review and closed-capture hashes pending.
-This closes prerequisites only when the full run confirms them; separate full
-release/multi-host and full application sanitizer suites are not implied.
+All closed captures below were SHA256-manifested and fully verified on origin,
+after measurement/tests ended. No bulk, store or payload was deleted. These are
+full test-all results with the specified host/profile, not full release/multi-host
+acceptance or the complete production application sanitizer suites. Existing
+historical failures are not retrospectively changed to passing results.
+
+The first five capture directories are on fcstor014 under
+`/data1/01/efs/evidence/`:
+
+| Capture | Files | SHA256SUMS SHA256 |
+|---|---:|---|
+| fin-complete-20261029-6ff653b7d | 12 | e6721158ff18204a82e24edb7297805376e1de20f2fddf25df573ada8579cc58 |
+| fin-complete-20261029-6ff653b7d-ready | 23 | 0ea0d1e0b312d995f99a92f5bc0bd1b2e41c28beb641bea061d2f7c55402acfd |
+| fin-complete-20261029-6ff653b7d-runtime | 113 | 47c5bf0188f4e65ce77bd938c27ddde35514113ce28a2ed0d396f586cb355177 |
+| fin-complete-20261029-c571b862f | 117 | d24cfbf91cb36e2ea57afb23069a62114832455b54adabf2a92bb93329af66d6 |
+| fin-thp-control-c571b862f | 11 | c81fc2b8bb11b7518d7896bdc3612640b47cd94d2588abb868856a3352f71c07 |
+| AMD preflight capture above | 4 | 184b8b1abf2739e3182f6caa8324f351cdfd97ce55a8abe6608599974fca499a |
 
 Local closed regression capture: 142 files, SHA256SUMS SHA256
 `6cd943e8652c7fc487e7452471d9a8ea5de096ed0a6bf4753e9a7ba8223a9fa5`.
-Canonical graph rebuild and all nine navigation tests PASS, 16,837 nodes /
+Documentation generation/all five checks PASS. Canonical graph rebuild and
+all nine navigation tests PASS, 16,837 nodes /
 69,645 edges. The protocol.h partial parse, 49 files without symbols and
 1,473 unresolved calls remain graph coverage gaps, not runtime findings.
