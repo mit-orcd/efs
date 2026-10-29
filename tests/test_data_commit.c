@@ -207,7 +207,7 @@ static void test_slow_commit_headroom(void)
     object_rc=EFS_ERR_NET; object_live=1;
 
     /* An early mark failure remains EIO and retains the record. */
-    reset(); assert(put(969,0,1,2,3,7)==EFS_OK); mark_rc=EFS_ERR_NET;
+    reset(); assert(put(969,0,1,2,3,7)==EFS_OK); mark_rc=EFS_ERR_NET; fail_io[3]=1;
     for(int i=1;i<=3;i++) __atomic_store_n(&hold[i],1,__ATOMIC_RELEASE);
     f=(struct fsync_thread){.ino=969};
     assert(!pthread_create(&f.t,NULL,do_fsync,&f)); release_commit_quorum(); wait_for_marks(1);
@@ -215,7 +215,29 @@ static void test_slow_commit_headroom(void)
     __atomic_store_n(&hold[3],0,__ATOMIC_RELEASE); pthread_join(f.t,NULL);
     assert(f.rc==EFS_ERR_IO && live()==1);
     test_clock_jump_ms=0;
-    mark_rc=EFS_OK; assert(efs_client_data_commit(969)==EFS_OK && !live());
+    mark_rc=EFS_OK; heal(); assert(efs_client_data_commit(969)==EFS_OK && !live());
+
+    /* A failed speculative mark is irrelevant if the third COMMIT still
+     * supplies a full valid proof before the original deadline. */
+    reset(); assert(put(970,0,1,2,3,7)==EFS_OK); mark_rc=EFS_ERR_NET;
+    for(int i=1;i<=3;i++) __atomic_store_n(&hold[i],1,__ATOMIC_RELEASE);
+    f=(struct fsync_thread){.ino=970};
+    assert(!pthread_create(&f.t,NULL,do_fsync,&f)); release_commit_quorum(); wait_for_marks(1);
+    assert(!__atomic_load_n(&f.done,__ATOMIC_ACQUIRE));
+    __atomic_store_n(&hold[3],0,__ATOMIC_RELEASE); pthread_join(f.t,NULL);
+    assert(f.rc==EFS_OK && !live() && marks==1);
+    test_clock_jump_ms=0;
+
+    /* The same result arriving after the cap cannot rescue the operation. */
+    reset(); assert(put(971,0,1,2,3,7)==EFS_OK);
+    for(int i=1;i<=3;i++) __atomic_store_n(&hold[i],1,__ATOMIC_RELEASE);
+    f=(struct fsync_thread){.ino=971};
+    assert(!pthread_create(&f.t,NULL,do_fsync,&f)); release_commit_quorum(); wait_for_marks(1);
+    __atomic_store_n(&test_clock_jump_ms,60001,__ATOMIC_RELEASE);
+    __atomic_store_n(&hold[3],0,__ATOMIC_RELEASE); pthread_join(f.t,NULL);
+    assert(f.rc==EFS_ERR_IO && live()==1 && marks==1);
+    test_clock_jump_ms=0; mark_rc=EFS_OK;
+    assert(efs_client_data_commit(971)==EFS_OK && !live());
     reset();
 }
 

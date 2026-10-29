@@ -296,7 +296,7 @@
     "src/client/commands/command.py": 33,
     "src/client/commands/embed.py": 1,
     "src/client/commands/source.h": 0,
-    "src/client/data_commit.c": 19,
+    "src/client/data_commit.c": 20,
     "src/client/efs_bench.c": 21,
     "src/client/efs_fuse.c": 284,
     "src/client/inode_rpc.c": 114,
@@ -1593,7 +1593,7 @@
     "src/client/commands/command.py": "00958a71e33cf21c9eddb8e659d2e92fefa24a55e3565326be0115597d914658",
     "src/client/commands/embed.py": "5bea9e34b531760d392f07db37737844304896392d66a1387d006015cc5b1ca4",
     "src/client/commands/source.h": "bc3906cf9a34b633296df88a44cfce37fa63d21d9eb371fb35d64b6f6b6db2a4",
-    "src/client/data_commit.c": "2ebff5224b497a775543e3387ad7791f7dd653756451fcfa1abc4249f2ec5a4c",
+    "src/client/data_commit.c": "53b788b7d858252afb95befd5f44da0f67aabe4cf57745438101f06a1fb26df6",
     "src/client/efs_bench.c": "52ba4ba8c448eca072f0ed599111be2607d8e54857d01258bf994c4bc8e5e293",
     "src/client/efs_fuse.c": "bc86c1b0cf43f19d899d4351e1cf319bac0b61c55d3a5219e4519819eb81c6f3",
     "src/client/inode_rpc.c": "e55f248e1cbd8579fa459e3ea4eacd46fbcdd5b90ec15ca3ba46559ebebf73fa",
@@ -2095,7 +2095,7 @@
     "tests/test_d4_plateau.py": "02f21450d21a3440f9d0ec5477a0de2f51aca4aa6812a034466f18edd1f77810",
     "tests/test_d4_progress.py": "f252b39764e5de934baf57871babe02d5068befbed828e1061ca570659ea9f15",
     "tests/test_data.c": "d49cc31522e9b90d651b7692a363642b689f648622ca11185987960c32f2d8d7",
-    "tests/test_data_commit.c": "269c5852ce9aea635e9498617b46f1003ecee28116322b3dd846b405d758368c",
+    "tests/test_data_commit.c": "ba0dda9292c75aeab4f9fc7a1da49a71a8da04c7294bb5b7abb40d979586610f",
     "tests/test_data_commit_index.c": "6186066cf180622602bb01c8ff5378498d163c5edf9f727c0a0217f7d0c060cd",
     "tests/test_declaration_gate.c": "0576925ea85404e1dbbf29b7218654f6a7b59d6a8a737db8408c74012258405a",
     "tests/test_declaration_gate_handler.py": "09afeba9a77f1f7894f5757fa6bdd14bb4a0750818edbefaacdf2a2712a33bda",
@@ -2563,5 +2563,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "4e088356021e7fdbaf573fb94603d0f0d34439e8"
+  "source_commit": "458f75e2139c0559f59bc0e29b28ab772a566303"
 }

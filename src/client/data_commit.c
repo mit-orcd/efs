@@ -282,7 +282,7 @@ void efs_client_stripe_closed(const struct efs_put_ticket *ticket)
 #define COMMIT_PROOF_HEADROOM_MS 15000u
 struct commit_job {
     efs_node_id_t node;
-    uint64_t target, epoch, deadline;
+    uint64_t target, epoch, deadline, completed_at;
     int rc, done, notify_fd;
 };
 
@@ -325,6 +325,9 @@ static void *commit_one(void *arg)
         if (!conn && !efs_client_node_reprobe(j->node))
             break;
     }
+    struct timespec finished;
+    j->completed_at = clock_gettime(CLOCK_MONOTONIC, &finished) ? UINT64_MAX :
+        (uint64_t)finished.tv_sec * 1000 + finished.tv_nsec / 1000000;
     efs_client_rpc_set_deadline_ms(saved);
     __atomic_store_n(&j->done, 1, __ATOMIC_RELEASE);
     /* At most COMMIT_NODES one-byte notices: the pipe cannot fill. */
@@ -372,21 +375,31 @@ static int sweep_expired(uint64_t deadline)
     return (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000 >= deadline;
 }
 
-/* Read job results only after their release-published completion. Missing
- * replies never prove a fragment durable; epochs and ACK watermarks still
- * bind every positive proof to this snapshot. */
+/* One certificate predicate for the collector, live fold and late fallback.
+ * Completion time, storage verifier and ACK watermark constrain authority. */
+static uint8_t commit_fragment_proof(const struct stripe *s, int i,
+                                     const struct commit_job *jobs, const int *slot,
+                                     uint64_t deadline)
+{
+    int at = slot[s->nodes[i]];
+    if (at < 0 || !__atomic_load_n(&jobs[at].done, __ATOMIC_ACQUIRE) ||
+        jobs[at].completed_at >= deadline || jobs[at].rc != EFS_OK ||
+        s->seq[i] > jobs[at].target) return FRAG_PENDING;
+    return s->epoch[i] == jobs[at].epoch ? FRAG_DURABLE : FRAG_LOST;
+}
+
+/* Missing replies never prove a fragment durable. This only decides when
+ * to collect; retirement still checks the current live obligation. */
 static int commit_quorum_ready(const struct stripe *snap, uint32_t ns,
-                               const struct commit_job *jobs, const int *slot)
+                               const struct commit_job *jobs, const int *slot,
+                               uint64_t deadline)
 {
     for (uint32_t k = 0; k < ns; k++) {
         unsigned durable = 0;
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            int at = slot[snap[k].nodes[i]];
             if (snap[k].state[i] == FRAG_DURABLE ||
-                (snap[k].state[i] == FRAG_PENDING && at >= 0 &&
-                 __atomic_load_n(&jobs[at].done, __ATOMIC_ACQUIRE) &&
-                 jobs[at].rc == EFS_OK && snap[k].seq[i] <= jobs[at].target &&
-                 snap[k].epoch[i] == jobs[at].epoch))
+                (snap[k].state[i] == FRAG_PENDING &&
+                 commit_fragment_proof(&snap[k], i, jobs, slot, deadline) == FRAG_DURABLE))
                 durable++;
         }
         if (durable < 2) return 0;
@@ -411,7 +424,7 @@ static void commit_wait_proof(struct commit_job *jobs, int n, int fd,
         struct timespec ts;
         if (clock_gettime(CLOCK_MONOTONIC, &ts)) return;
         uint64_t now = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-        if (now >= deadline || (now >= proof_at && commit_quorum_ready(snap, ns, jobs, slot)))
+        if (now >= deadline || (now >= proof_at && commit_quorum_ready(snap, ns, jobs, slot, deadline)))
             return;
         uint64_t until = now < proof_at ? proof_at : deadline;
         struct pollfd event = {.fd=fd, .events=POLLIN};
@@ -511,14 +524,11 @@ static int stripe_prove(efs_ino_t ino, int all)
             continue;
         }
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            int s = slot[p->nodes[i]];
-            if (p->state[i] != FRAG_PENDING || s < 0 ||
-                !__atomic_load_n(&jobs[s].done, __ATOMIC_ACQUIRE) || jobs[s].rc != EFS_OK ||
-                p->seq[i] > jobs[s].target)
-                continue;
-            p->state[i] = p->epoch[i] == jobs[s].epoch ? FRAG_DURABLE : FRAG_LOST;
+            if (p->state[i] == FRAG_PENDING)
+                p->state[i] = commit_fragment_proof(p, i, jobs, slot, deadline);
         }
-        snap[k] = *p;
+        /* Keep the entry snapshot intact for deadline-bounded late proof:
+         * a new ACK or another fsync cannot silently replace its authority. */
     }
     pthread_mutex_unlock(&commit_mu);
 
@@ -530,10 +540,19 @@ static int stripe_prove(efs_ino_t ino, int all)
     unsigned logged = 0, failed = 0, marked = 0;
     const char *what = all ? "data-commit sweep" : "fsync";
     for (uint32_t k = 0; k < ns; k++) {
-        struct stripe *s = &snap[k];
-        int durable = 0, open = -1, opens = 0, retire = 0;
-        if (!s->ino)
+        if (!snap[k].ino) continue;
+        struct stripe current;
+        pthread_mutex_lock(&commit_mu);
+        struct stripe *record = stripe_find(snap[k].ino, snap[k].ci, snap[k].object);
+        if (!record) {
+            snap[k].ino = 0;
+            pthread_mutex_unlock(&commit_mu);
             continue;
+        }
+        current = *record;
+        pthread_mutex_unlock(&commit_mu);
+        struct stripe *s = &current;
+        int durable = 0, open = -1, opens = 0, retire = 0;
         if (sweep_expired(deadline)) {
             stripe_log(what, s, 0, "sweep deadline exhausted; obligations retained", EFS_ERR_BUSY);
             failed++;
@@ -604,20 +623,55 @@ static int stripe_prove(efs_ino_t ino, int all)
             pthread_mutex_lock(&commit_mu);
             stripe_remove(s->ino, s->ci, s->object);
             pthread_mutex_unlock(&commit_mu);
+            snap[k].ino = 0;
         }
     }
     if (marked > 8)
         fprintf(stderr, "%s: %u more stripes marked degraded\n", what, marked - 8);
-    if (failed) {
-        if (logged > 8)
-            fprintf(stderr, "%s: %u more stripes without proof\n", what, logged - 8);
-        rc = EFS_ERR_IO;
-    }
     /* Even an early proof cannot release stack jobs or the pipe while a
      * worker still owns them. Their original absolute deadlines are intact. */
     for (int i = 0; i < n; i++)
         if (started[i]) pthread_join(th[i], NULL);
     close(completion[0]); close(completion[1]);
+    if (failed) {
+        /* A failed speculative mark must not turn an eventual full three-
+         * fragment proof into EIO. Accept only our own replies completed
+         * before the original deadline or unchanged entry-snapshot proofs;
+         * no late RPC or newly published ACK gains authority here. */
+        unsigned remaining = 0, rescued = 0;
+        pthread_mutex_lock(&commit_mu);
+        for (uint32_t k = 0; k < ns; k++) {
+            const struct stripe *before = &snap[k];
+            if (!before->ino) continue;
+            struct stripe *p = stripe_find(before->ino, before->ci, before->object);
+            if (!p) {
+                if (sweep_expired(deadline)) remaining++;
+                else rescued++; /* another fsync already proved this object */
+                continue;
+            }
+            int all_durable = p->inode_gen == before->inode_gen;
+            for (int i = 0; i < EFS_NUM_FRAGMENTS && all_durable; i++) {
+                if (before->state[i] == FRAG_DURABLE && p->state[i] == FRAG_DURABLE &&
+                    p->nodes[i] == before->nodes[i] && p->seq[i] == before->seq[i] &&
+                    p->epoch[i] == before->epoch[i]) continue;
+                if (commit_fragment_proof(p, i, jobs, slot, deadline) != FRAG_DURABLE)
+                    all_durable = 0;
+            }
+            if (all_durable) {
+                stripe_remove(p->ino, p->ci, p->object);
+                rescued++;
+            } else remaining++;
+        }
+        pthread_mutex_unlock(&commit_mu);
+        if (rescued)
+            fprintf(stderr, "%s: %u objects proven by on-time COMMITs or concurrent fsync; no further mark needed\n",
+                    what, rescued);
+        failed = remaining;
+        if (failed) {
+            fprintf(stderr, "%s: %u stripes remain without proof\n", what, failed);
+            rc = EFS_ERR_IO;
+        }
+    }
     efs_client_rpc_set_deadline_ms(parent);
     free(snap);
     return rc;
