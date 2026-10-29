@@ -910,7 +910,7 @@ checked against the function bodies and callers. Complexity below describes
 those loops, not a measured end-to-end slowdown or an unbounded input: message
 and staging limits still apply. No K defect, acceptance or failure verdict changes.
 
-- [ ] **AV — REPORT: index the chunk-to-inode-size join once per request.**
+- [x] **AV — REPORT: index the chunk-to-inode-size join once per request.**
   In `src/server/raft_host.c::server_raft_host_report`, the main record loop
   searches `irecs[0..ino_count)` from the start for each of `count` chunk records.
   This is O(C × I) comparisons in the worst case for C chunks and I inode-size
@@ -930,6 +930,11 @@ and staging limits still apply. No K defect, acceptance or failure verdict chang
   P3-C's ticket compaction. The client chunk-only-inode fallback has another
   size-array scan, but it already bypasses normal inodes through `dirty_set_has`;
   do not label all client REPORT construction quadratic from that rare branch.
+  **Measured 2026-10-29, no change** (`docs/status/av-report-join-20261028.md`):
+  the join costs 1–32 comparisons per REPORT across big/small/mixed/openmany
+  loads — C and I are never both large in one real frame and first-match makes
+  the common case linear; even an adversarial C=I=512 frame is ~0.1 ms, far
+  below the REPORT's own wall cost. No index is justified.
 - [ ] **AW — Local child vectors: avoid a parent-sized search on deletion and slot moves.**
   `src/meta/metadata.c::child_idx_del` searches all slots of the parent's child
   vector before swap-removing the match. `child_idx_replace_slot` searches that
