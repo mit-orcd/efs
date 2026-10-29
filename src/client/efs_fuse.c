@@ -7415,10 +7415,14 @@ ready:
  * freeing a large transfer can raise it to MiB, putting later transient
  * frames into retained heap holes despite the bounded arena count. This
  * preserves malloc/free ownership while letting large buffers return their
- * pages on free. Other allocators do not expose these glibc policies. */
+ * pages on free. Other allocators do not expose these glibc policies:
+ * an ASan build replaces malloc and its mallopt always fails, so the policy
+ * is skipped there (K56) and stays fatal in every glibc build.
+ * shortcut: relies on gcc's __SANITIZE_ADDRESS__ (the sanitizer gate's
+ * compiler); a clang ASan build needs a __has_feature test. */
 static int fuse_allocator_init(void)
 {
-#ifdef __GLIBC__
+#if defined(__GLIBC__) && !defined(__SANITIZE_ADDRESS__)
     if (!mallopt(M_ARENA_MAX, 4) || !mallopt(M_MMAP_THRESHOLD, 128 * 1024))
         return -1;
 #endif
