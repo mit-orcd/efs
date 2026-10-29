@@ -717,7 +717,7 @@ the source bodies, establishes the mechanisms. No new correctness defect or
 measured storage bottleneck is claimed. No live cluster, failure evidence or K
 verdict changes; the Stage 1 exception applies.
 
-- [ ] **AP — Packed segment reads: combine adjacent payload and tail I/O.**
+- [x] **AP — Packed segment reads: combine adjacent payload and tail I/O.**
   `src/server/segment_store.c::server_segment_read` first calls `sg_read_tail`
   and then `server_frag_pread` for the payload. The helper in
   `src/server/store.c` rounds the tail-record read to a 4 KiB O_DIRECT read,
@@ -735,6 +735,10 @@ verdict changes; the Stage 1 exception applies.
   packed reader, direct-I/O-required and K37 coverage; missing/truncated files,
   wrong identity, bad payload, read error and concurrent reclaim. Separate this
   server disk task from AK's client receive copy/double hash work.
+  **Measured 2026-10-29, no change** (`docs/status/ap-segment-read-combined-20261028.md`):
+  a combined read saves one pread + one bounce per packed GET, but cold and
+  repeated packed-read p95/p99 are identical within a 2–4× wider rep spread on
+  intel2 NVMe at 1/8 readers; the threshold is not met and the code stays as is.
 - [ ] **AQ — Segment directory barriers: share only covered namespace fsyncs.**
   `src/server/segment_store.c::sg_write` writes and fsyncs each newly created
   fragment file, then `sg_sync_path` opens/fsyncs/closes its directory.
