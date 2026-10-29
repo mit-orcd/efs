@@ -201,7 +201,7 @@ def bench_loop(c, w):
                              '--dirs', '16', '--workers', '16',
                              '--phases', 'mkdir,create', '--keep',
                              '--id', str(w * 1000000 + r)],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
         if rc != 0:
             bench_errors[0] += 1
 

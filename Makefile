@@ -214,6 +214,7 @@ test-report-pressure:
 	python3 tests/test_rdma_setup_reentry.py
 	python3 tests/test_rdma_handler_alignment.py
 	python3 tests/test_rdma_handoff.py
+	python3 tests/test_rdma_registry_probe.py
 	python3 tests/test_heartbeat_shutdown.py
 	python3 tests/test_wb_worker_budget.py
 	python3 tests/test_wb_drain_budget.py
