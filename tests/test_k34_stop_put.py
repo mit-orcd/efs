@@ -2,7 +2,9 @@
 """K34: a member that stops in order while a multi-chunk write is in flight.
 
 Three real efsd daemons on loopback (tests/k33_daemons.py) and efs-fuse;
-every stripe uses all three members. The interleaving of the K34 failure
+every stripe uses all three members. Before admitting writes, node 2 is
+made leader of both metadata groups so its stop also exercises leadership
+release during handler drain. The interleaving of the K34 failure
 (tests/test_k33_payload.py, 4 of 6 runs on nuc) is forced with two test
 hooks (src/server/put_upload.c):
 - node 2 gets EFS_FAULT_PUT_STOP_AFTER=2: right after it stores its second
@@ -32,7 +34,8 @@ Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 import os, re, shutil, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload  # noqa: E402
+from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload, mgmt  # noqa: E402
+from pub_unit_setup import leaders_on  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -73,6 +76,10 @@ try:
     c.start(3, join=1, extra_env={'EFS_FAULT_PUT_BUSY_FILE': str(busy)})
     for i in (1, 2, 3):
         c.wait_log(i, r'raft-host: formed: 3 members')
+    # Exercise stopping leadership, rather than depending on election luck.
+    # Transfer/readiness retries are fixture setup only, before any write.
+    place = leaders_on(c, mgmt, c.node_id(2), 30)
+    print(f'K34 stopping member leads both metadata groups: {place}', flush=True)
     # 0. A small file, packed into a segment on all three members, written
     # through its own mount so mount A never caches it.
     base = packed_total(c)
@@ -135,15 +142,31 @@ try:
             f'{alog.count("attempt")} retried PUT attempts logged, packed read {late:.1f} s '
             'after node 2 stopped')
 finally:
-    if busy.exists():
-        busy.unlink()
+    failed = sys.exc_info()[0] is not None
+    cleanup_errors = []
+    try:
+        busy.unlink(missing_ok=True)
+    except OSError as error:
+        cleanup_errors.append(f'fault marker: {error}')
     for m in mounts:
-        m.close()
-    c.stop_all()
-    if os.environ.get('EFS_K34_KEEP'):
-        print('kept', work)
+        try:
+            m.close()
+        except Exception as error:
+            cleanup_errors.append(f'mount {m.path}: {error}')
+    try:
+        c.stop_all()
+    except Exception as error:
+        cleanup_errors.append(f'daemons: {error}')
+    if failed or cleanup_errors or os.environ.get('EFS_K34_KEEP'):
+        print('kept', work, flush=True)
+        if failed or cleanup_errors:
+            for path in sorted(c.dir.glob('*.log')):
+                print(f'--- {path} tail', file=sys.stderr)
+                print(path.read_text(errors='replace')[-3000:], file=sys.stderr)
     else:
         shutil.rmtree(work, ignore_errors=True)
+    if cleanup_errors and not failed:
+        raise RuntimeError('K34 cleanup failed: ' + '; '.join(cleanup_errors))
 print(note)
 print('K34 orderly stop with a multi-chunk write in flight: no acknowledgement from the stopping '
       'member, BUSY member completed, exact with it down and after it returned, packed read past a stale down-mark: '

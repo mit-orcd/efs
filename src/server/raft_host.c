@@ -8503,6 +8503,28 @@ static void host_stored_decode_error(void *ctx, const uint8_t *key, uint32_t len
     host_pump_kick(h);
 }
 
+/* h->mu held. Handler drain closes new peer requests before Raft teardown.
+ * A stopping leader must not keep heartbeats suppressing an election while
+ * its admitted readers wait for replies on those closed connections. Drop
+ * leadership/campaigning on the pump owner, without touching committed work
+ * or bypassing the core's receive-persistence fence. A fenced demotion is
+ * retried next cycle; no shutdown thread waits on h->mu or disk here. */
+static void host_stop_leading(struct efs_raft_host *h, int stopping)
+{
+    if (!stopping) return;
+    for (unsigned i = 0; i < HOST_NGROUPS; i++) {
+        struct host_group *g = &h->g[i];
+        if (!g->hosted || !g->r) continue;
+        efs_raft_allow_campaign(g->r, 0);
+        if (efs_raft_role(g->r) != EFS_RAFT_FOLLOWER &&
+            efs_raft_step_down(g->r) == EFS_OK) {
+            fprintf(stderr, "raft-host: group=%u stopping: relinquished leadership before handler drain\n",
+                    g->group);
+            host_publish_group(h, g->group);
+        }
+    }
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -8546,6 +8568,7 @@ static void *host_pump(void *arg)
                 host_publish_group(h, dg->group);
             }
         }
+        host_stop_leading(h, h->s && server_stop_requested());
         host_pending_reads(h);
         /* Readers queued for a fresh round since the last cycle. */
         (void)host_read_start_requested(h);
@@ -8583,6 +8606,8 @@ static void *host_pump(void *arg)
         (void)efs_kv_lsm_sync_hold(h->kv);
         if (batch_obs) phase_us = efs_batch_obs_now_us();
         drain_inbox(h);
+        /* In-flight membership/apply work may have changed policy or role. */
+        host_stop_leading(h, h->s && server_stop_requested());
         /* Network trylocks can fail while this bounded drain holds h->mu.
          * Account eligible new read-only votes before the KV durability
          * tail; their unchanged core checks do not apply replication work.
