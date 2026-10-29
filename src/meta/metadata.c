@@ -1065,8 +1065,11 @@ static void child_vecs_free(struct efs_export *ex)
 {
     if (!ex)
         return;
-    for (uint64_t i = 0; i < ex->child_vec_count; i++)
+    for (uint64_t i = 0; i < ex->child_vec_count; i++) {
         free(ex->child_vecs[i].slots);
+        free(ex->child_vecs[i].pos_keys);
+        free(ex->child_vecs[i].pos_vals);
+    }
     free(ex->child_vecs);
     ex->child_vecs = NULL;
     ex->child_vec_count = 0;
@@ -1146,6 +1149,34 @@ static struct efs_child_vec *child_vec_get(struct efs_export *ex, efs_ino_t pare
     return &ex->child_vecs[vi];
 }
 
+/* AW: grow the reverse slot -> position map when the load exceeds half.
+ * Positions are simply the vector indices, so a rehash re-records every
+ * current slot; nothing outside this function holds a map array pointer. */
+static int child_pos_rehash(struct efs_export *ex, struct efs_child_vec *v,
+                            uint64_t ncap)
+{
+    uint64_t oldcap = v->pos_mask + 1;
+    uint64_t *keys = NULL, *vals = NULL, mask = 0;
+    if (idx_init(&keys, &vals, &mask, ncap) != 0)
+        return -1;
+    for (uint64_t i = 0; i < v->count; i++) {
+        if (idx_put(keys, vals, mask, v->slots[i], i) != 0) {
+            free(keys);
+            free(vals);
+            return -1;
+        }
+    }
+    free(v->pos_keys);
+    free(v->pos_vals);
+    v->pos_keys = keys;
+    v->pos_vals = vals;
+    ex->staged_child_bytes += ((mask + 1) * 2 * sizeof(uint64_t)) -
+                              (oldcap * 2 * sizeof(uint64_t));
+    v->pos_mask = mask;
+    staged_refresh(ex);
+    return 0;
+}
+
 static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
 {
     if (parent == inode_at(ex, slot)->ino && parent == EFS_ROOT_INO)
@@ -1153,6 +1184,13 @@ static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
     struct efs_child_vec *v = child_vec_get(ex, parent, 1);
     if (!v)
         return -1;
+    /* Grow before mutating: an allocation failure leaves the vector and the
+     * reverse index exactly as they were (failure atomicity). */
+    if ((v->count + 1) * 2 > v->pos_mask + 1) {
+        uint64_t ncap = v->pos_mask ? (v->pos_mask + 1) * 2 : 16;
+        if (child_pos_rehash(ex, v, ncap) != 0)
+            return -1;
+    }
     if (v->count >= v->cap) {
         uint64_t ncap = v->cap ? v->cap * 2 : 4;
         uint64_t *ns = realloc(v->slots, ncap * sizeof(uint64_t));
@@ -1163,6 +1201,8 @@ static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
         v->cap = ncap;
         staged_refresh(ex);
     }
+    if (idx_put(v->pos_keys, v->pos_vals, v->pos_mask, slot, v->count) != 0)
+        return -1;
     v->slots[v->count++] = slot;
     return 0;
 }
@@ -1172,13 +1212,17 @@ static void child_idx_del(struct efs_export *ex, efs_ino_t parent, uint64_t slot
     struct efs_child_vec *v = child_vec_get(ex, parent, 0);
     if (!v)
         return;
-    for (uint64_t i = 0; i < v->count; i++) {
-        if (v->slots[i] == slot) {
-            v->slots[i] = v->slots[v->count - 1];
-            v->count--;
-            return;
-        }
-    }
+    uint64_t pos;
+    if (idx_get(v->pos_keys, v->pos_vals, v->pos_mask, slot, &pos) != 0 ||
+        pos >= v->count)
+        return;
+    uint64_t last = v->count - 1;
+    uint64_t moved = v->slots[last];
+    v->slots[pos] = moved;
+    v->count--;
+    idx_del(v->pos_keys, v->pos_vals, v->pos_mask, slot);
+    if (pos != last)
+        idx_put(v->pos_keys, v->pos_vals, v->pos_mask, moved, pos);
 }
 
 static void child_idx_replace_slot(struct efs_export *ex, efs_ino_t parent,
@@ -1187,12 +1231,13 @@ static void child_idx_replace_slot(struct efs_export *ex, efs_ino_t parent,
     struct efs_child_vec *v = child_vec_get(ex, parent, 0);
     if (!v)
         return;
-    for (uint64_t i = 0; i < v->count; i++) {
-        if (v->slots[i] == old_slot) {
-            v->slots[i] = new_slot;
-            return;
-        }
-    }
+    uint64_t pos;
+    if (idx_get(v->pos_keys, v->pos_vals, v->pos_mask, old_slot, &pos) != 0 ||
+        pos >= v->count)
+        return;
+    v->slots[pos] = new_slot;
+    idx_del(v->pos_keys, v->pos_vals, v->pos_mask, old_slot);
+    idx_put(v->pos_keys, v->pos_vals, v->pos_mask, new_slot, pos);
 }
 
 static void child_idx_rebuild(struct efs_export *ex)

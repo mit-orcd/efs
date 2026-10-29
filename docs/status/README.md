@@ -56,6 +56,14 @@ durations track PUT completion, not wake latency, and broadcast-wake CPU is
 ~0.05 % of the host — no end-to-end gain from per-inode wake ownership.
 Named gates PASS; test-all 546/1/11 with the one FAIL the pre-existing b6 defect.
 
+[AW — child vectors: reverse slot→position index](aw-child-vector-index-20261028.md):
+**IMPLEMENTED on branch `agent/devel-taskaw` (`50218c827`), not merged.** O(1)
+deletion and relocation repair (~6 map ops instead of ~D comparisons), same
+memory budget, rollup convergence verified. End-to-end latency unchanged:
+the dominant cost is the pre-existing `recompute_times_up` rescan (recorded
+as a follow-up finding). Gates: deterministic + named + ASan/LSan PASS;
+test-all 547/2/12 (b6 pre-existing, K41 timing-sensitive).
+
 [Stage 1 cross-path due diligence AY–BB](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
 upload completion, serve/audit/recovery validation, deletion authority, and
@@ -69,9 +77,11 @@ consensus/publication interfaces, shared storage primitives and removal of
 superseded machinery. Alpha 1.0 tasks/gates and D38 alpha 2.0–4.0 remain intact.
 
 [Stage 1 scan/index tasks AV–AX](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--workload-sized-scans-avax):
-**OPEN / implementation and measurements NOTRUN**, source reviewed at `ee66f837b`:
-REPORT chunk/size nested search, local child-vector deletion/relocation scans,
-and loaded hardlink-alias scans. Scope and fixed-size fast paths distinguished;
+**AW IMPLEMENTED on `agent/devel-taskaw` (`50218c827`, not merged;
+[evidence](aw-child-vector-index-20261028.md)); AV and AX OPEN /
+implementation and measurements NOTRUN**, source reviewed at `ee66f837b`:
+REPORT chunk/size nested search (AV), local child-vector deletion/relocation scans (AW),
+and loaded hardlink-alias scans (AX). Scope and fixed-size fast paths distinguished;
 no new K defect or measured slowdown claimed. Existing tasks remain separate.
 
 [Stage 1 wakeup/polling tasks AS–AU](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--wakeups-and-polling-asau):

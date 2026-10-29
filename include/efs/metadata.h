@@ -193,6 +193,12 @@ struct efs_child_vec {
     uint64_t *slots;
     uint64_t count;
     uint64_t cap;
+    /* AW: reverse slot -> position map so deletion and relocation repair are
+     * O(1) instead of a full vector scan. Values are positions in `slots`;
+     * charged to the same staged_child_bytes budget as the vector itself. */
+    uint64_t *pos_keys;
+    uint64_t *pos_vals;
+    uint64_t pos_mask;
 };
 
 /* What is left of the old fully-replicated export root: the shard geometry
