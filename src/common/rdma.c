@@ -18,6 +18,7 @@
 #include "efs/wire.h"
 #include "efs/common.h"
 #include "rdma_memcheck.h"
+#include "tcp_counts.h"
 
 #include <infiniband/verbs.h>
 
@@ -1188,21 +1189,12 @@ static int setup_peer(struct efs_rdma_conn *rc, const struct efs_rmsg_setup *pee
                rc->dev->roce ? peer->gid : NULL) || qp_rts(rc)) return -1;
     return 0;
 }
-static int tcp_counts(int fd,uint64_t *tx,uint64_t *rx,int *peer_fin)
-{
-    struct tcp_info info;memset(&info,0,sizeof(info));socklen_t n=sizeof(info);
-    if (getsockopt(fd,IPPROTO_TCP,TCP_INFO,&info,&n) ||
-        n<offsetof(struct tcp_info,tcpi_bytes_sent)+sizeof(info.tcpi_bytes_sent)) return -1;
-    *tx=info.tcpi_bytes_sent;*rx=info.tcpi_bytes_received;
-    *peer_fin=info.tcpi_state==8; /* Linux TCP_CLOSE_WAIT: received FIN counts one octet */
-    return 0;
-}
 static void setup_publish(struct efs_conn *c, struct efs_rdma_conn *rc)
 {
     c->rc=rc; c->kind=EFS_CONN_RDMA; rc->tcp_fd=c->fd; rc->counted=1;
     fd_link_now(c->fd,rc->tcp_link,sizeof(rc->tcp_link));
-    int fin=0;
-    rc->tcp_counted=!tcp_counts(c->fd,&rc->bootstrap_tx,&rc->bootstrap_rx,&fin);
+    unsigned state=0,fin=0;
+    rc->tcp_counted=!efs_tcp_payload_counts(c->fd,&rc->bootstrap_tx,&rc->bootstrap_rx,&state,&fin);
     if (rc->tcp_counted && c->is_server) rc->bootstrap_tx+=5+EFS_RMSG_SETUP_BYTES;
     __sync_fetch_and_add(&g_live_conns,1);
     fprintf(stderr,"efs: RDMA transport up segmented-v1 on %s qpn=%u physical=%u logical=%u peer-receives=%u messages=%u\n",
@@ -1287,11 +1279,11 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
     }
     if (rc->messages.global) efs_rmsg_rx_destroy(&rc->messages);
     if (rc->counted) {
-        uint64_t tx=0,rx=0;int fin=0;
-        int measured=rc->tcp_counted&&!tcp_counts(rc->tcp_fd,&tx,&rx,&fin);
+        uint64_t tx=0,rx=0;unsigned state=0,fin=0;
+        int measured=rc->tcp_counted&&!efs_tcp_payload_counts(rc->tcp_fd,&tx,&rx,&state,&fin);
         uint64_t extra_tx=measured&&tx>rc->bootstrap_tx?tx-rc->bootstrap_tx:0;
-        uint64_t extra_rx=measured&&rx>rc->bootstrap_rx+(unsigned)fin?rx-rc->bootstrap_rx-(unsigned)fin:0;
-        fprintf(stderr,"efs: RDMA counters qpn=%u fd=%d data_tx=%llu/%llu data_rx=%llu/%llu app_tx=%llu/%llu app_rx=%llu/%llu controls=%llu/%llu peak=%llu stalls=%llu tcp_measured=%d bootstrap=%llu/%llu post_setup_tcp=%llu/%llu violations=%llu\n",
+        uint64_t extra_rx=measured&&rx>rc->bootstrap_rx?rx-rc->bootstrap_rx:0;
+        fprintf(stderr,"efs: RDMA counters qpn=%u fd=%d data_tx=%llu/%llu data_rx=%llu/%llu app_tx=%llu/%llu app_rx=%llu/%llu controls=%llu/%llu peak=%llu stalls=%llu tcp_measured=%d bootstrap=%llu/%llu post_setup_tcp=%llu/%llu violations=%llu tcp_state=%u peer_fin=%u\n",
             dying_qpn,rc->tcp_fd,(unsigned long long)rc->data_frames,(unsigned long long)rc->data_bytes,
             (unsigned long long)rc->rx_frames,(unsigned long long)rc->rx_bytes,
             (unsigned long long)rc->app_tx,(unsigned long long)rc->logical_tx,
@@ -1299,7 +1291,7 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
             (unsigned long long)rc->ctrl_tx,(unsigned long long)rc->ctrl_rx,
             (unsigned long long)rc->assembly_peak,(unsigned long long)rc->credit_stalls,
             measured,(unsigned long long)rc->bootstrap_tx,(unsigned long long)rc->bootstrap_rx,
-            (unsigned long long)extra_tx,(unsigned long long)extra_rx,(unsigned long long)rc->tcp_app_rx);
+            (unsigned long long)extra_tx,(unsigned long long)extra_rx,(unsigned long long)rc->tcp_app_rx,state,fin);
     }
     int counted = rc->counted;
     conn_arena_destroy(rc);
