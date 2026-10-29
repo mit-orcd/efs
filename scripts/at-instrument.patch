@@ -1,0 +1,116 @@
+diff --git a/src/client/write.c b/src/client/write.c
+index 12151e075..d19c916a5 100644
+--- a/src/client/write.c
++++ b/src/client/write.c
+@@ -4967,10 +4967,45 @@ static uint32_t put_win_total; /* open windows, all inodes: read fast path */
+ static pthread_mutex_t put_win_mu = PTHREAD_MUTEX_INITIALIZER;
+ static pthread_cond_t put_win_cv = PTHREAD_COND_INITIALIZER;
+ 
++/* TEMP-AT: uncommitted measurement instrumentation; never committed. */
++#include <time.h>
++uint64_t at_open, at_close, at_wait_calls, at_wait_wakes, at_wait_sat,
++    at_wait_to, at_wait_zero, at_wait_locks, at_wait_iters_hist[16],
++    at_wait_dur_hist[64];
++static uint64_t at_now_ns(void)
++{
++    struct timespec ts;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
++}
++static void at_bucket(uint64_t *hist, int n, uint64_t v)
++{
++    int b = 63 - __builtin_clzll(v | 1);
++    if (b >= n) b = n - 1;
++    hist[b]++;
++}
++void efs_at_dump(const char *tag)
++{
++    fprintf(stderr, "at-measure %s open=%llu close=%llu wait_calls=%llu wakes=%llu sat=%llu to=%llu zero=%llu locks=%llu",
++            tag, (unsigned long long)at_open, (unsigned long long)at_close,
++            (unsigned long long)at_wait_calls, (unsigned long long)at_wait_wakes,
++            (unsigned long long)at_wait_sat, (unsigned long long)at_wait_to,
++            (unsigned long long)at_wait_zero, (unsigned long long)at_wait_locks);
++    for (int i = 0; i < 16; i++)
++        if (at_wait_iters_hist[i])
++            fprintf(stderr, " it%d=%llu", i, (unsigned long long)at_wait_iters_hist[i]);
++    for (int i = 0; i < 64; i++)
++        if (at_wait_dur_hist[i])
++            fprintf(stderr, " d%d=%llu", i, (unsigned long long)at_wait_dur_hist[i]);
++    fprintf(stderr, "\n");
++    fflush(stderr);
++}
++
+ static void put_win_open(efs_ino_t ino)
+ {
+     int free_i = -1, i;
+ 
++    at_open++;
+     pthread_mutex_lock(&put_win_mu);
+     __atomic_fetch_add(&put_win_total, 1, __ATOMIC_RELEASE);
+     for (i = 0; i < PUT_WIN_SLOTS; i++) {
+@@ -4995,6 +5030,7 @@ static void put_win_close(efs_ino_t ino)
+ {
+     int i, found = 0;
+ 
++    at_close++;
+     pthread_mutex_lock(&put_win_mu);
+     for (i = 0; i < PUT_WIN_SLOTS; i++) {
+         if (put_win[i].n && put_win[i].ino == ino) {
+@@ -5032,6 +5068,10 @@ static int put_win_wait(efs_ino_t ino, unsigned max_ms)
+     if (outer && outer < end)
+         end = outer;
+     int rc = 0;
++    unsigned iters = 0;
++    uint64_t at_t0 = at_now_ns();
++    at_wait_calls++;
++    at_wait_locks++;
+     pthread_mutex_lock(&put_win_mu);
+     while (put_win_busy_locked(ino)) {
+         uint64_t now = report_clock_ms();
+@@ -5048,12 +5088,19 @@ static int put_win_wait(efs_ino_t ino, unsigned max_ms)
+         dl.tv_sec += dl.tv_nsec / 1000000000;
+         dl.tv_nsec %= 1000000000;
+         int wrc = pthread_cond_timedwait(&put_win_cv, &put_win_mu, &dl);
++        at_wait_wakes++;
++        iters++;
+         if (wrc && wrc != ETIMEDOUT) {
+             rc = EFS_ERR_IO;
+             break;
+         }
+     }
+     pthread_mutex_unlock(&put_win_mu);
++    if (rc == 1) at_wait_sat++;
++    else if (rc == EFS_ERR_BUSY) at_wait_to++;
++    else at_wait_zero++;
++    at_wait_iters_hist[iters < 15 ? iters : 15]++;
++    at_bucket(at_wait_dur_hist, 64, at_now_ns() - at_t0);
+     return rc;
+ }
+ 
+diff --git a/src/client/efs_fuse.c b/src/client/efs_fuse.c
+index 5fc0b0389..9b581b6e7 100644
+--- a/src/client/efs_fuse.c
++++ b/src/client/efs_fuse.c
+@@ -158,6 +158,9 @@ static void efs_fuse_stack_broadcast(int sig)
+     efs_fuse_diagnostic_write("STACKDUMP end\n", 14);
+ }
+ 
++/* TEMP-AT: uncommitted measurement instrumentation; never committed. */
++static void efs_at_sigprof(int sig) { (void)sig; extern void efs_at_dump(const char *); efs_at_dump("sigprof"); }
++
+ static void efs_fuse_install_crash_handlers(void)
+ {
+     stack_t ss;
+@@ -187,6 +190,12 @@ static void efs_fuse_install_crash_handlers(void)
+     sigaction(SIGUSR1, &sd, NULL);
+     sd.sa_handler = efs_fuse_stack_signal;
+     sigaction(SIGUSR2, &sd, NULL);
++
++    /* TEMP-AT: uncommitted measurement instrumentation; never committed. */
++    { struct sigaction sp;
++      memset(&sp, 0, sizeof(sp));
++      sp.sa_handler = efs_at_sigprof;
++      sigaction(SIGPROF, &sp, NULL); }
+ }
+ 
+ static ino_t stats_synthetic_ino(efs_ino_t parent_ino)
