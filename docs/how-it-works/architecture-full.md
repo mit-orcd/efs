@@ -1863,6 +1863,13 @@ with 0/8/32 saturating writers, plus a clamped 32 MiB/tier budget) — zero
 first-failures, sleeps or waits, so there is no notification cost to remove.
 AS checkbox ticked.
 
+[Task AU](../status/au-pump-kicks-20261028.md): **PASS — measured, no change**, devel
+`9c4bfd171` on intel2: the pump thread's own eventfd syscalls cost at most
+~1.1 % of one CPU, the entire candidate saving from coalescing redundant kick
+writes is bounded by ~0.8 % of one CPU per daemon, and
+`test_report_stepdown.py` runs show kicks/drain of 1.12–1.42. The stop rule
+holds; no pending-flag protocol is built. AU checkbox ticked.
+
 [ORCD-test merged devel qualification](../status/orcd-test-devel-qualification-20261028.md):
 **FAIL overall**, deployed `714d7e6fc`; profiling branch merged and deleted.
 Serial and seven-client POSIX, restart persistence, both expiry runs and all
