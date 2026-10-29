@@ -55,7 +55,9 @@ runs concurrently with a measurement.
 
 The final `matrix2` uses D4's fixed-footprint rewrite mode: 2,048 files total
 (256/128/64 per application writer), populated before the 45-second load,
-then overwritten, truncated and rewritten. A second mount runs the foreground
+then overwritten, truncated and rewritten. Seven eighths use 1–8,192 bytes;
+every eighth uses 192–512 KiB, exercising unpacked large-file fragment I/O as
+well as small-file packing. A second mount runs the foreground
 write/fsync/read/stat/list/query stream. Throughput is rewrite mutations per
 configured load second, not the population's creates per second. This is D4's
 saturated **closed-loop** offered load, not a fixed arrival-rate generator.
@@ -122,7 +124,9 @@ chosen source; use an external copy for the explicitly uncommitted no-op patch.
   workload ran; the corrected invocation uses no such selector.
 - `pilot2-tcp32` passed D4 and orderly cleanup, but both default-buffer sampling
   profilers exited 255 with incomplete perf files. It is **not counter-cost
-  evidence**. Bounded 64-page profiler buffers fixed capture in `pilot3`.
+  evidence**; its silent exit was not root-caused. Bounded 64-page profiler
+  buffers allowed a complete `pilot3`, but did not eliminate the later attach
+  race. No incomplete capture is promoted to a passing profile.
 - `pilot3-tcp32` passed D4, all profiler exits and checked cleanup. Its 90-second
   predecessor is not pooled with the 45-second comparison matrix.
 - The first create/unlink matrix stopped at `tcp-w16-r2-noop`: D4 and cleanup
@@ -141,10 +145,28 @@ chosen source; use an external copy for the explicitly uncommitted no-op patch.
   analyzer requests IP explicitly, retains unresolved samples in the denominator
   and counts address coverage; raw captures remain unchanged. Attribution uses
   ELF instruction ranges even when perf cannot print a symbol, and verifies
-  that the supplied ELF's build ID occurs in the capture.
+  that the supplied ELF's build ID occurs in the capture. A wrong-ELF negative
+  control refuses the no-op ELF against the baseline pilot before attribution.
+  Zero-IP periods are also charged to the counter as a coverage-sensitivity
+  check; this is not a statistical confidence bound on unsampled execution.
 - Sampling does not prove zero cost or zero misses. Threshold decisions require
   symbol/address coverage, repeated measurements and the comparison; an
   unresolved/unsupported capture cannot qualify the under-one-percent rule.
+
+### Internal error counters are not application verdicts
+
+Do not read D4 PASS as zero internal RPC errors. For example, baseline
+`matrix2/rdma-w8-r1-baseline` ends with 154 GET and disk-read non-OK outcomes
+on each daemon, five PUT non-OK outcomes on node 3, and zero disk-write errors.
+These are lifetime totals, including population/drain/verification. That case
+has no application errors, no bad final payloads, no uncertain writes, and zero
+packer read/put errors. Logs also retain two segmented-RDMA setup warnings;
+actual RDMA frame counters are positive on all three daemons. Aggregate
+`errors` counts include not-found/refused operations and do not identify their
+individual return codes, so these totals alone establish neither corruption
+nor an expected harmless cause. They remain visible in raw replies/logs;
+AD does not close a zero-network-error, repair or durability gate. The local
+no-op's deliberately invalid diagnostic totals never qualify error visibility.
 
 ## Evidence and remaining work
 

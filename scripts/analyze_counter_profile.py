@@ -56,6 +56,9 @@ def main():
             symbol = fields[3] if len(fields) >= 4 else '[unresolved]'
             periods[pid]['all'] += period
             samples[pid]['all'] += 1
+            if ip == 0:
+                periods[pid]['unlocated_ip'] += period
+                samples[pid]['unlocated_ip'] += 1
             if symbol == '[unresolved]' or symbol == '[unknown]':
                 periods[pid]['unresolved'] += period
                 samples[pid]['unresolved'] += 1
@@ -72,11 +75,14 @@ def main():
     for pid in sorted(wanted):
         cycle_summary[str(pid)] = {
             'periods': dict(periods[pid]), 'samples': dict(samples[pid]),
+            'counter_plus_unlocated_ip_percent': 100*(periods[pid]['iostats_add']+
+                periods[pid]['unlocated_ip'])/periods[pid]['all'] if periods[pid]['all'] else None,
             'percent': {name: 100*periods[pid][name]/periods[pid]['all']
                         for name in groups} if periods[pid]['all'] else {}}
     totals = sum((periods[pid] for pid in wanted), Counter())
     cycle_summary['aggregate'] = {'periods': dict(totals),
         'samples': dict(sum((samples[pid] for pid in wanted), Counter())),
+        'counter_plus_unlocated_ip_percent': 100*(totals['iostats_add']+totals['unlocated_ip'])/totals['all'],
         'percent': {name: 100*totals[name]/totals['all'] for name in groups}}
 
     # ELF symbols are absolute for EXEC, relative to the image base for DYN.
