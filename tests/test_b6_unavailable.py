@@ -112,15 +112,27 @@ def degraded_segments(c, i=1):
     return int(m.group(1)) if m else None
 
 
+def completed_pack_log(text):
+    """Cut each process run at its last complete pack-pass summary.
+
+    One read can still land between a segment's degraded line and the
+    later packed_total line. A baseline must include both or neither.
+    pk_main runs group passes serially and pk_group joins its segment
+    workers before printing the counter, so that summary closes the pass.
+    Keep process restarts separate because their counters reset.
+    """
+    runs = text.split('==== start')
+    for i in range(1, len(runs)):
+        ends = list(re.finditer(r'^.*packer: group=\d+ term=\d+ [^\n]*packed_total=\d+[^\n]*\n',
+                                runs[i], re.M))
+        runs[i] = runs[i][:ends[-1].end()] if ends else runs[i].split('\n', 1)[0] + '\n'
+    return '==== start'.join(runs)
+
+
 def snapshot(c):
-    """Every member's log, read once. The packer logs a segment's `written
-    degraded` line and the pass-end `packed_total=` line a few ms apart;
-    counts that must agree (files packed, segments written degraded) come
-    from one snapshot, never from two reads that a pass end can straddle
-    (two reads 4 ms apart counted 3 files as packed during the fault while
-    their segment's degraded line was already "before": 1 of 21 gate runs
-    and 1 of 8 alone, Oct 25)."""
-    return {i: c.log(i) for i in c.ports if (c.dir / f'n{i}.log').exists()}
+    """One completed-pass prefix per member; never split a counter cohort."""
+    return {i: completed_pack_log(c.log(i)) for i in c.ports
+            if (c.dir / f'n{i}.log').exists()}
 
 
 def degraded_writes(c, snap=None):
