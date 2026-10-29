@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
-# Full remaining-prerequisite qualification on an actually free AMD host.
+# Full remaining-prerequisite qualification on an actually free supported host.
 # SRC FRESH_EVIDENCE SOURCE_COMMIT CODE_ONLY_CLUSTER_SCRIPTS
 set -eu
 src=${1:?source};art=${2:?fresh evidence};commit=${3:?commit};cluster=${4:?code-only cluster scripts}
-[[ $(hostname -s) == amd-395 && $src == "$HOME/efs-fin-complete-"*/src && $art == "$HOME/efs-artifacts/fin-complete-"* && $cluster == "${src%/src}/cluster-scripts" ]] || exit 2
+case $(hostname -s) in
+ amd-395)
+  [[ $src == "$HOME/efs-fin-complete-"*/src && $art == "$HOME/efs-artifacts/fin-complete-"* ]] || exit 2
+  dev=rxe0;fuse=/usr;;
+ fcstor014)
+  [[ $src == /tmp/efs-fin-complete-*/src && $art == /data1/01/efs/evidence/fin-complete-* ]] || exit 2
+  dev=mlx5_2;fuse=$HOME/orcd/scratch/efs/orcd-test/deps/libfuse
+  export CPATH=${src%/src}/deps/include;;
+ *) exit 2;;
+esac
+[[ $cluster == "${src%/src}/cluster-scripts" ]] || exit 2
 mkdir "$art";exec >"$art/controller.log" 2>&1
 trap 'rc=$?;echo "$rc" > "$art/controller-exit"' EXIT
 cd "$src"
@@ -23,13 +33,16 @@ done
 [[ ! -e $cluster/env.sh && ! -e $cluster/hosts.sh && ! -e $cluster/.current-cluster ]] || exit 2
 for f in cluster.sh ct-up.sh gw-up.sh lib/client-stop.sh lib/client-user.sh lib/transfer.sh;do test -f "$cluster/$f";done
 export EFS_GIT_ID=$commit EFS_GIT_DESCRIBE=$commit EFS_GIT_BRANCH=agent/devel-k35-slow-fsync
-export EFS_CLUSTER_SCRIPTS=$cluster EFS_TRANSPORT=auto EFS_RDMA_DEV=rxe0 EFS_FUSE_PREFIX=/usr
+export EFS_CLUSTER_SCRIPTS=$cluster EFS_TRANSPORT=auto EFS_RDMA_DEV=$dev EFS_FUSE_PREFIX=$fuse
+if [[ -d $fuse/lib64/pkgconfig ]];then lib=$fuse/lib64;else lib=$fuse/lib;fi
+export PKG_CONFIG_PATH=$lib/pkgconfig LD_LIBRARY_PATH=$lib
 export TMPDIR=$src/tmp EFS_B6_KEEP=1 EFS_K35_KEEP=1
 unset LD_PRELOAD ASAN_OPTIONS LSAN_OPTIONS TSAN_OPTIONS EFS_SAN_ONLY EFS_LEAK_ONLY EFS_TEST_CMD_TIMEOUT EFS_TEST_TSAN EFS_TEST_SANITIZE EFS_SANITIZE
 mkdir -p "$TMPDIR" "$art/focused" "$art/gate"
-{ date -u;hostname;uname -a;id;free -h;df -h "$src";gcc --version;valgrind --version;pkg-config --modversion fuse3;ibv_devinfo -d rxe0;cat /proc/sys/kernel/yama/ptrace_scope;ulimit -a; } > "$art/environment.txt" 2>&1
+{ date -u;hostname;uname -a;id;free -h;df -h "$src";gcc --version;valgrind --version;pkg-config --modversion fuse3;ibv_devinfo -d "$dev";cat /proc/sys/kernel/yama/ptrace_scope;ulimit -a; } > "$art/environment.txt" 2>&1
 command -v valgrind > "$art/valgrind-path.txt"
-test -r /usr/include/valgrind/memcheck.h
+printf '#include <valgrind/memcheck.h>\n' | gcc -E -x c -o /dev/null -
+if [[ -n ${CPATH:-} ]];then sha256sum "$CPATH"/valgrind/*.h > "$art/valgrind-headers.txt";fi
 { cat "${src%/src}/cluster-source.txt";cd "$cluster";sha256sum cluster.sh ct-up.sh gw-up.sh lib/client-stop.sh lib/client-user.sh lib/transfer.sh; } > "$art/cluster-source.txt"
 python3 scripts/task_i_host_sample.py "$src" "$art/ownership.jsonl" > "$art/ownership.log" 2>&1 & monitor=$!
 trap 'rc=$?;kill "$monitor" 2>/dev/null || true;wait "$monitor" 2>/dev/null || true;echo "$rc" > "$art/controller-exit"' EXIT
@@ -44,7 +57,7 @@ run() {
 echo RUNTIME > "$art/stage"
 run asan-lsan-runtime 30 python3 -c 'import sys;sys.path.insert(0,"tests");from sanitize_env import asan_runtime_available;assert asan_runtime_available();print("Independent ASan/LSan runtime PASS")'
 echo BUILD > "$art/stage"
-make -j8 all tests/faults/efsd > "$art/build.log" 2>&1
+make -j8 all tests/faults/efsd FUSE_LIBS="$(pkg-config --libs fuse3) -Wl,-rpath,$lib" > "$art/build.log" 2>&1
 { ./efsd --version;sha256sum efsd efs-fuse efs-mgmt tests/faults/efsd src/common/rdma.c src/common/tcp_counts.h; } > "$art/identity.txt"
 echo FOCUSED > "$art/stage"
 run cluster-stop 900 python3 tests/test_cluster_stop.py
