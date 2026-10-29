@@ -1612,6 +1612,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**OPEN / measurements RUNNING**, no product locking change. User-authorized
+fcstor015 `/data1/01` substitutes for busy node9901; existing clusters untouched.
+Real mlx5_0 transport and one-rank filesystem/IOR smoke PASS scoped, with
+checked cleanup. Three-repeat TCP/native RDMA/probe RDMA matrix at 1/8/32
+streams active; threshold verdict, churn and full correctness gates pending.
+
+[Stage 1 cross-path due diligence AY–BB](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
 upload completion, serve/audit/recovery validation, deletion authority, and
 client metadata overlays. Audit justified differences and failure semantics;

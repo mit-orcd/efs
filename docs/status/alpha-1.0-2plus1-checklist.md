@@ -502,6 +502,9 @@ The Stage 1 exception above applies; P3-A–P3-F and AB–AF retain their own sc
   may race mutations. This task is distinct from network startup and ReadIndex
   overlap in P3-B/P3-E.
 - [ ] **AI — RDMA completion dispatch lifetime locking.**
+  [Measurement evidence](ai-rdma-registry-lock-20261028.md): OPEN, matrix RUNNING
+  on user-authorized fcstor015; native real-RDMA and one-rank IOR smoke PASS
+  scoped. No product locking change or threshold conclusion; full gates pending.
   Graph path: `recv_poller` → `harvest_recv_wcs` → `pend_push` in
   `src/common/rdma.c`. Every received CQE locks process-wide `g_reg_lock`,
   validates the slot generation, and publishes the completion (including an
