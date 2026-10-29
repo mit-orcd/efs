@@ -1,17 +1,58 @@
 # Task T — gate budgets across supported hosts
 
-**FITTED / fresh qualification in progress.** The b13b8867e refresh passed
-three gates each on intel1 and fstor007, but xorinox stopped after W130's
-95/96 listing and a B6 counter-cohort failure. Its failed run is excluded.
-The user authorized the resulting [directory-visibility repair](task-t-directory-visibility-20261029.md).
-Candidate `35a6e41b0` closes source-first and destination-first copy windows,
-with deterministic negative controls and isolated K48 3/3, W130 10/10
-and B6 refuse passes. Fresh three-run full measurements are now running on
-all three hosts. The B6 accounting correction has three focused
-passes with unchanged product binaries. The current92 bounds, slots,
-deadlines,1100s target and1650s margin remain unchanged (model1504s).
-No full qualification or new fit is claimed yet. Nuc/AMD failures remain open;
-there is no merge into devel or push.
+**FITTED / focused repair qualification only.** The user narrowed remaining
+work on October29 to focused testing. Full calibration, budget refitting and
+confirmation gates are held; the task is not declared complete. Directory
+candidate `35a6e41b0` passed three full gates each on intel1 and xorinox
+(548 commands, zero FAIL per run), in addition to its isolated controls.
+Fstor007 stopped after a separate K34 REPORT BUSY-to-write-EIO failure.
+Candidate `288cb4e65` adds stopping-leader release, failed-read-hint exploration
+and a complete fresh-log shutdown-marker check. Focused RDMA qualification
+is pending below. No passing result is claimed for this candidate yet.
+All92 bounds, slots, deadlines,1100s target and1650s margin remain unchanged
+(model1504s). No merge into devel or push.
+
+## Current focused scope — October29
+
+Source `288cb4e650233e182b32f73b6164290b49773695` includes product ports
+`68f8c7fc0` and `ea77b3a35` from Task H's reviewed stopping-leader and
+read-routing repairs, plus test-only `288cb4e65`. Local deterministic native
+controls passed; the read-routing negative control fails on the earlier
+source and ASan/UBSan passed. These do not establish live RDMA correctness.
+
+Run on idle fstor007, three loopback daemons with real RDMA (`mlx5_0`),
+mandatory direct I/O and private FUSE3.16.2: build `make -j8 test-bins`, then
+`python3 tests/test_shutdown_bounded.py`, `test_metadata_retry_budget.py`,
+`test_pub_unit_setup.py`, `test_dir_migrate_visibility.py`; ten serial
+`test_k34_stop_put.py`, three `test_shutdown_blocked_io.py` and three
+`test_k43_coordinator_kill.py` invocations. Each Python filename is under
+`tests/` and invoked with `python3`. Each live invocation uses a fresh private
+TMPDIR. Existing payload, durability and deadline assertions are unchanged.
+K34 forces the stopping node to lead both groups before any workload;
+`EFS_K34_KEEP=1` and `EFS_K43_KEEP=1` retain fixtures pending capture closure.
+Stop at the first unexpected failure, NOTRUN or competing workload. Diagnostic
+times are not calibration inputs. Canonical capture is
+`fstor007:/data1/efs/evidence/taskT-20261028/fstor007-288cb4e65-k34-focus20/`;
+manifest and result are pending. Exact source archive SHA-256:
+`08bd44e0a41b6689efc4cd0d6eb3c3ad0ed7729688b80cb813e35c1c934d96c1`.
+
+### Completed directory-candidate full gates
+
+| Host at35a6e41b0 | Outcomes | Test walls / build | OVERBUDGET | Closed manifest SHA-256 |
+| --- | --- | --- | --- | --- |
+| intel1 | 3×548,0 FAIL,11 NOTRUN each | 813/920/909s;31/0/0s build | 1/1/1 | `7215ee621b67f0ad6cf21f3ec5f251a26689ccc1aa4f5d894af165cd4aeb0e33` |
+| xorinox | 3×548,0 FAIL,10 NOTRUN each | 966/903/978s;0s builds | 1/1/2 | `539d0bf1eef065d46f9f0b3d8d58ec23302fd3d252c355530987d4c7a1205c9d` |
+| fstor007 | 548,1 FAIL,3 NOTRUN; stopped before run2 | 722s;23s build | 1 | `01132fd42d69f526fe6ed8e3bab4676efb67419296bda4d18f007fc302c7f8d7` |
+
+Captures: `/data1/efs/evidence/taskT-20261028/HOST-35a6e41b0-calibration19/`.
+All closed with unchanged source and no owned daemon/mount or contamination.
+Fstor007 case476 failed at metadata REPORT BUSY (`-13`), surfaced as EIO
+at12:54:00.774 UTC. **Evidence limit:** the old K34 finally block removed
+its failed fixture and complete daemon/client logs. Only captured failure
+output survives, recorded in `EVIDENCE_LIMIT.txt`. No post-error payload or
+durability verification is claimed, and the original cause is not proven.
+The revised K34 harness preserves failures and makes cleanup errors fatal.
+Later successful runs cannot reconstruct that missing evidence.
 
 ## Refresh interrupted by a new namespace failure
 
@@ -34,14 +75,9 @@ b13b8867e runs replay against their saved references and physical headers:
 inconclusive changed references in this set. This does not recover the absent
 mapping capture from the first63c6c9cb9 failure or establish its cause.
 
-Fresh source `35a6e41b042e84982268f8569cc31ddc739be5e1` is staged on all
-three hosts at `HOST-35a6e41b0-calibration19/`. Intel1 and fstor007 have begun
-three serial eight-job full gates. Xorinox completed the separate
-`xorinox-35a6e41b0-directory-focus19/` series before starting its full gates
-on the same immutable source, with no overlap between controllers. The new deterministic unit adds one
-executed command:548 in the refreshed full gate. All92 budget rows and their
-priority settings are unchanged. No failing or contaminated run may enter
-the next fit.
+The35a6e41b0 full cohort is completed above, rather than still running.
+Its new deterministic unit adds one executed command (548); the92 budget
+rows were unchanged. No failing or contaminated run enters any future fit.
 
 ## Second confirmation and fresh measurements — October29
 

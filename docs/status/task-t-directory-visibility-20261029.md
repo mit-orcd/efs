@@ -1,14 +1,19 @@
 # Task T — directory visibility during cross-group migration
 
-**Isolated TCP qualification PASS; full-gate qualification in progress**, on
+**Isolated TCP qualification PASS; six TCP full gates have zero FAIL**, on
 `agent/devel-task-t`; no merge or push.
 This is a new counterexample relevant to [K48](k48-readdir-omission-20261028.md)
 and [Task T's full-gate measurements](gate-budgets-per-host-20261028.md).
 The user explicitly authorized fixing and qualifying it in this branch.
 The current candidate is `35a6e41b042e84982268f8569cc31ddc739be5e1`.
 Its deterministic controls, three K48 runs, ten W130 runs and B6 refuse
-pass in the isolated scope below. Fresh full measurements are still running;
-no complete full-gate qualification is claimed.
+pass in the isolated scope below. Three full gates each on intel1 and
+xorinox also completed with548 commands and zero FAIL; host-limit NOTRUN
+and budget overruns remain explicit. Fstor007's full gate failed a separate
+K34 REPORT BUSY-to-EIO check. Its original fixture was deleted by the old
+harness, so causal attribution remains open. See the linked Task T page for
+closed manifests and the narrower focused-only next scope. This does not
+close the historical K48 incident or establish an overall Task T PASS.
 
 ## Discovery and preserved evidence
 
