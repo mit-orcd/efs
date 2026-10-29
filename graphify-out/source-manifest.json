@@ -805,6 +805,7 @@
     "tests/test_decoder_inputs.py": 2,
     "tests/test_decoder_refusal.py": 6,
     "tests/test_deepsteps_transparent.py": 9,
+    "tests/test_dir_migrate_visibility.py": 1,
     "tests/test_dir_ops_busy.py": 1,
     "tests/test_direct_io_required.py": 3,
     "tests/test_direct_read_fork_oracle.py": 2,
@@ -1264,7 +1265,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "70a8b3c455017a378c9896a6d8146c17676541b8e888b53d49b5aa0052735c83",
+    "Makefile": "a2b3d3863f16c34796e21b0e513af407111bb2847f804c7682b619092020d09e",
     "README.md": "15b25db8e5545f8c3c67ef24e217ae50a820e158bbaa8af416dba7c20885855d",
     "docs/backlog/crash-safe-durable-versions.md": "5ddb729585e675eabfa3e0bfa71caaac14286b7a8bf3646fbac8e74b6aef592f",
     "docs/backlog/decision-contracts.md": "a952ac8bd45907895542fbaa9dc9119735c89241c389d3049885a537b93bc04f",
@@ -1655,7 +1656,7 @@
     "src/kv/kv_snap.c": "a06c59820657b2e3a89564dd97c7c1d4d507df84c68e5bde5db7fa02c0200335",
     "src/kv/kv_wal.c": "f22f4136af52433efc4e451fc5e2abd058b403e1eee6a5ed9c6e80ea62a49987",
     "src/meta/append_plan.c": "59f7862056b0433409537fac18e7a5fbb1121898421e888805532db4236f822b",
-    "src/meta/dir_layout.c": "c29a456dab736672bee3f3d98dd121e7c2aea68138d51408b9d8da6e0f2a2626",
+    "src/meta/dir_layout.c": "0e3feda7b39da1dfe87b81c66217693da6f6afef83933df8f4ba1dadeb3f0d37",
     "src/meta/dir_spread.c": "00d269227fc1245845be38762208b0fbb2c17ebd6a10a83939085ccc33b3cd9f",
     "src/meta/expiry.c": "cad7f4708247f4521cc2d0e15a4129260d2392acb38e50871dfa0806ec570941",
     "src/meta/lock.c": "6ff545baf1fb74ff42f5fb9743b6a6f6dfc900a27c8c5fe5f1f167099690dfe0",
@@ -1701,7 +1702,7 @@
     "src/server/put_upload.c": "7bb1ad8e30e371c8b53e0316684460fb858091d70012ac46949665bc5d4bbc2e",
     "src/server/query_export_lease.h": "c1bf2e3bd646f19595ea7519057e1e04fbc4a402aa30445efe43aad198edcac4",
     "src/server/query_refresh.h": "e9508ec752fc826ed93079d1b9a9b12589631fe6eee9e5a81eef922f65ceff16",
-    "src/server/raft_host.c": "ff4122a39055703f9487762db06f04bc7e9d82b5c199a3b2827b220662c8498e",
+    "src/server/raft_host.c": "d999fb5dee7abee50779f94317b400b7111bf86517c59c5920578c3c8604c14a",
     "src/server/read_index_pair_remote.h": "1a0b0bb46af5847d2ee4e6acabc474d044c26e4ed1f0cddacd3d6ac863624d62",
     "src/server/reclaim.c": "be2ab100ff18bc51a702b42c549cc4dd1c436aaf7bd0b54b71d02b9fa1d97556",
     "src/server/recovery.c": "ef245bfe358ba9d10dcc9077e60c6bf7400ea9083f556a5c29d5dfbcd899a52a",
@@ -2049,7 +2050,7 @@
     "tests/test_apply_wait.c": "879841b4c363f9ed04d03f2a32f5dadfcea4b01caa7313929eeedf120f9024f2",
     "tests/test_atomic_append_host.py": "1b961e942abf2f072be3f784aec134996cc5a90543f1be7d4f4a893547a21638",
     "tests/test_attribute_authority_errno.py": "71391b28cb6dd5abb82a648d17bc46b74ebe70384780ccfa46648d1a14e038a7",
-    "tests/test_b6_log_accounting.py": "e35f328f33c081f80caa5c080c4bfea31499c0cc5197c0c5c88ef53e8c81c71e",
+    "tests/test_b6_log_accounting.py": "905c39091930e784841da5028e3dc4fd4e60a105090da40c25378d43c9fd69d3",
     "tests/test_b6_unavailable.py": "b3f4fe92218f26ef7d5b5c7f501e41d51fc4cc12553578a9723c5eed11bb4e97",
     "tests/test_b_checks_driver.py": "236166dcaef5dc0a9f5e771f4dbf29d40463d8ff89a0ccdaa9bc886064e87d1e",
     "tests/test_b_geometry.c": "7cba398dece45479a667e20b7a0a248bf1e2f742d2d3a989212ed54b68f9caa3",
@@ -2103,6 +2104,7 @@
     "tests/test_decoder_inputs.py": "d41d8a71949ed3e36db7aa0f0cc88d921ac86d0594504ce566bdc745b2028663",
     "tests/test_decoder_refusal.py": "af68e54e6c5d3cdb0a9778b877bb4fb3b8ecbbde08cd1389bed81c764aa31bd8",
     "tests/test_deepsteps_transparent.py": "9e7b664af607162bd42c20a7d55775d9131a47f0acdbea819a73c6a21e4ae883",
+    "tests/test_dir_migrate_visibility.py": "f682990b2d827c06e32432d4b1b99040fd9acdf711ccfafb171d00f2b13a05f5",
     "tests/test_dir_ops_busy.py": "4b1805738f6eb2dab4b509b785c966bc7eeafc8a40de13802574e4cd3a646f70",
     "tests/test_direct_io_required.py": "29a8e68d2cc15e4e39ec4c038bba8856c34aec8549d9eea18619a17fdfac2a54",
     "tests/test_direct_read_fork_oracle.py": "24fa6648f91c98f0f34135b33ceaf7103a051ed9a62597f8d50bd8dd796cef9b",
@@ -2565,5 +2567,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "e534883be202d7e42b758a89153fc97e10d7a481"
+  "source_commit": "780b6caba7ed022e88e3be41b63d6abfdb684e53"
 }

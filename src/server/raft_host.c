@@ -19411,8 +19411,12 @@ done:
     return rc;
 }
 
-/* Cross-group leftover migrate: hashed PUT + local DEL + used_shards
- * as a txn so group-2-only replicas see the hashed dentry. Same-group
+/* Cross-group leftover copy: hashed PUT + retained local row + used_shards
+ * as a txn so group-2-only replicas see the hashed dentry. RESOLVEs may
+ * apply in either order, so this transaction must not remove the only
+ * physical copy before the destination materializes: READDIR scans raw
+ * dentries. The next pass's existing DIR_MIGRATE cleanup removes the local
+ * copy only after the destination transaction has resolved. Same-group
  * leftovers (or hashed already present) stay a single DIR_MIGRATE apply.
  * Bounces to a dual-host when this replica does not host
  * the dest group. */
@@ -19430,7 +19434,7 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
     uint8_t loc_buf[EFS_META_DENT_BYTES];
     uint32_t kl = 0, kh = 0, ki = 0, ks = 0, locn;
     uint32_t psh, coord;
-    uint64_t loc_ver = 0, hash_ver = 0, bit;
+    uint64_t bit;
     uint8_t lane;
     int rc, i, stamp_ino = 0;
 
@@ -19467,11 +19471,6 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
     rc = efs_kv_key_dseq(hsh, dir, lane, k_dseq, &ks);
     if (rc != EFS_OK)
         return rc;
-    rc = efs_txn_ver_get(h->kv, k_loc, kl, &loc_ver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_hash, kh, &hash_ver);
-    if (rc != EFS_OK)
-        return rc;
     memset(&parts, 0, sizeof(parts));
     rc = host_parts_add(&parts, psh);
     if (rc == EFS_OK)
@@ -19483,16 +19482,19 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
         uint32_t sh = parts.shard[i];
 
         if (sh == psh) {
-            rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_loc, kl, loc_ver,
-                           EFS_TXN_DEL, NULL, 0, hint);
+            /* Unversioned namespace applies can change either key between
+             * capture and PREPARE. Never restore a stale source or replace
+             * a newly installed hashed live row/tombstone. */
+            rc = host_prep_value(h, psh, &t, &parts, k_loc, kl, loc_buf, locn,
+                                 EFS_TXN_PUT, v_dent, sizeof(v_dent), hint);
             if (rc == EFS_OK && stamp_ino)
                 rc = host_prep_ino_delta(h, psh, &t, &parts, k_ino, ki, &pd,
                                          NULL, hint);
         }
         if (rc == EFS_OK && sh == hsh) {
-            rc = host_prep(h, hsh, EFS_TXN_EXCL, &t, &parts, k_hash, kh,
-                           hash_ver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
-                           hint);
+            rc = host_prep_value(h, hsh, &t, &parts, k_hash, kh,
+                                 NULL, EFS_TXN_ABSENT, EFS_TXN_PUT,
+                                 v_dent, sizeof(v_dent), hint);
             if (rc == EFS_OK)
                 rc = host_prep_dseq_bump(h, hsh, &t, &parts, k_dseq, ks, NULL,
                                          hint);

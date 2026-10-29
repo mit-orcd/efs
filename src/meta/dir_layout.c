@@ -2,6 +2,7 @@
 #include "efs/dir_spread.h"
 #include "efs/meta_apply.h"
 #include "efs/kv_key.h"
+#include "efs/txn.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -210,6 +211,16 @@ int efs_meta_dir_migrate_one(struct efs_kv *kv, efs_ino_t dir)
         return rc;
     hsh = efs_kv_dentry_shard(dir, h.name, EFS_META_LAYOUT_HASHED);
     rc = efs_kv_key_dentry(hsh, dir, h.name, hk, &hklen);
+    if (rc != EFS_OK)
+        return rc;
+    /* A cross-group copy can have resolved only one participant. Never
+     * remove its source while either intent remains: a late source PUT
+     * could otherwise recreate a leftover after cleanup/FINISH. Apply is
+     * serialized by the KV writer scope, so these checks and the batch
+     * below cannot race another participant on this replica. */
+    rc = efs_txn_key_busy(kv, h.key, h.klen);
+    if (rc == EFS_OK)
+        rc = efs_txn_key_busy(kv, hk, hklen);
     if (rc != EFS_OK)
         return rc;
     hvlen = sizeof(hv);

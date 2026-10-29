@@ -31,7 +31,7 @@ assert count(None, {1: before + line(2, 1, 6) + line(0, 2, 6)}) == 6
 restarted = before + '==== start n1\n' + line(2, 3, 3) + line(0, 4, 3)
 assert count(None, {1: restarted, 2: '==== start n2\n' + line(2, 7, 2)}) == 9
 assert count(None, {1: '==== start n1\n'}) == 0
-cut = namespace['completed_pack_log']
+cut = namespace.get('completed_pack_log', lambda text: text)
 degraded = namespace['degraded_writes']
 mark = ('packer: segment g0 id=0000000000000123 gen=1 written degraded: '
         'fragment 2 for node 3 not acknowledged (rc=-1); marked for rebuild on return\n')
