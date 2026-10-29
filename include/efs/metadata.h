@@ -193,7 +193,8 @@ struct efs_child_vec {
     uint64_t *slots;
     uint64_t count;
     uint64_t cap;
-    /* AW: reverse slot -> position map so deletion and relocation repair are
+    /* AW: reverse slot -> position map (keyed slot + 1: idx_* reserves key 0,
+     * and slot 0 can be a child) so deletion and relocation repair are
      * O(1) instead of a full vector scan. Values are positions in `slots`;
      * charged to the same staged_child_bytes budget as the vector itself. */
     uint64_t *pos_keys;
