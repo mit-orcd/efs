@@ -152,6 +152,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Task AG](ag-bufpool-lock-20261028.md): **PASS — measured, no change**, devel
+`9c4bfd171` on xorinox: the client buffer pool mutex `g_bp_mu` shows at most
+0.0004 % wait share at 32 I/O streams (task threshold 5 %); cold slab growth
+holds it 25–54 µs a handful of times per client lifetime; the lock stays as is.
+AG checkbox ticked.
+
 [ORCD-test merged devel qualification](orcd-test-devel-qualification-20261028.md):
 **FAIL overall**, deployed `714d7e6fc`; profiling branch merged and deleted.
 Serial and seven-client POSIX, restart persistence, both expiry runs and all
