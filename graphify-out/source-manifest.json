@@ -752,7 +752,7 @@
     "tests/test_atomic_append_host.py": 2,
     "tests/test_attribute_authority_errno.py": 2,
     "tests/test_b6_log_accounting.py": 2,
-    "tests/test_b6_unavailable.py": 34,
+    "tests/test_b6_unavailable.py": 35,
     "tests/test_b_checks_driver.py": 2,
     "tests/test_b_geometry.c": 15,
     "tests/test_b_geometry.py": 20,
@@ -2049,7 +2049,7 @@
     "tests/test_atomic_append_host.py": "1b961e942abf2f072be3f784aec134996cc5a90543f1be7d4f4a893547a21638",
     "tests/test_attribute_authority_errno.py": "71391b28cb6dd5abb82a648d17bc46b74ebe70384780ccfa46648d1a14e038a7",
     "tests/test_b6_log_accounting.py": "2211429581ad3db7f30736bee1c7be01d8d6dc8737bdafd91db774ea0e7bbf08",
-    "tests/test_b6_unavailable.py": "46fd7c11e7901bc9ab2ad309bb4224fda2c509b403034c254553de1baca4ad69",
+    "tests/test_b6_unavailable.py": "f35fe9091fde832e5026b52bf8d8dfe5dd1d996e064a0a6cd6fa4181b0b591cd",
     "tests/test_b_checks_driver.py": "584dc48e237547e84cc276ebb57d9abcd788dbc31d497ce635435aca67aedb3e",
     "tests/test_b_geometry.c": "7cba398dece45479a667e20b7a0a248bf1e2f742d2d3a989212ed54b68f9caa3",
     "tests/test_b_geometry.py": "ae9ee0d7c336c000503c852d0fdd3bb92139a3525b0309f59a6bac0594b5dfc1",
@@ -2558,10 +2558,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1460
+    "calls": 1462
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "458f75e2139c0559f59bc0e29b28ab772a566303"
+  "source_commit": "8b75067893ca91fbd37914ff655fe500023fee3b"
 }

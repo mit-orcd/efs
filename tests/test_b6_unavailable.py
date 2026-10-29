@@ -286,18 +286,49 @@ def fault_on(r):
     elif r.mode == 'slow':
         r.set_fault(f'slow:{SLOW_MS} ' + DATA_OPS)
     elif r.mode == 'full':
-        # Fill node 3 (16 MiB quota): every stripe has a fragment there, so
-        # writes fill it until one is refused ENOSPC. Nothing degraded.
+        # First remove the seed files' future packing/reclaim headroom.
+        # A packed mapping is not enough: wait for its old fragments to go.
+        # Otherwise a pack between ENOSPC and W0 can legitimately free room.
         a = r.a
+        end = time.monotonic() + PACK_BOUND_S
+        wait_packed(r.c, 2 * len(SMALL), 'full: pack every small seed',
+                    timeout=max(0, end - time.monotonic()))
+        def first_chunk_dir(node, name):
+            # src/common/common.c: efs_ino_path_segments uses five decimal
+            # base-10000 components; the fixture's default export is 1.
+            digits = f'{(a.path / name).stat().st_ino:020d}'
+            parts = [digits[i:i + 4] for i in range(0, 20, 4)]
+            return r.c.dir / f'n{node}' / 'data' / 'exports' / '1' / Path(*parts) / '0'
+        # Prove the inventory address against an unpacked seed; an incorrect
+        # path must not turn the absence check below into a vacuous pass.
+        for node in (1, 2, 3):
+            assert list(first_chunk_dir(node, 'R0').glob('0.*')), 'full: seed inventory missing'
+        old_dirs = [first_chunk_dir(node, f'{prefix}{i}') for node in (1, 2, 3)
+                    for prefix in ('P', 'FS') for i in range(len(SMALL))]
+        while any(list(d.glob('0.*')) for d in old_dirs):
+            assert time.monotonic() < end, 'full: packed seed fragments not retired'
+            time.sleep(0.05)
+        r.out['full_seed_fragments_retired'] = True
+        # One 128 KiB chunk charges one 64 KiB fragment per node. These
+        # pinned files are too large to pack. A refused 1 MiB upload could
+        # leave room for several smaller writes and partially stored data;
+        # a single-chunk refusal establishes the granularity W*/Q* need.
         k = 0
         while True:
-            v, _ = r.write(a, f'fill-{k}', 1 << 20)
+            v, _ = r.write(a, f'fill-{k}', 128 * 1024)
             if v != 'ok':
                 assert v == 'ENOSPC', v
                 break
             k += 1
-            assert k < 64, 'node 3 never filled'
+            assert k < 512, 'node 3 never filled'
         r.out['fill_files'] = k
+        text = status(r.c, 3)
+        node = re.search(r'^  node 3:[\s\S]*?(?=^  node |\Z)', text, re.M)
+        match = re.search(r'^\s+bytes: used=(\d+) quota=(\d+)', node[0], re.M) if node else None
+        assert match, text
+        used, quota = map(int, match.groups())
+        r.out['full_usage'] = {'used': used, 'quota': quota, 'fragment_bytes': 65536}
+        assert quota == 16 * 1024 * 1024 and 0 <= quota - used < 65536, text
 
 
 def run_mode(mode):
