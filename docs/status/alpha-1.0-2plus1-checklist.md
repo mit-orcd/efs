@@ -872,7 +872,21 @@ and staging limits still apply. No K defect, acceptance or failure verdict chang
   P3-C's ticket compaction. The client chunk-only-inode fallback has another
   size-array scan, but it already bypasses normal inodes through `dirty_set_has`;
   do not label all client REPORT construction quadratic from that rare branch.
-- [ ] **AW — Local child vectors: avoid a parent-sized search on deletion and slot moves.**
+- [x] **AW — Local child vectors: avoid a parent-sized search on deletion and slot moves.**
+  **IMPLEMENTED on branch `agent/devel-taskaw` (`50218c827`), not merged** (Oct 29,
+  [evidence](aw-child-vector-index-20261028.md)): a reverse slot→position map
+  per child vector, charged to the same staged memory budget; deletion and
+  relocation repair are O(1) (~6 map operations instead of ~D comparisons at
+  1 K/100 K/1 M children). Rollup semantics unchanged (convergence verified).
+  End-to-end unlink latency is unchanged because the dominant cost is the
+  pre-existing `recompute_times_up` rescan (a separate O(D) mechanism,
+  recorded as a follow-up finding; the exact-skip fast path tried here was
+  reverted after the correctness check caught a stale bound). Gates:
+  deterministic child-vec test (realloc, cross-parent swap, aliases,
+  grow/delete cycles, allocation failure, root), sparse-metadata,
+  stage-evict, rename/unlink coverage, ASan/LSan PASS; test-all on intel1
+  547/2/12 (b6 = pre-existing; K41 = timing-sensitive, baseline and
+  isolation both PASS).
   `src/meta/metadata.c::child_idx_del` searches all slots of the parent's child
   vector before swap-removing the match. `child_idx_replace_slot` searches that
   vector again to fix a relocated inode row; `remove_inode_slot` invokes it

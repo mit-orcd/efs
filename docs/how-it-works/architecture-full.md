@@ -1612,6 +1612,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**IMPLEMENTED on branch `agent/devel-taskaw` (`50218c827`), not merged.** O(1)
+deletion and relocation repair (~6 map ops instead of ~D comparisons), same
+memory budget, rollup convergence verified. End-to-end latency unchanged:
+the dominant cost is the pre-existing `recompute_times_up` rescan (recorded
+as a follow-up finding). Gates: deterministic + named + ASan/LSan PASS;
+test-all 547/2/12 (b6 pre-existing, K41 timing-sensitive).
+
+[Stage 1 cross-path due diligence AY–BB](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
 upload completion, serve/audit/recovery validation, deletion authority, and
 client metadata overlays. Audit justified differences and failure semantics;
@@ -1624,9 +1632,11 @@ consensus/publication interfaces, shared storage primitives and removal of
 superseded machinery. Alpha 1.0 tasks/gates and D38 alpha 2.0–4.0 remain intact.
 
 [Stage 1 scan/index tasks AV–AX](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--workload-sized-scans-avax):
-**OPEN / implementation and measurements NOTRUN**, source reviewed at `ee66f837b`:
-REPORT chunk/size nested search, local child-vector deletion/relocation scans,
-and loaded hardlink-alias scans. Scope and fixed-size fast paths distinguished;
+**AW IMPLEMENTED on `agent/devel-taskaw` (`50218c827`, not merged;
+[evidence](../status/aw-child-vector-index-20261028.md)); AV and AX OPEN /
+implementation and measurements NOTRUN**, source reviewed at `ee66f837b`:
+REPORT chunk/size nested search (AV), local child-vector deletion/relocation scans (AW),
+and loaded hardlink-alias scans (AX). Scope and fixed-size fast paths distinguished;
 no new K defect or measured slowdown claimed. Existing tasks remain separate.
 
 [Stage 1 wakeup/polling tasks AS–AU](../status/alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--wakeups-and-polling-asau):
