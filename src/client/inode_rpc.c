@@ -890,6 +890,8 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
     int attempt = 0, tried = 0;
     unsigned last_status = 255;
     int read_route = type == EFS_MSG_INODE_LOOKUP || type == EFS_MSG_INODE_GETATTR;
+    uint64_t failed_read_hints = 0; /* this read only; never receipt routing */
+    int bypass_read_cache = 0;
     uint64_t read_key = read_route ? efs_meta_read_route_key(type,req,req_len) : 0;
     unsigned long long t_start = rpc_prof_now_us();
     union { struct efs_msg_inode_create create; struct efs_msg_inode_unlink unlink;
@@ -920,8 +922,10 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
             conn = efs_client_conn_get(target);
             nid = target;
         } else if (read_route) {
-            nid = efs_meta_read_route_get(&g_read_routes,read_key);
+            nid = bypass_read_cache ? 0 : efs_meta_read_route_get(&g_read_routes,read_key);
+            bypass_read_cache = 0;
             conn = nid && nid != skip && nid <= __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE) &&
+                   !(failed_read_hints & (1ull << (nid - 1))) &&
                    !efs_client_node_is_down(nid) ? efs_client_conn_get(nid) : NULL;
             if (!conn)
                 conn = raft_voter_conn_skip(shard, &nid, skip);
@@ -932,6 +936,9 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
         if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
             if (conn)
                 efs_client_conn_drop(nid, conn);
+            if (read_route && nid && nid <= 64 &&
+                (conn || efs_client_node_is_down(nid)))
+                failed_read_hints |= 1ull << (nid - 1);
             rpc_retry_peer(shard, nid, &target, &skip, conn != NULL);
             /* One dropped conn is not a failed create. Same 16-attempt
              * budget as BUSY; a hard NET only after it is used up
@@ -961,6 +968,8 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
             free(payload);
             rpc_tl_lost++;
             efs_client_conn_drop(nid, conn);
+            if (read_route && nid && nid <= 64)
+                failed_read_hints |= 1ull << (nid - 1);
             rpc_retry_peer(shard, nid, &target, &skip, 1);
             if (deadline_bounded || attempt + 1 < 16) {
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
@@ -1086,6 +1095,21 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
                 goto exhausted;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2,
                          rpc_prof_now_us() - sleep_start);
+            continue;
+        }
+        if (read_route && r->primary_id && r->primary_id <= 64 &&
+            (failed_read_hints & (1ull << (r->primary_id - 1)))) {
+            /* A responsive follower can keep advertising the stopped leader.
+             * Do not alternate that stale hint and its failed socket until
+             * this read returns EIO: ask another voter. Keep the existing
+             * attempts/deadline and all mutation/receipt routing unchanged. */
+            fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=failed-hint from=%u hint=%u\n",
+                    type, attempt, nid, r->primary_id);
+            rpc_retry_peer(shard, nid, &target, &skip, 0);
+            /* Explore another voter once, not a permanent exclusion: that
+             * voter may legitimately redirect here after the peer recovers. */
+            failed_read_hints &= ~(1ull << (r->primary_id - 1));
+            bypass_read_cache = 1;
             continue;
         }
         target = r->primary_id;

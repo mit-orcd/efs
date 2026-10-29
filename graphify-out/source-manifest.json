@@ -1598,7 +1598,7 @@
     "src/client/data_commit.c": "53b788b7d858252afb95befd5f44da0f67aabe4cf57745438101f06a1fb26df6",
     "src/client/efs_bench.c": "52ba4ba8c448eca072f0ed599111be2607d8e54857d01258bf994c4bc8e5e293",
     "src/client/efs_fuse.c": "bc86c1b0cf43f19d899d4351e1cf319bac0b61c55d3a5219e4519819eb81c6f3",
-    "src/client/inode_rpc.c": "e55f248e1cbd8579fa459e3ea4eacd46fbcdd5b90ec15ca3ba46559ebebf73fa",
+    "src/client/inode_rpc.c": "d013c88b70b497da49df57de9fdcf68f1f97f60690b97a9e46064ff331095a87",
     "src/client/metadata_read_route.h": "14d742d17370d118877ebe32e63592c95c1943656713326eb62e75b9bcc5a013",
     "src/client/node_cache.c": "276c031df481e05e11e05e56d34f99e937ab4b8d7b9de42f2cad324443774816",
     "src/client/ops.c": "946807843ab64db1bd8622101df341a787a658e48aa10831650d5ec806267d66",
@@ -2244,7 +2244,7 @@
     "tests/test_meta_cmd_namespace.py": "c11883d0bafc5cab0c8fd451024e082bc1b6c737c1d0a643d5ae2c5b5872e67d",
     "tests/test_meta_flush_batch.py": "d61ff601e129b4869301e827ea527718e460049a4b996dd47c450143072dc01c",
     "tests/test_metadata_read_route.py": "dc5c930de438c004ff72085b5a356cf0a7ba81c46a59ed6bfad0866556d72bcf",
-    "tests/test_metadata_retry_budget.py": "e8cff707b25ff024390aefff74de7ecc06026db4d680ebc2b2d0f4127065f810",
+    "tests/test_metadata_retry_budget.py": "c4da5dda4e7d9295de0d5614afe5b86b15fbd95a4d9cb10e448d1c6f47df9d0c",
     "tests/test_mgmt_expiry_lookup.py": "957a31ecf310e0b2e2b4527c869d34d84854f46c196a404abddde71a0b229b75",
     "tests/test_mgmt_session_routing.py": "b849d32960ce531c48c9e85ce1064dd1cbe9eb3f5f86b8694c512c0a19a971d3",
     "tests/test_mkdir_committed_reply.py": "1349ee9c26ad76706afcfbc62b90480fd6e24a20efb5fbbefc5841fab0aa6844",
@@ -2567,5 +2567,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "fbdf7870e7f7b9db8ce0015301ee67672094b00b"
+  "source_commit": "68f8c7fc0f041091bd7a7835ed4efcf5acd1bea1"
 }

@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "fbdf7870e7f7b9db8ce0015301ee67672094b00b"
+      "source_commit": "68f8c7fc0f041091bd7a7835ed4efcf5acd1bea1"
     }
   },
   "links": [
@@ -265915,7 +265915,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1897",
+      "source_location": "L1921",
       "target": "src_client_inode_rpc_admission_verdict",
       "weight": 1.0
     },
@@ -265926,7 +265926,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2805",
+      "source_location": "L2829",
       "target": "src_client_inode_rpc_append_reply_fault",
       "weight": 1.0
     },
@@ -265937,7 +265937,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1440",
+      "source_location": "L1464",
       "target": "src_client_inode_rpc_create_request_revocation",
       "weight": 1.0
     },
@@ -265948,7 +265948,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1402",
+      "source_location": "L1426",
       "target": "src_client_inode_rpc_create_request_rpc",
       "weight": 1.0
     },
@@ -265981,7 +265981,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1374",
+      "source_location": "L1398",
       "target": "src_client_inode_rpc_efs_client_create_begin",
       "weight": 1.0
     },
@@ -265992,7 +265992,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1478",
+      "source_location": "L1502",
       "target": "src_client_inode_rpc_efs_client_create_cancel",
       "weight": 1.0
     },
@@ -266003,7 +266003,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1472",
+      "source_location": "L1496",
       "target": "src_client_inode_rpc_efs_client_create_reset",
       "weight": 1.0
     },
@@ -266014,7 +266014,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1452",
+      "source_location": "L1476",
       "target": "src_client_inode_rpc_efs_client_create_resume",
       "weight": 1.0
     },
@@ -266025,7 +266025,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1986",
+      "source_location": "L2010",
       "target": "src_client_inode_rpc_efs_client_lease_begin",
       "weight": 1.0
     },
@@ -266036,7 +266036,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2096",
+      "source_location": "L2120",
       "target": "src_client_inode_rpc_efs_client_lease_reset",
       "weight": 1.0
     },
@@ -266047,7 +266047,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2055",
+      "source_location": "L2079",
       "target": "src_client_inode_rpc_efs_client_lease_resume",
       "weight": 1.0
     },
@@ -266091,7 +266091,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2891",
+      "source_location": "L2915",
       "target": "src_client_inode_rpc_efs_client_rpc_append_abandon",
       "weight": 1.0
     },
@@ -266102,7 +266102,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2832",
+      "source_location": "L2856",
       "target": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "weight": 1.0
     },
@@ -266113,7 +266113,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1255",
+      "source_location": "L1279",
       "target": "src_client_inode_rpc_efs_client_rpc_create",
       "weight": 1.0
     },
@@ -266124,7 +266124,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3048",
+      "source_location": "L3072",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -266135,7 +266135,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2217",
+      "source_location": "L2241",
       "target": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "weight": 1.0
     },
@@ -266146,7 +266146,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2945",
+      "source_location": "L2969",
       "target": "src_client_inode_rpc_efs_client_rpc_flock",
       "weight": 1.0
     },
@@ -266157,7 +266157,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2951",
+      "source_location": "L2975",
       "target": "src_client_inode_rpc_efs_client_rpc_flock_range",
       "weight": 1.0
     },
@@ -266168,7 +266168,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1486",
+      "source_location": "L1510",
       "target": "src_client_inode_rpc_efs_client_rpc_getattr",
       "weight": 1.0
     },
@@ -266179,7 +266179,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2643",
+      "source_location": "L2667",
       "target": "src_client_inode_rpc_efs_client_rpc_getchunks",
       "weight": 1.0
     },
@@ -266190,7 +266190,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2492",
+      "source_location": "L2516",
       "target": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "weight": 1.0
     },
@@ -266201,7 +266201,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2925",
+      "source_location": "L2949",
       "target": "src_client_inode_rpc_efs_client_rpc_hold",
       "weight": 1.0
     },
@@ -266212,7 +266212,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1751",
+      "source_location": "L1775",
       "target": "src_client_inode_rpc_efs_client_rpc_identity_revoked",
       "weight": 1.0
     },
@@ -266223,7 +266223,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2405",
+      "source_location": "L2429",
       "target": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "weight": 1.0
     },
@@ -266234,7 +266234,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2344",
+      "source_location": "L2368",
       "target": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "weight": 1.0
     },
@@ -266245,7 +266245,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3260",
+      "source_location": "L3284",
       "target": "src_client_inode_rpc_efs_client_rpc_last_sent",
       "weight": 1.0
     },
@@ -266256,7 +266256,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1779",
+      "source_location": "L1803",
       "target": "src_client_inode_rpc_efs_client_rpc_lease_edge",
       "weight": 1.0
     },
@@ -266267,7 +266267,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2997",
+      "source_location": "L3021",
       "target": "src_client_inode_rpc_efs_client_rpc_link",
       "weight": 1.0
     },
@@ -266278,7 +266278,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1230",
+      "source_location": "L1254",
       "target": "src_client_inode_rpc_efs_client_rpc_lookup",
       "weight": 1.0
     },
@@ -266289,7 +266289,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1206",
+      "source_location": "L1230",
       "target": "src_client_inode_rpc_efs_client_rpc_lookup_path",
       "weight": 1.0
     },
@@ -266300,7 +266300,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2612",
+      "source_location": "L2636",
       "target": "src_client_inode_rpc_efs_client_rpc_object_live",
       "weight": 1.0
     },
@@ -266311,7 +266311,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3066",
+      "source_location": "L3090",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -266322,7 +266322,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2276",
+      "source_location": "L2300",
       "target": "src_client_inode_rpc_efs_client_rpc_publication",
       "weight": 1.0
     },
@@ -266333,7 +266333,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1906",
+      "source_location": "L1930",
       "target": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "weight": 1.0
     },
@@ -266344,7 +266344,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2197",
+      "source_location": "L2221",
       "target": "src_client_inode_rpc_efs_client_rpc_put_ticket",
       "weight": 1.0
     },
@@ -266355,7 +266355,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2209",
+      "source_location": "L2233",
       "target": "src_client_inode_rpc_efs_client_rpc_put_ticket_batch",
       "weight": 1.0
     },
@@ -266366,7 +266366,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2203",
+      "source_location": "L2227",
       "target": "src_client_inode_rpc_efs_client_rpc_put_ticket_settle",
       "weight": 1.0
     },
@@ -266377,7 +266377,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3713",
+      "source_location": "L3737",
       "target": "src_client_inode_rpc_efs_client_rpc_query_snapshot",
       "weight": 1.0
     },
@@ -266388,7 +266388,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3721",
+      "source_location": "L3745",
       "target": "src_client_inode_rpc_efs_client_rpc_query_snapshot_v4_at",
       "weight": 1.0
     },
@@ -266399,7 +266399,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1512",
+      "source_location": "L1536",
       "target": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "weight": 1.0
     },
@@ -266410,7 +266410,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2691",
+      "source_location": "L2715",
       "target": "src_client_inode_rpc_efs_client_rpc_rename_at",
       "weight": 1.0
     },
@@ -266421,7 +266421,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3473",
+      "source_location": "L3497",
       "target": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "weight": 1.0
     },
@@ -266432,7 +266432,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3463",
+      "source_location": "L3487",
       "target": "src_client_inode_rpc_efs_client_rpc_report_dirty_raft",
       "weight": 1.0
     },
@@ -266443,7 +266443,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3317",
+      "source_location": "L3341",
       "target": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "weight": 1.0
     },
@@ -266465,7 +266465,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3043",
+      "source_location": "L3067",
       "target": "src_client_inode_rpc_efs_client_rpc_set_deadline_ms",
       "weight": 1.0
     },
@@ -266476,7 +266476,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2739",
+      "source_location": "L2763",
       "target": "src_client_inode_rpc_efs_client_rpc_setattr",
       "weight": 1.0
     },
@@ -266487,7 +266487,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2651",
+      "source_location": "L2675",
       "target": "src_client_inode_rpc_efs_client_rpc_unlink",
       "weight": 1.0
     },
@@ -266498,7 +266498,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2467",
+      "source_location": "L2491",
       "target": "src_client_inode_rpc_efs_client_rpc_writer_admission_view",
       "weight": 1.0
     },
@@ -266509,7 +266509,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1603",
+      "source_location": "L1627",
       "target": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "weight": 1.0
     },
@@ -266520,7 +266520,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3587",
+      "source_location": "L3611",
       "target": "src_client_inode_rpc_efs_client_rpc_xattr",
       "weight": 1.0
     },
@@ -266531,7 +266531,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1348",
+      "source_location": "L1372",
       "target": "src_client_inode_rpc_efs_client_session_admit",
       "weight": 1.0
     },
@@ -266542,7 +266542,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1886",
+      "source_location": "L1910",
       "target": "src_client_inode_rpc_efs_client_session_check",
       "weight": 1.0
     },
@@ -266553,7 +266553,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3796",
+      "source_location": "L3820",
       "target": "src_client_inode_rpc_efs_client_session_end",
       "weight": 1.0
     },
@@ -266564,7 +266564,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3781",
+      "source_location": "L3805",
       "target": "src_client_inode_rpc_efs_client_session_end_reason",
       "weight": 1.0
     },
@@ -266575,7 +266575,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1812",
+      "source_location": "L1836",
       "target": "src_client_inode_rpc_efs_client_session_fence",
       "weight": 1.0
     },
@@ -266586,7 +266586,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1827",
+      "source_location": "L1851",
       "target": "src_client_inode_rpc_efs_client_session_fenced",
       "weight": 1.0
     },
@@ -266597,7 +266597,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1832",
+      "source_location": "L1856",
       "target": "src_client_inode_rpc_efs_client_session_forget",
       "weight": 1.0
     },
@@ -266608,7 +266608,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1856",
+      "source_location": "L1880",
       "target": "src_client_inode_rpc_efs_client_session_start",
       "weight": 1.0
     },
@@ -266619,7 +266619,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1773",
+      "source_location": "L1797",
       "target": "src_client_inode_rpc_lease_command_be",
       "weight": 1.0
     },
@@ -266630,7 +266630,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2025",
+      "source_location": "L2049",
       "target": "src_client_inode_rpc_lease_request_result",
       "weight": 1.0
     },
@@ -266718,7 +266718,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1964",
+      "source_location": "L1988",
       "target": "src_client_inode_rpc_opid_try_begin",
       "weight": 1.0
     },
@@ -266729,7 +266729,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1770",
+      "source_location": "L1794",
       "target": "src_client_inode_rpc_publication_session_command",
       "weight": 1.0
     },
@@ -266740,7 +266740,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3653",
+      "source_location": "L3677",
       "target": "src_client_inode_rpc_query_snapshot_rpc",
       "weight": 1.0
     },
@@ -266795,7 +266795,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3450",
+      "source_location": "L3474",
       "target": "src_client_inode_rpc_report_fault_omit_size",
       "weight": 1.0
     },
@@ -266806,7 +266806,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3311",
+      "source_location": "L3335",
       "target": "src_client_inode_rpc_report_rc_transient",
       "weight": 1.0
     },
@@ -266894,7 +266894,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3053",
+      "source_location": "L3077",
       "target": "src_client_inode_rpc_rpc_past_deadline",
       "weight": 1.0
     },
@@ -266949,7 +266949,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2108",
+      "source_location": "L2132",
       "target": "src_client_inode_rpc_rpc_put_ticket",
       "weight": 1.0
     },
@@ -266960,7 +266960,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3267",
+      "source_location": "L3291",
       "target": "src_client_inode_rpc_rpc_report_receipt_query",
       "weight": 1.0
     },
@@ -266982,7 +266982,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1117",
+      "source_location": "L1141",
       "target": "src_client_inode_rpc_rpc_resolve_identified",
       "weight": 1.0
     },
@@ -267015,7 +267015,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1188",
+      "source_location": "L1212",
       "target": "src_client_inode_rpc_rpc_send_recv_admitted",
       "weight": 1.0
     },
@@ -267026,7 +267026,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3251",
+      "source_location": "L3275",
       "target": "src_client_inode_rpc_rpc_send_recv_dual",
       "weight": 1.0
     },
@@ -267037,7 +267037,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3078",
+      "source_location": "L3102",
       "target": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "weight": 1.0
     },
@@ -267048,7 +267048,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1174",
+      "source_location": "L1198",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -267059,7 +267059,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1163",
+      "source_location": "L1187",
       "target": "src_client_inode_rpc_rpc_send_recv_shard",
       "weight": 1.0
     },
@@ -267103,7 +267103,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1664",
+      "source_location": "L1688",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -267114,7 +267114,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1686",
+      "source_location": "L1710",
       "target": "src_client_inode_rpc_session_command_reply",
       "weight": 1.0
     },
@@ -267125,7 +267125,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1841",
+      "source_location": "L1865",
       "target": "src_client_inode_rpc_session_owner_view",
       "weight": 1.0
     },
@@ -267136,7 +267136,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3772",
+      "source_location": "L3796",
       "target": "src_client_inode_rpc_session_revoke_progress",
       "weight": 1.0
     },
@@ -267147,7 +267147,7 @@
       "relation": "contains",
       "source": "src_client_inode_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3733",
+      "source_location": "L3757",
       "target": "src_client_inode_rpc_session_revoke_submit",
       "weight": 1.0
     },
@@ -267182,7 +267182,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_admission_verdict",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1900",
+      "source_location": "L1924",
       "target": "src_client_inode_rpc_efs_client_session_fence",
       "weight": 1.0
     },
@@ -267194,7 +267194,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_append_reply_fault",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2805",
+      "source_location": "L2829",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -267206,7 +267206,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_create_request_revocation",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1444",
+      "source_location": "L1468",
       "target": "src_client_inode_rpc_efs_client_rpc_identity_revoked",
       "weight": 1.0
     },
@@ -267218,7 +267218,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_create_request_revocation",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1446",
+      "source_location": "L1470",
       "target": "src_client_inode_rpc_opid_end",
       "weight": 1.0
     },
@@ -267230,7 +267230,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_create_request_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1431",
+      "source_location": "L1455",
       "target": "src_client_inode_rpc_opid_end",
       "weight": 1.0
     },
@@ -267242,7 +267242,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_create_request_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1415",
+      "source_location": "L1439",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -267254,7 +267254,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_create_request_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1422",
+      "source_location": "L1446",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -267290,7 +267290,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_create_begin",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1374",
+      "source_location": "L1398",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -267302,7 +267302,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_create_begin",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1374",
+      "source_location": "L1398",
       "target": "src_client_inode_rpc_c_gid_t",
       "weight": 1.0
     },
@@ -267314,7 +267314,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_create_begin",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1374",
+      "source_location": "L1398",
       "target": "src_client_inode_rpc_c_uid_t",
       "weight": 1.0
     },
@@ -267326,7 +267326,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_create_begin",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1388",
+      "source_location": "L1412",
       "target": "src_client_inode_rpc_opid_begin",
       "weight": 1.0
     },
@@ -267338,7 +267338,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_create_cancel",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1482",
+      "source_location": "L1506",
       "target": "src_client_inode_rpc_opid_end",
       "weight": 1.0
     },
@@ -267350,7 +267350,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_create_resume",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1457",
+      "source_location": "L1481",
       "target": "src_client_inode_rpc_create_request_revocation",
       "weight": 1.0
     },
@@ -267362,7 +267362,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_create_resume",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1456",
+      "source_location": "L1480",
       "target": "src_client_inode_rpc_create_request_rpc",
       "weight": 1.0
     },
@@ -267374,7 +267374,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_create_resume",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1463",
+      "source_location": "L1487",
       "target": "src_client_inode_rpc_efs_client_session_admit",
       "weight": 1.0
     },
@@ -267386,7 +267386,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_create_resume",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1467",
+      "source_location": "L1491",
       "target": "src_client_inode_rpc_opid_refresh_ack",
       "weight": 1.0
     },
@@ -267398,7 +267398,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_lease_begin",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1986",
+      "source_location": "L2010",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -267410,7 +267410,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_lease_begin",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2003",
+      "source_location": "L2027",
       "target": "src_client_inode_rpc_opid_try_begin",
       "weight": 1.0
     },
@@ -267423,7 +267423,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_lease_resume",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2072",
+      "source_location": "L2096",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -267435,7 +267435,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_lease_resume",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2063",
+      "source_location": "L2087",
       "target": "src_client_inode_rpc_efs_client_rpc_lease_edge",
       "weight": 1.0
     },
@@ -267447,7 +267447,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_lease_resume",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2072",
+      "source_location": "L2096",
       "target": "src_client_inode_rpc_efs_client_session_admit",
       "weight": 1.0
     },
@@ -267459,7 +267459,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_lease_resume",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2066",
+      "source_location": "L2090",
       "target": "src_client_inode_rpc_lease_request_result",
       "weight": 1.0
     },
@@ -267471,7 +267471,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_lease_resume",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2076",
+      "source_location": "L2100",
       "target": "src_client_inode_rpc_opid_refresh_ack",
       "weight": 1.0
     },
@@ -267508,7 +267508,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_abandon",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2916",
+      "source_location": "L2940",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -267520,7 +267520,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_append_abandon",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2891",
+      "source_location": "L2915",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -267532,7 +267532,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_append_abandon",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2891",
+      "source_location": "L2915",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -267544,7 +267544,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_abandon",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2916",
+      "source_location": "L2940",
       "target": "src_client_inode_rpc_rpc_send_recv_admitted",
       "weight": 1.0
     },
@@ -267556,7 +267556,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_abandon",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2920",
+      "source_location": "L2944",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -267569,7 +267569,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_abandon",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2915",
+      "source_location": "L2939",
       "target": "src_sim_opid_efs_opid_req_pack",
       "weight": 1.0
     },
@@ -267582,7 +267582,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_abandon",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2899",
+      "source_location": "L2923",
       "target": "src_sim_opid_efs_opid_req_valid",
       "weight": 1.0
     },
@@ -267595,7 +267595,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2871",
+      "source_location": "L2895",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -267607,7 +267607,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2879",
+      "source_location": "L2903",
       "target": "src_client_inode_rpc_append_reply_fault",
       "weight": 1.0
     },
@@ -267619,7 +267619,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2832",
+      "source_location": "L2856",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -267631,7 +267631,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2832",
+      "source_location": "L2856",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -267643,7 +267643,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2871",
+      "source_location": "L2895",
       "target": "src_client_inode_rpc_rpc_send_recv_admitted",
       "weight": 1.0
     },
@@ -267655,7 +267655,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2877",
+      "source_location": "L2901",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -267668,7 +267668,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2867",
+      "source_location": "L2891",
       "target": "src_sim_opid_efs_opid_req_pack",
       "weight": 1.0
     },
@@ -267681,7 +267681,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2850",
+      "source_location": "L2874",
       "target": "src_sim_opid_efs_opid_req_valid",
       "weight": 1.0
     },
@@ -267693,7 +267693,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1255",
+      "source_location": "L1279",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -267705,7 +267705,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1255",
+      "source_location": "L1279",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -267717,7 +267717,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1255",
+      "source_location": "L1279",
       "target": "src_client_inode_rpc_c_gid_t",
       "weight": 1.0
     },
@@ -267729,7 +267729,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1255",
+      "source_location": "L1279",
       "target": "src_client_inode_rpc_c_uid_t",
       "weight": 1.0
     },
@@ -267741,7 +267741,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1298",
+      "source_location": "L1322",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -267753,7 +267753,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1299",
+      "source_location": "L1323",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -267765,7 +267765,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1294",
+      "source_location": "L1318",
       "target": "src_client_inode_rpc_opid_begin",
       "weight": 1.0
     },
@@ -267777,7 +267777,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1324",
+      "source_location": "L1348",
       "target": "src_client_inode_rpc_opid_end",
       "weight": 1.0
     },
@@ -267789,7 +267789,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1307",
+      "source_location": "L1331",
       "target": "src_client_inode_rpc_opid_suffix",
       "weight": 1.0
     },
@@ -267801,7 +267801,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1314",
+      "source_location": "L1338",
       "target": "src_client_inode_rpc_rpc_send_recv_dual",
       "weight": 1.0
     },
@@ -267813,7 +267813,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1317",
+      "source_location": "L1341",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -267825,7 +267825,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_create",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1328",
+      "source_location": "L1352",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -267838,7 +267838,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3050",
+      "source_location": "L3074",
       "target": "src_common_network_efs_net_deadline_ms",
       "weight": 1.0
     },
@@ -267851,7 +267851,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2224",
+      "source_location": "L2248",
       "target": "include_efs_raft_efs_raft_shard_group",
       "weight": 1.0
     },
@@ -267863,7 +267863,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2217",
+      "source_location": "L2241",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -267875,7 +267875,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2217",
+      "source_location": "L2241",
       "target": "src_client_inode_rpc_c_efs_node_id_t",
       "weight": 1.0
     },
@@ -267887,7 +267887,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2239",
+      "source_location": "L2263",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -267899,7 +267899,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2241",
+      "source_location": "L2265",
       "target": "src_client_inode_rpc_raft_voter_conn_skip",
       "weight": 1.0
     },
@@ -267911,7 +267911,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2251",
+      "source_location": "L2275",
       "target": "src_client_inode_rpc_rpc_retry_peer",
       "weight": 1.0
     },
@@ -267923,7 +267923,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2253",
+      "source_location": "L2277",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -267936,7 +267936,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2250",
+      "source_location": "L2274",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -267949,7 +267949,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2241",
+      "source_location": "L2265",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -267962,7 +267962,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2259",
+      "source_location": "L2283",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -267975,8 +267975,21 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2248",
+      "source_location": "L2272",
       "target": "src_common_protocol_efs_conn_recv_msg",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
+      "source_file": "src/client/inode_rpc.c",
+      "source_location": "L2271",
+      "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
     {
@@ -267989,19 +268002,6 @@
       "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "source_file": "src/client/inode_rpc.c",
       "source_location": "L2247",
-      "target": "src_common_protocol_efs_conn_send_msg",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "INFERRED",
-      "confidence_score": 0.85,
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
-      "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2223",
       "target": "src_kv_kv_key_efs_kv_lane_shard",
       "weight": 1.0
     },
@@ -268013,7 +268013,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_flock",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2945",
+      "source_location": "L2969",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -268025,7 +268025,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_flock",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2945",
+      "source_location": "L2969",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -268037,7 +268037,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_flock",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2948",
+      "source_location": "L2972",
       "target": "src_client_inode_rpc_efs_client_rpc_flock_range",
       "weight": 1.0
     },
@@ -268050,7 +268050,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_flock_range",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2986",
+      "source_location": "L3010",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -268062,7 +268062,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_flock_range",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2951",
+      "source_location": "L2975",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -268074,20 +268074,8 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_flock_range",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2951",
+      "source_location": "L2975",
       "target": "src_client_inode_rpc_c_efs_ino_t",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_inode_rpc_efs_client_rpc_flock_range",
-      "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2962",
-      "target": "src_client_inode_rpc_efs_client_publication_id",
       "weight": 1.0
     },
     {
@@ -268099,6 +268087,18 @@
       "source": "src_client_inode_rpc_efs_client_rpc_flock_range",
       "source_file": "src/client/inode_rpc.c",
       "source_location": "L2986",
+      "target": "src_client_inode_rpc_efs_client_publication_id",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_inode_rpc_efs_client_rpc_flock_range",
+      "source_file": "src/client/inode_rpc.c",
+      "source_location": "L3010",
       "target": "src_client_inode_rpc_rpc_send_recv_admitted",
       "weight": 1.0
     },
@@ -268110,7 +268110,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_flock_range",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2984",
+      "source_location": "L3008",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -268122,7 +268122,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_flock_range",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2994",
+      "source_location": "L3018",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -268134,7 +268134,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_getattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1486",
+      "source_location": "L1510",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -268146,7 +268146,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_getattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1486",
+      "source_location": "L1510",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -268158,7 +268158,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1500",
+      "source_location": "L1524",
       "target": "src_client_inode_rpc_rpc_learn_leader",
       "weight": 1.0
     },
@@ -268170,7 +268170,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1494",
+      "source_location": "L1518",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -268182,7 +268182,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1499",
+      "source_location": "L1523",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -268195,7 +268195,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1501",
+      "source_location": "L1525",
       "target": "src_client_ops_efs_client_epoch_note",
       "weight": 1.0
     },
@@ -268207,7 +268207,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2643",
+      "source_location": "L2667",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -268219,7 +268219,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2643",
+      "source_location": "L2667",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -268231,7 +268231,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2647",
+      "source_location": "L2671",
       "target": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "weight": 1.0
     },
@@ -268244,7 +268244,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2557",
+      "source_location": "L2581",
       "target": "include_efs_protocol_efs_getchunks_reply_len_ok",
       "weight": 1.0
     },
@@ -268257,7 +268257,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2591",
+      "source_location": "L2615",
       "target": "include_efs_protocol_efs_getchunks_reply_valid",
       "weight": 1.0
     },
@@ -268269,7 +268269,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2492",
+      "source_location": "L2516",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -268281,7 +268281,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2492",
+      "source_location": "L2516",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -268293,7 +268293,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2511",
+      "source_location": "L2535",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -268305,7 +268305,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2517",
+      "source_location": "L2541",
       "target": "src_client_inode_rpc_raft_voter_conn_skip",
       "weight": 1.0
     },
@@ -268317,7 +268317,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2554",
+      "source_location": "L2578",
       "target": "src_client_inode_rpc_rpc_prof_add",
       "weight": 1.0
     },
@@ -268329,7 +268329,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2514",
+      "source_location": "L2538",
       "target": "src_client_inode_rpc_rpc_prof_enabled",
       "weight": 1.0
     },
@@ -268341,7 +268341,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2515",
+      "source_location": "L2539",
       "target": "src_client_inode_rpc_rpc_prof_now_us",
       "weight": 1.0
     },
@@ -268353,7 +268353,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2587",
+      "source_location": "L2611",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -268365,7 +268365,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2529",
+      "source_location": "L2553",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -268378,7 +268378,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2523",
+      "source_location": "L2547",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -268391,7 +268391,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2516",
+      "source_location": "L2540",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -268404,7 +268404,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2549",
+      "source_location": "L2573",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -268417,7 +268417,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2604",
+      "source_location": "L2628",
       "target": "src_client_ops_efs_client_epoch_note",
       "weight": 1.0
     },
@@ -268430,7 +268430,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2537",
+      "source_location": "L2561",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -268443,7 +268443,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2521",
+      "source_location": "L2545",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -268456,7 +268456,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2506",
+      "source_location": "L2530",
       "target": "src_meta_metadata_efs_export_shard_of",
       "weight": 1.0
     },
@@ -268469,7 +268469,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_hold",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2939",
+      "source_location": "L2963",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -268481,7 +268481,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_hold",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2925",
+      "source_location": "L2949",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -268493,7 +268493,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_hold",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2925",
+      "source_location": "L2949",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -268505,7 +268505,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_hold",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2931",
+      "source_location": "L2955",
       "target": "src_client_inode_rpc_efs_client_publication_id",
       "weight": 1.0
     },
@@ -268517,7 +268517,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_hold",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2939",
+      "source_location": "L2963",
       "target": "src_client_inode_rpc_rpc_send_recv_admitted",
       "weight": 1.0
     },
@@ -268529,7 +268529,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_hold",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2942",
+      "source_location": "L2966",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -268541,7 +268541,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_identity_revoked",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1761",
+      "source_location": "L1785",
       "target": "src_client_inode_rpc_session_command_reply",
       "weight": 1.0
     },
@@ -268554,7 +268554,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_identity_revoked",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1761",
+      "source_location": "L1785",
       "target": "src_kv_kv_key_efs_kv_session_shard",
       "weight": 1.0
     },
@@ -268567,7 +268567,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2411",
+      "source_location": "L2435",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -268580,7 +268580,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2459",
+      "source_location": "L2483",
       "target": "include_efs_protocol_efs_lane_writer_view_reply_valid",
       "weight": 1.0
     },
@@ -268592,7 +268592,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2405",
+      "source_location": "L2429",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -268604,7 +268604,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2405",
+      "source_location": "L2429",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -268616,7 +268616,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2414",
+      "source_location": "L2438",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -268628,7 +268628,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2418",
+      "source_location": "L2442",
       "target": "src_client_inode_rpc_rpc_owner_conn_shard",
       "weight": 1.0
     },
@@ -268640,7 +268640,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2455",
+      "source_location": "L2479",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -268652,7 +268652,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2451",
+      "source_location": "L2475",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -268665,7 +268665,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2422",
+      "source_location": "L2446",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -268678,7 +268678,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2417",
+      "source_location": "L2441",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -268691,7 +268691,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2433",
+      "source_location": "L2457",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -268704,7 +268704,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2408",
+      "source_location": "L2432",
       "target": "src_common_common_efs_chunk_size_valid",
       "weight": 1.0
     },
@@ -268717,7 +268717,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2428",
+      "source_location": "L2452",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -268730,7 +268730,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2421",
+      "source_location": "L2445",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -268743,7 +268743,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2397",
+      "source_location": "L2421",
       "target": "include_efs_protocol_efs_lane_writer_view_reply_valid",
       "weight": 1.0
     },
@@ -268755,7 +268755,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2344",
+      "source_location": "L2368",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -268767,7 +268767,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2353",
+      "source_location": "L2377",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -268779,7 +268779,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2357",
+      "source_location": "L2381",
       "target": "src_client_inode_rpc_rpc_owner_conn_shard",
       "weight": 1.0
     },
@@ -268791,7 +268791,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2394",
+      "source_location": "L2418",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -268803,7 +268803,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2390",
+      "source_location": "L2414",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -268816,7 +268816,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2361",
+      "source_location": "L2385",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -268829,7 +268829,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2356",
+      "source_location": "L2380",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -268842,7 +268842,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2372",
+      "source_location": "L2396",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -268855,7 +268855,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2347",
+      "source_location": "L2371",
       "target": "src_common_common_efs_chunk_size_valid",
       "weight": 1.0
     },
@@ -268868,7 +268868,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2367",
+      "source_location": "L2391",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -268881,7 +268881,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2360",
+      "source_location": "L2384",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -268894,7 +268894,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2350",
+      "source_location": "L2374",
       "target": "src_kv_kv_key_efs_kv_lane_shard",
       "weight": 1.0
     },
@@ -268907,7 +268907,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lease_edge",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1796",
+      "source_location": "L1820",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -268919,7 +268919,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_lease_edge",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1779",
+      "source_location": "L1803",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -268931,7 +268931,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lease_edge",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1792",
+      "source_location": "L1816",
       "target": "src_client_inode_rpc_lease_command_be",
       "weight": 1.0
     },
@@ -268943,7 +268943,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lease_edge",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1796",
+      "source_location": "L1820",
       "target": "src_client_inode_rpc_session_command_reply",
       "weight": 1.0
     },
@@ -268956,7 +268956,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lease_edge",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1785",
+      "source_location": "L1809",
       "target": "src_sim_opid_efs_opid_req_valid",
       "weight": 1.0
     },
@@ -268968,7 +268968,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_link",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2997",
+      "source_location": "L3021",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -268980,7 +268980,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_link",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2997",
+      "source_location": "L3021",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -268992,7 +268992,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_link",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3021",
+      "source_location": "L3045",
       "target": "src_client_inode_rpc_opid_begin",
       "weight": 1.0
     },
@@ -269004,7 +269004,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_link",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3032",
+      "source_location": "L3056",
       "target": "src_client_inode_rpc_opid_end",
       "weight": 1.0
     },
@@ -269016,7 +269016,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_link",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3028",
+      "source_location": "L3052",
       "target": "src_client_inode_rpc_opid_suffix",
       "weight": 1.0
     },
@@ -269028,7 +269028,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_link",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3030",
+      "source_location": "L3054",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -269040,7 +269040,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_link",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3036",
+      "source_location": "L3060",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -269052,7 +269052,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_lookup",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1230",
+      "source_location": "L1254",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -269064,7 +269064,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_lookup",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1230",
+      "source_location": "L1254",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -269076,7 +269076,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lookup",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1249",
+      "source_location": "L1273",
       "target": "src_client_inode_rpc_rpc_learn_leader",
       "weight": 1.0
     },
@@ -269088,7 +269088,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lookup",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1243",
+      "source_location": "L1267",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -269100,7 +269100,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lookup",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1248",
+      "source_location": "L1272",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -269112,7 +269112,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_lookup_path",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1206",
+      "source_location": "L1230",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -269124,7 +269124,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_lookup_path",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1206",
+      "source_location": "L1230",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -269136,7 +269136,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lookup_path",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1218",
+      "source_location": "L1242",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -269148,7 +269148,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_lookup_path",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1224",
+      "source_location": "L1248",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -269160,7 +269160,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_object_live",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2612",
+      "source_location": "L2636",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -269172,7 +269172,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_object_live",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2622",
+      "source_location": "L2646",
       "target": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "weight": 1.0
     },
@@ -269184,7 +269184,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3068",
+      "source_location": "L3092",
       "target": "src_client_inode_rpc_rpc_past_deadline",
       "weight": 1.0
     },
@@ -269197,7 +269197,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2321",
+      "source_location": "L2345",
       "target": "include_efs_raft_efs_raft_shard_group",
       "weight": 1.0
     },
@@ -269209,7 +269209,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2295",
+      "source_location": "L2319",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -269221,7 +269221,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2289",
+      "source_location": "L2313",
       "target": "src_client_inode_rpc_efs_client_session_check",
       "weight": 1.0
     },
@@ -269233,7 +269233,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2335",
+      "source_location": "L2359",
       "target": "src_client_inode_rpc_efs_client_session_fence",
       "weight": 1.0
     },
@@ -269245,7 +269245,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2297",
+      "source_location": "L2321",
       "target": "src_client_inode_rpc_rpc_owner_conn_shard",
       "weight": 1.0
     },
@@ -269257,7 +269257,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2319",
+      "source_location": "L2343",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -269269,7 +269269,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2316",
+      "source_location": "L2340",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -269282,7 +269282,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2301",
+      "source_location": "L2325",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -269295,7 +269295,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2297",
+      "source_location": "L2321",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -269308,7 +269308,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2307",
+      "source_location": "L2331",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -269321,7 +269321,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2338",
+      "source_location": "L2362",
       "target": "src_client_write_efs_client_degraded_drop",
       "weight": 1.0
     },
@@ -269334,7 +269334,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2284",
+      "source_location": "L2308",
       "target": "src_client_write_efs_client_degraded_flags",
       "weight": 1.0
     },
@@ -269347,7 +269347,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2304",
+      "source_location": "L2328",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -269360,7 +269360,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2300",
+      "source_location": "L2324",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -269373,7 +269373,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2287",
+      "source_location": "L2311",
       "target": "src_common_publication_efs_publication_digest",
       "weight": 1.0
     },
@@ -269386,7 +269386,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2286",
+      "source_location": "L2310",
       "target": "src_common_publication_efs_publication_from_request",
       "weight": 1.0
     },
@@ -269399,7 +269399,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2292",
+      "source_location": "L2316",
       "target": "src_kv_kv_key_efs_kv_lane_shard",
       "weight": 1.0
     },
@@ -269412,7 +269412,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1938",
+      "source_location": "L1962",
       "target": "include_efs_raft_efs_raft_shard_group",
       "weight": 1.0
     },
@@ -269424,7 +269424,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1943",
+      "source_location": "L1967",
       "target": "src_client_inode_rpc_admission_verdict",
       "weight": 1.0
     },
@@ -269436,7 +269436,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1912",
+      "source_location": "L1936",
       "target": "src_client_inode_rpc_efs_client_session_check",
       "weight": 1.0
     },
@@ -269448,7 +269448,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1923",
+      "source_location": "L1947",
       "target": "src_client_inode_rpc_efs_client_session_fence",
       "weight": 1.0
     },
@@ -269460,7 +269460,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1936",
+      "source_location": "L1960",
       "target": "src_client_inode_rpc_lease_command_be",
       "weight": 1.0
     },
@@ -269472,7 +269472,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1943",
+      "source_location": "L1967",
       "target": "src_client_inode_rpc_publication_session_command",
       "weight": 1.0
     },
@@ -269484,7 +269484,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1918",
+      "source_location": "L1942",
       "target": "src_client_inode_rpc_session_owner_view",
       "weight": 1.0
     },
@@ -269497,7 +269497,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1916",
+      "source_location": "L1940",
       "target": "src_kv_kv_key_efs_kv_session_shard",
       "weight": 1.0
     },
@@ -269509,7 +269509,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2201",
+      "source_location": "L2225",
       "target": "src_client_inode_rpc_rpc_put_ticket",
       "weight": 1.0
     },
@@ -269521,7 +269521,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_put_ticket_batch",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2212",
+      "source_location": "L2236",
       "target": "src_client_inode_rpc_rpc_put_ticket",
       "weight": 1.0
     },
@@ -269533,7 +269533,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_put_ticket_settle",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2206",
+      "source_location": "L2230",
       "target": "src_client_inode_rpc_rpc_put_ticket",
       "weight": 1.0
     },
@@ -269545,7 +269545,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_query_snapshot",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3717",
+      "source_location": "L3741",
       "target": "src_client_inode_rpc_query_snapshot_rpc",
       "weight": 1.0
     },
@@ -269557,7 +269557,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_query_snapshot_v4_at",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3721",
+      "source_location": "L3745",
       "target": "src_client_inode_rpc_c_efs_node_id_t",
       "weight": 1.0
     },
@@ -269569,7 +269569,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_query_snapshot_v4_at",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3726",
+      "source_location": "L3750",
       "target": "src_client_inode_rpc_query_snapshot_rpc",
       "weight": 1.0
     },
@@ -269582,7 +269582,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1523",
+      "source_location": "L1547",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -269594,7 +269594,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1512",
+      "source_location": "L1536",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -269606,7 +269606,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1512",
+      "source_location": "L1536",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -269618,7 +269618,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1526",
+      "source_location": "L1550",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -269630,7 +269630,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1541",
+      "source_location": "L1565",
       "target": "src_client_inode_rpc_rpc_owner_conn_shard",
       "weight": 1.0
     },
@@ -269642,7 +269642,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1562",
+      "source_location": "L1586",
       "target": "src_client_inode_rpc_rpc_prof_add",
       "weight": 1.0
     },
@@ -269654,7 +269654,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1539",
+      "source_location": "L1563",
       "target": "src_client_inode_rpc_rpc_prof_enabled",
       "weight": 1.0
     },
@@ -269666,7 +269666,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1540",
+      "source_location": "L1564",
       "target": "src_client_inode_rpc_rpc_prof_now_us",
       "weight": 1.0
     },
@@ -269678,7 +269678,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1572",
+      "source_location": "L1596",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -269691,7 +269691,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1546",
+      "source_location": "L1570",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -269704,7 +269704,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1557",
+      "source_location": "L1581",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -269717,7 +269717,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1550",
+      "source_location": "L1574",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -269730,7 +269730,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1545",
+      "source_location": "L1569",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -269742,7 +269742,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_rename_at",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2691",
+      "source_location": "L2715",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -269754,7 +269754,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_rename_at",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2691",
+      "source_location": "L2715",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -269766,7 +269766,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_rename_at",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2717",
+      "source_location": "L2741",
       "target": "src_client_inode_rpc_opid_begin",
       "weight": 1.0
     },
@@ -269778,7 +269778,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_rename_at",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2729",
+      "source_location": "L2753",
       "target": "src_client_inode_rpc_opid_end",
       "weight": 1.0
     },
@@ -269790,7 +269790,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_rename_at",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2724",
+      "source_location": "L2748",
       "target": "src_client_inode_rpc_opid_suffix",
       "weight": 1.0
     },
@@ -269802,7 +269802,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_rename_at",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2726",
+      "source_location": "L2750",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -269814,7 +269814,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_rename_at",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2733",
+      "source_location": "L2757",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -269827,7 +269827,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3533",
+      "source_location": "L3557",
       "target": "include_efs_protocol_efs_chunk_rec_pack",
       "weight": 1.0
     },
@@ -269840,7 +269840,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3504",
+      "source_location": "L3528",
       "target": "include_efs_protocol_efs_chunk_rec_wire_size",
       "weight": 1.0
     },
@@ -269853,7 +269853,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3559",
+      "source_location": "L3583",
       "target": "include_efs_protocol_efs_report_pubid_pack",
       "weight": 1.0
     },
@@ -269866,7 +269866,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3562",
+      "source_location": "L3586",
       "target": "include_efs_protocol_efs_report_session_pack",
       "weight": 1.0
     },
@@ -269879,7 +269879,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3513",
+      "source_location": "L3537",
       "target": "include_efs_protocol_efs_report_session_valid",
       "weight": 1.0
     },
@@ -269892,7 +269892,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3579",
+      "source_location": "L3603",
       "target": "src_client_data_commit_efs_client_stripes_published",
       "weight": 1.0
     },
@@ -269904,7 +269904,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3473",
+      "source_location": "L3497",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -269916,7 +269916,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3511",
+      "source_location": "L3535",
       "target": "src_client_inode_rpc_efs_client_publication_id",
       "weight": 1.0
     },
@@ -269928,7 +269928,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3486",
+      "source_location": "L3510",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -269940,7 +269940,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3545",
+      "source_location": "L3569",
       "target": "src_client_inode_rpc_report_fault_omit_size",
       "weight": 1.0
     },
@@ -269952,7 +269952,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3571",
+      "source_location": "L3595",
       "target": "src_client_inode_rpc_rpc_send_recv_dual",
       "weight": 1.0
     },
@@ -269964,7 +269964,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3577",
+      "source_location": "L3601",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -269977,7 +269977,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3582",
+      "source_location": "L3606",
       "target": "src_client_write_efs_client_degraded_drop",
       "weight": 1.0
     },
@@ -269990,7 +269990,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3527",
+      "source_location": "L3551",
       "target": "src_client_write_efs_client_degraded_flags",
       "weight": 1.0
     },
@@ -270003,7 +270003,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3580",
+      "source_location": "L3604",
       "target": "src_client_write_efs_client_degraded_pending",
       "weight": 1.0
     },
@@ -270015,7 +270015,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_raft",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3463",
+      "source_location": "L3487",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -270027,7 +270027,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_dirty_raft",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3469",
+      "source_location": "L3493",
       "target": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "weight": 1.0
     },
@@ -270040,7 +270040,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3338",
+      "source_location": "L3362",
       "target": "include_efs_protocol_efs_report_session_valid",
       "weight": 1.0
     },
@@ -270053,7 +270053,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3414",
+      "source_location": "L3438",
       "target": "src_client_data_commit_efs_client_stripes_published",
       "weight": 1.0
     },
@@ -270065,7 +270065,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3317",
+      "source_location": "L3341",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -270077,7 +270077,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3317",
+      "source_location": "L3341",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -270089,7 +270089,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3337",
+      "source_location": "L3361",
       "target": "src_client_inode_rpc_efs_client_publication_id",
       "weight": 1.0
     },
@@ -270101,7 +270101,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3347",
+      "source_location": "L3371",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -270113,7 +270113,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3395",
+      "source_location": "L3419",
       "target": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "weight": 1.0
     },
@@ -270125,7 +270125,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3355",
+      "source_location": "L3379",
       "target": "src_client_inode_rpc_efs_client_rpc_set_deadline_ms",
       "weight": 1.0
     },
@@ -270137,7 +270137,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3335",
+      "source_location": "L3359",
       "target": "src_client_inode_rpc_report_rc_transient",
       "weight": 1.0
     },
@@ -270149,7 +270149,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3348",
+      "source_location": "L3372",
       "target": "src_client_inode_rpc_rpc_prof_now_us",
       "weight": 1.0
     },
@@ -270161,7 +270161,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3366",
+      "source_location": "L3390",
       "target": "src_client_inode_rpc_rpc_report_receipt_query",
       "weight": 1.0
     },
@@ -270173,7 +270173,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3327",
+      "source_location": "L3351",
       "target": "src_client_inode_rpc_rpc_resolve_ms",
       "weight": 1.0
     },
@@ -270185,7 +270185,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3407",
+      "source_location": "L3431",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -270198,7 +270198,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3346",
+      "source_location": "L3370",
       "target": "src_common_request_receipt_efs_receipt_key_format",
       "weight": 1.0
     },
@@ -270223,7 +270223,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_set_deadline_ms",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3045",
+      "source_location": "L3069",
       "target": "src_common_network_efs_net_set_deadline_ms",
       "weight": 1.0
     },
@@ -270236,7 +270236,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_setattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2778",
+      "source_location": "L2802",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -270248,7 +270248,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_setattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2739",
+      "source_location": "L2763",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -270260,7 +270260,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_setattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2739",
+      "source_location": "L2763",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -270272,7 +270272,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_setattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2739",
+      "source_location": "L2763",
       "target": "src_client_inode_rpc_c_gid_t",
       "weight": 1.0
     },
@@ -270284,7 +270284,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_setattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2739",
+      "source_location": "L2763",
       "target": "src_client_inode_rpc_c_uid_t",
       "weight": 1.0
     },
@@ -270296,68 +270296,8 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_setattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2772",
+      "source_location": "L2796",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
-      "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2768",
-      "target": "src_client_inode_rpc_opid_begin",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
-      "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2787",
-      "target": "src_client_inode_rpc_opid_end",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
-      "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2775",
-      "target": "src_client_inode_rpc_opid_refresh_ack",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
-      "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2777",
-      "target": "src_client_inode_rpc_opid_suffix",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
-      "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2778",
-      "target": "src_client_inode_rpc_rpc_send_recv_admitted",
       "weight": 1.0
     },
     {
@@ -270369,6 +270309,66 @@
       "source": "src_client_inode_rpc_efs_client_rpc_setattr",
       "source_file": "src/client/inode_rpc.c",
       "source_location": "L2792",
+      "target": "src_client_inode_rpc_opid_begin",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
+      "source_file": "src/client/inode_rpc.c",
+      "source_location": "L2811",
+      "target": "src_client_inode_rpc_opid_end",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
+      "source_file": "src/client/inode_rpc.c",
+      "source_location": "L2799",
+      "target": "src_client_inode_rpc_opid_refresh_ack",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
+      "source_file": "src/client/inode_rpc.c",
+      "source_location": "L2801",
+      "target": "src_client_inode_rpc_opid_suffix",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
+      "source_file": "src/client/inode_rpc.c",
+      "source_location": "L2802",
+      "target": "src_client_inode_rpc_rpc_send_recv_admitted",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "src_client_inode_rpc_efs_client_rpc_setattr",
+      "source_file": "src/client/inode_rpc.c",
+      "source_location": "L2816",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -270381,7 +270381,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_setattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2794",
+      "source_location": "L2818",
       "target": "src_client_ops_efs_client_epoch_note",
       "weight": 1.0
     },
@@ -270393,7 +270393,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_unlink",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2651",
+      "source_location": "L2675",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -270405,7 +270405,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_unlink",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2651",
+      "source_location": "L2675",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -270417,7 +270417,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_unlink",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2674",
+      "source_location": "L2698",
       "target": "src_client_inode_rpc_opid_begin",
       "weight": 1.0
     },
@@ -270429,7 +270429,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_unlink",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2685",
+      "source_location": "L2709",
       "target": "src_client_inode_rpc_opid_end",
       "weight": 1.0
     },
@@ -270441,7 +270441,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_unlink",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2681",
+      "source_location": "L2705",
       "target": "src_client_inode_rpc_opid_suffix",
       "weight": 1.0
     },
@@ -270453,7 +270453,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_unlink",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2683",
+      "source_location": "L2707",
       "target": "src_client_inode_rpc_rpc_send_recv_owner",
       "weight": 1.0
     },
@@ -270465,7 +270465,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_unlink",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2688",
+      "source_location": "L2712",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -270478,7 +270478,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_admission_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2486",
+      "source_location": "L2510",
       "target": "include_efs_protocol_efs_lane_writer_view_reply_valid",
       "weight": 1.0
     },
@@ -270490,7 +270490,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_admission_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2467",
+      "source_location": "L2491",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -270502,7 +270502,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_admission_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2467",
+      "source_location": "L2491",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -270514,7 +270514,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_admission_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2480",
+      "source_location": "L2504",
       "target": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "weight": 1.0
     },
@@ -270526,7 +270526,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_admission_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2476",
+      "source_location": "L2500",
       "target": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "weight": 1.0
     },
@@ -270538,7 +270538,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_admission_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2473",
+      "source_location": "L2497",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -270551,7 +270551,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_admission_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2471",
+      "source_location": "L2495",
       "target": "src_common_common_efs_chunk_size_valid",
       "weight": 1.0
     },
@@ -270564,7 +270564,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1609",
+      "source_location": "L1633",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -270577,7 +270577,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1656",
+      "source_location": "L1680",
       "target": "include_efs_protocol_efs_writer_view_reply_valid",
       "weight": 1.0
     },
@@ -270589,7 +270589,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1603",
+      "source_location": "L1627",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -270601,7 +270601,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1612",
+      "source_location": "L1636",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -270613,7 +270613,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1616",
+      "source_location": "L1640",
       "target": "src_client_inode_rpc_rpc_owner_conn_shard",
       "weight": 1.0
     },
@@ -270625,7 +270625,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1653",
+      "source_location": "L1677",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -270637,7 +270637,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1649",
+      "source_location": "L1673",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -270650,7 +270650,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1620",
+      "source_location": "L1644",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -270663,7 +270663,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1615",
+      "source_location": "L1639",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -270676,7 +270676,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1631",
+      "source_location": "L1655",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -270689,7 +270689,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1626",
+      "source_location": "L1650",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -270702,7 +270702,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1619",
+      "source_location": "L1643",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -270715,7 +270715,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_xattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3627",
+      "source_location": "L3651",
       "target": "include_efs_kv_key_efs_kv_inode_shard",
       "weight": 1.0
     },
@@ -270727,7 +270727,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_xattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3587",
+      "source_location": "L3611",
       "target": "src_client_inode_rpc_c_efs_export_id_t",
       "weight": 1.0
     },
@@ -270739,7 +270739,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_efs_client_rpc_xattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3587",
+      "source_location": "L3611",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -270751,7 +270751,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_xattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3621",
+      "source_location": "L3645",
       "target": "src_client_inode_rpc_efs_client_publication_id",
       "weight": 1.0
     },
@@ -270763,7 +270763,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_xattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3627",
+      "source_location": "L3651",
       "target": "src_client_inode_rpc_rpc_send_recv_admitted",
       "weight": 1.0
     },
@@ -270775,7 +270775,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_xattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3632",
+      "source_location": "L3656",
       "target": "src_client_inode_rpc_rpc_send_recv_shard",
       "weight": 1.0
     },
@@ -270787,7 +270787,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_xattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3638",
+      "source_location": "L3662",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -270800,7 +270800,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_rpc_xattr",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3632",
+      "source_location": "L3656",
       "target": "src_meta_metadata_efs_export_shard_of",
       "weight": 1.0
     },
@@ -270812,7 +270812,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_admit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1361",
+      "source_location": "L1385",
       "target": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "weight": 1.0
     },
@@ -270824,7 +270824,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_check",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1888",
+      "source_location": "L1912",
       "target": "src_client_inode_rpc_efs_client_session_fenced",
       "weight": 1.0
     },
@@ -270836,7 +270836,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_check",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1890",
+      "source_location": "L1914",
       "target": "src_client_inode_rpc_efs_client_session_start",
       "weight": 1.0
     },
@@ -270848,7 +270848,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_end",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3802",
+      "source_location": "L3826",
       "target": "src_client_inode_rpc_efs_client_publication_id",
       "weight": 1.0
     },
@@ -270860,7 +270860,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_end",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3808",
+      "source_location": "L3832",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -270872,7 +270872,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_end",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3809",
+      "source_location": "L3833",
       "target": "src_client_inode_rpc_efs_client_rpc_set_deadline_ms",
       "weight": 1.0
     },
@@ -270884,7 +270884,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_end",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3799",
+      "source_location": "L3823",
       "target": "src_client_inode_rpc_efs_client_session_fenced",
       "weight": 1.0
     },
@@ -270897,7 +270897,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_end",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3813",
+      "source_location": "L3837",
       "target": "src_common_session_revoke_efs_session_revoke",
       "weight": 1.0
     },
@@ -270910,7 +270910,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_fence",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1823",
+      "source_location": "L1847",
       "target": "src_common_common_efs_strerror",
       "weight": 1.0
     },
@@ -270922,7 +270922,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_start",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1859",
+      "source_location": "L1883",
       "target": "src_client_inode_rpc_efs_client_publication_id",
       "weight": 1.0
     },
@@ -270934,7 +270934,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_start",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1879",
+      "source_location": "L1903",
       "target": "src_client_inode_rpc_efs_client_session_fence",
       "weight": 1.0
     },
@@ -270946,7 +270946,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_start",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1861",
+      "source_location": "L1885",
       "target": "src_client_inode_rpc_efs_client_session_fenced",
       "weight": 1.0
     },
@@ -270958,7 +270958,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_start",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1872",
+      "source_location": "L1896",
       "target": "src_client_inode_rpc_lease_command_be",
       "weight": 1.0
     },
@@ -270970,7 +270970,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_start",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1873",
+      "source_location": "L1897",
       "target": "src_client_inode_rpc_publication_session_command",
       "weight": 1.0
     },
@@ -270982,7 +270982,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_start",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1865",
+      "source_location": "L1889",
       "target": "src_client_inode_rpc_session_owner_view",
       "weight": 1.0
     },
@@ -270995,7 +270995,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_efs_client_session_start",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1863",
+      "source_location": "L1887",
       "target": "src_kv_kv_key_efs_kv_session_shard",
       "weight": 1.0
     },
@@ -271007,7 +271007,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_lease_request_result",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2047",
+      "source_location": "L2071",
       "target": "src_client_inode_rpc_efs_client_rpc_identity_revoked",
       "weight": 1.0
     },
@@ -271019,7 +271019,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_lease_request_result",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2042",
+      "source_location": "L2066",
       "target": "src_client_inode_rpc_opid_end",
       "weight": 1.0
     },
@@ -271156,7 +271156,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_opid_try_begin",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1982",
+      "source_location": "L2006",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -271168,7 +271168,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_opid_try_begin",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1975",
+      "source_location": "L1999",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -271180,7 +271180,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_opid_try_begin",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1977",
+      "source_location": "L2001",
       "target": "src_client_inode_rpc_opid_take_locked",
       "weight": 1.0
     },
@@ -271192,7 +271192,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_publication_session_command",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1771",
+      "source_location": "L1795",
       "target": "src_client_inode_rpc_session_command_reply",
       "weight": 1.0
     },
@@ -271204,7 +271204,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_query_snapshot_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3653",
+      "source_location": "L3677",
       "target": "src_client_inode_rpc_c_efs_node_id_t",
       "weight": 1.0
     },
@@ -271216,7 +271216,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_query_snapshot_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3665",
+      "source_location": "L3689",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -271228,7 +271228,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_query_snapshot_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3667",
+      "source_location": "L3691",
       "target": "src_client_inode_rpc_raft_dual_voter_conn",
       "weight": 1.0
     },
@@ -271240,7 +271240,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_query_snapshot_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3708",
+      "source_location": "L3732",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -271253,7 +271253,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_query_snapshot_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3677",
+      "source_location": "L3701",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -271266,7 +271266,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_query_snapshot_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3667",
+      "source_location": "L3691",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -271279,7 +271279,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_query_snapshot_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3681",
+      "source_location": "L3705",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -271292,7 +271292,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_query_snapshot_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3676",
+      "source_location": "L3700",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -271305,7 +271305,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_query_snapshot_rpc",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3675",
+      "source_location": "L3699",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -271615,7 +271615,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_past_deadline",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3058",
+      "source_location": "L3082",
       "target": "src_common_network_efs_net_deadline_ms",
       "weight": 1.0
     },
@@ -271703,7 +271703,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2132",
+      "source_location": "L2156",
       "target": "include_efs_raft_efs_raft_shard_group",
       "weight": 1.0
     },
@@ -271715,7 +271715,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2140",
+      "source_location": "L2164",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -271727,7 +271727,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2118",
+      "source_location": "L2142",
       "target": "src_client_inode_rpc_efs_client_session_check",
       "weight": 1.0
     },
@@ -271739,7 +271739,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2189",
+      "source_location": "L2213",
       "target": "src_client_inode_rpc_efs_client_session_fence",
       "weight": 1.0
     },
@@ -271751,7 +271751,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2142",
+      "source_location": "L2166",
       "target": "src_client_inode_rpc_raft_voter_conn_skip",
       "weight": 1.0
     },
@@ -271763,7 +271763,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2157",
+      "source_location": "L2181",
       "target": "src_client_inode_rpc_rpc_retry_peer",
       "weight": 1.0
     },
@@ -271775,7 +271775,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2159",
+      "source_location": "L2183",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -271788,7 +271788,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2156",
+      "source_location": "L2180",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -271801,7 +271801,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2142",
+      "source_location": "L2166",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -271814,7 +271814,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2165",
+      "source_location": "L2189",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -271827,7 +271827,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2154",
+      "source_location": "L2178",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -271840,7 +271840,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2153",
+      "source_location": "L2177",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -271853,7 +271853,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2131",
+      "source_location": "L2155",
       "target": "src_kv_kv_key_efs_kv_lane_shard",
       "weight": 1.0
     },
@@ -271866,7 +271866,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_put_ticket",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2128",
+      "source_location": "L2152",
       "target": "src_meta_put_ticket_efs_put_ticket_encode",
       "weight": 1.0
     },
@@ -271879,7 +271879,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3283",
+      "source_location": "L3307",
       "target": "include_efs_protocol_efs_report_pubid_pack",
       "weight": 1.0
     },
@@ -271892,7 +271892,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3284",
+      "source_location": "L3308",
       "target": "include_efs_protocol_efs_report_session_pack",
       "weight": 1.0
     },
@@ -271904,7 +271904,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3267",
+      "source_location": "L3291",
       "target": "src_client_inode_rpc_c_efs_node_id_t",
       "weight": 1.0
     },
@@ -271916,7 +271916,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3307",
+      "source_location": "L3331",
       "target": "src_client_inode_rpc_rpc_status_to_efs",
       "weight": 1.0
     },
@@ -271929,7 +271929,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3289",
+      "source_location": "L3313",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -271942,7 +271942,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3285",
+      "source_location": "L3309",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -271955,7 +271955,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3300",
+      "source_location": "L3324",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -271968,7 +271968,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3292",
+      "source_location": "L3316",
       "target": "src_common_network_efs_conn_set_recv_timeout",
       "weight": 1.0
     },
@@ -271981,7 +271981,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3293",
+      "source_location": "L3317",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -271994,7 +271994,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_report_receipt_query",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3288",
+      "source_location": "L3312",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -272018,7 +272018,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_resolve_identified",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1132",
+      "source_location": "L1156",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -272030,7 +272030,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_resolve_identified",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1139",
+      "source_location": "L1163",
       "target": "src_client_inode_rpc_efs_client_rpc_set_deadline_ms",
       "weight": 1.0
     },
@@ -272042,7 +272042,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_resolve_identified",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1128",
+      "source_location": "L1152",
       "target": "src_client_inode_rpc_rpc_identified",
       "weight": 1.0
     },
@@ -272054,7 +272054,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_resolve_identified",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1133",
+      "source_location": "L1157",
       "target": "src_client_inode_rpc_rpc_prof_now_us",
       "weight": 1.0
     },
@@ -272066,7 +272066,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_resolve_identified",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1131",
+      "source_location": "L1155",
       "target": "src_client_inode_rpc_rpc_req_ident",
       "weight": 1.0
     },
@@ -272078,7 +272078,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_resolve_identified",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1123",
+      "source_location": "L1147",
       "target": "src_client_inode_rpc_rpc_resolve_ms",
       "weight": 1.0
     },
@@ -272090,7 +272090,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_resolve_identified",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1141",
+      "source_location": "L1165",
       "target": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "weight": 1.0
     },
@@ -272102,7 +272102,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_resolve_identified",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1143",
+      "source_location": "L1167",
       "target": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "weight": 1.0
     },
@@ -272152,7 +272152,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_admitted",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1194",
+      "source_location": "L1218",
       "target": "src_client_inode_rpc_efs_client_session_admit",
       "weight": 1.0
     },
@@ -272164,7 +272164,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_admitted",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1202",
+      "source_location": "L1226",
       "target": "src_client_inode_rpc_efs_client_session_forget",
       "weight": 1.0
     },
@@ -272176,7 +272176,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_admitted",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1197",
+      "source_location": "L1221",
       "target": "src_client_inode_rpc_rpc_send_recv_shard",
       "weight": 1.0
     },
@@ -272188,7 +272188,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3256",
+      "source_location": "L3280",
       "target": "src_client_inode_rpc_rpc_resolve_identified",
       "weight": 1.0
     },
@@ -272200,7 +272200,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3255",
+      "source_location": "L3279",
       "target": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "weight": 1.0
     },
@@ -272212,7 +272212,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3092",
+      "source_location": "L3116",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -272224,7 +272224,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3172",
+      "source_location": "L3196",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -272236,7 +272236,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3085",
+      "source_location": "L3109",
       "target": "src_client_inode_rpc_efs_client_session_check",
       "weight": 1.0
     },
@@ -272248,7 +272248,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3108",
+      "source_location": "L3132",
       "target": "src_client_inode_rpc_opid_retry_ack",
       "weight": 1.0
     },
@@ -272260,7 +272260,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3120",
+      "source_location": "L3144",
       "target": "src_client_inode_rpc_raft_dual_voter_conn",
       "weight": 1.0
     },
@@ -272272,7 +272272,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3219",
+      "source_location": "L3243",
       "target": "src_client_inode_rpc_rpc_note_slow_ok",
       "weight": 1.0
     },
@@ -272284,7 +272284,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3112",
+      "source_location": "L3136",
       "target": "src_client_inode_rpc_rpc_past_deadline",
       "weight": 1.0
     },
@@ -272296,7 +272296,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3196",
+      "source_location": "L3220",
       "target": "src_client_inode_rpc_rpc_prof_add",
       "weight": 1.0
     },
@@ -272308,7 +272308,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3095",
+      "source_location": "L3119",
       "target": "src_client_inode_rpc_rpc_prof_enabled",
       "weight": 1.0
     },
@@ -272320,7 +272320,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3096",
+      "source_location": "L3120",
       "target": "src_client_inode_rpc_rpc_prof_now_us",
       "weight": 1.0
     },
@@ -272332,7 +272332,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3162",
+      "source_location": "L3186",
       "target": "src_client_inode_rpc_rpc_req_ident",
       "weight": 1.0
     },
@@ -272344,7 +272344,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3084",
+      "source_location": "L3108",
       "target": "src_client_inode_rpc_rpc_type_mutates",
       "weight": 1.0
     },
@@ -272356,7 +272356,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3127",
+      "source_location": "L3151",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -272368,7 +272368,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3199",
+      "source_location": "L3223",
       "target": "src_client_inode_rpc_stale_retryable",
       "weight": 1.0
     },
@@ -272381,7 +272381,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3125",
+      "source_location": "L3149",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -272394,7 +272394,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3117",
+      "source_location": "L3141",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -272407,7 +272407,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3171",
+      "source_location": "L3195",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -272420,7 +272420,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3140",
+      "source_location": "L3164",
       "target": "src_common_network_efs_conn_set_recv_timeout",
       "weight": 1.0
     },
@@ -272433,7 +272433,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3142",
+      "source_location": "L3166",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -272446,7 +272446,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3123",
+      "source_location": "L3147",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -272458,7 +272458,7 @@
       "relation": "references",
       "source": "src_client_inode_rpc_rpc_send_recv_owner",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1174",
+      "source_location": "L1198",
       "target": "src_client_inode_rpc_c_efs_ino_t",
       "weight": 1.0
     },
@@ -272470,7 +272470,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_owner",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1179",
+      "source_location": "L1203",
       "target": "src_client_inode_rpc_rpc_send_recv_shard",
       "weight": 1.0
     },
@@ -272483,7 +272483,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_owner",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1179",
+      "source_location": "L1203",
       "target": "src_meta_metadata_efs_export_shard_of",
       "weight": 1.0
     },
@@ -272495,7 +272495,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1170",
+      "source_location": "L1194",
       "target": "src_client_inode_rpc_rpc_resolve_identified",
       "weight": 1.0
     },
@@ -272507,7 +272507,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1168",
+      "source_location": "L1192",
       "target": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "weight": 1.0
     },
@@ -272520,7 +272520,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1080",
+      "source_location": "L1089",
       "target": "include_efs_raft_efs_raft_shard_group",
       "weight": 1.0
     },
@@ -272544,7 +272544,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L913",
+      "source_location": "L915",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -272568,7 +272568,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L912",
+      "source_location": "L914",
       "target": "src_client_inode_rpc_opid_retry_ack",
       "weight": 1.0
     },
@@ -272580,7 +272580,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L927",
+      "source_location": "L931",
       "target": "src_client_inode_rpc_raft_voter_conn_skip",
       "weight": 1.0
     },
@@ -272592,7 +272592,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L956",
+      "source_location": "L963",
       "target": "src_client_inode_rpc_rpc_fault_create_reply",
       "weight": 1.0
     },
@@ -272604,7 +272604,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1080",
+      "source_location": "L1089",
       "target": "src_client_inode_rpc_rpc_leader_of",
       "weight": 1.0
     },
@@ -272616,7 +272616,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1007",
+      "source_location": "L1016",
       "target": "src_client_inode_rpc_rpc_learn_leader",
       "weight": 1.0
     },
@@ -272628,7 +272628,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1063",
+      "source_location": "L1072",
       "target": "src_client_inode_rpc_rpc_note_slow_ok",
       "weight": 1.0
     },
@@ -272640,7 +272640,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1023",
+      "source_location": "L1032",
       "target": "src_client_inode_rpc_rpc_prof_add",
       "weight": 1.0
     },
@@ -272664,7 +272664,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L894",
+      "source_location": "L896",
       "target": "src_client_inode_rpc_rpc_prof_now_us",
       "weight": 1.0
     },
@@ -272676,7 +272676,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L968",
+      "source_location": "L977",
       "target": "src_client_inode_rpc_rpc_req_ident",
       "weight": 1.0
     },
@@ -272688,7 +272688,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L935",
+      "source_location": "L942",
       "target": "src_client_inode_rpc_rpc_retry_peer",
       "weight": 1.0
     },
@@ -272712,7 +272712,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L942",
+      "source_location": "L949",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -272724,7 +272724,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1035",
+      "source_location": "L1044",
       "target": "src_client_inode_rpc_stale_retryable",
       "weight": 1.0
     },
@@ -272737,7 +272737,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L923",
+      "source_location": "L925",
       "target": "src_client_metadata_read_route_efs_meta_read_route_get",
       "weight": 1.0
     },
@@ -272750,7 +272750,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L893",
+      "source_location": "L895",
       "target": "src_client_metadata_read_route_efs_meta_read_route_key",
       "weight": 1.0
     },
@@ -272763,7 +272763,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1008",
+      "source_location": "L1017",
       "target": "src_client_metadata_read_route_efs_meta_read_route_note",
       "weight": 1.0
     },
@@ -272776,7 +272776,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L934",
+      "source_location": "L938",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -272789,7 +272789,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L920",
+      "source_location": "L922",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -272802,7 +272802,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L975",
+      "source_location": "L984",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -272815,7 +272815,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L925",
+      "source_location": "L929",
       "target": "src_client_node_cache_efs_client_node_is_down",
       "weight": 1.0
     },
@@ -272828,7 +272828,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L976",
+      "source_location": "L985",
       "target": "src_client_node_cache_efs_client_node_note_ok",
       "weight": 1.0
     },
@@ -272841,7 +272841,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L954",
+      "source_location": "L961",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -272854,7 +272854,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_send_recv_shard_once",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L932",
+      "source_location": "L936",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -272878,7 +272878,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_writer_retry_pause",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1667",
+      "source_location": "L1691",
       "target": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "weight": 1.0
     },
@@ -272890,7 +272890,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_rpc_writer_retry_pause",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1668",
+      "source_location": "L1692",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -272903,7 +272903,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1694",
+      "source_location": "L1718",
       "target": "include_efs_raft_efs_raft_shard_group",
       "weight": 1.0
     },
@@ -272915,7 +272915,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1698",
+      "source_location": "L1722",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -272927,7 +272927,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1743",
+      "source_location": "L1767",
       "target": "src_client_inode_rpc_efs_client_session_fence",
       "weight": 1.0
     },
@@ -272939,7 +272939,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1701",
+      "source_location": "L1725",
       "target": "src_client_inode_rpc_raft_voter_conn_skip",
       "weight": 1.0
     },
@@ -272951,7 +272951,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1728",
+      "source_location": "L1752",
       "target": "src_client_inode_rpc_rpc_note_leader",
       "weight": 1.0
     },
@@ -272963,7 +272963,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1712",
+      "source_location": "L1736",
       "target": "src_client_inode_rpc_rpc_retry_peer",
       "weight": 1.0
     },
@@ -272975,7 +272975,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1714",
+      "source_location": "L1738",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -272988,7 +272988,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1711",
+      "source_location": "L1735",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -273001,7 +273001,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1700",
+      "source_location": "L1724",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -273014,7 +273014,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1717",
+      "source_location": "L1741",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -273027,7 +273027,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1709",
+      "source_location": "L1733",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -273040,7 +273040,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_command_reply",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1708",
+      "source_location": "L1732",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -273052,7 +273052,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_owner_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1845",
+      "source_location": "L1869",
       "target": "src_client_inode_rpc_lease_command_be",
       "weight": 1.0
     },
@@ -273064,7 +273064,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_owner_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1847",
+      "source_location": "L1871",
       "target": "src_client_inode_rpc_session_command_reply",
       "weight": 1.0
     },
@@ -273077,7 +273077,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_owner_view",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1847",
+      "source_location": "L1871",
       "target": "src_kv_kv_key_efs_kv_session_shard",
       "weight": 1.0
     },
@@ -273090,7 +273090,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_progress",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3775",
+      "source_location": "L3799",
       "target": "src_client_stop_phase_efs_client_stop_phase",
       "weight": 1.0
     },
@@ -273103,7 +273103,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_submit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3758",
+      "source_location": "L3782",
       "target": "include_efs_session_revoke_efs_session_busy_retry_ok",
       "weight": 1.0
     },
@@ -273115,7 +273115,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_submit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3742",
+      "source_location": "L3766",
       "target": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "weight": 1.0
     },
@@ -273127,7 +273127,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_submit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3744",
+      "source_location": "L3768",
       "target": "src_client_inode_rpc_rpc_owner_conn_shard",
       "weight": 1.0
     },
@@ -273139,7 +273139,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_submit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3759",
+      "source_location": "L3783",
       "target": "src_client_inode_rpc_rpc_writer_retry_pause",
       "weight": 1.0
     },
@@ -273152,7 +273152,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_submit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3747",
+      "source_location": "L3771",
       "target": "src_client_node_cache_efs_client_conn_drop",
       "weight": 1.0
     },
@@ -273165,7 +273165,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_submit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3744",
+      "source_location": "L3768",
       "target": "src_client_node_cache_efs_client_conn_get",
       "weight": 1.0
     },
@@ -273178,7 +273178,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_submit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3753",
+      "source_location": "L3777",
       "target": "src_client_node_cache_efs_client_conn_release",
       "weight": 1.0
     },
@@ -273191,7 +273191,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_submit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3750",
+      "source_location": "L3774",
       "target": "src_common_protocol_efs_conn_recv_msg",
       "weight": 1.0
     },
@@ -273204,7 +273204,7 @@
       "relation": "calls",
       "source": "src_client_inode_rpc_session_revoke_submit",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3746",
+      "source_location": "L3770",
       "target": "src_common_protocol_efs_conn_send_msg",
       "weight": 1.0
     },
@@ -844697,7 +844697,7 @@
       "id": "src_client_inode_rpc_admission_verdict",
       "label": "admission_verdict()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1897"
+      "source_location": "L1921"
     },
     {
       "_callable": true,
@@ -844708,7 +844708,7 @@
       "id": "src_client_inode_rpc_append_reply_fault",
       "label": "append_reply_fault()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2805"
+      "source_location": "L2829"
     },
     {
       "_origin": "ast",
@@ -844769,7 +844769,7 @@
       "id": "src_client_inode_rpc_create_request_revocation",
       "label": "create_request_revocation()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1440"
+      "source_location": "L1464"
     },
     {
       "_callable": true,
@@ -844780,7 +844780,7 @@
       "id": "src_client_inode_rpc_create_request_rpc",
       "label": "create_request_rpc()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1402"
+      "source_location": "L1426"
     },
     {
       "_callable": true,
@@ -844813,7 +844813,7 @@
       "id": "src_client_inode_rpc_efs_client_create_begin",
       "label": "efs_client_create_begin()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1374"
+      "source_location": "L1398"
     },
     {
       "_callable": true,
@@ -844824,7 +844824,7 @@
       "id": "src_client_inode_rpc_efs_client_create_cancel",
       "label": "efs_client_create_cancel()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1478"
+      "source_location": "L1502"
     },
     {
       "_callable": true,
@@ -844835,7 +844835,7 @@
       "id": "src_client_inode_rpc_efs_client_create_reset",
       "label": "efs_client_create_reset()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1472"
+      "source_location": "L1496"
     },
     {
       "_callable": true,
@@ -844846,7 +844846,7 @@
       "id": "src_client_inode_rpc_efs_client_create_resume",
       "label": "efs_client_create_resume()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1452"
+      "source_location": "L1476"
     },
     {
       "_callable": true,
@@ -844857,7 +844857,7 @@
       "id": "src_client_inode_rpc_efs_client_lease_begin",
       "label": "efs_client_lease_begin()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1986"
+      "source_location": "L2010"
     },
     {
       "_callable": true,
@@ -844868,7 +844868,7 @@
       "id": "src_client_inode_rpc_efs_client_lease_reset",
       "label": "efs_client_lease_reset()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2096"
+      "source_location": "L2120"
     },
     {
       "_callable": true,
@@ -844879,7 +844879,7 @@
       "id": "src_client_inode_rpc_efs_client_lease_resume",
       "label": "efs_client_lease_resume()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2055"
+      "source_location": "L2079"
     },
     {
       "_callable": true,
@@ -844923,7 +844923,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_append_abandon",
       "label": "efs_client_rpc_append_abandon()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2891"
+      "source_location": "L2915"
     },
     {
       "_callable": true,
@@ -844934,7 +844934,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_append_reserve",
       "label": "efs_client_rpc_append_reserve()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2832"
+      "source_location": "L2856"
     },
     {
       "_callable": true,
@@ -844945,7 +844945,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_create",
       "label": "efs_client_rpc_create()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1255"
+      "source_location": "L1279"
     },
     {
       "_callable": true,
@@ -844956,7 +844956,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_deadline_ms",
       "label": "efs_client_rpc_deadline_ms()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3048"
+      "source_location": "L3072"
     },
     {
       "_callable": true,
@@ -844967,7 +844967,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_degraded_mark",
       "label": "efs_client_rpc_degraded_mark()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2217"
+      "source_location": "L2241"
     },
     {
       "_callable": true,
@@ -844978,7 +844978,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_flock",
       "label": "efs_client_rpc_flock()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2945"
+      "source_location": "L2969"
     },
     {
       "_callable": true,
@@ -844989,7 +844989,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_flock_range",
       "label": "efs_client_rpc_flock_range()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2951"
+      "source_location": "L2975"
     },
     {
       "_callable": true,
@@ -845000,7 +845000,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_getattr",
       "label": "efs_client_rpc_getattr()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1486"
+      "source_location": "L1510"
     },
     {
       "_callable": true,
@@ -845011,7 +845011,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_getchunks",
       "label": "efs_client_rpc_getchunks()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2643"
+      "source_location": "L2667"
     },
     {
       "_callable": true,
@@ -845022,7 +845022,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_getchunks_fileid",
       "label": "efs_client_rpc_getchunks_fileid()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2492"
+      "source_location": "L2516"
     },
     {
       "_callable": true,
@@ -845033,7 +845033,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_hold",
       "label": "efs_client_rpc_hold()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2925"
+      "source_location": "L2949"
     },
     {
       "_callable": true,
@@ -845044,7 +845044,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_identity_revoked",
       "label": "efs_client_rpc_identity_revoked()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1751"
+      "source_location": "L1775"
     },
     {
       "_callable": true,
@@ -845055,7 +845055,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_lane_bootstrap",
       "label": "efs_client_rpc_lane_bootstrap()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2405"
+      "source_location": "L2429"
     },
     {
       "_callable": true,
@@ -845066,7 +845066,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_lane_writer_view",
       "label": "efs_client_rpc_lane_writer_view()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2344"
+      "source_location": "L2368"
     },
     {
       "_callable": true,
@@ -845077,7 +845077,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_last_sent",
       "label": "efs_client_rpc_last_sent()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3260"
+      "source_location": "L3284"
     },
     {
       "_callable": true,
@@ -845088,7 +845088,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_lease_edge",
       "label": "efs_client_rpc_lease_edge()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1779"
+      "source_location": "L1803"
     },
     {
       "_callable": true,
@@ -845099,7 +845099,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_link",
       "label": "efs_client_rpc_link()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2997"
+      "source_location": "L3021"
     },
     {
       "_callable": true,
@@ -845110,7 +845110,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_lookup",
       "label": "efs_client_rpc_lookup()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1230"
+      "source_location": "L1254"
     },
     {
       "_callable": true,
@@ -845121,7 +845121,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_lookup_path",
       "label": "efs_client_rpc_lookup_path()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1206"
+      "source_location": "L1230"
     },
     {
       "_callable": true,
@@ -845132,7 +845132,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_object_live",
       "label": "efs_client_rpc_object_live()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2612"
+      "source_location": "L2636"
     },
     {
       "_callable": true,
@@ -845143,7 +845143,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_past_deadline",
       "label": "efs_client_rpc_past_deadline()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3066"
+      "source_location": "L3090"
     },
     {
       "_callable": true,
@@ -845154,7 +845154,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_publication",
       "label": "efs_client_rpc_publication()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2276"
+      "source_location": "L2300"
     },
     {
       "_callable": true,
@@ -845165,7 +845165,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_publication_session",
       "label": "efs_client_rpc_publication_session()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1906"
+      "source_location": "L1930"
     },
     {
       "_callable": true,
@@ -845176,7 +845176,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_put_ticket",
       "label": "efs_client_rpc_put_ticket()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2197"
+      "source_location": "L2221"
     },
     {
       "_callable": true,
@@ -845187,7 +845187,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_put_ticket_batch",
       "label": "efs_client_rpc_put_ticket_batch()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2209"
+      "source_location": "L2233"
     },
     {
       "_callable": true,
@@ -845198,7 +845198,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_put_ticket_settle",
       "label": "efs_client_rpc_put_ticket_settle()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2203"
+      "source_location": "L2227"
     },
     {
       "_callable": true,
@@ -845209,7 +845209,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_query_snapshot",
       "label": "efs_client_rpc_query_snapshot()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3713"
+      "source_location": "L3737"
     },
     {
       "_callable": true,
@@ -845220,7 +845220,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_query_snapshot_v4_at",
       "label": "efs_client_rpc_query_snapshot_v4_at()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3721"
+      "source_location": "L3745"
     },
     {
       "_callable": true,
@@ -845231,7 +845231,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_readdir_cur",
       "label": "efs_client_rpc_readdir_cur()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1512"
+      "source_location": "L1536"
     },
     {
       "_callable": true,
@@ -845242,7 +845242,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_rename_at",
       "label": "efs_client_rpc_rename_at()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2691"
+      "source_location": "L2715"
     },
     {
       "_callable": true,
@@ -845253,7 +845253,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_report_dirty_pub",
       "label": "efs_client_rpc_report_dirty_pub()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3473"
+      "source_location": "L3497"
     },
     {
       "_callable": true,
@@ -845264,7 +845264,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_report_dirty_raft",
       "label": "efs_client_rpc_report_dirty_raft()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3463"
+      "source_location": "L3487"
     },
     {
       "_callable": true,
@@ -845275,7 +845275,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_report_resolve",
       "label": "efs_client_rpc_report_resolve()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3317"
+      "source_location": "L3341"
     },
     {
       "_callable": true,
@@ -845297,7 +845297,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_set_deadline_ms",
       "label": "efs_client_rpc_set_deadline_ms()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3043"
+      "source_location": "L3067"
     },
     {
       "_callable": true,
@@ -845308,7 +845308,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_setattr",
       "label": "efs_client_rpc_setattr()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2739"
+      "source_location": "L2763"
     },
     {
       "_callable": true,
@@ -845319,7 +845319,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_unlink",
       "label": "efs_client_rpc_unlink()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2651"
+      "source_location": "L2675"
     },
     {
       "_callable": true,
@@ -845330,7 +845330,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_writer_admission_view",
       "label": "efs_client_rpc_writer_admission_view()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2467"
+      "source_location": "L2491"
     },
     {
       "_callable": true,
@@ -845341,7 +845341,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_writer_view",
       "label": "efs_client_rpc_writer_view()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1603"
+      "source_location": "L1627"
     },
     {
       "_callable": true,
@@ -845352,7 +845352,7 @@
       "id": "src_client_inode_rpc_efs_client_rpc_xattr",
       "label": "efs_client_rpc_xattr()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3587"
+      "source_location": "L3611"
     },
     {
       "_callable": true,
@@ -845363,7 +845363,7 @@
       "id": "src_client_inode_rpc_efs_client_session_admit",
       "label": "efs_client_session_admit()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1348"
+      "source_location": "L1372"
     },
     {
       "_callable": true,
@@ -845374,7 +845374,7 @@
       "id": "src_client_inode_rpc_efs_client_session_check",
       "label": "efs_client_session_check()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1886"
+      "source_location": "L1910"
     },
     {
       "_callable": true,
@@ -845385,7 +845385,7 @@
       "id": "src_client_inode_rpc_efs_client_session_end",
       "label": "efs_client_session_end()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3796"
+      "source_location": "L3820"
     },
     {
       "_callable": true,
@@ -845396,7 +845396,7 @@
       "id": "src_client_inode_rpc_efs_client_session_end_reason",
       "label": "efs_client_session_end_reason()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3781"
+      "source_location": "L3805"
     },
     {
       "_callable": true,
@@ -845407,7 +845407,7 @@
       "id": "src_client_inode_rpc_efs_client_session_fence",
       "label": "efs_client_session_fence()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1812"
+      "source_location": "L1836"
     },
     {
       "_callable": true,
@@ -845418,7 +845418,7 @@
       "id": "src_client_inode_rpc_efs_client_session_fenced",
       "label": "efs_client_session_fenced()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1827"
+      "source_location": "L1851"
     },
     {
       "_callable": true,
@@ -845429,7 +845429,7 @@
       "id": "src_client_inode_rpc_efs_client_session_forget",
       "label": "efs_client_session_forget()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1832"
+      "source_location": "L1856"
     },
     {
       "_callable": true,
@@ -845440,7 +845440,7 @@
       "id": "src_client_inode_rpc_efs_client_session_start",
       "label": "efs_client_session_start()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1856"
+      "source_location": "L1880"
     },
     {
       "_callable": true,
@@ -845451,7 +845451,7 @@
       "id": "src_client_inode_rpc_lease_command_be",
       "label": "lease_command_be()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1773"
+      "source_location": "L1797"
     },
     {
       "_callable": true,
@@ -845462,7 +845462,7 @@
       "id": "src_client_inode_rpc_lease_request_result",
       "label": "lease_request_result()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2025"
+      "source_location": "L2049"
     },
     {
       "_callable": true,
@@ -845550,7 +845550,7 @@
       "id": "src_client_inode_rpc_opid_try_begin",
       "label": "opid_try_begin()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1964"
+      "source_location": "L1988"
     },
     {
       "_callable": true,
@@ -845561,7 +845561,7 @@
       "id": "src_client_inode_rpc_publication_session_command",
       "label": "publication_session_command()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1770"
+      "source_location": "L1794"
     },
     {
       "_callable": true,
@@ -845572,7 +845572,7 @@
       "id": "src_client_inode_rpc_query_snapshot_rpc",
       "label": "query_snapshot_rpc()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3653"
+      "source_location": "L3677"
     },
     {
       "_callable": true,
@@ -845627,7 +845627,7 @@
       "id": "src_client_inode_rpc_report_fault_omit_size",
       "label": "report_fault_omit_size()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3450"
+      "source_location": "L3474"
     },
     {
       "_callable": true,
@@ -845638,7 +845638,7 @@
       "id": "src_client_inode_rpc_report_rc_transient",
       "label": "report_rc_transient()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3311"
+      "source_location": "L3335"
     },
     {
       "_callable": true,
@@ -845726,7 +845726,7 @@
       "id": "src_client_inode_rpc_rpc_past_deadline",
       "label": "rpc_past_deadline()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3053"
+      "source_location": "L3077"
     },
     {
       "_callable": true,
@@ -845781,7 +845781,7 @@
       "id": "src_client_inode_rpc_rpc_put_ticket",
       "label": "rpc_put_ticket()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L2108"
+      "source_location": "L2132"
     },
     {
       "_callable": true,
@@ -845792,7 +845792,7 @@
       "id": "src_client_inode_rpc_rpc_report_receipt_query",
       "label": "rpc_report_receipt_query()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3267"
+      "source_location": "L3291"
     },
     {
       "_callable": true,
@@ -845814,7 +845814,7 @@
       "id": "src_client_inode_rpc_rpc_resolve_identified",
       "label": "rpc_resolve_identified()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1117"
+      "source_location": "L1141"
     },
     {
       "_callable": true,
@@ -845847,7 +845847,7 @@
       "id": "src_client_inode_rpc_rpc_send_recv_admitted",
       "label": "rpc_send_recv_admitted()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1188"
+      "source_location": "L1212"
     },
     {
       "_callable": true,
@@ -845858,7 +845858,7 @@
       "id": "src_client_inode_rpc_rpc_send_recv_dual",
       "label": "rpc_send_recv_dual()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3251"
+      "source_location": "L3275"
     },
     {
       "_callable": true,
@@ -845869,7 +845869,7 @@
       "id": "src_client_inode_rpc_rpc_send_recv_dual_once",
       "label": "rpc_send_recv_dual_once()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3078"
+      "source_location": "L3102"
     },
     {
       "_callable": true,
@@ -845880,7 +845880,7 @@
       "id": "src_client_inode_rpc_rpc_send_recv_owner",
       "label": "rpc_send_recv_owner()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1174"
+      "source_location": "L1198"
     },
     {
       "_callable": true,
@@ -845891,7 +845891,7 @@
       "id": "src_client_inode_rpc_rpc_send_recv_shard",
       "label": "rpc_send_recv_shard()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1163"
+      "source_location": "L1187"
     },
     {
       "_callable": true,
@@ -845935,7 +845935,7 @@
       "id": "src_client_inode_rpc_rpc_writer_retry_pause",
       "label": "rpc_writer_retry_pause()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1664"
+      "source_location": "L1688"
     },
     {
       "_callable": true,
@@ -845946,7 +845946,7 @@
       "id": "src_client_inode_rpc_session_command_reply",
       "label": "session_command_reply()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1686"
+      "source_location": "L1710"
     },
     {
       "_callable": true,
@@ -845957,7 +845957,7 @@
       "id": "src_client_inode_rpc_session_owner_view",
       "label": "session_owner_view()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L1841"
+      "source_location": "L1865"
     },
     {
       "_callable": true,
@@ -845968,7 +845968,7 @@
       "id": "src_client_inode_rpc_session_revoke_progress",
       "label": "session_revoke_progress()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3772"
+      "source_location": "L3796"
     },
     {
       "_callable": true,
@@ -845979,7 +845979,7 @@
       "id": "src_client_inode_rpc_session_revoke_submit",
       "label": "session_revoke_submit()",
       "source_file": "src/client/inode_rpc.c",
-      "source_location": "L3733"
+      "source_location": "L3757"
     },
     {
       "_callable": true,
