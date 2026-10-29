@@ -10,7 +10,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import signal
 import time
 import traceback
 
@@ -62,7 +61,10 @@ def main():
                                          '-o',out/('streams-'+label)])
         run('generate-wake',['python3',tools/'rdma_registry_probe.py','wake',
                              probe/'src/common/rdma.c',out/'wake-rdma.c'])
-        run('build-wake-object',cc+['-c',out/'wake-rdma.c','-o',out/'rdma.o'])
+        # Match Makefile's existing production-source warning policy. Keep
+        # -Werror for the new standalone workload and all other diagnostics.
+        run('build-wake-object',cc+['-Wno-stringop-truncation','-Wno-format-truncation',
+                                   '-c',out/'wake-rdma.c','-o',out/'rdma.o'])
         # ar replaces the original rdma.o member, preserving every other object.
         (out/'wake-libefs.a').write_bytes((probe/'libefs.a').read_bytes())
         run('archive-wake-object',['ar','r',out/'wake-libefs.a',out/'rdma.o'])
