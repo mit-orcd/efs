@@ -1,13 +1,57 @@
 # Task T — gate budgets across supported hosts
 
-**FITTED / confirmation incomplete.** The63c6c9cb9 attempt passes on
-intel1 but fails the xorinox inventory oracle; xorinox and fstor007 each
-also overrun one budget. None is erased or called a passing confirmation.
-Candidate640265efc adds a bounded coherent inventory capture, negative
-controls and failed-fixture retention; new confirmations are running with
-full text oracle evidence. The92 fitted bounds, slots, deadlines and
-1100s target are unchanged (modeled1504s). Nuc/AMD full failures remain
-unqualified. Nothing is merged into devel or pushed.
+**FITTED / confirmation incomplete.** Candidate640265efc's three full
+confirmations each fail while saving the full-capacity phase's artifact:
+the summary directory was only created by the growth driver. The full phase
+does not call that driver. No failed gate is accepted. Xorinox additionally
+has one budget overrun and fstor007 two. Correctionb13b8867e creates the
+namespaced artifact directory before either phase. Three new serial eight-job
+measurement gates per host are running with the fitted scheduling priorities,
+so the repeated timing overruns will be assessed from medians, not converted
+into arbitrary larger bounds. The current92 bounds, slots, deadlines and
+1100s target remain unchanged (modeled1504s). Nuc/AMD failures remain
+unqualified; nothing is merged into devel or pushed.
+
+## Second confirmation and fresh measurements — October29
+
+Exact tested source640265efcdcffa3d315055ecbe898038ff632635:
+
+| Host | Commands / FAIL / NOTRUN | Test wall / build | OVERBUDGET | Closed capture manifest SHA-256 |
+| --- | --- | --- | --- | --- |
+| intel1 | 547 /1 /11 | 764s /31s | 0 | `9df5d7223bc0c21851cd0fde08fb0a20e175ec7669e0c6f1c7b6803e6755e993` |
+| xorinox | 547 /1 /10 | 904s /24s | grow-b133.5s vs120s | `0fe69e0c7553553b49853bf6bd419eb08f8f237c5684484c054939ba3eb986ed` |
+| fstor007 | 547 /1 /3 | 863s /23s | D4 progress205.2s vs115s; duplicate candidate68.8s vs55s | `558c21ae65cb4562ef71b4442dccab3c27c7e7ad131c937dcbdc2487a4a24fd7` |
+
+All three report FileNotFoundError saving
+`geometry/UNIQUE_FIXTURE/test_b_geometry-summary.json`. Their full-capacity
+assertions reached the summary, but failed evidence persistence still makes
+the command and gate FAIL. Stopped fixtures remain at case472 under each
+scratch root; canonical captures, including finalized log copies and the
+structured growth observations, are at
+`/data1/efs/evidence/taskT-20261028/HOST-640265efc-confirmation16/`.
+Closure checks find unchanged tracked source, no contention marker and no
+owned EFS process or mount. These facts do not qualify the failed gates.
+
+Correctionb13b8867e22c0a798c3cb7ea5b3ee84c0c8932a5 has the same product,
+oracles, budgets and deadlines, with the directory created independently of
+which phase runs. Geometry status controls, graph9/9 and docs5/5 pass.
+New measurement captures are
+`/data1/efs/evidence/taskT-20261028/HOST-b13b8867e-calibration17/`, with
+LAN scratch `/home/maik/efs-taskT-20261028-b13b8867e-calibration17` and
+fstor007 scratch `/tmp/efs-taskT-20261028-b13b8867e-calibration17`.
+The pristine archive SHA-256 is
+`52325b5921cf723103bb1490be0ac707594357431ec6a49f84ad57cd72bc85b8`.
+Their retained controllers stop before the next run on any failure or marked
+contention. They retain per-run geometry, B6 and W130 text captures. Every
+host passed a fresh ownership/quiet preflight; fstor007's private FUSE prefix
+is copied and hash-verified except its relocated pkg-config prefix. No
+existing deployment or Task AF was changed or messaged.
+
+The AMD focused W165 success scratch was pruned only after finalized capture
+verification and zero-owned-process/mount checks. Its canonical41-file text
+capture remains, with supplemental PRUNED.txt SHA-256
+`60e397942b9643467888320226714ee8bf54e654c3c9fedbf3be1d294d03692e`.
+All failed AMD stores remain retained.
 
 ## First fitted-table confirmation: not accepted as a complete gate
 
@@ -860,32 +904,20 @@ nuc/intel2 coverage. SSH checks did not use BatchMode.
 
 ## Completion still required
 
-1. **DONE:** three clean intel1 pools and K43 timings validated; retain the
-   explicit rejected attempts and host-limit skips.
-2. Fixed candidate 608ea0ea6 is archived after the user-authorized core fix
-   and bounded setup correction. Its scoped passes do not qualify full pools.
-   After the host is released,
-   collect three clean supported-profile nuc gates, investigating any failure
-   against an untouched same-host baseline. Do not fit failed
-   timings or retry them into a claimed PASS.
-3. Collect three clean intel2 gates after Task H releases it, with a new
-   quiet preflight and evidence directory.
-4. Fit complete cohorts, review every limiting row and modeled total against
-   1100 s, and report any excess without changing D44. Example:
-
-```sh
-python3 scripts/refit_test_budgets.py \
-  --budgets tests/budgets.tsv --runner scripts/make_test_summary.sh \
-  --host-runs intel1 I1_RUN1 I1_RUN2 I1_RUN3 \
-  --host-runs nuc NUC_RUN1 NUC_RUN2 NUC_RUN3 \
-  --host-runs intel2 I2_RUN1 I2_RUN2 I2_RUN3 \
-  --output NEW_DIRECTORY
-```
-
-5. Commit the reviewed table and run one confirming gate on nuc and intel2;
-   record actual OVERBUDGET counts. Zero is expected, not guaranteed by a
-   median fit. Preserve failures and inspect any excess without relaxing
-   durability, test bounds, slots or the target to manufacture success.
-6. Finalize manifests and prune closed bulk only after checking no owned
-   processes/mounts remain, using `~/bin/edelete --force --delete`. Keep open
-   investigation stores. Raw logs/captures stay outside Git.
+1. Finish the three fresh b13b8867e measurement gates per authorized substitute
+   host (intel1, xorinox, fstor007), accepting no failed or contaminated gate.
+   The earlier Nuc/AMD failures remain open and are not qualified by substitution.
+2. Replay every retained structured growth inventory observation against its
+   saved references and physical headers. This does not recover the missing
+   references from the first failed confirmation or prove its cause.
+3. Refit the92 rows from complete clean cohorts using
+   `scripts/refit_test_budgets.py --host-runs HOST RUN1 RUN2 RUN3` for each host
+   in one invocation. Preserve slots and reason prefixes,1100s target and
+   1650s margin. Report the modeled excess and any guard failure honestly.
+4. Run the resulting table through confirming full gates: zero FAIL and zero
+   OVERBUDGET are expected; host-limit NOTRUN remains visible. A failed
+   confirmation remains failed, with investigation before further changes.
+5. Finalize/verify manifests, commit the concise evidence and prune only closed
+   successful scratch via `~/bin/edelete --force --delete`, after ownership and
+   mount checks. Keep raw captures and open investigation stores. No merge into
+   devel or push is authorized by this task.
