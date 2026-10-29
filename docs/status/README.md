@@ -1,10 +1,12 @@
 # Project status — work queue and evidence
 
 [AD shared-counter measurement](ad-counter-contention-20261028.md):
-**IN PROGRESS**, frozen product source `1d2852da4`, private TCP/RDMA clusters
-on node9900 (user-selected alternate to occupied node9901). Local counter no-op
-comparison remains outside Git; no product change, switch or AD closure.
-Repeated 8/16/32-writer measurements and the full gate are outstanding.
+**MEASURED / NO PRODUCT CHANGE**, source `1d2852da4` on private node9900
+TCP/RDMA clusters: 32-writer counter updates below 0.036% of sampled CPU on
+every daemon, versus the 1% stop criterion. 42 original D4 trials plus a clean
+paired capture repair pass; one original IBS capture remains PARTIAL. Full
+gate: 545 commands, 0 FAIL, 4 NOTRUN, 690 s plus 15 s build; six individual
+overbudgets retained. No counter shards or product switch; raw evidence retained.
 
 [Stage 1 hot-path serialization tasks AG–AJ](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--hot-path-serialization-agaj):
 **OPEN / implementation and measurements NOTRUN**: shared client allocation
@@ -13,7 +15,8 @@ locks. Verified source mechanisms at `08a1606df`; no measured bottleneck, new K
 defect or acceptance claim. Distinct from P3-A–P3-F and AB–AF.
 
 [Stage 1 observability tasks AB–AF](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--observability-interference-abaf):
-**OPEN / implementation and measurements NOTRUN**, added by user direction Oct 28:
+**AD measured, no change; the other items' status is unchanged by AD**, added
+by user direction Oct 28:
 Raft-lock logging, unused RDMA status aggregation, shared counter contention,
 pump-thread telemetry and management status snapshots. AA remains W170; no K
 counts or acceptance verdicts change. P3-A–P3-F remain Stage 3.0 work.
