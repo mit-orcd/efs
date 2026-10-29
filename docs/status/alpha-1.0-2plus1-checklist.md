@@ -603,7 +603,17 @@ applies; no new behavior flags are proposed.
   counts and retained bytes across worker counts as well as read latency. This
   changes the caller's demand, not AG's allocator locking or budget mechanism;
   preserve demand-read headroom and existing resource bounds.
-- [ ] **AM — REPORT: batch degraded-object bookkeeping without changing publication.**
+- [x] **AM — REPORT: batch degraded-object bookkeeping without changing publication.**
+  **MEASURED, NO CHANGE (record and stop) on branch `agent/devel-taskam`
+  (`3fe865d98`, measurement assets only), not merged** (Oct 29,
+  [evidence](am-report-degraded-batch-20261028.md)): the empty-table fast
+  path takes zero `g_dgobj_mu` acquisitions at 1/8/32 writers; with one
+  pending object, an 8,192-entry table or a member down, the flags/drop pair
+  costs ~200–340 ns per record with no contention growth at 32 writers —
+  0.0025 % of REPORT wall on intel1, ≤ 0.023 % on node9901, two orders below
+  the 5 % threshold. No batch is built; named gates (k35, REPORT
+  partial-verdict, resolved-retry, session tests) PASS; test-all on intel1
+  546/1/12 with the one FAIL the pre-existing devel b6 slow-mode defect.
   `src/client/inode_rpc.c::efs_client_rpc_report_dirty_pub` calls
   `efs_client_degraded_flags` separately while serializing every chunk and, after
   successful publication while degraded state remains pending, calls

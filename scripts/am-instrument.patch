@@ -1,0 +1,159 @@
+diff --git a/src/client/write.c b/src/client/write.c
+index 12151e075..4f5919eaa 100644
+--- a/src/client/write.c
++++ b/src/client/write.c
+@@ -2851,6 +2851,17 @@ static struct dg_obj *g_dgobj;
+ static uint64_t g_dgobj_mask, g_dgobj_live, g_dgobj_used;
+ static pthread_mutex_t g_dgobj_mu = PTHREAD_MUTEX_INITIALIZER;
+ 
++/* TEMP-AM: uncommitted measurement instrumentation; never committed. */
++#include <time.h>
++uint64_t efs_am_dg_locks, efs_am_dg_wait_ns, efs_am_dg_fast, efs_am_dg_notes;
++static int dgobj_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint32_t mask);
++uint64_t efs_am_now_ns(void)
++{
++    struct timespec ts;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
++}
++
+ static uint64_t dgobj_hash(efs_ino_t ino, uint32_t ci, uint64_t gen)
+ {
+     uint64_t h = ((uint64_t)ino * 1315423911ull) ^ ((uint64_t)ci << 1) ^ gen;
+@@ -2907,6 +2918,7 @@ static int dgobj_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint32_t mask)
+ 
+     if (!ino || ino == DGOBJ_TOMB || !gen || !mask || !efs_chunk_missing_valid(mask))
+         return EFS_ERR_INVAL;
++    efs_am_dg_notes++;
+     pthread_mutex_lock(&g_dgobj_mu);
+     p = dgobj_find(ino, ci, gen);
+     if (!p) {
+@@ -2942,8 +2954,11 @@ uint32_t efs_client_degraded_flags(efs_ino_t ino, uint32_t ci, uint64_t gen)
+     struct dg_obj *p;
+ 
+     if (!__atomic_load_n(&g_dgobj_live, __ATOMIC_ACQUIRE) || !gen)
+-        return 0;
++        { efs_am_dg_fast++; return 0; }
++    { uint64_t am_t0 = efs_am_now_ns();
+     pthread_mutex_lock(&g_dgobj_mu);
++    efs_am_dg_locks++;
++    efs_am_dg_wait_ns += efs_am_now_ns() - am_t0; }
+     p = dgobj_find(ino, ci, gen);
+     if (p)
+         flags = p->mask << EFS_CHUNK_REC_F_MISSING_SHIFT;
+@@ -2956,8 +2971,11 @@ void efs_client_degraded_drop(efs_ino_t ino, uint32_t ci, uint64_t gen)
+     struct dg_obj *p;
+ 
+     if (!__atomic_load_n(&g_dgobj_live, __ATOMIC_ACQUIRE) || !gen)
+-        return;
++        { efs_am_dg_fast++; return; }
++    { uint64_t am_t0 = efs_am_now_ns();
+     pthread_mutex_lock(&g_dgobj_mu);
++    efs_am_dg_locks++;
++    efs_am_dg_wait_ns += efs_am_now_ns() - am_t0; }
+     p = dgobj_find(ino, ci, gen);
+     if (p) {
+         p->ino = DGOBJ_TOMB;
+@@ -2971,6 +2989,26 @@ uint64_t efs_client_degraded_pending(void)
+     return __atomic_load_n(&g_dgobj_live, __ATOMIC_ACQUIRE);
+ }
+ 
++/* TEMP-AM: seed fake entries that never match real lookups (measurement). */
++void efs_am_dgobj_seed(uint64_t n)
++{
++    for (uint64_t i = 0; i < n; i++)
++        dgobj_note((efs_ino_t)(0x00ffffff00000000ull | (i + 1)), 0, 1, 1);
++}
++extern uint64_t g_am_report_calls, g_am_report_ns, g_am_report_hist[64];
++void efs_am_dump(const char *tag)
++{
++    fprintf(stderr, "am-measure %s dg_locks=%llu dg_wait_ns=%llu dg_fast=%llu dg_notes=%llu report_calls=%llu report_ns=%llu",
++            tag, (unsigned long long)efs_am_dg_locks, (unsigned long long)efs_am_dg_wait_ns,
++            (unsigned long long)efs_am_dg_fast, (unsigned long long)efs_am_dg_notes,
++            (unsigned long long)g_am_report_calls, (unsigned long long)g_am_report_ns);
++    for (int i = 0; i < 64; i++)
++        if (g_am_report_hist[i])
++            fprintf(stderr, " h%d=%llu", i, (unsigned long long)g_am_report_hist[i]);
++    fprintf(stderr, "\n");
++    fflush(stderr);
++}
++
+ /* One line per degraded acknowledgement; past 100 in a second the rest of
+  * that second are counted and summarized. */
+ static void degraded_ack_log(efs_ino_t ino, uint32_t ci, uint64_t gen,
+diff --git a/src/client/inode_rpc.c b/src/client/inode_rpc.c
+index 28fa68a90..070fe847e 100644
+--- a/src/client/inode_rpc.c
++++ b/src/client/inode_rpc.c
+@@ -3470,7 +3470,16 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
+                                            ino_count, sync, NULL);
+ }
+ 
+-int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
++/* TEMP-AM: uncommitted measurement instrumentation; never committed. */
++uint64_t g_am_report_calls, g_am_report_ns, g_am_report_hist[64];
++extern uint64_t efs_am_now_ns(void);
++static int report_dirty_pub_impl(efs_export_id_t export_id,
++                                    const struct efs_chunk_rec *recs,
++                                    uint32_t count,
++                                    const struct efs_ino_size_rec *irecs,
++                                    uint32_t ino_count, int sync,
++                                    const struct efs_report_pubid *pubid);
++static int report_dirty_pub_impl(efs_export_id_t export_id,
+                                     const struct efs_chunk_rec *recs,
+                                     uint32_t count,
+                                     const struct efs_ino_size_rec *irecs,
+@@ -3584,6 +3593,23 @@ int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
+     return rc;
+ }
+ 
++/* TEMP-AM: timing wrapper. */
++int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
++                                    const struct efs_chunk_rec *recs,
++                                    uint32_t count,
++                                    const struct efs_ino_size_rec *irecs,
++                                    uint32_t ino_count, int sync,
++                                    const struct efs_report_pubid *pubid)
++{
++    uint64_t t0 = efs_am_now_ns();
++    int rc = report_dirty_pub_impl(export_id, recs, count, irecs, ino_count, sync, pubid);
++    uint64_t dt = efs_am_now_ns() - t0;
++    g_am_report_calls++;
++    g_am_report_ns += dt;
++    g_am_report_hist[dt ? 63 - __builtin_clzll(dt) : 0]++;
++    return rc;
++}
++
+ int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,
+                          uint32_t flags, const void *name, uint16_t nlen,
+                          const void *val, uint32_t vlen, void *out,
+diff --git a/src/client/efs_fuse.c b/src/client/efs_fuse.c
+index 5fc0b0389..bee884925 100644
+--- a/src/client/efs_fuse.c
++++ b/src/client/efs_fuse.c
+@@ -158,6 +158,9 @@ static void efs_fuse_stack_broadcast(int sig)
+     efs_fuse_diagnostic_write("STACKDUMP end\n", 14);
+ }
+ 
++/* TEMP-AM: uncommitted measurement instrumentation; never committed. */
++static void efs_am_sigprof(int sig) { (void)sig; extern void efs_am_dump(const char *); efs_am_dump("sigprof"); }
++
+ static void efs_fuse_install_crash_handlers(void)
+ {
+     stack_t ss;
+@@ -187,6 +190,15 @@ static void efs_fuse_install_crash_handlers(void)
+     sigaction(SIGUSR1, &sd, NULL);
+     sd.sa_handler = efs_fuse_stack_signal;
+     sigaction(SIGUSR2, &sd, NULL);
++
++    /* TEMP-AM: uncommitted measurement instrumentation; never committed. */
++    { extern void efs_am_dgobj_seed(uint64_t n);
++      const char *s = getenv("EFS_AM_SEED_DGOBJ");
++      if (s && *s) efs_am_dgobj_seed(strtoull(s, NULL, 10)); }
++    { struct sigaction sp;
++      memset(&sp, 0, sizeof(sp));
++      sp.sa_handler = efs_am_sigprof;
++      sigaction(SIGPROF, &sp, NULL); }
+ }
+ 
+ static ino_t stats_synthetic_ino(efs_ino_t parent_ino)
