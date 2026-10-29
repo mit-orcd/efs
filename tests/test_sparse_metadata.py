@@ -2,6 +2,7 @@
 """Actual sparse-metadata policy avoids THP amplification without losing bytes."""
 from pathlib import Path
 import platform
+import shutil
 import subprocess
 import tempfile
 root=Path(__file__).resolve().parents[1]
@@ -13,6 +14,7 @@ code=r'''
 #define _GNU_SOURCE
 #include "sparse_metadata.h"
 #include <assert.h>
+#include <linux/mman.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +32,14 @@ static void run(int fixed) {
     if(fixed) assert(!efs_sparse_metadata_pages(p+17,SIZE-34)); /* unaligned metadata */
     for(size_t i=0;i<SIZE;i+=HUGE)p[i]=(unsigned char)(i/HUGE+1);
     for(size_t i=0;i<SIZE;i+=HUGE)assert(p[i]==(unsigned char)(i/HUGE+1));
+#ifdef MADV_COLLAPSE
+    /* Instantiate the negative even when global THP policy is never.
+     * This request affects only this private mapping. NOHUGEPAGE must
+     * reject it; the original residency/byte assertions below still apply. */
+    int collapsed=madvise(p,SIZE,MADV_COLLAPSE);
+    if(fixed)assert(collapsed==-1);
+    printf("%s private-collapse rc=%d\n",fixed?"fixed":"old-negative",collapsed);
+#endif
     char line[512];FILE *f=fopen("/proc/self/smaps","r");assert(f);
     unsigned long a,b,rss=0,huge=0;int in=0,nohuge=0;
     while(fgets(line,sizeof(line),f)) {
@@ -50,8 +60,21 @@ static void run(int fixed) {
 }
 int main(void){run(1);run(0);return 0;}
 '''
-with tempfile.TemporaryDirectory(prefix='efs-sparse-pages-') as directory:
-    d=Path(directory);(d/'test.c').write_text(code)
-    subprocess.run(['cc','-std=c99','-O2','-Wall','-Wextra','-Werror','-I'+str(root/'src/client'),str(d/'test.c'),'-o',str(d/'test')],check=True)
-    subprocess.run([str(d/'test')],check=True,timeout=30)
+d=Path(tempfile.mkdtemp(prefix='efs-sparse-pages-'))
+try:
+    (d/'test.c').write_text(code)
+    with (d/'build.log').open('w') as log:
+        subprocess.run(['cc','-std=c99','-O2','-Wall','-Wextra','-Werror','-I'+str(root/'src/client'),str(d/'test.c'),'-o',str(d/'test')],check=True,stdout=log,stderr=subprocess.STDOUT)
+    with (d/'run.log').open('w') as log:
+        subprocess.run([str(d/'test')],check=True,timeout=30,stdout=log,stderr=subprocess.STDOUT)
+    output=(d/'run.log').read_text()
+    print(output,end='')
+except BaseException:
+    print('kept sparse metadata fixture',d)
+    raise
+else:
+    if 'NOTRUN:' in output:
+        print('kept incomplete sparse metadata fixture',d)
+    else:
+        shutil.rmtree(d)
 print('sparse metadata policy: original-capacity sparse payloads, unaligned range, no huge pages PASS')
