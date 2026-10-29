@@ -1359,7 +1359,7 @@
     "include/efs/write_extent.h": "ae00b427c77dc5f0419faf6e5325227b50b56bf7b69bb60c178b561255425110",
     "include/efs/writer_ranges.h": "a88de8968f0de54fdcae591aab9246b29e23c4986fd7251c9524db12a74dabdd",
     "include/efs/writer_state.h": "1a350f195a79947b772d3a08cf33efffb050ae53fe7c591af241398e8efd25c0",
-    "scripts/analyze_counter_profile.py": "a5124f2bc6357efa428cd49a0ef4c83699b15d7f4ead86bdb6f6faf9f5d66f82",
+    "scripts/analyze_counter_profile.py": "59d5d426638755cbcafae0cfc90e5c61051b561d1465dbf391caaec75027b42b",
     "scripts/audit_settings_refusals.py": "369bda1f7854e4837b4329be00f8a73615866e562a474cd1b4e7e1b94ccbd095",
     "scripts/b6_full_loop.sh": "3867ffcd6b6417e8244ee41f74dbdcfccb0c824ce4400bc41a0da8094a5dfbde",
     "scripts/b_checks.py": "e1c743c69a0a5bb6ce6000a3ee9dd1eb827d95e8e5c839151413c0fab9fef5de",
@@ -1418,7 +1418,7 @@
     "scripts/leader_placement.py": "84cf85b8e84990501916d59e9e8ed4073cf3450ace524c1dfd3e3577bb73d503",
     "scripts/make_test_summary.sh": "f03e8659c1c8c59df0784946524dccf9a8c09c7a55c6c99572b88d8eae47afb9",
     "scripts/measure_cohort_durability.sh": "2f1fb2bfddabcde1d6cfddd61a5d1c80ff32ef5fb27b15d17dd6e25033116072",
-    "scripts/measure_counter_cost.py": "7ffddf99fc94a411a457615dd76f19c37950c1f3e699de41b445d2f5d06578ac",
+    "scripts/measure_counter_cost.py": "b1a40f2f2755e4f751f997ca9de12d09ba955961d791fb495e3422c4543ca2ef",
     "scripts/measure_heartbeat_stop.py": "b01e09d8c25452eba17f184c300e06ed8fb0c919f0ac0f5ff19b1ae567a52306",
     "scripts/measure_intel_durability.py": "e954bb0bbd87d5f5354af87f3242fc74f9be88677323b65b490a46bf6edc668b",
     "scripts/measure_put_durability.sh": "c101a288f8603b6c021c6a6968a8700f53fd55c0ad9a9064f43d945b4315eb6a",
@@ -2562,5 +2562,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "82afb4d2c4e76326fc8c9593a8e4571bf9132a56"
+  "source_commit": "ef0ddf653f6fec6e3f5a1719c5d680f4614fe346"
 }

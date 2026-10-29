@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "82afb4d2c4e76326fc8c9593a8e4571bf9132a56"
+      "source_commit": "ef0ddf653f6fec6e3f5a1719c5d680f4614fe346"
     }
   },
   "links": [
@@ -192303,11 +192303,23 @@
     {
       "_origin": "ast",
       "confidence": "EXTRACTED",
+      "context": "import",
+      "evidence_method": "graphify-ast",
+      "relation": "imports",
+      "source": "scripts_analyze_counter_profile",
+      "source_file": "scripts/analyze_counter_profile.py",
+      "source_location": "L15",
+      "target": "efs:import-boundary:sys",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
       "evidence_method": "graphify-ast",
       "relation": "contains",
       "source": "scripts_analyze_counter_profile",
       "source_file": "scripts/analyze_counter_profile.py",
-      "source_location": "L21",
+      "source_location": "L22",
       "target": "scripts_analyze_counter_profile_main",
       "weight": 1.0
     },
@@ -192318,7 +192330,7 @@
       "relation": "contains",
       "source": "scripts_analyze_counter_profile",
       "source_file": "scripts/analyze_counter_profile.py",
-      "source_location": "L17",
+      "source_location": "L18",
       "target": "scripts_analyze_counter_profile_output",
       "weight": 1.0
     },
@@ -192330,7 +192342,7 @@
       "relation": "calls",
       "source": "scripts_analyze_counter_profile_main",
       "source_file": "scripts/analyze_counter_profile.py",
-      "source_location": "L27",
+      "source_location": "L28",
       "target": "scripts_analyze_counter_profile_output",
       "weight": 1.0
     },
@@ -814121,7 +814133,7 @@
       "id": "scripts_analyze_counter_profile_main",
       "label": "main()",
       "source_file": "scripts/analyze_counter_profile.py",
-      "source_location": "L21"
+      "source_location": "L22"
     },
     {
       "_callable": true,
@@ -814132,7 +814144,7 @@
       "id": "scripts_analyze_counter_profile_output",
       "label": "output()",
       "source_file": "scripts/analyze_counter_profile.py",
-      "source_location": "L17"
+      "source_location": "L18"
     },
     {
       "_origin": "ast",

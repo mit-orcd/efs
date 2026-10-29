@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 
 def output(*args):
@@ -28,6 +29,15 @@ def main():
     recorded_ids = output('perf', 'buildid-list', '-i', str(a.case/'cycles.data'))
     assert any(row.split()[0] == build_id for row in recorded_ids.splitlines()), \
         'provided ELF does not match this perf capture'
+    losses = {}
+    for kind in ('cycles', 'memory'):
+        report = subprocess.run(['perf', 'report', '--stdio', '-g', 'none', '--no-children',
+                                 '--percent-limit', '100', '-i', str(a.case/(kind+'.data'))],
+                                capture_output=True, text=True, check=True)
+        (a.case/('loss-'+kind+'.txt')).write_text(report.stdout+report.stderr)
+        match = re.search(r'Total Lost Samples:\s*(\d+)', report.stdout)
+        assert match, f'{kind}: missing capture-loss accounting'
+        losses[kind] = int(match[1])
     groups = {'iostats_add': ('efs_iostats_add',),
               'clock_helper': ('efs_iostats_now_us',),
               'writer_diagnostics': ('stats_time', 'stats_max')}
@@ -132,6 +142,8 @@ def main():
                     peaks[name] = max(peaks[name], int(value))
         observations[node] = dict(peaks)
     result = {'cycles': cycle_summary, 'memory_cachelines': dict(memory),
+              'capture_lost_samples': losses,
+              'capture_verdict': 'PARTIAL' if any(losses.values()) else 'COMPLETE',
               'elf_build_id': build_id,
               'counter_symbols': symbols, 'elf_pie': pie,
               'function_ranges': code, 'raft_obs_window_max_us': observations,
@@ -145,7 +157,8 @@ def main():
               'sampling_limit': 'No statistical independence assumed; no unsampled-access or coherence claim.'}
     (a.case/'profile-summary.json').write_text(json.dumps(result, indent=2)+'\n')
     print(json.dumps(result, indent=2))
+    return 3 if any(losses.values()) else 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

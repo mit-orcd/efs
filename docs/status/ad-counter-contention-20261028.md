@@ -89,6 +89,17 @@ soft limit; no host configuration or daemon limit changes.
   A sampled L1 miss is not, by itself, proof of false sharing. Whole-process
   `cache-misses` are never described as counter-line misses.
 
+The original matrix used measurement driver `82afb4d2c` (64-page buffers).
+The final audit found **371 lost IBS samples and 766,959 recorded samples**
+in `matrix2/rdma-w16-r2-noop/memory.data` (about 0.048% lost). All 36 CPU
+recordings and the other 35 memory recordings have zero lost samples. The
+original stays labelled PARTIAL. A separate matched 16-writer RDMA pair under
+`capture-repair-256/` uses 256-page buffers; both D4 checks and all four
+recordings pass with zero loss. Those extra trials do not replace an original
+trial in the throughput medians or turn the original recording into COMPLETE.
+The current driver defaults to 256 pages, and the current analyzer records
+loss explicitly and returns exit 3 (INCOMPLETE) for any partial capture.
+
 A second thread attempts FUSE `stat` syscalls at 10 Hz throughout the case,
 recording p50/p99 and errors. These are syscall latency, not isolated RPC
 service latency. Daemon logs preserve `raft-obs` pump-hold/lock-wait and
@@ -116,6 +127,10 @@ adds `--transport rdma --host 172.16.99.0` instead of TCP. Run on a compatible
 private host, not a production store. The exact serial commands, build commands
 and environment are retained below. The measurement driver never modifies the
 chosen source; use an external copy for the explicitly uncommitted no-op patch.
+Use the script at `82afb4d2c` for the original 64-page experiment; use the current
+script for the 256-page capture repair. No CPU affinity or leader placement was
+forced; per-case leadership is retained. The broad throughput spread is reported
+without assigning it to a particular unmeasured cause.
 
 ## Calibration failures and limitations
 

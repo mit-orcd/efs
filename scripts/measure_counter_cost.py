@@ -166,7 +166,7 @@ def main():
                         '-p', str(proc.pid), '-o', str(a.out/f'n{i}-stat.csv')], f'n{i}-stat')
             for name, event in [('cycles', ['-e', 'cycles', '-F', '499', '-g', '--call-graph', 'fp']),
                                 ('memory', ['-e', 'ibs_op//', '-c', '1048576', '-d'])]:
-                launch(['perf', 'record', '-v', '-N', '-m', '64', *event, '-p', ids,
+                launch(['perf', 'record', '-v', '-N', '-m', '256', *event, '-p', ids,
                         '-o', str(a.out/f'{name}.data')], name)
         mounts.append(k.Mount(c, 1, 'load'))
         mounts.append(k.Mount(c, 2, 'foreground'))
