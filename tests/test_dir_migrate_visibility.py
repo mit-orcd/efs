@@ -72,11 +72,11 @@ static int host_txn_commit(struct efs_raft_host*h,const struct efs_txid*t,const 
 tail = r'''
 
 static void one_case(void){struct efs_kv *kv=efs_kv_mem_create();struct efs_raft_host h={kv};struct efs_meta_attrs at={1000,1000,1000000000000000000ull};efs_ino_t ino;assert(kv);assert(!efs_meta_apply_init(kv,at.now));source_shard=efs_kv_inode_shard(EFS_ROOT_INO);
- for(unsigned i=0;;i++){snprintf(target,sizeof(target),"a%05u",i);uint32_t sh=efs_kv_dentry_shard(EFS_ROOT_INO,target,EFS_META_LAYOUT_HASHED);if((sh&1)!=(source_shard&1))break;}
+ for(unsigned i=0;;i++){snprintf(target,sizeof(target),"a%05u",i);uint32_t sh=efs_kv_dentry_shard(EFS_ROOT_INO,target,EFS_META_LAYOUT_HASHED);if(efs_kv_dir_lane(target)==1&&(sh&1)!=(source_shard&1))break;}
  assert(!efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,target,&ino));
- for(unsigned i=0;i<95;i++){char nm[32];snprintf(nm,sizeof(nm),"z%05u",i);if(i==63)assert(!efs_meta_dir_begin_split(kv,EFS_ROOT_INO));assert(!efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,nm,&ino));}
+ for(unsigned i=0,made=0;made<95;i++){char nm[32];snprintf(nm,sizeof(nm),"z%05u",i);if(efs_kv_dir_lane(nm)!=63)continue;if(made==63)assert(!efs_meta_dir_begin_split(kv,EFS_ROOT_INO));assert(!efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,nm,&ino));made++;}
  assert(listing(kv)==96);uint32_t dest=efs_kv_dentry_shard(EFS_ROOT_INO,target,EFS_META_LAYOUT_HASHED);int hint=-1;int rc=host_dir_migrate_txn(&h,EFS_ROOT_INO,target,dest,&hint);
- if(mutate){assert(rc==EFS_ERR_STALE);assert(listing(kv)==95);printf("stale capture=%s refused without resurrection\n",mutate==1?"source deletion":"hashed tombstone");efs_kv_mem_free(kv);return;}
+ if(mutate){assert(rc==EFS_ERR_STALE);if(mutate==1)assert(listing(kv)==95);else{assert(listing(kv)==95);uint8_t key[EFS_KV_KEY_MAX],raw[EFS_META_DENT_BYTES];uint32_t kl=0,vl=sizeof raw;struct efs_meta_dentry dead;assert(!efs_kv_key_dentry(dest,EFS_ROOT_INO,target,key,&kl));assert(!efs_kv_get(kv,key,kl,raw,&vl));assert(!efs_meta_unpack_dentry(raw,vl,&dead));assert(dead.type==EFS_META_DENT_TOMBSTONE);}printf("stale capture=%s refused without resurrection\n",mutate==1?"source deletion":"hashed tombstone");efs_kv_mem_free(kv);return;}
  assert(!rc);printf("after both resolves:96/96\n");
  if(decision==EFS_TXN_COMMIT&&EXPECTED==96){
   if(tombstone){uint8_t key[EFS_KV_KEY_MAX],val[EFS_META_DENT_BYTES];uint32_t kl=0;struct efs_meta_dentry dead={.ino=0,.type=EFS_META_DENT_TOMBSTONE};assert(!efs_kv_key_dentry(dest,EFS_ROOT_INO,target,key,&kl));assert(!efs_meta_pack_dentry(&dead,val,sizeof val));assert(!efs_kv_put(kv,key,kl,val,sizeof val));}

@@ -1278,7 +1278,7 @@
     "docs/how-it-works/naming.md": "e71f66d282fe0ee6ee9f8fae4e37c6eeafa2d1948b10de267ad2586721ce8a3c",
     "docs/how-it-works/performance.md": "07a59cebbdd235e724c08dd2a9a7da699ee32d511313a43310e1cf213eb9e9b6",
     "docs/how-it-works/protocols/data.md": "1bab64ffb615cc2fa4c07c89ebb3062888b6ac65682694d78ca86afd71ddc148",
-    "docs/how-it-works/protocols/directory.md": "b4e1cc9ed4429207729a535f7aba30effa989cd67fd989b011c69b0262c3b7ad",
+    "docs/how-it-works/protocols/directory.md": "dfbbe5ec13df2b71fe09edcdf7fa1ba7a1ed998154e48d0ab7eabc4b90dda2c4",
     "docs/how-it-works/protocols/sessions.md": "97134e8eb13cdf3f47c9247391c8f3ca663d78b9f91996a3c55bb7a15aaa368a",
     "docs/how-it-works/protocols/transactions.md": "5e1989bad26f62d59d69d697a83ace63716ff8d13d7b992d63cdab1be1011077",
     "docs/how-it-works/testing.md": "52cab1ce06e7ab3e01814482475c2523e24e56826647bb4f664b6210b2e4f569",
@@ -1660,7 +1660,7 @@
     "src/meta/dir_spread.c": "00d269227fc1245845be38762208b0fbb2c17ebd6a10a83939085ccc33b3cd9f",
     "src/meta/expiry.c": "cad7f4708247f4521cc2d0e15a4129260d2392acb38e50871dfa0806ec570941",
     "src/meta/lock.c": "6ff545baf1fb74ff42f5fb9743b6a6f6dfc900a27c8c5fe5f1f167099690dfe0",
-    "src/meta/meta_apply.c": "e9624e678654a5e9d67387d9a99b1ed657591993233ef1914c4ba35540f855b8",
+    "src/meta/meta_apply.c": "60c5b09d043092ee81de66326486b1ae7fbce71f9f7952b74fa85efbeb122c7a",
     "src/meta/metadata.c": "6373ffbbeebcd6f08ca1401cacfaf8318b6ba62457132578523fe8e3075a2bbd",
     "src/meta/name_index.c": "1a4f2c1de87823b411f1f82320f2a870ebee4c3ad7eff21ab261f99280a63cbe",
     "src/meta/pack_mapping.c": "6def05c1f5edd6548a07bd14099387a9857514071c8cb96c53446517c6b3590b",
@@ -2104,7 +2104,7 @@
     "tests/test_decoder_inputs.py": "d41d8a71949ed3e36db7aa0f0cc88d921ac86d0594504ce566bdc745b2028663",
     "tests/test_decoder_refusal.py": "af68e54e6c5d3cdb0a9778b877bb4fb3b8ecbbde08cd1389bed81c764aa31bd8",
     "tests/test_deepsteps_transparent.py": "9e7b664af607162bd42c20a7d55775d9131a47f0acdbea819a73c6a21e4ae883",
-    "tests/test_dir_migrate_visibility.py": "84d8082f6e1aafd885c5bc27d90d4a828e0afc27517cbd09683f9dde40c9a03b",
+    "tests/test_dir_migrate_visibility.py": "4292cad013a3be7de8dfde8628939fd613c48a70c83292c3283d7c150b6877b0",
     "tests/test_dir_ops_busy.py": "4b1805738f6eb2dab4b509b785c966bc7eeafc8a40de13802574e4cd3a646f70",
     "tests/test_direct_io_required.py": "29a8e68d2cc15e4e39ec4c038bba8856c34aec8549d9eea18619a17fdfac2a54",
     "tests/test_direct_read_fork_oracle.py": "24fa6648f91c98f0f34135b33ceaf7103a051ed9a62597f8d50bd8dd796cef9b",
@@ -2567,5 +2567,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "dabcf937a72241098290e33e77b43930b64393c7"
+  "source_commit": "40ef229c689f1068bcfa49ef2eab2e0007d54732"
 }

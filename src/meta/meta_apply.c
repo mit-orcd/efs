@@ -3435,7 +3435,7 @@ static int dir_scan_one(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
 
 /* During SPLITTING the hashed side is authoritative for a name. */
 static int hashed_side_claims(struct efs_kv *kv, efs_ino_t dir, const char *name,
-                              int *claimed)
+                              uint64_t used_shards, int *claimed)
 {
     struct efs_meta_dentry d;
     int rc;
@@ -3444,12 +3444,18 @@ static int hashed_side_claims(struct efs_kv *kv, efs_ino_t dir, const char *name
     /* A lane-0 name has no separate hashed copy to defer to — the record in
      * hand IS its hashed record. Asking the KV would find that same record
      * and drop the name from the listing. */
-    if (efs_kv_dir_lane(name) == 0)
+    uint8_t lane = efs_kv_dir_lane(name);
+    if (lane == 0)
         return EFS_OK;
     rc = dent_get(kv, efs_kv_dentry_shard(dir, name, EFS_META_LAYOUT_HASHED),
                   dir, name, &d);
     if (rc == EFS_OK) {
-        *claimed = 1;
+        /* A cross-group copy may materialize before its parent bitmap OR.
+         * Defer a live local name only to a source this scan will visit.
+         * A newly added bit triggers the final row recheck/page restart.
+         * Tombstones always dominate, even before the bit materializes. */
+        *claimed = d.type == EFS_META_DENT_TOMBSTONE ||
+                   (used_shards & (1ULL << lane)) != 0;
         return EFS_OK;
     }
     if (rc == EFS_ERR_NOT_FOUND) {
@@ -3564,7 +3570,8 @@ retry:
             for (i = base; i < s.n; i++) {
                 int claimed = 0;
 
-                rc = hashed_side_claims(kv, dir, out[i].name, &claimed);
+                rc = hashed_side_claims(kv, dir, out[i].name,
+                                        row.used_shards, &claimed);
                 if (rc != EFS_OK)
                     return rc;
                 if (claimed)
