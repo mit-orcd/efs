@@ -648,6 +648,7 @@ int server_put_sync_identity(struct efsd_server *s, char *why, size_t n);
 /* Recovery verified: clear every root's fence (COMMIT allowed again). */
 void server_put_sync_recovered(void);
 /* Prove one fragment file: OK, NOT_FOUND (absent) or the refusal. */
+int server_recovery_unprovable(int rc);
 int server_recovery_prove_file(const char *path, struct efs_frag_ident *want,
                                const uint8_t *expect, uint64_t *bytes);
 int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes, int charged,
