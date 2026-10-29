@@ -541,6 +541,113 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
     return EFS_OK;
 }
 
+/* Drain n already-declared payload bytes so a refused frame leaves the conn
+ * clean for reuse. */
+static int recv_drain(int fd, uint32_t n)
+{
+    uint8_t sink[4096];
+    while (n) {
+        uint32_t chunk = n < (uint32_t)sizeof(sink) ? n : (uint32_t)sizeof(sink);
+        if (efs_recv_all(fd, sink, chunk) != 0)
+            return EFS_ERR_NET;
+        n -= chunk;
+    }
+    return EFS_OK;
+}
+
+static uint32_t seg_reply_be32(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
+}
+
+/* Refuse a GET_SEGMENT reply header. EFS_OK: a success body of body_cap
+ * bytes follows. A negative server status: error reply, nothing follows.
+ * EFS_ERR_PROTO: shape violation (caller drains what remains). */
+static int seg_reply_hdr_check(const uint8_t hdr[EFS_SEGMENT_GET_REPLY],
+                               uint32_t plen, uint32_t body_cap)
+{
+    uint32_t status = seg_reply_be32(hdr);
+    uint32_t bytes = seg_reply_be32(hdr + 4);
+    if (status) {
+        if (bytes || plen != EFS_SEGMENT_GET_REPLY)
+            return EFS_ERR_PROTO;
+        return (int32_t)status;
+    }
+    if (bytes != body_cap || plen != EFS_SEGMENT_GET_REPLY + bytes)
+        return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
+static int seg_reply_recv_tcp(int fd, uint8_t hdr[EFS_SEGMENT_GET_REPLY],
+                              uint8_t *body, uint32_t body_cap)
+{
+    uint32_t be;
+    if (efs_recv_all(fd, &be, sizeof(be)) != 0)
+        return EFS_ERR_NET;
+    uint32_t nlen = ntohl(be);
+    /* An insane frame length leaves the conn unsynchronized: report NET so
+     * the caller drops it instead of releasing it for reuse. */
+    if (efs_wire_frame_check_nlen(nlen) != EFS_OK)
+        return EFS_ERR_NET;
+    uint8_t t;
+    if (efs_recv_all(fd, &t, 1) != 0)
+        return EFS_ERR_NET;
+    uint32_t plen = nlen - 1;
+    if (t != EFS_MSG_GET_SEGMENT_REPLY || plen < EFS_SEGMENT_GET_REPLY) {
+        int rc = recv_drain(fd, plen);
+        return rc ? rc : EFS_ERR_PROTO;
+    }
+    if (efs_recv_all(fd, hdr, EFS_SEGMENT_GET_REPLY) != 0)
+        return EFS_ERR_NET;
+    int rc = seg_reply_hdr_check(hdr, plen, body_cap);
+    if (rc == EFS_ERR_PROTO) {
+        int drc = recv_drain(fd, plen - EFS_SEGMENT_GET_REPLY);
+        return drc ? drc : EFS_ERR_PROTO;
+    }
+    if (rc != EFS_OK)
+        return rc; /* server status: the whole frame was the header */
+    return efs_recv_all(fd, body, body_cap) ? EFS_ERR_NET : EFS_OK;
+}
+
+int efs_conn_recv_segment_reply(struct efs_conn *c,
+                                uint8_t hdr[EFS_SEGMENT_GET_REPLY],
+                                uint8_t *body, uint32_t body_cap,
+                                uint8_t **owned)
+{
+    *owned = NULL;
+    if (!c->rc) {
+        c->last_recv_chan = EFS_CONN_TCP;
+        int rc = seg_reply_recv_tcp(c->fd, hdr, body, body_cap);
+        if (rc != EFS_ERR_NET)
+            efs_conn_note_ok(c);
+        return rc;
+    }
+
+    uint8_t type = 0;
+    const uint8_t *pl = NULL;
+    uint32_t plen = 0;
+    int rc = conn_rdma_frame(c, &type, &pl, &plen);
+    if (rc != EFS_OK)
+        return rc;
+    c->last_recv_chan = EFS_CONN_RDMA;
+    efs_conn_note_ok(c); /* a full frame arrived, whatever its verdict */
+    if (type != EFS_MSG_GET_SEGMENT_REPLY || plen < EFS_SEGMENT_GET_REPLY) {
+        efs_rdma_message_release(c->rc);
+        return EFS_ERR_PROTO;
+    }
+    memcpy(hdr, pl, EFS_SEGMENT_GET_REPLY);
+    rc = seg_reply_hdr_check(hdr, plen, body_cap);
+    if (rc != EFS_OK) {
+        efs_rdma_message_release(c->rc);
+        return rc;
+    }
+    /* Ownership transfer: the fragment stays where the NIC assembled it;
+     * the caller hashes it there and frees the buffer. */
+    *owned = efs_rdma_message_take(c->rc);
+    efs_conn_note_ok(c);
+    return EFS_OK;
+}
+
 int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status)
 {
     if (!c->rc)
