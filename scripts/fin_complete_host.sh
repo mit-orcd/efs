@@ -43,7 +43,8 @@ mkdir -p "$TMPDIR" "$art/focused" "$art/gate"
 command -v valgrind > "$art/valgrind-path.txt"
 printf '#include <valgrind/memcheck.h>\n' | gcc -E -x c -o /dev/null -
 if [[ -n ${CPATH:-} ]];then sha256sum "$CPATH"/valgrind/*.h > "$art/valgrind-headers.txt";fi
-{ cat "${src%/src}/cluster-source.txt";cd "$cluster";sha256sum cluster.sh ct-up.sh gw-up.sh lib/client-stop.sh lib/client-user.sh lib/transfer.sh; } > "$art/cluster-source.txt"
+( cat "${src%/src}/cluster-source.txt";cd "$cluster";sha256sum cluster.sh ct-up.sh gw-up.sh lib/client-stop.sh lib/client-user.sh lib/transfer.sh; ) > "$art/cluster-source.txt"
+[[ $(pwd -P) == "$src" ]] || exit 2
 python3 scripts/task_i_host_sample.py "$src" "$art/ownership.jsonl" > "$art/ownership.log" 2>&1 & monitor=$!
 trap 'rc=$?;kill "$monitor" 2>/dev/null || true;wait "$monitor" 2>/dev/null || true;echo "$rc" > "$art/controller-exit"' EXIT
 run() {
