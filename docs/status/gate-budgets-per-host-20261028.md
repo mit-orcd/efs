@@ -1,14 +1,86 @@
 # Task T — gate budgets across supported hosts
 
-**INCOMPLETE / collecting timing cohorts.** Candidate `f27251313`
-contains final durability correction547d9e1d0, stable B6 quota fixture
-d2edef6e9 and a fault-only W165 boundary correction. Intel1/xorinox have
-three-run d2 cohorts underway (first gates0FAIL,911/929s); fstor007's d2
-gate failed W165 before its intended request and is preserved. Its fresh
-f272 cohort is running. AMD passes three focused f272 W165 checks, not a
-full calibration. No final fit or confirmations are accepted. Nuc/AMD full
-failures stay open; slots, deadlines and target1100s stay unchanged. Nothing
-is merged or pushed.
+**FITTED / confirmations pending.** Three clean gates on each of intel1,
+xorinox and fstor007 supply all92 rows. The table follows the specified
+maximum-host-median formula exactly:31 bounds increase,12 decrease,49 stay.
+The declared schedule is1504s,404s above target1100s, which is unchanged;
+the unchanged1650s margin passes. No slots, test deadlines or success oracles
+are relaxed. Final merged-source confirming gates are next. All earlier
+failures remain traceable; Nuc/AMD full failures are not qualified. Nothing
+is merged into devel or pushed.
+
+## Final measurement set and fitted table
+
+[All92 per-host medians and bounds](gate-budget-medians-20261029.md).
+These are the accepted whole-gate input cohorts; every command returned0,
+with host limits reported as INCOMPLETE rather than full PASS:
+
+| Host | Source | Walls s | NOTRUN per gate | Old-table OVERBUDGET per gate | Closed manifest SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| intel1 | d2edef6e9 | 911/944/958 | 12/12/12 | 5/3/7 | `78399947535c0fa7e240734c082f4b0898dfbdb5286857ffeb590902d3e06284` |
+| xorinox | d2edef6e9 | 929/945/964 | 11/11/11 | 15/15/19 | `f19f844540611610e72a03c10a3e144f74fb69891c3119ba067d2107772be7ac` |
+| fstor007 | f27251313 | 775/739/707 | 4/4/4 | 7/8/6 | `6f6756574c7a71f0eb0afef6f97df1be4c85ecc22a118f1882e32e74bd3db35b` |
+
+On each host these immutable captures are under
+`/data1/efs/evidence/taskT-20261028/HOST-SOURCE-calibrationN/`, with N12 for
+the d2 LAN cohorts and N14 for fstor007. Their full source IDs, binary hashes,
+compiler/FUSE/filesystem metadata, before/after tracked-source hashes,
+commands, timings and guards are captured. Closing checks find no owned
+EFS process or mount. Bounded idle holds reserve the three hosts pending
+confirmation and are released cooperatively before the next workload.
+
+The offline copies and derived fit are at
+`/Users/mike/Documents/Codex/artifacts/taskT-20261028/fit-inputs/` and
+`fit-final-92rows-20261029/` under the same raw root. Every copied input hash
+was verified. Fit report SHA-256:
+`e3a0c14a71262ff07ae34a5d8b42f6e77bd55261834ca1c0306051203bee72ff`.
+The table's row values match the generated output exactly; only its header
+was updated to describe this measurement. No source gap is hidden: LAN uses
+d2, fstor007 uses the fault-only W165 boundary correctionf272. Confirmations
+use one final merged source on all three hosts, including devel714d7e6fc's
+ORCD runner/readiness follow-up and new fast unit.
+
+### The target is still exceeded
+
+The old declared schedule1533s becomes1504s (pool953 + exclusive551), not
+1100s. The margin remains1650s; neither constant was raised. The synthetic
+maximum-host-median schedule improves1122.0→1102.9s, still2.9s above target.
+It mixes per-row observations from different hosts; it is not a real run or
+a bound on future runtime. The recorded real measurement walls above all
+exclude separately recorded build time. Confirmation results are pending.
+
+The largest declared rows are snapshot import425s (xorinox median337.9),
+report stepdown315s (intel1 median250.8), segment rebuild290s (xorinox228.5),
+B6 slow270s (intel1 214.0), K33 growth225s (fstor007 180.0), and degraded
+fsync205s (fstor007 160.9). In the modeled pool's critical chain, stop
+progress175, grow-b120, B6 slow270 and degraded fsync205 are the large links;
+report stepdown315 is the dominant serial/exclusive contributor. These are
+where target work remains, rather than changing D44 to match the results.
+Every over300s row retains its historical reason and the measured fit reason.
+
+### Reporting and model corrections before confirmation
+
+`f03074744` removes the word NOTRUN only from the sanitizer self-test's
+unconditional successful-classification message. Real unsupported-runtime
+markers, failing fixtures and errors remain. Earlier summaries always chose
+that first informational marker, so they do not establish a real attach
+refusal, contrary to the earlier interpretation. Their command timings stay
+valid, but discarded successful stdout cannot prove detailed old runtime
+coverage. The final source will report actual limits correctly. The revised
+self-test passes on the Mac: TSan and ASan/UBSan controls run, while LSan is
+explicitly unsupported there. Raw log:
+`control/sanitizer-selftest-output-correction.log` under the local raw root.
+This is gate self-test coverage, not whole-EFS leak qualification.
+
+The recipe model also now counts four temporary C compile-and-run wrappers
+that start with `set -e;`. They are shared prerequisites, so remain outside
+the fast/long duplicate test, but run once in the full-gate model. No command
+execution or time limit changes. The actual checker agrees with the fit's
+1504s schedule. Graph9/9, refit regression and the current961-command recipe
+check pass. The final archived confirmation contains547 executed commands
+(one fast ORCD unit added since measurement), all92 budget rows, and the
+unchanged slot reservations. Its acceptance still requires0 FAIL and
+0 OVERBUDGET; every real NOTRUN remains visible.
 
 ## Authorized host substitution and current-source refresh
 

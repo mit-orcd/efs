@@ -102,7 +102,12 @@ assert not gone, 'tests/budgets.tsv rows for commands `make test-long` no longer
 exclusive = re.search(r'EXCLUSIVE=re\.compile\((.*?)\)\n', (root / 'scripts/make_test_summary.sh').read_text(), re.S).group(1)
 exclusive = re.compile(''.join(re.findall(r'"([^"]*)"', exclusive)))
 pool, alone = [], 0.0
-for c in [c.strip() for c in cmds if runs(c)]:
+# Four temporary compile-and-run C wrappers start with `set -e;`, not
+# python3 or ./tests/. They are shared prerequisites, so keep them out of
+# the fast/long duplication check above, but count each once in the full
+# recipe's runtime model, just as make_test_summary.sh executes it.
+modeled_runs = lambda c: runs(c) or c.startswith('set -e; ')
+for c in [c.strip() for c in cmds if modeled_runs(c)]:
     budget, slots = budgets.get(c, (FAST_DEFAULT_S, 1))[:2]
     slots = min(slots, JOBS)
     if exclusive.search(c):
