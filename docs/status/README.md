@@ -1,5 +1,12 @@
 # Project status — work queue and evidence
 
+[AM — REPORT degraded-object bookkeeping: measured, no change](am-report-degraded-batch-20261028.md):
+**MEASURED, NO CHANGE on branch `agent/devel-taskam` (`3fe865d98`), not merged.**
+Zero `g_dgobj_mu` acquisitions with an empty table at any concurrency; ~300 ns
+per flags/drop pair with entries, 0.0025 % of REPORT wall at 32 writers — two
+orders below the 5 % threshold on intel1 and node9901. Named gates PASS;
+test-all 546/1/12 with the one FAIL the pre-existing devel b6 slow defect.
+
 [Stage 1 cross-path due diligence AY–BB](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
 upload completion, serve/audit/recovery validation, deletion authority, and
@@ -37,9 +44,11 @@ Existing read-round sharing, admission batches and permission checks explicitly
 retained; distinct from AB–AM and P3-A–P3-F. No new K defect or measured gain.
 
 [Stage 1 copies/allocation tasks AK–AM](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--copies-allocation-and-repeated-work-akam):
-**OPEN / implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
-packed-fragment staging/double hashing, unnecessary decode scratch, and REPORT
-degraded-object batch bookkeeping. Distinct from AB–AJ and P3-A–P3-F; no K defect
+**AM MEASURED, NO CHANGE on `agent/devel-taskam` (`3fe865d98`, not merged;
+[evidence](am-report-degraded-batch-20261028.md)); AK and AL OPEN /
+implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
+packed-fragment staging/double hashing (AK), unnecessary decode scratch (AL), and REPORT
+degraded-object batch bookkeeping (AM). Distinct from AB–AJ and P3-A–P3-F; no K defect
 or performance acceptance claimed. Integrity, publication and memory bounds stay.
 
 [Graph sweep follow-up F4/F5](graph-defects-20261028.md#follow-up-repairs-f4f5--shared-deadline-and-retired-objects):
