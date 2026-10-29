@@ -189,6 +189,8 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Wave 35 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`5367beeca`; gate at `2195fd863`)**: `agent/devel-k35-slow-fsync` ([K35](k35-slow-fsync-20261029.md), [FIN accounting](fin-tcp-accounting-20261029.md), [FIN gate closure](fin-gate-notrun-closure-20261029.md)): strict TCP accounting (`tcp_counts.h`, `rdma.c`, `test_tcp_counts`: post-setup TCP counters, a one-byte violation control that still detects payload), the closure of thirteen gate prerequisites on isolated fcstor014 (546 / 0 FAIL / 0 NOTRUN with real Valgrind, sanitizers and hardware RDMA), and Task AF ([evidence](af-status-snapshot-20261028.md)): measured, no product change. Its `data_commit.c` slow-COMMIT change is identical to K55's already on devel, so that file is unchanged by the merge. Merge-time: both sides added a test entry in the same Makefile spot (kept both); `test_sanitizer_gate.py` differed only in a printed message (kept wave 34's). intel1 `make test-all` (8 jobs) at `2195fd863` (wave 34 plus K35): **552 / 0 FAIL / 11 NOTRUN** (host limits), 870 s, INCOMPLETE. Not claimed: the FIN branch's zero-NOTRUN gate needs fcstor014's Valgrind and sanitizer attach, which intel1 lacks.
+
 [Wave 34 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`5a8d34eef`; gate at `44e5bbaf7`)**: Task T ([evidence](task-t-directory-visibility-20261029.md), [budgets per host](gate-budgets-per-host-20261028.md)): directory visibility during cross-group migration (`inode_rpc.c`, `dir_layout.c`, `meta_apply.c`, `raft_host.c`), isolated TCP qualification PASS and six TCP full gates with zero FAIL on its own base, plus its per-host budget fits. **Merge-time decision:** Task T carried its own, larger fix for the slow-COMMIT fsync problem in `data_commit.c` (a poll/pipe wait, a two-fragment quorum check and a rescue path for a failed speculative degraded mark). devel keeps K55's reserve-slice mechanism, already merged and independently qualified, so T's `data_commit.c` and `test_data_commit.c` were not taken; T's rescue path (a failed degraded mark followed by an on-time third COMMIT no longer fails the fsync) is therefore **not on devel** and is separate work if wanted. intel1 `make test-all` (8 jobs) at `44e5bbaf7` (wave 33 plus T): **551 / 0 FAIL / 11 NOTRUN** (host limits), 918 s, INCOMPLETE; B6 slow PASS. The budgeted gate in `tests/budgets.tsv` is now 1,505 s of the 1,650 s bound (D44 target 1,100 s unchanged).
 
 [Wave 33 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`550b00e47`; gate at `550b00e47`)**: Task AL ([evidence](al-decode-scratch-20261028.md)): reads allocate decode scratch only for the path taken, retained decode scratch per mount 17.3 → 8.0 MiB (`read.c`), in-place aliasing pinned by `test_erasure`; Task AK ([evidence](ak-packed-read-staging-20261028.md)): packed reads hash each fragment once and receive it without a staging copy (TCP into the caller's slot, RDMA hands over its message buffer); the one hash is checked against both the reply digest and the mapping's committed digest, so neither authority is dropped, and a mismatch names which one failed; no wire change (`efs_conn_recv_segment_reply` is a new client-side helper); Task AC ([evidence](ac-iostats-rdma-scan-20261028.md)): the periodic `iostats:` line no longer scans the RDMA registry (36 scans → 0 in the instrumented runs; no consistent speedup, TCP throughput median 0.36 % lower). Merge-time: AL and AK both edit `read.c` and merged without a source conflict; the checklist conflicts were only the order of AL/AC's status paragraphs against the already-merged AM/AD blocks. intel1 `make test-all` (8 jobs) at `550b00e47`: **549 / 0 FAIL / 12 NOTRUN** (host limits), 773 s, INCOMPLETE. Known: the Mac build of `data_commit.c` has failed since wave 32 (`pthread_condattr_setclock` is glibc-only); Linux gates build it.
@@ -262,16 +264,15 @@ versus 48 MiB old negative; removed-policy control fails. All 73 ownership
 samples clear; cleanup verified. Seven advisory overruns retained, hard bounds
 unchanged. Prior failures/fixtures and closed hashes retained; no merge/push.
 
-[FIN accounting follow-up](fin-tcp-accounting-20261029.md): **FIXED (scoped,
-branch only)**, product `38f3cecba` on `agent/devel-k35-slow-fsync`. Strict
+[FIN accounting follow-up](fin-tcp-accounting-20261029.md): **FIXED (scoped)**,
+product `38f3cecba` on `agent/devel-k35-slow-fsync` (merged into devel, wave 35). Strict
 hardware audit: 785/785 measured, post-setup TCP 0/0, violations 0; the
 one-byte violation control still detects payload. Full gate 546/0 FAIL/13
 NOTRUN (TCP profile/host limits); original and unsafe closed-state controls
 fail their intended assertions. Original failed audit/manifests and every
 fixture retained unchanged. No full release PASS, merge or push.
 
-[K35 slow-fsync follow-up](k35-slow-fsync-20261029.md): **FIXED (scoped,
-branch only)**, `agent/devel-k35-slow-fsync`, product `1ab9fef83`.
+[K35 slow-fsync follow-up](k35-slow-fsync-20261029.md): **FIXED (scoped)**, `agent/devel-k35-slow-fsync` (merged into devel, wave 35), product `1ab9fef83`.
 Proof runs before a slow COMMIT exhausts the same deadline; durability unchanged.
 Component/index/ASan/UBSan/TSan PASS; old-source control fails. Full gate
 545/0 FAIL/11 NOTRUN (host limits); hardware TCP/RDMA B6 slow + K35 PASS,
@@ -281,7 +282,7 @@ receive deltas; no-payload FIN control reproduces the accounting gap, individual
 terminal states unavailable. No all-zero telemetry or full release PASS claim.
 
 [Task AF — management status contention](af-status-snapshot-20261028.md):
-**Measured, no product change**, `agent/devel-task-af`, tested `f570fb0cd`,
+**Measured, no product change**, `agent/devel-task-af` (merged into devel, wave 35, via the K35 branch), tested `f570fb0cd`,
 base `486aa3a46`. Thirty closed trials across xorinox and fstor007 TCP/RDMA:
 no observed10Hz pump/write bottleneck outside spread; hardware CPU/stat costs
 retained. Gate545/1FAIL/11NOTRUN: K35 slow-fsync EIO60s reproduces on untouched
