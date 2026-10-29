@@ -999,7 +999,7 @@ and staging limits still apply. No K defect, acceptance or failure verdict chang
   delete cycles and allocation failure. Measure comparisons against loaded
   child count, retained index bytes and local mutation latency. Distinct from
   AH's chunk-map locking and AO's server READDIR page transport.
-- [ ] **AX — Loaded hardlink aliases: visit aliases rather than unrelated inode rows.**
+- [x] **AX — Loaded hardlink aliases: visit aliases rather than unrelated inode rows.**
   `src/meta/metadata.c::sync_hardlink_attrs` scans `ex->inode_count` to propagate
   shared attributes for a non-directory with nlink > 1; size, mode, owner, time
   and RPC upsert callers use it. Single-link files and directories already return
@@ -1037,6 +1037,7 @@ All are **OPEN / audit qualification NOTRUN**. Graph navigation and source reads
 confirm separate mechanisms; they do not prove a defect. Unlike the optimization
 items above, these are Stage 1 due-diligence gates on authority, lifetime and
 failure semantics. No K defect or performance PASS is inferred from duplication.
+  **Done (Oct 29, `agent/devel-ax`):** above the threshold (13–20 ms per chmod/truncate/link on a hard-linked file at 1 M loaded rows, 0.001 ms after); per-table alias vector replaces the scans ([evidence](ax-hardlink-alias-index-20261028.md)). Gate xorinox 553 / 0 FAIL / 10 NOTRUN.
 
 - [ ] **AY — Ordinary versus packed upload: what does successful completion prove?**
   Ordinary `src/server/put_upload.c::server_put_upload` checks the exact ticket
