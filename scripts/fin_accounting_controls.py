@@ -17,6 +17,7 @@ body = old.read_text()
 a = body.index('static int tcp_counts(')
 b = body.index('static void setup_publish', a)
 original = body[a:b]
+assert 'info.tcpi_state==8;' in original, 'expected pinned old accounting body'
 prefix = '''#include <linux/tcp.h>
 #include <netinet/in.h>
 #include <stddef.h>
@@ -60,8 +61,13 @@ for name, header in headers.items():
             code = subprocess.run([str(binary)],stdout=log,stderr=subprocess.STDOUT,
                                   timeout=30,preexec_fn=no_core).returncode
     expected = 0 if name == 'candidate' else -signal.SIGABRT
-    results[name] = dict(build=build, exit=code, expected=expected,
-                         verdict='PASS' if build==0 and code==expected else 'FAIL')
+    trace = (art/(name+'.log')).read_text() if code is not None else ''
+    checks = sum(line.startswith('rx=') and line.endswith(' PASS') for line in trace.splitlines())
+    trace_ok = ('TCP payload accounting:' in trace if name == 'candidate' else
+                'TCP accounting did not reach expected payload/FIN counts' in trace and
+                checks == (4 if name == 'old' else 10))
+    results[name] = dict(build=build, exit=code, expected=expected, positive_prefix_checks=checks,
+                         verdict='PASS' if build==0 and code==expected and trace_ok else 'FAIL')
 (art/'results.json').write_text(json.dumps(results,indent=2)+'\n')
 print(json.dumps(results,indent=2))
 raise SystemExit(any(x['verdict']!='PASS' for x in results.values()))

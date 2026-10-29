@@ -124,6 +124,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[FIN accounting follow-up](fin-tcp-accounting-20261029.md): **FIXED (scoped,
+branch only)**, product `38f3cecba` on `agent/devel-k35-slow-fsync`. Strict
+hardware audit: 785/785 measured, post-setup TCP 0/0, violations 0; the
+one-byte violation control still detects payload. Full gate 546/0 FAIL/13
+NOTRUN (TCP profile/host limits); original and unsafe closed-state controls
+fail their intended assertions. Original failed audit/manifests and every
+fixture retained unchanged. No full release PASS, merge or push.
+
 [K35 slow-fsync follow-up](k35-slow-fsync-20261029.md): **FIXED (scoped,
 branch only)**, `agent/devel-k35-slow-fsync`, product `1ab9fef83`.
 Proof runs before a slow COMMIT exhausts the same deadline; durability unchanged.
