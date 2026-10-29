@@ -570,7 +570,7 @@ applies; no new behavior flags are proposed.
   allocated bytes, copied/hashed bytes, CPU and cold packed-read latency with
   identical integrity checks. This is separate from P3-B's request overlap and
   does not add an unbounded segment cache or remove client integrity verification.
-- [ ] **AL — Reads: allocate decode scratch only for the selected path.**
+- [x] **AL — Reads: allocate decode scratch only for the selected path.**
   `src/client/read.c::efs_client_decode_placed_chunk_attempts` calls
   `decode_frag_scratch(3 * frag_len)` before deciding that the mapping is packed.
   The packed branch instead allocates its own `5 * geometry / 2` scratch and
@@ -587,6 +587,12 @@ applies; no new behavior flags are proposed.
   counts and retained bytes across worker counts as well as read latency. This
   changes the caller's demand, not AG's allocator locking or budget mechanism;
   preserve demand-read headroom and existing resource bounds.
+  **FIXED 2026-10-29** (`cbeb09621`, [evidence](al-decode-scratch-20261028.md)):
+  path selection before scratch acquisition, one-fragment scratch in place;
+  retained decode scratch per mount 17.3 → 8.0 MiB mixed, packed-only now
+  holds none; latency inside the spread, in-place aliasing pinned by
+  `test_erasure` for every missing-fragment position; TSan PASS, gate FAIL 1
+  is the K55 base failure.
 - [ ] **AM — REPORT: batch degraded-object bookkeeping without changing publication.**
   `src/client/inode_rpc.c::efs_client_rpc_report_dirty_pub` calls
   `efs_client_degraded_flags` separately while serializing every chunk and, after

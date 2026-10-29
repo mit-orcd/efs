@@ -1735,6 +1735,16 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Task AL](../status/al-decode-scratch-20261028.md): **FIXED** (`cbeb09621` on devel
+`9c4bfd171`, intel2): decode scratch is acquired only for the selected read
+path and sized for it (one fragment in place, three otherwise, none for packed
+reads) — retained decode scratch per mount 17.3 → 8.0 MiB mixed / 16.0 → 8.0
+MiB ordinary, packed-only zero; latency inside the spread, every read exact;
+new in-place erasure aliasing test for every missing-fragment position; TSan
+19/19 PASS; gate FAIL 1 is the K55 base failure. Pre-existing on this devel:
+ASan-built efs-fuse refuses to start ("cannot establish allocator policy"),
+identical on clean and fixed trees — needs an owner (K row suggested).
+
 [ORCD-test merged devel qualification](../status/orcd-test-devel-qualification-20261028.md):
 **FAIL overall**, deployed `714d7e6fc`; profiling branch merged and deleted.
 Serial and seven-client POSIX, restart persistence, both expiry runs and all
