@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "63c6c9cb967f97fc3e675f1ec96a89956d43df87"
+      "source_commit": "962c3ea5b775aecb95bb80062ca99aa0986c6f03"
     }
   },
   "links": [
@@ -118304,7 +118304,7 @@
       "source": "efs:file:tests/test_b_geometry.py",
       "source_file": "tests/test_b_geometry.py",
       "source_location": "L1",
-      "target": "tests_test_b_geometry_rationale_134"
+      "target": "tests_test_b_geometry_rationale_136"
     },
     {
       "confidence": "EXTRACTED",
@@ -118313,7 +118313,7 @@
       "source": "efs:file:tests/test_b_geometry.py",
       "source_file": "tests/test_b_geometry.py",
       "source_location": "L1",
-      "target": "tests_test_b_geometry_rationale_160"
+      "target": "tests_test_b_geometry_rationale_162"
     },
     {
       "confidence": "EXTRACTED",
@@ -118322,7 +118322,7 @@
       "source": "efs:file:tests/test_b_geometry.py",
       "source_file": "tests/test_b_geometry.py",
       "source_location": "L1",
-      "target": "tests_test_b_geometry_rationale_180"
+      "target": "tests_test_b_geometry_rationale_182"
     },
     {
       "confidence": "EXTRACTED",
@@ -614484,7 +614484,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_b2_on_stores",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L218",
+      "source_location": "L220",
       "target": "tests_k33_daemons_payload",
       "weight": 1.0
     },
@@ -614496,7 +614496,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_b2_on_stores",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L254",
+      "source_location": "L256",
       "target": "tests_test_b_geometry_b2_on_stores_flip",
       "weight": 1.0
     },
@@ -614507,7 +614507,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_b2_on_stores",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L245",
+      "source_location": "L247",
       "target": "tests_test_b_geometry_b2_on_stores_flip",
       "weight": 1.0
     },
@@ -614519,7 +614519,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_b2_on_stores",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L268",
+      "source_location": "L270",
       "target": "tests_test_b_geometry_b2_on_stores_restore",
       "weight": 1.0
     },
@@ -614530,7 +614530,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_b2_on_stores",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L250",
+      "source_location": "L252",
       "target": "tests_test_b_geometry_b2_on_stores_restore",
       "weight": 1.0
     },
@@ -614542,7 +614542,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_b2_on_stores",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L222",
+      "source_location": "L224",
       "target": "tests_test_b_geometry_frag_paths",
       "weight": 1.0
     },
@@ -614554,7 +614554,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_b2_on_stores",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L255",
+      "source_location": "L257",
       "target": "tests_test_b_geometry_fresh_read",
       "weight": 1.0
     },
@@ -614566,7 +614566,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_b2_on_stores",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L217",
+      "source_location": "L219",
       "target": "tests_test_b_geometry_write",
       "weight": 1.0
     },
@@ -615169,7 +615169,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_fresh_read",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L171",
+      "source_location": "L173",
       "target": "tests_k33_daemons_mount",
       "weight": 1.0
     },
@@ -615181,7 +615181,7 @@
       "relation": "uses",
       "source": "tests_test_b_geometry_fresh_read",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L171",
+      "source_location": "L173",
       "target": "tests_k33_daemons_mount",
       "weight": 0.8
     },
@@ -615194,7 +615194,7 @@
       "relation": "indirect_call",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L334",
+      "source_location": "L336",
       "target": "tests_d39_model_node_resolver_work",
       "weight": 1.0
     },
@@ -615206,7 +615206,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L334",
+      "source_location": "L336",
       "target": "tests_k33_daemons_cluster",
       "weight": 1.0
     },
@@ -615218,7 +615218,7 @@
       "relation": "uses",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L334",
+      "source_location": "L336",
       "target": "tests_k33_daemons_cluster",
       "weight": 0.8
     },
@@ -615230,7 +615230,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L342",
+      "source_location": "L344",
       "target": "tests_k33_daemons_mount",
       "weight": 1.0
     },
@@ -615242,7 +615242,7 @@
       "relation": "uses",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L342",
+      "source_location": "L344",
       "target": "tests_k33_daemons_mount",
       "weight": 0.8
     },
@@ -615254,7 +615254,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L403",
+      "source_location": "L405",
       "target": "tests_k33_daemons_payload",
       "weight": 1.0
     },
@@ -615266,7 +615266,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L345",
+      "source_location": "L347",
       "target": "tests_test_b_geometry_py_tests_test_b_geometry_status",
       "weight": 1.0
     },
@@ -615278,7 +615278,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L340",
+      "source_location": "L342",
       "target": "tests_test_b_geometry_wait_formed",
       "weight": 1.0
     },
@@ -615290,7 +615290,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L344",
+      "source_location": "L346",
       "target": "tests_test_b_geometry_wait_mount",
       "weight": 1.0
     },
@@ -615302,7 +615302,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L341",
+      "source_location": "L343",
       "target": "tests_test_b_geometry_wait_served",
       "weight": 1.0
     },
@@ -615314,7 +615314,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L366",
+      "source_location": "L368",
       "target": "tests_test_b_geometry_wait_status",
       "weight": 1.0
     },
@@ -615326,7 +615326,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_full_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L351",
+      "source_location": "L353",
       "target": "tests_test_b_geometry_write",
       "weight": 1.0
     },
@@ -615339,7 +615339,7 @@
       "relation": "indirect_call",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L188",
+      "source_location": "L190",
       "target": "tests_d39_model_node_resolver_work",
       "weight": 1.0
     },
@@ -615351,7 +615351,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L188",
+      "source_location": "L190",
       "target": "tests_k33_daemons_cluster",
       "weight": 1.0
     },
@@ -615363,7 +615363,7 @@
       "relation": "uses",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L188",
+      "source_location": "L190",
       "target": "tests_k33_daemons_cluster",
       "weight": 0.8
     },
@@ -615375,7 +615375,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L196",
+      "source_location": "L198",
       "target": "tests_k33_daemons_mount",
       "weight": 1.0
     },
@@ -615387,7 +615387,7 @@
       "relation": "uses",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L196",
+      "source_location": "L198",
       "target": "tests_k33_daemons_mount",
       "weight": 0.8
     },
@@ -615399,7 +615399,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L206",
+      "source_location": "L208",
       "target": "tests_test_b_geometry_b2_on_stores",
       "weight": 1.0
     },
@@ -615411,7 +615411,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L202",
+      "source_location": "L204",
       "target": "tests_test_b_geometry_driver",
       "weight": 1.0
     },
@@ -615423,7 +615423,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L207",
+      "source_location": "L209",
       "target": "tests_test_b_geometry_grow_to",
       "weight": 1.0
     },
@@ -615435,7 +615435,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L194",
+      "source_location": "L196",
       "target": "tests_test_b_geometry_wait_formed",
       "weight": 1.0
     },
@@ -615447,7 +615447,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L198",
+      "source_location": "L200",
       "target": "tests_test_b_geometry_wait_mount",
       "weight": 1.0
     },
@@ -615459,7 +615459,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_phase",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L195",
+      "source_location": "L197",
       "target": "tests_test_b_geometry_wait_served",
       "weight": 1.0
     },
@@ -615471,7 +615471,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_to",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L289",
+      "source_location": "L291",
       "target": "tests_k33_daemons_mount",
       "weight": 1.0
     },
@@ -615483,7 +615483,7 @@
       "relation": "uses",
       "source": "tests_test_b_geometry_grow_to",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L289",
+      "source_location": "L291",
       "target": "tests_k33_daemons_mount",
       "weight": 0.8
     },
@@ -615495,7 +615495,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_to",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L285",
+      "source_location": "L287",
       "target": "tests_k33_daemons_voters_ok",
       "weight": 1.0
     },
@@ -615507,7 +615507,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_to",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L292",
+      "source_location": "L294",
       "target": "tests_test_b_geometry_driver",
       "weight": 1.0
     },
@@ -615519,7 +615519,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_to",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L275",
+      "source_location": "L277",
       "target": "tests_test_b_geometry_py_tests_test_b_geometry_status",
       "weight": 1.0
     },
@@ -615531,7 +615531,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_to",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L279",
+      "source_location": "L281",
       "target": "tests_test_b_geometry_wait_formed",
       "weight": 1.0
     },
@@ -615543,7 +615543,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_grow_to",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L286",
+      "source_location": "L288",
       "target": "tests_test_b_geometry_wait_mount",
       "weight": 1.0
     },
@@ -615652,7 +615652,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_mgmt",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L68",
+      "source_location": "L70",
       "target": "scripts_leader_placement_mgmt",
       "weight": 1.0
     },
@@ -615664,7 +615664,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_mgmt",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L68",
+      "source_location": "L70",
       "target": "tests_k33_daemons_mgmt",
       "weight": 1.0
     },
@@ -615943,7 +615943,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L213",
+      "source_location": "L215",
       "target": "tests_test_b_geometry_b2_on_stores",
       "weight": 1.0
     },
@@ -615954,7 +615954,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L94",
+      "source_location": "L96",
       "target": "tests_test_b_geometry_driver",
       "weight": 1.0
     },
@@ -615965,7 +615965,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L159",
+      "source_location": "L161",
       "target": "tests_test_b_geometry_frag_paths",
       "weight": 1.0
     },
@@ -615976,7 +615976,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L170",
+      "source_location": "L172",
       "target": "tests_test_b_geometry_fresh_read",
       "weight": 1.0
     },
@@ -615987,7 +615987,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L332",
+      "source_location": "L334",
       "target": "tests_test_b_geometry_full_phase",
       "weight": 1.0
     },
@@ -615998,7 +615998,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L179",
+      "source_location": "L181",
       "target": "tests_test_b_geometry_grow_phase",
       "weight": 1.0
     },
@@ -616009,7 +616009,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L273",
+      "source_location": "L275",
       "target": "tests_test_b_geometry_grow_to",
       "weight": 1.0
     },
@@ -616020,7 +616020,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L67",
+      "source_location": "L69",
       "target": "tests_test_b_geometry_mgmt",
       "weight": 1.0
     },
@@ -616031,7 +616031,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L128",
+      "source_location": "L130",
       "target": "tests_test_b_geometry_py_tests_test_b_geometry_status",
       "weight": 1.0
     },
@@ -616042,7 +616042,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L80",
+      "source_location": "L82",
       "target": "tests_test_b_geometry_wait_formed",
       "weight": 1.0
     },
@@ -616053,7 +616053,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L71",
+      "source_location": "L73",
       "target": "tests_test_b_geometry_wait_mount",
       "weight": 1.0
     },
@@ -616064,7 +616064,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L85",
+      "source_location": "L87",
       "target": "tests_test_b_geometry_wait_served",
       "weight": 1.0
     },
@@ -616075,7 +616075,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L133",
+      "source_location": "L135",
       "target": "tests_test_b_geometry_wait_status",
       "weight": 1.0
     },
@@ -616086,7 +616086,7 @@
       "relation": "contains",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L151",
+      "source_location": "L153",
       "target": "tests_test_b_geometry_write",
       "weight": 1.0
     },
@@ -616098,7 +616098,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_py_tests_test_b_geometry_status",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L129",
+      "source_location": "L131",
       "target": "tests_test_b_geometry_mgmt",
       "weight": 1.0
     },
@@ -616107,9 +616107,9 @@
       "confidence": "EXTRACTED",
       "evidence_method": "graphify-ast",
       "relation": "rationale_for",
-      "source": "tests_test_b_geometry_rationale_134",
+      "source": "tests_test_b_geometry_rationale_136",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L134",
+      "source_location": "L136",
       "target": "tests_test_b_geometry_wait_status",
       "weight": 1.0
     },
@@ -616118,9 +616118,9 @@
       "confidence": "EXTRACTED",
       "evidence_method": "graphify-ast",
       "relation": "rationale_for",
-      "source": "tests_test_b_geometry_rationale_160",
+      "source": "tests_test_b_geometry_rationale_162",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L160",
+      "source_location": "L162",
       "target": "tests_test_b_geometry_frag_paths",
       "weight": 1.0
     },
@@ -616129,9 +616129,9 @@
       "confidence": "EXTRACTED",
       "evidence_method": "graphify-ast",
       "relation": "rationale_for",
-      "source": "tests_test_b_geometry_rationale_180",
+      "source": "tests_test_b_geometry_rationale_182",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L180",
+      "source_location": "L182",
       "target": "tests_test_b_geometry_grow_phase",
       "weight": 1.0
     },
@@ -616260,7 +616260,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_wait_served",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L88",
+      "source_location": "L90",
       "target": "tests_test_b_geometry_mgmt",
       "weight": 1.0
     },
@@ -616272,7 +616272,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_wait_status",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L140",
+      "source_location": "L142",
       "target": "tests_test_b_geometry_py_tests_test_b_geometry_status",
       "weight": 1.0
     },
@@ -616284,7 +616284,7 @@
       "relation": "calls",
       "source": "tests_test_b_geometry_write",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L152",
+      "source_location": "L154",
       "target": "tests_k33_daemons_payload",
       "weight": 1.0
     },
@@ -930812,7 +930812,7 @@
       "id": "tests_test_b_geometry_b2_on_stores",
       "label": "b2_on_stores()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L213"
+      "source_location": "L215"
     },
     {
       "_callable": true,
@@ -930823,7 +930823,7 @@
       "id": "tests_test_b_geometry_b2_on_stores_flip",
       "label": "flip()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L245"
+      "source_location": "L247"
     },
     {
       "_callable": true,
@@ -930834,7 +930834,7 @@
       "id": "tests_test_b_geometry_b2_on_stores_restore",
       "label": "restore()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L250"
+      "source_location": "L252"
     },
     {
       "_callable": true,
@@ -930930,7 +930930,7 @@
       "id": "tests_test_b_geometry_driver",
       "label": "driver()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L94"
+      "source_location": "L96"
     },
     {
       "_callable": true,
@@ -930952,7 +930952,7 @@
       "id": "tests_test_b_geometry_frag_paths",
       "label": "frag_paths()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L159"
+      "source_location": "L161"
     },
     {
       "_callable": true,
@@ -930963,7 +930963,7 @@
       "id": "tests_test_b_geometry_fresh_read",
       "label": "fresh_read()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L170"
+      "source_location": "L172"
     },
     {
       "_callable": true,
@@ -930974,7 +930974,7 @@
       "id": "tests_test_b_geometry_full_phase",
       "label": "full_phase()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L332"
+      "source_location": "L334"
     },
     {
       "_callable": true,
@@ -930985,7 +930985,7 @@
       "id": "tests_test_b_geometry_grow_phase",
       "label": "grow_phase()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L179"
+      "source_location": "L181"
     },
     {
       "_callable": true,
@@ -930996,7 +930996,7 @@
       "id": "tests_test_b_geometry_grow_to",
       "label": "grow_to()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L273"
+      "source_location": "L275"
     },
     {
       "_callable": true,
@@ -931051,7 +931051,7 @@
       "id": "tests_test_b_geometry_mgmt",
       "label": "mgmt()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L67"
+      "source_location": "L69"
     },
     {
       "_callable": true,
@@ -931094,37 +931094,37 @@
       "id": "tests_test_b_geometry_py_tests_test_b_geometry_status",
       "label": "status()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L128"
+      "source_location": "L130"
     },
     {
       "_origin": "ast",
       "community": 2,
       "community_name": "tests",
       "file_type": "rationale",
-      "id": "tests_test_b_geometry_rationale_134",
+      "id": "tests_test_b_geometry_rationale_136",
       "label": "status on node i once pred holds and mount m's df agrees with its capacity (the\u2026",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L134"
+      "source_location": "L136"
     },
     {
       "_origin": "ast",
       "community": 2,
       "community_name": "tests",
       "file_type": "rationale",
-      "id": "tests_test_b_geometry_rationale_160",
+      "id": "tests_test_b_geometry_rationale_162",
       "label": "Fragment files of one chunk on the stores: {fi: (node, path)}.",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L160"
+      "source_location": "L162"
     },
     {
       "_origin": "ast",
       "community": 2,
       "community_name": "tests",
       "file_type": "rationale",
-      "id": "tests_test_b_geometry_rationale_180",
+      "id": "tests_test_b_geometry_rationale_182",
       "label": "Growth from three to `last` members. The driver runs at every size from `first`\u2026",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L180"
+      "source_location": "L182"
     },
     {
       "_origin": "ast",
@@ -931209,7 +931209,7 @@
       "id": "tests_test_b_geometry_wait_formed",
       "label": "wait_formed()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L80"
+      "source_location": "L82"
     },
     {
       "_callable": true,
@@ -931220,7 +931220,7 @@
       "id": "tests_test_b_geometry_wait_mount",
       "label": "wait_mount()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L71"
+      "source_location": "L73"
     },
     {
       "_callable": true,
@@ -931231,7 +931231,7 @@
       "id": "tests_test_b_geometry_wait_served",
       "label": "wait_served()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L85"
+      "source_location": "L87"
     },
     {
       "_callable": true,
@@ -931242,7 +931242,7 @@
       "id": "tests_test_b_geometry_wait_status",
       "label": "wait_status()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L133"
+      "source_location": "L135"
     },
     {
       "_callable": true,
@@ -931253,7 +931253,7 @@
       "id": "tests_test_b_geometry_write",
       "label": "write()",
       "source_file": "tests/test_b_geometry.py",
-      "source_location": "L151"
+      "source_location": "L153"
     },
     {
       "_origin": "ast",

@@ -2053,7 +2053,7 @@
     "tests/test_b6_unavailable.py": "f35fe9091fde832e5026b52bf8d8dfe5dd1d996e064a0a6cd6fa4181b0b591cd",
     "tests/test_b_checks_driver.py": "236166dcaef5dc0a9f5e771f4dbf29d40463d8ff89a0ccdaa9bc886064e87d1e",
     "tests/test_b_geometry.c": "7cba398dece45479a667e20b7a0a248bf1e2f742d2d3a989212ed54b68f9caa3",
-    "tests/test_b_geometry.py": "55218d40141786589906e66343b3626e06aa952680bede4e70693abb2fcac42b",
+    "tests/test_b_geometry.py": "2abbae2bd755246af2829708c28398e60adfd74d4983420e2892157c8d462c61",
     "tests/test_b_geometry_status.py": "d8b3c1607c3dd6b47041284c7535e19c09cb2b5ca9d5690e07e7d01d0f5ee67b",
     "tests/test_bench_cli.py": "5dc63c1f7b3ef9dfca2cd2cd8600fed7950816f498f33b40e40f49781da6187a",
     "tests/test_bench_latency.c": "995ad6f2e8a2f9ae0e8280f7a881e73b8bd0704efcc8a39bb4272e21933b7983",
@@ -2565,5 +2565,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "63c6c9cb967f97fc3e675f1ec96a89956d43df87"
+  "source_commit": "962c3ea5b775aecb95bb80062ca99aa0986c6f03"
 }

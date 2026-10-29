@@ -60,6 +60,8 @@ CS = 128 * 1024
 G = 1 << 30
 artifacts = (Path(os.environ['EFS_B_ARTIFACTS']) / work.name
              if os.environ.get('EFS_B_ARTIFACTS') else None)
+if artifacts:
+    artifacts.mkdir(parents=True, exist_ok=True)
 summary = {}
 phases = set((os.environ.get('EFS_B_PHASES') or 'grow,full').split(','))
 
