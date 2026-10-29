@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# New private fstor007 fixtures only. Never opens an existing cluster/store.
+# New private fixtures only; node9900 records its exact existing real client.
 set -eu
 src=${1:?source};art=${2:?fresh evidence};commit=${3:?source commit}
 [[ $src == /tmp/efs-k35-slow-*/src && $art == /data1/efs/evidence/k35-slow-* ]] || exit 2

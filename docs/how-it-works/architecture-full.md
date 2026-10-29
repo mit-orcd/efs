@@ -1735,6 +1735,16 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[K35 slow-fsync follow-up](../status/k35-slow-fsync-20261029.md): **FIXED (scoped,
+branch only)**, `agent/devel-k35-slow-fsync`, product `1ab9fef83`.
+Proof runs before a slow COMMIT exhausts the same deadline; durability unchanged.
+Component/index/ASan/UBSan/TSan PASS; old-source control fails. Full gate
+545/0 FAIL/11 NOTRUN (host limits); hardware TCP/RDMA B6 slow + K35 PASS,
+303/335 exact K35 files, nine native/declaration checks PASS. Original failed
+fixtures/evidence retained. Raw-zero TCP counter audit failed on 18 one-octet
+receive deltas; no-payload FIN control reproduces the accounting gap, individual
+terminal states unavailable. No all-zero telemetry or full release PASS claim.
+
 [Task AF — management status contention](../status/af-status-snapshot-20261028.md):
 **Measured, no product change**, `agent/devel-task-af`, tested `f570fb0cd`,
 base `486aa3a46`. Thirty closed trials across xorinox and fstor007 TCP/RDMA:

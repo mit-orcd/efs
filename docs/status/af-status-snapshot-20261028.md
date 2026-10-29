@@ -272,3 +272,8 @@ Documentation generation and all five checks, canonical graph rebuild and
 nine graph tests pass. Parser warnings/unresolved edges are coverage gaps;
 graph edges do not prove runtime behavior. No merge or push; the coordinator
 owns the inherited K35 fix and merged qualification.
+
+
+Subsequent [K35 slow-fsync fix and qualification](k35-slow-fsync-20261029.md)
+uses product `1ab9fef83`. AF's original failed gate and untouched-base
+reproduction remain failures; both fixtures and their evidence are unchanged.
