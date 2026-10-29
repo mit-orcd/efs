@@ -18,6 +18,14 @@ prefix = f'\n#define AI_REG_SITES {len(names)}\nstatic const char *ai_site_names
 back = out.replace(prefix+h, '', 1).replace('ai_registry_unlock();', m.UNLOCK)
 for n in range(4): back = back.replace(f'ai_registry_lock({n});', m.LOCK)
 assert back == s
+wake = m.instrument_wake(out)
+back_wake = wake
+for old,new in reversed(m.WAKE_ANCHORS): back_wake = back_wake.replace(new,old,1)
+assert back_wake == out
+for bad in (s,wake,out.replace('int pr = poll(&p, 1, 1000);','',1)):
+    try: m.instrument_wake(bad)
+    except ValueError: pass
+    else: raise AssertionError('wake source drift accepted')
 for bad in (s.replace(m.ANCHOR, '', 1), out, s.replace(m.LOCK, '', 1)):
     try: m.instrument(bad, h)
     except (ValueError, StopIteration): pass

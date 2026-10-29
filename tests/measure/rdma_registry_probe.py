@@ -17,6 +17,54 @@ ANCHOR = 'static pthread_mutex_t g_reg_lock = PTHREAD_MUTEX_INITIALIZER;'
 FUNCTION = re.compile(r'^[A-Za-z_][\w \t\*]*?\b([A-Za-z_]\w*)\s*\([^;{}]*?\)\s*\{', re.M)
 EXPECTED = {'harvest_recv_wcs', 'conn_create', 'efs_rdma_conn_destroy', 'efs_rdma_totals'}
 
+# Separate follow-up diagnostic: poll() return to the first successful pending
+# ring publication. Excludes kernel wake-to-run and NIC-to-CQE delay. This is
+# not enabled in formal runs or in the initial registry-only diagnostic build.
+WAKE_HEADER = r'''
+static __thread uint64_t ai_channel_return_ns;
+static uint64_t ai_wake_count, ai_wake_sum_ns, ai_wake_max_ns, ai_wake_hist[32];
+static void ai_wake_dispatch(void) {
+    if (!ai_channel_return_ns) return;
+    uint64_t elapsed = ai_now()-ai_channel_return_ns;
+    ai_channel_return_ns=0;
+    unsigned bin=0; uint64_t v=elapsed;
+    while (v>1 && bin<31) { v>>=1; bin++; }
+    __atomic_add_fetch(&ai_wake_count,1,__ATOMIC_RELAXED);
+    __atomic_add_fetch(&ai_wake_sum_ns,elapsed,__ATOMIC_RELAXED);
+    __atomic_add_fetch(&ai_wake_hist[bin],1,__ATOMIC_RELAXED);
+    uint64_t old=__atomic_load_n(&ai_wake_max_ns,__ATOMIC_RELAXED);
+    while (elapsed>old && !__atomic_compare_exchange_n(&ai_wake_max_ns,&old,elapsed,0,
+            __ATOMIC_RELAXED,__ATOMIC_RELAXED)) {}
+}
+static void __attribute__((destructor)) ai_wake_dump(void) {
+    fprintf(stderr,"AI_WAKE {\"pid\":%ld,\"count\":%llu,\"sum_ns\":%llu,\"max_ns\":%llu,\"log2_floor_ns_hist\":[",
+        (long)getpid(),(unsigned long long)__atomic_load_n(&ai_wake_count,__ATOMIC_RELAXED),
+        (unsigned long long)__atomic_load_n(&ai_wake_sum_ns,__ATOMIC_RELAXED),
+        (unsigned long long)__atomic_load_n(&ai_wake_max_ns,__ATOMIC_RELAXED));
+    for(unsigned i=0;i<32;i++) fprintf(stderr,"%s%llu",i?",":"",
+        (unsigned long long)__atomic_load_n(&ai_wake_hist[i],__ATOMIC_RELAXED));
+    fprintf(stderr,"]}\n");
+}
+'''
+WAKE_ANCHORS = (
+    ('static void harvest_recv_wcs(struct ibv_wc *wcs, int n)',
+     WAKE_HEADER+'\nstatic void harvest_recv_wcs(struct ibv_wc *wcs, int n)'),
+    ('pend_push(rc, buf, wcs[i].byte_len);',
+     'pend_push(rc, buf, wcs[i].byte_len);\n                if (!rc->broken) ai_wake_dispatch();'),
+    ('int pr = poll(&p, 1, 1000);',
+     'int pr = poll(&p, 1, 1000);\n            if (pr > 0 && (p.revents & POLLIN)) ai_channel_return_ns = ai_now();'),
+)
+
+
+def instrument_wake(source):
+    if 'AI_REGISTRY_META ' not in source or 'AI_WAKE ' in source:
+        raise ValueError('fresh registry diagnostic required')
+    for old,new in WAKE_ANCHORS:
+        if source.count(old) != 1:
+            raise ValueError('wake source drift: '+old)
+        source = source.replace(old,new,1)
+    return source
+
 
 def instrument(source, header):
     if source.count(ANCHOR) != 1 or 'AI_REGISTRY_META' in source:
@@ -75,13 +123,17 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest='command', required=True)
     i = sub.add_parser('instrument'); i.add_argument('source', type=Path); i.add_argument('output', type=Path)
+    w = sub.add_parser('wake'); w.add_argument('source', type=Path); w.add_argument('output', type=Path)
     a = sub.add_parser('summarize'); a.add_argument('logs', type=Path, nargs='+')
     args = p.parse_args()
-    if args.command == 'instrument':
+    if args.command in ('instrument','wake'):
         if args.output.resolve() == args.source.resolve() or args.output.exists():
             raise ValueError('fresh diagnostic output required; never edit shipping source')
         source = args.source.read_text()
-        edited, names = instrument(source, Path(__file__).with_suffix('.h').read_text())
+        if args.command == 'wake':
+            edited, names = instrument_wake(source), []
+        else:
+            edited, names = instrument(source, Path(__file__).with_suffix('.h').read_text())
         with args.output.open('x') as f: f.write(edited)
         print(json.dumps(dict(source_sha256=hashlib.sha256(source.encode()).hexdigest(),
                               diagnostic_sha256=hashlib.sha256(edited.encode()).hexdigest(), sites=names)))
