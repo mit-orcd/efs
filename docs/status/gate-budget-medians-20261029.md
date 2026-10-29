@@ -1,6 +1,8 @@
-# Task T — fitted per-host test medians, October 29
+# Task T — fitted per-host test medians, October 28 EDT / October 29 UTC
 
-**Measurement complete; confirming gates pending.** These are derived test
+**Measurement complete; confirmation incomplete.** The first fitted-table
+attempt is not accepted across all three hosts; see the retained failures and
+changed-source qualification on the evidence page. These are derived test
 medians, not raw captures. Three clean serial eight-job `test-all` gates ran
 on each host. All92 budget commands are present, slots and historical reason
 prefixes are unchanged, and every command returned0. Host-limited subcases

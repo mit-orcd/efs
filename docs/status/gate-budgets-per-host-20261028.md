@@ -1,13 +1,78 @@
 # Task T — gate budgets across supported hosts
 
-**FITTED / confirmations pending.** Three clean gates on each of intel1,
-xorinox and fstor007 supply all92 rows. The table follows the specified
-maximum-host-median formula exactly:31 bounds increase,12 decrease,49 stay.
-The declared schedule is1504s,404s above target1100s, which is unchanged;
-the unchanged1650s margin passes. No slots, test deadlines or success oracles
-are relaxed. Final merged-source confirming gates are next. All earlier
-failures remain traceable; Nuc/AMD full failures are not qualified. Nothing
-is merged into devel or pushed.
+**FITTED / confirmation incomplete.** The63c6c9cb9 attempt passes on
+intel1 but fails the xorinox inventory oracle; xorinox and fstor007 each
+also overrun one budget. None is erased or called a passing confirmation.
+Candidate640265efc adds a bounded coherent inventory capture, negative
+controls and failed-fixture retention; new confirmations are running with
+full text oracle evidence. The92 fitted bounds, slots, deadlines and
+1100s target are unchanged (modeled1504s). Nuc/AMD full failures remain
+unqualified. Nothing is merged into devel or pushed.
+
+## First fitted-table confirmation: not accepted as a complete gate
+
+Exact source63c6c9cb967f97fc3e675f1ec96a89956d43df87, archive SHA-256
+`8d8f728c30c5b5aeacd25394ea46c9cf9ee2d28994d9fc43241467d4bc4521c6`:
+
+| Host | Commands / FAIL / NOTRUN | Test wall / build | OVERBUDGET | Closed capture manifest SHA-256 |
+| --- | --- | --- | --- | --- |
+| intel1 | 547 /0 /11 | 763s /31s | 0 | `59d7903e99dc01e512ed2652a59fa25756fb2c61427bfe7d10024a1e68a05955` |
+| xorinox | 547 /1 /10 | 907s /24s | K22 leader admission94.8s vs90s | `171077bd0ce7d036910c2e5d9ea93fb5ffd5526d23a5efd1810de853471b1311` |
+| fstor007 | 547 /0 /3 | 890s /22s | D4 progress168.8s vs115s | `32e9f0bfb3a5b10ac86fc6af8e9fd704f5eb3506b1dd994aadd4d2f087c048fb` |
+
+Captures are on their hosts at
+`/data1/efs/evidence/taskT-20261028/HOST-63c6c9cb9-confirmation15/`.
+There is no contention marker; tracked sources are unchanged, and closing
+checks find no owned EFS process/mount. The reduced NOTRUN counts follow the
+sanitizer informational-marker correction, not newly claimed product coverage.
+The two overruns are retained counterexamples to zero-overrun qualification;
+no bound has been inflated from either single sample.
+
+### Seven-node inventory observation and evidence limit
+
+Xorinox grow-b fails at seven nodes: B1 checks988 conditions and reports5
+missing packed-fragment roles for b2-1 and small-0. Exact payload read checks
+had no reported mismatch. The old driver fetched rows once before its physical
+scan, with no after-scan recheck. Packing/compaction can change those references
+and retire their records during the scan. This is a credible capture race,
+**not a proven explanation of the original failure**: its messages omit the
+segment IDs, the pre-scan mappings were not retained, and the driver unlinked
+its own workload on failure. The stopped stores, finalized daemon logs and
+existing result JSON remain; they do not recreate that point-in-time capture.
+No missing-fragment claim or retroactive PASS is inferred from the evidence.
+
+`640265efcdcffa3d315055ecbe898038ff632635` fixes the observation method and
+retention. It reads all references, scans stores, then reads references again.
+Only equal references spanning the scan qualify; changed references produce a
+recorded inconclusive observation and another bounded metadata-only capture.
+The existing --pack-wait bounds capture; no application read/write is retried,
+no EIO or malformed row is forgiven, and stable missing records fail at once.
+Immutable object generations and the fixture's lack of application writes
+make a retired reference unable to reappear as an ABA during this bracket.
+Continuous change expires as FAIL. Reads use the driver's existing bounded
+parallelism. Missing-record messages now include segment ID, generation and
+group. Full before/after rows and physical record inventories are serialized
+for offline replay, alongside every inconclusive observation.
+
+Failed checks/exceptions now keep the workload and write a failure snapshot;
+only successful fixtures are eligible for cleanup. Geometry artifacts are
+namespaced by unique fixture directory to prevent parallel phases overwriting
+one another. Deterministic controls cover a switch during scan, stable loss,
+continual-change timeout, metadata read errors, JSON replay of the captured
+failure and failed/explicit-keep fixture preservation. The driver/status units
+and graph9/9 pass. There is no product code, budget or deadline change.
+
+The candidate's archive SHA-256 is
+`a222fef4782940c7e83099f986aaa18ded2b85e002afdda706e87ed8ed7a40eb`.
+New one-gate confirmations are at
+`/data1/efs/evidence/taskT-20261028/HOST-640265efc-confirmation16/`,
+with private LAN scratch `/home/maik/efs-taskT-20261028-640265efc-confirmation16`
+and fstor007 scratch `/tmp/efs-taskT-20261028-640265efc-confirmation16`.
+Their exact retained controllers set EFS_B_ARTIFACTS, EFS_B6_ARTIFACTS and
+W130_EVIDENCE_DIR to separate per-run text-evidence directories. This preserves
+the structured geometry/B6 oracle results and finalized W130 logs even after
+successful synthetic fixtures are pruned. All earlier failures/stores remain
+on-host; Task AF has not been messaged. Results are pending, not accepted.
 
 ## Final measurement set and fitted table
 
