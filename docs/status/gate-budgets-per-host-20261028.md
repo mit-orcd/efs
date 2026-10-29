@@ -1,16 +1,46 @@
 # Task T — gate budgets across supported hosts
 
-**FITTED / confirmation incomplete.** Candidate640265efc's three full
-confirmations each fail while saving the full-capacity phase's artifact:
-the summary directory was only created by the growth driver. The full phase
-does not call that driver. No failed gate is accepted. Xorinox additionally
-has one budget overrun and fstor007 two. Correctionb13b8867e creates the
-namespaced artifact directory before either phase. Three new serial eight-job
-measurement gates per host are running with the fitted scheduling priorities,
-so the repeated timing overruns will be assessed from medians, not converted
-into arbitrary larger bounds. The current92 bounds, slots, deadlines and
-1100s target remain unchanged (modeled1504s). Nuc/AMD failures remain
-unqualified; nothing is merged into devel or pushed.
+**FITTED / fresh qualification in progress.** The b13b8867e refresh passed
+three gates each on intel1 and fstor007, but xorinox stopped after W130's
+95/96 listing and a B6 counter-cohort failure. Its failed run is excluded.
+The user authorized the resulting [directory-visibility repair](task-t-directory-visibility-20261029.md).
+Candidate `35a6e41b0` closes source-first and destination-first copy windows,
+with deterministic negative controls; isolated live checks precede fresh
+three-run full measurements. The B6 accounting correction has three focused
+passes with unchanged product binaries. The current92 bounds, slots,
+deadlines,1100s target and1650s margin remain unchanged (model1504s).
+No full qualification or new fit is claimed yet. Nuc/AMD failures remain open;
+there is no merge into devel or push.
+
+## Refresh interrupted by a new namespace failure
+
+| Host at b13b8867e | Full gates | Test walls | OVERBUDGET | Closed manifest SHA-256 |
+| --- | --- | --- | --- | --- |
+| intel1 | 3 ×547, zero FAIL,11 NOTRUN each | 940/920/882s | 1/0/0 | `6f313735124eea2ba9884dbd76570d6624dd4bb414609ff001b6c115e05c3555` |
+| fstor007 | 3 ×547, zero FAIL,3 NOTRUN each | 782/881/778s | 0/1/1 | `65d6fcb0b2891578f16cf82cf3d0f11e8b4107de67dcb456c04b0305ae784f25` |
+| xorinox | 547,2 FAIL,10 NOTRUN; stopped before run2 | 953s | 2 | `71d3cf1c00ddaefb42e222fc503961d304ee23e39658070f37f691014a7476fa` |
+
+All canonical captures at
+`/data1/efs/evidence/taskT-20261028/HOST-b13b8867e-calibration17/`
+are finalized and copied as text-only evidence with every hash verified.
+These successful observations are retained, but they cannot qualify the
+subsequent product repair. Original W130/B6 failure stores stay on xorinox;
+forensics and the new counterexamples are on the linked page.
+
+Saved inventory observations from all three640265efc confirmations and these
+b13b8867e runs replay against their saved references and physical headers:
+60 result files/60 stable observations, zero stable missing records, and no
+inconclusive changed references in this set. This does not recover the absent
+mapping capture from the first63c6c9cb9 failure or establish its cause.
+
+Fresh source `35a6e41b042e84982268f8569cc31ddc739be5e1` is staged on all
+three hosts at `HOST-35a6e41b0-calibration19/`. Intel1 and fstor007 have begun
+three serial eight-job full gates. Xorinox first completes the separate
+`xorinox-35a6e41b0-directory-focus19/` series on the same immutable source,
+with no overlap between controllers. The new deterministic unit adds one
+executed command:548 in the refreshed full gate. All92 budget rows and their
+priority settings are unchanged. No failing or contaminated run may enter
+the next fit.
 
 ## Second confirmation and fresh measurements — October29
 
@@ -904,7 +934,7 @@ nuc/intel2 coverage. SSH checks did not use BatchMode.
 
 ## Completion still required
 
-1. Finish the three fresh b13b8867e measurement gates per authorized substitute
+1. Finish the isolated directory qualification and three fresh35a6e41b0 gates per authorized substitute
    host (intel1, xorinox, fstor007), accepting no failed or contaminated gate.
    The earlier Nuc/AMD failures remain open and are not qualified by substitution.
 2. Replay every retained structured growth inventory observation against its
