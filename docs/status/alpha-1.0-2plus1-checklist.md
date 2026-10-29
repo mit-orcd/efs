@@ -488,10 +488,7 @@ The Stage 1 exception above applies; P3-A–P3-F and AB–AF retain their own sc
   coverage plus deterministic simultaneous slab growth, allocation failure,
   thread exit and saturated writers with demand reads. Retain exact accounting
   and ownership under ASan/TSan; measure end-to-end gain as well as allocator cost.
-  **Measured 2026-10-28, no change** (`docs/status/ag-bufpool-lock-20261028.md`):
-  `g_bp_mu` wait share ≤ 0.0004 % at 32 streams (threshold 5 %), cold slab growth
-  25–54 µs a handful of times per client; the lock stays as is.
-- [ ] **AH — Mount-wide chunk-map read/write contention.**
+
   `src/client/read.c::chunk_get_worker` and `rdcache_map_gen` take
   `g_client.idx_mu` to read chunk mappings; `src/client/write.c` takes the same
   mutex around chunk/base/delta updates (for example `dcache_put_now_budgeted`).

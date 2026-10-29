@@ -178,6 +178,9 @@ under K37 rebuilds; median directory fsync 1 µs. The existing
 `directory_sync_group_run` is not adopted for segment directories. AQ checkbox
 ticked.
 
+[Oct 28 AH: mount-wide chunk-map lock contention measured — no change](ah-chunk-map-lock-20261028.md):
+**branch `agent/devel-taskah` (from devel `9c4bfd171`), docs + the committed measurement driver only; xorinox, loopback, TCP.** `g_client.idx_mu`: 2.4-5.6k acquisitions/s, flat with writers; 25-30 % trylock misses at 32 writers but ≈0.35 µs median contended wait, ≤0.15 % of wall. `test_sparse_metadata.py` PASS; `make tsan-check` 19/19; full gate below. Nothing partitioned.
+
 [ORCD-test merged devel qualification](orcd-test-devel-qualification-20261028.md):
 **FAIL overall**, deployed `714d7e6fc`; profiling branch merged and deleted.
 Serial and seven-client POSIX, restart persistence, both expiry runs and all
