@@ -272,7 +272,17 @@ void efs_client_stripe_closed(const struct efs_put_ticket *ticket)
     pthread_mutex_unlock(&commit_mu);
 }
 
-struct commit_job { efs_node_id_t node; uint64_t target, epoch, deadline; int rc; };
+struct commit_group {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    unsigned completed;
+};
+struct commit_job {
+    efs_node_id_t node;
+    uint64_t target, epoch, deadline;
+    int rc, done; /* published under group->mu */
+    struct commit_group *group;
+};
 
 /* One COMMIT. rc OK with the reply's verifier in epoch, or the failure. */
 static void *commit_one(void *arg)
@@ -314,6 +324,11 @@ static void *commit_one(void *arg)
             break;
     }
     efs_client_rpc_set_deadline_ms(saved);
+    pthread_mutex_lock(&j->group->mu);
+    j->done = 1;
+    j->group->completed++;
+    pthread_cond_broadcast(&j->group->cv);
+    pthread_mutex_unlock(&j->group->mu);
     return NULL;
 }
 
@@ -402,6 +417,25 @@ static int stripe_prove(efs_ino_t ino, int all)
     if (!ns)
         return EFS_OK; /* nothing this client wrote is unproven */
 
+    uint8_t *attempted = calloc(ns, 1);
+    struct commit_group group = { .mu = PTHREAD_MUTEX_INITIALIZER };
+    pthread_condattr_t attr;
+    int attr_rc = pthread_condattr_init(&attr);
+    int cv_rc = attr_rc;
+    if (!attr_rc) {
+        cv_rc = pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+        if (!cv_rc) cv_rc = pthread_cond_init(&group.cv, &attr);
+        pthread_condattr_destroy(&attr);
+    }
+    if (!attempted || cv_rc) {
+        if (!cv_rc) pthread_cond_destroy(&group.cv);
+        pthread_mutex_destroy(&group.mu);
+        int error = attempted ? EFS_ERR_IO : EFS_ERR_NOMEM;
+        free(attempted);
+        free(snap);
+        return error;
+    }
+
     uint64_t need = 0;
     for (uint32_t k = 0; k < ns; k++)
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
@@ -412,129 +446,166 @@ static int stripe_prove(efs_ino_t ino, int all)
         if (!(need & (1ull << node)))
             continue;
         jobs[n] = (struct commit_job){ .node = node, .target = target[node],
-                                       .deadline = deadline, .rc = EFS_ERR_NET };
+                                       .deadline = deadline, .rc = EFS_ERR_NET, .group = &group };
         slot[node] = n;
         started[n] = pthread_create(&th[n], NULL, commit_one, &jobs[n]) == 0;
         if (!started[n])
             commit_one(&jobs[n]);
         n++;
     }
-    for (int i = 0; i < n; i++)
-        if (started[i])
-            pthread_join(th[i], NULL);
-
-    /* Fold the COMMIT verdicts into the live records (a concurrent fsync
-     * may have proven or retired some meanwhile). */
-    pthread_mutex_lock(&commit_mu);
-    for (uint32_t k = 0; k < ns; k++) {
-        struct stripe *p = stripe_find(snap[k].ino, snap[k].ci, snap[k].object);
-        if (!p) {
-            snap[k].ino = 0; /* proven and retired by another fsync */
-            continue;
-        }
-        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            int s = slot[p->nodes[i]];
-            if (p->state[i] != FRAG_PENDING || s < 0 || jobs[s].rc != EFS_OK ||
-                p->seq[i] > jobs[s].target)
-                continue;
-            p->state[i] = p->epoch[i] == jobs[s].epoch ? FRAG_DURABLE : FRAG_LOST;
-        }
-        snap[k] = *p;
-    }
-    pthread_mutex_unlock(&commit_mu);
-
-    /* The same absolute budget covers all metadata work, not just COMMIT
-     * workers. In particular the first mark and every retired-object read
-     * must inherit it; restore the caller's TLS value on the single exit. */
-    efs_client_rpc_set_deadline_ms(deadline);
-    int rc = EFS_OK;
-    unsigned logged = 0, failed = 0, marked = 0;
-    const char *what = all ? "data-commit sweep" : "fsync";
-    for (uint32_t k = 0; k < ns; k++) {
-        struct stripe *s = &snap[k];
-        int durable = 0, open = -1, opens = 0, retire = 0;
-        if (!s->ino)
-            continue;
-        if (sweep_expired(deadline)) {
-            stripe_log(what, s, 0, "sweep deadline exhausted; obligations retained", EFS_ERR_BUSY);
-            failed++;
+    /* Leave a bounded opportunity for metadata proof while a slow COMMIT
+     * still owns its original deadline. Do not shorten any storage RPC or
+     * reset/extend the enclosing budget: two durable fragments can acquire
+     * their required degraded mark before the last worker times out. */
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    uint64_t now_ms = (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    uint64_t reserve = deadline > now_ms ? (deadline - now_ms) / 4 : 0;
+    if (reserve > 5000) reserve = 5000;
+    uint64_t proof_at = deadline - reserve;
+    struct timespec until = { .tv_sec = proof_at / 1000,
+                              .tv_nsec = (long)(proof_at % 1000) * 1000000 };
+    pthread_mutex_lock(&group.mu);
+    while (group.completed < (unsigned)n)
+        if (pthread_cond_timedwait(&group.cv, &group.mu, &until) != 0)
             break;
+    pthread_mutex_unlock(&group.mu);
+
+    int rc = EFS_OK, expired_logged = 0;
+    unsigned logged = 0, marked = 0, remaining = ns;
+    const char *what = all ? "data-commit sweep" : "fsync";
+    efs_client_rpc_set_deadline_ms(deadline);
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass) {
+            /* Stack jobs and checked-out connections never outlive fsync.
+             * A late reply can still prove a third fragment, but cannot
+             * invalidate an earlier durable degraded proof. */
+            for (int i = 0; i < n; i++)
+                if (started[i]) pthread_join(th[i], NULL);
+            if (!remaining) break;
         }
-        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            if (s->state[i] == FRAG_DURABLE)
-                durable++;
-            else if (s->state[i] == FRAG_PENDING || s->state[i] == FRAG_LOST) {
-                open = i;
-                opens++;
+        int finished[COMMIT_NODES];
+        pthread_mutex_lock(&group.mu);
+        int complete = group.completed == (unsigned)n;
+        for (int i = 0; i < n; i++) finished[i] = jobs[i].done;
+        pthread_mutex_unlock(&group.mu);
+
+        /* Fold the COMMIT verdicts into the live records (a concurrent fsync
+         * may have proven or retired some meanwhile). */
+        pthread_mutex_lock(&commit_mu);
+        for (uint32_t k = 0; k < ns; k++) {
+            if (!snap[k].ino) continue;
+            struct stripe *p = stripe_find(snap[k].ino, snap[k].ci, snap[k].object);
+            if (!p) {
+                remaining--;
+                snap[k].ino = 0; /* proven and retired by another fsync */
+                continue;
             }
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                int s = slot[p->nodes[i]];
+                if (p->state[i] != FRAG_PENDING || s < 0 || !finished[s] || jobs[s].rc != EFS_OK ||
+                    p->seq[i] > jobs[s].target)
+                    continue;
+                p->state[i] = p->epoch[i] == jobs[s].epoch ? FRAG_DURABLE : FRAG_LOST;
+            }
+            snap[k] = *p;
         }
-        if (durable >= 2 && !opens) {
-            retire = 1;
-        } else if (durable == 2 && opens == 1) {
-            /* No tolerance left: the mark must be durable before success. */
-            int mrc = efs_client_rpc_degraded_mark(s->ino, s->inode_gen, s->object, s->ci,
-                                                   (uint32_t)open, s->nodes[open]);
-            if (mrc == EFS_ERR_NOT_FOUND && !s->published && !s->closed) {
-                /* A replay may have abandoned this PUT without publishing it.
-                 * Local supersession alone is not proof: close its ticket on
-                 * the lane group first, within this sweep's existing bound.
-                 * SETTLE/PUBLISHED/REJECTED are durable fences against a late
-                 * REPORT. Then repeat the mark: absence BEFORE that fence is
-                 * not evidence of absence AFTER it. */
-                if (stripe_close_for_absence(s) == EFS_OK && !sweep_expired(deadline))
-                    mrc = efs_client_rpc_degraded_mark(s->ino, s->inode_gen, s->object,
-                                                       s->ci, (uint32_t)open, s->nodes[open]);
+        pthread_mutex_unlock(&commit_mu);
+
+        for (uint32_t k = 0; k < ns; k++) {
+            struct stripe *s = &snap[k];
+            int durable = 0, open = -1, opens = 0, retire = 0;
+            if (!s->ino)
+                continue;
+            if (sweep_expired(deadline)) {
+                if (!expired_logged++)
+                    stripe_log(what, s, 0, "sweep deadline exhausted; obligations retained", EFS_ERR_BUSY);
+                break;
             }
-            if (sweep_expired(deadline)) mrc = EFS_ERR_BUSY;
-            if (mrc == EFS_OK) {
-                s->state[open] = FRAG_MARKED;
-                if (marked++ < 8)
-                    stripe_log(what, s, durable, "marked degraded for rebuild on return", mrc);
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                if (s->state[i] == FRAG_DURABLE)
+                    durable++;
+                else if (s->state[i] == FRAG_PENDING || s->state[i] == FRAG_LOST) {
+                    open = i;
+                    opens++;
+                }
+            }
+            if (durable >= 2 && !opens) {
                 retire = 1;
-            } else if (mrc == EFS_ERR_NOT_FOUND && (s->published || s->closed)) {
-                /* Publication or a durable terminal ticket preceded this
-                 * mark RPC: absence now proves retirement, never "not yet". */
-                retire = 1;
+            } else if (attempted[k] || (durable < 2 && !complete)) {
+                /* Do not retry a failed proof RPC on a completion notification,
+                 * or reject a stripe while a needed COMMIT can still succeed. */
+                continue;
+            } else if (durable == 2 && opens == 1) {
+                attempted[k] = 1;
+                /* No tolerance left: the mark must be durable before success. */
+                int mrc = efs_client_rpc_degraded_mark(s->ino, s->inode_gen, s->object, s->ci,
+                                                       (uint32_t)open, s->nodes[open]);
+                if (mrc == EFS_ERR_NOT_FOUND && !s->published && !s->closed) {
+                    /* A replay may have abandoned this PUT without publishing it.
+                     * Local supersession alone is not proof: close its ticket on
+                     * the lane group first, within this sweep's existing bound.
+                     * SETTLE/PUBLISHED/REJECTED are durable fences against a late
+                     * REPORT. Then repeat the mark: absence BEFORE that fence is
+                     * not evidence of absence AFTER it. */
+                    if (stripe_close_for_absence(s) == EFS_OK && !sweep_expired(deadline))
+                        mrc = efs_client_rpc_degraded_mark(s->ino, s->inode_gen, s->object,
+                                                           s->ci, (uint32_t)open, s->nodes[open]);
+                }
+                if (sweep_expired(deadline)) mrc = EFS_ERR_BUSY;
+                if (mrc == EFS_OK) {
+                    s->state[open] = FRAG_MARKED;
+                    if (marked++ < 8)
+                        stripe_log(what, s, durable, "marked degraded for rebuild on return", mrc);
+                    retire = 1;
+                } else if (mrc == EFS_ERR_NOT_FOUND && (s->published || s->closed)) {
+                    /* Publication or a durable terminal ticket preceded this
+                     * mark RPC: absence now proves retirement, never "not yet". */
+                    retire = 1;
+                } else {
+                    if (logged++ < 8)
+                        stripe_log(what, s, durable, "degraded mark not written", mrc);
+                }
             } else {
-                if (logged++ < 8)
-                    stripe_log(what, s, durable, "degraded mark not written", mrc);
-                failed++;
+                attempted[k] = 1;
+                /* A closed/superseded object needs no fragment proof once a
+                 * fresh authoritative read proves it absent. With fewer than
+                 * two durable fragments never write a one-fragment repair mark:
+                 * a still-live or uncertain object must keep failing fsync. */
+                int live = 1;
+                int absent = stripe_close_for_absence(s);
+                if (absent == EFS_OK && !sweep_expired(deadline))
+                    absent = efs_client_rpc_object_live(s->ino, s->inode_gen, s->ci,
+                                                         s->object, &live);
+                if (absent == EFS_OK && !live && !sweep_expired(deadline)) {
+                    retire = 1;
+                } else {
+                    if (logged++ < 8)
+                        stripe_log(what, s, durable, s->state[0] == FRAG_LOST || s->state[1] == FRAG_LOST ||
+                                   s->state[2] == FRAG_LOST
+                                       ? "need 2 (a member of another incarnation lost a fragment)"
+                                       : "need 2", EFS_ERR_IO);
+                }
             }
-        } else {
-            /* A closed/superseded object needs no fragment proof once a
-             * fresh authoritative read proves it absent. With fewer than
-             * two durable fragments never write a one-fragment repair mark:
-             * a still-live or uncertain object must keep failing fsync. */
-            int live = 1;
-            int absent = stripe_close_for_absence(s);
-            if (absent == EFS_OK && !sweep_expired(deadline))
-                absent = efs_client_rpc_object_live(s->ino, s->inode_gen, s->ci,
-                                                     s->object, &live);
-            if (absent == EFS_OK && !live && !sweep_expired(deadline)) {
-                retire = 1;
-            } else {
-                if (logged++ < 8)
-                    stripe_log(what, s, durable, s->state[0] == FRAG_LOST || s->state[1] == FRAG_LOST ||
-                               s->state[2] == FRAG_LOST
-                                   ? "need 2 (a member of another incarnation lost a fragment)"
-                                   : "need 2", EFS_ERR_IO);
-                failed++;
+            if (retire) {
+                pthread_mutex_lock(&commit_mu);
+                stripe_remove(s->ino, s->ci, s->object);
+                pthread_mutex_unlock(&commit_mu);
+                s->ino = 0;
+                remaining--;
             }
-        }
-        if (retire) {
-            pthread_mutex_lock(&commit_mu);
-            stripe_remove(s->ino, s->ci, s->object);
-            pthread_mutex_unlock(&commit_mu);
         }
     }
+    pthread_cond_destroy(&group.cv);
+    pthread_mutex_destroy(&group.mu);
     if (marked > 8)
         fprintf(stderr, "%s: %u more stripes marked degraded\n", what, marked - 8);
-    if (failed) {
+    if (remaining) {
         if (logged > 8)
             fprintf(stderr, "%s: %u more stripes without proof\n", what, logged - 8);
         rc = EFS_ERR_IO;
     }
     efs_client_rpc_set_deadline_ms(parent);
+    free(attempted);
     free(snap);
     return rc;
 }
