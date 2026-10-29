@@ -47,9 +47,28 @@ except ValueError: pass
 else: raise AssertionError('impossible timing accepted')
 print('AI collector: exact source roundtrip, drift refusal, bounded/incomplete accounting PASS; RDMA NOTRUN')
 
+# Reporting must refuse duplicate evidence and never call an unfinished matrix
+# complete. These are synthetic parser fixtures, never measured results.
+import sys, tempfile
+sys.path.insert(0,str(p.parent))
+import rdma_registry_results as results
+with tempfile.TemporaryDirectory(prefix='efs-ai-parser-') as directory:
+    work=Path(directory)
+    (work/'state.json').write_text(json.dumps(dict(verdict='RUNNING',cells=[])))
+    assert results.matrix_results(work)['verdict']=='INCOMPLETE'
+    (work/'state.json').write_text(json.dumps(dict(verdict='PASS_SCOPED',cells=[])))
+    assert results.matrix_results(work)['verdict']=='INCOMPLETE'
+    (work/'state.json').write_text(json.dumps(dict(verdict='PASS_SCOPED',cells=[dict(name='x'),dict(name='x')])))
+    try: results.matrix_results(work)
+    except ValueError: pass
+    else: raise AssertionError('duplicate matrix accepted')
+assert results.percentile([4,1,2,3],.5)==2
+assert results.percentile([4,1,2,3],.99)==4
+assert results.spread([1,3,5])==dict(n=3,median=3,minimum=1,maximum=5)
+print('AI results: partial/empty/duplicate refusal and summary arithmetic PASS; RDMA NOTRUN')
+
 # Run on the assigned Linux host only, once its test window is available.
 # No compiler/RDMA execution is hidden in the parser-only default invocation.
-import sys
 if '--native' in sys.argv:
     import os, shlex, subprocess, tempfile
     with tempfile.TemporaryDirectory(prefix='efs-ai-collector-',dir=os.environ.get('TMPDIR')) as d:
