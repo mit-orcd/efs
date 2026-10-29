@@ -36,6 +36,12 @@ export EFS_GIT_ID=$commit EFS_GIT_DESCRIBE=$commit EFS_GIT_BRANCH=agent/devel-k3
 export EFS_CLUSTER_SCRIPTS=$cluster EFS_TRANSPORT=auto EFS_RDMA_DEV=$dev EFS_FUSE_PREFIX=$fuse
 if [[ -d $fuse/lib64/pkgconfig ]];then lib=$fuse/lib64;else lib=$fuse/lib;fi
 export PKG_CONFIG_PATH=$lib/pkgconfig LD_LIBRARY_PATH=$lib
+if [[ $(hostname -s) == fcstor014 ]];then
+ tsanlib=${src%/src}/deps/tsan-rpm/usr/lib64
+ test -f "$tsanlib/libtsan.so.0.0.0"
+ export LIBRARY_PATH=$tsanlib LD_LIBRARY_PATH=$tsanlib:$lib
+ sha256sum "$tsanlib"/libtsan.so.0.0.0 "${src%/src}/deps/tsan-rpm/"*.rpm > "$art/private-tsan.txt"
+fi
 export TMPDIR=$src/tmp EFS_B6_KEEP=1 EFS_K35_KEEP=1
 unset LD_PRELOAD ASAN_OPTIONS LSAN_OPTIONS TSAN_OPTIONS EFS_SAN_ONLY EFS_LEAK_ONLY EFS_TEST_CMD_TIMEOUT EFS_TEST_TSAN EFS_TEST_SANITIZE EFS_SANITIZE
 mkdir -p "$TMPDIR" "$art/focused" "$art/gate"
