@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import signal
 import time
 import traceback
 
@@ -67,8 +68,8 @@ def main():
         run('archive-wake-object',['ar','r',out/'wake-libefs.a',out/'rdma.o'])
         run('build-streams-wake',cc+[source,out/'wake-libefs.a','-lpthread','-lm','-ldl','-libverbs',
                                     '-o',out/'streams-wake'])
-        run('streams-tcp-smoke',[out/'streams-native','1','100','2'],transport='tcp')
-        run('streams-rdma-smoke',[out/'streams-native','1','100','2'])
+        run('streams-tcp-smoke',[out/'streams-native','1','1000','2'],transport='tcp')
+        run('streams-rdma-smoke',[out/'streams-native','1','1000','2'])
         for repeat in (1,2,3):
             for streams in (1,8,32):
                 for label,transport in (('native','tcp'),('native','rdma'),('probe','rdma'),('wake','rdma')):

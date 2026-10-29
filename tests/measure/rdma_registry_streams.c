@@ -96,7 +96,7 @@ int main(int argc,char **argv) {
     br=pthread_barrier_wait(&ready); CHECK(!br || br==PTHREAD_BARRIER_SERIAL_THREAD);
     int overlapping_cycles=0;
     for(int i=0;i<cycles;i++) {
-        if (__atomic_load_n(&active_load,__ATOMIC_SEQ_CST)>0) overlapping_cycles++;
+        int began_during_load=__atomic_load_n(&active_load,__ATOMIC_SEQ_CST)>0;
         int fd[2]; CHECK(!socketpair(AF_UNIX,SOCK_STREAM,0,fd));
         pthread_t ct[2]; struct stream cs[2];
         for(int j=0;j<2;j++) {
@@ -104,6 +104,10 @@ int main(int argc,char **argv) {
             CHECK(!pthread_create(&ct[j],NULL,churn,&cs[j]));
         }
         for(int j=0;j<2;j++) CHECK(!pthread_join(ct[j],NULL));
+        /* Both endpoints have destroyed their connections before this check.
+         * An active load count only decreases after the release barrier. */
+        if (began_during_load && __atomic_load_n(&active_load,__ATOMIC_SEQ_CST)>0)
+            overlapping_cycles++;
     }
     for(int i=0;i<2*streams;i++) CHECK(!pthread_join(ts[i],NULL));
     uint64_t elapsed=now_ns()-start;
