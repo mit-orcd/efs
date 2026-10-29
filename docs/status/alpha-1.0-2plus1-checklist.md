@@ -389,6 +389,18 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
     K17–K21. This needs the 3-, 4- and 5-plus-host clusters, so they are
     set up in parallel with steps 2–10.
 
+- [ ] **BC — Unlink in a loaded parent: avoid the `recompute_times_up` child rescan.**
+  Found by AW ([evidence](aw-child-vector-index-20261028.md)). `rollup_sub_under`
+  (`src/meta/metadata.c`) ends in `recompute_times_up`, which rescans every child
+  of the parent (and each ancestor) to recompute exact time bounds. At 1 M
+  children this is 64-78 % of unlink time, so AW's O(1) child-vector deletion does
+  not change end-to-end unlink latency, and D removals stay O(D²). AW tried an
+  exact-skip fast path and reverted it: the convergence check caught a stale
+  `parent_tmin`. **Measure first** (comparisons and unlink ns at D = 1 K/100 K/1 M
+  with the child-vector index in place); a fix must keep the time bounds exact or
+  document the allowed staleness, with the AW convergence check as a gate. Do not
+  silently expand AW.
+
 ### Stage 1 additional letter tasks — observability interference (AB–AF)
 
 **User-directed Stage 1 addition, October 28.** AA is already assigned to W170;
