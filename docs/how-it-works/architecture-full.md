@@ -1860,6 +1860,41 @@ retained, inactive owned scratch pruned. No setting/wire change or merge/push.
 
 [Task T: budgets across hosts](../status/gate-budgets-per-host-20261028.md): **focused repair qualification PASS (scoped); budget completion held** on `agent/devel-task-t`, per the user's October29 scope reduction. Directory35a6e41b0 passed isolated controls and six full TCP gates (three each intel1/xorinox,548 commands,0 FAIL; host-limit NOTRUN and overruns retained). Fstor007's RDMA gate failed K34 REPORT BUSY-to-EIO; the old harness deleted that fixture, so only captured error output survives and cause remains unproven. Candidate288cb4e65 adds stopping-leader/read-hint fixes and failure retention; focused real-HCA RDMA K34 10/10, blocked-shutdown 3/3 and K43 3/3 passed, plus four unit controls. Source unchanged, no contention or leftover daemon/mount. Closed214-file capture retained and hash-verified; successful scratch pruned. Single-host scope, original K34 cause unproven. Full calibration/refit/confirmation held;92 bounds/slots/1100s target/1650s margin unchanged (model1504s). No overall PASS, merge or push. Earlier Nuc/AMD failures remain unqualified; no Task AF message.
 
+[FIN thirteen-check closure](../status/fin-gate-notrun-closure-20261029.md):
+**PASS (scoped)**, source `c571b862f`, isolated fcstor014 hardware IB.
+Full gate **546/0 FAIL/0 NOTRUN**, 679 s + 17 s build; all 546 exits reviewed.
+Real Valgrind, TSan/ASan/UBSan/LSan controls, isolated cluster-script contract
+and nine native RDMA checks PASS. Private THP collapse proves 96 KiB fixed
+versus 48 MiB old negative; removed-policy control fails. All 73 ownership
+samples clear; cleanup verified. Seven advisory overruns retained, hard bounds
+unchanged. Prior failures/fixtures and closed hashes retained; no merge/push.
+
+[FIN accounting follow-up](../status/fin-tcp-accounting-20261029.md): **FIXED (scoped,
+branch only)**, product `38f3cecba` on `agent/devel-k35-slow-fsync`. Strict
+hardware audit: 785/785 measured, post-setup TCP 0/0, violations 0; the
+one-byte violation control still detects payload. Full gate 546/0 FAIL/13
+NOTRUN (TCP profile/host limits); original and unsafe closed-state controls
+fail their intended assertions. Original failed audit/manifests and every
+fixture retained unchanged. No full release PASS, merge or push.
+
+[K35 slow-fsync follow-up](../status/k35-slow-fsync-20261029.md): **FIXED (scoped,
+branch only)**, `agent/devel-k35-slow-fsync`, product `1ab9fef83`.
+Proof runs before a slow COMMIT exhausts the same deadline; durability unchanged.
+Component/index/ASan/UBSan/TSan PASS; old-source control fails. Full gate
+545/0 FAIL/11 NOTRUN (host limits); hardware TCP/RDMA B6 slow + K35 PASS,
+303/335 exact K35 files, nine native/declaration checks PASS. Original failed
+fixtures/evidence retained. Raw-zero TCP counter audit failed on 18 one-octet
+receive deltas; no-payload FIN control reproduces the accounting gap, individual
+terminal states unavailable. No all-zero telemetry or full release PASS claim.
+
+[Task AF — management status contention](../status/af-status-snapshot-20261028.md):
+**Measured, no product change**, `agent/devel-task-af`, tested `f570fb0cd`,
+base `486aa3a46`. Thirty closed trials across xorinox and fstor007 TCP/RDMA:
+no observed10Hz pump/write bottleneck outside spread; hardware CPU/stat costs
+retained. Gate545/1FAIL/11NOTRUN: K35 slow-fsync EIO60s reproduces on untouched
+base. Both failed investigations retained; successful scratch pruned, evidence
+hashed. Full release PASS is not claimed.
+
 [Wave 31 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`3c866b7bf`; gate at `d891c106e`)**: Task I ([review](../status/task-i-20261026.md)): efs-fuse bounded malloc arenas and fixed mmap threshold, client cache small-page hint, RDMA connection buffers in dedicated mappings, non-link-local GID preference, truncate sweep yields to fragment GC with a resume cursor, pack-state proof falls back to another voter on BUSY/NOT_PRIMARY; fstor007 RDMA/TCP hours 2,080 exact files each; merge-time: devel's newer keep-on-failure and BUSY-resync fixes kept, Task I's duplicate `tests/resync_setup.py` removed. devel's own `214c541aa`…`b9c2fad85` (terminal ticket proof before fsync retires an abandoned replay PUT; 49/49 sanitizer checks on intel2) and `7b7c9007f` (Stage 3 plan) merged in. Task Z / **D46** ([decision](#appendix-4--decisions--taken-and-pending-register-d1d36), [sheet](../status/stage1-decision-sheet-20261028.md)) as the user ruled it item by item: A4 on fcstor007–011 (`/data1/01`), 3/4/5 hosts × TCP/RDMA, and alpha 1.0 also on all 13 fcstor nodes; W122 required in alpha 1.0; member-down clean unmount a required fix (**K54**, OPEN, blocks alpha: yes); 33-tunable audit; F12 stays D45 (no authentication in any alpha); S1 command dispositions and `--writers` removal not adopted. Task X ([evidence](../status/k52-immediate-readback-20261028.md)): Stage 2 query launches use `posix_spawn`; **K52 DECIDED under K10/W121 (D40)** after four-host controls (fork/read 17 FAIL; spawned reader 22,293 and fork-free D3 59,112 exact PASS), the eight Task V failures stay unclassified; its node9900 B6 full-quota failure is K53's second occurrence. Task X's harness test passed on intel1 against the merged tree; the full gate predates Task X and the Stage 3 docs. K register: 54 rows, 11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN (K48, K53, K54).
 
 [Wave 30 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`833f25fe8`; gate at `d891c106e`)**: Task W ([evidence](../status/gate-notrun-cleanup-20261028.md)): cluster-stop and the real stalled-compactor follower-bound test now run, directory BUSY contract checked without counting transport attempts; `test_code_graph.py` stays in the developer-only `make code-graph-check`, not `test-long`. ORCD dd profile ([evidence](../status/orcd-test-dd-profile-20261028.md)): client durability records indexed by full stripe identity (`3769f44bb`), single-stream `dd` 207 → 332 MiB/s, fsync handling 8.4 s → 0.2 s, 1 GB/s still unmet; merge-time: `test_orcd_dd_profile.py` moved to `make test` (mocked unit, no budget row), and the branch gate's B6 full-quota over-admission recorded as **K53** (OPEN, blocks alpha: yes). Task AA / W170 ([evidence](../status/w170-efs-bench-20261028.md)): `efs-bench` writes through normal ticketed publication, raw store modes removed, valgrind leak workloads fail closed, `test_bench_published.py` in `test-long`. Gated together with wave 31: intel1 `make test-all` (8 jobs) at `d891c106e`: **545 / 0 FAIL / 12 NOTRUN** (host limits: no cluster scripts, valgrind headers or RDMA device; sanitizer attach refused), 803 s, INCOMPLETE.

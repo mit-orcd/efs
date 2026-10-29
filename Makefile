@@ -120,6 +120,8 @@ TEST_SRCS = tests/test_rdma_segmented.c tests/test_expiry.c tests/test_query_pol
 TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_txn_retire tests/test_pub_stage tests/test_namespace_session tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_append_cleanup tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_put_orphan tests/test_store_gc tests/test_reclaim tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_kv_seg_bloom tests/test_kv_lsm_concurrent tests/test_kv_block_hash tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_declaration_gate tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_follower_bound tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
 TEST_SRCS += tests/test_iostats_snapshot.c
 TEST_BINS += tests/test_iostats_snapshot
+TEST_SRCS += tests/test_tcp_counts.c
+TEST_BINS += tests/test_tcp_counts
 TEST_SRCS += tests/test_kv_reader_gate.c
 TEST_SRCS += tests/test_shared_primitives.c
 TEST_BINS += tests/test_shared_primitives
@@ -623,6 +625,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_publication_writeback.py
 	python3 tests/test_lane_bootstrap_export.py
 	./tests/test_wire
+	./tests/test_tcp_counts
 	./tests/test_declaration_gate
 	python3 tests/test_declaration_gate_handler.py
 	python3 tests/test_rdma_fork_poller.py
@@ -1261,3 +1264,6 @@ tests/decoders/apply: tests/decoders/apply.c src/server/raft_host.c tests/decode
 $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS): include/efs/byteorder.h
 src/sim/sim_raft.o src/server/raft_host.o: include/efs/meta_setattr_command.h
 src/kv/kv_mem.o src/kv/kv_snap.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_seg.o src/kv/kv_wal.o: src/kv/kv_order.h
+
+# FIN accounting is shared by RDMA diagnostics and the real-socket regression.
+src/common/rdma.o tests/test_tcp_counts: src/common/tcp_counts.h
