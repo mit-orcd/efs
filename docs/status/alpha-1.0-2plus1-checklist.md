@@ -509,7 +509,10 @@ The Stage 1 exception above applies; P3-A–P3-F and AB–AF retain their own sc
   coverage plus deterministic simultaneous slab growth, allocation failure,
   thread exit and saturated writers with demand reads. Retain exact accounting
   and ownership under ASan/TSan; measure end-to-end gain as well as allocator cost.
-
+  **Measured 2026-10-28, no change** (`docs/status/ag-bufpool-lock-20261028.md`):
+  `g_bp_mu` wait share ≤ 0.0004 % at 32 streams (threshold 5 %), cold slab growth
+  25–54 µs a handful of times per client; the lock stays as is.
+- [x] **AH — Mount-wide chunk-map read/write contention.** MEASURED, no change: `g_client.idx_mu` sees 2.4-5.6k acquisitions/s, flat with writer count (the fsync-patterned workload is the limiter); trylock misses reach 25-30 % at 32 writers but the median contended wait is ≈0.35 us and the aggregate wait stays ≤0.15 % of wall — far below the stated action threshold (~1 % of wall or contention visibly capping throughput). Nothing was partitioned. [evidence](ah-chunk-map-lock-20261028.md)
   `src/client/read.c::chunk_get_worker` and `rdcache_map_gen` take
   `g_client.idx_mu` to read chunk mappings; `src/client/write.c` takes the same
   mutex around chunk/base/delta updates (for example `dcache_put_now_budgeted`).
@@ -780,7 +783,11 @@ verdict changes; the Stage 1 exception applies.
   packed reader, direct-I/O-required and K37 coverage; missing/truncated files,
   wrong identity, bad payload, read error and concurrent reclaim. Separate this
   server disk task from AK's client receive copy/double hash work.
-
+  **Measured 2026-10-29, no change** (`docs/status/ap-segment-read-combined-20261028.md`):
+  a combined read saves one pread + one bounce per packed GET, but cold and
+  repeated packed-read p95/p99 are identical within a 2–4× wider rep spread on
+  intel2 NVMe at 1/8 readers; the threshold is not met and the code stays as is.
+- [x] **AQ — Segment directory barriers: share only covered namespace fsyncs.**
   `src/server/segment_store.c::sg_write` writes and fsyncs each newly created
   fragment file, then `sg_sync_path` opens/fsyncs/closes its directory.
   `sg_mkdirs` additionally syncs parents for newly created directory levels.
@@ -799,7 +806,23 @@ verdict changes; the Stage 1 exception applies.
   concurrent creators and crash at each write/barrier boundary. Every successful
   reply must retain the same durability guarantee. This is distinct from P3-D's
   client COMMIT workers and the ordinary root barrier, which already groups work.
-
+  **Measured 2026-10-29, no change** (`docs/status/aq-segment-dir-barriers-20261028.md`):
+  same-directory in-flight overlap 0.20–1.27 % at full packer rate (threshold
+  10 %), 0 % under K37 rebuilds, median directory fsync 1 µs; the sync group
+  is not adopted for segment directories.
+- [x] **AR — Ordinary PUT retries: quantify and reduce identical-object rewrites.**
+  **MEASURED, NO CHANGE (record and stop) on branch `agent/devel-taskar`
+  (`9b5de147e`, measurement assets only), merged into devel (wave 32)** (Oct 29,
+  [evidence](ar-put-retry-rewrites-20261028.md)): zero EEXIST rewrites in the
+  D4 small-file load, the append_failover baseline and its
+  --lose-reserve-every gate (all three daemons, ar_over=0; reserve-reply loss
+  writes new objects, never re-PUTs an existing one). Counter validated by
+  forcing one lost PUT reply per fragment
+  (EFS_FAULT_PUT_REPLY_COLLISION=1): exactly one 64 KiB rewrite per node.
+  Below the 1 % threshold in both loads; no completion-proof or verified-reuse
+  design is built. Named gates PASS (store overwrite, PUT ticket, PUT upload,
+  PUT ticket RPC); test-all on intel1 546/1/12 with the one FAIL the
+  pre-existing devel b6 slow-mode defect.
   `src/server/store.c::server_write_fragment_to_path` treats EEXIST on the
   exclusive-create attempt as an overwrite and calls `shard_io_thread` again
   with `no_create`. That path writes the full padded payload and I25 tail; it
