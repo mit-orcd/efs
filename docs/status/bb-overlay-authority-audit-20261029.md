@@ -1,14 +1,18 @@
 # BB — client overlays and metadata authority
 
-`agent/devel-bb`, base `74d34d588`; gate NOTRUN. Untouched-product control
-`e6856dd08` on xorinox: 8 mounted cases, 5 FAIL, 3 PASS, checked cleanup PASS.
-Evidence: `docs/status/bb-overlay-authority-audit-20261029.md`.
-ORCD TCP/RDMA NOTRUN. Findings BB1 (attribute overlays), BB2 (cached mutation
-shortcuts) and BB3 (cached DAC checks) have candidate fixes; qualification RUNNING.
-BB4 additionally captures reuse of a pre-truncate mapping after fresh metadata.
-Registered as K59 (attributes/EOF/mapping), K60 (mutation authority), and K61
-(permission authority); all require integration and acceptance before alpha.
-No merge, push, new product switch, cache protocol or wire/store change.
+`agent/devel-bb`, tested head `02f861e4a`: **TOTAL 553 FAIL 0 NOTRUN 10**
+(base mounted matrix: 5 FAIL / 8 cases).
+`docs/status/bb-overlay-authority-audit-20261029.md`.
+ORCD TCP/RDMA scoped PASS; external cluster scripts NOTRUN (absent).
+K59 attributes/EOF/maps FIXED.
+K60 cached mutation shortcuts FIXED.
+K61 cached DAC FIXED. No merge/push; integrated devel acceptance remains.
+
+**Current verdict: COMPLETE scoped audit; bulk cleanup HOLD**, not blanket alpha acceptance.
+The final immutable source has the `791d57787` client repair plus the register
+correction and test/evidence tooling; it merges no upstream server fixes.
+Earlier failures below remain recorded, including the unclassified original
+`c0266ad36` read whose returned bytes were never captured.
 
 ## Authority contract from the actual paths
 
@@ -91,7 +95,7 @@ in both tables, preserving those independent findings.
 ## Reproduction, environment and current results
 
 xorinox: unprivileged `maik` (uid 1000), x86_64 Linux
-`6.12.0-211.67.1.el10_2.x86_64`, system libfuse 3.16.2; private trees under
+`6.12.0-211.67.1.el10_2.x86_64`, GCC 14.3.1, system libfuse 3.16.2; private trees under
 `~/efs-taskBB-20261029`, raw captures under `~/efs-artifacts/taskBB-20261029`.
 The existing `efs` user's `/data1/efs/intel-mnt` was left untouched. Another
 agent's sanitizer build finished before this task's host builds/tests began.
@@ -295,3 +299,162 @@ and valid links. **Those upstream fixes/results are not part of this pre-wave-37
 BB product build and were not independently revalidated by BB.** No upstream
 server code is merged. The corrected register is checked locally before a new
 immutable export and a complete qualification; the failed result is unchanged.
+
+## Final qualification — source `02f861e4a`
+
+**xorinox reserved-window comparison PASS scoped.** Untouched product control
+`e6856dd08` (product inputs equal base `74d34d588`) passed GC, core 218/218
+and original peer 68/68 in 189.2 s. Candidate: native controls, expected old-code
+negative controls, ASan/UBSan/leak component, matrix **8/8**, GC, core
+**218/218**, peer **72/72** PASS; matrix 29.7 s, GC/POSIX 142.1 s.
+The full gate is **TOTAL 553 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (957s)
+OVERBUDGET 1 BUILD 0s**. The one advisory overrun is grow-b 120.4/120 s;
+its budget and workload are unchanged. No competing EFS/test/build sample
+was observed after the 60-second quiet boundary. Sampling every 10 seconds
+is not an exclusive-host lease; the identified resident intel-mnt client
+remained in place with its CPU ticks recorded.
+
+Ten xorinox NOTRUNs are the absent external cluster scripts, declaration
+RDMA branch, RDMA transport and seven segmented modes. ORCD separately
+executes those nine RDMA checks; the reported full-gate line remains unchanged.
+The external `~/git/cluster` script gate is still NOTRUN; BB edits neither
+that repository nor devops.
+
+**node9900 hardware PASS scoped.** Private tree
+`/tmp/efs-taskBB-orcd-02f861e4a`, RHEL 9.8 kernel
+`5.14.0-687.39.1.el9_8.x86_64`, AMD EPYC 9474F (192 logical CPUs), active
+`mlx5_0` port 1, unlimited memlock, local `/tmp` on `/dev/md0`, private FUSE
+from `/data1/efs/deps/libfuse/lib64` (FUSE 3.16.2), GCC 11.5.0.
+Existing orcd-mini client PID 2380112
+(start ticks 353877425), endpoint `10.1.99.1:17432`, mount
+`/data1/efs/orcd-mini-mnt`, remains unchanged. No other test/build work was
+observed in the hardware pre/post checks. No existing cluster was stopped,
+formatted, deployed or queried by the fixture.
+
+TCP matrix **8/8**, forced-RDMA matrix **8/8**, strict cleanup on both.
+The RDMA matrix retains verbs descriptors for all three owned daemons and
+both clients at mount and after its owned member restart. Declaration RDMA,
+RDMA transport and all seven segmented modes PASS. Forced-RDMA GC reclamation,
+core **218/218**, peer **72/72** PASS (131.0 s). GC also retains per-process
+verbs-device proof across its restarts. The hardware controller checks that
+all four built product binaries remain byte-identical throughout qualification.
+
+Both matrices use three 1 GiB members, two mounts, dynamic held loopback
+ports, O_DIRECT fragments, default packing/recovery and commands policy,
+expiry off. GC uses four 1 GiB members across two root parents, ports
+19950–19953 on xorinox / 19960–19963 on node9900, four concurrent core cases,
+unchanged 30 s per-case deadline. All owned processes exited and mounts were
+absent at the final independent checks. This is single-host HCA functional
+coverage, not multi-host failure, power-loss or performance acceptance.
+
+Build identities:
+
+```text
+xorinox: efsd 02f861e4a (branch agent/devel-bb, built 2026-10-30T02:10:56Z on xorinox)
+node9900: efsd 02f861e4a (branch agent/devel-bb, built 2026-10-30T02:06:49Z on node9900)
+```
+
+All four per-host product SHA256 values, native RDMA binary hashes, compiler,
+CPU, kernel, filesystem, FUSE versions and commands are in the sealed states
+and host manifests. This is targeted ASan/UBSan/leak coverage of real client
+functions, not a full sanitized mounted suite or TSan qualification.
+
+### Reproduce without private captures
+
+Use fresh owned directories, matching immutable Git exports, available FUSE
+and no competing test/build work. Export `02f861e4a` as SOURCE and `e6856dd08`
+as BASE, each into a fresh source directory below PRIVATE, whose basename is
+`efs-taskBB-20261029`. Build BASE with its matching EFS_GIT_ID / DESCRIBE
+and `make -j8 all tests/faults/efsd`. Then:
+
+```sh
+python3 SOURCE/tests/measure/bb_quiet_qualify.py PRIVATE SOURCE BASE NEW_OUTPUT 02f861e4a \
+  --background-client-pid VERIFIED_RESIDENT_PID
+```
+
+The resident exception verifies UID, endpoint, mount and start identity;
+it never permits an arbitrary competing workload. The controller waits at
+most four hours, compares base/candidate, runs the exact native, mounted,
+sanitizer and eight-job full recipes, and refuses reused fixture paths.
+An observer overlap or unknown process state prevents quiet qualification.
+
+On node9900 export the same commit to
+`/tmp/efs-taskBB-orcd-02f861e4a/src`, then run the committed hardware driver
+in a detached screen, with retained stdout/stderr and exit code:
+
+```sh
+python3 SOURCE/tests/measure/bb_orcd_qualify.py PRIVATE 02f861e4a --phase build
+python3 SOURCE/tests/measure/bb_orcd_qualify.py PRIVATE 02f861e4a --phase qualify \
+  --loopback-proof CLOSED_CANDIDATE_STATE --quiet-proof CLOSED_COMPARISON_STATE
+```
+
+The hardware driver requires closed matching-source zero-failure receipts,
+the exact candidate-state hash, no observed overlap, and unchanged local
+built binaries before any live hardware stage. It invokes the sibling live
+matrix tool with `--source SOURCE`; no exported product source is edited.
+
+The stale/reordered reply and cold-cache schedules are deterministic tests
+of extracted real production wrappers with table/RPC boundary adapters;
+the LRU control exercises actual eviction code. They are not a wire-delay
+experiment or a mounted pressure-forced LRU campaign. Mounted peer mutations
+start before explicit fsync, but background REPORT may already publish;
+the native dirty/pinned-body controls force that ownership state explicitly.
+The coverage categories are separate, not passed off as one end-to-end trace.
+
+### Retention and cleanup
+
+Closed xorinox capture:
+`/home/maik/efs-artifacts/taskBB-20261029/closed-02f861e4a`, **387 files**,
+independently re-read and compared with every selected original before fsync.
+`SHA256SUMS` hash:
+`a95d0384dcc404e7a066d12b4645da817461d8140942d7c7d935052d7241c308`;
+receipt hash:
+`baa81ca99a930e29b035272c5791f5d60ea4af469685c1f3a7b807717dcfbe15`.
+
+Closed ORCD capture:
+`/data1/efs/evidence/taskBB-20261029-node9900-02f861e4a`, **68 files**;
+manifest hash:
+`586534bf8549876b3ae9e412e0eb1ea98780c00e1e9ca5c755b8b6968efcf3b3`;
+receipt hash:
+`5fd8e81182b964ba7ecedff9fb6f5d5c47b3725fde63cb39094dbd4491658da6`.
+Both copies pass a separate `sha256sum -c SHA256SUMS --quiet`.
+Committed retention method: `tests/measure/bb_seal_evidence.py` copies closed
+logs/results/captures only, refuses active states, excludes runtime store
+traversal, verifies source/copy hashes and fsyncs files and directories.
+
+The six failed xorinox fixture trees remain on-host for open investigation
+and integration review: base matrix, ff91/c026/01c matrices, and the original
+791d failed GC roots a/b. Their **3,398 regular files** have a separate full
+inventory at
+`/home/maik/efs-artifacts/taskBB-20261029/failed-fixtures-02f861e4a.SHA256SUMS`,
+SHA256 `fe70517dd7e28a6bb98e7cff39377a7f3a9664eaa842b61e601547549ccb07c7`.
+This is a retention checksum inventory, not a claim of logical payload
+correctness or an explanation of the missing c026 observation. No failed
+store is deleted or opened with another build.
+
+**Bulk cleanup HOLD — nothing pruned.** Automatic approval review rejected
+removal of the three passing/build-only ORCD scratch trees because it flagged
+an unresolved working-directory conflict with unrelated screen PID 201758,
+`tiny-files-4kb`. Its cwd is protected: ordinary lsof reports Permission denied,
+and a single read-only `sudo -n readlink` query required a password. No
+credential was entered, screen command sent or process signaled; the rejected
+deletion was not bypassed. All three `/tmp/efs-taskBB-orcd-{17027103e,791d57787,
+02f861e4a}` trees remain intact. This is cleanup uncertainty, not a product-gate
+failure. User confirmation of that screen's cwd, or a decision to retain the
+scratch trees, is needed to close the cleanup item safely.
+
+Xorinox passing source/build trees are also retained pending the final
+retention decision; the six failed fixture trees remain for open investigation.
+The 3,398-file inventory passes another complete `sha256sum -c` after the
+cleanup preflight. No private tree or failed file was deleted on either host.
+`RETAINED.txt` records the hold beside each capture; the original capture
+manifests/receipts are unchanged. All known BB EFS/test processes exited and
+owned mounts are absent; existing user/agent clusters are untouched.
+
+Retention-note hashes (management records added after the sealed run captures):
+node9900 `RETAINED.txt`
+`1841c42696048702a89b8df91b2e2d9604cf425484e4fb8d65ffaf800c296075`;
+xorinox `~/efs-artifacts/taskBB-20261029/RETAINED.txt`
+`73de878ab6768446083f4d8313937eda012d789f643c34d776dfe0af6a089242`.
+The earlier failed cleanup preflight and rejected retry changed no directory;
+there is no PRUNED.txt claiming otherwise.

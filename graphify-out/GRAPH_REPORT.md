@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `791d57787fc33590ce71e2a3601d0bf281722d66`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,143 nodes, 70,730 directed typed edges, 549 communities.
+Source base: `02f861e4a38600611bb425a9a845cd49bd742bf1`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,152 nodes, 70,765 directed typed edges, 577 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,20 +19,20 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 26367
+- `calls`: 26372
 - `case_of`: 116
-- `contains`: 25899
+- `contains`: 25913
 - `defines`: 1964
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7096
-- `imports_from`: 904
+- `imports`: 7106
+- `imports_from`: 906
 - `indirect_call`: 706
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 2373
+- `mentions_symbol`: 2376
 - `method`: 640
-- `rationale_for`: 1301
+- `rationale_for`: 1302
 - `references`: 2110
 - `references_path`: 1114
 - `regression_for`: 8
@@ -46,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1614}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1623}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.

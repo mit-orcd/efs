@@ -1626,13 +1626,15 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**RUNNING**, branch `agent/devel-bb`, K59–K61. Reserved-window base/core/peer
-and candidate matrix 8/8, core 218/218, peer 72/72 and targeted sanitizers PASS.
-Full gate 553/1 FAIL/10 host-limited NOTRUN: only the branch's missing K57/K58
-register rows failed; corrected from committed upstream metadata, no server
-code merged. Fresh qualification pending; hardware remains gated. The original
-791d timeout failures under observed K42 overlap remain FAIL, cause unproven.
-No alpha closure.
+**COMPLETE scoped**, source `02f861e4a`, branch `agent/devel-bb`, K59–K61 fixed.
+Xorinox full gate **553/0 FAIL/10 host-limited NOTRUN**; reserved-window base
+and candidate comparisons PASS. ORCD node9900 TCP/RDMA matrices **8/8 each**,
+RDMA transport/segmented/declaration, reclamation, core **218/218**, peer
+**72/72** PASS. Nine RDMA skips covered separately; external cluster-script
+gate remains NOTRUN. Both evidence copies sealed/verified; original failures
+and six failed fixture trees retained on xorinox. Bulk cleanup HOLD: automatic
+approval flagged an unrelated protected screen cwd; no scratch trees deleted.
+No merge/push or alpha closure.
 
 [K55 — slow storage COMMIT](../status/k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
