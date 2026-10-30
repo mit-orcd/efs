@@ -1626,9 +1626,6 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-<<<<<<< HEAD
-[Task H split: K45/K51 group](../status/h-k45-shutdown-20261029.md): **F24** (rejoin-thread ownership joined in bounded teardown; devel heartbeat owner kept) and **F35** (`raft-resync` retries only a definite BUSY inside the existing 30 s I/O bound) ported to `agent/h-k45-shutdown`, both named reproductions fail on devel source and pass with the change; K54 interaction checked, none. Not merged; intel1 gate 556 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
-
 [H-recovery — Task H F26–F29](../status/h-recovery-20261029.md): **F26 K36/K47 re-probe, F28 K43
 pin retention and F29 K36 recovery scheduling PASS focused** on branch `agent/h-recovery`
 (each test fails on devel source); F27 not ported, devel `35a6e41b0` already covers it.
@@ -1638,7 +1635,7 @@ K36, K43, K47 statuses unchanged; **K48 stays OPEN**.
 (allocator reservation, receipt replay, bootstrap/CREATE authority, snapshot
 import, KV flush cohorts, delayed-pump heartbeat) ported to
 `agent/h-k22-allocator`, pending merge; unit regressions PASS, live K22 NOTRUN.
-=======
+
 [Task BB — client overlay authority](../status/bb-overlay-authority-audit-20261029.md):
 **COMPLETE scoped**, source `02f861e4a`, branch `agent/devel-bb`, K62–K64 fixed.
 Xorinox full gate **553/0 FAIL/10 host-limited NOTRUN**; reserved-window base
@@ -1649,7 +1646,6 @@ gate remains NOTRUN. Both evidence copies sealed/verified; original failures
 and six failed fixture trees retained on xorinox. User chose to retain passing
 scratch/build trees on both hosts for review; cleanup choice closed by retention.
 No trees deleted, merge/push or alpha closure.
->>>>>>> agent/devel-bb
 
 [K55 — slow storage COMMIT](../status/k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
@@ -1864,6 +1860,8 @@ full acceptance are separate states.
 - [H K38/K40 publication port](../status/h-k38-publication-20261029.md): F02–F04, F07–F09, F25 ported from `agent/task-h-repair` with retained regressions; F01/F06 already on devel, F05 not needed; gate result in the page; not merged.
 - [Task H devel baseline](../status/task-h-devel-baseline-20261029.md): branch fix tests run against devel `74d34d588` on nuc; 18 DEVEL-BUG, 2 NOT-NEEDED, 13 NOCOMPILE, 2 NO-TEST of 35 rows; measurement only.
 - [H-K42 session port](../status/h-k42-session-20261029.md): Task H F21–F23 (exact-epoch revoke ACK, BEGIN cleanup reserve, empty-cleanup proof) ported to devel with fail/pass evidence; no K row changed.
+
+- [H-K33 routing fixes](../status/h-k33-routing-20261029.md): Task H F30-F32 client routing/deadline fixes ported to `agent/h-k33-routing` with retained failing tests; F33/F34 already on devel; branch, not merged.
 
 [Task AX](../status/ax-hardlink-alias-index-20261028.md): **hard-link attribute fan-out no longer scans unrelated rows** (branch `agent/devel-ax`, merged into devel Oct 29, `a50741e3e`). Measured on xorinox: chmod/truncate/link on a hard-linked file cost 13–20 ms at 1 M loaded rows (0.9–1.3 ms at 100 K), independent of alias count; a per-table alias vector makes it 0.0003–0.0006 ms, independent of rows. Gate xorinox: 553 commands, 0 FAIL, 10 host-limited NOTRUN. `make asan-check` fails 4 cases on xorinox identically on untouched devel (join does not answer): not this change, open for the coordinator. Unlink in a 1 M-child directory stays 8–15 ms: that is AW's child-vector scan.
 [Task BA](../status/ba-deletion-authority-audit-20261029.md): **deletion authority audited** (branch `agent/devel-ba`, not merged). Every delete caller is tabulated with its fence, exact identity and non-resurrection argument. Three gaps: **K59** a delayed segment PUT or rebuild recreated a retired segment (fixed: exclusive guard before the authority read); **K60** recovery and segment delete both debited one file's bytes (fixed: only the successful unlink debits); **K61** a delayed ordinary PUT can rewrite a superseded fragment (open, reproduction `test_ba_upload_retire` not in the gate: the fix moves the ReadIndex on the PUT hot path). Not run: a three-member Raft crash matrix. Gate on AMD: TOTAL 556, 1 FAIL (k42 teardown, intermittent on unchanged devel on AMD too, 2/5 vs 3/5), 2 host-limited NOTRUN.
