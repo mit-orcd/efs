@@ -66,8 +66,11 @@ static void sess_pack_hdr(uint8_t *payload, uint8_t group, uint8_t sub,
 int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,
                                 const uint8_t uuid[EFS_OPID_UUID_LEN],
                                 uint32_t old_epoch, uint32_t shard, int appends,
-                                struct efs_msg_raft_mkfs_reply *reply)
+                                struct efs_msg_raft_mkfs_reply *reply,
+                                uint64_t *last_wait_reason)
 {
+    uint64_t last_wait=0;
+    if (last_wait_reason) *last_wait_reason=0;
     uint8_t payload[27] = {0};
     uint32_t length=sizeof(payload);
     if(appends) {
@@ -92,7 +95,10 @@ int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,
     int result = EFS_ERR_BUSY;
     for (unsigned batch = 0; batch < 4096; batch++) {
         if (efs_net_remaining_ms(0x7fffffff) <= 0) break;
+        memset(reply,0,sizeof(*reply));
+        reply->leader_hint=-1;
         int rc = sess_rpc(rpc, payload, length, reply);
+        if (rc!=EFS_OK) reply->rc=rc; /* no reply still has its transport error */
         /* NOT_PRIMARY explicitly rejects proposal admission. Cold owners can
          * remain leaderless beyond sess_rpc's redirect window. Retry only
          * that definite rejection, or a BUSY the server certifies as a
@@ -103,13 +109,22 @@ int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,
          * bounding socket waits). */
         if (rc == EFS_ERR_NOT_PRIMARY ||
             (rc == EFS_ERR_BUSY && efs_session_cleanup_retry_ok(reply, appends))) {
+            last_wait=rc==EFS_ERR_BUSY ? reply->salt : 0;
             usleep(50000);
             continue;
         }
-        if (rc != EFS_OK) { result = rc; break; }
+        if (rc != EFS_OK) {
+            result=rc;
+            if (rc==EFS_ERR_NET && last_wait && efs_net_remaining_ms(0x7fffffff)<=0)
+                result=EFS_ERR_BUSY; /* exhausted wait, never a completed cleanup */
+            break;
+        }
+        last_wait=0; /* progress supersedes an earlier blocking observation */
         if (reply->salt == 1) { result = EFS_OK; break; }
         if (reply->salt != 0) { result = EFS_ERR_PROTO; break; }
     }
+    if (last_wait_reason && result==EFS_ERR_BUSY &&
+        efs_net_remaining_ms(0x7fffffff)<=0) *last_wait_reason=last_wait;
     efs_net_set_deadline_ms(saved);
     return result;
 }
@@ -163,8 +178,9 @@ struct sess_stage {
 
 static int sess_item_step(struct sess_stage *st, uint32_t i,
                           struct efs_msg_raft_mkfs_reply *r, const char **phase,
-                          uint32_t *failed)
+                          uint32_t *failed, uint64_t *last_wait_reason)
 {
+    *last_wait_reason=0;
     _Static_assert(EFS_MD_SESSION_CLEANUP_PROBE_LEN <= EFS_MD_SESS_FENCE_LOC_LEN,
                    "one payload buffer for both requests");
     uint8_t payload[1 + EFS_MD_SESS_FENCE_LOC_LEN];
@@ -194,9 +210,9 @@ static int sess_item_step(struct sess_stage *st, uint32_t i,
             if (!(pending >> b & 1))
                 continue;
             *failed = sh;
-            rc = efs_session_cleanup_bounded(st->rpc, st->uuid, st->old_epoch, sh, 0, r);
+            rc = efs_session_cleanup_bounded(st->rpc, st->uuid, st->old_epoch, sh, 0, r, last_wait_reason);
             if (rc == EFS_OK)
-                rc = efs_session_cleanup_bounded(st->rpc, st->uuid, st->old_epoch, sh, 1, r);
+                rc = efs_session_cleanup_bounded(st->rpc, st->uuid, st->old_epoch, sh, 1, r, last_wait_reason);
             if (rc != EFS_OK)
                 return rc;
         }
@@ -237,14 +253,15 @@ static void *sess_stage_worker(void *arg)
         pthread_mutex_unlock(&st->mu);
         if (i >= st->n)
             break;
-        rc = sess_item_step(st, i, &r, &phase, &failed);
+        uint64_t last_wait_reason=0;
+        rc = sess_item_step(st, i, &r, &phase, &failed, &last_wait_reason);
         pthread_mutex_lock(&st->mu);
-        st->last = r;
+        if (st->rc==EFS_OK) st->last = r; /* retain the first failing reply */
         if (rc != EFS_OK && st->rc == EFS_OK) {
             st->rc = rc;
             st->failed = failed;
             st->phase = phase;
-            st->reason = r.salt;
+            st->reason = last_wait_reason ? last_wait_reason : r.salt;
         }
         if (rc == EFS_OK)
             st->done += (uint32_t)__builtin_popcountll(st->units[i].mask);

@@ -138,6 +138,7 @@ static double run(unsigned parallel,int expect,const char *phase,uint32_t shard)
     clock_gettime(CLOCK_MONOTONIC,&b);
     if(rc!=expect)fprintf(stderr,"rc=%d phase=%s\n",rc,res.phase);
     assert(rc==expect&&res.ntouch==N);
+    if(expect)assert(res.last.rc==expect); /* later workers must not overwrite the failing reply */
     if(phase)assert(!strcmp(res.phase,phase)&&res.shard==shard);
     if(!expect) {
         assert(res.state==EFS_SESSION_ACTIVE&&progress_fence==N&&progress_clean==N);

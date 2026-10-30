@@ -49,7 +49,7 @@ static inline int efs_session_busy_retry_ok(const uint8_t *payload, uint32_t ple
 static inline int efs_session_cleanup_retry_ok(const struct efs_msg_raft_mkfs_reply *r,
                                                int appends)
 {
-    if (r->index || r->term)
+    if (r->rc != EFS_ERR_BUSY || r->index || r->term)
         return 0;
     return appends ? r->salt >= EFS_MD_SESSION_APPEND_RETRY_SALT &&
                      r->salt <= EFS_MD_SESSION_APPEND_WAIT_GONE
@@ -81,11 +81,15 @@ int efs_session_storage_barrier(const struct efs_session_rpc *, const uint8_t *p
                                 uint32_t plen, struct efs_msg_raft_mkfs_reply *out);
 /* Exact lease/lock (appends=0) or append (appends=1) cleanup of one shard
  * for old_epoch, eight keys per RPC, within EFS_SESSION_CLEANUP_BUDGET_MS.
- * OK once the phase is empty; a certified BUSY is repeated every 50 ms. */
+ * OK once the phase is empty; a certified BUSY is repeated every 50 ms.
+ * At deadline after a certified wait, returns terminal BUSY even if the last
+ * transport call timed out. reply retains that call's actual error and is
+ * never a retry certificate. Optional last_wait_reason is diagnostic only. */
 int efs_session_cleanup_bounded(const struct efs_session_rpc *,
                                 const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t old_epoch,
                                 uint32_t shard, int appends,
-                                struct efs_msg_raft_mkfs_reply *reply);
+                                struct efs_msg_raft_mkfs_reply *reply,
+                                uint64_t *last_wait_reason);
 struct efs_session_revoke_result {
     uint32_t epoch, state, ntouch; /* the owner's view at the end */
     uint32_t old_epoch, shard;     /* the revoked epoch; shard where cleanup stopped */

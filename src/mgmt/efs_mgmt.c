@@ -1958,7 +1958,7 @@ static int cmd_raft_session(int argc, char **argv)
         struct sess_seed seed = {host, port};
         const struct efs_session_rpc rpc = {&seed, sess_seed_submit, 0, NULL};
         int rc = efs_session_cleanup_bounded(&rpc, uuid, (uint32_t)old,
-                                      (uint32_t)target, !strcmp(op,"cleanup-appends"), &reply);
+                                      (uint32_t)target, !strcmp(op,"cleanup-appends"), &reply, NULL);
         printf("raft-session op=%s epoch=%lu shard=%lu rc=%d index=%llu salt=%llu\n",
                op, old, target, rc, (unsigned long long)reply.index,
                (unsigned long long)reply.salt);

@@ -53,7 +53,8 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
  else {assert(p[2]==EFS_MD_SESS_ACK&&bytes==35&&read32(p+19)==5&&read32(p+23)==0&&!read32(p+27)&&read32(p+31)==2);}
  return EFS_OK;
 }
-int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,const uint8_t id[EFS_OPID_UUID_LEN],uint32_t old,uint32_t shard,int append,struct efs_msg_raft_mkfs_reply *r){
+int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,const uint8_t id[EFS_OPID_UUID_LEN],uint32_t old,uint32_t shard,int append,struct efs_msg_raft_mkfs_reply *r,uint64_t *reason){
+ if(reason)*reason=0;
  assert(rpc->ctx==&seed);(void)r;assert(!memcmp(id,identity,16)&&old==4&&shard==1&&append==(int)cleanups);cleanups++;return EFS_OK;
 }
 '''+function('int efs_session_storage_barrier(')+'\n'+function('static void sess_pack_hdr(')+'\n'+stages+function('int efs_session_revoke(')+r'''

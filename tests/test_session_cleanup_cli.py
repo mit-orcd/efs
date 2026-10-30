@@ -6,6 +6,8 @@ root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_CLEANUP_CLIENT_SOURCE',root/'src/common/session_revoke.c')).read_text()
 a=s.index('int efs_session_cleanup_bounded(')
 f=s[a:s.index('\n}',a)+2]
+new_reason_api='uint64_t *last_wait_reason' in f
+f=f.replace('int efs_session_cleanup_bounded(', 'int cleanup_under_test(', 1)
 server=Path(os.environ.get('EFS_CLEANUP_SERVER_SOURCE',root/'src/server/raft_host.c')).read_text()
 start=server.index('    if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {')
 end=server.index('    } else if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH)',start)
@@ -48,105 +50,126 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
  for(unsigned i=3;i<19;i++)assert(p[i]==42);
  }
  assert(deadline && deadline<=EFS_SESSION_CLEANUP_BUDGET_MS && EFS_SESSION_CLEANUP_BUDGET_MS==20000);calls++;memset(r,0,sizeof(*r));
- if(mode==6 && calls<13)return EFS_ERR_NOT_PRIMARY;
- if(mode==7)return EFS_ERR_NOT_PRIMARY;
- if(mode==8)return EFS_ERR_STALE;
- if(mode==9)return EFS_ERR_INVAL;
+ if(mode>=27 && mode<=32) {
+   if(calls==1 && mode!=29) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN;return r->rc=EFS_ERR_BUSY;}
+   if(mode==31 && calls==2) {r->salt=0;return r->rc=EFS_OK;}
+   tick=mode==28?2:20;
+   return r->rc=mode==30?EFS_ERR_IO:mode==32?EFS_ERR_PROTO:EFS_ERR_NET;
+ }
+ if(mode==6 && calls<13)return r->rc=EFS_ERR_NOT_PRIMARY;
+ if(mode==7)return r->rc=EFS_ERR_NOT_PRIMARY;
+ if(mode==8)return r->rc=EFS_ERR_STALE;
+ if(mode==9)return r->rc=EFS_ERR_INVAL;
  if(mode>=10 && mode<=13 && calls<13) {
    r->salt=EFS_MD_SESSION_CLEANUP_RETRY_SALT;
    if(mode==11)r->index=99;
    if(mode==12)r->term=7;
    if(mode==13)r->salt=0;
-   return EFS_ERR_BUSY;
+   return r->rc=EFS_ERR_BUSY;
  }
  if(mode>=14 && mode<=18 && (calls<13 || mode==18)) {
    r->salt=EFS_MD_SESSION_APPEND_RETRY_SALT;
    if(mode==15)r->index=99;
    if(mode==16)r->term=7;
    if(mode==17)r->salt=EFS_MD_SESSION_CLEANUP_RETRY_SALT;
-   return EFS_ERR_BUSY;
+   return r->rc=EFS_ERR_BUSY;
  }
  /* K42: append waits (OPEN, frontier, aborted PREPARE, REAP), then empty. */
- if(mode>=20 && mode<=23 && calls<13) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN+(mode-20);return EFS_ERR_BUSY;}
- if(mode==24) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN;return EFS_ERR_BUSY;}
- if(mode==25 && calls<13) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN;r->index=5;return EFS_ERR_BUSY;}
- if(mode==26 && calls<13) {r->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return EFS_ERR_BUSY;}
- if(mode==1)return EFS_ERR_IO; /* ambiguous submission: do not reselect */
- if(mode==2)return EFS_ERR_BUSY; /* active or incomplete global barrier */
+ if(mode>=20 && mode<=23 && calls<13) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN+(mode-20);return r->rc=EFS_ERR_BUSY;}
+ if(mode==24) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN;return r->rc=EFS_ERR_BUSY;}
+ if(mode==25 && calls<13) {r->salt=EFS_MD_SESSION_APPEND_WAIT_OPEN;r->index=5;return r->rc=EFS_ERR_BUSY;}
+ if(mode==26 && calls<13) {r->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return r->rc=EFS_ERR_BUSY;}
+ if(mode==1)return r->rc=EFS_ERR_IO; /* ambiguous submission: do not reselect */
+ if(mode==2)return r->rc=EFS_ERR_BUSY; /* active or incomplete global barrier */
  r->salt=mode==19?EFS_MD_SESSION_APPEND_RETRY_SALT:mode==3?2:mode==4?0:((mode==6 || mode==10 || mode==14 || (mode>=20 && mode<=23) || mode==26)?calls==16:calls==4)?1:0;
  if(mode==5)tick=30;
- return EFS_OK;
+ return r->rc=EFS_OK;
 }
-'''+f+r'''
+'''+f+('\n#define CLEANUP(rpc,id,epoch,shard,app,r,reason) cleanup_under_test(rpc,id,epoch,shard,app,r,reason)\n' if new_reason_api else '\n#define CLEANUP(rpc,id,epoch,shard,app,r,reason) ((void)(reason),cleanup_under_test(rpc,id,epoch,shard,app,r))\n')+r'''
 int main(void) {
  uint8_t uuid[16];memset(uuid,42,16);struct efs_msg_raft_mkfs_reply r;
  const struct efs_session_rpc rpc={&owned,NULL,0,NULL};
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_OK && calls==4);
  for(mode=1;mode<=3;mode++) {
-   calls=0;assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==
+   calls=0;assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==
       (mode==1?EFS_ERR_IO:mode==2?EFS_ERR_BUSY:EFS_ERR_PROTO) && calls==1);
  }
- mode=4;calls=0;assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==4096);
- mode=5;calls=0;assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1);
+ mode=4;calls=0;assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==4096);
+ mode=5;calls=0;assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==1);
  append_mode=1;mode=0;calls=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_OK && calls==4);
  assert(!deadline);
  for(append_mode=0;append_mode<2;append_mode++) {
    mode=6;calls=waits=0;tick=0;
-   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+   assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_OK && calls==16 && waits==12 && !deadline);
    mode=7;calls=waits=0;tick=0;
-   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==20 && waits==20 && !deadline);
+   assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==20 && waits==20 && !deadline);
    for(mode=8;mode<=9;mode++) {
      calls=waits=0;tick=0;
-     assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==(mode==8?EFS_ERR_STALE:EFS_ERR_INVAL) && calls==1 && !waits && !deadline);
+     assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==(mode==8?EFS_ERR_STALE:EFS_ERR_INVAL) && calls==1 && !waits && !deadline);
    }
    mode=7;calls=waits=0;tick=0;deadline=3000;
-   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
+   assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
    deadline=0;
  }
  append_mode=0;mode=10;calls=waits=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_OK && calls==16 && waits==12 && !deadline);
  for(mode=11;mode<=13;mode++) {
    calls=waits=0;tick=0;
-   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+   assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
  }
  append_mode=1;mode=10;calls=waits=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
  mode=14;calls=waits=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_OK && calls==16 && waits==12 && !deadline);
  for(mode=15;mode<=17;mode++) {
    calls=waits=0;tick=0;
-   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+   assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
  }
  append_mode=0;mode=14;calls=waits=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
  append_mode=1;mode=18;calls=waits=0;tick=0;deadline=3000;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
  deadline=0;mode=19;calls=waits=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_PROTO && calls==1 && !waits && !deadline);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_PROTO && calls==1 && !waits && !deadline);
  for(mode=20;mode<=23;mode++) {
    append_mode=1;calls=waits=0;tick=0;
-   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+   assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_OK && calls==16 && waits==12 && !deadline);
    append_mode=0;calls=waits=0;tick=0;
-   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+   assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
    assert(!strcmp(efs_session_cleanup_reason(r.salt,EFS_ERR_BUSY),
        mode==20?"append-open-by-other-session":mode==21?"append-frontier":
        mode==22?"append-prepare-aborted":"append-reap-owed"));
  }
  /* A wait that outlasts the budget fails closed and keeps its reason. */
  append_mode=1;mode=24;calls=waits=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==20 && waits==20 && !deadline);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==20 && waits==20 && !deadline);
  assert(r.salt==EFS_MD_SESSION_APPEND_WAIT_OPEN && !strcmp(efs_session_cleanup_reason(r.salt,EFS_ERR_BUSY),"append-open-by-other-session"));
  /* A wait salt on a submitted (indexed) reply is not a certificate. */
  mode=25;calls=waits=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==1 && !waits);
  /* K42: a lease batch applied as a no-op BUSY is retried in the lease phase only. */
  mode=26;append_mode=0;calls=waits=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_OK && calls==16 && waits==12 && !deadline);
  append_mode=1;calls=waits=0;tick=0;
- assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,NULL)==EFS_ERR_BUSY && calls==1 && !waits);
  assert(!strcmp(efs_session_cleanup_reason(EFS_MD_SESSION_CLEANUP_WAIT_LOCKED,EFS_ERR_BUSY),"lease-key-locked"));
  assert(!strcmp(efs_session_cleanup_reason(0,EFS_ERR_BUSY),"uncertified-busy") && !*efs_session_cleanup_reason(4,EFS_OK));
+ /* The deadline may expire inside the last receive. The invocation is
+  * exhausted, but the actual transport reply remains uncertain/nonretryable.
+  * Its last certified wait is diagnostic metadata, never a wire certificate. */
+ uint64_t reason=0;
+ append_mode=1;mode=27;calls=waits=0;tick=0;deadline=0;
+ puts("late transport deadline regression");fflush(stdout);
+ assert(CLEANUP(&rpc,uuid,1,7,append_mode,&r,&reason)==EFS_ERR_BUSY && calls==2 && waits==1 && !deadline);
+ assert(r.rc==EFS_ERR_NET && !r.salt && !r.index && !r.term &&
+        !efs_session_cleanup_retry_ok(&r,1) && reason==EFS_MD_SESSION_APPEND_WAIT_OPEN);
+ for(mode=28;mode<=32;mode++) {
+   calls=waits=0;tick=0;deadline=0;reason=99;
+   int rc=CLEANUP(&rpc,uuid,1,7,append_mode,&r,&reason);
+   assert(rc==(mode==30?EFS_ERR_IO:mode==32?EFS_ERR_PROTO:EFS_ERR_NET));
+   assert(calls==(mode==29?1:mode==31?3:2) && !reason && !deadline && !efs_session_cleanup_retry_ok(&r,1));
+ }
  puts("session CLI: K42 append waits retried within the budget, fail closed with reason");
  puts("session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS");
 }
