@@ -35,6 +35,7 @@ python3 tests/test_k33_seed_loss.py	65	1	Task T: slowest host median 48.5 s (xor
 python3 tests/test_k33_bookkeeping.py	45	2	
 python3 tests/test_k34_stop_put.py	50	1	
 python3 tests/test_k42_peer_stop_open.py	50	1	Task T: slowest host median 36.3 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 45 s
+python3 tests/test_k54_member_down_fence.py	50	1	K54: four formed daemons, four revoke scenarios (one member SIGKILLed or stopped, two down, resume); 27 s alone on intel1, budget set for 8-job contention (measured at the gate), 1.25x rounded up to 5 s
 python3 tests/test_k38_shared_chunk_pressure.py	60	2	Task T: slowest host median 46.4 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 35 s
 python3 tests/test_stop_progress.py	175	3	1,500 directories and files through FUSE, then the stop steps (66 s alone, up to four times that beside other writers); Task T: slowest host median 137.5 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 50 s
 python3 tests/test_operator_workflows.py	30	1	Task T: slowest host median 23.5 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 15 s

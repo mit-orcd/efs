@@ -14896,8 +14896,15 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
                             const uint8_t *cmd, uint32_t clen, int *hint);
 
 /* A metadata quorum is not a storage-member acknowledgement. Every
- * configured member (including a non-hosting or offline replica) must seal or
- * prove its certificate. No server lock is held over network/disk I/O. */
+ * configured member that answers (including a non-hosting replica) must seal
+ * or prove its certificate, and a strict majority of the configured members
+ * must have done so (K54, D46 item 6): one member that is down no longer
+ * fails a clean unmount. The epoch it missed is committed in the session
+ * shard log by BEGIN/FENCE_LOC/FINISH, and every storage admission of that
+ * member needs a fresh lane-leader STATUS proof against that log
+ * (server_put_upload), so a returning member refuses the revoked epoch
+ * before it could seal. A reach below a majority stays BUSY. No server lock
+ * is held over network/disk I/O. */
 static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid[16],
                                       uint32_t floor,int check_only)
 {
@@ -14907,6 +14914,7 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
     if(count<=EFS_MAX_NODES)memcpy(members,h->s->nodes,count*sizeof(*members));
     pthread_mutex_unlock(&h->s->lock);
     if(count<EFS_NUM_FRAGMENTS || count>EFS_MAX_NODES)return EFS_ERR_BUSY;
+    uint32_t reached=0,missed=0;
     for(uint32_t i=0;i<count;i++){
         if(!members[i].id || members[i].id>EFS_MAX_NODES)return EFS_ERR_INVAL;
         for(uint32_t j=0;j<i;j++)if(members[j].id==members[i].id)return EFS_ERR_INVAL;
@@ -14916,14 +14924,22 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
         else if(host_inode_rpc_peer(h,(int)members[i].id-1,EFS_MSG_STORAGE_SESSION_FENCE,
                     &request,sizeof(request),EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply))){
             fprintf(stderr,"storage-fence: member=%u floor=%u check=%d transport unavailable\n",members[i].id,floor,check_only);
-            return EFS_ERR_BUSY;
+            missed|=1u<<(members[i].id-1);continue;
         }
         if(memcmp(reply.uuid,uuid,16) || reply.floor!=floor)return EFS_ERR_PROTO;
         if(reply.rc!=EFS_OK){
             fprintf(stderr,"storage-fence: member=%u floor=%u check=%d rc=%d\n",members[i].id,floor,check_only,reply.rc);
             return reply.rc;
         }
+        reached++;
     }
+    if(reached*2<=count){
+        fprintf(stderr,"storage-fence: floor=%u check=%d reached %u of %u members, no majority (unreached mask 0x%x)\n",
+                floor,check_only,reached,count,missed);
+        return EFS_ERR_BUSY;
+    }
+    if(missed)fprintf(stderr,"storage-fence: floor=%u check=%d sealed %u of %u members, unreached mask 0x%x\n",
+                      floor,check_only,reached,count,missed);
     int same=1;pthread_mutex_lock(&h->s->lock);
     if(h->s->node_count!=count)same=0;
     for(uint32_t i=0;i<count && same;i++){

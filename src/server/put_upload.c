@@ -121,6 +121,11 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     if(authority.rc!=EFS_OK && getenv("EFS_PUT_TICKET_DBG"))
         fprintf(stderr,"put-upload status rc=%d hint=%d group=%u\n",authority.rc,
                 authority.leader_hint,query[0]);
+    /* K54: a member the revoke could not reach learns the sealed epoch here,
+     * from the committed session shard (the lane leader's FENCED verdict),
+     * and keeps it durably: every later admission under it stops locally. */
+    if(authority.rc==EFS_ERR_FENCED)
+        (void)server_put_session_fence(s,ticket.id.client_uuid,ticket.id.session_epoch+1);
     if(authority.rc!=EFS_OK)return authority.rc;
     if(authority.salt!=EFS_PUT_TICKET_ADMITTED)return EFS_ERR_STALE;
 
