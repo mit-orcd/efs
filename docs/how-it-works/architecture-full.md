@@ -1612,6 +1612,11 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+(allocator reservation, receipt replay, bootstrap/CREATE authority, snapshot
+import, KV flush cohorts, delayed-pump heartbeat) ported to
+`agent/h-k22-allocator`, pending merge; unit regressions PASS, live K22 NOTRUN.
+
+[K55 — slow storage COMMIT](../status/k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
 source `5185bfcd3`; merged into devel (wave 32, `4e4b7ec75`). Attributed K35 fix passes native/index,
 ASan/UBSan/leak, TSan, the old-source negative control, four planned TCP/RDMA
