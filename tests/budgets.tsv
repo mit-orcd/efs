@@ -113,7 +113,7 @@ python3 tests/test_ao_readdir_live.py	30	3	AO intel1 8-job gate measured 20.5s (
 python3 tests/test_bench_published.py	10	2	W170: three private daemons, published data and cold FUSE verification; 7.7s in eight-job gate, 1.25x rounded up to 5s
 
 ./tests/faults/test_follower_bound --stalled-compactor	5	1	Task W: real stalled LSM compactor and bounded follower catch-up; 1.2s at eight jobs, 1.25x rounded up to 5s
-python3 tests/test_put_quota_reclaim.py	120	2	unmeasured (F07 port, NOTRUN without FUSE); set from the first FUSE-capable run
+python3 tests/test_put_quota_reclaim.py	60	2	nuc 33.2 s at 8 jobs, xorinox 12.5 s (one gate each; was an unmeasured 120 s guess from the F07 port); 60 s is 1.8x the slower run, trimmed so the K53 full-mode row (400 s) fits the gate bound
 python3 tests/test_pump_logging.py	65	2	35 s blocked logging plus formation, fixed-rate rewrites, exact readback, recovery drain and orderly stop
 python3 tests/test_settings_listing.py	10	1	S4/W122: three real daemons and a mount on loopback; 5.5 s at one job on xorinox, 1.25x rounded up to 5 s
 python3 tests/test_k54_member2_unmount.py	60	1	K54: two production unmounts (SIGKILL, clean stop) with member 2 down on four efsd; 20 s a failed unmount; budget set for 8-job contention (measured at the gate), 1.25x rounded up to 5 s
