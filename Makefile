@@ -484,6 +484,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_dir_migrate_visibility.py
 	python3 tests/test_recovery_pin_owner.py
 	python3 tests/test_dir_migrate_visibility.py
+	python3 tests/test_dir_migrate_route.py
 	python3 tests/test_access_permissions.py
 	python3 tests/test_rename_flags.py
 	python3 tests/test_attribute_authority_errno.py

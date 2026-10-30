@@ -14,7 +14,7 @@ branches propose before that check, and host_propose forwarded on.
 
 Now host_rpc_submit marks a member's forward in the group byte
 (HOST_SUBMIT_FORWARDED), server_raft_host_submit serves a marked command
-with host_serving_forward set (DIR_MIGRATE excepted: it is bounced to a
+with host_serving_forward set (migration planning excepted: it is bounced to a
 dual-host on purpose), and host_propose refuses to forward while it is set:
 NOT_PRIMARY with the leader it knows, never itself, for the forwarder's
 host_remote_cmd to retry. A client's or this process's own submit still
@@ -75,10 +75,13 @@ int main(void)
     assert(host_submit_serves_forward(p, 2, &g) && g == 2);
     p[0] = 0 | HOST_SUBMIT_FORWARDED;
     assert(host_submit_serves_forward(p, 1, &g) && g == 0);
-    /* DIR_MIGRATE is bounced to a dual-host on purpose: it may forward. */
+    /* A planning RPC may coordinate; its log command is one-hop apply only. */
     p[0] = 2 | HOST_SUBMIT_FORWARDED; p[1] = EFS_MD_CMD_DIR; p[2] = EFS_MD_DIR_MIGRATE;
+    assert(host_submit_serves_forward(p, 1 + HOST_DIR_LEN, &g) && g == 2);
+    p[1] = EFS_MD_REQ_DIR_MIGRATE; p[2] = 0;
     assert(!host_submit_serves_forward(p, 1 + HOST_DIR_LEN, &g) && g == 2);
-    assert(host_submit_serves_forward(p, HOST_DIR_LEN, &g)); /* too short to be one */
+    /* Truncated planning requests reach the strict decoder, not Raft. */
+    assert(!host_submit_serves_forward(p, HOST_DIR_LEN, &g));
     assert(!host_submit_serves_forward(p, 0, &g) && g == 0);
     /* The expiry deletion (D43) is a cross-group unlink the inode group's
      * leader forwards to a dual-host: it may forward its own steps. */
@@ -120,7 +123,7 @@ assert 'payload[0]' not in entry, 'the submit entry reads the marked group byte'
 prop = fn('static int host_propose_impl')
 refuse = prop.index('host_forward_refused(host_serving_forward, lid, h->raft_id, leader_hint)')
 assert refuse < prop.index('rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);'), 'forward before refusal'
-print('forward once: a member-forwarded submit is served without a further forward (DIR_MIGRATE '
+print('forward once: a member-forwarded submit is served without a further forward (planning RPC '
       'excepted), client submits forward one hop, the refusal hints the known leader PASS')
 
 # W166: execute the actual STATUS route block with controlled hosting/role

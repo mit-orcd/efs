@@ -5916,13 +5916,8 @@ busy:
  * test_report_stepdown.py 5.2-6.0 s writes in 5 of 28 runs under load). */
 static __thread int host_serving_forward;
 
-/* A submit's group byte, and whether this thread then serves a member's
- * forward: marked by host_rpc_submit, except DIR_MIGRATE and the expiry
- * deletion (see server_raft_host_submit). Both are bounced to a dual-host
- * on purpose: the group leader that forwards them may not host the other
- * group of the transaction (an expiry pass runs on the inode group's
- * leader; the deletion is a cross-group unlink, D43), and each of their own
- * reads and proposals forwards one hop to a leader that answers. */
+/* Planning may bounce to a dual-group host. The canonical DIR/MIGRATE
+ * log command has normal one-hop proposal semantics and is never replanned. */
 static int host_submit_serves_forward(const uint8_t *payload, uint32_t plen, uint8_t *group)
 {
     *group = plen >= 1 ? (uint8_t)(payload[0] & ~HOST_SUBMIT_FORWARDED) : 0;
@@ -5930,8 +5925,22 @@ static int host_submit_serves_forward(const uint8_t *payload, uint32_t plen, uin
         return 0;
     if (plen >= 2 && payload[1] == EFS_MD_REQ_EXPIRY_DELETE)
         return 0;
-    return !(plen >= 1u + HOST_DIR_LEN && payload[1] == EFS_MD_CMD_DIR &&
-             payload[2] == EFS_MD_DIR_MIGRATE);
+    return !(plen >= 2 && payload[1] == EFS_MD_REQ_DIR_MIGRATE);
+}
+
+/* Decode only a planning RPC. Never admit it to Raft's command namespace. */
+static int host_dir_migrate_request_decode(uint8_t group, const uint8_t *request,
+                                           uint32_t length, uint8_t *command)
+{
+    if (!request || !command || length != HOST_DIR_LEN ||
+        request[0] != EFS_MD_REQ_DIR_MIGRATE || request[1] ||
+        !rd64be(request + 2) ||
+        group != efs_raft_shard_group(efs_kv_inode_shard(rd64be(request + 2))))
+        return EFS_ERR_INVAL;
+    memcpy(command, request, HOST_DIR_LEN);
+    command[0] = EFS_MD_CMD_DIR;
+    command[1] = EFS_MD_DIR_MIGRATE;
+    return EFS_OK;
 }
 
 /* A proposal on a member that is not the group's leader is forwarded to
@@ -15149,7 +15158,7 @@ static void host_serving_forward_restore(const int *previous)
 /* payload[0] is the group; HOST_SUBMIT_FORWARDED in it marks a command a
  * member forwarded (host_rpc_submit), as opposed to one a client or this
  * process submits. A forwarded command is served without a further forward
- * (host_serving_forward, restored on every return), except DIR_MIGRATE: it
+ * (host_serving_forward, restored on every return), except a migration planning request: it
  * is bounced to a dual-host because the parent group's leader may not host
  * the destination group, and its own proposals each forward one hop to a
  * leader that answers. */
@@ -15682,21 +15691,30 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             out->rc = rc;
         return;
     }
+    if (clen && cmd[0] == EFS_MD_REQ_DIR_MIGRATE) {
+        uint8_t migration[HOST_DIR_LEN];
+        rc = host_dir_migrate_request_decode(group, cmd, clen, migration);
+        if (rc == EFS_OK)
+            rc = host_dir_migrate(h, rd64be(migration + 2), migration,
+                                  sizeof(migration), &hint);
+        out->rc = rc;
+        out->leader_hint = hint;
+        struct host_view v;
+        host_view_get(h, group, &v);
+        out->index = v.applied;
+        return;
+    }
     /* A forwarded command is answered here only by the leader. A hosted
      * follower used to run host_read_index/host_propose, which forward
      * again — under a leaderless group every hop parked a conn thread and
      * a peer-pool slot on the next node's recv (56 + 48 such threads on
      * fcstor003, Sep 21) and the chain kept the pool full. The caller's
-     * host_remote_cmd retries the hinted leader itself. DIR_MIGRATE is
-     * exempt: it is bounced to a dual-host precisely because the pg
-     * leader may not host the dest group; its own reads/proposes each
-     * forward one hop to a leader that answers. */
+     * host_remote_cmd retries the hinted leader itself. Migration planning
+     * is handled separately above; its log commands are ordinary proposals. */
     {
         struct host_view v;
         host_view_get(h, group, &v);
-        if ((!v.has || v.role != EFS_RAFT_LEADER) &&
-            !(clen >= HOST_DIR_LEN && cmd[0] == EFS_MD_CMD_DIR &&
-              cmd[1] == EFS_MD_DIR_MIGRATE)) {
+        if (!v.has || v.role != EFS_RAFT_LEADER) {
             out->rc = EFS_ERR_NOT_PRIMARY;
             if (v.has && v.leader >= 0 && v.leader != h->raft_id)
                 out->leader_hint = v.leader;
@@ -15785,14 +15803,6 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
          * This replies with a quorum certificate only; the data-serving
          * replica still waits for its own apply before touching KV rows. */
         rc = host_read_index_admitted(h, group, &hint, NULL, &idx, 1);
-    } else if (clen >= HOST_DIR_LEN && cmd[0] == EFS_MD_CMD_DIR &&
-               cmd[1] == EFS_MD_DIR_MIGRATE) {
-        rc = host_dir_migrate(h, rd64be(cmd + 2), cmd, clen, &hint);
-        {
-            struct host_view v;
-            host_view_get(h, group, &v);
-            idx = v.applied;
-        }
     } else if (clen >= 1 && cmd[0] == EFS_MD_CMD_PUBLISH) {
         /* Same as the local report path: propose, return the index, let
          * the reporter host_wait_applied the last idx. host_propose_wait
@@ -19897,8 +19907,15 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
         rid = host_pick_peer(h, need, 2, -1);
         if (rid < 0)
             rc = EFS_ERR_NOT_PRIMARY;
-        else
-            rc = host_rpc_submit(h, rid, pg, cmd, clen, &rep, EFS_IO_TIMEOUT_MS);
+        else {
+            uint8_t request[HOST_DIR_LEN];
+            if (clen != HOST_DIR_LEN) return EFS_ERR_INVAL;
+            memcpy(request, cmd, sizeof(request));
+            request[0] = EFS_MD_REQ_DIR_MIGRATE;
+            request[1] = 0;
+            rc = host_rpc_submit(h, rid, pg, request, sizeof(request), &rep,
+                                 EFS_IO_TIMEOUT_MS);
+        }
         if (rc != EFS_OK)
             return rc;
         if (hint && rep.leader_hint >= 0)

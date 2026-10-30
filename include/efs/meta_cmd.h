@@ -242,6 +242,10 @@
  * Unknown PROBE returns BUSY/salt=0 and cannot acquire or retire ownership.
  * Requires an explicitly established session; production FUSE is not active. */
 #define EFS_MD_SESS_LEASE_EDGE_LEN 66u
+/* RPC-only migration planning: [tag:1][reserved-zero:1][directory:8].
+ * Distinct from the DIR/MIGRATE log command: forwarding that command must
+ * apply one cleanup step, never invoke the distributed planner again. */
+#define EFS_MD_REQ_DIR_MIGRATE 104
 #define EFS_MD_CMD_DIR    11 /* matches sim SIM_CMD_DIR; layout-epoch */
 #define EFS_MD_DIR_BEGIN   1
 #define EFS_MD_DIR_MIGRATE 2

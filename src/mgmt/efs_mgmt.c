@@ -1433,8 +1433,8 @@ static int cmd_raft_dir(int argc, char **argv)
         return 1;
     }
     payload[0] = efs_raft_shard_group(efs_kv_inode_shard(ino));
-    payload[1] = EFS_MD_CMD_DIR;
-    payload[2] = kind;
+    payload[1] = kind == EFS_MD_DIR_MIGRATE ? EFS_MD_REQ_DIR_MIGRATE : EFS_MD_CMD_DIR;
+    payload[2] = kind == EFS_MD_DIR_MIGRATE ? 0 : kind;
     wr64be_mgmt(payload + 3, ino);
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
