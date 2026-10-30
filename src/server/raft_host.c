@@ -21627,7 +21627,10 @@ static void host_truncate_lazy(efs_ino_t ino, uint64_t size, uint64_t mtime,
     struct efs_meta_stat st;
     struct efs_meta_row row;
     uint8_t cmd[HOST_TRUNC_LAZY_LEN];
-    uint8_t g;
+    /* Authority is local to this RPC. A completed fence already covers
+     * earlier writes in that group; keep rereading rows and decisions, but
+     * do not repeat quorum round trips before/after our own committed entry. */
+    uint8_t g, covered = 0;
     int hint = -1, rc = EFS_ERR_BUSY;
 
     memset(out, 0, sizeof(*out));
@@ -21648,13 +21651,15 @@ static void host_truncate_lazy(efs_ino_t ino, uint64_t size, uint64_t mtime,
 
         if (attempt)
             usleep(1000u << (attempt < 6 ? attempt : 6));
-        rc = host_read_index(h, g, &hint);
+        rc = (covered & (1u << g)) ? EFS_OK : host_read_index(h, g, &hint);
+        if (rc == EFS_OK)
+            covered |= (uint8_t)(1u << g);
         if (rc == EFS_OK)
             rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_coord, h, &row);
         if (rc == EFS_OK && !S_ISREG(row.mode))
             rc = EFS_ERR_INVAL;
         if (rc == EFS_OK)
-            rc = host_read_inode_lanes(h, ino, &hint);
+            rc = host_read_inode_lanes_reuse(h, ino, &hint, &covered);
         if (rc == EFS_OK)
             rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
         if (rc != EFS_OK)
@@ -21713,7 +21718,7 @@ static void host_truncate_lazy(efs_ino_t ino, uint64_t size, uint64_t mtime,
     }
 #endif
     if (rc == EFS_OK)
-        rc = host_read_inode_lanes(h, ino, &hint);
+        rc = host_read_inode_lanes_reuse(h, ino, &hint, &covered);
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     set_inode_rc(out, rc, hint);
@@ -21949,7 +21954,6 @@ static void host_append_owner(struct efs_raft_host *h, efs_ino_t ino,
                                uint32_t sess_epoch, uint64_t op_seq, const uint64_t *ack,
                                struct efs_msg_inode_reply *out)
 {
-    struct efs_meta_stat st;
     uint64_t reserved = 0;
     int hint = -1, rc;
 
@@ -21972,10 +21976,13 @@ static void host_append_owner(struct efs_raft_host *h, efs_ino_t ino,
         return;
     }
     rc=host_append_transaction(h,ino,len,&q,&reserved,&hint);
-    if(rc==EFS_OK)rc=efs_meta_apply_getattr(h->kv,ino,host_txn_coord,h,&st);
     set_inode_rc(out,rc,hint);
     if(rc==EFS_OK) {
-        stat_to_inode(&st,&out->inode);
+        /* This reply is the durable reservation result, not a new stat.
+         * A fallible lane collect here can turn an accepted reservation
+         * into BUSY/IO and adds transaction/quorum reads to every append.
+         * The client consumes only this identity's exact start and end. */
+        out->inode.ino=ino;
         out->inode.size=reserved+len;out->inode.atime=reserved;
     }
 }

@@ -2200,6 +2200,22 @@ static int efs_open_drain_pending(void)
         return rc;
     rc = efs_open_release_pending(ino);
     pthread_mutex_unlock(edge);
+    if (rc == EFS_ERR_BUSY) {
+        /* Selection prioritizes every already-identified release. If this
+         * row still has no identity, another queue/foreground owner holds
+         * the receipt window. Do not scan it 4096 more times under opid_mu;
+         * return the pass to CREATE proof, outside the inode stripe. */
+        int unadmitted = 0;
+        pthread_mutex_lock(&g_open_mu);
+        for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
+            if (r->ino == ino) {
+                unadmitted = r->close_pending && r->retry_order == UINT64_MAX;
+                break;
+            }
+        pthread_mutex_unlock(&g_open_mu);
+        if (unadmitted)
+            return EFS_ERR_AGAIN;
+    }
     return rc == EFS_OK ? EFS_ERR_BUSY : rc;
 }
 
@@ -2500,6 +2516,10 @@ static int efs_open_retry_pass(uint64_t deadline)
     int lease_rc = EFS_OK;
     for (unsigned i = 0; i < OPEN_DRAIN_PER_PASS && !efs_client_rpc_past_deadline(); i++) {
         lease_rc = efs_open_drain_pending();
+        if (lease_rc == EFS_ERR_AGAIN) {
+            lease_rc = EFS_ERR_BUSY; /* retained, but admission is elsewhere */
+            break;
+        }
         if (lease_rc == EFS_OK)
             break; /* nothing retained */
     }
@@ -2572,7 +2592,7 @@ static int fuse_odirect_unaligned(const struct fuse_file_info *fi,
            ((offset & 4095) || (size & 4095));
 }
 
-static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
+static int efs_fuse_open_ino_run(fuse_ino_t ino, struct fuse_file_info *fi)
 {
     int vk = virt_kind(ino);
     if (vk == 1 || vk == 2) {
@@ -2671,6 +2691,20 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         }
     }
     return 0;
+}
+
+/* OPEN's staged row must survive until the open-reference pin takes over.
+ * stat_ino drops its table locks before permission checks and OPEN lease
+ * acquisition; without an operation pin the evictor can remove the exact
+ * EOF in that gap, and a later buffered write has no row to update. */
+static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
+{
+    if (virt_kind(ino))
+        return efs_fuse_open_ino_run(ino, fi);
+    efs_client_stage_pin((efs_ino_t)ino);
+    int rc = efs_fuse_open_ino_run(ino, fi);
+    efs_client_stage_unpin((efs_ino_t)ino);
+    return rc;
 }
 
 static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
@@ -4570,12 +4604,15 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
                     usleep(1000u << t);
             }
             if (found) {
-                ino = exist.ino;
-                if (fi->flags & O_TRUNC) {
-                    int trc = efs_client_truncate(ino, 0);
-                    if (trc != EFS_OK)
-                        return fuse_stat_errno(trc);
-                }
+                /* This is an OPEN, not a newly created row. Reuse its
+                 * staged-row pin, access checks, truncate and lease handoff;
+                 * FileID acquisition alone does not stage a missing inode. */
+                int open_rc = efs_fuse_open_ino((fuse_ino_t)exist.ino, fi);
+                if (open_rc)
+                    return open_rc;
+                if (out_ino)
+                    *out_ino = exist.ino;
+                return 0;
             } else {
                 if (e != -EEXIST)
                     fprintf(stderr, "create %s failed (%s efs_rc=%d)\n", name,

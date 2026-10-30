@@ -90,6 +90,7 @@ static void *cancel_waiter(void *unused) {
     (void)unused;usleep(80000);atomic_store(&cancelled,1);return NULL;
 }
 int main(void) {
+    assert(sizeof(g_client.opid_inflight) / sizeof(g_client.opid_inflight[0]) == EFS_OPID_REPLY_CACHE);
     struct efs_opid_req held[EFS_OPID_REPLY_CACHE],q;
     bootstrap_next=g_client.opid_next;bootstrap_busy=3;test_deadline=mono_ms()+200;
     assert(efs_client_rpc_create(1,1,"test",S_IFDIR|0700,0,0,0,NULL,NULL)==EFS_OK);
@@ -205,5 +206,5 @@ with tempfile.TemporaryDirectory(prefix='efs-opid-admit-') as work:
     path=Path(work)/'test.c';path.write_text(source)
     binary=path.with_suffix('')
     subprocess.run([os.environ.get('CC','cc'),'-std=gnu11','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-pthread',
-                    '-I'+str(root/'include'),'-I'+str(root/'src/client'),str(path),str(root/'libefs.a'),'-o',str(binary)],check=True)
+                    '-I'+str(root/'include'),'-I'+str(root/'src/client'),str(path),str(root/'src/sim/opid.c'),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)

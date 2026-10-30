@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-s = (root / 'src/client/read.c').read_text()
+s = Path(os.environ.get('EFS_RDCACHE_SOURCE', root / 'src/client/read.c')).read_text()
 
 
 def between(start, end):
@@ -43,7 +43,7 @@ source = r'''
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-typedef uint64_t efs_ino_t;
+#include "efs/common.h"
 #define LEN 16384u
 static unsigned budget, live, allocs, frees;
 static void *efs_buf_alloc_prefetch(uint32_t n)
@@ -95,6 +95,27 @@ static void put(efs_ino_t ino, uint32_t ci)
 }
 int main(void)
 {
+    /* Real allocator stride: 64 files on one metadata shard, chunk 0.
+     * Every accepted cache entry must remain readable with its own bytes;
+     * the old low-bit hash retained only the last two files. */
+    budget = 64;
+    for (uint32_t i = 1; i <= 64; i++) {
+        uint8_t bytes[LEN]; memset(bytes, (int)i, sizeof(bytes));
+        assert(!rdcache_put_inner((uint64_t)i * 4096 + 1, 0, bytes, LEN, 0, 0));
+    }
+    assert(live == 64 && cached_bodies() == 64);
+    for (uint32_t i = 1; i <= 64; i++) {
+        uint8_t got[4096];
+        assert(!efs_rdcache_copy((uint64_t)i * 4096 + 1, 0, 0, got, sizeof(got)));
+        for (unsigned j = 0; j < sizeof(got); j++) assert(got[j] == (uint8_t)i);
+    }
+    for (unsigned slot = 0; slot < RDCACHE_SLOTS; slot++)
+        for (unsigned w = 0; w < RDCACHE_WAYS; w++) {
+            struct rdcache_ent *e = &g_rdcache.e[slot][w];
+            if (e->data) { efs_buf_free(e->data, LEN); memset(e, 0, sizeof(*e)); }
+        }
+    allocs = frees = 0; assert(!live);
+
     /* Budget of 8 bodies: the first 8 chunks allocate. */
     budget = 8;
     for (uint32_t ci = 0; ci < 8; ci++)
@@ -163,7 +184,7 @@ int main(void)
     budget = 0;
     put(43, 1);
     assert(!cached(43, 1) && live == 0 && pending_ways() == 0);
-    puts("read cache: admission past the speculative budget reuses LRU bodies, "
+    puts("read cache: allocated-file residency and admission past the speculative budget reuses LRU bodies, "
          "keeps pinned/pending ways, bounded pool and clean drop PASS");
     return 0;
 }
@@ -175,7 +196,7 @@ with tempfile.TemporaryDirectory(prefix='efs-rdcache-steal-') as d:
     exe = Path(d) / 'test'
     cc = shlex.split(os.environ.get('CC', 'cc'))
     subprocess.run(cc + ['-std=gnu11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
-                         '-pthread', str(p), '-o', str(exe)], check=True)
+                         '-pthread', '-I'+str(root/'include'), str(p), '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
 
 # Both speculative allocations fall back to reusing a cached body.
