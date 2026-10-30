@@ -33,6 +33,7 @@ static uint32_t routing,participant;
 static uint8_t sent;
 uint32_t efs_kv_session_shard(const uint8_t uuid[EFS_OPID_UUID_LEN]){assert(uuid[0]==9);return 31;}
 static int efs_client_rpc_past_deadline(void){return expired;}
+static uint64_t efs_client_rpc_deadline_ms(void){return 0;}
 void efs_client_session_fence(int rc);
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n==3);return &connection;}
 /* K34: a failed exchange re-picks a voter (skip the one that failed). */
