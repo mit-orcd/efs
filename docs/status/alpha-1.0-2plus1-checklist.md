@@ -789,7 +789,7 @@ correctness checks. No K count, live gate or failure verdict changes.
   per fragment, quorum rounds, batching wait and write p95/p99. Bound queue size
   and residence time; no low-load batching delay may break existing deadlines.
   **Wave 38 coordinator note:** only the evidence and measurement scripts were merged. AN's branch also carries product repairs (K35 and K55-style COMMIT overlap in `data_commit.c`, directory-migration visibility in `raft_host.c`, GETCHUNKS record clearing, a store.c ENOENT parent retry) that overlap work already on devel; they are being checked against current devel in a separate port, not merged here.
-- [ ] **AO — Directory listing: amortize serial page RPCs and repeated proofs.**
+- [x] **AO — Directory listing: amortize serial page RPCs and repeated proofs.** *(Wave 40: bounded compact pages and migration repairs ported; AO COMPLETE scoped, B6 and live-error attribution still open; [port](ao-product-port-20261030.md).)*
   `src/client/efs_fuse.c::efs_fuse_readdir_ino` first refreshes the parent via
   `efs_client_stat_refresh` and checks current permissions, then synchronously
   loops over `efs_client_rpc_readdir_cur`. Each reply has at most
