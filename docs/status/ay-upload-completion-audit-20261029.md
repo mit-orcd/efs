@@ -99,3 +99,12 @@ the last column; this audit did not add a new live cluster case.
   construction; there is no race test.
 * Allocation-failure and `ENOSPC` inside `sg_write` are not injected.
 * RDMA-served segment PUTs use the same handler; not separately exercised.
+
+## Gate
+
+`EFS_TEST_JOBS=8 scripts/make_test_summary.sh` (`make test-all`) on xorinox
+at `5d9812515`: **TOTAL 552, FAIL 0, NOTRUN 10, INCOMPLETE** (967 s), OVERBUDGET 2.
+The NOTRUN lines are host limits (no RDMA device; `/home/maik/git/cluster`
+absent), the same set the AX gate showed there. intel2 was running another
+gate, so the gate ran on xorinox, not intel2 as the task named. Summary:
+`~/efs-artifacts/taskAY-20261029/gate-summary.txt` on xorinox.

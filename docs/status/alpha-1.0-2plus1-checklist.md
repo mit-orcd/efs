@@ -1040,7 +1040,7 @@ confirm separate mechanisms; they do not prove a defect. Unlike the optimization
 items above, these are Stage 1 due-diligence gates on authority, lifetime and
 failure semantics. No K defect or performance PASS is inferred from duplication.
 
-- [ ] **AY — Ordinary versus packed upload: what does successful completion prove?**
+- [x] **AY — Ordinary versus packed upload: what does successful completion prove?**
   Ordinary `src/server/put_upload.c::server_put_upload` checks the exact ticket
   under fresh authority, enters a storage-session guard and writes through the
   export/store path. Ordinary data durability is tracked by root barriers and
