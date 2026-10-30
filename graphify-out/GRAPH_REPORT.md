@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `72ba517fec4f46316028e12f7e04a95278456c6e`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,404 nodes, 71,956 directed typed edges, 533 communities.
+Source base: `e76d07fed3336a47a489fc4418ba9dc434979191`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,428 nodes, 72,056 directed typed edges, 547 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,24 +19,24 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 26802
+- `calls`: 26827
 - `case_of`: 116
-- `contains`: 26275
+- `contains`: 26311
 - `defines`: 1974
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7341
-- `imports_from`: 937
-- `indirect_call`: 719
+- `imports`: 7364
+- `imports_from`: 940
+- `indirect_call`: 721
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 2393
+- `mentions_symbol`: 2397
 - `method`: 645
-- `rationale_for`: 1327
+- `rationale_for`: 1331
 - `references`: 2129
-- `references_path`: 1158
+- `references_path`: 1159
 - `regression_for`: 8
-- `uses`: 90
+- `uses`: 92
 
 ## Extraction warnings
 
@@ -46,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1678}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1698}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.

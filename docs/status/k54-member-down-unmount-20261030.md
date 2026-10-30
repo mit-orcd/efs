@@ -122,12 +122,17 @@ for byte.
 
 | Host | Transport | Runs | Clean | Read-back bad |
 |---|---|---|---|---|
-| intel1 | TCP | 20 | RESULT_INTEL | RESULT_INTEL_BAD |
-| node9901 | TCP | 10 | 10 | 0 |
-| node9901 | RDMA (`mlx5_0`, daemon log "RDMA transport up") | 10 | 10 | 0 |
+| intel1 | TCP, SIGKILL only | 40 | 40 | 0 |
+| node9901 | TCP, alternating | 10 | 10 | 0 |
+| node9901 | RDMA (`mlx5_0`, daemon log "RDMA transport up"), alternating | 10 | 10 | 0 |
 
-An earlier 20/20 intel1 run and 10+10 on node9901 on the commit before the
-orphan-delete change are also kept. Unmount took 0.4-0.9 s per run. Raw output:
+Final build = code commit `cdcf16b72` (`e76d07fed` changes tests only). Earlier
+builds: intel1 alternating 20/20 (commit `8bd4029f8`), then 19/20 on `c953d5254`:
+one SIGKILL run failed at `phase=begin rc=-6` (a pooled connection to the just-killed
+member). `efs_client_session_end` now repeats the revoke once after a transport
+error at BEGIN (the ladder is resumable; a second BEGIN only raises the epoch),
+and the 40/40 SIGKILL run is on that build. An intel1 alternating 20 on the final
+build was not repeated; node9901 TCP and RDMA were (10 + 10, alternating). Unmount took 0.4-0.9 s per run. Raw output:
 `~/efs-artifacts/k54-member-down-20261030/` on intel1 and node9901
 (`SHA256SUMS` in each).
 
@@ -154,4 +159,23 @@ is not yet true. Needs its own task.
 
 ## Gate
 
-GATE_RESULT
+`make test-all` through `scripts/make_test_summary.sh`, `EFS_TEST_JOBS=8`, intel1,
+`git archive` of the branch: five gates.
+
+| Tree | Result |
+|---|---|
+| `c953d5254` | TOTAL 568 FAIL 2 NOTRUN 11 (883 s): `test_storage_fence_members` (its offline-member expectation was the old rule; updated) and my e2e test (picked member 2, see K72 candidate; now picks 3 or 4) |
+| `c74788bf7` | TOTAL 568 FAIL 1 NOTRUN 11 (923 s): my e2e test's orphan-delete assertion too strict (answer may be OK once the drain ledgered the ticket); fixed |
+| `cdcf16b72` | TOTAL 568 FAIL 1 NOTRUN 11 (761 s): `test_k37_segment_rebuild` |
+| `e76d07fed` | TOTAL 568 FAIL 1 NOTRUN 11 (764 s): `test_k37_segment_rebuild` again |
+
+**No 0-FAIL gate was obtained.** `test_k37_segment_rebuild` fails at its last wait
+(line 402, `c=0 files=24`, after steps 1-6 PASS) in the two final gates; it passed
+in 3 of 3 runs alone (165-192 s) and was not among the failures of the first two
+gates. It involves no session, mount or revoke, so I believe a load-dependent wait,
+but I did not run the untouched base under gate load to prove it. NOTRUN 11 are host limits
+(no cluster scripts, no valgrind headers, no usable IB device on intel1). Gate
+OVERBUDGET rows (not failures): `test_b_geometry`, `test_member_limit`,
+`test_b6_unavailable`, `test_pack_dup_candidate`; my test measured 27 s alone.
+Raw gate output stays on intel1 (`~/efs-bd/final/`), summaries copied to
+`~/efs-artifacts/k54-member-down-20261030/`.
