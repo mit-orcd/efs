@@ -89,6 +89,7 @@ static struct efs_raft_msg *msg_copy_deep(const struct efs_raft_msg *src)
 struct app {
     int n;
     int park_apply;
+    int hold_snapshot, snapshot_busy_calls;
     uint64_t apply_limit;
     uint8_t last;
     uint64_t snap_at;
@@ -184,6 +185,11 @@ static int snap_chunk(void *app_, uint64_t incl, uint64_t incl_term,
     uint8_t *p;
 
     (void)incl_term;
+    if (done && a->hold_snapshot) {
+        a->snapshot_busy_calls++;
+        return EFS_ERR_BUSY;
+    }
+    if (done && a->snapshot_busy_calls) a->park_apply=0;
     if (offset == 0) {
         free(a->part);
         a->part = NULL;
@@ -2102,6 +2108,56 @@ static void test_install_snapshot(void)
     free_n(&n, st, 5);
 }
 
+/* A delayed pre-compaction entry batch can finish while the receiver is
+ * preparing the snapshot's KV import. Its ACK proves log bytes, not that
+ * the pending image has installed. Continue polling the final chunk until
+ * the import completes; abandoning it leaves application apply blocked. */
+static void test_snapshot_busy_survives_delayed_append(void)
+{
+    struct net n; struct efs_raft_store *st[3]; struct app app[3];
+    struct efs_raft_cfg cfg;
+    boot_n(&n,st,app,&cfg,3,7);
+    cfg.snap_open=snap_open;cfg.snap_read=snap_read;
+    cfg.snap_close=snap_close;cfg.snap_chunk=snap_chunk;
+    for(int i=0;i<3;i++) {
+        efs_raft_free(n.r[i]);cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+        cfg.app=&app[i];cfg.election_ticks=10+(uint32_t)i*10;cfg.heartbeat_ticks=1;
+        n.r[i]=test_raft_new(&cfg);
+    }
+    CHECK(elect(&n,40)==1,"pending import election");
+    int leader=leader_id(&n);
+    if(leader<0){free_n(&n,st,3);return;}
+    int follower=(leader+1)%3;
+    app[follower].park_apply=1;app[follower].hold_snapshot=1;
+    n.defer_on=1;n.defer_to=follower;
+    uint8_t cmd=73;uint64_t index=0;
+    CHECK(!efs_raft_propose(n.r[leader],&cmd,1,&index),"queue original append");
+    CHECK(n.ndeferred>0,"original append delayed");
+    CHECK(efs_raft_commit(n.r[leader])>=index,"other voter commits entry");
+    CHECK(!efs_raft_snapshot(n.r[leader]),"compact before delayed append arrives");
+    for(int i=0;i<5;i++)(void)efs_raft_tick(n.r[leader]);
+    CHECK(app[follower].snapshot_busy_calls>0,"receiver prepares import");
+    n.defer_on=0;
+    for(int i=0;i<n.ndeferred;i++) {
+        CHECK(!efs_raft_recv(n.r[follower],n.deferred[i]),"delayed append reaches pending importer");
+        msg_free_deep(n.deferred[i]);n.deferred[i]=NULL;
+    }
+    n.ndeferred=0;
+    CHECK(efs_raft_applied(n.r[follower])<index,"log ACK is not completed import");
+    struct efs_raft_msg stale={0};
+    stale.type=EFS_RAFT_MSG_SNAP_REP;stale.from=follower;stale.to=leader;
+    stale.term=efs_raft_term(n.r[leader]);stale.boot_id=1;
+    stale.success=1;stale.vote_granted=1;stale.match_index=index-1;
+    CHECK(!efs_raft_recv(n.r[leader],&stale),"older image ACK is consumed without releasing current import");
+    app[follower].hold_snapshot=0;
+    for(int i=0;i<10;i++)(void)efs_raft_tick(n.r[leader]);
+    CHECK(app[follower].part_applied,"pending final chunk is retried after log ACK");
+    CHECK(efs_raft_applied(n.r[follower])>=index,"pending importer reaches committed prefix");
+    CHECK(app[follower].n==app[leader].n && app[follower].last==app[leader].last,
+          "imported state matches leader exactly");
+    free_n(&n,st,3);
+}
+
 /* Compacting without a snap_get blob must not skip a learner ahead.
  * wait_voters stays BUSY — match never reaches commit. */
 static void test_install_snapshot_needs_blob(void)
@@ -3415,6 +3471,7 @@ int main(void)
         test_noop_over_stale_tail();
         test_ae_batch_catchup();
         test_ae_catchup_flow_control();
+        test_snapshot_busy_survives_delayed_append();
         test_install_snapshot();
         test_install_snapshot_needs_blob();
         test_install_snapshot_restarted_leader();

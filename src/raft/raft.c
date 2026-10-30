@@ -135,6 +135,7 @@ struct efs_raft {
     uint64_t snap_handle_incl;
     uint64_t snap_off[EFS_RAFT_MAX_PEERS];
     uint64_t snap_peer_incl[EFS_RAFT_MAX_PEERS];
+    uint8_t snap_pending[EFS_RAFT_MAX_PEERS]; /* final KV import still needs SNAP replies */
     /* No-progress InstallSnapshot ack: do not read another chunk until
      * this tick. Propose wakes were copying the same chunk every time
      * the follower answered BUSY. An empty AppendEntries still goes out. */
@@ -826,6 +827,10 @@ static int send_snap(struct efs_raft *r, int to)
     m.entries[0].term = incl_t;
     m.entries[0].clen = plen;
     m.entries[0].cmd = pay;
+    /* Publish before send: in-process transports may deliver its reply
+     * synchronously. Only a completed image ACK releases this ownership;
+     * an AppendEntries ACK proves log bytes, never the pending KV import. */
+    r->snap_pending[to] = 1;
     rc = send_msg(r, &m);
     free(pay);
     if (rc == EFS_OK)
@@ -978,7 +983,7 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
     ni = r->next_index[to];
     if (ni == 0)
         ni = 1;
-    if (ni < efs_raft_log_floor(r)) {
+    if (r->snap_pending[to] || ni < efs_raft_log_floor(r)) {
         /* Same one-outstanding rule as the entry batch below: a snapshot
          * per propose to a peer in the snap window is a multi-MiB blob per
          * propose. on_snap_rep clears it; the heartbeat retransmits.
@@ -1317,6 +1322,10 @@ static int become_leader(struct efs_raft *r)
         r->next_index[i] = last_i + 1;
         r->match_index[i] = (i == r->id) ? last_i : 0;
     }
+    memset(r->snap_pending, 0, sizeof(r->snap_pending));
+    memset(r->snap_peer_incl, 0, sizeof(r->snap_peer_incl));
+    memset(r->snap_off, 0, sizeof(r->snap_off));
+    memset(r->snap_retry_tick, 0, sizeof(r->snap_retry_tick));
     memset(r->ae_inflight, 0, sizeof(r->ae_inflight));
     memset(r->ae_inflight_commit, 0, sizeof(r->ae_inflight_commit));
     memset(r->ae_inflight_end, 0, sizeof(r->ae_inflight_end));
@@ -2261,6 +2270,11 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
             return EFS_OK;
         return rc;
     }
+    /* A delayed ACK for an older image cannot release a newer import. */
+    if (r->snap_pending[in->from] &&
+        in->match_index < r->snap_peer_incl[in->from])
+        return EFS_OK;
+    r->snap_pending[in->from] = 0;
     if (in->match_index > r->match_index[in->from])
         r->match_index[in->from] = in->match_index;
     r->next_index[in->from] = r->match_index[in->from] + 1;
