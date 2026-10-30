@@ -264,16 +264,21 @@ int efs_session_ack_fence(struct efs_kv *kv,
 }
 
 int efs_session_ack_fence_word(struct efs_kv *kv, const uint8_t uuid[EFS_OPID_UUID_LEN],
-                               uint32_t word, uint64_t mask)
+                               uint32_t epoch, uint32_t word, uint64_t mask)
 {
     struct efs_session_rec r;
     int rc, changed = 0;
 
-    if (!kv || !uuid || !mask || word >= EFS_SESSION_BITS / 64u)
+    if (!kv || !uuid || epoch < 2 || !mask || word >= EFS_SESSION_BITS / 64u)
         return EFS_ERR_INVAL;
     rc = load_rec(kv, uuid, &r);
     if (rc != EFS_OK)
         return rc;
+    if (r.epoch != epoch)
+        return EFS_ERR_STALE;
+    /* An exact-epoch retry after FINISH must not touch a later barrier. */
+    if (r.state == EFS_SESSION_ACTIVE)
+        return EFS_OK;
     if (r.state != EFS_SESSION_FENCING)
         return EFS_ERR_INVAL;
     for (uint32_t b = 0; b < 64; b++) {

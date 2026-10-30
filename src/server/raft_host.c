@@ -2887,10 +2887,11 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_ACK: {
         if (clen != EFS_MD_SESS_ACK_LEN)
             return EFS_ERR_UNSUPPORTED;
-        uint32_t word = rd32be(cmd + 18);
-        uint64_t mask = rd64be(cmd + 22);
+        uint32_t epoch = rd32be(cmd + 18);
+        uint32_t word = rd32be(cmd + 22);
+        uint64_t mask = rd64be(cmd + 26);
         shard = mask ? word * 64u + (uint32_t)__builtin_ctzll(mask) : 0;
-        rc = efs_session_ack_fence_word(h->kv, uuid, word, mask);
+        rc = efs_session_ack_fence_word(h->kv, uuid, epoch, word, mask);
         break;
     }
     case EFS_MD_SESS_FINISH:
@@ -15343,8 +15344,8 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
     }
     if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION && cmd[1] == EFS_MD_SESS_ACK &&
-        (clen != EFS_MD_SESS_ACK_LEN || !rd64be(cmd + 22) ||
-         rd32be(cmd + 18) >= EFS_SESSION_BITS / 64u ||
+        (clen != EFS_MD_SESS_ACK_LEN || rd32be(cmd + 18) < 2 || !rd64be(cmd + 26) ||
+         rd32be(cmd + 22) >= EFS_SESSION_BITS / 64u ||
          group != efs_raft_shard_group(efs_kv_session_shard(cmd + 2)))) {
         out->rc = EFS_ERR_INVAL;
         return;

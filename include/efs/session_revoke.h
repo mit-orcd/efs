@@ -29,7 +29,7 @@ struct efs_session_rpc {
      * completes, from any worker thread. */
     void (*progress)(void *ctx, const char *stage, uint32_t done, uint32_t total);
 };
-/* Fresh session reads and exact-floor fences can be BUSY while a cold
+/* Fresh session reads, exact-floor fences and epoch-bound ACKs can be BUSY while a cold
  * participant catches up; these requests are idempotent with unchanged
  * bytes. BEGIN and cleanup selection keep their one definite result. */
 static inline int efs_session_busy_retry_ok(const uint8_t *payload, uint32_t plen)
@@ -37,6 +37,7 @@ static inline int efs_session_busy_retry_ok(const uint8_t *payload, uint32_t ple
     return plen >= 3 && payload[1] == EFS_MD_CMD_SESSION &&
            ((payload[2] == 0 && plen == 23) ||
             (payload[2] == EFS_MD_SESS_FENCE_LOC && plen == 1 + EFS_MD_SESS_FENCE_LOC_LEN) ||
+            (payload[2] == EFS_MD_SESS_ACK && plen == 1 + EFS_MD_SESS_ACK_LEN) ||
             (payload[2] == EFS_MD_SESS_STORAGE_FENCE && plen == 23));
 }
 /* A cleanup step's BUSY that the server certified as a no-op (zero

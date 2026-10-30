@@ -209,8 +209,9 @@ static int sess_item_step(struct sess_stage *st, uint32_t i,
         return rc;
     memset(payload, 0, sizeof(payload));
     sess_pack_hdr(payload, efs_raft_shard_group(st->ssh), EFS_MD_SESS_ACK, st->uuid);
-    wr32be_sess(payload + 3 + EFS_OPID_UUID_LEN, u->word);
-    wr64be_sess(payload + 3 + EFS_OPID_UUID_LEN + 4, u->mask);
+    wr32be_sess(payload + 3 + EFS_OPID_UUID_LEN, st->epoch);
+    wr32be_sess(payload + 3 + EFS_OPID_UUID_LEN + 4, u->word);
+    wr64be_sess(payload + 3 + EFS_OPID_UUID_LEN + 8, u->mask);
     *phase = "participant-ack";
     return sess_rpc(st->rpc, payload, 1 + EFS_MD_SESS_ACK_LEN, r);
 }

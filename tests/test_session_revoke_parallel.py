@@ -96,8 +96,8 @@ static int submit(void *ctx,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs
         return r->rc=fail?EFS_ERR_IO:EFS_OK;
     }
     case EFS_MD_SESS_ACK: {
-        uint32_t word=rd32(p+19);uint64_t mask=(uint64_t)rd32(p+23)<<32|rd32(p+27);
-        assert(n==1+EFS_MD_SESS_ACK_LEN&&mask);
+        uint32_t word=rd32(p+23);uint64_t mask=(uint64_t)rd32(p+27)<<32|rd32(p+31);
+        assert(n==1+EFS_MD_SESS_ACK_LEN&&rd32(p+19)==2&&mask);
         enter();pthread_mutex_lock(&mu);
         for(unsigned b=0;b<64;b++)if(mask>>b&1){
             uint32_t sh=word*64+b;assert(fenced[sh]==1&&!acked[sh]);acked[sh]++;

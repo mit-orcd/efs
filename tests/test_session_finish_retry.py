@@ -48,7 +48,7 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
   r->salt=sh==7?((uint64_t)(finishes>=3?1:2)<<32)|5:(sh==EFS_SESSION_BITS?2:0);
  }
  else if(p[2]==EFS_MD_SESS_FENCE_LOC){assert(bytes==35&&read32(p+19)==5&&read32(p+23)==0&&!read32(p+27)&&read32(p+31)==2);}
- else {assert(p[2]==EFS_MD_SESS_ACK&&bytes==31&&read32(p+19)==0&&!read32(p+23)&&read32(p+27)==2);}
+ else {assert(p[2]==EFS_MD_SESS_ACK&&bytes==35&&read32(p+19)==5&&read32(p+23)==0&&!read32(p+27)&&read32(p+31)==2);}
  return EFS_OK;
 }
 int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,const uint8_t id[EFS_OPID_UUID_LEN],uint32_t old,uint32_t shard,int append,struct efs_msg_raft_mkfs_reply *r){

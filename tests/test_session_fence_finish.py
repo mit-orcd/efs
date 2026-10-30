@@ -27,7 +27,7 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
  assert(rpc->ctx==&owned);memset(r,0,sizeof(*r));r->leader_hint=1;
  if(p[1]==EFS_MD_REQ_SESSION_CLEANUP_PROBE){assert(n==34&&finished);return EFS_ERR_BUSY;} /* falls back per shard */
  if(p[2]==EFS_MD_SESS_BEGIN){assert(n==19);return 0;}
- if(p[2]==EFS_MD_SESS_ACK){assert(n==31&&read32(p+19)==0&&!read32(p+23)&&read32(p+27)==1u<<7&&barriers==2);return 0;}
+ if(p[2]==EFS_MD_SESS_ACK){assert(n==35&&read32(p+19)==2&&read32(p+23)==0&&!read32(p+27)&&read32(p+31)==1u<<7&&barriers==2);return 0;}
  assert(p[2]==0&&n==23);uint32_t sh=read32(p+19);
  r->salt=sh==31?2|((uint64_t)(finished?EFS_SESSION_ACTIVE:EFS_SESSION_FENCING)<<32):sh==EFS_SESSION_BITS?1u<<7:0;
  return 0;
