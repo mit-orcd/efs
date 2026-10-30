@@ -438,6 +438,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_k37_events.py
 	python3 tests/test_raft_log_entries.py
 	python3 tests/test_env_inventory.py
+	python3 tests/test_settings_inventory.py
 	python3 scripts/check_k_register.py
 	python3 tests/test_k_register.py
 	python3 tests/test_graph_community_labels.py
@@ -1181,6 +1182,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_shutdown_stuck_worker.py
 	python3 tests/test_k36_recovery.py
 	python3 tests/test_expiry_policy_live.py
+	python3 tests/test_settings_listing.py
 	python3 tests/posix/posix_expiry.py --private
 	python3 tests/test_k36_segment_recovery.py
 	./tests/test_reclaim
