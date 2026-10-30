@@ -53,6 +53,7 @@
  * them turns the packer off:
  * rates and counts below 1 are raised to 1 (the minimum age may be 0 for
  * tests). */
+#include "efs/settings.h"
 #include "server_internal.h"
 #include "efs/placement.h"
 #include "efs/fault_exit.h"
@@ -122,11 +123,12 @@ static uint64_t pk_now_ns(void)
 static uint64_t env_u64(const char *name, uint64_t def, uint64_t min)
 {
     const char *v = getenv(name);
-    if (!v || !*v) return def;
+    uint64_t r = def;
     char *end;
-    unsigned long long x = strtoull(v, &end, 10);
-    if (*end) return def;
-    return x < min ? min : (uint64_t)x;
+    unsigned long long x = v && *v ? strtoull(v, &end, 10) : 0;
+    if (v && *v && !*end) r = x < min ? min : (uint64_t)x;
+    efs_setting_u64(name, r);
+    return r;
 }
 static void wr64(uint8_t *p, uint64_t v) { for (int i = 7; i >= 0; i--) { p[i] = (uint8_t)v; v >>= 8; } }
 static uint64_t rd64(const uint8_t *p) { uint64_t v = 0; for (int i = 0; i < 8; i++) v = (v << 8) | p[i]; return v; }

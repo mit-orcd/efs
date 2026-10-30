@@ -1,3 +1,4 @@
+#include "efs/settings.h"
 #include "../common/query_stage_trace.h"
 /* Local, rebuildable query cache. Authoritative metadata remains in Raft/KV.
  * Immutable generation directories retain old query leases. Only changed raw
@@ -131,16 +132,19 @@ static void configure_reserve(void)
     if(text && (errno || !end || *end || mib<1 || mib>1048576))
         fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_RESERVE_MIB; using 64\n");
     else reserve_bytes=(uint64_t)mib<<20;
+    efs_setting_u64("EFS_QUERY_DISK_RESERVE_MIB",reserve_bytes>>20);
     text=getenv("EFS_QUERY_DISK_MAX_MIB");
     errno=0;end=NULL;mib=text?strtoull(text,&end,10):16384;
     if(text && (errno || !end || *end || mib<1 || mib>16777216))
         fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_MAX_MIB; using 16384\n");
     else generation_limit=(uint64_t)mib<<20;
+    efs_setting_u64("EFS_QUERY_DISK_MAX_MIB",generation_limit>>20);
     text=getenv("EFS_QUERY_DISK_TOTAL_MIB");
     errno=0;end=NULL;mib=text?strtoull(text,&end,10):32768;
     if(text && (errno || !end || *end || mib<1 || mib>16777216))
         fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_TOTAL_MIB; using 32768\n");
     else aggregate_limit=(uint64_t)mib<<20;
+    efs_setting_u64("EFS_QUERY_DISK_TOTAL_MIB",aggregate_limit>>20);
 }
 /* A free-space guard, not a reservation against concurrent non-cache writers.
  * Check every 256 small writes; ENOSPC still propagates from every syscall. */

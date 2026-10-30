@@ -1,4 +1,5 @@
 #include "efs/record_decode.h"
+#include "efs/settings.h"
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
@@ -944,6 +945,31 @@ void server_handle_conn(struct efs_conn *conn)
             efs_iostats_snapshot(&reply);
             efs_conn_send_msg(conn, EFS_MSG_IO_STATS_REPLY, &reply,
                               sizeof(reply));
+            break;
+        }
+        case EFS_MSG_SETTINGS: {
+            struct efs_msg_settings_reply *rep = calloc(1, sizeof(*rep));
+            if (!rep) { close_conn = 1; break; }
+            int rows, cut;
+            rep->rc = payload_len ? EFS_ERR_INVAL : EFS_OK;
+            if (!rep->rc) {
+                rep->len = (uint32_t)efs_settings_render(rep->text, sizeof(rep->text), &rows, &cut);
+                rep->rows = (uint32_t)rows;
+                rep->truncated = (uint32_t)cut;
+                /* The durability window is a recorded policy of this node. */
+                struct efs_msg_sync_stats_reply *ss = calloc(1, sizeof(*ss));
+                if (ss) {
+                    server_put_sync_stats(g_server, ss);
+                    int n = snprintf(rep->text + rep->len, sizeof(rep->text) - rep->len,
+                                     "durability-window\t%u ms / %llu MiB\t200 ms / 256 MiB\tpolicy\tpolicy\n",
+                                     ss->sync_window_ms, (unsigned long long)(ss->sync_window_bytes >> 20));
+                    if (n > 0 && (size_t)n < sizeof(rep->text) - rep->len) { rep->len += (uint32_t)n; rep->rows++; }
+                    else rep->truncated = 1;
+                    free(ss);
+                }
+            }
+            efs_conn_send_msg(conn, EFS_MSG_SETTINGS_REPLY, rep, sizeof(*rep));
+            free(rep);
             break;
         }
         case EFS_MSG_VERSION: {

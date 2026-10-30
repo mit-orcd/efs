@@ -1,3 +1,4 @@
+#include "efs/settings.h"
 #include "client_internal.h"
 #include "efs/opid.h"
 #include "efs/request_receipt.h"
@@ -142,6 +143,7 @@ static uint64_t rpc_resolve_ms(void)
         const char *e = getenv("EFS_RESOLVE_MS");
         long v = e && *e ? strtol(e, NULL, 10) : 8000;
         ms = v < 0 ? 0 : v;
+        efs_setting_u64("EFS_RESOLVE_MS", (unsigned long long)ms);
     }
     return (uint64_t)ms;
 }

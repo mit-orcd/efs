@@ -1,3 +1,4 @@
+#include "efs/settings.h"
 #include "client_internal.h"
 #include "efs/protocol.h"
 #include <stdio.h>
@@ -473,6 +474,7 @@ static void map_fresh_init(void)
     const char *e = getenv("EFS_READ_MAP_TTL_MS");
     unsigned long v = e && *e ? strtoul(e, NULL, 10) : 200;
     map_fresh_ttl = (v > 10000 ? 10000 : (uint64_t)v) * 1000;
+    efs_setting_u64("EFS_READ_MAP_TTL_MS", map_fresh_ttl / 1000);
 }
 
 /* Microseconds: an open and the pull that follows it usually fall in the

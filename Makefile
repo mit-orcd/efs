@@ -64,7 +64,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               $(COMMON_DIR)/common.c $(COMMON_DIR)/frag_record.c $(COMMON_DIR)/packed_segment.c $(COMMON_DIR)/pack_ledger.c $(COMMON_DIR)/packed_reader.c \
               $(COMMON_DIR)/log_ts.c \
               $(COMMON_DIR)/batch_obs.c \
-              $(COMMON_DIR)/version.c \
+              $(COMMON_DIR)/version.c $(COMMON_DIR)/settings.c \
               $(COMMON_DIR)/protocol.c $(COMMON_DIR)/record_decode.c \
               $(COMMON_DIR)/request_receipt.c \
               src/wire/wire.c \

@@ -1,6 +1,7 @@
 /* Shared client body/scratch budget. Ownership transfers between the dirty
  * cache, read cache and PUT pipeline keep the allocation charged until free.
  * Failed publication therefore retains its charge, as required by D27. */
+#include "efs/settings.h"
 #include <efs/common.h>
 #include <efs/rdma.h>
 #include <pthread.h>
@@ -32,12 +33,16 @@ static uint64_t budget_env(const char *name, uint64_t fallback,
 {
     const char *s = getenv(name);
     char *end;
-    unsigned long long v;
-    if (!s || !*s || *s == '-')
-        return fallback;
-    errno = 0;
-    v = strtoull(s, &end, 10);
-    return !errno && *end == '\0' && v >= min && v <= max ? v : fallback;
+    unsigned long long v = 0;
+    if (s && *s && *s != '-') {
+        errno = 0;
+        v = strtoull(s, &end, 10);
+        if (errno || *end != '\0' || v < min || v > max)
+            v = fallback;
+    } else
+        v = fallback;
+    efs_setting_u64(name, v);
+    return v;
 }
 static void credit_destroy(void *unused)
 {

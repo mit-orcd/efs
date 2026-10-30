@@ -276,6 +276,15 @@ enum efs_msg_type {
      * EFS_RECOVERY_SCAN_SEGMENTS: EFS_RECOVERY_SEGMENT_REC_LEN records). */
     EFS_MSG_RECOVERY_SCAN = 243,
     EFS_MSG_RECOVERY_SCAN_REPLY = 244,
+    /* S4/W122: the node's effective settings, read-only (efs-mgmt settings).
+     * No request payload; reply struct efs_msg_settings_reply. */
+    EFS_MSG_SETTINGS = 247,
+    EFS_MSG_SETTINGS_REPLY = 248,
+};
+#define EFS_SETTINGS_PAGE 8192u
+struct efs_msg_settings_reply {
+    uint32_t rc, rows, truncated, len;
+    char text[EFS_SETTINGS_PAGE]; /* NUL-terminated; len bytes before it */
 };
 /* K36 inventory kinds: every published object (chunk base or live span)
  * that places a fragment on `node`, as the degraded mark it would carry if
