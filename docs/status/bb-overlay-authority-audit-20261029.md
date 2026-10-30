@@ -119,10 +119,9 @@ shutdown of both clients is checked after all members return. Eight cases:
 | RPC failure refuses new OPEN, recovery preserves exact bytes | PASS |
 
 All original base stores/logs/results are retained. Matrix `cleanup_errors=[]`;
-both owned mounts and daemons retired. Candidate matrix, eviction/reload,
-reordered-response component schedule, POSIX core/peer suites, sanitizers,
-full test gate and ORCD TCP/RDMA are still **NOTRUN**. Do not infer a completed
-BB audit or alpha PASS from the candidate source alone.
+both owned mounts and daemons retired. At this baseline checkpoint, candidate
+qualification was NOTRUN; subsequent closed results and failures follow below.
+Do not infer a completed BB audit or alpha PASS from the candidate source alone.
 
 ## First candidate failure (retained, not a passing qualification)
 
@@ -141,7 +140,9 @@ before returning fresh fstat data; unpublished bodies still own their local
 EOF. A production-block regression now checks the staging EOF and invalidation,
 not only fstat output. Each candidate gets unique TMPDIR/GC/full-gate paths;
 none reopens or overwrites failed captures. ORCD login's previous master has
-expired and now requires user interactive authentication; xorinox work continues.
+expired at that checkpoint; authentication was later restored with the user's
+explicit `ssh -A erbmi1@orcd-login.mit.edu` form. No credential was entered by
+the agent.
 
 `c0266ad36`: the strengthened shrink test passed its fstat and beyond-EOF
 check, then failed the post-regrow zero-tail assertion (7/8 matrix PASS;
@@ -204,3 +205,24 @@ node9900 build uses `/tmp/efs-taskBB-orcd-17027103e`, with the existing
 on the closed matching-source xorinox zero-failure result. Build is not a
 hardware qualification. Committed reproduction driver:
 `tests/measure/bb_orcd_qualify.py --phase build|qualify`.
+
+## Cold-cache reply race (K59), retained control and serialized rerun
+
+The cold open-stat path could miss its local row, receive a valid RPC, then
+return the local row inserted by another lookup during that RPC. The actual
+production wrapper fails the new deterministic hydration schedule against
+source `17027103e` (stale mode/uid/gid assertion), even though its warm path
+is already repaired. New source `791d57787` returns that successful RPC row
+plus only the unpublished EOF/mtime overlay in the cold path as well. Native
+regression passes. Raw Linux negative control:
+`~/efs-artifacts/taskBB-20261029/cold-race-negative-17027103e.log`; failed
+component source/binary copied and independently hash-compared into
+`~/efs-taskBB-20261029/cold-race-negative-17027103e`, original retained.
+
+The `17027103e` full gate is allowed to close unchanged. A bounded 3600 s
+predecessor wait queues exactly one `791d57787` qualification after its exit
+file and closed state exist and no process argument still names the previous
+source. Runs do not overlap. Both outputs and the queue's screen transcript
+remain under the existing private/raw roots. Hardware source `791d57787` is
+built separately on node9900; live checks still require its own closed
+xorinox zero-failure proof. No preceding gate can qualify the new source.

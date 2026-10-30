@@ -52,6 +52,8 @@ else:
   for f in (d/'tmp').glob('fail-*.log'):add(f,d.name+'/tmp/'+f.name)
  for d in root.glob('gc-*'):
   for case in d.glob('gc-*'):direct(case,d.name+'/'+case.name)
+ for d in root.glob('cold-race-negative-*'):
+  add(d/'test.c',d.name+'/test.c')
 # Only finalized launcher files, not arbitrary nested private fixtures.
 for f in logs.iterdir():
  if f.is_file() and f.suffix in ('.log','.json',''):
