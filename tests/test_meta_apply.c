@@ -2176,6 +2176,74 @@ static void test_lookup_committed_unresolved_dentry(void)
     efs_kv_mem_free(kv);
 }
 
+/* Cross-group migration has independently materialized participants. Cover
+ * both source-first (committed PUT still an intent) and destination-first
+ * (first-use bitmap still absent), without another write to repair the cut. */
+static void test_readdir_migration_participant_cuts(void)
+{
+    for (unsigned source_first = 0; source_first < 2; ++source_first) {
+        struct efs_kv *kv = efs_kv_mem_create();
+        struct coord_ctx cc = {.kv = kv};
+        struct efs_meta_row row;
+        struct efs_meta_dir_cursor cur = {0};
+        struct efs_meta_dir_ent out[4];
+        struct efs_txid tx = {{0x78}};
+        struct efs_txn_parts parts = {0};
+        uint8_t loc[EFS_KV_KEY_MAX], dst[EFS_KV_KEY_MAX], ik[EFS_KV_KEY_MAX];
+        uint8_t img[EFS_META_DENT_BYTES], iv[EFS_META_INO_BYTES];
+        uint32_t ll, dl, il, len = sizeof(img), n, budget = 1024;
+        uint64_t lv, dv;
+        efs_ino_t ino;
+        CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "migration init");
+        const char *name = spread_name(EFS_ROOT_INO);
+        uint32_t psh = efs_kv_inode_shard(EFS_ROOT_INO);
+        uint32_t hsh = efs_kv_dentry_shard(EFS_ROOT_INO, name, EFS_META_LAYOUT_HASHED);
+        CHECK(psh != hsh, "distinct migration participants");
+        CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                        name, &ino) == EFS_OK, "stable name");
+        CHECK(efs_meta_dir_begin_split(kv, EFS_ROOT_INO) == EFS_OK, "begin split");
+        CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &row) == EFS_OK, "row");
+        if (source_first) {
+            /* An already-used destination makes K48's bitmap cut unchanged. */
+            row.used_shards |= 1ULL << efs_kv_dir_lane(name);
+            CHECK(efs_kv_key_inode(psh, EFS_ROOT_INO, ik, &il) == EFS_OK &&
+                  efs_meta_pack_inode(&row, iv, sizeof(iv)) == EFS_OK &&
+                  efs_kv_put(kv, ik, il, iv, sizeof(iv)) == EFS_OK, "used lane");
+        }
+        CHECK(efs_kv_key_dentry(psh, EFS_ROOT_INO, name, loc, &ll) == EFS_OK &&
+              efs_kv_key_dentry(hsh, EFS_ROOT_INO, name, dst, &dl) == EFS_OK,
+              "migration keys");
+        CHECK(efs_kv_get(kv, loc, ll, img, &len) == EFS_OK &&
+              efs_txn_ver_get(kv, loc, ll, &lv) == EFS_OK &&
+              efs_txn_ver_get(kv, dst, dl, &dv) == EFS_OK, "capture source");
+        parts.n = 2;
+        parts.shard[0] = psh < hsh ? psh : hsh;
+        parts.shard[1] = psh < hsh ? hsh : psh;
+        CHECK(efs_txn_prepare_excl(kv, &tx, &parts, loc, ll, lv, EFS_TXN_DEL,
+                                  NULL, 0) == EFS_OK &&
+              efs_txn_prepare_excl(kv, &tx, &parts, dst, dl, dv, EFS_TXN_PUT,
+                                  img, len) == EFS_OK, "prepare move");
+        CHECK(efs_txn_decide(kv, efs_txn_coordinator(&tx, &parts), &tx,
+                            EFS_TXN_COMMIT) == EFS_OK, "commit move");
+        CHECK(efs_txn_resolve(kv, &tx, source_first ? psh : hsh,
+                             EFS_TXN_COMMIT) == EFS_OK, "resolve only one side");
+        if (source_first) {
+            CHECK(efs_meta_apply_readdir(kv, EFS_ROOT_INO, &cur, out, 4, &n) ==
+                      EFS_OK && !n, "reproduce stable migration omission");
+            memset(&cur, 0, sizeof(cur));
+        }
+        CHECK(efs_meta_apply_readdir_tx_bounded(kv, EFS_ROOT_INO, &cur, out, 4,
+                  &n, &budget, coord_fn, &cc) == EFS_OK && n == 1 && cur.done &&
+                  !strcmp(out[0].name, name) && out[0].d.ino == ino,
+              "stable name survives either participant cut");
+        len = sizeof(img);
+        CHECK(efs_kv_get(kv, source_first ? dst : loc, source_first ? dl : ll,
+                         img, &len) == (source_first ? EFS_ERR_NOT_FOUND : EFS_OK),
+              "listing leaves unresolved participant unchanged");
+        efs_kv_mem_free(kv);
+    }
+}
+
 /* The intent stream fills before the base stream. An invisible intent is
  * progress, not permission to jump the cursor to a later base name. */
 static void test_readdir_intent_frontier(void)
@@ -6952,6 +7020,7 @@ int main(void)
     test_stat_committed_unresolved_row();
     test_lookup_committed_unresolved_dentry();
     test_readdir_intent_frontier();
+    test_readdir_migration_participant_cuts();
     test_stat_fence_and_gen();
     test_stat_dir_hashed();
     test_utimens_fence();
