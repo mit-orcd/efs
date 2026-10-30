@@ -1202,6 +1202,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k22_leader_admission.py
 	python3 tests/test_w130_dir_fault.py
 	python3 tests/test_k48_readdir.py
+	python3 tests/test_ao_readdir_live.py
 	python3 tests/test_w166_authority.py
 	./tests/test_kv_lsm
 	python3 tests/test_server_processes.py
