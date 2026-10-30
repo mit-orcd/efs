@@ -1337,7 +1337,7 @@
     "docs/status/alpha-1.0-2plus1-checklist.md": "b72c310ca46730164e24eb59c53fa9d3b0c4326d8da5384f95b2d61aec1f1cee",
     "docs/status/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
     "docs/status/alpha-1.1-consolidation.md": "bd0cbe68dab646b3a433afa10500dab2c3d80e0c0f9f1d55cf20f18dd6f523df",
-    "docs/status/d39-consolidated-model-20261023.md": "343d1f6023da489ccf29b84f786919ec076c191ea27bf56f5602c0d0fc2b5a6c",
+    "docs/status/d39-consolidated-model-20261023.md": "6da2028b033d8cdabdb5da3f63b30873cc23dbe2a1b3e8e6587147f9d16f0f56",
     "docs/status/decisions.md": "ce46e3d7d720b6e7ea80d708fd352cbd431c917d9e0eb7de53518543525cea95",
     "docs/status/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
     "docs/status/w100-eof-contract-20261013.md": "28014869365f057282c99f3632e40a1894d7c5229840386e9b34301fd714f612",
@@ -2667,5 +2667,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "ada4bccf3ebfb96b36a8da556744c76a0248db71"
+  "source_commit": "abae2544486cf2b0f22959cb12edee6e4655db28"
 }
