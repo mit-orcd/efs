@@ -141,3 +141,15 @@ EOF. A production-block regression now checks the staging EOF and invalidation,
 not only fstat output. Each candidate gets unique TMPDIR/GC/full-gate paths;
 none reopens or overwrites failed captures. ORCD login's previous master has
 expired and now requires user interactive authentication; xorinox work continues.
+
+`c0266ad36`: the strengthened shrink test passed its fstat and beyond-EOF
+check, then failed the post-regrow zero-tail assertion (7/8 matrix PASS;
+cleanup PASS). **The original returned bytes were not captured**, so this is
+not evidence of resurrected bytes. The test had not refreshed the held
+descriptor's metadata EOF after regrowth, contrary to D25's recorded
+OPEN/GETATTR freshness boundary (§3.5 / audit 2 of its design note). The
+corrected harness explicitly verifies fresh fstat EOF before requiring a full
+zero tail, keeps the exact byte oracle, and records lengths/hashes and raw
+mismatches. The original failure is retained unchanged; no original readback
+is reconstructed or fabricated. The product is unchanged for this harness
+correction. Its failed root is `qualification-c0266ad36/matrix`.

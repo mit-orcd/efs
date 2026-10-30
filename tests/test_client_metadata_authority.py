@@ -95,6 +95,13 @@ int main(int argc,char **argv){struct efs_inode out;assert(argc==2);
  }
  reset();rpc_rc=EFS_ERR_NOT_FOUND;assert(!efs_client_stat_open(42,&out)&&out.nlink==0&&out.size==8192);
  reset();present=dirty=0;assert(!efs_client_stat_refresh(42,&out));authority(&out);assert(out.size==0);
+ /* A late response can represent its earlier capture point. It cannot
+  * authorize a later operation through the cache: that operation must fetch
+  * its own authority. This runs actual adoption/refresh wrappers, not a model. */
+ reset();struct efs_inode latest=reply,late=reply;late.mode=S_IFREG|0777;late.uid=11;late.gid=12;late.parent=1;strcpy(late.name,"old");late.content_epoch=1;
+ efs_client_adopt_lookup(&latest,&out);efs_client_adopt_lookup(&late,&out);
+ reply=latest;assert(!efs_client_stat_refresh(42,&out));authority(&out);assert(out.size==8192);
+ rpc_rc=EFS_ERR_NET;assert(efs_client_stat_refresh(42,&out)==EFS_ERR_NET);
  reset();dirty=0;efs_client_adopt_lookup(&reply,&out);authority(&out);assert(out.size==0 && drops==1);
  /* Once no local data owns EOF, a newer peer shrink is adopted. */
  reset();dirty=0;reply.mtime=11;efs_client_adopt_lookup(&reply,&out);authority(&out);assert(out.size==0&&drops==1);

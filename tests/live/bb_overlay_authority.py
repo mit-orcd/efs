@@ -31,6 +31,15 @@ def denied(path,flags):
     try:fd=os.open(path,flags,0o600)
     except OSError as e:assert e.errno==errno.EACCES,(path,e);return
     os.close(fd);raise AssertionError('stale local authority granted '+str(path))
+def observed(label,got,want):
+    record=dict(label=label,actual_length=len(got),expected_length=len(want),
+                actual_sha256=hashlib.sha256(got).hexdigest(),expected_sha256=hashlib.sha256(want).hexdigest())
+    result.setdefault('observations',[]).append(record);save()
+    if got!=want:
+        (out/(label+'-actual.bin')).write_bytes(got)
+        (out/(label+'-expected.bin')).write_bytes(want)
+        raise AssertionError(record)
+
 def chown_authority(ino,uid,gid):
     rc,text=mgmt(env,'raft-setattr',c.ep(1),str(ino),'6','0',str(uid),str(gid))
     assert rc==0 and 'status=0' in text,text
@@ -79,8 +88,14 @@ try:
         with (A/'reader').open('wb') as f:f.write(data);f.flush();os.fsync(f.fileno())
         fd=opened(B/'reader',os.O_RDONLY);assert os.pread(fd,len(data),0)==data
         os.truncate(A/'reader',65536);assert os.fstat(fd).st_size==65536,'open getattr hid peer truncate'
-        assert os.pread(fd,4096,131072)==b''
-        os.truncate(A/'reader',300000);assert os.pread(fd,4096,131072)==bytes(4096),'discarded bytes resurrected'
+        observed('after-shrink',os.pread(fd,4096,131072),b'')
+        os.truncate(A/'reader',300000)
+        # A held descriptor's metadata EOF refreshes at OPEN/GETATTR, not
+        # on every read. Establish that boundary before demanding tail bytes.
+        size=os.fstat(fd).st_size
+        result.setdefault('observations',[]).append(dict(label='after-grow-EOF',actual_size=size,expected_size=300000));save()
+        assert size==300000,('after-grow-EOF',size)
+        observed('after-grow-masked-tail',os.pread(fd,4096,131072),bytes(4096))
     check('truncate-under-open-reader',shrink_reader)
     def namespace_permission():
         (A/'deny-dir').mkdir();(A/'deny-dir/file').write_bytes(b'x');os.stat(A/'deny-dir')
