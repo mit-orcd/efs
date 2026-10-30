@@ -92,6 +92,11 @@ Not reproduced. `scripts/b6_full_loop.sh` with `EFS_PACK_DBG=1` on
   ledger (it frees exactly 65,536 B), then exactly one 128 KiB write succeeds
   and the next gets `ENOSPC`, ledger never above its quota.
 
+- `tests/budgets.tsv`: the full-mode row goes from a stale 85 s to 400 s
+  (318 s at 8 jobs on nuc, 220–232 s alone; the refused writers wait 13–20 s
+  each, the unlink check adds about 45 s); the recipe test still passes
+  (budgeted gate 1,616 s of 1,650 s).
+
 Quiet is a stabilizer, not the fix: a late free is now explained or flagged
 instead of forbidden.
 
