@@ -2166,7 +2166,12 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,uint32_t n,int pro
     body[1]=tag[probe_only];
     efs_node_id_t target=0,skip=0;
     int lost=0;
-    for(unsigned attempt=0;attempt<8;attempt++) {
+    /* A stale hint can alternate with a lost exchange while the surviving
+     * quorum elects. The foreground owner already supplied its deadline;
+     * retain this exact ticket body until that bound, not eight exchanges.
+     * Deadline-less background settlement retains its finite attempt cap. */
+    int bounded=efs_client_rpc_deadline_ms()!=0;
+    for(unsigned attempt=0;bounded || attempt<8;attempt++) {
         if(efs_client_rpc_past_deadline())return lost?EFS_ERR_NET:EFS_ERR_BUSY;
         efs_node_id_t nid=target;
         struct efs_conn *conn=target?efs_client_conn_get(target):raft_voter_conn_skip(shard,&nid,skip);
@@ -2186,7 +2191,7 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,uint32_t n,int pro
             if(conn)efs_client_conn_drop(nid,conn);
             rpc_retry_peer(shard,nid,&target,&skip,conn!=NULL);
             lost=1;
-            int last=attempt+1==8 || rpc_writer_retry_pause(attempt)!=EFS_OK;
+            int last=(!bounded && attempt+1==8) || rpc_writer_retry_pause(attempt)!=EFS_OK;
             fprintf(stderr,"put-ticket: lost exchange op=%d shard=%u nid=%u attempt=%u%s\n",
                     probe_only,shard,nid,attempt,last?" -> NET":"; another voter");
             if(last)return EFS_ERR_NET;
@@ -2265,7 +2270,10 @@ int efs_client_rpc_degraded_mark(efs_ino_t ino,uint64_t inode_gen,uint64_t objec
     body[30]=(uint8_t)fi;
     efs_node_id_t target=0,skip=0;
     int lost=0;
-    for(unsigned attempt=0;attempt<8;attempt++) {
+    /* The mark is idempotent and shares the existing fsync deadline, just
+     * like ticket admission/settlement. Never renew that caller's bound. */
+    int bounded=efs_client_rpc_deadline_ms()!=0;
+    for(unsigned attempt=0;bounded || attempt<8;attempt++) {
         if(efs_client_rpc_past_deadline())return lost?EFS_ERR_NET:EFS_ERR_BUSY;
         efs_node_id_t nid=target;
         struct efs_conn *conn=target?efs_client_conn_get(target):raft_voter_conn_skip(shard,&nid,skip);
@@ -2280,7 +2288,7 @@ int efs_client_rpc_degraded_mark(efs_ino_t ino,uint64_t inode_gen,uint64_t objec
             if(conn)efs_client_conn_drop(nid,conn);
             rpc_retry_peer(shard,nid,&target,&skip,conn!=NULL);
             lost=1;
-            int last=attempt+1==8 || rpc_writer_retry_pause(attempt)!=EFS_OK;
+            int last=(!bounded && attempt+1==8) || rpc_writer_retry_pause(attempt)!=EFS_OK;
             fprintf(stderr,"degraded-mark: lost exchange ino=%llu ci=%u nid=%u attempt=%u%s\n",
                     (unsigned long long)ino,ci,nid,attempt,last?" -> NET":"; another voter");
             if(last)return EFS_ERR_NET;
