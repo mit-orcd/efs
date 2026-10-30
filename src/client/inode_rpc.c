@@ -3760,12 +3760,12 @@ static int session_revoke_submit(void *ctx,const uint8_t *payload,uint32_t plen,
     (void)ctx;
     /* Any shard of the group routes to its voters; its anchor will do. */
     uint32_t shard=payload[0]==EFS_RAFT_GROUP_SHARD?1u:2u;
-    efs_node_id_t target=0;
+    efs_node_id_t target=0,skip=0;
     memset(out,0,sizeof(*out));out->leader_hint=-1;out->rc=EFS_ERR_BUSY;
     for (unsigned attempt=0;attempt<8;attempt++) {
         if (efs_client_rpc_past_deadline()) return out->rc=EFS_ERR_BUSY;
         efs_node_id_t nid=target;
-        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
+        struct efs_conn *conn=target?efs_client_conn_get(target):raft_voter_conn_skip(shard,&nid,skip);
         if (!conn) return out->rc=EFS_ERR_NET;
         if (efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,payload,plen)) {
             efs_client_conn_drop(nid,conn);return out->rc=EFS_ERR_NET;
@@ -3785,8 +3785,14 @@ static int session_revoke_submit(void *ctx,const uint8_t *payload,uint32_t plen,
         }
         if (out->rc!=EFS_ERR_NOT_PRIMARY) return out->rc;
         if (out->leader_hint<-1 || out->leader_hint>=EFS_MAX_NODES) return out->rc=EFS_ERR_PROTO;
+        /* A capacity handoff can leave the old leader with no hint. Do
+         * not let the cached leader choose that same refusing voter on
+         * every retry. This is a definite non-admission, not an ambiguous
+         * transport retry; preserve the existing attempt/deadline bounds. */
+        rpc_retry_peer(shard,nid,&target,&skip,0);
         target=out->leader_hint>=0 && (efs_node_id_t)(out->leader_hint+1)!=nid ?
             (efs_node_id_t)(out->leader_hint+1):0;
+        if (target) skip=0;
         if (rpc_writer_retry_pause(attempt)!=EFS_OK) return out->rc;
     }
     return out->rc;
