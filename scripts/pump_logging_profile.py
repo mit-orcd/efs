@@ -246,8 +246,10 @@ def run(a):
             samples.append(sample)
             time.sleep(.5)
         cpus = {i: cpu(p.pid)-cpus[i] for i, p in c.procs.items()}
-        c.active.clear()
-        c.done.set()
+        hold = getattr(a, 'stop_blocked', False) or getattr(a, 'unmount_blocked', False)
+        if not hold:
+            c.active.clear()
+            c.done.set()
         if getattr(a, 'full_release', None):
             release = Path(a.full_release).resolve()
             assert release.parent == c.full_path.resolve() and release.name == 'fill'
@@ -295,8 +297,10 @@ def run(a):
         result.update(verdict='FAIL', error=repr(e), errors=errors, samples=samples)
         raise
     finally:
-        c.active.clear()
-        c.done.set()
+        hold = getattr(a, 'stop_blocked', False) or getattr(a, 'unmount_blocked', False)
+        if not hold:
+            c.active.clear()
+            c.done.set()
         try:
             if mount:
                 stop = subprocess.run([str(ROOT / 'scripts/client.sh'), 'stop', str(mount.path)],
@@ -305,9 +309,17 @@ def run(a):
                 assert stop.returncode == 0 and not os.path.ismount(mount.path), 'unclean unmount'
                 assert mount.p.wait(timeout=30) == 0
                 mount.log.close()
+            # unmount-blocked: the sink stays blocked through the checked
+            # unmount, then drains before the daemons stop. stop-blocked
+            # (open K79) keeps it blocked through daemon exit.
+            if not getattr(a, 'stop_blocked', False):
+                c.active.clear()
+                c.done.set()
             for i, proc in c.procs.items():
                 proc.send_signal(signal.SIGTERM)
                 assert proc.wait(timeout=60) == 0, ('daemon stop', i)
+            c.active.clear()
+            c.done.set()
             for t in c.readers:
                 t.join(5)
                 assert not t.is_alive(), 'reader did not finish'
@@ -338,6 +350,10 @@ if __name__ == '__main__':
     p.add_argument('--rdma-dev')
     p.add_argument('--listen', default='127.0.0.1')
     p.add_argument('--ports', type=int, nargs=3, help='explicit unused private ports for real-HCA runs')
+    p.add_argument('--unmount-blocked', action='store_true',
+                   help='keep the sink blocked through the checked unmount; drain before daemon stop')
+    p.add_argument('--stop-blocked', action='store_true',
+                   help='also keep it blocked until every daemon has stopped (60 s bound; open K79)')
     p.add_argument('--versioned', action='store_true', help='final expected-version payload oracle')
     p.add_argument('--slow-fsync-us', type=int, default=0,
                    help='daemon-only existing W159 test interposer, for wait-log pressure')

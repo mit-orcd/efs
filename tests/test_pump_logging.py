@@ -26,7 +26,7 @@ base = Path(tempfile.mkdtemp(prefix='efs-pump-logging-'))
 print('pump logging fixture:', base, flush=True)
 profile.require_reporter_startup_failure(profile.k.EFSD, base/'unsupported-stderr', base/'startup-refusal.log')
 a = argparse.Namespace(work=base/'work', output=base/'out', sink='blocked', obs=1,
-                       seconds=35, threads=2, rate=2, slow_fsync_us=10000, versioned=True, require_progress=True)
+                       seconds=25, threads=2, rate=2, slow_fsync_us=10000, versioned=True, require_progress=True)
 r = profile.run(a)
 assert r['verdict'] == 'PASS' and r['writes'] >= 50, r
 for n in (1, 2, 3):
@@ -34,7 +34,21 @@ for n in (1, 2, 3):
     values = re.findall(r'telemetry: overflow=(\d+)', text)
     assert values and max(map(int, values)) > 0, ('no overflow accounting', n)
     assert 'raft-obs: ' in text and 'iostats: ' in text and 'batch-obs {' in text
+    # AB: term/role events are captured under h->mu and delivered whole,
+    # in order, by the reporter. Formation runs on a drained sink.
+    roles = re.findall(r'^(?:\S+ )?raft-obs: g(\d+) term (\d+)->(\d+) role (\w+)->(\w+) leader=(-?\d+) '
+                       r'commit=\d+ applied=\d+ t=\d+ms$', text, re.M)
+    assert roles, ('no role-change evidence', n)
+    assert not re.search(r'raft-obs: g\d+ term(?! \d+->\d+ role \w+->\w+ leader=-?\d+ commit=\d+ applied=\d+ t=\d+ms$)', text, re.M), ('torn role record', n)
     sync = (a.output / ('n%d-sync.log' % n)).read_text()
     assert re.search(r'slow-fsync: .*calls=[1-9][0-9]+ delay_us=10000', sync), n
+# AB/AE: the checked unmount (session revoke through Raft) completes while the
+# sink is still blocked. Daemon exit with a blocked sink is open K79
+# (pump_logging_profile.py --stop-blocked reproduces it).
+b = argparse.Namespace(work=base/'work-stop', output=base/'out-stop', sink='blocked', obs=1,
+                       seconds=10, threads=2, rate=2, slow_fsync_us=0, versioned=True,
+                       require_progress=True, unmount_blocked=True)
+r = profile.run(b)
+assert r['verdict'] == 'PASS' and r['writes'] >= 20, r
 shutil.rmtree(base)
-print('pump logging: PASS (blocked sink, exact payloads, progress and explicit overflow)')
+print('pump logging: PASS (blocked sink, exact payloads, progress, explicit overflow, role events, unmount with sink blocked)')

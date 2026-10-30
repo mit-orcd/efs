@@ -3023,7 +3023,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc == EFS_ERR_STALE)
         rc = EFS_OK;
     if (rc != EFS_OK) {
-        fprintf(stderr,
+        efs_telemetry_log(0,
                 "raft-host: apply session rc=%d index=%llu ino=%llu kind=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)ino,
                 (unsigned)cmd[1]);
@@ -3031,9 +3031,10 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
          * advancing past it can pin an unlinked inode forever. */
         return rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM ? rc : EFS_OK;
     }
-    /* Routine ACK progress must not block the applier on stderr. Other
-     * session events (including fences) retain synchronous delivery. */
-    efs_telemetry_log(cmd[1] != EFS_MD_SESS_ACK,
+    /* The applier runs on the pump under h->mu: no session event, fences
+     * and failures included, may wait on stderr. All go through the
+     * reporter; a full mailbox is counted in its overflow line. */
+    efs_telemetry_log(0,
             "raft-host: applied session index=%llu kind=%u shard=%u ino=%llu\n",
             (unsigned long long)index, (unsigned)cmd[1], shard,
             (unsigned long long)ino);
