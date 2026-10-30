@@ -1,3 +1,4 @@
+#include "efs/settings.h"
 #include "../common/parse_host_port.h"
 #include "client_internal.h"
 #include "efs/placement.h"
@@ -100,6 +101,7 @@ void efs_client_conn_init(void)
             n = v;
     }
     g_client.conn_pool_size = n;
+    efs_setting_u64("EFS_CLIENT_CONNS_PER_NODE", (unsigned)n);
 
     for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
         for (int s = 0; s < EFS_CLIENT_CONNS_PER_NODE; s++) {
@@ -442,6 +444,7 @@ int efs_client_view_start(void)
     const char *pe = getenv("EFS_CLIENT_VIEW_POLL_MS");
     if (pe && atoi(pe) >= 50 && atoi(pe) <= 60000)
         g_view.poll_ms = atoi(pe);
+    efs_setting_u64("EFS_CLIENT_VIEW_POLL_MS", g_view.poll_ms);
     if (pthread_create(&g_view.th, NULL, view_thread, NULL) != 0) {
         pthread_mutex_unlock(&g_view.mu);
         fprintf(stderr, "membership view: refresh thread not started; members added after "

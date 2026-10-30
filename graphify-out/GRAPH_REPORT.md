@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `91b0fe4998087512e39f499e3b61952b980bdf53`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,557 nodes, 72,716 directed typed edges, 565 communities.
+Source base: `7f57ba7110f4f780cf40a6b9e60611756b1dfc47`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,596 nodes, 72,952 directed typed edges, 555 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,34 +19,34 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 26965
-- `case_of`: 116
-- `contains`: 26490
-- `defines`: 1980
+- `calls`: 27017
+- `case_of`: 118
+- `contains`: 26544
+- `defines`: 1985
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7468
-- `imports_from`: 959
+- `imports`: 7505
+- `imports_from`: 962
 - `indirect_call`: 735
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 2550
+- `mentions_symbol`: 2625
 - `method`: 651
-- `rationale_for`: 1344
+- `rationale_for`: 1347
 - `references`: 2147
-- `references_path`: 1168
+- `references_path`: 1173
 - `regression_for`: 8
 - `uses`: 93
 
 ## Extraction warnings
 
-- warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 322, 843 symbol(s) extracted)
-- warning: 50 code file(s) yielded no symbols (0.19 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+45 more)
+- warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 331, 851 symbol(s) extracted)
+- warning: 51 code file(s) yielded no symbols (0.19 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+46 more)
 
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1716}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1717}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.

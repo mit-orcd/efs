@@ -38,6 +38,9 @@ static struct {
 } g_stop = {.gate=PTHREAD_RWLOCK_INITIALIZER, .listener=-1,
             .status_mu=PTHREAD_MUTEX_INITIALIZER};
 
+/* S4/W122: set by efs-fuse; answers "SETTINGS" with the effective-settings
+ * page (read-only, no quiesce). */
+static size_t (*efs_stop_settings_text)(char *buf,size_t size);
 static uint64_t efs_stop_now(void)
 {
     struct timespec ts;
@@ -259,6 +262,10 @@ static void *efs_stop_server(void *unused)
                           strcmp(command,"FORCE\n")==0)) {
             int force=strcmp(command,"FORCE\n")==0;
             efs_stop_reply(fd,efs_stop_prepare(force)==0?"OK\n":"BUSY\n");
+        } else if(n>0 && strcmp(command,"SETTINGS\n")==0 && efs_stop_settings_text) {
+            char page[8192];
+            efs_stop_settings_text(page,sizeof(page));
+            efs_stop_reply(fd,page);
         } else
             efs_stop_reply(fd,"INVALID\n");
         close(fd);
@@ -319,6 +326,25 @@ static void efs_stop_finish(void)
     }
     close(g_stop.listener);unlink(g_stop.path);
     g_stop.listener=-1;g_stop.started=0;
+}
+/* The SETTINGS page of a mounted client into out (NUL-terminated); 0 on success. */
+static inline int efs_stop_settings(const char *mount,char *out,size_t size)
+{
+    struct sockaddr_un addr={.sun_family=AF_UNIX};
+    if(efs_stop_path(mount,addr.sun_path,sizeof(addr.sun_path)))
+        return 3;
+    int fd=efs_stop_socket();
+    if(fd<0)
+        return 3;
+    if(connect(fd,(struct sockaddr *)&addr,sizeof(addr))!=0) {close(fd);return 3;}
+    efs_stop_reply(fd,"SETTINGS\n");
+    size_t used=0;
+    ssize_t part;
+    while(used<size-1 && (part=recv(fd,out+used,size-1-used,0))>0)
+        used+=(size_t)part;
+    close(fd);
+    out[used]=0;
+    return used>0 && out[0]=='#' ? 0 : 1;
 }
 /* Return 3 for unavailable old/dead clients; normal stop must fail closed. */
 static int efs_stop_client(const char *mount,const char *command)

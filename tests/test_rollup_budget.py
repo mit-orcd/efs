@@ -15,6 +15,7 @@ source = r'''
 #include <assert.h>
 #include <stdio.h>
 #include "metadata.c"
+void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 #define SLOT_BYTES (sizeof(efs_ino_t) + sizeof(int64_t) + sizeof(uint8_t))
 #define FIRST_BYTES (64 * SLOT_BYTES)
 /* Change only the accounted slab payload to place the live table at an exact

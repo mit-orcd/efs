@@ -15,6 +15,11 @@
 #include "efs/session_revoke.h"
 #include "efs/txn.h"
 #include "efs/version.h"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#include "../client/stop_control.h"
+#pragma GCC diagnostic pop
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -3129,6 +3134,113 @@ static int cmd_raft_publish(int argc, char **argv)
     return 0;
 }
 
+/* settings <node:port> | settings --mount PATH (S4/W122): one line per effective
+ * setting, "name value default provenance kind", sorted by kind then name. The
+ * node answers from its recorded process state; the two cluster policies are
+ * read through the node like `commands-policy get` and `expiry-policy cluster get`.
+ * The client page comes from the mount's control socket, the channel that
+ * already serves `efs-fuse --stop`. Exit 1 when refused or truncated. */
+#define SETTINGS_LINES 160
+static char g_settings_line[SETTINGS_LINES][256];
+static int settings_cmp(const void *a, const void *b)
+{
+    const char *x = a, *y = b;
+    int c = strcmp(strrchr(x, '\t') + 1, strrchr(y, '\t') + 1);
+    return c ? c : strcmp(x, y); /* same kind: the name leads the line */
+}
+static void settings_policy(int n_lines[1], const char *name, const char *def, int rc,
+                            uint64_t version, uint64_t value, int expiry)
+{
+    char v[96];
+    if (rc)
+        snprintf(v, sizeof(v), "unavailable (rc=%d)", rc);
+    else if (expiry)
+        snprintf(v, sizeof(v), "%s version=%llu", value ? "on" : "off", (unsigned long long)version);
+    else
+        snprintf(v, sizeof(v), "mask=%llu version=%llu", (unsigned long long)value, (unsigned long long)version);
+    if (n_lines[0] < SETTINGS_LINES)
+        snprintf(g_settings_line[n_lines[0]++], 256, "%s\t%s\t%s\tpolicy\tpolicy\n", name, v, def);
+}
+static int cmd_settings(int argc, char **argv)
+{
+    static struct efs_msg_settings_reply page;
+    char client[8192];
+    const char *text;
+    int rc_all = 0, lines = 0;
+    if (argc == 2 && !strcmp(argv[0], "--mount")) {
+        if (efs_stop_settings(argv[1], client, sizeof(client))) {
+            fprintf(stderr, "efs-mgmt: no mounted client answers for %s\n", argv[1]);
+            return 1;
+        }
+        fputs(client, stdout);
+        return 0;
+    }
+    char host[64];
+    uint16_t port;
+    if (argc != 1 || parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Usage:\n  efs-mgmt settings <node:port>\n  efs-mgmt settings --mount <mountpoint>\n");
+        return 1;
+    }
+    int fd = efs_connect_declared(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    uint8_t type = 0;
+    void *reply = NULL;
+    uint32_t len = 0;
+    if (send_recv(fd, EFS_MSG_SETTINGS, NULL, 0, &type, &reply, &len) != 0 ||
+        type != EFS_MSG_SETTINGS_REPLY || len != sizeof(page)) {
+        fprintf(stderr, "settings: %s:%u refused or does not support it\n", host, port);
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    memcpy(&page, reply, sizeof(page));
+    free(reply);
+    page.text[sizeof(page.text) - 1] = '\0';
+    if (page.rc || page.len >= sizeof(page.text)) {
+        fprintf(stderr, "settings: %s:%u refused (rc=%u)\n", host, port, page.rc);
+        return 1;
+    }
+    text = page.text;
+    char *header = strchr(text, '\n');
+    if (!header || text[0] != '#') {
+        fprintf(stderr, "settings: malformed reply\n");
+        return 1;
+    }
+    *header++ = '\0';
+    for (char *l = header; *l && lines < SETTINGS_LINES;) {
+        char *e = strchr(l, '\n');
+        if (!e || !strchr(l, '\t') || e - l >= 255)
+            break;
+        memcpy(g_settings_line[lines], l, (size_t)(e - l) + 1);
+        g_settings_line[lines++][e - l + 1] = '\0';
+        l = e + 1;
+    }
+    if (page.truncated) {
+        fprintf(stderr, "settings: %s:%u reply truncated\n", host, port);
+        rc_all = 1;
+    }
+    struct efs_msg_raft_mkfs_reply pr;
+    uint8_t cp[2] = {efs_raft_shard_group(1), EFS_MD_REQ_QUERY_POLICY};
+    int rc = sess_rpc(host, port, cp, 2, &pr);
+    settings_policy(&lines, "commands-policy", "mask=3 version=0", rc, pr.index, pr.salt, 0);
+    uint8_t ep[2] = {efs_raft_shard_group(1), EFS_MD_REQ_EXPIRY_SWITCH};
+    int rc2 = sess_rpc(host, port, ep, 2, &pr);
+    settings_policy(&lines, "expiry-policy", "off version=0", rc2, pr.index, pr.salt, 1);
+    if (rc || rc2)
+        rc_all = 1;
+    qsort(g_settings_line, (size_t)lines, sizeof(g_settings_line[0]), settings_cmp);
+    printf("%s (%s:%u)\n", text, host, port);
+    for (int i = 0; i < lines; i++)
+        fputs(g_settings_line[i], stdout);
+    return rc_all;
+}
+
 /* sync-status <node:port>...: per-root durability state of each node
  * (mode, unsynced bytes/fragments, oldest age, synced %, epochs, barriers,
  * unclean-restart verification). */
@@ -3386,6 +3498,8 @@ int main(int argc, char **argv)
         return cmd_status(argc - 2, argv + 2);
     if (strcmp(cmd, "sync-status") == 0)
         return cmd_sync_status(argc - 2, argv + 2);
+    if (strcmp(cmd, "settings") == 0)
+        return cmd_settings(argc - 2, argv + 2);
     if (strcmp(cmd, "data-commit") == 0)
         return cmd_data_commit(argc - 2, argv + 2);
     if (strcmp(cmd, "shrink-quota") == 0)

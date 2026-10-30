@@ -235,6 +235,8 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[S4 effective settings](s4-effective-settings-20261030.md): **`efs-mgmt settings NODE:PORT` and `--mount PATH` shipped (D46 item 3, W122 DONE, L24 removed); gate on xorinox: TOTAL 569 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (1019s)**, NOTRUN = host limits; not merged.
+
 [AN port](an-product-port-20261030.md): store ENOENT retry fix ported (K65); K48, K35 and GETCHUNKS repairs not ported (no failing reproduction on devel).
 
 [Wave 40 merge](alpha-1.0-2plus1-checklist.md): **AO port merged into devel Oct 30; gate on intel2 at `9fd5d4cb3`: TOTAL 574 FAIL 3 NOTRUN 10 STATUS FAIL (847s)**; the three FAILs were test-harness or script issues from the port, fixed test/script-only and each rerun PASS on intel2 (`test_readdir_migration_race` needed a `dent_get_tx` stub, `test_client_metadata_authority` the call-deadline stubs, `test_ao_readdir_live` AO's final script with `missing_ok`); no full-gate rerun after them. NOTRUN = host limits. **AO** ([port](ao-product-port-20261030.md), [AO evidence](ao-readdir-pages-20261028.md)): bounded compact directory pages (wire-format change, fresh clusters only; 100K listing 1.893 -> 0.735 s, page-tail latency worse), plus K74 committed unresolved migration names in READDIR, K75 migration planner/log forwarding cycle, K76 cross-group cleanup at both owners, K77 explicit lock conflict status, K78 admission deadline. K74/K75 block alpha pending live runs; K48 itself stays OPEN. TSan/ASan not run (sanitizer builds are broken on devel by `test_child_vec_index`, see Wave 39).

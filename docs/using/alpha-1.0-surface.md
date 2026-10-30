@@ -135,32 +135,54 @@ descriptions are not a support statement.
 
 ## S4 — effective settings
 
-**Status: structure only. The A6 inventory exists**
-([settings inventory](../status/a6-settings-inventory-20261024.md): every
-setting the binaries read, its kind, default and disposition) **and the
-A7 removals are done; the user's decision whether W122 (an
-effective-settings listing) is in alpha is still open.** Until then an
-operator sees effective settings only through the channels below; no
-command lists them.
+**Status: implemented (W122, D46 item 3); evidence in
+[S4 effective settings](../status/s4-effective-settings-20261030.md).**
+`efs-mgmt settings NODE:PORT` lists the node's effective settings, one line
+per setting, from the values the daemon recorded when it read them; the
+[A6 inventory](../status/a6-settings-inventory-20261024.md) is the list of
+what is covered (the 9 deployment inputs and the numeric tunables, plus the
+active policies, the transport and the build). The command is read-only and
+has no write form.
 
-| Setting | Where the operator sees the effective value today |
+```text
+# daemon settings; observability (34) and fault/test hooks (62) are not listed (127.0.0.1:17432)
+build                  efsd v… (branch …, built … on …)   -      built-in     build
+…
+EFS_PACK_MIN_AGE_MS    12345   60000   environment   numeric tunable
+--writers              2       8       command line  numeric tunable
+commands-policy        mask=3 version=0   mask=3 version=0   policy   policy
+```
+
+Columns (tab separated): name, effective value, default, provenance, kind.
+Provenance is `built-in` (the default is in force), `environment` (the
+variable is set and the daemon accepted it; a value outside the allowed
+range is logged and the default shows as `built-in`), `command line`,
+`automatic` (the daemon chose: transport `auto`, the RDMA device and GID
+index) or `policy` (a cluster policy). Rows are sorted by kind, then name.
+The header line says how many observability and fault/test settings the
+listing leaves out. The page is one reply of at most 8 KiB; the command
+exits non-zero when the node refuses, cannot be reached or the reply is
+truncated, or when a cluster policy cannot be read.
+
+| What | Where the operator sees the effective value |
 | --- | --- |
-| Endpoint, node id, storage roots, quota (automatic or explicit, with the safe maximum), direct I/O, writer count | `efsd` startup lines in `log/efsd.log` (`Storage quota: …`, `node N listening on …`, `direct_io=…`); roots, quota and usage also in `efs-mgmt status` |
-| Membership, member count, metadata voters, formation | `efs-mgmt status` (members), `efs-mgmt raft-status` (voters per group), log line `raft-host: formed: N members, g0 voters …, g2 voters …` |
-| Build identity | `--version` on each binary, `efs-mgmt version NODE:PORT` |
-| Durability window per root | `efs-mgmt sync-status NODE:PORT` (`window 200 ms / 256 MiB`, unsynced bytes, barriers) |
-| Cluster expiry policy | `efs-mgmt expiry-policy NODE:PORT cluster get` (version, on/off, enabled folder count) |
-| `.efs` policy | `efs-mgmt commands-policy NODE:PORT get` (the only switch; `EFS_COMMANDS` is removed) |
-| Recovery state after an unclean stop | `efs-mgmt sync-status NODE:PORT` (`recovery running\|verified\|FAILED`) |
-| Transport | Daemon and client logs; not in any status command |
-| Retained environment tunables | Not shown. An unset variable gives the built-in default; a set one is visible only in the process environment. Some invalid values are logged (`query-config: …`) |
+| Deployment inputs and numeric tunables of the daemon (`EFS_*`, `--writers`) | `efs-mgmt settings NODE:PORT` |
+| Cluster `.efs` policy and cluster expiry policy (with their versions) | `efs-mgmt settings NODE:PORT` (rows `commands-policy`, `expiry-policy`); `commands-policy get` and `expiry-policy cluster get` still answer alone |
+| Durability window | `efs-mgmt settings NODE:PORT` (`durability-window`); `sync-status` adds per-root state and recovery |
+| Transport (TCP, or RDMA and its device) and build identity | `efs-mgmt settings NODE:PORT` (`transport`, `build`); `--version`, `efs-mgmt version NODE:PORT` |
+| Endpoint, storage roots, quota, usage, membership, voters | `efsd` startup lines, `efs-mgmt status`, `efs-mgmt raft-status` (unchanged) |
+| The client's own settings (budgets, connection pool, transport, direct I/O) | `efs-mgmt settings --mount MOUNTPOINT` on the host that has the mount |
 
-Structure for the S4 page once W122 is decided: one row per inventoried
-setting (the A6 inventory already has the rows), with its disposition
-(deployment input, justified tuning, observability, removed), its default,
-whether its effective value is visible and where, and the A11 configuration
-dimension it belongs to. If W122 is taken into alpha, its listing replaces
-the last three rows of the table above; if not, F4 keeps "no
-effective-settings listing" as limitation L24.
+A setting that is read lazily (the RDMA receive buffers and the packing
+tunables on a node that has not packed yet) shows the environment text, or
+the default, until its first read. Direct I/O is always on; the `direct-io`
+row says so and has no environment variable.
+
+**Client listing: `--mount`, not a `.efs` file.** `.efs` exists on a mount
+only while the cluster commands policy enables it, and the file would need a
+new virtual-file path in the FUSE layer. The client already serves a private
+control socket for `efs-fuse --stop`; `settings` is one more command on it
+(the socket is mode 0600, owner only), so the listing works whether or not
+`.efs` is enabled and is read by the same user who mounted.
 
 Removed settings (A6, `docs/status/a6-settings-inventory-20261024.md`) such as `EFS_FEATURES_TTL_MS`, `EFS_QUERY_CATALOG_MIB`, `EFS_GC_DISABLE` and `EFS_KV_COMPACT_DIE` are not settings any more: efsd and efs-fuse stop with a message naming one that is still set.

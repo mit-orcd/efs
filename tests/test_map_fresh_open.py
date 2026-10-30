@@ -13,6 +13,7 @@ code=r'''
 #include <stdlib.h>
 #include <time.h>
 static uint64_t now_us=1000000;
+static void efs_setting_u64(const char *n,unsigned long long v){(void)n;(void)v;}
 static uint64_t map_fresh_now_us(void);
 '''+block+r'''
 static uint32_t data_chunk_size(void){return 131072;}

@@ -22,6 +22,7 @@ def block(s, start):
     return s[a:s.index('\n};', a) + 3]
 source = r'''
 #include <assert.h>
+static void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

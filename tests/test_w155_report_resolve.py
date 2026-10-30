@@ -78,6 +78,7 @@ for n in (1, 2, 3):
 
 code = r'''
 #include "efs/protocol.h"
+static void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 #include "efs/opid.h"
 #include "efs/request_receipt.h"
 #include <assert.h>

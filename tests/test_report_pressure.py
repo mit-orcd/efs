@@ -13,6 +13,7 @@ a=w.index('#define REPORT_PRESSURE_RECORD_BYTES')
 b=w.index('\nint efs_client_ino_is_dirty(',a)
 source=r'''
 #include "client_internal.h"
+static void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>

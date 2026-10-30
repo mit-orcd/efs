@@ -1528,14 +1528,17 @@ facts for A6, not decisions.
   (`revoke rc=-13 phase=storage-fence`) while any member is down, because
   the storage fence must reach every configured member. **D46: a required
   fix before alpha 1.0, K54 (blocks alpha: yes).**
-- [ ] **S4 — Effective settings.** **D46: W122**, the listing of effective
+- [x] **S4 — Effective settings.** **D46: W122**, the listing of effective
   settings, is required in alpha 1.0. It supports A8 and A10.
-  **STRUCTURE Oct 24 ([effective settings](../using/alpha-1.0-surface.md#s4--effective-settings)):**
-  where each effective value is visible today (startup log, `status`,
-  `raft-status`, `version`, `sync-status`, `commands-policy get`; tunables
-  not at all) and the page layout once A6 lands. The A6 inventory exists
-  and the A7 removals are done (D42); implementation and acceptance NOTRUN
-  (described in the Oct 25 [audit](docs-audit-20261025.md)).
+  **DONE Oct 30 ([evidence](s4-effective-settings-20261030.md)):**
+  `efs-mgmt settings NODE:PORT` lists the daemon's 9 deployment inputs and
+  the numeric tunables (value, default, provenance, kind), the cluster
+  `.efs` and expiry policies, the durability window, the transport and the
+  build; `efs-mgmt settings --mount PATH` lists the client's. Read-only, one
+  page, no new setting. Tests: `tests/test_settings_inventory.py` (a
+  setting without a row fails) and `tests/test_settings_listing.py`.
+  Surface page: [effective settings](../using/alpha-1.0-surface.md#s4--effective-settings);
+  limitation L24 is removed from the release notes.
 - [ ] **S5 — User documentation.** Install, configuration, supported
   topologies, the reduced configuration matrix (A11) and the published
   limitations.

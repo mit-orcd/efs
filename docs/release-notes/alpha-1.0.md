@@ -77,7 +77,6 @@ cluster expiry policy is off until an operator turns it on (L20).
 | L21 | One export per cluster | Any | No export label, no second export | `efs-fuse`, `mkfs` |
 | L22 | No authentication on the cluster ports (D45, user, Oct 28: none in any alpha release) | Any host that reaches a daemon port | Can run every `efs-mgmt` command, including mutating ones; keep the network trusted | Finding F12 |
 | L23 | Same build everywhere; no upgrade in place | A peer or client of another build; a format change | The connection is refused; a format change needs a fresh format, no migration and no downgrade | AGENTS.md (no backward compatibility) |
-| L24 | No effective-settings listing yet (D46, user, Oct 28: W122 is required in alpha 1.0; this row goes when it ships) | An operator wants every effective value | Only the startup log and the status commands show settings; the [A6 inventory](../status/a6-settings-inventory-20261024.md) lists every setting and its default | S4, W122 |
 | L25 | Full RDMA topology qualification across independent storage hosts remains open | RDMA with 3/4/>4 distinct storage hosts | Task K's node9900 client to four co-located node9901 daemons has scoped RDMA POSIX/management PASS; Task M has single-host native RDMA evidence. Neither qualifies independent storage failure domains or the complete RDMA release matrix | W106, A2; [Task K](../status/k44-retired-replica-routing-20261026.md), [Task M](../status/gate-fstor007-20261027.md) |
 | L26 | The alpha profile is the only behavior (A7, D42) | — | Fragment I/O is always `O_DIRECT`, `.efs` follows the cluster commands-policy, expiry follows the cluster expiry policy (D43); removed settings are refused at startup | Findings F7, F8 (closed by A7) |
 
@@ -125,4 +124,4 @@ summary supersedes the October 25 open-item list; the
   does not qualify every K34–K37 scenario; cold-query skips remain
   incomplete coverage. Zero FAIL with NOTRUN is INCOMPLETE, not a full gate
   PASS. L22 is decided (D45: no authentication in any alpha release); W122 is
-  required in alpha 1.0 (D46), so L24 goes when it ships.
+  required in alpha 1.0 (D46) and shipped as `efs-mgmt settings` (S4), so L24 is gone.

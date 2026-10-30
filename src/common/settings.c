@@ -1,0 +1,163 @@
+/* S4/W122: effective-settings table. See include/efs/settings.h. */
+#include "efs/settings.h"
+#include "efs/version.h"
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+enum { D = EFS_SETTINGS_DAEMON, C = EFS_SETTINGS_CLIENT, B = D | C };
+
+struct row {
+    const char *name, *def, *kind;
+    unsigned role;
+    char value[48];
+    const char *prov;
+};
+#define DEP "deployment input"
+#define NUM "numeric tunable"
+/* One row per A6 inventory entry of these two kinds; the test reads the
+ * inventory, so a setting without a row fails it. */
+#define R(n, d, k, r) {n, d, k, r, "", NULL}
+static struct row g_rows[] = {
+    R("EFS_NUMA_NODE", "auto", DEP, C), R("EFS_QUERY_DISK_MAX_MIB", "16384", DEP, D),
+    R("EFS_QUERY_DISK_RESERVE_MIB", "64", DEP, D), R("EFS_QUERY_DISK_TOTAL_MIB", "32768", DEP, D),
+    R("EFS_QUERY_EXPORT_MAX_MS", "3600000", DEP, D), R("EFS_RDMA_DEV", "auto", DEP, B),
+    R("EFS_RDMA_GID_INDEX", "auto", DEP, B), R("EFS_RDMA_PORT", "1", DEP, B),
+    R("EFS_TRANSPORT", "auto", DEP, B),
+    R("EFS_CLIENT_CONNS_PER_NODE", "64", NUM, C), R("EFS_CLIENT_META_MB", "256", NUM, C),
+    R("EFS_CLIENT_VIEW_POLL_MS", "1000", NUM, C), R("EFS_DCACHE_BYTES", "134217728", NUM, C),
+    R("EFS_DCACHE_DRAIN_BYTES", "67108864", NUM, C), R("EFS_DCACHE_HARD_BYTES", "268435456", NUM, C),
+    R("EFS_DCACHE_READ_BYTES", "67108864", NUM, C), R("EFS_DIR_SPREAD_MIN", "65536", NUM, B),
+    R("EFS_GC_BACKLOG_IDLE_MS", "20", NUM, D), R("EFS_PACK_BACKFILL_SHARDS", "64", NUM, D),
+    R("EFS_PACK_BUSY_COMMITS_PER_S", "100", NUM, D), R("EFS_PACK_BUSY_FILES_PER_S", "50", NUM, D),
+    R("EFS_PACK_COMPACT_DAILY_START_MIN", "180", NUM, D), R("EFS_PACK_COMPACT_IDLE_S", "60", NUM, D),
+    R("EFS_PACK_COMPACT_IDLE_SEGS", "256", NUM, D), R("EFS_PACK_FILES_PER_S", "5000", NUM, D),
+    R("EFS_PACK_INTERVAL_MS", "1000", NUM, D), R("EFS_PACK_MIN_AGE_MS", "60000", NUM, D),
+    R("EFS_PACK_SEGMENTS_PER_PASS", "8", NUM, D), R("EFS_PACK_SPACE_FULL_PCT", "80", NUM, D),
+    R("EFS_PACK_SPACE_START_PCT", "50", NUM, D), R("EFS_PACK_UNPACKED_GIB", "64", NUM, D),
+    R("EFS_PUT_AWAY_MARK_MS", "10000", NUM, C), R("EFS_PUT_SYNC_MS", "200", NUM, D),
+    R("EFS_QUERY_REFRESH_MS", "60000", NUM, D), R("EFS_RAFT_APPLIED_INTERVAL_MS", "100", NUM, D),
+    R("EFS_RDMA_BUFS", "6", NUM, B), R("EFS_READ_MAP_TTL_MS", "200", NUM, C),
+    R("EFS_REBUILD_PER_PASS", "256", NUM, D), R("EFS_REPORT_ADMIT_MS", "8000", NUM, C),
+    R("EFS_REPORT_MAX_BYTES", "16777216", NUM, C), R("EFS_REPORT_MAX_RECORDS", "8192", NUM, C),
+    R("EFS_REPORT_RECEIPT_JOIN_MS", "5000", NUM, D), R("EFS_RESOLVE_MS", "8000", NUM, C),
+    R("--writers", "8", NUM, D),
+};
+#define NROWS (sizeof(g_rows) / sizeof(g_rows[0]))
+static pthread_mutex_t g_mu = PTHREAD_MUTEX_INITIALIZER;
+static unsigned g_role;
+static char g_transport[96] = "unresolved";
+
+static const char *env_text(const struct row *r)
+{
+    const char *e = r->name[0] == '-' ? NULL : getenv(r->name);
+    return e && *e ? e : NULL;
+}
+
+static struct row *find(const char *name)
+{
+    for (size_t i = 0; i < NROWS; i++)
+        if (!strcmp(g_rows[i].name, name))
+            return &g_rows[i];
+    return NULL;
+}
+
+void efs_settings_init(unsigned role)
+{
+    pthread_mutex_lock(&g_mu);
+    g_role = role;
+    for (size_t i = 0; i < NROWS; i++) {
+        struct row *r = &g_rows[i];
+        const char *e = env_text(r);
+        snprintf(r->value, sizeof(r->value), "%s", e ? e : r->def);
+        r->prov = e ? "environment" : strcmp(r->def, "auto") ? "built-in" : "automatic";
+    }
+    pthread_mutex_unlock(&g_mu);
+}
+
+static void note(const char *name, const char *value, const char *cmdline)
+{
+    pthread_mutex_lock(&g_mu);
+    struct row *r = find(name);
+    if (r) {
+        const char *e = env_text(r);
+        char *end = NULL;
+        /* Accepted: the text matches, the number matches, or the reader
+         * moved off the default (clamped); refused text leaves the default. */
+        int env_ok = e && (!strcmp(e, value) || strcmp(value, r->def) != 0 ||
+                           (strtoull(e, &end, 10) == strtoull(value, NULL, 10) && !*end));
+        snprintf(r->value, sizeof(r->value), "%s", value);
+        r->prov = cmdline ? cmdline : env_ok ? "environment"
+                  : strcmp(r->def, "auto") ? "built-in" : "automatic";
+    }
+    pthread_mutex_unlock(&g_mu);
+}
+
+void efs_setting_str(const char *name, const char *value) { note(name, value, NULL); }
+void efs_setting_u64(const char *name, unsigned long long v)
+{
+    char b[32];
+    snprintf(b, sizeof(b), "%llu", v);
+    note(name, b, NULL);
+}
+void efs_setting_cmdline(const char *name, unsigned long long v)
+{
+    char b[32];
+    snprintf(b, sizeof(b), "%llu", v);
+    note(name, b, "command line");
+}
+void efs_settings_transport(const char *how)
+{
+    pthread_mutex_lock(&g_mu);
+    snprintf(g_transport, sizeof(g_transport), "%s", how);
+    pthread_mutex_unlock(&g_mu);
+}
+
+struct line { char text[256]; const char *kind; const char *name; };
+static int by_kind_name(const void *a, const void *b)
+{
+    const struct line *x = a, *y = b;
+    int c = strcmp(x->kind, y->kind);
+    return c ? c : strcmp(x->name, y->name);
+}
+
+size_t efs_settings_render(char *buf, size_t size, int *rows, int *truncated)
+{
+    struct line L[NROWS + 4];
+    size_t n = 0;
+    char ver[256];
+    pthread_mutex_lock(&g_mu);
+    for (size_t i = 0; i < NROWS; i++) {
+        struct row *r = &g_rows[i];
+        if (!(r->role & g_role))
+            continue;
+        snprintf(L[n].text, sizeof(L[n].text), "%s\t%s\t%s\t%s\t%s\n", r->name, r->value, r->def,
+                 r->prov, r->kind);
+        L[n].name = r->name;
+        L[n++].kind = r->kind;
+    }
+    snprintf(L[n].text, sizeof(L[n].text), "transport\t%s\tauto\t%s\ttransport\n", g_transport,
+             getenv("EFS_TRANSPORT") && *getenv("EFS_TRANSPORT") ? "environment" : "automatic");
+    L[n].name = "transport"; L[n++].kind = "transport";
+    snprintf(L[n].text, sizeof(L[n].text), "direct-io\ton\ton\tbuilt-in\tbuild\n");
+    L[n].name = "direct-io"; L[n++].kind = "build";
+    pthread_mutex_unlock(&g_mu);
+    snprintf(L[n].text, sizeof(L[n].text), "build\t%s\t-\tbuilt-in\tbuild\n",
+             efs_version_string(g_role == EFS_SETTINGS_CLIENT ? "efs-fuse" : "efsd", ver, sizeof(ver)));
+    L[n].name = "build"; L[n++].kind = "build";
+    qsort(L, n, sizeof(L[0]), by_kind_name);
+    size_t len = (size_t)snprintf(buf, size, "# %s settings; observability (%d) and fault/test hooks (%d) "
+                                  "are not listed\n", g_role == EFS_SETTINGS_CLIENT ? "client" : "daemon",
+                                  EFS_SETTINGS_OBSERVABILITY, EFS_SETTINGS_FAULT_HOOKS);
+    *rows = 0;
+    *truncated = len >= size;
+    for (size_t i = 0; i < n && !*truncated; i++) {
+        size_t l = strlen(L[i].text);
+        if (len + l >= size) { *truncated = 1; break; }
+        memcpy(buf + len, L[i].text, l + 1);
+        len += l;
+        (*rows)++;
+    }
+    return *truncated && len >= size ? size - 1 : len;
+}

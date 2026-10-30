@@ -65,7 +65,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               $(COMMON_DIR)/log_ts.c \
               $(COMMON_DIR)/telemetry.c \
               $(COMMON_DIR)/batch_obs.c \
-              $(COMMON_DIR)/version.c \
+              $(COMMON_DIR)/version.c $(COMMON_DIR)/settings.c \
               $(COMMON_DIR)/protocol.c $(COMMON_DIR)/record_decode.c \
               $(COMMON_DIR)/request_receipt.c \
               src/wire/wire.c \
@@ -442,6 +442,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_k37_events.py
 	python3 tests/test_raft_log_entries.py
 	python3 tests/test_env_inventory.py
+	python3 tests/test_settings_inventory.py
 	python3 scripts/check_k_register.py
 	python3 tests/test_k_register.py
 	python3 tests/test_graph_community_labels.py
@@ -837,8 +838,8 @@ efs-mgmt: $(MGMT_OBJ) $(LIB)
 tests/test_reply_buffers: tests/test_reply_buffers.c src/client/reply_buffers.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
 
-tests/test_bufpool: tests/test_bufpool.c src/common/common.c src/client/publication_ack_owner.c include/efs/publication_ack.h src/client/bufpool.c src/client/writer_state.c include/efs/writer_state.h include/efs/writer_ranges.h src/client/client_internal.h
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< src/common/common.c -lpthread
+tests/test_bufpool: tests/test_bufpool.c src/common/common.c src/common/settings.c src/client/publication_ack_owner.c include/efs/publication_ack.h src/client/bufpool.c src/client/writer_state.c include/efs/writer_state.h include/efs/writer_ranges.h src/client/client_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< src/common/common.c src/common/settings.c src/common/version.c -lpthread
 
 test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py
@@ -1191,6 +1192,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_shutdown_stuck_worker.py
 	python3 tests/test_k36_recovery.py
 	python3 tests/test_expiry_policy_live.py
+	python3 tests/test_settings_listing.py
 	python3 tests/posix/posix_expiry.py --private
 	python3 tests/test_k36_segment_recovery.py
 	./tests/test_reclaim

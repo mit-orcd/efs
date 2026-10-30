@@ -1859,6 +1859,8 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[S4 effective settings](../status/s4-effective-settings-20261030.md): **`efs-mgmt settings NODE:PORT` and `--mount PATH` shipped (D46 item 3, W122 DONE, L24 removed); gate on xorinox: TOTAL 569 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (1019s)**, NOTRUN = host limits; not merged.
+
 [AN port](../status/an-product-port-20261030.md): store ENOENT retry fix ported (K65); K48, K35 and GETCHUNKS repairs not ported (no failing reproduction on devel).
 
 [Wave 40 merge](../status/alpha-1.0-2plus1-checklist.md): **AO port merged into devel Oct 30; gate on intel2 at `9fd5d4cb3`: TOTAL 574 FAIL 3 NOTRUN 10 STATUS FAIL (847s)**; the three FAILs were test-harness or script issues from the port, fixed test/script-only and each rerun PASS on intel2 (`test_readdir_migration_race` needed a `dent_get_tx` stub, `test_client_metadata_authority` the call-deadline stubs, `test_ao_readdir_live` AO's final script with `missing_ok`); no full-gate rerun after them. NOTRUN = host limits. **AO** ([port](../status/ao-product-port-20261030.md), [AO evidence](../status/ao-readdir-pages-20261028.md)): bounded compact directory pages (wire-format change, fresh clusters only; 100K listing 1.893 -> 0.735 s, page-tail latency worse), plus K74 committed unresolved migration names in READDIR, K75 migration planner/log forwarding cycle, K76 cross-group cleanup at both owners, K77 explicit lock conflict status, K78 admission deadline. K74/K75 block alpha pending live runs; K48 itself stays OPEN. TSan/ASan not run (sanitizer builds are broken on devel by `test_child_vec_index`, see Wave 39).
@@ -3922,7 +3924,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | REQUIRED FOR ALPHA 1.0 (D46, user, Oct 28; supersedes the D45 beta deferral); was PROPOSED: role-specific supported settings, defaults, effective values and startup/runtime scope; backend implementation and acceptance NOTRUN | [feature and gates](#w122) |
+| settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | DONE Oct 30 (D46 item 3, S4): `efs-mgmt settings NODE:PORT` and `--mount PATH`, [evidence](../status/s4-effective-settings-20261030.md); the JSON form and portal catalog stay beta backlog | [feature and gates](#w122) |
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
 | small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
@@ -10211,9 +10213,11 @@ Unplanned recovery remains deferred.
 
 ### W122 · Discoverable effective settings for efsd, efs-fuse and the portal
 
-**Class/state:** product observability feature; PROPOSED, October 16, 2026.
-Requested for the stable beta product. This item records the feature; backend
-implementation and end-to-end acceptance are NOTRUN. It does not restore
+**Class/state:** product observability feature; the alpha 1.0 part (D46 item 3)
+is DONE Oct 30, 2026: `efs-mgmt settings` ([evidence](../status/s4-effective-settings-20261030.md)).
+The JSON interface and the portal Settings section below remain beta backlog,
+PROPOSED October 16, 2026; the rest of this item records that feature and
+its acceptance is NOTRUN. It does not restore
 archived experimental features or enable expiry.
 
 **Problem:** binary help lists command-line options and efs-mgmt offers

@@ -1,3 +1,4 @@
+#include "efs/settings.h"
 #include "efs/rdma.h"
 #include "../common/parse_host_port.h"
 #include "efs/cli_help.h"
@@ -956,6 +957,7 @@ int main(int argc, char **argv)
 #if !EFS_FAULTS
     efs_faults_env_ignored("efsd");
 #endif
+    efs_settings_init(EFS_SETTINGS_DAEMON);
     if (efs_transport_startup("efsd") != EFS_OK)
         return 1;
 
@@ -1023,6 +1025,7 @@ int main(int argc, char **argv)
                 return 1;
             }
             server.nwriters = n;
+            efs_setting_cmdline("--writers", (unsigned)n);
         } else if (strcmp(argv[i], "--perf") == 0) {
             server.perf = 1;
         } else if (strcmp(argv[i], "--strace") == 0) {

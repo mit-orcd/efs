@@ -1,3 +1,4 @@
+#include "efs/settings.h"
 #include "../common/parse_host_port.h"
 #include "efs/cli_help.h"
 #define FUSE_USE_VERSION 312
@@ -7264,6 +7265,8 @@ static void numa_pin_startup(const char *host, uint16_t port)
         node = atoi(env);
     else
         node = efs_rdma_numa_node_for_host(host, port, hca, sizeof(hca));
+    if (node >= 0)
+        efs_setting_u64("EFS_NUMA_NODE", (unsigned)node);
     if (node < 0)
         return;
     char path[128], buf[4096];
@@ -7473,6 +7476,12 @@ static int fuse_allocator_init(void)
     return 0;
 }
 
+static size_t client_settings_text(char *buf, size_t size)
+{
+    int rows, cut;
+    return efs_settings_render(buf, size, &rows, &cut);
+}
+
 int main(int argc, char **argv)
 {
     /* Before transport, client pools or FUSE start any worker threads. */
@@ -7519,6 +7528,7 @@ int main(int argc, char **argv)
     setvbuf(stderr, NULL, _IOLBF, 0);
     efs_log_timestamps_install();
     efs_fuse_install_crash_handlers();
+    efs_settings_init(EFS_SETTINGS_CLIENT);
     if (efs_transport_startup("efs-fuse") != EFS_OK)
         return 1;
 
@@ -7909,6 +7919,7 @@ static int efs_fuse_main_mt(int argc, char *argv[])
         goto out;
     }
 
+    efs_stop_settings_text = client_settings_text;
     if (efs_stop_start(opts.mountpoint, efs_control_drain) != 0) {
         fprintf(stderr, "efs-fuse: cannot establish safe-stop control channel\n");
         fuse_loop_cfg_destroy(config);

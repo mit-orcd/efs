@@ -13,6 +13,7 @@ def function(name):
     return s[m.start():s.index('\n}',m.end())+2]
 code = r'''
 #include "efs/protocol.h"
+static void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 #include "efs/meta_cmd.h"
 #include "metadata_read_route.h"
 #include "efs/opid.h"

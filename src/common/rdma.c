@@ -11,6 +11,7 @@
  * per-conn recv CQs, whose per-thread spin-polling (ibv_poll_cq lock churn)
  * was the top CPU consumer on both client and server under load.
  */
+#include "efs/settings.h"
 #include "efs/rdma.h"
 #include "efs/telemetry.h"
 #include "efs/rdma_message.h"
@@ -143,6 +144,7 @@ static int nrecv_bufs(void)
         const char *e=getenv("EFS_RDMA_BUFS"); char *end=NULL;
         long n=(e&&*e)?strtol(e,&end,10):EFS_RDMA_NRECV_DEFAULT;
         v=(n<2 || n>64 || (end&&*end))?0:(int)n;
+        efs_setting_u64("EFS_RDMA_BUFS", v ? (unsigned)v : EFS_RDMA_NRECV_DEFAULT);
         __atomic_store_n(&v_s,v,__ATOMIC_RELEASE);
     }
     return v;
@@ -251,6 +253,7 @@ static int rdma_port_no(void)
         v = (e && *e) ? atoi(e) : 1;
         if (v < 1)
             v = 1;
+        efs_setting_u64("EFS_RDMA_PORT", (unsigned)v);
         __atomic_store_n(&v_s, v, __ATOMIC_RELEASE);
     }
     return v;
@@ -336,6 +339,7 @@ static int dev_open(const char *name, struct efs_rdma_dev *out)
         }
         gid_index = gid_select(ctx, rdma_port_no(), pa.gid_tbl_len, requested, &gid);
         if (gid_index < 0) { ibv_close_device(ctx); return -1; }
+        efs_setting_u64("EFS_RDMA_GID_INDEX", (unsigned)gid_index);
     }
     struct ibv_pd *pd = ibv_alloc_pd(ctx);
     if (!pd) {
@@ -618,7 +622,9 @@ int efs_transport_startup(const char *prog)
         return EFS_ERR_INVAL;
     }
     int mode = efs_rdma_transport();
+    efs_setting_str("EFS_TRANSPORT", mode == EFS_TRANSPORT_TCP ? "tcp" : mode == EFS_TRANSPORT_RDMA ? "rdma" : "auto");
     if (mode == EFS_TRANSPORT_TCP) {
+        efs_settings_transport("tcp");
         fprintf(stderr, "%s: transport tcp (EFS_TRANSPORT=tcp)\n", prog);
         return EFS_OK;
     }
@@ -630,6 +636,13 @@ int efs_transport_startup(const char *prog)
                 dev && *dev ? " named by EFS_RDMA_DEV=" : "", dev && *dev ? dev : "");
         return EFS_ERR_UNSUPPORTED;
     }
+    if (d) {
+        char how[96];
+        snprintf(how, sizeof(how), "rdma on %s", d->name);
+        efs_settings_transport(how);
+        efs_setting_str("EFS_RDMA_DEV", d->name);
+    } else
+        efs_settings_transport("tcp (no usable RDMA device)");
     if (d)
         fprintf(stderr, "%s: transport %s: rdma on %s (TCP carries setup)\n", prog,
                 mode == EFS_TRANSPORT_RDMA ? "rdma" : "auto", d->name);

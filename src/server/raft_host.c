@@ -1,3 +1,4 @@
+#include "efs/settings.h"
 #include "efs/meta_setattr_command.h"
 #include "efs/record_decode.h"
 #include "../common/query_stage_trace.h"
@@ -12174,6 +12175,7 @@ static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t a
         const char *e = getenv("EFS_REBUILD_PER_PASS");
         long v = e ? strtol(e, NULL, 10) : 0;
         per_pass = v > 0 && v <= 65536 ? (uint64_t)v : 256;
+        efs_setting_u64("EFS_REBUILD_PER_PASS", per_pass);
     }
     if (!nodes || efs_kv_key_degraded_prefix(anchor, prefix, &plen) != EFS_OK ||
         server_test_rebuild_sample_held())
@@ -12705,6 +12707,7 @@ static void query_export_configure(void)
 {
     int valid;query_export_max_ms=efs_query_export_lifetime(getenv("EFS_QUERY_EXPORT_MAX_MS"),&valid);
     if(!valid)fprintf(stderr,"query-config: invalid EFS_QUERY_EXPORT_MAX_MS; using 3600000 (allowed 60000..604800000)\n");
+    efs_setting_u64("EFS_QUERY_EXPORT_MAX_MS",query_export_max_ms);
 }
 static int query_export_expired(uint64_t now,uint64_t touched,uint64_t born)
 {
@@ -12983,6 +12986,7 @@ static void *host_query_thread(void *ctx)
     else if(interval_ms!=HOST_QUERY_T_MS)
         fprintf(stderr,"query-config: refresh interval %u ms\n",interval_ms);
     __atomic_store_n(&host_query_interval_ms,interval_ms,__ATOMIC_RELAXED);
+    efs_setting_u64("EFS_QUERY_REFRESH_MS",interval_ms);
     while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
         usleep(efs_query_refresh_poll_ms(cut_retry)*1000u);
         query_page_sweep(0);
@@ -13693,11 +13697,13 @@ int server_raft_host_start(struct efsd_server *s)
         fprintf(stderr, "raft-host: EFS_GC_BACKLOG_IDLE_MS must be 20..1000\n");
         return EFS_ERR_INVAL;
     }
+    efs_setting_u64("EFS_GC_BACKLOG_IDLE_MS", gc_backlog_idle_ms);
     uint64_t applied_interval;
     if (host_applied_interval(getenv("EFS_RAFT_APPLIED_INTERVAL_MS"),&applied_interval)!=EFS_OK) {
         fprintf(stderr,"raft-host: EFS_RAFT_APPLIED_INTERVAL_MS must be 10..1000\n");
         return EFS_ERR_INVAL;
     }
+    efs_setting_u64("EFS_RAFT_APPLIED_INTERVAL_MS", applied_interval / 1000);
     /* W153: the member count and both groups' voters come from the
      * membership committed at formation (the member store), never from the
      * environment or the HELLO table. Unformed: group 0 on nodes 1..3. */
@@ -24866,6 +24872,7 @@ static void host_report_receipts_init(void)
     const char *join = getenv("EFS_REPORT_RECEIPT_JOIN_MS");
     if (join && *join)
         g_report_receipt_join_ms = (unsigned)strtoul(join, NULL, 10);
+    efs_setting_u64("EFS_REPORT_RECEIPT_JOIN_MS", g_report_receipt_join_ms);
     g_report_receipt_trace = getenv("EFS_RECEIPT_TRACE") != NULL;
     g_report_receipts_ok = efs_receipt_table_init(&g_report_receipts, 4096u) == EFS_OK;
     if (!g_report_receipts_ok)

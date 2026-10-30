@@ -1,3 +1,4 @@
+#include "efs/settings.h"
 #include "client_internal.h"
 #include "sparse_metadata.h"
 #include "efs/protocol.h"
@@ -896,11 +897,15 @@ static uint64_t report_env(const char *name, uint64_t fallback)
 {
     const char *value = getenv(name);
     char *end = NULL;
-    if (!value || !*value || *value == '-')
-        return fallback;
-    errno = 0;
-    unsigned long long n = strtoull(value, &end, 10);
-    return errno || *end || !n ? fallback : n;
+    unsigned long long n = fallback;
+    if (value && *value && *value != '-') {
+        errno = 0;
+        n = strtoull(value, &end, 10);
+        if (errno || *end || !n)
+            n = fallback;
+    }
+    efs_setting_u64(name, n);
+    return n;
 }
 
 static void report_config(void)
@@ -910,6 +915,7 @@ static void report_config(void)
     report_admit_ms = report_env("EFS_REPORT_ADMIT_MS", 8000);
     if (report_admit_ms > 60000)
         report_admit_ms = 60000;
+    efs_setting_u64("EFS_REPORT_ADMIT_MS", report_admit_ms);
 }
 
 /* dirty_mu held. Detached snapshots remain charged until release. */
@@ -8730,6 +8736,9 @@ static uint64_t dcache_reclaim_limit(void)
         if (end != env && v >= (1ull << 20) && v <= (4ull << 30))
             lim = (uint64_t)v;
     }
+    static int noted;
+    if (!__atomic_exchange_n(&noted, 1, __ATOMIC_RELAXED))
+        efs_setting_u64("EFS_DCACHE_BYTES", lim);
     return lim;
 }
 

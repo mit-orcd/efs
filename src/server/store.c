@@ -1,3 +1,4 @@
+#include "efs/settings.h"
 #include "server_internal.h"
 #include "storage_roots.h"
 #ifndef EFS_BENCH_BUILD
@@ -1581,6 +1582,7 @@ static void put_sync_config(void)
             unsigned long v = strtoul(w, NULL, 10);
             if (v >= 1 && v <= 10000) put_sync_window_ms = v;
         }
+        efs_setting_u64("EFS_PUT_SYNC_MS", put_sync_window_ms);
     }
 }
 
