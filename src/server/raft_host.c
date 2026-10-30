@@ -6378,6 +6378,19 @@ static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_typ
         server_peer_conn_drop(host, port, pc);
         return -1;
     }
+    if (rtype == reply_type && reply_type == EFS_MSG_INODE_READDIR_REPLY &&
+        outlen == sizeof(struct efs_msg_inode_readdir_reply)) {
+        if (efs_readdir_reply_len_ok(reply, rlen) != EFS_OK) {
+            free(reply);
+            server_peer_conn_drop(host, port, pc);
+            return -1;
+        }
+        memset(out, 0, outlen);
+        memcpy(out, reply, rlen);
+        free(reply);
+        server_peer_conn_release(host, port, pc);
+        return 0;
+    }
     /* GETCHUNKS replies are variable length (header + count records);
      * zero-extend them into the caller's full struct. */
     if (rtype == reply_type && reply_type == EFS_MSG_INODE_GETCHUNKS_REPLY &&
@@ -6667,12 +6680,14 @@ static void host_fwd_readdir(struct efs_raft_host *h, efs_ino_t parent,
     int tries, rid, skip = -1;
 
     memset(&req, 0, sizeof(req));
+    req.format = EFS_READDIR_FORMAT;
     req.parent = parent;
     req.max_ents = max_ents;
     req.after_src = after_src;
     if (after_name)
         strncpy(req.after_name, after_name, EFS_MAX_NAME - 1);
     memset(out, 0, sizeof(*out));
+    out->format = EFS_READDIR_FORMAT;
     out->status = EFS_INODE_RPC_NOT_PRIMARY;
     for (tries = 0; tries < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); tries++) {
         rid = host_pick_peer(h, groups, ng, skip);
@@ -25649,11 +25664,13 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
     struct efs_meta_dir_cursor cur;
     struct efs_meta_dir_ent page[EFS_READDIR_MAX];
     uint32_t got = 0, i;
+    uint32_t scan_left = EFS_READDIR_SCAN_MAX;
     uint8_t covered = 0;
     int hint = -1;
     int rc;
 
     memset(out, 0, sizeof(*out));
+    out->format = EFS_READDIR_FORMAT;
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !__atomic_load_n(&h->running, __ATOMIC_ACQUIRE) || parent == 0) {
         out->status = EFS_INODE_RPC_INVAL;
@@ -25719,13 +25736,13 @@ scan_covered:
     cur.src = after_src;
     if (after_name && after_name[0])
         strncpy(cur.name, after_name, EFS_MAX_NAME - 1);
-    while (rc == EFS_OK && !cur.done && out->count < max_ents) {
+    while (rc == EFS_OK && !cur.done && out->count < max_ents && scan_left) {
         got = 0;
         /* Never scan past what fits in the reply: the cursor advances to
          * the last SCANNED name, so an unemitted entry would be skipped on
          * resume. */
-        rc = efs_meta_apply_readdir(h->kv, parent, &cur, page,
-                                    max_ents - out->count, &got);
+        rc = efs_meta_apply_readdir_bounded(h->kv, parent, &cur, page,
+                                    max_ents - out->count, &got, &scan_left);
         for (i = 0; i < got && rc == EFS_OK && out->count < max_ents; i++) {
             /* Readdir is a weak name listing (spec §7.4): ino + type +
              * name. A getattr + ReadIndex per child made `ls` of an
@@ -25734,7 +25751,6 @@ scan_covered:
             memset(&out->ents[out->count], 0, sizeof(out->ents[0]));
             out->ents[out->count].ino = page[i].d.ino;
             out->ents[out->count].mode = page[i].d.type;
-            out->ents[out->count].parent = parent;
             strncpy(out->ents[out->count].name, page[i].name,
                     EFS_MAX_NAME - 1);
             out->count++;
@@ -25755,6 +25771,8 @@ scan_covered:
             rc = host_read_inode_lanes_reuse(h, parent, &hint, &covered);
             if (rc == EFS_OK && (need & ~covered))
                 rc = EFS_ERR_BUSY; /* no proof progress: never loop or serve */
+            if (rc == EFS_OK && !scan_left)
+                rc = EFS_ERR_BUSY; /* cannot publish an unfenced exhausted cut */
             if (rc == EFS_OK)
                 goto scan_covered;
         }

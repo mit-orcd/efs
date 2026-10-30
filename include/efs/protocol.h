@@ -1170,29 +1170,15 @@ struct efs_msg_inode_getattr {
     efs_ino_t ino;
 };
 
-/* Return dentries with this parent from the receiver's own shard table
- * (not the parent-owner table). Used to merge a spread directory. */
-#define EFS_READDIR_F_LOCAL_ONLY (1u << 0)
+/* Exact name/source cursor; no inode-order or local-table fallback. */
+#define EFS_READDIR_FORMAT 0x414f0001u
 struct efs_msg_inode_readdir {
     efs_export_id_t export_id;
     efs_ino_t parent;
+    uint32_t format;
     uint32_t max_ents;
-    uint32_t flags;
-    /* EFS_READDIR_F_LOCAL_ONLY: serve this shard's table. */
-    uint32_t shard;
-    /* Pagination cursor: return children with ino > after_ino, in ascending
-     * ino order. A positional skip is NOT stable — remove_inode_slot
-     * swap-compacts, so a concurrent unlink of ANOTHER dir on the same shard
-     * shifts this dir's rows across a page boundary and an entry is skipped.
-     * inos survive compaction, so an ino cursor is stable. 0 = from start.
-     *
-     * Raft host: the KV scans a directory in NAME order, so
-     * the ino cursor cannot work (name order != ino order — entries would
-     * be skipped). The raft path uses (after_src, after_name) instead: the
-     * exact resume cookie from the previous reply's next_src/next_name.
-     * 0/"" = from start. */
-    uint64_t after_ino;
     uint32_t after_src;
+    uint32_t reserved;
     char after_name[EFS_MAX_NAME];
 };
 
@@ -1231,17 +1217,58 @@ struct efs_msg_create_retained_reply {
     uint8_t routed, known;
 };
 
-#define EFS_READDIR_MAX 64
+/* One supported page layout. Byte and logical-key scan bounds are fixed,
+ * including tombstones, filtered names and internal scan/proof retries. */
+#define EFS_READDIR_MAX 256u
+#define EFS_READDIR_REPLY_MAX_BYTES (72u * 1024u)
+#define EFS_READDIR_SCAN_MAX 32768u
+struct efs_readdir_wire_ent {
+    efs_ino_t ino;
+    uint32_t mode;
+    uint32_t reserved;
+    char name[EFS_MAX_NAME];
+};
 struct efs_msg_inode_readdir_reply {
     uint8_t status;
+    uint8_t reserved[3];
+    uint32_t format;
     uint32_t count;
-    struct efs_inode ents[EFS_READDIR_MAX];
-    /* Raft host resume cookie: pass back verbatim as after_src/after_name.
-     * next_done=1 means the directory scan is exhausted. */
     uint32_t next_src;
     uint32_t next_done;
+    uint32_t reserved2;
     char next_name[EFS_MAX_NAME];
+    struct efs_readdir_wire_ent ents[EFS_READDIR_MAX];
 };
+_Static_assert(sizeof(struct efs_msg_inode_readdir_reply) <= EFS_READDIR_REPLY_MAX_BYTES,
+               "directory reply exceeds protocol byte cap");
+static inline uint32_t efs_readdir_reply_len(const struct efs_msg_inode_readdir_reply *r)
+{
+    return (uint32_t)offsetof(struct efs_msg_inode_readdir_reply, ents) +
+           r->count * (uint32_t)sizeof(r->ents[0]);
+}
+/* Validate the entire frame before any output or forwarding effect. */
+static inline int efs_readdir_reply_len_ok(const void *buf, uint32_t len)
+{
+    const struct efs_msg_inode_readdir_reply *r = buf;
+    if (!r || len < offsetof(struct efs_msg_inode_readdir_reply, ents) ||
+        len > EFS_READDIR_REPLY_MAX_BYTES || r->format != EFS_READDIR_FORMAT ||
+        r->reserved[0] || r->reserved[1] || r->reserved[2] || r->reserved2 ||
+        r->status > EFS_INODE_RPC_UNREGISTERED || r->count > EFS_READDIR_MAX ||
+        r->next_done > 1 || r->next_src > 64 ||
+        (r->next_src == 64 && !r->next_done) ||
+        !memchr(r->next_name, 0, sizeof(r->next_name)) ||
+        len != efs_readdir_reply_len(r) ||
+        (r->status != EFS_INODE_RPC_OK && r->count))
+        return EFS_ERR_PROTO;
+    for (uint32_t i = 0; i < r->count; i++) {
+        const struct efs_readdir_wire_ent *e = &r->ents[i];
+        if (!e->ino || e->reserved || !e->name[0] ||
+            !memchr(e->name, 0, sizeof(e->name)) ||
+            strchr(e->name, '/') || !strcmp(e->name, ".") || !strcmp(e->name, ".."))
+            return EFS_ERR_PROTO;
+    }
+    return EFS_OK;
+}
 
 /* Rename/move a specific dentry to a new parent + name. */
 struct efs_msg_inode_rename_at {

@@ -25,7 +25,7 @@ struct readdir_collect_arg {struct readdir_ent *ents;size_t count,cap;};
 static struct {efs_export_id_t export_id;} g_client;
 static struct fuse_ctx context={1001,1001};
 static struct efs_inode fresh,stale;
-static int fresh_calls,local_calls,lists,result;
+static int fresh_calls,local_calls,lists,result,empty_pages;
 static int virt_kind(fuse_ino_t ino){(void)ino;return 0;}
 static int commands_enabled(void){return 0;}
 static int command_script(const char *term){(void)term;return 0;}
@@ -40,15 +40,16 @@ static int efs_client_stat_ino(efs_ino_t ino,struct efs_inode *p){(void)ino;loca
 static int efs_client_stat_refresh(efs_ino_t ino,struct efs_inode *p) __attribute__((unused));
 static int efs_client_stat_refresh(efs_ino_t ino,struct efs_inode *p){(void)ino;fresh_calls++;*p=fresh;return result;}
 static int efs_client_rpc_readdir_cur(efs_export_id_t id,efs_ino_t ino,struct efs_inode *ents,uint32_t*n,uint32_t*src,char*cur,uint32_t*done){
- (void)id;(void)ino;(void)ents;(void)src;(void)cur;lists++;*n=0;*done=1;return 0;
+ (void)id;(void)ino;(void)ents;(void)src;(void)cur;lists++;*n=0;*done=lists>empty_pages;return 0;
 }
 static int vq_lookup(uint64_t ino,efs_ino_t *parent,char *term,size_t n){(void)ino;(void)parent;(void)term;(void)n;return -1;}
 static int readdir_collect_page(struct readdir_collect_arg*c,const struct efs_inode*p,uint32_t n){(void)c;(void)p;(void)n;return 0;}
 '''+s[a:b]+s[s.index('static int efs_fuse_access_ino('):s.index('\n}',s.index('static int efs_fuse_access_ino('))+2]+r'''
-static void reset(void){fresh_calls=local_calls=lists=result=0;context.uid=1001;fresh=(struct efs_inode){.ino=99,.uid=1001,.gid=1001,.mode=S_IFDIR|0300};stale=(struct efs_inode){.ino=99,.uid=1001,.gid=1001,.mode=S_IFDIR|0755};}
+static void reset(void){fresh_calls=local_calls=lists=result=empty_pages=0;context.uid=1001;fresh=(struct efs_inode){.ino=99,.uid=1001,.gid=1001,.mode=S_IFDIR|0300};stale=(struct efs_inode){.ino=99,.uid=1001,.gid=1001,.mode=S_IFDIR|0755};}
 int main(void){struct readdir_collect_arg col={0};struct efs_inode row;
  reset();assert(efs_fuse_readdir_ino(99,&col,&row)==-EACCES);assert(fresh_calls==1&&!local_calls&&!lists);
  reset();fresh.mode=S_IFDIR|0400;stale.mode=S_IFDIR|0300;assert(!efs_fuse_readdir_ino(99,&col,&row));assert(fresh_calls==1&&lists==1&&row.mode==fresh.mode);
+ reset();fresh.mode=S_IFDIR|0400;empty_pages=3;assert(!efs_fuse_readdir_ino(99,&col,&row)&&lists==4);
  reset();context.uid=0;assert(!efs_fuse_readdir_ino(99,&col,&row)&&lists==1);
  reset();fresh.ino=EFS_ROOT_INO;assert(!efs_fuse_readdir_ino(EFS_ROOT_INO,&col,&row)&&lists==1);
  reset();result=EFS_ERR_BUSY;assert(efs_fuse_readdir_ino(99,&col,&row)==-EBUSY&&!lists);

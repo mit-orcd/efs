@@ -1566,6 +1566,7 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
     if (inout_count && !*inout_count)
         return EFS_ERR_INVAL;
     memset(&req, 0, sizeof(req));
+    req.format = EFS_READDIR_FORMAT;
     req.export_id = export_id;
     req.parent = parent;
     req.max_ents = inout_count ? *inout_count : EFS_READDIR_MAX;
@@ -1599,7 +1600,7 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
     }
     rpc_prof_add(EFS_MSG_INODE_READDIR, t1 - t0, t2 - t1, t3 - t2, 0);
     if (rtype != EFS_MSG_INODE_READDIR_REPLY ||
-        plen < sizeof(struct efs_msg_inode_readdir_reply)) {
+        efs_readdir_reply_len_ok(payload, plen) != EFS_OK) {
         free(payload);
         return EFS_ERR_PROTO;
     }
@@ -1613,16 +1614,23 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
         }
         if (r->count > req.max_ents || r->next_done > 1 ||
             !memchr(r->next_name, 0, sizeof(r->next_name)) ||
-            (!r->next_done && r->next_src == req.after_src &&
-             !strcmp(r->next_name, req.after_name))) {
+            (!r->next_done && (r->next_src < req.after_src ||
+             (r->next_src == req.after_src &&
+              strcmp(r->next_name, req.after_name) <= 0)))) {
             free(payload);
             return EFS_ERR_PROTO;
         }
         n = r->count;
         if (inout_count && n > *inout_count)
             n = *inout_count;
-        if (ents && n)
-            memcpy(ents, r->ents, n * sizeof(ents[0]));
+        if (ents)
+            for (uint32_t i = 0; i < n; i++) {
+                memset(&ents[i], 0, sizeof(ents[i]));
+                ents[i].ino = r->ents[i].ino;
+                ents[i].mode = r->ents[i].mode;
+                ents[i].parent = parent;
+                memcpy(ents[i].name, r->ents[i].name, EFS_MAX_NAME);
+            }
         if (inout_count)
             *inout_count = n;
         if (src_io)

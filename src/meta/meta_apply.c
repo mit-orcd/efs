@@ -3393,6 +3393,7 @@ struct dir_scan {
     struct efs_meta_dir_ent *out;
     uint32_t max;
     uint32_t n;
+    uint32_t *remaining;
     char last[EFS_MAX_NAME];
     int have_last;
     int full; /* stopped because the page filled, not because the range ended */
@@ -3405,6 +3406,13 @@ static int dir_scan_cb(void *user, const uint8_t *key, uint32_t klen,
     struct dir_scan *s = user;
     uint32_t nl;
 
+    if (s->remaining) {
+        if (!*s->remaining) {
+            s->full = 1;
+            return 1;
+        }
+        --*s->remaining;
+    }
     if (klen <= DENTRY_KEY_PREFIX)
         return 0; /* the prefix itself is not an entry */
     nl = klen - DENTRY_KEY_PREFIX;
@@ -3524,10 +3532,10 @@ static void k48_readdir_layout_pause(efs_ino_t dir)
 }
 #endif
 
-int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
+int efs_meta_apply_readdir_bounded(struct efs_kv *kv, efs_ino_t dir,
                            struct efs_meta_dir_cursor *cur,
                            struct efs_meta_dir_ent *out, uint32_t max,
-                           uint32_t *n)
+                           uint32_t *n, uint32_t *remaining)
 {
     struct efs_meta_row row, after;
     struct efs_meta_dir_cursor begin;
@@ -3558,8 +3566,10 @@ retry:
 
     memset(&s, 0, sizeof(s));
     s.out = out;
+    s.remaining = remaining;
     s.max = max;
-    while (cur->src <= last_src && s.n < max) {
+    while (cur->src <= last_src && s.n < max &&
+           (!remaining || *remaining)) {
         uint32_t shard, base = s.n;
         int local_pass = 0;
 
@@ -3619,7 +3629,7 @@ retry:
              * something to deliver; the cursor advanced, so this terminates.
              * The only way to get here empty is a full page of names the
              * hashed side already owns. */
-            if (s.n > 0)
+            if (s.n > 0 || (remaining && !*remaining))
                 break;
             continue;
         }
@@ -3641,7 +3651,8 @@ retry:
         return rc;
     if (after.layout != row.layout || after.used_shards != row.used_shards ||
         after.layout_epoch != row.layout_epoch) {
-        if (++retries > EFS_META_LANES + 2) {
+        if (++retries > EFS_META_LANES + 2 ||
+            (remaining && !*remaining)) {
             *cur = begin;
             return EFS_ERR_BUSY;
         }
@@ -3649,6 +3660,14 @@ retry:
     }
     *n = s.n;
     return EFS_OK;
+}
+
+int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
+                           struct efs_meta_dir_cursor *cur,
+                           struct efs_meta_dir_ent *out, uint32_t max,
+                           uint32_t *n)
+{
+    return efs_meta_apply_readdir_bounded(kv, dir, cur, out, max, n, NULL);
 }
 
 static int dir_has_live(struct efs_kv *kv, uint32_t shard, efs_ino_t dir)

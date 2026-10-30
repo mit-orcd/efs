@@ -1833,8 +1833,8 @@ static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col,
             return fuse_stat_errno(rc);
         if (readdir_collect_page(col, ents, n) != 0)
             return -ENOMEM;
-        if (n == 0 && !done)
-            break;
+        /* A bounded scan may consume only tombstones/shadowed names.
+         * The RPC decoder requires a progressing cursor; only done is EOF. */
     }
     return 0;
 }

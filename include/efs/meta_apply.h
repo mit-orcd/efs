@@ -924,6 +924,14 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
                            struct efs_meta_dir_cursor *cur,
                            struct efs_meta_dir_ent *out, uint32_t max,
                            uint32_t *n);
+/* RPC scan budget counts visited keys, including tombstones, and is shared
+ * across retries/calls within a reply. Exhaustion may yield zero names with
+ * a progressing cursor. A changed layout after exhaustion returns BUSY and
+ * restores the request cursor rather than publishing an unsafe cut. */
+int efs_meta_apply_readdir_bounded(struct efs_kv *kv, efs_ino_t dir,
+                           struct efs_meta_dir_cursor *cur,
+                           struct efs_meta_dir_ent *out, uint32_t max,
+                           uint32_t *n, uint32_t *remaining);
 /* Last-link reclaim: nlink==0 AND no open leases (I19, L6). Else BUSY.
  * Deletes the inode row and writes the reap marker (EFS_KV_KIND_REAP on the
  * inode group's anchor shard) in the same batch — the marker is what the

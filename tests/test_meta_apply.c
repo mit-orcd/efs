@@ -1362,6 +1362,21 @@ static void test_readdir_local(void)
     CHECK(got == 9 && (ent[0].d.type & S_IFMT) == S_IFREG, "dentry type");
     CHECK(ent[0].d.ino != 0, "dentry ino");
 
+    /* A two-key budget stops before the next live entry; resuming must
+     * neither skip that entry nor turn a short page into EOF. */
+    memset(&cur, 0, sizeof(cur));
+    unsigned bounded_total = 0, bounded_calls = 0;
+    do {
+        uint32_t left = 2;
+        CHECK(efs_meta_apply_readdir_bounded(kv, EFS_ROOT_INO, &cur, ent,
+                                             16, &got, &left) == EFS_OK,
+              "bounded readdir");
+        CHECK(got <= 2 && left <= 2, "key scan cap");
+        bounded_total += got;
+        CHECK(++bounded_calls < 20, "bounded cursor progresses");
+    } while (!cur.done);
+    CHECK(bounded_total == 9 && bounded_calls >= 5, "bounded listing complete");
+
     /* A file is not a directory. */
     CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "f00", &ent[0].d) == EFS_OK,
           "lookup");

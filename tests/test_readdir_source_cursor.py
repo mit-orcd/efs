@@ -23,12 +23,13 @@ static int host_read_inode_lanes_reuse(struct efs_raft_host*h,efs_ino_t ino,int*
 static uint8_t rc_to_inode_status(int rc){return rc==EFS_OK?EFS_INODE_RPC_OK:rc==EFS_ERR_NOT_PRIMARY?EFS_INODE_RPC_NOT_PRIMARY:EFS_INODE_RPC_ERROR;}
 static void host_fwd_readdir(struct efs_raft_host*h,efs_ino_t ino,uint32_t max,uint32_t src,const char*name,struct efs_msg_inode_readdir_reply*out,const uint8_t*groups,int n){(void)h;assert(partial&&ino==42&&max==17&&src==1&&!name[0]&&n==2&&groups[0]==EFS_RAFT_GROUP_SHARD&&groups[1]==EFS_RAFT_GROUP_SHARD2);fwd_calls++;memset(out,0,sizeof(*out));out->status=EFS_INODE_RPC_OK;out->count=1;out->ents[0].ino=777;}
 int efs_meta_apply_get_inode(struct efs_kv*kv,efs_ino_t ino,struct efs_meta_row*out){(void)kv;(void)ino;memset(out,0,sizeof(*out));out->mode=S_IFDIR|0755;out->layout=(partial||(late&&!scans))?EFS_META_LAYOUT_LOCAL:EFS_META_LAYOUT_HASHED;out->used_shards=out->layout==EFS_META_LAYOUT_LOCAL?0:3;return EFS_OK;}
-int efs_meta_apply_readdir(struct efs_kv*kv,efs_ino_t ino,struct efs_meta_dir_cursor*cur,struct efs_meta_dir_ent*out,uint32_t max,uint32_t*n){
- (void)kv;(void)ino;scans++;*n=0;if(cur->src>=3){cur->done=1;return EFS_OK;}
+int efs_meta_apply_readdir_bounded(struct efs_kv*kv,efs_ino_t ino,struct efs_meta_dir_cursor*cur,struct efs_meta_dir_ent*out,uint32_t max,uint32_t*n,uint32_t*remaining){
+ (void)kv;(void)ino;assert(*remaining);if(max>*remaining)max=*remaining;scans++;*n=0;if(cur->src>=3){cur->done=1;return EFS_OK;}
  unsigned index=0,src=cur->src;
  if(cur->name[0]){unsigned last;assert(sscanf(cur->name,"source%u-%u",&src,&last)==2&&src==cur->src);index=last+1;}
  unsigned length=src==2?1:64;
  while(index<length&&*n<max){struct efs_meta_dir_ent*e=&out[(*n)++];memset(e,0,sizeof(*e));snprintf(e->name,sizeof(e->name),"source%u-%03u",src,index);e->d.ino=src*64+index+1;e->d.type=S_IFDIR|0755;strcpy(cur->name,e->name);index++;}
+ *remaining-=*n;
  if(index==length){cur->src++;cur->name[0]=0;if(cur->src==3)cur->done=1;}
  return EFS_OK;
 }

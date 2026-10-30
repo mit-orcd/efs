@@ -1304,16 +1304,20 @@ void server_handle_conn(struct efs_conn *conn)
         case EFS_MSG_INODE_READDIR: {
             struct efs_msg_inode_readdir_reply r;
             memset(&r, 0, sizeof(r));
-            r.status = EFS_INODE_RPC_ERROR;
+            r.format = EFS_READDIR_FORMAT;
+            r.status = EFS_INODE_RPC_INVAL;
             if (server_raft_host_active() &&
-                payload_len >= sizeof(struct efs_msg_inode_readdir)) {
-                struct efs_msg_inode_readdir *req = payload;
-                server_raft_host_readdir(req->parent, req->max_ents,
-                                         req->after_src, req->after_name,
-                                         &r);
+                payload_len == sizeof(struct efs_msg_inode_readdir)) {
+                const struct efs_msg_inode_readdir *req = payload;
+                if (req->format == EFS_READDIR_FORMAT && !req->reserved &&
+                    req->max_ents && req->max_ents <= EFS_READDIR_MAX &&
+                    req->after_src < EFS_META_LANES &&
+                    memchr(req->after_name, 0, sizeof(req->after_name)))
+                    server_raft_host_readdir(req->parent, req->max_ents,
+                                             req->after_src, req->after_name, &r);
             }
             efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR_REPLY, &r,
-                              sizeof(r));
+                              efs_readdir_reply_len(&r));
             break;
         }
         case EFS_MSG_PUBLICATION:
