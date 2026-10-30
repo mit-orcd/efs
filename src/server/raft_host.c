@@ -13543,7 +13543,7 @@ int server_raft_host_start(struct efsd_server *s)
         fprintf(stderr,"raft-host: EFS_RAFT_APPLIED_INTERVAL_MS must be 10..1000\n");
         return EFS_ERR_INVAL;
     }
-    efs_setting_u64("EFS_RAFT_APPLIED_INTERVAL_MS", applied_interval);
+    efs_setting_u64("EFS_RAFT_APPLIED_INTERVAL_MS", applied_interval / 1000);
     /* W153: the member count and both groups' voters come from the
      * membership committed at formation (the member store), never from the
      * environment or the HELLO table. Unformed: group 0 on nodes 1..3. */

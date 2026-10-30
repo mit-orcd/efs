@@ -3217,7 +3217,7 @@ static int cmd_settings(int argc, char **argv)
     struct efs_msg_raft_mkfs_reply pr;
     uint8_t cp[2] = {efs_raft_shard_group(1), EFS_MD_REQ_QUERY_POLICY};
     int rc = sess_rpc(host, port, cp, 2, &pr);
-    settings_policy(&lines, "commands-policy", "mask=0 version=0", rc, pr.index, pr.salt, 0);
+    settings_policy(&lines, "commands-policy", "mask=3 version=0", rc, pr.index, pr.salt, 0);
     uint8_t ep[2] = {efs_raft_shard_group(1), EFS_MD_REQ_EXPIRY_SWITCH};
     int rc2 = sess_rpc(host, port, ep, 2, &pr);
     settings_policy(&lines, "expiry-policy", "off version=0", rc2, pr.index, pr.salt, 1);

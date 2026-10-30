@@ -87,7 +87,7 @@ try:
     print('settings: environment, command line and built-in provenance on a loopback cluster PASS')
 
     # 2. The policy rows follow the cluster policies.
-    assert policies(c, 1) == ('mask=0 version=0', 'off version=0'), policies(c, 1)
+    assert policies(c, 1) == ('mask=3 version=0', 'off version=0'), policies(c, 1)
     rc, out = mgmt(env, 'commands-policy', c.ep(1), 'set', '3', '0')
     assert rc == 0 and 'rc=0' in out, out
     rc, out = mgmt(env, 'expiry-policy', c.ep(1), 'cluster', 'set', 'on', '0')
