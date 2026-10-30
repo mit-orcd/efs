@@ -39,7 +39,7 @@ static void test_free(void*p){if(p)freed++;free(p);}
 #define free test_free
 #define clock_gettime fake_clock
 #define usleep fake_sleep
-static struct efs_conn *efs_client_conn_get(efs_node_id_t n){connection.node=n;return &connection;}
+static struct efs_conn *efs_client_conn_get(efs_node_id_t n){if(failover==3 && n==2){routing_sends++;return NULL;}connection.node=n;return &connection;}
 static struct efs_conn *raft_voter_conn_skip(uint32_t s,efs_node_id_t*n,efs_node_id_t skip){(void)s;*n=read_stale_loop?(skip==1?3:1):(failover&&skip==2)?3:1;connection.node=*n;return &connection;}
 static struct efs_conn *raft_dual_voter_conn(efs_node_id_t*n,efs_node_id_t skip){return raft_voter_conn_skip(0,n,skip);}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;drops++;}
@@ -154,9 +154,21 @@ int main(void){
   rc=d?rpc_send_recv_dual(EFS_MSG_INODE_UNLINK,remove,sizeof(remove),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),100):rpc_send_recv_shard(0,EFS_MSG_INODE_UNLINK,remove,sizeof(remove),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),0,NULL);
   assert(rc==EFS_ERR_BUSY && now==deadline && freed==calls);
  }
- for(unsigned mode=1;mode<=2;mode++){
+ for(unsigned mode=1;mode<=3;mode++){
   struct efs_msg_inode_reply r;reset();failover=mode;g_group_leader[0]=2;
   assert(!run(0,&r)&&routing_sends==3&&calls==(mode==1?3u:2u)&&g_group_leader[0]==0);
+ }
+ /* K36: a directory redirect can name the leader just as it crashes.
+  * Transport loss must discard that hint for MKDIR, not REPORT alone.
+  * Every send keeps the same operation identity; the 30 s clock is fixed. */
+ for(unsigned mode=1;mode<=3;mode++){
+  reset();failover=mode;g_group_leader[0]=2;deadline=31000;mkdir_ready=1;
+  memset(packet,0,sizeof(packet));
+  ((struct efs_msg_inode_create *)packet)->mode=S_IFDIR|0755;
+  ((struct efs_msg_inode_create *)packet)->parent=1;
+  strcpy(((struct efs_msg_inode_create *)packet)->name,"churn");
+  assert(rpc_send_recv_dual(EFS_MSG_INODE_CREATE,packet,sizeof(packet),EFS_MSG_INODE_GETATTR_REPLY,&mkdir_reply,sizeof(mkdir_reply),100)==EFS_OK);
+  assert(routing_sends==3 && calls==(mode==1?3u:2u) && now<deadline && mkdir_packet_len==sizeof(packet));
  }
  efs_node_id_t target=2,skip=0;g_group_leader[0]=3;
  rpc_retry_peer(0,2,&target,&skip,1);

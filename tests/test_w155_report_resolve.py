@@ -27,10 +27,10 @@ Negative control: W155_RESOLVE_MS=0 disables the resolution; the test then
 fails (the reply-loss cases end in an error).
 """
 from pathlib import Path
-import os, re, shlex, subprocess, tempfile
+import os, re, shlex, subprocess, tempfile, shutil, sys
 
 root = Path(__file__).resolve().parents[1]
-cli = (root / 'src/client/inode_rpc.c').read_text()
+cli = Path(os.environ.get('EFS_INODE_RPC_SOURCE', root / 'src/client/inode_rpc.c')).read_text()
 srv = (root / 'src/server/raft_host.c').read_text()
 
 
@@ -325,9 +325,21 @@ with tempfile.TemporaryDirectory(prefix='efs-w155-report-') as d:
                          '-I' + str(root / 'include'), *extra, str(p),
                          str(root / 'src/common/request_receipt.c'), '-pthread',
                          '-o', str(p.with_suffix(''))], check=True)
-    out = subprocess.run([str(p.with_suffix(''))], check=True, timeout=60,
+    out = subprocess.run([str(p.with_suffix(''))], check=False, timeout=60,
                          capture_output=True, text=True,
                          env=dict(os.environ, EFS_RESOLVE_MS=os.environ.get('W155_RESOLVE_MS', '8000'), EFS_REPORT_RECEIPT_JOIN_MS='50'))
+    if out.returncode:
+        # The failing native assertion used to disappear inside
+        # CalledProcessError, then TemporaryDirectory deleted its program.
+        # Preserve the exact generated source/binary and full diagnostics.
+        kept=Path(tempfile.mkdtemp(prefix='efs-w155-report-failure-'))
+        for artifact in (p,p.with_suffix('')):
+            shutil.copy2(artifact,kept/artifact.name)
+        (kept/'stdout.log').write_text(out.stdout)
+        (kept/'stderr.log').write_text(out.stderr)
+        print(out.stdout+out.stderr,file=sys.stderr)
+        print('W155 failed native fixture kept at '+str(kept),file=sys.stderr)
+        out.check_returncode()
     log = out.stderr
     # The lines carry the request identity on both sides and join on it.
     assert re.search(r'report-resolve id=5515\w*/7/\w+:\d+ ino=4242 outcome=applied rc=0', log), log

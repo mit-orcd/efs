@@ -3148,6 +3148,12 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
             if (conn)
                 efs_client_conn_drop(nid, conn);
             if (deadline_bounded || attempt + 1 < 16) {
+                /* A redirect is only a routing hint. If its endpoint is
+                 * lost, every command (including MKDIR) must try another
+                 * dual voter with the same request identity and deadline.
+                 * Without a redirect, retain ordinary routing: a brief
+                 * REPORT reply loss should replay its same-host receipt. */
+                if (target) { target = 0; skip = nid; }
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                     goto exhausted;
                 continue;
@@ -3176,6 +3182,12 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
                  * deadline (a sync REPORT's 8 s budget), the bound, or the
                  * connection. A11 finding 2 read recv_ms=30001 on a receive
                  * the 8 s budget had cut. */
+                /* A redirect is only a routing hint. If its endpoint is
+                 * lost, every command (including MKDIR) must try another
+                 * dual voter with the same request identity and deadline.
+                 * Without a redirect, retain ordinary routing: a brief
+                 * REPORT reply loss should replay its same-host receipt. */
+                if (target) { target = 0; skip = nid; }
                 int bound = recv_ms > 0 ? recv_ms : EFS_IO_TIMEOUT_MS;
                 unsigned long long waited = (rpc_prof_now_us() - t_recv) / 1000ull;
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
