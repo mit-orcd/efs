@@ -1,13 +1,13 @@
 # Project status — work queue and evidence
 
 [Task BB — client overlay authority](bb-overlay-authority-audit-20261029.md):
-**RUNNING**, branch `agent/devel-bb`, K59–K61. Base matrix 5/8 FAIL;
-source `791d57787` matrix 8/8 and targeted sanitizers PASS, then core POSIX
-216/218 FAIL on two unchanged 30 s deadlines. Another agent's K42 gate was
-observed overlapping; causation unproven. All failures retained. A guarded
-base/candidate comparison waits for a quiet xorinox window; hardware remains
-blocked on that result. Previous-source full gate 553/0 FAIL/10 host-limited
-NOTRUN does not qualify the final cold-cache fix. No closure.
+**RUNNING**, branch `agent/devel-bb`, K59–K61. Reserved-window base/core/peer
+and candidate matrix 8/8, core 218/218, peer 72/72 and targeted sanitizers PASS.
+Full gate 553/1 FAIL/10 host-limited NOTRUN: only the branch's missing K57/K58
+register rows failed; corrected from committed upstream metadata, no server
+code merged. Fresh qualification pending; hardware remains gated. The original
+791d timeout failures under observed K42 overlap remain FAIL, cause unproven.
+No alpha closure.
 
 [K55 — slow storage COMMIT](k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,

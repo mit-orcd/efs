@@ -277,3 +277,21 @@ observation, not an exclusive-host lease. This changed precondition justifies
 the planned comparison; the original FAIL stays FAIL. No retry-until-green.
 The hardware driver additionally requires the closed quiet comparison receipt
 and matching candidate-state hash before admitting this continuation.
+
+## Guarded full gate: runtime checks pass; register gap fails
+
+The reserved-window `791d57787` run closed **TOTAL 553 FAIL 1 NOTRUN 10
+STATUS FAIL (900s) OVERBUDGET 2 BUILD 0s**. The only failure is command 7,
+`python3 scripts/check_k_register.py`: this branch added K59–K61 while K57
+and K58 existed only on newer devel, leaving a numbering gap in both local
+tables. All other 552 commands returned success (ten have host-limit NOTRUN
+markers). No competing sample was observed after the quiet boundary. Advisory
+overruns: grow-b 128.0/120 s and K22 admission 102.3/90 s. No runtime deadline
+or oracle changes; this is not a zero-failure full gate.
+
+The correction imports the four exact K57/K58 table rows and their two linked
+summary pages from committed devel `126ba81d4`, solely for register continuity
+and valid links. **Those upstream fixes/results are not part of this pre-wave-37
+BB product build and were not independently revalidated by BB.** No upstream
+server code is merged. The corrected register is checked locally before a new
+immutable export and a complete qualification; the failed result is unchanged.
