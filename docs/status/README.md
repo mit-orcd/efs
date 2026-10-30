@@ -2,6 +2,11 @@
 
 [Task H split: K45/K51 group](h-k45-shutdown-20261029.md): **F24** (rejoin-thread ownership joined in bounded teardown; devel heartbeat owner kept) and **F35** (`raft-resync` retries only a definite BUSY inside the existing 30 s I/O bound) ported to `agent/h-k45-shutdown`, both named reproductions fail on devel source and pass with the change; K54 interaction checked, none. Not merged; intel1 gate 556 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
 
+[H-recovery — Task H F26–F29](h-recovery-20261029.md): **F26 K36/K47 re-probe, F28 K43
+pin retention and F29 K36 recovery scheduling PASS focused** on branch `agent/h-recovery`
+(each test fails on devel source); F27 not ported, devel `35a6e41b0` already covers it.
+K36, K43, K47 statuses unchanged; **K48 stays OPEN**.
+
 [K55 — slow storage COMMIT](k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
 source `5185bfcd3`; merged into devel (wave 32, `4e4b7ec75`). Attributed K35 fix passes native/index,

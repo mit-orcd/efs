@@ -27,3 +27,7 @@ assert 'efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,' in body
 pr = (Path(__file__).resolve().parents[1] / 'src/common/packed_reader.c').read_text()
 assert 'if (!nodes[i]) return EFS_ERR_INVAL;' in pr and 'if (nodes[i] == nodes[j]) return EFS_ERR_INVAL;' in pr
 print('B1 reader: fragment nodes only from the row or pack object, invalid stripe refused before any GET PASS')
+
+# The same recorded-node gate executes the production delta recovery path.
+import runpy
+runpy.run_path(str(Path(__file__).resolve().parent / "delta_reprobe_gate.py"), run_name="__main__")

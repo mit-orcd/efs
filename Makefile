@@ -472,7 +472,9 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_chown_permissions.py
 	python3 tests/test_readdir_collection.py
 	python3 tests/test_readdir_source_cursor.py
+	python3 tests/test_readdir_migration_race.py
 	python3 tests/test_dir_migrate_visibility.py
+	python3 tests/test_recovery_pin_owner.py
 	python3 tests/test_access_permissions.py
 	python3 tests/test_rename_flags.py
 	python3 tests/test_attribute_authority_errno.py
@@ -706,6 +708,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_txn
 	./tests/test_txn_resolve_faults
 	python3 tests/test_txn_decision_sweep.py
+	python3 tests/test_txn_recovery_priority.py
 	python3 tests/test_txn_apply_exact.py
 	./tests/test_shared_primitives
 	python3 tests/test_txn_apply_retry.py

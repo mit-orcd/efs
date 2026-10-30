@@ -473,9 +473,14 @@ struct efs_raft_host {
      * nothing pending was ever written there). The GC pass scans only
      * shards whose mark is HOST_REC_AGE_NS old, so an idle cluster scans
      * nothing and a busy shard is scanned once per age period. Written by
-     * the apply path (under h->mu), read by the GC thread — rec_mu. */
+     * the apply path (under h->mu), read by the GC thread — rec_mu.
+     * Observed records/conflicts outrank cold startup discovery. A separate
+     * generation prevents a concurrent hint being cleared by an empty scan. */
     pthread_mutex_t rec_mu;
     uint64_t rec_mark[EFS_KV_SHARD_MASK + 1];
+    uint64_t rec_generation[EFS_KV_SHARD_MASK + 1];
+    uint8_t rec_observed[EFS_KV_SHARD_MASK + 1];
+    uint32_t rec_hot_next, rec_cold_next; /* GC thread owns scan cursors. */
     uint64_t rec_found, rec_aborted, rec_resolved, rec_fail, rec_scans;
     /* W83 decision retirement: RETIREs proposed OK / failed, live
      * decisions re-driven by the sweeper, sweeps with a failed RESOLVE. */
@@ -3264,7 +3269,10 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
          * simulator. */
         rc = efs_txn_apply_prepare(h->kv, kind, &t, &p, key, klen, cmd + off,
                                    clen - off);
-        if (rc == EFS_OK && klen >= 2)
+        /* BUSY is also a discovery hint: an old intent restored from KV
+         * may not have replayed a PREPARE in this process. Never leave a
+         * known conflicting shard behind the cold-start discovery walk. */
+        if ((rc == EFS_OK || rc == EFS_ERR_BUSY) && klen >= 2)
             host_rec_mark(h, ((uint32_t)key[0] << 8) | key[1]);
         break;
     case EFS_MD_CMD_DECIDE:
@@ -10137,6 +10145,8 @@ static void host_rec_mark(struct efs_raft_host *h, uint32_t shard)
     pthread_mutex_lock(&h->rec_mu);
     if (h->rec_mark[shard] == 0)
         h->rec_mark[shard] = now_ns();
+    h->rec_observed[shard] = 1;
+    h->rec_generation[shard]++;
     pthread_mutex_unlock(&h->rec_mu);
 }
 
@@ -10147,7 +10157,7 @@ static void host_rec_mark_all(struct efs_raft_host *h)
 
     pthread_mutex_lock(&h->rec_mu);
     for (s = 0; s <= EFS_KV_SHARD_MASK; s++)
-        h->rec_mark[s] = now;
+        if (!h->rec_mark[s]) h->rec_mark[s] = now;
     pthread_mutex_unlock(&h->rec_mu);
 }
 
@@ -10240,9 +10250,11 @@ static void host_txn_recover_one(struct efs_raft_host *h, uint32_t shard,
     }
     h->rec_resolved++;
     fprintf(stderr, "raft-host: txn-recover shard=%u coord=%u parts=%u "
-            "age=%.1fs -> %s\n", shard, coord, rec->parts.n,
+            "age=%.1fs -> %s pin_only=%u tx=%016llx%016llx\n", shard, coord, rec->parts.n,
             (double)(now_ns() - txid_ns(&rec->t)) / 1e9,
-            dec == EFS_TXN_COMMIT ? "COMMIT (resolved)" : "ABORT");
+            dec == EFS_TXN_COMMIT ? "COMMIT (resolved)" : "ABORT",
+            (unsigned)rec->pin_only, (unsigned long long)rd64be(rec->t.bytes),
+            (unsigned long long)rd64be(rec->t.bytes + 8));
     /* Every participant resolved with the established verdict (each
      * proposal above returned its OK verdict): retire the decision. */
     host_txn_retire(h, &rec->t, coord);
@@ -10315,6 +10327,7 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
     struct efs_txn_pending_rec recs[HOST_REC_MAX];
     uint64_t now = now_ns();
     uint32_t shard, n, i, done = 0;
+    uint8_t seen[EFS_KV_SHARD_MASK + 1] = {0};
     int lead[2];
 
     if (!h->kv)
@@ -10323,42 +10336,74 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
     lead[1] = host_leads(h, EFS_RAFT_GROUP_SHARD2);
     if (!lead[0] && !lead[1])
         return;
-    for (shard = 0; shard <= EFS_KV_SHARD_MASK && done < HOST_REC_SHARDS &&
-                    __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && __atomic_load_n(&h->running, __ATOMIC_ACQUIRE); shard++) {
-        uint64_t mark;
+    /* Reserve half the work for observed PREPARE/conflict shards and half
+     * for cold discovery. Either class borrows unused capacity. Starting
+     * every pass at shard zero left a known high-shard allocator intent
+     * behind a roughly 64-second startup sweep after leader failover. */
+    for (unsigned pass = 0; pass < 3; pass++) {
+        int hot = pass != 1;
+        uint32_t *cursor = hot ? &h->rec_hot_next : &h->rec_cold_next;
+        uint32_t start = *cursor;
+        uint32_t limit = pass == 0 ? HOST_REC_SHARDS / 2u : HOST_REC_SHARDS;
+        for (uint32_t step = 0; step <= EFS_KV_SHARD_MASK && done < limit &&
+                        __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && __atomic_load_n(&h->running, __ATOMIC_ACQUIRE); step++) {
+            uint64_t mark, generation;
+            shard = (start + step) & EFS_KV_SHARD_MASK;
 
-        if (!lead[(shard & 1u) ? 0 : 1])
-            continue;
-        pthread_mutex_lock(&h->rec_mu);
-        mark = h->rec_mark[shard];
-        pthread_mutex_unlock(&h->rec_mu);
-        if (mark == 0 || now - mark < HOST_REC_AGE_NS)
-            continue;
-        done++;
-        h->rec_scans++;
-        n = 0;
-        if (efs_txn_scan_pending(h->kv, shard, recs, HOST_REC_MAX, &n) != EFS_OK)
-            continue; /* mark stays; retried next pass */
-        for (i = 0; i < n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && __atomic_load_n(&h->running, __ATOMIC_ACQUIRE); i++) {
-            uint64_t born = txid_ns(&recs[i].t);
-
-            if (born > now || now - born < HOST_REC_AGE_NS)
+            if (!lead[(shard & 1u) ? 0 : 1])
                 continue;
-            host_txn_recover_one(h, shard, &recs[i]);
+            pthread_mutex_lock(&h->rec_mu);
+            mark = h->rec_mark[shard];
+            generation = h->rec_generation[shard];
+            int observed = h->rec_observed[shard];
+            pthread_mutex_unlock(&h->rec_mu);
+            if (seen[shard] || observed != hot || mark == 0 || mark > now ||
+                now - mark < HOST_REC_AGE_NS)
+                continue;
+            seen[shard] = 1;
+            *cursor = (shard + 1) & EFS_KV_SHARD_MASK;
+            done++;
+            h->rec_scans++;
+            n = 0;
+            if (efs_txn_scan_pending(h->kv, shard, recs, HOST_REC_MAX, &n) != EFS_OK)
+                continue; /* mark stays; retried next pass */
+            for (i = 0; i < n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) && __atomic_load_n(&h->running, __ATOMIC_ACQUIRE); i++) {
+                uint64_t born = txid_ns(&recs[i].t);
+
+                if (born > now || now - born < HOST_REC_AGE_NS)
+                    continue;
+                if (recs[i].pin_only &&
+                    efs_txn_coordinator(&recs[i].t, &recs[i].parts) == shard) {
+                    int decision = EFS_TXN_UNDECIDED;
+                    int drc = efs_txn_decision_get(h->kv, shard, &recs[i].t, &decision);
+                    /* A decided publication's retained pin belongs to the
+                     * decision sweeper below. Re-deciding ABORT and resolving
+                     * every participant here mistakes retention for stranded
+                     * payload, delaying real recovery with redundant work.
+                     * Missing/retired history still takes normal recovery;
+                     * an unreadable verdict is never authority to abort. */
+                    if (drc == EFS_OK ||
+                        (drc != EFS_ERR_NOT_FOUND && drc != EFS_ERR_STALE))
+                        continue;
+                }
+                host_txn_recover_one(h, shard, &recs[i]);
+            }
+            /* The coordinator shard is always a participant, so its PREPARE
+             * marked it: the same due mark drives the decision sweep. Live
+             * decisions (young or orphaned) re-arm the mark like records do. */
+            n += host_txn_decision_sweep(h, shard, now);
+            /* Clean only if no PREPARE/conflict hint landed during this scan.
+             * Anything found — young, recovered, or a failed recovery
+             * — re-arms from now so the shard is looked at again in one age
+             * period and a recovery is verified gone. */
+            pthread_mutex_lock(&h->rec_mu);
+            if (h->rec_generation[shard] == generation) {
+                h->rec_mark[shard] = n ? now : 0;
+                h->rec_observed[shard] = !!n;
+            }
+            pthread_mutex_unlock(&h->rec_mu);
+            usleep(HOST_REC_YIELD_US); /* let the apply path have the KV lock */
         }
-        /* The coordinator shard is always a participant, so its PREPARE
-         * marked it: the same due mark drives the decision sweep. Live
-         * decisions (young or orphaned) re-arm the mark like records do. */
-        n += host_txn_decision_sweep(h, shard, now);
-        /* Clean: clear the mark unless a PREPARE landed meanwhile (mark
-         * moved). Anything found — young, recovered, or a failed recovery
-         * — re-arms from now so the shard is looked at again in one age
-         * period and a recovery is verified gone. */
-        pthread_mutex_lock(&h->rec_mu);
-        if (h->rec_mark[shard] == mark)
-            h->rec_mark[shard] = n ? now : 0;
-        pthread_mutex_unlock(&h->rec_mu);
-        usleep(HOST_REC_YIELD_US); /* let the apply path have the KV lock */
     }
 }
 
