@@ -172,7 +172,11 @@ exits 1, so a script can use its exit status. `raft-status` shows each
 metadata group's term, commit and applied index, voters and follower bound.
 `efs-mgmt version`, `io-stats`, `gc-status` and `sync-status` (the
 durability window of each root, and the state of a verified recovery) are
-further read-only views; `pack-compact NODE:PORT 0` prints the packer and
+further read-only views. `efs-mgmt settings NODE:PORT` lists the node's
+effective settings (value, default, provenance, kind; the two cluster
+policies, the transport and the build); `efs-mgmt settings --mount MOUNTPOINT`
+does the same for a client on the host that mounted it
+([S4](alpha-1.0-surface.md#s4--effective-settings)); `pack-compact NODE:PORT 0` prints the packer and
 segment summary without compacting.
 
 ### Mount and unmount a client

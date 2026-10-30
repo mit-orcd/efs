@@ -5601,9 +5601,11 @@ Unplanned recovery remains deferred.
 
 ## W122 · Discoverable effective settings for efsd, efs-fuse and the portal
 
-**Class/state:** product observability feature; PROPOSED, October 16, 2026.
-Requested for the stable beta product. This item records the feature; backend
-implementation and end-to-end acceptance are NOTRUN. It does not restore
+**Class/state:** product observability feature; the alpha 1.0 part (D46 item 3)
+is DONE Oct 30, 2026: `efs-mgmt settings` ([evidence](../status/s4-effective-settings-20261030.md)).
+The JSON interface and the portal Settings section below remain beta backlog,
+PROPOSED October 16, 2026; the rest of this item records that feature and
+its acceptance is NOTRUN. It does not restore
 archived experimental features or enable expiry.
 
 **Problem:** binary help lists command-line options and efs-mgmt offers

@@ -93,7 +93,7 @@ message naming it.
 
 ## efs-mgmt
 
-`status`, `raft-status`, `version`, `io-stats`, `gc-status`, `sync-status`,
+`status`, `raft-status`, `version`, `io-stats`, `gc-status`, `sync-status`, `settings`,
 `data-commit`, `pack-compact`, `commands-policy`, `mkfs` (`raft-mkfs`),
 `shrink-quota`, `raft-resync`, `raft-step-down`, `raft-change`, `raft-dir`,
 `raft-session` and a `raft-<op>` for every metadata operation (`add-node`

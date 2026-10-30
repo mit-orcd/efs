@@ -112,3 +112,4 @@ python3 tests/test_bench_published.py	10	2	W170: three private daemons, publishe
 
 ./tests/faults/test_follower_bound --stalled-compactor	5	1	Task W: real stalled LSM compactor and bounded follower catch-up; 1.2s at eight jobs, 1.25x rounded up to 5s
 python3 tests/test_put_quota_reclaim.py	120	2	unmeasured (F07 port, NOTRUN without FUSE); set from the first FUSE-capable run
+python3 tests/test_settings_listing.py	10	1	S4/W122: three real daemons and a mount on loopback; 5.5 s at one job on xorinox, 1.25x rounded up to 5 s
