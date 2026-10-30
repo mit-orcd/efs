@@ -25,6 +25,7 @@ source = r'''
 #include <stdio.h>
 #include "efs/metadata.h"
 #include "src/common/stage_limit.h"
+void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 static void staged_refresh(struct efs_export *e) { (void)e; }
 void efs_export_ensure_rollups(struct efs_export *e) { (void)e; assert(0); }
 static void apply_size_delta_for_ino(struct efs_export *e, efs_ino_t ino, int64_t delta) {

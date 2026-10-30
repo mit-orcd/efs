@@ -42,6 +42,7 @@ client = ''.join([
 
 code = r'''
 #include "efs/protocol.h"
+static void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 #include "efs/opid.h"
 #include "efs/meta_cmd.h"
 #include "metadata_read_route.h"
