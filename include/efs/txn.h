@@ -206,6 +206,10 @@ int efs_txn_key_guarded(struct efs_kv *,const uint8_t *,uint32_t);
 int efs_txn_key_exclusive(struct efs_kv *kv, const uint8_t *key, uint32_t klen);
 
 int efs_txn_key_busy(struct efs_kv *kv, const uint8_t *key, uint32_t klen);
+/* Receipt-window probe: an EXCL intent, this sequence's pending verdict,
+ * or a pending ACK covering it is BUSY. Other sequences commute and cannot
+ * answer or reclaim this identity. Malformed/overfull scans fail closed. */
+int efs_txn_opid_busy(struct efs_kv *, const uint8_t *, uint32_t, uint64_t seq);
 
 /* Current value of a dseq witness (0 when absent). GUARDs on a DSEQ key
  * compare this value, not the version sidecar: the witness is bumped by
@@ -330,6 +334,12 @@ int efs_txn_decision_count(struct efs_kv *kv, uint32_t shard,
  * value is returned. */
 typedef int (*efs_txn_coord_fn)(void *ctx, const struct efs_txid *t,
                                 uint32_t coord_shard, int *decision);
+
+/* Exact pending receipt: 1 plus reply only after fresh coordinator COMMIT
+ * authority; 0 when no relevant reduction exists; uncertainty stays BUSY.
+ * Read-only: never materializes, acknowledges, or authorizes a new mutation. */
+int efs_txn_opid_replay(struct efs_kv *, const uint8_t *, uint32_t, uint64_t,
+                         efs_txn_coord_fn, void *, struct efs_opid_reply *);
 
 int efs_txn_read(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
                  efs_txn_coord_fn coord, void *ctx, uint8_t *val,

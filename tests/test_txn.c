@@ -805,6 +805,83 @@ static void test_opid_reduce(void)
     efs_kv_mem_free(kv);
 }
 
+/* A committed receipt must be readable before background RESOLVE catches
+ * up. It is still pending for apply conflict checks; this is not a new op. */
+static void test_committed_pending_receipt(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();
+    struct kvs ctx={kv,0};
+    struct efs_txn_parts p=two(1,2);
+    struct efs_txid t,other;
+    struct efs_opid_req q={.id={.client_uuid={98},.session_epoch=1,.seq=1}};
+    struct efs_opid_reply rep={.rc=EFS_OK,.ino=4242,.extra=17},got;
+    uint8_t key[EFS_KV_KEY_MAX];uint32_t kl=0;
+    CHECK(kv!=NULL,"receipt kv");tid(&t,71);tid(&other,72);
+    CHECK(efs_session_establish(kv,1,q.id.client_uuid,1)==EFS_OK,"receipt session");
+    CHECK(efs_kv_key_opid(1,q.id.client_uuid,1,key,&kl)==EFS_OK,"receipt key");
+    CHECK(efs_txn_prepare_opid(kv,&t,&p,key,kl,&q,&rep)==EFS_OK,"stage exact receipt");
+    CHECK(efs_txn_opid_replay(kv,key,kl,1,coord_ok,&ctx,&got)==EFS_ERR_BUSY,"undecided is not an answer");
+    CHECK(efs_txn_opid_replay(kv,key,kl,2,coord_ok,&ctx,&got)==0,"unrelated sequence is free");
+    CHECK(efs_txn_decide(kv,efs_txn_coordinator(&t,&p),&t,EFS_TXN_COMMIT)==EFS_OK,"commit before materialization");
+    for(int fail=1;fail<=3;fail++) {
+        ctx.fail=fail;
+        CHECK(efs_txn_opid_replay(kv,key,kl,1,coord_ok,&ctx,&got)==
+              (fail==1?EFS_ERR_IO:fail==2?EFS_ERR_BUSY:EFS_ERR_NOT_PRIMARY),"fresh authority failure refuses replay");
+    }
+    ctx.fail=0;
+    CHECK(efs_txn_opid_replay(kv,key,kl,1,coord_ok,&ctx,&got)==1 && got.seq==1 &&
+          got.rc==EFS_OK && got.ino==4242 && got.extra==17,"exact committed receipt answers before resolve");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&got)==0 &&
+          efs_txn_opid_busy(kv,key,kl,1)==EFS_ERR_BUSY,"read did not materialize or release intent");
+    CHECK(efs_txn_opid_replay(kv,key,kl,1,NULL,&ctx,&got)==EFS_ERR_INVAL,"callback required");
+    q.id.seq=9;q.ack=1;
+    CHECK(efs_txn_prepare_opid(kv,&other,&p,key,kl,&q,&rep)==EFS_OK,"stage covering ack");
+    CHECK(efs_txn_opid_replay(kv,key,kl,1,coord_ok,&ctx,&got)==EFS_ERR_BUSY,"covering ack is not an exact receipt");
+    CHECK(efs_txn_decide(kv,efs_txn_coordinator(&other,&p),&other,EFS_TXN_ABORT)==EFS_OK,"abort covering ack");
+    CHECK(efs_txn_opid_replay(kv,key,kl,9,coord_ok,&ctx,&got)==EFS_ERR_BUSY,"abort still waits for removal");
+    CHECK(efs_txn_resolve(kv,&other,1,EFS_TXN_ABORT)==EFS_OK,"remove aborted ack");
+    CHECK(efs_txn_resolve(kv,&t,1,EFS_TXN_COMMIT)==EFS_OK,"materialize receipt normally");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&(struct efs_opid){.client_uuid={98},.session_epoch=1,.seq=1},&got)==1 &&
+          got.ino==4242 && got.extra==17,"same exact result after materialization");
+    efs_kv_mem_free(kv);
+}
+
+static void test_opid_pending_bounds(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();
+    struct efs_txn_parts p=two(1,2);
+    struct efs_opid_req q={.id={.client_uuid={99},.session_epoch=1,.seq=2}};
+    struct efs_opid_reply rep={.rc=EFS_OK,.ino=42};
+    struct efs_txid t;
+    uint8_t key[EFS_KV_KEY_MAX],rk[EFS_KV_KEY_MAX];uint32_t kl=0,rl=0;
+    struct kvs ctx={kv,0};struct efs_opid_reply got;
+    CHECK(kv!=NULL,"pending bounds kv");
+    CHECK(efs_session_establish(kv,1,q.id.client_uuid,1)==EFS_OK,"pending bounds session");
+    CHECK(efs_kv_key_opid(1,q.id.client_uuid,1,key,&kl)==EFS_OK,"pending bounds key");
+    for (unsigned i=0;i<=EFS_OPID_BITMAP_BITS;i++) {
+        tid(&t,100+i);q.id.seq=2+i;
+        CHECK(efs_txn_prepare_opid(kv,&t,&p,key,kl,&q,&rep)==EFS_OK,"independent pending receipt");
+        CHECK(efs_txn_opid_busy(kv,key,kl,1000)==
+                  (i<EFS_OPID_BITMAP_BITS?EFS_OK:EFS_ERR_BUSY),
+              "receipt scan is bounded at the existing window width");
+        CHECK(efs_txn_opid_replay(kv,key,kl,1000,coord_ok,&ctx,&got)==
+                  (i<EFS_OPID_BITMAP_BITS?0:EFS_ERR_BUSY),"committed receipt scan has the same bound");
+    }
+    efs_kv_mem_free(kv);kv=efs_kv_mem_create();ctx.kv=kv;
+    CHECK(kv!=NULL,"malformed receipt kv");
+    CHECK(efs_kv_key_reduce(key,kl,t.bytes,rk,&rl)==EFS_OK &&
+          efs_kv_put(kv,rk,rl,(const uint8_t *)"bad",3)==EFS_OK,"malformed pending receipt");
+    CHECK(efs_txn_opid_busy(kv,key,kl,1000)==EFS_ERR_PROTO,"malformed receipt is never a free identity");
+    CHECK(efs_txn_opid_replay(kv,key,kl,1000,coord_ok,&ctx,&got)==EFS_ERR_PROTO,"malformed committed receipt refused");
+    CHECK(efs_kv_del(kv,rk,rl)==EFS_OK,"remove malformed receipt");
+    CHECK(efs_txn_prepare_excl(kv,&t,&p,key,kl,0,EFS_TXN_PUT,
+                              (const uint8_t *)"held",4)==EFS_OK,"exclusive window intent");
+    CHECK(efs_txn_opid_busy(kv,key,kl,1000)==EFS_ERR_BUSY,"exclusive window replacement blocks every identity");
+    CHECK(efs_txn_opid_busy(kv,key,kl,0)==EFS_ERR_INVAL,"invalid identity refused");
+    CHECK(efs_txn_opid_replay(kv,key,kl,1,coord_ok,&ctx,&got)==EFS_ERR_BUSY,"exclusive window blocks committed-read path");
+    efs_kv_mem_free(kv);
+}
+
 static int fail_pair_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
 {
     (void)ctx;
@@ -1241,6 +1318,8 @@ int main(void)
     test_exact_prepare_bounds();
     test_extended_guard_reduce_envelopes();
     test_opid_reduce();
+    test_opid_pending_bounds();
+    test_committed_pending_receipt();
     test_scan_pending();
     test_excl_conflict_i16();
     test_i17_visible_at_decision();

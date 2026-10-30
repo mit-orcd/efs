@@ -17523,11 +17523,16 @@ static int host_opid_replay(struct efs_raft_host *h, uint32_t shard,
         uint32_t bytes = 0;
         int rc = efs_kv_key_opid(shard, q->id.client_uuid, q->id.session_epoch,
                                 key, &bytes);
-        if (rc == EFS_OK) rc = efs_txn_key_busy(h->kv, key, bytes);
-        if (rc != EFS_OK) return rc;
+        if (rc == EFS_OK) {
+            struct host_txn_read_context txn={.host=h};
+            rc=efs_txn_opid_replay(h->kv,key,bytes,q->id.seq,
+                                   host_txn_read_coord,&txn,rep);
+        }
+        if (rc<0) return rc;
+        if (rc>0) hit=rc;
         /* RESOLVE writes the receipt and removes its reduction atomically.
          * Re-probe after the free-key check to cover concurrent RESOLVE. */
-        hit = efs_meta_apply_opid_probe(h->kv, shard, &q->id, rep);
+        if (!hit) hit = efs_meta_apply_opid_probe(h->kv, shard, &q->id, rep);
     }
     if (hit > 0) {
         __atomic_fetch_add(&h->obs_opid_replay, 1, __ATOMIC_RELAXED);

@@ -18,7 +18,9 @@ struct efs_opid_req {struct efs_opid id;uint64_t ack;};
 struct efs_opid_reply {int rc;uint64_t ino;uint64_t seq;};
 struct efs_raft_host {void *kv;uint64_t obs_opid_replay;};
 static unsigned probes,checks,keys;
-static int result,pending,key_error,resolve_during_check;
+static int result,pending,key_error,resolve_during_check,committed_pending;
+struct host_txn_read_context {struct efs_raft_host *host;uint8_t covered;int unhosted_coordinator;};
+static int host_txn_read_coord(void *,void *,uint32_t,int *);
 static int efs_opid_req_valid(const struct efs_opid_req *q){return q && q->id.seq && q->id.client_uuid[0];}
 static int efs_meta_apply_opid_probe(void *kv,uint32_t shard,const struct efs_opid *id,struct efs_opid_reply *rep){
  (void)kv;assert(shard==1 && id->client_uuid[0]==17);probes++;
@@ -32,8 +34,15 @@ static int efs_txn_key_busy(void *kv,const uint8_t *key,uint32_t bytes){
  if(resolve_during_check)result=1;
  return pending;
 }
+static int efs_txn_opid_replay(void *kv,const uint8_t *key,uint32_t bytes,uint64_t seq,
+ int (*coord)(void *,void *,uint32_t,int *),void *ctx,struct efs_opid_reply *rep){
+ assert(coord==host_txn_read_coord && ((struct host_txn_read_context*)ctx)->host->kv==kv);
+ int rc=efs_txn_opid_busy(kv,key,bytes,seq);
+ if(committed_pending){rep->rc=0;rep->ino=4242;return 1;}
+ return rc;
+}
 ''' + s[a:b] + r'''
-static void reset(void){probes=checks=keys=0;result=pending=key_error=resolve_during_check=0;}
+static void reset(void){probes=checks=keys=0;result=pending=key_error=resolve_during_check=committed_pending=0;}
 int main(void){
  struct efs_raft_host h={0};struct efs_opid_req q={.id={.client_uuid={17},.session_epoch=1,.seq=1}};struct efs_opid_reply rep={0};
  reset();pending=EFS_ERR_BUSY;assert(host_opid_replay(&h,1,&q,&rep)==EFS_ERR_BUSY);assert(probes==1 && checks==1 && !h.obs_opid_replay);
@@ -45,7 +54,11 @@ int main(void){
  reset();result=EFS_ERR_IO;assert(host_opid_replay(&h,1,&q,&rep)==EFS_ERR_IO);assert(probes==1 && !keys);
  reset();assert(!host_opid_replay(&h,1,NULL,&rep));assert(!probes && !keys);
  reset();q.id.session_epoch=0;assert(!host_opid_replay(&h,1,&q,&rep));assert(probes==1 && !keys);
- puts("Namespace replay: pending receipt refusal, concurrent materialization re-probe, existing verdict and hard-error propagation PASS");
+ puts("committed pending receipt regression");fflush(stdout);
+ reset();q.id.session_epoch=1;pending=EFS_ERR_BUSY;committed_pending=1;
+ uint64_t previous=h.obs_opid_replay;
+ assert(host_opid_replay(&h,1,&q,&rep)==1 && rep.ino==4242 && probes==1 && checks==1 && h.obs_opid_replay==previous+1);
+ puts("Namespace replay: committed pending verdict without background materialization, pending receipt refusal, concurrent materialization re-probe, existing verdict and hard-error propagation PASS");
 }
 '''
 c=s.index('static void host_opid_reply_ino(');d=s.index('\n}',c)+2
@@ -63,7 +76,7 @@ struct efs_meta_row {uint64_t ino;};
 struct efs_meta_stat {uint64_t ino;};
 struct efs_inode {uint64_t ino,parent;char name[EFS_MAX_NAME];};
 struct efs_msg_inode_reply {unsigned status;struct efs_inode inode;};
-struct host_txn_read_context {struct efs_raft_host *host;uint8_t covered;int unhosted_coordinator;};
+
 static int read_rc,row_rc,remote_status,hosted=1,unhosted_coord;
 static unsigned reads,rows,forwards;
 static uint32_t efs_kv_inode_shard(uint64_t ino){assert(ino==4242);return 2;}

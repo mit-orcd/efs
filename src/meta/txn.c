@@ -739,6 +739,89 @@ static int decode_opid(const uint8_t *key, uint32_t klen, const uint8_t *pay,
     return EFS_OK;
 }
 
+struct opid_pending_scan {
+    const uint8_t *window;
+    uint32_t klen, prefix_len, seen;
+    uint64_t seq;
+    int rc, found;
+    efs_txn_coord_fn coord;
+    void *ctx;
+    struct efs_opid_reply *reply;
+};
+
+static int opid_pending_cb(void *arg, const uint8_t *key, uint32_t klen,
+                            const uint8_t *value, uint32_t bytes)
+{
+    struct opid_pending_scan *s=arg;
+    struct efs_txid t;
+    struct efs_txn_parts p;
+    struct efs_opid_req q;
+    struct efs_opid_reply rep;
+    uint32_t used=0;
+    if (++s->seen>EFS_OPID_BITMAP_BITS) {s->rc=EFS_ERR_BUSY;return 1;}
+    if (klen!=s->prefix_len+EFS_TXN_ID_LEN ||
+        parse_parts_txid(value,bytes,&t,&p,&used)!=EFS_OK || !parts_ok(&p) ||
+        memcmp(key+klen-EFS_TXN_ID_LEN,t.bytes,EFS_TXN_ID_LEN) ||
+        bytes!=16+used+EFS_TXN_REDUCE_OPID_WIRE ||
+        decode_opid(s->window,s->klen,value+16+used,
+                     EFS_TXN_REDUCE_OPID_WIRE,&q,&rep)!=EFS_OK ||
+        !efs_opid_req_valid(&q) || q.ack>=q.id.seq) {
+        s->rc=EFS_ERR_PROTO;return 1;
+    }
+    int hosted=0;
+    for (uint32_t i=0;i<p.n;i++)hosted|=p.shard[i]==key_shard(s->window);
+    if (!hosted) {s->rc=EFS_ERR_PROTO;return 1;}
+    if (q.id.seq==s->seq || q.ack>=s->seq) {
+        /* Only the exact staged verdict can answer a retry. A covering ACK
+         * is never permission to invent the old result or execute it again. */
+        int decision=EFS_TXN_UNDECIDED;
+        if (!s->coord || q.id.seq!=s->seq) {s->rc=EFS_ERR_BUSY;return 1;}
+        int rc=s->coord(s->ctx,&t,efs_txn_coordinator(&t,&p),&decision);
+        if (rc!=EFS_OK) {
+            s->rc=(rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_STALE)?EFS_ERR_BUSY:rc;
+            return 1;
+        }
+        if (decision!=EFS_TXN_COMMIT) {s->rc=EFS_ERR_BUSY;return 1;}
+        if (s->found && (s->reply->seq!=rep.seq || s->reply->rc!=rep.rc ||
+                        s->reply->ino!=rep.ino || s->reply->extra!=rep.extra)) {
+            s->rc=EFS_ERR_PROTO;return 1;
+        }
+        *s->reply=rep;s->found=1;
+    }
+    return 0;
+}
+
+static int opid_pending(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
+                         uint64_t seq,efs_txn_coord_fn coord,void *ctx,
+                         struct efs_opid_reply *reply)
+{
+    uint8_t prefix[KEY_MAX];uint32_t plen=0;
+    if (!kv || !key || klen!=3+EFS_OPID_UUID_LEN+4 ||
+        key[2]!=EFS_KV_KIND_OPID || !seq) return EFS_ERR_INVAL;
+    int rc=efs_txn_key_exclusive(kv,key,klen);
+    if (rc!=EFS_OK)return rc;
+    rc=efs_kv_key_reduce_prefix(key,klen,prefix,&plen);
+    if (rc!=EFS_OK)return rc;
+    struct opid_pending_scan s={.window=key,.klen=klen,.prefix_len=plen,.seq=seq,
+                                .coord=coord,.ctx=ctx,.reply=reply};
+    rc=efs_kv_scan_prefix(kv,prefix,plen,opid_pending_cb,&s);
+    return rc!=EFS_OK && rc!=1?rc:s.rc?s.rc:s.found;
+}
+
+int efs_txn_opid_busy(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
+                       uint64_t seq)
+{
+    return opid_pending(kv,key,klen,seq,NULL,NULL,NULL);
+}
+
+int efs_txn_opid_replay(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
+                         uint64_t seq,efs_txn_coord_fn coord,void *ctx,
+                         struct efs_opid_reply *reply)
+{
+    if (!coord || !reply) return EFS_ERR_INVAL;
+    return opid_pending(kv,key,klen,seq,coord,ctx,reply);
+}
+
 /* Record under reduce(key, txid): [txid][parts][payload]. The payload's
  * meaning follows the KIND OF THE DATA KEY (lane triple, inode delta, u64
  * add) — one record shape, so drop/resolve find every reduce of a txn by
