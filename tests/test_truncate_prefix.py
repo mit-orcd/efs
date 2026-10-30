@@ -14,6 +14,7 @@ static void now_ns(uint64_t *s,uint32_t *n) {*s=1;*n=0;}
 void efs_client_lock_dir(efs_ino_t i) {(void)i;}
 void efs_client_unlock_dir(efs_ino_t i) {(void)i;}
 int efs_export_get_inode(struct efs_export *e,efs_ino_t i,struct efs_inode *r) {(void)e;(void)i;memset(r,0,sizeof(*r));r->size=3*131072;return 0;}
+int efs_client_stat_refresh(efs_ino_t i,struct efs_inode *r) {(void)i;(void)r;assert(!"warm-cache truncate unexpectedly refreshed");return EFS_ERR_NET;}
 int efs_client_report_dirty_ino(efs_ino_t i,int sync) {(void)i;assert(sync);reports++;return report_rc;}
 int efs_client_rpc_setattr(efs_export_id_t e,efs_ino_t i,uint32_t mask,uint32_t mode,uid_t uid,gid_t gid,uint64_t size,uint64_t mt,uint32_t mn,uint64_t at,uint32_t an,struct efs_inode *out) {(void)e;(void)i;(void)mask;(void)mode;(void)uid;(void)gid;(void)size;(void)mt;(void)mn;(void)at;(void)an;memset(out,0,sizeof(*out));setattrs++;return setattr_rc;}
 void efs_export_drop_chunks_from(struct efs_export *e,efs_ino_t i,uint32_t ci) {(void)e;(void)i;dropped_from=(int)ci;}
