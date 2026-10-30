@@ -79,7 +79,8 @@ def run(a):
         k.place_leaders(c,2,groups=(0,2),timeout=15)
         Path(str(pause)+'.release').touch();pending.result(timeout=30)
         assert any(f'released inode={ino} ready=1' in c.log(i) for i in (1,2,3)), 'pause expired'
-        pause.unlink();record('listing spans actual leader change after row cut')
+        pause.unlink(missing_ok=True) # fault actor renames the request to .ready before pausing
+        record('listing spans actual leader change after row cut')
         c.procs[3].send_signal(signal.SIGSTOP)
         try:
             for _ in range(4):listing()
@@ -92,7 +93,14 @@ def run(a):
         record('every stable payload exact after churn stops')
         c.ports[4]=fourth_port
         c.start(4,join=2);c.wait_members((1,2,3,4),4)
-        c.wait_voters((1,2,3,4),lambda i,v:all(bits==(7 if g==0 else 14) for g,(_,bits) in v.items()))
+        # A non-host need not retain the other group's voter mask. Match
+        # the established K33 hosting/readiness contract, not stale local state.
+        def four_ready(i,v):
+            if set(v)!={0,2}:return False
+            if i==1:return v[0]==(1,7) and v[2][0]==0
+            if i==4:return v[2]==(1,14) and v[0][0]==0
+            return v=={0:(1,7),2:(1,14)}
+        c.wait_voters((1,2,3,4),four_ready)
         for node in (1,4):
             src=0;cookie='';seen=set();pages=0
             while True:
@@ -112,7 +120,7 @@ def run(a):
         record('variable compact replies survive partial-group peer forwarding')
         if a.posix:
             argv=[sys.executable,str(ROOT/'tests/posix/posix_suite.py'),str(mount.path),
-                  '--suite','core','--results',str(a.output/'posix.tsv'),'--tag','ao']
+                  '--suite','core','--keep','--results',str(a.output/'posix.tsv'),'--tag','ao']
             with (a.output/'posix.log').open('w') as log:
                 done=subprocess.run(argv,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=900)
             assert done.returncode==0,('POSIX core failed',done.returncode)
@@ -137,6 +145,24 @@ def run(a):
         finally:
             if errors:result['verdict']='FAIL'
             for log in c.dir.glob('*.log'):(a.output/log.name).write_bytes(log.read_bytes())
+            if a.transport == 'rdma' and result['verdict'] == 'PASS':
+                evidence = {}
+                for name in ('n1.log','n2.log','n3.log','n4.log','mnt.log'):
+                    text=(a.output/name).read_text(errors='replace')
+                    counters=re.findall(r'app_tx=(\d+)/(\d+) app_rx=(\d+)/(\d+).*?tcp_measured=(\d+).*?post_setup_tcp=(\d+)/(\d+) violations=(\d+)',text)
+                    row=dict(connections=len(counters),
+                             app_frames=sum(int(c[0])+int(c[2]) for c in counters),
+                             tcp_measured=sum(int(c[4]) for c in counters),
+                             post_setup_tcp_bytes=sum(int(c[5])+int(c[6]) for c in counters),
+                             violations=sum(int(c[7]) for c in counters))
+                    evidence[name]=row
+                    if ('transport rdma:' not in text or
+                        'RDMA transport up segmented-v1' not in text or
+                        not row['app_frames'] or row['violations'] or
+                        row['post_setup_tcp_bytes']):
+                        errors.append('RDMA transport evidence failed '+name+' '+repr(row))
+                result['rdma_evidence']=evidence
+                if errors:result['verdict']='FAIL'
             result['elapsed_s']=time.monotonic()-started
             (a.output/'result.json').write_text(json.dumps(result,indent=2))
     assert result['verdict']=='PASS',result

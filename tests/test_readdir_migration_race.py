@@ -40,6 +40,9 @@ static int dent_get(struct efs_kv *kv,uint32_t sh,efs_ino_t ino,const char *nm,s
  if(!hashed_exists)return EFS_ERR_NOT_FOUND;
  *out=hashed;return EFS_OK;
 }
+static int dent_get_tx(struct efs_kv *kv,uint32_t sh,efs_ino_t ino,const char *nm,efs_txn_coord_fn coord,void *ctx,struct efs_meta_dentry *out) {
+ (void)coord;(void)ctx;return dent_get(kv,sh,ino,nm,out);
+}
 static int scan_from(void *kv,const uint8_t *prefix,uint32_t plen,
  const uint8_t *start,uint32_t slen,int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *arg) {
  (void)kv;assert(plen==11);

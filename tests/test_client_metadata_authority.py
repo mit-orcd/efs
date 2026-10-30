@@ -47,6 +47,7 @@ static void efs_rdcache_invalidate(efs_ino_t ino,uint32_t ci){(void)ino;(void)ci
 static void efs_dcache_drop_if_clean(efs_ino_t ino,uint32_t ci){(void)ino;(void)ci;}
 static int efs_client_rpc_setattr(unsigned ex,efs_ino_t ino,uint32_t mask,uint32_t mode,uid_t uid,gid_t gid,uint64_t size,uint64_t mt,uint32_t mn,uint64_t at,uint32_t an,struct efs_inode *out){(void)ex;(void)ino;(void)mask;(void)mode;(void)uid;(void)gid;(void)size;(void)mt;(void)mn;(void)at;(void)an;mutations++;*out=reply;return EFS_OK;}
 static int efs_client_rpc_unlink(unsigned ex,efs_ino_t p,const char *name,bool directory){(void)ex;(void)p;(void)name;(void)directory;mutations++;return rpc_rc;}
+static uint64_t call_deadline;static uint64_t efs_client_rpc_deadline_ms(void){return call_deadline;}static void efs_client_rpc_set_deadline_ms(uint64_t value){call_deadline=value;}
 static void efs_client_stage_pin(efs_ino_t ino){(void)ino;}
 static void efs_client_stage_unpin(efs_ino_t ino){(void)ino;}
 int efs_export_lookup(struct efs_export *e,efs_ino_t p,const char *name,struct efs_inode *out){(void)e;(void)p;(void)name;*out=staged;return EFS_OK;}
