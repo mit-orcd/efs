@@ -42,8 +42,8 @@ int main(void)
 {
  struct test_server server={1};struct efs_raft_host host={.s=&server};struct efs_msg_inode_reply out;
  classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_BUSY);
- classify(&host,EFS_ERR_AGAIN,&out);assert(out.status==EFS_INODE_RPC_BUSY);
- classify(&host,EFS_ERR_NOLCK,&out);assert(out.status==EFS_INODE_RPC_BUSY);
+ classify(&host,EFS_ERR_AGAIN,&out);assert(out.status==EFS_INODE_RPC_LOCKED);
+ classify(&host,EFS_ERR_NOLCK,&out);assert(out.status==EFS_INODE_RPC_LOCK_LIMIT);
  classify(&host,EFS_ERR_NOT_PRIMARY,&out);assert(out.status==EFS_INODE_RPC_NOT_PRIMARY);
  server.unused=0;classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_BUSY);
  host.s=NULL;classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_BUSY);

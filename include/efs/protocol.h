@@ -114,7 +114,7 @@ enum efs_msg_type {
     EFS_MSG_INODE_HOLD = 83,
     EFS_MSG_INODE_HOLD_REPLY = 84,
     /* Cluster-wide whole-file flock. Reply is struct efs_msg_inode_reply
-     * (BUSY = would block). */
+     * (LOCKED = competing owner; BUSY = transient metadata authority). */
     EFS_MSG_INODE_FLOCK = 85,
     EFS_MSG_INODE_FLOCK_REPLY = 86,
     /* Rename a specific directory name (hard links share an ino). */
@@ -1110,6 +1110,10 @@ struct efs_msg_query_stats_reply {
 /* Session refusals (K5): EFS_ERR_FENCED / EFS_ERR_UNREGISTERED. */
 #define EFS_INODE_RPC_FENCED    14
 #define EFS_INODE_RPC_UNREGISTERED 15
+/* FLOCK-specific terminal verdicts. Keep transient authority/proposal BUSY
+ * retryable; never turn an uncontended grant into EAGAIN. High free values. */
+#define EFS_INODE_RPC_LOCK_LIMIT 253
+#define EFS_INODE_RPC_LOCKED     254
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;

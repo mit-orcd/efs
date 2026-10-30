@@ -45,11 +45,10 @@ static int efs_append_flush_report(struct fuse_file_info*f,efs_ino_t i){(void)f;
 static int efs_file_sync_error(struct fuse_file_info*f,efs_ino_t i,int stalled,int rc){(void)f;(void)i;(void)stalled;return rc;}
 static void efs_fuse_log_err(const char*w,int rc,efs_ino_t i,uint64_t o,size_t n,const char*p){(void)w;(void)rc;(void)i;(void)o;(void)n;(void)p;logged++;}
 static int efs_client_rpc_flock(unsigned ex,efs_ino_t i,uint32_t op,uint64_t who){assert(ex==1 && i==4097);requests++;operation=op;owner=who;return reply;}
-static int efs_rc_to_errno(int rc){return rc==EFS_OK?0:-EBUSY;}
 /* Only the old source calls these: retain an executable negative control. */
 static int flock_armed_take(efs_ino_t i,uint64_t*o){(void)i;*o=555;old_takes++;return 1;}
 static void flock_arm(efs_ino_t i,uint64_t o){(void)i;(void)o;}
-''' + ''.join(function(n) for n in ('efs_fuse_flush_ino','efs_fuse_release_ino','efs_fuse_flock_ino')) + r'''
+''' + ''.join(function(n) for n in ('efs_rc_to_errno','efs_fuse_flush_ino','efs_fuse_release_ino','efs_fuse_flock_ino')) + r'''
 int main(void){
  struct fuse_file_info f={.fh=4097,.lock_owner=77};
  assert(!efs_fuse_flush_ino(4097,&f));assert(requests==0 && old_takes==0);
@@ -67,6 +66,8 @@ int main(void){
  assert(!efs_fuse_flock_ino(4097,&f,LOCK_EX|LOCK_NB));assert(operation==(EFS_FLOCK_EX|EFS_FLOCK_NB));
  assert(!efs_fuse_flock_ino(4097,&f,LOCK_UN));assert(operation==EFS_FLOCK_UN);
  reply=EFS_ERR_BUSY;assert(efs_fuse_flock_ino(4097,&f,LOCK_EX|LOCK_NB)==-EAGAIN);
+ reply=EFS_ERR_AGAIN;assert(efs_fuse_flock_ino(4097,&f,LOCK_EX|LOCK_NB)==-EAGAIN);
+ reply=EFS_ERR_NOLCK;assert(efs_fuse_flock_ino(4097,&f,LOCK_EX|LOCK_NB)==-ENOLCK);
  assert(efs_fuse_flock_ino(4097,NULL,LOCK_EX)==-EBADF);
  puts("flock callbacks: fork/dup FLUSH preserves lock, per-description kernel RELEASE owner, other opens, >64 owners, failure visibility and blocking WAIT flags PASS");
  return 0;

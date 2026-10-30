@@ -4867,6 +4867,8 @@ static int efs_rc_to_errno(int rc)
         return -EBUSY;
     case EFS_ERR_AGAIN:
         return -EAGAIN;
+    case EFS_ERR_NOLCK:
+        return -ENOLCK;
     case EFS_ERR_NO_QUORUM:
     case EFS_ERR_NET:
     default:                return -EIO;
@@ -5661,11 +5663,9 @@ static int efs_fuse_flock_ino(fuse_ino_t ino, struct fuse_file_info *fi, int op)
         fprintf(stderr, "flock: ino=%llu op=%u owner=%llu\n",
                 (unsigned long long)fh, op, (unsigned long long)owner);
     rc = efs_client_rpc_flock(g_client.export_id, fh, rpc_op, owner);
-    if (rc == EFS_ERR_BUSY)
+    if (rc == EFS_ERR_BUSY || rc == EFS_ERR_AGAIN)
         return -EAGAIN;
-    if (rc != EFS_OK)
-        return -EIO;
-    return 0;
+    return efs_rc_to_errno(rc);
 }
 
 /* Parent of a daemonized efs-fuse waits on this until FUSE_INIT has run.

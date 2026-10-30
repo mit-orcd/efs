@@ -45,6 +45,10 @@ int main(void) {
  assert(rc_to_inode_status(EFS_ERR_OVERFLOW)==EFS_INODE_RPC_OVERFLOW);
  assert(rpc_status_to_efs(EFS_INODE_RPC_OVERFLOW)==EFS_ERR_OVERFLOW);
  assert(efs_rc_to_errno(EFS_ERR_OVERFLOW)==-EOVERFLOW);
+ assert(rpc_status_to_efs(EFS_INODE_RPC_LOCKED)==EFS_ERR_AGAIN);
+ assert(rpc_status_to_efs(EFS_INODE_RPC_LOCK_LIMIT)==EFS_ERR_NOLCK);
+ assert(efs_rc_to_errno(EFS_ERR_AGAIN)==-EAGAIN);
+ assert(efs_rc_to_errno(EFS_ERR_NOLCK)==-ENOLCK);
  assert(rc_to_inode_status(EFS_ERR_BUSY)==EFS_INODE_RPC_BUSY);
  assert(rpc_status_to_efs(EFS_INODE_RPC_BUSY)==EFS_ERR_BUSY);
  assert(efs_rc_to_errno(EFS_ERR_BUSY)==-EBUSY);

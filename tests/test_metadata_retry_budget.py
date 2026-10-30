@@ -152,11 +152,22 @@ int main(void){
  reset();reply_status=EFS_INODE_RPC_BUSY;
  assert(rpc_send_recv_shard(0,EFS_MSG_INODE_FLOCK,unlock,sizeof(unlock),EFS_MSG_INODE_GETATTR_REPLY,&ur,sizeof(ur),0,NULL)==EFS_ERR_BUSY);
  assert(calls==16 && sleeps==15 && freed==16);
+ /* Grant authority BUSY must retry without changing owner/range/session.
+  * This includes nonblocking grants: only a real conflict is immediate. */
  for(unsigned op=EFS_FLOCK_EX;op<=EFS_FLOCK_EX+EFS_FLOCK_NB;op+=EFS_FLOCK_NB){
-  uq.op=op;memcpy(unlock,&uq,sizeof(uq));reset();reply_status=EFS_INODE_RPC_BUSY;
+  uq.op=op;memcpy(unlock,&uq,sizeof(uq));reset();reply_status=EFS_INODE_RPC_BUSY;mkdir_ready=3;
   assert(rpc_send_recv_shard(0,EFS_MSG_INODE_FLOCK,unlock,sizeof(unlock),EFS_MSG_INODE_GETATTR_REPLY,&ur,sizeof(ur),0,NULL)==EFS_OK);
-  assert(calls==1 && !sleeps && ur.status==EFS_INODE_RPC_BUSY);
+  assert(calls==3 && sleeps==2 && freed==3 && ur.status==EFS_INODE_RPC_OK);
+  reset();reply_status=EFS_INODE_RPC_BUSY;deadline=1010;
+  assert(rpc_send_recv_shard(0,EFS_MSG_INODE_FLOCK,unlock,sizeof(unlock),EFS_MSG_INODE_GETATTR_REPLY,&ur,sizeof(ur),0,NULL)==EFS_ERR_BUSY);
+  assert(calls==1 && sleeps==1 && now==deadline);
+  const int terminal[]={EFS_INODE_RPC_LOCKED,EFS_INODE_RPC_LOCK_LIMIT};
+  for(unsigned i=0;i<2;i++){
+   reset();reply_status=terminal[i];
+   assert(rpc_send_recv_shard(0,EFS_MSG_INODE_FLOCK,unlock,sizeof(unlock),EFS_MSG_INODE_GETATTR_REPLY,&ur,sizeof(ur),0,NULL)==EFS_OK);
+   assert(calls==1 && !sleeps && freed==1 && ur.status==terminal[i]);
   }
+ }
  /* A directory prepare can outlive the legacy 16-attempt window. */
  unsigned char packet[sizeof(struct efs_msg_inode_create)+EFS_OPID_WIRE_LEN]={0};
  ((struct efs_msg_inode_create *)packet)->mode=S_IFDIR|0755;
