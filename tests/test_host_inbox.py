@@ -70,3 +70,29 @@ with tempfile.TemporaryDirectory(prefix='efs-host-inbox-') as d:
  subprocess.run([os.environ.get('CC','cc'),*flags,'-std=c99','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include'),str(p),'-o',str(binary)],check=True)
  subprocess.run([str(binary)],check=True)
 print('host inbox: bounded FIFO slices, exact byte accounting and backlog wakes PASS')
+
+# Wall heartbeat cadence survives a coarse pump without advancing an election
+# clock or counting the past interval after a newly received leader contact.
+a=s.index('static int host_heartbeat_due(');body=s[a:s.index('\n}',a)+2]
+code=r'''
+#include <assert.h>
+#include <stdint.h>
+#define HOST_TICK_US 5000u
+#define HOST_HB_TICKS 10u
+'''+body+r'''
+int main(void){uint64_t last=1000000;
+ for(unsigned i=0;i<50000;i++)assert(!host_heartbeat_due(1000000+i,&last,10000));
+ assert(!host_heartbeat_due(1050000,&last,9999)&&last==1000000);
+ assert(last==1000000&&host_heartbeat_due(1050000,&last,10000)&&last==1050000);
+ assert(host_heartbeat_due(1259001,&last,10000)&&last==1250000);
+ assert(!host_heartbeat_due(1259002,&last,10000));assert(!host_heartbeat_due(100,&last,10000));
+ assert(host_heartbeat_due(1300000,&last,10000)&&last==1300000);
+ assert(host_heartbeat_due(UINT64_MAX,&last,10000));assert(!host_heartbeat_due(UINT64_MAX,&last,10000));
+}
+'''
+with tempfile.TemporaryDirectory(prefix='efs-host-heartbeat-') as d:
+ p=Path(d)/'test.c';p.write_text(code)
+ subprocess.run([os.environ.get('CC','cc'),'-std=gnu11','-Wall','-Wextra','-Werror',str(p),'-o',str(p.with_suffix(''))],check=True)
+ subprocess.run([str(p.with_suffix(''))],check=True)
+assert 'efs_raft_heartbeat(h->g[i].r)' in s
+print('host heartbeat: no early sends, slow-cycle cadence, fractional carry, one coalesced event after huge pause PASS')

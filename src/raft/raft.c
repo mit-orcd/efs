@@ -2386,6 +2386,27 @@ void efs_raft_free(struct efs_raft *r)
     free(r);
 }
 
+/* Explicit wall-clock liveness, independent of delayed logical tick calls.
+ * Use the already validated acknowledged prefix without resending the
+ * outstanding data window or inventing replication/durability authority.
+ * Replies and follower commit catch-up retain ordinary receive validation. */
+int efs_raft_heartbeat(struct efs_raft *r)
+{
+    if (!r) return EFS_ERR_INVAL;
+    if (r->recv_persisting) return EFS_ERR_BUSY;
+    if (r->storage_failed) return EFS_ERR_IO;
+    if (r->role != EFS_RAFT_LEADER) return EFS_ERR_NOT_PRIMARY;
+    uint32_t peers = peer_mask(r);
+    for (int i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+        if (i == r->id || !(peers & (1u << i))) continue;
+        int rc = send_commit_probe(r, i);
+        if (rc != EFS_OK) return rc;
+    }
+    /* Preserve logical heartbeat/retransmission aging; this additional
+     * liveness probe cannot postpone the ordinary data/snapshot retry. */
+    return EFS_OK;
+}
+
 int efs_raft_tick(struct efs_raft *r)
 {
     if (r && r->recv_persisting) return EFS_ERR_BUSY;

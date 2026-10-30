@@ -3488,9 +3488,71 @@ static void test_recv_batch_overlap(void)
     }
 }
 
+/* A leader pump runs every 200 ms while followers run every 5 ms.
+ * Dropping elapsed tick quanta used to stretch its heartbeat beyond their
+ * unchanged 500+ ms election windows. Real core/transport, no time sleeps. */
+static void test_wall_heartbeat_coarse_pump(void)
+{
+    for (int wall_heartbeat = 0; wall_heartbeat < 2; wall_heartbeat++) {
+        struct net n = {0}; struct app app[3] = {{0}};
+        struct efs_raft_store *st[3]; struct efs_raft_cfg cfg = {0};
+        n.n=3;cfg.n=3;cfg.voters=7;cfg.send=send_now;cfg.net=&n;
+        cfg.apply=apply_cmd;cfg.boot_id=1;cfg.heartbeat_ticks=10;
+        for(int i=0;i<3;i++) {
+            st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+            cfg.app=&app[i];cfg.election_ticks=100+(uint32_t)i*20;
+            n.r[i]=test_raft_new(&cfg);CHECK(n.r[i]!=NULL,"coarse pump core");
+        }
+        CHECK(elect(&n,1000)==1,"coarse pump election");
+        int leader=leader_id(&n);CHECK(leader>=0,"coarse pump leader");
+        if(leader<0){free_n(&n,st,3);continue;}
+        uint64_t term=efs_raft_term(n.r[leader]);int changed=0;
+        for(unsigned clock=1;clock<=2000;clock++) {
+            if(clock%40==0) {
+                (void)efs_raft_tick(n.r[leader]);
+                if(wall_heartbeat)(void)efs_raft_heartbeat(n.r[leader]);
+            }
+            for(int i=0;i<3;i++)if(i!=leader)(void)efs_raft_tick(n.r[i]);
+            if(leader_id(&n)!=leader || efs_raft_term(n.r[leader])!=term)changed=1;
+        }
+        if(!wall_heartbeat)CHECK(changed,"old one-tick slow pump loses leadership (negative control)");
+        else {
+            CHECK(!changed,"wall-clock heartbeats keep healthy coarse leader stable");
+            /* With no leader heartbeat, ordinary follower timers still elect
+             * a replacement; the fix never raises an election duration. */
+            for(unsigned clock=0;clock<1000;clock++)
+                for(int i=0;i<3;i++)if(i!=leader)(void)efs_raft_tick(n.r[i]);
+            int next=leader_id(&n);CHECK(next>=0&&next!=leader,"real pause still fails over");
+            if(next>=0) {
+                uint8_t cmd=29;uint64_t ix=0,commit=efs_raft_commit(n.r[next]);
+                n.hold_ae_replies=1;
+                CHECK(!efs_raft_propose(n.r[next],&cmd,1,&ix),"outstanding data");
+                int batches[3];memcpy(batches,n.batches,sizeof(batches));
+                for(unsigned repeat=0;repeat<10;repeat++)
+                    CHECK(!efs_raft_heartbeat(n.r[next]),"empty heartbeat send");
+                CHECK(!memcmp(batches,n.batches,sizeof(batches)),"heartbeats never duplicate data window");
+                CHECK(efs_raft_commit(n.r[next])==commit,"unanswered probes earn no commit");
+                /* Extra wall probes cannot reset the logical timer and
+                 * postpone an unanswered data batch's normal retry. */
+                for(unsigned tick=0;tick<10;tick++) {
+                    (void)efs_raft_heartbeat(n.r[next]);
+                    (void)efs_raft_tick(n.r[next]);
+                }
+                int retried=0;
+                for(int i=0;i<3;i++)if(n.batches[i]>batches[i])retried=1;
+                CHECK(retried,"wall probes preserve ordinary data retry aging");
+                for(int i=0;i<3;i++)if(i!=next)
+                    CHECK(efs_raft_heartbeat(n.r[i])==EFS_ERR_NOT_PRIMARY,"follower cannot send heartbeat");
+            }
+        }
+        free_n(&n,st,3);
+    }
+}
+
 int main(void)
 {
     for (ack_window_fixture_mode=0;ack_window_fixture_mode<2;ack_window_fixture_mode++) {
+        test_wall_heartbeat_coarse_pump();
         test_note_durable_without_apply();
         test_readindex_control();
         test_read_quorum_before_apply();

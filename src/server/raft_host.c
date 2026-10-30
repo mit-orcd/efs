@@ -8525,10 +8525,24 @@ static void host_stop_leading(struct efs_raft_host *h, int stopping)
     }
 }
 
+/* At most one heartbeat event per elapsed wall interval, even after a long
+ * pump pause. Eventfd storms cannot send early. Keep fractional remainder. */
+static int host_heartbeat_due(uint64_t now, uint64_t *previous, uint64_t tick_gap)
+{
+    const uint64_t interval = (uint64_t)HOST_HB_TICKS * HOST_TICK_US;
+    /* On-time cycles already have the core's normal heartbeat. Only a
+     * cycle that lost at least a whole extra tick needs this liveness path. */
+    if (tick_gap < 2u * HOST_TICK_US) return 0;
+    if (now < *previous || now - *previous < interval) return 0;
+    *previous += ((now - *previous) / interval) * interval;
+    return 1;
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
     uint64_t last_tick_us = 0;
+    uint64_t last_heartbeat_us = now_us_();
     int checkpoint_failed = 0;
     struct host_checkpoint_worker checkpoint;
     if(host_checkpoint_start(&checkpoint,h)!=EFS_OK)
@@ -8548,6 +8562,7 @@ static void *host_pump(void *arg)
         int batch_obs = BO_ON();
         uint64_t phase_us = batch_obs ? efs_batch_obs_now_us() : 0;
         uint64_t t_drain = 0, t_tick = 0, t_persist = 0, t_wait = 0;
+        uint64_t tick_gap = 0;
         if (obs) {
             c0 = now_us_();
             h->obs_apply_cnt = 0;
@@ -8631,6 +8646,7 @@ static void *host_pump(void *arg)
          * timeouts); early ones are not, so never catch up missed ticks. */
         {
             uint64_t now = now_us_();
+            tick_gap = last_tick_us && now >= last_tick_us ? now - last_tick_us : 0;
             if (now - last_tick_us >= HOST_TICK_US) {
                 /* K22/W23: KV at its admission watermark -> no leadership. */
                 int kv_over = host_kv_pressure(h);
@@ -8642,6 +8658,17 @@ static void *host_pump(void *arg)
                 }
                 last_tick_us = now;
             }
+        }
+        /* A slow pump may take much longer than one 5 ms logical tick.
+         * Keep the existing election/pressure ordering, but send one empty
+         * acknowledged-prefix heartbeat by wall time. This cannot charge
+         * historical elapsed time to a contact just processed above, and
+         * it cannot make a new storage/apply promise or duplicate a batch. */
+        if (host_heartbeat_due(now_us_(), &last_heartbeat_us, tick_gap)) {
+            for (i = 0; i < HOST_NGROUPS; i++)
+                if (h->g[i].hosted && h->g[i].r &&
+                    efs_raft_role(h->g[i].r) == EFS_RAFT_LEADER)
+                    (void)efs_raft_heartbeat(h->g[i].r);
         }
         /* Election no-ops/config entries are appended outside client submit.
          * Admit only bytes already covered by the disk's fsync watermark;

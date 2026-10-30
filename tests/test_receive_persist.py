@@ -45,7 +45,7 @@ static void *receive(void *ctx){struct receiver*x=ctx;struct efs_raft_msg m=x->m
  pthread_mutex_lock(&x->h->mu);x->rc=x->mode?efs_raft_recv(x->h->r[0],&m):efs_raft_recv_batch(x->h->r[0],x->m,2);pthread_mutex_unlock(&x->h->mu);return NULL;}
 
 static void blocked(struct efs_raft*r,struct efs_raft_msg*m,uint64_t expected_term){uint64_t index=99,round=99;
- assert(efs_raft_tick(r)==EFS_ERR_BUSY);assert(efs_raft_recv(r,m)==EFS_ERR_BUSY);
+ assert(efs_raft_tick(r)==EFS_ERR_BUSY);assert(efs_raft_heartbeat(r)==EFS_ERR_BUSY);assert(efs_raft_recv(r,m)==EFS_ERR_BUSY);
  assert(efs_raft_recv_batch(r,m,1)==EFS_ERR_BUSY);
  assert(efs_raft_propose(r,(uint8_t*)"x",1,&index)==EFS_ERR_BUSY);
  assert(efs_raft_propose_local(r,(uint8_t*)"x",1,&index)==EFS_ERR_BUSY);

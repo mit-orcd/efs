@@ -261,6 +261,9 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg);
 void efs_raft_free(struct efs_raft *r);
 
 int efs_raft_tick(struct efs_raft *r);
+/* Owner-serialized empty liveness probes on a wall-clock deadline. Preserves
+ * in-flight data windows and all receive/persistence/term/prefix fences. */
+int efs_raft_heartbeat(struct efs_raft *r);
 int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg);
 /* Process already queued messages in order. Only contiguous, same-leader,
  * same-term new appends share persistence; conflicts, reads, elections and
