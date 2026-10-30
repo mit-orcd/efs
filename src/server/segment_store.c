@@ -303,6 +303,13 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
      * same read names exactly this fragment. */
     struct efs_pack_object *o = malloc(sizeof(*o));
     if (!o) return EFS_ERR_NOMEM;
+    /* Bind the fresh authority read to the write's lifetime. Reclaim takes
+     * this guard exclusively before installing its journal-backed fence.
+     * Checking authority before the guard lets a delayed ACTIVE result
+     * outlive deletion and retirement of that temporary fence, then
+     * recreate a segment whose object row has already been forgotten. */
+    pthread_rwlock_t *g = server_segment_guard(group, id);
+    pthread_rwlock_rdlock(g);
     uint32_t degraded = EFS_PACK_READ_DEGRADED_BAD;
     int rc = rebuild ? server_raft_host_pack_state(group, id, gen, o, &degraded)
                      : server_raft_host_pack_object(group, id, gen, o);
@@ -316,11 +323,12 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
         else if (rebuild && degraded != (1u << fi)) rc = EFS_ERR_STALE;
     }
     free(o);
-    if (rc != EFS_OK) return rc;
+    if (rc != EFS_OK) {
+        pthread_rwlock_unlock(g);
+        return rc;
+    }
     char path[EFS_MAX_PATH + 128];
     server_segment_path(s, group, id, gen, fi, path, sizeof(path));
-    pthread_rwlock_t *g = server_segment_guard(group, id);
-    pthread_rwlock_rdlock(g);
     if (server_reclaim_fenced(EFS_RECLAIM_SEGMENT_EID(group), id)) {
         pthread_rwlock_unlock(g);
         return EFS_ERR_STALE;
@@ -546,9 +554,13 @@ int server_segment_delete(struct efsd_server *s, uint32_t group, uint64_t id, ui
         struct stat st;
         server_segment_path(s, group, id, gen, fi, path, sizeof(path));
         if (stat(path, &st)) { if (errno != ENOENT) rc = EFS_ERR_IO; continue; }
-        if (unlink(path) && errno != ENOENT) { rc = EFS_ERR_IO; continue; }
+        int removed_here = !unlink(path);
+        if (!removed_here && errno != ENOENT) { rc = EFS_ERR_IO; continue; }
         any = 1;
-        if (removed && (uint64_t)st.st_size > SG_TAIL) *removed += (uint64_t)st.st_size - SG_TAIL;
+        /* Recovery may have won the unlink after our stat and debited its
+         * bytes. The journal must not also claim that physical removal. */
+        if (removed_here && removed && (uint64_t)st.st_size > SG_TAIL)
+            *removed += (uint64_t)st.st_size - SG_TAIL;
     }
     if (any && rc == EFS_OK && sg_sync_path(dir) != EFS_OK) rc = EFS_ERR_IO;
     return rc;

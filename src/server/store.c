@@ -2135,16 +2135,21 @@ void server_put_sync_recovered(void)
     }
 }
 
-/* Remove an unprovable fragment file durably and give its bytes back to
- * the quota. ENOENT counts as removed (a reclaim deleter got there). */
+/* Remove an unprovable fragment file durably. Only the successful unlink
+ * owns its physical quota debit; ENOENT is idempotent success, not a second
+ * debit of bytes another deleter already accounted for. */
 int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes, int charged,
                          struct server_recovery_files *c)
 {
-    if (unlink(path) && errno != ENOENT)
+    int removed_here = !unlink(path);
+    if (!removed_here && errno != ENOENT)
         return EFS_ERR_IO;
-    int rc = fragment_parent_sync(s, path);
-    if (rc != EFS_OK)
-        return rc;
+    /* Account the physical effect even when the following namespace
+     * barrier fails. Return that IO failure unchanged; a retry must fence
+     * the absent name, without losing or repeating this debit. Restart
+     * inventories the physical files again before admitting writes. */
+    if (!removed_here)
+        return fragment_parent_sync(s, path);
     __atomic_fetch_add(&c->dropped, 1, __ATOMIC_RELAXED);
     __atomic_fetch_add(&c->bytes_dropped, bytes, __ATOMIC_RELAXED);
     if (charged) {
@@ -2157,7 +2162,7 @@ int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes
     }
     fprintf(stderr, "store: recovery dropped %s (%llu bytes)\n", path,
             (unsigned long long)bytes);
-    return EFS_OK;
+    return fragment_parent_sync(s, path);
 }
 
 /* Read a whole fragment file and prove it: an I25 record naming exactly
