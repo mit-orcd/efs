@@ -670,6 +670,74 @@ static void t_segment_audit_rebuild(void)
     seg_obj.ledger.state[0] = EFS_PACK_PENDING;
     seg_mark = 0;
 }
+/* AY: a retried upload meets whatever an earlier attempt left under the name.
+ * The ordinary fragment PUT and the segment PUT (packer path) must reach the
+ * same outcome for each leftover: acknowledged only with the full, verified
+ * payload on disk, and no quota drift. */
+static void flip_byte(const char *path, off_t off)
+{
+    int fd = open(path, O_RDWR);
+    uint8_t x = 0;
+    assert(fd >= 0 && pread(fd, &x, 1, off) == 1);
+    x ^= 0xff;
+    assert(pwrite(fd, &x, 1, off) == 1 && !fsync(fd));
+    close(fd);
+}
+static void t_upload_retry_matrix(void)
+{
+    boot();
+    const uint64_t id = 0x5e60301;
+    uint64_t base = used();
+    char path[8192];
+    seg_setup(id);
+    seg_mark = 0;
+    server_segment_path(&S, 0, id, 1, 0, path, sizeof(path));
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(used() == base + 8192);
+    /* Lost reply: the exact retry. */
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(used() == base + 8192);
+    /* Leftovers: partial write, payload bit flip under an intact tail record,
+     * damaged tail record, trailing bytes. Each retry repairs in full; the
+     * counter is re-read from disk first, as a restart would. */
+    flip_byte(path, 100); /* payload damaged, tail record intact */
+    startup_inventory(&S);
+    int rc = server_segment_put(&S, seg_body, sizeof(seg_body));
+    assert(rc != EFS_OK || server_segment_check(&S, 0, id, 1, 0, 16384, seg_obj.checksums[0]) == EFS_SEGMENT_AUDIT_OK);
+    assert(rc == EFS_OK);
+    assert(!truncate(path, 4096));
+    startup_inventory(&S);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(server_segment_check(&S, 0, id, 1, 0, 16384, seg_obj.checksums[0]) == EFS_SEGMENT_AUDIT_OK);
+    flip_byte(path, 8192 + 10);
+    startup_inventory(&S);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(server_segment_check(&S, 0, id, 1, 0, 16384, seg_obj.checksums[0]) == EFS_SEGMENT_AUDIT_OK);
+    assert(!truncate(path, 8192 + 4096 + 4096));
+    startup_inventory(&S);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(server_segment_check(&S, 0, id, 1, 0, 16384, seg_obj.checksums[0]) == EFS_SEGMENT_AUDIT_OK);
+    assert(server_compute_local_usage(&S) == used());
+    /* The same leftovers under an ordinary fragment: the retry rewrites it. */
+    assert(!put(9600, 0, 0));
+    uint64_t after = used();
+    char fp[8192];
+    assert(server_fragment_path(&S, &EX, 9600, 0, 0, fp, sizeof(fp)) == EFS_OK);
+    uint8_t *got = malloc(EFS_FRAGMENT_SIZE);
+    assert(got);
+    for (int leftover = 0; leftover < 3; leftover++) {
+        if (leftover == 0) assert(!truncate(fp, 4096));
+        if (leftover == 1) flip_byte(fp, 100);
+        if (leftover == 2) flip_byte(fp, EFS_FRAGMENT_SIZE + 10);
+        assert(!put(9600, 0, 0));
+        int fd = open(fp, O_RDONLY);
+        assert(fd >= 0 && pread(fd, got, EFS_FRAGMENT_SIZE, 0) == (ssize_t)EFS_FRAGMENT_SIZE);
+        close(fd);
+        assert(!memcmp(got, body, EFS_FRAGMENT_SIZE));
+        assert(used() == after);
+    }
+    free(got);
+}
 /* Crash after a segment acceptance: the version 2 record replays. */
 static void t_segment_crash(void)
 {
@@ -932,6 +1000,7 @@ int main(void)
     run("superseded record replays",t_superseded_replay,0);
     run("segment PUT at a full quota uses the reserve",t_segment_quota,0);
     run("K37 segment audit and rebuild PUT",t_segment_audit_rebuild,0);
+    run("AY retried upload meets every leftover",t_upload_retry_matrix,0);
     len=snprintf(cmd,sizeof(cmd),"rm -rf %s %s",roots[0],roots[1]);
     assert(len>0 && (size_t)len<sizeof(cmd));assert(!system(cmd));
     printf("reclaim journal: PASS\n");
