@@ -913,3 +913,48 @@ int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t typ
     }
     return EFS_GATE_DISPATCH;
 }
+
+void efs_readdir_trace(const char *who, uint32_t peer, uint64_t parent,
+                       uint32_t max_ents, uint32_t after_src,
+                       const char *after_name, int rc,
+                       const struct efs_msg_inode_readdir_reply *r)
+{
+    static int on = -1;
+    int cur = __atomic_load_n(&on, __ATOMIC_ACQUIRE);
+    if (cur < 0) {
+        cur = getenv("EFS_TRACE_READDIR") != NULL;
+        __atomic_store_n(&on, cur, __ATOMIC_RELEASE);
+    }
+    if (!cur)
+        return;
+    /* Names are comma-joined into one buffer so a page is one atomic line. */
+    char *names = NULL;
+    size_t cap = 0, len = 0;
+    if (r && rc == 0)
+        for (uint32_t i = 0; i < r->count && i < EFS_READDIR_MAX; i++) {
+            size_t n = strnlen(r->ents[i].name, EFS_MAX_NAME);
+            if (len + n + 2 > cap) {
+                cap = (len + n + 2) * 2;
+                char *g = realloc(names, cap);
+                if (!g) {
+                    free(names);
+                    names = NULL;
+                    break;
+                }
+                names = g;
+            }
+            if (len)
+                names[len++] = ',';
+            memcpy(names + len, r->ents[i].name, n);
+            len += n;
+            names[len] = 0;
+        }
+    fprintf(stderr,
+            "readdir-trace %s peer=%u parent=%llu max=%u after=%u/%s rc=%d "
+            "status=%d count=%u next=%u/%s done=%u names=%s\n",
+            who, peer, (unsigned long long)parent, max_ents, after_src,
+            after_name ? after_name : "", rc, r ? (int)r->status : -1,
+            r ? r->count : 0, r ? r->next_src : 0, r ? r->next_name : "",
+            r ? r->next_done : 0, names ? names : "");
+    free(names);
+}
