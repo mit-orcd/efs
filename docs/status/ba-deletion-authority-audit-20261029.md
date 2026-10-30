@@ -2,7 +2,7 @@
 
 Branch `agent/devel-ba`, base `74d34d588`, merged with devel `126ba81d4`.
 **Three gaps: K59 and K60 FIXED, K61 OPEN.** The inventory below stands as
-written. Full gate: `TOTAL 556 FAIL 1 NOTRUN 2 STATUS FAIL (708s)`: the one failure, `test_k42_peer_stop_open.py`, is a `fusermount3 -u` error in its teardown and fails 4 of 4 on unchanged devel `126ba81d4` on the same host (1 of 3 reruns passed on the BA tree); NOTRUN are cluster scripts absent and a non-XFS TMPDIR; 3 OVERBUDGET (b6 refuse 82 s/55, pack-dup 57 s/55, w166 38 s/30), artifacts on AMD `~/efs-artifacts/taskBA-gate-20261029/`. AMD (not the specified intel1, which was
+written. Full gate: `TOTAL 556 FAIL 1 NOTRUN 2 STATUS FAIL (708s)`: the one failure, `test_k42_peer_stop_open.py`, is a `fusermount3 -u` error in its teardown and is intermittent on the same host: 2 of 5 reruns fail on unchanged devel `126ba81d4`, 3 of 5 on the BA tree, same `fusermount3` error; NOTRUN are cluster scripts absent and a non-XFS TMPDIR; 3 OVERBUDGET (b6 refuse 82 s/55, pack-dup 57 s/55, w166 38 s/30), artifacts on AMD `~/efs-artifacts/taskBA-gate-20261029/`. AMD (not the specified intel1, which was
 occupied) ran every control and the gate, with the user's permission.
 Nothing merged or pushed.
 
