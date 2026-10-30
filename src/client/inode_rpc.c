@@ -3840,26 +3840,43 @@ int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4 *
 /* Transport of the shared revocation coordinator (session_revoke.h): one
  * EFS_MSG_RAFT_MKFS to a voter of the payload's group, NOT_PRIMARY redirects,
  * BUSY repeated only where efs_session_busy_retry_ok allows. A transport
- * failure is ambiguous and never resent. */
+ * failure moves on to another voter (every ladder step is idempotent). */
 static int session_revoke_submit(void *ctx,const uint8_t *payload,uint32_t plen,
                                  struct efs_msg_raft_mkfs_reply *out)
 {
     (void)ctx;
     /* Any shard of the group routes to its voters; its anchor will do. */
     uint32_t shard=payload[0]==EFS_RAFT_GROUP_SHARD?1u:2u;
-    efs_node_id_t target=0,skip=0;
+    efs_node_id_t target=0,skip=0,named_by=0;
     memset(out,0,sizeof(*out));out->leader_hint=-1;out->rc=EFS_ERR_BUSY;
     for (unsigned attempt=0;attempt<8;attempt++) {
         if (efs_client_rpc_past_deadline()) return out->rc=EFS_ERR_BUSY;
         efs_node_id_t nid=target;
         struct efs_conn *conn=target?efs_client_conn_get(target):raft_voter_conn_skip(shard,&nid,skip);
-        if (!conn) return out->rc=EFS_ERR_NET;
-        if (efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,payload,plen)) {
-            efs_client_conn_drop(nid,conn);return out->rc=EFS_ERR_NET;
+        if (!conn) {
+            /* K54: the hint named a member that is down (a step only a
+             * member hosting both groups can run is sent to the first such
+             * member, which may be the dead one): ask another voter. */
+            if (!target) return out->rc=EFS_ERR_NET;
+            rpc_retry_peer(shard,target,&target,&skip,1);
+            skip=named_by; /* the voter that sent us to a dead member knows no better */
+            out->rc=EFS_ERR_NOT_PRIMARY;
+            if (rpc_writer_retry_pause(attempt)!=EFS_OK) return out->rc;
+            continue;
         }
         uint8_t type=0;uint32_t len=0;void *reply=NULL;
-        if (efs_conn_recv_msg(conn,&type,&reply,&len)) {
-            free(reply);efs_client_conn_drop(nid,conn);return out->rc=EFS_ERR_NET;
+        if (efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,payload,plen) ||
+            efs_conn_recv_msg(conn,&type,&reply,&len)) {
+            /* K54: a member killed while this client held a pooled connection
+             * to it fails here, and its group leader hint points at it until
+             * the election. Every step of the revoke ladder is idempotent and
+             * resumable (a second BEGIN only raises the epoch), so ask another
+             * voter instead of failing the unmount. */
+            free(reply);efs_client_conn_drop(nid,conn);
+            out->rc=EFS_ERR_NET;
+            rpc_retry_peer(shard,nid,&target,&skip,1);
+            if (rpc_writer_retry_pause(attempt)!=EFS_OK) return out->rc;
+            continue;
         }
         efs_client_conn_release(nid,conn);
         if (type!=EFS_MSG_RAFT_MKFS_REPLY || len!=sizeof(*out)) {
@@ -3877,6 +3894,7 @@ static int session_revoke_submit(void *ctx,const uint8_t *payload,uint32_t plen,
          * every retry. This is a definite non-admission, not an ambiguous
          * transport retry; preserve the existing attempt/deadline bounds. */
         rpc_retry_peer(shard,nid,&target,&skip,0);
+        named_by=nid;
         target=out->leader_hint>=0 && (efs_node_id_t)(out->leader_hint+1)!=nid ?
             (efs_node_id_t)(out->leader_hint+1):0;
         if (target) skip=0;

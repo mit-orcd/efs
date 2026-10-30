@@ -9,6 +9,15 @@ static struct efs_put_ticket expected;
 static uint8_t expected_wire[EFS_PUT_TICKET_WIRE_LEN];
 static int authority_rc, delete_rc, authorities, deletes, cleanups;
 __thread uint64_t efs_tls_chunk_gen;
+static int learn_epoch, learns;
+/* K54: the session shard's committed epoch, as the member reads it. */
+int server_raft_host_storage_session_learn(const uint8_t uuid[16], uint32_t below)
+{
+    learns++;
+    if (learn_epoch <= (int)below)
+        return EFS_ERR_BUSY;
+    return server_put_session_fence(&server, uuid, (uint32_t)learn_epoch);
+}
 int server_raft_host_put_orphan_status(const uint8_t ticket[216])
 {
     assert(!memcmp(ticket, expected_wire, sizeof(expected_wire)));
@@ -81,9 +90,17 @@ int main(void)
     assert(server_put_orphan_delete(&server, frame, len) == EFS_ERR_BUSY && !authorities);
     assert(!server_put_session_fence(&server, expected.id.client_uuid, 3));
     assert(server_put_orphan_delete(&server, frame, len) == EFS_ERR_BUSY && !authorities);
-    assert(!server_put_session_fence(&server, expected.id.client_uuid, 4));
+    /* K54: a member the revoke missed learns the committed epoch and seals
+     * it before it deletes; a committed epoch not above the ticket's does not. */
+    learn_epoch = 3;
+    assert(server_put_orphan_delete(&server, frame, len) == EFS_ERR_BUSY && !authorities && learns == 3);
+    learn_epoch = 4;
+    authority_rc = EFS_ERR_NOT_FOUND;
+    assert(server_put_orphan_delete(&server, frame, len) == EFS_ERR_STALE && authorities == 1);
+    authorities = 0;
     uint32_t floor = 0;
     assert(!server_put_session_floor(&server, expected.id.client_uuid, &floor) && floor == 4);
+    authorities = 0;
     /* Negative control: no orphan record (a published, live or collected
      * ticket) is never deleted. */
     authority_rc = EFS_ERR_NOT_FOUND;

@@ -157,6 +157,7 @@ struct efs_put_storage_guard { void *locked; };
 int server_put_session_begin(struct efsd_server *, const uint8_t uuid[16],
                              uint32_t epoch, struct efs_put_storage_guard *);
 void server_put_session_end(struct efs_put_storage_guard *);
+int server_raft_host_storage_session_learn(const uint8_t uuid[16], uint32_t below);
 void server_raft_host_storage_session_fence(const struct efs_msg_storage_session_fence *,
     struct efs_msg_storage_session_fence_reply *);
 int server_put_upload(struct efsd_server *,const uint8_t *,uint32_t,uint8_t *);

@@ -15066,8 +15066,15 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
                             const uint8_t *cmd, uint32_t clen, int *hint);
 
 /* A metadata quorum is not a storage-member acknowledgement. Every
- * configured member (including a non-hosting or offline replica) must seal or
- * prove its certificate. No server lock is held over network/disk I/O. */
+ * configured member that answers (including a non-hosting replica) must seal
+ * or prove its certificate, and a strict majority of the configured members
+ * must have done so (K54, D46 item 6): one member that is down no longer
+ * fails a clean unmount. The epoch it missed is committed in the session
+ * shard log by BEGIN/FENCE_LOC/FINISH, and every storage admission of that
+ * member needs a fresh lane-leader STATUS proof against that log
+ * (server_put_upload), so a returning member refuses the revoked epoch
+ * before it could seal. A reach below a majority stays BUSY. No server lock
+ * is held over network/disk I/O. */
 static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid[16],
                                       uint32_t floor,int check_only)
 {
@@ -15077,6 +15084,7 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
     if(count<=EFS_MAX_NODES)memcpy(members,h->s->nodes,count*sizeof(*members));
     pthread_mutex_unlock(&h->s->lock);
     if(count<EFS_NUM_FRAGMENTS || count>EFS_MAX_NODES)return EFS_ERR_BUSY;
+    uint32_t reached=0,missed=0;
     for(uint32_t i=0;i<count;i++){
         if(!members[i].id || members[i].id>EFS_MAX_NODES)return EFS_ERR_INVAL;
         for(uint32_t j=0;j<i;j++)if(members[j].id==members[i].id)return EFS_ERR_INVAL;
@@ -15086,14 +15094,22 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
         else if(host_inode_rpc_peer(h,(int)members[i].id-1,EFS_MSG_STORAGE_SESSION_FENCE,
                     &request,sizeof(request),EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply))){
             fprintf(stderr,"storage-fence: member=%u floor=%u check=%d transport unavailable\n",members[i].id,floor,check_only);
-            return EFS_ERR_BUSY;
+            missed|=1u<<(members[i].id-1);continue;
         }
         if(memcmp(reply.uuid,uuid,16) || reply.floor!=floor)return EFS_ERR_PROTO;
         if(reply.rc!=EFS_OK){
             fprintf(stderr,"storage-fence: member=%u floor=%u check=%d rc=%d\n",members[i].id,floor,check_only,reply.rc);
             return reply.rc;
         }
+        reached++;
     }
+    if(reached*2<=count){
+        fprintf(stderr,"storage-fence: floor=%u check=%d reached %u of %u members, no majority (unreached mask 0x%x)\n",
+                floor,check_only,reached,count,missed);
+        return EFS_ERR_BUSY;
+    }
+    if(missed)fprintf(stderr,"storage-fence: floor=%u check=%d sealed %u of %u members, unreached mask 0x%x\n",
+                      floor,check_only,reached,count,missed);
     int same=1;pthread_mutex_lock(&h->s->lock);
     if(h->s->node_count!=count)same=0;
     for(uint32_t i=0;i<count && same;i++){
@@ -15898,6 +15914,23 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
         int rc=server_put_session_begin(g_host->s,request->uuid,request->floor-1,&guard);
         server_put_session_end(&guard);out->rc=rc==EFS_ERR_STALE?EFS_OK:rc==EFS_OK?EFS_ERR_BUSY:rc;
     }
+}
+
+/* K54: a member that missed the revoke's seal (it was down) learns the
+ * committed epoch from the session shard's leader and seals it before it
+ * deletes or admits anything of that uuid. OK only when the committed epoch
+ * is above `below` and this member's certificate now holds it. */
+int server_raft_host_storage_session_learn(const uint8_t uuid[16],uint32_t below)
+{
+    if(!g_host || !__atomic_load_n(&g_host->running, __ATOMIC_ACQUIRE))return EFS_ERR_BUSY;
+    uint32_t ssh=efs_kv_session_shard(uuid);
+    uint8_t query[1+HOST_SESS_CREATE_LEN]={0};query[0]=efs_raft_shard_group(ssh);query[1]=EFS_MD_CMD_SESSION;
+    memcpy(query+3,uuid,16);wr32be(query+19,ssh);
+    struct efs_msg_raft_mkfs_reply authority;server_raft_host_submit(query,sizeof(query),&authority);
+    uint32_t epoch=(uint32_t)authority.salt,state=(uint32_t)((authority.salt>>32)&255);
+    if(authority.rc!=EFS_OK)return authority.rc;
+    if(epoch<=below || (state!=EFS_SESSION_ACTIVE && state!=EFS_SESSION_FENCING))return EFS_ERR_BUSY;
+    return server_put_session_fence(g_host->s,uuid,epoch);
 }
 
 void server_raft_host_expiry_status(struct efs_expiry_status *out)

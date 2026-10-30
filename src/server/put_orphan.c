@@ -8,8 +8,9 @@
 /* D31 + K13: delete one abandoned fragment of a retired REJECTED ticket on
  * this member (EFS_MSG_PUT_ORPHAN_DELETE). Order matters:
  *   1. the fragment is ours (nodes[fi]);
- *   2. our durable storage session floor is above the ticket's epoch. The
- *      floor is sealed only after every guarded PUT of older epochs left
+ *   2. our durable storage session floor is above the ticket's epoch (a
+ *      member that missed the revoke first learns it from the session shard,
+ *      K54). The floor is sealed only after every guarded PUT of older epochs left
  *      (put_fence.c), so no PUT of this ticket can land after the delete;
  *   3. the ticket's group, after a ReadIndex, still holds the orphan record
  *      behind the shard's rejection floor: the object was never published
@@ -30,6 +31,15 @@ int server_put_orphan_delete(struct efsd_server *s, const uint8_t *body, uint32_
         return EFS_ERR_INVAL;
     uint32_t floor = 0;
     rc = server_put_session_floor(s, t.id.client_uuid, &floor);
+    if (rc != EFS_OK)
+        return rc;
+    /* K54: a member the revoke could not reach (it was down) has no
+     * certificate yet. It reads the committed epoch from the session shard
+     * and seals it here, so the collection that keeps retrying this
+     * member is what resolves the gap; until it holds, nothing is deleted. */
+    if (floor <= t.id.session_epoch &&
+        (rc = server_raft_host_storage_session_learn(t.id.client_uuid, t.id.session_epoch)) == EFS_OK)
+        rc = server_put_session_floor(s, t.id.client_uuid, &floor);
     if (rc != EFS_OK)
         return rc;
     if (floor <= t.id.session_epoch)

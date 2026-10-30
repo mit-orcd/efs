@@ -11,7 +11,8 @@ code=r'''
 #include <assert.h>
 #include <string.h>
 struct efs_raft_host {struct efsd_server *s;};
-static int calls,local_calls,bad_uuid,bad_floor,fail_id,change_members,mode;
+static int calls,local_calls,bad_uuid,bad_floor,change_members,mode;
+static unsigned fail_mask;
 static struct efsd_server server;
 void server_raft_host_storage_session_fence(const struct efs_msg_storage_session_fence *q,struct efs_msg_storage_session_fence_reply *r) {
  assert(q->uuid[0]==17&&q->floor==2&&q->check_only==(unsigned)mode);
@@ -22,7 +23,7 @@ static int host_inode_rpc_peer(struct efs_raft_host *h,int rid,uint8_t type,cons
  assert(bytes==sizeof(struct efs_msg_storage_session_fence)&&out_bytes==sizeof(struct efs_msg_storage_session_fence_reply));
  const struct efs_msg_storage_session_fence *q=body;struct efs_msg_storage_session_fence_reply *r=out;
  assert(q->uuid[0]==17&&q->floor==2&&q->check_only==(unsigned)mode);calls++;
- if(fail_id==rid+1)return -1;
+ if(fail_mask&(1u<<(rid+1)))return -1;
  memcpy(r->uuid,q->uuid,16);r->floor=q->floor;r->rc=0;
  if(bad_uuid)r->uuid[0]^=1;
  if(bad_floor)r->floor++;
@@ -37,8 +38,13 @@ int main(void) {
  assert(!host_storage_fence_members(&host,uuid,2,0)&&calls==3&&local_calls==1);
  calls=local_calls=0;mode=1;
  assert(!host_storage_fence_members(&host,uuid,2,1)&&calls==3&&local_calls==1);
- /* Never infer an unavailable member's seal from the other three. */
- fail_id=4;assert(host_storage_fence_members(&host,uuid,2,1)==EFS_ERR_BUSY);fail_id=0;
+ /* K54: one unreachable member is not a seal and not a failure: the other
+  * three are a majority of four. Two unreachable are never inferred sealed. */
+ fail_mask=1u<<4;assert(!host_storage_fence_members(&host,uuid,2,1));
+ fail_mask=1u<<4;mode=0;assert(!host_storage_fence_members(&host,uuid,2,0));mode=1;
+ fail_mask=(1u<<4)|(1u<<3);assert(host_storage_fence_members(&host,uuid,2,1)==EFS_ERR_BUSY);
+ fail_mask=(1u<<4)|(1u<<3);mode=0;assert(host_storage_fence_members(&host,uuid,2,0)==EFS_ERR_BUSY);mode=1;
+ fail_mask=0;
  bad_uuid=1;assert(host_storage_fence_members(&host,uuid,2,1)==EFS_ERR_PROTO);bad_uuid=0;
  bad_floor=1;assert(host_storage_fence_members(&host,uuid,2,1)==EFS_ERR_PROTO);bad_floor=0;
  change_members=1;assert(host_storage_fence_members(&host,uuid,2,1)==EFS_ERR_BUSY);
@@ -51,4 +57,4 @@ with tempfile.TemporaryDirectory(prefix='efs-storage-members-') as directory:
  p=Path(directory)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root),'-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True)
-print('storage revocation: every member, exact UUID/floor, offline refusal, changed roster and duplicate identity rejection PASS')
+print('storage revocation: every member, exact UUID/floor, one offline member tolerated, two offline refused, changed roster and duplicate identity rejection PASS')
