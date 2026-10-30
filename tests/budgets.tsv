@@ -110,3 +110,4 @@ python3 tests/test_k48_readdir.py	15	2	Task S intel1 standalone 11.91s; 1.25x ro
 python3 tests/test_bench_published.py	10	2	W170: three private daemons, published data and cold FUSE verification; 7.7s in eight-job gate, 1.25x rounded up to 5s
 
 ./tests/faults/test_follower_bound --stalled-compactor	5	1	Task W: real stalled LSM compactor and bounded follower catch-up; 1.2s at eight jobs, 1.25x rounded up to 5s
+python3 tests/test_put_quota_reclaim.py	120	2	unmeasured (F07 port, NOTRUN without FUSE); set from the first FUSE-capable run
