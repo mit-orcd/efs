@@ -14,6 +14,12 @@ def function(name):
 ops=Path(os.environ.get('OPID_CREATE_OPS_SOURCE',root/'src/client/ops.c')).read_text()
 a=ops.index('int efs_client_create_result_inode(');b=ops.index('\n}',a)+2
 create_api=ops[a:b]
+namespace_api=[]
+for name in ('first_child_name_cb','efs_client_unlink','efs_client_link'):
+    m=re.search(r'^(?:static )?[^\n;]*\b'+name+r'\([^;]+?\)\n\{',ops,re.M)
+    assert m,name
+    namespace_api.append(ops[m.start():ops.index('\n}',m.end())+2])
+
 source=r'''
 #include "client_internal.h"
 #include "efs/protocol.h"
@@ -39,6 +45,22 @@ static int admit_rc;
 int efs_client_report_admit(uint64_t n) {(void)n;return admit_rc;}
 void efs_client_report_unreserve(void) {}
 static void create_stage_inode(efs_ino_t p,const char *n,uint32_t m,uid_t u,gid_t g,const struct efs_inode *o,int publish) {(void)p;(void)n;(void)m;(void)u;(void)g;(void)o;(void)publish;}
+static unsigned pins,dir_locks;
+void efs_client_stage_pin(efs_ino_t ino) {(void)ino;pins++;}
+void efs_client_stage_unpin(efs_ino_t ino) {(void)ino;assert(pins);pins--;}
+void efs_client_stage_touch(efs_ino_t ino) {(void)ino;}
+void efs_client_lock_dir(efs_ino_t ino) {(void)ino;dir_locks++;}
+void efs_client_unlock_dir(efs_ino_t ino) {(void)ino;assert(dir_locks);dir_locks--;}
+void efs_client_lock_dirs2(efs_ino_t a,efs_ino_t b) {(void)a;(void)b;dir_locks++;}
+void efs_client_unlock_dirs2(efs_ino_t a,efs_ino_t b) {(void)a;(void)b;assert(dir_locks);dir_locks--;}
+int efs_export_lookup(struct efs_export *ex,efs_ino_t p,const char *n,struct efs_inode *o) {(void)ex;(void)p;(void)n;(void)o;return EFS_ERR_NOT_FOUND;}
+int efs_export_dir_empty(struct efs_export *ex,efs_ino_t i) {(void)ex;(void)i;return 1;}
+int efs_export_foreach_child(struct efs_export *ex,efs_ino_t p,efs_child_cb cb,void *arg) {(void)ex;(void)p;(void)cb;(void)arg;return 0;}
+const char *efs_export_inode_name(const struct efs_export *ex,uint64_t slot) {(void)ex;(void)slot;return "unused";}
+int efs_export_unlink_name_ex(struct efs_export *ex,efs_ino_t p,const char *n,int keep) {(void)ex;(void)p;(void)n;(void)keep;return EFS_OK;}
+int efs_export_nlink_dec_ex(struct efs_export *ex,efs_ino_t i,struct efs_inode *o,int keep) {(void)ex;(void)i;(void)o;(void)keep;return EFS_OK;}
+int efs_export_link(struct efs_export *ex,efs_ino_t i,efs_ino_t p,const char *n) {(void)ex;(void)i;(void)p;(void)n;return EFS_OK;}
+int efs_export_upsert_inode(struct efs_export *ex,const struct efs_inode *i) {(void)ex;(void)i;return EFS_OK;}
 static unsigned calls, bootstrap_busy, bootstrap_checks;
 static uint64_t bootstrap_next;
 int efs_client_session_check(void) {
@@ -51,6 +73,7 @@ static int rpc_writer_retry_pause(unsigned attempt) {(void)attempt;usleep(10000)
 static uint64_t last_ack,last_seq;
 static int rpc_status_to_efs(uint8_t status) { return status?EFS_ERR_IO:EFS_OK; }
 static int send(uint8_t type,const void *buf,uint32_t length,void *out,uint32_t outlen) {
+    assert(!dir_locks);assert(!pthread_mutex_trylock(&g_client.idx_mu));pthread_mutex_unlock(&g_client.idx_mu);
     (void)type;assert(length>EFS_OPID_WIRE_LEN);calls++;
     struct efs_opid_req q;
     efs_opid_req_unpack(&q,(const uint8_t *)buf+length-EFS_OPID_WIRE_LEN);
@@ -69,7 +92,7 @@ static int rpc_send_recv_dual(uint8_t type,const void *buf,uint32_t length,uint8
 }
 '''+'\n'.join(function(name) for name in ('opid_seed_locked','opid_take_locked','opid_begin','opid_end','opid_suffix',
                                         'efs_client_rpc_create','efs_client_rpc_unlink',
-                                        'efs_client_rpc_rename_at','efs_client_rpc_link'))+create_api+r'''
+                                        'efs_client_rpc_rename_at','efs_client_rpc_link'))+create_api+'\n'.join(namespace_api)+r'''
 static pthread_mutex_t hold_mu=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t hold_cv=PTHREAD_COND_INITIALIZER;
 static unsigned ready;
@@ -91,6 +114,7 @@ static void *cancel_waiter(void *unused) {
 }
 int main(void) {
     assert(sizeof(g_client.opid_inflight) / sizeof(g_client.opid_inflight[0]) == EFS_OPID_REPLY_CACHE);
+    assert(!pthread_mutex_init(&g_client.idx_mu,NULL));
     struct efs_opid_req held[EFS_OPID_REPLY_CACHE],q;
     bootstrap_next=g_client.opid_next;bootstrap_busy=3;test_deadline=mono_ms()+200;
     assert(efs_client_rpc_create(1,1,"test",S_IFDIR|0700,0,0,0,NULL,NULL)==EFS_OK);
@@ -193,6 +217,31 @@ int main(void) {
     for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)opid_end(i);
     test_deadline=0;
     puts("namespace admission: waits before allocation, exact one identity, inherited deadline sends nothing PASS");
+    /* Real public UNLINK/RMDIR/LINK wrappers must wait past the unrelated
+     * fallback while one healthy older operation owns the receipt frontier.
+     * The transport is mocked only after actual opid admission succeeds. */
+    for (unsigned op=0;op<3;op++) {
+        for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(opid_begin(&held[i])>=0);
+        for(int i=1;i<EFS_OPID_REPLY_CACHE;i++)opid_end(i);
+        admission_next=g_client.opid_next;before=calls;begin=mono_ms();
+        assert(!pthread_create(&releaser,NULL,release_oldest,(void *)(intptr_t)0));
+        int rc=op==2?efs_client_link(2,1,"test"):efs_client_unlink(1,"test",op==1);
+        assert(rc==EFS_OK && "public namespace admission must share the normal I/O envelope");
+        assert(!pthread_join(releaser,NULL));
+        assert(mono_ms()-begin>=1200 && mono_ms()-begin<3000);
+        assert(calls==before+1 && last_seq==admission_next && g_client.opid_next==admission_next+1);
+        assert(!test_deadline && !pins && !dir_locks);
+        for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(opid_begin(&held[i])>=0);
+        admission_next=g_client.opid_next;before=calls;begin=mono_ms();
+        test_deadline=begin+20;uint64_t inherited=test_deadline;
+        rc=op==2?efs_client_link(2,1,"test"):efs_client_unlink(1,"test",op==1);
+        assert(rc==EFS_ERR_BUSY && calls==before && g_client.opid_next==admission_next);
+        assert(test_deadline==inherited && mono_ms()-begin<200 && !pins && !dir_locks);
+        test_deadline=0;
+        for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)opid_end(i);
+    }
+    puts("public UNLINK/RMDIR/LINK: healthy delayed frontier, one identity, inherited deadline and pin cleanup PASS");
+    before=calls;
     g_client.opid_next=UINT64_MAX;
     begin=mono_ms();test_deadline=begin+3000;
     assert(efs_client_rpc_create(1,1,"test",S_IFDIR|0700,0,0,0,NULL,NULL)==EFS_ERR_BUSY);

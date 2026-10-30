@@ -1825,11 +1825,23 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
 
+    /* Admission and the RPC share the normal I/O envelope. With no
+     * inherited deadline, opid_begin's one-second fallback could fail while
+     * a healthy older RPC still owned the receipt frontier. This does not
+     * extend a caller's deadline or allocate a second operation identity. */
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    if (!previous) {
+        struct timespec ts;
+        if (clock_gettime(CLOCK_MONOTONIC, &ts)) return EFS_ERR_IO;
+        uint64_t end = (uint64_t)ts.tv_sec * 1000u + ts.tv_nsec / 1000000u + EFS_IO_TIMEOUT_MS;
+        efs_client_rpc_set_deadline_ms(end);
+    }
     efs_client_stage_pin(parent);
     if (victim_ino)
         efs_client_stage_pin(victim_ino);
     /* Phase 2b: unlink on the primary; dual-apply removes the local entry. */
     int rc = efs_client_rpc_unlink(g_client.export_id, parent, name, is_dir);
+    efs_client_rpc_set_deadline_ms(previous);
     if (rc != EFS_OK) {
         if (victim_ino)
             efs_client_stage_unpin(victim_ino);
@@ -1861,10 +1873,23 @@ int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_nam
 {
     /* Phase 2b: link on the primary. */
     struct efs_inode out;
+    /* Admission and the RPC share the normal I/O envelope. With no
+     * inherited deadline, opid_begin's one-second fallback could fail while
+     * a healthy older RPC still owned the receipt frontier. This does not
+     * extend a caller's deadline or allocate a second operation identity. */
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    if (!previous) {
+        struct timespec ts;
+        if (clock_gettime(CLOCK_MONOTONIC, &ts)) return EFS_ERR_IO;
+        uint64_t end = (uint64_t)ts.tv_sec * 1000u + ts.tv_nsec / 1000000u + EFS_IO_TIMEOUT_MS;
+        efs_client_rpc_set_deadline_ms(end);
+    }
+
     efs_client_stage_pin(src_ino);
     efs_client_stage_pin(new_parent);
     int rc = efs_client_rpc_link(g_client.export_id, src_ino, new_parent,
                                  new_name, &out);
+    efs_client_rpc_set_deadline_ms(previous);
     if (rc != EFS_OK) {
         g_client.last_err = rc;
         efs_client_stage_unpin(new_parent);
