@@ -29,8 +29,8 @@ static int efs_meta_apply_opid_probe(void *kv,uint32_t shard,const struct efs_op
 static int efs_kv_key_opid(uint32_t shard,const uint8_t *uuid,uint32_t epoch,uint8_t *key,uint32_t *bytes){
  assert(shard==1 && uuid[0]==17 && epoch==1);keys++;*bytes=3;memset(key,19,3);return key_error;
 }
-static int efs_txn_key_busy(void *kv,const uint8_t *key,uint32_t bytes){
- (void)kv;assert(bytes==3 && key[0]==19);checks++;
+static int efs_txn_opid_busy(void *kv,const uint8_t *key,uint32_t bytes,uint64_t seq){
+ (void)kv;assert(bytes==3 && key[0]==19 && seq==1);checks++;
  if(resolve_during_check)result=1;
  return pending;
 }

@@ -738,6 +738,10 @@ static void test_opid_reduce(void)
           "prep a");
     CHECK(efs_meta_apply_opid_probe(kv, 1, &q1.id, &got) == 0,
           "pending reduce is not visible");
+    CHECK(efs_txn_opid_busy(kv,key,klen,1)==EFS_ERR_BUSY,
+          "pending own identity never becomes a receipt miss");
+    CHECK(efs_txn_opid_busy(kv,key,klen,2)==EFS_OK,
+          "independent sequence is not serialized on another pending verdict");
     CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &p), &a, EFS_TXN_COMMIT) ==
               EFS_OK,
           "decide a");
@@ -756,6 +760,9 @@ static void test_opid_reduce(void)
     rep.ino = 4343;
     CHECK(efs_txn_prepare_opid(kv, &b, &p, key, klen, &q2, &rep) == EFS_OK,
           "prep b");
+    CHECK(efs_txn_opid_busy(kv,key,klen,2)==EFS_ERR_BUSY &&
+          efs_txn_opid_busy(kv,key,klen,3)==EFS_OK,
+          "exact pending sequence only");
     cn = sizeof(cur);
     CHECK(efs_kv_get(kv, key, klen, cur, &cn) == EFS_OK, "window present");
     rep.ino = 4444;
@@ -776,8 +783,15 @@ static void test_opid_reduce(void)
     /* ABORT leaves the window untouched */
     tid(&a, 53);
     q1.id.seq = 9;
+    q1.ack=1;
     CHECK(efs_txn_prepare_opid(kv, &a, &p, key, klen, &q1, &rep) == EFS_OK,
           "prep abort");
+    /* This reduction carries ACK1, so a raw miss for sequence1 is not
+     * permission to run it again before the ACK materializes. */
+    CHECK(efs_txn_opid_busy(kv,key,klen,1)==EFS_ERR_BUSY &&
+          efs_txn_opid_busy(kv,key,klen,9)==EFS_ERR_BUSY &&
+          efs_txn_opid_busy(kv,key,klen,10)==EFS_OK,
+          "covering ACK and own sequence block; unrelated sequence stays free");
     CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &p), &a, EFS_TXN_ABORT) ==
               EFS_OK,
           "decide abort");
