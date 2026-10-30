@@ -1,10 +1,9 @@
 # BA — deletion authority audit — October 29
 
-Branch `agent/devel-ba`, base `74d34d588`. **IN PROGRESS; full gate NOTRUN.**
-Evidence: `docs/status/ba-deletion-authority-audit-20261029.md`. AMD replaces
-occupied intel1 with the user's permission. Two unchanged-product negative
-controls FAIL; the segment lifetime repair passes both and the complete
-reclaim suite. Three-member fault/recovery and full-suite gates remain owed.
+Branch `agent/devel-ba`, base `74d34d588`, merged with devel `126ba81d4`.
+**Three gaps: K59 and K60 FIXED, K61 OPEN.** The inventory below stands as
+written. Full gate: `TOTAL 556 FAIL 1 NOTRUN 2 STATUS FAIL (708s)`: the one failure, `test_k42_peer_stop_open.py`, is a `fusermount3 -u` error in its teardown and fails 4 of 4 on unchanged devel `126ba81d4` on the same host (1 of 3 reruns passed on the BA tree); NOTRUN are cluster scripts absent and a non-XFS TMPDIR; 3 OVERBUDGET (b6 refuse 82 s/55, pack-dup 57 s/55, w166 38 s/30), artifacts on AMD `~/efs-artifacts/taskBA-gate-20261029/`. AMD (not the specified intel1, which was
+occupied) ran every control and the gate, with the user's permission.
 Nothing merged or pushed.
 
 ## Scope and authority inventory
@@ -73,8 +72,15 @@ No existing deployment, other agent's processes, or runtime stores were changed.
   source/test overlay SHA-256
   `129f3c701ef420197a2eeff76bf05d7387e5489607396fb9ab386d3d0ac93c86`.
   Each directory contains exact build commands, exits and source/ELF hashes.
-- Additional deletion-accounting negative controls are running against the
-  untouched base at `base-accounting/`; no outcome or repair is claimed yet.
+- `base-accounting-3/` (unchanged product `74d34d588`, test only):
+  `tests/test_ba_delete_accounting` cases `recovery`, `segment` and `sync`
+  each **FAIL** (assertions at lines 63, 96 and 116). `fixed-wrappers-2/`: all
+  three **PASS**, plus `test_reclaim`, `test_store_gc`, `test_store_durability`,
+  `test_put_orphan_server`, `test_put_storage_fence`, `test_put_upload_server`.
+- `ordinary-open-merged/` (merged tree `a6277cece`): `test_ba_upload_retire put`
+  and `rebuild` both **FAIL** at `access(path) && errno == ENOENT`: K61 below.
+  `put_upload.c`, `put_fence.c` and `store_nvme.c` are byte-identical between
+  `74d34d588` and the merged tree, so the failure is the base's.
 
 Reproduce the segment controls from the committed test source on the base
 product and on the repair: `make -j8 tests/test_reclaim`, then
@@ -85,3 +91,57 @@ No product deadline, quota, oracle or workload limit is relaxed.
 Raw logs and failed synthetic stores remain on AMD while this audit is open;
 no raw artifacts are committed. Final manifest, pruning record, real-wrapper
 fault matrix, three-member K36 recovery and full-gate verdicts are still owed.
+
+## K60: two deleters, one debit
+
+`server_recovery_drop` debited a file's bytes after any non-error `unlink`,
+including `ENOENT`, and returned before debiting when the namespace sync failed
+after a successful unlink. `server_segment_delete` added a stat'ed size to the
+journal's `removed` count even when recovery won the unlink between the stat
+and the call. Both let `used` drift below the physical total. Repair: only the
+call whose `unlink` succeeded owns the debit or the count; `ENOENT` is
+idempotent success; a sync failure is returned after the debit is recorded, and
+the retry sees `ENOENT` and debits nothing. Three deterministic cases in
+`tests/test_ba_delete_accounting.c` (in `test-long`, 5 s budget, 0.00 s run).
+
+## K61: ordinary upload against superseded delete (OPEN)
+
+`server_put_upload` and `server_rebuild_put` read their authority (ticket
+status, degraded mark) first. Their store write then takes the inode read guard
+and the fragment mutex. `server_gc_superseded_delete` takes only the fragment
+mutex for the unlink: it installs no object fence, unlike the inode and segment
+paths. The test (`tests/test_ba_upload_retire.c`, real `server_put_upload`,
+`server_rebuild_put`, session guard, nvme store, superseded delete) holds the
+authority reply, retires the ticket, deletes the superseded fragment and
+releases the reply: the PUT then rewrites the dead generation's fragment.
+
+Consequence: a stray fragment that no metadata names. K36 recovery proves and
+drops files that metadata names; it does not sweep unreferenced ones. No
+published object is touched. **Not repaired:** the check has to happen under the
+fragment mutex, which means moving the ReadIndex read under it (the geometry
+store before it must then not trust an unchecked ticket) or repeating it after
+the write; both change the PUT hot path owned by AQ/AR and need a measurement.
+The test is deliberately not in `test-long`: it documents the open gap.
+
+## Fault matrix: what ran and what did not
+
+Covered, with real code: stale generation (superseded delete refuses another
+body; K36 `server_recovery_prove_file`), concurrent PUT and rebuild of one identity
+(K59 reproductions; AY's retry matrix), file already missing (`ENOENT` cases
+in K60), unlink race, fsync failure after unlink (K60 `sync`), and crash after
+acceptance with replay (existing `test_reclaim` cases: inode, segment, v1
+segment, superseded; accept → crash → replay, each repeated). K36 verified
+recovery after restart is in the gate (`test_k36_segment_recovery.py`).
+
+**Not run:** a three-member Raft loopback fault matrix with a crash injected
+between credit and journal, between journal and unlink, and between unlink and
+acknowledgement. The reclaim harness covers the same orderings with a metadata
+oracle (accept → crash → replay), not through a Raft cluster; the evidence
+does not claim more. Allocation-failure injection into the new deleters was
+not run either.
+
+## Decision for the checklist
+
+BA is ticked as an audit with the above gaps recorded: inventory complete, K59
+and K60 fixed with retained reproductions, K61 open with its reproduction and
+the reason it was not fixed here. Whoever decides K61's blocking status owns it.
