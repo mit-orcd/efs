@@ -53,7 +53,7 @@ else:
  for d in sorted(root.glob('base-matrix-*')):matrix(d,d.name)
  for d in sorted(root.glob('source-*')):
   for f in d.iterdir():
-   if f.is_file() and f.suffix in ('.txt','.tsv'):add(f,d.name+'/'+f.name)
+   if f.is_file() and f.suffix in ('.txt','.tsv','.log'):add(f,d.name+'/'+f.name)
   for f in (d/'tmp').glob('fail-*.log'):add(f,d.name+'/tmp/'+f.name)
  for d in root.glob('gc-*'):
   for case in d.glob('gc-*'):direct(case,d.name+'/'+case.name)

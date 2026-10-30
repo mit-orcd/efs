@@ -68,9 +68,12 @@ try:
   for test in ('client_metadata_authority','inode_pending_eof','map_fresh_open','readdir_permission_authority','stage_evict_lru'):
    run('unit-'+test,['python3','tests/test_'+test+'.py'])
   for transport in ('tcp','rdma'):
-   run('matrix-'+transport,['python3','tests/live/bb_overlay_authority.py','--source',source,'--output',out/('matrix-'+transport)],transport=transport,timeout=600)
+   matrix_driver=Path(__file__).resolve().parents[1]/'live/bb_overlay_authority.py'
+   assert matrix_driver.is_file(),'stage the matching external matrix tool with this controller'
+   run('matrix-'+transport,['python3',matrix_driver,'--source',source,'--output',out/('matrix-'+transport)],transport=transport,timeout=600)
    matrix=json.loads((out/('matrix-'+transport)/'result.json').read_text())
    assert matrix['verdict']=='PASS' and len(matrix['cases'])==8 and not matrix['cleanup_errors'],matrix
+   if transport=='rdma':assert len(matrix.get('rdma_runtime',[]))==2 and all(len(x['processes'])==5 for x in matrix['rdma_runtime'])
   run('rdma-xprt',[source/'tests/test_rdma_xprt'],transport='rdma')
   for mode in ('normal','interrupt','tcp-violation','deadline','burst','burst-asym','churn'):
    text=run('rdma-segmented-'+mode,[source/'tests/test_rdma_segmented',mode],transport='rdma');assert 'PASS' in text

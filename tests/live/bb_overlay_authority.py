@@ -43,10 +43,26 @@ def observed(label,got,want):
 def chown_authority(ino,uid,gid):
     rc,text=mgmt(env,'raft-setattr',c.ep(1),str(ino),'6','0',str(uid),str(gid))
     assert rc==0 and 'status=0' in text,text
+def transport_proof(stage):
+    if result['transport']!='rdma':return
+    proof=[]
+    for proc in [*c.procs.values(),*(m.p for m in mounts)]:
+        deadline=time.monotonic()+20;devices=[]
+        while not devices and proc.poll() is None:
+            for fd in (Path('/proc')/str(proc.pid)/'fd').iterdir():
+                try:target=os.readlink(fd)
+                except FileNotFoundError:continue
+                if '/dev/infiniband/uverbs' in target:devices.append(target)
+            if devices or time.monotonic()>=deadline:break
+            time.sleep(.2)
+        assert devices,('forced RDMA matrix process has no verbs device',stage,proc.pid)
+        proof.append(dict(pid=proc.pid,verbs_devices=sorted(set(devices))))
+    result.setdefault('rdma_runtime',[]).append(dict(stage=stage,processes=proof));save()
 try:
     for i in (1,2,3):c.start(i,join=None if i==1 else 1)
     c.wait_members([1,2,3],3);c.leader_placement(1)
     mounts=[Mount(c,1,'a'),Mount(c,2,'b')];A,B=[m.path for m in mounts]
+    transport_proof('mounted')
     def chmod_dirty():
         fd=opened(A/'chmod',os.O_CREAT|os.O_RDWR);data=payload('bb-chmod',131077);assert os.write(fd,data)==len(data)
         try:
@@ -115,6 +131,7 @@ try:
             for i in (1,2,3):c.restart(i)
             c.wait_members([1,2,3],3);c.leader_placement(1)
         assert os.pread(fd,8,0)==b'accepted'
+        transport_proof('after-owned-member-restart')
     check('rpc-failure-refuses-new-open',rpc_failure)
 finally:
     for fd in fds:
