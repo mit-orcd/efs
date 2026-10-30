@@ -1367,7 +1367,7 @@ check_sess_ident() {
     echo "$out" | grep -q 'status=0' || bad "$tag sess-ident flock ex not OK"
     out=$(g0_mgmt raft-flock "$ino" ex 2)
     say "$tag sess-ident flock other-session busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "$tag sess-ident flock other session not BUSY"
+    echo "$out" | grep -q 'status=254' || bad "$tag sess-ident flock other session not LOCKED"
     out=$(g0_mgmt raft-flock "$ino" un 1 "$SESS_UUID" 1)
     say "$tag sess-ident flock un: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag sess-ident flock un not OK"
@@ -1515,7 +1515,7 @@ check_hold() {
 }
 
 # Non-blocking flock on the inode shard. Dedicated raft-smoke-w (not a
-# substring of -h / -hd / -k / -c). Conflict is BUSY; leave owner=2 EX
+# substring of -h / -hd / -k / -c). Conflict is LOCKED; leave owner=2 EX
 # held through crash. ROOT nlink is unchanged (file create). File stays
 # in READDIR. Blocking wait / ranges / F_GETLK are not hosted.
 check_flock() {
@@ -1539,7 +1539,7 @@ check_flock() {
     echo "$out" | grep -q 'status=0' || bad "$tag flock ex owner1 not OK"
     out=$(g0_mgmt raft-flock "$FLOCK_INO" ex 2)
     say "$tag flock ex owner2 busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "$tag flock ex owner2 not BUSY"
+    echo "$out" | grep -q 'status=254' || bad "$tag flock ex owner2 not LOCKED"
     out=$(g0_mgmt raft-flock "$FLOCK_INO" un 1)
     say "$tag flock un owner1: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag flock un owner1 not OK"
@@ -1556,7 +1556,7 @@ check_flock() {
 
 # Non-blocking whole-file fcntl on the same FLOCK opcode with
 # EFS_FLOCK_FCNTL. Dedicated raft-smoke-c (not a substring of -h / -hd /
-# -k / -w). Same-domain conflict is BUSY; flock EX on the same file is
+# -k / -w). Same-domain conflict is LOCKED; flock EX on the same file is
 # the other domain and must succeed. Leave owner=1 EX held through crash.
 # ROOT nlink is unchanged. Ranges / F_GETLK / blocking wait are not hosted.
 check_fcntl() {
@@ -1580,7 +1580,7 @@ check_fcntl() {
     echo "$out" | grep -q 'status=0' || bad "$tag fcntl ex owner1 not OK"
     out=$(g0_mgmt raft-fcntl "$FCNTL_INO" ex 2)
     say "$tag fcntl ex owner2 busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "$tag fcntl ex owner2 not BUSY"
+    echo "$out" | grep -q 'status=254' || bad "$tag fcntl ex owner2 not LOCKED"
     out=$(g0_mgmt raft-flock "$FCNTL_INO" ex 2)
     say "$tag fcntl cross-domain flock: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag fcntl cross-domain flock not OK"
@@ -1602,7 +1602,7 @@ check_fcntl() {
 }
 
 # Non-blocking fcntl byte ranges (half-open). Dedicated raft-smoke-t.
-# Adjacent ranges do not conflict; overlap is BUSY. Flock domain
+# Adjacent ranges do not conflict; overlap is LOCKED. Flock domain
 # rejects a range (INVAL). Inverted start>=end is INVAL. Leave
 # owner=2 EX [100,200) through crash. Blocking wait not hosted.
 check_fcntl_range() {
@@ -1650,7 +1650,7 @@ check_fcntl_range() {
     echo "$out" | grep -q 'status=1' || bad "$tag range gex miss not NOT_FOUND"
     out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 3 50 150)
     say "$tag range ex [50,150) busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "$tag range overlap not BUSY"
+    echo "$out" | grep -q 'status=254' || bad "$tag range overlap not LOCKED"
     out=$(g0_mgmt raft-fcntl "$RANGE_INO" un 1 0 100)
     say "$tag range un [0,100) owner1: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag range un owner1 not OK"
@@ -1729,7 +1729,7 @@ check_lock_wait() {
     fi
     out=$(g0_mgmt raft-fcntl "$WAIT_INO" sh 4 60 140)
     say "$tag wait sh [60,140) owner4 busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "$tag wait sh owner4 not BUSY"
+    echo "$out" | grep -q 'status=254' || bad "$tag wait sh owner4 not LOCKED"
     out=$(g0_mgmt raft-fcntl "$WAIT_INO" un 2 50 150)
     say "$tag wait un owner2: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag wait un owner2 not OK"
@@ -2718,7 +2718,7 @@ if [ -n "${FLOCK_INO:-}" ]; then
     echo "$out" | grep -q 'status=0' || bad "after-crash flock inode missing"
     out=$(g0_mgmt raft-flock "$FLOCK_INO" ex 1)
     say "after-crash flock ex owner1 busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "after-crash flock lock lost"
+    echo "$out" | grep -q 'status=254' || bad "after-crash flock lock lost"
     out=$(g0_mgmt raft-flock "$FLOCK_INO" un 2)
     say "after-crash flock un owner2: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash flock un not OK"
@@ -2737,7 +2737,7 @@ if [ -n "${FCNTL_INO:-}" ]; then
     echo "$out" | grep -q 'status=0' || bad "after-crash fcntl inode missing"
     out=$(g0_mgmt raft-fcntl "$FCNTL_INO" ex 2)
     say "after-crash fcntl ex owner2 busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "after-crash fcntl lock lost"
+    echo "$out" | grep -q 'status=254' || bad "after-crash fcntl lock lost"
     out=$(g0_mgmt raft-fcntl "$FCNTL_INO" un 1)
     say "after-crash fcntl un owner1: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash fcntl un not OK"
@@ -2763,7 +2763,7 @@ if [ -n "${RANGE_INO:-}" ]; then
     echo "$out" | grep -q 'end=200' || bad "after-crash range gex end"
     out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 1 100 200)
     say "after-crash range ex [100,200) owner1 busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "after-crash range lock lost"
+    echo "$out" | grep -q 'status=254' || bad "after-crash range lock lost"
     out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 1 0 100)
     say "after-crash range ex [0,100) owner1: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash range disjoint not OK"
@@ -2785,7 +2785,7 @@ if [ -n "${WAIT_INO:-}" ]; then
     echo "$out" | grep -q 'status=0' || bad "after-crash wait inode missing"
     out=$(g0_mgmt raft-fcntl "$WAIT_INO" ex 9 500 600)
     say "after-crash wait ex [500,600) owner9 busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "after-crash wait lock lost"
+    echo "$out" | grep -q 'status=254' || bad "after-crash wait lock lost"
     if [ -n "${WAIT8_PID:-}" ]; then
         local_ok=0
         if kill -0 $WAIT8_PID 2>/dev/null; then

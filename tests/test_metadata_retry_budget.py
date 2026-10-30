@@ -215,4 +215,4 @@ with tempfile.TemporaryDirectory(prefix='efs-metadata-budget-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client')]+shlex.split(os.environ.get('EFS_TEST_CFLAGS',''))+[str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention, lost hinted peer rerouting, same-identity MKDIR/RMDIR beyond 16 attempts with shorter deadline enforcement, and exact-packet bounded unlock BUSY retries with immediate grant conflicts PASS')
+print('metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention, lost hinted peer rerouting, same-identity MKDIR/RMDIR beyond 16 attempts with shorter deadline enforcement, and exact-packet bounded grant/unlock authority retries with immediate terminal conflicts/capacity PASS')
