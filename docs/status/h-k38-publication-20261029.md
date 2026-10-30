@@ -56,4 +56,4 @@ Branch tip: all eleven Python tests and `test_store_durability` rc 0 (one fixtur
 
 ## Gate
 
-Pending.
+`EFS_TEST_JOBS=8 scripts/make_test_summary.sh` on intel2 (`~/efs-hk38-gate3`, tree = branch tip merged with devel `62417ac5b`): **TOTAL 560 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (871 s) OVERBUDGET 6**. NOTRUN: RDMA/memcheck tests needing hardware or packages intel2 lacks. INCOMPLETE and OVERBUDGET are the runner's budget flags on a shared host, not failures. An earlier run of the same tree had FAIL 1 (`test_tmpdir_hygiene`: the F25 test hard-coded `/tmp`), fixed by a test-only commit and rerun. Raw output stays on intel2 (`summary.txt`).
