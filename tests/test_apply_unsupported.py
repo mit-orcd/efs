@@ -156,7 +156,7 @@ static int dir_rc;
 static int efs_meta_dir_begin_split(struct efs_kv *k,uint64_t d){(void)k;(void)d;return dir_rc;}
 static int efs_meta_dir_migrate_one(struct efs_kv *k,uint64_t d){(void)k;(void)d;return dir_rc;}
 static int efs_meta_dir_finish_hashed(struct efs_kv *k,uint64_t d){(void)k;(void)d;return dir_rc;}
-''' + function('static int apply_dir_cmd(') + r'''
+''' + 'static int host_dir_migrate_local(struct efs_kv *kv, efs_ino_t dir){return efs_meta_dir_migrate_one(kv,dir);}' + function('static int apply_dir_cmd(') + r'''
 int main(void){
     struct efs_raft_host h={0};uint8_t cmd[HOST_DIR_LEN]={EFS_MD_CMD_DIR,EFS_MD_DIR_BEGIN};
     dir_rc=EFS_OK;assert(apply_dir_cmd(&h,cmd,HOST_DIR_LEN,1)==EFS_OK);

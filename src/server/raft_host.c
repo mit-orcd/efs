@@ -2639,6 +2639,23 @@ static int apply_append_catchup_cmd(struct efs_raft_host *h,const uint8_t *cmd,
         rd64be(cmd+17),rd64be(cmd+25),limit,cmd[37]?&session:NULL);
 }
 
+/* Apply owns the KV writer scope. A planner's first leftover can have
+ * changed before this entry applies. Never inspect/write a foreign shard
+ * from a one-group replica: the next planning pass uses a transaction. */
+static int host_dir_migrate_local(struct efs_kv *kv, efs_ino_t dir)
+{
+    char name[EFS_MAX_NAME];
+    uint32_t destination = 0;
+    int saw = 0;
+    int rc = efs_meta_dir_migrate_peek(kv, dir, name, sizeof(name), &destination, &saw);
+    if (rc == EFS_OK && efs_raft_shard_group(destination) !=
+                        efs_raft_shard_group(efs_kv_inode_shard(dir)))
+        return EFS_ERR_BUSY;
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_INVAL)
+        return rc;
+    return efs_meta_dir_migrate_one(kv, dir);
+}
+
 /* Same encoding as sim_dir_apply. Empty LOCAL → HASHED for the smoke.
  * Same-group leftover migrate stays this apply. A leftover whose HASHED
  * shard is on the other group is a txn from host_dir_migrate (hashed PUT
@@ -2678,7 +2695,7 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_meta_dir_begin_split(h->kv, dir);
         break;
     case EFS_MD_DIR_MIGRATE:
-        rc = efs_meta_dir_migrate_one(h->kv, dir);
+        rc = host_dir_migrate_local(h->kv, dir);
         break;
     case EFS_MD_DIR_FINISH:
         rc = efs_meta_dir_finish_hashed(h->kv, dir);
@@ -19774,15 +19791,11 @@ done:
     return rc;
 }
 
-/* Cross-group leftover copy: hashed PUT + retained local row + used_shards
- * as a txn so group-2-only replicas see the hashed dentry. RESOLVEs may
- * apply in either order, so this transaction must not remove the only
- * physical copy before the destination materializes: READDIR scans raw
- * dentries. The next pass's existing DIR_MIGRATE cleanup removes the local
- * copy only after the destination transaction has resolved. Same-group
- * leftovers (or hashed already present) stay a single DIR_MIGRATE apply.
- * Bounces to a dual-host when this replica does not host
- * the dest group. */
+/* Cross-group copy/cleanup always commits through both owning groups.
+ * Copy retains the physical source until the destination resolves. Cleanup
+ * compares both captured rows, deletes only the source and preserves the
+ * exact hashed live row/tombstone; it never asks a one-group log apply to
+ * infer whether its unhosted destination exists. */
 static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
                                 const char *name, uint32_t hsh, int *hint)
 {
@@ -19794,12 +19807,12 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
     uint8_t k_loc[EFS_KV_KEY_MAX], k_hash[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t k_dseq[EFS_KV_KEY_MAX];
     uint8_t v_dent[EFS_META_DENT_BYTES];
-    uint8_t loc_buf[EFS_META_DENT_BYTES];
-    uint32_t kl = 0, kh = 0, ki = 0, ks = 0, locn;
+    uint8_t loc_buf[EFS_META_DENT_BYTES], hash_buf[EFS_META_DENT_BYTES];
+    uint32_t kl = 0, kh = 0, ki = 0, ks = 0, locn, hashn;
     uint32_t psh, coord;
     uint64_t bit;
     uint8_t lane;
-    int rc, i, stamp_ino = 0;
+    int rc, i, stamp_ino = 0, cleanup = 0;
 
     psh = efs_kv_inode_shard(dir);
     lane = efs_kv_dir_lane(name);
@@ -19822,6 +19835,18 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
         rc = efs_meta_pack_dentry(&dent, v_dent, sizeof(v_dent));
     if (rc != EFS_OK)
         return rc;
+    hashn = sizeof(hash_buf);
+    rc = efs_kv_get(h->kv, k_hash, kh, hash_buf, &hashn);
+    if (rc == EFS_OK) {
+        struct efs_meta_dentry existing;
+        rc = efs_kv_decode_result(h->kv, k_hash, kh,
+                                  efs_meta_unpack_dentry(hash_buf, hashn, &existing));
+        if (rc != EFS_OK) return rc;
+        cleanup = 1;
+    } else if (rc != EFS_ERR_NOT_FOUND) {
+        return rc;
+    }
+    rc = EFS_OK;
     if ((row.used_shards & bit) == 0) {
         /* first-use bit as a commutative OR on the dir row (§7.2) */
         memset(&pd, 0, sizeof(pd));
@@ -19849,15 +19874,19 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
              * capture and PREPARE. Never restore a stale source or replace
              * a newly installed hashed live row/tombstone. */
             rc = host_prep_value(h, psh, &t, &parts, k_loc, kl, loc_buf, locn,
-                                 EFS_TXN_PUT, v_dent, sizeof(v_dent), hint);
+                                 cleanup ? EFS_TXN_DEL : EFS_TXN_PUT,
+                                 cleanup ? NULL : v_dent,
+                                 cleanup ? 0 : sizeof(v_dent), hint);
             if (rc == EFS_OK && stamp_ino)
                 rc = host_prep_ino_delta(h, psh, &t, &parts, k_ino, ki, &pd,
                                          NULL, hint);
         }
         if (rc == EFS_OK && sh == hsh) {
             rc = host_prep_value(h, hsh, &t, &parts, k_hash, kh,
-                                 NULL, EFS_TXN_ABSENT, EFS_TXN_PUT,
-                                 v_dent, sizeof(v_dent), hint);
+                                 cleanup ? hash_buf : NULL,
+                                 cleanup ? hashn : EFS_TXN_ABSENT, EFS_TXN_PUT,
+                                 cleanup ? hash_buf : v_dent,
+                                 cleanup ? hashn : sizeof(v_dent), hint);
             if (rc == EFS_OK)
                 rc = host_prep_dseq_bump(h, hsh, &t, &parts, k_dseq, ks, NULL,
                                          hint);
@@ -19876,8 +19905,8 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
                             const uint8_t *cmd, uint32_t clen, int *hint)
 {
     char name[EFS_MAX_NAME];
-    uint8_t hk[EFS_KV_KEY_MAX], hv[EFS_META_DENT_BYTES], need[2];
-    uint32_t hsh = 0, hklen = 0, hvlen, psh;
+    uint8_t need[2];
+    uint32_t hsh = 0, psh;
     uint8_t pg, hg;
     struct efs_msg_raft_mkfs_reply rep;
     int rc, saw = 0, rid;
@@ -19929,15 +19958,6 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
     }
     if (hg == pg)
         return host_propose_wait(h, pg, cmd, clen, hint);
-    rc = efs_kv_key_dentry(hsh, dir, name, hk, &hklen);
-    if (rc != EFS_OK)
-        return rc;
-    hvlen = sizeof(hv);
-    rc = efs_kv_get(h->kv, hk, hklen, hv, &hvlen);
-    if (rc == EFS_OK)
-        return host_propose_wait(h, pg, cmd, clen, hint);
-    if (rc != EFS_ERR_NOT_FOUND)
-        return rc;
     return host_dir_migrate_txn(h, dir, name, hsh, hint);
 }
 

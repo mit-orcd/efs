@@ -40,7 +40,8 @@ head = r'''
 #include <string.h>
 #include <sys/stat.h>
 struct efs_raft_host {struct efs_kv *kv;};
-static unsigned seen_count;static char target[32];static uint32_t source_shard;static int dest_first,decision,tombstone,mutate;
+static unsigned seen_count;static char target[32];static uint32_t source_shard;static int dest_first,decision,tombstone,mutate,cleanup;
+static unsigned wanted(void){return cleanup==2?95:96;}
 static unsigned listing(struct efs_kv *kv){struct efs_meta_dir_cursor cur={0};struct efs_meta_dir_ent out[64];char seen[128][EFS_MAX_NAME];unsigned total=0,pages=0;
  do{uint32_t got=0;assert(!efs_meta_apply_readdir(kv,EFS_ROOT_INO,&cur,out,64,&got));for(unsigned i=0;i<got;i++){unsigned j;for(j=0;j<total;j++)if(!strcmp(seen[j],out[i].name))break;if(j==total){assert(total<128);strcpy(seen[total++],out[i].name);}}assert(++pages<100);}while(!cur.done);return total;}
 static int host_parts_add(struct efs_txn_parts *p,uint32_t sh){p->shard[p->n++]=sh;return EFS_OK;}
@@ -55,16 +56,16 @@ static int host_prep_ino_delta(struct efs_raft_host*h,uint32_t sh,const struct e
 static int host_prep_dseq_bump(struct efs_raft_host*h,uint32_t sh,const struct efs_txid*t,const struct efs_txn_parts*p,const uint8_t*k,uint32_t kl,void*out,int*hint){(void)sh;(void)out;(void)hint;return efs_txn_prepare_add(h->kv,t,p,k,kl,1);}
 static int host_drop_parts(struct efs_raft_host*h,const struct efs_txid*t,const struct efs_txn_parts*p,int*hint){(void)hint;for(unsigned i=0;i<p->n;i++)assert(!efs_txn_resolve(h->kv,t,p->shard[i],EFS_TXN_ABORT));return EFS_OK;}
 static int host_txn_commit(struct efs_raft_host*h,const struct efs_txid*t,const struct efs_txn_parts*p,uint32_t coord,int*hint){
- (void)hint;assert(listing(h->kv)==96);
- if(EXPECTED==96)assert(efs_meta_dir_migrate_one(h->kv,EFS_ROOT_INO)==EFS_ERR_BUSY);
+ (void)hint;assert(listing(h->kv)==wanted());
+ if(!cleanup&&EXPECTED==96)assert(efs_meta_dir_migrate_one(h->kv,EFS_ROOT_INO)==EFS_ERR_BUSY);
  assert(!efs_txn_decide_parts(h->kv,coord,t,p,decision));
  uint32_t first=dest_first?p->shard[1]:source_shard,second=dest_first?source_shard:p->shard[1];
  assert(!efs_txn_resolve(h->kv,t,first,decision));seen_count=listing(h->kv);
  printf("decision=%d first=%s partial=%u/96 target=%s\n",decision,dest_first?"destination":"source",seen_count,target);fflush(stdout);
- assert(seen_count==EXPECTED || (EXPECTED==95&&decision==EFS_TXN_ABORT));
- if(EXPECTED==96)assert(efs_meta_dir_migrate_one(h->kv,EFS_ROOT_INO)==EFS_ERR_BUSY);
- assert(!efs_txn_resolve(h->kv,t,second,decision));assert(listing(h->kv)==96);
- assert(!efs_txn_resolve(h->kv,t,first,decision));assert(listing(h->kv)==96);
+ assert(seen_count==(cleanup?wanted():EXPECTED) || (EXPECTED==95&&decision==EFS_TXN_ABORT));
+ if(!cleanup&&EXPECTED==96)assert(efs_meta_dir_migrate_one(h->kv,EFS_ROOT_INO)==EFS_ERR_BUSY);
+ assert(!efs_txn_resolve(h->kv,t,second,decision));assert(listing(h->kv)==wanted());
+ assert(!efs_txn_resolve(h->kv,t,first,decision));assert(listing(h->kv)==wanted());
  return EFS_OK;}
 
 
@@ -75,16 +76,26 @@ static void one_case(void){struct efs_kv *kv=efs_kv_mem_create();struct efs_raft
  for(unsigned i=0;;i++){snprintf(target,sizeof(target),"a%05u",i);uint32_t sh=efs_kv_dentry_shard(EFS_ROOT_INO,target,EFS_META_LAYOUT_HASHED);if(efs_kv_dir_lane(target)==1&&(sh&1)!=(source_shard&1))break;}
  assert(!efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,target,&ino));
  for(unsigned i=0,made=0;made<95;i++){char nm[32];snprintf(nm,sizeof(nm),"z%05u",i);if(efs_kv_dir_lane(nm)!=63)continue;if(made==63)assert(!efs_meta_dir_begin_split(kv,EFS_ROOT_INO));assert(!efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,nm,&ino));made++;}
- assert(listing(kv)==96);uint32_t dest=efs_kv_dentry_shard(EFS_ROOT_INO,target,EFS_META_LAYOUT_HASHED);int hint=-1;int rc=host_dir_migrate_txn(&h,EFS_ROOT_INO,target,dest,&hint);
+ assert(listing(kv)==96);uint32_t dest=efs_kv_dentry_shard(EFS_ROOT_INO,target,EFS_META_LAYOUT_HASHED);
+ if(cleanup){uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_DENT_BYTES];uint32_t kl=0,vl=sizeof value;struct efs_meta_dentry row;
+  assert(!efs_kv_key_dentry(source_shard,EFS_ROOT_INO,target,key,&kl));assert(!efs_kv_get(kv,key,kl,value,&vl));assert(!efs_meta_unpack_dentry(value,vl,&row));
+  if(cleanup==2){row.ino=0;row.type=EFS_META_DENT_TOMBSTONE;}assert(!efs_meta_pack_dentry(&row,value,sizeof value));
+  assert(!efs_kv_key_dentry(dest,EFS_ROOT_INO,target,key,&kl));assert(!efs_kv_put(kv,key,kl,value,sizeof value));assert(listing(kv)==wanted());}
+ int hint=-1;int rc=host_dir_migrate_txn(&h,EFS_ROOT_INO,target,dest,&hint);
  if(mutate){assert(rc==EFS_ERR_STALE);if(mutate==1)assert(listing(kv)==95);else{assert(listing(kv)==95);uint8_t key[EFS_KV_KEY_MAX],raw[EFS_META_DENT_BYTES];uint32_t kl=0,vl=sizeof raw;struct efs_meta_dentry dead;assert(!efs_kv_key_dentry(dest,EFS_ROOT_INO,target,key,&kl));assert(!efs_kv_get(kv,key,kl,raw,&vl));assert(!efs_meta_unpack_dentry(raw,vl,&dead));assert(dead.type==EFS_META_DENT_TOMBSTONE);}printf("stale capture=%s refused without resurrection\n",mutate==1?"source deletion":"hashed tombstone");efs_kv_mem_free(kv);return;}
  assert(!rc);printf("after both resolves:96/96\n");
- if(decision==EFS_TXN_COMMIT&&EXPECTED==96){
+ if(!cleanup&&decision==EFS_TXN_COMMIT&&EXPECTED==96){
   if(tombstone){uint8_t key[EFS_KV_KEY_MAX],val[EFS_META_DENT_BYTES];uint32_t kl=0;struct efs_meta_dentry dead={.ino=0,.type=EFS_META_DENT_TOMBSTONE};assert(!efs_kv_key_dentry(dest,EFS_ROOT_INO,target,key,&kl));assert(!efs_meta_pack_dentry(&dead,val,sizeof val));assert(!efs_kv_put(kv,key,kl,val,sizeof val));}
   assert(!efs_meta_dir_migrate_one(kv,EFS_ROOT_INO));assert(listing(kv)==(tombstone?95:96));
   uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_DENT_BYTES];uint32_t kl=0,vl=sizeof value;assert(!efs_kv_key_dentry(source_shard,EFS_ROOT_INO,target,key,&kl));assert(efs_kv_get(kv,key,kl,value,&vl)==EFS_ERR_NOT_FOUND);
  }
+ if(cleanup){uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_DENT_BYTES];uint32_t kl=0,vl=sizeof value;
+  assert(!efs_kv_key_dentry(source_shard,EFS_ROOT_INO,target,key,&kl));int rc=efs_kv_get(kv,key,kl,value,&vl);
+  assert(rc==(decision==EFS_TXN_COMMIT?EFS_ERR_NOT_FOUND:EFS_OK));assert(listing(kv)==wanted());}
  efs_kv_mem_free(kv);}
-int main(void){for(dest_first=0;dest_first<2;dest_first++)for(decision=EFS_TXN_COMMIT;decision<=EFS_TXN_ABORT;decision++)for(tombstone=0;tombstone<=(decision==EFS_TXN_COMMIT);tombstone++){if(EXPECTED==95&&(dest_first||decision!=EFS_TXN_COMMIT||tombstone))continue;one_case();}if(EXPECTED==96){decision=EFS_TXN_COMMIT;dest_first=tombstone=0;for(mutate=1;mutate<=2;mutate++)one_case();}return 0;}
+int main(void){for(dest_first=0;dest_first<2;dest_first++)for(decision=EFS_TXN_COMMIT;decision<=EFS_TXN_ABORT;decision++)for(tombstone=0;tombstone<=(decision==EFS_TXN_COMMIT);tombstone++){if(EXPECTED==95&&(dest_first||decision!=EFS_TXN_COMMIT||tombstone))continue;one_case();}if(EXPECTED==96){decision=EFS_TXN_COMMIT;dest_first=tombstone=0;for(mutate=1;mutate<=2;mutate++)one_case();mutate=tombstone=0;
+ for(cleanup=1;cleanup<=2;cleanup++)for(dest_first=0;dest_first<2;dest_first++)for(decision=EFS_TXN_COMMIT;decision<=EFS_TXN_ABORT;decision++)one_case();
+ cleanup=1;dest_first=0;decision=EFS_TXN_COMMIT;mutate=2;one_case();}return 0;}
 
 '''
 with tempfile.TemporaryDirectory(prefix='efs-dir-migrate-gap-') as tmp:
