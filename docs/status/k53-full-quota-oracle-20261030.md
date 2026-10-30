@@ -121,7 +121,8 @@ instead of forbidden.
 | fstor007 loops, 2 × 20 | `7514b2145` | 40/40 PASS |
 | nuc, quiet-wait harness only (superseded) | `7514b2145` + early test edit | 31/31 PASS, stopped on instruction |
 | nuc, final harness, 3 runs | `7514b2145` + this branch's test files | 3/3 PASS, 220–232 s |
-| `make test-all`, 8 jobs | this branch | GATE_LINE |
+| `make test-all`, 8 jobs, nuc, `545e5012d` | this branch | **TOTAL 568 FAIL 0 NOTRUN 11 STATUS INCOMPLETE (1609s)**, OVERBUDGET 37, build 62 s; NOTRUN = host limits (no RDMA device, no valgrind/memcheck.h, no cluster scripts) |
+| `make test-all`, 8 jobs, nuc, `b00e92c72` (first run) | this branch | TOTAL 568 FAIL 2 (1248s): `test_d4_progress` and `test_d4_plateau` timing failures under load; both PASS alone on idle nuc (81 s, 164 s); not B6 |
 
 Raw captures (not in Git): `~/efs-artifacts/taskBE-20261030/` on the Mac
 (`fcstor007-case464/`: the n1/n2/n3 and mnt-a/mnt-b logs and node 3's
