@@ -17561,14 +17561,44 @@ static void host_opid_reply_ino(struct efs_raft_host *h, efs_ino_t parent,
                 (unsigned long long)rep->ino);
         return;
     }
-    if (efs_meta_apply_get_inode(h->kv, rep->ino, &row) == EFS_OK) {
-        host_stat_from_row(&row, &st);
-        stat_to_inode(&st, &out->inode);
+    /* A receipt can materialize on its group before this replica has
+     * materialized the child on another group. Absence from a plain row
+     * read is not proof of deletion. Fence the child group and resolve
+     * committed intents before preserving the legitimate deleted-row
+     * replay case. Refused authority must stay a refusal, never bare OK. */
+    uint8_t group=efs_raft_shard_group(efs_kv_inode_shard(rep->ino));
+    int hint=-1, gone=0;
+    if (!host_hosts(h,group)) {
+        host_fwd_getattr(h,rep->ino,out,&group,1);
+        gone=out->status==EFS_INODE_RPC_NOT_FOUND;
     } else {
-        out->inode.ino = rep->ino;
+        struct host_txn_read_context txn={.host=h};
+        int rc=host_read_index(h,group,&hint);
+        if (rc==EFS_OK) {
+            txn.covered=(uint8_t)(1u<<group);
+            rc=efs_meta_apply_get_inode_tx(h->kv,rep->ino,host_txn_read_coord,&txn,&row);
+            gone=rc==EFS_ERR_NOT_FOUND;
+        }
+        if (rc!=EFS_OK && txn.unhosted_coordinator) {
+            uint8_t need[2];host_need_both(need);
+            host_fwd_getattr(h,rep->ino,out,need,2);
+            gone=out->status==EFS_INODE_RPC_NOT_FOUND;
+        } else {
+            set_inode_rc(out,rc,hint);
+            if (rc==EFS_OK) {
+                host_stat_from_row(&row,&st);
+                stat_to_inode(&st,&out->inode);
+            }
+        }
+    }
+    if (gone) {
+        set_inode_rc(out,EFS_OK,-1);
+        out->inode.ino=rep->ino;
         fprintf(stderr, "raft-host: opid-replay parent=%llu name=%s seq=%llu "
-                "ino=%llu row gone\n", (unsigned long long)parent, name,
+                "ino=%llu row authoritatively gone\n", (unsigned long long)parent, name,
                 (unsigned long long)rep->seq, (unsigned long long)rep->ino);
+    } else if (out->status!=EFS_INODE_RPC_OK) {
+        return;
     }
     out->inode.parent = parent;
     strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
@@ -17630,6 +17660,7 @@ static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
     uint8_t pg, dg = 0;
     int hint = -1;
     int rc;
+    struct host_txn_read_context txn={.host=h,.covered=covered};
     int hashed = 0;
     uint64_t hold = (flags & EFS_CREATE_F_HOLD) ? owner : 0;
     int pending = !!(flags & EFS_CREATE_F_PENDING);
@@ -17682,8 +17713,10 @@ static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
     if (rc == EFS_OK)
         rc = host_test_dir_serve_read(h, parent, pg);
 #endif
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
+    if (rc == EFS_OK) {
+        txn.covered=covered;
+        rc = efs_meta_apply_get_inode_tx(h->kv, parent, host_txn_read_coord, &txn, &prow);
+    }
     if (rc == EFS_OK && !S_ISDIR(prow.mode))
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK) {
@@ -17728,7 +17761,7 @@ static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
             return;
         }
     }
-    struct host_txn_read_context txn={.host=h,.covered=covered};
+    txn.covered=covered;
     if (rc == EFS_OK) {
         rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_read_coord, &txn, &dent);
         if (rc == EFS_OK && !(q && efs_opid_req_valid(q))) {
@@ -17808,7 +17841,7 @@ static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
         rc = lrc;
     }
     if (rc == EFS_OK)
-        rc = efs_meta_apply_get_inode(h->kv, dent.ino, &prow);
+        rc = efs_meta_apply_get_inode_tx(h->kv, dent.ino, host_txn_read_coord, &txn, &prow);
     if (rc == EFS_OK)
         host_stat_from_row(&prow, &st);
     if (dirop_fail_on(rc))
