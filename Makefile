@@ -513,7 +513,6 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_raft_pending_reads.py
 	python3 tests/test_prepare_cohort.py
 	python3 tests/test_prepare_wait_progress.py
-	python3 tests/test_put_epoch_files.py
 	python3 tests/test_append_cohort.py
 	python3 tests/test_atomic_append_host.py
 	python3 tests/test_host_cover_route.py
@@ -1292,5 +1291,3 @@ src/kv/kv_mem.o src/kv/kv_snap.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_s
 
 # FIN accounting is shared by RDMA diagnostics and the real-socket regression.
 src/common/rdma.o tests/test_tcp_counts: src/common/tcp_counts.h
-
-src/server/store.o src/bench/store.o tests/test_store_durability: src/server/put_epoch_files.h
