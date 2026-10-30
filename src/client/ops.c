@@ -1482,10 +1482,23 @@ int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t 
     if (!ino)
         return EFS_ERR_INVAL;
     *ino = 0;
+    /* Direct library callers have no FUSE request deadline. Give admission
+     * and transport one shared normal I/O budget: the receipt window must
+     * not fail at its unrelated one-second fallback while an older valid
+     * RPC still owns the oldest slot. Never extend an inherited deadline. */
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    if (!previous) {
+        struct timespec ts;
+        if (clock_gettime(CLOCK_MONOTONIC, &ts)) return EFS_ERR_IO;
+        uint64_t end = (uint64_t)ts.tv_sec * 1000u + ts.tv_nsec / 1000000u + EFS_IO_TIMEOUT_MS;
+        efs_client_rpc_set_deadline_ms(end);
+    }
     int publish = !S_ISDIR(mode);
     int admission = publish ? efs_client_report_admit(1) : EFS_OK;
-    if (admission != EFS_OK)
+    if (admission != EFS_OK) {
+        efs_client_rpc_set_deadline_ms(previous);
         return admission;
+    }
     /* Phase 2b: the mutation runs on the metadata primary (which allocates the
      * ino and persists via the server flush thread). Dual-apply the returned
      * inode to the local snapshot so the data path sees it immediately. */
@@ -1499,6 +1512,7 @@ int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t 
             *created = out;
     }
     if (publish) efs_client_report_unreserve();
+    efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }
 

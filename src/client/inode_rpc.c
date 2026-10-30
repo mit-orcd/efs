@@ -1316,6 +1316,19 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
     if ((flags & EFS_CREATE_F_HOLD) && !g_client.flock_token)
         g_client.flock_token = 1;
     req->owner = g_client.flock_token;
+    /* Establish the mount before allocating a file-mutation identity. A
+     * BUSY bootstrap has sent no CREATE, so it can wait inside the caller's
+     * existing envelope without consuming the finite receipt window. */
+    int ready = efs_client_session_check();
+    unsigned bootstrap_attempt = 0;
+    while (ready == EFS_ERR_BUSY && efs_client_rpc_deadline_ms() &&
+           !efs_client_rpc_past_deadline()) {
+        if (rpc_writer_retry_pause(bootstrap_attempt++) != EFS_OK)
+            break;
+        ready = efs_client_session_check();
+    }
+    if (ready != EFS_OK)
+        return ready;
     slot = opid_begin(&q);
     /* A full local receipt window has sent no CREATE and allocated no
      * identity. Wait only inside an existing caller deadline, as retained
