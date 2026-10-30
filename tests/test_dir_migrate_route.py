@@ -6,17 +6,22 @@ as a log command, rather than bounce back as another distributed plan.
 """
 from pathlib import Path
 import os
+import resource
 import shlex
 import subprocess
 import tempfile
 
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 root = Path(__file__).resolve().parents[1]
 source = (root / 'src/server/raft_host.c').read_text()
+route_source = Path(os.environ.get('EFS_MIGRATE_ROUTE_SOURCE',
+                                  root / 'src/server/raft_host.c')).read_text()
 
 
 def function(name):
-    start = source.rindex(name)
-    return source[start:source.index('\n}', start) + 2]
+    text = route_source if name == 'static int host_dir_migrate(struct' else source
+    start = text.rindex(name)
+    return text[start:text.index('\n}', start) + 2]
 
 
 code = r'''
