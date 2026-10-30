@@ -615,7 +615,7 @@ int server_segment_recovery_check(struct efsd_server *s, uint32_t group, uint64_
     int rc = server_recovery_prove_file(path, &want, expect, &bytes);
     if (rc != EFS_ERR_NOT_FOUND)
         __atomic_fetch_add(&c->checked, 1, __ATOMIC_RELAXED);
-    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_NOMEM)
+    if (server_recovery_unprovable(rc))
         rc = server_recovery_drop(s, path, bytes, 1, c) == EFS_OK ? EFS_ERR_NOT_FOUND
                                                                  : EFS_ERR_IO;
     pthread_rwlock_unlock(g);

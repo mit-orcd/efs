@@ -174,6 +174,7 @@ Historical October 22 legend (retained):
 | K55 | Task AI real-RDMA full gate on fcstor015: B6 slow mode returns EIO for F0 after 60.01 s; snapshot PDD shows two durable fragments, but waiting for the slow COMMIT consumes the sweep deadline before its degraded mark. Untouched base `486aa3a46` independently reproduces F0 EIO at 60.04 s. | slow-member fsync availability / bounded durable marking | FIXED, merged into devel (wave 32, `4e4b7ec75`); independent focused TCP/RDMA qualification PASS at `5185bfcd3`, four slow cases plus exact restart bytes; full gate 546/0 FAIL/4 host-limited NOTRUN, blanket INCOMPLETE; distinct from still-OPEN K54 ([original](ai-rdma-registry-lock-20261028.md), [fix qualification](k55-slow-commit-20261028.md)). |
 | K56 | `make asan-check` fails five tests at startup (`env_removed`, `k36_recovery`, `k36_segment_recovery`, `k37_segment_rebuild`, `d4_progress`): the ASan-built `efs-fuse` exits with `cannot establish allocator policy`. Task I's wave 31 allocator policy (`fuse_allocator_init`) requires both glibc `mallopt` calls to succeed, and ASan's replacement allocator makes `mallopt` fail. Found by Task AL's `make asan-check`, identical on clean devel. | sanitizer tooling / startup | FIXED on `k56-asan-allocator`, blocks alpha: no (a sanitizer build only; normal glibc builds still refuse to start if the policy fails): the policy is skipped under `__SANITIZE_ADDRESS__`. xorinox `bash tests/sanitizer_check.sh asan`: baseline devel `330c48aea` 49 run / 5 failed (60 s, all the startup refusal), fix `ae655e066` 49 run / 0 failed (425 s); a normal build's `efs-fuse --help` still starts ([evidence](k56-asan-fuse-allocator-20261029.md)) |
 | K57 | Task AY audit: the packer-path segment PUT acknowledged an existing fragment file after checking only its I25 tail record; the payload was never hashed. A copy with a damaged payload under an intact tail (media damage, or a half-visible write of an earlier attempt) was acknowledged as placed, and the packer's retry on a fresh connection could run beside the PUT it retried (shared segment guard). The ordinary path rewrites an existing file and the rebuild branch hashed it. | upload completion / segment placement | FIXED on `agent/devel-ay`, blocks alpha: no (the segment kept two good fragments and a later audit finds the bad one; nothing is lost with a single bad copy): every segment PUT now runs the full tail-and-payload check under the exclusive segment guard, removes a bad copy and rewrites it; removal subtracts what the inventory counted. Retained reproduction `t_upload_retry_matrix` (`tests/test_reclaim.c`) fails on `74d34d588` and passes with the fix ([evidence](ay-upload-completion-audit-20261029.md)) |
+| K58 | Task AZ audit: verified recovery (`recovery_chunk_path`, `server_segment_recovery_check`) deleted a fragment on any prover verdict except NOT_FOUND and NOMEM, including `EFS_ERR_IO` from a failed open or read (EIO, EACCES, EMFILE, a short read). A read error proves nothing about the bytes, so one transient error after an unclean stop removed a good fragment and marked its stripe degraded; with another fragment of the stripe already marked, the 2+1 code could not rebuild it. | durability / destructive action on unproven evidence | FIXED on `agent/devel-az`, blocks alpha: no (fixed here): only CHECKSUM, FRAG_FORMAT and FRAG_IDENTITY verdicts drop a file; an I/O error is returned, recovery reports FAILED and the store stays fenced until a restart verifies it. Retained regression: `tests/test_store_durability.c` injects EIO, EACCES and EMFILE on open for the chunk wrapper, the segment wrapper and the local scan (fails on the old logic: the valid fragment was dropped); fixture matrix `tests/test_verification_matrix.c` ([evidence](az-verification-policy-audit-20261029.md)). |
 
 
 ### Recheck: candidate register reconciliation (October 28)
@@ -244,6 +245,7 @@ standalone rows K15/K16/K27/K28 are added without inventing historical runs.
 | K55 | FIXED, merged into devel (wave 32, `4e4b7ec75`); original PDD/slow-fsync failure retained; independent TCP/RDMA focused qualification PASS, full gate 546/0 FAIL/4 host-limited NOTRUN; K54 still OPEN ([original](ai-rdma-registry-lock-20261028.md), [fix qualification](k55-slow-commit-20261028.md)). |
 | K56 | FIXED on `k56-asan-allocator`, blocks alpha: no; ASan-built `efs-fuse` refused to start (`cannot establish allocator policy`) since wave 31, five `make asan-check` tests failed at startup; baseline 49 run / 5 failed, fix 49 run / 0 failed ([evidence](k56-asan-fuse-allocator-20261029.md)) |
 | K57 | FIXED on `agent/devel-ay`, blocks alpha: no; packer-path segment PUT trusted an existing file on its tail record alone; now full check under the exclusive guard, reproduction `t_upload_retry_matrix` ([evidence](ay-upload-completion-audit-20261029.md)) |
+| K58 | FIXED on `agent/devel-az`, blocks alpha: no; recovery no longer deletes a fragment on an I/O error (open EIO/EACCES/EMFILE), only on a proven mismatch; regression in `test_store_durability`, matrix `test_verification_matrix` ([evidence](az-verification-policy-audit-20261029.md)) |
 
 **Oct 23 evidence qualification:** nuc capture bundles are reported lost;
 xorinox raw outputs were deleted. Their PASS labels below are historical
@@ -1094,7 +1096,7 @@ failure semantics. No K defect or performance PASS is inferred from duplication.
   **Done:** reviewed completion contracts and cross-path fault results, with
   defects fixed/retested or explicitly tracked as blockers. AN/AQ/AR still own
   RPC/barrier/rewrite optimization; this task owns correctness of their contracts.
-- [ ] **AZ — Verification policy across GET, audit and recovery.**
+- [x] **AZ — Verification policy across GET, audit and recovery.**
   Ordinary serving uses `store.c::read_fragment_verified`; packed serving uses
   `segment_store.c::server_segment_read`; packed audit uses
   `server_segment_check`; recovery uses the verification paths in `store.c`
@@ -1115,6 +1117,13 @@ failure semantics. No K defect or performance PASS is inferred from duplication.
   **Done:** matrix outcomes and retained regressions for gaps; identify reusable
   policy primitives only after proving the guarantees match. AK/AP retain their
   hashing/copy/I/O scope; W123/K36 failures and qualification remain independent.
+  **Audited 2026-10-29** (`docs/status/az-verification-policy-audit-20261029.md`):
+  six wrappers tabulated, one fixture matrix (12 cases) through all of them
+  (`tests/test_verification_matrix.c`). One demonstrated gap, **K58**: verified
+  recovery deleted a fragment on an I/O error; fixed with a retained regression.
+  Other differences (extra tail, where the expected digest is compared, tickets
+  marked after the fence) are justified in the page; no shared primitive proposed
+  beyond the recovery verdict predicate.
 - [ ] **BA — Ordinary orphan, superseded-object and segment deletion authority.**
   `src/server/put_orphan.c::server_put_orphan_delete` requires a durable session
   floor and authoritative orphan status before exact-object deletion and directory
