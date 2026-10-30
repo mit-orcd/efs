@@ -1632,9 +1632,9 @@ and candidate comparisons PASS. ORCD node9900 TCP/RDMA matrices **8/8 each**,
 RDMA transport/segmented/declaration, reclamation, core **218/218**, peer
 **72/72** PASS. Nine RDMA skips covered separately; external cluster-script
 gate remains NOTRUN. Both evidence copies sealed/verified; original failures
-and six failed fixture trees retained on xorinox. Bulk cleanup HOLD: automatic
-approval flagged an unrelated protected screen cwd; no scratch trees deleted.
-No merge/push or alpha closure.
+and six failed fixture trees retained on xorinox. User chose to retain passing
+scratch/build trees on both hosts for review; cleanup choice closed by retention.
+No trees deleted, merge/push or alpha closure.
 
 [K55 — slow storage COMMIT](../status/k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,

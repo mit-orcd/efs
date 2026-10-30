@@ -8,7 +8,8 @@ K59 attributes/EOF/maps FIXED.
 K60 cached mutation shortcuts FIXED.
 K61 cached DAC FIXED. No merge/push; integrated devel acceptance remains.
 
-**Current verdict: COMPLETE scoped audit; bulk cleanup HOLD**, not blanket alpha acceptance.
+**Current verdict: COMPLETE scoped audit; trees retained by user decision**,
+not blanket alpha acceptance.
 The final immutable source has the `791d57787` client repair plus the register
 correction and test/evidence tooling; it merges no upstream server fixes.
 Earlier failures below remain recorded, including the unclassified original
@@ -432,7 +433,7 @@ This is a retention checksum inventory, not a claim of logical payload
 correctness or an explanation of the missing c026 observation. No failed
 store is deleted or opened with another build.
 
-**Bulk cleanup HOLD — nothing pruned.** Automatic approval review rejected
+**Historical cleanup hold — nothing pruned.** Automatic approval review rejected
 removal of the three passing/build-only ORCD scratch trees because it flagged
 an unresolved working-directory conflict with unrelated screen PID 201758,
 `tiny-files-4kb`. Its cwd is protected: ordinary lsof reports Permission denied,
@@ -440,11 +441,10 @@ and a single read-only `sudo -n readlink` query required a password. No
 credential was entered, screen command sent or process signaled; the rejected
 deletion was not bypassed. All three `/tmp/efs-taskBB-orcd-{17027103e,791d57787,
 02f861e4a}` trees remain intact. This is cleanup uncertainty, not a product-gate
-failure. User confirmation of that screen's cwd, or a decision to retain the
-scratch trees, is needed to close the cleanup item safely.
+failure. The user subsequently chose retention, as recorded below.
 
-Xorinox passing source/build trees are also retained pending the final
-retention decision; the six failed fixture trees remain for open investigation.
+Xorinox passing source/build trees are also retained; the six failed fixture
+trees remain for open investigation.
 The 3,398-file inventory passes another complete `sha256sum -c` after the
 cleanup preflight. No private tree or failed file was deleted on either host.
 `RETAINED.txt` records the hold beside each capture; the original capture
@@ -458,3 +458,17 @@ xorinox `~/efs-artifacts/taskBB-20261029/RETAINED.txt`
 `73de878ab6768446083f4d8313937eda012d789f643c34d776dfe0af6a089242`.
 The earlier failed cleanup preflight and rejected retry changed no directory;
 there is no PRUNED.txt claiming otherwise.
+
+### Retention decision — October 29, 2026 (user local date)
+
+The user selected **“Retain passing trees for review”** for xorinox and
+node9900. This explicitly supersedes the default post-run bulk pruning for
+these BB trees and closes the pending cleanup choice by retention. No cwd
+verification, screen interaction or deletion is needed to honor this choice.
+Passing scratch/build trees and every failed fixture remain in place for review;
+no retention expiry or later deletion is authorized by this decision.
+
+The earlier automatic-review rejection, read-only checks and RETAINED.txt
+hashes remain historical evidence. Sealed captures, manifests and qualification
+verdicts are unchanged. Only future integration and the documented external
+cluster-script gate remain outside the completed scoped BB work.
