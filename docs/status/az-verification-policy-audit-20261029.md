@@ -99,4 +99,13 @@ handling and in who compares the digest, so no further primitive is proposed.
 ## Gates
 
 Unit tests `test_store_durability` and `test_verification_matrix` pass on
-intel2. Full `make test-all` on node9901: see the result line below.
+intel2. Full gate on node9901 at `25347a6c7` (`EFS_TEST_JOBS=8`, tree and
+TMPDIR under local `/tmp`): **TOTAL 553 FAIL 0 NOTRUN 2 STATUS INCOMPLETE
+(840s) OVERBUDGET 2 BUILD 13s**. NOTRUN are host limits:
+`test_cluster_stop.py` (no cluster scripts on the host) and
+`test_rdma_memcheck.py` (no `valgrind/memcheck.h`). OVERBUDGET:
+`test_member_limit.py` 39.1 s against 20 s, `test_pack_dup_candidate.py`
+72.8 s against 55 s (shared host). The RDMA-device set ran. A first run from
+`$HOME` (NFS) failed 57 tests with `incompatible, busy or corrupt root`
+because the storage root refuses NFS; it says nothing about the code and is
+not counted.
