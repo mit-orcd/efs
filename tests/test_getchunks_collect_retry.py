@@ -34,7 +34,7 @@ int efs_meta_get_chunk_view_auth(struct efs_kv*kv,efs_ino_t ino,uint64_t gen,uin
 int efs_meta_pub_stage_visible(struct efs_kv*kv,efs_ino_t ino,uint64_t gen,uint32_t ci,
  efs_txn_coord_fn coord,void*ctx,struct efs_txn_pending*pend){
  (void)kv;(void)ino;(void)gen;(void)ci;(void)coord;(void)ctx;(void)pend;return EFS_OK;}
-int efs_pack_ref_encode(const struct efs_pack_ref*r,uint8_t*out){
+int efs_pack_ref_encode(const struct efs_pack_ref*r,uint8_t out[EFS_PACK_REF_BYTES]){
  memset(out,0,EFS_PACK_REF_BYTES);efs_store_be64(out,r->ino);efs_store_be64(out+24,r->record_generation);return EFS_OK;}
 '''+stamp+'\n'+s[a:b]+r'''
 static void view(int packed,unsigned deltas,uint64_t object){
