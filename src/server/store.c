@@ -1220,16 +1220,6 @@ int server_gc_inode_payload(struct efsd_server *s, efs_export_id_t eid, efs_ino_
     return EFS_OK;
 }
 
-/* PUT may have ACKed a file whose namespace proof is still owned by an
- * epoch. Before pruning its ancestors, drain that ownership. The inode death
- * fence (whole inode) or write guard (superseded pruning) prevents a later
- * PUT from slipping between the drain and directory removal. */
-#ifndef EFS_BENCH_BUILD
-static int put_sync_namespace_drain(void);
-#else
-static int put_sync_namespace_drain(void) { return EFS_OK; }
-#endif
-
 /* W124: durably delete one fenced inode's fragments on every root, then its
  * empty scaffolding. Runs without the inode guard: the fence (journalled
  * before acceptance) already refuses every later PUT, and a PUT that held the
@@ -1238,8 +1228,7 @@ int server_gc_inode_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
                            uint64_t *counted, int durable)
 {
     if (!s || !eid || ino <= EFS_ROOT_INO || efs_ino_is_meta_table(ino)) return EFS_ERR_INVAL;
-    int rc = put_sync_namespace_drain();
-    if (rc != EFS_OK) return rc;
+    int rc = EFS_OK;
     t_gc_counted = counted;
     t_gc_defer_sync = !durable;
     for (uint32_t r = 0;
@@ -1284,7 +1273,6 @@ int server_gc_superseded_delete(struct efsd_server *s, efs_export_id_t eid, efs_
      * inode's write guard a PUT cannot be between its mkdir and create. */
     pthread_rwlock_t *g = server_inode_guard(eid, ino);
     pthread_rwlock_wrlock(g);
-    rc = put_sync_namespace_drain();
     for (uint32_t r = 0; rc == EFS_OK && r < (s->storage_path_count ? s->storage_path_count : 1); r++) {
         char path[8192];
         format_ino_chunk_dir(path, sizeof(path), s->storage_paths[r], eid, ino, ci);
@@ -1806,7 +1794,7 @@ static int put_sync_note(struct put_sync_root *r, uint64_t bytes,int pin,
 }
 
 /* Wait until everything acknowledged before this call is durable. */
-static int put_sync_commit_root_mode(struct put_sync_root *r, int require_recovery)
+static int put_sync_commit_root(struct put_sync_root *r)
 {
     pthread_mutex_lock(&r->mu);
     uint64_t want = r->cur_frags ? r->seq
@@ -1817,27 +1805,9 @@ static int put_sync_commit_root_mode(struct put_sync_root *r, int require_recove
     }
     while (r->durable_seq < want && !r->error && !r->stop)
         pthread_cond_wait(&r->cv, &r->mu);
-    int rc = r->durable_seq >= want && !r->error && (!require_recovery || !r->recovery_uncertain) ? EFS_OK : EFS_ERR_IO;
+    int rc = r->durable_seq >= want && !r->error && !r->recovery_uncertain ? EFS_OK : EFS_ERR_IO;
     pthread_mutex_unlock(&r->mu);
     return rc;
-}
-
-static int put_sync_commit_root(struct put_sync_root *r)
-{
-    return put_sync_commit_root_mode(r, 1);
-}
-static int put_sync_namespace_drain(void)
-{
-    for (unsigned i=0;i<EFS_MAX_STORAGE_PATHS;i++) {
-        pthread_mutex_lock(&put_sync_mu);
-        int on=put_sync_state[i]>0;
-        pthread_mutex_unlock(&put_sync_mu);
-        /* This is only a namespace-lifetime barrier for current pins, not
-         * proof about a previous unclean boot. Recovery stays uncertain. */
-        if(on && put_sync_commit_root_mode(&put_sync_roots[i],0)!=EFS_OK)
-            return EFS_ERR_IO;
-    }
-    return EFS_OK;
 }
 
 /* Attach one root. Reads the previous record and starts a new boot; an
