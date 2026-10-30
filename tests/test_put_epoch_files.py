@@ -35,7 +35,7 @@ static void *wait_pin(void *p) {
     assert(!put_epoch_close(fd));return NULL;
 }
 int main(void) {
-    char path[]="/tmp/efs-epoch-files-XXXXXX";int fd=mkstemp(path);assert(fd>=0);assert(!unlink(path));
+    const char *td=getenv("TMPDIR");char path[512];snprintf(path,sizeof path,"%s/efs-epoch-files-XXXXXX",td&&*td?td:"/tmp");int fd=mkstemp(path);assert(fd>=0);assert(!unlink(path));
     assert(write(fd,"payload",7)==7);
     for(int mode=0;mode<3;mode++) {
         struct put_epoch_file files[128];memset(seen,0,sizeof(seen));active=peak=0;
