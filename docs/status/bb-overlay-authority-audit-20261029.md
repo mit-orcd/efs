@@ -5,6 +5,7 @@
 Evidence: `docs/status/bb-overlay-authority-audit-20261029.md`.
 ORCD TCP/RDMA NOTRUN. Findings BB1 (attribute overlays), BB2 (cached mutation
 shortcuts) and BB3 (cached DAC checks) have candidate fixes; qualification RUNNING.
+BB4 additionally captures reuse of a pre-truncate mapping after fresh metadata.
 K numbers will be assigned against the then-current register before closure.
 No merge, push, new product switch, cache protocol or wire/store change.
 
@@ -153,3 +154,26 @@ zero tail, keeps the exact byte oracle, and records lengths/hashes and raw
 mismatches. The original failure is retained unchanged; no original readback
 is reconstructed or fabricated. The product is unchanged for this harness
 correction. Its failed root is `qualification-c0266ad36/matrix`.
+
+## BB4 — inode invalidation left old map authority reusable
+
+`01c84c49e` (same product as `c0266ad36`, corrected capture harness) again
+FAILS 7/8. This time the fresh fstat EOF is 300,000 and the read returns
+4,096 nonzero bytes at offset 131,072. Actual SHA256
+`63d320b7f817c1523404fbc90872912e4301f30cd7d69aadbcf74a13c5179743`,
+expected zero SHA256 `ad7facb2586fc6e966c004d7d1d16b024f5805ff7cb47c7a85dabd8b48892ca7`.
+The actual bytes match the exact discarded original synthetic slice, confirmed
+by independent regeneration on xorinox (no store was reopened).
+Actual/expected files, result and all stores remain under
+`qualification-01c84c49e/matrix`. This is now a captured byte mismatch, unlike
+the preceding unclassified read.
+
+`invalidate_file_layout` drops decoded-cache entries but never invalidates
+`map_fresh`; `pull_file_layout` is intentionally a no-op after D2. A cached
+pre-truncate mapping therefore remains eligible within 200 ms even after
+metadata exposes the new size. The candidate uses the existing map-open
+freshness boundary when adopting an invalidated inode layout. Even a zero-size
+truncate fences mappings; a late pull stamped before the boundary cannot
+restore freshness. No TTL, clock policy, flag or wire protocol changes. The
+production-function fake-clock regression fails without this fence and passes
+with it; the mounted exact-byte check is unchanged.

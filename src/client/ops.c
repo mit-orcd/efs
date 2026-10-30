@@ -959,6 +959,11 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
 
 static void invalidate_file_layout(const struct efs_inode *rpc, int drop_dcache)
 {
+    /* The new inode authority also fences map freshness. Dropping decoded
+     * bytes alone leaves pre-truncate mappings usable until their TTL, and
+     * pull_file_layout deliberately performs no eager GETCHUNKS. A late pull
+     * stamped before this boundary must not make those mappings fresh again. */
+    efs_client_map_opened(rpc->ino);
     uint32_t cs = data_chunk_size();
     uint32_t nci = 0;
     if (cs && rpc->size)

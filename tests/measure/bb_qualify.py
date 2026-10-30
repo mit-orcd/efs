@@ -34,8 +34,9 @@ try:
  run('version',[source/'efsd','--version'])
  for case in ('overlay','mutations','unlink'):
   run('base-'+case,['python3','tests/test_client_metadata_authority.py','--source',base/'src/client/ops.c','--case',case],negative=True)
+ run('base-map-fresh',['python3','tests/test_map_fresh_open.py',base/'src/client/ops.c'],negative=True)
  run('base-permission',['python3','tests/test_readdir_permission_authority.py'],extra={'EFS_FUSE_SOURCE':str(base/'src/client/efs_fuse.c')},negative=True)
- for name in ('client_metadata_authority','inode_pending_eof','attribute_authority_errno','readdir_permission_authority','sparse_metadata','stage_evict_lru'):
+ for name in ('client_metadata_authority','inode_pending_eof','attribute_authority_errno','readdir_permission_authority','sparse_metadata','stage_evict_lru','map_fresh_open'):
   run('unit-'+name,['python3','tests/test_'+name+'.py'])
  run('unit-asan-ubsan',['python3','tests/test_client_metadata_authority.py'],extra={'CC':'gcc -fsanitize=address,undefined -fno-omit-frame-pointer','ASAN_OPTIONS':'detect_leaks=1:halt_on_error=1','UBSAN_OPTIONS':'halt_on_error=1:print_stacktrace=1'})
  run('matrix',['python3','tests/live/bb_overlay_authority.py','--source',source,'--output',out/'matrix'],timeout=600)
