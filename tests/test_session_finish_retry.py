@@ -83,7 +83,8 @@ print('session FINISH: BUSY retries keep UUID/epoch, one BEGIN, both cleanup sta
 # session before cleanup. Execute the production predicate at memory/log
 # pressure; new session/namespace work must remain refused.
 host=Path(os.environ.get('SESSION_ADMIT_SOURCE',root/'src/server/raft_host.c')).read_text()
-a=host.index('static int host_admit(');body=host[a:host.index('\n}',a)+2]
+a=host.index('static int host_kv_pressure(');body=host[a:host.index('\n}',a)+2]
+a=host.index('static int host_admit(');body+='\n'+host[a:host.index('\n}',a)+2]
 code=r'''
 #include "efs/common.h"
 #include "efs/meta_cmd.h"
