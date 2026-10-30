@@ -1,5 +1,10 @@
 # Project status — work queue and evidence
 
+[H-recovery — Task H F26–F29](h-recovery-20261029.md): **F26 K36/K47 re-probe, F28 K43
+pin retention and F29 K36 recovery scheduling PASS focused** on branch `agent/h-recovery`
+(each test fails on devel source); F27 not ported, devel `35a6e41b0` already covers it.
+K36, K43, K47 statuses unchanged; **K48 stays OPEN**.
+
 [K55 — slow storage COMMIT](k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
 source `5185bfcd3`; merged into devel (wave 32, `4e4b7ec75`). Attributed K35 fix passes native/index,

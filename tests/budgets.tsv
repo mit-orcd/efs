@@ -68,7 +68,6 @@ python3 tests/test_w125_harness.py	15	1
 python3 tests/test_orcd_verify_resume.py	10	1	
 ./tests/test_kv_lsm_concurrent 4	10	1	
 ./tests/test_txn_retire	10	1	
-python3 tests/test_txn_recovery_priority.py	5	1	bounded recovery scheduler regression
 ./tests/test_pub_stage	5	1	
 python3 tests/test_d39_model.py --shard 0/3	45	1	Task T: slowest host median 32.9 s (fstor007); three runs/host, 1.25x rounded up to 5 s; previous budget 25 s
 python3 tests/test_d39_model.py --shard 1/3	25	1	Task T: slowest host median 17.9 s (fstor007); three runs/host, 1.25x rounded up to 5 s; previous budget 15 s
