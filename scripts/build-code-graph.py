@@ -12,6 +12,7 @@ import io
 from collections import Counter, defaultdict
 import hashlib
 import importlib.metadata
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -129,7 +130,7 @@ def build(root, out):
         raise ValueError(f"expected graphifyy {config['graphify_version']}, got {version}; revalidate before upgrading")
     code, docs = select_files(root, config)
     inputs = sorted(set(code + docs + config["build_files"] + [
-        "tools/graphify/scope.json", "tools/graphify/known-bugs.json", "scripts/build-code-graph.py"]))
+        "tools/graphify/scope.json", "tools/graphify/known-bugs.json", "scripts/build-code-graph.py", "scripts/graph-community-labels.py"]))
     before = {p: digest(root / p) for p in inputs}
     print(f"Scope: {len(code)} code, {len(docs)} documents, {len(config['build_files'])} build files", flush=True)
     # Fresh extraction, bounded workers, no reuse of potentially stale semantic cache.
@@ -243,11 +244,14 @@ def build(root, out):
     projection.add_nodes_from(nodes)
     projection.add_edges_from((e["source"], e["target"]) for e in normalized)
     communities = cluster(projection)
+    spec = importlib.util.spec_from_file_location("community_labels", ROOT / "scripts/graph-community-labels.py")
+    naming = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(naming)
+    prior = json.loads((out / "graph.json").read_text())["nodes"] if (out / "graph.json").exists() else []
+    descriptions = naming.describe(nodes, communities, normalized, prior)
     for cid, members in communities.items():
-        paths = Counter(nodes[n].get("source_file", "").rsplit("/", 1)[0] for n in members)
-        label = paths.most_common(1)[0][0] or "External interfaces"
         for nid in members:
-            nodes[nid].update(community=cid, community_name=label)
+            nodes[nid].update(community=cid, community_name=descriptions[cid]["label"], community_label_version=1)
     # No write occurs until source stability and known-path validation succeed.
     after = {p: digest(root / p) for p in inputs}
     if before != after:
@@ -276,6 +280,7 @@ def build(root, out):
     if not to_html(display, communities, str(out / "graph.html"),
                    community_labels={cid: nodes[members[0]]["community_name"] for cid, members in communities.items()}, node_limit=5000):
         raise ValueError("community HTML export failed")
+    naming.enrich_html(out / "graph.html", descriptions)
     relations = Counter(e["relation"] for e in normalized)
     report = ["# EFS defect-navigation graph", "", f"Source base: `{manifest['source_commit']}`; exact inputs: `source-manifest.json`.",
               f"Graphify {version}; {len(nodes):,} nodes, {len(normalized):,} directed typed edges, {len(communities)} communities.",

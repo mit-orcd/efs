@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `f21404bfa7dd45ba5c303a1a91c7b666ebc837c7`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,148 nodes, 70,843 directed typed edges, 564 communities.
+Source base: `06117153e17a5cb3168e8d84f8d75426306d5230`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,183 nodes, 70,993 directed typed edges, 555 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,22 +19,22 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 26467
+- `calls`: 26514
 - `case_of`: 116
-- `contains`: 25900
-- `defines`: 1973
+- `contains`: 25954
+- `defines`: 1972
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7097
-- `imports_from`: 899
-- `indirect_call`: 688
+- `imports`: 7113
+- `imports_from`: 901
+- `indirect_call`: 690
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 2379
-- `method`: 640
-- `rationale_for`: 1293
+- `mentions_symbol`: 2388
+- `method`: 645
+- `rationale_for`: 1294
 - `references`: 2120
-- `references_path`: 1131
+- `references_path`: 1146
 - `regression_for`: 8
 - `uses`: 90
 
@@ -46,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1586}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1588}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.

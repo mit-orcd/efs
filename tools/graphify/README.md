@@ -85,3 +85,22 @@ the report. It does not infer lock ownership, state writes, barriers, durability
 ordering or happens-before. Those need source inspection, targeted annotations
 and executable tests; inventing such edges would make defect searches misleading.
 The graph does not replace the full test suite or live TCP/RDMA gates.
+
+### Community overview names
+
+Community dots are structural clusters, not directories or proven architectural
+boundaries. Names use the dominant file's responsibility (a small reviewed map
+in `scripts/graph-community-labels.py`), falling back to its filename. Duplicate
+topics add a central symbol, then an anchor hash if necessary. Documentation,
+tests and interfaces have distinct prefixes. Tooltips show node count, dominant
+files, representative symbols and neighboring communities with edge counts.
+
+Numeric cluster IDs are not stable identities. A prior label is retained only
+with a mutual majority of shared nodes and an unchanged topic; splits, merges
+and changed responsibilities can legitimately change names. The HTML adapter
+checks the pinned export structure and refuses an unfamiliar overview. No LLM
+labels or additional inferred call edges are introduced.
+
+Check naming, identity changes and tooltip escaping with
+`python3 tests/test_graph_community_labels.py`, in addition to the canonical
+rebuild and `python3 tests/test_code_graph.py`.
