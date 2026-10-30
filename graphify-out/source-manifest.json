@@ -492,6 +492,7 @@
     "src/sim/sim_sess.c": 18,
     "src/sim/sim_txn.c": 34,
     "src/wire/wire.c": 11,
+    "tests/b6_full_oracle.py": 6,
     "tests/clean_cluster.sh": 4,
     "tests/cluster.sh": 12,
     "tests/d39_model.py": 314,
@@ -837,8 +838,9 @@
     "tests/test_apply_wait.c": 1,
     "tests/test_atomic_append_host.py": 2,
     "tests/test_attribute_authority_errno.py": 2,
+    "tests/test_b6_full_oracle.py": 1,
     "tests/test_b6_log_accounting.py": 2,
-    "tests/test_b6_unavailable.py": 37,
+    "tests/test_b6_unavailable.py": 47,
     "tests/test_b_checks_driver.py": 4,
     "tests/test_b_geometry.c": 15,
     "tests/test_b_geometry.py": 20,
@@ -1380,7 +1382,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "dd95781512e9eb482708ed4ec5b438c0e963e5fa07ef286a28d5ec6ccfecfc93",
+    "Makefile": "7912889f56a331faa2897b9c0495a42e903c6dada661c017003835a0348d848b",
     "README.md": "15b25db8e5545f8c3c67ef24e217ae50a820e158bbaa8af416dba7c20885855d",
     "docs/backlog/crash-safe-durable-versions.md": "5ddb729585e675eabfa3e0bfa71caaac14286b7a8bf3646fbac8e74b6aef592f",
     "docs/backlog/decision-contracts.md": "a952ac8bd45907895542fbaa9dc9119735c89241c389d3049885a537b93bc04f",
@@ -1399,7 +1401,7 @@
     "docs/how-it-works/testing.md": "52cab1ce06e7ab3e01814482475c2523e24e56826647bb4f664b6210b2e4f569",
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "f952fb3dc48061c7fc7b89c88f869f384af0fefb3609831e5c3ed331f121270b",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "37cccfc93e2187c3b4c796831bf36ed14cc5eb9dcb67ab09375db47f27724905",
     "docs/status/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
     "docs/status/alpha-1.1-consolidation.md": "bd0cbe68dab646b3a433afa10500dab2c3d80e0c0f9f1d55cf20f18dd6f523df",
     "docs/status/d39-consolidated-model-20261023.md": "343d1f6023da489ccf29b84f786919ec076c191ea27bf56f5602c0d0fc2b5a6c",
@@ -1906,6 +1908,7 @@
     "src/sim/sim_sess.c": "465fd68e122f53b66410078caf747c7c7e99e1aab1c0c296e7c7a9953247da6a",
     "src/sim/sim_txn.c": "70d1ab5fe159586c01bc097db8dc795c3ca849df6761b88d7b1dbb32d7bf15e2",
     "src/wire/wire.c": "1ec4eae9cc90ae4b4f9ce1668f478f2710b36a5391e8cf4b09b8a839f6ddd626",
+    "tests/b6_full_oracle.py": "21603c554fb69fca8728a13dddde8fb9d4b24874f27bfe58ed9b09e87ca6d9a3",
     "tests/clean_cluster.sh": "46985882b3a9503f3a3da4cd138dda21ea4cacc04211fbb1d9d312f54280b2ed",
     "tests/cluster.sh": "606f5dba9552323a0b0d0bad91e40d6e74a98f55a8c4dbcfa3253f60468d3304",
     "tests/d39_model.py": "dcdeaa9a9c5875166bb436cc6a8918603be8b8b1bda2080b8da8e6a72fe8ba76",
@@ -2251,8 +2254,9 @@
     "tests/test_apply_wait.c": "879841b4c363f9ed04d03f2a32f5dadfcea4b01caa7313929eeedf120f9024f2",
     "tests/test_atomic_append_host.py": "1b961e942abf2f072be3f784aec134996cc5a90543f1be7d4f4a893547a21638",
     "tests/test_attribute_authority_errno.py": "dcdee83dfbfcc926ef9217d7a65c4426e1c69d6abd09f303a38a4b970a3d32cc",
+    "tests/test_b6_full_oracle.py": "4c0fb54931e828d056678802f706097a51cee1aad4f74ecbc0cca24a2da2d648",
     "tests/test_b6_log_accounting.py": "905c39091930e784841da5028e3dc4fd4e60a105090da40c25378d43c9fd69d3",
-    "tests/test_b6_unavailable.py": "b3f4fe92218f26ef7d5b5c7f501e41d51fc4cc12553578a9723c5eed11bb4e97",
+    "tests/test_b6_unavailable.py": "a66c12e2e5487d04a10fdcf04d5ead094c05b71a4e29c114a428fe302cb02a2e",
     "tests/test_b_checks_driver.py": "236166dcaef5dc0a9f5e771f4dbf29d40463d8ff89a0ccdaa9bc886064e87d1e",
     "tests/test_b_geometry.c": "7cba398dece45479a667e20b7a0a248bf1e2f742d2d3a989212ed54b68f9caa3",
     "tests/test_b_geometry.py": "2abbae2bd755246af2829708c28398e60adfd74d4983420e2892157c8d462c61",
@@ -2792,10 +2796,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1737
+    "calls": 1742
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "6f881d68222044aa3c45b0c4dda4f1558a5bb66c"
+  "source_commit": "d7662f1836927c5e7ddd06fe192ee3f093fc905a"
 }
