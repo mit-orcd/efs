@@ -1186,8 +1186,54 @@ static void test_exact_prepare_bounds(void)
     efs_kv_mem_free(kv);
 }
 
+static void be64(uint8_t *p,uint64_t v){for(int i=7;i>=0;i--){p[i]=(uint8_t)v;v>>=8;}}
+static uint64_t rd64(const uint8_t *p){uint64_t v=0;for(int i=0;i<8;i++)v=(v<<8)|p[i];return v;}
+static void test_apply_allocator_reservation(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();
+    struct efs_txid t={{91}}, other={{92}};
+    struct efs_txn_parts parts=two(1,2), wrong=two(1,3);
+    uint8_t key[EFS_KV_KEY_MAX],old[8],next[8],out[8],ik[EFS_KV_KEY_MAX];
+    uint32_t kl=0,n=8,il=0;
+    CHECK(efs_kv_key_alloc(1,key,&kl)==EFS_OK,"allocator key");
+    be64(old,4097);be64(next,8193);
+    CHECK(efs_kv_put(kv,key,kl,old,8)==EFS_OK,"initial watermark");
+    /* Negative control: every proposer-side CAS loses to the ordinary
+     * allocation queued ahead of it, even though every retry recaptures. */
+    for (unsigned i=0;i<16;i++) {
+        n=8;CHECK(!efs_kv_get(kv,key,kl,old,&n),"recapture watermark");
+        uint64_t value=rd64(old)+4096;be64(next,value);
+        CHECK(!efs_kv_put(kv,key,kl,next,8),"ordinary allocation advances");
+        CHECK(efs_txn_prepare_excl_value(kv,&t,&parts,key,kl,old,8,
+                  EFS_TXN_PUT,next,8)==EFS_ERR_STALE,"old CAS starves under queued allocation");
+    }
+    CHECK(efs_txn_apply_prepare(kv,EFS_TXN_ALLOC_INODE,&t,&parts,key,kl,NULL,0)==EFS_OK,
+          "apply-time allocator reserves despite changed proposer snapshot");
+    n=8;CHECK(!efs_txn_owned_excl(kv,&t,&parts,key,kl,out,&n) && n==8 &&
+                  rd64(out)==rd64(next)+4096,"reservation returns unique next watermark");
+    CHECK(!efs_txn_apply_prepare(kv,EFS_TXN_ALLOC_INODE,&t,&parts,key,kl,NULL,0),"same transaction idempotent");
+    CHECK(efs_txn_apply_prepare(kv,EFS_TXN_ALLOC_INODE,&other,&parts,key,kl,NULL,0)==EFS_ERR_BUSY,"other owner refused");
+    n=8;CHECK(efs_txn_owned_excl(kv,&other,&parts,key,kl,out,&n)==EFS_ERR_BUSY,"cannot read foreign reservation");
+    n=8;CHECK(efs_txn_owned_excl(kv,&t,&wrong,key,kl,out,&n)==EFS_ERR_STALE,"parts cannot change");
+    CHECK(efs_txn_key_busy(kv,key,kl)==EFS_ERR_BUSY,"ordinary allocation blocked by intent");
+    CHECK(!efs_txn_resolve(kv,&t,1,EFS_TXN_ABORT),"abort reservation");
+    n=8;CHECK(!efs_kv_get(kv,key,kl,out,&n)&&!memcmp(out,next,8),"abort does not advance watermark");
+    CHECK(!efs_txn_apply_prepare(kv,EFS_TXN_ALLOC_INODE,&other,&parts,key,kl,NULL,0),"new owner reserves");
+    CHECK(!efs_txn_resolve(kv,&other,1,EFS_TXN_COMMIT),"commit reservation");
+    n=8;CHECK(!efs_kv_get(kv,key,kl,out,&n)&&rd64(out)==rd64(next)+4096,"commit advances once");
+    CHECK(efs_txn_apply_prepare(kv,EFS_TXN_ALLOC_INODE,&t,&parts,key,kl,out,1)==EFS_ERR_UNSUPPORTED,"allocator payload must be empty");
+    CHECK(!efs_txn_key_busy(kv,key,kl),"malformed wire leaves no intent");
+    key[2]=EFS_KV_KIND_INODE;
+    CHECK(efs_txn_apply_prepare(kv,EFS_TXN_ALLOC_INODE,&t,&parts,key,kl,NULL,0)==EFS_ERR_UNSUPPORTED,"wrong key kind refused");key[2]=EFS_KV_KIND_ALLOC;
+    CHECK(!efs_kv_key_intent(key,kl,ik,&il),"intent key");
+    CHECK(!efs_kv_put(kv,ik,il,(uint8_t*)"bad",3),"inject corrupt intent");
+    n=8;CHECK(efs_txn_owned_excl(kv,&t,&parts,key,kl,out,&n)==EFS_ERR_PROTO,"malformed owned intent refused");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_apply_allocator_reservation();
     test_atomic_prepare_pair();
     test_atomic_prepare_triple_bounds();
     test_full_fence_transaction();

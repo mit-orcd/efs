@@ -509,6 +509,34 @@ int efs_txn_prepare_excl_value(struct efs_kv *kv, const struct efs_txid *t,
     return efs_txn_prepare_excl(kv, t, p, key, klen, ver, op, value, vn);
 }
 
+int efs_txn_owned_excl(struct efs_kv *kv, const struct efs_txid *t,
+                        const struct efs_txn_parts *p, const uint8_t *key,
+                        uint32_t klen, uint8_t *value, uint32_t *length)
+{
+    uint8_t ik[KEY_MAX], buf[VAL_MAX];
+    uint32_t il=0, bn=sizeof(buf), vn=0;
+    struct efs_txid owner; struct efs_txn_parts parts;
+    const uint8_t *v; int op;
+    if (!kv || !t || !parts_ok(p) || !key || klen<3 || !value || !length)
+        return EFS_ERR_INVAL;
+    int rc=efs_kv_key_intent(key,klen,ik,&il);
+    if (rc==EFS_OK) rc=efs_kv_get(kv,ik,il,buf,&bn);
+    if (rc!=EFS_OK) return rc;
+    rc=parse_excl(buf,bn,&owner,&parts,&op,&v,&vn);
+    if (rc!=EFS_OK) return rc;
+    if (bn!=31u+4u*parts.n+vn) return EFS_ERR_PROTO;
+    int member=0;
+    for (unsigned i=0;i<parts.n;i++) member|=parts.shard[i]==key_shard(key);
+    if (!member) return EFS_ERR_PROTO;
+    if (!same_txid(owner.bytes,t)) return EFS_ERR_BUSY;
+    if (parts.n!=p->n || memcmp(parts.shard,p->shard,p->n*sizeof(p->shard[0])) ||
+        op!=EFS_TXN_PUT) return EFS_ERR_STALE;
+    if (*length<vn) return EFS_ERR_INVAL;
+    if (vn) memcpy(value,v,vn);
+    *length=vn;
+    return EFS_OK;
+}
+
 /* Stage the existing exact-value PREPARE implementation's intent PUTs.
  * No write reaches the real KV until every request passes. The participant
  * log serializes the read/validate/batch sequence, as for single PREPARE. */
@@ -834,6 +862,11 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
             return EFS_ERR_PROTO;
         return efs_txn_prepare_excl(kv, t, p, key, klen, expected, op,
                                     pay + 13, vlen);
+    }
+    case EFS_TXN_ALLOC_INODE: {
+        if (plen) return EFS_ERR_UNSUPPORTED;
+        int rc=efs_meta_apply_alloc_prepare(kv,t,p,key,klen);
+        return rc==EFS_ERR_PROTO ? EFS_ERR_UNSUPPORTED : rc;
     }
     case EFS_TXN_EXCL_VALUE: {
         uint32_t en, vn, bytes;

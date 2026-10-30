@@ -49,6 +49,7 @@
 #define EFS_TXN_RESERVED_9 9 /* reserved: PREPARE refuses it; never reuse */
 /* W77: one chunk's publication staged under the request-wide decision
  * (chunk key), or the FileID truncate pin (inode key). meta_apply.h. */
+#define EFS_TXN_ALLOC_INODE 12 /* apply selects and exclusively reserves one inode */
 #define EFS_TXN_PUBLISH 11
 
 #define EFS_TXN_UNDECIDED 0
@@ -131,6 +132,11 @@ int efs_txn_prepare_excl_value(struct efs_kv *kv, const struct efs_txid *t,
                                uint32_t klen, const uint8_t *expected_value,
                                uint32_t expected_len, int op,
                                const uint8_t *new_value, uint32_t new_len);
+/* Read only this transaction's exact EXCL PUT intent; another owner is BUSY.
+ * NOT_FOUND means no intent, never a transaction decision. */
+int efs_txn_owned_excl(struct efs_kv *, const struct efs_txid *,
+                        const struct efs_txn_parts *, const uint8_t *, uint32_t,
+                        uint8_t *, uint32_t *);
 /* Wire: op:u8, expected_len:u32, new_len:u32, expected bytes, new bytes;
  * lengths are big-endian; ABSENT contributes no expected bytes. */
 int efs_txn_encode_excl_value(uint8_t *out, uint32_t cap, uint32_t *len,

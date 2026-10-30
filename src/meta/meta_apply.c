@@ -1425,6 +1425,34 @@ int efs_meta_apply_peek_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next
     return EFS_OK;
 }
 
+int efs_meta_apply_alloc_prepare(struct efs_kv *kv, const struct efs_txid *t,
+                                  const struct efs_txn_parts *parts,
+                                  const uint8_t *key, uint32_t klen)
+{
+    if (!key || klen!=3 || key[2]!=EFS_KV_KIND_ALLOC ||
+        (((uint32_t)key[0]<<8)|key[1])>EFS_KV_SHARD_MASK) return EFS_ERR_PROTO;
+    uint32_t shard=((uint32_t)key[0]<<8)|key[1], n=8;
+    uint8_t old[8], value[8];
+    int rc=efs_txn_owned_excl(kv,t,parts,key,klen,value,&n);
+    if (rc==EFS_OK) {
+        /* Idempotent retry keeps its original reservation. */
+        if (n!=8 || rd64(value)<(1u<<EFS_KV_SHARD_BITS) ||
+            efs_kv_inode_shard(rd64(value))!=shard) return EFS_ERR_PROTO;
+        return EFS_OK;
+    }
+    if (rc!=EFS_ERR_NOT_FOUND) return rc;
+    efs_ino_t ino, next;
+    rc=alloc_next_free(kv,shard,&ino,&next);
+    if (rc!=EFS_OK) return rc;
+    if (next<=ino) return EFS_ERR_PROTO;
+    n=sizeof(old); rc=efs_kv_get(kv,key,klen,old,&n);
+    if (rc==EFS_ERR_NOT_FOUND) n=EFS_TXN_ABSENT;
+    else if (rc!=EFS_OK) return rc;
+    else if (n!=sizeof(old)) return EFS_ERR_PROTO;
+    be64(value,next);
+    return efs_txn_prepare_excl_value(kv,t,parts,key,klen,old,n,EFS_TXN_PUT,value,sizeof(value));
+}
+
 /* Resolve nearest explicit policy under one participant's log. This staged
  * helper refuses another group's ancestors, rather than reading follower
  * state as policy authority. Cross-group inheritance needs a guarded txn. */

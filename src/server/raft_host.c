@@ -7209,7 +7209,7 @@ static uint32_t pack_prep_raw(uint8_t *out, int kind, const struct efs_txid *t,
     out[n++] = (uint8_t)klen;
     memcpy(out + n, key, klen);
     n += klen;
-    memcpy(out + n, pay, plen);
+    if (plen) memcpy(out + n, pay, plen);
     return n + plen;
 }
 
@@ -18697,6 +18697,30 @@ static int host_prep_alloc_value(struct efs_raft_host *h, uint32_t shard,
                          payload, bytes, ref, hint);
 }
 
+/* Select at the allocator's serialized apply point, not from a proposer
+ * snapshot that ordinary CREATE can outrun on every retry. The intent owns
+ * the watermark until COMMIT/DROP; no dependent row exists before it. */
+static int host_mkdir_alloc_reserve(struct efs_raft_host *h, uint32_t shard,
+    const struct efs_txid *t, const struct efs_txn_parts *parts,
+    efs_ino_t *ino, int *hint)
+{
+    uint8_t key[EFS_KV_KEY_MAX], value[8];
+    uint32_t length=0, bytes=sizeof(value);
+    struct host_idx_ref ref;
+    int rc=efs_kv_key_alloc(shard,key,&length);
+    if (rc==EFS_OK) rc=host_prep_raw(h,shard,EFS_TXN_ALLOC_INODE,t,parts,
+                                    key,length,NULL,0,&ref,hint);
+    if (rc==EFS_OK) rc=host_wait_refs(h,&ref,1,hint);
+    if (rc==EFS_OK) rc=efs_txn_owned_excl(h->kv,t,parts,key,length,value,&bytes);
+    if (rc!=EFS_OK) return rc;
+    if (bytes!=8) return EFS_ERR_PROTO;
+    uint64_t next=rd64be(value);
+    if (next<(1u<<EFS_KV_SHARD_BITS) ||
+        efs_kv_inode_shard(next)!=shard) return EFS_ERR_PROTO;
+    *ino=next-(1u<<EFS_KV_SHARD_BITS);
+    return *ino && *ino!=EFS_ROOT_INO ? EFS_OK : EFS_ERR_PROTO;
+}
+
 /* Parent (or moved-dir) inode row: nlink/nents delta, times MAX,
  * used_shards OR, parent SET. Replaces the EXCL full-image PUT that lost
  * concurrent log-path updates and serialized every op in one directory. */
@@ -20141,16 +20165,15 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     struct efs_txn_parts parts;
     struct efs_txn_ino_delta pd;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
-    uint8_t k_alloc[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
+    uint8_t k_dseq[EFS_KV_KEY_MAX];
     uint8_t v_dent[EFS_META_DENT_BYTES];
-    uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
-    uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
+    uint8_t v_cino[EFS_META_INO_BYTES];
+    uint32_t kd = 0, kpi = 0, kci = 0, ks = 0;
     uint32_t psh, csh, dsh = 0, coord;
     uint64_t dver = 0, salt = 0;
-    uint8_t alloc_before[EFS_META_ALLOC_BYTES];
-    uint32_t alloc_before_bytes = 0;
     uint64_t now;
     efs_ino_t next = 0, ino = 0;
+    int alloc_reserved = 0;
     uint8_t mkcmd[HOST_CMD_MAX], p_lane = 0;
     uint32_t mklen = 0;
     struct host_idx_ref prefs[8];
@@ -20287,15 +20310,20 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     }
     if (rc == EFS_OK) {
         stage = 6;
-        rc = host_alloc_capture(h, csh, k_alloc, &ka, alloc_before, &alloc_before_bytes);
-        if (rc == EFS_OK)
-            rc = efs_meta_apply_peek_alloc(h->kv, csh, &next);
+        memset(&parts,0,sizeof(parts));
+        rc=host_parts_add(&parts,psh);
+        if (rc==EFS_OK) rc=host_parts_add(&parts,csh);
+        if (rc==EFS_OK) rc=host_parts_add(&parts,dsh);
+        if (rc==EFS_OK) {
+            fill_txid(h,&t);
+            rc=host_mkdir_alloc_reserve(h,csh,&t,&parts,&ino,&hint);
+            if (rc!=EFS_OK) (void)host_drop_parts(h,&t,&parts,&hint);
+            else alloc_reserved=1;
+        }
     }
     if (rc == EFS_OK) {
-        ino = next;
         if (efs_kv_inode_shard(ino) != csh)
             rc = EFS_ERR_PROTO;
-        next = ino + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
     }
     if (rc == EFS_OK) {
         memset(&crow, 0, sizeof(crow));
@@ -20330,7 +20358,6 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         rc = efs_meta_pack_dentry(&dent, v_dent, sizeof(v_dent));
         if (rc == EFS_OK)
             rc = efs_meta_pack_inode(&crow, v_cino, sizeof(v_cino));
-        wr64be(v_alloc, next);
     }
     if (rc == EFS_OK) {
         stage = 7;
@@ -20347,16 +20374,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
     }
     if (rc == EFS_OK) {
-        memset(&parts, 0, sizeof(parts));
-        rc = host_parts_add(&parts, psh);
-        if (rc == EFS_OK)
-            rc = host_parts_add(&parts, csh);
-        if (rc == EFS_OK)
-            rc = host_parts_add(&parts, dsh);
-        if (rc != EFS_OK)
-            goto mkdir_done;
         stage = 9;
-        fill_txid(h, &t);
         struct host_command_cohort cohort;
         phase=prof?now_us_():0;
         host_command_cohort_begin(&cohort,h);
@@ -20397,12 +20415,6 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                                      sizeof(v_cino), &prefs[np], &hint);
                 if (rc == EFS_OK)
                     np++;
-                if (rc == EFS_OK)
-                    rc = host_prep_alloc_value(h, csh, &t, &parts,
-                                         k_alloc, ka, alloc_before, alloc_before_bytes,
-                                         v_alloc, &prefs[np], &hint);
-                if (rc == EFS_OK)
-                    np++;
             }
         }
         rc=host_command_cohort_end(&cohort,rc,&hint);
@@ -20410,9 +20422,11 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, np, &hint);
         if(prof)wait_us=now_us_()-phase;
-        if (rc != EFS_OK)
+        if (rc != EFS_OK) {
             (void)host_drop_parts(h, &t, &parts, &hint);
-        else {
+            alloc_reserved=0;
+        } else {
+            alloc_reserved=0; /* decision owner/finisher takes over, even if ambiguous */
             stage = 10;
             coord = efs_txn_coordinator(&t, &parts);
             phase=prof?now_us_():0;
@@ -20421,6 +20435,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         }
     }
 mkdir_done:
+    if (alloc_reserved && rc!=EFS_OK) (void)host_drop_parts(h,&t,&parts,&hint);
     if (rc == EFS_OK) {
         stage = 11;
         rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_read_coord, &txn, &dent);
