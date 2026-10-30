@@ -71,7 +71,8 @@ int main(void){
  for(unsigned i=0;i<4096;i++){assert(scan_count[i]<=1);if(i>=100&&i<200)hot+=scan_count[i];else cold+=scan_count[i];}
  assert(scans==HOST_REC_SHARDS && hot>=HOST_REC_SHARDS/2 && cold>=HOST_REC_SHARDS/2);
  host_txn_recover_pass(&host);assert(scans==2*HOST_REC_SHARDS);
- for(unsigned i=0;i<4096;i++)assert(scan_count[i]<=1);finish();
+ for(unsigned i=0;i<4096;i++){assert(scan_count[i]<=1);}
+ finish();
  /* Empty cold discovery lends its unused work to known intents. */
  reset();for(unsigned i=100;i<200;i++)host_rec_mark(&host,i);
  clock_ns+=6000000000ull;host_txn_recover_pass(&host);assert(scans==HOST_REC_SHARDS);finish();

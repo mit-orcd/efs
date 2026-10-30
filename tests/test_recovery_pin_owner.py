@@ -22,7 +22,7 @@ code=r'''
 #define HOST_REC_YIELD_US 1000
 #define EFS_RAFT_GROUP_SHARD 0
 #define EFS_RAFT_GROUP_SHARD2 2
-struct efs_raft_host {struct efs_kv *kv;pthread_mutex_t rec_mu;uint64_t rec_mark[4096];unsigned rec_scans;int running,gc_running;};
+struct efs_raft_host {struct efs_kv *kv;pthread_mutex_t rec_mu;uint64_t rec_mark[4096],rec_generation[4096];uint8_t rec_observed[4096];uint32_t rec_hot_next,rec_cold_next;unsigned rec_scans;int running,gc_running;};
 static int pin_only,decision_rc,recovered,swept;
 static uint64_t now_ns(void){return 100000000000ULL;}
 static uint64_t txid_ns(const struct efs_txid *t){(void)t;return 1;}
