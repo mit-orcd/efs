@@ -4,12 +4,14 @@ import argparse, hashlib, json, os, resource, subprocess, time, traceback
 from pathlib import Path
 p=argparse.ArgumentParser(description=__doc__)
 for key in ('private','source','base','output'):p.add_argument(key,type=Path)
-p.add_argument('commit');a=p.parse_args()
+p.add_argument('commit');p.add_argument('--run-id');a=p.parse_args()
+run_id=a.run_id or a.commit
+assert run_id.replace('-','').isalnum() and run_id.startswith(a.commit)
 private=a.private.resolve();source=a.source.resolve();base=a.base.resolve();out=a.output.absolute()
 assert private.name=='efs-taskBB-20261029' and private.stat().st_uid==os.getuid()
 assert private in source.parents and private in base.parents and private in out.parents
 assert not out.exists();out.mkdir()
-state=dict(verdict='RUNNING',source=a.commit,commands=[])
+state=dict(verdict='RUNNING',source=a.commit,run_id=run_id,commands=[])
 env={k:v for k,v in os.environ.items() if not k.startswith('EFS_')}
 env.update(EFS_GIT_ID=a.commit,EFS_GIT_DESCRIBE=a.commit,EFS_GIT_BRANCH='agent/devel-bb',EFS_TRANSPORT='tcp')
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
@@ -17,7 +19,7 @@ def save():
  t=out/'state.tmp';t.write_text(json.dumps(state,indent=2)+'\n');t.replace(out/'state.json')
 def no_core():resource.setrlimit(resource.RLIMIT_CORE,(0,0))
 def run(name,argv,extra=None,timeout=900,negative=False):
- state['current']=name;save();tmp=private/('tmp-'+a.commit)/name;tmp.mkdir(parents=True)
+ state['current']=name;save();tmp=private/('tmp-'+run_id)/name;tmp.mkdir(parents=True)
  e=dict(env,TMPDIR=str(tmp),**(extra or {}));start=time.monotonic();log=out/(name+'.log')
  with log.open('x') as f:
   f.write(json.dumps(dict(argv=list(map(str,argv)),extra=extra or {},tmp=str(tmp)))+'\n');f.flush()
@@ -41,11 +43,11 @@ try:
  run('unit-asan-ubsan',['python3','tests/test_client_metadata_authority.py'],extra={'CC':'gcc -fsanitize=address,undefined -fno-omit-frame-pointer','ASAN_OPTIONS':'detect_leaks=1:halt_on_error=1','UBSAN_OPTIONS':'halt_on_error=1:print_stacktrace=1'})
  run('matrix',['python3','tests/live/bb_overlay_authority.py','--source',source,'--output',out/'matrix'],timeout=600)
  matrix=json.loads((out/'matrix/result.json').read_text());assert matrix['verdict']=='PASS' and not matrix['cleanup_errors'],matrix
- roots=[private/('gc-'+a.commit+'-'+side) for side in ('a','b')]
+ roots=[private/('gc-'+run_id+'-'+side) for side in ('a','b')]
  for path in roots:path.mkdir()
  text=run('gc-posix',['python3','tests/live/gc_reclamation.py','--transport','tcp','--root',roots[0],'--root',roots[1],'--port','19950','--posix'],timeout=3600)
  assert 'GC reclamation PASS' in text and 'POSIX suite: 218/218 pass' in text and 'POSIX 2-client: 72/72 pass' in text,text[-3000:]
- state['current']='full-gate';save();tmp=private/('full-'+a.commit);tmp.mkdir();e=dict(env,TMPDIR=str(tmp),EFS_TEST_TARGET='test-all',EFS_TEST_JOBS='8',EFS_BUILD_JOBS='8')
+ state['current']='full-gate';save();tmp=private/('full-'+run_id);tmp.mkdir();e=dict(env,TMPDIR=str(tmp),EFS_TEST_TARGET='test-all',EFS_TEST_JOBS='8',EFS_BUILD_JOBS='8')
  start=time.monotonic()
  with (out/'full-gate.log').open('x') as f:rc=subprocess.run(['bash','scripts/make_test_summary.sh'],cwd=source,env=e,stdout=f,stderr=subprocess.STDOUT,timeout=7200).returncode
  state.update(gate_rc=rc,gate_elapsed_s=time.monotonic()-start,gate_summary=(source/'summary.txt').read_text());save()

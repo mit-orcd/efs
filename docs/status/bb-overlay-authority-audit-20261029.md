@@ -56,6 +56,17 @@ layout is not what authorizes an attribute answer: later reads need their own
 mapping/view checks. Local alias/name tables are not server namespace replicas.
 AW/AX own their index performance; this audit does not alter those indexes.
 
+Remaining local-row uses in FUSE are intentional hints/informational views:
+virtual stat presentation after its separate access check, directory-handle
+`.`/`..` presentation, immutable symlink type/length, opendir's type check
+(readdir independently refreshes permissions before enumeration), a pre-truncate
+size for kernel invalidation, and the reply fallback for a known committed
+CREATE/MKDIR. They do not grant a new DAC/namespace mutation. The stale comment
+claiming strict refresh maps every failure to NOT_FOUND is corrected too.
+Fresh DAC checking and the later namespace RPC remain separate operations;
+this audit adds neither an atomic server-side ACL transaction nor hostile-client
+authentication to the existing trusted-network model.
+
 ## Demonstrated differences and repairs under qualification
 
 * **BB1:** `overlay_local_size` replaced a fresh regular inode with the entire
@@ -226,3 +237,43 @@ source. Runs do not overlap. Both outputs and the queue's screen transcript
 remain under the existing private/raw roots. Hardware source `791d57787` is
 built separately on node9900; live checks still require its own closed
 xorinox zero-failure proof. No preceding gate can qualify the new source.
+
+`17027103e` closed: **TOTAL 553 FAIL 0 NOTRUN 10 STATUS INCOMPLETE
+(932s) OVERBUDGET 1 BUILD 0s**; the sole advisory overrun is K22 leader
+admission 109.9/90 s. The cold-cache negative control still fails this source,
+so it does not close BB. Its untouched-base truncate-prefix test PASS is
+retained in `base-truncate-prefix.log`, confirming the earlier failure was
+the adapter added by this branch. Serialized `791d57787` qualification started
+only after that predecessor closed and its process guard passed.
+
+## Final-source run stopped on POSIX deadlines; foreign overlap observed
+
+`791d57787`: native controls, targeted ASan/UBSan/leak and the exact mounted
+matrix **8/8 PASS**. GC's core POSIX phase **216/218 FAIL**: unchanged 30 s
+deadlines expired for `concurrent_appends_two_proc` and
+`mtime_monotonic_many_writes`. Peer/full gates were NOTRUN because the
+controller stopped. Original state, logs and stores remain at
+`qualification-791d57787/` and `gc-791d57787-a/gc-_7fiiul7/`; no error is
+waived and no deadline/workload is changed. Own processes/mounts retired.
+
+Read-only all-user inspection found another agent's `efs-k42-gate` running
+on xorinox: its screen/test controller and many daemon/mount fixtures overlap
+this run. Snapshot `~/efs-artifacts/taskBB-20261029/overlap-791d57787.json`
+records PID, UID, command, cwd and boot-derived start times (48 foreign
+processes at capture). This demonstrates overlap, **not causation** for the
+timeouts. The existing user's intel-mnt client and the K42 cluster were
+never stopped or changed.
+
+Next is one explicit guarded comparison after the competing gate ends:
+`tests/measure/bb_quiet_qualify.py PRIVATE SOURCE BASE NEW_OUTPUT 791d57787`.
+It waits at most four hours for 60 seconds without observed foreign test/build
+work, then runs untouched-base GC/core/peer and the unchanged candidate
+qualification sequentially with fresh `791d57787-quiet1` fixture paths.
+The existing tested Task-I all-user guard samples every 10 s throughout;
+overlap or unknown metadata prevents quiet qualification. The single resident
+intel-mnt client is identified by PID/start time, UID, endpoint and mount and
+its CPU ticks recorded; it is not an arbitrary ignore rule. This is sampled
+observation, not an exclusive-host lease. This changed precondition justifies
+the planned comparison; the original FAIL stays FAIL. No retry-until-green.
+The hardware driver additionally requires the closed quiet comparison receipt
+and matching candidate-state hash before admitting this continuation.

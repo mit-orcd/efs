@@ -5808,10 +5808,9 @@ static int lookup_fill(fuse_ino_t ino, struct fuse_entry_param *e,
 }
 
 /* The mutation already committed and dual-applied `ino`. lookup_fill with
- * no open fh always refreshes, and stat_refresh maps every RPC failure to
- * NOT_FOUND, so the app saw ENOENT for a directory that existed
- * (same_parent_storm: mkdir ENOENT, the following rmdir succeeded).
- * Reply the local row instead. */
+ * no open fh refreshes strictly; a transient follow-up GETATTR failure must
+ * not turn that known committed mutation into a failed creation reply.
+ * Its local row is a reply fallback, never authority for a new operation. */
 static int lookup_fill_committed(fuse_ino_t ino, struct fuse_entry_param *e,
                                  const char *op, fuse_ino_t parent,
                                  const char *name)

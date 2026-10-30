@@ -1,12 +1,13 @@
 # Project status — work queue and evidence
 
 [Task BB — client overlay authority](bb-overlay-authority-audit-20261029.md):
-**RUNNING**, branch `agent/devel-bb`, K59–K61. Untouched-base matrix 5/8 FAIL;
-repaired matrix 8/8 PASS, POSIX core 218/218 and peer 72/72 PASS. First full
-gate 553 commands / 1 FAIL / 10 host-limited NOTRUN: missing test adapter,
-fixed without changing its assertions. Fresh source `17027103e` qualification
-running; private node9900 build complete, TCP/RDMA live stage gated on the
-closed xorinox result. All failed candidates retained; no closure.
+**RUNNING**, branch `agent/devel-bb`, K59–K61. Base matrix 5/8 FAIL;
+source `791d57787` matrix 8/8 and targeted sanitizers PASS, then core POSIX
+216/218 FAIL on two unchanged 30 s deadlines. Another agent's K42 gate was
+observed overlapping; causation unproven. All failures retained. A guarded
+base/candidate comparison waits for a quiet xorinox window; hardware remains
+blocked on that result. Previous-source full gate 553/0 FAIL/10 host-limited
+NOTRUN does not qualify the final cold-cache fix. No closure.
 
 [K55 — slow storage COMMIT](k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,

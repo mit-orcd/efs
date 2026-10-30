@@ -22,7 +22,7 @@ def add(path,label):
 def direct(directory,prefix):
  if directory.is_dir():
   for f in directory.iterdir():
-   if f.is_file() and not f.is_symlink() and f.suffix in ('.log','.json','.txt','.tsv','.bin'):add(f,prefix+'/'+f.name)
+   if f.is_file() and not f.is_symlink() and f.suffix in ('.log','.json','.jsonl','.txt','.tsv','.bin'):add(f,prefix+'/'+f.name)
 
 def matrix(directory,prefix):
  direct(directory,prefix)
@@ -31,7 +31,7 @@ def matrix(directory,prefix):
 def closed(directory):
  state=directory/'state.json'
  assert state.is_file(),state
- d=json.loads(state.read_text());assert d['verdict'] not in ('RUNNING',''),state
+ d=json.loads(state.read_text());assert d['verdict'] in ('FAIL','PASS_SCOPED','PASS_EXECUTED_WITH_HOST_LIMITS','PASS_SCOPED_OBSERVED_QUIET','PASS_SCOPED_SINGLE_HOST_HCA','BUILD_COMPLETE_NOT_QUALIFIED'),state
  return d
 
 if a.orcd:
@@ -44,7 +44,12 @@ if a.orcd:
   for case in (root/side).glob('gc-*'):direct(case,side+'/'+case.name)
 else:
  for d in sorted(root.glob('qualification-*')):
-  if d.is_dir():closed(d);direct(d,d.name);matrix(d/'matrix',d.name+'/matrix')
+  if d.is_dir():
+   closed(d);direct(d,d.name);matrix(d/'matrix',d.name+'/matrix')
+   if (d/'candidate').is_dir():
+    closed(d/'candidate');direct(d/'candidate',d.name+'/candidate');matrix(d/'candidate/matrix',d.name+'/candidate/matrix')
+   for side in ('base-a','base-b'):
+    for case in (d/side).glob('gc-*'):direct(case,d.name+'/'+side+'/'+case.name)
  for d in sorted(root.glob('base-matrix-*')):matrix(d,d.name)
  for d in sorted(root.glob('source-*')):
   for f in d.iterdir():

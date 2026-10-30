@@ -10,6 +10,7 @@ p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('private',type=Path);p.add_argument('commit')
 p.add_argument('--phase',choices=('build','qualify'),required=True)
 p.add_argument('--loopback-proof',type=Path)
+p.add_argument('--quiet-proof',type=Path)
 p.add_argument('--fuse-prefix',type=Path,default=Path('/data1/efs/deps/libfuse'))
 a=p.parse_args();root=a.private.resolve();source=root/'src';out=root/a.phase
 assert root.parent==Path('/tmp') and root.name=='efs-taskBB-orcd-'+a.commit
@@ -50,6 +51,12 @@ try:
   proof=json.loads(a.loopback_proof.read_text())
   assert proof['source']==a.commit and proof['verdict'] in ('PASS_SCOPED','PASS_EXECUTED_WITH_HOST_LIMITS')
   assert proof['gate_rc'] in (0,3) and ' FAIL 0 ' in proof['gate_summary']
+  if proof.get('run_id','').endswith('-quiet1'):
+   assert a.quiet_proof and a.quiet_proof.is_file(),'closed quiet comparison required'
+   quiet=json.loads(a.quiet_proof.read_text())
+   assert quiet['source']==a.commit and quiet['verdict']=='PASS_SCOPED_OBSERVED_QUIET' and not quiet['overlap']
+   assert quiet['candidate_state_sha256']==sha(a.loopback_proof)
+   state['quiet_proof_sha256']=sha(a.quiet_proof)
   build=json.loads((root/'build/state.json').read_text())
   assert build['source']==a.commit and build['verdict']=='BUILD_COMPLETE_NOT_QUALIFIED'
   assert all(sha(source/n)==h for n,h in build['binary_sha256'].items())
@@ -70,6 +77,7 @@ try:
   for n in ('ga','gb'):(root/n).mkdir()
   text=run('gc-posix-rdma',['python3','tests/live/gc_reclamation.py','--transport','rdma','--root',root/'ga','--root',root/'gb','--port','19960','--posix'],transport='rdma',timeout=3600)
   assert 'GC reclamation PASS' in text and 'POSIX suite: 218/218 pass' in text and 'POSIX 2-client: 72/72 pass' in text,text[-3000:]
+  assert all(sha(source/n)==h for n,h in build['binary_sha256'].items())
   state['verdict']='PASS_SCOPED_SINGLE_HOST_HCA'
 except BaseException:
  state.update(verdict='FAIL',error=traceback.format_exc());raise
