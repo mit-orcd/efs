@@ -122,3 +122,22 @@ both owned mounts and daemons retired. Candidate matrix, eviction/reload,
 reordered-response component schedule, POSIX core/peer suites, sanitizers,
 full test gate and ORCD TCP/RDMA are still **NOTRUN**. Do not infer a completed
 BB audit or alpha PASS from the candidate source alone.
+
+## First candidate failure (retained, not a passing qualification)
+
+`ff91e2b9d`: native controls and ASan/UBSan/leak PASS; mounted matrix
+**7 PASS / 1 FAIL**, clean shutdown verified. The remaining reader test had
+correct fstat EOF but `pread` still returned bytes beyond it: stat-open updated
+the answer without updating the clean staging row that `client_read_run` uses
+for its length bound. FOPEN_DIRECT_IO does not clamp that read to kernel i_size.
+The failed fixture/result stays at
+`~/efs-taskBB-20261029/qualification-ff91e2b9d/matrix`, logs at
+`~/efs-artifacts/taskBB-20261029/qualification-ff91e2b9d.log`. Full gate was
+NOTRUN because this demonstrated failure stopped qualification.
+
+The next candidate uses existing adoption/invalidation for a clean open file
+before returning fresh fstat data; unpublished bodies still own their local
+EOF. A production-block regression now checks the staging EOF and invalidation,
+not only fstat output. Each candidate gets unique TMPDIR/GC/full-gate paths;
+none reopens or overwrites failed captures. ORCD login's previous master has
+expired and now requires user interactive authentication; xorinox work continues.

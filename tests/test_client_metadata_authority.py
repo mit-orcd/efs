@@ -83,7 +83,8 @@ int main(int argc,char **argv){struct efs_inode out;assert(argc==2);
  }
  reset();efs_client_adopt_lookup(&reply,&out);authority(&out);assert(out.size==8192 && !drops);
  reset();assert(!efs_client_stat_refresh(42,&out));authority(&out);assert(out.size==8192 && calls==1);
- reset();assert(!efs_client_stat_open(42,&out));authority(&out);assert(out.size==8192 && calls==1);
+ reset();assert(!efs_client_stat_open(42,&out));authority(&out);assert(out.size==8192 && calls==1 && !drops);
+ reset();dirty=0;reply.mtime=11;assert(!efs_client_stat_open(42,&out));assert(out.size==0 && staged.size==0 && drops==1);
  /* Open-handle data remains available on an unavailable authority; it is
   * explicitly NOT an authorization row. Fresh refresh must report errors. */
  int errors[]={EFS_ERR_BUSY,EFS_ERR_IO,EFS_ERR_NET,EFS_ERR_ACCES};

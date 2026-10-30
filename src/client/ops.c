@@ -1184,6 +1184,11 @@ int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out)
         efs_client_unlock_dir(ino);
     }
     if (rpc_ok == EFS_OK) {
+        /* fstat's accepted clean EOF must also bound the subsequent data
+         * read: FOPEN_DIRECT_IO does not clamp that read to kernel i_size.
+         * Adoption keeps unpublished bodies, and invalidates a clean shrink. */
+        if (!efs_client_ino_has_unpublished_data(ino))
+            adopt_rpc_inode(&rpc);
         *out = rpc;
         overlay_local_size(out, 0);
     } else {

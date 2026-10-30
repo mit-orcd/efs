@@ -17,7 +17,7 @@ def save():
  t=out/'state.tmp';t.write_text(json.dumps(state,indent=2)+'\n');t.replace(out/'state.json')
 def no_core():resource.setrlimit(resource.RLIMIT_CORE,(0,0))
 def run(name,argv,extra=None,timeout=900,negative=False):
- state['current']=name;save();tmp=private/'tmp'/name;tmp.mkdir(parents=True)
+ state['current']=name;save();tmp=private/('tmp-'+a.commit)/name;tmp.mkdir(parents=True)
  e=dict(env,TMPDIR=str(tmp),**(extra or {}));start=time.monotonic();log=out/(name+'.log')
  with log.open('x') as f:
   f.write(json.dumps(dict(argv=list(map(str,argv)),extra=extra or {},tmp=str(tmp)))+'\n');f.flush()
@@ -31,6 +31,7 @@ def run(name,argv,extra=None,timeout=900,negative=False):
 try:
  run('build',['make','-j8','all','tests/faults/efsd','test-bins'],timeout=1800)
  state['binary_sha256']={n:sha(source/n) for n in ('efsd','efs-fuse','efs-mgmt','tests/faults/efsd')};save()
+ run('version',[source/'efsd','--version'])
  for case in ('overlay','mutations','unlink'):
   run('base-'+case,['python3','tests/test_client_metadata_authority.py','--source',base/'src/client/ops.c','--case',case],negative=True)
  run('base-permission',['python3','tests/test_readdir_permission_authority.py'],extra={'EFS_FUSE_SOURCE':str(base/'src/client/efs_fuse.c')},negative=True)
@@ -39,10 +40,11 @@ try:
  run('unit-asan-ubsan',['python3','tests/test_client_metadata_authority.py'],extra={'CC':'gcc -fsanitize=address,undefined -fno-omit-frame-pointer','ASAN_OPTIONS':'detect_leaks=1:halt_on_error=1','UBSAN_OPTIONS':'halt_on_error=1:print_stacktrace=1'})
  run('matrix',['python3','tests/live/bb_overlay_authority.py','--source',source,'--output',out/'matrix'],timeout=600)
  matrix=json.loads((out/'matrix/result.json').read_text());assert matrix['verdict']=='PASS' and not matrix['cleanup_errors'],matrix
- for name in ('gc-a','gc-b'):(private/name).mkdir()
- text=run('gc-posix',['python3','tests/live/gc_reclamation.py','--transport','tcp','--root',private/'gc-a','--root',private/'gc-b','--port','19950','--posix'],timeout=3600)
+ roots=[private/('gc-'+a.commit+'-'+side) for side in ('a','b')]
+ for path in roots:path.mkdir()
+ text=run('gc-posix',['python3','tests/live/gc_reclamation.py','--transport','tcp','--root',roots[0],'--root',roots[1],'--port','19950','--posix'],timeout=3600)
  assert 'GC reclamation PASS' in text and 'POSIX suite: 218/218 pass' in text and 'POSIX 2-client: 72/72 pass' in text,text[-3000:]
- state['current']='full-gate';save();tmp=private/'full-tmp';tmp.mkdir();e=dict(env,TMPDIR=str(tmp),EFS_TEST_TARGET='test-all',EFS_TEST_JOBS='8',EFS_BUILD_JOBS='8')
+ state['current']='full-gate';save();tmp=private/('full-'+a.commit);tmp.mkdir();e=dict(env,TMPDIR=str(tmp),EFS_TEST_TARGET='test-all',EFS_TEST_JOBS='8',EFS_BUILD_JOBS='8')
  start=time.monotonic()
  with (out/'full-gate.log').open('x') as f:rc=subprocess.run(['bash','scripts/make_test_summary.sh'],cwd=source,env=e,stdout=f,stderr=subprocess.STDOUT,timeout=7200).returncode
  state.update(gate_rc=rc,gate_elapsed_s=time.monotonic()-start,gate_summary=(source/'summary.txt').read_text());save()
