@@ -152,7 +152,7 @@ static void make_dir(const char *path)
     free(tmp);
 }
 
-static void make_dir_for_file(const char *path)
+static void make_dir_for_file_hint(const char *path, int force)
 {
     /* Skip full mkdir walk when the parent dir matches the last one we
      * successfully created on this thread (sequential chunk PUTs share
@@ -162,7 +162,7 @@ static void make_dir_for_file(const char *path)
     size_t plen = 0;
     if (slash && slash > path)
         plen = (size_t)(slash - path);
-    if (plen > 0 && plen < sizeof(last_parent) && last_parent[0] &&
+    if (!force && plen > 0 && plen < sizeof(last_parent) && last_parent[0] &&
         strncmp(last_parent, path, plen) == 0 && last_parent[plen] == '\0')
         return;
 
@@ -182,6 +182,11 @@ static void make_dir_for_file(const char *path)
         }
     }
     free(tmp);
+}
+
+static void make_dir_for_file(const char *path)
+{
+    make_dir_for_file_hint(path, 0);
 }
 
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id)
@@ -2475,7 +2480,9 @@ static void *shard_io_thread(void *arg)
             return NULL;
         }
         if (fd < 0 && errno == ENOENT) {
-            make_dir_for_file(a->path);
+            /* Empty-parent pruning can invalidate the thread-local hint.
+             * An observed missing pathname requires a real mkdir walk. */
+            make_dir_for_file_hint(a->path, 1);
             fd = server_frag_open(a->path, flags, 0644);
         }
         if (fd < 0) {

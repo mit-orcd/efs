@@ -465,6 +465,20 @@ int main(void)
     unsigned ancestors=0;for(const char *c=path;*c;c++)ancestors+=*c=='/';
     file_syncs=directory_syncs=0;shard_io_thread(&a);
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==ancestors);
+    /* An empty parent can disappear between PUTs. A thread-local mkdir
+     * hint is not authority that the directory still exists: the observed
+     * ENOENT path must recreate it, with the same publication barriers. */
+    assert(!unlink(path));
+    char missing_parent[1024];snprintf(missing_parent,sizeof(missing_parent),"%s/a/b",dir);
+    assert(!rmdir(missing_parent));
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==ancestors);
+    {
+        uint8_t back[8192];int fd=open(path,O_RDONLY);assert(fd>=0);
+        assert(read(fd,back,sizeof(back))==(ssize_t)sizeof(back));assert(!close(fd));
+        assert(!memcmp(back,data,4096));
+        assert(!memcmp(back+4096,sum,sizeof(sum)));
+    }
     /* Real initialized files target, with an initially empty pinned cache. */
     booting=1;assert(!server_storage_roots_init(server));booting=0;
     file_syncs=directory_syncs=0;shard_io_thread(&a);
