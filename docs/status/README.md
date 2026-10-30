@@ -666,3 +666,7 @@ preserves preceding failed candidates, historical RUNNING/STOP instructions and
 scope changes. It does not authorize further cluster or agent work.
 See [evidence cleanup inventory](../../results/measure/20261012-evidence-cleanup/README.md)
 for consolidated duplicate paths and explicitly pruned historical captures.
+
+## Recent evidence and remaining acceptance
+
+- [Task H devel baseline](task-h-devel-baseline-20261029.md): branch fix tests run against devel `74d34d588` on nuc; 18 DEVEL-BUG, 2 NOT-NEEDED, 13 NOCOMPILE, 2 NO-TEST of 35 rows; measurement only.
