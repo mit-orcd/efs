@@ -61,12 +61,13 @@ def put_status(cluster, ticket, fi):
 
 def fence(cluster, ticket, via):
     """Exit status and output of `raft-session fence`; a BEGIN that finds no
-    metadata leader (the stopped member led a group) is repeated for 60 s."""
+    metadata leader, or a cleanup that meets the election after the stopped
+    member led a group, is resumed by repeating the command (up to 60 s)."""
     for _ in range(60):
         r = subprocess.run([str(root / 'efs-mgmt'), 'raft-session', f'127.0.0.1:{cluster.base + via}',
                             'fence', ticket.wire[:16].hex()], env=cluster.env, capture_output=True,
                            text=True, timeout=120)
-        if 'phase=begin' not in r.stdout + r.stderr:
+        if not re.search(r'phase=(begin|cleanup)', r.stdout + r.stderr):
             break
         time.sleep(1)
     return r.returncode, r.stdout + r.stderr
@@ -110,19 +111,34 @@ def main():
 
             # 2. (i) SIGKILLed member
             t = admit('kill')
-            victim = 2
+            victim = next(n - 1 for n in t.nodes if n > 1)  # a placed member, never the seed
             stop(victim, signal.SIGKILL)
-            rc, out = fence(cluster, t, 1)
+            rc, out = fence(cluster, t, 0)
             assert rc == 0, ('revoke with one member SIGKILLed', out)
             cluster.start(victim)
+            # The collection of abandoned uploads is what keeps asking a member
+            # that missed the seal: it must learn the epoch from the session shard
+            # (not stay BUSY) and seal it before it deletes anything. No orphan
+            # record exists for this ticket, so the answer is STALE (-14), never BUSY (-13).
+            fi = t.nodes.index(victim + 1)
+            with socket.create_connection(('127.0.0.1', cluster.base + victim), timeout=30) as sock:
+                sock.sendall(HELLO)
+                n = struct.unpack('>I', exact(sock, 4))[0]
+                exact(sock, n)
+                body = struct.pack('>II', 1, fi) + t.wire
+                sock.sendall(struct.pack('>IB', len(body) + 1, 177) + body)
+                reply = exact(sock, struct.unpack('>I', exact(sock, 4))[0])
+            assert reply[0] == 178 and struct.unpack('=i', reply[1:5])[0] == -14, ('orphan delete did not learn the epoch', reply)
+            assert (work / f'n{victim+1}/meta/put-session' / t.wire[:16].hex()).is_file(), 'no certificate sealed'
             late_all_stale(t, 'returned after SIGKILL')
             print('(i) member SIGKILLed: revoke rc=0; returned member refuses the old epoch (STALE) PASS', flush=True)
 
             # 3. (ii) clean stop, replay at once
             t = admit('term')
+            victim = next(n - 1 for n in t.nodes if n > 1)
             before = stored(work, [victim])
             stop(victim, signal.SIGTERM)
-            rc, out = fence(cluster, t, 1)
+            rc, out = fence(cluster, t, 0)
             assert rc == 0, ('revoke with one member stopped', out)
             cluster.start(victim)
             late_all_stale(t, 'returned after clean stop, replayed before resync')

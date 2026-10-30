@@ -15745,6 +15745,23 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
     }
 }
 
+/* K54: a member that missed the revoke's seal (it was down) learns the
+ * committed epoch from the session shard's leader and seals it before it
+ * deletes or admits anything of that uuid. OK only when the committed epoch
+ * is above `below` and this member's certificate now holds it. */
+int server_raft_host_storage_session_learn(const uint8_t uuid[16],uint32_t below)
+{
+    if(!g_host || !__atomic_load_n(&g_host->running, __ATOMIC_ACQUIRE))return EFS_ERR_BUSY;
+    uint32_t ssh=efs_kv_session_shard(uuid);
+    uint8_t query[1+HOST_SESS_CREATE_LEN]={0};query[0]=efs_raft_shard_group(ssh);query[1]=EFS_MD_CMD_SESSION;
+    memcpy(query+3,uuid,16);wr32be(query+19,ssh);
+    struct efs_msg_raft_mkfs_reply authority;server_raft_host_submit(query,sizeof(query),&authority);
+    uint32_t epoch=(uint32_t)authority.salt,state=(uint32_t)((authority.salt>>32)&255);
+    if(authority.rc!=EFS_OK)return authority.rc;
+    if(epoch<=below || (state!=EFS_SESSION_ACTIVE && state!=EFS_SESSION_FENCING))return EFS_ERR_BUSY;
+    return server_put_session_fence(g_host->s,uuid,epoch);
+}
+
 void server_raft_host_expiry_status(struct efs_expiry_status *out)
 {
     memset(out,0,sizeof(*out));

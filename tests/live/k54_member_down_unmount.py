@@ -2,12 +2,12 @@
 """K54: clean unmount with one storage member down (D46 item 6, finding U4).
 
 Usage: python3 tests/live/k54_member_down_unmount.py [--runs N] [--members 4]
-           [--mode alternate|kill|stop] [--down 1] [--port-base 18700] [--keep]
+           [--mode alternate|kill|stop] [--down 1] [--victim 3] [--port-base 18700] [--keep]
 
 Run from the root of a built tree (make, make tests/faults/efsd). Starts
 --members private efsd daemons on 127.0.0.1 (PORT_BASE+1..) and, per run:
 mounts a client on node 1, writes and fsyncs a few files, stops --down
-members (not node 1) by SIGKILL or SIGTERM (alternate: odd runs SIGKILL,
+members (from --victim up; not node 1) by SIGKILL or SIGTERM (alternate: odd runs SIGKILL,
 even runs SIGTERM), unmounts the client with `scripts/client.sh stop`, and
 requires exit 0 and `session revoked at unmount ... rc=0`. Then it restarts
 the stopped members, waits until `efs-mgmt status` shows every member up and
@@ -40,9 +40,9 @@ def wait_in_sync(c, ids, timeout=120):
     raise AssertionError('cluster never in sync:\n' + out)
 
 
-def one_run(c, ids, run, mode, down, files):
+def one_run(c, ids, run, mode, down, files, first=3):
     name = f'm{run:03d}'
-    victims = ids[2:2 + down]
+    victims = ids[first - 1:first - 1 + down]
     m = Mount(c, 1, name)
     names = []
     for k in range(files):
@@ -83,6 +83,7 @@ def main():
     ap.add_argument('--runs', type=int, default=20)
     ap.add_argument('--members', type=int, default=4)
     ap.add_argument('--down', type=int, default=1)
+    ap.add_argument('--victim', type=int, default=3, help='first member stopped (2..members)')
     ap.add_argument('--files', type=int, default=4)
     ap.add_argument('--mode', choices=('alternate', 'kill', 'stop'), default='alternate')
     ap.add_argument('--port-base', type=int, default=18700)
@@ -106,7 +107,7 @@ def main():
             c.wait_log(i, r'(formed: %d members|n=%d formed|membership revision \d+: %d members)'
                        % (a.members, a.members, a.members), timeout=120, run=False)
         for run in range(1, a.runs + 1):
-            sig, clean, rc, line, secs, bad = one_run(c, ids, run, a.mode, a.down, a.files)
+            sig, clean, rc, line, secs, bad = one_run(c, ids, run, a.mode, a.down, a.files, a.victim)
             if expect_fail:
                 ok = not clean and 'phase=storage-fence' in line and not bad
             else:
