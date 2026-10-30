@@ -2949,8 +2949,8 @@ static int cmd_raft_readdir(int argc, char **argv)
     struct efs_msg_inode_readdir_reply *r;
     uint32_t i;
 
-    if (argc < 2) {
-        fprintf(stderr, "Usage:\n  efs-mgmt raft-readdir <node:port> <parent> [after_ino]\n");
+    if (argc != 2 && argc != 4) {
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-readdir <node:port> <parent> [after_src after_name]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -2958,10 +2958,20 @@ static int cmd_raft_readdir(int argc, char **argv)
         return 1;
     }
     memset(&req, 0, sizeof(req));
+    req.format = EFS_READDIR_FORMAT;
     req.parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
     req.max_ents = EFS_READDIR_MAX;
-    if (argc >= 3)
-        req.after_ino = strtoull(argv[2], NULL, 0);
+    if (argc == 4) {
+        char *end = NULL;
+        unsigned long src = strtoul(argv[2], &end, 10);
+        if (!argv[2][0] || !end || *end || src >= 64 ||
+            strlen(argv[3]) >= EFS_MAX_NAME) {
+            fprintf(stderr, "Invalid directory source/name cursor\n");
+            return 1;
+        }
+        req.after_src = (uint32_t)src;
+        strcpy(req.after_name, argv[3]);
+    }
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -2972,7 +2982,7 @@ static int cmd_raft_readdir(int argc, char **argv)
     if (send_recv(fd, EFS_MSG_INODE_READDIR, &req, sizeof(req), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_READDIR_REPLY ||
-        reply_len != sizeof(*r)) {
+        efs_readdir_reply_len_ok(reply, reply_len) != EFS_OK) {
         fprintf(stderr, "Failed to raft-readdir\n");
         free(reply);
         close(fd);

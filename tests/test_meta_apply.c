@@ -1386,6 +1386,38 @@ static void test_readdir_local(void)
     efs_kv_mem_free(kv);
 }
 
+/* Filtered records consume the scan cap even when they emit no names. */
+static void test_readdir_tombstone_budget(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_dir_cursor cur = {0};
+    struct efs_meta_dir_ent out[4];
+    struct efs_meta_dentry tomb = {0};
+    uint8_t key[EFS_KV_KEY_MAX], val[20];
+    uint32_t kl, n, left;
+    efs_ino_t ino;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "AO init");
+    tomb.type = EFS_META_DENT_TOMBSTONE;
+    CHECK(efs_meta_pack_dentry(&tomb, val, sizeof(val)) == EFS_OK, "AO tomb encoding");
+    CHECK(efs_kv_key_dentry(efs_kv_inode_shard(EFS_ROOT_INO), EFS_ROOT_INO,
+                           "a-tomb", key, &kl) == EFS_OK &&
+          efs_kv_put(kv, key, kl, val, sizeof(val)) == EFS_OK, "AO tomb key");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "z-live", &ino) == EFS_OK, "AO live");
+    left = 1;
+    CHECK(efs_meta_apply_readdir_bounded(kv, EFS_ROOT_INO, &cur, out, 4,
+                                         &n, &left) == EFS_OK,
+          "AO tomb page");
+    CHECK(!n && !left && !cur.done && !strcmp(cur.name, "a-tomb"),
+          "AO empty page has exact progress and never claims EOF");
+    left = 1;
+    CHECK(efs_meta_apply_readdir_bounded(kv, EFS_ROOT_INO, &cur, out, 4,
+                                         &n, &left) == EFS_OK && n == 1 &&
+          out[0].d.ino == ino && !strcmp(out[0].name, "z-live"),
+          "AO resume keeps unscanned live name");
+    efs_kv_mem_free(kv);
+}
+
 /* A spread directory is up to 64 ranges on 64 shards. readdir has to visit
  * the lanes the directory actually uses — including lanes the migrator
  * populated — and must not return a name twice or resurrect a deleted one. */
@@ -6846,6 +6878,7 @@ int main(void)
     test_i8_spread();
     test_row_attrs();
     test_readdir_local();
+    test_readdir_tombstone_budget();
     test_readdir_spread();
     test_readdir_lane0();
     test_readdir_concurrent_split();
