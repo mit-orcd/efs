@@ -328,7 +328,7 @@ static void efs_stop_finish(void)
     g_stop.listener=-1;g_stop.started=0;
 }
 /* The SETTINGS page of a mounted client into out (NUL-terminated); 0 on success. */
-static int efs_stop_settings(const char *mount,char *out,size_t size)
+static inline int efs_stop_settings(const char *mount,char *out,size_t size)
 {
     struct sockaddr_un addr={.sun_family=AF_UNIX};
     if(efs_stop_path(mount,addr.sun_path,sizeof(addr.sun_path)))
