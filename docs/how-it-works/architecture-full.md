@@ -339,6 +339,20 @@ this list, before it ships.
   in project-history.md "START-HERE closed items": peer sees 0/10
   un-`fsync`ed bytes; `kill -9` of `efs-fuse` loses a 64 MiB acknowledged
   `write()`).
+- **Attributes — staging is not metadata authority.** LOOKUP and refreshed
+  attributes use the successful metadata RPC's row. Only unpublished local
+  data overlays its EOF and mtime; it cannot supply mode, uid/gid, names,
+  link count or content epoch. New permission and namespace decisions require
+  a successful strict refresh; a cached matching value cannot skip a requested
+  mutation. Open-handle getattr also fetches metadata: when the file is clean,
+  the accepted EOF updates the local read bound and any layout invalidation
+  fences cached mapping freshness, including a shrink to zero. Thus a read
+  after that getattr cannot reuse a pre-invalidation mapping. A read without
+  a new OPEN/GETATTR still follows the existing metadata and mapping freshness
+  rules above; this adds no recall protocol. A held unlink-open file retains
+  its local data and may report local attributes on RPC failure, but that
+  fallback never authorizes a new permission or namespace operation. See the
+  [BB authority audit](../status/bb-overlay-authority-audit-20261029.md).
 - **One `write()`/`pwrite()` publishes atomically.** POSIX makes regular-file
   `read()`/`write()` effects atomic with respect to one another, so a
   concurrent reader never observes a mix of old and new chunks from a single
@@ -1612,10 +1626,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**RUNNING**, branch `agent/devel-bb`, base `74d34d588`. Source-backed authority
-table and retained xorinox base matrix (8 cases: 5 FAIL / 3 PASS); candidate
-repairs restrict data overlays, remove cached mutation shortcuts and refresh
-DAC authority. Candidate/live/full/ORCD qualification pending; no closure.
+**RUNNING**, branch `agent/devel-bb`, K59–K61. Untouched-base matrix 5/8 FAIL;
+repaired matrix 8/8 PASS, POSIX core 218/218 and peer 72/72 PASS. First full
+gate 553 commands / 1 FAIL / 10 host-limited NOTRUN: missing test adapter,
+fixed without changing its assertions. Fresh source `17027103e` qualification
+running; private node9900 build complete, TCP/RDMA live stage gated on the
+closed xorinox result. All failed candidates retained; no closure.
 
 [K55 — slow storage COMMIT](../status/k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,

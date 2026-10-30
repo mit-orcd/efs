@@ -41,7 +41,7 @@ def run(name,argv,transport='tcp',timeout=900,required=True):
 try:
  if a.phase=='build':
   libs=subprocess.check_output(['pkg-config','--libs','fuse3'],env=env,text=True).strip()
-  run('build',['make','-j8',f'FUSE_LIBS={libs} -Wl,-rpath,{lib}','all','tests/faults/efsd','tests/test_rdma_xprt','tests/test_rdma_segmented'],timeout=1800)
+  run('build',['make','-j8',f'FUSE_LIBS={libs} -Wl,-rpath,{lib}','all','tests/faults/efsd','tests/test_declaration_gate','tests/test_rdma_xprt','tests/test_rdma_segmented'],timeout=1800)
   run('version',[source/'efsd','--version'])
   state['binary_sha256']={n:sha(source/n) for n in ('efsd','efs-fuse','efs-mgmt','tests/faults/efsd')}
   state['verdict']='BUILD_COMPLETE_NOT_QUALIFIED'
@@ -54,6 +54,10 @@ try:
   assert build['source']==a.commit and build['verdict']=='BUILD_COMPLETE_NOT_QUALIFIED'
   assert all(sha(source/n)==h for n,h in build['binary_sha256'].items())
   state.update(loopback_proof_sha256=sha(a.loopback_proof),build_proof_sha256=sha(root/'build/state.json'),binary_sha256=build['binary_sha256'])
+  # Also close the declaration RDMA branch skipped by the no-HCA xorinox
+  # gate. This target is native-only and does not relink the four products.
+  run('build-declaration',['make','tests/test_declaration_gate'])
+  run('declaration-rdma',[source/'tests/test_declaration_gate'],transport='rdma')
   for test in ('client_metadata_authority','inode_pending_eof','map_fresh_open','readdir_permission_authority','stage_evict_lru'):
    run('unit-'+test,['python3','tests/test_'+test+'.py'])
   for transport in ('tcp','rdma'):

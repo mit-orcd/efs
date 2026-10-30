@@ -6,7 +6,8 @@ Evidence: `docs/status/bb-overlay-authority-audit-20261029.md`.
 ORCD TCP/RDMA NOTRUN. Findings BB1 (attribute overlays), BB2 (cached mutation
 shortcuts) and BB3 (cached DAC checks) have candidate fixes; qualification RUNNING.
 BB4 additionally captures reuse of a pre-truncate mapping after fresh metadata.
-K numbers will be assigned against the then-current register before closure.
+Registered as K59 (attributes/EOF/mapping), K60 (mutation authority), and K61
+(permission authority); all require integration and acceptance before alpha.
 No merge, push, new product switch, cache protocol or wire/store change.
 
 ## Authority contract from the actual paths
@@ -73,9 +74,8 @@ AW/AX own their index performance; this audit does not alter those indexes.
   read-only owner row. Switch those decisions to strict refresh, retaining
   authority errors (including ACCESS's previous false ENOENT mapping).
 
-Numbers are deliberately pending: concurrent AY/AZ branches have already
-both used K57. The final register must allocate distinct numbers without
-silently overwriting another audit's finding.
+Devel `126ba81d4` reconciled AY as K57 and AZ as K58; BB uses K59–K61
+in both tables, preserving those independent findings.
 
 ## Reproduction, environment and current results
 
@@ -177,3 +177,30 @@ truncate fences mappings; a late pull stamped before the boundary cannot
 restore freshness. No TTL, clock policy, flag or wire protocol changes. The
 production-function fake-clock regression fails without this fence and passes
 with it; the mounted exact-byte check is unchanged.
+
+## Closed xorinox gate failure and corrected continuation
+
+Source `4d4f5f7ba`: native positive/negative controls, ASan/UBSan/leak, mounted
+matrix **8/8**, GC reclamation, POSIX core **218/218** and peer **72/72** PASS.
+Full gate: **TOTAL 553 FAIL 1 NOTRUN 10 STATUS FAIL (995s) OVERBUDGET 2**.
+The sole failure is `test_truncate_prefix.py` linking its extracted real
+truncate body without an adapter for the new cold-path `stat_refresh` call.
+The existing warm-cache assertions remain unchanged; the corrected adapter
+asserts if refresh is unexpectedly called. This is a test-adapter defect,
+not a passing full gate or an environment waiver. Original log/result remains
+at `source-4d4f5f7ba/tmp/fail-229.log` and `qualification-4d4f5f7ba/`.
+
+Ten NOTRUNs: absent external cluster scripts, declaration RDMA path, native
+RDMA transport and seven segmented modes (no usable HCA on xorinox). Advisory
+OVERBUDGET: geometry grow-b 124.4/120 s and pack duplicate candidate 69.3/55 s;
+no budget/deadline was increased. Source `17027103e` changes only that adapter
+after `4d4f5f7ba`; fresh `qualification-17027103e` reruns the complete sequential
+qualification. No failed export/output is edited or overwritten. The later
+comment and documentation correction changes no compiled product behavior.
+
+ORCD authentication restored using the user's explicit login form. Private
+node9900 build uses `/tmp/efs-taskBB-orcd-17027103e`, with the existing
+`/data1/efs/orcd-mini-mnt` client left untouched. Hardware tests remain gated
+on the closed matching-source xorinox zero-failure result. Build is not a
+hardware qualification. Committed reproduction driver:
+`tests/measure/bb_orcd_qualify.py --phase build|qualify`.

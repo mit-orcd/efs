@@ -1,10 +1,12 @@
 # Project status — work queue and evidence
 
 [Task BB — client overlay authority](bb-overlay-authority-audit-20261029.md):
-**RUNNING**, branch `agent/devel-bb`, base `74d34d588`. Source-backed authority
-table and retained xorinox base matrix (8 cases: 5 FAIL / 3 PASS); candidate
-repairs restrict data overlays, remove cached mutation shortcuts and refresh
-DAC authority. Candidate/live/full/ORCD qualification pending; no closure.
+**RUNNING**, branch `agent/devel-bb`, K59–K61. Untouched-base matrix 5/8 FAIL;
+repaired matrix 8/8 PASS, POSIX core 218/218 and peer 72/72 PASS. First full
+gate 553 commands / 1 FAIL / 10 host-limited NOTRUN: missing test adapter,
+fixed without changing its assertions. Fresh source `17027103e` qualification
+running; private node9900 build complete, TCP/RDMA live stage gated on the
+closed xorinox result. All failed candidates retained; no closure.
 
 [K55 — slow storage COMMIT](k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,

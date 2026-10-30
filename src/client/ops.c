@@ -999,15 +999,10 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
         (void)efs_export_upsert_inode(&g_client.export, rpc);
         is_new = 1;
     } else if ((rpc->mode & S_IFMT) == S_IFREG) {
-        /* Size growth = a peer published more data. mtime-only (chmod)
-         * must not clobber the writer's unflushed dcache — that was the
-         * POSIX same-fd-read / chmod / unlink-open regression. Shrink
-         * only when the primary is newer (peer truncate) AND this client
-         * has nothing unflushed: fsync/lookup getattr still sees the
-         * post-truncate size 0 until REPORT lands, and the owner's
-         * set_size-stamped mtime can look newer than the local write.
-         * Taking that shrink is trunc_open_other_fd fstat=0 under 9-way
-         * load (and then REPORT publishes the clobbered 0). */
+        /* Size growth may be peer publication. A clean owner EOF also
+         * permits shrink regardless of wall-clock mtime; unpublished local
+         * bodies protect their EOF below. Attribute-only changes must not
+         * discard the writer's unflushed dcache. */
         int newer = rpc->mtime > local.mtime ||
                     (rpc->mtime == local.mtime &&
                      rpc->mtime_nsec > local.mtime_nsec);

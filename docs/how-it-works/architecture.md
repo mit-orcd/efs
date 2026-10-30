@@ -309,6 +309,20 @@ this list, before it ships.
   in project-history.md "START-HERE closed items": peer sees 0/10
   un-`fsync`ed bytes; `kill -9` of `efs-fuse` loses a 64 MiB acknowledged
   `write()`).
+- **Attributes — staging is not metadata authority.** LOOKUP and refreshed
+  attributes use the successful metadata RPC's row. Only unpublished local
+  data overlays its EOF and mtime; it cannot supply mode, uid/gid, names,
+  link count or content epoch. New permission and namespace decisions require
+  a successful strict refresh; a cached matching value cannot skip a requested
+  mutation. Open-handle getattr also fetches metadata: when the file is clean,
+  the accepted EOF updates the local read bound and any layout invalidation
+  fences cached mapping freshness, including a shrink to zero. Thus a read
+  after that getattr cannot reuse a pre-invalidation mapping. A read without
+  a new OPEN/GETATTR still follows the existing metadata and mapping freshness
+  rules above; this adds no recall protocol. A held unlink-open file retains
+  its local data and may report local attributes on RPC failure, but that
+  fallback never authorizes a new permission or namespace operation. See the
+  [BB authority audit](../status/bb-overlay-authority-audit-20261029.md).
 - **One `write()`/`pwrite()` publishes atomically.** POSIX makes regular-file
   `read()`/`write()` effects atomic with respect to one another, so a
   concurrent reader never observes a mix of old and new chunks from a single
