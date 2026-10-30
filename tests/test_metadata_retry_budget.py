@@ -18,6 +18,7 @@ code=r'''
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
+static void efs_setting_u64(const char *n,unsigned long long v){(void)n;(void)v;}
 static uint64_t now=1000,deadline;static unsigned calls,sleeps,freed,drops,releases;
 static int reply_status,fail_recv,fail_send,bad_type,expire_recv;
 static unsigned read_hint;
