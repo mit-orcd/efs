@@ -354,6 +354,7 @@ static const char *const sd_barrier_names[SD_NBARRIERS] = {
 static const char *const sd_state_names[] = { "not_reached", "done", "failed", "stuck" };
 
 static int sd_recorders(struct efsd_server *s) { (void)s; stop_perf_recorder(); return 0; }
+static int sd_rejoin(struct efsd_server *s) { server_stop_rejoin(s); return 0; }
 static int sd_recovery(struct efsd_server *s) { (void)s; server_recovery_stop(); return 0; }
 static int sd_packer(struct efsd_server *s) { (void)s; server_packer_stop(); return 0; }
 static int sd_writers(struct efsd_server *s) { server_writer_pool_stop(s); return 0; }
@@ -383,6 +384,7 @@ static const struct shutdown_phase {
     int barrier;          /* SD_* index, or -1 */
 } g_sd_phases[] = {
     { "recorders", "perf/strace recorder processes", sd_recorders, -1 },
+    { "rejoin", "rejoin thread", sd_rejoin, -1 },
     { "recovery", "K36 verified recovery thread", sd_recovery, -1 },
     { "packer", "packer thread", sd_packer, -1 },
     { "writer-pool", "writer threads", sd_writers, -1 },
@@ -563,6 +565,7 @@ static int shutdown_bounded(struct efsd_server *s, uint64_t t0)
 {
     const unsigned total_ms = shutdown_total_ms();
     const uint64_t end = t0 + total_ms;
+    __atomic_store_n(&s->running, 0, __ATOMIC_RELEASE); /* workers exit before their join */
     int none[SD_NBARRIERS] = { SD_NOT_REACHED, SD_NOT_REACHED, SD_NOT_REACHED };
 
     /* Busy handlers close before their next request; idle pooled readers
@@ -1386,6 +1389,7 @@ int main(int argc, char **argv)
      * keeps saying HELLO. */
     char chost[64] = "";
     uint16_t cport = 0;
+    int rejoin_needed = 0;
     if (seed_host[0]) {
         snprintf(chost, sizeof(chost), "%s", seed_host);
         cport = seed_port;
@@ -1410,7 +1414,7 @@ int main(int argc, char **argv)
         if (joined != 0 || !server_raft_host_formed()) {
             snprintf(server.rejoin_addr, sizeof(server.rejoin_addr), "%s", chost);
             server.rejoin_port = cport;
-            server_start_rejoin(&server);
+            rejoin_needed = 1;
         }
     } else if (server.node_count > 1) {
         /* K33: a formed member restarts from its committed record; the
@@ -1421,7 +1425,7 @@ int main(int argc, char **argv)
          * tests/test_k33_payload.py). */
         server.rejoin_addr[0] = '\0';
         server.rejoin_announce = 1;
-        server_start_rejoin(&server);
+        rejoin_needed = 1;
     } else {
         server_save_nodes(&server);
     }
@@ -1471,6 +1475,9 @@ int main(int argc, char **argv)
      * once they run and serves in the background. */
     if (server_recovery_start(&server) != EFS_OK)
         fprintf(stderr, "recovery: cannot start; the store stays fenced\n");
+    /* The rejoin thread owns shared state until bounded shutdown joins it:
+     * launch only after running and the Raft/storage owners are initialized. */
+    if (rejoin_needed) server_start_rejoin(&server);
     if (server.discovery_port) {
         if (efs_disc_responder_start(server.discovery_port, discovery_info) != 0)
             fprintf(stderr, "discovery: cannot answer on UDP port %u: %s; joiners must name a "
@@ -1602,8 +1609,8 @@ int main(int argc, char **argv)
     int exit_rc = shutdown_bounded(&server, stop_t0);
     if (!exit_rc && __atomic_load_n(&server.join_refused, __ATOMIC_ACQUIRE))
         exit_rc = 1; /* K33: refused by the cluster, as at the first HELLO */
-    /* server.lock lives as long as the process: the detached rejoin thread
-     * may still take it before exit. The heartbeat was joined by sd_raft. */
+    /* The rejoin thread and heartbeat were joined inside the bounded stop
+     * before exports are freed. server.lock lives as long as the process. */
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);
     return exit_rc;

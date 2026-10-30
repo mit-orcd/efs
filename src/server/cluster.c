@@ -740,6 +740,7 @@ static void *rejoin_thread(void *arg)
         if (!first || !s->rejoin_announce)
             sleep(2);
         first = 0;
+        if (!__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) break;
 
         pthread_mutex_lock(&s->lock);
         uint32_t node_count = s->node_count;
@@ -787,9 +788,22 @@ static void *rejoin_thread(void *arg)
 
 void server_start_rejoin(struct efsd_server *s)
 {
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    pthread_create(&s->rejoin_tid, &attr, rejoin_thread, s);
-    pthread_attr_destroy(&attr);
+    if (s->rejoin_started) return;
+    if (efsd_pthread_create(&s->rejoin_tid, rejoin_thread, s) == 0)
+        s->rejoin_started = 1;
+}
+
+/* An unexpected join error proves no quiescence. Leave this phase blocked
+ * for the independent shutdown deadline; never free state under the thread.
+ * No cancellation: an in-flight HELLO/probe owns its connection until done. */
+void server_stop_rejoin(struct efsd_server *s)
+{
+    if (!s->rejoin_started) return;
+    int rc = pthread_join(s->rejoin_tid, NULL);
+    if (rc) {
+        fprintf(stderr, "shutdown: cannot join rejoin: %s; preserving shared state\n",
+                strerror(rc));
+        for (;;) sleep(1);
+    }
+    s->rejoin_started = 0;
 }

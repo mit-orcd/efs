@@ -82,7 +82,8 @@ struct efsd_server {
     pthread_cond_t heartbeat_wake;
     int join_refused; /* K33: stopped because the cluster refused this node */
 
-    pthread_t rejoin_tid; /* background rejoin retry thread */
+    pthread_t rejoin_tid; /* background rejoin retry thread; main starts it, teardown joins */
+    int rejoin_started;
     char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
     uint16_t rejoin_port;
     /* K33: a restarted formed member says HELLO to its persisted peers from
@@ -605,6 +606,8 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
 
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);
+/* Join the rejoin thread before the host, peer pool or exports can be freed. */
+void server_stop_rejoin(struct efsd_server *s);
 
 /* Persist the cluster nodes list to disk. Caller must NOT hold s->lock (does
  * disk I/O). Use server_nodes_mark_dirty under the lock instead. */

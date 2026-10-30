@@ -87,7 +87,7 @@ record_park = fn(efsd, 'static void shutdown_fault_record_park(const char *step)
 assert record_park.index('#if EFS_FAULTS') < record_park.index('EFS_FAULT_SHUTDOWN_RECORD_PARK') < record_park.index('#else')
 phases = efsd[efsd.index('} g_sd_phases[] = {'):efsd.index('};', efsd.index('} g_sd_phases[] = {'))]
 names = re.findall(r'\{ "([a-z-]+)", "[^"]+", sd_\w+, (-1|SD_\w+) \}', phases)
-assert names == [('recorders', '-1'), ('recovery', '-1'), ('packer', '-1'), ('writer-pool', '-1'),
+assert names == [('recorders', '-1'), ('rejoin', '-1'), ('recovery', '-1'), ('packer', '-1'), ('writer-pool', '-1'),
                  ('put-sync', 'SD_PUT_SYNC'),
                  ('reclaim', 'SD_RECLAIM'), ('usage-flush', 'SD_USAGE'), ('raft-host', '-1'),
                  ('peer-pool', '-1'), ('storage-roots', '-1')], names
@@ -203,3 +203,47 @@ with tempfile.TemporaryDirectory(prefix='efs-stop-leadership-') as d:
     subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror',
                    '-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
     subprocess.run([str(p.with_suffix(''))],check=True,timeout=10)
+
+# Execute the real rejoin lifecycle: teardown must wait for a paused
+# HELLO/rejoin before the shared owners can be destroyed.
+cluster = Path(os.environ.get('CLUSTER_WORKER_SOURCE', root/'src/server/cluster.c')).read_text()
+code = r"""
+#include <assert.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+struct efsd_server {pthread_t rejoin_tid;int rejoin_started;};
+static pthread_mutex_t mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t cv=PTHREAD_COND_INITIALIZER;
+static unsigned entered,released,departed,join_calls,done,fail_create;
+static void *rejoin_thread(void *s){(void)s;pthread_mutex_lock(&mu);entered=1;pthread_cond_broadcast(&cv);
+ while(!released)pthread_cond_wait(&cv,&mu);departed=1;pthread_mutex_unlock(&mu);return NULL;}
+static int efsd_pthread_create(pthread_t*t,void*(*fn)(void*),void*s){return fail_create?1:pthread_create(t,NULL,fn,s);}
+static int observed_join(pthread_t t,void**r){__atomic_add_fetch(&join_calls,1,__ATOMIC_RELEASE);return pthread_join(t,r);}
+#define pthread_join observed_join
+""" + fn(cluster, 'void server_start_rejoin(') + fn(cluster, 'void server_stop_rejoin(') + r"""
+#undef pthread_join
+static void *stopper(void*s){server_stop_rejoin(s);__atomic_store_n(&done,1,__ATOMIC_RELEASE);return NULL;}
+int main(void){struct efsd_server s={0};
+ fail_create=1;server_start_rejoin(&s);assert(!s.rejoin_started);server_stop_rejoin(&s);assert(!join_calls);
+ fail_create=0;server_start_rejoin(&s);server_start_rejoin(&s); /* no duplicate owner */
+ pthread_mutex_lock(&mu);while(!entered)pthread_cond_wait(&cv,&mu);pthread_mutex_unlock(&mu);
+ pthread_t stop;assert(!pthread_create(&stop,NULL,stopper,&s));
+ for(unsigned i=0;i<1000&&!__atomic_load_n(&join_calls,__ATOMIC_ACQUIRE);i++)usleep(1000);
+ assert(join_calls==1);usleep(20000);assert(!__atomic_load_n(&done,__ATOMIC_ACQUIRE));
+ pthread_mutex_lock(&mu);released=1;pthread_cond_broadcast(&cv);pthread_mutex_unlock(&mu);
+ assert(!pthread_join(stop,NULL));assert(done&&departed&&!s.rejoin_started);
+ server_stop_rejoin(&s);assert(join_calls==1);
+ puts("rejoin worker: failed start, duplicate start, paused owner joined before teardown, idempotent stop PASS");
+}
+"""
+with tempfile.TemporaryDirectory(prefix='efs-rejoin-join-') as d:
+    p = Path(d)/'test.c'; p.write_text(code)
+    subprocess.run(shlex.split(os.environ.get('CC', 'cc'))+['-std=gnu11', '-Wall', '-Wextra', '-Werror', '-pthread', str(p), '-o', str(p.with_suffix(''))], check=True)
+    subprocess.run([str(p.with_suffix(''))], check=True, timeout=10)
+
+main = efsd[efsd.index('int main(int argc, char **argv)'):]
+assert main.index('__atomic_store_n(&server.running') < main.index('if (rejoin_needed) server_start_rejoin')
+assert main.index('if (server_raft_host_start') < main.index('if (rejoin_needed) server_start_rejoin')
+assert phases.index('"rejoin"') < phases.index('"raft-host"') < phases.index('"peer-pool"')
