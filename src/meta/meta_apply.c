@@ -3469,6 +3469,132 @@ static int dir_scan_one(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
     return s->rc;
 }
 
+/* A committed destination may still be an EXCL intent after the source's
+ * deletion has materialized. Scan intents BEFORE base keys: resolution moves
+ * intent -> base atomically, so that order cannot lose a stable name. Merge
+ * only through the smaller full-stream frontier; an invisible intent must
+ * never move the cookie past an unseen name in the other stream. */
+#define DIR_TX_SCAN_MAX 256
+#define DIR_TX_SCAN_MIN 6
+struct dir_names {
+    struct efs_kv *kv;
+    char names[DIR_TX_SCAN_MAX][EFS_MAX_NAME];
+    uint32_t prefix, count, limit;
+    uint32_t *remaining;
+    int full, rc, intent;
+};
+
+static int dir_names_cb(void *user, const uint8_t *key, uint32_t kl,
+                        const uint8_t *val, uint32_t vl)
+{
+    struct dir_names *a = user;
+    if (a->remaining) {
+        if (!*a->remaining) { a->full = 1; return 1; }
+        --*a->remaining;
+    }
+    if (kl <= a->prefix)
+        return 0;
+    uint32_t nl = kl - a->prefix;
+    if (nl >= EFS_MAX_NAME || memchr(key + a->prefix, 0, nl)) {
+        a->rc = efs_kv_decode_result(a->kv, key, kl, EFS_ERR_PROTO);
+        return a->rc;
+    }
+    if (a->count == a->limit) { a->full = 1; return 1; }
+    if (!a->intent) {
+        struct efs_meta_dentry d;
+        int rc = unpack_dentry(val, vl, &d);
+        if (rc != EFS_OK) {
+            a->rc = efs_kv_decode_result(a->kv, key, kl, rc);
+            return a->rc;
+        }
+    }
+    memcpy(a->names[a->count], key + a->prefix, nl);
+    a->names[a->count++][nl] = 0;
+    return 0;
+}
+
+static int dir_names_scan(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
+                           const char *after, struct dir_names *a)
+{
+    uint8_t pre[EFS_KV_KEY_MAX], start[EFS_KV_KEY_MAX], tmp[EFS_KV_KEY_MAX];
+    uint32_t pl = 0, sl = 0;
+    int rc = efs_kv_key_dentry_prefix(shard, dir, pre, &pl);
+    if (rc != EFS_OK) return rc;
+    if (after && after[0]) {
+        rc = efs_kv_key_dentry(shard, dir, after, start, &sl);
+        if (rc != EFS_OK) return rc;
+    }
+    if (a->intent) {
+        rc = efs_kv_key_intent(pre, pl, tmp, &pl);
+        if (rc != EFS_OK) return rc;
+        memcpy(pre, tmp, pl);
+        if (sl) {
+            rc = efs_kv_key_intent(start, sl, tmp, &sl);
+            if (rc != EFS_OK) return rc;
+            memcpy(start, tmp, sl);
+        }
+    }
+    if (sl) {
+        if (sl == EFS_KV_KEY_MAX) return EFS_ERR_INVAL;
+        start[sl++] = 0;
+    }
+    a->kv = kv;
+    a->prefix = pl;
+    rc = efs_kv_scan_from(kv, pre, pl, sl ? start : NULL, sl, dir_names_cb, a);
+    return rc == EFS_OK || rc == 1 ? a->rc : rc;
+}
+
+static int dir_scan_one_tx(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
+                            const char *after, struct dir_scan *s,
+                            efs_txn_coord_fn coord, void *ctx)
+{
+    struct dir_names *a = calloc(2, sizeof(*a));
+    if (!a) return EFS_ERR_NOMEM;
+    uint32_t limit = s->max - s->n;
+    if (limit > DIR_TX_SCAN_MAX) limit = DIR_TX_SCAN_MAX;
+    /* Each stream reserves its candidate limit plus a lookahead and the
+     * possible prefix key. Neither stream can spend the other's budget. */
+    if (s->remaining && limit > (*s->remaining / 2 - 2))
+        limit = *s->remaining / 2 - 2;
+    a[0].intent = 1;
+    for (unsigned i = 0; i < 2; ++i) {
+        a[i].limit = limit;
+        a[i].remaining = s->remaining;
+    }
+    int rc = dir_names_scan(kv, shard, dir, after, &a[0]);
+    if (rc == EFS_OK) rc = dir_names_scan(kv, shard, dir, after, &a[1]);
+    if (rc != EFS_OK) { free(a); return rc; }
+    const char *frontier = NULL;
+    for (unsigned k = 0; k < 2; ++k)
+        if (a[k].full && a[k].count &&
+            (!frontier || strcmp(a[k].names[a[k].count - 1], frontier) < 0))
+            frontier = a[k].names[a[k].count - 1];
+    uint32_t i = 0, j = 0;
+    while (i < a[0].count || j < a[1].count) {
+        const char *name;
+        int cmp = i == a[0].count ? 1 : j == a[1].count ? -1 :
+                  strcmp(a[0].names[i], a[1].names[j]);
+        name = cmp <= 0 ? a[0].names[i] : a[1].names[j];
+        if ((frontier && strcmp(name, frontier) > 0) || s->n == s->max)
+            break;
+        struct efs_meta_dentry d;
+        rc = dent_get_tx(kv, shard, dir, name, coord, ctx, &d);
+        if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) break;
+        strcpy(s->last, name);
+        s->have_last = 1;
+        if (rc == EFS_OK && d.type != EFS_META_DENT_TOMBSTONE) {
+            strcpy(s->out[s->n].name, name);
+            s->out[s->n++].d = d;
+        }
+        rc = EFS_OK;
+        if (cmp <= 0) ++i;
+        if (cmp >= 0) ++j;
+    }
+    s->full = a[0].full || a[1].full || i < a[0].count || j < a[1].count;
+    free(a);
+    return rc;
+}
+
 /* During SPLITTING the hashed side is authoritative for a name. */
 static int hashed_side_claims(struct efs_kv *kv, efs_ino_t dir, const char *name,
                               uint64_t used_shards, int *claimed)
@@ -3532,10 +3658,11 @@ static void k48_readdir_layout_pause(efs_ino_t dir)
 }
 #endif
 
-int efs_meta_apply_readdir_bounded(struct efs_kv *kv, efs_ino_t dir,
+static int readdir_impl(struct efs_kv *kv, efs_ino_t dir,
                            struct efs_meta_dir_cursor *cur,
                            struct efs_meta_dir_ent *out, uint32_t max,
-                           uint32_t *n, uint32_t *remaining)
+                           uint32_t *n, uint32_t *remaining,
+                           efs_txn_coord_fn coord, void *ctx)
 {
     struct efs_meta_row row, after;
     struct efs_meta_dir_cursor begin;
@@ -3569,7 +3696,7 @@ retry:
     s.remaining = remaining;
     s.max = max;
     while (cur->src <= last_src && s.n < max &&
-           (!remaining || *remaining)) {
+           (!remaining || *remaining >= (coord ? DIR_TX_SCAN_MIN : 1))) {
         uint32_t shard, base = s.n;
         int local_pass = 0;
 
@@ -3598,7 +3725,8 @@ retry:
         s.have_last = 0;
         s.last[0] = 0;
         s.full = 0;
-        rc = dir_scan_one(kv, shard, dir, cur->name, &s);
+        rc = coord ? dir_scan_one_tx(kv, shard, dir, cur->name, &s, coord, ctx) :
+                     dir_scan_one(kv, shard, dir, cur->name, &s);
         if (rc != EFS_OK)
             return rc;
         if (local_pass) {
@@ -3623,13 +3751,10 @@ retry:
         if (s.have_last)
             memcpy(cur->name, s.last, strlen(s.last) + 1);
         if (s.full) {
-            /* More remains in this source, so do not advance it. Returning
-             * an empty page while entries remain would make any caller that
-             * stops at *n == 0 miss them, so keep scanning until there is
-             * something to deliver; the cursor advanced, so this terminates.
-             * The only way to get here empty is a full page of names the
-             * hashed side already owns. */
-            if (s.n > 0 || (remaining && !*remaining))
+            /* More remains in this source. Continue through shadowed-only
+             * chunks while budget remains. Budget exhaustion may return no
+             * names with an advancing cursor: callers must use done for EOF. */
+            if (s.n > 0 || (remaining && *remaining < (coord ? DIR_TX_SCAN_MIN : 1)))
                 break;
             continue;
         }
@@ -3652,7 +3777,7 @@ retry:
     if (after.layout != row.layout || after.used_shards != row.used_shards ||
         after.layout_epoch != row.layout_epoch) {
         if (++retries > EFS_META_LANES + 2 ||
-            (remaining && !*remaining)) {
+            (remaining && *remaining < (coord ? DIR_TX_SCAN_MIN : 1))) {
             *cur = begin;
             return EFS_ERR_BUSY;
         }
@@ -3662,12 +3787,31 @@ retry:
     return EFS_OK;
 }
 
+int efs_meta_apply_readdir_bounded(struct efs_kv *kv, efs_ino_t dir,
+                           struct efs_meta_dir_cursor *cur,
+                           struct efs_meta_dir_ent *out, uint32_t max,
+                           uint32_t *n, uint32_t *remaining)
+{
+    return readdir_impl(kv, dir, cur, out, max, n, remaining, NULL, NULL);
+}
+
+int efs_meta_apply_readdir_tx_bounded(struct efs_kv *kv, efs_ino_t dir,
+                           struct efs_meta_dir_cursor *cur,
+                           struct efs_meta_dir_ent *out, uint32_t max,
+                           uint32_t *n, uint32_t *remaining,
+                           efs_txn_coord_fn coord, void *ctx)
+{
+    if (!coord || (remaining && *remaining < DIR_TX_SCAN_MIN))
+        return EFS_ERR_BUSY;
+    return readdir_impl(kv, dir, cur, out, max, n, remaining, coord, ctx);
+}
+
 int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
                            struct efs_meta_dir_cursor *cur,
                            struct efs_meta_dir_ent *out, uint32_t max,
                            uint32_t *n)
 {
-    return efs_meta_apply_readdir_bounded(kv, dir, cur, out, max, n, NULL);
+    return readdir_impl(kv, dir, cur, out, max, n, NULL, NULL, NULL);
 }
 
 static int dir_has_live(struct efs_kv *kv, uint32_t shard, efs_ino_t dir)

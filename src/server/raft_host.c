@@ -25737,13 +25737,14 @@ scan_covered:
     cur.src = after_src;
     if (after_name && after_name[0])
         strncpy(cur.name, after_name, EFS_MAX_NAME - 1);
-    while (rc == EFS_OK && !cur.done && out->count < max_ents && scan_left) {
+    while (rc == EFS_OK && !cur.done && out->count < max_ents && scan_left >= 6) {
         got = 0;
         /* Never scan past what fits in the reply: the cursor advances to
          * the last SCANNED name, so an unemitted entry would be skipped on
          * resume. */
-        rc = efs_meta_apply_readdir_bounded(h->kv, parent, &cur, page,
-                                    max_ents - out->count, &got, &scan_left);
+        rc = efs_meta_apply_readdir_tx_bounded(h->kv, parent, &cur, page,
+                                    max_ents - out->count, &got, &scan_left,
+                                    host_txn_coord, h);
         for (i = 0; i < got && rc == EFS_OK && out->count < max_ents; i++) {
             /* Readdir is a weak name listing (spec §7.4): ino + type +
              * name. A getattr + ReadIndex per child made `ls` of an
@@ -25772,7 +25773,7 @@ scan_covered:
             rc = host_read_inode_lanes_reuse(h, parent, &hint, &covered);
             if (rc == EFS_OK && (need & ~covered))
                 rc = EFS_ERR_BUSY; /* no proof progress: never loop or serve */
-            if (rc == EFS_OK && !scan_left)
+            if (rc == EFS_OK && scan_left < 6)
                 rc = EFS_ERR_BUSY; /* cannot publish an unfenced exhausted cut */
             if (rc == EFS_OK)
                 goto scan_covered;

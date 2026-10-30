@@ -2151,12 +2151,76 @@ static void test_lookup_committed_unresolved_dentry(void)
           "committed unresolved dentry visible");
     CHECK(efs_meta_apply_lookup_row_tx(kv, &root, "c", coord_fn, &cc, &dent) ==
               EFS_OK && dent.ino == ino, "batch committed unresolved visible");
+    /* A materialized-only listing loses the same committed name that lookup
+     * sees. Migration can leave precisely this cut after source RESOLVE. */
+    struct efs_meta_dir_cursor dc = {0};
+    struct efs_meta_dir_ent de[4];
+    uint32_t dn = 0, budget = 64;
+    CHECK(efs_meta_apply_readdir(kv, EFS_ROOT_INO, &dc, de, 4, &dn) == EFS_OK &&
+              dn == 0, "reproduce materialized-only listing omission");
+    memset(&dc, 0, sizeof(dc));
+    CHECK(efs_meta_apply_readdir_tx_bounded(kv, EFS_ROOT_INO, &dc, de, 4, &dn,
+              &budget, coord_fn, &cc) == EFS_OK && dn == 1 &&
+              !strcmp(de[0].name, "c") && de[0].d.ino == ino && dc.done,
+          "listing includes committed unresolved dentry");
+    n = sizeof(img);
+    CHECK(efs_kv_get(kv, key, klen, img, &n) == EFS_ERR_NOT_FOUND,
+          "listing does not resolve or materialize intents");
+
     CHECK(efs_meta_apply_resolve_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc, &dent,
                                     &row) == EFS_OK && row.ino == ino,
           "resolve sees the row");
     CHECK(efs_txn_resolve(kv, &t, sh, EFS_TXN_COMMIT) == EFS_OK, "resolve");
     CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "c", &dent) == EFS_OK &&
               dent.ino == ino, "materialized");
+    efs_kv_mem_free(kv);
+}
+
+/* The intent stream fills before the base stream. An invisible intent is
+ * progress, not permission to jump the cursor to a later base name. */
+static void test_readdir_intent_frontier(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc = {.kv = kv};
+    struct efs_meta_dir_cursor cur = {0};
+    struct efs_meta_dir_ent out[1];
+    struct efs_meta_row root;
+    efs_ino_t ino;
+    uint8_t key[EFS_KV_KEY_MAX], img[512];
+    uint32_t kl, vl, sh, n, budget;
+    struct efs_txid tx[2] = {{{0}}};
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init frontier");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &root) == EFS_OK, "root");
+    sh = efs_kv_inode_shard(EFS_ROOT_INO);
+    struct efs_txn_parts parts = one_part(sh);
+    const char *names[] = {"a", "b", "z"};
+    for (unsigned i = 0; i < 3; ++i) {
+        CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755,
+                                  names[i], &ino) == EFS_OK, "make frontier name");
+        if (i == 2) break;
+        CHECK(efs_kv_key_dentry(sh, EFS_ROOT_INO, names[i], key, &kl) == EFS_OK, "key");
+        vl = sizeof(img);
+        CHECK(efs_kv_get(kv, key, kl, img, &vl) == EFS_OK, "image");
+        CHECK(efs_kv_del(kv, key, kl) == EFS_OK, "remove base");
+        tx[i].bytes[0] = 0x70 + i;
+        CHECK(efs_txn_prepare_excl(kv, &tx[i], &parts, key, kl, 0, EFS_TXN_PUT,
+                                  img, vl) == EFS_OK, "prepare frontier");
+        if (i == 1)
+            CHECK(efs_txn_decide(kv, efs_txn_coordinator(&tx[i], &parts), &tx[i],
+                                EFS_TXN_COMMIT) == EFS_OK, "commit b");
+    }
+    budget = 6;
+    CHECK(efs_meta_apply_readdir_tx_bounded(kv, EFS_ROOT_INO, &cur, out, 1, &n,
+              &budget, coord_fn, &cc) == EFS_OK && n == 0 && !cur.done &&
+              !strcmp(cur.name, "a"), "invisible intent advances only to frontier");
+    budget = 6;
+    CHECK(efs_meta_apply_readdir_tx_bounded(kv, EFS_ROOT_INO, &cur, out, 1, &n,
+              &budget, coord_fn, &cc) == EFS_OK && n == 1 &&
+              !strcmp(out[0].name, "b"), "committed intent not skipped");
+    budget = 6;
+    CHECK(efs_meta_apply_readdir_tx_bounded(kv, EFS_ROOT_INO, &cur, out, 1, &n,
+              &budget, coord_fn, &cc) == EFS_OK && n == 1 &&
+              !strcmp(out[0].name, "z") && cur.done, "base stream not skipped");
     efs_kv_mem_free(kv);
 }
 
@@ -6887,6 +6951,7 @@ int main(void)
     test_stat_collect();
     test_stat_committed_unresolved_row();
     test_lookup_committed_unresolved_dentry();
+    test_readdir_intent_frontier();
     test_stat_fence_and_gen();
     test_stat_dir_hashed();
     test_utimens_fence();

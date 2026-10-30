@@ -36,6 +36,7 @@ def run(a):
     started=time.monotonic()
     pause=a.work/'readdir-pause';mount=None;pool=None;stop=threading.Event();errors=[];writer=None;churn_count=[0];churn_started=threading.Event()
     result=dict(verdict='RUNNING',transport=a.transport,checks=[],errors=errors)
+    listing_serial=[0]
     def record(name):result['checks'].append(name);print('AO PASS',name,flush=True)
     try:
         for i in (1,2,3):c.start(i,join=None if i==1 else 1,extra_env={'EFS_FAULT_READDIR_LAYOUT_FILE':str(pause)})
@@ -50,6 +51,9 @@ def run(a):
         with ThreadPoolExecutor(max_workers=8) as p:list(p.map(put,sorted(expected)))
         def listing():
             names=os.listdir(target)
+            listing_serial[0]+=1
+            (a.output/f'listing-{listing_serial[0]:04d}.json').write_text(json.dumps(
+                dict(inode=ino,names=names,missing=sorted(expected-set(names))),indent=2)+'\n')
             assert len(names)==len(set(names)),('duplicate names',names)
             assert expected <= set(names),('missing stable names',sorted(expected-set(names)))
             assert all(n in expected or n.startswith('volatile-') for n in names),('unexpected names',names)
