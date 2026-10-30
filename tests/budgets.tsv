@@ -58,6 +58,7 @@ python3 tests/test_expiry_policy_live.py	40	1
 python3 tests/posix/posix_expiry.py --private	185	3	the four-member expiry fixture and its fsynced create bursts (135 s alone, 133-262 s in the pool depending on its neighbours): three slots and a budget below D4's, so it never runs beside the report step-down or D4 in the first wave; Task T: slowest host median 146.7 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 165 s
 python3 tests/test_k36_segment_recovery.py	155	1	
 ./tests/test_reclaim	20	1	
+./tests/test_ba_delete_accounting	5	1	BA unlink ownership and recovery idempotence
 python3 tests/test_opid_admission.py	15	1	
 EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta	35	1	Task T: slowest host median 25.4 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 10 s
 python3 tests/test_raft_ack_window.py	15	1	Task T: slowest host median 9.3 s (fstor007); three runs/host, 1.25x rounded up to 5 s; previous budget 10 s

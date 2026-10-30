@@ -377,7 +377,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 # helpers built with extra flags). They are real prerequisites of test and
 # test-long, never built inside a recipe, so test-long works on its own and a
 # parallel make cannot start a test before its binary exists.
-TEST_SPECIAL_BINS = tests/faults/efsd tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/test_data_commit_index tests/faults/test_kv_compact_crash
+TEST_SPECIAL_BINS = tests/faults/efsd tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/test_data_commit_index tests/faults/test_kv_compact_crash tests/test_ba_delete_accounting
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -869,6 +869,12 @@ tests/test_store_gc: tests/test_store_gc.c src/server/store.c src/server/reclaim
 tests/test_reclaim: tests/test_reclaim.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/server_internal.h src/bench/writer.o src/bench/storage_roots.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/storage_roots.o $(LIB) $(LDFLAGS)
 
+tests/test_ba_delete_accounting: tests/test_ba_delete_accounting.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/server_internal.h src/bench/writer.o $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o $(LIB) $(LDFLAGS)
+
+tests/test_ba_upload_retire: tests/test_ba_upload_retire.c tests/test_reclaim.c src/server/store.c src/server/store_nvme.c src/server/put_upload.c src/server/put_fence.c src/server/reclaim.c src/server/segment_store.c src/bench/writer.o src/bench/storage_roots.o src/bench/iostats.o $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/storage_roots.o src/bench/iostats.o $(LIB) $(LDFLAGS)
+
 tests/test_iostats_snapshot: tests/test_iostats_snapshot.c src/server/iostats.c src/server/server_internal.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< src/server/iostats.c
 
@@ -947,6 +953,7 @@ clean:
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_follower_bound tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
 	rm -rf tests/faults/server tests/faults/kv
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
+	rm -f tests/test_ba_delete_accounting
 	rm -f tests/test_data_commit tests/test_data_commit_index tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
 
@@ -1170,6 +1177,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/posix/posix_expiry.py --private
 	python3 tests/test_k36_segment_recovery.py
 	./tests/test_reclaim
+	./tests/test_ba_delete_accounting
 	python3 tests/test_opid_admission.py
 	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
 	python3 tests/test_raft_ack_window.py

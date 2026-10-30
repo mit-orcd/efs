@@ -41,12 +41,15 @@ int server_raft_host_inode_reaped(efs_ino_t ino,int *dead)
  * phase 0 means absent. */
 static struct efs_pack_object seg_obj;
 static uint32_t seg_phase;
+/* A captured ReadIndex result may wait before its caller uses it. */
+static void (*seg_authority_captured)(void);
 int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen, struct efs_pack_object *out)
 {
     if (!seg_phase || group != seg_obj.ledger.publication_group || id != seg_obj.ledger.segment_id ||
         gen != seg_obj.ledger.segment_generation) return EFS_ERR_NOT_FOUND;
     *out = seg_obj;
     out->ledger.phase = seg_phase;
+    if (seg_authority_captured) seg_authority_captured();
     return EFS_OK;
 }
 
@@ -514,6 +517,78 @@ static int seg_file(uint64_t id)
 {
     char p[8192]; server_segment_path(&S, 0, id, 1, 0, p, sizeof(p)); return !access(p, F_OK);
 }
+
+static pthread_mutex_t authority_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t authority_cv = PTHREAD_COND_INITIALIZER;
+static int authority_seen, authority_release, delayed_put_rc;
+static __thread int capture_this_put;
+static void capture_segment_authority(void)
+{
+    if (!capture_this_put) return;
+    pthread_mutex_lock(&authority_mu);
+    authority_seen = 1;
+    pthread_cond_broadcast(&authority_cv);
+    while (!authority_release) pthread_cond_wait(&authority_cv, &authority_mu);
+    pthread_mutex_unlock(&authority_mu);
+}
+static void *delayed_segment_put(void *unused)
+{
+    (void)unused;
+    capture_this_put = 1;
+    delayed_put_rc = server_segment_put(&S, seg_body, sizeof(seg_body));
+    return NULL;
+}
+/* Drive the actual upload, journal, fence, unlink and retirement wrappers.
+ * If reclamation is excluded while authority is captured, let the admitted
+ * write finish first. Otherwise complete retirement before releasing the
+ * stale authority result. Both legal schedules must end with no fragment;
+ * a pre-lock authority check resurrects the retired object in the latter.
+ * trywrlock selects a possible schedule; it is not a timing assertion. */
+static void segment_delayed_authority(int rebuild)
+{
+    boot();
+    uint64_t base = used(), id = rebuild ? 0x5eba002 : 0x5eba001;
+    seg_setup(id);
+    if (rebuild) {
+        seg_obj.ledger.state[0] = EFS_PACK_LIVE;
+        seg_mark = 1;
+        seg_body[2] = EFS_SEGMENT_PUT_F_REBUILD;
+    }
+    authority_seen = authority_release = 0;
+    seg_authority_captured = capture_segment_authority;
+    pthread_t writer;
+    assert(!pthread_create(&writer, NULL, delayed_segment_put, NULL));
+    pthread_mutex_lock(&authority_mu);
+    while (!authority_seen) pthread_cond_wait(&authority_cv, &authority_mu);
+    pthread_mutex_unlock(&authority_mu);
+    pthread_rwlock_t *guard = server_segment_guard(0, id);
+    int before = pthread_rwlock_trywrlock(guard);
+    assert(before == 0 || before == EBUSY);
+    if (!before) pthread_rwlock_unlock(guard);
+    seg_phase = EFS_PACK_RECLAIMING;
+    if (!before) {
+        assert(seg_accept(id) == EFS_OK);
+        wait_drained();
+        assert(!server_reclaim_fenced(EFS_RECLAIM_SEGMENT_EID(0), id));
+        seg_phase = 0; /* PACK_RETIRE has forgotten the object row. */
+    }
+    pthread_mutex_lock(&authority_mu);
+    authority_release = 1;
+    pthread_cond_broadcast(&authority_cv);
+    pthread_mutex_unlock(&authority_mu);
+    assert(!pthread_join(writer, NULL));
+    seg_authority_captured = NULL;
+    assert(delayed_put_rc == EFS_OK || delayed_put_rc == EFS_ERR_STALE);
+    if (before == EBUSY) {
+        assert(seg_accept(id) == EFS_OK);
+        wait_drained();
+    }
+    assert(!seg_file(id)); /* An acknowledged delete cannot be resurrected. */
+    assert(used() == base && pending() == 0);
+}
+static void t_segment_delayed_put(void) { segment_delayed_authority(0); }
+static void t_segment_delayed_rebuild(void) { segment_delayed_authority(1); }
+
 /* A full quota must not stop packing: a segment PUT may use the reserve
  * above it (it frees the per-file fragments it replaces); beyond the
  * reserve it is refused. */
@@ -952,13 +1027,21 @@ static void t_ring_release(void)
     pthread_mutex_unlock(&rj.mu);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     /* Under TMPDIR (make_test_summary.sh sets a disk path): the physical
      * guard keeps max(5%, 1 GiB) + 256 MiB free, more than a small tmpfs /tmp. */
     efs_test_path(roots[0],sizeof(roots[0]),"efs-rj-a-XXXXXX");efs_test_path(roots[1],sizeof(roots[1]),"efs-rj-b-XXXXXX");
     assert(efs_test_mkdtemp(roots[0])&&efs_test_mkdtemp(roots[1]));
     assert(!posix_memalign((void**)&body,4096,EFS_FRAGMENT_SIZE));memset(body,0x61,EFS_FRAGMENT_SIZE);memset(sum,0x62,sizeof(sum));
+    if (argc == 2) {
+        void (*test)(void) = !strcmp(argv[1], "--ba-put") ? t_segment_delayed_put :
+            !strcmp(argv[1], "--ba-rebuild") ? t_segment_delayed_rebuild : NULL;
+        assert(test);
+        run(argv[1], test, 0);
+        return 0;
+    }
+    assert(argc == 1);
     printf("reclaim journal:\n");
     run("accept/credit/fence/settle/retire",t_basic,0);
     run("double-debit settle",t_settle,0);
@@ -1000,6 +1083,8 @@ int main(void)
     run("superseded record replays",t_superseded_replay,0);
     run("segment PUT at a full quota uses the reserve",t_segment_quota,0);
     run("K37 segment audit and rebuild PUT",t_segment_audit_rebuild,0);
+    run("BA delayed segment PUT cannot resurrect retirement",t_segment_delayed_put,0);
+    run("BA delayed segment rebuild cannot resurrect retirement",t_segment_delayed_rebuild,0);
     run("AY retried upload meets every leftover",t_upload_retry_matrix,0);
     len=snprintf(cmd,sizeof(cmd),"rm -rf %s %s",roots[0],roots[1]);
     assert(len>0 && (size_t)len<sizeof(cmd));assert(!system(cmd));

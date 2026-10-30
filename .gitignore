@@ -129,3 +129,4 @@ tests/test_kv_reader_gate
 /tests/decoders/check
 
 /tests/decoders/apply
+/tests/test_ba_delete_accounting
