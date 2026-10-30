@@ -135,6 +135,7 @@ struct efs_raft {
     uint64_t snap_handle_incl;
     uint64_t snap_off[EFS_RAFT_MAX_PEERS];
     uint64_t snap_peer_incl[EFS_RAFT_MAX_PEERS];
+    uint8_t snap_pending[EFS_RAFT_MAX_PEERS]; /* final KV import still needs SNAP replies */
     /* No-progress InstallSnapshot ack: do not read another chunk until
      * this tick. Propose wakes were copying the same chunk every time
      * the follower answered BUSY. An empty AppendEntries still goes out. */
@@ -826,6 +827,10 @@ static int send_snap(struct efs_raft *r, int to)
     m.entries[0].term = incl_t;
     m.entries[0].clen = plen;
     m.entries[0].cmd = pay;
+    /* Publish before send: in-process transports may deliver its reply
+     * synchronously. Only a completed image ACK releases this ownership;
+     * an AppendEntries ACK proves log bytes, never the pending KV import. */
+    r->snap_pending[to] = 1;
     rc = send_msg(r, &m);
     free(pay);
     if (rc == EFS_OK)
@@ -978,7 +983,7 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
     ni = r->next_index[to];
     if (ni == 0)
         ni = 1;
-    if (ni < efs_raft_log_floor(r)) {
+    if (r->snap_pending[to] || ni < efs_raft_log_floor(r)) {
         /* Same one-outstanding rule as the entry batch below: a snapshot
          * per propose to a peer in the snap window is a multi-MiB blob per
          * propose. on_snap_rep clears it; the heartbeat retransmits.
@@ -1317,6 +1322,10 @@ static int become_leader(struct efs_raft *r)
         r->next_index[i] = last_i + 1;
         r->match_index[i] = (i == r->id) ? last_i : 0;
     }
+    memset(r->snap_pending, 0, sizeof(r->snap_pending));
+    memset(r->snap_peer_incl, 0, sizeof(r->snap_peer_incl));
+    memset(r->snap_off, 0, sizeof(r->snap_off));
+    memset(r->snap_retry_tick, 0, sizeof(r->snap_retry_tick));
     memset(r->ae_inflight, 0, sizeof(r->ae_inflight));
     memset(r->ae_inflight_commit, 0, sizeof(r->ae_inflight_commit));
     memset(r->ae_inflight_end, 0, sizeof(r->ae_inflight_end));
@@ -2019,14 +2028,15 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         if (ni < 1)
             ni = 1;
         r->next_index[in->from] = ni;
-        /* W130/K6: match=0 from a peer with a proven prefix is an
-         * operator-ordered resync pull (the peer's log is untrusted even
-         * where it matches), not a fresh join. Log replay cannot heal a
-         * halted replica; only the image can. A young leader may have no
-         * image yet: snap_want makes the pump export one outside the byte
-         * cadence, and the next rejection ships it. When the floor has
-         * already passed, send_ae below routes to send_snap as before. */
-        if (ni <= 1 && r->match_index[in->from] > 0) {
+        /* A zero-prefix rejection can be either a fresh empty follower or
+         * an operator resync whose log cannot be trusted. A replacement
+         * leader has match_index==0 for both: requiring earlier success
+         * stranded a resync forever after an election. A valid image is
+         * suitable for both cases. Request export outside the byte cadence
+         * and send an available image; unavailable exports retain the
+         * normal retry/log path. Success/read probes and capacity BUSY
+         * returned above and never trigger this branch. */
+        if (ni <= 1) {
             if (r->snap_idx < r->last_applied)
                 r->snap_want = 1;
             if (r->snap_idx > 0 &&
@@ -2261,6 +2271,11 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
             return EFS_OK;
         return rc;
     }
+    /* A delayed ACK for an older image cannot release a newer import. */
+    if (r->snap_pending[in->from] &&
+        in->match_index < r->snap_peer_incl[in->from])
+        return EFS_OK;
+    r->snap_pending[in->from] = 0;
     if (in->match_index > r->match_index[in->from])
         r->match_index[in->from] = in->match_index;
     r->next_index[in->from] = r->match_index[in->from] + 1;
@@ -2369,6 +2384,27 @@ void efs_raft_free(struct efs_raft *r)
     if (r->snap_handle && r->snap_close)
         r->snap_close(r->snap_handle);
     free(r);
+}
+
+/* Explicit wall-clock liveness, independent of delayed logical tick calls.
+ * Use the already validated acknowledged prefix without resending the
+ * outstanding data window or inventing replication/durability authority.
+ * Replies and follower commit catch-up retain ordinary receive validation. */
+int efs_raft_heartbeat(struct efs_raft *r)
+{
+    if (!r) return EFS_ERR_INVAL;
+    if (r->recv_persisting) return EFS_ERR_BUSY;
+    if (r->storage_failed) return EFS_ERR_IO;
+    if (r->role != EFS_RAFT_LEADER) return EFS_ERR_NOT_PRIMARY;
+    uint32_t peers = peer_mask(r);
+    for (int i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+        if (i == r->id || !(peers & (1u << i))) continue;
+        int rc = send_commit_probe(r, i);
+        if (rc != EFS_OK) return rc;
+    }
+    /* Preserve logical heartbeat/retransmission aging; this additional
+     * liveness probe cannot postpone the ordinary data/snapshot retry. */
+    return EFS_OK;
 }
 
 int efs_raft_tick(struct efs_raft *r)
@@ -3330,8 +3366,18 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
         r->log_new || r->app_new || r->log_old!=r->app_old)
         return 0;
     if (in->type==EFS_RAFT_MSG_AE_REQ) {
-        if (r->role!=EFS_RAFT_FOLLOWER || r->leader!=in->from ||
-            log_term(r,in->prev_index,&term)!=EFS_OK || term!=in->prev_term)
+        if (r->role!=EFS_RAFT_FOLLOWER || r->leader!=in->from)
+            return 0;
+        /* Known current-term leader contact is liveness even when the
+         * advertised commit still belongs to ordered receive. Normal
+         * on_ae_req also resets before validating the prefix. Do not let a
+         * queued heartbeat start a pre-vote just because its apply work
+         * cannot bypass the pump. This grants no reply/read/replication
+         * authority; all prefix and work checks below remain mandatory.
+         * Frozen receive, pending configuration, boot and voter checks above
+         * still refuse inspection without changing this timer. */
+        reset_election(r);
+        if (log_term(r,in->prev_index,&term)!=EFS_OK || term!=in->prev_term)
             return 0;
         /* Zero-context heartbeats can bypass only when no commit/apply
          * bookkeeping is owed. They never grant request-scoped authority. */
@@ -3341,7 +3387,6 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
         reply.type=EFS_RAFT_MSG_AE_REP;reply.to=in->from;
         reply.success=1;reply.vote_granted=in->vote_granted;
         reply.match_index=in->prev_index;reply.last_log_index=in->last_log_index;
-        reset_election(r);
         /* Send failure falls back to normal receive; duplicate read ACKs
          * cannot form an extra vote or grant another round's authority. */
         if(send_msg(r,&reply)!=EFS_OK)return 0;

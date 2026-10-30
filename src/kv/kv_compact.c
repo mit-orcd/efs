@@ -82,11 +82,71 @@ static void flush_drop_new(struct kv_lsm *l, struct seg_slot *neu, uint32_t n)
 
 static uint64_t mono_ms(void);
 
+/* Independent immutable outputs may share the device's durability epoch.
+ * Every file still runs the unchanged checked finish/fsync/rename. Bound
+ * live writers/threads, join all accepted jobs even on error, and publish
+ * no segment until the entire flush has succeeded. No user-facing mode. */
+#define KV_FLUSH_FINISH_MAX 16u
+struct kv_flush_job {
+    struct kv_seg_w *writer;
+    uint32_t slot;
+    int rc;
+};
+
+static void *kv_flush_finish_one(void *arg)
+{
+    struct kv_flush_job *job = arg;
+    job->rc = kv_seg_w_finish(job->writer); /* consumes writer on every result */
+    return NULL;
+}
+
+static int kv_flush_finish_jobs(struct kv_lsm *l, struct seg_slot *neu,
+                                 struct kv_flush_job *jobs, uint32_t count)
+{
+    pthread_t threads[KV_FLUSH_FINISH_MAX];
+    int started[KV_FLUSH_FINISH_MAX] = {0}, rc = EFS_OK;
+    char path[KV_LSM_PATH_MAX + 64];
+
+    for (uint32_t i = 0; i < count; i++) {
+        if (count > 1 && pthread_create(&threads[i], NULL, kv_flush_finish_one, &jobs[i]) == 0)
+            started[i] = 1;
+        else
+            (void)kv_flush_finish_one(&jobs[i]); /* resource failure: same checked finish */
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        if (started[i] && pthread_join(threads[i], NULL) != 0) {
+            /* These are our joinable children, never self or transferred.
+             * A broken join invariant cannot release their borrowed jobs
+             * or let the manifest publish without a completion proof. */
+            fprintf(stderr, "kv-flush: cannot join owned finish job; refusing publication\n");
+            abort();
+        }
+        jobs[i].writer = NULL;
+        if (rc == EFS_OK && jobs[i].rc != EFS_OK)
+            rc = jobs[i].rc;
+    }
+    if (rc != EFS_OK)
+        return rc;
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t slot = jobs[i].slot;
+        struct kv_seg *seg = NULL;
+        kv_seg_path(l, 0, neu[slot].seq, path, sizeof(path));
+        rc = kv_seg_open(path, &seg);
+        if (rc != EFS_OK)
+            return rc;
+        seg_slot_set(&neu[slot], seg);
+        neu[slot].level = 0;
+    }
+    return EFS_OK;
+}
+
 int kv_flush_locked(struct kv_lsm *l)
 {
     char path[KV_LSM_PATH_MAX + 64];
     struct seg_slot neu[KV_RANGE_N];
     struct kv_seg_w *w = NULL;
+    struct kv_flush_job jobs[KV_FLUSH_FINISH_MAX] = {0};
+    uint32_t njobs = 0;
     uint32_t nneu = 0, i, runs = 0;
     int cur = -1, prev = -1;
     int rc = EFS_OK, yielded = 0, outer;
@@ -122,22 +182,14 @@ int kv_flush_locked(struct kv_lsm *l)
 
         if (r != cur) {
             if (w) {
-                struct kv_seg *s = NULL;
-                uint64_t seq = neu[nneu].seq;
-
-                rc = kv_seg_w_finish(w);
+                jobs[njobs++] = (struct kv_flush_job){.writer=w, .slot=nneu++};
                 w = NULL;
-                if (rc != EFS_OK)
-                    goto fail;
-                kv_seg_path(l, 0, seq, path, sizeof(path));
-                rc = kv_seg_open(path, &s);
-                if (rc != EFS_OK) {
-                    unlink(path);
-                    goto fail;
+                if (njobs == KV_FLUSH_FINISH_MAX) {
+                    rc = kv_flush_finish_jobs(l, neu, jobs, njobs);
+                    njobs = 0;
+                    if (rc != EFS_OK)
+                        goto fail;
                 }
-                seg_slot_set(&neu[nneu], s);
-                neu[nneu].level = 0;
-                nneu++;
             }
             /* One file per range; range 0 splits into 256, so a
              * memtable can hold up to KV_RANGE_N runs. A cap of 256
@@ -162,22 +214,14 @@ int kv_flush_locked(struct kv_lsm *l)
         }
     }
     if (w) {
-        struct kv_seg *s = NULL;
-        uint64_t seq = neu[nneu].seq;
-
-        rc = kv_seg_w_finish(w);
+        jobs[njobs++] = (struct kv_flush_job){.writer=w, .slot=nneu++};
         w = NULL;
+    }
+    if (njobs) {
+        rc = kv_flush_finish_jobs(l, neu, jobs, njobs);
+        njobs = 0;
         if (rc != EFS_OK)
             goto fail;
-        kv_seg_path(l, 0, seq, path, sizeof(path));
-        rc = kv_seg_open(path, &s);
-        if (rc != EFS_OK) {
-            unlink(path);
-            goto fail;
-        }
-        seg_slot_set(&neu[nneu], s);
-        neu[nneu].level = 0;
-        nneu++;
     }
     t_io = mono_ms() - t0;
     /* Publish exclusively: the level array may move (reserve) and the
@@ -218,6 +262,11 @@ int kv_flush_locked(struct kv_lsm *l)
     return rc;
 
 fail:
+    /* Queued jobs have not started until finish_jobs; a returned cohort
+     * already joined every child and consumed every writer. */
+    for (uint32_t j = 0; j < njobs; j++)
+        if (jobs[j].writer)
+            kv_seg_w_abort(jobs[j].writer);
     lsm_view_reclaim(l, yielded);
     flush_drop_new(l, neu, nneu);
     return rc;

@@ -19,6 +19,9 @@ code=r'''
 #include <string.h>
 #include <stdio.h>
 #include <pthread.h>
+#include <time.h>
+#include <errno.h>
+#include <unistd.h>
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
 static struct {uint8_t opid_uuid[EFS_OPID_UUID_LEN];uint32_t opid_epoch;int session_started,session_fenced;
  uint8_t append_session_shards[512];} g_client;
@@ -28,6 +31,7 @@ static int efs_client_publication_id(uint64_t sequence,struct efs_opid *out)
 struct efs_conn {int unused;};static struct efs_conn connection;
 static struct efs_opid identity;
 static unsigned calls,stage,redirect,busy,drops,expired,malformed,fail_receive,creates;
+static int concurrent_start;
 static int failure,existing;static uint64_t query_salt;
 static uint32_t routing,participant;
 static uint8_t sent;
@@ -61,6 +65,7 @@ int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *data,uint32_t 
 }
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *n)
 {
+ if(concurrent_start)usleep(20000);
  (void)c;struct efs_msg_raft_mkfs_reply r={.leader_hint=-1};
  if(redirect){redirect--;r.rc=EFS_ERR_NOT_PRIMARY;r.leader_hint=2;}
  else if(busy){busy--;r.rc=EFS_ERR_BUSY;}
@@ -81,11 +86,21 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *n)
 static void reset(void){calls=stage=redirect=busy=drops=expired=malformed=fail_receive=creates=0;failure=existing=0;query_salt=0;participant=18;
  g_client.session_started=1;g_client.session_fenced=0;}
 #define ACTIVE1 (1|((uint64_t)EFS_SESSION_ACTIVE<<32))
+static void *start_worker(void *arg){(void)arg;return (void *)(intptr_t)efs_client_session_check();}
 int main(void)
 {
  identity.client_uuid[0]=9;identity.session_epoch=1;
  memcpy(g_client.opid_uuid,identity.client_uuid,16);g_client.opid_epoch=1;
  /* Mount start: absent owner row -> one CREATE, then ACTIVE at our epoch. */
+ reset();g_client.session_started=0;concurrent_start=1;
+ pthread_t starters[16];
+ for(unsigned i=0;i<16;i++)assert(!pthread_create(&starters[i],NULL,start_worker,NULL));
+ for(unsigned i=0;i<16;i++){void *rc;assert(!pthread_join(starters[i],&rc)&&!(intptr_t)rc);}
+ assert(creates==1&&calls==3&&g_client.session_started);concurrent_start=0;
+ reset();g_client.session_started=0;expired=1;
+ assert(!pthread_mutex_lock(&session_start_mu));
+ assert(efs_client_session_start()==EFS_ERR_BUSY&&!calls);
+ assert(!pthread_mutex_unlock(&session_start_mu));
  reset();g_client.session_started=0;
  assert(efs_client_session_start()==EFS_OK && creates==1 && calls==3 && g_client.session_started && !g_client.session_fenced);
  assert(efs_client_session_start()==EFS_OK && calls==3); /* started once */

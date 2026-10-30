@@ -11,6 +11,7 @@
 #include "efs/session.h"
 #include "efs/session_revoke.h"
 #include "metadata_read_route.h"
+#include <errno.h>
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
@@ -1315,6 +1316,19 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
     if ((flags & EFS_CREATE_F_HOLD) && !g_client.flock_token)
         g_client.flock_token = 1;
     req->owner = g_client.flock_token;
+    /* Establish the mount before allocating a file-mutation identity. A
+     * BUSY bootstrap has sent no CREATE, so it can wait inside the caller's
+     * existing envelope without consuming the finite receipt window. */
+    int ready = efs_client_session_check();
+    unsigned bootstrap_attempt = 0;
+    while (ready == EFS_ERR_BUSY && efs_client_rpc_deadline_ms() &&
+           !efs_client_rpc_past_deadline()) {
+        if (rpc_writer_retry_pause(bootstrap_attempt++) != EFS_OK)
+            break;
+        ready = efs_client_session_check();
+    }
+    if (ready != EFS_OK)
+        return ready;
     slot = opid_begin(&q);
     /* A full local receipt window has sent no CREATE and allocated no
      * identity. Wait only inside an existing caller deadline, as retained
@@ -1877,7 +1891,7 @@ static int session_owner_view(const struct efs_opid *id,uint32_t shard,uint64_t 
     return EFS_OK;
 }
 
-int efs_client_session_start(void)
+static int session_start_once(void)
 {
     struct efs_opid id;
     int rc=efs_client_publication_id(1,&id); /* seeds the mount identity */
@@ -1905,6 +1919,32 @@ int efs_client_session_start(void)
     }
     __atomic_store_n(&g_client.session_started,1,__ATOMIC_RELEASE);
     return EFS_OK;
+}
+
+/* Bootstrap is one operation per mount, not one CREATE per worker. All
+ * waiters share its established latch, but retain their own deadlines.
+ * No file identity has been allocated while waiting for this owner. */
+static pthread_mutex_t session_start_mu=PTHREAD_MUTEX_INITIALIZER;
+int efs_client_session_start(void)
+{
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC,&ts)) return EFS_ERR_IO;
+    uint64_t end=(uint64_t)ts.tv_sec*1000u+ts.tv_nsec/1000000u+EFS_IO_TIMEOUT_MS;
+    for (;;) {
+        if (efs_client_session_fenced()) return EFS_ERR_FENCED;
+        if (__atomic_load_n(&g_client.session_started,__ATOMIC_ACQUIRE)) return EFS_OK;
+        if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        int rc=pthread_mutex_trylock(&session_start_mu);
+        if (!rc) break;
+        if (rc!=EBUSY) return EFS_ERR_IO;
+        if (clock_gettime(CLOCK_MONOTONIC,&ts)) return EFS_ERR_IO;
+        uint64_t now=(uint64_t)ts.tv_sec*1000u+ts.tv_nsec/1000000u;
+        if (now>=end) return EFS_ERR_BUSY;
+        usleep(1000);
+    }
+    int rc=efs_client_rpc_past_deadline()?EFS_ERR_BUSY:session_start_once();
+    pthread_mutex_unlock(&session_start_mu);
+    return rc;
 }
 
 int efs_client_session_check(void)

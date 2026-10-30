@@ -16,6 +16,9 @@ code=r'''
 #include <stdio.h>
 #include <string.h>
 struct efs_client g_client;
+static __thread uint64_t call_deadline;
+uint64_t efs_client_rpc_deadline_ms(void){return call_deadline;}
+void efs_client_rpc_set_deadline_ms(uint64_t value){call_deadline=value;}
 static int pins,locks,marks,admitted,unreserved,pressure,opened,stage_missing;
 int efs_client_stage_is_open(efs_ino_t ino){assert(ino==2);return opened;}
 int efs_client_stat_local(efs_ino_t ino,struct efs_inode *out){assert(ino==2);memset(out,0,sizeof(*out));return stage_missing?EFS_ERR_NOT_FOUND:EFS_OK;}

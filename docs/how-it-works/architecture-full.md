@@ -1617,6 +1617,11 @@ pin retention and F29 K36 recovery scheduling PASS focused** on branch `agent/h-
 (each test fails on devel source); F27 not ported, devel `35a6e41b0` already covers it.
 K36, K43, K47 statuses unchanged; **K48 stays OPEN**.
 
+[H-K22 allocator group](../status/h-k22-allocator-20261029.md): Task H fixes F10-F20
+(allocator reservation, receipt replay, bootstrap/CREATE authority, snapshot
+import, KV flush cohorts, delayed-pump heartbeat) ported to
+`agent/h-k22-allocator`, pending merge; unit regressions PASS, live K22 NOTRUN.
+
 [K55 — slow storage COMMIT](../status/k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
 source `5185bfcd3`; merged into devel (wave 32, `4e4b7ec75`). Attributed K35 fix passes native/index,

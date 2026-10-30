@@ -509,6 +509,34 @@ int efs_txn_prepare_excl_value(struct efs_kv *kv, const struct efs_txid *t,
     return efs_txn_prepare_excl(kv, t, p, key, klen, ver, op, value, vn);
 }
 
+int efs_txn_owned_excl(struct efs_kv *kv, const struct efs_txid *t,
+                        const struct efs_txn_parts *p, const uint8_t *key,
+                        uint32_t klen, uint8_t *value, uint32_t *length)
+{
+    uint8_t ik[KEY_MAX], buf[VAL_MAX];
+    uint32_t il=0, bn=sizeof(buf), vn=0;
+    struct efs_txid owner; struct efs_txn_parts parts;
+    const uint8_t *v; int op;
+    if (!kv || !t || !parts_ok(p) || !key || klen<3 || !value || !length)
+        return EFS_ERR_INVAL;
+    int rc=efs_kv_key_intent(key,klen,ik,&il);
+    if (rc==EFS_OK) rc=efs_kv_get(kv,ik,il,buf,&bn);
+    if (rc!=EFS_OK) return rc;
+    rc=parse_excl(buf,bn,&owner,&parts,&op,&v,&vn);
+    if (rc!=EFS_OK) return rc;
+    if (bn!=31u+4u*parts.n+vn) return EFS_ERR_PROTO;
+    int member=0;
+    for (unsigned i=0;i<parts.n;i++) member|=parts.shard[i]==key_shard(key);
+    if (!member) return EFS_ERR_PROTO;
+    if (!same_txid(owner.bytes,t)) return EFS_ERR_BUSY;
+    if (parts.n!=p->n || memcmp(parts.shard,p->shard,p->n*sizeof(p->shard[0])) ||
+        op!=EFS_TXN_PUT) return EFS_ERR_STALE;
+    if (*length<vn) return EFS_ERR_INVAL;
+    if (vn) memcpy(value,v,vn);
+    *length=vn;
+    return EFS_OK;
+}
+
 /* Stage the existing exact-value PREPARE implementation's intent PUTs.
  * No write reaches the real KV until every request passes. The participant
  * log serializes the read/validate/batch sequence, as for single PREPARE. */
@@ -711,6 +739,92 @@ static int decode_opid(const uint8_t *key, uint32_t klen, const uint8_t *pay,
     return EFS_OK;
 }
 
+struct opid_pending_scan {
+    const uint8_t *window;
+    uint32_t klen, prefix_len, seen;
+    uint64_t seq;
+    int rc, found;
+    int allow_replay;
+    struct efs_txid transaction;
+    struct efs_txn_parts participants;
+    struct efs_opid_reply reply;
+};
+
+static int opid_pending_cb(void *arg, const uint8_t *key, uint32_t klen,
+                            const uint8_t *value, uint32_t bytes)
+{
+    struct opid_pending_scan *s=arg;
+    struct efs_txid t;
+    struct efs_txn_parts p;
+    struct efs_opid_req q;
+    struct efs_opid_reply rep;
+    uint32_t used=0;
+    if (++s->seen>EFS_OPID_BITMAP_BITS) {s->rc=EFS_ERR_BUSY;return 1;}
+    if (klen!=s->prefix_len+EFS_TXN_ID_LEN ||
+        parse_parts_txid(value,bytes,&t,&p,&used)!=EFS_OK || !parts_ok(&p) ||
+        memcmp(key+klen-EFS_TXN_ID_LEN,t.bytes,EFS_TXN_ID_LEN) ||
+        bytes!=16+used+EFS_TXN_REDUCE_OPID_WIRE ||
+        decode_opid(s->window,s->klen,value+16+used,
+                     EFS_TXN_REDUCE_OPID_WIRE,&q,&rep)!=EFS_OK ||
+        !efs_opid_req_valid(&q) || q.ack>=q.id.seq) {
+        s->rc=EFS_ERR_PROTO;return 1;
+    }
+    int hosted=0;
+    for (uint32_t i=0;i<p.n;i++)hosted|=p.shard[i]==key_shard(s->window);
+    if (!hosted) {s->rc=EFS_ERR_PROTO;return 1;}
+    if (q.id.seq==s->seq || q.ack>=s->seq) {
+        /* Only the exact staged verdict can answer a retry. A covering ACK
+         * is never permission to invent the old result or execute it again. */
+        if (!s->allow_replay || q.id.seq!=s->seq || s->found) {
+            s->rc=EFS_ERR_BUSY;return 1;
+        }
+        s->transaction=t;s->participants=p;s->reply=rep;s->found=1;
+    }
+    return 0;
+}
+
+static int opid_pending(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
+                         uint64_t seq,efs_txn_coord_fn coord,void *ctx,
+                         struct efs_opid_reply *reply)
+{
+    uint8_t prefix[KEY_MAX];uint32_t plen=0;
+    if (!kv || !key || klen!=3+EFS_OPID_UUID_LEN+4 ||
+        key[2]!=EFS_KV_KIND_OPID || !seq) return EFS_ERR_INVAL;
+    int rc=efs_txn_key_exclusive(kv,key,klen);
+    if (rc!=EFS_OK)return rc;
+    rc=efs_kv_key_reduce_prefix(key,klen,prefix,&plen);
+    if (rc!=EFS_OK)return rc;
+    struct opid_pending_scan s={.window=key,.klen=klen,.prefix_len=plen,.seq=seq,
+                                .allow_replay=coord!=NULL};
+    rc=efs_kv_scan_prefix(kv,prefix,plen,opid_pending_cb,&s);
+    if (rc!=EFS_OK && rc!=1)return rc;
+    if (s.rc)return s.rc;
+    if (!s.found)return 0;
+    /* A real KV scan holds its reader gate. ReadIndex may need apply to
+     * advance, which needs that gate released. Copy the bounded record
+     * first and establish coordinator authority only after scan returns. */
+    int decision=EFS_TXN_UNDECIDED;
+    rc=coord(ctx,&s.transaction,efs_txn_coordinator(&s.transaction,&s.participants),&decision);
+    if (rc!=EFS_OK)return rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
+    if (decision!=EFS_TXN_COMMIT)return EFS_ERR_BUSY;
+    *reply=s.reply;
+    return 1;
+}
+
+int efs_txn_opid_busy(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
+                       uint64_t seq)
+{
+    return opid_pending(kv,key,klen,seq,NULL,NULL,NULL);
+}
+
+int efs_txn_opid_replay(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
+                         uint64_t seq,efs_txn_coord_fn coord,void *ctx,
+                         struct efs_opid_reply *reply)
+{
+    if (!coord || !reply) return EFS_ERR_INVAL;
+    return opid_pending(kv,key,klen,seq,coord,ctx,reply);
+}
+
 /* Record under reduce(key, txid): [txid][parts][payload]. The payload's
  * meaning follows the KIND OF THE DATA KEY (lane triple, inode delta, u64
  * add) — one record shape, so drop/resolve find every reduce of a txn by
@@ -834,6 +948,11 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
             return EFS_ERR_PROTO;
         return efs_txn_prepare_excl(kv, t, p, key, klen, expected, op,
                                     pay + 13, vlen);
+    }
+    case EFS_TXN_ALLOC_INODE: {
+        if (plen) return EFS_ERR_UNSUPPORTED;
+        int rc=efs_meta_apply_alloc_prepare(kv,t,p,key,klen);
+        return rc==EFS_ERR_PROTO ? EFS_ERR_UNSUPPORTED : rc;
     }
     case EFS_TXN_EXCL_VALUE: {
         uint32_t en, vn, bytes;

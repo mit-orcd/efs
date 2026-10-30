@@ -107,7 +107,7 @@ static int host_propose(struct efs_raft_host *h,uint8_t g,const uint8_t *cmd,uin
  } else image_seen(cmd,n,g);
  *idx=proposals;*term=42;return 0;
 }
-static int host_wait_applied(struct efs_raft_host *h,uint8_t g,uint64_t idx,int *hint) {
+static int host_wait_applied_own(struct efs_raft_host *h,uint8_t g,uint64_t idx,int *hint) {
  (void)h;assert(g==0||g==2);assert(idx&&idx<=proposals);*hint=1;waits++;waited[g/2]=idx;return wait_error;
 }
 static int host_apply_rc(struct efs_raft_host *h,uint8_t g,uint64_t idx,uint64_t term) {

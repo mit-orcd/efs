@@ -89,6 +89,7 @@ static struct efs_raft_msg *msg_copy_deep(const struct efs_raft_msg *src)
 struct app {
     int n;
     int park_apply;
+    int hold_snapshot, snapshot_busy_calls;
     uint64_t apply_limit;
     uint8_t last;
     uint64_t snap_at;
@@ -184,6 +185,11 @@ static int snap_chunk(void *app_, uint64_t incl, uint64_t incl_term,
     uint8_t *p;
 
     (void)incl_term;
+    if (done && a->hold_snapshot) {
+        a->snapshot_busy_calls++;
+        return EFS_ERR_BUSY;
+    }
+    if (done && a->snapshot_busy_calls) a->park_apply=0;
     if (offset == 0) {
         free(a->part);
         a->part = NULL;
@@ -799,6 +805,47 @@ static void test_readindex_control(void)
           "identical pure votes remain idempotent with outstanding suffix");
     reply.match_index=index;
     n.hold_ae_replies=0;elect(&n,4);
+    /* A queued ordinary heartbeat is still contact from the known leader.
+     * It must suppress a spurious election while its advertised commit
+     * work is queued; no ACK, read proof or state-machine progress is owed
+     * by this liveness-only inspection. Drive far beyond an election window. */
+    struct efs_raft_msg contact=probe;
+    contact.term=efs_raft_term(n.r[leader]);contact.prev_index=efs_raft_applied(n.r[follower]);
+    contact.prev_term=contact.term;contact.nentries=0;contact.last_log_index=0;
+    contact.leader_commit=contact.prev_index+1;
+    CHECK(efs_raft_commit(n.r[follower])==efs_raft_applied(n.r[follower]),"contact fixture has no local apply backlog");
+    int contact_applies=app[follower].n;
+    uint64_t contact_term=efs_raft_term(n.r[follower]);
+    uint64_t contact_commit=efs_raft_commit(n.r[follower]);
+    uint64_t contact_applied=efs_raft_applied(n.r[follower]);
+    int contact_replies=n.cap_n;
+    for(unsigned tick=0;tick<200;tick++) {
+        CHECK(!efs_raft_read_control(n.r[follower],&contact),"queued heartbeat remains owned by receive");
+        CHECK(!efs_raft_tick(n.r[follower]),"queued heartbeat follower tick");
+    }
+    CHECK(efs_raft_role(n.r[follower])==EFS_RAFT_FOLLOWER &&
+          efs_raft_leader(n.r[follower])==leader &&
+          efs_raft_term(n.r[follower])==contact_term,
+          "queued known-leader heartbeats suppress false election");
+    CHECK(efs_raft_commit(n.r[follower])==contact_commit &&
+          efs_raft_applied(n.r[follower])==contact_applied &&
+          app[follower].n==contact_applies && n.cap_n==contact_replies,
+          "liveness-only inspection earns no commit/apply or reply authority");
+    for(unsigned invalid=0;invalid<3;invalid++) {
+        struct efs_raft_msg wrong=contact;
+        if(invalid==0)wrong.boot_id++;
+        else if(invalid==1)wrong.term++;
+        else wrong.from=3-leader-follower; /* configured, but not the known leader */
+        for(unsigned tick=0;tick<200;tick++) {
+            CHECK(!efs_raft_read_control(n.r[follower],&wrong),"invalid contact stays on ordered path");
+            CHECK(!efs_raft_tick(n.r[follower]),"invalid contact tick");
+        }
+        CHECK(efs_raft_leader(n.r[follower])!=leader,
+              "wrong boot/term/leader cannot suppress election timeout");
+        CHECK(!efs_raft_recv(n.r[follower],&contact) &&
+              efs_raft_leader(n.r[follower])==leader,
+              "normal valid heartbeat restores known leader after timeout");
+    }
     app[follower].park_apply=1;
     CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"follower parked new durable prefix");
     elect(&n,4);n.hold_ae_replies=1;
@@ -2102,6 +2149,56 @@ static void test_install_snapshot(void)
     free_n(&n, st, 5);
 }
 
+/* A delayed pre-compaction entry batch can finish while the receiver is
+ * preparing the snapshot's KV import. Its ACK proves log bytes, not that
+ * the pending image has installed. Continue polling the final chunk until
+ * the import completes; abandoning it leaves application apply blocked. */
+static void test_snapshot_busy_survives_delayed_append(void)
+{
+    struct net n; struct efs_raft_store *st[3]; struct app app[3];
+    struct efs_raft_cfg cfg;
+    boot_n(&n,st,app,&cfg,3,7);
+    cfg.snap_open=snap_open;cfg.snap_read=snap_read;
+    cfg.snap_close=snap_close;cfg.snap_chunk=snap_chunk;
+    for(int i=0;i<3;i++) {
+        efs_raft_free(n.r[i]);cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+        cfg.app=&app[i];cfg.election_ticks=10+(uint32_t)i*10;cfg.heartbeat_ticks=1;
+        n.r[i]=test_raft_new(&cfg);
+    }
+    CHECK(elect(&n,40)==1,"pending import election");
+    int leader=leader_id(&n);
+    if(leader<0){free_n(&n,st,3);return;}
+    int follower=(leader+1)%3;
+    app[follower].park_apply=1;app[follower].hold_snapshot=1;
+    n.defer_on=1;n.defer_to=follower;
+    uint8_t cmd=73;uint64_t index=0;
+    CHECK(!efs_raft_propose(n.r[leader],&cmd,1,&index),"queue original append");
+    CHECK(n.ndeferred>0,"original append delayed");
+    CHECK(efs_raft_commit(n.r[leader])>=index,"other voter commits entry");
+    CHECK(!efs_raft_snapshot(n.r[leader]),"compact before delayed append arrives");
+    for(int i=0;i<5;i++)(void)efs_raft_tick(n.r[leader]);
+    CHECK(app[follower].snapshot_busy_calls>0,"receiver prepares import");
+    n.defer_on=0;
+    for(int i=0;i<n.ndeferred;i++) {
+        CHECK(!efs_raft_recv(n.r[follower],n.deferred[i]),"delayed append reaches pending importer");
+        msg_free_deep(n.deferred[i]);n.deferred[i]=NULL;
+    }
+    n.ndeferred=0;
+    CHECK(efs_raft_applied(n.r[follower])<index,"log ACK is not completed import");
+    struct efs_raft_msg stale={0};
+    stale.type=EFS_RAFT_MSG_SNAP_REP;stale.from=follower;stale.to=leader;
+    stale.term=efs_raft_term(n.r[leader]);stale.boot_id=1;
+    stale.success=1;stale.vote_granted=1;stale.match_index=index-1;
+    CHECK(!efs_raft_recv(n.r[leader],&stale),"older image ACK is consumed without releasing current import");
+    app[follower].hold_snapshot=0;
+    for(int i=0;i<10;i++)(void)efs_raft_tick(n.r[leader]);
+    CHECK(app[follower].part_applied,"pending final chunk is retried after log ACK");
+    CHECK(efs_raft_applied(n.r[follower])>=index,"pending importer reaches committed prefix");
+    CHECK(app[follower].n==app[leader].n && app[follower].last==app[leader].last,
+          "imported state matches leader exactly");
+    free_n(&n,st,3);
+}
+
 /* Compacting without a snap_get blob must not skip a learner ahead.
  * wait_voters stays BUSY — match never reaches commit. */
 static void test_install_snapshot_needs_blob(void)
@@ -2847,6 +2944,67 @@ static void test_resync_replaces_diverged_follower(void)
     efs_raft_mem_free(st);
 }
 
+/* A resync survives leader replacement even before that leader has a
+ * successful match for this voter. Its zero-prefix rejection must request
+ * an image, rather than loop forever through log replay it refuses. */
+static void test_resync_new_leader_without_match(void)
+{
+    struct net n={.n=3};struct efs_raft_store *st[3];struct app app[3]={{0}};
+    struct efs_raft_cfg cfg={0};
+    cfg.n=3;cfg.voters=7;cfg.boot_id=1;cfg.send=send_now;cfg.net=&n;
+    cfg.apply=apply_cmd;cfg.snap_open=snap_open;cfg.snap_read=snap_read;
+    cfg.snap_close=snap_close;cfg.snap_chunk=snap_chunk;
+    cfg.heartbeat_ticks=1;
+    for(int i=0;i<3;i++) {
+        st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+        cfg.app=&app[i];cfg.election_ticks=4u+(uint32_t)i*4;
+        n.r[i]=test_raft_new(&cfg);CHECK(n.r[i]!=NULL,"resync election fixture");
+    }
+    CHECK(elect(&n,40)==1,"initial resync leader");
+    int old=leader_id(&n);if(old<0){free_n(&n,st,3);return;}
+    uint8_t data='A';uint64_t idx=0;
+    CHECK(efs_raft_propose(n.r[old],&data,1,&idx)==EFS_OK && elect(&n,4)==1,
+          "initial committed payload");
+    int follower=(old+1)%3;
+    CHECK(efs_raft_request_resync(n.r[follower])==EFS_OK,"request resync before transfer");
+    n.drop[follower]=1;
+    efs_raft_allow_campaign(n.r[old],0);
+    CHECK(efs_raft_step_down(n.r[old])==EFS_OK && elect(&n,60)==1,"replacement leader");
+    int leader=leader_id(&n);
+    if(leader<0){free_n(&n,st,3);return;}
+    CHECK(leader!=old && leader!=follower,"new leader elected without resync peer");
+    struct efs_raft_peer_progress peer;
+    CHECK(efs_raft_peer_progress(n.r[leader],follower,&peer)==EFS_OK &&
+          peer.match_index==0,"new leader has no established peer prefix");
+    uint64_t term=efs_raft_term(n.r[leader]);
+    struct efs_raft_msg m={0};m.type=EFS_RAFT_MSG_AE_REQ;
+    m.from=leader;m.to=follower;m.term=term;m.boot_id=1;
+    n.drop[leader]=1;n.cap_rep=1;n.cap_n=0;
+    CHECK(efs_raft_recv(n.r[follower],&m)==EFS_OK && n.cap_n==1 &&
+          !n.cap_ok && !n.cap_match,"resync peer emits genuine zero rejection");
+    n.drop[leader]=0;n.cap_rep=0;
+    memset(&m,0,sizeof(m));m.type=EFS_RAFT_MSG_AE_REP;m.from=follower;
+    m.to=leader;m.term=term;m.boot_id=1;m.success=1;
+    CHECK(efs_raft_recv(n.r[leader],&m)==EFS_OK && !efs_raft_snap_wanted(n.r[leader]),
+          "a successful prefix-zero read vote never requests an image");
+    m.success=0;m.busy=1;
+    CHECK(efs_raft_recv(n.r[leader],&m)==EFS_OK && !efs_raft_snap_wanted(n.r[leader]),
+          "capacity BUSY does not request an image");
+    m.busy=0;
+    CHECK(efs_raft_recv(n.r[leader],&m)==EFS_OK && efs_raft_snap_wanted(n.r[leader]),
+          "zero rejection requests image without previous match knowledge");
+    CHECK(efs_raft_snapshot(n.r[leader])==EFS_OK,"pump exports requested image");
+    n.drop[follower]=0;
+    CHECK(efs_raft_recv(n.r[leader],&m)==EFS_OK &&
+          !efs_raft_resync_pending(n.r[follower]) && app[follower].last=='A' &&
+          efs_raft_applied(n.r[follower])==efs_raft_applied(n.r[leader]),
+          "image heals resync peer after leader change");
+    data='B';
+    CHECK(efs_raft_propose(n.r[leader],&data,1,&idx)==EFS_OK && elect(&n,6)==1 &&
+          app[follower].last=='B',"ordinary replication resumes after image");
+    free_n(&n,st,3);
+}
+
 /* New leader's no-op is above the send cap armed at attach. A follower
  * that still holds a stale tail at that index must receive the no-op,
  * and the leader must not commit it off the stale reply. */
@@ -3371,9 +3529,71 @@ static void test_recv_batch_overlap(void)
     }
 }
 
+/* A leader pump runs every 200 ms while followers run every 5 ms.
+ * Dropping elapsed tick quanta used to stretch its heartbeat beyond their
+ * unchanged 500+ ms election windows. Real core/transport, no time sleeps. */
+static void test_wall_heartbeat_coarse_pump(void)
+{
+    for (int wall_heartbeat = 0; wall_heartbeat < 2; wall_heartbeat++) {
+        struct net n = {0}; struct app app[3] = {{0}};
+        struct efs_raft_store *st[3]; struct efs_raft_cfg cfg = {0};
+        n.n=3;cfg.n=3;cfg.voters=7;cfg.send=send_now;cfg.net=&n;
+        cfg.apply=apply_cmd;cfg.boot_id=1;cfg.heartbeat_ticks=10;
+        for(int i=0;i<3;i++) {
+            st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+            cfg.app=&app[i];cfg.election_ticks=100+(uint32_t)i*20;
+            n.r[i]=test_raft_new(&cfg);CHECK(n.r[i]!=NULL,"coarse pump core");
+        }
+        CHECK(elect(&n,1000)==1,"coarse pump election");
+        int leader=leader_id(&n);CHECK(leader>=0,"coarse pump leader");
+        if(leader<0){free_n(&n,st,3);continue;}
+        uint64_t term=efs_raft_term(n.r[leader]);int changed=0;
+        for(unsigned clock=1;clock<=2000;clock++) {
+            if(clock%40==0) {
+                (void)efs_raft_tick(n.r[leader]);
+                if(wall_heartbeat)(void)efs_raft_heartbeat(n.r[leader]);
+            }
+            for(int i=0;i<3;i++)if(i!=leader)(void)efs_raft_tick(n.r[i]);
+            if(leader_id(&n)!=leader || efs_raft_term(n.r[leader])!=term)changed=1;
+        }
+        if(!wall_heartbeat)CHECK(changed,"old one-tick slow pump loses leadership (negative control)");
+        else {
+            CHECK(!changed,"wall-clock heartbeats keep healthy coarse leader stable");
+            /* With no leader heartbeat, ordinary follower timers still elect
+             * a replacement; the fix never raises an election duration. */
+            for(unsigned clock=0;clock<1000;clock++)
+                for(int i=0;i<3;i++)if(i!=leader)(void)efs_raft_tick(n.r[i]);
+            int next=leader_id(&n);CHECK(next>=0&&next!=leader,"real pause still fails over");
+            if(next>=0) {
+                uint8_t cmd=29;uint64_t ix=0,commit=efs_raft_commit(n.r[next]);
+                n.hold_ae_replies=1;
+                CHECK(!efs_raft_propose(n.r[next],&cmd,1,&ix),"outstanding data");
+                int batches[3];memcpy(batches,n.batches,sizeof(batches));
+                for(unsigned repeat=0;repeat<10;repeat++)
+                    CHECK(!efs_raft_heartbeat(n.r[next]),"empty heartbeat send");
+                CHECK(!memcmp(batches,n.batches,sizeof(batches)),"heartbeats never duplicate data window");
+                CHECK(efs_raft_commit(n.r[next])==commit,"unanswered probes earn no commit");
+                /* Extra wall probes cannot reset the logical timer and
+                 * postpone an unanswered data batch's normal retry. */
+                for(unsigned tick=0;tick<10;tick++) {
+                    (void)efs_raft_heartbeat(n.r[next]);
+                    (void)efs_raft_tick(n.r[next]);
+                }
+                int retried=0;
+                for(int i=0;i<3;i++)if(n.batches[i]>batches[i])retried=1;
+                CHECK(retried,"wall probes preserve ordinary data retry aging");
+                for(int i=0;i<3;i++)if(i!=next)
+                    CHECK(efs_raft_heartbeat(n.r[i])==EFS_ERR_NOT_PRIMARY,"follower cannot send heartbeat");
+            }
+        }
+        free_n(&n,st,3);
+    }
+}
+
 int main(void)
 {
     for (ack_window_fixture_mode=0;ack_window_fixture_mode<2;ack_window_fixture_mode++) {
+        test_wall_heartbeat_coarse_pump();
         test_note_durable_without_apply();
         test_readindex_control();
         test_read_quorum_before_apply();
@@ -3408,6 +3628,7 @@ int main(void)
         test_ae_reply_match_stops_at_prev();
         test_snapshot_commit_stops_at_snapshot();
         test_resync_replaces_diverged_follower();
+        test_resync_new_leader_without_match();
         test_probe_ack_keeps_next_index();
         test_conflict_hint_skips_term_run();
         test_restart_elections_bounded();
@@ -3415,6 +3636,7 @@ int main(void)
         test_noop_over_stale_tail();
         test_ae_batch_catchup();
         test_ae_catchup_flow_control();
+        test_snapshot_busy_survives_delayed_append();
         test_install_snapshot();
         test_install_snapshot_needs_blob();
         test_install_snapshot_restarted_leader();

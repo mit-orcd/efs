@@ -510,6 +510,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_queued_read_control.py
 	python3 tests/test_raft_pending_reads.py
 	python3 tests/test_prepare_cohort.py
+	python3 tests/test_prepare_wait_progress.py
 	python3 tests/test_append_cohort.py
 	python3 tests/test_atomic_append_host.py
 	python3 tests/test_host_cover_route.py
@@ -671,7 +672,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_bench_latency
 	./tests/test_store_overwrite
 	./tests/test_directory_sync_group
-	python3 tests/test_meta_flush_batch.py
+	python3 tests/test_meta_flush_batch.py && python3 tests/test_kv_flush_finish.py
 	./tests/test_put_ticket
 	./tests/test_put_orphan
 	./tests/test_store_gc

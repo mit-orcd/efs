@@ -18,6 +18,9 @@ source = r'''
 #include <stdio.h>
 #include <string.h>
 struct efs_client g_client;
+static __thread uint64_t call_deadline;
+uint64_t efs_client_rpc_deadline_ms(void){return call_deadline;}
+void efs_client_rpc_set_deadline_ms(uint64_t value){call_deadline=value;}
 static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 static int arrived, lookup_rc, lookups;

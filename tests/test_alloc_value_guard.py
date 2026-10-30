@@ -63,3 +63,7 @@ with tempfile.TemporaryDirectory(prefix='efs-alloc-value-') as directory:
     subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-Wall', '-Wextra', '-Werror', '-I' + str(root / 'include'), str(path), str(root / 'libefs.a'), '-pthread', '-lm', '-ldl', '-o', str(path.with_suffix(''))], check=True)
     subprocess.run([str(path.with_suffix(''))], check=True, timeout=5)
 print('allocator guard: equal bytes/different versions, concurrent advance, absent key and malformed watermark PASS')
+
+# Keep the host ordering regression in the same allocator gate/budget.
+import runpy
+runpy.run_path(str(root / "tests/mkdir_alloc_claim_gate.py"), run_name="__main__")

@@ -32,6 +32,8 @@ harness = r'''
 #include "efs/meta_cmd.h"
 #include "efs/session.h"
 #include <assert.h>
+#include <errno.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -48,6 +50,7 @@ uint32_t efs_kv_session_shard(const uint8_t uuid[EFS_OPID_UUID_LEN]) { (void)uui
 static void lease_command_be(uint8_t *out, uint64_t value, unsigned bytes) {
     for (unsigned i = 0; i < bytes; i++) out[i] = (uint8_t)(value >> (8 * (bytes - 1 - i)));
 }
+static int efs_client_rpc_past_deadline(void) { return 0; }
 static unsigned long owner_queries;
 static int session_command_reply(uint32_t shard, const uint8_t *command, uint32_t bytes,
                                  uint64_t *known, int probe) {

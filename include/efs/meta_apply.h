@@ -1374,6 +1374,10 @@ int efs_meta_unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r);
 int efs_meta_pack_dentry(const struct efs_meta_dentry *d, uint8_t *out,
                          uint32_t cap);
 int efs_meta_unpack_dentry(const uint8_t *p, uint32_t n, struct efs_meta_dentry *d);
+/* Called only under serialized transaction apply, before dependent rows.
+ * Stores the ordinary EXCL allocator intent; host reads its owned watermark. */
+int efs_meta_apply_alloc_prepare(struct efs_kv *, const struct efs_txid *,
+                                  const struct efs_txn_parts *, const uint8_t *, uint32_t);
 int efs_meta_apply_peek_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next);
 /* HASHED/SPLITTING dest CREATE: pack the dir-lane MAX stamp that lives on
  * the dentry shard so the parent leader is not on the create path. */
