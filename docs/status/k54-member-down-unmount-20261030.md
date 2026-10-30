@@ -171,9 +171,9 @@ is not yet true. Needs its own task.
 
 **No 0-FAIL gate was obtained.** `test_k37_segment_rebuild` fails at its last wait
 (line 402, `c=0 files=24`, after steps 1-6 PASS) in the two final gates; it passed
-in 3 of 3 runs alone (165-192 s) and was not among the failures of the first two
+in 3 of 3 runs alone (165-192 s), failed once more at the same line when run next to a second copy, and then passed 2 of 2 on the final tree and 2 of 2 on the untouched base (devel `7514b2145`) when run as two concurrent copies and was not among the failures of the first two
 gates. It involves no session, mount or revoke, so I believe a load-dependent wait,
-but I did not run the untouched base under gate load to prove it. NOTRUN 11 are host limits
+but one failure on the final tree and none on the base in 2 runs is not proof either way: the base was not run under full gate load, so the cause stays unattributed and the gate is not 0-FAIL. NOTRUN 11 are host limits
 (no cluster scripts, no valgrind headers, no usable IB device on intel1). Gate
 OVERBUDGET rows (not failures): `test_b_geometry`, `test_member_limit`,
 `test_b6_unavailable`, `test_pack_dup_candidate`; my test measured 27 s alone.
