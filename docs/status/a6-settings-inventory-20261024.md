@@ -536,6 +536,7 @@ before/after counts earlier on this page describe the original Oct 24 audit.
 | `efs-mgmt expiry-policy`, `expiry-enable`, `expiry-clock`, `expiry-status`, `expiry` | efs-mgmt | scratch expiry policy and clock health | development build only | expiry tests (`make test-expiry`) | Compiled out of the product (D42) |
 | `efs-mgmt shrink-quota` | efs-mgmt | quota change | runtime management setting | tests | Keep |
 | `efs-mgmt add-storage`, `add-node` | efs-mgmt | refused by name (docs-review fixes): roots are fixed when a store is created; a node joins with `efsd --join`; wire types 16/17 and 41/42 are retired | removed | — | Keep refusing (`test_cli_surface.py`, `EFS_MSG_IS_RETIRED`) |
+| `efs-mgmt settings NODE:PORT`, `settings --mount PATH` | efs-mgmt | read-only listing of the effective settings of this inventory's deployment-input and numeric-tunable kinds, the cluster policies, transport and build (S4/W122, [evidence](s4-effective-settings-20261030.md)); `tests/test_settings_inventory.py` keeps its table equal to this page | operator command | `tests/test_settings_listing.py` | Keep |
 | `efs-mgmt status` | efs-mgmt | cluster status; now also metadata leader placement per group and node (self-reported) | operator command | K33 tests | Keep (A9 measurement, D42) |
 | `efs-mgmt raft-dir` | efs-mgmt | directory layout migration | runtime management setting | tests | Keep |
 | `efs-bench` options | efs-bench | bench tool (`efs-bench --help`, `--bench io/data/meta/principles/blake3 --help`) | bench tool | bench scripts | Keep: not in the product path |

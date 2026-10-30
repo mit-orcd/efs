@@ -1,13 +1,13 @@
 # S4 / W122: effective-settings listing (Oct 30)
 
-**Verdict: GATE PENDING** (updated below when `make test-all` finishes).
+**Verdict: PASS** (`make test-all` on xorinox: TOTAL 569 FAIL 0 NOTRUN 10, STATUS INCOMPLETE for host limits).
 
 - **Purpose:** checklist [S4](alpha-1.0-2plus1-checklist.md), work item W122,
   decision D46 item 3: a minimal, bounded, read-only listing of effective
   settings (values, defaults, provenance, active policies, transport, build).
   No new behavior knob, no write form.
 - **Tested source:** branch `claude/devel-bf-s4-683b1c` cut from devel
-  `7514b2145`; the head commit is recorded in the Gate section.
+  `7514b2145`; the gated code is `930ccbe17` (later commits change only this page, the README and the regenerated code graph). Build identity: `EFS_GIT_ID` unset (copied with `git archive`, no `.git`).
 - **Host:** xorinox (16 CPUs, Linux, TCP only; FUSE available), private tree
   `~/efs-bf` under `$HOME`; loopback clusters on free ports only.
 
@@ -88,4 +88,14 @@ Cleanup: `~/bin/edelete --force --delete ~/efs-bf`. Raw runner output stays in
 
 ## Gate
 
-GATE PENDING.
+`make test-all` through `scripts/make_test_summary.sh`, `EFS_TEST_JOBS=8`,
+xorinox, source `930ccbe17`:
+**TOTAL 569 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (1019 s)**. NOTRUN are host
+limits: no RDMA device (3 RDMA tests and more), no `/home/maik/git/cluster`
+scripts, no valgrind. OVERBUDGET 3 on existing tests (`test_b_geometry`,
+`test_b6_unavailable`); `test_settings_listing.py` took 4.7 s against its
+10 s budget. An earlier run (979 s) had one FAIL, `test_client_memory.py`,
+which compiles `common.c` alone and lacked the settings note; fixed by a stub in
+the test, and `make test` was 0 FAIL. Raw summaries and timings:
+`xorinox:~/efs-artifacts/bf-s4/` (`SHA256SUMS` sha256
+`103e4d18ee026fa2…`). No base run was needed (0 FAIL).
