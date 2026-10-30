@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `abae2544486cf2b0f22959cb12edee6e4655db28`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,108 nodes, 70,633 directed typed edges, 542 communities.
+Source base: `d75f220e199663c37a844cbf1c087d7f0ddff625`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,174 nodes, 71,048 directed typed edges, 548 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,22 +19,22 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 26387
+- `calls`: 26602
 - `case_of`: 116
-- `contains`: 25840
-- `defines`: 1969
+- `contains`: 25953
+- `defines`: 1972
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7064
-- `imports_from`: 898
+- `imports`: 7107
+- `imports_from`: 901
 - `indirect_call`: 688
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 2368
+- `mentions_symbol`: 2379
 - `method`: 640
-- `rationale_for`: 1292
-- `references`: 2115
-- `references_path`: 1116
+- `rationale_for`: 1295
+- `references`: 2123
+- `references_path`: 1132
 - `regression_for`: 8
 - `uses`: 90
 
@@ -46,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1586}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1587}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
