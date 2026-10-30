@@ -1,0 +1,180 @@
+# Stage 1 acceptance matrix, October 30
+
+**Purpose:** one list of what each FIXED or VERIFY row of the checklist's section K still owes, which live run can supply it, and how long the runs take, so the coordinator can schedule the D46 campaign. Planning only: it records no PASS, FAIL or NOTRUN verdict, and no row changes status because of this page.
+
+**Linked items:** [Section K register](alpha-1.0-2plus1-checklist.md#k-stage-1-known-defects-in-the-alpha-scope), [D46](decisions.md#d46--task-z-decisions-item-by-item-user-oct-28) (six cells on fcstor007-011 over TCP and RDMA, plus all 13 fcstor nodes), D45 item 5 (campaign order), D40 and D42.
+
+**Source state:** checklist at devel `8b0d128cc` (wave 43): 35 FIXED, 35 VERIFY, 3 CLOSED, 3 DECIDED, 2 OPEN. This page covers the 70 FIXED and VERIFY rows; K48 and K61 (OPEN), K9, K27, K53 (CLOSED), K10, K23, K52 (DECIDED) are not rows here. No code was run for this page; durations are estimates from the cited measurements and are labelled as such.
+
+## How to read it
+
+**Campaign coverage** has four values.
+
+- *Cell as-is*: a gate that `scripts/qualify_matrix.json` already lists for the `bare-metal-N-tcp` shapes (identity, topology, b-checks, posix-core, posix-extras, posix-2client, posix-durability, e1-manifest, e2-client-stop, e3-turnover, a13-node-addition, b6-member-down, c5-protocol-live, d1-packing, d3-efs-load, d4-progress, e4-scale, d5-expiry, soak). The matrix estimates a cell at about 60 minutes (90 for the 5-host shape); Task V's nine-gate 4-host dry run took 1,338 s of gate time ([dry run](a4-lab-topology-dryrun-20261028.md)). A cell supplies an environment and these gates; it injects no faults beyond what a gate itself does.
+- *Own run*: a fault injection, kill, stop under load, recovery, hardware sanitizer or soak that no cell gate performs. It needs its own scheduled run inside the campaign window (runs H1-H10, H12-H15 below; the D46 cells only provide the cluster).
+- *Candidate regression*: the row owes nothing live that is named; `F1` (`make test-all` on the frozen candidate) re-checks its regression. FIXED is not VERIFIED, and this is not new acceptance.
+- *Undefined*: neither the row nor its evidence page names the acceptance. These rows are marked and not guessed.
+
+**Host class:** loopback done / orcd-mini (RDMA, node9900-node9901, three daemons on one host) / distinct-host (fcstor007-011, TCP and RDMA) / 13-node (fcstor003-015) / soak.
+
+**Estimates** are wall minutes for the run body plus teardown, once per listed transport (`x2` = TCP and RDMA). Each environment also needs a deploy: build per host, source-manifest check and teardown, estimated at 45 minutes per shape (procedure in the [dry run](a4-lab-topology-dryrun-20261028.md)). A run listed for several rows is one run; the batch table counts it once.
+
+## Matrix
+
+| K | Defect | Status | Acceptance still owed | Host class | Campaign coverage | Runs / est. | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| K1 | Raft stop bounded under blocked handler / forced exit (W145) | VERIFY | Retained orcd-mini `stop.sh` / blocked-handler qualification; the devops `stop.sh` patch (k01b) is not applied. | orcd-mini | Own run (stop with blocked handler) | O4 30 min | [K1 T2](k01-t2-forced-exit-bound-20261022.md), [R4](k01b-r4-shutdown-deadline-20261022.md) |
+| K2 | Proposal RPC accepts tags this build cannot apply (W140) | VERIFY | Overall decoder qualification; the page lists "remaining named boundaries" (validators for store paths) but no distinct-host script. Acceptance only partly defined. | distinct-host | Own run (decoder submit gate on distinct hosts) | H3 30 x2 min | [Task C](task-c-20261025.md) |
+| K3 | `NODE_LEFT` from any connection drops a node (W132) | FIXED | None stated ("no new candidate gate claimed"); candidate regression only. | loopback done | Candidate regression | F1 20 min | [W132](../backlog/work-items.md#w132) |
+| K4 | Client protocol declaration gate fail-open (W133) | VERIFY | `scripts/w125_p3_compat.sh` hardware gate. W133 notes its case 2 expects an old client's writes to keep working, which contradicts no-backward-compatibility: the script must be reviewed before it can be the acceptance. `c5-protocol-live` (cell gate) is the nearest as-is check. Partly undefined. | orcd-mini (hardware) | Own run (script, after review); c5 in every cell as-is | O7 30 min | [W133](../backlog/work-items.md#w133) |
+| K5 | Unregistered session identities bypass fencing (W134/W72) | VERIFY | Fence cluster gate `scripts/k05_session_fence_gate.sh` on the candidate, partitioned-client and leader-change barrier gates (W72); RDMA paths NOTRUN. | distinct-host | Own run (fault: fence, partition, leader change) | H14 45 x2 min | [T1 abandon](k05-t1-abandon-capture-20261022.md), [S2/S3](k05-s2-s3-20261022.md) |
+| K6 | Fail-closed apply (W127-W131); one replica halts | VERIFY | Distinct-host and RDMA decoder qualification of W130 halt/resync (loopback PASS). Task V saw a resync recurrence tied to K48. | distinct-host + RDMA | Own run (fault: halt one replica) | H3 30 x2 min | [Task B](k22-k6-loopback-taskb-20261025.md) |
+| K7 | Transaction decision records never retired (W83) | FIXED | None stated; follow-up noted: RESOLVE/DROP/PREPARE decoders still accept a minimum length, not an exact one (no gate named). | loopback done | Candidate regression | F1 20 min | [integration review](devel-integration-review-20261022.md) |
+| K8 | Modify-under-load returned wrong bytes (W148) | VERIFY | Retained fixed-build W148/w125 modify rerun (originally 3 of 9 attempts on node9901 RDMA; raw bundles lost, summary-only). | orcd-mini | Own run (load) | O6 30 min | [W148](review-pack-validate-once-20261022.md) |
+| K11 | Span committed but fragment PUTs never landed (W55) | VERIFY | **Acceptance undefined.** Row owes "Linux-FUSE W55 publication/cold-byte qualification"; the validation page names no script and says W55 stays open pending a confirmed causal diagnosis of the historical incident. Nearest cell gates: `e1-manifest`, `e4-scale` (cold-reader exact bytes). NFS/macOS moved to W152. | distinct-host | Undefined (nearest cell gates e1/e4 as-is) | 0 extra (cell) | [validation](known-bugs-validation-20261008.md) |
+| K12 | `O_EXCL` create answered EEXIST (W58) | VERIFY | Live controlled BUSY/ambiguous-retry coverage with server/client timelines plus longer original-shape fresh-directory stress; the trigger is unisolated. | distinct-host | Own run (fault: BUSY / lost reply) | H7 45 x2 min | [validation](known-bugs-validation-20261008.md) |
+| K13 | Folded-span retry resurrects; default PUT/flush ticket (W88/W86) | VERIFY | Live abandoned-upload collection, RDMA and distinct-host acceptance (dead-client drain, unsettled tickets). | distinct-host + RDMA | Own run (kill client) | H2 30 x2 min | [D31 drain](k13-d31-drain-20261024.md) |
+| K14 | Atomic multi-chunk publication and observation (W77) | VERIFY | RDMA / orcd-mini / multi-host torn-read gate (loopback: 0 torn of 329,530 reads across leader changes and a writer-client kill). | distinct-host + RDMA | Own run (torn-read harness with fault) | H2 30 x2 min | [W77](k14-w77-atomic-publication-20261023.md) |
+| K15 | Append reservation replay across leader changes; REPORT after many appends (W64/W52) | VERIFY | Multi-host and RDMA runs, SIGKILL / combined faults and the historical W52 A/B (single-host TCP PASS in Task N). | distinct-host + RDMA | Own run (fault injection) | H1 60 x2 min | [Task N](k15-k29-append-gates-20261027.md) |
+| K16 | Identity-bound fragment integrity format (W75) | VERIFY | "Named integrity/hardware/RDMA gates" on a fresh-format candidate; the row does not list them. Page section "Limitations and remaining gates" is the reference; nearest harness `fragment-integrity`. Partly undefined. | distinct-host + RDMA | Own run | H2 30 x2 min | [W75](k16-w75-identity-format-20261022.md) |
+| K17 | STALE replay convergence (0a/D27) | VERIFY | **Partly undefined.** orcd-mini C1 rerun; the work queue also lists strict timing, fault/recovery/contention and RSS gates "remaining in handoff" without a script. Only the C1 workload is run here. | orcd-mini | Own run (D45 item 5, first) | O3 30 min | [work queue](work-queue.md), [lane-epoch-lag](w0a-lane-epoch-lag-20261021.md) |
+| K18 | Fold/GC data loss (W54/W38) | VERIFY | Fold/GC hardware gate on distinct RDMA hosts (original: nine physical hosts, real traced IOR cold read + hardscan, GC, restart). 5-host cells cap at five; the 13-node run is the only larger shape. | distinct-host RDMA + 13-node | Own run | H6 90 x2, T2 60 min | [W54](../backlog/work-items.md#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
+| K19 | GC final drain and lost-ledger reconciliation (W61-W63) | VERIFY | Final-drain and lost-ledger reconciliation gate on the alpha profile. W61's gate: fault sweeps with BUSY/I/O errors, retain reap marker, verdict-ring eviction and term changes. No single script named; `gc-reclamation` is the nearest (not in the bare-metal cell list). Partly undefined. | distinct-host | Own run (fault injection) | H6 90 x2 min | [W61](../backlog/work-items.md#w61) |
+| K20 | Capacity reporting on any node count; protection debt (W42/B5) | VERIFY | Real-host capacity/protection-debt acceptance (3-8 loopback members checked). The `b-checks` cell gate (placement/capacity/decode, 71 s) needs a quiet cluster. | distinct-host | Cell as-is (b-checks) | T2 60 min | [B5](b-geometry-capacity-20261024.md) |
+| K21 | Concurrent RDMA failures and blocked clean stop (W119/W65) | VERIFY | Rerun the original W119 RDMA / query / blocked-stop gates (seven-client POSIX `--suite all`, jobs16/client, physical orcd-test) before attributing the historical failures. | distinct-host RDMA | Own run (stop under load) | H12 120 min | [W119](orcd-devel-qualification-20261015.md) |
+| K22 | Universal follower memory/lag bound (W23) | VERIFY | Production-scale plateau (about 6 h), snapshot import with a 1 GiB lag on real hosts (`scripts/k22_snapshot_import.sh`), leader admission at 3/4, RDMA/multi-host. | distinct-host + soak | Own run (soak + stall) | S2 420, H15 90 x2 min | [Task B](k22-k6-loopback-taskb-20261025.md) |
+| K24 | `EFS_KV_COMPACT_DIE` exits the daemon in normal builds (W149) | FIXED | None stated. | loopback done | Candidate regression | F1 20 min | [hygiene](test-hygiene-k32-w149-w140-20261024.md) |
+| K25 | Test harness and reporting defects (W135-W150) | FIXED | None stated; does not certify later tests. | loopback done | Candidate regression | F1 20 min | [K25](k25b-summary-exit-tmpdir-20261022.md) |
+| K26 | LeakSanitizer aborts; need a working leak check | FIXED | ORCD leak verification NOTRUN (Task L disabled LSan, host lacks Memcheck headers); efs1/efs2 25/25 PASS exists. | loopback done + orcd-mini | Own run on ORCD; candidate `make leak-check` | F3 20, O9 20 min | [K26](k26-leak-gate-20261022.md), [Task L](rdma-gate-node9901-20261027.md) |
+| K28 | Cluster capped at four nodes (W151) | FIXED | Raw revalidation incomplete; W154 rebuild-on-return NOTRUN on multi-host, RDMA, direct I/O. D46 item 2 (all 13 fcstor nodes) is the first live >5-node proof; five-node PASS on xorinox is scoped. | 13-node | Own run in 13-node window (+ member return in H4) | T1 90, T2 60, T3 45, H4 120 x2 min | [K28](k28-w151-cluster-cap-20261022.md), [W154](w154-rebuild-on-return-20261023.md) |
+| K29 | Append path stall near zero without leader change | VERIFY | Multi-host / RDMA append qualification (not a placement-performance conclusion); sustained load. | distinct-host + RDMA + soak | Own run (load) and soak | H1 60 x2, S1 270 min | [Task N](k15-k29-append-gates-20261027.md) |
+| K30 | Intermittent `make test` failures on amd | FIXED | None stated; later unrelated flakes stay findings. | loopback done | Candidate regression | F1 20 min | [K30](k30-intermittent-tests-20261023.md) |
+| K31 | Devel RDMA clients lose larger replies | FIXED | None stated (orcd-mini suites recorded PASS). Every RDMA cell exercises RDMA clients. | loopback done / RDMA cells | Cell as-is (any RDMA cell) | 0 extra (cell) | [K31](k31-k27-orcd-mini-20261023.md) |
+| K32 | ior easy write ~0.36-0.5 GiB/s after wave 4 (was ~1.3) | VERIFY | orcd-mini ior easy-write target with the K13/K14 gates on (Task U profile is measurement only; D4 baseline failure OPEN). | orcd-mini | Own run (D45 item 5) | O2 40 min | [fix](k32-write-fix-20261023.md), [Task U](k32-write-cost-profile-20261028.md) |
+| K33 | Simple startup and safe online node addition (W157) | VERIFY | Cross-subnet, RDMA and distinct-host addition under load. The `a13-node-addition` cell gate covers a clean addition; load variant and cross-subnet are not in any cell (fcstor hosts share 10.1.223.x). | distinct-host + RDMA | Cell as-is (a13) + own run (load); cross-subnet cannot be covered | H10 45 x2 min | [acceptance](k33-acceptance-20261024.md), [join retry](k33-join-retry-20261025.md) |
+| K34 | Acknowledged files unreadable (EIO) while one member stops | VERIFY | Live multi-host ordered stop under load (loopback 20/20 `test_k33_payload.py`). | distinct-host | Own run (stop under load) | H4 120 x2 min | [K34](k34-stop-put-ack-20261024.md) |
+| K35 | `fsync` COMMIT fails with any member down (F22) | VERIFY | Multi-host / RDMA stripe-durability acceptance of the D42 degraded-fsync proof. `b6-member-down` is the nearest cell gate. | distinct-host + RDMA | Cell as-is (b6) + own run (stop, fsync, verify stripe) | H4 120 x2 min | [K35](k35-fsync-degraded-20261024.md) |
+| K36 | Store after an unclean stop stays uncertain (F23) | VERIFY | Distinct-host, current-profile recovery gate for crash / SIGKILL / forced exit. Power loss is DECIDED out (D45 item 4); the page must not be read as a power-loss PASS. | distinct-host + RDMA | Own run (kill, restart, recover) | H5 60 x2 min | [recovery](k36-verified-recovery-20261024.md), [segments](k36-k37-segment-recovery-20261024.md) |
+| K37 | Packed segment with a missing fragment never re-protected | VERIFY | Distinct-host segment-rebuild acceptance (loopback and Task L checks are not a replacement). | distinct-host + RDMA | Own run (recovery) | H5 60 x2 min | [K37](k37-segment-rebuild-20261024.md) |
+| K38 | ior hard: `write()` EIO, REPORT STALE (W161) | VERIFY | orcd-mini ior hard rerun on RDMA and real-cluster shared-chunk acceptance (1 of 4 runs failed originally). | orcd-mini + distinct-host RDMA | Own run (D45 item 5) | O1 45, H7 45 min | [replay](k38-stale-span-replay-20261025.md), [Task G](k38-task-g-repair-20261027.md) |
+| K39 | `write()`/`fsync` EIO with one member down (4-member loopback) | VERIFY | Live multi-host stop, RDMA and orcd-mini; K33 read EIO is not closed here. | distinct-host + RDMA | Cell as-is (b6) + own run | H4 120 x2 min | [K39](k39-write-eio-one-member-down-20261025.md) |
+| K40 | Two FUSE clients writing one shared file get EIO (W162) | VERIFY | Real-cluster / RDMA two-client shared-chunk acceptance; orcd-mini ior hard rerun. | orcd-mini + distinct-host RDMA | Own run (two clients, shared chunks) | O1 45, H7 45 min | [K40](k40-two-client-unit-busy-20261025.md), [Task G](k38-task-g-repair-20261027.md) |
+| K41 | Packer placed a fragment on a stopped member | VERIFY | Live multi-host, RDMA and orcd-mini gates (growth 10/10 on loopback); D45 item 5 lists ior hard for K41. | orcd-mini + distinct-host | Own run (stop member during packing) | O1 45, H4 120 x2 min | [K41](k41-packer-placement-20261025.md) |
+| K42 | Clean unmount failed its revoke with BUSY (W164) | VERIFY | Loopback-5 `gc-reclamation` and live multi-host gates (20/20 loaded stop runs PASS on loopback). `e2-client-stop` is the cell gate. | distinct-host + loopback-5 | Cell as-is (e2) + own run (stop under load) | H4 120 x2, F4 30 min | [K42](e2-clean-stop-busy-20261025.md) |
+| K43 | Writer `EBUSY`/`EIO` when a member is SIGKILLed (Task D soak) | VERIFY | Four-hour soak and multi-host / RDMA reruns of the incident chain (coordinator kill). | soak + distinct-host | Soak (D45) + own run (kill) | S1 270, H4 120 x2 min | [K43](k43-coordinator-kill-20261026.md) |
+| K44 | Retired-seed MKFS BUSY after online addition (W167) | VERIFY | Merged-candidate and cold-query acceptance (private TCP/RDMA and authorized orcd-mini checks PASS scoped). | distinct-host + RDMA | Cell as-is (a13) + own run | H10 45 x2 min | [K44](k44-retired-replica-routing-20261026.md) |
+| K45 | Delayed AppendEntries below the snapshot (Raft) | FIXED | Multi-host NOTRUN; no script named. Nearest: snapshot import in H15. **Acceptance undefined beyond that.** | loopback done | Candidate regression; undefined multi-host | F1 20 min | [Task J](gate-budgets-refit-20261026.md) |
+| K46 | `raft-resync` replica could win an election | FIXED | No live gate named. Nearest: W130 halt/resync (H3). | loopback done | Candidate regression; undefined live | F1 20 min | [Task J](gate-budgets-refit-20261026.md) |
+| K47 | Packed read with a returned holder answering NET returned EIO | FIXED | No live gate named. Nearest: member-return reads in H4. | loopback done | Candidate regression; undefined live | F1 20 min | [Task J](gate-budgets-refit-20261026.md) |
+| K49 | RDMA dispatch casts `frame + 5` to aligned structs (UBSan) | VERIFY | Integrated-candidate acceptance of the alignment fix on a real HCA with sanitizers. | orcd-mini (RDMA) | Own run (sanitizer build) | O8 60 min | [Task L](rdma-gate-node9901-20261027.md) |
+| K50 | Transient metadata BUSY reaches RMDIR as EBUSY | VERIFY | Broader W159 latency and integrated live acceptance (`scripts/qualify_dir_ops.sh`). | distinct-host | Own run (namespace under load) | H8 45 x2 min | [Task O](dir-ops-busy-under-load-20261027.md) |
+| K51 | Detached heartbeat reads `g_host` while teardown frees it | VERIFY | Integrated-candidate TSan/ASan and RDMA acceptance. | orcd-mini (RDMA) | Own run (sanitizer build) | O8 60, F2 45 min | [Task L](rdma-gate-node9901-20261027.md) |
+| K54 | Member-down clean unmount fails at session revoke (U4) | FIXED | Blocks alpha until qualified live (D46 item 6). orcd-mini real-host stage NOTRUN (node9900 RDMA client, clean stop of node9901, unmount, restart, read back; "no explicit user OK"); distinct-host rotation of the down member. | orcd-mini + distinct-host | Own run (stop with member down) | O5 20, H4 120 x2 min | [K54](k54-member-down-unmount-20261030.md), [D46](decisions.md#d46--task-z-decisions-item-by-item-user-oct-28) |
+| K55 | B6 slow mode: fsync EIO after 60 s, no degraded mark | FIXED | None stated beyond the original real-RDMA full gate; `b6-member-down` slow mode in each RDMA cell re-runs the failing case. | RDMA cells | Cell as-is (b6 slow mode) | 0 extra (cell) | [K55](k55-slow-commit-20261028.md) |
+| K56 | `make asan-check` fails five tests at startup | FIXED | No full `make test-all` ran on the fixed tree; ASan gate only. Re-run on the candidate. | loopback done | Candidate regression | F2 45 min | [K56](k56-asan-fuse-allocator-20261029.md) |
+| K57 | Packer segment PUT acknowledged an existing fragment after a tail check | FIXED | None owed; page lists no live cluster scenario, no allocation-failure/ENOSPC injection, RDMA PUT path not separately exercised. | loopback done | Candidate regression | F1 20 min | [Task AY](ay-upload-completion-audit-20261029.md) |
+| K58 | Verified recovery deleted a fragment on an I/O error | FIXED | None stated. | loopback done | Candidate regression | F1 20 min | [Task AZ](az-verification-policy-audit-20261029.md) |
+| K59 | Packed segment PUT read ACTIVE authority before the guard | FIXED | None stated. | loopback done | Candidate regression | F1 20 min | [Task BA](ba-deletion-authority-audit-20261029.md) |
+| K60 | Two deleters both debited a physical file | FIXED | None stated. | loopback done | Candidate regression | F1 20 min | [Task BA](ba-deletion-authority-audit-20261029.md) |
+| K62 | Dirty inode overlays replaced fresh RPC metadata | FIXED | Blocks alpha until integration and acceptance: integration is done (wave 38); acceptance = core 218/218 and peer 72/72 on ORCD TCP/RDMA, i.e. `posix-core` and `posix-2client` in every cell. | distinct-host + RDMA | Cell as-is (posix-core, posix-2client) | 0 extra (cell) | [Task BB](bb-overlay-authority-audit-20261029.md) |
+| K63 | CHMOD/CHOWN/TRUNCATE skipped owner mutation on cached match | FIXED | Same as K62. | distinct-host + RDMA | Cell as-is (posix-core, posix-2client) | 0 extra (cell) | [Task BB](bb-overlay-authority-audit-20261029.md) |
+| K64 | FUSE permission checks used a stale local inode row | FIXED | Same as K62. | distinct-host + RDMA | Cell as-is (posix-core, posix-2client) | 0 extra (cell) | [Task BB](bb-overlay-authority-audit-20261029.md) |
+| K65 | Shard PUT ENOENT retry skipped mkdir (Task AN) | FIXED | None stated. | loopback done | Candidate regression | F1 20 min | [Task AN](an-product-port-20261030.md) |
+| K66 | Append reservation reply collected `getattr` after commit (Task EIO) | FIXED | Blocks alpha pending a live append stress. | distinct-host + RDMA | Own run (append stress) | H9 60 x2 min | [EIO port](eio-product-port-20261030.md) |
+| K67 | `host_truncate_lazy` repeated read-index round trips | FIXED | None stated (latency; blocks alpha: no). | loopback done | Candidate regression | F1 20 min | [EIO port](eio-product-port-20261030.md) |
+| K68 | Read-cache slot hash collided for shard-strided inodes | FIXED | None stated (performance; blocks alpha: no). | loopback done | Candidate regression | F1 20 min | [EIO port](eio-product-port-20261030.md) |
+| K69 | OPEN dropped its staged-row pin before the open reference | FIXED | Blocks alpha pending a live extend-EOF stress. | distinct-host + RDMA | Own run (extend-EOF stress) | H9 60 x2 min | [EIO port](eio-product-port-20261030.md) |
+| K70 | Non-exclusive CREATE race skipped the OPEN path | FIXED | Blocks alpha pending live qualification (the branch's own live stress was 272 FAIL / 372 NOTRUN and is not re-run). | distinct-host + RDMA | Own run (create race stress) | H9 60 x2 min | [EIO port](eio-product-port-20261030.md) |
+| K71 | Lease cleanup scanned a 512-slot table under the opid mutex | FIXED | None stated (blocks alpha: no). | loopback done | Candidate regression | F1 20 min | [EIO port](eio-product-port-20261030.md) |
+| K72 | Blocked routine stderr stops the Raft pump (Task AE) | FIXED | Gate still owed: exclusive-host native `test-all`, literal matched D4 kit, TSan on the merged tree, real-HCA TCP/RDMA repeats; nothing here closes AB/AE. | distinct-host + loopback | Own run | F1 20, F2 45, H13 60 x2 min | [AE port](ae-product-port-20261030.md), [original](ae-pump-logging-20261028.md) |
+| K73 | `rj.recovered` increment raced its reader (TSan) | FIXED | TSan fixture on the merged tree (no failing reproduction was run). | loopback done | Candidate regression | F2 45 min | [AE port](ae-product-port-20261030.md) |
+| K74 | COMMITted directory migration invisible to READDIR | FIXED | Blocks alpha pending the coordinator gate and a live listing run on the merged source. Task V's K48 recurrence is separate. | distinct-host + RDMA | Own run (live migration + listing) | H8 45 x2 min | [Task AO](ao-product-port-20261030.md) |
+| K75 | Directory-migration planner and apply forwarded to each other | FIXED | Blocks alpha pending a live migration run on the merged source. | distinct-host + RDMA | Own run (live migration) | H8 45 x2 min | [Task AO](ao-product-port-20261030.md) |
+| K76 | Cross-group directory cleanup inspected a foreign KV | FIXED | None stated; exercised incidentally by the live migration run. | loopback done | Candidate regression | F1 20 min | [Task AO](ao-product-port-20261030.md) |
+| K77 | Lock conflicts reported as transient BUSY | FIXED | None stated. | loopback done | Candidate regression | F1 20 min | [Task AO](ao-product-port-20261030.md) |
+| K78 | Unlink/link admission used the opid fallback second | FIXED | None stated; AO page notes page-tail latency worsened, 1.0 acceptance is the coordinator's. | loopback done | Candidate regression | F1 20 min | [Task AO](ao-product-port-20261030.md) |
+
+## Runs
+
+| Run | Batch | Transports | Est. min each | What it does |
+| --- | --- | --- | ---: | --- |
+| F1 | F candidate / loopback | - | 20 | `make test-all` on the frozen candidate, `EFS_TEST_JOBS=8` (D44 target 1,100 s) |
+| F2 | F candidate / loopback | - | 45 | sanitizer gates on the candidate: `tests/sanitizer_check.sh asan` (425 s measured, K56) plus TSan on the merged tree |
+| F3 | F candidate / loopback | - | 20 | `make leak-check` (Memcheck, 25 unit binaries) on the candidate |
+| F4 | F candidate / loopback | - | 30 | `gc-reclamation` gate on a loopback-5 cluster (named by K42) |
+| O1 | O orcd-mini RDMA | - | 45 | ior hard, 8 ranks, one shared file, RDMA, direct I/O, at least 4 runs (K38 failed 1 of 4) plus the two-client shared-chunk case |
+| O2 | O orcd-mini RDMA | - | 40 | ior easy write A/B against the pre-regression baseline `08cc16af4`, with the K13/K14 gates on |
+| O3 | O orcd-mini RDMA | - | 30 | D27/0a STALE-replay convergence C1 rerun (estimate; acceptance only partly defined) |
+| O4 | O orcd-mini RDMA | - | 30 | `stop.sh` qualification with a blocked handler (needs the unapplied devops `stop.sh` patch) |
+| O5 | O orcd-mini RDMA | - | 20 | K54 real-host stage: node9900 RDMA client, clean stop of the node9901 daemon, unmount, restart, read back (needs an explicit user OK) |
+| O6 | O orcd-mini RDMA | - | 30 | W148/K8 modify-under-load rerun, at least 9 attempts on node9901 RDMA |
+| O7 | O orcd-mini RDMA | - | 30 | `scripts/w125_p3_compat.sh` hardware gate (script needs review first, see K4) |
+| O8 | O orcd-mini RDMA | - | 60 | real-HCA sanitizer pass: UBSan alignment (K49) and TSan/ASan heartbeat teardown (K51) |
+| O9 | O orcd-mini RDMA | - | 20 | ORCD leak verification (needs Memcheck headers on the host) |
+| H1 | D distinct-host | TCP + RDMA | 60 | append gates: W52 20k, step-down 8k, lost-reply 2k, SIGKILL and combined faults, historical W52 A/B |
+| H2 | D distinct-host | TCP + RDMA | 30 | `k14-torn-read` (3 min on loopback, incl. writer-client kill), `k13-tickets` (1 min), abandoned-upload collection, `fragment-integrity`; needs the harnesses to drive the cluster (see "cannot cover") |
+| H3 | D distinct-host | TCP + RDMA | 30 | W130 halt/resync (`tests/test_w130_dir_fault.py`) and proposal-decoder submit gate (Task C) on distinct hosts |
+| H4 | D distinct-host | TCP + RDMA | 120 | member-down family under load: `tests/test_k33_payload.py` x20, loaded clean stop x20, `tests/test_k35_fsync_degraded.py` cases incl. 7-8 at the 10 s default, packer growth x10, K54 clean unmount with the down member rotating, coordinator SIGKILL chain |
+| H5 | D distinct-host | TCP + RDMA | 60 | unclean-stop recovery: SIGKILL / forced exit of a member under load, restart, verified recovery, packed-segment rebuild |
+| H6 | D distinct-host | TCP + RDMA | 90 | fold/GC gate: real traced IOR cold verification and hardscan (4 and 36 ranks), fold transitions, physical GC, restart, lost-ledger reconciliation |
+| H7 | D distinct-host | TCP + RDMA | 45 | two-client shared-chunk pressure (`tests/test_k38_shared_chunk_pressure.py --clients 2`), BUSY/lost-reply exclusive-create retry with server/client timelines |
+| H8 | D distinct-host | TCP + RDMA | 45 | namespace under load: `scripts/qualify_dir_ops.sh` (RMDIR deadline), `scripts/qualify_ao_readdir.py` / `tests/test_ao_readdir_live.py` live directory migration and listing on the merged source |
+| H9 | D distinct-host | TCP + RDMA | 60 | ORCD EIO stress rerun: live append stress, extend-EOF stress, non-exclusive CREATE race (driver named on the [repair page](orcd-test-eio-stress-repair-20261028.md)) |
+| H10 | D distinct-host | TCP + RDMA | 45 | online node addition under load and retired-seed MKFS / cold query on the 5-host shape |
+| H12 | D distinct-host | RDMA | 120 | W119/W65 rerun: seven-client POSIX `--suite all`, RDMA, query load, blocked clean stop |
+| H13 | D distinct-host | TCP + RDMA | 60 | K72 real-HCA TCP/RDMA repeats and the literal matched D4 kit on an exclusive host |
+| H14 | D distinct-host | TCP + RDMA | 45 | session fence gate `scripts/k05_session_fence_gate.sh`, partitioned-client and leader-change barrier |
+| H15 | D distinct-host | TCP + RDMA | 90 | K22 snapshot import into a stalled follower (1 GiB log lag, `scripts/k22_snapshot_import.sh`) and live leader admission at 3/4 |
+| S1 | S soak | - | 270 | four-hour soak on the four-host shape (E4/D4 with K43) plus 30 min setup/verify |
+| S2 | S soak | - | 420 | K22 production-scale follower plateau (about 6 h measured on xorinox) plus verify |
+| T1 | N 13-node | - | 90 | 13-node qualify gates: identity, topology, b-checks, posix-core, posix-2client, e1-manifest, c5, e4-scale (storage/client split undecided, D46 item 2) |
+| T2 | N 13-node | - | 60 | 13-node: >4-node ring/placement (K28), capacity/protection debt (K20), fold/GC at scale (K18) |
+| T3 | N 13-node | - | 45 | 13-node: member stop/return and clean stop with one member down |
+
+## Batches by host class
+
+Batches are ordered as D45 item 5 and D46 set the campaign: orcd-mini RDMA reruns first, then the distinct-host cells TCP then RDMA, then the soak. Candidate regression (F) needs no campaign host. Overheads are the 45-minute deploy per shape.
+
+| Batch | Host | Runs | Run time | Deploy | Total | Rows served |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| F | loopback (any lab host, no campaign) | F1-F4 | 1 h 55 min | - | 1 h 55 min | K3, K7, K24, K25, K26, K30, K42, K45, K46, K47, K51, K56, K57, K58, K59, K60, K65, K67, K68, K71, K72, K73, K76, K77, K78 |
+| O | orcd-mini RDMA | O1-O9 | 5 h 05 min | 0 h 45 min | 5 h 50 min | K1, K4, K8, K17, K26, K32, K38, K40, K41, K49, K51, K54 |
+| D-TCP | fcstor007-011 TCP: three cells (210 min: 60 + 60 + 90) plus own runs H (TCP column, 780 min) | cells + H1-H10, H12-H15 | 16 h 30 min | 2 h 15 min | 18 h 45 min | K2, K5, K6, K12, K13, K14, K15, K16, K18, K19, K22, K28, K29, K33, K34, K35, K36, K37, K39, K41, K42, K43, K44, K50, K54, K66, K69, K70, K72, K74, K75 |
+| D-RDMA | fcstor007-011 RDMA: three cells (210 min: 60 + 60 + 90) plus own runs H (RDMA column, 900 min, includes H12) | cells + H1-H10, H12-H15 | 18 h 30 min | 2 h 15 min | 20 h 45 min | K2, K5, K6, K12, K13, K14, K15, K16, K18, K19, K21, K22, K28, K29, K33, K34, K35, K36, K37, K38, K39, K40, K41, K42, K43, K44, K50, K54, K66, K69, K70, K72, K74, K75 |
+| S | four-host shape, soak | S1, S2 | 11 h 30 min | 0 h 45 min | 12 h 15 min | K43, K29, K22 |
+| N | fcstor003-015, 13 nodes | T1-T3 | 3 h 15 min | 0 h 45 min | 4 h 00 min | K28, K20, K18 |
+
+**Sequential total: 63 h 30 min** (3810 min), about 2.6 days of wall time if every batch runs one after another and every own run is done once per transport on the 4-host shape. Hosts are shared between batches D-TCP, D-RDMA, S and N (fcstor007-011 are inside fcstor003-015), so they cannot overlap; F and O can run alongside any fcstor batch. Own runs in D and the 3-, 4- and 5-host shapes: only H10 needs the 5-host shape; every other H run is counted once on the 4-host shape, so a decision to repeat them on the 3- and 5-host shapes adds their TCP and RDMA columns again (780 + 900 min per extra shape).
+
+Rows served by the cells as-is, with no extra run: K20 (b-checks), K31, K55 (b6 slow mode), K62-K64 (posix-core and posix-2client). Rows served only by `F1`: K3, K7, K24, K25, K30, K45-K47 (live gate undefined, see matrix), K57-K60, K65, K67, K68, K71, K76-K78.
+
+## What the campaign cannot cover
+
+These need hardware, a harness change or a decision outside D46.
+
+1. **K23 power loss** is DECIDED out (D45 item 4, D40); K36 therefore claims recovery after unclean *process* stops only, and the H5 run must not be read as a power-loss PASS.
+2. **K33 cross-subnet** addition: the fcstor hosts share 10.1.223.x, no D46 cell crosses a subnet. Needs a decision to narrow the claim or an environment that spans two subnets.
+3. **RDMA live harnesses.** `scripts/qualify_matrix.json` states live harnesses are "not driven" over RDMA ("no RDMA live harness"). H1, H2, H3, H7, H8, H14 and H15 (K13-K16, K2, K5, K6, K12, K29, K38, K40, K50, K74, K75) are counted on RDMA in the batch table on the assumption that the driver is extended; until then their RDMA half is not runnable. Decision: extend the harnesses, or narrow RDMA acceptance to the cell gates and the orcd-mini runs.
+4. **K11 and the "partly undefined" rows (K2, K4, K16, K17, K19, K45-K47):** no named acceptance exists. The coordinator must define the gate (or accept the nearest cell gate in the matrix) before they can be scheduled; the durations above are placeholders for K17 and the nearest-gate choices.
+5. **K4 `w125_p3_compat.sh`** tests old-client compatibility that W133 and the no-backward-compatibility rule say must fail; the script needs review or replacement before O7 is meaningful.
+6. **K54 orcd-mini stage** needs an explicit user OK to use orcd-mini (the evidence records it as the reason it was not run). **K1** also needs the devops `stop.sh` patch applied (k01b patch, devops repo).
+7. **K26 ORCD leak verification** needs Memcheck headers on the ORCD hosts; LSan is disabled there.
+8. **K43 RDMA soak:** D45 item 5 schedules one four-hour soak on the four-host shape; the row also asks for RDMA reruns of the incident chain (covered by H4) but no RDMA four-hour soak is decided. A second soak would add about 4.5 h.
+9. **K22 production-scale plateau** (about 6 h, S2) and the 1 GiB lag (H15) are outside the six cells; the plateau is not in D45's campaign order, so S2 is scheduled here only as an assumption. D46 item 2 also leaves the 13-node storage/client split and transports unset, so T1-T3 cannot be started until that is decided.
+10. **K32 target:** the row says "ior easy-write target" but states no number; the baseline `08cc16af4` A/B is the reference unless the coordinator sets one.
+11. **K72 literal matched D4 kit and exclusive host:** the AE port lists them as remaining gates; the kit must be identified and an exclusive host reserved.
+12. **K74 page-tail latency:** the AO page records that tail latency worsened; accepting it for 1.0 is the coordinator's decision, not a campaign output.
+
+## Limitations
+
+Estimates are not measurements: the cell time (60 min) is the matrix's own figure and the nine-gate dry run; the other runs are estimates from loopback gate times (`append-failover` 19 min, `k14-torn-read` 3 min, `k13-tickets` 1 min, two-client suite about 13 min on orcd-mini) and from the evidence pages' soak and plateau figures. The campaign must replace them with measured times after the first cell. No row was re-run or re-read at code level; the owed text comes from each row's current status and its linked page. Row status words follow the checklist at `8b0d128cc`.
+
+## Reproduction
+
+Regenerate the K-status counts from the checklist:
+
+```sh
+awk -F' [|] ' '/^\| K[0-9]+ \|/ && !seen[$1]++ {split($4,a,/[:, ]/); print a[1]}' docs/status/alpha-1.0-2plus1-checklist.md | sort | uniq -c
+```
+
+The first table's rows come first, so the pattern counts the main register (35 FIXED, 35 VERIFY, 3 CLOSED, 3 DECIDED, 2 OPEN at `8b0d128cc`) and skips the reconciled table. The list of cell gates is `python3 scripts/qualify.py plan` against `scripts/qualify_matrix.json`.
