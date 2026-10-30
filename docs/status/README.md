@@ -235,6 +235,8 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Wave 41 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30 (`ed4343683`; gate at `ed4343683`)**: Task BF, **S4 / W122** ([evidence](s4-effective-settings-20261030.md)): `efs-mgmt settings NODE:PORT` and `efs-mgmt settings --mount PATH` list the effective settings with value, default, provenance and kind (the 9 deployment inputs, the 34 numeric tunables, `--writers`, the two cluster policies, the durability window, transport and build; observability and fault hooks counted in the header, not listed), read-only, no new knob; S4 ticked, W122 DONE, limitation L24 removed. Merge-time: `tests/budgets.tsv` keeps both new rows (wave 40's `test_pump_logging.py` and `test_settings_listing.py`); architecture docs and code graph regenerated. intel2 `make test-all` (8 jobs): TOTAL 576 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (992 s), NOTRUN = host limits.
+
 [S4 effective settings](s4-effective-settings-20261030.md): **`efs-mgmt settings NODE:PORT` and `--mount PATH` shipped (D46 item 3, W122 DONE, L24 removed); gate on xorinox: TOTAL 569 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (1019s)**, NOTRUN = host limits; not merged.
 
 [AN port](an-product-port-20261030.md): store ENOENT retry fix ported (K65); K48, K35 and GETCHUNKS repairs not ported (no failing reproduction on devel).
