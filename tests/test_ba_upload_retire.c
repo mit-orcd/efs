@@ -71,6 +71,8 @@ static void *ordinary_writer(void *unused)
 static void ordinary_delayed_authority(void)
 {
     boot(); ordinary_setup();
+    S.nwriters = 1; /* the real writer pool: the retire mark must cross to its thread */
+    assert(server_writer_pool_start(&S) == 0);
     uint64_t base = used();
     uint8_t placed;
     efs_tls_write_root = 0;

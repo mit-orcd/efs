@@ -113,6 +113,7 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     if(put_test_busy())return EFS_ERR_BUSY;
     if((rc=server_test_dest_fault("put"))!=EFS_OK)return rc;
 
+    uint64_t retire_mark=server_fragment_retire_mark(1,ticket.ino,ticket.ci,fi);
     uint8_t query[2+EFS_PUT_TICKET_WIRE_LEN];
     query[0]=efs_raft_shard_group(efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES));
     query[1]=EFS_MD_REQ_PUT_TICKET_STATUS;memcpy(query+2,body+8,EFS_PUT_TICKET_WIRE_LEN);
@@ -156,7 +157,9 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
             .inode_generation=ticket.inode_gen,.coding_profile_id=ticket.coding_profile};
         efs_store_nvme_bind(&store,&context,s,ex);
         efs_tls_path_used=-1;efs_tls_path_hint=-1;
+        efs_tls_retire_mark=retire_mark;
         rc=efs_store_put(&store,&fid,data,ticket.fragment_len,ticket.checksums[fi]);
+        efs_tls_retire_mark=EFS_RETIRE_MARK_NONE;
         efs_tls_path_hint=-1;
         if(rc==EFS_OK && efs_tls_path_used>=0 && efs_tls_path_used<256)
             *path_used=(uint8_t)efs_tls_path_used;
@@ -214,6 +217,7 @@ int server_rebuild_put(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     uint8_t checksum[EFS_HASH_SIZE];
     efs_hash(data,len,checksum);
     if(memcmp(checksum,d.checksums[fi],EFS_HASH_SIZE))return EFS_ERR_PROTO;
+    uint64_t retire_mark=server_fragment_retire_mark(export_id,d.ino,d.chunk_index,fi);
     int rc=server_raft_host_degraded_check(body+4);
     if(rc!=EFS_OK)return rc==EFS_ERR_NOT_FOUND?EFS_ERR_STALE:rc;
     pthread_mutex_lock(&s->lock);
@@ -227,7 +231,9 @@ int server_rebuild_put(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
             .fragment_index=fi,.chunk_generation=d.object_gen};
         efs_store_nvme_bind(&store,&context,s,ex);
         efs_tls_path_used=-1;efs_tls_path_hint=-1;
+        efs_tls_retire_mark=retire_mark;
         rc=efs_store_put(&store,&fid,data,len,d.checksums[fi]);
+        efs_tls_retire_mark=EFS_RETIRE_MARK_NONE;
         efs_tls_path_hint=-1;
         if(rc==EFS_OK && efs_tls_path_used>=0 && efs_tls_path_used<256)
             *path_used=(uint8_t)efs_tls_path_used;
