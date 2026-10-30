@@ -831,8 +831,8 @@ efs-mgmt: $(MGMT_OBJ) $(LIB)
 tests/test_reply_buffers: tests/test_reply_buffers.c src/client/reply_buffers.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
 
-tests/test_bufpool: tests/test_bufpool.c src/common/common.c src/client/publication_ack_owner.c include/efs/publication_ack.h src/client/bufpool.c src/client/writer_state.c include/efs/writer_state.h include/efs/writer_ranges.h src/client/client_internal.h
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< src/common/common.c -lpthread
+tests/test_bufpool: tests/test_bufpool.c src/common/common.c src/common/settings.c src/client/publication_ack_owner.c include/efs/publication_ack.h src/client/bufpool.c src/client/writer_state.c include/efs/writer_state.h include/efs/writer_ranges.h src/client/client_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< src/common/common.c src/common/settings.c -lpthread
 
 test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py
