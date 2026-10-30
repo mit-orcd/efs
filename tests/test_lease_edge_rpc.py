@@ -3,7 +3,7 @@
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/inode_rpc.c').read_text()
+s=Path(os.environ.get('EFS_INODE_RPC_SOURCE',root/'src/client/inode_rpc.c')).read_text()
 a=s.index('static int session_command_reply(')
 b=s.index('static int publication_session_command(',a)
 c=s.index('static void lease_command_be(',b)
@@ -21,8 +21,9 @@ code=r'''
 struct efs_conn {int unused;};static struct efs_conn connection;
 static struct efs_opid_req identity;
 static uint8_t first[67];static unsigned calls,drops,redirect,busy,expired,expire_receive,malformed,fail_receive,query;
-static uint64_t salt;static int result,hint;static uint32_t route;
-static int efs_client_rpc_past_deadline(void){return expired;}
+static uint64_t salt,clock_ms,deadline;static int result,hint;static uint32_t route;
+uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
+static int efs_client_rpc_past_deadline(void){return expired || (deadline && clock_ms>=deadline);}
 static unsigned fences;static void efs_client_session_fence(int rc){if(rc==EFS_ERR_FENCED)fences++;}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n==3);return &connection;}
 /* K34: a failed exchange re-picks a voter (skip the one that failed). */
@@ -33,7 +34,7 @@ static void rpc_retry_peer(uint32_t shard,efs_node_id_t nid,efs_node_id_t *targe
 {(void)shard;(void)failed;*target=0;*skip=nid;peer_retries++;}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;}
-static int rpc_writer_retry_pause(unsigned n){(void)n;return EFS_OK;}
+static int rpc_writer_retry_pause(unsigned n){(void)n;if(deadline){clock_ms+=10;if(clock_ms>deadline)clock_ms=deadline;}return efs_client_rpc_past_deadline()?EFS_ERR_BUSY:EFS_OK;}
 static unsigned leader_notes;static efs_node_id_t noted_leader;
 static void rpc_note_leader(uint8_t g,efs_node_id_t n){assert(g==0 || g==2);leader_notes++;noted_leader=n;}
 static uint64_t number(const uint8_t *b,unsigned n){uint64_t v=0;while(n--)v=v<<8|*b++;return v;}
@@ -60,7 +61,7 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *n)
 }
 ''' + s[a:b] + s[c:d] + r'''
 static void reset(void)
-{calls=drops=redirect=busy=expired=expire_receive=malformed=fail_receive=query=0;salt=1;result=EFS_OK;hint=-1;}
+{calls=drops=redirect=busy=expired=expire_receive=malformed=fail_receive=query=0;salt=1;result=EFS_OK;hint=-1;deadline=clock_ms=0;}
 static int invoke(uint64_t *known){return efs_client_rpc_lease_edge(4097,8,&identity,EFS_LEASE_EDGE_OPEN,0,query,known);}
 int main(void)
 {
@@ -85,6 +86,19 @@ int main(void)
  reset();peer_retries=0;fail_receive=99;assert(invoke(&known)==EFS_ERR_NET && !known && drops==8 && calls==8 && peer_retries==8);
  fail_receive=0;assert(invoke(&known)==EFS_OK && known==1 && calls==9); /* same identity/body */
  reset();fail_receive=1;assert(invoke(&known)==EFS_OK && known==1 && calls==2 && drops==1);
+ /* K33: OPEN/CLOSE retain one identity under a caller's 30 s budget.
+  * A lost exchange followed by a short election/admission window must not
+  * turn into NET merely because the internal eight tries were exhausted. */
+ reset();deadline=30000;fail_receive=1;busy=9;
+ assert(invoke(&known)==EFS_OK && known==1 && calls==10 && clock_ms<deadline);
+ assert(!memcmp(&identity,&original,sizeof(identity)));
+ /* A shorter inherited bound wins and leaves the lost operation unknown. */
+ reset();deadline=25;fail_receive=1;busy=99;
+ assert(invoke(&known)==EFS_ERR_BUSY && !known && calls==3 && clock_ms==25);
+ reset();deadline=30000;result=EFS_ERR_BUSY;
+ assert(invoke(&known)==EFS_ERR_BUSY && known==1 && calls==1 && !clock_ms);
+ reset();deadline=30000;malformed=1;
+ assert(invoke(&known)==EFS_ERR_PROTO && !known && calls==1 && !clock_ms);
  reset();expired=1;assert(invoke(&known)==EFS_ERR_BUSY && !known && !calls);
  reset();expire_receive=1;assert(invoke(&known)==EFS_ERR_BUSY && !known && calls==1);
  reset();malformed=1;assert(invoke(&known)==EFS_ERR_PROTO && !known && calls==1);

@@ -1718,7 +1718,13 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
     body[0]=efs_raft_shard_group(shard);memcpy(body+1,command,bytes);
     efs_node_id_t target=0,skip=0;
     int lost=0;
-    for (unsigned attempt=0;attempt<8;attempt++) {
+    /* OPEN/CLOSE and session establishment share the caller's existing
+     * deadline. Eight mixed redirects/lost exchanges can expire far before
+     * it while a surviving quorum is still making progress, surfacing NET
+     * as an application EIO. Keep the same immutable command/receipt until
+     * that bound; deadline-less background callers retain eight attempts. */
+    int bounded=efs_client_rpc_deadline_ms()!=0;
+    for (unsigned attempt=0;bounded || attempt<8;attempt++) {
         if (efs_client_rpc_past_deadline()) return lost?EFS_ERR_NET:EFS_ERR_BUSY;
         efs_node_id_t nid=target;
         struct efs_conn *conn=target?efs_client_conn_get(target):
