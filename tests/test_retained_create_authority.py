@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=Path(os.environ.get('RETAINED_AUTHORITY_SOURCE',root/'src/server/raft_host.c')).read_text()
 a=s.index('static int host_retained_create_proof(');b=s.index('\n}',a)+2
 code=r'''
 #include "efs/meta_apply.h"
@@ -16,10 +16,11 @@ code=r'''
 #include <string.h>
 struct efs_raft_host{struct efs_kv *kv;};
 static int reads,read_rc,replays,hit,fetches,fetch_rc;
+static unsigned reply_status;
 static struct efs_opid_reply receipt;
 static int host_read_index(struct efs_raft_host*h,uint8_t g,int*hint){(void)h;(void)hint;assert(g==0 || g==2);reads++;return read_rc;}
 static int host_opid_replay(struct efs_raft_host*h,uint32_t sh,const struct efs_opid_req*q,struct efs_opid_reply*r){(void)h;assert(sh==1 || sh==2);assert(q->id.seq==9);replays++;*r=receipt;return hit;}
-static void host_opid_reply_ino(struct efs_raft_host*h,efs_ino_t parent,const char*name,const struct efs_opid_reply*r,struct efs_msg_inode_reply*out){(void)h;assert(parent==4097 && !strcmp(name,"f"));out->inode.ino=r->ino;}
+static void host_opid_reply_ino(struct efs_raft_host*h,efs_ino_t parent,const char*name,const struct efs_opid_reply*r,struct efs_msg_inode_reply*out){(void)h;assert(parent==4097 && !strcmp(name,"f"));out->inode.ino=r->ino;out->status=reply_status;}
 int efs_meta_apply_get_inode(struct efs_kv*kv,efs_ino_t ino,struct efs_meta_row*row){(void)kv;assert(ino==8193);fetches++;row->generation=7;return fetch_rc;}
 ''' + s[a:b] + r'''
 int main(void){struct efs_raft_host h={0};int hint=-1;uint8_t covered=0;
@@ -37,6 +38,12 @@ int main(void){struct efs_raft_host h={0};int hint=-1;uint8_t covered=0;
  assert(!host_retained_create_proof(&h,&request,&out,&hint,&covered) && out.generation==1 && out.rpc.inode.ino==8193);
  fetch_rc=0;
  assert(!host_retained_create_proof(&h,&request,&out,&hint,&covered) && out.generation==7);
+ for(unsigned i=0;i<3;i++) {
+  reply_status=(unsigned[]){EFS_INODE_RPC_BUSY,EFS_INODE_RPC_NOT_PRIMARY,EFS_INODE_RPC_ERROR}[i];
+  int old_fetches=fetches;
+  assert(host_retained_create_proof(&h,&request,&out,&hint,&covered)==EFS_ERR_AGAIN&&!out.known&&out.rpc.status==reply_status&&fetches==old_fetches);
+ }
+ reply_status=EFS_INODE_RPC_OK;
  covered=0;read_rc=EFS_ERR_BUSY;int before=replays;
  assert(host_retained_create_proof(&h,&request,&out,&hint,&covered)==EFS_ERR_BUSY && replays==before && !covered);
  puts("retained CREATE authority: covered missing/negative/exact receipts, durable FileID, storage failure and fresh post-mutation refusal PASS");
@@ -100,6 +107,23 @@ int main(void){struct efs_raft_host h={.running=1};g_host=&h;
  hosted=0;reads=submits=hit=0;
  server_raft_host_create_retained(&r,&out);
  assert(forwards==1&&!reads&&!submits&&!out.known);
+ hosted=1;hit=1;reply_status=EFS_INODE_RPC_BUSY;submits=reads=0;
+ server_raft_host_create_retained(&r,&out);
+ assert(!submits&&!out.known&&out.rpc.status==EFS_INODE_RPC_BUSY);
+ reply_status=EFS_INODE_RPC_NOT_PRIMARY;
+ server_raft_host_create_retained(&r,&out);
+ assert(!submits&&!out.known&&out.rpc.status==EFS_INODE_RPC_NOT_PRIMARY);
+ reply_status=EFS_INODE_RPC_OK;
+ server_raft_host_create_retained(&r,&out);
+ assert(!submits&&out.known&&out.rpc.inode.ino==8193);
+ hit=0;submits=0;settled_mode=1;reply_status=EFS_INODE_RPC_BUSY;
+ server_raft_host_create_retained(&r,&out);
+ assert(submits==1&&!out.known&&out.rpc.status==EFS_INODE_RPC_BUSY);
+ reply_status=EFS_INODE_RPC_OK;
+ server_raft_host_create_retained(&r,&out);
+ assert(submits==1&&out.known&&out.rpc.inode.ino==8193);
+
+
  puts("retained CREATE handler: own settled entry saves one round; unknown/forwarded outcomes require fresh proof PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-create-handler-') as work:

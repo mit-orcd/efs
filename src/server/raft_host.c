@@ -17899,6 +17899,7 @@ static int host_retained_create_proof(struct efs_raft_host *h,
     const struct efs_msg_create_retained *request,
     struct efs_msg_create_retained_reply *out,int *hint,uint8_t *covered)
 {
+    out->known=0;
     uint8_t group=efs_raft_shard_group(out->shard);
     int rc=(*covered&(1u<<group))?EFS_OK:host_read_index(h,group,hint);
     if(rc==EFS_OK)*covered|=(uint8_t)(1u<<group);
@@ -17912,8 +17913,13 @@ static int host_retained_create_proof(struct efs_raft_host *h,
     if(hit==EFS_ERR_UNREGISTERED)return EFS_ERR_BUSY;
     if(hit<0)return hit;
     if(!hit)return EFS_ERR_BUSY;
-    out->known=1;
     host_opid_reply_ino(h,request->create.parent,request->create.name,&receipt,&out->rpc);
+    /* The receipt is durable, but its row-authority result may still be
+     * transient. A known reply must be terminal on the wire. Preserve this
+     * refusal and tell the handler not to submit again in this call. */
+    if(receipt.rc==EFS_OK && out->rpc.status!=EFS_INODE_RPC_OK)
+        return EFS_ERR_AGAIN;
+    out->known=1;
     if(receipt.rc==EFS_OK && receipt.ino) {
         /* Pending CREATE always allocates generation 1. Preserve its FileID
          * even after later revocation/deletion removed the attribute row. */
@@ -17971,7 +17977,7 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
         return;
     }
     rc=host_retained_create_proof(h,request,out,&hint,&covered);
-    if(out->known)return;
+    if(out->known || rc==EFS_ERR_AGAIN)return;
     if(request->probe || rc!=EFS_ERR_BUSY) {
         set_inode_rc(&out->rpc,rc,hint);return;
     }
@@ -17987,7 +17993,7 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
      * probe; never reuse the pre-mutation ReadIndex across this boundary. */
     covered=submitted.status==EFS_INODE_RPC_OK?settled:0;
     rc=host_retained_create_proof(h,request,out,&hint,&covered);
-    if(!out->known)out->rpc=submitted;
+    if(!out->known && rc!=EFS_ERR_AGAIN)out->rpc=submitted;
 }
 
 static int host_namespace_capacity(const char *phase, uint32_t used)
