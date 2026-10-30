@@ -56,4 +56,14 @@ Python tests FAIL.
 
 ## Gate
 
-GATE_PLACEHOLDER
+amd (32 CPU, shared with another session's gate; TMPDIR not XFS), final tree,
+`EFS_TEST_JOBS=8 scripts/make_test_summary.sh`: **TOTAL 556 / FAIL 2 / NOTRUN 2**,
+762 s, OVERBUDGET 4. NOTRUN: `test_cluster_stop` (cluster scripts absent),
+`test_store_durability` (TMPDIR not XFS). The two FAILs are `test_k42_peer_stop_open`
+and `test_stop_progress`, both `fusermount3 -u` "Device or resource busy" at
+teardown on amd. `test_k42_peer_stop_open` passes alone on the same tree;
+`test_stop_progress` fails identically on unmodified devel `126ba81d4` on amd, so
+it is a host limit, not this change. An earlier run on the pre-fix tree had 6 FAIL:
+four source-extracted harnesses needed the F11/F15 updates (committed, passing
+on rerun). Verdict: **PASS with these two amd host-limit FAILs; not a clean
+gate**; rerun on intel hosts before merge if a clean total is required.
