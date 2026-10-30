@@ -513,12 +513,23 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
         int prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
             (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
             chunk_out, chunk_size, scratch, needed);
-        /* The final fetch verdict depends on fragment order: a missing
-         * third fragment can mask an earlier NET from a returned holder.
-         * Re-probe down members for either short-read result before K41
-         * classifies the shortage. Integrity/deadline errors stay fatal. */
+        /* A missing last fragment can hide an earlier holder skipped by
+         * its stale down-mark. Re-probe recorded holders once for either
+         * short-read status, under the same caller deadline (K36). */
+        int recovered=0;
         if ((prc == EFS_ERR_NET || prc == EFS_ERR_NOT_FOUND) &&
-            read_reprobe_down(ce.fragment_nodes)) {
+            !efs_client_rpc_past_deadline()) {
+            for (unsigned i=0;i<EFS_NUM_FRAGMENTS && !efs_client_rpc_past_deadline();i++) {
+                if (!pctx.tried[i] || pctx.rc[i]!=EFS_ERR_NET)continue;
+                /* Its asynchronous health probe may already have cleared
+                 * the down-mark since fetch skipped it. That is also a
+                 * reason to retry, not proof that the first read tried it. */
+                efs_node_id_t node=ce.fragment_nodes[i];
+                if (node && (!efs_client_node_is_down(node) || efs_client_node_reprobe(node)))
+                    recovered=1;
+            }
+        }
+        if (recovered) {
             pctx = (struct packed_fetch_ctx){.group = ce.packed.publication_group};
             prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
                 (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
@@ -1208,7 +1219,7 @@ static int overlay_one_delta_ex(efs_ino_t ino, uint32_t ci, uint8_t *buf,
     uint8_t *decoded, *fbuf;
     uint8_t *frags[EFS_NUM_FRAGMENTS];
     int have[EFS_NUM_FRAGMENTS];
-    int a = -1, b = -1, missing = -1, integrity = 0;
+    int a = -1, b = -1, missing = -1, integrity = 0, reprobed = 0;
 
     if (!d || d->len == 0 || (uint64_t)d->off + d->len > chunk_len ||
         (chunk_len % 2u) != 0)
@@ -1224,6 +1235,8 @@ static int overlay_one_delta_ex(efs_ino_t ino, uint32_t ci, uint8_t *buf,
     memset(decoded, 0, chunk_len);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
         frags[i] = fbuf + (size_t)i * frag_len;
+retry_fragments:
+    a = b = missing = -1;
     memset(have, 0, sizeof(have));
     ngood = 0;
     for (i = 0; i < EFS_NUM_FRAGMENTS && ngood < 2; i++) {
@@ -1241,6 +1254,16 @@ static int overlay_one_delta_ex(efs_ino_t ino, uint32_t ci, uint8_t *buf,
         } else if (transient && (grc == EFS_ERR_NET || grc == EFS_ERR_BUSY)) {
             *transient = 1;
         }
+    }
+    /* Like a base stripe, a published span may have skipped a recovered
+     * member solely because of this client's earlier cooldown. Before
+     * declaring it undecodable, re-probe its recorded nodes once and retry
+     * only if one actually answers. No placement change, new deadline or
+     * integrity bypass: every fragment still needs the same identity/hash. */
+    if (ngood < 2 && !reprobed && !efs_client_rpc_past_deadline() &&
+        read_reprobe_down(d->nodes)) {
+        reprobed = 1;
+        goto retry_fragments;
     }
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (!have[i]) {

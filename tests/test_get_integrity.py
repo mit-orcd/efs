@@ -17,11 +17,15 @@ verified fragments only, or fails with EFS_ERR_CHECKSUM.
 from pathlib import Path
 import os
 import re
+import shlex
+import sys
 import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-read = (root / 'src/client/read.c').read_text()
+sys.path.insert(0,str(root/'tests'))
+from sanitize_env import cflags, wrap  # noqa: E402
+read = Path(os.environ.get('EFS_GET_INTEGRITY_READ_SOURCE',root/'src/client/read.c')).read_text()
 
 
 def function(name):
@@ -117,19 +121,22 @@ static int test_export_get_chunk(void *ex, efs_ino_t ino, uint32_t ci,
 static __thread uint64_t deadline_ms;
 static uint64_t efs_client_rpc_deadline_ms(void) { return deadline_ms; }
 static void efs_client_rpc_set_deadline_ms(uint64_t d) { deadline_ms = d; }
-static int efs_client_rpc_past_deadline(void) { return 0; }
-static unsigned down_mask, reprobe_mask;
-static int efs_client_node_is_down(efs_node_id_t n) { return !!(down_mask & (1u << n)); }
-static int efs_client_node_reprobe(efs_node_id_t n)
-{
-    if (!(reprobe_mask & (1u << n))) return 0;
-    down_mask &= ~(1u << n);
-    return 1;
+static unsigned down_mask,probe_calls,reprobe_mask=~0u;
+static int expired,reprobe_ok=1,async_recovered;
+static int efs_client_rpc_past_deadline(void) { return expired; }
+static int efs_client_node_is_down(efs_node_id_t n) {
+    int down=(down_mask>>n)&1u;
+    if(down && async_recovered)down_mask&=~(1u<<n);
+    return down;
+}
+static int efs_client_node_reprobe(efs_node_id_t n) {
+    probe_calls++;if(!reprobe_ok || !(reprobe_mask&(1u<<n)))return 0;down_mask&=~(1u<<n);return 1;
 }
 static void efs_client_node_note_ok(efs_node_id_t n) { (void)n; }
 static void efs_client_node_note_fail(efs_node_id_t n) { (void)n; }
 static int read_retry_pause(unsigned us) { (void)us; return EFS_OK; }
-/* Production down-member recovery, with deterministic probe outcomes. */
+/* K34/K36: production re-probe policy, with explicit stale-down and
+ * unavailable-holder cases; fake storage still uses real framing/hashes. */
 static void *demand_read_alloc(uint32_t n) { return malloc(n); }
 static void test_buf_free(void *p, uint32_t n) { (void)n; free(p); }
 #define efs_buf_free test_buf_free
@@ -158,7 +165,7 @@ static void reset(void)
     memset(served, 0, sizeof(served));
     pthread_mutex_unlock(&serve_mu);
     memset(&read_peer_order, 0, sizeof(read_peer_order));
-    down_mask = reprobe_mask = 0;
+    down_mask=probe_calls=0;expired=async_recovered=0;reprobe_ok=1;reprobe_mask=~0u;deadline_ms=0;
 }
 static void set_mode(int kind, int fi, int m0, int m1)
 { mode[kind][fi][0] = m0; mode[kind][fi][1] = m1; mode[kind][fi][2] = m1; mode[kind][fi][3] = m1; }
@@ -390,6 +397,27 @@ static void packed_cases(void)
         reset(); set_mode(K_SEG, 1, M_NOTFOUND, M_NOTFOUND); set_mode(K_SEG, 2, bad[b], bad[b]);
         REFUSED(decode(1), expect);
     }
+    /* K36 retained signature: one stale down-mark, one good fragment,
+     * then NOT_FOUND. The final missing status must not suppress probing
+     * the returned holder, and every retry still verifies exact bytes. */
+    puts("packed stale-down plus missing fragment regression");fflush(stdout);
+    reset();down_mask=1u<<1;set_mode(K_SEG,2,M_NOTFOUND,M_NOTFOUND);
+    deadline_ms=12345;
+    GOOD(decode(1),expect);
+    assert(probe_calls==1 && !down_mask && deadline_ms==12345 &&
+           served[K_SEG][0]==1 && served[K_SEG][1]==2 && served[K_SEG][2]==1);
+    reset();down_mask=1u<<1;async_recovered=1;set_mode(K_SEG,2,M_NOTFOUND,M_NOTFOUND);
+    GOOD(decode(1),expect);
+    assert(!probe_calls && !down_mask && served[K_SEG][0]==1 && served[K_SEG][1]==2);
+    reset();down_mask=1u<<1;reprobe_ok=0;set_mode(K_SEG,2,M_NOTFOUND,M_NOTFOUND);
+    assert(decode(1)==EFS_ERR_IO && probe_calls==1 && served[K_SEG][0]==0 &&
+           served[K_SEG][1]==1 && served[K_SEG][2]==1);
+    reset();set_mode(K_SEG,0,M_NOTFOUND,M_NOTFOUND);set_mode(K_SEG,2,M_NOTFOUND,M_NOTFOUND);
+    assert(decode(1)==EFS_ERR_IO && !probe_calls); /* no fabricated second copy */
+    reset();down_mask=1u<<1;expired=1;deadline_ms=12345;
+    assert(decode(1)==EFS_ERR_BUSY && !probe_calls && deadline_ms==12345 &&
+           !served[K_SEG][0] && !served[K_SEG][1] && !served[K_SEG][2]);
+    reset();
     /* A returned holder plus one live holder is enough even when the last
      * fragment is absent. The reader's last-error order must not suppress
      * the bounded down-member re-probe (K36 pool failure, step 8). */
@@ -403,7 +431,7 @@ static void packed_cases(void)
             assert(!down_mask);
             /* A probe that cannot reach the holder still refuses; no
              * absent fragment or unchecked payload becomes a success. */
-            reset(); down_mask = 1u << (returned + 1);
+            reset(); reprobe_mask=0; down_mask = 1u << (returned + 1);
             set_mode(K_SEG, missing, M_NOTFOUND, M_NOTFOUND);
             assert(decode(1) == EFS_ERR_IO);
         }
@@ -472,13 +500,13 @@ with tempfile.TemporaryDirectory(prefix='efs-get-integrity-', dir=os.environ.get
     path = Path(directory) / 'test.c'
     path.write_text(source)
     binary = path.with_suffix('')
-    subprocess.run([os.environ.get('CC', 'cc'), '-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror',
+    subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + cflags() + ['-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror',
                     '-pthread', '-I' + str(root / 'include'), '-I' + str(root / 'src/client'),
                     str(path), str(root / 'libefs.a'), '-lm', '-ldl', '-libverbs', '-o', str(binary)],
                    check=True)
     env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_')}
     # Refusals log one line each (read.c); show them only on a failure.
-    run = subprocess.run([str(binary)], env=env, timeout=60, capture_output=True, text=True)
+    run = subprocess.run(wrap()+[str(binary)], env=env, timeout=60, capture_output=True, text=True)
     print(run.stdout, end='')
     if run.returncode:
         print(run.stderr, end='')
