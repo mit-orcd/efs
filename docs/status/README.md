@@ -231,7 +231,7 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[K54 member-down unmount](k54-member-down-unmount-20261030.md): **FIXED on branch `claude/devel-bd-k54-505e84`, not merged**: majority-sealed storage fence, returned member learns the sealed epoch; 40/40 clean unmounts with member 3 down (intel1, node9901 TCP and RDMA), intel1 gate TOTAL 568 / 1 FAIL (`test_k37_segment_rebuild`, load-dependent, passes alone) / 11 host-limited NOTRUN, no 0-FAIL gate yet; member-2-down cleanup residual and orcd-mini stage open.
+[K54 member-down unmount](k54-member-down-unmount-20261030.md): **FIXED on branch `claude/devel-bd-k54-505e84`, not merged**: majority-sealed storage fence, returned member learns the sealed epoch, and the client routes the revoke around a dead member (member 2 included); 42 clean unmounts rotating the down member over 2/3/4 (intel1 TCP 30, node9901 TCP 12 and RDMA 12), six controls, intel1 `make test-all` on the final tree 569 / 0 FAIL / 11 host-limited NOTRUN, untouched base 567 / 0 FAIL; `test_k37_segment_rebuild` failed in two earlier gates and is unattributed; orcd-mini stage NOTRUN (no allowance in this session).
 
 [AN port](an-product-port-20261030.md): store ENOENT retry fix ported (K65); K48, K35 and GETCHUNKS repairs not ported (no failing reproduction on devel).
 
