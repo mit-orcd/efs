@@ -2,7 +2,7 @@
 """K54: clean unmount with one storage member down (D46 item 6, finding U4).
 
 Usage: python3 tests/live/k54_member_down_unmount.py [--runs N] [--members 4]
-           [--mode alternate|kill|stop] [--down 1] [--victim 3] [--port-base 18700] [--keep]
+           [--mode alternate|kill|stop] [--down 1] [--victim 3] [--port-base N] [--keep]
 
 Run from the root of a built tree (make, make tests/faults/efsd). Starts
 --members private efsd daemons on 127.0.0.1 (PORT_BASE+1..) and, per run:
@@ -86,17 +86,18 @@ def main():
     ap.add_argument('--victim', type=int, default=3, help='first member stopped (2..members)')
     ap.add_argument('--files', type=int, default=4)
     ap.add_argument('--mode', choices=('alternate', 'kill', 'stop'), default='alternate')
-    ap.add_argument('--port-base', type=int, default=18700)
+    ap.add_argument('--port-base', type=int, default=0, help='fixed ports PORT_BASE+1.. (default: free ports)')
     ap.add_argument('--keep', action='store_true')
     a = ap.parse_args()
     work = Path(tempfile.mkdtemp(prefix='efs-k54-', dir=os.environ.get('TMPDIR')))
     env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_TEST_')}
     ids = list(range(1, a.members + 1))
-    c = Cluster(work, 'c', ids, env, disc_port=a.port_base + 99)
-    for h in c.held:
-        h.close()
-    c.held = []
-    c.ports = {i: a.port_base + i for i in ids}
+    c = Cluster(work, 'c', ids, env, disc_port=a.port_base + 99 if a.port_base else 0)
+    if a.port_base:
+        for h in c.held:
+            h.close()
+        c.held = []
+        c.ports = {i: a.port_base + i for i in ids}
     expect_fail = a.down > a.members - (a.members // 2 + 1)
     failed = done = 0
     try:

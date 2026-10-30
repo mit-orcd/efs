@@ -113,3 +113,4 @@ python3 tests/test_bench_published.py	10	2	W170: three private daemons, publishe
 
 ./tests/faults/test_follower_bound --stalled-compactor	5	1	Task W: real stalled LSM compactor and bounded follower catch-up; 1.2s at eight jobs, 1.25x rounded up to 5s
 python3 tests/test_put_quota_reclaim.py	120	2	unmeasured (F07 port, NOTRUN without FUSE); set from the first FUSE-capable run
+python3 tests/test_k54_member2_unmount.py	60	1	K54: two production unmounts (SIGKILL, clean stop) with member 2 down on four efsd; 20 s a failed unmount; budget set for 8-job contention (measured at the gate), 1.25x rounded up to 5 s
