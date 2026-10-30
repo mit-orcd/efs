@@ -18096,7 +18096,11 @@ static int host_wait_refs(struct efs_raft_host *h, struct host_idx_ref *refs,
             if (refs[j].group == refs[i].group && refs[j].idx > mx)
                 mx = refs[j].idx;
         }
-        rc = host_wait_applied(h, refs[i].group, mx, hint);
+        /* These are our submitted PREPARE/RESOLVE entries, not a follower
+         * ReadIndex. Use the existing progress-renewed own-entry grant:
+         * aborting every healthy but >400 ms batch queues DROP/retries
+         * behind that same apply lag. The existing 2 s hard cap remains. */
+        rc = host_wait_applied_own(h, refs[i].group, mx, hint);
         if (rc != EFS_OK)
             return rc;
     }

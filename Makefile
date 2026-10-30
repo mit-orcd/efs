@@ -507,6 +507,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_queued_read_control.py
 	python3 tests/test_raft_pending_reads.py
 	python3 tests/test_prepare_cohort.py
+	python3 tests/test_prepare_wait_progress.py
 	python3 tests/test_append_cohort.py
 	python3 tests/test_atomic_append_host.py
 	python3 tests/test_host_cover_route.py
