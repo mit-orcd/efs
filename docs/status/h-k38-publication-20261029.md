@@ -1,5 +1,7 @@
 # H K38/K40 publication group port (F01–F09, F25)
 
+> **Wave 38 coordinator note (Oct 30):** F25 (`b687e26bb`, `a1855bd1e`, `c7bfd1218`) was merged and then reverted in wave 38 and is held back. It replaces the K55 syncer's root-wide `syncfs` with per-file barriers, and its only evidence is structural (the new header is absent on devel) plus loopback unit controls; the 14.3 s foreground-fsync symptom was not reproduced on devel and no real-cluster rerun exists. It stays on `agent/h-k38-publication` until a retained behavioural failure on devel justifies it; if A11-B decides the barrier, revert stays the answer.
+
 **Purpose:** port the proven Task H publication fixes F01–F09 and F25 from `agent/task-h-repair` onto devel `126ba81d4` (wave 37) as small commits, each with a named retained regression that fails on devel (or the prior source) and passes with the change. Linked rows: K38, K40, D4. Blocks alpha: no new blocker; the K38/K40 rows keep their VERIFY status (no real-cluster/RDMA rerun was made).
 
 **Verdict:** F03, F04, F07, F08, F09 and the F02 retained-ownership rule PASS (below). F01 and F06 were already on devel. F05 is NOT-NEEDED on devel. F25 PASS on loopback unit/native controls; its end-to-end 14 s barrier symptom was not re-measured (NOTRUN). Gate: see *Gate*.
