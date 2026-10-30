@@ -20,7 +20,7 @@ static int calls,renames,rename_rc,stat_rc,lookup_rc,wx_rc;
 static int virt_kind(fuse_ino_t ino){(void)ino;return 0;}
 static int fuse_stat_errno(int rc){return rc==EFS_ERR_NOT_FOUND?-ENOENT:-EIO;}
 static int efs_rc_to_errno(int rc){return -rc;}
-static int efs_client_stat_ino(uint64_t ino,struct efs_inode *row){calls++;row->ino=ino;return stat_rc;}
+static int efs_client_stat_refresh(uint64_t ino,struct efs_inode *row){calls++;row->ino=ino;return stat_rc;}
 static int check_dir_wx(const struct efs_inode *row){(void)row;calls++;return wx_rc;}
 static int efs_client_rpc_lookup(uint64_t export_id,uint64_t parent,const char *name,struct efs_inode *row){(void)export_id;(void)parent;(void)name;calls++;row->ino=3001;return lookup_rc;}
 static int efs_client_rename_at(uint64_t ino,uint64_t parent,const char *name,uint64_t newparent,const char *newname){(void)ino;(void)parent;(void)name;(void)newparent;(void)newname;calls++;renames++;return rename_rc;}

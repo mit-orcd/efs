@@ -557,6 +557,68 @@ def peer_chmod_visible():
 
 
 @test
+def peer_open_chmod_visible():
+    """A holds an fd; B chmod is visible through A's fstat."""
+    def a(d):
+        wr(os.path.join(d,"f"),b"kept")
+        os.chmod(os.path.join(d,"f"),0o600)
+        _spawn_holder(d,"statmode")
+    def b(d):
+        os.chmod(os.path.join(d,"f"),0o400)
+    def a2(d):
+        mode,_ = _holder_go(d)
+        eq(int(mode),0o400,"open-fd remote mode")
+    return [("a",a),("b",b),("a",a2)]
+
+
+@test
+def peer_open_truncate_visible():
+    """A holds a clean fd; B shrink updates A's fstat EOF."""
+    def a(d):
+        wr(os.path.join(d,"f"),b"X"*300000)
+        fsync_path(os.path.join(d,"f"))
+        _spawn_holder(d,"statsize")
+    def b(d):
+        os.truncate(os.path.join(d,"f"),65536)
+    def a2(d):
+        size,_ = _holder_go(d)
+        eq(int(size),65536,"open-fd remote EOF")
+    return [("a",a),("b",b),("a",a2)]
+
+
+@test
+def peer_cached_chmod_reapplies():
+    """A must send same-valued chmod after B changed the cached mode."""
+    def a(d):
+        wr(os.path.join(d,"f"),b"X")
+        os.chmod(os.path.join(d,"f"),0o600)
+        _spawn_holder(d,"samechmod")
+    def b(d):
+        os.chmod(os.path.join(d,"f"),0o400)
+    def a2(d):
+        _holder_go(d)
+    def b2(d):
+        eq(os.stat(os.path.join(d,"f")).st_mode&0o777,0o600,"committed same-valued chmod")
+    return [("a",a),("b",b),("a",a2),("b",b2)]
+
+
+@test
+def peer_cached_truncate_reapplies():
+    """A's cached empty EOF never suppresses a shrink after B's write."""
+    def a(d):
+        wr(os.path.join(d,"f"),b"")
+        _spawn_holder(d,"sametruncate")
+    def b(d):
+        wr(os.path.join(d,"f"),b"X"*300000)
+        fsync_path(os.path.join(d,"f"))
+    def a2(d):
+        _holder_go(d)
+    def b2(d):
+        eq(os.stat(os.path.join(d,"f")).st_size,0,"committed same-valued truncate")
+    return [("a",a),("b",b),("a",a2),("b",b2)]
+
+
+@test
 def peer_utimens_visible():
     """A utime; B must see the new mtime."""
     def a(d):
@@ -1923,6 +1985,16 @@ try:
                     nlink = os.fstat(fd).st_nlink
                     os.lseek(fd, 0, os.SEEK_SET)
                     data = os.read(fd, 4096)
+                elif mode == "statmode":
+                    data = str(os.fstat(fd).st_mode & 0o777).encode()
+                elif mode == "statsize":
+                    data = str(os.fstat(fd).st_size).encode()
+                elif mode == "samechmod":
+                    os.fchmod(fd, 0o600)
+                    data = b"ok"
+                elif mode == "sametruncate":
+                    os.ftruncate(fd, 0)
+                    data = b"ok"
                 elif mode == "pwrite1m":
                     os.pwrite(fd, b"Y", 1 << 20)
                     data = b"ok\n"

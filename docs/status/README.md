@@ -1,5 +1,6 @@
 # Project status — work queue and evidence
 
+<<<<<<< HEAD
 [Task H split: K45/K51 group](h-k45-shutdown-20261029.md): **F24** (rejoin-thread ownership joined in bounded teardown; devel heartbeat owner kept) and **F35** (`raft-resync` retries only a definite BUSY inside the existing 30 s I/O bound) ported to `agent/h-k45-shutdown`, both named reproductions fail on devel source and pass with the change; K54 interaction checked, none. Not merged; intel1 gate 556 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
 
 [H-recovery — Task H F26–F29](h-recovery-20261029.md): **F26 K36/K47 re-probe, F28 K43
@@ -11,6 +12,18 @@ K36, K43, K47 statuses unchanged; **K48 stays OPEN**.
 (allocator reservation, receipt replay, bootstrap/CREATE authority, snapshot
 import, KV flush cohorts, delayed-pump heartbeat) ported to
 `agent/h-k22-allocator`, pending merge; unit regressions PASS, live K22 NOTRUN.
+=======
+[Task BB — client overlay authority](bb-overlay-authority-audit-20261029.md):
+**COMPLETE scoped**, source `02f861e4a`, branch `agent/devel-bb`, K62–K64 fixed.
+Xorinox full gate **553/0 FAIL/10 host-limited NOTRUN**; reserved-window base
+and candidate comparisons PASS. ORCD node9900 TCP/RDMA matrices **8/8 each**,
+RDMA transport/segmented/declaration, reclamation, core **218/218**, peer
+**72/72** PASS. Nine RDMA skips covered separately; external cluster-script
+gate remains NOTRUN. Both evidence copies sealed/verified; original failures
+and six failed fixture trees retained on xorinox. User chose to retain passing
+scratch/build trees on both hosts for review; cleanup choice closed by retention.
+No trees deleted, merge/push or alpha closure.
+>>>>>>> agent/devel-bb
 
 [K55 — slow storage COMMIT](k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,

@@ -527,6 +527,15 @@ is needed on reductions.
 
 ### 8.2 Audit 2 — size and data visibility on a mount
 
+**Later contract tightening (Task BB, October 29):** the table and measured
+correction below describe the original D25 implementation. The
+[BB audit](bb-overlay-authority-audit-20261029.md) now makes a successful clean
+open-handle GETATTR adopt the authoritative EOF into the read bound and fence
+invalidated mapping freshness. Unpublished local data still owns its EOF.
+This does not make every read fetch metadata or replace the existing mapping
+TTL. Qualification status is recorded on the BB page; the historical D25
+observations below are retained unchanged.
+
 | layer | call site | behaviour | effect on truncate |
 | --- | --- | --- | --- |
 | kernel page cache | `fuse_fi_direct_io` (`src/client/efs_fuse.c`), set on every regular-file open | `direct_io = 1`, `keep_cache = 0` | no kernel data cache to invalidate |

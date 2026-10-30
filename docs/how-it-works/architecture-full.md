@@ -339,6 +339,20 @@ this list, before it ships.
   in project-history.md "START-HERE closed items": peer sees 0/10
   un-`fsync`ed bytes; `kill -9` of `efs-fuse` loses a 64 MiB acknowledged
   `write()`).
+- **Attributes — staging is not metadata authority.** LOOKUP and refreshed
+  attributes use the successful metadata RPC's row. Only unpublished local
+  data overlays its EOF and mtime; it cannot supply mode, uid/gid, names,
+  link count or content epoch. New permission and namespace decisions require
+  a successful strict refresh; a cached matching value cannot skip a requested
+  mutation. Open-handle getattr also fetches metadata: when the file is clean,
+  the accepted EOF updates the local read bound and any layout invalidation
+  fences cached mapping freshness, including a shrink to zero. Thus a read
+  after that getattr cannot reuse a pre-invalidation mapping. A read without
+  a new OPEN/GETATTR still follows the existing metadata and mapping freshness
+  rules above; this adds no recall protocol. A held unlink-open file retains
+  its local data and may report local attributes on RPC failure, but that
+  fallback never authorizes a new permission or namespace operation. See the
+  [BB authority audit](../status/bb-overlay-authority-audit-20261029.md).
 - **One `write()`/`pwrite()` publishes atomically.** POSIX makes regular-file
   `read()`/`write()` effects atomic with respect to one another, so a
   concurrent reader never observes a mix of old and new chunks from a single
@@ -1612,6 +1626,9 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+<<<<<<< HEAD
+[Task H split: K45/K51 group](../status/h-k45-shutdown-20261029.md): **F24** (rejoin-thread ownership joined in bounded teardown; devel heartbeat owner kept) and **F35** (`raft-resync` retries only a definite BUSY inside the existing 30 s I/O bound) ported to `agent/h-k45-shutdown`, both named reproductions fail on devel source and pass with the change; K54 interaction checked, none. Not merged; intel1 gate 556 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
+
 [H-recovery — Task H F26–F29](../status/h-recovery-20261029.md): **F26 K36/K47 re-probe, F28 K43
 pin retention and F29 K36 recovery scheduling PASS focused** on branch `agent/h-recovery`
 (each test fails on devel source); F27 not ported, devel `35a6e41b0` already covers it.
@@ -1621,6 +1638,18 @@ K36, K43, K47 statuses unchanged; **K48 stays OPEN**.
 (allocator reservation, receipt replay, bootstrap/CREATE authority, snapshot
 import, KV flush cohorts, delayed-pump heartbeat) ported to
 `agent/h-k22-allocator`, pending merge; unit regressions PASS, live K22 NOTRUN.
+=======
+[Task BB — client overlay authority](../status/bb-overlay-authority-audit-20261029.md):
+**COMPLETE scoped**, source `02f861e4a`, branch `agent/devel-bb`, K62–K64 fixed.
+Xorinox full gate **553/0 FAIL/10 host-limited NOTRUN**; reserved-window base
+and candidate comparisons PASS. ORCD node9900 TCP/RDMA matrices **8/8 each**,
+RDMA transport/segmented/declaration, reclamation, core **218/218**, peer
+**72/72** PASS. Nine RDMA skips covered separately; external cluster-script
+gate remains NOTRUN. Both evidence copies sealed/verified; original failures
+and six failed fixture trees retained on xorinox. User chose to retain passing
+scratch/build trees on both hosts for review; cleanup choice closed by retention.
+No trees deleted, merge/push or alpha closure.
+>>>>>>> agent/devel-bb
 
 [K55 — slow storage COMMIT](../status/k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,

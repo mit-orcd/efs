@@ -33,7 +33,7 @@ static int efs_dcache_ino_pinned(efs_ino_t ino){assert(ino==42);assert(pthread_m
 static int efs_client_mtime_is_pinned(efs_ino_t ino){(void)ino;return 0;}
 static void pull_file_layout(const struct efs_inode*r){(void)r;}
 static void invalidate_file_layout(const struct efs_inode*r,int drop){(void)r;drops+=drop;}
-'''+ownership+fn('static void adopt_rpc_inode(')+fn('static int inode_mtime_older(')+fn('static void overlay_local_size(')+fn('void efs_client_adopt_lookup(')+r'''
+'''+ownership+fn('static void adopt_rpc_inode(')+(fn('static int inode_mtime_older(') if 'static int inode_mtime_older(' in s else '')+fn('static void overlay_local_size(')+fn('void efs_client_adopt_lookup(')+r'''
 static struct efs_inode reset(void){staged=(struct efs_inode){.ino=42,.parent=1,.mode=S_IFREG|0600,.nlink=1,.size=1,.mtime=1};dirty=pinned=drops=0;struct efs_inode rpc=staged;rpc.size=0;rpc.mtime=2;return rpc;}
 int main(void){struct efs_inode out,rpc=reset();
  /* The inode-only mark has retired; one dirty body still owns EOF1. */

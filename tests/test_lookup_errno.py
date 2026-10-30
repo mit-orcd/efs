@@ -40,7 +40,7 @@ static fuse_ino_t virt_find_ino(fuse_ino_t n){return n;}
 static int dot_result;
 static int lookup_fill(fuse_ino_t n,struct fuse_entry_param*e,void*p){(void)p;e->ino=n;return dot_result;}
 static int efs_client_stat_local(efs_ino_t n,struct efs_inode*out){memset(out,0,sizeof(*out));out->ino=n;out->parent=1;out->mode=S_IFDIR|0755;return 0;}
-static int efs_client_stat_ino(efs_ino_t n,struct efs_inode*out){return efs_client_stat_local(n,out);}
+static int efs_client_stat_refresh(efs_ino_t n,struct efs_inode*out){return efs_client_stat_local(n,out);}
 static int check_dir_x(struct efs_inode*n){(void)n;return 0;}
 static int efs_client_rpc_lookup(uint64_t x,efs_ino_t p,const char*n,struct efs_inode*out){(void)x;(void)p;(void)n;rpc_calls++;out->ino=authoritative_ino;out->mode=S_IFREG|0644;return failure;}
 static void efs_client_adopt_lookup(struct efs_inode*a,struct efs_inode*b){(void)a;(void)b;adopted++;}
