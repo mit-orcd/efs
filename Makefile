@@ -397,6 +397,7 @@ docs-check:
 code-graph-check:
 	sh scripts/rebuild-code-graph.sh
 	python3 tests/test_code_graph.py
+	python3 tests/test_graph_community_labels.py
 
 # Valgrind memcheck leak gate (K26): bounded unit list, one PASS/FAIL line
 # per binary and a verdict; exit 1 on any definite leak, 3 (NOTRUN) without
