@@ -162,10 +162,11 @@ struct host_view {uint64_t applied;};
 struct efs_arc_view {uint64_t idx,term;int rc;};
 static uint32_t rd32be(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
 static int verdict, nonempty, selections, proposals, applied, ring_hit=1, ring_term=1;
+static int empty_on_recheck,recheck_error;
 static const uint8_t *proposed;
 static int host_pack_session_cleanup(void *h,const uint8_t *cmd,uint32_t len,
  uint8_t group,int *hint,uint8_t *packed,uint32_t *size)
-{assert(!h && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT && len==26 && group==0);selections++;*hint=2;*size=nonempty?26:0;memcpy(packed,cmd,26);packed[1]=EFS_MD_SESS_LEASE_LOCK_BATCH;return verdict;}
+{assert(!h && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT && len==26 && group==0);selections++;*hint=2;*size=nonempty && !(empty_on_recheck&&selections>1)?26:0;memcpy(packed,cmd,26);packed[1]=EFS_MD_SESS_LEASE_LOCK_BATCH;return selections>1&&recheck_error?recheck_error:verdict;}
 static void host_view_get(void *h,uint8_t group,struct host_view *v)
 {assert(!h && !group);v->applied=17;}
 static int host_propose_mode(void *h,uint8_t group,const uint8_t *cmd,uint32_t len,
@@ -202,6 +203,18 @@ int main(void) {
    assert(out.rc==EFS_ERR_BUSY && !out.salt && out.index==40);
  }
  ring_hit=ring_term=1;
+ /* A missing verdict is never success by itself. A fresh owner-floor /
+  * ReadIndex selection may independently prove the entire phase empty.
+  * This does not resubmit or claim the original entry committed. */
+ ring_hit=0;empty_on_recheck=1;selections=proposals=0;dispatch(cmd,26,&out);
+ assert(selections==2 && proposals==1 && out.rc==EFS_OK && out.salt==1 && out.index==17);
+ for(int c=0;c<2;c++) {
+   empty_on_recheck=c;recheck_error=c?EFS_ERR_IO:0;selections=proposals=0;dispatch(cmd,26,&out);
+   assert(selections==2 && proposals==1 && out.rc==EFS_ERR_BUSY && !out.salt && out.index==40);
+ }
+ empty_on_recheck=1;recheck_error=0;applied=EFS_ERR_IO;selections=proposals=0;dispatch(cmd,26,&out);
+ assert(selections==1 && out.rc==EFS_ERR_IO && out.index==40 && !out.salt);
+ empty_on_recheck=0;ring_hit=ring_term=1;
  int other[]={EFS_ERR_STALE,EFS_ERR_IO,EFS_ERR_NOT_PRIMARY,EFS_ERR_INVAL};
  for(unsigned i=0;i<sizeof(other)/sizeof(other[0]);i++) {
    applied=other[i];selections=proposals=0;dispatch(cmd,26,&out);

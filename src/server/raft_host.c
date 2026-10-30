@@ -15515,6 +15515,22 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                         rd32be(cmd+22),rd32be(cmd+18),n+1);
             out->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return;
         }
+        if (rc==EFS_ERR_BUSY && batch_idx && batch_term) {
+            /* The bounded exact-entry wait may expire after submission.
+             * Do not repeat it or invent its verdict. Re-run the existing
+             * owner-floor + ReadIndex selection instead: an empty phase
+             * is independent completion proof. The revoked epoch cannot
+             * acquire new ownership, and a late exact cleanup batch only
+             * removes that epoch's rows. Nonempty or failed reads leave
+             * the original ambiguous BUSY and entry index unchanged. */
+            uint32_t remaining=0;
+            if (host_pack_session_cleanup(h,cmd,clen,group,&hint,
+                                           cleanup_cmd,&remaining)==EFS_OK && !remaining) {
+                struct host_view v;host_view_get(h,group,&v);
+                out->rc=EFS_OK;out->salt=1;out->index=v.applied;
+                out->leader_hint=hint;return;
+            }
+        }
         if (rc==EFS_ERR_BUSY)
             fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u idx=%llu BUSY "
                     "uncertified (verdict not known)\n",rd32be(cmd+22),rd32be(cmd+18),
