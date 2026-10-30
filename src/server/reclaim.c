@@ -1019,7 +1019,7 @@ static void recover_flush(struct efs_reclaim_item *batch, uint32_t *nb)
         accept_internal(batch, n, rcs, 1);
         uint32_t keep = 0;
         for (uint32_t i = 0; i < n; i++) {
-            if (rcs[i] == EFS_OK || rcs[i] == EFS_ERR_INVAL) rj.recovered++;
+            if (rcs[i] == EFS_OK || rcs[i] == EFS_ERR_INVAL) __atomic_fetch_add(&rj.recovered, 1, __ATOMIC_RELAXED);
             else batch[keep++] = batch[i];
         }
         n = keep;
@@ -1117,7 +1117,7 @@ static void *recover_main(void *arg)
     free(batch);
     if (__atomic_load_n(&rj.stop, __ATOMIC_ACQUIRE)) return NULL; /* still fail closed */
     fprintf(stderr, "reclaim: recovery complete, %llu dead inodes fenced; writes re-admitted\n",
-            (unsigned long long)rj.recovered);
+            (unsigned long long)__atomic_load_n(&rj.recovered, __ATOMIC_RELAXED));
     pthread_mutex_lock(&rj.mu);
     rj.recovering = 0;
     pthread_mutex_unlock(&rj.mu);
@@ -1223,7 +1223,7 @@ void server_reclaim_status(struct efsd_server *s, struct efs_reclaim_status *out
     out->journal_segments = rj.nseg;
     out->journal_epoch = rj.epoch;
     out->recovering = (uint32_t)rj.recovering;
-    out->recovered = rj.recovered;
+    out->recovered = __atomic_load_n(&rj.recovered, __ATOMIC_RELAXED);
     pthread_mutex_unlock(&rj.mu);
     out->busy = __atomic_load_n(&rj.busy, __ATOMIC_RELAXED);
     out->credited_bytes = __atomic_load_n(&rj.credited, __ATOMIC_RELAXED);

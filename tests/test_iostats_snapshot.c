@@ -15,14 +15,14 @@ void efs_rdma_totals(struct efs_rdma_totals *out)
 int main(void)
 {
     struct efs_msg_io_stats_reply r;
-    efs_iostats_dump(0); /* even idle routine diagnostics must not scan */
+    efs_iostats_dump_to(stderr, 0); /* even idle routine diagnostics must not scan */
     assert(scans == 0);
     for (int i = 0; i < EFS_IO_STATS_CLASSES; ++i) {
         efs_iostats_add(i, 100 + i, 20, 0);
         efs_iostats_add(i, 200 + i, 40, 1);
     }
-    efs_iostats_dump(1);
-    efs_iostats_dump(1);
+    efs_iostats_dump_to(stderr, 1);
+    efs_iostats_dump_to(stderr, 1);
     assert(scans == 0);
     memset(&r, 0xa5, sizeof(r));
     efs_iostats_snapshot(&r);
@@ -35,7 +35,7 @@ int main(void)
     assert(r.rdma.live_conns == 7 && r.rdma.data_frames_tx == 11);
     assert(r.rdma.data_bytes_tx == 13 && r.rdma.data_frames_rx == 17);
     assert(r.rdma.data_bytes_rx == 19 && r.rdma.credit_stalls == 23);
-    efs_iostats_dump(1);
+    efs_iostats_dump_to(stderr, 1);
     assert(scans == 1);
     puts("I/O snapshot: routine dumps never aggregate RDMA; management preserves every field PASS");
     return 0;

@@ -120,7 +120,7 @@ void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out)
 
 /* Called from the raft host pump; prints one line per ~5 s once any class
  * has seen an op. */
-void efs_iostats_dump(int force)
+void efs_iostats_dump_to(FILE *out, int force)
 {
     struct efs_msg_io_stats_reply r;
     uint64_t now = efs_iostats_now_us();
@@ -136,7 +136,7 @@ void efs_iostats_dump(int force)
     if (!any && !force)
         return;
     g_last_dump_us = now;
-    fprintf(stderr,
+    fprintf(out,
             "iostats: get ops=%llu bytes=%llu errors=%llu avg_us=%llu "
             "p50_us=%llu max_us=%llu "
             "put ops=%llu bytes=%llu errors=%llu avg_us=%llu "

@@ -16,7 +16,7 @@ code=r'''
 #define HOST_READ_TRIES 1
 #define HOST_TICK_US 5000
 struct server {int unused;};
-struct efs_raft_host {struct server *s;pthread_mutex_t mu,cv_mu;int raft_id,n;};
+struct efs_raft_host {void *telemetry;struct server *s;pthread_mutex_t mu,cv_mu;int raft_id,n;};
 struct host_read_admission {uint64_t want,round,term;};
 struct read_prof_acc {int unused;};
 static struct {struct read_prof_acc ri_remote,ri_remote_wait,ri_leader_covered,ri_leader,ri_lock,ri_begin,ri_sleep_apply,ri_sleep_quorum;} g_read_prof;
@@ -29,6 +29,7 @@ static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t g,struct efs_
 static int delayed_floor;
 static struct host_view current;
 static int remote_rc,apply_rc,admissions,deadline=1,cv_progress,views;
+static void efs_telemetry_printf(void *p,const char *fmt,...){(void)p;(void)fmt;}
 static int read_prof_on(void){return 0;}
 static uint64_t now_us_(void){return 0;}
 static void read_prof_add(struct read_prof_acc*a,uint64_t n){(void)a;(void)n;}

@@ -108,6 +108,12 @@ static ssize_t ts_write(void *cookie, const char *buf, size_t size)
  * are anchored here (F1 asan gate: `efsd` refusing a removed setting
  * reported both as direct leaks), and freed if the stream is ever closed. */
 static struct ts_cookie *ts_cookies[3];
+static int ts_stderr_installed;
+
+int efs_log_timestamps_enabled(void)
+{
+    return __atomic_load_n(&ts_stderr_installed, __ATOMIC_ACQUIRE);
+}
 
 static int ts_close(void *cookie)
 {
@@ -148,6 +154,8 @@ void efs_log_timestamps_install(void)
     FILE *err = ts_wrap(2);
     if (out)
         stdout = out;
-    if (err)
+    if (err) {
         stderr = err;
+        __atomic_store_n(&ts_stderr_installed, 1, __ATOMIC_RELEASE);
+    }
 }

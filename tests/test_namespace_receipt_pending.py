@@ -16,8 +16,9 @@ source=r'''
 struct efs_opid {uint8_t client_uuid[16];uint32_t session_epoch;uint64_t seq;};
 struct efs_opid_req {struct efs_opid id;uint64_t ack;};
 struct efs_opid_reply {int rc;uint64_t ino;uint64_t seq;};
-struct efs_raft_host {void *kv;uint64_t obs_opid_replay;};
-static unsigned probes,checks,keys;
+struct efs_raft_host {void *telemetry,*kv;uint64_t obs_opid_replay;};
+static unsigned probes,checks,keys,telemetry_calls;
+static void efs_telemetry_printf(void *p,const char *fmt,...){(void)p;assert(strstr(fmt,"opid-receipt: replay"));telemetry_calls++;}
 static int result,pending,key_error,resolve_during_check,committed_pending;
 struct host_txn_read_context {struct efs_raft_host *host;uint8_t covered;int unhosted_coordinator;};
 static int host_txn_read_coord(void *,void *,uint32_t,int *);

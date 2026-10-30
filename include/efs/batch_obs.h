@@ -1,6 +1,7 @@
 #ifndef EFS_BATCH_OBS_H
 #define EFS_BATCH_OBS_H
 #include <stdint.h>
+#include <stdio.h>
 
 /* Opt-in diagnostics only: never used for admission, ACK or persistence. */
 enum efs_batch_counter {
@@ -43,7 +44,7 @@ void efs_batch_obs_count(enum efs_batch_counter key);
 void efs_batch_obs_reject(enum efs_batch_counter key);
 void efs_batch_obs_command(uint8_t opcode);
 void efs_batch_obs_hist(enum efs_batch_hist key, uint64_t value);
-void efs_batch_obs_dump(uint64_t now_us);
+void efs_batch_obs_dump_to(FILE *out, uint64_t now_us);
 #define BO_ON() __atomic_load_n(&efs_batch_obs_on, __ATOMIC_RELAXED)
 #define BO_COUNT(k) do { if (BO_ON()) efs_batch_obs_count(k); } while (0)
 #define BO_HIST(k,v) do { if (BO_ON()) efs_batch_obs_hist(k,(v)); } while (0)

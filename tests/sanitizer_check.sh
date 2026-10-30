@@ -103,6 +103,7 @@ default_list_tsan() {
 cat <<'LEOF'
 # KV: the W126 reader/writer/peek stress, the LSM (flush, compaction, peeks,
 # the reader gate), the KV snapshot tail; Raft store and reclaim threads.
+telemetry|tests/test_telemetry
 kv_lsm_concurrent|tests/test_kv_lsm_concurrent 4
 kv_lsm|tests/test_kv_lsm
 kv_reader_gate|tests/test_kv_reader_gate

@@ -1,3 +1,4 @@
+#include "efs/telemetry.h"
 /* W125 background packer.
  *
  * Runs on every daemon; works only for the metadata groups this node leads
@@ -1125,7 +1126,7 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
         qsort(files, nfiles, sizeof(*files), pk_file_cmp);
         moved = pk_segment(group, term, nodes, count, files, nfiles, NULL, NULL, EFS_PACK_LEDGER_F_COLD);
         STAT_ADD(compacted, moved);
-        fprintf(stderr, "packer: compact group=%u sources=%u moved=%u/%u\n", group, used_segs, moved, nfiles);
+        efs_telemetry_log(0, "packer: compact group=%u sources=%u moved=%u/%u\n", group, used_segs, moved, nfiles);
     }
 out:
     free(work); /* every files[].data points into it */
@@ -1201,7 +1202,7 @@ static void pk_backfill(struct efs_kv *kv, uint8_t group)
     }
     (void)pk_index_flush(group, items, n, end, end > EFS_KV_SHARD_MASK);
     if (end > EFS_KV_SHARD_MASK)
-        fprintf(stderr, "packer: backfill group=%u complete, %llu files indexed\n", group,
+        efs_telemetry_log(0, "packer: backfill group=%u complete, %llu files indexed\n", group,
                 (unsigned long long)__atomic_load_n(&pk.st.backfilled, __ATOMIC_RELAXED));
 out:
     free(a.v);
@@ -1347,7 +1348,7 @@ static int pk_group(uint8_t group, uint64_t term)
             pk.g[pk_gi(group)].fs_dead = o->dead; pk.g[pk_gi(group)].fs_holes = o->holes;
             pk.g[pk_gi(group)].fs_small = o->small;
             pthread_mutex_unlock(&pk.mu);
-            fprintf(stderr, "packer: segments group=%u active=%llu total_kib=%llu live_kib=%llu dead_kib=%llu "
+            efs_telemetry_log(0, "packer: segments group=%u active=%llu total_kib=%llu live_kib=%llu dead_kib=%llu "
                     "holes=%llu small=%llu backlog=%llu compacted_total=%llu\n", group,
                     (unsigned long long)fs->segs, (unsigned long long)(fs->total >> 10),
                     (unsigned long long)(fs->live >> 10), (unsigned long long)(fs->dead >> 10),
@@ -1494,7 +1495,7 @@ static int pk_group(uint8_t group, uint64_t term)
         }
     }
     if (segs || ndrop)
-        fprintf(stderr, "packer: group=%u term=%llu busy=%d fg_commits_per_s=%.0f lag_s=%.0f rate=%.0f pressure=%.2f unpacked_gib=%.1f used_pct=%.1f candidates=%u eligible=%u segments=%u unindexed=%u packed_total=%llu scan_ms=%llu read_ms=%llu seg_ms=%llu pass_ms=%llu\n",
+        efs_telemetry_log(0, "packer: group=%u term=%llu busy=%d fg_commits_per_s=%.0f lag_s=%.0f rate=%.0f pressure=%.2f unpacked_gib=%.1f used_pct=%.1f candidates=%u eligible=%u segments=%u unindexed=%u packed_total=%llu scan_ms=%llu read_ms=%llu seg_ms=%llu pass_ms=%llu\n",
                 group, (unsigned long long)term, pk.g[pk_gi(group)].busy, pk.g[pk_gi(group)].fg_rate,
                 (double)pk.g[pk_gi(group)].lag_ns / 1e9, pk.g[pk_gi(group)].rate, pk.g[pk_gi(group)].pressure,
                 (double)(pk.g[pk_gi(group)].backlog * (uint64_t)EFS_FRAGMENT_SIZE) / (double)(1ull << 30),

@@ -331,7 +331,7 @@ void efs_iostats_add(int cls, uint64_t bytes, uint64_t us, int err);
 void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out);
 /* 5 s throttled `iostats:` stderr line once any class is nonzero; the
  * raft host pump calls it on the host_obs_dump cadence. */
-void efs_iostats_dump(int force);
+void efs_iostats_dump_to(FILE *out, int force);
 
 void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out);
 

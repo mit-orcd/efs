@@ -12,6 +12,7 @@
  * was the top CPU consumer on both client and server under load.
  */
 #include "efs/rdma.h"
+#include "efs/telemetry.h"
 #include "efs/rdma_message.h"
 #include "efs/network.h"
 #include "efs/protocol.h"
@@ -1197,7 +1198,7 @@ static void setup_publish(struct efs_conn *c, struct efs_rdma_conn *rc)
     rc->tcp_counted=!efs_tcp_payload_counts(c->fd,&rc->bootstrap_tx,&rc->bootstrap_rx,&state,&fin);
     if (rc->tcp_counted && c->is_server) rc->bootstrap_tx+=5+EFS_RMSG_SETUP_BYTES;
     __sync_fetch_and_add(&g_live_conns,1);
-    fprintf(stderr,"efs: RDMA transport up segmented-v1 on %s qpn=%u physical=%u logical=%u peer-receives=%u messages=%u\n",
+    efs_telemetry_log(0,"efs: RDMA transport up segmented-v1 on %s qpn=%u physical=%u logical=%u peer-receives=%u messages=%u\n",
             rc->dev->name,rc->qp->qp_num,rc->max_frame,rc->messages.logical_cap,
             rc->credits.capacity+1,rc->peer_outstanding);
 }
@@ -1283,7 +1284,7 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
         int measured=rc->tcp_counted&&!efs_tcp_payload_counts(rc->tcp_fd,&tx,&rx,&state,&fin);
         uint64_t extra_tx=measured&&tx>rc->bootstrap_tx?tx-rc->bootstrap_tx:0;
         uint64_t extra_rx=measured&&rx>rc->bootstrap_rx?rx-rc->bootstrap_rx:0;
-        fprintf(stderr,"efs: RDMA counters qpn=%u fd=%d data_tx=%llu/%llu data_rx=%llu/%llu app_tx=%llu/%llu app_rx=%llu/%llu controls=%llu/%llu peak=%llu stalls=%llu tcp_measured=%d bootstrap=%llu/%llu post_setup_tcp=%llu/%llu violations=%llu tcp_state=%u peer_fin=%u\n",
+        efs_telemetry_log(extra_tx || extra_rx || rc->tcp_app_rx,"efs: RDMA counters qpn=%u fd=%d data_tx=%llu/%llu data_rx=%llu/%llu app_tx=%llu/%llu app_rx=%llu/%llu controls=%llu/%llu peak=%llu stalls=%llu tcp_measured=%d bootstrap=%llu/%llu post_setup_tcp=%llu/%llu violations=%llu tcp_state=%u peer_fin=%u\n",
             dying_qpn,rc->tcp_fd,(unsigned long long)rc->data_frames,(unsigned long long)rc->data_bytes,
             (unsigned long long)rc->rx_frames,(unsigned long long)rc->rx_bytes,
             (unsigned long long)rc->app_tx,(unsigned long long)rc->logical_tx,

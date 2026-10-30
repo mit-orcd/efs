@@ -15,6 +15,11 @@ code = r'''
 #include "efs/meta_cmd.h"
 #include <assert.h>
 #include <stdio.h>
+/* This extraction tests verdict/advancement only; the real bounded logger
+ * is exercised by test_telemetry and the blocked-sink integration test. */
+static void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; (void)format;
+}
 static int audible(unsigned kind, int rc) {
     uint8_t cmd[2] = {EFS_MD_CMD_SESSION, kind};
     uint64_t index = 1; efs_ino_t ino = 42; uint32_t shard = 1;

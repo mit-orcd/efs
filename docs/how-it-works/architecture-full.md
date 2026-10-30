@@ -3892,6 +3892,8 @@ gate or authorize deployment. Keep unresolved work linked from its queue/ledger.
 
 **Raw evidence note (2026-10-23):** the bulk data in `testsuite` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.
 
+[AE port](../status/ae-product-port-20261030.md): `agent/devel-task-ae` ported onto devel `7514b2145`: routine-logging reporter (K70) and `rj.recovered` atomic (K71) ported; the fault-fixture, K48 forensics and AB/AE native acceptance are **not** closed. Evidence pages [AB](../status/ab-obs-dump-20261028.md) and [AE](../status/ae-pump-logging-20261028.md) merged with renumbered K rows.
+
 
 ## Appendix 2 — Work queue — ordered items and source findings
 

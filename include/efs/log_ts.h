@@ -5,5 +5,7 @@
  * line with a UTC timestamp ("2026-10-01T13:41:24.780Z "). Call once at
  * the top of a daemon's main(), before any thread. EFS_LOG_TS=0 skips it. */
 void efs_log_timestamps_install(void);
+/* Whether stderr actually received the timestamp wrapper at startup. */
+int efs_log_timestamps_enabled(void);
 
 #endif

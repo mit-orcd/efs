@@ -84,7 +84,7 @@ void efs_batch_obs_command(uint8_t opcode)
     __atomic_add_fetch(&commands[opcode], 1, __ATOMIC_RELAXED);
 }
 
-void efs_batch_obs_dump(uint64_t now_us)
+void efs_batch_obs_dump_to(FILE *out, uint64_t now_us)
 {
     unsigned i, b;
     int saved = errno;
@@ -92,26 +92,24 @@ void efs_batch_obs_dump(uint64_t now_us)
     /* One pump owns dump cadence. Cumulative atomics are not a transactional
      * snapshot: interval boundary counts can differ by concurrent updates. */
     last_dump = now_us;
-    flockfile(stderr);
-    fprintf(stderr,"batch-obs {\"mono_us\":%llu,\"counters\":{",(unsigned long long)now_us);
+    fprintf(out,"batch-obs {\"mono_us\":%llu,\"counters\":{",(unsigned long long)now_us);
     for (i=0;i<BO_COUNTER_N;i++)
-        fprintf(stderr,"%s\"%s\":%llu",i?",":"",cn[i],(unsigned long long)__atomic_load_n(&counters[i],__ATOMIC_RELAXED));
-    fprintf(stderr,"},\"follow_reject\":{");
+        fprintf(out,"%s\"%s\":%llu",i?",":"",cn[i],(unsigned long long)__atomic_load_n(&counters[i],__ATOMIC_RELAXED));
+    fprintf(out,"},\"follow_reject\":{");
     for (i=0;i<BO_COUNTER_N;i++)
-        fprintf(stderr,"%s\"%s\":%llu",i?",":"",cn[i],(unsigned long long)__atomic_load_n(&rejected[i],__ATOMIC_RELAXED));
-    fprintf(stderr,"},\"commands\":{");
+        fprintf(out,"%s\"%s\":%llu",i?",":"",cn[i],(unsigned long long)__atomic_load_n(&rejected[i],__ATOMIC_RELAXED));
+    fprintf(out,"},\"commands\":{");
     for (i=0;i<256;i++)
-        fprintf(stderr,"%s\"%u\":%llu",i?",":"",i,(unsigned long long)__atomic_load_n(&commands[i],__ATOMIC_RELAXED));
-    fprintf(stderr,"},\"hist\":{");
+        fprintf(out,"%s\"%u\":%llu",i?",":"",i,(unsigned long long)__atomic_load_n(&commands[i],__ATOMIC_RELAXED));
+    fprintf(out,"},\"hist\":{");
     for (i=0;i<BH_HIST_N;i++) {
-        fprintf(stderr,"%s\"%s\":{\"n\":%llu,\"sum\":%llu,\"max\":%llu,\"bins\":[",i?",":"",hn[i],
+        fprintf(out,"%s\"%s\":{\"n\":%llu,\"sum\":%llu,\"max\":%llu,\"bins\":[",i?",":"",hn[i],
             (unsigned long long)__atomic_load_n(&hist[i].n,__ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&hist[i].sum,__ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&hist[i].max,__ATOMIC_RELAXED));
-        for (b=0;b<BINS;b++) fprintf(stderr,"%s%llu",b?",":"",(unsigned long long)__atomic_load_n(&hist[i].bins[b],__ATOMIC_RELAXED));
-        fprintf(stderr,"]}");
+        for (b=0;b<BINS;b++) fprintf(out,"%s%llu",b?",":"",(unsigned long long)__atomic_load_n(&hist[i].bins[b],__ATOMIC_RELAXED));
+        fprintf(out,"]}");
     }
-    fprintf(stderr,"}}\n");
-    funlockfile(stderr);
+    fprintf(out,"}}\n");
     errno = saved;
 }

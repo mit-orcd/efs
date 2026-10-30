@@ -7,6 +7,7 @@
 #include "efs/checksum.h"
 #include "efs/raft.h"
 #include "efs/batch_obs.h"
+#include "efs/telemetry.h"
 #include "write_prof.h"
 #include "apply_ring.h"
 #include "apply_wait.h"
@@ -387,6 +388,7 @@ struct host_waiter {
 };
 
 struct efs_raft_host {
+    struct efs_telemetry *telemetry; /* immutable until host workers stop */
     struct efsd_server *s;
     int raft_id;
     /* W153/K33: member count. Before formation EFS_FORMATION_MIN (group 0
@@ -1087,7 +1089,7 @@ static void *host_sender(void *arg)
             tx->conn = server_peer_conn_new(host, port);
         pc = tx->conn;
         if (!pc) {
-            tx->st_fail += (uint64_t)n;
+            __atomic_add_fetch(&tx->st_fail, (uint64_t)n, __ATOMIC_RELAXED);
             for (i = 0; i < n; i++)
                 free(bufs[i]);
             continue;
@@ -1096,9 +1098,9 @@ static void *host_sender(void *arg)
             uint64_t gw;
             t1 = now_us_();
             gw = t1 - t0;
-            tx->st_get_us += gw;
-            if (gw > tx->st_get_max_us)
-                tx->st_get_max_us = gw;
+            __atomic_add_fetch(&tx->st_get_us, gw, __ATOMIC_RELAXED);
+            if (gw > __atomic_load_n(&tx->st_get_max_us, __ATOMIC_RELAXED))
+                __atomic_store_n(&tx->st_get_max_us, gw, __ATOMIC_RELAXED);
         }
         /* Every conn kind. Until Sep 30 2026 this was TCP-only, so an
          * RDMA lane waited EFS_IO_TIMEOUT_MS (30 s) for one RAFT_REPLY
@@ -1194,20 +1196,20 @@ static void *host_sender(void *arg)
         }
         if (bad) {
             /* Everything unacked is lost with the conn; Raft resends. */
-            tx->st_fail += (uint64_t)(n - acked);
+            __atomic_add_fetch(&tx->st_fail, (uint64_t)(n - acked), __ATOMIC_RELAXED);
             efs_conn_destroy(pc);
             tx->conn = NULL;
         } else if (sent < n) {
             /* Popped more than this conn may carry: the rest were not
              * sent. Raft retries them (heartbeat / next AE). */
-            tx->st_fail += (uint64_t)(n - sent);
+            __atomic_add_fetch(&tx->st_fail, (uint64_t)(n - sent), __ATOMIC_RELAXED);
         }
         for (i = 0; i < n; i++)
             free(bufs[i]);
         if (obs) {
-            tx->st_sent += (uint64_t)acked;
+            __atomic_add_fetch(&tx->st_sent, (uint64_t)acked, __ATOMIC_RELAXED);
             if (acked)
-                tx->st_rtt_us += now_us_() - t1;
+                __atomic_add_fetch(&tx->st_rtt_us, now_us_() - t1, __ATOMIC_RELAXED);
         }
     }
 }
@@ -3011,7 +3013,9 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
          * advancing past it can pin an unlinked inode forever. */
         return rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM ? rc : EFS_OK;
     }
-    fprintf(stderr,
+    /* Routine ACK progress must not block the applier on stderr. Other
+     * session events (including fences) retain synchronous delivery. */
+    efs_telemetry_log(cmd[1] != EFS_MD_SESS_ACK,
             "raft-host: applied session index=%llu kind=%u shard=%u ino=%llu\n",
             (unsigned long long)index, (unsigned)cmd[1], shard,
             (unsigned long long)ino);
@@ -5549,7 +5553,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             if (prof) read_prof_add(waiting_apply ? &g_read_prof.ri_sleep_apply :
                                                    &g_read_prof.ri_sleep_quorum, efs_batch_obs_now_us() - sleep_begin);
             if (s0 > 20000)
-                fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "
+                efs_telemetry_printf(h->telemetry, "raft-host: read-sleep us=%llu group=%u "
                         "want=%llu read_idx=%llu applied=%llu pending=%d\n",
                         (unsigned long long)s0, group,
                         (unsigned long long)want,
@@ -5743,7 +5747,7 @@ static int host_wait_applied_mode(struct efs_raft_host *h, uint8_t group,
             host_waiter_sleep(h, group, 0, idx, 0, &end, 0, 0, 0, NULL);
             s0 = now_us_() - s0;
             if (s0 > 20000)
-                fprintf(stderr, "raft-host: apply-sleep us=%llu group=%u "
+                efs_telemetry_printf(h->telemetry, "raft-host: apply-sleep us=%llu group=%u "
                         "idx=%llu applied=%llu\n",
                         (unsigned long long)s0, group,
                         (unsigned long long)idx,
@@ -8008,10 +8012,55 @@ static void host_pump_kick(struct efs_raft_host *h)
 
 /* EFS_RAFT_OBS: log every term/role change (election churn has no other
  * footprint) and dump outbox/pump stats every ~5 s when anything moved. */
-static void host_obs_dump(struct efs_raft_host *h, int force)
+struct host_tx_obs {
+    int peer;
+    uint64_t st_drop;
+    uint64_t st_enq;
+    uint64_t st_fail;
+    uint64_t st_get_max_us;
+    uint64_t st_get_us;
+    uint32_t st_hi;
+    uint64_t st_rtt_us;
+    uint64_t st_sent;
+};
+struct host_periodic {
+    struct efs_raft_host *host;
+    int obs;
+    struct host_tx_obs tx[EFS_RAFT_MAX_PEERS];
+    uint64_t obs_pub_ring[64];
+    uint64_t fin_done;
+    uint64_t fin_dropped;
+    uint64_t fin_full;
+    uint64_t fin_queued;
+    uint64_t inbox_drop;
+    uint64_t obs_apply_max_cnt;
+    uint64_t obs_apply_max_us;
+    uint64_t obs_arc_miss;
+    uint64_t obs_arc_term_miss;
+    uint64_t obs_drain_max_us;
+    uint64_t obs_getchunks_moved;
+    uint64_t obs_opid_replay;
+    uint64_t obs_persist_max_us;
+    uint64_t obs_pub_max_us;
+    uint64_t obs_pub_n;
+    uint64_t obs_pub_set_splits;
+    uint64_t obs_pub_sets;
+    uint64_t obs_pub_unit_aborts;
+    uint64_t obs_pub_units;
+    uint64_t obs_pump_hold_max_us;
+    uint64_t obs_stage_busy;
+    uint64_t obs_tick_max_us;
+    uint64_t obs_wait_extends;
+    uint64_t obs_wait_max_us;
+    uint64_t obs_wait_timeouts;
+    uint64_t obs_wait_timeouts_own;
+};
+_Static_assert(sizeof(struct host_periodic) <= EFS_TELEMETRY_BYTES, "periodic telemetry snapshot bound");
+
+static void host_obs_roles(struct efs_raft_host *h)
 {
     uint64_t now_ms = now_us_() / 1000ull;
-    int i, any = 0;
+    int i;
     static const char *roles[] = { "FOLLOWER", "CANDIDATE", "LEADER", "?" };
 
     for (i = 0; i < HOST_NGROUPS; i++) {
@@ -8039,14 +8088,17 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
             g->obs_role = ro;
         }
     }
-    if (!force && now_ms - h->obs_last_dump_ms < 5000)
-        return;
+}
+
+static void host_obs_render(FILE *out, const struct host_periodic *h)
+{
+    int i, any = 0;
     for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
-        struct host_outbox *tx = &h->tx[i];
+        const struct host_tx_obs *tx = &h->tx[i];
         if (!tx->st_enq && !tx->st_drop)
             continue;
         any = 1;
-        fprintf(stderr,
+        fprintf(out,
                 "raft-obs: tx->%d enq=%llu drop=%llu sent=%llu fail=%llu "
                 "hi=%u rtt_avg=%lluus get_avg=%lluus get_max=%llums\n",
                 tx->peer,
@@ -8066,7 +8118,7 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
     if (__atomic_load_n(&h->obs_pub_units, __ATOMIC_RELAXED) ||
         __atomic_load_n(&h->obs_pub_unit_aborts, __ATOMIC_RELAXED) ||
         __atomic_load_n(&h->obs_getchunks_moved, __ATOMIC_RELAXED))
-        fprintf(stderr, "raft-obs-w77: pub_units=%llu pub_sets=%llu pub_set_splits=%llu "
+        fprintf(out, "raft-obs-w77: pub_units=%llu pub_sets=%llu pub_set_splits=%llu "
                 "pub_unit_aborts=%llu getchunks_moved=%llu stage_busy=%llu\n",
                 (unsigned long long)__atomic_load_n(&h->obs_pub_units, __ATOMIC_RELAXED),
                 (unsigned long long)__atomic_load_n(&h->obs_pub_sets, __ATOMIC_RELAXED),
@@ -8103,7 +8155,7 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
             }
             pub_p50 = psamp[pc / 2];
         }
-        fprintf(stderr,
+        fprintf(out,
                 "raft-obs: wait_timeouts=%llu wait_timeouts_own=%llu wait_extends=%llu pump_hold_max=%lluus "
                 "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
                 "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
@@ -8129,20 +8181,69 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)h->fin_dropped,
                 (unsigned long long)h->fin_full,
                 (unsigned long long)pub_p50,
-                (unsigned long long)__atomic_exchange_n(&h->obs_pub_max_us, 0,
-                                                       __ATOMIC_RELAXED),
+                (unsigned long long)h->obs_pub_max_us,
                 (unsigned long long)__atomic_load_n(&h->inbox_drop,
                                                     __ATOMIC_RELAXED));
-        h->obs_pump_hold_max_us = 0;
-        h->obs_wait_max_us = 0;
-        h->obs_drain_max_us = 0;
-        h->obs_tick_max_us = 0;
-        h->obs_apply_max_us = 0;
-        h->obs_persist_max_us = 0;
-        h->obs_apply_max_cnt = 0;
     }
-    if (any)
-        h->obs_last_dump_ms = now_ms;
+}
+
+/* Bounded numeric snapshot only. No formatting, stdio or sink access under
+ * h->mu. Sender-owned diagnostic counters are atomic; outbox-owned fields
+ * are copied under their owner mutex. */
+static void host_periodic_capture(struct efs_raft_host *h, struct host_periodic *out, int obs)
+{
+    memset(out, 0, sizeof(*out));
+    out->host = h;
+    out->obs = obs;
+    if (!obs) return;
+    out->fin_done = __atomic_load_n(&h->fin_done, __ATOMIC_RELAXED);
+    out->fin_dropped = __atomic_load_n(&h->fin_dropped, __ATOMIC_RELAXED);
+    out->fin_full = __atomic_load_n(&h->fin_full, __ATOMIC_RELAXED);
+    out->fin_queued = __atomic_load_n(&h->fin_queued, __ATOMIC_RELAXED);
+    out->inbox_drop = __atomic_load_n(&h->inbox_drop, __ATOMIC_RELAXED);
+    out->obs_apply_max_cnt = __atomic_load_n(&h->obs_apply_max_cnt, __ATOMIC_RELAXED);
+    out->obs_apply_max_us = __atomic_load_n(&h->obs_apply_max_us, __ATOMIC_RELAXED);
+    out->obs_arc_miss = __atomic_load_n(&h->obs_arc_miss, __ATOMIC_RELAXED);
+    out->obs_arc_term_miss = __atomic_load_n(&h->obs_arc_term_miss, __ATOMIC_RELAXED);
+    out->obs_drain_max_us = __atomic_load_n(&h->obs_drain_max_us, __ATOMIC_RELAXED);
+    out->obs_getchunks_moved = __atomic_load_n(&h->obs_getchunks_moved, __ATOMIC_RELAXED);
+    out->obs_opid_replay = __atomic_load_n(&h->obs_opid_replay, __ATOMIC_RELAXED);
+    out->obs_persist_max_us = __atomic_load_n(&h->obs_persist_max_us, __ATOMIC_RELAXED);
+    out->obs_pub_max_us = __atomic_exchange_n(&h->obs_pub_max_us, 0, __ATOMIC_RELAXED);
+    out->obs_pub_n = __atomic_load_n(&h->obs_pub_n, __ATOMIC_RELAXED);
+    out->obs_pub_set_splits = __atomic_load_n(&h->obs_pub_set_splits, __ATOMIC_RELAXED);
+    out->obs_pub_sets = __atomic_load_n(&h->obs_pub_sets, __ATOMIC_RELAXED);
+    out->obs_pub_unit_aborts = __atomic_load_n(&h->obs_pub_unit_aborts, __ATOMIC_RELAXED);
+    out->obs_pub_units = __atomic_load_n(&h->obs_pub_units, __ATOMIC_RELAXED);
+    out->obs_pump_hold_max_us = __atomic_load_n(&h->obs_pump_hold_max_us, __ATOMIC_RELAXED);
+    out->obs_stage_busy = __atomic_load_n(&h->obs_stage_busy, __ATOMIC_RELAXED);
+    out->obs_tick_max_us = __atomic_load_n(&h->obs_tick_max_us, __ATOMIC_RELAXED);
+    out->obs_wait_extends = __atomic_load_n(&h->obs_wait_extends, __ATOMIC_RELAXED);
+    out->obs_wait_max_us = __atomic_load_n(&h->obs_wait_max_us, __ATOMIC_RELAXED);
+    out->obs_wait_timeouts = __atomic_load_n(&h->obs_wait_timeouts, __ATOMIC_RELAXED);
+    out->obs_wait_timeouts_own = __atomic_load_n(&h->obs_wait_timeouts_own, __ATOMIC_RELAXED);
+    for (unsigned i=0; i<64; i++)
+        out->obs_pub_ring[i] = __atomic_load_n(&h->obs_pub_ring[i], __ATOMIC_RELAXED);
+    pthread_mutex_lock(&h->outbox_mu);
+    for (unsigned i=0; i<EFS_RAFT_MAX_PEERS; i++) {
+        out->tx[i].peer = __atomic_load_n(&h->tx[i].peer, __ATOMIC_RELAXED);
+        out->tx[i].st_drop = __atomic_load_n(&h->tx[i].st_drop, __ATOMIC_RELAXED);
+        out->tx[i].st_enq = __atomic_load_n(&h->tx[i].st_enq, __ATOMIC_RELAXED);
+        out->tx[i].st_fail = __atomic_load_n(&h->tx[i].st_fail, __ATOMIC_RELAXED);
+        out->tx[i].st_get_max_us = __atomic_load_n(&h->tx[i].st_get_max_us, __ATOMIC_RELAXED);
+        out->tx[i].st_get_us = __atomic_load_n(&h->tx[i].st_get_us, __ATOMIC_RELAXED);
+        out->tx[i].st_hi = __atomic_load_n(&h->tx[i].st_hi, __ATOMIC_RELAXED);
+        out->tx[i].st_rtt_us = __atomic_load_n(&h->tx[i].st_rtt_us, __ATOMIC_RELAXED);
+        out->tx[i].st_sent = __atomic_load_n(&h->tx[i].st_sent, __ATOMIC_RELAXED);
+    }
+    pthread_mutex_unlock(&h->outbox_mu);
+    h->obs_pump_hold_max_us = 0;
+    h->obs_wait_max_us = 0;
+    h->obs_drain_max_us = 0;
+    h->obs_tick_max_us = 0;
+    h->obs_apply_max_us = 0;
+    h->obs_persist_max_us = 0;
+    h->obs_apply_max_cnt = 0;
 }
 
 /* The KV shape line the W23 stalled-compactor test samples: one line per
@@ -8150,7 +8251,7 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
  * then stays quiet). Always-on, like iostats; the snapshot is one short
  * l->mu hold, taken off the pump lock. One pump thread per process, so
  * the last-printed state is a function-local static. */
-static void host_kv_obs_dump(struct efs_raft_host *h)
+static void host_kv_obs_dump(FILE *out, struct efs_raft_host *h)
 {
     static uint64_t last_ms;
     static struct efs_kv_lsm_stats prev;
@@ -8168,9 +8269,20 @@ static void host_kv_obs_dump(struct efs_raft_host *h)
         return;
     prev = s;
     printed = 1;
-    fprintf(stderr, "kv-obs: mt_bytes=%llu l0_bytes=%llu l0=%u l1=%u\n",
+    fprintf(out, "kv-obs: mt_bytes=%llu l0_bytes=%llu l0=%u l1=%u\n",
             (unsigned long long)s.mt_bytes, (unsigned long long)s.l0_bytes,
             s.n_l0, s.n_l1);
+}
+
+/* One renderer and mailbox for AB and AE. KV snapshots and optional batch
+ * formatting also run off the pump. Host lifetime extends through stop/join. */
+static void host_periodic_render(FILE *out, const void *data)
+{
+    const struct host_periodic *p = data;
+    if (p->obs) host_obs_render(out, p);
+    efs_iostats_dump_to(out, 0);
+    host_kv_obs_dump(out, p->host);
+    efs_batch_obs_dump_to(out, efs_batch_obs_now_us());
 }
 
 /* KV release has already completed; the restart checkpoint is a separate
@@ -8583,6 +8695,8 @@ static void *host_pump(void *arg)
 
     while (__atomic_load_n(&h->running, __ATOMIC_ACQUIRE)) {
         struct pollfd pfd;
+        struct host_periodic periodic;
+        int report_due = 0;
         uint64_t sink;
         uint64_t c0 = 0;
         uint64_t applied_now[HOST_NGROUPS],cursor_now[HOST_NGROUPS];
@@ -8743,13 +8857,16 @@ static void *host_pump(void *arg)
             held = t_drain + t_tick;
             if (held > h->obs_pump_hold_max_us)
                 h->obs_pump_hold_max_us = held;
-            host_obs_dump(h, 0);
+            host_obs_roles(h);
+        }
+        uint64_t report_ms = efs_batch_obs_now_us() / 1000ull;
+        if (report_ms - h->obs_last_dump_ms >= 5000) {
+            host_periodic_capture(h, &periodic, obs);
+            h->obs_last_dump_ms = report_ms;
+            report_due = 1;
         }
         pthread_mutex_unlock(&h->mu);
-        /* iostats: is always-on (not EFS_RAFT_OBS-gated); the 5 s cadence
-         * lives in efs_iostats_dump. */
-        efs_iostats_dump(0);
-        host_kv_obs_dump(h);
+        if (report_due) efs_telemetry_submit(h->telemetry, &periodic, sizeof(periodic));
         /* Capture this cycle's WAL prefix and transfer its barrier to one
          * bounded worker. The next pump cycle may run while it flushes.
          * Recovery cursors and checkpoints still follow the successful
@@ -8786,7 +8903,6 @@ static void *host_pump(void *arg)
         if (batch_obs) {
             if(!checkpoint.started)
                 BO_HIST(BH_APPLIED_PERSIST_US, efs_batch_obs_now_us() - phase_us);
-            efs_batch_obs_dump(efs_batch_obs_now_us());
         }
         if (obs) {
             t_persist = now_us_() - c0;
@@ -9929,7 +10045,7 @@ static void host_fin_add(struct efs_raft_host *h, const struct efs_txid *t,
         return;
     pthread_mutex_lock(&h->fin_mu);
     if (h->fin_n >= HOST_FIN_MAX) {
-        h->fin_full++;
+        __atomic_fetch_add(&h->fin_full, 1, __ATOMIC_RELAXED);
         pthread_mutex_unlock(&h->fin_mu);
         return;
     }
@@ -9940,7 +10056,7 @@ static void host_fin_add(struct efs_raft_host *h, const struct efs_txid *t,
     it->born_ns = now_ns();
     it->retire_only = retire_only;
     h->fin_n++;
-    h->fin_queued++;
+    __atomic_fetch_add(&h->fin_queued, 1, __ATOMIC_RELAXED);
     pthread_cond_signal(&h->fin_cv);
     pthread_mutex_unlock(&h->fin_mu);
 }
@@ -9989,7 +10105,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
             if (!h->fin_running)
                 return;
             if (now_ns() - it->born_ns > HOST_FIN_MAX_NS) {
-                h->fin_dropped++;
+                __atomic_fetch_add(&h->fin_dropped, 1, __ATOMIC_RELAXED);
                 return;
             }
             rc = host_bg_propose(h, cg, dcmd, dn, 1);
@@ -10000,7 +10116,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
             if (rc == EFS_ERR_STALE)
                 return; /* retired and reclaimed: every RESOLVE applied */
             if (rc != EFS_ERR_BUSY && rc != EFS_ERR_NOT_PRIMARY) {
-                h->fin_dropped++;
+                __atomic_fetch_add(&h->fin_dropped, 1, __ATOMIC_RELAXED);
                 fprintf(stderr, "raft-host: txn-finish coord=%u abort rc=%d (recovery)\n",
                         it->coord, rc);
                 return;
@@ -10015,11 +10131,11 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
         if (!h->fin_running)
             return;
         if (now_ns() - it->born_ns > HOST_FIN_MAX_NS) {
-            h->fin_dropped++;
+            __atomic_fetch_add(&h->fin_dropped, 1, __ATOMIC_RELAXED);
             return;
         }
         if (!host_hosts(h, cg)) {
-            h->fin_dropped++;
+            __atomic_fetch_add(&h->fin_dropped, 1, __ATOMIC_RELAXED);
             return;
         }
         rc = host_read_index(h, cg, &hint);
@@ -10051,7 +10167,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
          * nothing is left to finish. */
         if (rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_BUSY &&
             rc != EFS_ERR_NOT_PRIMARY) {
-            h->fin_dropped++;
+            __atomic_fetch_add(&h->fin_dropped, 1, __ATOMIC_RELAXED);
             return;
         }
         usleep(HOST_FIN_POLL_US);
@@ -10098,7 +10214,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
             if (!h->fin_running)
                 return;
             if (now_ns() - it->born_ns > HOST_FIN_MAX_NS) {
-                h->fin_dropped++;
+                __atomic_fetch_add(&h->fin_dropped, 1, __ATOMIC_RELAXED);
                 return;
             }
             /* verdict=1: a rejected RESOLVE must not count as done.
@@ -10108,7 +10224,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
             if (rc == EFS_OK)
                 break;
             if (rc != EFS_ERR_BUSY && rc != EFS_ERR_NOT_PRIMARY) {
-                h->fin_dropped++;
+                __atomic_fetch_add(&h->fin_dropped, 1, __ATOMIC_RELAXED);
                 fprintf(stderr, "raft-host: txn-finish coord=%u resolve "
                         "sh=%u dec=%d rc=%d (recovery)\n",
                         it->coord, sh, dec, rc);
@@ -10117,7 +10233,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
             usleep(HOST_FIN_POLL_US);
         }
     }
-    h->fin_done++;
+    __atomic_fetch_add(&h->fin_done, 1, __ATOMIC_RELAXED);
     host_txn_retire(h, &it->t, it->coord);
 }
 
@@ -12973,7 +13089,9 @@ static void *host_query_thread(void *ctx)
             h->query_view=view;
             struct efs_query_rollup root={0};
             int root_rc=efs_query_catalog_stats(candidate,EFS_ROOT_INO,&root);
-            fprintf(stderr,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u refolded=%u walked=%u edge_reused=%u deferred_cleanup=%llu bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
+            /* Keep the initial catalog-ready event lossless for startup
+             * consumers; subsequent refresh summaries are routine telemetry. */
+            efs_telemetry_log(view.generation == 1,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u refolded=%u walked=%u edge_reused=%u deferred_cleanup=%llu bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
                 (unsigned long long)view.generation,(unsigned long long)view.applied[0],
                 (unsigned long long)view.applied[1],efs_query_catalog_rebuilt(candidate),efs_query_catalog_refolded(candidate),
                 efs_query_catalog_walked(candidate),efs_query_catalog_reused_edges(candidate),
@@ -13670,9 +13788,12 @@ int server_raft_host_start(struct efsd_server *s)
     efs_kv_lsm_query_tracking(h->kv,1);
     /* Published atomically: the rejoin thread (membership_copy) and the
      * query thread may already look for it. */
-    __atomic_store_n(&g_host, h, __ATOMIC_RELEASE);
-    if (efsd_pthread_create(&h->tid, host_pump, h) != 0) {
-        fprintf(stderr, "raft-host: pump thread failed\n");
+    h->telemetry = efs_telemetry_start(host_periodic_render);
+    if (h->telemetry)
+        __atomic_store_n(&g_host, h, __ATOMIC_RELEASE);
+    if (!h->telemetry || efsd_pthread_create(&h->tid, host_pump, h) != 0) {
+        fprintf(stderr, "raft-host: required telemetry or pump thread unavailable; refusing startup\n");
+        efs_telemetry_stop(h->telemetry);
         __atomic_store_n(&g_host, NULL, __ATOMIC_RELEASE);
         __atomic_store_n(&h->running, 0, __ATOMIC_RELEASE);
         host_stop_senders(h);
@@ -13829,6 +13950,7 @@ void server_raft_host_stop(void)
     /* After the pump join (no new tick sends) and before the raft cores are
      * freed. A sender blocked on a dead peer exits within HOST_SEND_IO_MS. */
     host_stop_senders(h);
+    efs_telemetry_stop(h->telemetry);
     pthread_mutex_lock(&h->mu);
     for (i = 0; i < HOST_NGROUPS; i++) {
         efs_raft_free(h->g[i].r);
@@ -17647,7 +17769,7 @@ static int host_opid_replay(struct efs_raft_host *h, uint32_t shard,
         __atomic_fetch_add(&h->obs_opid_replay, 1, __ATOMIC_RELAXED);
         /* W155 G2/G4: a same-identity retry answered from the durable
          * receipt (the op-id window), not run again. */
-        fprintf(stderr, "opid-receipt: replay shard=%u id=%02x%02x%02x%02x/%u/%llu "
+        efs_telemetry_printf(h->telemetry, "opid-receipt: replay shard=%u id=%02x%02x%02x%02x/%u/%llu "
                 "rc=%d ino=%llu\n", shard, q->id.client_uuid[0], q->id.client_uuid[1],
                 q->id.client_uuid[2], q->id.client_uuid[3], q->id.session_epoch,
                 (unsigned long long)q->id.seq, rep->rc, (unsigned long long)rep->ino);

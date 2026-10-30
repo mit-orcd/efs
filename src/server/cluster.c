@@ -1,3 +1,4 @@
+#include "efs/telemetry.h"
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
@@ -614,7 +615,8 @@ static void *heartbeat_thread(void *arg)
         if (now - gc_log_ms >= 15000) {
             struct efs_msg_gc_status_reply gc;
             server_gc_status(s, &gc);
-            fprintf(stderr, "gc-health: stage=%u group=%u elapsed_ms=%llu last_pass_age_ms=%llu "
+            efs_telemetry_log(gc.delete_errors || gc.sweep_errors || gc.reap_errors ||
+                              gc.ack_errors || gc.missing_exports, "gc-health: stage=%u group=%u elapsed_ms=%llu last_pass_age_ms=%llu "
                     "passes=%llu sampled=%u pending=%llu,%llu reap=%llu,%llu removed=%llu "
                     "file_bytes=%llu payload_bytes=%llu delete_errors=%llu sweep_errors=%llu "
                     "reap_errors=%llu ack_errors=%llu missing_exports=%llu\n",

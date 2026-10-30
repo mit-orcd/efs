@@ -8,6 +8,7 @@ a=s.index('static uint64_t host_session_register_active_proof(')
 b=s.index('\n}',s.index('static int apply_session_cmd(',a))+2
 code=r'''
 #include "efs/session.h"
+#include "efs/telemetry.h"
 #include "efs/protocol.h"
 #include "efs/meta_apply.h"
 #include "efs/lock.h"

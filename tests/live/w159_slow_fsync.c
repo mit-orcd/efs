@@ -18,6 +18,12 @@
 #include <time.h>
 #include <unistd.h>
 
+/* A blocked-stderr qualification must not make this test interposer the
+ * source of the stall. Its caller can route the unchanged count trace to a
+ * separately inherited regular-file descriptor at compile time. */
+#ifndef W159_FSYNC_REPORT_FD
+#define W159_FSYNC_REPORT_FD STDERR_FILENO
+#endif
 static atomic_ulong calls;
 static long delay_us = -1;
 /* EFS_TEST_FSYNC_LOCK_FILE: hold an exclusive flock on this file while
@@ -29,7 +35,7 @@ static int (*real_fsync)(int), (*real_fdatasync)(int);
 
 static void report(void)
 {
-    fprintf(stderr, "slow-fsync: pid=%ld calls=%lu delay_us=%ld\n", (long)getpid(),
+    dprintf(W159_FSYNC_REPORT_FD, "slow-fsync: pid=%ld calls=%lu delay_us=%ld\n", (long)getpid(),
             atomic_load(&calls), delay_us < 0 ? 0 : delay_us);
 }
 
