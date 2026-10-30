@@ -242,6 +242,7 @@ test-report-pressure:
 	python3 tests/test_append_session_host.py
 	python3 tests/test_session_read_proof.py
 	python3 tests/test_append_host_authority.py
+	python3 tests/test_append_reservation_reply.py
 	python3 tests/test_report_orphan.py
 
 test-create-errors: $(LIB) tests/faults/efsd
@@ -271,6 +272,7 @@ test-fold-observation:
 	python3 tests/test_writer_admission_rpc.py
 	python3 tests/test_writer_deadline.py
 	python3 tests/test_truncate_admission.py
+	python3 tests/test_truncate_read_reuse.py
 	python3 tests/test_truncate_prefix.py
 	python3 tests/test_span_selection.py
 

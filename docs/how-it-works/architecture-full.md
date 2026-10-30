@@ -1626,6 +1626,10 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+[ORCD-test EIO and stress repair](../status/orcd-test-eio-stress-repair-20261028.md): **IN PROGRESS / overall FAIL**, checked Oct 29 (live gates, IOR pass at 402/378 MiB/s write; serial POSIX has one 15 s mtime timeout, not a PASS; stress 272 FAIL / 372 NOTRUN). Only the product repairs listed in the port page were applied to devel.
+
+[Task H split: K45/K51 group](../status/h-k45-shutdown-20261029.md): **F24** (rejoin-thread ownership joined in bounded teardown; devel heartbeat owner kept) and **F35** (`raft-resync` retries only a definite BUSY inside the existing 30 s I/O bound) ported to `agent/h-k45-shutdown`, both named reproductions fail on devel source and pass with the change; K54 interaction checked, none. Not merged; intel1 gate 556 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
+
 [H-recovery — Task H F26–F29](../status/h-recovery-20261029.md): **F26 K36/K47 re-probe, F28 K43
 pin retention and F29 K36 recovery scheduling PASS focused** on branch `agent/h-recovery`
 (each test fails on devel source); F27 not ported, devel `35a6e41b0` already covers it.
@@ -1854,6 +1858,8 @@ full acceptance are separate states.
 | Earlier assignments, chronology and superseded captures | [Status archive](../status/archive/README.md), [project archive](../archive/README.md) |
 
 ### Recent evidence and remaining acceptance
+
+[AN port](../status/an-product-port-20261030.md): store ENOENT retry fix ported (K65); K48, K35 and GETCHUNKS repairs not ported (no failing reproduction on devel).
 
 [Wave 38 merge](../status/alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30; gate on intel2 at `05360d91d`: TOTAL 566 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (1008s)**, NOTRUN = host limits (no RDMA device, no valgrind/memcheck.h). Task H was split by K group instead of merged whole (258 commits, 35 fixes with named reproductions, 11 refactors): **K45/K51** F24 rejoin-thread ownership and F35 resync BUSY ([evidence](../status/h-k45-shutdown-20261029.md)); **recovery** F26, F28, F29 ([evidence](../status/h-recovery-20261029.md)), F27 not ported because devel already guards it; **K22** F10-F20 allocator reservation, receipt replay, snapshot import, KV flush finish, delayed-pump heartbeat ([evidence](../status/h-k22-allocator-20261029.md)); **K38/K40** F02-F04, F07-F09 ([evidence](../status/h-k38-publication-20261029.md)), with **F25 held back** (it swaps the K55 syncer's root-wide syncfs for per-file barriers with only structural evidence; stays on `agent/h-k38-publication`); **K42** F21-F23 including the 34-byte epoch-bound session ACK, fresh clusters only ([evidence](../status/h-k42-session-20261029.md)); **K33** F30-F32 ([evidence](../status/h-k33-routing-20261029.md)), F33/F34 were already on devel. The 11 refactors R01-R11 are alpha 1.1 input and stay on `agent/task-h-repair`. **BB** client overlay authority ([audit](../status/bb-overlay-authority-audit-20261029.md)): its findings were renumbered K62-K64 because Task BA took K59-K61 on devel first. **AN**: evidence and measurement scripts only ([evidence](../status/an-put-status-batching-20261028.md)); the branch's product repairs overlap K35/K55/K48 work on devel and are not merged, they need a separate commit-by-commit port. **`test_bench_published.py`** failed once in the first wave 38 gate (file 1 read back with the right length but wrong contents) and passed in the final gate; twelve side-by-side runs on amd did not reproduce that mode (they showed unmount and write failures on both wave 38 and devel `62417ac5b`), so it is an unattributed intermittent, the third failure mode seen in this test. Task list: AB and AE (qualification incomplete), AO (in progress) and P3-A-F remain open; AN ticked (measured, no change).
 

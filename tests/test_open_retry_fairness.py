@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,resource,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/efs_fuse.c').read_text()
+s=Path(os.environ.get('EFS_FUSE_RETRY_SOURCE',root/'src/client/efs_fuse.c')).read_text()
 a=s.index('static int efs_open_retry_pass(');b=s.index('static void *efs_open_retry_worker(',a)
 code=r'''
 #include <assert.h>
@@ -11,14 +11,15 @@ code=r'''
 #include <stdio.h>
 #define EFS_OK 0
 #define EFS_ERR_BUSY -13
+#define EFS_ERR_AGAIN -18
 static uint64_t now, budget;
-static int creates, leases, consume, create_rc, backlog;
+static int creates, leases, consume, create_rc, backlog, unadmitted;
 static uint64_t stats_now_ms(void){return now;}
 static uint64_t efs_client_rpc_deadline_ms(void){return budget;}
 static void efs_client_rpc_set_deadline_ms(uint64_t v){budget=v;}
 #define OPEN_DRAIN_PER_PASS 4096u
 static int efs_client_rpc_past_deadline(void){return budget && now>=budget;}
-static int efs_open_drain_pending(void){leases++;if(consume){now=budget;return EFS_ERR_BUSY;}if(backlog){backlog--;return EFS_ERR_BUSY;}return EFS_OK;}
+static int efs_open_drain_pending(void){leases++;if(unadmitted)return EFS_ERR_AGAIN;if(consume){now=budget;return EFS_ERR_BUSY;}if(backlog){backlog--;return EFS_ERR_BUSY;}return EFS_OK;}
 static int efs_pending_create_drain(void){creates++;assert(now<budget);return create_rc;}
 '''+s[a:b]+r'''
 int main(void) {
@@ -35,6 +36,11 @@ int main(void) {
  /* One pass drains a whole retained backlog, not one row per pass. */
  now=100;budget=0;consume=0;create_rc=0;leases=0;backlog=50;
  assert(efs_open_retry_pass(1100)==EFS_OK && !backlog && leases==51);
+ /* No identity can be taken: yield directly to the queue that can free
+  * capacity, retaining the refusal and the caller's existing deadline. */
+ now=100;budget=0;consume=0;unadmitted=1;leases=creates=0;
+ assert(efs_open_retry_pass(1100)==EFS_ERR_BUSY);
+ assert(leases==1 && creates==1 && now==100 && budget==0);
  puts("retry fairness: exhausted lease budget leaves CREATE proof time; inherited deadline/result preserved PASS");
 }
 '''

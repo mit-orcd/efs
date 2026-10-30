@@ -1059,8 +1059,12 @@ static void rdcache_ensure(void)
 
 static uint32_t rdcache_slot(efs_ino_t ino, uint32_t ci)
 {
-    uint64_t h = (uint64_t)ino * 0x9E3779B97F4A7C15ULL;
-    h ^= (uint64_t)ci * 0xBF58476D1CE4E5B9ULL;
+    /* Allocations in one metadata shard differ by 4096: masking a
+     * product sent all of their chunk-0 reads to one two-way bucket.
+     * Mix the allocation counter, then retain the chunk-index permutation
+     * so one file's sequential chunks do not collide within a cache lap. */
+    uint64_t h = efs_ino_lock_slot(ino, RDCACHE_SLOTS);
+    h ^= (uint64_t)ci * UINT64_C(0xBF58476D1CE4E5B9);
     return (uint32_t)(h & (RDCACHE_SLOTS - 1));
 }
 

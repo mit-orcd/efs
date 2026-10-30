@@ -1287,7 +1287,8 @@ struct efs_msg_inode_link {
 /* Cross-client O_APPEND reservation; reply is struct efs_msg_inode_reply
  * with inode.size = THIS reservation's end (eof+len), not the live
  * watermark. offset = inode.size - len. Two concurrent reserves must
- * not share an offset.
+ * not share an offset. Only inode.ino, inode.size and inode.atime (the
+ * reservation's start) are defined; full attributes require GETATTR.
  * Mandatory suffix (K5): EFS_APPEND_ACK_LEN = uuid[16] + native uint32
  * epoch + native uint64 seq + native uint64 contiguous ACK, selecting the
  * durable reservation receipt on the inode shard. Any other length is

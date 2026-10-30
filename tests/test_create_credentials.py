@@ -26,7 +26,7 @@ struct fuse_ctx {uid_t uid;gid_t gid;};
 struct fuse_file_info {int flags;};
 static struct fuse_ctx creator={1001,2001};
 static int has_context=1;
-static int create_rc, lookup_rc=EFS_OK;
+static int create_rc, lookup_rc=EFS_OK, fallback_opens, fallback_rc, fallback_flags;
 static const struct fuse_ctx *ll_ctx(void){return has_context?&creator:NULL;}
 static mode_t parent_mode,captured_mode;
 static uid_t captured_uid;
@@ -41,14 +41,15 @@ static struct efs_pending_create *efs_pending_create_alloc(void){return calloc(1
 static void efs_pending_create_free(struct efs_pending_create *p){free(p);}
 static void efs_pending_create_queue(struct efs_pending_create *p){free(p);}
 static void capture(mode_t mode,uid_t uid,gid_t gid){captured_mode=mode;captured_uid=uid;captured_gid=gid;}
-static int efs_fuse_create_begin_wait(struct request *r,efs_ino_t p,const char *name,mode_t mode,uid_t uid,gid_t gid){(void)p;(void)name;capture(mode,uid,gid);open_acquired=0;r->complete=1;r->generation=1;r->inode.ino=42;return EFS_OK;}
+static int efs_fuse_create_begin_wait(struct request *r,efs_ino_t p,const char *name,mode_t mode,uid_t uid,gid_t gid){(void)p;(void)name;capture(mode,uid,gid);open_acquired=0;r->complete=1;r->result=create_rc;r->generation=1;r->inode.ino=42;return create_rc;}
 static int efs_fuse_create_resume_wait(struct request *r){(void)r;return EFS_OK;}
 static int efs_client_create_stage_open_result(struct request *r){(void)r;assert(open_acquired);return stage_rc;}
 static int efs_fuse_release_ino(fuse_ino_t ino,struct fuse_file_info *fi){(void)fi;assert(ino==42);releases++;open_acquired=0;return 0;}
 static int efs_client_create_reset(struct request *r){(void)r;return EFS_OK;}
 static int efs_client_create_cancel(struct request *r){(void)r;return EFS_OK;}
 static int efs_client_rpc_lookup(uint64_t ex,efs_ino_t p,const char*n,struct efs_inode*out){(void)ex;(void)p;(void)n;if(out){out->ino=42;out->mode=S_IFDIR|0755;}return lookup_rc;}
-static int efs_client_truncate(efs_ino_t ino,uint64_t size){(void)ino;(void)size;return EFS_OK;}
+static int __attribute__((unused)) efs_client_truncate(efs_ino_t ino,uint64_t size){(void)ino;(void)size;return EFS_OK;}
+static int __attribute__((unused)) efs_fuse_open_ino(fuse_ino_t ino,struct fuse_file_info *fi){assert(ino==42);fallback_opens++;fallback_flags=fi->flags;return fallback_rc;}
 static int efs_file_open(struct fuse_file_info *fi,efs_ino_t ino){(void)fi;(void)ino;return 0;}
 static void efs_file_close(struct fuse_file_info *fi){(void)fi;}
 static void fuse_fi_direct_io(struct fuse_file_info *fi){(void)fi;}
@@ -76,6 +77,17 @@ int main(void){
  stage_rc=EFS_ERR_BUSY;assert(efs_fuse_create_at(1,"stage-refused",0640,&fi,&ino,NULL)==-EBUSY&&releases==1&&!open_acquired);stage_rc=0;
  create_rc=EFS_ERR_EXIST;
  assert(efs_fuse_mkdir_at(1,"raced",0755,&ino,NULL)==-EEXIST && ino==999);
+ /* A non-exclusive CREATE racing an existing file delegates to protected
+  * ordinary OPEN. It neither stages a fictitious CREATE row nor opens twice. */
+ parent_mode=S_IFDIR|0777;fi.flags=O_CREAT|O_WRONLY|O_TRUNC;
+ struct efs_inode created={.ino=999};ino=999;
+ assert(!efs_fuse_create_at(1,"existing",0640,&fi,&ino,&created));
+ assert(ino==42 && !created.ino && fallback_opens==1 && fallback_flags==fi.flags);
+ fallback_rc=-EACCES;ino=999;
+ assert(efs_fuse_create_at(1,"denied-existing",0640,&fi,&ino,&created)==-EACCES);
+ assert(ino==999 && !created.ino && fallback_opens==2);
+ fi.flags|=O_EXCL;fallback_rc=0;
+ assert(efs_fuse_create_at(1,"exclusive",0640,&fi,&ino,&created)==-EEXIST && fallback_opens==2);
  create_rc=EFS_ERR_BUSY;
  assert(efs_fuse_mkdir_at(1,"raced",0755,&ino,NULL)==-EBUSY && ino==999);
  create_rc=EFS_ERR_QUOTA;
@@ -88,4 +100,4 @@ with tempfile.TemporaryDirectory(prefix='efs-create-credentials-') as d:
     p.write_text(code)
     subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-D_GNU_SOURCE','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
     subprocess.run([str(p.with_suffix(''))],check=True,timeout=10)
-print('FUSE creation credentials: parent setgid inheritance, directory-only bit, distinct caller groups internal context and refused mkdir verdicts PASS')
+print('FUSE creation credentials: parent setgid inheritance, directory-only bit, distinct caller groups internal context refused mkdir verdicts and protected existing-file OPEN fallback PASS')

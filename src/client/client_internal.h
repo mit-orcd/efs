@@ -99,7 +99,11 @@ struct efs_client {
      * space, and the in-flight set that yields the contiguous ack the
      * server windows reclaim by. A slot is held from the first send of an
      * RPC to its final return; every retry inside reuses the same seq. */
-#define EFS_OPID_INFLIGHT 512
+/* Admission already limits next - oldest to the smallest receipt window.
+     * No more than that many positions can be live. Scanning 512 slots on
+     * every blocked cleanup attempt adds work under the shared opid mutex
+     * without admitting any additional request. */
+#define EFS_OPID_INFLIGHT EFS_OPID_REPLY_CACHE
     uint8_t opid_uuid[EFS_OPID_UUID_LEN]; /* guarded by inode_rpc.c opid_mu */
     uint32_t opid_epoch;
     uint64_t opid_next;                        /* next seq; 0 = unseeded */

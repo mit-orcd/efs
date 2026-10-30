@@ -21,9 +21,13 @@ code=r'''
 #include <stdio.h>
 #include <string.h>
 typedef uint64_t fuse_ino_t;
+static int stage_pins,eviction_enabled,row_present,open_refs;
+static void __attribute__((unused)) efs_client_stage_pin(efs_ino_t ino){assert(ino==42);stage_pins++;}
+static void __attribute__((unused)) efs_client_stage_unpin(efs_ino_t ino){assert(ino==42 && stage_pins>0);stage_pins--;}
+static void eviction_boundary(void){if(eviction_enabled){if(!stage_pins && !open_refs)row_present=0;assert(row_present);}}
 static int stat_rc,mutation_rc,permission_rc,stat_calls,mutations,source_dir;
 static int virt_kind(fuse_ino_t n){(void)n;return 0;}
-static int efs_client_stat_refresh(uint64_t ino,struct efs_inode *row){stat_calls++;row->ino=ino;row->mode=source_dir?S_IFDIR:S_IFREG;return stat_rc;}
+static int efs_client_stat_refresh(uint64_t ino,struct efs_inode *row){stat_calls++;row_present=1;row->ino=ino;row->mode=source_dir?S_IFDIR:S_IFREG;return stat_rc;}
 static int check_chown_perm(const struct efs_inode *row,uid_t uid,gid_t gid){(void)row;(void)uid;(void)gid;return permission_rc;}
 static int check_dir_wx(const struct efs_inode *row){(void)row;return permission_rc;}
 static int efs_client_chown(uint64_t ino,uid_t uid,gid_t gid){(void)ino;(void)uid;(void)gid;mutations++;return mutation_rc;}
@@ -49,14 +53,14 @@ static struct {int valid;uint64_t dir_ino;char term[256];char *text;size_t len;}
 static int find_query_ensure(uint64_t ino,const char *path,const char *term){(void)ino;(void)path;(void)term;return -EIO;}
 static int find_res_caller(int i){(void)i;return 0;}
 static int vq_version_matches(uint64_t ino,const char *text,size_t len){(void)ino;(void)text;(void)len;return 0;}
-static int check_access(const struct efs_inode *row,uid_t uid,gid_t gid,int mask){(void)row;(void)uid;(void)gid;(void)mask;return permission_rc;}
+static int check_access(const struct efs_inode *row,uid_t uid,gid_t gid,int mask){(void)row;(void)uid;(void)gid;(void)mask;eviction_boundary();return permission_rc;}
 static int efs_fuse_truncate_ino(uint64_t ino,off_t size,struct fuse_file_info *fi){(void)ino;(void)size;(void)fi;mutations++;return 0;}
 static int file_opens,lease_opens,file_closes,lease_rc;
-static int efs_file_open(struct fuse_file_info *fi,uint64_t ino){fi->fh=ino;file_opens++;return 0;}
+static int efs_file_open(struct fuse_file_info *fi,uint64_t ino){eviction_boundary();fi->fh=ino;file_opens++;return 0;}
 static __thread uint64_t t_open_read_size;
-static int efs_open_acquire(uint64_t ino){(void)ino;lease_opens++;return lease_rc;}
+static int efs_open_acquire(uint64_t ino){(void)ino;eviction_boundary();lease_opens++;if(!lease_rc)open_refs++;return lease_rc;}
 static void efs_file_close(struct fuse_file_info *fi){fi->fh=0;file_closes++;}
-'''+function('fuse_stat_errno')+function('efs_rc_to_errno')+function('fuse_fi_direct_io')+function('efs_fuse_open_ino')+function('efs_fuse_chown_ino')+function('efs_fuse_link_at')+r'''
+'''+function('fuse_stat_errno')+function('efs_rc_to_errno')+function('fuse_fi_direct_io')+(function('efs_fuse_open_ino_run') if 'static int efs_fuse_open_ino_run(' in s else '')+function('efs_fuse_open_ino')+function('efs_fuse_chown_ino')+function('efs_fuse_link_at')+r'''
 int main(void){
  int cases[][2]={{EFS_ERR_IO,-EIO},{EFS_ERR_NET,-EIO},{EFS_ERR_NO_QUORUM,-EIO},{EFS_ERR_BUSY,-EBUSY},{EFS_ERR_NOT_PRIMARY,-EBUSY},{EFS_ERR_NOMEM,-ENOMEM},{EFS_ERR_ACCES,-EACCES},{EFS_ERR_NOT_FOUND,-ENOENT}};
  for(unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);i++){
@@ -75,6 +79,14 @@ int main(void){
  assert(!efs_fuse_open_ino(42,&fi));assert(fi.fh==42 && fi.direct_io && file_opens==1 && lease_opens==1);
  lease_rc=EFS_ERR_BUSY;assert(efs_fuse_open_ino(42,&fi)==-EBUSY);assert(!fi.fh && file_closes==1);
  assert(!efs_fuse_chown_ino(42,1,2));assert(!efs_fuse_link_at(42,43,"target"));
+ /* Execute the actual OPEN body with an eviction scheduled at every unlocked
+  * boundary between stat and the installed open reference. */
+ eviction_enabled=1;open_refs=0;lease_rc=0;
+ assert(!efs_fuse_open_ino(42,&fi));assert(row_present && open_refs==1 && !stage_pins);
+ open_refs=0;lease_rc=EFS_ERR_BUSY;
+ assert(efs_fuse_open_ino(42,&fi)==-EBUSY);assert(row_present && !open_refs && !stage_pins);
+ permission_rc=-EACCES;
+ assert(efs_fuse_open_ino(42,&fi)==-EACCES);assert(!stage_pins);
  return 0;
 }
 '''
@@ -82,4 +94,4 @@ with tempfile.TemporaryDirectory(prefix='efs-attribute-authority-') as d:
     p=Path(d)/'test.c';p.write_text(code)
     subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix('')),'-lpthread'],check=True)
     subprocess.run([str(p.with_suffix(''))],check=True,timeout=10)
-print('OPEN/CHOWN/LINK: only actual absence ENOENT; unavailable authority, permissions and mutation errors preserved PASS')
+print('OPEN/CHOWN/LINK: only actual absence ENOENT; unavailable authority, permissions and mutation errors and staged OPEN eviction handoff preserved PASS')
