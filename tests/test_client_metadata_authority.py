@@ -23,11 +23,11 @@ code=r'''
 #include <sys/stat.h>
 static struct {struct efs_export export;pthread_mutex_t idx_mu;unsigned export_id;int last_err;} g_client={.idx_mu=PTHREAD_MUTEX_INITIALIZER};
 static struct efs_inode staged,reply;
-static int present,dirty,pinned,rpc_rc,pulls,drops,calls;
+static int present,dirty,pinned,rpc_rc,pulls,drops,calls,race_after_miss;
 static void efs_client_stage_touch(efs_ino_t ino){(void)ino;}
 static void efs_client_lock_dir(efs_ino_t ino){(void)ino;}
 static void efs_client_unlock_dir(efs_ino_t ino){(void)ino;}
-int efs_export_get_inode(struct efs_export *e,efs_ino_t ino,struct efs_inode *out){(void)e;(void)ino;if(!present)return EFS_ERR_NOT_FOUND;*out=staged;return 0;}
+int efs_export_get_inode(struct efs_export *e,efs_ino_t ino,struct efs_inode *out){(void)e;(void)ino;if(!present){if(race_after_miss){race_after_miss=0;present=1;}return EFS_ERR_NOT_FOUND;}*out=staged;return 0;}
 int efs_export_upsert_inode(struct efs_export *e,const struct efs_inode *in){(void)e;staged=*in;present=1;return 0;}
 static int efs_client_ino_has_unpublished_data(efs_ino_t ino){(void)ino;return dirty;}
 static int efs_client_mtime_is_pinned(efs_ino_t ino){(void)ino;return pinned;}
@@ -58,7 +58,7 @@ int efs_export_unlink_name_ex(struct efs_export *e,efs_ino_t p,const char *name,
 int efs_export_nlink_dec_ex(struct efs_export *e,efs_ino_t ino,struct efs_inode *out,int keep){(void)e;(void)ino;(void)out;(void)keep;return EFS_OK;}
 '''+fn('int efs_client_unlink(')+(fn('static int local_inode(') if 'static int local_inode(' in s else '')+fn('int efs_client_chmod(')+fn('int efs_client_chown(')+fn('int efs_client_truncate(')+fn('static void adopt_rpc_inode(')+(fn('static int inode_mtime_older(') if 'static int inode_mtime_older(' in s else '')+fn('static void overlay_local_size(')+fn('void efs_client_adopt_lookup(')+fn('int efs_client_stat_local(')+fn('int efs_client_stat_open(')+fn('int efs_client_stat_refresh(')+r'''
 static void reset(void){
- present=1;dirty=1;pinned=0;rpc_rc=pulls=drops=calls=0;
+ present=1;dirty=1;pinned=0;rpc_rc=pulls=drops=calls=race_after_miss=0;
  staged=(struct efs_inode){.ino=42,.parent=1,.mode=S_IFREG|0777,.uid=11,.gid=12,.size=8192,.mtime=10,.nlink=1,.content_epoch=1};strcpy(staged.name,"old");
  reply=staged;reply.parent=2;strcpy(reply.name,"renamed");reply.mode=S_IFREG|0000;reply.uid=21;reply.gid=22;reply.nlink=2;reply.ctime=20;reply.ctime_nsec=8;reply.atime=30;reply.content_epoch=2;reply.size=0;reply.mtime=9;
 }
@@ -95,6 +95,10 @@ int main(int argc,char **argv){struct efs_inode out;assert(argc==2);
  }
  reset();rpc_rc=EFS_ERR_NOT_FOUND;assert(!efs_client_stat_open(42,&out)&&out.nlink==0&&out.size==8192);
  reset();present=dirty=0;assert(!efs_client_stat_refresh(42,&out));authority(&out);assert(out.size==0);
+ /* A cache miss does not reserve the slot: another lookup may hydrate it
+  * before this RPC returns. That hint must not replace this reply's fields. */
+ reset();present=dirty=0;race_after_miss=1;
+ assert(!efs_client_stat_open(42,&out));authority(&out);assert(out.size==0);
  /* A late response can represent its earlier capture point. It cannot
   * authorize a later operation through the cache: that operation must fetch
   * its own authority. This runs actual adoption/refresh wrappers, not a model. */

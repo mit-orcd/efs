@@ -1152,8 +1152,10 @@ int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out)
         return rpc_ok;
     if (!have) {
         adopt_rpc_inode(&rpc);
-        if (efs_client_stat_local(ino, out) != EFS_OK)
-            *out = rpc;
+        /* Another lookup may hydrate the cache between the initial miss
+         * and this reply. Its row is not this operation's authority. */
+        *out = rpc;
+        overlay_local_size(out, 0);
         return EFS_OK;
     }
     /* Both OPEN and CREATE hold a lease, so the last unlink stores nlink
