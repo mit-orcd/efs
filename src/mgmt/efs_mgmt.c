@@ -1132,29 +1132,62 @@ static int cmd_raft_resync(int argc, char **argv)
     }
     memset(&req, 0, sizeof(req));
     req.group = (uint8_t)strtoul(argv[1], NULL, 10);
-    fd = efs_connect_declared(host, port);
-    if (fd < 0) {
-        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
-        return 1;
-    }
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_RAFT_RESYNC, &req, sizeof(req), &reply_type, &reply,
-                  &reply_len) != 0 || reply_type != EFS_MSG_RAFT_RESYNC_REPLY ||
-        reply_len != sizeof(*r)) {
-        fprintf(stderr, "Failed to request raft-resync\n");
-        free(reply);
+    /* A receive-persistence cohort refuses this request before any effect.
+     * Retry only that definite BUSY, under one existing I/O allowance.
+     * Never turn a lost or malformed reply into an automatic re-request. */
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t now = (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+    uint64_t previous = efs_net_deadline_ms(), deadline = now + EFS_IO_TIMEOUT_MS;
+    if (previous && previous < deadline)
+        deadline = previous;
+    efs_net_set_deadline_ms(deadline);
+    int verdict = EFS_ERR_BUSY, failed = 0;
+    while (efs_net_remaining_ms(EFS_IO_TIMEOUT_MS) > 0) {
+        fd = efs_connect_declared(host, port);
+        if (fd < 0) {
+            fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+            failed = 1;
+            break;
+        }
+        int remaining = efs_net_remaining_ms(EFS_IO_TIMEOUT_MS);
+        if (remaining <= 0) {
+            close(fd);
+            break;
+        }
+        efs_set_recv_timeout(fd, remaining);
+        efs_set_send_timeout(fd, remaining);
+        reply = NULL;
+        reply_len = 0;
+        reply_type = 0;
+        int rc = send_recv(fd, EFS_MSG_RAFT_RESYNC, &req, sizeof(req),
+                           &reply_type, &reply, &reply_len);
         close(fd);
-        return 1;
+        if (rc != 0 || reply_type != EFS_MSG_RAFT_RESYNC_REPLY ||
+            reply_len != sizeof(*r)) {
+            fprintf(stderr, "Failed to request raft-resync\n");
+            free(reply);
+            reply = NULL;
+            failed = 1;
+            break;
+        }
+        r = reply;
+        verdict = r->rc;
+        free(reply);
+        reply = NULL;
+        if (verdict != EFS_ERR_BUSY)
+            break;
+        remaining = efs_net_remaining_ms(50);
+        if (remaining > 0)
+            usleep((useconds_t)remaining * 1000);
     }
-    close(fd);
-    r = reply;
-    printf("raft-resync %s:%u group=%u rc=%d%s\n", host, port, req.group, r->rc,
-           r->rc == EFS_ERR_NOT_PRIMARY ? " (this replica is not eligible for resync: leader or retired; refused)" :
-           r->rc == EFS_OK ? " (requested; the next conflicting AppendEntries asks for a snapshot)" : "");
-    int out = r->rc == EFS_OK ? 0 : 1;
-    free(reply);
-    return out;
+    efs_net_set_deadline_ms(previous);
+    if (failed)
+        return 1;
+    printf("raft-resync %s:%u group=%u rc=%d%s\n", host, port, req.group, verdict,
+           verdict == EFS_ERR_NOT_PRIMARY ? " (this replica is not eligible for resync: leader or retired; refused)" :
+           verdict == EFS_OK ? " (requested; the next conflicting AppendEntries asks for a snapshot)" : "");
+    return verdict == EFS_OK ? 0 : 1;
 }
 
 /* W64 failover harness: make the node stop leading GROUP. With TARGET (a

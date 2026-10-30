@@ -3424,6 +3424,7 @@ int server_rejoin_cluster(struct efsd_server *s)
         return -1;
 
     for (uint32_t i = 0; i < node_count; i++) {
+        if (!__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) return -1;
         if (nodes[i].id == s->id)
             continue;
         printf("Trying to rejoin via persisted peer %s:%u (node %u)...\n",
