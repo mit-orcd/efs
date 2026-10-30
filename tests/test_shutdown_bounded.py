@@ -218,7 +218,8 @@ static pthread_mutex_t mu=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv=PTHREAD_COND_INITIALIZER;
 static unsigned entered,released,departed,join_calls,done,fail_create;
 static void *rejoin_thread(void *s){(void)s;pthread_mutex_lock(&mu);entered=1;pthread_cond_broadcast(&cv);
- while(!released)pthread_cond_wait(&cv,&mu);departed=1;pthread_mutex_unlock(&mu);return NULL;}
+ while(!released)pthread_cond_wait(&cv,&mu);
+ departed=1;pthread_mutex_unlock(&mu);return NULL;}
 static int efsd_pthread_create(pthread_t*t,void*(*fn)(void*),void*s){return fail_create?1:pthread_create(t,NULL,fn,s);}
 static int observed_join(pthread_t t,void**r){__atomic_add_fetch(&join_calls,1,__ATOMIC_RELEASE);return pthread_join(t,r);}
 #define pthread_join observed_join
