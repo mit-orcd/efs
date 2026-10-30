@@ -1121,6 +1121,7 @@ test: test-apply-wait
 # runs both and is what the gates run.
 .PHONY: test-long test-all
 test-long: all $(TEST_SPECIAL_BINS)
+	python3 tests/test_put_quota_reclaim.py
 	python3 tests/test_bench_published.py
 	./tests/faults/test_follower_bound --stalled-compactor
 	python3 tests/test_decoder_refusal.py
