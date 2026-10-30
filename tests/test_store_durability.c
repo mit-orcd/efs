@@ -11,10 +11,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/vfs.h>
-static unsigned file_syncs,directory_syncs,sync_opens;
+#include <pthread.h>
+static _Atomic unsigned file_syncs,directory_syncs,sync_opens;
 static int booting;
 static const char *fail_open_path;
 static int fail_open_errno;
+static pthread_mutex_t scope_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t scope_cv=PTHREAD_COND_INITIALIZER;
+static int scope_pause,scope_entered,scope_release;
 static int fail_file,fail_directory,fail_directory_at,interrupt_directory,fail_directory_close;
 static int barrier_open(const char *path,int flags,...)
 {
@@ -33,6 +37,12 @@ static int barrier_sync(int fd)
         if(interrupt_directory) {interrupt_directory--;errno=EINTR;return -1;}
         if(fail_directory || directory_syncs==(unsigned)fail_directory_at) {errno=EIO;return -1;}
     } else {
+        pthread_mutex_lock(&scope_mu);
+        if(scope_pause) {
+            scope_entered=1;pthread_cond_broadcast(&scope_cv);
+            while(!scope_release)pthread_cond_wait(&scope_cv,&scope_mu);
+        }
+        pthread_mutex_unlock(&scope_mu);
         file_syncs++;
         if(fail_file) {errno=EIO;return -1;}
     }
@@ -200,6 +210,7 @@ static int test_async_durability(uint8_t *data)
     assert(!file_syncs && !directory_syncs && r->cur_frags+r->inflight_frags==1);
     /* COMMIT: one barrier makes it durable. */
     assert(put_sync_commit_root(r)==EFS_OK && r->durable_seq>=1 && !r->cur_frags && !r->inflight_frags);
+    assert(file_syncs && directory_syncs && !put_epoch_owned);
     uint64_t b=r->barriers;assert(b>=1);
     /* Nothing new: COMMIT returns without a barrier. */
     assert(put_sync_commit_root(r)==EFS_OK && r->barriers==b);
@@ -281,6 +292,61 @@ static int test_async_durability(uint8_t *data)
     assert(!unlink(rec));assert(!rmdir(root));
     return 1;
 }
+/* Real epoch transition, independent of XFS-only ACK selection. A PUT
+ * arriving during the file barrier is covered only by the following epoch. */
+static void *scope_barrier(void *arg)
+{
+    struct put_sync_root *r=arg;pthread_mutex_lock(&r->mu);
+    put_sync_barrier_locked(r);pthread_mutex_unlock(&r->mu);return NULL;
+}
+static void test_scoped_epoch(void)
+{
+    for(int failure=0;failure<4;failure++) {
+        char root[EFS_TEST_PATH],path[EFS_TEST_PATH+32],record[EFS_TEST_PATH+32];
+        efs_test_path(root,sizeof(root),"efs-scoped-XXXXXX");assert(efs_test_mkdtemp(root));
+        snprintf(path,sizeof(path),"%s/body",root);snprintf(record,sizeof(record),"%s/epoch",root);
+        struct put_sync_root *r=calloc(1,sizeof(*r));assert(r);
+        pthread_mutex_init(&r->mu,NULL);pthread_cond_init(&r->cv,NULL);
+        r->fd=open(root,O_RDONLY|O_DIRECTORY);r->record_fd=open(record,O_CREAT|O_RDWR,0600);
+        assert(r->fd>=0 && r->record_fd>=0);r->seq=r->boot=r->root_count=1;r->verifier=101;
+        strcpy(r->root,root);assert(!put_sync_record_write(r,0,0));
+        int fd=open(path,O_CREAT|O_RDWR,0600);assert(fd>=0 && write(fd,"one",3)==3);
+        file_syncs=directory_syncs=0;
+        assert(!put_sync_note(r,3,put_epoch_pin(fd),NULL,path));
+        uint64_t old=r->durable_seq;int saved_record=r->record_fd;
+        fail_file=failure==1;fail_directory=failure==2;
+        if(failure==3)r->record_fd=-1;
+        if(failure<2) {
+            pthread_mutex_lock(&scope_mu);scope_pause=1;scope_entered=scope_release=0;pthread_mutex_unlock(&scope_mu);
+            pthread_t t;assert(!pthread_create(&t,NULL,scope_barrier,r));
+            pthread_mutex_lock(&scope_mu);
+            while(!scope_entered)pthread_cond_wait(&scope_cv,&scope_mu);
+            pthread_mutex_unlock(&scope_mu);
+            assert(!put_sync_note(r,3,put_epoch_pin(fd),NULL,path));
+            pthread_mutex_lock(&scope_mu);scope_release=1;pthread_cond_broadcast(&scope_cv);pthread_mutex_unlock(&scope_mu);
+            assert(!pthread_join(t,NULL));scope_pause=0;
+            if(failure) {
+                assert(r->error && r->durable_seq==old && !put_epoch_owned);
+                struct put_sync_record got;assert(!put_sync_record_read(saved_record,&got) && got.seq==0);
+                assert(put_sync_commit_root(r)==EFS_ERR_IO);
+            } else {
+            assert(r->durable_seq==1 && r->seq==2 && r->cur_frags==1 && r->file_count==1 && put_epoch_owned==1);
+            struct put_sync_record got;assert(!put_sync_record_read(r->record_fd,&got) && got.seq==1);
+            scope_barrier(r);assert(r->durable_seq==2 && !r->file_count && !put_epoch_owned);
+            assert(file_syncs==2 && directory_syncs);
+            }
+        } else {
+            scope_barrier(r);assert(r->error && r->durable_seq==old && !put_epoch_owned);
+            struct put_sync_record got;assert(!put_sync_record_read(saved_record,&got) && got.seq==0);
+            assert(put_sync_commit_root(r)==EFS_ERR_IO);
+        }
+        r->record_fd=saved_record;fail_file=fail_directory=0;
+        close(fd);close(r->fd);close(r->record_fd);
+        pthread_mutex_destroy(&r->mu);pthread_cond_destroy(&r->cv);free(r);
+        assert(!unlink(path) && !unlink(record) && !rmdir(root));
+    }
+    puts("scoped epoch: late PUT belongs to next watermark; file, namespace and record failures stay sticky and release every pin PASS");
+}
 /* K36: the local half of verified recovery. Real fragment names under a
  * root: a valid file is kept, a torn one (truncated), one whose record names
  * another object, one with a flipped payload byte and one whose digest
@@ -297,6 +363,43 @@ static void write_frag(struct efsd_server *s,efs_ino_t ino,uint32_t ci,uint32_t 
     uint8_t tail[4096]={0};memcpy(tail,rec,sizeof(rec)); /* payload || 4 KiB tail page */
     int fd=open(path,O_CREAT|O_TRUNC|O_WRONLY,0644);assert(fd>=0);
     assert(write(fd,data,4096)==4096 && write(fd,tail,sizeof(tail))==(ssize_t)sizeof(tail));close(fd);
+}
+/* GC may unlink an obsolete fragment, but may not remove its containing
+ * directory while an acknowledged epoch still owns that namespace proof. */
+static void test_gc_epoch_prune(uint8_t *data)
+{
+    for(int superseded=0;superseded<2;superseded++) {
+        char root[EFS_TEST_PATH],path[8192],rec[EFS_TEST_PATH+32];
+        efs_test_path(root,sizeof(root),"efs-prune-XXXXXX");assert(efs_test_mkdtemp(root));
+        struct statfs fs;assert(!statfs(root,&fs));
+        if((unsigned long)fs.f_type!=XFS_SUPER_MAGIC_){assert(!rmdir(root));return;}
+        struct efsd_server *s=calloc(1,sizeof(*s));assert(s);pthread_mutex_init(&s->lock,NULL);
+        s->storage_path_count=1;strcpy(s->storage_paths[0],root);
+        s->node_count=1;s->nodes[0].id=s->id=1;
+        write_frag(s,12345,7,1,0x77,12345,data,path,sizeof(path));
+        struct put_sync_root *r=&put_sync_roots[0];
+        uint64_t window=put_sync_window_ms;put_sync_window_ms=100000;
+        booting=1;put_sync_attach(r,root,101,1);booting=0;assert(r->fd>=0);put_sync_state[0]=1;
+        int fd=open(path,O_RDONLY);assert(fd>=0);
+        assert(!put_sync_note(r,4096,put_epoch_pin(fd),s,path));close(fd);
+        r->recovery_uncertain=1; /* namespace ownership is separate from recovery proof */
+        uint8_t sum[EFS_HASH_SIZE];efs_hash(data,4096,sum);
+        int rc=superseded ? server_gc_superseded_delete(s,1,12345,7,1,0x77,sum,0)
+                          : server_gc_inode_delete(s,1,12345,NULL,0);
+        assert(!rc && access(path,F_OK) && !put_epoch_owned);
+        assert(r->durable_seq>=1 && r->recovery_uncertain && put_sync_commit_root(r)==EFS_ERR_IO);
+        server_put_sync_recovered();assert(!server_put_sync_stop(s));
+        close(r->fd);close(r->record_fd);pthread_mutex_destroy(&r->mu);pthread_cond_destroy(&r->cv);
+        memset(r,0,sizeof(*r));put_sync_state[0]=0;put_sync_window_ms=window;
+        /* Only the exact fresh fixture's empty ancestors; failed tests retain it. */
+        char *slash;
+        while((slash=strrchr(path,'/')) && (size_t)(slash-path)>strlen(root)) {
+            *slash=0;int d=rmdir(path);assert(!d || errno==ENOENT);
+        }
+        snprintf(rec,sizeof(rec),"%s/%s",root,PUT_SYNC_RECORD);assert(!unlink(rec));assert(!rmdir(root));
+        pthread_mutex_destroy(&s->lock);free(s);
+    }
+    puts("GC namespace pruning drains owned PUT epochs without clearing recovery uncertainty PASS");
 }
 static void test_recovery_local(uint8_t *data)
 {
@@ -533,7 +636,9 @@ int main(void)
     assert(!rmdir(dir));
     test_root_format();
     test_root_set();
+    test_scoped_epoch();
     int async_ran=test_async_durability(data);
+    test_gc_epoch_prune(data);
     test_startup_abandon(data);
     test_recovery_local(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");

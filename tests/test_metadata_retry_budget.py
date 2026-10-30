@@ -21,6 +21,7 @@ code=r'''
 static uint64_t now=1000,deadline;static unsigned calls,sleeps,freed,drops,releases;
 static int reply_status,fail_recv,fail_send,bad_type,expire_recv;
 static unsigned read_hint;
+static unsigned sequence,seq_sends,seq_nodes[32];
 static unsigned mkdir_ready, mkdir_packet_len;
 static unsigned char mkdir_packet[1024];
 static unsigned failover,routing_sends,stale_hint,read_stale_loop,read_sends,read_nodes[32];
@@ -54,15 +55,15 @@ static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
 static unsigned efs_raft_shard_group(uint32_t s){(void)s;return 0;}
 static unsigned rpc_leader_of(unsigned g){(void)g;return 1;}
 static void efs_conn_set_recv_timeout(struct efs_conn*c,int n){(void)c;(void)n;}
-int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)t;if(read_stale_loop){assert(read_sends<32);read_nodes[read_sends++]=c->node;if(c->node==2 && (read_stale_loop==1 || read_sends==2))return 1;}if(stale_hint && calls)assert(c->node==3);if(mkdir_ready){assert(n<=sizeof(mkdir_packet));if(!mkdir_packet_len){memcpy(mkdir_packet,p,n);mkdir_packet_len=n;}else assert(n==mkdir_packet_len&&!memcmp(mkdir_packet,p,n));}if(failover){routing_sends++;if(routing_sends==2){assert(c->node==2);if(failover==2)return 1;}if(routing_sends==3)assert(c->node==3);}return fail_send;}
-int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->read_node_id=read_hint;r->status=mkdir_ready && calls>=mkdir_ready ? EFS_INODE_RPC_OK : reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;if(stale_hint && calls==1){r->status=EFS_INODE_RPC_STALE;r->primary_id=3;}if(failover){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(failover==1&&calls==2)return 1;else assert(c->node==3);}if(read_stale_loop){int hinted=c->node==1 || (read_stale_loop==2 && c->node==3);r->status=hinted?EFS_INODE_RPC_NOT_PRIMARY:EFS_INODE_RPC_OK;r->primary_id=hinted?2:0;}return fail_recv;}
+int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)t;if(sequence){assert(seq_sends<32);seq_nodes[seq_sends++]=c->node;if(sequence==3&&seq_sends==3)return 1;}if(read_stale_loop){assert(read_sends<32);read_nodes[read_sends++]=c->node;if(c->node==2 && (read_stale_loop==1 || read_sends==2))return 1;}if(stale_hint && calls)assert(c->node==3);if(mkdir_ready){assert(n<=sizeof(mkdir_packet));if(!mkdir_packet_len){memcpy(mkdir_packet,p,n);mkdir_packet_len=n;}else assert(n==mkdir_packet_len&&!memcmp(mkdir_packet,p,n));}if(failover){routing_sends++;if(routing_sends==2){assert(c->node==2);if(failover==2)return 1;}if(routing_sends==3)assert(c->node==3);}return fail_send;}
+int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->read_node_id=read_hint;r->status=mkdir_ready && calls>=mkdir_ready ? EFS_INODE_RPC_OK : reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;if(stale_hint && calls==1){r->status=EFS_INODE_RPC_STALE;r->primary_id=3;}if(failover){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(failover==1&&calls==2)return 1;else assert(c->node==3);}if(read_stale_loop){int hinted=c->node==1 || (read_stale_loop==2 && c->node==3);r->status=hinted?EFS_INODE_RPC_NOT_PRIMARY:EFS_INODE_RPC_OK;r->primary_id=hinted?2:0;}if(sequence){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(calls==2)r->status=EFS_INODE_RPC_BUSY;else if(sequence==2&&calls==3){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=3;}else if(sequence==4&&calls==3)return 1;else r->status=EFS_INODE_RPC_OK;}return fail_recv;}
 static void opid_retry_ack(void *packet,uint32_t length){(void)packet;(void)length;}
 static int efs_client_session_check(void){return EFS_OK;} /* K5 mount session, ready */
 static __thread uint64_t rpc_tl_sent;static __thread unsigned rpc_tl_lost; /* W155 */
 static void efs_client_rpc_set_deadline_ms(uint64_t d){deadline=d;}
 static int rpc_send_recv_dual_once(uint8_t,const void*,uint32_t,uint8_t,void*,uint32_t,int);
 '''+fn('static int rpc_writer_retry_pause(' ,True)+fn('static void rpc_retry_peer(')+fn('static int rpc_type_mutates(')+fn('static int rpc_identified(')+fn('static const char *rpc_req_ident(')+fn('static uint64_t rpc_resolve_ms(')+fn('static int rpc_send_recv_shard_once(')+fn('static int rpc_resolve_identified(')+fn('static int rpc_send_recv_shard(')+fn('static int rpc_send_recv_dual_once(',True)+fn('static int rpc_send_recv_dual(',True)+r'''
-static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;failover=routing_sends=mkdir_ready=mkdir_packet_len=stale_hint=0;g_group_leader[0]=0;read_hint=read_stale_loop=read_sends=0;memset(g_read_routes.slot,0,sizeof(g_read_routes.slot));}
+static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;failover=routing_sends=mkdir_ready=mkdir_packet_len=stale_hint=0;g_group_leader[0]=0;sequence=seq_sends=0;read_hint=read_stale_loop=read_sends=0;memset(g_read_routes.slot,0,sizeof(g_read_routes.slot));}
 static int run(int dual,struct efs_msg_inode_reply*r){return dual?rpc_send_recv_dual(EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),100):rpc_send_recv_shard(0,EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),0,NULL);}
 int main(void){
  struct efs_msg_inode_reply route_reply;
@@ -111,6 +112,30 @@ int main(void){
  reset();deadline=1010;expire_recv=1;memset(&r,0x5a,sizeof(r));struct efs_msg_inode_reply before=r;assert(run(d,&r)==EFS_ERR_BUSY&&freed==1&&!memcmp(&r,&before,sizeof(r)));
  reset();stale_hint=1;assert(!run(d,&r)&&calls==2&&freed==2);
  reset();reply_status=EFS_INODE_RPC_BUSY;assert(run(d,&r)==EFS_ERR_BUSY&&calls==16&&freed==16&&sleeps==15);
+ }
+ /* A live publication owner stays selected across BUSY. Network loss
+  * and explicit leader redirects still move it, using the original packet. */
+ unsigned char report[64];memset(report,0x5a,sizeof(report));
+ struct efs_msg_inode_reply rr;
+ for(unsigned mode=1;mode<=4;mode++){
+  reset();sequence=mode;mkdir_ready=99;deadline=9000;
+  assert(rpc_send_recv_dual_once(EFS_MSG_REPORT_CHUNKS,report,sizeof(report),EFS_MSG_INODE_GETATTR_REPLY,&rr,sizeof(rr),100)==EFS_OK);
+  assert(seq_nodes[0]==1 && seq_nodes[1]==2 && seq_nodes[2]==2);
+  if(mode==1)assert(seq_sends==3 && calls==3 && !drops);
+  if(mode==2)assert(seq_sends==4 && seq_nodes[3]==3);
+  if(mode>=3)assert(seq_sends==4 && seq_nodes[3]==1 && drops==1);
+  assert(now<deadline && mkdir_packet_len==sizeof(report));
+ }
+ reset();sequence=1;
+ assert(rpc_send_recv_dual_once(EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,&rr,sizeof(rr),100)==EFS_OK);
+ assert(seq_sends==3 && seq_nodes[0]==1 && seq_nodes[1]==2 && seq_nodes[2]==1);
+ /* A permanently busy REPORT still consumes at most 16 attempts, or the
+  * shorter caller deadline. It never turns BUSY into successful publication. */
+ for(int limited=0;limited<2;limited++){
+  reset();reply_status=EFS_INODE_RPC_BUSY;if(limited)deadline=1010;
+  assert(rpc_send_recv_dual_once(EFS_MSG_REPORT_CHUNKS,report,sizeof(report),EFS_MSG_INODE_GETATTR_REPLY,&rr,sizeof(rr),100)==EFS_ERR_BUSY);
+  assert(calls==(limited?1u:16u) && freed==calls);
+  if(limited)assert(now==deadline);
  }
  /* Unlock BUSY is transient admission, not a grant conflict. Preserve the
   * complete owner/range/session packet, the 16 attempts and the deadline. */

@@ -29,6 +29,7 @@ code=r'''
 struct efs_client g_client;
 static uint64_t next_seq=1;static unsigned gen_rpcs,admits,sessions,settles;
 static int admit_rc,admit_lost,session_rc,unregistered,settle_rc,gen_rc;
+static int probe_rc,probe_done;static unsigned probes;
 static uint32_t settle_cap=EFS_PUT_TICKET_SETTLE_MAX, probe_state=EFS_PUT_TICKET_REJECTED;
 static uint64_t settled[64];static unsigned nsettled;
 static uint64_t referenced_object;
@@ -42,7 +43,9 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t e,efs_ino_t ino,uint64_t g,u
 {(void)e;(void)g;(void)start;(void)r;(void)n;gen_rpcs++;*resolved=ino==4097?7:0;return gen_rc;}
 int efs_client_rpc_put_ticket(const struct efs_put_ticket *t,int probe,uint32_t *state)
 {
- if(probe){*state=probe_state;return EFS_OK;}
+ if(probe){probes++;*state=probe_state; /* No local owner lock may cover network I/O. */
+  if(probe_done)efs_client_put_done(t->ino,t->ci,t->object);
+  return probe_rc;}
  assert(!probe);*state=0;struct efs_meta_pub p={0};(void)p;
  /* The admitted body is exactly the immutable PUT identity. */
  assert(t->inode_gen==7 && t->member_mask==15 && t->fragment_len==32 && t->coding_profile==EFS_META_PROFILE_K2F1);
@@ -209,6 +212,24 @@ int main(void){
  settle_rc=0;
  assert(!efs_client_put_terminal(4097,7,48,abandoned.object));
  assert(!efs_client_put_settle() && !efs_client_put_outstanding());
+ probe_state=EFS_PUT_TICKET_ADMITTED;
+ struct efs_put_ticket retained;
+ assert(!admit(48,&retained));
+ unsigned probe_before=probes;
+ assert(!efs_client_put_retry_admitted(4097,48,retained.object,retained.id.seq)&&probes==probe_before); /* putting */
+ efs_client_put_release(retained.id.seq,1);referenced_object=retained.object;
+ assert(efs_client_put_retry_admitted(4097,48,retained.object,retained.id.seq)==1&&probes==probe_before+1);
+ assert(!efs_client_put_retry_admitted(4097,49,retained.object,retained.id.seq)&&probes==probe_before+1);
+ probe_rc=EFS_ERR_NET;
+ assert(efs_client_put_retry_admitted(4097,48,retained.object,retained.id.seq)==EFS_ERR_NET&&!ledger_find(retained.id.seq)->done);
+ probe_rc=EFS_ERR_NOT_FOUND;
+ assert(!efs_client_put_retry_admitted(4097,48,retained.object,retained.id.seq));
+ probe_rc=0;probe_state=EFS_PUT_TICKET_PUBLISHED;
+ assert(!efs_client_put_retry_admitted(4097,48,retained.object,retained.id.seq));
+ probe_state=EFS_PUT_TICKET_ADMITTED;probe_done=1;
+ assert(!efs_client_put_retry_admitted(4097,48,retained.object,retained.id.seq)); /* owner changed during RPC */
+ probe_done=0;assert(!efs_client_put_settle()&&!efs_client_put_outstanding());
+ puts("owned retry: exact ADMITTED ticket, no putting/done/wrong tuple reuse, unknown status retains, concurrent done rechecked PASS");
  efs_client_put_settle_stop();
  puts("K13 ticket ledger: FileID binding, admission before PUT, lost/stale admission retention, putting protection, sweep, ordered per-stream batched settle, partial and fenced retirement; K32 cohort ADMIT_BATCH per group, single-ADMIT fallback, multi-stream SETTLE_BATCH PASS");
 }

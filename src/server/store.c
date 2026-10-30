@@ -2,6 +2,7 @@
 #include "storage_roots.h"
 #ifndef EFS_BENCH_BUILD
 #include "directory_sync_group.h"
+#include "put_epoch_files.h"
 #endif
 #include "efs/checksum.h"
 #include "efs/frag_record.h"
@@ -1219,6 +1220,16 @@ int server_gc_inode_payload(struct efsd_server *s, efs_export_id_t eid, efs_ino_
     return EFS_OK;
 }
 
+/* PUT may have ACKed a file whose namespace proof is still owned by an
+ * epoch. Before pruning its ancestors, drain that ownership. The inode death
+ * fence (whole inode) or write guard (superseded pruning) prevents a later
+ * PUT from slipping between the drain and directory removal. */
+#ifndef EFS_BENCH_BUILD
+static int put_sync_namespace_drain(void);
+#else
+static int put_sync_namespace_drain(void) { return EFS_OK; }
+#endif
+
 /* W124: durably delete one fenced inode's fragments on every root, then its
  * empty scaffolding. Runs without the inode guard: the fence (journalled
  * before acceptance) already refuses every later PUT, and a PUT that held the
@@ -1227,7 +1238,8 @@ int server_gc_inode_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
                            uint64_t *counted, int durable)
 {
     if (!s || !eid || ino <= EFS_ROOT_INO || efs_ino_is_meta_table(ino)) return EFS_ERR_INVAL;
-    int rc = EFS_OK;
+    int rc = put_sync_namespace_drain();
+    if (rc != EFS_OK) return rc;
     t_gc_counted = counted;
     t_gc_defer_sync = !durable;
     for (uint32_t r = 0;
@@ -1272,6 +1284,7 @@ int server_gc_superseded_delete(struct efsd_server *s, efs_export_id_t eid, efs_
      * inode's write guard a PUT cannot be between its mkdir and create. */
     pthread_rwlock_t *g = server_inode_guard(eid, ino);
     pthread_rwlock_wrlock(g);
+    rc = put_sync_namespace_drain();
     for (uint32_t r = 0; rc == EFS_OK && r < (s->storage_path_count ? s->storage_path_count : 1); r++) {
         char path[8192];
         format_ino_chunk_dir(path, sizeof(path), s->storage_paths[r], eid, ino, ci);
@@ -1510,11 +1523,11 @@ static int fragment_root_lookup(struct efsd_server *s, const char *path,
  * DATA_COMMIT (client fsync) asks; PUTs wait above twice that byte bound.
  * Smaller values make durability more aggressive.
  *
- * Barrier: syncfs(root) (writeback and journal commit), then the epoch
+ * Barrier: bounded exact fragment fsyncs plus their directory/ancestry
+ * barriers, then the epoch
  * record <root>/.efs-durable-epoch rewritten and fdatasynced. That
- * fdatasync of rewritten data issues a device cache flush even when the
- * journal had nothing to write, which also covers O_DIRECT overwrites
- * that changed no metadata. The record names the last durable (boot,
+ * fdatasync of rewritten data seals that watermark only after every file
+ * and namespace barrier succeeded, including O_DIRECT same-size rewrites. The record names the last durable (boot,
  * seq) and is written only after the fragments it covers are durable.
  * A failed barrier is sticky until restart: COMMIT and fsync return EIO;
  * PUTs continue. Shutdown runs a final barrier and marks the record
@@ -1535,6 +1548,8 @@ struct put_sync_root {
     uint64_t verifier; /* retained only across a proven all-root clean stop */
     uint64_t seq, durable_seq;            /* open epoch, last durable epoch */
     uint64_t cur_bytes, cur_frags, cur_first_ns;
+    struct put_epoch_file files[PUT_EPOCH_FILES];
+    unsigned file_count;
     uint64_t inflight_bytes, inflight_frags, inflight_first_ns;
     int want_now, stop, error;
     int recovery_uncertain; /* persists until K36 verified recovery or fresh format */
@@ -1657,21 +1672,47 @@ static int put_sync_reuse_epoch(struct efsd_server *s,uint64_t *epoch)
 
 /* One barrier for everything acknowledged before it started. Called by the
  * syncer only, with mu held; drops mu during I/O. */
+/* A file barrier covers O_DIRECT data, checksum tail and size. Its name
+ * and any newly created ancestry are then sealed through the existing pinned
+ * directory barrier. Only after ALL members succeed may the epoch advance. */
+static int put_sync_file(const struct put_epoch_file *file)
+{
+    int rc;
+    do{rc=fsync(file->fd);}while(rc<0 && errno==EINTR);
+    return rc ? EFS_ERR_IO : sync_fragment_parents(file->owner,file->path);
+}
+static void put_sync_discard_files(struct put_sync_root *r)
+{
+    for(unsigned i=0;i<r->file_count;i++)(void)put_epoch_close(r->files[i].fd);
+    r->file_count=0;
+}
 static void put_sync_barrier_locked(struct put_sync_root *r)
 {
     uint64_t target = r->seq;
+    struct put_epoch_file files[PUT_EPOCH_FILES];
+    unsigned count=r->file_count;
+    memcpy(files,r->files,count*sizeof(*files));r->file_count=0;
     r->inflight_bytes = r->cur_bytes;
     r->inflight_frags = r->cur_frags;
     r->inflight_first_ns = r->cur_first_ns;
     r->cur_bytes = r->cur_frags = r->cur_first_ns = 0;
     r->seq++;
     r->want_now = 0;
+    /* Capacity released here belongs to the next cohort, not this proof. */
+    pthread_cond_broadcast(&r->cv);
     pthread_mutex_unlock(&r->mu);
     uint64_t t0 = put_sync_now_ns();
-    int rc = syncfs(r->fd) == 0 ? EFS_OK : EFS_ERR_IO;
+    int rc=put_epoch_sync(files,count,put_sync_file);
+    if(r->fd<0)rc=EFS_ERR_IO;
+    uint64_t synced = put_sync_now_ns();
     if (rc == EFS_OK)
         rc = put_sync_record_write(r, target, 0);
     uint64_t t1 = put_sync_now_ns();
+    if (rc != EFS_OK || t1 - t0 >= 500000000ull)
+        fprintf(stderr, "store: slow put barrier root=%s seq=%llu files=%u file_names_ms=%llu record_ms=%llu rc=%d\n",
+                r->root, (unsigned long long)target,count,
+                (unsigned long long)((synced-t0)/1000000ull),
+                (unsigned long long)((t1-synced)/1000000ull), rc);
     pthread_mutex_lock(&r->mu);
     r->barriers++;
     r->last_barrier_ns = t1;
@@ -1680,8 +1721,6 @@ static void put_sync_barrier_locked(struct put_sync_root *r)
         r->durable_seq = target;
         r->synced_bytes += r->inflight_bytes;
     } else {
-        /* Durability of these writes is unknown: keep counting them as
-         * unsynced and stop acknowledging asynchronously. */
         r->failures++;
         if (!r->error)
             fprintf(stderr, "store: put sync root=%s barrier failed seq=%llu; "
@@ -1692,6 +1731,9 @@ static void put_sync_barrier_locked(struct put_sync_root *r)
         r->cur_frags += r->inflight_frags;
         if (r->inflight_first_ns && (!r->cur_first_ns || r->inflight_first_ns < r->cur_first_ns))
             r->cur_first_ns = r->inflight_first_ns;
+        /* Terminal failure releases pins without certifying their data.
+         * Keeping a failed root's pins would starve healthy roots' budget. */
+        put_sync_discard_files(r);
     }
     r->inflight_bytes = r->inflight_frags = r->inflight_first_ns = 0;
     pthread_cond_broadcast(&r->cv);
@@ -1702,9 +1744,13 @@ static void *put_sync_thread(void *arg)
     struct put_sync_root *r = arg;
     pthread_mutex_lock(&r->mu);
     for (;;) {
+        if(r->error) {
+            if(r->stop)break;
+            pthread_cond_wait(&r->cv,&r->mu);continue;
+        }
         uint64_t now = put_sync_now_ns();
         int due = r->cur_frags &&
-                  (r->want_now || r->cur_bytes >= put_sync_window_bytes ||
+                  (r->want_now || r->file_count==PUT_EPOCH_FILES || r->cur_bytes >= put_sync_window_bytes ||
                    now - r->cur_first_ns >= put_sync_window_ms * 1000000ull);
         if (due) {
             put_sync_barrier_locked(r);
@@ -1726,30 +1772,41 @@ static void *put_sync_thread(void *arg)
         if (until.tv_nsec >= 1000000000L) { until.tv_sec++; until.tv_nsec -= 1000000000L; }
         pthread_cond_timedwait(&r->cv, &r->mu, &until);
     }
+    put_sync_discard_files(r); /* abandoned boot stays unclean; no proof */
     pthread_mutex_unlock(&r->mu);
     return NULL;
 }
 
 /* Count an acknowledged-but-unsynced fragment. Waits only while the root
  * holds more than twice the byte window (bounded exposure). */
-static void put_sync_note(struct put_sync_root *r, uint64_t bytes)
+static int put_sync_note(struct put_sync_root *r, uint64_t bytes,int pin,
+                           struct efsd_server *owner,const char *path)
 {
     pthread_mutex_lock(&r->mu);
-    if (!r->cur_frags)
-        r->cur_first_ns = put_sync_now_ns();
-    r->cur_bytes += bytes;
-    r->cur_frags++;
-    r->acked_bytes += bytes;
-    if (r->cur_bytes >= put_sync_window_bytes)
+    while(r->file_count==PUT_EPOCH_FILES && !r->error && !r->stop) {
+        r->want_now=1;pthread_cond_broadcast(&r->cv);
+        pthread_cond_wait(&r->cv,&r->mu);
+    }
+    if(r->stop || strlen(path)>=sizeof(r->files[0].path)) {
+        pthread_mutex_unlock(&r->mu);(void)put_epoch_close(pin);return EFS_ERR_IO;
+    }
+    int first=!r->cur_frags;
+    if (first)r->cur_first_ns = put_sync_now_ns();
+    r->cur_bytes += bytes;r->cur_frags++;r->acked_bytes += bytes;
+    if(!r->error) {
+        struct put_epoch_file *file=&r->files[r->file_count++];
+        file->fd=pin;file->owner=owner;strcpy(file->path,path);
+    } else (void)put_epoch_close(pin); /* same unstable-ACK/sticky-COMMIT failure policy */
+    if(first || r->file_count==PUT_EPOCH_FILES || r->cur_bytes >= put_sync_window_bytes)
         pthread_cond_broadcast(&r->cv);
     while (r->cur_bytes + r->inflight_bytes > 2 * put_sync_window_bytes &&
            !r->stop && !(r->error && !r->inflight_frags))
         pthread_cond_wait(&r->cv, &r->mu);
-    pthread_mutex_unlock(&r->mu);
+    pthread_mutex_unlock(&r->mu);return EFS_OK;
 }
 
 /* Wait until everything acknowledged before this call is durable. */
-static int put_sync_commit_root(struct put_sync_root *r)
+static int put_sync_commit_root_mode(struct put_sync_root *r, int require_recovery)
 {
     pthread_mutex_lock(&r->mu);
     uint64_t want = r->cur_frags ? r->seq
@@ -1760,9 +1817,27 @@ static int put_sync_commit_root(struct put_sync_root *r)
     }
     while (r->durable_seq < want && !r->error && !r->stop)
         pthread_cond_wait(&r->cv, &r->mu);
-    int rc = r->durable_seq >= want && !r->error && !r->recovery_uncertain ? EFS_OK : EFS_ERR_IO;
+    int rc = r->durable_seq >= want && !r->error && (!require_recovery || !r->recovery_uncertain) ? EFS_OK : EFS_ERR_IO;
     pthread_mutex_unlock(&r->mu);
     return rc;
+}
+
+static int put_sync_commit_root(struct put_sync_root *r)
+{
+    return put_sync_commit_root_mode(r, 1);
+}
+static int put_sync_namespace_drain(void)
+{
+    for (unsigned i=0;i<EFS_MAX_STORAGE_PATHS;i++) {
+        pthread_mutex_lock(&put_sync_mu);
+        int on=put_sync_state[i]>0;
+        pthread_mutex_unlock(&put_sync_mu);
+        /* This is only a namespace-lifetime barrier for current pins, not
+         * proof about a previous unclean boot. Recovery stays uncertain. */
+        if(on && put_sync_commit_root_mode(&put_sync_roots[i],0)!=EFS_OK)
+            return EFS_ERR_IO;
+    }
+    return EFS_OK;
 }
 
 /* Attach one root. Reads the previous record and starts a new boot; an
@@ -2403,11 +2478,18 @@ static int finish_fragment_put(struct shard_io_arg *a, int fd, size_t bytes)
     if (a->sync_root) {
         /* Acknowledged now; durable at the root's next barrier or when a
          * client COMMIT (fsync) asks for one. */
+        int cancel_state;
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE,&cancel_state);
+        int pin=put_epoch_pin(fd);
         int rc = finish_shard_write(fd, bytes, 0, 0);
-        if (rc != EFS_OK)
-            return rc;
-        put_sync_note(a->sync_root, bytes);
-        return EFS_OK;
+        if (pin<0 || rc!=EFS_OK) {
+            if(pin>=0)(void)put_epoch_close(pin);
+            pthread_setcancelstate(cancel_state,NULL);
+            return EFS_ERR_IO;
+        }
+        rc=put_sync_note(a->sync_root,bytes,pin,a->s,a->path);
+        pthread_setcancelstate(cancel_state,NULL);
+        return rc;
     }
     int rc = finish_shard_write(fd, bytes, 1, 0);
     return rc == EFS_OK ? sync_fragment_parents(a->s, a->path) : rc;

@@ -247,6 +247,7 @@ struct put_id {
     uint64_t gen;
     uint64_t seq; /* dcache snapshot seq of this PUT (0 = unordered) */
     uint64_t span_base_gen; /* immutable base observed by this span's PUT */
+    uint8_t stale_retry; /* subsequent reuse requires fresh ADMITTED-ticket proof */
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     uint32_t delta_off;
@@ -369,6 +370,7 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
 {
     struct put_id *p;
     uint64_t superseded = 0;
+    uint8_t stale_retry = 0;
 
     if (!ino || !gen || ino == PUTID_TOMB || !ticket || ticket->object != gen)
         return;
@@ -387,6 +389,8 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
         pthread_mutex_unlock(&g_putid_mu);
         return;
     }
+    if (p && p->gen == gen && p->seq == seq && p->put_seq == ticket->id.seq)
+        stale_retry = p->stale_retry;
     if (p && p->gen != gen)
         superseded = p->gen;
     if (!p) {
@@ -409,6 +413,7 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
     p->gen = gen;
     p->seq = seq;
     p->span_base_gen = span_base_gen;
+    p->stale_retry = stale_retry;
     memcpy(p->nodes, nodes, sizeof(p->nodes));
     memcpy(p->cks, cks, sizeof(p->cks));
     p->delta_off = delta_off;
@@ -1382,6 +1387,7 @@ struct stale_pair {
     uint32_t idx;    /* index into the dirty snapshot */
     uint8_t valid;   /* successful authoritative repull */
     uint8_t absent;  /* the repull found no row on the host */
+    uint8_t owned;   /* exact unconditional body retained; never ACKed */
 };
 
 static int stale_pair_cmp(const void *a, const void *b)
@@ -1514,6 +1520,87 @@ static int stale_sent_cmp(const void *a, const void *b)
     return x->ci < y->ci ? -1 : x->ci > y->ci;
 }
 
+struct stale_retry_view {
+    efs_ino_t ino;
+    uint64_t generation;
+    int rc;
+    struct efs_msg_inode_writer_view_reply authority;
+};
+
+/* A transaction can abort on admission/lock BUSY while its chunk mapping
+ * did not change. Its uploaded immutable body is still owned: retry that
+ * object under the next publication id, rather than settle it REJECTED and
+ * upload identical bytes again. This is never an ACK. The server rechecks
+ * the ticket, CAS and atomic unit. Subsequent reuse additionally proves the
+ * same live ticket is ADMITTED; terminal tickets take normal replay and
+ * unknown authority preserves the body as a failure. Existing REPORT
+ * attempt/deadline bounds still terminate persistent refusals. */
+static int stale_retry_owned(const struct efs_chunk_rec *r, uint64_t seq,
+                              const struct efs_chunk_entry *ce, int absent,
+                              struct stale_retry_view *view)
+{
+    int keep = 0, repeated = 0;
+    if (!seq || !r->put_seq || !r->file_generation ||
+        (r->delta_len && r->base_gen==EFS_CHUNK_BASE_UNCOND) ||
+        !(r->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
+        (r->publish_epoch && !(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH)))
+        return 0;
+    /* A full UNCOND image has no mapping CAS predicate. Its exact owned
+     * body is reusable over an existing row too: server publication still
+     * validates FileID/epoch/ticket and orders this overwrite. Requiring
+     * absence here replayed every unchanged overwrite after admission BUSY.
+     * Conditional images/spans still need the fresh exact mapping proof;
+     * no inference from a staging placeholder on an absent server row. */
+    if (r->base_gen != EFS_CHUNK_BASE_UNCOND &&
+        (r->base_gen != (absent ? 0 : ce->generation) ||
+         r->delta_base_n != (absent ? 0 : ce->ndelta) ||
+         r->delta_base_seq != (absent ? 0 : ce->delta_seq)))
+        return 0;
+    /* One fresh FileID/epoch proof per inode in this repull round, not one
+     * network round-trip per chunk of a large atomic write. No global cache. */
+    if (view->ino != r->ino || view->generation != r->file_generation) {
+        view->ino = r->ino;
+        view->generation = r->file_generation;
+        view->rc = efs_client_rpc_writer_view(r->ino, r->file_generation,
+                                             r->chunk_index, &view->authority);
+    }
+    if (view->rc != EFS_OK || view->authority.generation != r->file_generation ||
+        view->authority.authority_epoch != r->publish_epoch)
+        return 0; /* a truncate/FileID change needs ordinary repull/replay */
+    pthread_mutex_lock(&g_putid_mu);
+    struct put_id *p = putid_find(r->ino, r->chunk_index);
+    if (p && p->gen == r->chunk_generation && p->seq == seq &&
+        p->put_seq == r->put_seq && p->file_generation == r->file_generation &&
+        p->delta_off==r->delta_off && p->delta_len==r->delta_len &&
+        (!r->delta_len || p->span_base_gen==r->base_gen) &&
+        p->delta_base_n==r->delta_base_n && p->delta_base_seq==r->delta_base_seq &&
+        p->publish_epoch == r->publish_epoch &&
+        !memcmp(p->nodes, r->nodes, sizeof(p->nodes)) &&
+        !memcmp(p->cks, r->checksums, sizeof(p->cks))) {
+        repeated=p->stale_retry;
+        p->stale_retry = 1;
+        keep = 1;
+    }
+    pthread_mutex_unlock(&g_putid_mu);
+    if (!keep || !repeated) return keep;
+    int live=efs_client_put_retry_admitted(r->ino,r->chunk_index,
+                                          r->chunk_generation,r->put_seq);
+    if (live<=0) return live;
+    /* Another PUT may replace this exact snapshot while status is read. */
+    pthread_mutex_lock(&g_putid_mu);
+    p=putid_find(r->ino,r->chunk_index);
+    keep=p && p->gen==r->chunk_generation && p->seq==seq &&
+         p->put_seq==r->put_seq && p->file_generation==r->file_generation &&
+         p->delta_off==r->delta_off && p->delta_len==r->delta_len &&
+         (!r->delta_len || p->span_base_gen==r->base_gen) &&
+         p->delta_base_n==r->delta_base_n && p->delta_base_seq==r->delta_base_seq &&
+         p->publish_epoch==r->publish_epoch &&
+         !memcmp(p->nodes,r->nodes,sizeof(p->nodes)) &&
+         !memcmp(p->cks,r->checksums,sizeof(p->cks));
+    pthread_mutex_unlock(&g_putid_mu);
+    return keep;
+}
+
 /* sent[0..nsent) and sent_seq: the records the STALE round carried and their
  * snapshot seqs. A chunk is done only when the host holds the object that
  * round SENT. The putid and the local table can already name a newer PUT
@@ -1529,7 +1616,8 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
 {
     struct stale_pair *pp, *rp = NULL;
     struct stale_sent *sx = NULL;
-    uint64_t n = 0, i, runs = 0, replayed = 0, committed = 0;
+    struct stale_retry_view reuse = {0};
+    uint64_t n = 0, i, runs = 0, replayed = 0, committed = 0, retained = 0;
     uint64_t t_start = report_mono_ms();
     int error = EFS_OK;
     static int dbg_s = -1; /* any thread may be first: atomic, local copy (TSan) */
@@ -1568,20 +1656,45 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
         pp[n].idx = (uint32_t)i;
         pp[n].absent = 0;
         pp[n].valid = 0;
+        pp[n].owned = 0;
         n++;
     }
     qsort(pp, (size_t)n, sizeof(*pp), stale_pair_cmp);
+    /* An explicit unconditional full overwrite has no chunk-map predicate.
+     * Retain its exact owned body from fresh FileID/epoch/ticket authority
+     * before fetching a map it does not depend on. This never acknowledges
+     * publication; a terminal/changed owner falls through to ordinary pull.
+     * Conditional records still require that pull before ACK or replay. */
+    for (i = 0; i < n;) {
+        uint64_t j=i+1;
+        while (j<n && pp[j].ino==pp[i].ino && pp[j].ci==pp[i].ci)j++;
+        struct stale_sent key={pp[i].ino,pp[i].ci,0};
+        const struct stale_sent *was=nsent?bsearch(&key,sx,nsent,sizeof(*sx),stale_sent_cmp):NULL;
+        if (was && sent[was->idx].base_gen==EFS_CHUNK_BASE_UNCOND &&
+            !sent[was->idx].delta_len) {
+            struct efs_chunk_entry unused={0};
+            int keep=stale_retry_owned(&sent[was->idx],sent_seq?sent_seq[was->idx]:0,
+                                       &unused,1,&reuse);
+            if (keep<0) {free(sx);free(rp);free(pp);return keep;}
+            if (keep) {
+                for(uint64_t k=i;k<j;k++)pp[k].owned=1;
+                retained++;
+            }
+        }
+        i=j;
+    }
     /* Gap-tolerant runs, one paged pull per run (64 recs/RPC). A chunk
      * the host has no row for is marked absent: the table then still
      * holds our own PUT's identity and must not read as committed. */
     i = 0;
     while (i < n) {
+        if (pp[i].owned) {i++;continue;}
         efs_ino_t ino = pp[i].ino;
         uint32_t lo = pp[i].ci, hi = pp[i].ci;
         uint64_t j = i + 1, k;
         uint8_t *bits;
 
-        while (j < n && pp[j].ino == ino && pp[j].ci - hi <= 64) {
+        while (j < n && !pp[j].owned && pp[j].ino == ino && pp[j].ci - hi <= 64) {
             if (pp[j].ci > hi)
                 hi = pp[j].ci;
             j++;
@@ -1614,7 +1727,7 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
 
         while (j < n && pp[j].ino == pp[i].ino && pp[j].ci == pp[i].ci)
             j++; /* [i,j) = duplicate snapshot entries for one chunk */
-        if (!pp[i].valid) {
+        if (pp[i].owned || !pp[i].valid) {
             i = j;
             continue;
         }
@@ -1679,6 +1792,13 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
             i = j;
             continue;
         }
+        int owned_retry=stale_retry_owned(&obj, object_seq, &ce, pp[i].absent, &reuse);
+        if (owned_retry<0) { error=owned_retry;break; }
+        if (owned_retry) {
+            retained++;
+            i = j;
+            continue;
+        }
         struct efs_chunk_entry observed = ce;
         if (pp[i].absent)
             memset(&observed, 0, sizeof(observed));
@@ -1696,13 +1816,14 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
             error = replay_fan_run(rp, replayed);
         /* Always logged when a round replayed: this is the wall the
          * REPORT budget pays for (chunks = snapshot entries pulled). */
-        if (dbg || replayed)
+        if (dbg || replayed || retained)
             fprintf(stderr,
                     "report-stale: chunks=%llu runs=%llu committed=%llu "
-                    "replayed=%llu pull_ms=%llu replay_ms=%llu\n",
+                    "replayed=%llu retained=%llu pull_ms=%llu replay_ms=%llu\n",
                     (unsigned long long)n, (unsigned long long)runs,
                     (unsigned long long)committed,
                     (unsigned long long)replayed,
+                    (unsigned long long)retained,
                     (unsigned long long)(t1 - t_start),
                     (unsigned long long)(report_mono_ms() - t1));
     }
@@ -1710,6 +1831,18 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
     free(rp);
     free(pp);
     return error;
+}
+
+/* The exact sent snapshot remains owned until a definite STALE verdict
+ * has reconciled it. A receipt can provide that verdict after transport
+ * returned; rebuilding from live cache rows first loses this authority. */
+static int report_replay_snapshot(struct dirty_snap *ds, efs_ino_t only_ino,
+    const struct efs_chunk_rec *crecs, const uint64_t *cseq, uint32_t cn,
+    const struct efs_ino_size_rec *irecs, uint32_t in)
+{
+    for (uint32_t k=0;k<in;k++)
+        if (irecs[k].ino) (void)report_replay_stale(irecs[k].ino);
+    return stale_repull_replay(ds,only_ino,crecs,cseq,cn);
 }
 
 /* Phase 2b: report the dirty set to the metadata primary (chunk mappings +
@@ -2284,14 +2417,10 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
             if (!sync && attempt >= 2)
                 break;
             report_streak_note(&streaks, &nstreaks, crecs, cn);
-            for (k = 0; k < in; k++) {
-                if (irecs[k].ino)
-                    (void)report_replay_stale(irecs[k].ino);
-            }
             {
                 uint64_t t0 = report_mono_ms();
 
-                int replay_rc = stale_repull_replay(&ds, only_ino, crecs, cseq, cn);
+                int replay_rc = report_replay_snapshot(&ds, only_ino, crecs, cseq, cn, irecs, in);
                 if (replay_rc != EFS_OK) {
                     rc = replay_rc;
                     break;
@@ -2431,8 +2560,19 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
         efs_client_rpc_set_deadline_ms(completion_deadline);
         rc = efs_client_rpc_report_resolve(g_client.export_id, crecs, cn, irecs, in, sync,
                                            &pubid, report_sent, rc, only_ino);
+        *resolved_stale = 0;
+        if (sent_rc != EFS_ERR_STALE && rc == EFS_ERR_STALE) {
+            /* PARTIAL is definite, never an acknowledgement. Reconcile the
+             * original snapshot before freeing it or shaping another REPORT.
+             * Use only the remaining absolute completion allowance. */
+            uint64_t before=report_mono_ms();
+            int replay_rc=efs_client_rpc_past_deadline() ? EFS_ERR_BUSY :
+                report_replay_snapshot(&ds,only_ino,crecs,cseq,cn,irecs,in);
+            t_replay_ms+=report_mono_ms()-before;
+            if (replay_rc==EFS_OK) *resolved_stale=1;
+            else rc=replay_rc;
+        }
         efs_client_rpc_set_deadline_ms(outer);
-        *resolved_stale = sent_rc != EFS_ERR_STALE && rc == EFS_ERR_STALE;
     }
     if (dcache_trace_on()) {
         for (uint32_t k = 0; k < cn; k++)
@@ -3693,6 +3833,25 @@ static int degraded_record(efs_ino_t ino, uint32_t chunk_index, uint64_t object,
     return EFS_OK;
 }
 
+/* Preserve immediate placement around full members when enough unused live
+ * members exist. Otherwise the same immutable ticket may wait for local
+ * packing/reclaim to return space, within the existing PUT retry budget. */
+static int put_quota_has_spares(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS], uint32_t mask)
+{
+    unsigned need = (unsigned)__builtin_popcount(mask), available = 0;
+    if (!need) return 0;
+    uint32_t count = __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE);
+    for (uint32_t n = 0; n < count && n < EFS_MAX_NODES; n++) {
+        efs_node_id_t id = g_client.nodes[n].id;
+        if (!id || node_is_full(id) || efs_client_node_is_down(id) || node_is_away(id))
+            continue;
+        int used = 0;
+        for (unsigned i = 0; i < EFS_NUM_FRAGMENTS; i++) used |= nodes[i] == id;
+        if (!used && ++available >= need) return 1;
+    }
+    return 0;
+}
+
 /* Retries reuse the ticket: same object name, placement and bytes.
  * *quota_mask gets the slots whose member refused the object as full.
  * On EFS_OK seq/epoch hold each acknowledged slot's acknowledgement (0 for
@@ -3721,14 +3880,24 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
     *unreachable_mask = 0;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         seq[i] = epoch[i] = 0;
-    int reprobed = 0;
+    int reprobed = 0, quota_waited = 0;
     for (int attempt = 1; attempt <= 128; attempt++) {
+        memset(quota, 0, sizeof(quota));
+        *quota_mask = 0;
         rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota, seq, epoch);
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             if (acked[i])
                 node_note_back(nodes[i]);
             if (quota[i] && !acked[i])
                 *quota_mask |= 1u << i;
+        }
+        if (*quota_mask && (rc == EFS_OK || rc == EFS_ERR_QUOTA) &&
+            !put_quota_has_spares(nodes, *quota_mask) && !quota_waited) {
+            quota_waited = 1;
+            fprintf(stderr, "put quota backpressure ino=%llu ci=%u ticket=%llu: "
+                    "retaining object and ACKs within existing retry budget\n",
+                    (unsigned long long)ino, chunk_index,
+                    (unsigned long long)ticket->id.seq);
         }
         if (rc == EFS_OK) {
             uint32_t missing = 0;
@@ -3758,8 +3927,13 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
              * on two fragments would create protection debt that no
              * rebuild can pay while the member stays full; the caller
              * places the object again without it, or reports ENOSPC. */
-            if (missing & *quota_mask)
-                return EFS_ERR_QUOTA;
+            if (missing & *quota_mask) rc = EFS_ERR_QUOTA;
+            if (rc == EFS_ERR_QUOTA) {
+                if (put_quota_has_spares(nodes, *quota_mask)) return rc;
+                if (efs_client_rpc_past_deadline() || report_retry_pause(50000) != EFS_OK)
+                    return rc;
+                continue;
+            }
             /* K34: two acks with the third member alive but BUSY (its
              * ticket read during a group leader change, pressure) are not
              * a degraded stripe: either acknowledging member may be the
@@ -3790,6 +3964,11 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
                 return rc;
             return degraded_record(ino, chunk_index, ticket->object, nodes, missing,
                                    failed[mi]);
+        }
+        if (rc == EFS_ERR_QUOTA && *quota_mask && !put_quota_has_spares(nodes, *quota_mask)) {
+            if (efs_client_rpc_past_deadline() || report_retry_pause(50000) != EFS_OK)
+                return rc;
+            continue;
         }
         if (rc == EFS_ERR_QUOTA || rc == EFS_ERR_STALE)
             return rc;
@@ -4531,9 +4710,12 @@ void efs_dcache_init(void)
 
 static uint32_t dcache_slot(efs_ino_t ino, uint32_t ci)
 {
-    uint64_t h = (uint64_t)ino * 0x9E3779B97F4A7C15ULL;
-    h ^= (uint64_t)ci * 0xBF58476D1CE4E5B9ULL;
-    return (uint32_t)(h & (DCACHE_SLOTS - 1));
+    /* Low inode bits name a metadata shard. Masking a product preserved
+     * those bits: files allocated 4096 apart used only 16 cache buckets
+     * and the same I/O mutex for each chunk index, across network I/O.
+     * Mix the allocation counter before selecting either bucket or lock. */
+    uint64_t key = (uint64_t)ino ^ ((uint64_t)ci * UINT64_C(0xBF58476D1CE4E5B9));
+    return efs_ino_lock_slot(key, DCACHE_SLOTS);
 }
 
 static pthread_mutex_t *dcache_mu(uint32_t slot)
@@ -7458,16 +7640,22 @@ int efs_dcache_flush_ino(efs_ino_t ino)
     int rc = dcache_flush_ino_pass(ino, 0);
     int w;
 
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        fprintf(stderr, "dcache-flush-fail ino=%llu stage=put rc=%d\n",
+                (unsigned long long)ino, rc);
         return rc;
+    }
     /* Another flusher (reclaim, a second close) may hold this inode's
      * chunks in a PUT window: entry clean, chunk not yet in the dirty
      * set. Wait for those windows; a failed PUT re-dirties the entry, so
      * one more pass picks it up. Then the caller's REPORT snapshot sees
      * every chunk this inode has written. */
     w = put_win_wait(ino, 8000u);
-    if (w == EFS_ERR_BUSY)
+    if (w == EFS_ERR_BUSY) {
+        fprintf(stderr, "dcache-flush-fail ino=%llu stage=put-window rc=%d\n",
+                (unsigned long long)ino, w);
         return EFS_ERR_BUSY;
+    }
     if (w == 1)
         rc = dcache_flush_ino_pass(ino, 0);
     return rc;

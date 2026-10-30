@@ -60,6 +60,8 @@ struct dirty_snap {uint64_t chunk_count;efs_ino_t *chunk_inos;uint32_t *chunk_id
 #define OLD_BASE 0xc28987f070b5f01aull
 #define NEW_BASE 0x244b546dfa67ace7ull
 #define SPAN_A 0xa5ull
+int efs_client_rpc_writer_view(efs_ino_t ino,uint64_t gen,uint32_t ci,struct efs_msg_inode_writer_view_reply *out)
+{(void)ino;(void)gen;(void)ci;(void)out;return EFS_ERR_BUSY;}
 static struct dcache_ent slot;
 static pthread_mutex_t mu=PTHREAD_MUTEX_INITIALIZER, io=PTHREAD_MUTEX_INITIALIZER;
 static struct efs_chunk_entry row;
@@ -71,6 +73,7 @@ static uint64_t put_bg, put_seq, next_object=0x1000, seqctr=10;
 static uint32_t put_off, put_len;
 static uint8_t put_img[LEN];
 static struct efs_chunk_delta overlay_d;
+int efs_client_put_retry_admitted(efs_ino_t ino,uint32_t ci,uint64_t o,uint64_t seq){(void)ino;(void)ci;(void)o;(void)seq;return 0;}
 void efs_client_put_done(efs_ino_t ino,uint32_t ci,uint64_t o){(void)ino;(void)ci;if(o)settled++;}
 static void putid_miss_note(efs_ino_t ino,uint32_t ci,const efs_node_id_t *n){(void)ino;(void)ci;(void)n;}
 static void report_retry_without_identity(efs_ino_t ino,uint32_t ci){(void)ino;(void)ci;}
@@ -141,7 +144,7 @@ static int dcache_put_now(efs_ino_t ino,uint32_t ci,const uint8_t *chunk,uint32_
     fn('dcache_unpublished') + fn('dcache_object_of') + fn('report_fill_owned') + \
     fn('chunk_obs_has_live_spans') + fn('chunk_obs_masked') + fn('stale_pair_cmp') + \
     (fn('stale_sent_cmp') if SENT else '') + \
-    fn('stale_repull_replay') + fn('dcache_identity_abandon', True) + \
+    (block('struct stale_retry_view {', '\n};') if 'struct stale_retry_view {' in src else '') + fn('stale_retry_owned', True) + fn('stale_repull_replay') + fn('dcache_identity_abandon', True) + \
     fn('replay_span_without_body', True) + fn('dcache_replay_stale_ex_budgeted') + \
     (fn('dcache_object_seq_of', True) or
      'static uint64_t dcache_object_seq_of(efs_ino_t i,uint32_t c){(void)i;(void)c;return 0;}') + r'''
@@ -236,11 +239,21 @@ int main(void)
  reset();land_span_a();fetch_rc=EFS_ERR_BUSY;
  built=round_after_stale(&rc,&rec);
  assert(rc==EFS_ERR_BUSY&&!nput&&!wb_errors&&built&&rec.chunk_generation==SPAN_A);
+ /* The once-only retry belongs to the immutable PUT, not each callback. */
+ reset();land_span_a();putid_find(INO,CI)->stale_retry=1;land_span_a();
+ assert(putid_find(INO,CI)->stale_retry==1);
+ struct efs_put_ticket fresh={.object=SPAN_A+1,.id={.seq=106},.inode_gen=1,.fragment_len=LEN/2,.member_mask=7};
+ putid_note(INO,CI,SPAN_A+1,6,nodes,cks,SPAN_OFF,SPAN_LEN,0,0,NULL,OLD_BASE,&fresh);
+ assert(!putid_find(INO,CI)->stale_retry);
  puts("K38 STALE span without body: superseded drop + late-PUT guard, rebuild on committed base "
       "from own object, fail-closed lost object, retained transient PASS");
  return 0;
 }
 '''
+if 'uint8_t stale_retry;' not in src:
+    a=code.index(' /* The once-only retry belongs')
+    b=code.index(' puts("K38 STALE span',a)
+    code=code[:a]+code[b:]
 with tempfile.TemporaryDirectory(prefix='efs-k38-replay-') as d:
     p = Path(d)/'test.c'; p.write_text(code)
     cmd = shlex.split(os.getenv('CC', 'cc'))+['-std=gnu11', '-g', '-O1', '-Wall', '-Wextra', '-Werror',

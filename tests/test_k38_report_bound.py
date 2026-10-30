@@ -93,7 +93,8 @@ with tempfile.TemporaryDirectory(prefix='efs-k38-bound-') as d:
 loop = fn('report_dirty_ino_run')
 stale = loop[loop.index('if (rc == EFS_ERR_STALE) {\n            uint32_t k;'):]
 note = stale.index('report_streak_note(&streaks, &nstreaks, crecs, cn);')
-assert note < stale.index('stale_repull_replay(&ds, only_ino, crecs, cseq, cn)'), 'streaks must be noted before the replay'
+assert note < stale.index('report_replay_snapshot(&ds, only_ino, crecs, cseq, cn, irecs, in)'), 'streaks must be noted before the replay'
+assert 'return stale_repull_replay(ds,only_ino,crecs,cseq,cn);' in fn('report_replay_snapshot')
 rebuild = stale[stale.index('report_rec_stuck(streaks, nstreaks, &crecs[cn], ce.generation)'):]
 rebuild = rebuild[:rebuild.index('cn++;')]
 for need in ('report-stuck ino=', 'wb_error_record_add(crecs[cn].ino)', 'dcache_identity_abandon(',

@@ -333,6 +333,8 @@ test-wb-runtime:
 	python3 tests/test_read_ahead_boundary.py
 	python3 tests/test_getchunks_budget.py
 	python3 tests/test_mgmt_resync_busy.py
+	python3 tests/test_getchunks_collect_retry.py
+	python3 tests/test_dcache_lock_distribution.py
 	python3 tests/test_metadata_retry_budget.py
 	python3 tests/test_inode_writer_view_budget.py
 	python3 tests/test_readdir_reply_boundary.py
@@ -511,6 +513,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_raft_pending_reads.py
 	python3 tests/test_prepare_cohort.py
 	python3 tests/test_prepare_wait_progress.py
+	python3 tests/test_put_epoch_files.py
 	python3 tests/test_append_cohort.py
 	python3 tests/test_atomic_append_host.py
 	python3 tests/test_host_cover_route.py
@@ -1131,6 +1134,7 @@ test: test-apply-wait
 # runs both and is what the gates run.
 .PHONY: test-long test-all
 test-long: all $(TEST_SPECIAL_BINS)
+	python3 tests/test_put_quota_reclaim.py
 	python3 tests/test_bench_published.py
 	./tests/faults/test_follower_bound --stalled-compactor
 	python3 tests/test_decoder_refusal.py
@@ -1288,3 +1292,5 @@ src/kv/kv_mem.o src/kv/kv_snap.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_s
 
 # FIN accounting is shared by RDMA diagnostics and the real-socket regression.
 src/common/rdma.o tests/test_tcp_counts: src/common/tcp_counts.h
+
+src/server/store.o src/bench/store.o tests/test_store_durability: src/server/put_epoch_files.h

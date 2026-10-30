@@ -3,11 +3,16 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=Path(os.environ.get('HOST_COVER_SOURCE',root/'src/server/raft_host.c')).read_text()
 r=s.index('static uint32_t host_route_voters(');a=s.index('static int host_leader_cover_pick(');b=s.index('\n}',a)+2
 fa=s.index('static int host_group_retired(');fb=s.index('\n}',fa)+2
+def function(name):
+ a=s.index('static '+name+'(');return s[a:s.index('\n}',a)+2]
 code=r"""
 #include "efs/raft.h"
+#include "efs/protocol.h"
+#include "efs/kv_key.h"
+#include <string.h>
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -30,7 +35,7 @@ static void host_view_get(struct efs_raft_host*h,uint8_t group,struct host_view*
 /* Routing must never take the host mutex. */
 #define pthread_mutex_lock(m) (abort(),0)
 #define pthread_mutex_unlock(m) (abort(),0)
-"""+s[fa:fb]+s[r:a]+s[a:b]+r"""
+"""+s[fa:fb]+s[r:a]+s[a:b]+function("void host_need_both")+function("int host_report_primary_pick")+r"""
 int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.n=4,.raft_id=2};
  h.g[0].r=(struct efs_raft*)1;h.g[1].r=(struct efs_raft*)2;masks[0]=7;masks[1]=14;
  uint8_t both[]={0,2};leaders[0]=1;leaders[1]=1;
@@ -55,6 +60,20 @@ int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.n=4,.raft_
  h.g[1].r=NULL;h.g[1].voters=5;assert(host_leader_cover_pick(&h,0,both,2)==-1);
  h.g[1].voters=7;assert(host_leader_cover_pick(&h,0,both,2)==-1); /* missing leadership proof */
  assert(host_leader_cover_pick(&h,0,NULL,2)==-1 && host_leader_cover_pick(&h,0,both,0)==-1);
+ struct efs_chunk_rec recs[8]={{0}},original[8];
+ for(unsigned i=0;i<8;i++){recs[i].ino=7;recs[i].chunk_index=i;}
+ memcpy(original,recs,sizeof(recs));
+ h.g[1].r=(struct efs_raft*)2;h.n=3;h.raft_id=2;masks[0]=masks[1]=7;leaders[0]=leaders[1]=1;
+ assert(host_report_primary_pick(&h,recs,1)==1);
+ assert(host_report_primary_pick(&h,recs,8)==1); /* the actual multi-chunk regression */
+ assert(!memcmp(recs,original,sizeof(recs)));
+ recs[7].ino=8;assert(host_report_primary_pick(&h,recs,8)==-1);recs[7].ino=7;
+ assert(host_report_primary_pick(&h,NULL,8)==-1&&host_report_primary_pick(&h,recs,0)==-1);
+ leaders[0]=2;assert(host_report_primary_pick(&h,recs,8)==-1);
+ leaders[0]=1;masks[1]=5;assert(host_report_primary_pick(&h,recs,8)==-1);
+ h.n=4;masks[0]=7;masks[1]=14;leaders[1]=3;
+ for(unsigned i=0;i<8;i++)recs[i].ino=8;
+ assert(host_report_primary_pick(&h,recs,8)==-1); /* a single-group leader cannot own this RPC */
  puts("leader routing: full committed coverage, three/four-node layouts, membership changes, missing/self leaders and single-group loop refusal PASS");
 }
 """
@@ -69,8 +88,7 @@ a=s.index('void server_raft_host_create_retained(');b=s.index('\n}',a)
 assert s[a:b].index('host_leader_cover_pick')<s[a:b].index('host_retained_create_proof')
 
 a=s.index('void server_raft_host_report(');b=s.index('/* Register first-touch participants',a)
-assert s[a:b].index('host_leader_cover_pick')<s[a:b].index('rc = host_read_index')
-assert 'if(session && count==1)' in s[a:b] and 'host_need_both(both)' in s[a:b]
+assert s[a:b].index('host_report_primary_pick')<s[a:b].index('rc = host_read_index')
 # REPORT calls the helper before authority without holding the host mutex
 # (live fsync regression); the helper itself no longer takes it.
 assert 'pthread_mutex_lock(&h->mu)' not in s[a:b]

@@ -3188,6 +3188,7 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
             if (conn)
                 efs_client_conn_drop(nid, conn);
             if (deadline_bounded || attempt + 1 < 16) {
+                if (type == EFS_MSG_REPORT_CHUNKS && target) { target = 0; skip = nid; }
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                     goto exhausted;
                 continue;
@@ -3216,6 +3217,7 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
                  * deadline (a sync REPORT's 8 s budget), the bound, or the
                  * connection. A11 finding 2 read recv_ms=30001 on a receive
                  * the 8 s budget had cut. */
+                if (type == EFS_MSG_REPORT_CHUNKS && target) { target = 0; skip = nid; }
                 int bound = recv_ms > 0 ? recv_ms : EFS_IO_TIMEOUT_MS;
                 unsigned long long waited = (rpc_prof_now_us() - t_recv) / 1000ull;
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
@@ -3251,8 +3253,13 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
         last_status = r->status;
         if (r->status == EFS_INODE_RPC_BUSY) {
             saw_busy = 1;
-            skip = nid;
-            target = 0;
+            /* REPORT retries carry one immutable publication identity. A
+             * live coordinator's BUSY is not evidence of a failed peer:
+             * switching coordinators just adds redirects and receipt joins.
+             * Keep it until a network failure or NOT_PRIMARY says otherwise.
+             * Backoff, attempt cap and the caller's deadline are unchanged. */
+            target = type == EFS_MSG_REPORT_CHUNKS ? nid : 0;
+            skip = target ? 0 : nid;
             unsigned long long sleep_start = rpc_prof_now_us();
             if ((!deadline_bounded && attempt == 15) || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                 goto exhausted;

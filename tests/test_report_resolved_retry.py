@@ -92,3 +92,75 @@ with tempfile.TemporaryDirectory(prefix='efs-resolved-retry-') as d:
     subprocess.run(shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-Wall', '-Wextra', '-Werror',
                    '-I' + str(root/'include'), str(p), '-o', str(Path(d)/'test')], check=True)
     subprocess.run([str(Path(d)/'test')], check=True)
+
+# Execute the production receipt-resolution block itself. The former wrapper
+# test mocked an entire run and could not detect freeing its sent snapshot
+# before authoritative repull/replay. Old source must fail at runtime here.
+a=source.index('    if (sync && report_sent && cn) {')
+b=source.index('\n    if (dcache_trace_on())',a)
+block=source[a:b]
+helper=''
+if 'static int report_replay_snapshot(' in source:
+    helper=extract('report_replay_snapshot')
+code=r'''
+#include "efs/common.h"
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+struct dirty_snap {int owned;};
+struct efs_chunk_rec {uint64_t generation;};
+struct efs_ino_size_rec {efs_ino_t ino;};
+struct client {int export_id;} g_client;
+static uint64_t deadline,now;
+static int resolved_rc,replay_rc,replayed,inode_reads;
+static struct dirty_snap expected_ds;
+static struct efs_chunk_rec expected_rec[2]={{19},{23}};
+static uint64_t expected_seq[2]={29,31};
+static __attribute__((unused)) uint64_t report_mono_ms(void){return now;}
+void efs_client_rpc_set_deadline_ms(uint64_t d){deadline=d;}
+int efs_client_rpc_past_deadline(void){return deadline && now>=deadline;}
+static __attribute__((unused)) int report_replay_stale(efs_ino_t ino){assert(ino==7);inode_reads++;return 0;}
+static __attribute__((unused)) int stale_repull_replay(struct dirty_snap *ds,efs_ino_t ino,
+ const struct efs_chunk_rec *rec,const uint64_t *seq,uint32_t count){
+ assert(ds==&expected_ds&&ds->owned&&ino==7&&rec==expected_rec&&seq==expected_seq&&count==2);
+ assert(rec[0].generation==19&&rec[1].generation==23&&seq[0]==29&&seq[1]==31);
+ assert(deadline==17000);replayed++;now+=50;return replay_rc;
+}
+static int efs_client_rpc_report_resolve(int export_id,const struct efs_chunk_rec *rec,uint32_t cn,
+ const struct efs_ino_size_rec *ir,uint32_t in,int sync,const void *pub,uint64_t sent,int rc,efs_ino_t ino){
+ (void)export_id;(void)ir;(void)in;(void)pub;assert(expected_ds.owned&&rec==expected_rec&&cn==2&&sync&&sent==1&&ino==7&&rc==EFS_ERR_NET);
+ assert(deadline==17000);return resolved_rc;
+}
+'''+helper+r'''
+static int run(int *resolved_stale){
+ int sync=1,rc=EFS_ERR_NET;uint64_t report_sent=1,completion_deadline=17000,outer=9000,t_replay_ms=0;
+ uint32_t cn=2,in=1;efs_ino_t only_ino=7;int pubid=0;
+ struct dirty_snap ds=expected_ds;
+ struct efs_chunk_rec *crecs=expected_rec;uint64_t *cseq=expected_seq;
+ struct efs_ino_size_rec rows[1]={{7}},*irecs=rows;
+ /* ds is a local snapshot in production: point the stub's expected address
+  * at that local copy through a macro for the extracted block. */
+ (void)ds;(void)cseq;(void)t_replay_ms;
+'''+block+r'''
+ assert(deadline==outer);
+ return rc;
+}
+int main(void){
+ expected_ds.owned=1;now=12000;deadline=9000;resolved_rc=EFS_ERR_STALE;
+ int resolved=0;assert(run(&resolved)==EFS_ERR_STALE&&resolved&&replayed==1&&inode_reads==1);
+ replayed=inode_reads=0;replay_rc=EFS_ERR_BUSY;resolved=1;
+ assert(run(&resolved)==EFS_ERR_BUSY&&!resolved&&replayed==1&&expected_ds.owned);
+ replayed=inode_reads=0;resolved_rc=EFS_ERR_IO;replay_rc=0;resolved=1;
+ assert(run(&resolved)==EFS_ERR_IO&&!resolved&&!replayed&&!inode_reads&&expected_ds.owned);
+ replayed=inode_reads=0;resolved_rc=EFS_ERR_STALE;now=17000;resolved=1;
+ assert(run(&resolved)==EFS_ERR_BUSY&&!resolved&&!replayed&&!inode_reads&&expected_ds.owned);
+ puts("late receipt PARTIAL: original sent snapshot replayed before release; unknown/replay failure retains ownership PASS");
+}
+'''
+# The adapter verifies the local snapshot contents, not an invented new body.
+code=code.replace('assert(ds==&expected_ds&&ds->owned', 'assert(ds->owned')
+with tempfile.TemporaryDirectory(prefix='efs-late-replay-') as d:
+    p=Path(d)/'test.c';p.write_text(code)
+    subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror',
+                   '-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
+    subprocess.run([str(p.with_suffix(''))],check=True)
