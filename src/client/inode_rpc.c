@@ -3912,6 +3912,12 @@ int efs_client_session_end(void)
                                       session_revoke_progress};
     struct efs_session_revoke_result res;
     rc=efs_session_revoke(&rpc,id.client_uuid,&res);
+    /* K54: a member killed while this client held a pooled connection to it
+     * fails BEGIN with a transport error. The ladder is resumable by uuid
+     * (what `efs-mgmt raft-session fence` repeats); a second BEGIN only
+     * raises the epoch again, so repeat it once on a different voter. */
+    if (rc==EFS_ERR_NET && !strcmp(res.phase,"begin"))
+        rc=efs_session_revoke(&rpc,id.client_uuid,&res);
     efs_client_rpc_set_deadline_ms(saved);
     /* Latch: nothing may run under the revoked epoch from here on. */
     __atomic_store_n(&g_client.session_fenced,1,__ATOMIC_RELEASE);
