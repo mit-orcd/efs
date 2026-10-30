@@ -18,7 +18,7 @@ code=r'''
 #include <time.h>
 typedef uint64_t fuse_ino_t;
 static int status,stat_status,permission,mutations,sleeps;
-static int efs_client_stat_ino(uint64_t ino,struct efs_inode *row){row->ino=ino;return stat_status;}
+static int efs_client_stat_refresh(uint64_t ino,struct efs_inode *row){row->ino=ino;return stat_status;}
 static int check_dir_wx(const struct efs_inode *row){(void)row;return permission;}
 static int efs_client_unlink(uint64_t ino,const char *name,bool directory){(void)ino;(void)name;(void)directory;mutations++;return status;}
 static int fixture_sleep(const struct timespec *delay,struct timespec *remaining){(void)delay;(void)remaining;sleeps++;return 0;}

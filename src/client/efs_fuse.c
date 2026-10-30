@@ -906,7 +906,7 @@ static int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid, int m
 static int virtual_access(efs_ino_t ino)
 {
     struct efs_inode row;
-    int rc = efs_client_stat_ino(ino, &row);
+    int rc = efs_client_stat_refresh(ino, &row);
     if (rc != EFS_OK) return efs_rc_to_errno(rc);
     const struct fuse_ctx *ctx = ll_ctx();
     return ctx ? check_access(&row, ctx->uid, ctx->gid, R_OK | X_OK) : 0;
@@ -1853,11 +1853,11 @@ static int efs_fuse_access_ino(fuse_ino_t ino, int mask)
         return virtual_access(parent);
     }
     struct efs_inode row;
-    int lrc = efs_client_stat_ino((efs_ino_t)ino, &row);
+    int lrc = efs_client_stat_refresh((efs_ino_t)ino, &row);
     if (lrc == EFS_ERR_ACCES)
         return -EACCES;
     if (lrc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(lrc);
     const struct fuse_ctx *ctx = ll_ctx();
     if (!ctx)
         return 0;
@@ -2630,7 +2630,7 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         return -EISDIR;
 
     struct efs_inode row;
-    int lrc = efs_client_stat_ino((efs_ino_t)ino, &row);
+    int lrc = efs_client_stat_refresh((efs_ino_t)ino, &row);
     if (lrc != EFS_OK)
         return fuse_stat_errno(lrc);
     {
@@ -4515,7 +4515,7 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
         memset(created, 0, sizeof(*created));
     if (strlen(name) > 255)
         return -ENAMETOOLONG;
-    rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
+    rc = efs_client_stat_refresh((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     if (!efs_mode_is_dir(parent.mode))
@@ -4626,7 +4626,7 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     int rc;
     if (strlen(name) > 255)
         return -ENAMETOOLONG;
-    rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
+    rc = efs_client_stat_refresh((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     if (!efs_mode_is_dir(parent.mode))
@@ -4654,7 +4654,7 @@ static int efs_fuse_unlink_at(fuse_ino_t parent_ino, const char *name)
 {
     struct efs_inode parent;
     int rc;
-    rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
+    rc = efs_client_stat_refresh((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     int wx = check_dir_wx(&parent);
@@ -4666,7 +4666,7 @@ static int efs_fuse_unlink_at(fuse_ino_t parent_ino, const char *name)
 static int efs_fuse_rmdir_at(fuse_ino_t parent_ino, const char *name)
 {
     struct efs_inode parent;
-    int rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
+    int rc = efs_client_stat_refresh((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     int wx = check_dir_wx(&parent);
@@ -4848,7 +4848,7 @@ static int efs_fuse_chown_ino(fuse_ino_t ino, uid_t uid, gid_t gid)
     int rc;
     if (virt_kind(ino))
         return -EACCES;
-    rc = efs_client_stat_ino((efs_ino_t)ino, &row);
+    rc = efs_client_stat_refresh((efs_ino_t)ino, &row);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     rc = check_chown_perm(&row, uid, gid);
@@ -4862,7 +4862,7 @@ static int efs_fuse_symlink_at(const char *link, fuse_ino_t parent_ino,
                                const char *name, efs_ino_t *out_ino)
 {
     struct efs_inode parent;
-    int rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
+    int rc = efs_client_stat_refresh((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     if (!efs_mode_is_dir(parent.mode))
@@ -4923,12 +4923,12 @@ static int efs_fuse_link_at(fuse_ino_t src_ino, fuse_ino_t newparent,
     int rc;
     if (virt_kind(src_ino) || virt_kind(newparent))
         return -EACCES;
-    rc = efs_client_stat_ino((efs_ino_t)src_ino, &src);
+    rc = efs_client_stat_refresh((efs_ino_t)src_ino, &src);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     if (efs_mode_is_dir(src.mode))
         return -EPERM;
-    rc = efs_client_stat_ino((efs_ino_t)newparent, &parent);
+    rc = efs_client_stat_refresh((efs_ino_t)newparent, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     int wx = check_dir_wx(&parent);
@@ -5035,7 +5035,7 @@ static int efs_fuse_truncate_run(fuse_ino_t ino, off_t size,
         return -EAGAIN;
     if (!fi || !fi->fh) {
         struct efs_inode row;
-        int rc = efs_client_stat_ino((efs_ino_t)ino, &row);
+        int rc = efs_client_stat_refresh((efs_ino_t)ino, &row);
         if (rc != EFS_OK)
             return efs_rc_to_errno(rc);
         if (efs_mode_is_dir(row.mode))
@@ -5273,7 +5273,7 @@ static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
         return -EOPNOTSUPP;
     if (virt_kind(parent) || virt_kind(newparent))
         return -EACCES;
-    rc = efs_client_stat_ino((efs_ino_t)parent, &src_parent);
+    rc = efs_client_stat_refresh((efs_ino_t)parent, &src_parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     int wx = check_dir_wx(&src_parent);
@@ -5282,7 +5282,7 @@ static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
     rc = efs_client_rpc_lookup(g_client.export_id, (efs_ino_t)parent, name, &src);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
-    rc = efs_client_stat_ino((efs_ino_t)newparent, &dst_parent);
+    rc = efs_client_stat_refresh((efs_ino_t)newparent, &dst_parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     wx = check_dir_wx(&dst_parent);
@@ -5900,14 +5900,13 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
     if (strcmp(name, "..") == 0) {
         fuse_ino_t up = parent;
         if (parent != FUSE_ROOT_ID &&
-            efs_client_stat_ino((efs_ino_t)parent, &prow) == EFS_OK &&
+            efs_client_stat_refresh((efs_ino_t)parent, &prow) == EFS_OK &&
             prow.parent)
             up = (fuse_ino_t)prow.parent;
         return lookup_fill(up, e, NULL);
     }
-    rc = efs_client_stat_local((efs_ino_t)parent, &prow);
-    if (rc != EFS_OK)
-        rc = efs_client_stat_ino((efs_ino_t)parent, &prow);
+    /* Parent search permission must not come from the staging cache. */
+    rc = efs_client_stat_refresh((efs_ino_t)parent, &prow);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
     if (!efs_mode_is_dir(prow.mode))
@@ -6516,7 +6515,7 @@ static void ll_fallocate_run(fuse_req_t req, fuse_ino_t ino, int mode, off_t off
         fuse_reply_err(req, -efs_rc_to_errno(rc));
         return;
     }
-    rc = efs_client_stat_ino((efs_ino_t)ino, &row);
+    rc = efs_client_stat_refresh((efs_ino_t)ino, &row);
     if (rc != EFS_OK) {
         lookup_memo_mutation_end();
         t_req = NULL;

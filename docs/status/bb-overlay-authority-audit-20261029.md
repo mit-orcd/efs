@@ -1,0 +1,124 @@
+# BB — client overlays and metadata authority
+
+`agent/devel-bb`, base `74d34d588`; gate NOTRUN. Untouched-product control
+`e6856dd08` on xorinox: 8 mounted cases, 5 FAIL, 3 PASS, checked cleanup PASS.
+Evidence: `docs/status/bb-overlay-authority-audit-20261029.md`.
+ORCD TCP/RDMA NOTRUN. Findings BB1 (attribute overlays), BB2 (cached mutation
+shortcuts) and BB3 (cached DAC checks) have candidate fixes; qualification RUNNING.
+K numbers will be assigned against the then-current register before closure.
+No merge, push, new product switch, cache protocol or wire/store change.
+
+## Authority contract from the actual paths
+
+The local `metadata.c` export is a bounded staging/index view. The Raft KV
+rows applied by `meta_apply.c` supply committed metadata; the inode/lane reads
+in `server_raft_host_getattr`, `server_raft_host_lookup` and inode RPC collectors
+supply operation-specific authority. A local mutex, row or routing hint supplies
+no ReadIndex, namespace receipt, publication proof or permission lease.
+
+**R** below means the successful RPC's authority point, not "latest forever".
+Concurrent requests can complete in another order. A previously captured reply
+is not a token authorizing a later operation. **L** means only locally accepted
+unpublished data, identified by `efs_client_ino_has_unpublished_data` (dirty
+inode OR pinned dcache body), never a whole cached inode. **C** is a hint only.
+
+| Field | LOOKUP / strict refresh | Open-handle getattr | REPORT | SETATTR / truncate | Unlink-open / reload |
+| --- | --- | --- | --- | --- | --- |
+| Size / EOF | R, with L EOF while unpublished | Same field-scoped overlay; clean R even after backdated mtime | Accepted local EOF to owner/lane reductions; tickets/epoch/CAS validate publication | Explicit requested size must reach owner even if C equals it; drain per-inode report first | Held ghost retains L bytes; clean reload adopts R |
+| Content epoch / generation | R epoch; never copied back from dirty C | R epoch, not local data overlay | Captured publication/ticket identity and current read views; no cache-issued fence | Server TRUNCATE records history; local dropped mappings invalidate clean cache | OPEN/FileID generation and leases supply lifetime; inode row is not the generation certificate |
+| nlink | R; local dual-apply is not a peer link count | R; actual absence gives leased ghost nlink 0 | Does not confer link/unlink authority | Link/unlink commit at owner | Ghost permits existing fd use; never authorizes a new path |
+| mode / uid / gid | R, preserved over dirty EOF | R on success; local fallback is informational only | Not exported as a permission update | Owner mutation is never skipped because C matches | Every new DAC/namespace decision requires strict refresh; failed authority is refused |
+| mtime | R when clean; L mtime while unpublished | Same; timestamps do not prove clean EOF authority | Accepted data time / explicit pinned utimens rules | Requested times, including backwards values, commit at owner | Fresh clean row can be older in wall time |
+| ctime / atime (including nsec) | R | R on success | Atime/time flags use existing publication contract | Explicit requested fields commit at owner | No blanket dirty-row overwrite |
+| parent / name | Binding resolved by LOOKUP; RPC row retained | RPC row; fd identity is independent of names | Cannot rename a file | Namespace RPC / transaction commits; cached type cannot veto it | Drop stale cached binding without destroying a possibly held file's bytes |
+| Packing / chunk mappings | Separate authoritative GETCHUNKS and fence views, not an inode packing flag | Attribute merge never proves data mapping current | Exact object/ticket and pack ledger rules remain | D25 masks and clean-cache invalidation; no tail rewrite | Dirty-body ownership retained; read mapping identity/revision revalidated by existing data path |
+
+`efs_client_stat_ino` and `stat_local` remain local-view interfaces. They may be
+used for staging, counters and already-committed reply fallback; they are not
+permission authority. Strict `stat_refresh` propagates every metadata RPC error.
+Open-fd `stat_open` still asks the RPC on every call (the old local-first comment
+was false). A held ghost may return local attributes on transport failure, but
+new OPEN/ACCESS/parent mutation checks must not use that fallback.
+
+FUSE's ordinary LOOKUP validates parent search permissions from a strict row,
+then resolves the child name at the owner. New OPEN, ACCESS, CREATE, MKDIR,
+UNLINK/RMDIR, SYMLINK, CHOWN, LINK, RENAME, path truncate and the fallocate EOF
+check use strict metadata. Readdir already did so and continues to do so.
+Root-export DAC bypass remains the existing explicit policy, not a cache grant.
+An already-open descriptor retains its POSIX access rights after chmod/chown;
+that is different from admitting a new OPEN. Committed CREATE/MKDIR reply
+fallback does not turn an unavailable RPC into permission for another mutation.
+
+Cache hydration may fail while a valid RPC row remains returnable. Pulling file
+layout is not what authorizes an attribute answer: later reads need their own
+mapping/view checks. Local alias/name tables are not server namespace replicas.
+AW/AX own their index performance; this audit does not alter those indexes.
+
+## Demonstrated differences and repairs under qualification
+
+* **BB1:** `overlay_local_size` replaced a fresh regular inode with the entire
+  dirty cached row. `stat_open` discarded all successful RPC fields except
+  nlink/ctime changes, even when clean. The candidate overlays only unpublished
+  EOF/mtime; clean RPC EOF wins without comparing wall clocks. Fresh mode,
+  ownership, names, epoch and timestamps survive. Existing pending-body EOF
+  protection stays in place.
+* **BB2:** cached equality skipped CHMOD/CHOWN/TRUNCATE RPCs even when a peer
+  had changed the authoritative value. A cached type mismatch also refused
+  UNLINK/RMDIR before asking the owner. Remove those shortcuts. Cached file
+  bindings retired by RMDIR still retain a ghost instead of discarding held
+  bytes. The local staging view cannot decide the operation's outcome.
+* **BB3:** FUSE ACCESS and other DAC/parent checks used `stat_ino`'s local-hit
+  fast path; an injected stale writable row granted ACCESS despite a fresh
+  read-only owner row. Switch those decisions to strict refresh, retaining
+  authority errors (including ACCESS's previous false ENOENT mapping).
+
+Numbers are deliberately pending: concurrent AY/AZ branches have already
+both used K57. The final register must allocate distinct numbers without
+silently overwriting another audit's finding.
+
+## Reproduction, environment and current results
+
+xorinox: unprivileged `maik` (uid 1000), x86_64 Linux
+`6.12.0-211.67.1.el10_2.x86_64`, system libfuse 3.16.2; private trees under
+`~/efs-taskBB-20261029`, raw captures under `~/efs-artifacts/taskBB-20261029`.
+The existing `efs` user's `/data1/efs/intel-mnt` was left untouched. Another
+agent's sanitizer build finished before this task's host builds/tests began.
+No timings are performance claims; no exclusive-host lease is claimed.
+
+Base source `e6856dd08` adds only tests to `74d34d588`; all product inputs are
+unchanged. Build: `make -j8 all tests/faults/efsd` with matching EFS_GIT identity.
+Native Linux base `--case overlay` and `--case mutations` both fail as expected.
+Later component controls additionally exercise cached type refusal and ACCESS
+using the original source, not old stores or mixed-build binaries.
+
+Committed [live matrix](../../tests/live/bb_overlay_authority.py), tools
+`ba57eb170`, invocation on the base:
+
+```sh
+EFS_TRANSPORT=tcp python3 -u ~/efs-taskBB-20261029/tools-ba57eb170/bb_overlay_authority.py \
+  --source ~/efs-taskBB-20261029/base-e6856dd08/src \
+  --output ~/efs-taskBB-20261029/base-matrix-ba57eb170
+```
+
+It starts three private 1 GiB logical members on dynamically held loopback
+ports, two FUSE clients, O_DIRECT fragments, normal recovery/packing and the
+current commands policy; expiry is not enabled. Files range from empty to
+300,000 bytes. RPC-failure checks stop/restart only those owned daemons; clean
+shutdown of both clients is checked after all members return. Eight cases:
+
+| Base case | Verdict |
+| --- | --- |
+| Remote chmod alongside accepted local writes / open-fd stat | FAIL, old mode |
+| Remote CHOWN via trusted management while fd has accepted bytes | FAIL, old uid/gid |
+| Remote rename/link/unlink, fd lifetime and exact accepted bytes | PASS |
+| Same-cached-mode chmod after peer chmod | FAIL, mutation skipped |
+| Same-cached-size truncate after peer extension | FAIL, mutation skipped |
+| Truncate under a clean open reader, then grow masked tail | FAIL, old fstat EOF |
+| Remote directory write permission | PASS |
+| RPC failure refuses new OPEN, recovery preserves exact bytes | PASS |
+
+All original base stores/logs/results are retained. Matrix `cleanup_errors=[]`;
+both owned mounts and daemons retired. Candidate matrix, eviction/reload,
+reordered-response component schedule, POSIX core/peer suites, sanitizers,
+full test gate and ORCD TCP/RDMA are still **NOTRUN**. Do not infer a completed
+BB audit or alpha PASS from the candidate source alone.

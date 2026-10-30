@@ -7,7 +7,7 @@ permission path. A SOURCE file argument makes the same assertions a base control
 from pathlib import Path
 import argparse, os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
-ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--source',type=Path,default=root/'src/client/ops.c');ap.add_argument('--case',choices=('overlay','mutations','all'),default='all');args=ap.parse_args()
+ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--source',type=Path,default=root/'src/client/ops.c');ap.add_argument('--case',choices=('overlay','mutations','unlink','all'),default='all');args=ap.parse_args()
 s=args.source.read_text()
 def fn(signature):
     start=s.index(signature)
@@ -35,6 +35,7 @@ static void pull_file_layout(const struct efs_inode *in){(void)in;pulls++;}
 static void invalidate_file_layout(const struct efs_inode *in,int drop){(void)in;drops+=drop;}
 static int efs_client_rpc_getattr(unsigned ex,efs_ino_t ino,struct efs_inode *out){(void)ex;(void)ino;calls++;*out=reply;return rpc_rc;}
 int efs_client_stat_local(efs_ino_t ino,struct efs_inode *out);
+int efs_client_stat_refresh(efs_ino_t ino,struct efs_inode *out);
 void efs_client_adopt_lookup(const struct efs_inode *in,struct efs_inode *out);
 static int mutations;
 static int setattr_rpc_dual_apply(efs_ino_t ino,uint32_t mask,uint32_t mode,uid_t uid,gid_t gid,uint64_t size,uint64_t mt,uint32_t mn,uint64_t at,uint32_t an){(void)ino;(void)mask;(void)mode;(void)uid;(void)gid;(void)size;(void)mt;(void)mn;(void)at;(void)an;mutations++;return EFS_OK;}
@@ -45,7 +46,17 @@ void efs_export_drop_chunks_from(struct efs_export *e,efs_ino_t ino,uint32_t ci)
 static void efs_rdcache_invalidate(efs_ino_t ino,uint32_t ci){(void)ino;(void)ci;}
 static void efs_dcache_drop_if_clean(efs_ino_t ino,uint32_t ci){(void)ino;(void)ci;}
 static int efs_client_rpc_setattr(unsigned ex,efs_ino_t ino,uint32_t mask,uint32_t mode,uid_t uid,gid_t gid,uint64_t size,uint64_t mt,uint32_t mn,uint64_t at,uint32_t an,struct efs_inode *out){(void)ex;(void)ino;(void)mask;(void)mode;(void)uid;(void)gid;(void)size;(void)mt;(void)mn;(void)at;(void)an;mutations++;*out=reply;return EFS_OK;}
-'''+fn('static int local_inode(')+fn('int efs_client_chmod(')+fn('int efs_client_chown(')+fn('int efs_client_truncate(')+fn('static void adopt_rpc_inode(')+fn('static int inode_mtime_older(')+fn('static void overlay_local_size(')+fn('void efs_client_adopt_lookup(')+fn('int efs_client_stat_local(')+fn('int efs_client_stat_open(')+fn('int efs_client_stat_refresh(')+r'''
+static int efs_client_rpc_unlink(unsigned ex,efs_ino_t p,const char *name,bool directory){(void)ex;(void)p;(void)name;(void)directory;mutations++;return rpc_rc;}
+static void efs_client_stage_pin(efs_ino_t ino){(void)ino;}
+static void efs_client_stage_unpin(efs_ino_t ino){(void)ino;}
+int efs_export_lookup(struct efs_export *e,efs_ino_t p,const char *name,struct efs_inode *out){(void)e;(void)p;(void)name;*out=staged;return EFS_OK;}
+int efs_export_dir_empty(struct efs_export *e,efs_ino_t ino){(void)e;(void)ino;return 1;}
+static int first_child_name_cb(struct efs_export *e,uint64_t slot,void *arg){(void)e;(void)slot;(void)arg;return 0;}
+int efs_export_foreach_child(struct efs_export *e,efs_ino_t p,efs_child_cb cb,void *arg){(void)e;(void)p;(void)cb;(void)arg;return EFS_OK;}
+static int kept_ghost;
+int efs_export_unlink_name_ex(struct efs_export *e,efs_ino_t p,const char *name,int keep){(void)e;(void)p;(void)name;kept_ghost=keep;return EFS_OK;}
+int efs_export_nlink_dec_ex(struct efs_export *e,efs_ino_t ino,struct efs_inode *out,int keep){(void)e;(void)ino;(void)out;(void)keep;return EFS_OK;}
+'''+fn('int efs_client_unlink(')+(fn('static int local_inode(') if 'static int local_inode(' in s else '')+fn('int efs_client_chmod(')+fn('int efs_client_chown(')+fn('int efs_client_truncate(')+fn('static void adopt_rpc_inode(')+(fn('static int inode_mtime_older(') if 'static int inode_mtime_older(' in s else '')+fn('static void overlay_local_size(')+fn('void efs_client_adopt_lookup(')+fn('int efs_client_stat_local(')+fn('int efs_client_stat_open(')+fn('int efs_client_stat_refresh(')+r'''
 static void reset(void){
  present=1;dirty=1;pinned=0;rpc_rc=pulls=drops=calls=0;
  staged=(struct efs_inode){.ino=42,.parent=1,.mode=S_IFREG|0777,.uid=11,.gid=12,.size=8192,.mtime=10,.nlink=1,.content_epoch=1};strcpy(staged.name,"old");
@@ -58,10 +69,16 @@ static void authority(const struct efs_inode *out){
  assert(out->atime==reply.atime);
 }
 int main(int argc,char **argv){struct efs_inode out;assert(argc==2);
+ if(!strcmp(argv[1],"unlink") || !strcmp(argv[1],"all")){
+  reset();rpc_rc=EFS_ERR_BUSY;mutations=0;assert(efs_client_unlink(1,"replaced",true)==EFS_ERR_BUSY && mutations==1);
+  reset();mutations=kept_ghost=0;assert(!efs_client_unlink(1,"replaced",true) && mutations==1 && kept_ghost);
+  if(!strcmp(argv[1],"unlink")){puts("cached type never rejects namespace authority; old file ghost retained PASS");return 0;}
+ }
  if(strcmp(argv[1],"overlay")){
   reset();mutations=0;assert(!efs_client_chmod(42,staged.mode));assert(mutations==1);
   reset();mutations=0;assert(!efs_client_chown(42,staged.uid,staged.gid));assert(mutations==1);
   reset();mutations=0;assert(!efs_client_truncate(42,staged.size));assert(mutations==1);
+  reset();present=0;mutations=0;assert(!efs_client_truncate(42,0) && mutations==1);
   if(!strcmp(argv[1],"mutations")){puts("same cached attributes never suppress authoritative mutations PASS");return 0;}
  }
  reset();efs_client_adopt_lookup(&reply,&out);authority(&out);assert(out.size==8192 && !drops);
@@ -77,6 +94,7 @@ int main(int argc,char **argv){struct efs_inode out;assert(argc==2);
  }
  reset();rpc_rc=EFS_ERR_NOT_FOUND;assert(!efs_client_stat_open(42,&out)&&out.nlink==0&&out.size==8192);
  reset();present=dirty=0;assert(!efs_client_stat_refresh(42,&out));authority(&out);assert(out.size==0);
+ reset();dirty=0;efs_client_adopt_lookup(&reply,&out);authority(&out);assert(out.size==0 && drops==1);
  /* Once no local data owns EOF, a newer peer shrink is adopted. */
  reset();dirty=0;reply.mtime=11;efs_client_adopt_lookup(&reply,&out);authority(&out);assert(out.size==0&&drops==1);
  puts("client metadata authority: dirty EOF isolated from fresh DAC/names/epoch; open-ghost and strict RPC failures PASS");

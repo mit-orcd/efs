@@ -28,7 +28,7 @@ static int virt_kind(uint64_t ino){(void)ino;return 0;}
 static void lookup_memo_mutation_begin(void){assert(!depth);depth++;}
 static void lookup_memo_mutation_end(void){assert(depth==1);depth--;}
 static int efs_append_flush_report(struct fuse_file_info *fi,uint64_t ino){(void)fi;(void)ino;return flush_rc;}
-static int efs_client_stat_ino(uint64_t ino,struct efs_inode *row){stat_calls++;row->ino=ino;row->mode=directory?S_IFDIR:S_IFREG;row->size=row_size;return stat_rc;}
+static int efs_client_stat_refresh(uint64_t ino,struct efs_inode *row){stat_calls++;row->ino=ino;row->mode=directory?S_IFDIR:S_IFREG;row->size=row_size;return stat_rc;}
 static int efs_fuse_truncate_ino(uint64_t ino,off_t size,struct fuse_file_info *fi){(void)ino;(void)size;(void)fi;mutations++;return truncate_rc;}
 static void fuse_reply_err(fuse_req_t req,int err){(void)req;assert(err>=0);assert(!depth && !t_req);replied=err;}
 '''+function('fuse_stat_errno')+function('efs_rc_to_errno')+function('ll_fallocate_run')+r'''

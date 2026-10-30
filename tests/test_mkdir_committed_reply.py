@@ -29,7 +29,7 @@ struct fuse_entry_param {struct efs_inode row;};
 static void *t_req;
 static int create_rc,stat_rc,deny,malformed,stats,creates,errors,replies,last_error,held;
 static uint64_t deadline,observed_deadline;
-static int efs_client_stat_ino(efs_ino_t ino,struct efs_inode *row) {assert(ino==7);stats++;*row=(struct efs_inode){.ino=7,.mode=S_IFDIR|02770,.gid=91};return stat_rc;}
+static int efs_client_stat_refresh(efs_ino_t ino,struct efs_inode *row) {assert(ino==7);stats++;*row=(struct efs_inode){.ino=7,.mode=S_IFDIR|02770,.gid=91};return stat_rc;}
 static int fuse_stat_errno(int rc) {(void)rc;return -EIO;}
 static int check_dir_wx(const struct efs_inode *p) {assert(p->ino==7);return deny?-EACCES:0;}
 static void efs_create_credentials(const struct efs_inode *p,mode_t *m,uid_t *uid,gid_t *gid) {assert(p->ino==7);*m|=S_ISGID;*uid=17;*gid=p->gid;}

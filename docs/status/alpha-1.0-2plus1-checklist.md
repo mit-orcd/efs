@@ -1101,6 +1101,10 @@ failure semantics. No K defect or performance PASS is inferred from duplication.
   replay/interleaving gates using reclaim, orphan and pack-ledger tests. This is
   a correctness audit, not AQ's barrier sharing or AR's duplicate-write avoidance.
 - [ ] **BB — Client metadata overlays versus authoritative metadata.**
+  [Audit and retained controls](bb-overlay-authority-audit-20261029.md): RUNNING
+  on `agent/devel-bb`; xorinox unchanged-base matrix 8 cases / 5 FAIL / 3 PASS.
+  Candidate field-scoped overlays, strict DAC refresh and cache-shortcut removal
+  await live/full/ORCD qualification. The misleading stat-open comment is fixed.
   Local `src/meta/metadata.c` inode/name/child/alias indexes and mutators coexist
   with Raft-backed rows in `src/meta/meta_apply.c`. They are not two equivalent
   authoritative replicas. `src/client/ops.c::efs_client_adopt_lookup` adopts an

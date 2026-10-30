@@ -1,5 +1,11 @@
 # Project status — work queue and evidence
 
+[Task BB — client overlay authority](bb-overlay-authority-audit-20261029.md):
+**RUNNING**, branch `agent/devel-bb`, base `74d34d588`. Source-backed authority
+table and retained xorinox base matrix (8 cases: 5 FAIL / 3 PASS); candidate
+repairs restrict data overlays, remove cached mutation shortcuts and refresh
+DAC authority. Candidate/live/full/ORCD qualification pending; no closure.
+
 [K55 — slow storage COMMIT](k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
 source `5185bfcd3`; merged into devel (wave 32, `4e4b7ec75`). Attributed K35 fix passes native/index,

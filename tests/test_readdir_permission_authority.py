@@ -28,6 +28,7 @@ static struct efs_inode fresh,stale;
 static int fresh_calls,local_calls,lists,result;
 static int virt_kind(fuse_ino_t ino){(void)ino;return 0;}
 static int commands_enabled(void){return 0;}
+static int command_script(const char *term){(void)term;return 0;}
 static efs_ino_t virt_parent(fuse_ino_t ino){return ino;}
 static int virtual_access(efs_ino_t ino){(void)ino;return 0;}
 static const struct fuse_ctx *ll_ctx(void){return &context;}
@@ -41,8 +42,9 @@ static int efs_client_stat_refresh(efs_ino_t ino,struct efs_inode *p){(void)ino;
 static int efs_client_rpc_readdir_cur(efs_export_id_t id,efs_ino_t ino,struct efs_inode *ents,uint32_t*n,uint32_t*src,char*cur,uint32_t*done){
  (void)id;(void)ino;(void)ents;(void)src;(void)cur;lists++;*n=0;*done=1;return 0;
 }
+static int vq_lookup(uint64_t ino,efs_ino_t *parent,char *term,size_t n){(void)ino;(void)parent;(void)term;(void)n;return -1;}
 static int readdir_collect_page(struct readdir_collect_arg*c,const struct efs_inode*p,uint32_t n){(void)c;(void)p;(void)n;return 0;}
-'''+s[a:b]+r'''
+'''+s[a:b]+s[s.index('static int efs_fuse_access_ino('):s.index('\n}',s.index('static int efs_fuse_access_ino('))+2]+r'''
 static void reset(void){fresh_calls=local_calls=lists=result=0;context.uid=1001;fresh=(struct efs_inode){.ino=99,.uid=1001,.gid=1001,.mode=S_IFDIR|0300};stale=(struct efs_inode){.ino=99,.uid=1001,.gid=1001,.mode=S_IFDIR|0755};}
 int main(void){struct readdir_collect_arg col={0};struct efs_inode row;
  reset();assert(efs_fuse_readdir_ino(99,&col,&row)==-EACCES);assert(fresh_calls==1&&!local_calls&&!lists);
@@ -52,7 +54,11 @@ int main(void){struct readdir_collect_arg col={0};struct efs_inode row;
  reset();result=EFS_ERR_BUSY;assert(efs_fuse_readdir_ino(99,&col,&row)==-EBUSY&&!lists);
  reset();result=EFS_ERR_ACCES;assert(efs_fuse_readdir_ino(99,&col,&row)==-EACCES&&!lists);
  reset();fresh.mode=S_IFREG|0400;assert(efs_fuse_readdir_ino(99,&col,&row)==-ENOTDIR&&!lists);
- puts("readdir: fresh DAC before enumeration, stale grants/refusals, root/export-root and authority failures PASS");
+ reset();fresh.mode=S_IFREG|0400;stale.mode=S_IFREG|0600;
+ assert(efs_fuse_access_ino(99,W_OK)==-EACCES && fresh_calls==1 && !local_calls);
+ reset();result=EFS_ERR_BUSY;assert(efs_fuse_access_ino(99,F_OK)==-EBUSY && !local_calls);
+ reset();result=EFS_ERR_IO;assert(efs_fuse_access_ino(99,F_OK)==-EIO && !local_calls);
+ puts("readdir/access: fresh DAC before enumeration, stale grants/refusals, root/export-root and authority failures PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-readdir-authority-') as d:

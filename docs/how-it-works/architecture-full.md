@@ -1612,6 +1612,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**RUNNING**, branch `agent/devel-bb`, base `74d34d588`. Source-backed authority
+table and retained xorinox base matrix (8 cases: 5 FAIL / 3 PASS); candidate
+repairs restrict data overlays, remove cached mutation shortcuts and refresh
+DAC authority. Candidate/live/full/ORCD qualification pending; no closure.
+
+[K55 — slow storage COMMIT](../status/k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
 source `5185bfcd3`; merged into devel (wave 32, `4e4b7ec75`). Attributed K35 fix passes native/index,
 ASan/UBSan/leak, TSan, the old-source negative control, four planned TCP/RDMA

@@ -99,6 +99,7 @@ static int efs_append_flush_report(struct fuse_file_info *fi,efs_ino_t ino) {
 static int efs_client_stat_ino(efs_ino_t ino,struct efs_inode *out) {
     (void)ino;*out=current;return stat_failure ? EFS_ERR_IO : EFS_OK;
 }
+static int efs_client_stat_refresh(efs_ino_t ino,struct efs_inode *out) {return efs_client_stat_ino(ino,out);}
 static int efs_fuse_truncate_ino(fuse_ino_t ino,off_t size,struct fuse_file_info *fi) {
     (void)ino;(void)fi;check_active();current.size=size;return 0;
 }

@@ -25,7 +25,7 @@ static int efs_client_rpc_past_deadline(void) {return deadline&&now>=deadline;}
 static int virt_kind(fuse_ino_t ino) {(void)ino;return 0;}
 static const struct fuse_ctx *ll_ctx(void) {return NULL;}
 static int check_access(const struct efs_inode *p,uid_t u,gid_t g,int m) {(void)p;(void)u;(void)g;(void)m;return 0;}
-static int efs_client_stat_ino(efs_ino_t ino,struct efs_inode *p) {(void)ino;p->mode=0100644;seen=deadline;return stat_rc;}
+static int efs_client_stat_refresh(efs_ino_t ino,struct efs_inode *p) {(void)ino;p->mode=0100644;seen=deadline;return stat_rc;}
 static int efs_rc_to_errno(int rc) {return rc==EFS_OK?0:rc==EFS_ERR_BUSY?-EAGAIN:-EIO;}
 static int efs_dcache_flush_ino(efs_ino_t ino) {(void)ino;flushes++;seen=deadline;return flush_rc;}
 static int efs_client_truncate(efs_ino_t ino,uint64_t size) {(void)ino;(void)size;truncates++;return EFS_OK;}

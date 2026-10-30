@@ -1023,18 +1023,18 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
          * the owner is authoritative, including an older setattr. A
          * pinned dirty row must not take a newer REPORT echo ("now"). */
         int take_mtime = 0;
-        if (mtime_pinned)
+        if (mtime_pinned && local_dirty)
             take_mtime = 0;
         else if (!local_dirty && times_differ)
             take_mtime = 1;
         else if (newer)
             take_mtime = 1;
-        /* Shrink only on a newer owner (peer truncate). An older
-         * setattr mtime must not pull size 0 from a lagging owner
-         * after dirty cleared — that zeroed basic_dd_rw / O_TRUNC. */
+        /* A fresh clean EOF does not need a newer wall-clock mtime:
+         * utimens can move time backwards. Pending data ownership above,
+         * rather than a timestamp guess, protects an unpublished EOF. */
         int grow = rpc->size > local.size;
         int same = rpc->size == local.size;
-        int shrink = rpc->size < local.size && !local_dirty && newer;
+        int shrink = rpc->size < local.size && !local_dirty;
         /* Owner nlink is cluster-shared. Dual-apply of this client's
          * link/unlink only bumps locally; a peer's concurrent link is
          * missing until GETATTR/LOOKUP. Merge it here without treating
@@ -1090,17 +1090,55 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
     }
 }
 
-/* getattr for an open fd (and any ino-keyed stat). Path lookup already
- * prefers the local row after adopt; the FUSE getattr(fi->fh) path used
- * to return the RPC row raw. The owner learns size via async
- * REPORT_CHUNKS, so that row is often still size 0 after a same-fd
- * write. The kernel then sets i_size=0 (attr_timeout=0) and never
- * calls .read — POSIX same-fd / unlink-open / chmod-open all empty.
- *
- * ecopy (and every create/write/close) getattr's the open fd ~2x per
- * file. The RPC was discarded whenever a local row existed — ~2 RTTs
- * of pure wait on the dest owner's shard lock. Local-first: RPC only
- * on a miss (peer-created ino, or a cold table). */
+int efs_client_stat_local(efs_ino_t ino, struct efs_inode *out)
+{
+    if (!out || !ino)
+        return EFS_ERR_INVAL;
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    int rc = efs_export_get_inode(&g_client.export, ino, out);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+    return rc == 0 ? EFS_OK : EFS_ERR_NOT_FOUND;
+}
+
+/* Pending local writes retain their EOF/mtime until publication. The RPC
+ * supplies every other attribute. more=1 is a walk intermediate; directories
+ * never receive a local data overlay. */
+static void overlay_local_size(struct efs_inode *child, int more)
+{
+    /* Directory attrs are authoritative: local namespace dirtiness does
+     * not grant ownership of parent times after a committed rename. */
+    if (efs_mode_is_dir(child->mode))
+        return;
+    int dirty = efs_client_ino_has_unpublished_data(child->ino);
+    (void)more;
+    if (!dirty)
+        return;
+    efs_ino_t lk = child->parent ? child->parent : child->ino;
+    struct efs_inode local;
+    int have;
+    efs_client_lock_dir(lk);
+    pthread_mutex_lock(&g_client.idx_mu);
+    have = (efs_export_get_inode(&g_client.export, child->ino, &local) == 0);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(lk);
+    if (have && dirty) {
+        /* Pending writes own these data attributes, not an entire inode.
+         * Replacing the row also restored stale DAC, name/parent and epoch
+         * fields over a successful authority read. */
+        child->size = local.size;
+        child->mtime = local.mtime;
+        child->mtime_nsec = local.mtime_nsec;
+    }
+}
+
+/* Open-handle getattr always asks the authority. Only locally accepted data
+ * (EOF/mtime while unpublished) overlays that
+ * reply. Permissions, ownership, names, link count and content epoch are never
+ * supplied by dirty data. On transport failure a held open file can still
+ * expose its local data row; permission/namespace callers must use the strict
+ * stat_refresh path, which propagates authority failures. */
 int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out)
 {
     struct efs_inode local, rpc;
@@ -1145,7 +1183,12 @@ int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out)
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
     }
-    *out = local;
+    if (rpc_ok == EFS_OK) {
+        *out = rpc;
+        overlay_local_size(out, 0);
+    } else {
+        *out = local; /* the leased unlink-open ghost */
+    }
     return EFS_OK;
 }
 
@@ -1191,57 +1234,6 @@ int efs_client_stat_refresh(efs_ino_t ino, struct efs_inode *out)
         return grc;
     efs_client_adopt_lookup(&rpc, out);
     return EFS_OK;
-}
-
-/* Is a's mtime strictly older than b's? */
-static int inode_mtime_older(const struct efs_inode *a,
-                             const struct efs_inode *b)
-{
-    if (a->mtime != b->mtime)
-        return a->mtime < b->mtime;
-    return a->mtime_nsec < b->mtime_nsec;
-}
-
-int efs_client_stat_local(efs_ino_t ino, struct efs_inode *out)
-{
-    if (!out || !ino)
-        return EFS_ERR_INVAL;
-    efs_client_lock_dir(ino);
-    pthread_mutex_lock(&g_client.idx_mu);
-    int rc = efs_export_get_inode(&g_client.export, ino, out);
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(ino);
-    return rc == 0 ? EFS_OK : EFS_ERR_NOT_FOUND;
-}
-
-/* Writer: local size/pack is newer than the owner until REPORT.
- * Peer remount stubs must not clobber GETATTR. more=1 for a walk
- * intermediate (directories; no size overlay). */
-static void overlay_local_size(struct efs_inode *child, int more)
-{
-    /* Directory attrs are authoritative: local namespace dirtiness does
-     * not grant ownership of parent times after a committed rename. */
-    if (efs_mode_is_dir(child->mode))
-        return;
-    int dirty = efs_client_ino_has_unpublished_data(child->ino);
-    int want_local = dirty ||
-                     (!more && !efs_mode_is_dir(child->mode));
-    if (!want_local)
-        return;
-    efs_ino_t lk = child->parent ? child->parent : child->ino;
-    struct efs_inode local;
-    int have;
-    efs_client_lock_dir(lk);
-    pthread_mutex_lock(&g_client.idx_mu);
-    have = (efs_export_get_inode(&g_client.export, child->ino, &local) == 0);
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(lk);
-    if (have && dirty) {
-        *child = local;
-    } else if (have && local.size > child->size &&
-               !inode_mtime_older(&local, child)) {
-        child->size = local.size;
-    }
 }
 
 void efs_client_adopt_lookup(const struct efs_inode *rpc, struct efs_inode *out)
@@ -1573,37 +1565,16 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
     return EFS_OK;
 }
 
-static int local_inode(efs_ino_t ino, struct efs_inode *out)
-{
-    int rc;
-    efs_client_lock_dir(ino);
-    pthread_mutex_lock(&g_client.idx_mu);
-    rc = efs_export_get_inode(&g_client.export, ino, out);
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(ino);
-    return rc;
-}
-
 int efs_client_chmod(efs_ino_t ino, uint32_t mode)
 {
-    struct efs_inode cur;
-    if (local_inode(ino, &cur) == 0 &&
-        (cur.mode & 07777) == (mode & 07777))
-        return EFS_OK;
+    /* A matching cached value does not prove a peer has not changed it. */
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_MODE, mode, 0, 0, 0, 0, 0,
                                   0, 0);
 }
 
 int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid)
 {
-    struct efs_inode cur;
     uint32_t mask = 0;
-    if (local_inode(ino, &cur) == 0) {
-        if (uid != (uid_t)-1 && cur.uid == uid)
-            uid = (uid_t)-1;
-        if (gid != (gid_t)-1 && cur.gid == gid)
-            gid = (gid_t)-1;
-    }
     if (uid != (uid_t)-1)
         mask |= EFS_SETATTR_UID;
     if (gid != (gid_t)-1)
@@ -1637,15 +1608,19 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
 {
     efs_client_lock_dir(ino);
     struct efs_inode inode;
-    if (efs_export_get_inode(&g_client.export, ino, &inode) != 0) {
-        efs_client_unlock_dir(ino);
-        return EFS_ERR_NOT_FOUND;
+    int cached = efs_export_get_inode(&g_client.export, ino, &inode) == 0;
+    efs_client_unlock_dir(ino);
+    if (!cached) {
+        /* Eviction is not namespace absence. Refill from authority within
+         * the inherited budget; never invent ENOENT from a cache miss. */
+        int rc = efs_client_stat_refresh(ino, &inode);
+        if (rc != EFS_OK)
+            return rc;
     }
     uint64_t old_size = inode.size;
-    efs_client_unlock_dir(ino);
 
-    if (size == old_size)
-        return EFS_OK;
+    /* Even equal local EOF is not an authoritative no-op: a peer can have
+     * extended the file since this client cached that size. */
 
     /* D25: no tail rewrite. The server's single TRUNCATE entry records the
      * boundary in the inode's history, which masks the discarded bytes;
@@ -1795,18 +1770,13 @@ static int first_child_name_cb(struct efs_export *ex, uint64_t slot, void *arg)
 
 int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
 {
-    /* Validate type locally (and to surface ENOENT/EISDIR before the RPC). */
+    /* The local dentry is only a cleanup/pinning hint: a peer can have
+     * replaced the name with another inode or type. The owner decides. */
     efs_client_lock_dir(parent);
     pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode ino;
     int lrc = efs_export_lookup(&g_client.export, parent, name, &ino);
     if (lrc == 0) {
-        /* Local hit: validate type + refuse a non-empty rmdir before the RPC. */
-        if (efs_mode_is_dir(ino.mode) != is_dir) {
-            pthread_mutex_unlock(&g_client.idx_mu);
-            efs_client_unlock_dir(parent);
-            return EFS_ERR_INVAL;
-        }
         /* rmdir: the local table may still list a child whose removal
          * committed elsewhere (another client, or a retry answered from the
          * op-id window) — refusing here made `rmdir` ENOTEMPTY for minutes
@@ -1814,7 +1784,8 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
          * `dir_deep_nesting`, fcstor012 Sep 30, fcstor009 Oct 1). The
          * server is authoritative (EFS_INODE_RPC_NOT_EMPTY); log the
          * stale view and ask it. */
-        if (is_dir && !efs_export_dir_empty(&g_client.export, ino.ino)) {
+        if (is_dir && efs_mode_is_dir(ino.mode) &&
+            !efs_export_dir_empty(&g_client.export, ino.ino)) {
             const char *child = NULL;
             efs_export_foreach_child(&g_client.export, ino.ino,
                                      first_child_name_cb, &child);
@@ -1849,7 +1820,9 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
     /* Keep a nlink=0 ghost so an already-open fd can still get_inode.
      * Sharded unlink_name_ex now honors keep_last when the dentry slot is
      * the canonical row (co-located file create). */ 
-    efs_export_unlink_name_ex(&g_client.export, parent, name, is_dir ? 0 : 1);
+    /* Even RMDIR may be retiring a stale local file binding. Keep a file
+     * ghost rather than dropping accepted bytes on its still-open handle. */
+    efs_export_unlink_name_ex(&g_client.export, parent, name, 1);
     /* Remaining hardlink rows keep the old nlink unless we nlink_dec the
      * same way the server does — getattr is local after dual-apply
      * (entry_timeout=0 still hits the snapshot). */
