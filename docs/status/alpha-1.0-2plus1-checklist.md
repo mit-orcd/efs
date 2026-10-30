@@ -724,7 +724,15 @@ inspection of the downstream handlers, establish the sequences below. They are
 optimization candidates, not measured bottlenecks or permission to delete
 correctness checks. No K count, live gate or failure verdict changes.
 
-- [ ] **AN — PUT storage authority: batch status requests and avoid duplicate proof work.**
+- [x] **AN — PUT storage authority: measure status requests and duplicate proof work.**
+  **COMPLETE / measured, no STATUS optimization:** [AN evidence](an-put-status-batching-20261028.md),
+  `agent/devel-task-an` from `9c4bfd171`; user-approved isolated fcstor014.
+  Exact f7 product: full 548/0 FAIL/0 NOTRUN, strict hardware audit 9/9,
+  K35/K33 TCP/RDMA and W166 TCP 5/5; extra W130/K48 5/5 each. Precise 36-cell
+  RPC/timing matrix plus 36 observer controls reviewed, medians/ranges on AN
+  and four-counter table on K32. No demonstrated STATUS-specific benefit;
+  authority checks unchanged. Observer CPU/GETATTR effects and single-host,
+  fixed-rate limits explicit. Original FAILs/fixtures retained; no release PASS.
   Every fragment in `src/server/put_upload.c::server_put_upload` submits an exact
   `PUT_TICKET_STATUS` before storage admission. In
   `src/server/raft_host.c::server_raft_host_submit`, a nonleader delegates that
@@ -752,6 +760,7 @@ correctness checks. No K count, live gate or failure verdict changes.
   Run normal and degraded multi-client writes on TCP and RDMA, measuring RPCs
   per fragment, quorum rounds, batching wait and write p95/p99. Bound queue size
   and residence time; no low-load batching delay may break existing deadlines.
+  **Wave 38 coordinator note:** only the evidence and measurement scripts were merged. AN's branch also carries product repairs (K35 and K55-style COMMIT overlap in `data_commit.c`, directory-migration visibility in `raft_host.c`, GETCHUNKS record clearing, a store.c ENOENT parent retry) that overlap work already on devel; they are being checked against current devel in a separate port, not merged here.
 - [ ] **AO — Directory listing: amortize serial page RPCs and repeated proofs.**
   `src/client/efs_fuse.c::efs_fuse_readdir_ino` first refreshes the parent via
   `efs_client_stat_refresh` and checks current permissions, then synchronously
