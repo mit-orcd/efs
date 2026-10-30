@@ -669,7 +669,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_bench_latency
 	./tests/test_store_overwrite
 	./tests/test_directory_sync_group
-	python3 tests/test_meta_flush_batch.py
+	python3 tests/test_meta_flush_batch.py && python3 tests/test_kv_flush_finish.py
 	./tests/test_put_ticket
 	./tests/test_put_orphan
 	./tests/test_store_gc
