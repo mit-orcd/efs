@@ -310,8 +310,8 @@ static int fence_submit(void *ctx, const uint8_t *p, uint32_t n, struct efs_msg_
     }
     case EFS_MD_SESS_ACK:
         assert(n == 1 + EFS_MD_SESS_ACK_LEN);
-        return out->rc = efs_session_ack_fence_word(kv, uuid, f1,
-                                                    (uint64_t)rd32be(p + 23) << 32 | rd32be(p + 27));
+        return out->rc = efs_session_ack_fence_word(kv, uuid, f1, f2,
+                                                    (uint64_t)rd32be(p + 27) << 32 | rd32be(p + 31));
     case EFS_MD_SESS_FINISH: return out->rc = efs_session_finish_fence_epoch(kv, uuid, f1);
     case EFS_MD_SESS_LEASE_LOCK_NEXT: out->salt = 1; return out->rc = EFS_OK;
     }

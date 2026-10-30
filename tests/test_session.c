@@ -1413,13 +1413,21 @@ static void test_epoch_bound_finish(void)
     struct efs_kv *kv=efs_kv_mem_create();CHECK(kv,"epoch finish kv");
     uint8_t uuid[16]={0x71};struct efs_session_rec row;
     CHECK(efs_session_create(kv,uuid,1)==EFS_OK,"epoch finish session");
+    CHECK(efs_session_register(kv,uuid,1,0)==EFS_OK,"epoch ACK participant");
     CHECK(efs_session_begin_fence(kv,uuid)==EFS_OK,"epoch two begins");
+    CHECK(efs_session_ack_fence_word(kv,uuid,3,0,1)==EFS_ERR_STALE,"future ACK refused");
+    CHECK(efs_session_ack_fence_word(kv,uuid,2,0,1)==EFS_OK,"exact epoch ACK");
     CHECK(efs_session_finish_fence_epoch(kv,uuid,3)==EFS_ERR_STALE,"future finish refused");
     CHECK(efs_session_finish_fence_epoch(kv,uuid,2)==EFS_OK,"exact epoch finishes");
     CHECK(efs_session_finish_fence_epoch(kv,uuid,2)==EFS_OK,"exact epoch retry idempotent");
+    CHECK(efs_session_ack_fence_word(kv,uuid,2,0,1)==EFS_OK,"finished exact epoch ACK retry");
     CHECK(efs_session_begin_fence(kv,uuid)==EFS_OK,"next epoch begins");
+    CHECK(efs_session_ack_fence_word(kv,uuid,2,0,1)==EFS_ERR_STALE,"delayed ACK cannot acknowledge later barrier");
+    CHECK(efs_session_get(kv,uuid,&row)==EFS_OK && !row.acked[0],"delayed ACK leaves bitmap clear");
     CHECK(efs_session_finish_fence_epoch(kv,uuid,2)==EFS_ERR_STALE,"delayed finish cannot complete later barrier");
     CHECK(efs_session_get(kv,uuid,&row)==EFS_OK && row.epoch==3 && row.state==EFS_SESSION_FENCING,"later barrier remains fencing");
+    CHECK(efs_session_finish_fence_epoch(kv,uuid,3)==EFS_ERR_BUSY,"later barrier still needs fresh ACK");
+    CHECK(efs_session_ack_fence_word(kv,uuid,3,0,1)==EFS_OK,"later exact ACK");
     CHECK(efs_session_finish_fence_epoch(kv,uuid,3)==EFS_OK,"later exact epoch completes");
     efs_kv_mem_free(kv);
 }

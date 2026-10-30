@@ -2892,10 +2892,11 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_ACK: {
         if (clen != EFS_MD_SESS_ACK_LEN)
             return EFS_ERR_UNSUPPORTED;
-        uint32_t word = rd32be(cmd + 18);
-        uint64_t mask = rd64be(cmd + 22);
+        uint32_t epoch = rd32be(cmd + 18);
+        uint32_t word = rd32be(cmd + 22);
+        uint64_t mask = rd64be(cmd + 26);
         shard = mask ? word * 64u + (uint32_t)__builtin_ctzll(mask) : 0;
-        rc = efs_session_ack_fence_word(h->kv, uuid, word, mask);
+        rc = efs_session_ack_fence_word(h->kv, uuid, epoch, word, mask);
         break;
     }
     case EFS_MD_SESS_FINISH:
@@ -5877,6 +5878,12 @@ static int host_admit(struct efs_raft_host *h, struct efs_raft *r,
         return EFS_OK;
     if (cmd && clen && (cmd[0] == EFS_MD_CMD_DECIDE || cmd[0] == EFS_MD_CMD_RESOLVE ||
                         cmd[0] == EFS_MD_CMD_DROP ||
+                        /* Revocation stops an existing session's growth and
+                         * is prerequisite to reclaiming its owned bodies.
+                         * BEGIN uses cleanup's reserved quarter, never new
+                         * work's soft admission. Raft's hard cap still wins. */
+                        (cmd[0] == EFS_MD_CMD_SESSION && clen == HOST_SESS_HDR_LEN &&
+                         cmd[1] == EFS_MD_SESS_BEGIN) ||
                         (cmd[0] == EFS_MD_CMD_TXN_BATCH && clen > 1 &&
                          cmd[1] == EFS_MD_CMD_RESOLVE)))
         return EFS_OK;
@@ -15429,8 +15436,8 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
     }
     if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION && cmd[1] == EFS_MD_SESS_ACK &&
-        (clen != EFS_MD_SESS_ACK_LEN || !rd64be(cmd + 22) ||
-         rd32be(cmd + 18) >= EFS_SESSION_BITS / 64u ||
+        (clen != EFS_MD_SESS_ACK_LEN || rd32be(cmd + 18) < 2 || !rd64be(cmd + 26) ||
+         rd32be(cmd + 22) >= EFS_SESSION_BITS / 64u ||
          group != efs_raft_shard_group(efs_kv_session_shard(cmd + 2)))) {
         out->rc = EFS_ERR_INVAL;
         return;
@@ -15593,6 +15600,22 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                         "(key under another transaction's intent), retry certified (%u)\n",
                         rd32be(cmd+22),rd32be(cmd+18),n+1);
             out->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return;
+        }
+        if (rc==EFS_ERR_BUSY && batch_idx && batch_term) {
+            /* The bounded exact-entry wait may expire after submission.
+             * Do not repeat it or invent its verdict. Re-run the existing
+             * owner-floor + ReadIndex selection instead: an empty phase
+             * is independent completion proof. The revoked epoch cannot
+             * acquire new ownership, and a late exact cleanup batch only
+             * removes that epoch's rows. Nonempty or failed reads leave
+             * the original ambiguous BUSY and entry index unchanged. */
+            uint32_t remaining=0;
+            if (host_pack_session_cleanup(h,cmd,clen,group,&hint,
+                                           cleanup_cmd,&remaining)==EFS_OK && !remaining) {
+                struct host_view v;host_view_get(h,group,&v);
+                out->rc=EFS_OK;out->salt=1;out->index=v.applied;
+                out->leader_hint=hint;return;
+            }
         }
         if (rc==EFS_ERR_BUSY)
             fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u idx=%llu BUSY "

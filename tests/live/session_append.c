@@ -38,8 +38,11 @@ static struct efs_msg_raft_mkfs_reply rpc(const uint8_t *p,unsigned n,int expect
 }
 static void session(unsigned sub,unsigned group,unsigned value,unsigned target,unsigned length,int expected)
 {
-    uint8_t p[27]={0};p[0]=group;p[1]=EFS_MD_CMD_SESSION;p[2]=sub;
-    memcpy(p+3,uuid,16);be(p+19,value,4);be(p+23,target,4);rpc(p,length+1,expected);
+    uint8_t p[35]={0};p[0]=group;p[1]=EFS_MD_CMD_SESSION;p[2]=sub;
+    memcpy(p+3,uuid,16);be(p+19,value,4);be(p+23,target,4);
+    if(sub==EFS_MD_SESS_ACK){be(p+19,2,4);be(p+23,value/64u,4);be(p+27,1ull<<(value%64u),8);length=EFS_MD_SESS_ACK_LEN;}
+    if(sub==EFS_MD_SESS_FENCE_LOC){be(p+23,target/64u,4);be(p+27,1ull<<(target%64u),8);length=EFS_MD_SESS_FENCE_LOC_LEN;}
+    rpc(p,length+1,expected);
 }
 static struct efs_msg_raft_mkfs_reply next(int expected)
 {

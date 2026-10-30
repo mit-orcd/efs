@@ -27,7 +27,7 @@ static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t 
  assert(rpc->ctx==&owned);memset(r,0,sizeof(*r));r->leader_hint=1;
  if(p[1]==EFS_MD_REQ_SESSION_CLEANUP_PROBE){assert(n==34&&finished);return EFS_ERR_BUSY;} /* falls back per shard */
  if(p[2]==EFS_MD_SESS_BEGIN){assert(n==19);return 0;}
- if(p[2]==EFS_MD_SESS_ACK){assert(n==31&&read32(p+19)==0&&!read32(p+23)&&read32(p+27)==1u<<7&&barriers==2);return 0;}
+ if(p[2]==EFS_MD_SESS_ACK){assert(n==35&&read32(p+19)==2&&read32(p+23)==0&&!read32(p+27)&&read32(p+31)==1u<<7&&barriers==2);return 0;}
  assert(p[2]==0&&n==23);uint32_t sh=read32(p+19);
  r->salt=sh==31?2|((uint64_t)(finished?EFS_SESSION_ACTIVE:EFS_SESSION_FENCING)<<32):sh==EFS_SESSION_BITS?1u<<7:0;
  return 0;
@@ -41,8 +41,14 @@ int efs_session_storage_barrier(const struct efs_session_rpc *rpc,const uint8_t 
  if(mode==3)return EFS_ERR_STALE;
  finished=1;return 0;
 }
-int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,const uint8_t uuid[16],uint32_t epoch,uint32_t shard,int app,struct efs_msg_raft_mkfs_reply *r){
- (void)r;assert(rpc->ctx==&owned&&uuid[0]==42&&epoch==1&&shard==7&&finished);assert(app==(int)cleanups);cleanups++;return 0;
+int efs_session_cleanup_bounded(const struct efs_session_rpc *rpc,const uint8_t uuid[16],uint32_t epoch,uint32_t shard,int app,struct efs_msg_raft_mkfs_reply *r,uint64_t *reason){
+ if(reason)*reason=0;
+ (void)r;assert(rpc->ctx==&owned&&uuid[0]==42&&epoch==1&&shard==7&&finished);assert(app==(int)cleanups);cleanups++;
+ if(app && (mode==4 || mode==5)){
+  r->rc=EFS_ERR_NET;if(mode==4 && reason)*reason=EFS_MD_SESSION_APPEND_WAIT_OPEN;
+  return EFS_ERR_BUSY;
+ }
+ return 0;
 }
 uint64_t efs_net_deadline_ms(void){return 0;}
 void efs_net_set_deadline_ms(uint64_t d){(void)d;}
@@ -50,6 +56,12 @@ void efs_net_set_deadline_ms(uint64_t d){(void)d;}
 int main(void){uint8_t uuid[16]={42};const struct efs_session_rpc rpc={&owned,NULL,0,NULL};struct efs_session_revoke_result res;
  assert(!efs_session_revoke(&rpc,uuid,&res)&&barriers==3&&cleanups==2);
  for(mode=1;mode<=3;mode++){barriers=cleanups=finished=0;assert(efs_session_revoke(&rpc,uuid,&res)!=EFS_OK&&!cleanups&&!finished);}
+ for(mode=4;mode<=5;mode++){
+  barriers=cleanups=finished=0;
+  assert(efs_session_revoke(&rpc,uuid,&res)==EFS_ERR_BUSY && finished && cleanups==2);
+  assert(!strcmp(res.phase,"cleanup")&&res.shard==7&&res.last.rc==EFS_ERR_NET);
+  assert(!strcmp(res.reason,mode==4?"append-open-by-other-session":"uncertified-busy"));
+ }
  puts("Session fence CLI: exact epoch participant and FINISH barriers; BUSY/STALE never report completion or start cleanup PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-session-finish-') as td:

@@ -121,10 +121,10 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         rc = efs_session_fence_local(s->disk, shard, uuid, epoch);
         break;
     case EFS_MD_SESS_ACK:
-        if (clen < 22)
-            break;
-        shard = efs_load_be32(cmd + 18);
-        rc = efs_session_ack_fence(s->disk, uuid, shard);
+        if (clen != EFS_MD_SESS_ACK_LEN)
+            return EFS_ERR_UNSUPPORTED;
+        rc = efs_session_ack_fence_word(s->disk, uuid, efs_load_be32(cmd + 18),
+                                        efs_load_be32(cmd + 22), efs_load_be64(cmd + 26));
         break;
     case EFS_MD_SESS_FINISH:
         rc = efs_session_finish_fence(s->disk, uuid);
@@ -348,8 +348,10 @@ int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until)
         if (!efs_session_bit_get(rec.touched, i))
             continue;
         n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_ACK, uuid);
-        efs_store_be32(cmd + n, i);
-        n += 4;
+        efs_store_be32(cmd + n, rec.epoch);
+        efs_store_be32(cmd + n + 4, i / 64u);
+        efs_store_be64(cmd + n + 8, 1ull << (i % 64u));
+        n += 16;
         rc = propose_sess(sim, ssh, cmd, n);
         if (rc != EFS_OK)
             return rc;

@@ -182,11 +182,11 @@ static void namespace_guard(unsigned port)
 {
  uint8_t uuid[16]={71},tx[2][16]={{72},{73}};be(uuid+8,(uint64_t)getpid(),8);
  unsigned shard=7;uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(uuid));
- uint8_t lane=efs_raft_shard_group(shard),session[27]={owner,EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+ uint8_t lane=efs_raft_shard_group(shard),session[35]={owner,EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
  memcpy(session+3,uuid,16);be(session+19,1,4);be(session+23,shard,4);
  owner_rpc(port,session,23,EFS_OK);
- session[2]=EFS_MD_SESS_REGISTER;owner_rpc(port,session,sizeof(session),EFS_OK);
- session[0]=lane;session[2]=EFS_MD_SESS_ESTABLISH;owner_rpc(port,session,sizeof(session),EFS_OK);
+ session[2]=EFS_MD_SESS_REGISTER;owner_rpc(port,session,27,EFS_OK);
+ session[0]=lane;session[2]=EFS_MD_SESS_ESTABLISH;owner_rpc(port,session,27,EFS_OK);
  uint8_t key[EFS_KV_KEY_MAX];uint32_t kl=0;assert(!efs_kv_key_opid(shard,uuid,1,key,&kl));
  struct efs_opid_req q={.id={.session_epoch=1}};memcpy(q.id.client_uuid,uuid,16);
  struct efs_opid_reply reply={.rc=EFS_OK,.ino=123};uint8_t prepare[256]={lane,EFS_MD_CMD_PREPARE,EFS_TXN_REDUCE_OPID};
@@ -194,7 +194,7 @@ static void namespace_guard(unsigned port)
  for(unsigned i=0;i<2;i++){memcpy(prepare+3,tx[i],16);q.id.seq=i+1;efs_txn_encode_opid(prepare+26+kl,&q,&reply);
   owner_rpc(port,prepare,26+kl+EFS_TXN_REDUCE_OPID_WIRE,EFS_OK);}
  session[0]=owner;session[2]=EFS_MD_SESS_BEGIN;owner_rpc(port,session,23,EFS_OK);
- session[0]=lane;session[2]=EFS_MD_SESS_FENCE_LOC;be(session+19,2,4);
+ session[0]=lane;session[2]=EFS_MD_SESS_FENCE_LOC;be(session+19,2,4);be(session+23,shard/64u,4);be(session+27,1ull<<(shard%64u),8);
  owner_rpc(port,session,sizeof(session),EFS_ERR_BUSY);
  uint8_t resolve[23]={lane,EFS_MD_CMD_RESOLVE};be(resolve+18,shard,4);
  for(unsigned i=0;i<2;i++){memcpy(resolve+2,tx[i],16);resolve[22]=i?EFS_TXN_ABORT:EFS_TXN_COMMIT;
@@ -204,7 +204,7 @@ static void namespace_guard(unsigned port)
  for(unsigned i=0;i<2;i++){memcpy(resolve+2,tx[i],16);resolve[22]=i?EFS_TXN_ABORT:EFS_TXN_COMMIT;owner_rpc(port,resolve,sizeof(resolve),EFS_OK);}
  tx[0][0]=74;memcpy(prepare+3,tx[0],16);q.id.seq=3;efs_txn_encode_opid(prepare+26+kl,&q,&reply);
  owner_rpc(port,prepare,26+kl+EFS_TXN_REDUCE_OPID_WIRE,EFS_ERR_FENCED);
- session[0]=owner;session[2]=EFS_MD_SESS_ACK;be(session+19,0,4);owner_rpc(port,session,sizeof(session),EFS_OK);
+ session[0]=owner;session[2]=EFS_MD_SESS_ACK;be(session+19,2,4);owner_rpc(port,session,sizeof(session),EFS_OK);
  /* Completion now carries the checked epoch and requires every storage
   * member, including the member outside the metadata replica set. */
  be(session+19,2,4);session[2]=EFS_MD_SESS_STORAGE_FENCE;
@@ -219,9 +219,9 @@ static void namespace_guard(unsigned port)
    unsigned touched=word*64+bit;
    printf("namespace barrier touched shard=%u\n",touched);
    session[0]=efs_raft_shard_group(touched);session[2]=EFS_MD_SESS_FENCE_LOC;
-   be(session+19,2,4);be(session+23,touched,4);owner_rpc(port,session,sizeof(session),EFS_OK);
-   session[0]=owner;session[2]=EFS_MD_SESS_ACK;be(session+19,touched,4);
-   owner_rpc(port,session,23,EFS_OK);
+   be(session+19,2,4);be(session+23,word,4);be(session+27,1ull<<bit,8);owner_rpc(port,session,sizeof(session),EFS_OK);
+   session[0]=owner;session[2]=EFS_MD_SESS_ACK;
+   owner_rpc(port,session,sizeof(session),EFS_OK);
   }
  }
 

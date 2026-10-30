@@ -96,8 +96,8 @@ static int submit(void *ctx,const uint8_t *p,uint32_t n,struct efs_msg_raft_mkfs
         return r->rc=fail?EFS_ERR_IO:EFS_OK;
     }
     case EFS_MD_SESS_ACK: {
-        uint32_t word=rd32(p+19);uint64_t mask=(uint64_t)rd32(p+23)<<32|rd32(p+27);
-        assert(n==1+EFS_MD_SESS_ACK_LEN&&mask);
+        uint32_t word=rd32(p+23);uint64_t mask=(uint64_t)rd32(p+27)<<32|rd32(p+31);
+        assert(n==1+EFS_MD_SESS_ACK_LEN&&rd32(p+19)==2&&mask);
         enter();pthread_mutex_lock(&mu);
         for(unsigned b=0;b<64;b++)if(mask>>b&1){
             uint32_t sh=word*64+b;assert(fenced[sh]==1&&!acked[sh]);acked[sh]++;
@@ -138,6 +138,7 @@ static double run(unsigned parallel,int expect,const char *phase,uint32_t shard)
     clock_gettime(CLOCK_MONOTONIC,&b);
     if(rc!=expect)fprintf(stderr,"rc=%d phase=%s\n",rc,res.phase);
     assert(rc==expect&&res.ntouch==N);
+    if(expect)assert(res.last.rc==expect); /* later workers must not overwrite the failing reply */
     if(phase)assert(!strcmp(res.phase,phase)&&res.shard==shard);
     if(!expect) {
         assert(res.state==EFS_SESSION_ACTIVE&&progress_fence==N&&progress_clean==N);
