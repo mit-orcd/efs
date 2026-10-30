@@ -805,6 +805,47 @@ static void test_readindex_control(void)
           "identical pure votes remain idempotent with outstanding suffix");
     reply.match_index=index;
     n.hold_ae_replies=0;elect(&n,4);
+    /* A queued ordinary heartbeat is still contact from the known leader.
+     * It must suppress a spurious election while its advertised commit
+     * work is queued; no ACK, read proof or state-machine progress is owed
+     * by this liveness-only inspection. Drive far beyond an election window. */
+    struct efs_raft_msg contact=probe;
+    contact.term=efs_raft_term(n.r[leader]);contact.prev_index=efs_raft_applied(n.r[follower]);
+    contact.prev_term=contact.term;contact.nentries=0;contact.last_log_index=0;
+    contact.leader_commit=contact.prev_index+1;
+    CHECK(efs_raft_commit(n.r[follower])==efs_raft_applied(n.r[follower]),"contact fixture has no local apply backlog");
+    int contact_applies=app[follower].n;
+    uint64_t contact_term=efs_raft_term(n.r[follower]);
+    uint64_t contact_commit=efs_raft_commit(n.r[follower]);
+    uint64_t contact_applied=efs_raft_applied(n.r[follower]);
+    int contact_replies=n.cap_n;
+    for(unsigned tick=0;tick<200;tick++) {
+        CHECK(!efs_raft_read_control(n.r[follower],&contact),"queued heartbeat remains owned by receive");
+        CHECK(!efs_raft_tick(n.r[follower]),"queued heartbeat follower tick");
+    }
+    CHECK(efs_raft_role(n.r[follower])==EFS_RAFT_FOLLOWER &&
+          efs_raft_leader(n.r[follower])==leader &&
+          efs_raft_term(n.r[follower])==contact_term,
+          "queued known-leader heartbeats suppress false election");
+    CHECK(efs_raft_commit(n.r[follower])==contact_commit &&
+          efs_raft_applied(n.r[follower])==contact_applied &&
+          app[follower].n==contact_applies && n.cap_n==contact_replies,
+          "liveness-only inspection earns no commit/apply or reply authority");
+    for(unsigned invalid=0;invalid<3;invalid++) {
+        struct efs_raft_msg wrong=contact;
+        if(invalid==0)wrong.boot_id++;
+        else if(invalid==1)wrong.term++;
+        else wrong.from=3-leader-follower; /* configured, but not the known leader */
+        for(unsigned tick=0;tick<200;tick++) {
+            CHECK(!efs_raft_read_control(n.r[follower],&wrong),"invalid contact stays on ordered path");
+            CHECK(!efs_raft_tick(n.r[follower]),"invalid contact tick");
+        }
+        CHECK(efs_raft_leader(n.r[follower])!=leader,
+              "wrong boot/term/leader cannot suppress election timeout");
+        CHECK(!efs_raft_recv(n.r[follower],&contact) &&
+              efs_raft_leader(n.r[follower])==leader,
+              "normal valid heartbeat restores known leader after timeout");
+    }
     app[follower].park_apply=1;
     CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"follower parked new durable prefix");
     elect(&n,4);n.hold_ae_replies=1;

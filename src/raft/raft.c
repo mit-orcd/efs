@@ -3366,8 +3366,18 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
         r->log_new || r->app_new || r->log_old!=r->app_old)
         return 0;
     if (in->type==EFS_RAFT_MSG_AE_REQ) {
-        if (r->role!=EFS_RAFT_FOLLOWER || r->leader!=in->from ||
-            log_term(r,in->prev_index,&term)!=EFS_OK || term!=in->prev_term)
+        if (r->role!=EFS_RAFT_FOLLOWER || r->leader!=in->from)
+            return 0;
+        /* Known current-term leader contact is liveness even when the
+         * advertised commit still belongs to ordered receive. Normal
+         * on_ae_req also resets before validating the prefix. Do not let a
+         * queued heartbeat start a pre-vote just because its apply work
+         * cannot bypass the pump. This grants no reply/read/replication
+         * authority; all prefix and work checks below remain mandatory.
+         * Frozen receive, pending configuration, boot and voter checks above
+         * still refuse inspection without changing this timer. */
+        reset_election(r);
+        if (log_term(r,in->prev_index,&term)!=EFS_OK || term!=in->prev_term)
             return 0;
         /* Zero-context heartbeats can bypass only when no commit/apply
          * bookkeeping is owed. They never grant request-scoped authority. */
@@ -3377,7 +3387,6 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
         reply.type=EFS_RAFT_MSG_AE_REP;reply.to=in->from;
         reply.success=1;reply.vote_granted=in->vote_granted;
         reply.match_index=in->prev_index;reply.last_log_index=in->last_log_index;
-        reset_election(r);
         /* Send failure falls back to normal receive; duplicate read ACKs
          * cannot form an extra vote or grant another round's authority. */
         if(send_msg(r,&reply)!=EFS_OK)return 0;
