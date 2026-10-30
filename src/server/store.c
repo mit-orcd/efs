@@ -2165,6 +2165,14 @@ int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes
     return fragment_parent_sync(s, path);
 }
 
+/* Is this verdict a proof the file is not the object (wrong bytes, record or
+ * identity)? A read error (EFS_ERR_IO, also an fd or memory shortage) proves
+ * nothing either way and never licenses deleting a fragment. */
+int server_recovery_unprovable(int rc)
+{
+    return rc == EFS_ERR_CHECKSUM || rc == EFS_ERR_FRAG_FORMAT || rc == EFS_ERR_FRAG_IDENTITY;
+}
+
 /* Read a whole fragment file and prove it: an I25 record naming exactly
  * `want` (its payload length from the file size), BLAKE3(payload) equal to
  * the record's digest and, when `expect` is set, to `expect`. EFS_OK
@@ -2235,8 +2243,9 @@ static int recovery_chunk_path(struct efsd_server *s, uint32_t root, efs_export_
     int rc = server_recovery_prove_file(path, &want, expect, &bytes);
     if (rc != EFS_ERR_NOT_FOUND)
         __atomic_fetch_add(&c->checked, 1, __ATOMIC_RELAXED);
-    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_NOMEM) {
-        /* Unreadable counts as unprovable: never served, so drop it. */
+    if (server_recovery_unprovable(rc)) {
+        /* Provably not this object: never served, so drop it. A read error
+         * falls through as IO and recovery stays fenced. */
         rc = server_recovery_drop(s, path, bytes, !efs_ino_is_meta_table(ino), c) == EFS_OK
                  ? EFS_ERR_NOT_FOUND : EFS_ERR_IO;
     }

@@ -23,7 +23,7 @@
  * read linearizably from the group (server_raft_host_pack_object). The
  * segment's guard orders a PUT against reclaim acceptance: acceptance
  * installs the segment's fence under the write guard, and a PUT checks the
- * fence under the read guard, so no PUT lands after acceptance.
+ * fence under the same guard, so no PUT lands after acceptance.
  *
  * K37: a rebuild PUT (EFS_SEGMENT_PUT_F_REBUILD) restores the one missing
  * fragment of a published segment. Its authority is the same object read
@@ -177,8 +177,8 @@ static int sg_read_tail(int fd, uint32_t group, uint64_t id, uint64_t gen, uint3
     return rc;
 }
 
-/* Write and make durable one fragment. EEXIST with the same checksum (a
- * retried PUT) is success; a different file under the name is refused. */
+/* Write and make durable one fragment. A file already under the name is
+ * refused; the caller judges it in full first (server_segment_check). */
 static int sg_write(struct efsd_server *s, const char *path, uint32_t group, uint64_t id,
                     uint64_t gen, uint32_t fi, const uint8_t *data, uint32_t len,
                     const uint8_t sum[EFS_HASH_SIZE], int *created)
@@ -206,14 +206,9 @@ static int sg_write(struct efsd_server *s, const char *path, uint32_t group, uin
     int fd = server_frag_open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
         free(buf);
-        if (errno != EEXIST) return EFS_ERR_IO;
-        uint8_t have[EFS_HASH_SIZE];
-        fd = server_frag_open(path, O_RDONLY, 0);
-        if (fd < 0) return EFS_ERR_IO;
-        rc = sg_read_tail(fd, group, id, gen, fi, len, have);
-        close(fd);
-        if (rc != EFS_OK) return rc;
-        return memcmp(have, sum, EFS_HASH_SIZE) ? EFS_ERR_EXIST : EFS_OK;
+        /* The caller holds the segment guard and found no file: a name that
+         * appeared since is not ours to trust on its tail record alone. */
+        return errno == EEXIST ? EFS_ERR_EXIST : EFS_ERR_IO;
     }
     *created = 1;
     size_t done = 0;
@@ -303,13 +298,16 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
      * same read names exactly this fragment. */
     struct efs_pack_object *o = malloc(sizeof(*o));
     if (!o) return EFS_ERR_NOMEM;
-    /* Bind the fresh authority read to the write's lifetime. Reclaim takes
-     * this guard exclusively before installing its journal-backed fence.
+    /* Bind the fresh authority read to the write's lifetime. Exclusive: a
+     * retry that overlaps the PUT it retries must wait for that PUT's fsync
+     * before judging the file, and may not remove a copy still being written.
+     * Reclaim and recovery take the same guard before installing their
+     * journal-backed fence.
      * Checking authority before the guard lets a delayed ACTIVE result
      * outlive deletion and retirement of that temporary fence, then
      * recreate a segment whose object row has already been forgotten. */
     pthread_rwlock_t *g = server_segment_guard(group, id);
-    pthread_rwlock_rdlock(g);
+    pthread_rwlock_wrlock(g);
     uint32_t degraded = EFS_PACK_READ_DEGRADED_BAD;
     int rc = rebuild ? server_raft_host_pack_state(group, id, gen, o, &degraded)
                      : server_raft_host_pack_object(group, id, gen, o);
@@ -333,10 +331,12 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
         pthread_rwlock_unlock(g);
         return EFS_ERR_STALE;
     }
-    if (rebuild) {
-        /* A good copy already here (a retried rebuild) is success; a torn,
-         * foreign or corrupt file under the name is removed first so the
-         * exclusive create below writes the rebuilt fragment. */
+    {
+        /* A good copy already here (a retried PUT or rebuild) is success; a
+         * torn, foreign or corrupt file under the name, tail record intact
+         * or not, is removed first so the exclusive create below writes the
+         * fragment the ledger names. Never acknowledge a copy whose payload
+         * was not hashed. */
         uint32_t v = server_segment_check(s, group, id, gen, fi, geometry, sum);
         if (v == EFS_SEGMENT_AUDIT_OK) {
             pthread_rwlock_unlock(g);
@@ -348,8 +348,10 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
         }
         if (v == EFS_SEGMENT_AUDIT_BAD) {
             struct stat st;
-            uint64_t old = !stat(path, &st) && (uint64_t)st.st_size > SG_TAIL
-                           ? (uint64_t)st.st_size - SG_TAIL : 0;
+            /* What the startup inventory counted for this file. */
+            uint64_t old = stat(path, &st) ? 0
+                           : st.st_size >= SG_TAIL && st.st_size % SG_TAIL == 0
+                             ? (uint64_t)st.st_size - SG_TAIL : (uint64_t)st.st_size;
             char dir[EFS_MAX_PATH + 64];
             sg_dir(s, group, id, dir, sizeof(dir));
             if ((unlink(path) && errno != ENOENT) || sg_sync_path(dir) != EFS_OK) {
@@ -609,7 +611,7 @@ int server_segment_scan(struct efsd_server *s,
 }
 
 /* K36 verified recovery: one segment fragment file, under the segment's
- * write guard (a PUT holds the read guard while it writes): proven,
+ * write guard (a PUT holds the guard while it writes): proven,
  * absent, or unprovable and dropped. */
 int server_segment_recovery_check(struct efsd_server *s, uint32_t group, uint64_t id,
                                   uint64_t gen, uint32_t fi, const uint8_t *expect,
@@ -625,7 +627,7 @@ int server_segment_recovery_check(struct efsd_server *s, uint32_t group, uint64_
     int rc = server_recovery_prove_file(path, &want, expect, &bytes);
     if (rc != EFS_ERR_NOT_FOUND)
         __atomic_fetch_add(&c->checked, 1, __ATOMIC_RELAXED);
-    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_NOMEM)
+    if (server_recovery_unprovable(rc))
         rc = server_recovery_drop(s, path, bytes, 1, c) == EFS_OK ? EFS_ERR_NOT_FOUND
                                                                  : EFS_ERR_IO;
     pthread_rwlock_unlock(g);

@@ -1,0 +1,43 @@
+diff --git a/src/meta/metadata.c b/src/meta/metadata.c
+index 48da1405a..ccf39d473 100644
+--- a/src/meta/metadata.c
++++ b/src/meta/metadata.c
+@@ -1207,12 +1207,16 @@ static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
+     return 0;
+ }
+ 
++/* TEMP-AW: measurement counter, never committed to devel. */
++uint64_t g_aw_cmps;
++
+ static void child_idx_del(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
+ {
+     struct efs_child_vec *v = child_vec_get(ex, parent, 0);
+     if (!v)
+         return;
+     uint64_t pos;
++    g_aw_cmps++;
+     if (idx_get(v->pos_keys, v->pos_vals, v->pos_mask, slot, &pos) != 0 ||
+         pos >= v->count)
+         return;
+@@ -1220,9 +1224,12 @@ static void child_idx_del(struct efs_export *ex, efs_ino_t parent, uint64_t slot
+     uint64_t moved = v->slots[last];
+     v->slots[pos] = moved;
+     v->count--;
++    g_aw_cmps++;
+     idx_del(v->pos_keys, v->pos_vals, v->pos_mask, slot);
+-    if (pos != last)
++    if (pos != last) {
++        g_aw_cmps++;
+         idx_put(v->pos_keys, v->pos_vals, v->pos_mask, moved, pos);
++    }
+ }
+ 
+ static void child_idx_replace_slot(struct efs_export *ex, efs_ino_t parent,
+@@ -1232,6 +1239,7 @@ static void child_idx_replace_slot(struct efs_export *ex, efs_ino_t parent,
+     if (!v)
+         return;
+     uint64_t pos;
++    g_aw_cmps += 3;
+     if (idx_get(v->pos_keys, v->pos_vals, v->pos_mask, old_slot, &pos) != 0 ||
+         pos >= v->count)
+         return;

@@ -56,6 +56,14 @@ durations track PUT completion, not wake latency, and broadcast-wake CPU is
 ~0.05 % of the host — no end-to-end gain from per-inode wake ownership.
 Named gates PASS; test-all 546/1/11 with the one FAIL the pre-existing b6 defect.
 
+[AW — child vectors: reverse slot→position index](aw-child-vector-index-20261028.md):
+**IMPLEMENTED on branch `agent/devel-taskaw` (`50218c827`), not merged.** O(1)
+deletion and relocation repair (~6 map ops instead of ~D comparisons), same
+memory budget, rollup convergence verified. End-to-end latency unchanged:
+the dominant cost is the pre-existing `recompute_times_up` rescan (recorded
+as a follow-up finding). Gates: deterministic + named + ASan/LSan PASS;
+test-all 547/2/12 (b6 pre-existing, K41 timing-sensitive).
+
 [Stage 1 cross-path due diligence AY–BB](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--cross-path-due-diligence-aybb):
 **OPEN / audit qualification NOTRUN**: four source-verified areas—ordinary/packed
 upload completion, serve/audit/recovery validation, deletion authority, and
@@ -69,9 +77,11 @@ consensus/publication interfaces, shared storage primitives and removal of
 superseded machinery. Alpha 1.0 tasks/gates and D38 alpha 2.0–4.0 remain intact.
 
 [Stage 1 scan/index tasks AV–AX](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--workload-sized-scans-avax):
-**OPEN / implementation and measurements NOTRUN**, source reviewed at `ee66f837b`:
-REPORT chunk/size nested search, local child-vector deletion/relocation scans,
-and loaded hardlink-alias scans. Scope and fixed-size fast paths distinguished;
+**AW IMPLEMENTED on `agent/devel-taskaw` (`50218c827`, not merged;
+[evidence](aw-child-vector-index-20261028.md)); AV and AX OPEN /
+implementation and measurements NOTRUN**, source reviewed at `ee66f837b`:
+REPORT chunk/size nested search (AV), local child-vector deletion/relocation scans (AW),
+and loaded hardlink-alias scans (AX). Scope and fixed-size fast paths distinguished;
 no new K defect or measured slowdown claimed. Existing tasks remain separate.
 
 [Stage 1 wakeup/polling tasks AS–AU](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--wakeups-and-polling-asau):
@@ -198,11 +208,23 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Wave 37 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29; gate on intel2 at `ea54f57bf`: TOTAL 555 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (787s), NOTRUN = host limits (no RDMA device, no valgrind/memcheck.h)**. **AV** measured, no change ([REPORT join](av-report-join-20261028.md)). **AW** implemented ([child-vector reverse index](aw-child-vector-index-20261028.md)): unlink in a loaded parent no longer scans the child vector; the position map is keyed by slot+1 because the shared `idx_*` helpers reserve key 0; end-to-end unlink is unchanged because `recompute_times_up` dominates, recorded as new item **BC**. **AY** fixed **K57** ([audit](ay-upload-completion-audit-20261029.md)): a packer-path segment PUT acknowledged an existing fragment on its tail record alone; it now checks the whole fragment under the exclusive guard. **AZ** fixed **K58** ([audit](az-verification-policy-audit-20261029.md)): verified recovery no longer deletes a fragment on a read error, only on a proven mismatch; AZ's branch also called it K57, renumbered here because AY merged first. AW's earlier gate failures (B6 slow, K41 timing) did not recur on this head. Devel's AX alias index and AW's child-vector index auto-merged and passed together. Task list: AB and AE (qualification incomplete), AN and AO (in progress), BB (in progress, 5 commits) remain open with evidence on branches; P3-A–F have no commits yet.
+
+- [Task H devel baseline](task-h-devel-baseline-20261029.md): branch fix tests run against devel `74d34d588` on nuc; 18 DEVEL-BUG, 2 NOT-NEEDED, 13 NOCOMPILE, 2 NO-TEST of 35 rows; measurement only.
+
+[Task AX](ax-hardlink-alias-index-20261028.md): **hard-link attribute fan-out no longer scans unrelated rows** (branch `agent/devel-ax`, merged into devel Oct 29, `a50741e3e`). Measured on xorinox: chmod/truncate/link on a hard-linked file cost 13–20 ms at 1 M loaded rows (0.9–1.3 ms at 100 K), independent of alias count; a per-table alias vector makes it 0.0003–0.0006 ms, independent of rows. Gate xorinox: 553 commands, 0 FAIL, 10 host-limited NOTRUN. `make asan-check` fails 4 cases on xorinox identically on untouched devel (join does not answer): not this change, open for the coordinator. Unlink in a 1 M-child directory stays 8–15 ms: that is AW's child-vector scan.
+
 [Wave 36 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`4fdf8ddd2`; local checks only, no new full gate: docs, measurement scripts and one ASan-only line)**: **K56 FIXED** ([evidence](k56-asan-fuse-allocator-20261029.md)): the ASan-built `efs-fuse` no longer refuses to start (`cannot establish allocator policy`; Task I's `mallopt` policy cannot succeed under ASan's allocator), skipped under `__SANITIZE_ADDRESS__` and still fatal in every other glibc build; `make asan-check` 49 run / 5 failed → 49 run / 0 failed on xorinox. Measured, no change: AT ([PUT-window wake-ups](at-put-window-wakeups-20261028.md)), AS ([demand-read wait loop](as-demand-read-wait-20261028.md), never engaged in about 5.1M allocations), AU ([Raft pump kicks](au-pump-kicks-20261028.md); its gate recorded a K48 recurrence, `test_w130_dir_fault.py` partial listing 95 != 96, on an untouched base, which keeps K48 OPEN). Also this wave: the wave 32 merges had dropped the checklist text of AG, AH, AP, AQ and AR (a merge helper discarded the non-table lines of conflicting hunks); the entries were rebuilt from their branches in `6b3b3bad5`. Task list: AB and AE (qualification incomplete), AN and AO (in progress) are the Stage 1 items still open with evidence on branches; AV, AW, AX, AY–BB and P3-A–F have no commits yet.
 
 [Wave 35 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`5367beeca`; gate at `2195fd863`)**: `agent/devel-k35-slow-fsync` ([K35](k35-slow-fsync-20261029.md), [FIN accounting](fin-tcp-accounting-20261029.md), [FIN gate closure](fin-gate-notrun-closure-20261029.md)): strict TCP accounting (`tcp_counts.h`, `rdma.c`, `test_tcp_counts`: post-setup TCP counters, a one-byte violation control that still detects payload), the closure of thirteen gate prerequisites on isolated fcstor014 (546 / 0 FAIL / 0 NOTRUN with real Valgrind, sanitizers and hardware RDMA), and Task AF ([evidence](af-status-snapshot-20261028.md)): measured, no product change. Its `data_commit.c` slow-COMMIT change is identical to K55's already on devel, so that file is unchanged by the merge. Merge-time: both sides added a test entry in the same Makefile spot (kept both); `test_sanitizer_gate.py` differed only in a printed message (kept wave 34's). intel1 `make test-all` (8 jobs) at `2195fd863` (wave 34 plus K35): **552 / 0 FAIL / 11 NOTRUN** (host limits), 870 s, INCOMPLETE. Not claimed: the FIN branch's zero-NOTRUN gate needs fcstor014's Valgrind and sanitizer attach, which intel1 lacks.
 
 [Wave 34 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`5a8d34eef`; gate at `44e5bbaf7`)**: Task T ([evidence](task-t-directory-visibility-20261029.md), [budgets per host](gate-budgets-per-host-20261028.md)): directory visibility during cross-group migration (`inode_rpc.c`, `dir_layout.c`, `meta_apply.c`, `raft_host.c`), isolated TCP qualification PASS and six TCP full gates with zero FAIL on its own base, plus its per-host budget fits. **Merge-time decision:** Task T carried its own, larger fix for the slow-COMMIT fsync problem in `data_commit.c` (a poll/pipe wait, a two-fragment quorum check and a rescue path for a failed speculative degraded mark). devel keeps K55's reserve-slice mechanism, already merged and independently qualified, so T's `data_commit.c` and `test_data_commit.c` were not taken; T's rescue path (a failed degraded mark followed by an on-time third COMMIT no longer fails the fsync) is therefore **not on devel** and is separate work if wanted. intel1 `make test-all` (8 jobs) at `44e5bbaf7` (wave 33 plus T): **551 / 0 FAIL / 11 NOTRUN** (host limits), 918 s, INCOMPLETE; B6 slow PASS. The budgeted gate in `tests/budgets.tsv` is now 1,505 s of the 1,650 s bound (D44 target 1,100 s unchanged).
+
+[Task AV](av-report-join-20261028.md): **PASS — measured, no change**, devel
+`330c48aea` on intel2: the REPORT chunk↔inode-size join costs 1–32 comparisons
+per frame across big/small/mixed/openmany loads; C and I are never both large
+in one real frame and first-match ordering makes the common case linear, so no
+request-local index is justified. AV checkbox ticked.
 
 [Wave 33 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`550b00e47`; gate at `550b00e47`)**: Task AL ([evidence](al-decode-scratch-20261028.md)): reads allocate decode scratch only for the path taken, retained decode scratch per mount 17.3 → 8.0 MiB (`read.c`), in-place aliasing pinned by `test_erasure`; Task AK ([evidence](ak-packed-read-staging-20261028.md)): packed reads hash each fragment once and receive it without a staging copy (TCP into the caller's slot, RDMA hands over its message buffer); the one hash is checked against both the reply digest and the mapping's committed digest, so neither authority is dropped, and a mismatch names which one failed; no wire change (`efs_conn_recv_segment_reply` is a new client-side helper); Task AC ([evidence](ac-iostats-rdma-scan-20261028.md)): the periodic `iostats:` line no longer scans the RDMA registry (36 scans → 0 in the instrumented runs; no consistent speedup, TCP throughput median 0.36 % lower). Merge-time: AL and AK both edit `read.c` and merged without a source conflict; the checklist conflicts were only the order of AL/AC's status paragraphs against the already-merged AM/AD blocks. intel1 `make test-all` (8 jobs) at `550b00e47`: **549 / 0 FAIL / 12 NOTRUN** (host limits), 773 s, INCOMPLETE. Known: the Mac build of `data_commit.c` has failed since wave 32 (`pthread_condattr_setclock` is glibc-only); Linux gates build it.
 

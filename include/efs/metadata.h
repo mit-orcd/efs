@@ -193,6 +193,13 @@ struct efs_child_vec {
     uint64_t *slots;
     uint64_t count;
     uint64_t cap;
+    /* AW: reverse slot -> position map (keyed slot + 1: idx_* reserves key 0,
+     * and slot 0 can be a child) so deletion and relocation repair are
+     * O(1) instead of a full vector scan. Values are positions in `slots`;
+     * charged to the same staged_child_bytes budget as the vector itself. */
+    uint64_t *pos_keys;
+    uint64_t *pos_vals;
+    uint64_t pos_mask;
 };
 
 /* What is left of the old fully-replicated export root: the shard geometry
@@ -247,6 +254,15 @@ struct efs_export {
     struct efs_child_vec *child_vecs;
     uint64_t child_vec_count;
     uint64_t child_vec_cap;
+    /* ino -> efs_alias_vec of every row slot holding that ino on THIS table,
+     * kept for hard-linked inos only (ino_idx holds one slot per ino).
+     * In-memory only; rebuilt with ino_idx. alias_bytes is the vectors'
+     * heap, charged to the stage estimate. */
+    uint64_t *alias_keys;
+    uint64_t *alias_vals;
+    uint64_t alias_mask;
+    uint64_t alias_inos;
+    uint64_t alias_bytes;
     /* Running sums of the two walks in the staging-byte estimate: per-slab
      * row and name arenas, and each child vector's slot array. The rest of
      * the estimate is capacities and index masks, read in constant time.

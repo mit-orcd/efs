@@ -31,14 +31,15 @@ static void inode_bump_ctime(struct efs_inode_mem *p)
 
 static struct efs_inode_mem *inode_ptr(struct efs_export *ex, efs_ino_t ino);
 static struct efs_inode_mem *inode_at(struct efs_export *ex, uint64_t slot);
+static uint32_t alias_slots(struct efs_export *ex, efs_ino_t ino,
+                            const uint64_t **slots, uint64_t *one);
 static int inode_slab_ensure(struct efs_export *ex, uint32_t si);
 static int inode_ensure_cap(struct efs_export *ex, uint64_t need);
 static int inode_set_name(struct efs_export *ex, struct efs_inode_mem *p,
                           const char *name);
 static uint32_t slab_of_row(const struct efs_export *ex,
                             const struct efs_inode_mem *p);
-static void remove_inode_slot(struct efs_export *ex, uint64_t i,
-                              int expect_survivor);
+static void remove_inode_slot(struct efs_export *ex, uint64_t i);
 
 static uint64_t export_staged_bytes_one(const struct efs_export *ex);
 
@@ -481,6 +482,17 @@ static int inode_from_rpc(struct efs_export *ex, struct efs_inode_mem *d,
     return inode_set_name(ex, d, s->name);
 }
 
+static void stamp_ino_rows(struct efs_export *t, efs_ino_t ino, uint64_t ct)
+{
+    const uint64_t *slots;
+    uint64_t one;
+    uint32_t n = alias_slots(t, ino, &slots, &one);
+    for (uint32_t k = 0; k < n; k++) {
+        inode_at(t, slots[k])->ctime = ct;
+        inode_at(t, slots[k])->ctime_nsec = 0;
+    }
+}
+
 static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct)
 {
     if (!ex || !ino)
@@ -495,24 +507,12 @@ static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct
         if (p->nlink <= 1)
             return;
     }
-    for (uint64_t i = 0; i < ex->inode_count; i++) {
-        if (inode_at(ex, i)->ino == ino) {
-            inode_at(ex, i)->ctime = ct;
-            inode_at(ex, i)->ctime_nsec = 0;
-        }
-    }
+    stamp_ino_rows(ex, ino, ct);
     if (!ex->shard_tabs)
         return;
     for (uint32_t s = 1; s < ex->shard_tab_cap; s++) {
-        struct efs_export *t = ex->shard_tabs[s];
-        if (!t)
-            continue;
-        for (uint64_t i = 0; i < t->inode_count; i++) {
-            if (inode_at(t, i)->ino == ino) {
-                inode_at(t, i)->ctime = ct;
-                inode_at(t, i)->ctime_nsec = 0;
-            }
-        }
+        if (ex->shard_tabs[s])
+            stamp_ino_rows(ex->shard_tabs[s], ino, ct);
     }
 }
 
@@ -654,6 +654,150 @@ static void idx_del(uint64_t *keys, uint64_t *vals, uint64_t mask, uint64_t key)
         idx_put(keys, vals, mask, k, v);
         j = (j + 1) & mask;
     }
+}
+
+/* Hard links put several rows with one ino on one table while ino_idx holds
+ * one slot per ino. An alias vector lists every row slot of such an ino, so
+ * a shared attribute is written to the aliases instead of found by a scan of
+ * every loaded row. A vector exists only after a link; without one the ino
+ * has at most the one row ino_idx names. Slots stay valid because rows move
+ * only in remove_inode_slot, which repairs the vector. */
+struct efs_alias_vec {
+    uint32_t n, cap;
+    uint64_t slot[];
+};
+
+static size_t alias_vec_bytes(uint32_t cap)
+{
+    return sizeof(struct efs_alias_vec) + (size_t)cap * sizeof(uint64_t);
+}
+
+static struct efs_alias_vec *alias_get(const struct efs_export *ex, efs_ino_t ino)
+{
+    uint64_t v;
+    if (!ex->alias_keys ||
+        idx_get(ex->alias_keys, ex->alias_vals, ex->alias_mask, ino, &v) != 0)
+        return NULL;
+    return (struct efs_alias_vec *)(uintptr_t)v;
+}
+
+static void alias_free_all(struct efs_export *ex)
+{
+    for (uint64_t i = 0; ex->alias_keys && i <= ex->alias_mask; i++)
+        if (ex->alias_keys[i])
+            free((void *)(uintptr_t)ex->alias_vals[i]);
+    idx_free(&ex->alias_keys, &ex->alias_vals, &ex->alias_mask);
+    ex->alias_inos = 0;
+    ex->alias_bytes = 0;
+}
+
+static int alias_map_room(struct efs_export *ex)
+{
+    if (ex->alias_keys && (ex->alias_inos + 1) * 2 <= ex->alias_mask + 1)
+        return 0;
+    uint64_t *k = NULL, *v = NULL, m = 0;
+    if (idx_init(&k, &v, &m, ex->alias_inos + 1) != 0)
+        return -1;
+    for (uint64_t i = 0; ex->alias_keys && i <= ex->alias_mask; i++)
+        if (ex->alias_keys[i])
+            (void)idx_put(k, v, m, ex->alias_keys[i], ex->alias_vals[i]);
+    idx_free(&ex->alias_keys, &ex->alias_vals, &ex->alias_mask);
+    ex->alias_keys = k;
+    ex->alias_vals = v;
+    ex->alias_mask = m;
+    return 0;
+}
+
+/* Make room for one more row of ino, whose existing row is at slot `have`.
+ * May fail; alias_push after it cannot. */
+static int alias_reserve(struct efs_export *ex, efs_ino_t ino, uint64_t have)
+{
+    struct efs_alias_vec *v = alias_get(ex, ino);
+    if (!v) {
+        if (alias_map_room(ex) != 0)
+            return -1;
+        v = malloc(alias_vec_bytes(4));
+        if (!v)
+            return -1;
+        v->n = 1;
+        v->cap = 4;
+        v->slot[0] = have;
+        (void)idx_put(ex->alias_keys, ex->alias_vals, ex->alias_mask, ino,
+                      (uint64_t)(uintptr_t)v);
+        ex->alias_inos++;
+        ex->alias_bytes += alias_vec_bytes(4);
+        return 0;
+    }
+    if (v->n < v->cap)
+        return 0;
+    struct efs_alias_vec *nv = realloc(v, alias_vec_bytes(v->cap * 2));
+    if (!nv)
+        return -1;
+    ex->alias_bytes += alias_vec_bytes(nv->cap * 2) - alias_vec_bytes(nv->cap);
+    nv->cap *= 2;
+    (void)idx_put(ex->alias_keys, ex->alias_vals, ex->alias_mask, ino,
+                  (uint64_t)(uintptr_t)nv);
+    return 0;
+}
+
+static void alias_push(struct efs_export *ex, efs_ino_t ino, uint64_t slot)
+{
+    struct efs_alias_vec *v = alias_get(ex, ino);
+    v->slot[v->n++] = slot;
+}
+
+/* Drop `slot` from ino's vector. When one row is left the vector is freed and
+ * that row's slot goes to *survivor (UINT64_MAX when the ino has no row left
+ * or still has a vector). */
+static void alias_del(struct efs_export *ex, efs_ino_t ino, uint64_t slot,
+                      uint64_t *survivor)
+{
+    *survivor = UINT64_MAX;
+    struct efs_alias_vec *v = alias_get(ex, ino);
+    if (!v)
+        return;
+    for (uint32_t k = 0; k < v->n; k++) {
+        if (v->slot[k] == slot) {
+            v->slot[k] = v->slot[--v->n];
+            break;
+        }
+    }
+    if (v->n > 1)
+        return;
+    if (v->n == 1)
+        *survivor = v->slot[0];
+    ex->alias_bytes -= alias_vec_bytes(v->cap);
+    ex->alias_inos--;
+    idx_del(ex->alias_keys, ex->alias_vals, ex->alias_mask, ino);
+    free(v);
+}
+
+static void alias_move(struct efs_export *ex, efs_ino_t ino, uint64_t from,
+                       uint64_t to)
+{
+    struct efs_alias_vec *v = alias_get(ex, ino);
+    for (uint32_t k = 0; v && k < v->n; k++) {
+        if (v->slot[k] == from) {
+            v->slot[k] = to;
+            return;
+        }
+    }
+}
+
+/* Every row slot of ino on this table: the alias vector, else the one row
+ * ino_idx names. *one backs the single-row answer. */
+static uint32_t alias_slots(struct efs_export *ex, efs_ino_t ino,
+                            const uint64_t **slots, uint64_t *one)
+{
+    struct efs_alias_vec *v = alias_get(ex, ino);
+    if (v) {
+        *slots = v->slot;
+        return v->n;
+    }
+    if (efs_export_inode_slot(ex, ino, one) != EFS_OK)
+        return 0;
+    *slots = one;
+    return 1;
 }
 
 /* Name/chunk indexes may share a hash across distinct keys; probe past
@@ -977,6 +1121,7 @@ static uint64_t chunk_idx_hint(const struct efs_export *ex)
 
 static int export_reindex_inodes(struct efs_export *ex)
 {
+    alias_free_all(ex);
     if (idx_init(&ex->ino_keys, &ex->ino_vals, &ex->ino_mask,
                  inode_idx_hint(ex)) != 0)
         return -1;
@@ -986,6 +1131,13 @@ static int export_reindex_inodes(struct efs_export *ex)
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         if (inode_at(ex, i)->ino == 0)
             continue;
+        uint64_t prev;
+        if (idx_get(ex->ino_keys, ex->ino_vals, ex->ino_mask,
+                    inode_at(ex, i)->ino, &prev) == 0) {
+            if (alias_reserve(ex, inode_at(ex, i)->ino, prev) != 0)
+                return -1;
+            alias_push(ex, inode_at(ex, i)->ino, i);
+        }
         idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, inode_at(ex, i)->ino, i);
         name_idx_put(ex, inode_at(ex, i)->parent, efs_export_inode_name(ex, i), i);
     }
@@ -1065,8 +1217,11 @@ static void child_vecs_free(struct efs_export *ex)
 {
     if (!ex)
         return;
-    for (uint64_t i = 0; i < ex->child_vec_count; i++)
+    for (uint64_t i = 0; i < ex->child_vec_count; i++) {
         free(ex->child_vecs[i].slots);
+        free(ex->child_vecs[i].pos_keys);
+        free(ex->child_vecs[i].pos_vals);
+    }
     free(ex->child_vecs);
     ex->child_vecs = NULL;
     ex->child_vec_count = 0;
@@ -1146,6 +1301,34 @@ static struct efs_child_vec *child_vec_get(struct efs_export *ex, efs_ino_t pare
     return &ex->child_vecs[vi];
 }
 
+/* AW: grow the reverse slot -> position map when the load exceeds half.
+ * Positions are simply the vector indices, so a rehash re-records every
+ * current slot; nothing outside this function holds a map array pointer. */
+static int child_pos_rehash(struct efs_export *ex, struct efs_child_vec *v,
+                            uint64_t ncap)
+{
+    uint64_t oldcap = v->pos_mask + 1;
+    uint64_t *keys = NULL, *vals = NULL, mask = 0;
+    if (idx_init(&keys, &vals, &mask, ncap) != 0)
+        return -1;
+    for (uint64_t i = 0; i < v->count; i++) {
+        if (idx_put(keys, vals, mask, v->slots[i] + 1, i) != 0) {
+            free(keys);
+            free(vals);
+            return -1;
+        }
+    }
+    free(v->pos_keys);
+    free(v->pos_vals);
+    v->pos_keys = keys;
+    v->pos_vals = vals;
+    ex->staged_child_bytes += ((mask + 1) * 2 * sizeof(uint64_t)) -
+                              (oldcap * 2 * sizeof(uint64_t));
+    v->pos_mask = mask;
+    staged_refresh(ex);
+    return 0;
+}
+
 static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
 {
     if (parent == inode_at(ex, slot)->ino && parent == EFS_ROOT_INO)
@@ -1153,6 +1336,13 @@ static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
     struct efs_child_vec *v = child_vec_get(ex, parent, 1);
     if (!v)
         return -1;
+    /* Grow before mutating: an allocation failure leaves the vector and the
+     * reverse index exactly as they were (failure atomicity). */
+    if ((v->count + 1) * 2 > v->pos_mask + 1) {
+        uint64_t ncap = v->pos_mask ? (v->pos_mask + 1) * 2 : 16;
+        if (child_pos_rehash(ex, v, ncap) != 0)
+            return -1;
+    }
     if (v->count >= v->cap) {
         uint64_t ncap = v->cap ? v->cap * 2 : 4;
         uint64_t *ns = realloc(v->slots, ncap * sizeof(uint64_t));
@@ -1163,6 +1353,8 @@ static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
         v->cap = ncap;
         staged_refresh(ex);
     }
+    if (idx_put(v->pos_keys, v->pos_vals, v->pos_mask, slot + 1, v->count) != 0)
+        return -1;
     v->slots[v->count++] = slot;
     return 0;
 }
@@ -1172,13 +1364,17 @@ static void child_idx_del(struct efs_export *ex, efs_ino_t parent, uint64_t slot
     struct efs_child_vec *v = child_vec_get(ex, parent, 0);
     if (!v)
         return;
-    for (uint64_t i = 0; i < v->count; i++) {
-        if (v->slots[i] == slot) {
-            v->slots[i] = v->slots[v->count - 1];
-            v->count--;
-            return;
-        }
-    }
+    uint64_t pos;
+    if (idx_get(v->pos_keys, v->pos_vals, v->pos_mask, slot + 1, &pos) != 0 ||
+        pos >= v->count)
+        return;
+    uint64_t last = v->count - 1;
+    uint64_t moved = v->slots[last];
+    v->slots[pos] = moved;
+    v->count--;
+    idx_del(v->pos_keys, v->pos_vals, v->pos_mask, slot + 1);
+    if (pos != last)
+        idx_put(v->pos_keys, v->pos_vals, v->pos_mask, moved + 1, pos);
 }
 
 static void child_idx_replace_slot(struct efs_export *ex, efs_ino_t parent,
@@ -1187,12 +1383,13 @@ static void child_idx_replace_slot(struct efs_export *ex, efs_ino_t parent,
     struct efs_child_vec *v = child_vec_get(ex, parent, 0);
     if (!v)
         return;
-    for (uint64_t i = 0; i < v->count; i++) {
-        if (v->slots[i] == old_slot) {
-            v->slots[i] = new_slot;
-            return;
-        }
-    }
+    uint64_t pos;
+    if (idx_get(v->pos_keys, v->pos_vals, v->pos_mask, old_slot + 1, &pos) != 0 ||
+        pos >= v->count)
+        return;
+    v->slots[pos] = new_slot;
+    idx_del(v->pos_keys, v->pos_vals, v->pos_mask, old_slot + 1);
+    idx_put(v->pos_keys, v->pos_vals, v->pos_mask, new_slot + 1, pos);
 }
 
 static void child_idx_rebuild(struct efs_export *ex)
@@ -1582,10 +1779,11 @@ static void rollup_expand_parents_of(struct efs_export *ex, efs_ino_t ino)
         return;
     }
     /* Hardlinked: one inode row per link, each with its own parent (rare). */
-    for (uint64_t i = 0; i < ex->inode_count; i++) {
-        if (inode_at(ex, i)->ino == ino)
-            expand_parent_chain(ex, ino, inode_at(ex, i)->parent, lo, hi);
-    }
+    const uint64_t *slots;
+    uint64_t one;
+    uint32_t n = alias_slots(ex, ino, &slots, &one);
+    for (uint32_t k = 0; k < n; k++)
+        expand_parent_chain(ex, ino, inode_at(ex, slots[k])->parent, lo, hi);
 }
 
 static void pending_rollup_clear(struct efs_export *ex)
@@ -1675,10 +1873,11 @@ static void apply_size_delta_for_ino(struct efs_export *ex, efs_ino_t ino,
         rollup_size_delta(ex, p->parent, delta);
         return;
     }
-    for (uint64_t i = 0; i < ex->inode_count; i++) {
-        if (inode_at(ex, i)->ino == ino)
-            rollup_size_delta(ex, inode_at(ex, i)->parent, delta);
-    }
+    const uint64_t *slots;
+    uint64_t one;
+    uint32_t n = alias_slots(ex, ino, &slots, &one);
+    for (uint32_t k = 0; k < n; k++)
+        rollup_size_delta(ex, inode_at(ex, slots[k])->parent, delta);
 }
 
 void efs_export_ensure_rollups(struct efs_export *ex)
@@ -1713,9 +1912,11 @@ static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
      * Directories have nlink>=2 without hardlink rows — nothing to sync. */
     if (!src || src->nlink <= 1 || efs_mode_is_dir(src->mode))
         return;
-    for (uint64_t i = 0; i < ex->inode_count; i++) {
-        if (inode_at(ex, i)->ino != ino)
-            continue;
+    const uint64_t *slots;
+    uint64_t one;
+    uint32_t nslots = alias_slots(ex, ino, &slots, &one);
+    for (uint32_t k = 0; k < nslots; k++) {
+        uint64_t i = slots[k];
         efs_ino_t parent = inode_at(ex, i)->parent;
         uint32_t noff = inode_at(ex, i)->name_off;
         uint16_t nlen = inode_at(ex, i)->name_len;
@@ -1850,12 +2051,8 @@ static void forget_ino_on_tab(struct efs_export *ex, efs_ino_t ino)
         struct efs_inode_mem *row = inode_at(ex, pos);
         if (!row || row->ino != ino)
             break;
-        /* nlink > 1 hints another link row may share this ino on this tab;
-         * remove_inode_slot then re-indexes a survivor (or drops the key).
-         * nlink <= 1 takes the O(1) idx_del path. */
-        int expect_survivor = row->nlink > 1;
         child_idx_del(ex, row->parent, pos);
-        remove_inode_slot(ex, pos, expect_survivor);
+        remove_inode_slot(ex, pos);
     }
 }
 
@@ -1882,7 +2079,7 @@ void efs_export_forget_name(struct efs_export *ex, efs_ino_t parent,
             inode_at(tab, pos)->ino == expected) {
             child_idx_del(tab, parent, pos);
             /* Cache eviction preserves chunk maps, nlink and other aliases. */
-            remove_inode_slot(tab, pos, 1);
+            remove_inode_slot(tab, pos);
         }
     }
 }
@@ -2070,54 +2267,51 @@ void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
 
 /* Swap-remove inode array slot i; refresh indexes for the moved row.
  * Caller must already have applied rollup_sub and child_idx_del for slot i.
- * expect_survivor: another hard-link row for this ino remains (nlink > 0). */
-static void remove_inode_slot(struct efs_export *ex, uint64_t i, int expect_survivor)
+ * Another hard-link row of the same ino may remain; ino_idx is re-pointed at it. */
+static void remove_inode_slot(struct efs_export *ex, uint64_t i)
 {
     efs_ino_t old_parent = inode_at(ex, i)->parent;
     char old_name[EFS_MAX_NAME];
     memset(old_name, 0, sizeof(old_name));
     strncpy(old_name, efs_export_inode_name(ex, i), EFS_MAX_NAME - 1);
     efs_ino_t old_ino = inode_at(ex, i)->ino;
+    uint64_t survivor;
 
     name_idx_del(ex, old_parent, old_name);
+    alias_del(ex, old_ino, i, &survivor);
 
     ex->layout_epoch++;
     uint64_t last = ex->inode_count - 1;
     if (i != last) {
         efs_ino_t moved_parent = inode_at(ex, last)->parent;
-        idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, inode_at(ex, last)->ino);
+        efs_ino_t moved_ino = inode_at(ex, last)->ino;
+        idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, moved_ino);
         name_idx_del(ex, inode_at(ex, last)->parent, efs_export_inode_name(ex, last));
         (void)inode_row_move(ex, i, last);
         ex->inode_count--;
         idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, inode_at(ex, i)->ino, i);
         name_idx_put(ex, inode_at(ex, i)->parent, efs_export_inode_name(ex, i), i);
         child_idx_replace_slot(ex, moved_parent, last, i);
+        alias_move(ex, moved_ino, last, i);
+        if (survivor == last)
+            survivor = i;
     } else {
         ex->inode_count--;
     }
 
     /* ino_idx holds one slot per ino. If it still points at a live row with
      * old_ino (hard-link survivor, or the moved last row was the same ino),
-     * leave it. Otherwise drop it — do not scan the inode table. */
+     * leave it. */
     uint64_t pos = 0;
     if (ex->ino_keys &&
         idx_get(ex->ino_keys, ex->ino_vals, ex->ino_mask, old_ino, &pos) == 0 &&
         pos < ex->inode_count && inode_at(ex, pos)->ino == old_ino)
         return;
 
-    if (!expect_survivor) {
-        idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, old_ino);
-        return;
-    }
-
-    /* Rare: unlinked the indexed hard-link row; find another dent. */
-    uint64_t survivor = UINT64_MAX;
-    for (uint64_t k = 0; k < ex->inode_count; k++) {
-        if (inode_at(ex, k)->ino == old_ino) {
-            survivor = k;
-            break;
-        }
-    }
+    /* Unlinked the indexed hard-link row: re-point at another alias, if any. */
+    struct efs_alias_vec *rest = alias_get(ex, old_ino);
+    if (survivor == UINT64_MAX && rest && rest->n)
+        survivor = rest->slot[0];
     if (survivor != UINT64_MAX)
         idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, old_ino, survivor);
     else
@@ -2194,6 +2388,7 @@ void efs_export_free(struct efs_export *ex)
     free(ex->pending_rollup_deltas);
     free(ex->pending_rollup_touch);
     idx_free(&ex->ino_keys, &ex->ino_vals, &ex->ino_mask);
+    alias_free_all(ex);
     idx_free(&ex->name_keys, &ex->name_vals, &ex->name_mask);
     idx_free(&ex->chunk_keys, &ex->chunk_vals, &ex->chunk_mask);
     icnt_free(ex);
@@ -2523,14 +2718,15 @@ static void tab_set_nlink(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
 {
     /* Same authoritative-index early-out as efs_export_unlink: this is fanned
      * across every loaded shard table, so the scan must not run on tables that
-     * cannot hold the ino. The scan still runs when the ino IS present, since
-     * hardlinks put several rows on one table and the index holds only one. */
+     * cannot hold the ino. Hardlinks put several rows on one table and the
+     * index holds only one, so the aliases come from alias_slots. */
     if (tab->ino_keys && !inode_ptr(tab, ino))
         return;
-    for (uint64_t i = 0; i < tab->inode_count; i++) {
-        if (inode_at(tab, i)->ino == ino)
-            inode_at(tab, i)->nlink = nlink;
-    }
+    const uint64_t *slots;
+    uint64_t one;
+    uint32_t n = alias_slots(tab, ino, &slots, &one);
+    for (uint32_t k = 0; k < n; k++)
+        inode_at(tab, slots[k])->nlink = nlink;
 }
 
 int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
@@ -2607,7 +2803,7 @@ int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
                 return EFS_OK;
             }
         }
-        remove_inode_slot(dtab, pos, nlink > 0);
+        remove_inode_slot(dtab, pos);
         if (ptab != dtab)
 
         /* Parent dentry only when the canonical row lives elsewhere.
@@ -2649,7 +2845,7 @@ int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
         return EFS_OK;
     }
 
-    remove_inode_slot(ex, pos, nlink > 0);
+    remove_inode_slot(ex, pos);
 
     if (nlink == 0) {
         remove_chunks_for_ino(ex, ino);
@@ -2657,10 +2853,11 @@ int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
     }
 
     /* Remaining hard links keep the decremented nlink. */
-    for (uint64_t i = 0; i < ex->inode_count; i++) {
-        if (inode_at(ex, i)->ino == ino)
-            inode_at(ex, i)->nlink = nlink;
-    }
+    const uint64_t *slots;
+    uint64_t one;
+    uint32_t nrows = alias_slots(ex, ino, &slots, &one);
+    for (uint32_t k = 0; k < nrows; k++)
+        inode_at(ex, slots[k])->nlink = nlink;
     return EFS_OK;
 }
 
@@ -2680,23 +2877,22 @@ int efs_export_unlink(struct efs_export *ex, efs_ino_t ino)
 
     /* Remove every directory name for this inode, then chunks. */
     int found = 0;
-    uint64_t i = 0;
-    while (i < ex->inode_count) {
-        if (inode_at(ex, i)->ino == ino) {
-            found = 1;
-            struct efs_inode_mem removed = (*inode_at(ex, i));
-            if (efs_mode_is_dir(removed.mode)) {
-                struct efs_inode_mem *p = inode_ptr(ex, removed.parent);
-                if (p && p->nlink > 2)
-                    p->nlink--;
-            }
-            rollup_sub_under(ex, removed.parent, &removed);
-            child_idx_del(ex, removed.parent, i);
-            remove_inode_slot(ex, i, 0);
-            /* slot i now holds a different row (or count shrank) */
-        } else {
-            i++;
+    for (;;) {
+        const uint64_t *slots;
+        uint64_t one;
+        if (alias_slots(ex, ino, &slots, &one) == 0)
+            break;
+        uint64_t i = slots[0];
+        found = 1;
+        struct efs_inode_mem removed = (*inode_at(ex, i));
+        if (efs_mode_is_dir(removed.mode)) {
+            struct efs_inode_mem *p = inode_ptr(ex, removed.parent);
+            if (p && p->nlink > 2)
+                p->nlink--;
         }
+        rollup_sub_under(ex, removed.parent, &removed);
+        child_idx_del(ex, removed.parent, i);
+        remove_inode_slot(ex, i);
     }
     if (!found)
         return EFS_ERR_NOT_FOUND;
@@ -2804,6 +3000,11 @@ int efs_export_link_dentry(struct efs_export *ex, const struct efs_inode *src,
     if (export_ensure_inode_idx(ptab) != 0)
         return EFS_ERR_NOMEM;
 
+    uint64_t have;
+    int alias = efs_export_inode_slot(ptab, src->ino, &have) == EFS_OK;
+    if (alias && alias_reserve(ptab, src->ino, have) != 0)
+        return EFS_ERR_NOMEM;
+
     shard_set_nlink(ex, src->ino, src->nlink);
 
     uint64_t pos = ptab->inode_count++;
@@ -2820,6 +3021,8 @@ int efs_export_link_dentry(struct efs_export *ex, const struct efs_inode *src,
         return EFS_ERR_NOMEM;
     }
     time_now(&dst->ctime);
+    if (alias)
+        alias_push(ptab, src->ino, pos);
     name_idx_put(ptab, new_parent, new_name, pos);
     child_idx_add(ptab, new_parent, pos);
     rollup_add_under(ptab, new_parent, dst);
@@ -2878,14 +3081,21 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     src = inode_ptr(ex, src_ino);
     if (!src)
         return EFS_ERR_NOT_FOUND;
+    uint64_t src_slot;
+    if (efs_export_inode_slot(ex, src_ino, &src_slot) != EFS_OK ||
+        alias_reserve(ex, src_ino, src_slot) != 0)
+        return EFS_ERR_NOMEM;
 
     inode_bump_ctime(src);
     uint64_t ct = src->ctime;
     uint32_t nlink = src->nlink + 1;
     sync_hardlink_attrs(ex, src_ino, src);
-    for (uint64_t i = 0; i < ex->inode_count; i++) {
-        if (inode_at(ex, i)->ino == src_ino)
-            inode_at(ex, i)->nlink = nlink;
+    {
+        const uint64_t *slots;
+        uint64_t one;
+        uint32_t n = alias_slots(ex, src_ino, &slots, &one);
+        for (uint32_t k = 0; k < n; k++)
+            inode_at(ex, slots[k])->nlink = nlink;
     }
     stamp_ctime_loaded(ex, src_ino, ct);
     src = inode_ptr(ex, src_ino);
@@ -2908,6 +3118,7 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     time_now(&dst->ctime);
 
     /* Keep ino_idx pointing at an existing row; name index gets the new name. */
+    alias_push(ex, src_ino, pos);
     name_idx_put(ex, new_parent, new_name, pos);
     child_idx_add(ex, new_parent, pos);
     rollup_add_under(ex, new_parent, dst);
@@ -3634,6 +3845,8 @@ static uint64_t export_staged_bytes_one(const struct efs_export *ex)
     b += ex->chunk_capacity * sizeof(struct efs_chunk_entry);
     if (ex->ino_keys)
         b += (ex->ino_mask + 1) * 2 * sizeof(uint64_t);
+    if (ex->alias_keys)
+        b += (ex->alias_mask + 1) * 2 * sizeof(uint64_t) + ex->alias_bytes;
     if (ex->name_keys)
         b += (ex->name_mask + 1) * 2 * sizeof(uint64_t);
     if (ex->chunk_keys)

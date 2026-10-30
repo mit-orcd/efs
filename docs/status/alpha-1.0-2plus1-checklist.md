@@ -173,6 +173,8 @@ Historical October 22 legend (retained):
 | K54 | Member-down clean unmount: a clean client stop fails at the session revoke (`revoke rc=-13 phase=storage-fence`) while any member is down, because the storage fence must reach every configured member (open finding U4, found Oct 25). | clean stop with one member down | OPEN, blocks alpha: yes (D46, user Oct 28: required fix, not a limitation); owner unassigned: complete accepted flush/settle and safe durable revocation with one member down, never turn a failed revoke into a clean shutdown ([decision](decisions.md)) |
 | K55 | Task AI real-RDMA full gate on fcstor015: B6 slow mode returns EIO for F0 after 60.01 s; snapshot PDD shows two durable fragments, but waiting for the slow COMMIT consumes the sweep deadline before its degraded mark. Untouched base `486aa3a46` independently reproduces F0 EIO at 60.04 s. | slow-member fsync availability / bounded durable marking | FIXED, merged into devel (wave 32, `4e4b7ec75`); independent focused TCP/RDMA qualification PASS at `5185bfcd3`, four slow cases plus exact restart bytes; full gate 546/0 FAIL/4 host-limited NOTRUN, blanket INCOMPLETE; distinct from still-OPEN K54 ([original](ai-rdma-registry-lock-20261028.md), [fix qualification](k55-slow-commit-20261028.md)). |
 | K56 | `make asan-check` fails five tests at startup (`env_removed`, `k36_recovery`, `k36_segment_recovery`, `k37_segment_rebuild`, `d4_progress`): the ASan-built `efs-fuse` exits with `cannot establish allocator policy`. Task I's wave 31 allocator policy (`fuse_allocator_init`) requires both glibc `mallopt` calls to succeed, and ASan's replacement allocator makes `mallopt` fail. Found by Task AL's `make asan-check`, identical on clean devel. | sanitizer tooling / startup | FIXED on `k56-asan-allocator`, blocks alpha: no (a sanitizer build only; normal glibc builds still refuse to start if the policy fails): the policy is skipped under `__SANITIZE_ADDRESS__`. xorinox `bash tests/sanitizer_check.sh asan`: baseline devel `330c48aea` 49 run / 5 failed (60 s, all the startup refusal), fix `ae655e066` 49 run / 0 failed (425 s); a normal build's `efs-fuse --help` still starts ([evidence](k56-asan-fuse-allocator-20261029.md)) |
+| K57 | Task AY audit: the packer-path segment PUT acknowledged an existing fragment file after checking only its I25 tail record; the payload was never hashed. A copy with a damaged payload under an intact tail (media damage, or a half-visible write of an earlier attempt) was acknowledged as placed, and the packer's retry on a fresh connection could run beside the PUT it retried (shared segment guard). The ordinary path rewrites an existing file and the rebuild branch hashed it. | upload completion / segment placement | FIXED on `agent/devel-ay`, blocks alpha: no (the segment kept two good fragments and a later audit finds the bad one; nothing is lost with a single bad copy): every segment PUT now runs the full tail-and-payload check under the exclusive segment guard, removes a bad copy and rewrites it; removal subtracts what the inventory counted. Retained reproduction `t_upload_retry_matrix` (`tests/test_reclaim.c`) fails on `74d34d588` and passes with the fix ([evidence](ay-upload-completion-audit-20261029.md)) |
+| K58 | Task AZ audit: verified recovery (`recovery_chunk_path`, `server_segment_recovery_check`) deleted a fragment on any prover verdict except NOT_FOUND and NOMEM, including `EFS_ERR_IO` from a failed open or read (EIO, EACCES, EMFILE, a short read). A read error proves nothing about the bytes, so one transient error after an unclean stop removed a good fragment and marked its stripe degraded; with another fragment of the stripe already marked, the 2+1 code could not rebuild it. | durability / destructive action on unproven evidence | FIXED on `agent/devel-az`, blocks alpha: no (fixed here): only CHECKSUM, FRAG_FORMAT and FRAG_IDENTITY verdicts drop a file; an I/O error is returned, recovery reports FAILED and the store stays fenced until a restart verifies it. Retained regression: `tests/test_store_durability.c` injects EIO, EACCES and EMFILE on open for the chunk wrapper, the segment wrapper and the local scan (fails on the old logic: the valid fragment was dropped); fixture matrix `tests/test_verification_matrix.c` ([evidence](az-verification-policy-audit-20261029.md)). |
 
 
 ### Recheck: candidate register reconciliation (October 28)
@@ -242,6 +244,8 @@ standalone rows K15/K16/K27/K28 are added without inventing historical runs.
 | K54 | OPEN, blocks alpha: yes; owner unassigned: D46 makes the member-down clean unmount (U4, `revoke rc=-13 phase=storage-fence`) a required fix before alpha 1.0 ([decision](decisions.md)) |
 | K55 | FIXED, merged into devel (wave 32, `4e4b7ec75`); original PDD/slow-fsync failure retained; independent TCP/RDMA focused qualification PASS, full gate 546/0 FAIL/4 host-limited NOTRUN; K54 still OPEN ([original](ai-rdma-registry-lock-20261028.md), [fix qualification](k55-slow-commit-20261028.md)). |
 | K56 | FIXED on `k56-asan-allocator`, blocks alpha: no; ASan-built `efs-fuse` refused to start (`cannot establish allocator policy`) since wave 31, five `make asan-check` tests failed at startup; baseline 49 run / 5 failed, fix 49 run / 0 failed ([evidence](k56-asan-fuse-allocator-20261029.md)) |
+| K57 | FIXED on `agent/devel-ay`, blocks alpha: no; packer-path segment PUT trusted an existing file on its tail record alone; now full check under the exclusive guard, reproduction `t_upload_retry_matrix` ([evidence](ay-upload-completion-audit-20261029.md)) |
+| K58 | FIXED on `agent/devel-az`, blocks alpha: no; recovery no longer deletes a fragment on an I/O error (open EIO/EACCES/EMFILE), only on a proven mismatch; regression in `test_store_durability`, matrix `test_verification_matrix` ([evidence](az-verification-policy-audit-20261029.md)) |
 
 **Oct 23 evidence qualification:** nuc capture bundles are reported lost;
 xorinox raw outputs were deleted. Their PASS labels below are historical
@@ -388,6 +392,18 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
 11. **VERIFY sweep on separate hosts with one candidate:** K6, K11, K12,
     K17–K21. This needs the 3-, 4- and 5-plus-host clusters, so they are
     set up in parallel with steps 2–10.
+
+- [ ] **BC — Unlink in a loaded parent: avoid the `recompute_times_up` child rescan.**
+  Found by AW ([evidence](aw-child-vector-index-20261028.md)). `rollup_sub_under`
+  (`src/meta/metadata.c`) ends in `recompute_times_up`, which rescans every child
+  of the parent (and each ancestor) to recompute exact time bounds. At 1 M
+  children this is 64-78 % of unlink time, so AW's O(1) child-vector deletion does
+  not change end-to-end unlink latency, and D removals stay O(D²). AW tried an
+  exact-skip fast path and reverted it: the convergence check caught a stale
+  `parent_tmin`. **Measure first** (comparisons and unlink ns at D = 1 K/100 K/1 M
+  with the child-vector index in place); a fix must keep the time bounds exact or
+  document the allowed staleness, with the AW convergence check as a gate. Do not
+  silently expand AW.
 
 ### Stage 1 additional letter tasks — observability interference (AB–AF)
 
@@ -960,7 +976,7 @@ checked against the function bodies and callers. Complexity below describes
 those loops, not a measured end-to-end slowdown or an unbounded input: message
 and staging limits still apply. No K defect, acceptance or failure verdict changes.
 
-- [ ] **AV — REPORT: index the chunk-to-inode-size join once per request.**
+- [x] **AV — REPORT: index the chunk-to-inode-size join once per request.**
   In `src/server/raft_host.c::server_raft_host_report`, the main record loop
   searches `irecs[0..ino_count)` from the start for each of `count` chunk records.
   This is O(C × I) comparisons in the worst case for C chunks and I inode-size
@@ -980,7 +996,26 @@ and staging limits still apply. No K defect, acceptance or failure verdict chang
   P3-C's ticket compaction. The client chunk-only-inode fallback has another
   size-array scan, but it already bypasses normal inodes through `dirty_set_has`;
   do not label all client REPORT construction quadratic from that rare branch.
-- [ ] **AW — Local child vectors: avoid a parent-sized search on deletion and slot moves.**
+  **Measured 2026-10-29, no change** (`docs/status/av-report-join-20261028.md`):
+  the join costs 1–32 comparisons per REPORT across big/small/mixed/openmany
+  loads — C and I are never both large in one real frame and first-match makes
+  the common case linear; even an adversarial C=I=512 frame is ~0.1 ms, far
+  below the REPORT's own wall cost. No index is justified.
+- [x] **AW — Local child vectors: avoid a parent-sized search on deletion and slot moves.**
+  **IMPLEMENTED (`50218c827`), merged in wave 37** (Oct 29,
+  [evidence](aw-child-vector-index-20261028.md)): a reverse slot→position map
+  per child vector, charged to the same staged memory budget; deletion and
+  relocation repair are O(1) (~6 map operations instead of ~D comparisons at
+  1 K/100 K/1 M children). Rollup semantics unchanged (convergence verified).
+  End-to-end unlink latency is unchanged because the dominant cost is the
+  pre-existing `recompute_times_up` rescan (a separate O(D) mechanism,
+  recorded as a follow-up finding; the exact-skip fast path tried here was
+  reverted after the correctness check caught a stale bound). Gates:
+  deterministic child-vec test (realloc, cross-parent swap, aliases,
+  grow/delete cycles, allocation failure, root), sparse-metadata,
+  stage-evict, rename/unlink coverage, ASan/LSan PASS; test-all on intel1
+  547/2/12 (b6 = pre-existing; K41 = timing-sensitive, baseline and
+  isolation both PASS).
   `src/meta/metadata.c::child_idx_del` searches all slots of the parent's child
   vector before swap-removing the match. `child_idx_replace_slot` searches that
   vector again to fix a relocated inode row; `remove_inode_slot` invokes it
@@ -999,7 +1034,7 @@ and staging limits still apply. No K defect, acceptance or failure verdict chang
   delete cycles and allocation failure. Measure comparisons against loaded
   child count, retained index bytes and local mutation latency. Distinct from
   AH's chunk-map locking and AO's server READDIR page transport.
-- [ ] **AX — Loaded hardlink aliases: visit aliases rather than unrelated inode rows.**
+- [x] **AX — Loaded hardlink aliases: visit aliases rather than unrelated inode rows.**
   `src/meta/metadata.c::sync_hardlink_attrs` scans `ex->inode_count` to propagate
   shared attributes for a non-directory with nlink > 1; size, mode, owner, time
   and RPC upsert callers use it. Single-link files and directories already return
@@ -1037,8 +1072,9 @@ All are **OPEN / audit qualification NOTRUN**. Graph navigation and source reads
 confirm separate mechanisms; they do not prove a defect. Unlike the optimization
 items above, these are Stage 1 due-diligence gates on authority, lifetime and
 failure semantics. No K defect or performance PASS is inferred from duplication.
+  **Done (Oct 29, `agent/devel-ax`):** above the threshold (13–20 ms per chmod/truncate/link on a hard-linked file at 1 M loaded rows, 0.001 ms after); per-table alias vector replaces the scans ([evidence](ax-hardlink-alias-index-20261028.md)). Gate xorinox 553 / 0 FAIL / 10 NOTRUN.
 
-- [ ] **AY — Ordinary versus packed upload: what does successful completion prove?**
+- [x] **AY — Ordinary versus packed upload: what does successful completion prove?**
   Ordinary `src/server/put_upload.c::server_put_upload` checks the exact ticket
   under fresh authority, enters a storage-session guard and writes through the
   export/store path. Ordinary data durability is tracked by root barriers and
@@ -1060,7 +1096,7 @@ failure semantics. No K defect or performance PASS is inferred from duplication.
   **Done:** reviewed completion contracts and cross-path fault results, with
   defects fixed/retested or explicitly tracked as blockers. AN/AQ/AR still own
   RPC/barrier/rewrite optimization; this task owns correctness of their contracts.
-- [ ] **AZ — Verification policy across GET, audit and recovery.**
+- [x] **AZ — Verification policy across GET, audit and recovery.**
   Ordinary serving uses `store.c::read_fragment_verified`; packed serving uses
   `segment_store.c::server_segment_read`; packed audit uses
   `server_segment_check`; recovery uses the verification paths in `store.c`
@@ -1081,6 +1117,13 @@ failure semantics. No K defect or performance PASS is inferred from duplication.
   **Done:** matrix outcomes and retained regressions for gaps; identify reusable
   policy primitives only after proving the guarantees match. AK/AP retain their
   hashing/copy/I/O scope; W123/K36 failures and qualification remain independent.
+  **Audited 2026-10-29** (`docs/status/az-verification-policy-audit-20261029.md`):
+  six wrappers tabulated, one fixture matrix (12 cases) through all of them
+  (`tests/test_verification_matrix.c`). One demonstrated gap, **K58**: verified
+  recovery deleted a fragment on an I/O error; fixed with a retained regression.
+  Other differences (extra tail, where the expected digest is compared, tickets
+  marked after the fence) are justified in the page; no shared primitive proposed
+  beyond the recovery verdict predicate.
 - [ ] **BA — Ordinary orphan, superseded-object and segment deletion authority.**
   `src/server/put_orphan.c::server_put_orphan_delete` requires a durable session
   floor and authoritative orphan status before exact-object deletion and directory

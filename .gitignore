@@ -35,6 +35,7 @@ tests/test_txn
 tests/test_session
 tests/test_lock
 tests/test_stage_evict
+tests/test_hardlink_alias
 tests/test_conn_fd
 tests/perf/tcp_rdma/xprt_bench
 tests/faults/fault_sim
@@ -97,6 +98,7 @@ tests/test_query_catalog
 tests/test_name_index
 tests/test_append_transaction
 tests/test_store_durability
+tests/test_verification_matrix
 tests/test_append_receipt
 tests/test_put_ticket
 tests/test_store_gc

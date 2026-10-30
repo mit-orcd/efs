@@ -13,12 +13,15 @@
 #include <sys/vfs.h>
 static unsigned file_syncs,directory_syncs,sync_opens;
 static int booting;
+static const char *fail_open_path;
+static int fail_open_errno;
 static int fail_file,fail_directory,fail_directory_at,interrupt_directory,fail_directory_close;
 static int barrier_open(const char *path,int flags,...)
 {
     int mode=0;
     if(flags&O_CREAT) {va_list ap;va_start(ap,flags);mode=va_arg(ap,int);va_end(ap);}
     if((flags&O_SYNC)==O_SYNC)sync_opens++;
+    if(fail_open_errno && fail_open_path && !strcmp(path,fail_open_path)) {errno=fail_open_errno;return -1;}
     return open(path,flags,mode);
 }
 static int barrier_sync(int fd)
@@ -328,6 +331,32 @@ static void test_recovery_local(uint8_t *data)
     assert(server_recovery_fragment_check(s,1,12345,11,1,0x7b,wrong,&c)==EFS_ERR_NOT_FOUND &&
            c.dropped==1 && access(pub,F_OK));
     assert(server_recovery_fragment_check(s,1,12345,8,1,0x78,want,&c)==EFS_ERR_NOT_FOUND);
+    /* AZ: a read error proves nothing, so no verdict deletes the file: the
+     * chunk and segment wrappers and the scan report IO and keep it. */
+    {
+        static const int errs[]={EIO,EACCES,EMFILE};
+        uint8_t seg[8192],ssum[EFS_HASH_SIZE];char sp[EFS_MAX_PATH+128];int created=0;
+        memset(seg,0x5a,sizeof(seg));efs_hash(seg,sizeof(seg),ssum);
+        server_segment_path(s,0,0x1234,1,0,sp,sizeof(sp));
+        assert(sg_write(s,sp,0,0x1234,1,0,seg,sizeof(seg),ssum,&created)==EFS_OK && created);
+        uint64_t used=s->nodes[0].used;
+        for(unsigned i=0;i<sizeof(errs)/sizeof(errs[0]);i++){
+            fail_open_errno=errs[i];
+            memset(&c,0,sizeof(c));
+            fail_open_path=good;
+            assert(server_recovery_fragment_check(s,1,12345,7,1,0x77,want,&c)==EFS_ERR_IO && !c.dropped);
+            assert(server_recovery_scan_local(s,&c,&stop)==EFS_ERR_IO && !c.dropped);
+            fail_open_path=sp;
+            assert(server_segment_recovery_check(s,0,0x1234,1,0,ssum,&c)==EFS_ERR_IO && !c.dropped);
+            fail_open_errno=0;
+            assert(!access(good,F_OK) && !access(sp,F_OK) && s->nodes[0].used==used);
+        }
+        memset(&c,0,sizeof(c));
+        assert(server_segment_recovery_check(s,0,0x1234,1,0,ssum,&c)==EFS_OK && !c.dropped);
+        /* Wrong bytes remain provable and dropped. */
+        {int fd=open(sp,O_WRONLY);assert(fd>=0 && pwrite(fd,"X",1,100)==1);close(fd);}
+        assert(server_segment_recovery_check(s,0,0x1234,1,0,ssum,&c)==EFS_ERR_NOT_FOUND && c.dropped==1 && access(sp,F_OK));
+    }
     /* Idempotent: a second pass (a crash during recovery) changes nothing. */
     memset(&c,0,sizeof(c));
     assert(server_recovery_scan_local(s,&c,&stop)==EFS_OK && c.checked==1 && !c.dropped);
