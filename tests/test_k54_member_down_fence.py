@@ -119,7 +119,8 @@ def main():
             # The collection of abandoned uploads is what keeps asking a member
             # that missed the seal: it must learn the epoch from the session shard
             # (not stay BUSY) and seal it before it deletes anything. No orphan
-            # record exists for this ticket, so the answer is STALE (-14), never BUSY (-13).
+            # record exists for this ticket, so the answer is STALE (-14), or OK (0: the drain already ledgered it and
+            # nothing is stored here), never BUSY (-13).
             fi = t.nodes.index(victim + 1)
             with socket.create_connection(('127.0.0.1', cluster.base + victim), timeout=30) as sock:
                 sock.sendall(HELLO)
@@ -128,7 +129,7 @@ def main():
                 body = struct.pack('>II', 1, fi) + t.wire
                 sock.sendall(struct.pack('>IB', len(body) + 1, 177) + body)
                 reply = exact(sock, struct.unpack('>I', exact(sock, 4))[0])
-            assert reply[0] == 178 and struct.unpack('=i', reply[1:5])[0] == -14, ('orphan delete did not learn the epoch', reply)
+            assert reply[0] == 178 and struct.unpack('=i', reply[1:5])[0] in (0, -14), ('orphan delete did not learn the epoch', reply)
             assert (work / f'n{victim+1}/meta/put-session' / t.wire[:16].hex()).is_file(), 'no certificate sealed'
             late_all_stale(t, 'returned after SIGKILL')
             print('(i) member SIGKILLed: revoke rc=0; returned member refuses the old epoch (STALE) PASS', flush=True)
