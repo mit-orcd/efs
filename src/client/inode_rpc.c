@@ -1560,6 +1560,8 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
     uint32_t plen = 0;
     uint32_t shard = efs_kv_inode_shard(parent);
     int rc;
+    unsigned attempt = 0;
+retry:
 
     if (efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
@@ -1610,6 +1612,13 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
         if (r->status != EFS_INODE_RPC_OK) {
             int st = rpc_status_to_efs(r->status);
             free(payload);
+            payload = NULL;
+            /* A changing split can exhaust this reply's scan budget before
+             * its layout cut is publishable. Retry from the unchanged cookie,
+             * with fresh server proofs and the existing operation deadline. */
+            if (st == EFS_ERR_BUSY && attempt < 15 &&
+                rpc_writer_retry_pause(attempt++) == EFS_OK)
+                goto retry;
             return st;
         }
         if (r->count > req.max_ents || r->next_done > 1 ||

@@ -32,6 +32,8 @@ def run(a):
         for held in c.held:held.close()
         c.ports={i:a.base_port+i-1 for i in (1,2,3,4)}
         c.held=[k.hold_port(a.bind,p) for p in c.ports.values()]
+    fourth_port=c.ports.pop(4) # place_leaders inspects only started members
+    started=time.monotonic()
     pause=a.work/'readdir-pause';mount=None;pool=None;stop=threading.Event();errors=[];writer=None;churn_count=[0];churn_started=threading.Event()
     result=dict(verdict='RUNNING',transport=a.transport,checks=[],errors=errors)
     def record(name):result['checks'].append(name);print('AO PASS',name,flush=True)
@@ -84,6 +86,7 @@ def run(a):
         result['churn_operations']=churn_count[0]
         for name in expected:assert (target/name).read_bytes()==payload(name),name
         record('every stable payload exact after churn stops')
+        c.ports[4]=fourth_port
         c.start(4,join=2);c.wait_members((1,2,3,4),4)
         c.wait_voters((1,2,3,4),lambda i,v:all(bits==(7 if g==0 else 14) for g,(_,bits) in v.items()))
         for node in (1,4):
@@ -130,6 +133,7 @@ def run(a):
         finally:
             if errors:result['verdict']='FAIL'
             for log in c.dir.glob('*.log'):(a.output/log.name).write_bytes(log.read_bytes())
+            result['elapsed_s']=time.monotonic()-started
             (a.output/'result.json').write_text(json.dumps(result,indent=2))
     assert result['verdict']=='PASS',result
 
