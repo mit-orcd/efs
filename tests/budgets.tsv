@@ -43,7 +43,7 @@ python3 tests/test_member_limit.py	20	1
 EFS_B6_MODES=down python3 tests/test_b6_unavailable.py	60	1	Task T: slowest host median 47.6 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 55 s
 EFS_B6_MODES=refuse python3 tests/test_b6_unavailable.py	55	1	Task T: slowest host median 40.7 s (fstor007); three runs/host, 1.25x rounded up to 5 s; previous budget 45 s
 EFS_B6_MODES=slow python3 tests/test_b6_unavailable.py	270	1	deliberate slow-member delays (8 s per operation, 45 s reads, 65 s commit) past the client deadlines
-EFS_B6_MODES=full python3 tests/test_b6_unavailable.py	85	2	
+EFS_B6_MODES=full python3 tests/test_b6_unavailable.py	400	2	K53: 318 s at 8 jobs on nuc (220-232 s alone), 1.25x rounded up to 5 s; the ENOSPC writers take 13-20 s each, the unlink room check adds about 45 s; previous budget 85 s was stale
 python3 tests/test_d4_progress.py	115	2	bounded-progress gate (76-125 s; packer PUT deadlines fail beside fsync-heavy tests): the budget above every other two-slot command makes it the first, in the report step-down window
 python3 tests/test_d4_plateau.py	185	2	Task T: slowest host median 145.3 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 180 s
 python3 tests/test_pack_dup_candidate.py	55	1	up to 60 s waiting for a pack-epoch boundary (41-60 s measured)

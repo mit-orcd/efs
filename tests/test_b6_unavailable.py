@@ -36,9 +36,14 @@ In each mode:
     explicit error; never wrong or short bytes. Within READ_BOUND_S each.
  4. fsync of every F*: success only with proof (two durable fragments plus
     a durable degraded mark, client log `marked degraded`), else EIO.
- 5. Write: new ordinary W* and small Q* files, each written, closed and
-    fsynced: success (a degraded acknowledgement with its W154 mark, never
-    from node 3), or an explicit error (full: ENOSPC, no degraded mark).
+ 5. Write, one after another (open, write, fsync and close folded into one
+    verdict, the refusing call kept as its stage): new ordinary W* and small
+    Q* files: success (a degraded acknowledgement with its W154 mark, never
+    from node 3), or an explicit error (full: ENOSPC, no degraded mark; K53: a success on
+    the full node counts only when the room it used is explained by the
+    ledger and the reclaim counters, b6_full_oracle.judge; before the
+    writers an unlink of one 128 KiB file must admit exactly one 128 KiB
+    file, and node 3's ledger never exceeds its quota).
     The degraded state shows: `Degraded chunks:` > 0 and `Protection:
     DEGRADED` (down, refuse); slow: that, or W154 already rebuilding the
     marks onto the slow member during the fault (status rebuilt=N rises:
@@ -62,6 +67,7 @@ Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 import errno, json, os, re, shutil, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from b6_full_oracle import judge  # noqa: E402
 from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload  # noqa: E402
 
 for b in (EFSD, MGMT):
@@ -96,10 +102,39 @@ result = {'bounds': {'read_s': READ_BOUND_S, 'write_s': WRITE_BOUND_S, 'fsync_s'
                      'read_slow_ms': READ_SLOW_MS, 'read_slow_s': READ_SLOW_BOUND_S},
           'modes': {}}
 t0 = time.time()
+T0 = time.monotonic()
 
 
 def status(c, i=1):
     return mgmt(c.env, 'status', c.ep(i))[1]
+
+
+FULL_QUIET_S = 3   # longer than a GC/reclaim pass (about 1 s)
+
+
+def node3_usage(c):
+    """(used, quota, status text) of node 3 as `efs-mgmt status` reports it."""
+    text = status(c, 3)
+    node = re.search(r'^  node 3:[\s\S]*?(?=^  node |\Z)', text, re.M)
+    match = re.search(r'^\s+bytes: used=(\d+) quota=(\d+)', node[0], re.M) if node else None
+    assert match, text
+    return int(match.group(1)), int(match.group(2)), text
+
+
+def node3_reclaimed(c):
+    """Payload bytes node 3's GC and reclaim have removed since it started."""
+    out = mgmt(c.env, 'gc-status', c.ep(3))[1]
+    m = re.search(r'reclaimed_payload_bytes=(\d+)', out)
+    assert m, out
+    return int(m.group(1))
+
+
+def mark(r, label):
+    """Sample node 3's ledger into the ordered trail kept in b6-result.json."""
+    used, quota, _ = node3_usage(r.c)
+    r.out.setdefault('usage_trail', []).append((label, used, round(time.monotonic() - T0, 3)))
+    assert used <= quota, f'{label}: node 3 used {used} above its quota {quota}'
+    return used
 
 
 def degraded(c, i=1):
@@ -201,6 +236,7 @@ class Run:
         self.c = Cluster(work, mode, [1, 2, 3], env)
         self.acked = {}     # name -> size: write and close (and fsync) succeeded
         self.refused = {}   # name -> errno: an explicit refusal
+        self.stages = {}    # name -> open|write|fsync|close: the call that refused it
         self.out = {'reads': {}, 'fsync': {}, 'writes': {}}
         self.mounts = []
 
@@ -230,17 +266,21 @@ class Run:
             self.fault.unlink()
 
     def write(self, m, name, size, sync=True):
-        """Write, close and (sync) fsync one file; record the verdict."""
+        """Write, close and (sync) fsync one file; record the verdict and,
+        for a refusal, the call that returned it in self.stages."""
         t = time.time()
+        stage = 'open'
         try:
             fd = os.open(m.path / name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
             try:
                 data = payload(name, size)
-                off = 0
+                off, stage = 0, 'write'
                 while off < len(data):
                     off += os.write(fd, data[off:])
                 if sync:
+                    stage = 'fsync'
                     os.fsync(fd)
+                stage = 'close'
             finally:
                 os.close(fd)
             self.acked[name] = size
@@ -248,6 +288,7 @@ class Run:
             verdict = 'ok'
         except OSError as e:
             self.refused[name] = e.errno
+            self.stages[name] = stage
             verdict = errno.errorcode.get(e.errno, str(e.errno))
         dt = time.time() - t
         assert dt <= WRITE_BOUND_S, f'{self.mode}: write {name} took {dt:.1f} s'
@@ -290,6 +331,69 @@ class Run:
         self.c.stop_all()
 
 
+def fill_node3(r, tag='fill'):
+    """Fill node 3's 16 MiB quota to within one fragment and let it settle.
+
+    K53: capacity freed after the refusal (a reclaim, session cleanup or
+    pack debit landing late) would let a writer succeed legitimately. So
+    wait until node 3's ledger has been still for FULL_QUIET_S, and fill
+    again if room appeared meanwhile. Returns the number of files written;
+    r.out['full_usage'] keeps the settled ledger the writers must not move.
+    """
+    a, k, rounds = r.a, 0, 0
+    while True:
+        while True:
+            v, _ = r.write(a, f'{tag}-{rounds}-{k}', 128 * 1024)
+            if v != 'ok':
+                assert v == 'ENOSPC', v
+                break
+            k += 1
+            assert k < 512, 'node 3 never filled'
+        used, quota, text = node3_usage(r.c)
+        quiet = time.monotonic()
+        end = quiet + 30
+        while time.monotonic() - quiet < FULL_QUIET_S:
+            assert time.monotonic() < end, f'node 3 ledger never settled: {used}'
+            time.sleep(0.25)
+            now, quota, text = node3_usage(r.c)
+            if now != used:
+                used, quiet = now, time.monotonic()
+        if quota - used < 65536:
+            break
+        rounds += 1
+        assert rounds < 5, f'node 3 keeps freeing room: used {used} of {quota}'
+    r.out[f'{tag}_files'] = k
+    r.out[f'{tag}_refill_rounds'] = rounds
+    r.out['full_usage'] = {'used': used, 'quota': quota, 'fragment_bytes': 65536}
+    r.out['full_reclaimed_at_fill'] = node3_reclaimed(r.c)
+    r.out['usage_trail'] = [('fill', used, round(time.monotonic() - T0, 3))]
+    assert quota == 16 * 1024 * 1024 and 0 <= quota - used < 65536, text
+    return k
+
+
+def room_scenario(r):
+    """K53 admission check with a known cause: unlink one 128 KiB file on the
+    full node 3, let the ledger settle, then exactly one more 128 KiB file
+    fits and the next is ENOSPC, with the ledger never above its quota."""
+    a = r.a
+    used0 = mark(r, 'room: before unlink')
+    os.unlink(a.path / 'fill-0-0')
+    r.acked.pop('fill-0-0')
+    quiet, used = time.monotonic(), used0
+    while time.monotonic() - quiet < FULL_QUIET_S:
+        assert time.monotonic() - quiet < 30, 'room: ledger never settled after the unlink'
+        time.sleep(0.25)
+        now, _, _ = node3_usage(r.c)
+        if now != used:
+            used, quiet = now, time.monotonic()
+    assert used0 - used == 65536, f'room: unlink freed {used0 - used} B, not one fragment'
+    first = r.write(a, 'room-0', 128 * 1024)[0]
+    second = r.write(a, 'room-1', 128 * 1024)[0]
+    mark(r, 'room: after the two writes')
+    assert (first, second) == ('ok', 'ENOSPC'), f'room: {first} then {second}, want ok then ENOSPC'
+    r.out['room'] = [first, second]
+
+
 def fault_on(r):
     if r.mode == 'down':
         r.c.stop(3)
@@ -325,22 +429,7 @@ def fault_on(r):
         # pinned files are too large to pack. A refused 1 MiB upload could
         # leave room for several smaller writes and partially stored data;
         # a single-chunk refusal establishes the granularity W*/Q* need.
-        k = 0
-        while True:
-            v, _ = r.write(a, f'fill-{k}', 128 * 1024)
-            if v != 'ok':
-                assert v == 'ENOSPC', v
-                break
-            k += 1
-            assert k < 512, 'node 3 never filled'
-        r.out['fill_files'] = k
-        text = status(r.c, 3)
-        node = re.search(r'^  node 3:[\s\S]*?(?=^  node |\Z)', text, re.M)
-        match = re.search(r'^\s+bytes: used=(\d+) quota=(\d+)', node[0], re.M) if node else None
-        assert match, text
-        used, quota = map(int, match.groups())
-        r.out['full_usage'] = {'used': used, 'quota': quota, 'fragment_bytes': 65536}
-        assert quota == 16 * 1024 * 1024 and 0 <= quota - used < 65536, text
+        fill_node3(r)
 
 
 def run_mode(mode):
@@ -449,19 +538,40 @@ def run_mode(mode):
         assert marked == 0, r.client_log(a)[-3000:]
 
     # 5. Write during the fault.
+    if mode == 'full':
+        # Steps 3 and 4 (a mount, its session revoke, fsyncs) can settle
+        # capacity too: top up so the writers meet a full, still node 3.
+        room_scenario(r)
+        fill_node3(r, 'topup')
     if mode == 'slow':
         r.set_fault(f'slow:{SLOW_MS} ' + DATA_OPS)
     ws = {}
     for k in range(3):
+        if mode == 'full':
+            mark(r, f'before W{k}')
         ws[f'W{k}'] = r.write(a, f'W{k}', LARGE)
     for k, size in enumerate(SMALL):
+        if mode == 'full':
+            mark(r, f'before Q{k}')
         ws[f'Q{k}'] = r.write(a, f'Q{k}', size)
     r.out['writes'] = {k: (v, round(dt, 2)) for k, (v, dt) in ws.items()}
     alog = r.client_log(a)
     from_3 = re.findall(r'degraded acknowledgement, fragment \d+ for node (\d+) not', alog)
     r.out['degraded_acks'] = len(from_3)
     if mode == 'full':
-        assert all(v == 'ENOSPC' for v, _ in ws.values()), f'full: {ws}'
+        mark(r, 'after the writers')
+        sizes = {f'W{k}': LARGE for k in range(3)} | {f'Q{k}': n for k, n in enumerate(SMALL)}
+        writers = [(n, v, sizes[n]) for n, (v, _) in ws.items()]
+        r.out['writer_stages'] = {n: r.stages.get(n) for n, (v, _) in ws.items() if v != 'ok'}
+        reclaimed = node3_reclaimed(c) - r.out['full_reclaimed_at_fill']
+        fu = r.out['full_usage']
+        ok, why = judge(fu['quota'], fu['used'], [t[:2] for t in r.out['usage_trail']], writers, reclaimed)
+        if not ok:   # a reclaim counter can trail the ledger it freed: look once more
+            time.sleep(FULL_QUIET_S)
+            reclaimed = node3_reclaimed(c) - r.out['full_reclaimed_at_fill']
+            ok, why = judge(fu['quota'], fu['used'], [t[:2] for t in r.out['usage_trail']], writers, reclaimed)
+        r.out['full_verdict'] = why
+        assert ok, f'full: {why}; writes {ws}; stages {r.out["writer_stages"]}; trail {r.out["usage_trail"]}'
         assert not from_3, alog[-3000:]
         assert degraded(c) == 0, status(c)
         r.out['degraded_during'] = 0
