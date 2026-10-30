@@ -22,6 +22,7 @@ code = r'''
 #include "efs/raft.h"
 #include <assert.h>
 #include <stdio.h>
+#define HOST_SESS_HDR_LEN 18
 struct efs_kv { int room, hot; }; /* hot: L0 at its cap, which must not count */
 struct efs_raft { int role; uint64_t lag, cap; };
 struct efs_raft_host { struct efs_kv *kv; uint64_t admit_busy; };
