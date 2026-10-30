@@ -2028,14 +2028,15 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         if (ni < 1)
             ni = 1;
         r->next_index[in->from] = ni;
-        /* W130/K6: match=0 from a peer with a proven prefix is an
-         * operator-ordered resync pull (the peer's log is untrusted even
-         * where it matches), not a fresh join. Log replay cannot heal a
-         * halted replica; only the image can. A young leader may have no
-         * image yet: snap_want makes the pump export one outside the byte
-         * cadence, and the next rejection ships it. When the floor has
-         * already passed, send_ae below routes to send_snap as before. */
-        if (ni <= 1 && r->match_index[in->from] > 0) {
+        /* A zero-prefix rejection can be either a fresh empty follower or
+         * an operator resync whose log cannot be trusted. A replacement
+         * leader has match_index==0 for both: requiring earlier success
+         * stranded a resync forever after an election. A valid image is
+         * suitable for both cases. Request export outside the byte cadence
+         * and send an available image; unavailable exports retain the
+         * normal retry/log path. Success/read probes and capacity BUSY
+         * returned above and never trigger this branch. */
+        if (ni <= 1) {
             if (r->snap_idx < r->last_applied)
                 r->snap_want = 1;
             if (r->snap_idx > 0 &&

@@ -2903,6 +2903,67 @@ static void test_resync_replaces_diverged_follower(void)
     efs_raft_mem_free(st);
 }
 
+/* A resync survives leader replacement even before that leader has a
+ * successful match for this voter. Its zero-prefix rejection must request
+ * an image, rather than loop forever through log replay it refuses. */
+static void test_resync_new_leader_without_match(void)
+{
+    struct net n={.n=3};struct efs_raft_store *st[3];struct app app[3]={{0}};
+    struct efs_raft_cfg cfg={0};
+    cfg.n=3;cfg.voters=7;cfg.boot_id=1;cfg.send=send_now;cfg.net=&n;
+    cfg.apply=apply_cmd;cfg.snap_open=snap_open;cfg.snap_read=snap_read;
+    cfg.snap_close=snap_close;cfg.snap_chunk=snap_chunk;
+    cfg.heartbeat_ticks=1;
+    for(int i=0;i<3;i++) {
+        st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+        cfg.app=&app[i];cfg.election_ticks=4u+(uint32_t)i*4;
+        n.r[i]=test_raft_new(&cfg);CHECK(n.r[i]!=NULL,"resync election fixture");
+    }
+    CHECK(elect(&n,40)==1,"initial resync leader");
+    int old=leader_id(&n);if(old<0){free_n(&n,st,3);return;}
+    uint8_t data='A';uint64_t idx=0;
+    CHECK(efs_raft_propose(n.r[old],&data,1,&idx)==EFS_OK && elect(&n,4)==1,
+          "initial committed payload");
+    int follower=(old+1)%3;
+    CHECK(efs_raft_request_resync(n.r[follower])==EFS_OK,"request resync before transfer");
+    n.drop[follower]=1;
+    efs_raft_allow_campaign(n.r[old],0);
+    CHECK(efs_raft_step_down(n.r[old])==EFS_OK && elect(&n,60)==1,"replacement leader");
+    int leader=leader_id(&n);
+    if(leader<0){free_n(&n,st,3);return;}
+    CHECK(leader!=old && leader!=follower,"new leader elected without resync peer");
+    struct efs_raft_peer_progress peer;
+    CHECK(efs_raft_peer_progress(n.r[leader],follower,&peer)==EFS_OK &&
+          peer.match_index==0,"new leader has no established peer prefix");
+    uint64_t term=efs_raft_term(n.r[leader]);
+    struct efs_raft_msg m={0};m.type=EFS_RAFT_MSG_AE_REQ;
+    m.from=leader;m.to=follower;m.term=term;m.boot_id=1;
+    n.drop[leader]=1;n.cap_rep=1;n.cap_n=0;
+    CHECK(efs_raft_recv(n.r[follower],&m)==EFS_OK && n.cap_n==1 &&
+          !n.cap_ok && !n.cap_match,"resync peer emits genuine zero rejection");
+    n.drop[leader]=0;n.cap_rep=0;
+    memset(&m,0,sizeof(m));m.type=EFS_RAFT_MSG_AE_REP;m.from=follower;
+    m.to=leader;m.term=term;m.boot_id=1;m.success=1;
+    CHECK(efs_raft_recv(n.r[leader],&m)==EFS_OK && !efs_raft_snap_wanted(n.r[leader]),
+          "a successful prefix-zero read vote never requests an image");
+    m.success=0;m.busy=1;
+    CHECK(efs_raft_recv(n.r[leader],&m)==EFS_OK && !efs_raft_snap_wanted(n.r[leader]),
+          "capacity BUSY does not request an image");
+    m.busy=0;
+    CHECK(efs_raft_recv(n.r[leader],&m)==EFS_OK && efs_raft_snap_wanted(n.r[leader]),
+          "zero rejection requests image without previous match knowledge");
+    CHECK(efs_raft_snapshot(n.r[leader])==EFS_OK,"pump exports requested image");
+    n.drop[follower]=0;
+    CHECK(efs_raft_recv(n.r[leader],&m)==EFS_OK &&
+          !efs_raft_resync_pending(n.r[follower]) && app[follower].last=='A' &&
+          efs_raft_applied(n.r[follower])==efs_raft_applied(n.r[leader]),
+          "image heals resync peer after leader change");
+    data='B';
+    CHECK(efs_raft_propose(n.r[leader],&data,1,&idx)==EFS_OK && elect(&n,6)==1 &&
+          app[follower].last=='B',"ordinary replication resumes after image");
+    free_n(&n,st,3);
+}
+
 /* New leader's no-op is above the send cap armed at attach. A follower
  * that still holds a stale tail at that index must receive the no-op,
  * and the leader must not commit it off the stale reply. */
@@ -3464,6 +3525,7 @@ int main(void)
         test_ae_reply_match_stops_at_prev();
         test_snapshot_commit_stops_at_snapshot();
         test_resync_replaces_diverged_follower();
+        test_resync_new_leader_without_match();
         test_probe_ack_keeps_next_index();
         test_conflict_hint_skips_term_run();
         test_restart_elections_bounded();
