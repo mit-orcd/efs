@@ -111,7 +111,7 @@ def main():
 
             # 2. (i) SIGKILLed member
             t = admit('kill')
-            victim = next(n - 1 for n in t.nodes if n > 1)  # a placed member, never the seed
+            victim = next(n - 1 for n in t.nodes if n > 2)  # a placed member 3 or 4 (member 2 is K72)
             stop(victim, signal.SIGKILL)
             rc, out = fence(cluster, t, 0)
             assert rc == 0, ('revoke with one member SIGKILLed', out)
@@ -135,7 +135,7 @@ def main():
 
             # 3. (ii) clean stop, replay at once
             t = admit('term')
-            victim = next(n - 1 for n in t.nodes if n > 1)
+            victim = next(n - 1 for n in t.nodes if n > 2)
             before = stored(work, [victim])
             stop(victim, signal.SIGTERM)
             rc, out = fence(cluster, t, 0)
