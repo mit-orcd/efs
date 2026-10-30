@@ -805,12 +805,34 @@ static void test_opid_reduce(void)
     efs_kv_mem_free(kv);
 }
 
+/* Model the production scan reader gate: coordinator authority may wait
+ * for apply and must be requested after the scan callback has returned. */
+static int receipt_scan_depth;
+static int (*receipt_scan_real)(void *,const uint8_t *,uint32_t,
+    int (*)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *);
+static int receipt_scan_guard(void *ctx,const uint8_t *p,uint32_t n,
+    int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *arg)
+{
+    receipt_scan_depth++;
+    int rc=receipt_scan_real(ctx,p,n,cb,arg);
+    receipt_scan_depth--;
+    return rc;
+}
+static int receipt_coord_checked(void *user,const struct efs_txid *t,uint32_t shard,int *decision)
+{
+    CHECK(receipt_scan_depth==0,"coordinator wait must run outside the KV scan reader gate");
+    return coord_ok(user,t,shard,decision);
+}
+
 /* A committed receipt must be readable before background RESOLVE catches
  * up. It is still pending for apply conflict checks; this is not a new op. */
 static void test_committed_pending_receipt(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();
     struct kvs ctx={kv,0};
+    struct efs_kv_ops guarded=*kv->ops;
+    receipt_scan_real=guarded.scan_prefix;guarded.scan_prefix=receipt_scan_guard;
+    kv->ops=&guarded;
     struct efs_txn_parts p=two(1,2);
     struct efs_txid t,other;
     struct efs_opid_req q={.id={.client_uuid={98},.session_epoch=1,.seq=1}};
@@ -820,25 +842,25 @@ static void test_committed_pending_receipt(void)
     CHECK(efs_session_establish(kv,1,q.id.client_uuid,1)==EFS_OK,"receipt session");
     CHECK(efs_kv_key_opid(1,q.id.client_uuid,1,key,&kl)==EFS_OK,"receipt key");
     CHECK(efs_txn_prepare_opid(kv,&t,&p,key,kl,&q,&rep)==EFS_OK,"stage exact receipt");
-    CHECK(efs_txn_opid_replay(kv,key,kl,1,coord_ok,&ctx,&got)==EFS_ERR_BUSY,"undecided is not an answer");
-    CHECK(efs_txn_opid_replay(kv,key,kl,2,coord_ok,&ctx,&got)==0,"unrelated sequence is free");
+    CHECK(efs_txn_opid_replay(kv,key,kl,1,receipt_coord_checked,&ctx,&got)==EFS_ERR_BUSY,"undecided is not an answer");
+    CHECK(efs_txn_opid_replay(kv,key,kl,2,receipt_coord_checked,&ctx,&got)==0,"unrelated sequence is free");
     CHECK(efs_txn_decide(kv,efs_txn_coordinator(&t,&p),&t,EFS_TXN_COMMIT)==EFS_OK,"commit before materialization");
     for(int fail=1;fail<=3;fail++) {
         ctx.fail=fail;
-        CHECK(efs_txn_opid_replay(kv,key,kl,1,coord_ok,&ctx,&got)==
+        CHECK(efs_txn_opid_replay(kv,key,kl,1,receipt_coord_checked,&ctx,&got)==
               (fail==1?EFS_ERR_IO:fail==2?EFS_ERR_BUSY:EFS_ERR_NOT_PRIMARY),"fresh authority failure refuses replay");
     }
     ctx.fail=0;
-    CHECK(efs_txn_opid_replay(kv,key,kl,1,coord_ok,&ctx,&got)==1 && got.seq==1 &&
+    CHECK(efs_txn_opid_replay(kv,key,kl,1,receipt_coord_checked,&ctx,&got)==1 && got.seq==1 &&
           got.rc==EFS_OK && got.ino==4242 && got.extra==17,"exact committed receipt answers before resolve");
     CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&got)==0 &&
           efs_txn_opid_busy(kv,key,kl,1)==EFS_ERR_BUSY,"read did not materialize or release intent");
     CHECK(efs_txn_opid_replay(kv,key,kl,1,NULL,&ctx,&got)==EFS_ERR_INVAL,"callback required");
     q.id.seq=9;q.ack=1;
     CHECK(efs_txn_prepare_opid(kv,&other,&p,key,kl,&q,&rep)==EFS_OK,"stage covering ack");
-    CHECK(efs_txn_opid_replay(kv,key,kl,1,coord_ok,&ctx,&got)==EFS_ERR_BUSY,"covering ack is not an exact receipt");
+    CHECK(efs_txn_opid_replay(kv,key,kl,1,receipt_coord_checked,&ctx,&got)==EFS_ERR_BUSY,"covering ack is not an exact receipt");
     CHECK(efs_txn_decide(kv,efs_txn_coordinator(&other,&p),&other,EFS_TXN_ABORT)==EFS_OK,"abort covering ack");
-    CHECK(efs_txn_opid_replay(kv,key,kl,9,coord_ok,&ctx,&got)==EFS_ERR_BUSY,"abort still waits for removal");
+    CHECK(efs_txn_opid_replay(kv,key,kl,9,receipt_coord_checked,&ctx,&got)==EFS_ERR_BUSY,"abort still waits for removal");
     CHECK(efs_txn_resolve(kv,&other,1,EFS_TXN_ABORT)==EFS_OK,"remove aborted ack");
     CHECK(efs_txn_resolve(kv,&t,1,EFS_TXN_COMMIT)==EFS_OK,"materialize receipt normally");
     CHECK(efs_meta_apply_opid_probe(kv,1,&(struct efs_opid){.client_uuid={98},.session_epoch=1,.seq=1},&got)==1 &&

@@ -744,9 +744,10 @@ struct opid_pending_scan {
     uint32_t klen, prefix_len, seen;
     uint64_t seq;
     int rc, found;
-    efs_txn_coord_fn coord;
-    void *ctx;
-    struct efs_opid_reply *reply;
+    int allow_replay;
+    struct efs_txid transaction;
+    struct efs_txn_parts participants;
+    struct efs_opid_reply reply;
 };
 
 static int opid_pending_cb(void *arg, const uint8_t *key, uint32_t klen,
@@ -774,19 +775,10 @@ static int opid_pending_cb(void *arg, const uint8_t *key, uint32_t klen,
     if (q.id.seq==s->seq || q.ack>=s->seq) {
         /* Only the exact staged verdict can answer a retry. A covering ACK
          * is never permission to invent the old result or execute it again. */
-        int decision=EFS_TXN_UNDECIDED;
-        if (!s->coord || q.id.seq!=s->seq) {s->rc=EFS_ERR_BUSY;return 1;}
-        int rc=s->coord(s->ctx,&t,efs_txn_coordinator(&t,&p),&decision);
-        if (rc!=EFS_OK) {
-            s->rc=(rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_STALE)?EFS_ERR_BUSY:rc;
-            return 1;
+        if (!s->allow_replay || q.id.seq!=s->seq || s->found) {
+            s->rc=EFS_ERR_BUSY;return 1;
         }
-        if (decision!=EFS_TXN_COMMIT) {s->rc=EFS_ERR_BUSY;return 1;}
-        if (s->found && (s->reply->seq!=rep.seq || s->reply->rc!=rep.rc ||
-                        s->reply->ino!=rep.ino || s->reply->extra!=rep.extra)) {
-            s->rc=EFS_ERR_PROTO;return 1;
-        }
-        *s->reply=rep;s->found=1;
+        s->transaction=t;s->participants=p;s->reply=rep;s->found=1;
     }
     return 0;
 }
@@ -803,9 +795,20 @@ static int opid_pending(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
     rc=efs_kv_key_reduce_prefix(key,klen,prefix,&plen);
     if (rc!=EFS_OK)return rc;
     struct opid_pending_scan s={.window=key,.klen=klen,.prefix_len=plen,.seq=seq,
-                                .coord=coord,.ctx=ctx,.reply=reply};
+                                .allow_replay=coord!=NULL};
     rc=efs_kv_scan_prefix(kv,prefix,plen,opid_pending_cb,&s);
-    return rc!=EFS_OK && rc!=1?rc:s.rc?s.rc:s.found;
+    if (rc!=EFS_OK && rc!=1)return rc;
+    if (s.rc)return s.rc;
+    if (!s.found)return 0;
+    /* A real KV scan holds its reader gate. ReadIndex may need apply to
+     * advance, which needs that gate released. Copy the bounded record
+     * first and establish coordinator authority only after scan returns. */
+    int decision=EFS_TXN_UNDECIDED;
+    rc=coord(ctx,&s.transaction,efs_txn_coordinator(&s.transaction,&s.participants),&decision);
+    if (rc!=EFS_OK)return rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
+    if (decision!=EFS_TXN_COMMIT)return EFS_ERR_BUSY;
+    *reply=s.reply;
+    return 1;
 }
 
 int efs_txn_opid_busy(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
