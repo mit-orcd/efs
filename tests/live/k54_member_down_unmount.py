@@ -83,7 +83,7 @@ def main():
     ap.add_argument('--runs', type=int, default=20)
     ap.add_argument('--members', type=int, default=4)
     ap.add_argument('--down', type=int, default=1)
-    ap.add_argument('--victim', type=int, default=3, help='first member stopped (2..members)')
+    ap.add_argument('--victim', type=int, default=3, help='first member stopped (2..members); 0 = rotate 2, 3, 4, 2, ...')
     ap.add_argument('--files', type=int, default=4)
     ap.add_argument('--mode', choices=('alternate', 'kill', 'stop'), default='alternate')
     ap.add_argument('--port-base', type=int, default=0, help='fixed ports PORT_BASE+1.. (default: free ports)')
@@ -108,14 +108,14 @@ def main():
             c.wait_log(i, r'(formed: %d members|n=%d formed|membership revision \d+: %d members)'
                        % (a.members, a.members, a.members), timeout=120, run=False)
         for run in range(1, a.runs + 1):
-            sig, clean, rc, line, secs, bad = one_run(c, ids, run, a.mode, a.down, a.files, a.victim)
+            sig, clean, rc, line, secs, bad = one_run(c, ids, run, a.mode, a.down, a.files, a.victim or 2 + (run - 1) % 3)
             if expect_fail:
                 ok = not clean and 'phase=storage-fence' in line and not bad
             else:
                 ok = clean and not bad
             done += 1
             failed += not ok
-            print(f'run={run} signal={sig} down={a.down} exit={rc} unmount_s={secs:.1f} '
+            print(f'run={run} signal={sig} down={a.down} victim={a.victim or 2 + (run - 1) % 3} exit={rc} unmount_s={secs:.1f} '
                   f'readback_bad={len(bad)} ok={int(ok)}\n  {line}', flush=True)
     finally:
         c.stop_all()
