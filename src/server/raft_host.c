@@ -6380,7 +6380,8 @@ static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_typ
     }
     if (rtype == reply_type && reply_type == EFS_MSG_INODE_READDIR_REPLY &&
         outlen == sizeof(struct efs_msg_inode_readdir_reply)) {
-        if (efs_readdir_reply_len_ok(reply, rlen) != EFS_OK) {
+        if (reqlen != sizeof(struct efs_msg_inode_readdir) ||
+            efs_readdir_reply_for_req_ok(req, reply, rlen) != EFS_OK) {
             free(reply);
             server_peer_conn_drop(host, port, pc);
             return -1;

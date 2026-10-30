@@ -767,8 +767,7 @@ static void *meta_worker(void *arg)
                     break;
                 }
                 a->ops += n;
-                if (n == 0 && !done)
-                    break;
+                /* Only done ends a listing; bounded filtered pages may be empty. */
             }
         }
         break;

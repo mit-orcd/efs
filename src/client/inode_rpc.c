@@ -1600,7 +1600,7 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
     }
     rpc_prof_add(EFS_MSG_INODE_READDIR, t1 - t0, t2 - t1, t3 - t2, 0);
     if (rtype != EFS_MSG_INODE_READDIR_REPLY ||
-        efs_readdir_reply_len_ok(payload, plen) != EFS_OK) {
+        efs_readdir_reply_for_req_ok(&req, payload, plen) != EFS_OK) {
         free(payload);
         return EFS_ERR_PROTO;
     }

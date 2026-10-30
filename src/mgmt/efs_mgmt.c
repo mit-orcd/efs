@@ -2982,7 +2982,7 @@ static int cmd_raft_readdir(int argc, char **argv)
     if (send_recv(fd, EFS_MSG_INODE_READDIR, &req, sizeof(req), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_READDIR_REPLY ||
-        efs_readdir_reply_len_ok(reply, reply_len) != EFS_OK) {
+        efs_readdir_reply_for_req_ok(&req, reply, reply_len) != EFS_OK) {
         fprintf(stderr, "Failed to raft-readdir\n");
         free(reply);
         close(fd);
@@ -2990,7 +2990,8 @@ static int cmd_raft_readdir(int argc, char **argv)
     }
     close(fd);
     r = reply;
-    printf("raft-readdir status=%u count=%u names=", r->status, r->count);
+    printf("raft-readdir status=%u count=%u src=%u done=%u cookie=%s names=",
+           r->status, r->count, r->next_src, r->next_done, r->next_name);
     for (i = 0; i < r->count; i++) {
         if (i)
             printf(",");

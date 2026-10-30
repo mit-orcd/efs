@@ -118,7 +118,7 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
         {"raft-rmdir","NODE:PORT PARENT NAME"},{"raft-link","NODE:PORT SRC_INO PARENT NAME"},
         {"raft-setattr","NODE:PORT INO MASK [mode|mtime|size] [uid|atime] [gid]"},
         {"raft-rename","NODE:PORT OLD_PARENT OLD_NAME NEW_PARENT NEW_NAME"},
-        {"raft-readdir","NODE:PORT PARENT [after_ino]"},{"raft-lookup-path","NODE:PORT PATH [start]"},
+        {"raft-readdir","NODE:PORT PARENT [after_src after_name]"},{"raft-lookup-path","NODE:PORT PATH [start]"},
         {"raft-publish","NODE:PORT INO [chunk] [size]"},{"raft-getchunks","NODE:PORT INO [start]"},
         {"raft-append","NODE:PORT INO LENGTH [uuid-hex epoch]"},
         {"raft-hold","NODE:PORT INO open|close [owner] [uuid-hex epoch]"},

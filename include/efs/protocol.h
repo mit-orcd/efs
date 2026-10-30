@@ -1262,11 +1262,30 @@ static inline int efs_readdir_reply_len_ok(const void *buf, uint32_t len)
         return EFS_ERR_PROTO;
     for (uint32_t i = 0; i < r->count; i++) {
         const struct efs_readdir_wire_ent *e = &r->ents[i];
-        if (!e->ino || e->reserved || !e->name[0] ||
+        uint32_t type = e->mode & 0170000u;
+        if ((type != 0100000u && type != 0040000u && type != 0120000u &&
+             type != 0010000u && type != 0020000u && type != 0060000u &&
+             type != 0140000u) || (e->mode & ~0177777u) ||
+            !e->ino || e->reserved || !e->name[0] ||
             !memchr(e->name, 0, sizeof(e->name)) ||
             strchr(e->name, '/') || !strcmp(e->name, ".") || !strcmp(e->name, ".."))
             return EFS_ERR_PROTO;
     }
+    return EFS_OK;
+}
+
+static inline int efs_readdir_reply_for_req_ok(const struct efs_msg_inode_readdir *q,
+                                              const void *buf, uint32_t len)
+{
+    const struct efs_msg_inode_readdir_reply *r = buf;
+    if (!q || q->format != EFS_READDIR_FORMAT ||
+        efs_readdir_reply_len_ok(buf, len) != EFS_OK)
+        return EFS_ERR_PROTO;
+    if (r->status == EFS_INODE_RPC_OK &&
+        (r->count > q->max_ents ||
+         (!r->next_done && (r->next_src < q->after_src ||
+          (r->next_src == q->after_src && strcmp(r->next_name, q->after_name) <= 0)))))
+        return EFS_ERR_PROTO;
     return EFS_OK;
 }
 
