@@ -434,6 +434,7 @@ test-bins: all $(TEST_SPECIAL_BINS) decoder-bins tests/test_apply_wait
 # under a second; about a minute in all). Slow tests belong in test-long.
 test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_b6_log_accounting.py
+	python3 tests/test_b6_full_oracle.py
 	python3 tests/test_decoder_inputs.py
 	python3 tests/test_k37_events.py
 	python3 tests/test_raft_log_entries.py
