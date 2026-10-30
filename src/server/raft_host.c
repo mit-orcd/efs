@@ -17849,6 +17849,11 @@ static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
         rc = efs_meta_apply_get_inode_tx(h->kv, dent.ino, host_txn_read_coord, &txn, &prow);
     if (rc == EFS_OK)
         host_stat_from_row(&prow, &st);
+    if (rc!=EFS_OK && txn.unhosted_coordinator) {
+        uint8_t need[2];host_need_both(need);
+        host_fwd_create(h,parent,name,mode,uid,gid,flags,owner,q,out,need,2);
+        return;
+    }
     if (dirop_fail_on(rc))
         fprintf(stderr, "raft-host: create parent=%llu name=%s rc=%d hint=%d "
                 "dsh=%u hashed=%d\n",
