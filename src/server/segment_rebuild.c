@@ -698,9 +698,10 @@ void server_segment_rebuild_pass(struct efsd_server *s, uint8_t group)
         sr[gi].mark_cursor_len = 0;
         return;
     }
-    /* Unrecoverable marks are reported again at most once a minute. */
+    /* Unrecoverable marks are reported again at most once a minute. A pass
+     * that has none to report must not use up the minute (K85). */
     int report = t0 >= sr[gi].said_unrecoverable_us + 60000000ull;
-    if (report) sr[gi].said_unrecoverable_us = t0;
+    if (report && cnt.lost) sr[gi].said_unrecoverable_us = t0;
     struct sr_mark_scan *c = calloc(1, sizeof(*c));
     uint8_t *buf[EFS_NUM_FRAGMENTS] = {0};
     uint32_t done = 0;
