@@ -99,6 +99,7 @@ unsigned efs_faults_env_ignored(const char *prog)
             continue;
         const char *eq = strchr(*e, '=');
         int len = eq ? (int)(eq - *e) : (int)strlen(*e);
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "%s: %.*s ignored: this build has no fault hooks "
                 "(build with EFS_FAULTS=1 for fault tests)\n", prog, len, *e);
         n++;
@@ -175,6 +176,7 @@ unsigned efs_env_removed_refuse(const char *prog)
     for (size_t i = 0; i < sizeof(removed_env) / sizeof(removed_env[0]); i++) {
         if (!getenv(removed_env[i].name))
             continue;
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "%s: %s was removed (%s). Unset it and start again.\n",
                 prog, removed_env[i].name, removed_env[i].why);
         n++;

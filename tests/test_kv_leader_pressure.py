@@ -22,6 +22,10 @@ code = r'''
 #include "efs/raft.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #define HOST_SESS_HDR_LEN 18
 struct efs_kv { int room, hot; }; /* hot: L0 at its cap, which must not count */
 struct efs_raft { int role; uint64_t lag, cap; };

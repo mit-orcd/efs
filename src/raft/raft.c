@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "efs/telemetry.h"
 
 struct recv_replies {
     struct { int to, success, probe, busy; uint64_t match, read; } reply[EFS_RAFT_RECV_MAX];
@@ -332,7 +333,7 @@ static int receive_store(struct efs_raft *r, enum receive_store_kind kind,
 static void fence_storage_at(struct efs_raft *r, const char *where, int line)
 {
     if (!r->storage_failed)
-        fprintf(stderr, "raft: group=%u storage fenced at=%s:%d term=%llu "
+        efs_telemetry_log(0, "raft: group=%u storage fenced at=%s:%d term=%llu "
                 "commit=%llu applied=%llu snap=%llu resync=%d\n", r->group,
                 where, line, (unsigned long long)r->current_term,
                 (unsigned long long)r->commit_index,
@@ -521,7 +522,7 @@ static void leader_exit_note(struct efs_raft *r, uint64_t term, const char *why)
     if (!elect_note_ok(r))
         return;
     (void)last_log(r, &last_i, &last_t);
-    fprintf(stderr, "raft: group=%u leader steps down term=%llu->%llu why=%s commit=%llu "
+    efs_telemetry_log(0, "raft: group=%u leader steps down term=%llu->%llu why=%s commit=%llu "
             "applied=%llu last=%llu/%llu commit_quorum=0x%x match=[%llu,%llu,%llu,%llu,%llu,%llu,%llu] "
             "events=%llu skipped=%llu\n",
             r->group, (unsigned long long)r->current_term, (unsigned long long)term, why,
@@ -812,7 +813,7 @@ static int send_snap(struct efs_raft *r, int to)
         }
     }
     if (getenv("EFS_RAFT_DBG"))
-        fprintf(stderr, "raft[%u]: send_snap incl=%llu off=%llu n=%u done=%d "
+        efs_telemetry_log(0, "raft[%u]: send_snap incl=%llu off=%llu n=%u done=%d "
                 "to=%d\n", r->group, (unsigned long long)incl,
                 (unsigned long long)off, user_n, done, to);
     memset(&m, 0, sizeof(m));
@@ -1278,7 +1279,7 @@ static int try_commit(struct efs_raft *r)
         }
         if (quorum_ok(r, bits)) {
             if (r->role != EFS_RAFT_LEADER)
-                fprintf(stderr, "raft: group=%u commit by non-leader role=%d term=%llu %llu->%llu "
+                efs_telemetry_log(0, "raft: group=%u commit by non-leader role=%d term=%llu %llu->%llu "
                         "quorum=0x%x\n", r->group, r->role, (unsigned long long)r->current_term,
                         (unsigned long long)r->commit_index, (unsigned long long)n, bits);
             r->commit_index = n;
@@ -1337,7 +1338,7 @@ static int become_leader(struct efs_raft *r)
         return rc;
     r->match_index[r->id] = last_i;
     if (elect_note_ok(r))
-        fprintf(stderr, "raft: group=%u became leader term=%llu noop=%llu commit=%llu "
+        efs_telemetry_log(0, "raft: group=%u became leader term=%llu noop=%llu commit=%llu "
                 "applied=%llu events=%llu skipped=%llu\n",
                 r->group, (unsigned long long)r->current_term, (unsigned long long)last_i,
                 (unsigned long long)r->commit_index, (unsigned long long)r->last_applied,
@@ -1395,7 +1396,7 @@ static int capacity_hold(struct efs_raft *r)
     r->campaigns_held++;
     if (r->campaigns_held == 1 || r->ticks - r->capacity_log_tick >= REJECT_LOG_TICKS) {
         r->capacity_log_tick = r->ticks;
-        fprintf(stderr, "raft: group=%u election held: low capacity "
+        efs_telemetry_log(0, "raft: group=%u election held: low capacity "
                 "(pressure=%d applied=%llu commit=%llu held=%llu)\n", r->group,
                 r->pressure, (unsigned long long)r->last_applied,
                 (unsigned long long)r->commit_index,
@@ -1480,7 +1481,7 @@ static int on_vote_req(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     m.vote_granted = grant;
     if (elect_note_ok(r))
-        fprintf(stderr, "raft: group=%u vote %s for=%d term=%llu cand_last=%llu/%llu "
+        efs_telemetry_log(0, "raft: group=%u vote %s for=%d term=%llu cand_last=%llu/%llu "
                 "my_last=%llu/%llu voted_for=%d commit=%llu events=%llu skipped=%llu\n",
                 r->group, grant ? "granted" : "refused", in->from,
                 (unsigned long long)in->term, (unsigned long long)in->last_log_index,
@@ -1563,7 +1564,7 @@ static int on_prevote_req(struct efs_raft *r, const struct efs_raft_msg *in)
         grant = 1;
     m.vote_granted = grant;
     if (elect_note_ok(r))
-        fprintf(stderr, "raft: group=%u prevote %s for=%d term=%llu cand_last=%llu/%llu "
+        efs_telemetry_log(0, "raft: group=%u prevote %s for=%d term=%llu cand_last=%llu/%llu "
                 "my_last=%llu/%llu my_term=%llu leader=%d events=%llu skipped=%llu\n",
                 r->group, grant ? "granted" : "refused", in->from,
                 (unsigned long long)want, (unsigned long long)in->last_log_index,
@@ -1614,7 +1615,7 @@ static void ae_reject_note(struct efs_raft *r, const struct efs_raft_msg *in,
         r->ticks - r->ae_reject_log_tick < REJECT_LOG_TICKS)
         return;
     r->ae_reject_log_tick = r->ticks;
-    fprintf(stderr, "raft: group=%u rejecting AE from=%d term=%llu prev=%llu/%llu "
+    efs_telemetry_log(0, "raft: group=%u rejecting AE from=%d term=%llu prev=%llu/%llu "
             "last=%llu commit=%llu why=%s rejects=%llu\n", r->group, in->from,
             (unsigned long long)in->term, (unsigned long long)in->prev_index,
             (unsigned long long)in->prev_term, (unsigned long long)last_i,
@@ -1644,7 +1645,7 @@ static int ae_proto_drop(struct efs_raft *r, const struct efs_raft_msg *in,
         if (r->ae_rejects_sent == 1 ||
             r->ticks - r->ae_reject_log_tick >= REJECT_LOG_TICKS) {
             r->ae_reject_log_tick = r->ticks;
-            fprintf(stderr, "raft: group=%u resync: conflict at index=%llu <= commit=%llu "
+            efs_telemetry_log(0, "raft: group=%u resync: conflict at index=%llu <= commit=%llu "
                     "from=%d; requesting InstallSnapshot (rejects=%llu)\n", r->group,
                     (unsigned long long)idx, (unsigned long long)r->commit_index,
                     in->from, (unsigned long long)r->ae_rejects_sent);
@@ -1652,7 +1653,7 @@ static int ae_proto_drop(struct efs_raft *r, const struct efs_raft_msg *in,
         return send_msg(r, &m);
     }
     r->ae_proto_drops++;
-    fprintf(stderr, "raft: group=%u AE conflict at index=%llu <= commit=%llu "
+    efs_telemetry_log(0, "raft: group=%u AE conflict at index=%llu <= commit=%llu "
             "from=%d term=%llu prev=%llu/%llu: refused without reply (drops=%llu)\n",
             r->group, (unsigned long long)idx, (unsigned long long)r->commit_index,
             in->from, (unsigned long long)in->term,
@@ -1729,7 +1730,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         int *ctr = &ae_dbg[in->from >= 0 && in->from < EFS_RAFT_MAX_PEERS ? in->from : 0];
         (*ctr)++;
         if (getenv("EFS_RAFT_AE_DBG") && (*ctr <= 5 || *ctr % 1000 == 0))
-            fprintf(stderr, "AE_REQ from=%d prev_idx=%llu prev_term=%llu nent=%u my_last=%llu my_term=%llu in_term=%llu\n",
+            efs_telemetry_log(0, "AE_REQ from=%d prev_idx=%llu prev_term=%llu nent=%u my_last=%llu my_term=%llu in_term=%llu\n",
                     in->from, (unsigned long long)in->prev_index,
                     (unsigned long long)in->prev_term, in->nentries,
                     (unsigned long long)last_i, (unsigned long long)r->current_term,
@@ -1737,7 +1738,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     if (in->prev_index > last_i) {
         if (getenv("EFS_RAFT_AE_DBG"))
-            fprintf(stderr, "AE_REQ REJECT prev_idx=%llu > last_i=%llu\n",
+            efs_telemetry_log(0, "AE_REQ REJECT prev_idx=%llu > last_i=%llu\n",
                     (unsigned long long)in->prev_index, (unsigned long long)last_i);
         m.success = 0;
         /* W145 repair: while a resync is requested this log's tail is not
@@ -1755,7 +1756,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     if ((in->prev_index > 0 && rc != EFS_OK) || pt != in->prev_term) {
         int conflict_rc = rc;
         if (getenv("EFS_RAFT_AE_DBG"))
-            fprintf(stderr, "AE_REQ REJECT prev_term: pt=%llu in_prev_term=%llu rc=%d prev_idx=%llu\n",
+            efs_telemetry_log(0, "AE_REQ REJECT prev_term: pt=%llu in_prev_term=%llu rc=%d prev_idx=%llu\n",
                     (unsigned long long)pt, (unsigned long long)in->prev_term, rc,
                     (unsigned long long)in->prev_index);
         if (in->prev_index > r->snap_idx) {
@@ -1810,7 +1811,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
             r->ae_busy_sent++;
             if (r->ae_busy_sent == 1 || r->ticks - r->busy_log_tick >= REJECT_LOG_TICKS) {
                 r->busy_log_tick = r->ticks;
-                fprintf(stderr, "raft: group=%u AE busy: unapplied=%llu max=%llu "
+                efs_telemetry_log(0, "raft: group=%u AE busy: unapplied=%llu max=%llu "
                         "applied=%llu commit=%llu last=%llu busy_sent=%llu\n", r->group,
                         (unsigned long long)unapplied_at(r, last_i),
                         (unsigned long long)r->max_unapplied,
@@ -1870,7 +1871,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                                in->entries[i].cmd,in->entries[i].clen);
             if (rc != EFS_OK) {
                 if (getenv("EFS_RAFT_AE_DBG"))
-                    fprintf(stderr, "AE_REQ APPEND FAIL idx=%llu i=%u rc=%d\n",
+                    efs_telemetry_log(0, "AE_REQ APPEND FAIL idx=%llu i=%u rc=%d\n",
                             (unsigned long long)idx, i, rc);
                 if (batch)
                     (void)receive_store(r,RECEIVE_END,0,0,0,NULL,0);
@@ -1886,7 +1887,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         rc = last_log(r, &last_i, &last_t);
         if (rc != EFS_OK) { fence_storage(r); return rc; }
         if (getenv("EFS_RAFT_AE_DBG"))
-            fprintf(stderr, "AE_REQ ACCEPT nent=%u new_last=%llu\n",
+            efs_telemetry_log(0, "AE_REQ ACCEPT nent=%u new_last=%llu\n",
                     in->nentries, (unsigned long long)last_i);
     }
     if (in->leader_commit > r->commit_index) {
@@ -2013,7 +2014,7 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     if (r->peer_rejects[in->from] == 1 ||
         r->ticks - r->peer_reject_log_tick[in->from] >= REJECT_LOG_TICKS) {
         r->peer_reject_log_tick[in->from] = r->ticks;
-        fprintf(stderr, "raft: group=%u AE rejected by peer=%d hint=%llu "
+        efs_telemetry_log(0, "raft: group=%u AE rejected by peer=%d hint=%llu "
                 "next=%llu match=%llu rejects=%llu\n", r->group, in->from,
                 (unsigned long long)in->match_index,
                 (unsigned long long)r->next_index[in->from],
@@ -2080,7 +2081,7 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
         read_proof_forget(r);
         r->read_in_flight = 0;
         if (r->resync_requested)
-            fprintf(stderr, "raft: group=%u resync: installed snapshot incl=%llu/%llu "
+            efs_telemetry_log(0, "raft: group=%u resync: installed snapshot incl=%llu/%llu "
                     "(applied was %llu)\n", r->group, (unsigned long long)incl,
                     (unsigned long long)incl_t, (unsigned long long)r->last_applied);
         r->resync_requested = 0;
@@ -2118,7 +2119,7 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
     }
     if (r->storage_failed) return EFS_ERR_IO;
     if (getenv("EFS_RAFT_DBG"))
-        fprintf(stderr, "raft[%u]: on_snap_req INSTALLED incl=%llu\n",
+        efs_telemetry_log(0, "raft[%u]: on_snap_req INSTALLED incl=%llu\n",
                 r->group, (unsigned long long)incl);
     m->success = 1;
     m->vote_granted = 1;
@@ -2161,7 +2162,7 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
         plen = in->entries[0].clen;
     }
     if (getenv("EFS_RAFT_DBG"))
-        fprintf(stderr, "raft[%u]: on_snap_req from=%d incl=%llu off=%llu "
+        efs_telemetry_log(0, "raft[%u]: on_snap_req from=%d incl=%llu off=%llu "
                 "done=%d plen=%u my_applied=%llu my_snap=%llu\n",
                 r->group, in->from, (unsigned long long)incl,
                 (unsigned long long)offset, done, plen,
@@ -2217,7 +2218,7 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     if (rc != EFS_OK) {
         if (getenv("EFS_RAFT_DBG"))
-            fprintf(stderr, "raft[%u]: on_snap_req chunk rc=%d incl=%llu "
+            efs_telemetry_log(0, "raft[%u]: on_snap_req chunk rc=%d incl=%llu "
                     "off=%llu\n", r->group, rc, (unsigned long long)incl,
                     (unsigned long long)offset);
         return snap_reject(r, &m, last_i);
@@ -2244,7 +2245,7 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     r->ae_inflight[in->from] = 0;
     if (!in->success) {
         if (getenv("EFS_RAFT_DBG"))
-            fprintf(stderr, "raft[%u]: on_snap_rep REJECT from=%d match=%llu "
+            efs_telemetry_log(0, "raft[%u]: on_snap_rep REJECT from=%d match=%llu "
                     "snap_idx=%llu\n", r->group, in->from,
                     (unsigned long long)in->match_index,
                     (unsigned long long)r->snap_idx);
@@ -2421,7 +2422,7 @@ int efs_raft_tick(struct efs_raft *r)
         if (!solo(r) && low_capacity(r)) {
             if (++r->pressure_ticks >= 4u * (uint64_t)r->election_ticks) {
                 r->capacity_stepdowns++;
-                fprintf(stderr, "raft: group=%u leader steps down: low capacity "
+                efs_telemetry_log(0, "raft: group=%u leader steps down: low capacity "
                         "for %llu ticks (pressure=%d applied=%llu commit=%llu)\n",
                         r->group, (unsigned long long)r->pressure_ticks,
                         r->pressure, (unsigned long long)r->last_applied,
@@ -3109,7 +3110,7 @@ int efs_raft_request_resync(struct efs_raft *r)
     r->prevote_bits = 0;
     r->vote_bits = 0;
     reset_election(r);
-    fprintf(stderr, "raft: group=%u resync requested (commit=%llu applied=%llu)\n",
+    efs_telemetry_log(0, "raft: group=%u resync requested (commit=%llu applied=%llu)\n",
             r->group, (unsigned long long)r->commit_index,
             (unsigned long long)r->last_applied);
     return EFS_OK;

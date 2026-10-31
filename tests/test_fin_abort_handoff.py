@@ -19,6 +19,10 @@ code = r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <string.h>
 #define EFS_OK 0
 #define EFS_ERR_NOT_FOUND -2

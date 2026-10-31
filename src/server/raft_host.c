@@ -739,7 +739,7 @@ static int raft_dbg_on(void)
     return v;
 }
 
-#define APPLY_LOG(...) do { if (raft_dbg_on()) fprintf(stderr, __VA_ARGS__); } while (0)
+#define APPLY_LOG(...) do { if (raft_dbg_on()) efs_telemetry_log(0, __VA_ARGS__); } while (0)
 
 /* EFS_WRITE_PROF=1: write-path phase histograms (write_prof.h), one
  * "write-phase-prof" stderr line per 10,000 local-leader proposals.
@@ -780,7 +780,7 @@ static void wprof_tick(void)
     if (efs_wprof_format(line, sizeof(line), g_wprof, wprof_now(),
                          __atomic_load_n(&g_wprof_arc_fallback,
                                          __ATOMIC_RELAXED)) > 0)
-        fprintf(stderr, "%s\n", line);
+        efs_telemetry_log(0, "%s\n", line);
 }
 
 /* A verdict wait that began at t0 (propose returned), saw the entry applied
@@ -1583,7 +1583,7 @@ static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (rc == EFS_OK)
         __atomic_store_n(&h->mb_kick, 1, __ATOMIC_RELEASE);
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply mkfs rc=%d index=%llu\n",
+        efs_telemetry_log(0, "raft-host: apply mkfs rc=%d index=%llu\n",
                 rc, (unsigned long long)index);
         return rc;
     }
@@ -1617,7 +1617,7 @@ static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (rc == EFS_OK)
         __atomic_store_n(&h->mb_kick, 1, __ATOMIC_RELEASE);
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply salt rc=%d index=%llu\n",
+        efs_telemetry_log(0, "raft-host: apply salt rc=%d index=%llu\n",
                 rc, (unsigned long long)index);
         return rc;
     }
@@ -1646,7 +1646,7 @@ static int apply_members_cmd(struct efs_raft_host *h, uint8_t group, const uint8
     if (rc == EFS_OK)
         __atomic_store_n(&h->mb_kick, 1, __ATOMIC_RELEASE);
     else
-        fprintf(stderr, "raft-host: apply members index=%llu (%u members): rc=%d\n",
+        efs_telemetry_log(0, "raft-host: apply members index=%llu (%u members): rc=%d\n",
                 (unsigned long long)index, m.count, rc);
     return rc;
 }
@@ -1738,7 +1738,7 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         }
     }
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply create rc=%d index=%llu parent=%llu "
+        efs_telemetry_log(0, "raft-host: apply create rc=%d index=%llu parent=%llu "
                 "name=%s\n",
                 rc, (unsigned long long)index, (unsigned long long)parent,
                 name);
@@ -1796,7 +1796,7 @@ static int apply_unlink_cmd(struct efs_raft_host *h, const uint8_t *cmd,
      * flagged. BUSY/IO were also OK before — the file stayed and the
      * client heard success. */
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply unlink rc=%d index=%llu parent=%llu "
+        efs_telemetry_log(0, "raft-host: apply unlink rc=%d index=%llu parent=%llu "
                 "name=%s\n",
                 rc, (unsigned long long)index, (unsigned long long)parent,
                 name);
@@ -1831,7 +1831,7 @@ static int apply_rmdir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     /* W45: NOT_FOUND is the verdict (see apply_unlink_cmd); the retry of a
      * committed rmdir is the op-id window's job. */
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply rmdir rc=%d index=%llu parent=%llu "
+        efs_telemetry_log(0, "raft-host: apply rmdir rc=%d index=%llu parent=%llu "
                 "name=%s\n",
                 rc, (unsigned long long)index, (unsigned long long)parent,
                 name);
@@ -1860,7 +1860,7 @@ static int apply_setattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
      * not produced; if a caller ever sets it, STALE is a real verdict
      * (the handle names a replaced inode), not a replay. */
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply setattr rc=%d index=%llu ino=%llu\n",
+        efs_telemetry_log(0, "raft-host: apply setattr rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
         return rc;
     }
@@ -1902,7 +1902,7 @@ static int apply_xattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (rc != EFS_OK && rc != EFS_ERR_NODATA && rc != EFS_ERR_EXIST &&
         rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_INVAL &&
         rc != EFS_ERR_FENCED && rc != EFS_ERR_UNREGISTERED) {
-        fprintf(stderr, "raft-host: apply xattr rc=%d index=%llu ino=%llu\n",
+        efs_telemetry_log(0, "raft-host: apply xattr rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
     }
     return rc;
@@ -1944,7 +1944,7 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (rc == EFS_ERR_STALE)
         rc = EFS_OK;
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply utimens rc=%d index=%llu ino=%llu\n",
+        efs_telemetry_log(0, "raft-host: apply utimens rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
         return rc;
     }
@@ -1986,7 +1986,7 @@ static int apply_truncate_lazy_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 #endif
     rc = efs_meta_apply_truncate_lazy(h->kv, &t, &epoch);
     if (rc != EFS_OK && rc != EFS_ERR_STALE && rc != EFS_ERR_BUSY)
-        fprintf(stderr, "raft-host: apply truncate-lazy rc=%d index=%llu ino=%llu\n",
+        efs_telemetry_log(0, "raft-host: apply truncate-lazy rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)t.ino);
     else
         APPLY_LOG("raft-host: applied truncate-lazy index=%llu ino=%llu size=%llu kind=%u rc=%d epoch=%llu\n",
@@ -2031,7 +2031,7 @@ static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (rc == EFS_ERR_STALE)
         return rc; /* a truncate won the race; the REPORT re-pulls */
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply activate-lane rc=%d index=%llu ino=%llu\n",
+        efs_telemetry_log(0, "raft-host: apply activate-lane rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
         return rc;
     }
@@ -2068,7 +2068,7 @@ static int apply_trunc_sweep_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     rc = efs_meta_apply_trunc_sweep(h->kv, ino, rd64be(cmd + 9), lane,
                                     rd64be(cmd + 18), rd32be(cmd + 26), &snap);
     if (rc != EFS_OK)
-        fprintf(stderr, "raft-host: apply trunc-sweep rc=%d index=%llu ino=%llu lane=%u\n",
+        efs_telemetry_log(0, "raft-host: apply trunc-sweep rc=%d index=%llu ino=%llu lane=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)ino, (unsigned)lane);
     return rc;
 }
@@ -2111,7 +2111,7 @@ static int apply_bootstrap_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     rc = efs_meta_apply_bootstrap_lane(h->kv, ino, rd64be(cmd + 9), cmd[17],
                                        rd64be(cmd + 18));
     if (rc != EFS_OK)
-        fprintf(stderr, "raft-host: apply bootstrap-lane rc=%d index=%llu ino=%llu lane=%u\n",
+        efs_telemetry_log(0, "raft-host: apply bootstrap-lane rc=%d index=%llu ino=%llu lane=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)ino, (unsigned)cmd[17]);
     return rc;
 }
@@ -2174,7 +2174,7 @@ static int apply_lane_sweep_multi_cmd(struct efs_raft_host *h, const uint8_t *cm
         off += 18u + 4u * n;
         int rc = efs_meta_apply_lane_sweep_reaped(h->kv, ino, gen, lane, indices, n);
         if (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM) {
-            fprintf(stderr, "raft-host: apply lane-sweep-multi rc=%d index=%llu ino=%llu\n",
+            efs_telemetry_log(0, "raft-host: apply lane-sweep-multi rc=%d index=%llu ino=%llu\n",
                     rc, (unsigned long long)index, (unsigned long long)ino);
             return rc;
         }
@@ -2205,7 +2205,7 @@ static int apply_reap_multi_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         off += 17u + 32u * n;
         int rc = efs_meta_apply_reap_batch(h->kv, ino, gen, keys, n);
         if (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM) {
-            fprintf(stderr, "raft-host: apply reap-multi rc=%d index=%llu ino=%llu\n",
+            efs_telemetry_log(0, "raft-host: apply reap-multi rc=%d index=%llu ino=%llu\n",
                     rc, (unsigned long long)index, (unsigned long long)ino);
             return rc;
         }
@@ -2274,7 +2274,7 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_meta_apply_pack_retire(h->kv, cmd[1], ids, gens, n, NULL);
     }
     if (rc != EFS_OK && rc != EFS_ERR_STALE)
-        fprintf(stderr, "raft-host: apply pack cmd=%u rc=%d index=%llu\n",
+        efs_telemetry_log(0, "raft-host: apply pack cmd=%u rc=%d index=%llu\n",
                 cmd[0], rc, (unsigned long long)index);
     return rc;
 }
@@ -2423,7 +2423,7 @@ static int apply_put_orphan_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         return EFS_ERR_INVAL;
     int rc = efs_put_ticket_orphan_ack(h->kv, &t, cmd[1]);
     if (rc != EFS_OK && rc != EFS_ERR_BUSY && rc != EFS_ERR_NOT_FOUND)
-        fprintf(stderr, "raft-host: put-orphan ack ino=%llu ci=%u seq=%llu frags=%u rc=%d\n",
+        efs_telemetry_log(0, "raft-host: put-orphan ack ino=%llu ci=%u seq=%llu frags=%u rc=%d\n",
                 (unsigned long long)t.ino, t.ci, (unsigned long long)t.id.seq, cmd[1], rc);
     return rc;
 }
@@ -2441,7 +2441,7 @@ static int apply_put_ticket_drain_cmd(struct efs_raft_host *h, const uint8_t *cm
         return EFS_ERR_INVAL;
     int rc = efs_put_ticket_drain(h->kv, &st, EFS_PUT_TICKET_DRAIN_MAX, &moved);
     if (rc != EFS_OK && rc != EFS_ERR_BUSY)
-        fprintf(stderr, "raft-host: put-ticket drain shard=%u epoch=%u moved=%u rc=%d\n",
+        efs_telemetry_log(0, "raft-host: put-ticket drain shard=%u epoch=%u moved=%u rc=%d\n",
                 st.shard, st.epoch, moved, rc);
     return rc;
 }
@@ -2460,10 +2460,10 @@ static int apply_degraded_clear_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         return EFS_ERR_INVAL;
     rc = efs_meta_apply_degraded_clear(h->kv, &d, rebuilt, &outcome);
     if (rc != EFS_OK)
-        fprintf(stderr, "raft-host: apply degraded-clear rc=%d index=%llu ino=%llu ci=%u\n",
+        efs_telemetry_log(0, "raft-host: apply degraded-clear rc=%d index=%llu ino=%llu ci=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)d.ino, d.chunk_index);
     else if (outcome == EFS_META_DEGRADED_ORPHANED)
-        fprintf(stderr, "raft-host: degraded-clear ino=%llu ci=%u gen=%llx fragment=%d "
+        efs_telemetry_log(0, "raft-host: degraded-clear ino=%llu ci=%u gen=%llx fragment=%d "
                 "superseded during rebuild: rebuilt copy queued for GC\n",
                 (unsigned long long)d.ino, d.chunk_index,
                 (unsigned long long)d.object_gen, __builtin_ctz(d.missing_mask));
@@ -2484,7 +2484,7 @@ static int apply_recovery_mark_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         group != efs_raft_shard_group(efs_kv_lane_shard(d.ino, d.lane)))
         return EFS_ERR_INVAL;
     int rc = efs_meta_apply_recovery_mark(h->kv, &d);
-    fprintf(stderr, "raft-host: recovery-mark ino=%llu ci=%u gen=%llx fragment=%d node=%u: %s "
+    efs_telemetry_log(0, "raft-host: recovery-mark ino=%llu ci=%u gen=%llx fragment=%d node=%u: %s "
             "index=%llu\n", (unsigned long long)d.ino, d.chunk_index,
             (unsigned long long)d.object_gen, __builtin_ctz(d.missing_mask),
             d.nodes[__builtin_ctz(d.missing_mask)],
@@ -2522,12 +2522,12 @@ static int apply_degraded_mark_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     rc = efs_meta_apply_degraded_mark(h->kv, ino, rd64be(cmd + 9), rd64be(cmd + 17), ci, fi,
                                       rd32be(cmd + 30), &added);
     if (rc == EFS_OK && added)
-        fprintf(stderr, "raft-host: degraded mark ino=%llu ci=%u gen=%llx fragment=%u "
+        efs_telemetry_log(0, "raft-host: degraded mark ino=%llu ci=%u gen=%llx fragment=%u "
                 "node=%u: COMMIT did not prove it durable; rebuild on return\n",
                 (unsigned long long)ino, ci, (unsigned long long)rd64be(cmd + 17), fi,
                 rd32be(cmd + 30));
     else if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND)
-        fprintf(stderr, "raft-host: apply degraded-mark rc=%d index=%llu ino=%llu ci=%u "
+        efs_telemetry_log(0, "raft-host: apply degraded-mark rc=%d index=%llu ino=%llu ci=%u "
                 "gen=%llx fragment=%u\n", rc, (unsigned long long)index,
                 (unsigned long long)ino, ci, (unsigned long long)rd64be(cmd + 17), fi);
     h->apply_extra = (uint64_t)added;
@@ -2561,7 +2561,7 @@ static int apply_gc_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     rc = efs_meta_apply_gc_ack(h->kv, items, cnt);
     if (rc != EFS_OK)
-        fprintf(stderr, "raft-host: apply gc-ack rc=%d index=%llu cnt=%u\n",
+        efs_telemetry_log(0, "raft-host: apply gc-ack rc=%d index=%llu cnt=%u\n",
                 rc, (unsigned long long)index, cnt);
     return rc;
 }
@@ -2612,7 +2612,7 @@ static int apply_append_rsv_cmd(struct efs_raft_host *h, const uint8_t *cmd,
      * watermark — two clients then both wrote at wm-len. */
     h->apply_extra = (rc == EFS_OK) ? off : 0;
     if (rc != EFS_OK && rc != EFS_ERR_INVAL && rc != EFS_ERR_BUSY) {
-        fprintf(stderr, "raft-host: apply append-rsv rc=%d index=%llu ino=%llu\n",
+        efs_telemetry_log(0, "raft-host: apply append-rsv rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
     } else if (rc == EFS_OK) {
         APPLY_LOG("raft-host: applied append-rsv index=%llu ino=%llu off=%llu\n",
@@ -2684,6 +2684,7 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (efs_kv_key_inode(efs_kv_inode_shard(dir), dir, key, &kl) == EFS_OK) {
             memset(junk, 0xEE, sizeof(junk));
             if (efs_kv_put(h->kv, key, kl, junk, sizeof(junk)) == EFS_OK)
+                /* sync: test-only fault or debug hook */
                 fprintf(stderr, "raft-host: fault dir-corrupt: damaged ino=%llu row\n",
                         (unsigned long long)dir);
         }
@@ -2717,7 +2718,7 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (rc == EFS_ERR_PROTO || rc == EFS_ERR_UNSUPPORTED)
         return EFS_ERR_UNSUPPORTED;
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply dir rc=%d index=%llu ino=%llu kind=%u\n",
+        efs_telemetry_log(0, "raft-host: apply dir rc=%d index=%llu ino=%llu kind=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)dir,
                 (unsigned)cmd[1]);
         /* W130: a storage failure must retry this index on this replica,
@@ -3004,7 +3005,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         return EFS_ERR_UNSUPPORTED;
     }
     if (required_failure) {
-        fprintf(stderr,"raft-host: required lease cleanup rc=%d index=%llu ino=%llu\n",
+        efs_telemetry_log(0,"raft-host: required lease cleanup rc=%d index=%llu ino=%llu\n",
                 rc,(unsigned long long)index,(unsigned long long)ino);
         return rc;
     }
@@ -3166,7 +3167,7 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
     if (rc == EFS_ERR_NOT_FOUND)
         rc = EFS_OK;
     if (rc != EFS_OK)
-        fprintf(stderr,
+        efs_telemetry_log(0,
                 "raft-host: apply publish rc=%d index=%llu ino=%llu ci=%u "
                 "why=%d span=%u+%u exp=%llx base_n=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)p.ino,
@@ -3473,7 +3474,7 @@ static void host_mark_incomplete(struct host_group *g)
         return;
     if (!g->kv_incomplete) {
         g->kv_incomplete = 1;
-        fprintf(stderr,
+        efs_telemetry_log(0,
                 "raft-host: group=%u KV incomplete — step down, no campaign\n",
                 g->group);
     }
@@ -3495,13 +3496,13 @@ static void host_mark_incompatible(struct host_group *g, uint64_t index, uint64_
     g->incompat_sub = cmd && clen > 1 ? cmd[1] : 0;
     __atomic_store_n(&g->incompatible, 1, __ATOMIC_RELEASE);
     if (!cmd) {
-        fprintf(stderr,
+        efs_telemetry_log(0,
                 "raft-host: group=%u INCOMPATIBLE stored row shard=%u kind=%u key_len=%u at applied=%llu term=%llu: "
                 "malformed stored encoding; apply halted, group not served\n",
                 g->group, ((unsigned)g->damaged_key[0] << 8) | g->damaged_key[1],
                 (unsigned)g->damaged_key[2], g->damaged_key_len,
                 (unsigned long long)index, (unsigned long long)term);
-    } else fprintf(stderr,
+    } else efs_telemetry_log(0,
             "raft-host: group=%u INCOMPATIBLE entry index=%llu term=%llu tag=%u sub=%u len=%u: "
             "unsupported or malformed encoding; apply halted, group not served\n",
             g->group, (unsigned long long)index, (unsigned long long)term,
@@ -3518,7 +3519,7 @@ static void host_clear_incomplete(struct host_group *g)
         return;
     g->kv_incomplete = 0;
     efs_raft_allow_campaign(g->r, !g->retired);
-    fprintf(stderr, "raft-host: group=%u KV complete — campaign allowed\n",
+    efs_telemetry_log(0, "raft-host: group=%u KV complete — campaign allowed\n",
             g->group);
 }
 
@@ -3551,7 +3552,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         /* W131: no engine is not an applied entry; the index stays. */
         static int logged;
         if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
-            fprintf(stderr, "raft-host: group=%u apply without a KV engine at index=%llu; refused\n",
+            efs_telemetry_log(0, "raft-host: group=%u apply without a KV engine at index=%llu; refused\n",
                     g->group, (unsigned long long)index);
         return EFS_ERR_IO;
     }
@@ -3585,6 +3586,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0]==EFS_MD_CMD_RESOLVE || cmd[0]==EFS_MD_CMD_DROP || cmd[0]==EFS_MD_CMD_TXN_BATCH) &&
         getenv("EFS_FAULT_TXN_APPLY_FILE") &&
         access(getenv("EFS_FAULT_TXN_APPLY_FILE"),F_OK)==0) {
+        /* sync: test-only fault or debug hook */
         fprintf(stderr,"txn-fault: refused persistence index=%llu tag=%u group=%u\n",
                 (unsigned long long)index,cmd[0],g->group);
         rc=EFS_ERR_IO;
@@ -3750,7 +3752,7 @@ static int host_snap_open(void *app, uint64_t incl, void **handle,
     flush_us = now_us_() - prepare_start;
     if (rc != EFS_OK) {
         if (flush_us > 20000)
-            fprintf(stderr, "raft-snap: prepare group=%u flush_us=%llu rc=%d\n",
+            efs_telemetry_log(0, "raft-snap: prepare group=%u flush_us=%llu rc=%d\n",
                     g->group, (unsigned long long)flush_us, rc);
         return rc;
     }
@@ -3758,7 +3760,7 @@ static int host_snap_open(void *app, uint64_t incl, void **handle,
     rc = efs_kv_lsm_view_pin(h->kv, &view);
     pin_us = now_us_() - prepare_start;
     if (flush_us + pin_us > 20000)
-        fprintf(stderr, "raft-snap: prepare group=%u flush_us=%llu pin_us=%llu rc=%d\n",
+        efs_telemetry_log(0, "raft-snap: prepare group=%u flush_us=%llu pin_us=%llu rc=%d\n",
                 g->group, (unsigned long long)flush_us,
                 (unsigned long long)pin_us, rc);
     if (rc != EFS_OK)
@@ -3924,7 +3926,7 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
             g->import_incl >= g->incompat_index) {
             __atomic_store_n(&g->damaged_row, 0, __ATOMIC_RELEASE);
             __atomic_store_n(&g->incompatible, 0, __ATOMIC_RELEASE);
-            fprintf(stderr,
+            efs_telemetry_log(0,
                     "raft-host: group=%u snapshot import incl=%llu covers the "
                     "halted entry %llu: halt cleared, group served again\n",
                     g->group, (unsigned long long)g->import_incl,
@@ -4062,7 +4064,7 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
     int rc = efs_raft_snapshot(h->g[gi].r);
     uint64_t elapsed = now_us_() - started;
     if (elapsed > 20000)
-        fprintf(stderr, "raft-snap: advance group=%u applied=%llu elapsed_us=%llu rc=%d\n",
+        efs_telemetry_log(0, "raft-snap: advance group=%u applied=%llu elapsed_us=%llu rc=%d\n",
                 h->g[gi].group, (unsigned long long)applied,
                 (unsigned long long)elapsed, rc);
     return rc;
@@ -5110,7 +5112,7 @@ static void read_prof_tick(void)
     line[0] = '\0';
     for (i = 0; i < 12; i++)
         strncat(line, f[i], sizeof(line) - strlen(line) - 1);
-    fprintf(stderr, "read-prof:%s lk_fwd=%llu ga_fwd=%llu pair_parallel=%llu pair_scalar=%llu\n", line,
+    efs_telemetry_log(0, "read-prof:%s lk_fwd=%llu ga_fwd=%llu pair_parallel=%llu pair_scalar=%llu\n", line,
             (unsigned long long)__atomic_load_n(&g_read_prof.lk_fwd,
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_read_prof.ga_fwd,
@@ -5130,7 +5132,7 @@ static void read_prof_tick(void)
             (unsigned long long)__atomic_load_n(&phase[i]->sum,__ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&phase[i]->max,__ATOMIC_RELAXED));
     }
-    fprintf(stderr, "%s\n", line);
+    efs_telemetry_log(0, "%s\n", line);
 }
 
 /* A follower's ReadIndex is one RPC to the leader per caller. The dual
@@ -5457,7 +5459,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             if (prof)
                 read_prof_add(&g_read_prof.ri_remote_wait, now_us_() - p1);
             if (rc != EFS_OK) {
-                if (prof) fprintf(stderr,"raft-host: admitted-read-remote group=%u rc=%d leader=%d returned_hint=%d remote_index=%llu term=%llu applied=%llu\n",group,rc,v.leader,rhint,(unsigned long long)ridx,(unsigned long long)v.term,(unsigned long long)v.applied);
+                if (prof) efs_telemetry_log(0,"raft-host: admitted-read-remote group=%u rc=%d leader=%d returned_hint=%d remote_index=%llu term=%llu applied=%llu\n",group,rc,v.leader,rhint,(unsigned long long)ridx,(unsigned long long)v.term,(unsigned long long)v.applied);
                 return rc;
             }
             if (proof_index)
@@ -5492,7 +5494,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             requested=1;
         }
         if (v.term != admitted_term) {
-            if (prof) fprintf(stderr,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
+            if (prof) efs_telemetry_log(0,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
             return EFS_ERR_NOT_PRIMARY;
         }
         (void)host_read_floor_ready(&v,&floor,want,round,admitted_term,proof_only,delegated);
@@ -5551,7 +5553,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             continue;
         }
         if (host_past_deadline(&end)) {
-            if (prof) fprintf(stderr,"raft-host: admitted-read-timeout group=%u want=%llu admitted_round=%llu admitted_term=%llu role=%d leader=%d term=%llu raw_round=%llu raw_index=%llu raw_done=%d pending=%d proven_round=%llu proven_index=%llu proven_done=%d applied=%llu commit=%llu\n",
+            if (prof) efs_telemetry_log(0,"raft-host: admitted-read-timeout group=%u want=%llu admitted_round=%llu admitted_term=%llu role=%d leader=%d term=%llu raw_round=%llu raw_index=%llu raw_done=%d pending=%d proven_round=%llu proven_index=%llu proven_done=%d applied=%llu commit=%llu\n",
                 group,(unsigned long long)want,(unsigned long long)round,(unsigned long long)admitted_term,v.role,v.leader,(unsigned long long)v.term,(unsigned long long)v.read_round,(unsigned long long)v.read_index,v.read_done,v.read_pending,(unsigned long long)v.proven_round,(unsigned long long)v.proven_index,v.proven_done,(unsigned long long)v.applied,(unsigned long long)v.commit);
             return EFS_ERR_BUSY;
         }
@@ -5873,7 +5875,7 @@ static int host_tag_refused(uint8_t group, const uint8_t *cmd, uint32_t clen)
         return 1;
     }
     skipped = __atomic_exchange_n(&suppressed, 0, __ATOMIC_RELAXED);
-    fprintf(stderr, "raft-host: group=%u refused proposal tag=%u len=%u: "
+    efs_telemetry_log(0, "raft-host: group=%u refused proposal tag=%u len=%u: "
             "not a log command this build applies (suppressed=%llu)\n",
             group, (unsigned)cmd[0], clen, (unsigned long long)skipped);
     return 1;
@@ -5918,7 +5920,7 @@ static int host_admit(struct efs_raft_host *h, struct efs_raft *r,
     return EFS_OK;
 busy:
     if (__atomic_fetch_add(&h->admit_busy, 1, __ATOMIC_RELAXED) % 4096u == 0)
-        fprintf(stderr, "raft-host: admission busy (refused=%llu)\n",
+        efs_telemetry_log(0, "raft-host: admission busy (refused=%llu)\n",
                 (unsigned long long)h->admit_busy);
     return EFS_ERR_BUSY;
 }
@@ -7539,7 +7541,7 @@ static void set_inode_rc(struct efs_msg_inode_reply *out, int rc, int leader_hin
 
         if (now - last_us > 1000000ull) {
             last_us = now;
-            fprintf(stderr, "raft-host: NOT_PRIMARY without hint from=%p "
+            efs_telemetry_log(0, "raft-host: NOT_PRIMARY without hint from=%p "
                     "(addr2line -e efsd)\n", __builtin_return_address(0));
         }
     }
@@ -8523,7 +8525,7 @@ static void *host_kv_work(void *arg)
             ?host_checkpoint_dispatch(w->checkpoint,idx,now_us_(),rc)
             :host_checkpoint_retire(w->host,idx,now_us_(),rc);
         if(!rc)rc=checkpoint_rc;
-        if(rc)fprintf(stderr,"raft-host: captured KV prefix persistence failed; checkpoint retained\n");
+        if(rc)efs_telemetry_log(0,"raft-host: captured KV prefix persistence failed; checkpoint retained\n");
         pthread_mutex_lock(&w->mu);
         if(rc)w->result=rc;
         w->flushing=0;
@@ -8722,7 +8724,7 @@ static void host_stop_leading(struct efs_raft_host *h, int stopping)
         efs_raft_allow_campaign(g->r, 0);
         if (efs_raft_role(g->r) != EFS_RAFT_FOLLOWER &&
             efs_raft_step_down(g->r) == EFS_OK) {
-            fprintf(stderr, "raft-host: group=%u stopping: relinquished leadership before handler drain\n",
+            efs_telemetry_log(0, "raft-host: group=%u stopping: relinquished leadership before handler drain\n",
                     g->group);
             host_publish_group(h, g->group);
         }
@@ -8750,11 +8752,11 @@ static void *host_pump(void *arg)
     int checkpoint_failed = 0;
     struct host_checkpoint_worker checkpoint;
     if(host_checkpoint_start(&checkpoint,h)!=EFS_OK)
-        fprintf(stderr,"raft-host: checkpoint worker unavailable; using synchronous persistence\n");
+        efs_telemetry_log(0,"raft-host: checkpoint worker unavailable; using synchronous persistence\n");
 
     struct host_kv_worker kv_worker;
     if(host_kv_start(&kv_worker,h,&checkpoint)!=EFS_OK)
-        fprintf(stderr,"raft-host: KV worker unavailable; using synchronous persistence\n");
+        efs_telemetry_log(0,"raft-host: KV worker unavailable; using synchronous persistence\n");
 
     while (__atomic_load_n(&h->running, __ATOMIC_ACQUIRE)) {
         struct pollfd pfd;
@@ -8948,7 +8950,7 @@ static void *host_pump(void *arg)
         if(!dispatched)kv_rc=efs_kv_lsm_sync_release(h->kv);
         if(!dispatched)host_publish_cursor(h,cursor_now,kv_rc);
         if (kv_rc != EFS_OK && !checkpoint_failed)
-            fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
+            efs_telemetry_log(0, "raft-host: kv wal fsync failed at pump release\n");
         if (batch_obs) {
             if(!dispatched)BO_HIST(BH_KV_RELEASE_US, efs_batch_obs_now_us() - phase_us);
             phase_us = efs_batch_obs_now_us();
@@ -8962,7 +8964,7 @@ static void *host_pump(void *arg)
                 ? host_checkpoint_dispatch(&checkpoint,applied_now,pnow,kv_rc)
                 : host_checkpoint_retire(h,applied_now,pnow,kv_rc);
             if (durable_rc != EFS_OK && !checkpoint_failed)
-                fprintf(stderr,"raft-host: applied checkpoint not advanced after persistence failure\n");
+                efs_telemetry_log(0,"raft-host: applied checkpoint not advanced after persistence failure\n");
             checkpoint_failed=durable_rc!=EFS_OK;
         }
         if (batch_obs) {
@@ -8994,16 +8996,16 @@ static void *host_pump(void *arg)
         int i;
 
         if(host_kv_stop(&kv_worker)!=EFS_OK)
-            fprintf(stderr,"raft-host: KV worker persistence failed during drain\n");
+            efs_telemetry_log(0,"raft-host: KV worker persistence failed during drain\n");
         if(host_checkpoint_stop(&checkpoint)!=EFS_OK)
-            fprintf(stderr,"raft-host: checkpoint worker persistence failed during drain\n");
+            efs_telemetry_log(0,"raft-host: checkpoint worker persistence failed during drain\n");
         pthread_mutex_lock(&h->mu);
         for (i = 0; i < HOST_NGROUPS; i++)
             idx[i] = h->g[i].hosted && h->g[i].r
                          ? efs_raft_applied(h->g[i].r) : 0;
         pthread_mutex_unlock(&h->mu);
         if (host_persist_durable_tail(h, idx, now_us_(), 1) != EFS_OK)
-            fprintf(stderr, "raft-host: shutdown durability failed; checkpoint retained\n");
+            efs_telemetry_log(0, "raft-host: shutdown durability failed; checkpoint retained\n");
     }
     return NULL;
 }
@@ -9292,7 +9294,7 @@ static void host_retire_check(struct efs_raft_host *h)
         efs_raft_allow_campaign(g->r, !ret && !g->kv_incomplete && !g->incompatible);
         if (ret && efs_raft_role(g->r) == EFS_RAFT_LEADER)
             efs_raft_step_down(g->r);
-        fprintf(stderr, "raft-host: group %u replica %s: this node is %sa voter under %u members\n",
+        efs_telemetry_log(0, "raft-host: group %u replica %s: this node is %sa voter under %u members\n",
                 g->group, ret ? "retired" : "active", ret ? "not " : "", h->members.count);
     }
 }
@@ -9336,7 +9338,7 @@ static int host_learn_membership(struct efs_raft_host *h, const struct efs_membe
         }
         if (!efs_membership_extends(m, &h->members)) {
             pthread_mutex_unlock(&h->mu);
-            fprintf(stderr, "raft-host: membership record of %u members (cluster %016llx) "
+            efs_telemetry_log(0, "raft-host: membership record of %u members (cluster %016llx) "
                     "conflicts with the committed revision of %u members (cluster %016llx); "
                     "refused\n", m->count, (unsigned long long)m->cluster, h->members.count,
                     (unsigned long long)h->members.cluster);
@@ -9347,7 +9349,7 @@ static int host_learn_membership(struct efs_raft_host *h, const struct efs_membe
     if (!self || self->port != h->s->port || strcmp(self->addr, h->s->addr) ||
         self->token != h->s->mstore.token) {
         pthread_mutex_unlock(&h->mu);
-        fprintf(stderr, "raft-host: membership record of %u members does not hold node %u at "
+        efs_telemetry_log(0, "raft-host: membership record of %u members does not hold node %u at "
                 "%s:%u with this store (token %016llx); refused\n", m->count, h->s->id,
                 h->s->addr, h->s->port, (unsigned long long)h->s->mstore.token);
         return EFS_ERR_FENCED;
@@ -9355,7 +9357,7 @@ static int host_learn_membership(struct efs_raft_host *h, const struct efs_membe
     rc = member_store_learn(&h->s->mstore, m, err, sizeof(err));
     if (rc != EFS_OK) {
         pthread_mutex_unlock(&h->mu);
-        fprintf(stderr, "raft-host: membership not persisted: %s\n", err);
+        efs_telemetry_log(0, "raft-host: membership not persisted: %s\n", err);
         return rc;
     }
     if (prev && m->count > prev)
@@ -9377,15 +9379,15 @@ static int host_learn_membership(struct efs_raft_host *h, const struct efs_membe
     pthread_mutex_unlock(&h->mu);
     server_nodes_keep_members(h->s, m);
     if (!prev)
-        fprintf(stderr, "raft-host: formed: %u members, g0 voters 0x%x, g2 voters 0x%x, g2 %s\n",
+        efs_telemetry_log(0, "raft-host: formed: %u members, g0 voters 0x%x, g2 voters 0x%x, g2 %s\n",
                 m->count, group_voters(EFS_RAFT_GROUP_SHARD, (int)m->count), target,
                 __atomic_load_n(&g2->hosted, __ATOMIC_ACQUIRE) ? "hosted" : "off");
     else
-        fprintf(stderr, "raft-host: membership revision %u: %u members (was %u), g2 target "
+        efs_telemetry_log(0, "raft-host: membership revision %u: %u members (was %u), g2 target "
                 "voters 0x%x, g2 %s\n", m->count - m->formed + 1, m->count, prev, target,
                 __atomic_load_n(&g2->hosted, __ATOMIC_ACQUIRE) ? "hosted" : "off");
     if (rc != EFS_OK)
-        fprintf(stderr, "raft-host: group-2 attach after the membership change failed rc=%d\n", rc);
+        efs_telemetry_log(0, "raft-host: group-2 attach after the membership change failed rc=%d\n", rc);
     host_member_kick(h);
     host_pump_kick(h);
     return rc;
@@ -9411,7 +9413,7 @@ static int host_membership_reconcile(struct efs_raft_host *h)
         if (rc == EFS_OK)
             rc = efs_membership_decode(rec, len, &m);
         if (rc != EFS_OK) {
-            fprintf(stderr, "raft-host: committed membership record on anchor %u is unreadable "
+            efs_telemetry_log(0, "raft-host: committed membership record on anchor %u is unreadable "
                     "or malformed (rc=%d); refusing to start\n", anchors[i], rc);
             return rc == EFS_ERR_UNSUPPORTED ? rc : EFS_ERR_DECODE;
         }
@@ -9419,7 +9421,7 @@ static int host_membership_reconcile(struct efs_raft_host *h)
             if (efs_membership_extends(&h->members, &m))
                 continue;
             if (!efs_membership_extends(&m, &h->members)) {
-                fprintf(stderr, "raft-host: committed membership on anchor %u (%u members, "
+                efs_telemetry_log(0, "raft-host: committed membership on anchor %u (%u members, "
                         "cluster %016llx) diverges from the member store's (%u members, "
                         "cluster %016llx); refusing to start\n", anchors[i], m.count,
                         (unsigned long long)m.cluster, h->members.count,
@@ -9430,21 +9432,21 @@ static int host_membership_reconcile(struct efs_raft_host *h)
         const struct efs_member *self = efs_membership_find(&m, h->s->id);
         if (!self || self->port != h->s->port || strcmp(self->addr, h->s->addr) ||
             self->token != h->s->mstore.token) {
-            fprintf(stderr, "raft-host: committed membership does not hold node %u at %s:%u with "
+            efs_telemetry_log(0, "raft-host: committed membership does not hold node %u at %s:%u with "
                     "this store (token %016llx); refusing to start\n", h->s->id, h->s->addr,
                     h->s->port, (unsigned long long)h->s->mstore.token);
             return EFS_ERR_FENCED;
         }
         rc = member_store_learn(&h->s->mstore, &m, err, sizeof(err));
         if (rc != EFS_OK) {
-            fprintf(stderr, "raft-host: %s\n", err);
+            efs_telemetry_log(0, "raft-host: %s\n", err);
             return rc;
         }
         h->members = m;
         mview_publish(&m);
         h->n = (int)m.count;
         h->formed = 1;
-        fprintf(stderr, "raft-host: membership learned from the committed record (%u members, "
+        efs_telemetry_log(0, "raft-host: membership learned from the committed record (%u members, "
                 "revision %u)\n", m.count, m.count - m.formed + 1);
     }
     return EFS_OK;
@@ -9615,7 +9617,7 @@ static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *
      * table; before formation there is no membership to prove anything. */
     if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
         if (env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc reclaim batch refused: cluster not formed\n");
+            efs_telemetry_log(0, "raft-host: gc reclaim batch refused: cluster not formed\n");
         return;
     }
     struct efs_membership mb;
@@ -9662,7 +9664,7 @@ static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *
     (void)server_reclaim_accept(h->s, items, n, local_rc);
     for (uint32_t i = 0; i < n; i++) ok[i] = local_rc[i] == EFS_OK;
     if (env_on("EFS_GC_DBG"))
-        fprintf(stderr, "raft-host: gc reclaim batch local rc0=%d failed=%d\n", n ? local_rc[0] : 0, failed);
+        efs_telemetry_log(0, "raft-host: gc reclaim batch local rc0=%d failed=%d\n", n ? local_rc[0] : 0, failed);
     for (uint32_t i = 0; i < count; i++) {
         struct efs_conn *pc = pending[i];
         if (!pc) continue;
@@ -9674,7 +9676,7 @@ static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *
                    len == sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)n * 4u &&
                    ((struct efs_msg_gc_inode_batch_reply *)reply)->count == n;
         if (env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc reclaim batch node=%u good=%d type=%u len=%u n=%u\n",
+            efs_telemetry_log(0, "raft-host: gc reclaim batch node=%u good=%d type=%u len=%u n=%u\n",
                     nodes[i].id, good, type, len, n);
         if (good) {
             const struct efs_msg_gc_inode_batch_reply *r = reply;
@@ -9906,7 +9908,7 @@ static void host_pack_retire_pass(struct efs_raft_host *h, uint8_t group, uint32
                 (void)host_gc_propose(h, group, cmd, 4u + 16u * m);
             }
             if (env_on("EFS_GC_DBG"))
-                fprintf(stderr, "raft-host: pack retire group=%u candidates=%u accepted=%u\n",
+                efs_telemetry_log(0, "raft-host: pack retire group=%u candidates=%u accepted=%u\n",
                         group, ps->n, m);
             free(cmd);
         }
@@ -10182,14 +10184,14 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
                 return; /* retired and reclaimed: every RESOLVE applied */
             if (rc != EFS_ERR_BUSY && rc != EFS_ERR_NOT_PRIMARY) {
                 __atomic_fetch_add(&h->fin_dropped, 1, __ATOMIC_RELAXED);
-                fprintf(stderr, "raft-host: txn-finish coord=%u abort rc=%d (recovery)\n",
+                efs_telemetry_log(0, "raft-host: txn-finish coord=%u abort rc=%d (recovery)\n",
                         it->coord, rc);
                 return;
             }
             usleep(4 * HOST_FIN_POLL_US);
         }
         h->fin_aborted++;
-        fprintf(stderr, "raft-host: txn-finish coord=%u abort decided rc=%d (coordinator lost its group)\n",
+        efs_telemetry_log(0, "raft-host: txn-finish coord=%u abort decided rc=%d (coordinator lost its group)\n",
                 it->coord, rc);
     }
     for (;;) {
@@ -10220,7 +10222,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
 
             if (arc == EFS_OK) {
                 h->fin_aborted++;
-                fprintf(stderr, "raft-host: txn-finish coord=%u no decision after %llu ms: abort decided\n",
+                efs_telemetry_log(0, "raft-host: txn-finish coord=%u no decision after %llu ms: abort decided\n",
                         it->coord, (unsigned long long)((now_ns() - it->born_ns) / 1000000ull));
                 dec = EFS_TXN_ABORT;
                 break;
@@ -10259,6 +10261,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
                 fd = open(ready, O_WRONLY | O_CREAT | O_TRUNC, 0600);
                 if (fd >= 0)
                     close(fd);
+                /* sync: test-only fault or debug hook */
                 fprintf(stderr, "raft-host: K43 fault: finisher parked before "
                         "the abort's RESOLVEs\n");
                 uint64_t end = now_us_() + 15000000;
@@ -10290,7 +10293,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
                 break;
             if (rc != EFS_ERR_BUSY && rc != EFS_ERR_NOT_PRIMARY) {
                 __atomic_fetch_add(&h->fin_dropped, 1, __ATOMIC_RELAXED);
-                fprintf(stderr, "raft-host: txn-finish coord=%u resolve "
+                efs_telemetry_log(0, "raft-host: txn-finish coord=%u resolve "
                         "sh=%u dec=%d rc=%d (recovery)\n",
                         it->coord, sh, dec, rc);
                 return;
@@ -10434,7 +10437,7 @@ static void host_txn_recover_one(struct efs_raft_host *h, uint32_t shard,
             h->rec_unknown++;
         else
             h->rec_fail++;
-        fprintf(stderr, "raft-host: txn-recover shard=%u coord=%u "
+        efs_telemetry_log(0, "raft-host: txn-recover shard=%u coord=%u "
                 "unknown decision (reclaimed) -> drop rc=%d\n", shard, coord, rc);
         return;
     }
@@ -10442,7 +10445,7 @@ static void host_txn_recover_one(struct efs_raft_host *h, uint32_t shard,
         dec = EFS_TXN_COMMIT; /* committed; only its RESOLVEs were lost */
     } else if (rc != EFS_OK) {
         h->rec_fail++;
-        fprintf(stderr, "raft-host: txn-recover shard=%u coord=%u age=%.1fs "
+        efs_telemetry_log(0, "raft-host: txn-recover shard=%u coord=%u age=%.1fs "
                 "decide-abort rc=%d (retry next pass)\n", shard, coord,
                 (double)(now_ns() - txid_ns(&rec->t)) / 1e9, rc);
         return;
@@ -10472,13 +10475,13 @@ static void host_txn_recover_one(struct efs_raft_host *h, uint32_t shard,
         rc = host_bg_propose(h, efs_raft_shard_group(sh), cmd, 22, 1);
         if (rc != EFS_OK) {
             h->rec_fail++;
-            fprintf(stderr, "raft-host: txn-recover shard=%u resolve sh=%u "
+            efs_telemetry_log(0, "raft-host: txn-recover shard=%u resolve sh=%u "
                     "dec=%d rc=%d (retry next pass)\n", shard, sh, dec, rc);
             return;
         }
     }
     h->rec_resolved++;
-    fprintf(stderr, "raft-host: txn-recover shard=%u coord=%u parts=%u "
+    efs_telemetry_log(0, "raft-host: txn-recover shard=%u coord=%u parts=%u "
             "age=%.1fs -> %s pin_only=%u tx=%016llx%016llx\n", shard, coord, rec->parts.n,
             (double)(now_ns() - txid_ns(&rec->t)) / 1e9,
             dec == EFS_TXN_COMMIT ? "COMMIT (resolved)" : "ABORT",
@@ -10763,7 +10766,7 @@ static void host_gc_records(struct efs_raft_host *h, struct efs_export *ex,
         (*nack)++;
     }
     if (env_on("EFS_GC_DBG"))
-        fprintf(stderr, "raft-host: gc frag batch records=%d fragments=%u acks=%d\n", n, m, *nack);
+        efs_telemetry_log(0, "raft-host: gc frag batch records=%d fragments=%u acks=%d\n", n, m, *nack);
 out:
     if (pick) for (uint32_t i = 0; i < EFS_MAX_NODES; i++) free(pick[i]);
     free(pick);
@@ -10827,7 +10830,7 @@ static void reap_multi_flush(struct efs_raft_host *h, struct reap_multi *m)
     int rc = host_gc_propose(h, m->group, m->buf, m->len);
     if (rc != EFS_OK) m->rc = rc;
     if (env_on("EFS_GC_DBG"))
-        fprintf(stderr, "raft-host: gc reap entry kind=%u group=%u items=%u bytes=%u rc=%d\n",
+        efs_telemetry_log(0, "raft-host: gc reap entry kind=%u group=%u items=%u bytes=%u rc=%d\n",
                 m->kind, m->group, m->count, m->len, rc);
     m->len = 3;
     m->count = 0;
@@ -11004,7 +11007,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     if (env_on("EFS_GC_DBG")) {
         int swept = 0;
         for (int i = 0; i < n; i++) swept += host_reap_swept[i];
-        fprintf(stderr, "raft-host: gc reap group=%u markers=%d swept=%d first=%llu lanes=%llx left=%llx\n",
+        efs_telemetry_log(0, "raft-host: gc reap group=%u markers=%d swept=%d first=%llu lanes=%llx left=%llx\n",
                 group, n, swept, (unsigned long long)cp->ino[0], (unsigned long long)cp->lanes[0],
                 (unsigned long long)host_reap_left[0]);
     }
@@ -11025,7 +11028,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     if (env_on("EFS_GC_DBG")) {
         uint32_t accepted = 0;
         for (uint32_t k = 0; k < m; k++) accepted += host_reap_ok[k];
-        fprintf(stderr, "raft-host: gc reap group=%u handed=%u accepted=%u\n", group, m, accepted);
+        efs_telemetry_log(0, "raft-host: gc reap group=%u handed=%u accepted=%u\n", group, m, accepted);
     }
 
     /* 3. REAP completion for accepted inodes only. */
@@ -11079,7 +11082,7 @@ static int host_gc_ack_flush(struct efs_raft_host *h, uint8_t group,
     }
     rc = host_gc_propose(h, group, cmd, (uint32_t)off);
     if (env_on("EFS_GC_DBG"))
-        fprintf(stderr, "raft-host: gc ack flush group=%u n=%d rc=%d\n",
+        efs_telemetry_log(0, "raft-host: gc ack flush group=%u n=%d rc=%d\n",
                 group, *nack, rc);
     *nack = 0;
     return rc;
@@ -11118,7 +11121,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
         efs_meta_gc_pending_derived(anchor, n);
         pend = efs_meta_gc_pending_peek(anchor);
         if (env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc watermark group=%u anchor=%u derived=%llu\n",
+            efs_telemetry_log(0, "raft-host: gc watermark group=%u anchor=%u derived=%llu\n",
                     group, anchor, (unsigned long long)n);
     }
     __atomic_store_n(&h->s->gc_pending[group == 0 ? 0 : 1], (uint64_t)pend, __ATOMIC_RELAXED);
@@ -11146,7 +11149,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
         if (!ex)
             ex = host_gc_export(h);
         if (env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc frag pass group=%u anchor=%u prc=%d src=%d records=%d ex=%p cur=%u\n",
+            efs_telemetry_log(0, "raft-host: gc frag pass group=%u anchor=%u prc=%d src=%d records=%d ex=%p cur=%u\n",
                     group, anchor, prc, src, c.n, (void *)ex, g_gc_cur_len[gi]);
         /* src > 0 is the scan callback's "batch full" stop, not an error.
          * No export yet (pre-mkfs / post-restart before a PUT or GET):
@@ -11170,7 +11173,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
                 if (!recs && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) &&
                     efs_meta_gc_pending_zero_if(anchor, pend) &&
                     env_on("EFS_GC_DBG"))
-                    fprintf(stderr, "raft-host: gc watermark group=%u anchor=%u drained\n",
+                    efs_telemetry_log(0, "raft-host: gc watermark group=%u anchor=%u drained\n",
                             group, anchor);
                 break;
             }
@@ -11225,7 +11228,7 @@ out:
     if (ex)
         server_export_put(h->s, ex);
     if (recs > 0 && env_on("EFS_RAFT_OBS"))
-        fprintf(stderr, "raft-host: gc-frag group=%u scans=%d records=%d ms=%llu\n",
+        efs_telemetry_log(0, "raft-host: gc-frag group=%u scans=%d records=%d ms=%llu\n",
                 group, scans, recs,
                 (unsigned long long)((now_us_() - t0) / 1000));
     /* Only a successful, progressing pass stopped by its work budget can
@@ -11318,7 +11321,7 @@ static void host_snap_export_pass(struct efs_raft_host *h)
         snprintf(path, sizeof(path), "%s", h->g[gi].snap_path);
         pthread_mutex_unlock(&h->snap_mu);
         t0 = now_us_();
-        fprintf(stderr, "raft-snap: start group=%u incl=%llu\n", group,
+        efs_telemetry_log(0, "raft-snap: start group=%u incl=%llu\n", group,
                 (unsigned long long)incl);
         rc = efs_kv_lsm_view_export(view, group, path);
         efs_kv_lsm_view_unpin(view);
@@ -11327,7 +11330,7 @@ static void host_snap_export_pass(struct efs_raft_host *h)
             unlink(path);
             h->g[gi].snap_exporting = 0;
         } else if (rc != EFS_OK) {
-            fprintf(stderr, "raft-snap: export failed group=%u rc=%d\n",
+            efs_telemetry_log(0, "raft-snap: export failed group=%u rc=%d\n",
                     group, rc);
             h->g[gi].snap_exporting = 0;
             h->g[gi].snap_ready = 0;
@@ -11344,12 +11347,12 @@ static void host_snap_export_pass(struct efs_raft_host *h)
                 }
                 h->g[gi].snap_exporting = 0;
                 h->g[gi].snap_ready = 0;
-                fprintf(stderr, "raft-snap: open failed group=%u\n", group);
+                efs_telemetry_log(0, "raft-snap: open failed group=%u\n", group);
             } else {
                 h->g[gi].snap_bytes = (uint64_t)st.st_size;
                 h->g[gi].snap_ready = 1;
                 h->g[gi].snap_exporting = 0;
-                fprintf(stderr, "raft-snap: end group=%u incl=%llu bytes=%llu "
+                efs_telemetry_log(0, "raft-snap: end group=%u incl=%llu bytes=%llu "
                         "ms=%llu\n", group, (unsigned long long)incl,
                         (unsigned long long)h->g[gi].snap_bytes,
                         (unsigned long long)((now_us_() - t0) / 1000));
@@ -11389,12 +11392,12 @@ static void host_snap_import_pass(struct efs_raft_host *h)
         pthread_mutex_unlock(&h->snap_mu);
         __atomic_store_n(&h->g[gi].import_block, 1, __ATOMIC_RELEASE);
         t0 = now_us_();
-        fprintf(stderr, "raft-snap: import start group=%u incl=%llu\n",
+        efs_telemetry_log(0, "raft-snap: import start group=%u incl=%llu\n",
                 group, (unsigned long long)incl);
         snprintf(local, sizeof(local), "%s/snap-%u-import-local.kvx",
                  h->mdraft, group);
         rc = efs_kv_lsm_flush(h->kv);
-        fprintf(stderr, "raft-snap: import flush group=%u rc=%d ms=%llu\n",
+        efs_telemetry_log(0, "raft-snap: import flush group=%u rc=%d ms=%llu\n",
                 group, rc, (unsigned long long)((now_us_() - t0) / 1000));
         if (rc == EFS_ERR_BUSY) {
             /* L0 is at the cap. Leave the .part queued and try again.
@@ -11415,7 +11418,7 @@ static void host_snap_import_pass(struct efs_raft_host *h)
             rc = efs_kv_lsm_view_export(view, group, local);
             efs_kv_lsm_view_unpin(view);
         }
-        fprintf(stderr, "raft-snap: import export group=%u rc=%d ms=%llu\n",
+        efs_telemetry_log(0, "raft-snap: import export group=%u rc=%d ms=%llu\n",
                 group, rc, (unsigned long long)((now_us_() - t0) / 1000));
         if (rc == EFS_OK) {
             struct efs_kv_item *diff = NULL;
@@ -11424,7 +11427,7 @@ static void host_snap_import_pass(struct efs_raft_host *h)
 
             rc = efs_kv_group_import_prepare(h->kv, group, path, local,
                                              &diff, &ni, &ha, &hb);
-            fprintf(stderr, "raft-snap: import diff group=%u rc=%d n=%u "
+            efs_telemetry_log(0, "raft-snap: import diff group=%u rc=%d n=%u "
                     "ms=%llu\n", group, rc, ni,
                     (unsigned long long)((now_us_() - t0) / 1000));
             if (rc == EFS_OK) {
@@ -11452,7 +11455,7 @@ static void host_snap_import_pass(struct efs_raft_host *h)
             }
         }
         unlink(local);
-        fprintf(stderr, "raft-snap: import end group=%u incl=%llu rc=%d "
+        efs_telemetry_log(0, "raft-snap: import end group=%u incl=%llu rc=%d "
                 "ms=%llu\n", group, (unsigned long long)incl, rc,
                 (unsigned long long)((now_us_() - t0) / 1000));
         pthread_mutex_lock(&h->snap_mu);
@@ -11592,7 +11595,7 @@ static int host_expiry_delete(struct efs_raft_host *h,uint8_t group,
     else return EFS_ERR_NOT_PRIMARY;
     if(!capable && (rc || (reply.rc!=EFS_OK && reply.rc!=EFS_ERR_STALE && reply.rc!=EFS_ERR_NOT_FOUND))) {
         pthread_mutex_lock(&h->mu);h->expiry_peer_skip=peer;pthread_mutex_unlock(&h->mu);
-        fprintf(stderr,"raft-host: expiry-forward retry peer=%d rc=%d ino=%llu revision=%llu\n",
+        efs_telemetry_log(0,"raft-host: expiry-forward retry peer=%d rc=%d ino=%llu revision=%llu\n",
             peer+1,rc?rc:reply.rc,(unsigned long long)due->ino,(unsigned long long)due->revision);
     }
     /* Transport ambiguity cannot authorize a different deletion: the next
@@ -12115,7 +12118,7 @@ static int dg_one(struct efs_raft_host *h, uint8_t group, struct efs_export *ex,
 
     live = efs_meta_degraded_live(h->kv, d);
     if (live < 0) {
-        fprintf(stderr, "raft-host: rebuild ino=%llu ci=%u gen=%llx: chunk row unreadable "
+        efs_telemetry_log(0, "raft-host: rebuild ino=%llu ci=%u gen=%llx: chunk row unreadable "
                 "(rc=%d); mark kept\n", (unsigned long long)d->ino, d->chunk_index,
                 (unsigned long long)d->object_gen, live);
         __atomic_fetch_add(&h->s->rebuild_failures, 1, __ATOMIC_RELAXED);
@@ -12125,7 +12128,7 @@ static int dg_one(struct efs_raft_host *h, uint8_t group, struct efs_export *ex,
         rc = dg_propose_clear(h, group, d, 0);
         if (rc == EFS_OK) {
             __atomic_fetch_add(&h->s->rebuild_retired, 1, __ATOMIC_RELAXED);
-            fprintf(stderr, "raft-host: rebuild ino=%llu ci=%u gen=%llx: object superseded, "
+            efs_telemetry_log(0, "raft-host: rebuild ino=%llu ci=%u gen=%llx: object superseded, "
                     "mark retired\n", (unsigned long long)d->ino, d->chunk_index,
                     (unsigned long long)d->object_gen);
         }
@@ -12156,7 +12159,7 @@ static int dg_one(struct efs_raft_host *h, uint8_t group, struct efs_export *ex,
             g_dg_node_backoff_us[d->nodes[b]] = now + DG_NODE_BACKOFF_US;
         }
         __atomic_fetch_add(&h->s->rebuild_failures, 1, __ATOMIC_RELAXED);
-        fprintf(stderr, "raft-host: rebuild ino=%llu ci=%u gen=%llx fragment=%u: %s "
+        efs_telemetry_log(0, "raft-host: rebuild ino=%llu ci=%u gen=%llx fragment=%u: %s "
                 "(rc=%d); mark kept\n", (unsigned long long)d->ino, d->chunk_index,
                 (unsigned long long)d->object_gen, fi,
                 rc == EFS_ERR_CHECKSUM ? "checksum mismatch" : "source fragments unavailable", rc);
@@ -12166,7 +12169,7 @@ static int dg_one(struct efs_raft_host *h, uint8_t group, struct efs_export *ex,
     if (rc != EFS_OK) {
         g_dg_node_backoff_us[d->nodes[fi]] = now + DG_NODE_BACKOFF_US;
         __atomic_fetch_add(&h->s->rebuild_failures, 1, __ATOMIC_RELAXED);
-        fprintf(stderr, "raft-host: rebuild ino=%llu ci=%u gen=%llx fragment=%u node=%u: "
+        efs_telemetry_log(0, "raft-host: rebuild ino=%llu ci=%u gen=%llx fragment=%u node=%u: "
                 "PUT failed (rc=%d); mark kept\n", (unsigned long long)d->ino, d->chunk_index,
                 (unsigned long long)d->object_gen, fi, d->nodes[fi], rc);
         return 0;
@@ -12175,7 +12178,7 @@ static int dg_one(struct efs_raft_host *h, uint8_t group, struct efs_export *ex,
     if (rc != EFS_OK)
         return 0; /* the PUT is idempotent; the next pass retires it */
     __atomic_fetch_add(&h->s->rebuilt_fragments, 1, __ATOMIC_RELAXED);
-    fprintf(stderr, "raft-host: rebuilt ino=%llu ci=%u gen=%llx fragment=%u on node %u "
+    efs_telemetry_log(0, "raft-host: rebuilt ino=%llu ci=%u gen=%llx fragment=%u on node %u "
             "(from nodes %u,%u)\n", (unsigned long long)d->ino, d->chunk_index,
             (unsigned long long)d->object_gen, fi, d->nodes[fi], d->nodes[a], d->nodes[b]);
     return 1;
@@ -12260,7 +12263,7 @@ static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t a
                 static uint64_t said_us;
                 if (now_us_() - said_us > 10000000ull) {
                     said_us = now_us_();
-                    fprintf(stderr, "raft-host: rebuild group=%u: malformed degraded mark; "
+                    efs_telemetry_log(0, "raft-host: rebuild group=%u: malformed degraded mark; "
                             "kept (fail closed)\n", group);
                 }
                 __atomic_fetch_add(&h->s->rebuild_failures, 1, __ATOMIC_RELAXED);
@@ -12403,7 +12406,7 @@ static void host_put_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_
         h->put_orphan_cursor_len[gi] = scan->last_len;
     }
     if (env_on("EFS_GC_DBG") && (scan->n || scan->bad))
-        fprintf(stderr, "raft-host: put-orphan pass group=%u visited=%u bad=%u waiting=%llu "
+        efs_telemetry_log(0, "raft-host: put-orphan pass group=%u visited=%u bad=%u waiting=%llu "
                 "deleted=%llu collected=%llu failures=%llu\n", group, scan->n, scan->bad,
                 (unsigned long long)st.waiting, (unsigned long long)st.deleted,
                 (unsigned long long)st.collected, (unsigned long long)st.failures);
@@ -12500,7 +12503,7 @@ static void host_put_drain_pass(struct efs_raft_host *h, uint8_t group, uint32_t
     if (scan->bad)
         __atomic_fetch_add(&h->s->put_orphan_failures, scan->bad, __ATOMIC_RELAXED);
     if (env_on("EFS_GC_DBG") && (scan->n || scan->bad))
-        fprintf(stderr, "raft-host: put-drain pass group=%u streams=%u bad=%u waiting=%llu "
+        efs_telemetry_log(0, "raft-host: put-drain pass group=%u streams=%u bad=%u waiting=%llu "
                 "blocked=%llu commands=%llu drained=%llu\n", group, scan->n, scan->bad,
                 (unsigned long long)st.waiting, (unsigned long long)st.blocked,
                 (unsigned long long)st.commands, (unsigned long long)st.drained);
@@ -12547,7 +12550,7 @@ static void *host_gc_thread(void *arg)
                 lead = 1;
             pthread_mutex_unlock(&h->mu);
             if (env_on("EFS_GC_DBG"))
-                fprintf(stderr, "raft-host: gc loop g=%d group=%u r=%p role=%d lead=%d\n",
+                efs_telemetry_log(0, "raft-host: gc loop g=%d group=%u r=%p role=%d lead=%d\n",
                         g, h->g[g].group, (void *)h->g[g].r,
                         h->g[g].r ? efs_raft_role(h->g[g].r) : -1, lead);
             if (!lead) {
@@ -12628,7 +12631,7 @@ static void *host_gc_thread(void *arg)
          * one with `ftomb` in the thousands is tombstones under the GC
          * prefix. `EFS_GC_DBG` prints the line on every pass. */
         if (t_all > 5000 || env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc-pass ms=%llu orphan=%llu reap=%llu frag=%llu "
+            efs_telemetry_log(0, "raft-host: gc-pass ms=%llu orphan=%llu reap=%llu frag=%llu "
                     "spread=%llu recover=%llu fscans=%llu fsegs=%llu "
                     "fkeys=%llu femit=%llu ftomb=%llu scans=%llu segs=%llu "
                     "keys=%llu emit=%llu tomb=%llu reap_scan=%llu "
@@ -12675,7 +12678,7 @@ static void *host_gc_thread(void *arg)
             if (pass_ms > idle_ms) idle_ms = pass_ms > GC_LOOP_MS ? GC_LOOP_MS : (unsigned)pass_ms;
         }
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
-            fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
+            efs_telemetry_log(0, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
                     (unsigned long long)(removed_after - removed_before));
         /* Reap/fragment work must keep up with expiry. Broader housekeeping
          * stays at ordinary cadence above; two-file expiry bursts are spread
@@ -12728,7 +12731,7 @@ static uint64_t query_export_max_ms=3600000;
 static void query_export_configure(void)
 {
     int valid;query_export_max_ms=efs_query_export_lifetime(getenv("EFS_QUERY_EXPORT_MAX_MS"),&valid);
-    if(!valid)fprintf(stderr,"query-config: invalid EFS_QUERY_EXPORT_MAX_MS; using 3600000 (allowed 60000..604800000)\n");
+    if(!valid)efs_telemetry_log(0,"query-config: invalid EFS_QUERY_EXPORT_MAX_MS; using 3600000 (allowed 60000..604800000)\n");
     efs_setting_u64("EFS_QUERY_EXPORT_MAX_MS",query_export_max_ms);
 }
 static int query_export_expired(uint64_t now,uint64_t touched,uint64_t born)
@@ -12996,17 +12999,17 @@ static void *host_query_thread(void *ctx)
     {
         int recovery=efs_query_catalog_disk_recover(query_root,&disk_lease);
         if(recovery) {
-            fprintf(stderr,"query-recovery: rc=%d; disk publisher unavailable\n",recovery);
+            efs_telemetry_log(0,"query-recovery: rc=%d; disk publisher unavailable\n",recovery);
             pthread_rwlock_wrlock(&h->query_lock);h->query_error=recovery;
             pthread_rwlock_unlock(&h->query_lock);return NULL;
         }
     }
     unsigned interval_ms;
     if(efs_query_refresh_interval_config(getenv("EFS_QUERY_REFRESH_MS"),HOST_QUERY_T_MS,&interval_ms))
-        fprintf(stderr,"query-config: invalid EFS_QUERY_REFRESH_MS; using %u (allowed %u..%u)\n",
+        efs_telemetry_log(0,"query-config: invalid EFS_QUERY_REFRESH_MS; using %u (allowed %u..%u)\n",
                 HOST_QUERY_T_MS,EFS_QUERY_REFRESH_MIN_MS,EFS_QUERY_REFRESH_MAX_MS);
     else if(interval_ms!=HOST_QUERY_T_MS)
-        fprintf(stderr,"query-config: refresh interval %u ms\n",interval_ms);
+        efs_telemetry_log(0,"query-config: refresh interval %u ms\n",interval_ms);
     __atomic_store_n(&host_query_interval_ms,interval_ms,__ATOMIC_RELAXED);
     efs_setting_u64("EFS_QUERY_REFRESH_MS",interval_ms);
     while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
@@ -13023,7 +13026,7 @@ static void *host_query_thread(void *ctx)
             h->query_error=rc;
             pthread_rwlock_unlock(&h->query_lock);
             if(rc!=last_error || now-last_error_log>=30000){
-                fprintf(stderr,"query-revisions: rc=%d\n",rc);last_error_log=now;
+                efs_telemetry_log(0,"query-revisions: rc=%d\n",rc);last_error_log=now;
             }
             last_error=rc;
             continue;
@@ -13072,6 +13075,7 @@ static void *host_query_thread(void *ctx)
         static int first_unformed_fired;
         if(initial && !first_unformed_fired && env_on("EFS_FAULT_QUERY_FIRST_UNFORMED")){
             first_unformed_fired=1;source=NULL;rc=EFS_ERR_UNFORMED;
+            /* sync: test-only fault or debug hook */
             fprintf(stderr,"fault: EFS_FAULT_QUERY_FIRST_UNFORMED refused the first catalog capture\n");
         } else
 #endif
@@ -13095,10 +13099,10 @@ static void *host_query_thread(void *ctx)
                 if(initial)restored=efs_query_catalog_restore_disk(query_root,source,watermark,catalog_bytes,&candidate);
                 if(initial && restored==EFS_ERR_STALE){
                     restored=efs_query_catalog_catchup_disk(query_root,source,catalog_bytes,host_query_disk_cancel,h,&candidate);
-                    fprintf(stderr,"query-catchup: rc=%d backend=disk\n",restored);
+                    efs_telemetry_log(0,"query-catchup: rc=%d backend=disk\n",restored);
                 }
                 if(work_enabled && initial)work.restore_ms=query_mono_ms()-restore_start;
-                if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
+                if(initial)efs_telemetry_log(0,"query-restore: rc=%d backend=disk\n",restored);
                 uint64_t build_start=query_mono_ms();
                 if(restored)rc=efs_query_catalog_build_disk_checked(query_root,source,h->query_view.catalog,
                     catalog_bytes,host_query_disk_cancel,h,&build_failure,&candidate);
@@ -13141,7 +13145,7 @@ static void *host_query_thread(void *ctx)
          * retain their start-to-start coalescing and pending-age reporting. */
         if (failed) last_attempt=query_mono_ms();
         if (rc && rc!=EFS_ERR_NOT_PRIMARY && (rc!=last_error || now-last_error_log>=30000)) {
-            fprintf(stderr,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu stage=%s pending=%d capture_ms=%llu\n",
+            efs_telemetry_log(0,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu stage=%s pending=%d capture_ms=%llu\n",
                     rc,(unsigned long long)(catalog_bytes>>20),initial,
                     (unsigned long long)(query_mono_ms()-now),refresh_stage,build_failure.pending,
                     (unsigned long long)(capture_done-now));
@@ -13716,12 +13720,14 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_INVAL;
     unsigned gc_backlog_idle_ms;
     if (host_gc_backlog_config(getenv("EFS_GC_BACKLOG_IDLE_MS"), &gc_backlog_idle_ms) != EFS_OK) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "raft-host: EFS_GC_BACKLOG_IDLE_MS must be 20..1000\n");
         return EFS_ERR_INVAL;
     }
     efs_setting_u64("EFS_GC_BACKLOG_IDLE_MS", gc_backlog_idle_ms);
     uint64_t applied_interval;
     if (host_applied_interval(getenv("EFS_RAFT_APPLIED_INTERVAL_MS"),&applied_interval)!=EFS_OK) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr,"raft-host: EFS_RAFT_APPLIED_INTERVAL_MS must be 10..1000\n");
         return EFS_ERR_INVAL;
     }
@@ -13733,6 +13739,7 @@ int server_raft_host_start(struct efsd_server *s)
         n = (int)s->mstore.members.count;
     if (s->id < 1 || s->id > EFS_MAX_NODES ||
         (formed && !efs_membership_find(&s->mstore.members, s->id))) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "raft-host: node-id %u is not a member (%s, %d members)\n", s->id,
                 formed ? "committed membership" : "unformed", formed ? n : 0);
         return EFS_ERR_INVAL;
@@ -13807,6 +13814,7 @@ int server_raft_host_start(struct efsd_server *s)
              s->meta_storage[0] ? s->meta_storage : s->storage_path);
     snprintf(h->mdraft, sizeof(h->mdraft), "%s", dir);
     if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "raft-host: mkdir %s: %s\n", dir, strerror(errno));
         free(h);
         return EFS_ERR_IO;
@@ -13821,12 +13829,14 @@ int server_raft_host_start(struct efsd_server *s)
         kcfg.sync_mode = EFS_KV_LSM_SYNC;
         h->kv = efs_kv_lsm_open(kvdir, &kcfg);
         if (!h->kv) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "raft-host: kv_lsm_open %s failed\n", kvdir);
                 free(h);
             return EFS_ERR_IO;
         }
         h->disk = efs_raft_disk_open(logdir, EFS_RAFT_DISK_SYNC);
         if (!h->disk) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "raft-host: raft_disk_open %s failed\n", logdir);
             efs_kv_lsm_close(h->kv);
                 free(h);
@@ -13842,6 +13852,7 @@ int server_raft_host_start(struct efsd_server *s)
     if (rc == EFS_OK)
         host_retire_check(h);
     if (rc != EFS_OK) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "raft-host: attach failed rc=%d\n", rc);
         efs_raft_free(h->g[0].r);
         efs_raft_free(h->g[1].r);
@@ -13862,6 +13873,7 @@ int server_raft_host_start(struct efsd_server *s)
     if (h->telemetry)
         __atomic_store_n(&g_host, h, __ATOMIC_RELEASE);
     if (!h->telemetry || efsd_pthread_create(&h->tid, host_pump, h) != 0) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "raft-host: required telemetry or pump thread unavailable; refusing startup\n");
         efs_telemetry_stop(h->telemetry);
         __atomic_store_n(&g_host, NULL, __ATOMIC_RELEASE);
@@ -13878,7 +13890,7 @@ int server_raft_host_start(struct efsd_server *s)
     __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
     if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
         __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
-        fprintf(stderr,"raft-host: query refresh thread failed; virtual queries unavailable\n");
+        efs_telemetry_log(0,"raft-host: query refresh thread failed; virtual queries unavailable\n");
     } else h->query_started=1;
     /* GC reaper after the pump: its proposals need the pump to apply. A
      * spawn failure only leaks fragments (logged), never corrupts.
@@ -13888,13 +13900,14 @@ int server_raft_host_start(struct efsd_server *s)
     __atomic_store_n(&h->gc_running, 1, __ATOMIC_RELEASE);
 #if EFS_FAULTS
     if (env_on("EFS_FAULT_GC_DISABLE")) {
+        /* sync: test-only fault or debug hook */
         fprintf(stderr, "raft-host: GC reaper DISABLED (EFS_FAULT_GC_DISABLE); "
                 "unlinked fragments will leak\n");
         __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
     } else
 #endif
     if (efsd_pthread_create(&h->gc_tid, host_gc_thread, h) != 0) {
-        fprintf(stderr, "raft-host: GC reaper thread failed; "
+        efs_telemetry_log(0, "raft-host: GC reaper thread failed; "
                 "unlinked fragments will leak\n");
         __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
     } else {
@@ -13905,7 +13918,7 @@ int server_raft_host_start(struct efsd_server *s)
      * still learns revisions from notices, but nothing forms or grows. */
     __atomic_store_n(&h->mb_running, 1, __ATOMIC_RELEASE);
     if (efsd_pthread_create(&h->mb_tid, host_member_thread, h) != 0) {
-        fprintf(stderr, "raft-host: membership thread failed; formation and node addition "
+        efs_telemetry_log(0, "raft-host: membership thread failed; formation and node addition "
                 "need efs-mgmt raft-mkfs and a restart\n");
         __atomic_store_n(&h->mb_running, 0, __ATOMIC_RELEASE);
     } else {
@@ -13916,13 +13929,13 @@ int server_raft_host_start(struct efsd_server *s)
     h->fin_running = h->fin != NULL;
     if (h->fin_running &&
         efsd_pthread_create(&h->fin_tid, host_fin_thread, h) != 0) {
-        fprintf(stderr, "raft-host: txn finisher thread failed; "
+        efs_telemetry_log(0, "raft-host: txn finisher thread failed; "
                 "recovery covers abandoned commits\n");
         h->fin_running = 0;
     } else if (h->fin_running) {
         h->fin_started = 1;
     }
-    fprintf(stderr,
+    efs_telemetry_log(0,
             "raft-host: up raft_id=%d n=%d %s boot=%llu salt=%llu "
             "g0=%s g2=%s\n",
             h->raft_id, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE),
@@ -14121,7 +14134,7 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
         /* W145: a refused Raft frame used to vanish without a trace. */
         uint64_t n = __atomic_add_fetch(&h->inbox_oversize, 1, __ATOMIC_RELAXED);
         if (n <= 10)
-            fprintf(stderr, "raft-host: inbox refused oversize frame len=%u max=%u type=%u (n=%llu)\n",
+            efs_telemetry_log(0, "raft-host: inbox refused oversize frame len=%u max=%u type=%u (n=%llu)\n",
                     plen, (unsigned)HOST_FRAME_MAX, payload[0], (unsigned long long)n);
         return EFS_ERR_INVAL;
     }
@@ -14163,7 +14176,7 @@ static int host_mkfs_committed(struct efs_raft_host *h, struct efs_membership *m
     int rc = EFS_ERR_NOT_FOUND;
 
     if (!hosts_group(h->raft_id, __atomic_load_n(&h->g[0].voters, __ATOMIC_ACQUIRE))) {
-        fprintf(stderr, "raft-host: raft-mkfs: MKFS committed but this node hosts no group-0 "
+        efs_telemetry_log(0, "raft-host: raft-mkfs: MKFS committed but this node hosts no group-0 "
                 "replica to read it back; retry on node 1, 2 or 3\n");
         return EFS_ERR_BUSY;
     }
@@ -14177,11 +14190,11 @@ static int host_mkfs_committed(struct efs_raft_host *h, struct efs_membership *m
         usleep(20000);
     }
     if (rc == EFS_ERR_NOT_FOUND) {
-        fprintf(stderr, "raft-host: raft-mkfs: MKFS committed but not applied here yet; retry\n");
+        efs_telemetry_log(0, "raft-host: raft-mkfs: MKFS committed but not applied here yet; retry\n");
         return EFS_ERR_BUSY;
     }
     if (rc == EFS_OK && efs_membership_decode(rec, len, m) != EFS_OK) {
-        fprintf(stderr, "raft-host: raft-mkfs: committed membership record is malformed\n");
+        efs_telemetry_log(0, "raft-host: raft-mkfs: committed membership record is malformed\n");
         return EFS_ERR_DECODE;
     }
     return rc;
@@ -14234,7 +14247,7 @@ static int host_formation_notify(struct efs_raft_host *h, const struct efs_membe
         }
         efs_net_set_deadline_ms(previous);
         if (tries > 1)
-            fprintf(stderr, "raft-host: membership notice node %u: %d attempts rc=%d\n",
+            efs_telemetry_log(0, "raft-host: membership notice node %u: %d attempts rc=%d\n",
                     p->id, tries, r);
         if (r != EFS_OK && ml < sizeof(missed))
             ml += (size_t)snprintf(missed + ml, sizeof(missed) - ml, "%snode %u at %s:%u "
@@ -14242,7 +14255,7 @@ static int host_formation_notify(struct efs_raft_host *h, const struct efs_membe
     }
     if (!ml)
         return EFS_OK;
-    fprintf(stderr, "raft-host: raft-mkfs: membership committed, but these members did not "
+    efs_telemetry_log(0, "raft-host: raft-mkfs: membership committed, but these members did not "
             "record it: %s; they serve no metadata until they do; retry raft-mkfs\n", missed);
     return EFS_ERR_NET;
 }
@@ -14277,12 +14290,12 @@ static int host_form(struct efs_raft_host *h, const struct efs_membership *want,
     }
     if (rc == EFS_OK) {
         if (salt != want->cluster)
-            fprintf(stderr, "raft-host: raft-mkfs: table exists with salt %llu; "
+            efs_telemetry_log(0, "raft-host: raft-mkfs: table exists with salt %llu; "
                     "proposed salt %llu not used (mkfs once)\n",
                     (unsigned long long)salt, (unsigned long long)want->cluster);
         h->salt = salt;
         if (!efs_membership_extends(&committed, want))
-            fprintf(stderr, "raft-host: raft-mkfs: the cluster formed earlier with %u members; "
+            efs_telemetry_log(0, "raft-host: raft-mkfs: the cluster formed earlier with %u members; "
                     "this request's %u members not used\n", committed.formed, want->count);
         rc = host_formation_notify(h, &committed);
     }
@@ -14366,7 +14379,7 @@ static void host_seed_propose(struct efs_raft_host *h, uint64_t now)
     if (n + 1 < EFS_FORMATION_MIN) {
         if (now - h->mb_log_us >= 10000000ull) {
             h->mb_log_us = now;
-            fprintf(stderr, "raft-host: unready: formation needs %u members (joined: this seed "
+            efs_telemetry_log(0, "raft-host: unready: formation needs %u members (joined: this seed "
                     "at %s:%u%s); waiting for nodes started with --join\n", EFS_FORMATION_MIN,
                     h->s->addr, h->s->port, joined);
         }
@@ -14399,10 +14412,10 @@ static void host_seed_propose(struct efs_raft_host *h, uint64_t now)
     pthread_mutex_unlock(&h->mu);
     h->mb_sig = 0;
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: formation proposal not persisted: %s\n", err);
+        efs_telemetry_log(0, "raft-host: formation proposal not persisted: %s\n", err);
         return;
     }
-    fprintf(stderr, "raft-host: formation proposed: %u members of cluster %016llx (node 1 at "
+    efs_telemetry_log(0, "raft-host: formation proposed: %u members of cluster %016llx (node 1 at "
             "%s:%u%s, node ids in that order); waiting for their promises\n", want.count,
             (unsigned long long)want.cluster, h->s->addr, h->s->port, joined);
 }
@@ -14513,7 +14526,7 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         pthread_cond_signal(&h->mb_cv);
         pthread_mutex_unlock(&h->mb_mu);
         if (seed && (uint32_t)fresh + 1 < EFS_FORMATION_MIN) {
-            fprintf(stderr, "raft-host: raft-mkfs refused: formation needs %u members; %d "
+            efs_telemetry_log(0, "raft-host: raft-mkfs refused: formation needs %u members; %d "
                     "joined this seed (start more nodes with --join)\n", EFS_FORMATION_MIN,
                     fresh + 1);
             out->rc = EFS_ERR_UNFORMED;
@@ -14527,7 +14540,7 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         if (ready) {
             rc = host_form(h, &want, &hint);
         } else {
-            fprintf(stderr, "raft-host: raft-mkfs refused: the cluster is not formed; "
+            efs_telemetry_log(0, "raft-host: raft-mkfs refused: the cluster is not formed; "
                     "formation waits for: %s\n", missing);
             rc = EFS_ERR_UNFORMED;
         }
@@ -14573,7 +14586,7 @@ static int host_member_add_forward(struct efs_raft_host *h, const struct efs_mem
             continue; /* unreachable (its transport may say BUSY): the next one */
         rc = rep.rc;
         if (rc == EFS_OK || rc == EFS_ERR_FENCED) {
-            fprintf(stderr, "membership: forwarded %s:%u to member %d: rc=%d\n",
+            efs_telemetry_log(0, "membership: forwarded %s:%u to member %d: rc=%d\n",
                     j->addr, j->port, rid + 1, rc);
             break;
         }
@@ -14625,7 +14638,7 @@ static int host_member_add(struct efs_raft_host *h, const struct efs_member *j)
         return host_member_add_forward(h, j);
     rc = efs_membership_plus(&view, j->addr, j->port, j->token, &next, err, sizeof(err));
     if (rc != EFS_OK) {
-        fprintf(stderr, "membership: addition refused: %s\n", err);
+        efs_telemetry_log(0, "membership: addition refused: %s\n", err);
         return EFS_ERR_FENCED;
     }
     cmd[0] = EFS_MD_CMD_MEMBERS;
@@ -14633,13 +14646,13 @@ static int host_member_add(struct efs_raft_host *h, const struct efs_member *j)
     if (rc == EFS_OK)
         rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, (uint32_t)(1 + rlen), &hint);
     if (rc != EFS_OK) {
-        fprintf(stderr, "membership: adding %s:%u (token %016llx) as member %u: rc=%d%s\n",
+        efs_telemetry_log(0, "membership: adding %s:%u (token %016llx) as member %u: rc=%d%s\n",
                 j->addr, j->port, (unsigned long long)j->token, next.count, rc,
                 rc == EFS_ERR_FENCED ? " (another store took that id first; its next HELLO "
                 "retries on the newer record)" : "");
         return rc;
     }
-    fprintf(stderr, "membership: committed %s:%u (token %016llx) as member %u "
+    efs_telemetry_log(0, "membership: committed %s:%u (token %016llx) as member %u "
             "(revision %u)\n", j->addr, j->port, (unsigned long long)j->token, next.count,
             next.count - next.formed + 1);
     host_test_exit("after-members-commit");
@@ -14666,7 +14679,7 @@ static void host_join_enqueue(struct efs_raft_host *h, const struct efs_member *
             break;
     if (i == h->mb_njoin && h->mb_njoin < EFS_MAX_NODES) {
         h->mb_join[h->mb_njoin++] = *j;
-        fprintf(stderr, "membership: joining store at %s:%u (token %016llx) is pending; "
+        efs_telemetry_log(0, "membership: joining store at %s:%u (token %016llx) is pending; "
                 "adding it\n", j->addr, j->port, (unsigned long long)j->token);
     }
     pthread_cond_signal(&h->mb_cv);
@@ -14721,17 +14734,17 @@ static void host_auto_form(struct efs_raft_host *h, uint64_t now)
     if (!ready || host_local_leader(h, EFS_RAFT_GROUP_SHARD) != h->raft_id) {
         if (now - h->mb_log_us >= 10000000ull) {
             h->mb_log_us = now;
-            fprintf(stderr, "raft-host: unready: the cluster is not formed; %s%s\n",
+            efs_telemetry_log(0, "raft-host: unready: the cluster is not formed; %s%s\n",
                     ready ? "formation waits for the group-0 leader"
                           : "formation waits for the promise of ", ready ? "" : missing);
         }
         return;
     }
-    fprintf(stderr, "raft-host: forming automatically with %u members (cluster %016llx)\n",
+    efs_telemetry_log(0, "raft-host: forming automatically with %u members (cluster %016llx)\n",
             want.count, (unsigned long long)want.cluster);
     int rc = host_form(h, &want, &hint);
     if (rc != EFS_OK)
-        fprintf(stderr, "raft-host: automatic formation: rc=%d; retrying\n", rc);
+        efs_telemetry_log(0, "raft-host: automatic formation: rc=%d; retrying\n", rc);
 }
 
 /* Group-0 leader (M5 steps 3 and 5): send the current record to every
@@ -14773,7 +14786,7 @@ static void host_notice_pump(struct efs_raft_host *h, uint64_t now)
             h->mb_acked[i] = m.count;
         } else {
             if (!h->mb_retry_us[i])
-                fprintf(stderr, "membership: member %u at %s:%u has not recorded revision %u "
+                efs_telemetry_log(0, "membership: member %u at %s:%u has not recorded revision %u "
                         "(rc=%d); retrying every 2 s\n", p->id, p->addr, p->port,
                         m.count - m.formed + 1, rc);
             h->mb_retry_us[i] = now + 2000000ull;
@@ -14822,7 +14835,7 @@ static void host_voter_reconcile(struct efs_raft_host *h)
         pthread_mutex_unlock(&h->mu);
         if (cur && cur != target && logged[gi] != (target | (uint32_t)(rc == EFS_OK) << 31)) {
             logged[gi] = target | (uint32_t)(rc == EFS_OK) << 31;
-            fprintf(stderr, "membership: group %u voters 0x%x -> 0x%x: %s (rc=%d)\n",
+            efs_telemetry_log(0, "membership: group %u voters 0x%x -> 0x%x: %s (rc=%d)\n",
                     h->g[gi].group, cur, target,
                     rc == EFS_OK ? "joint consensus started" :
                     rc == EFS_ERR_BUSY ? "waiting for the new voters to catch up" : "refused",
@@ -14872,7 +14885,7 @@ static void *host_member_thread(void *arg)
         if (have_join) {
             int rc = host_member_add(h, &j);
             if (rc != EFS_OK && rc != EFS_ERR_FENCED)
-                fprintf(stderr, "membership: addition of %s:%u not finished (rc=%d); "
+                efs_telemetry_log(0, "membership: addition of %s:%u not finished (rc=%d); "
                         "its next HELLO retries it\n", j.addr, j.port, rc);
         }
         if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
@@ -14880,7 +14893,7 @@ static void *host_member_thread(void *arg)
                 host_auto_form(h, now);
             else if (now - h->mb_log_us >= 10000000ull) {
                 h->mb_log_us = now;
-                fprintf(stderr, "raft-host: unready: the cluster is not formed (or this node "
+                efs_telemetry_log(0, "raft-host: unready: the cluster is not formed (or this node "
                         "is not a member yet); waiting\n");
             }
             continue;
@@ -15115,22 +15128,22 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
         if(members[i].id==h->s->id)server_raft_host_storage_session_fence(&request,&reply);
         else if(host_inode_rpc_peer(h,(int)members[i].id-1,EFS_MSG_STORAGE_SESSION_FENCE,
                     &request,sizeof(request),EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply))){
-            fprintf(stderr,"storage-fence: member=%u floor=%u check=%d transport unavailable\n",members[i].id,floor,check_only);
+            efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d transport unavailable\n",members[i].id,floor,check_only);
             missed|=1u<<(members[i].id-1);continue;
         }
         if(memcmp(reply.uuid,uuid,16) || reply.floor!=floor)return EFS_ERR_PROTO;
         if(reply.rc!=EFS_OK){
-            fprintf(stderr,"storage-fence: member=%u floor=%u check=%d rc=%d\n",members[i].id,floor,check_only,reply.rc);
+            efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d rc=%d\n",members[i].id,floor,check_only,reply.rc);
             return reply.rc;
         }
         reached++;
     }
     if(reached*2<=count){
-        fprintf(stderr,"storage-fence: floor=%u check=%d reached %u of %u members, no majority (unreached mask 0x%x)\n",
+        efs_telemetry_log(0,"storage-fence: floor=%u check=%d reached %u of %u members, no majority (unreached mask 0x%x)\n",
                 floor,check_only,reached,count,missed);
         return EFS_ERR_BUSY;
     }
-    if(missed)fprintf(stderr,"storage-fence: floor=%u check=%d sealed %u of %u members, unreached mask 0x%x\n",
+    if(missed)efs_telemetry_log(0,"storage-fence: floor=%u check=%d sealed %u of %u members, unreached mask 0x%x\n",
                       floor,check_only,reached,count,missed);
     int same=1;pthread_mutex_lock(&h->s->lock);
     if(h->s->node_count!=count)same=0;
@@ -15271,10 +15284,12 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             FILE *f=fopen(gate,"r");
             if(f){if(!fgets(word,sizeof(word),f))word[0]=0;fclose(f);}
             if(!strncmp(word,"fail",4)) {
+                /* sync: test-only fault or debug hook */
                 fprintf(stderr,"raft-host: EFS_FAULT_REVOKE_BEGIN_FILE fail: session BEGIN refused\n");
                 out->rc=EFS_ERR_IO;return;
             }
             if(!noted++)
+                /* sync: test-only fault or debug hook */
                 fprintf(stderr,"raft-host: EFS_FAULT_REVOKE_BEGIN_FILE present: session BEGIN held\n");
             usleep(50000);
         }
@@ -15570,6 +15585,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             if(gate && access(gate,F_OK)==0 && lag.has && lag.role!=EFS_RAFT_LEADER) {
                 static unsigned noted;
                 if(!__atomic_exchange_n(&noted,1,__ATOMIC_RELAXED))
+                    /* sync: test-only fault or debug hook */
                     fprintf(stderr,"fault: EFS_FAULT_TICKET_READ_LAG_FILE: follower STATUS not covered\n");
                 out->rc=EFS_ERR_NOT_PRIMARY;
                 out->leader_hint=lag.leader==h->raft_id?-1:lag.leader;
@@ -15813,7 +15829,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             static unsigned locked;
             unsigned n=__atomic_fetch_add(&locked,1,__ATOMIC_RELAXED);
             if (!(n&63))
-                fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u applied BUSY "
+                efs_telemetry_log(0,"raft-host: session cleanup batch shard=%u epoch=%u applied BUSY "
                         "(key under another transaction's intent), retry certified (%u)\n",
                         rd32be(cmd+22),rd32be(cmd+18),n+1);
             out->salt=EFS_MD_SESSION_CLEANUP_WAIT_LOCKED;return;
@@ -15835,7 +15851,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             }
         }
         if (rc==EFS_ERR_BUSY)
-            fprintf(stderr,"raft-host: session cleanup batch shard=%u epoch=%u idx=%llu BUSY "
+            efs_telemetry_log(0,"raft-host: session cleanup batch shard=%u epoch=%u idx=%llu BUSY "
                     "uncertified (verdict not known)\n",rd32be(cmd+22),rd32be(cmd+18),
                     (unsigned long long)batch_idx);
         out->index=batch_idx;
@@ -15896,6 +15912,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             if (d && *d && h->s &&
                 snprintf(flag, sizeof(flag), "%s/stale-%u", d, h->s->id) < (int)sizeof(flag) &&
                 !unlink(flag)) {
+                /* sync: test-only fault or debug hook */
                 fprintf(stderr, "fault: EFS_FAULT_FWD_TXN_STALE answered a forwarded TXN_BATCH "
                         "group=%u idx=%llu STALE after it applied\n", group,
                         (unsigned long long)idx);
@@ -16453,7 +16470,7 @@ void server_raft_host_step_down(const struct efs_msg_raft_step_down *in,
         out->rc = in->target >= 0 ? efs_raft_transfer(g->r, in->target)
                                   : efs_raft_step_down(g->r);
         if (out->rc == EFS_OK)
-            fprintf(stderr, "raft-host: group=%u operator step-down term=%llu target=%d\n",
+            efs_telemetry_log(0, "raft-host: group=%u operator step-down term=%llu target=%d\n",
                     g->group, (unsigned long long)out->term, in->target);
     }
     pthread_mutex_unlock(&h->mu);
@@ -16513,7 +16530,7 @@ uint32_t server_member_hello(efs_node_id_t id, const char *addr, uint16_t port, 
         mine = mview_cluster;
         pthread_mutex_unlock(&mview_mu);
         if (!token || !cluster || cluster != mine) {
-            fprintf(stderr, "membership: HELLO from node %u at %s:%u refused: %s (cluster "
+            efs_telemetry_log(0, "membership: HELLO from node %u at %s:%u refused: %s (cluster "
                     "%016llx, this node %016llx)\n", id, addr ? addr : "?", port,
                     !token ? "no store token" : "another cluster", (unsigned long long)cluster,
                     (unsigned long long)mine);
@@ -16524,7 +16541,7 @@ uint32_t server_member_hello(efs_node_id_t id, const char *addr, uint16_t port, 
     if (count)
         *count = m.count;
     if (!addr || !token || cluster != m.cluster) {
-        fprintf(stderr, "membership: HELLO from node %u at %s:%u refused: %s\n", id,
+        efs_telemetry_log(0, "membership: HELLO from node %u at %s:%u refused: %s\n", id,
                 addr ? addr : "?", port, !token ? "no store token" : "another cluster");
         return EFS_HELLO_REJECT_FORMED;
     }
@@ -16587,7 +16604,7 @@ void server_member_hello_join(const char *addr, uint16_t port, uint64_t token,
             return;
         }
         if (e || efs_membership_find_ep(&m, addr, port)) {
-            fprintf(stderr, "membership: joining store %016llx at %s:%u refused: %s\n",
+            efs_telemetry_log(0, "membership: joining store %016llx at %s:%u refused: %s\n",
                     (unsigned long long)token, addr, port,
                     e ? "this store is a member at another endpoint"
                       : "the endpoint is a member with another store");
@@ -16597,7 +16614,7 @@ void server_member_hello_join(const char *addr, uint16_t port, uint64_t token,
         /* F14: a full cluster refuses the store outright (the joiner exits)
          * rather than queueing an addition that can never commit. */
         if (m.count >= EFS_MAX_NODES) {
-            fprintf(stderr, "membership: joining store %016llx at %s:%u refused: the cluster "
+            efs_telemetry_log(0, "membership: joining store %016llx at %s:%u refused: the cluster "
                     "has the maximum of %d members\n", (unsigned long long)token, addr, port,
                     EFS_MAX_NODES);
             ack->reject_reason = EFS_HELLO_REJECT_FULL;
@@ -16649,7 +16666,7 @@ void server_member_hello_join(const char *addr, uint16_t port, uint64_t token,
         slot = h->mb_ncand++;
     if (slot >= 0) {
         if (h->mb_cand[slot].token != token)
-            fprintf(stderr, "membership: joining store %016llx at %s:%u waits for formation\n",
+            efs_telemetry_log(0, "membership: joining store %016llx at %s:%u waits for formation\n",
                     (unsigned long long)token, addr, port);
         memset(&h->mb_cand[slot], 0, sizeof(h->mb_cand[slot]));
         h->mb_cand[slot].port = port;
@@ -17899,7 +17916,7 @@ static void host_opid_reply_ino(struct efs_raft_host *h, efs_ino_t parent,
     if (rep->rc != EFS_OK || !rep->ino) {
         /* An acked-and-reclaimed stub (ino 0) should never answer a live
          * retry: the client acks only below its lowest in-flight seq. */
-        fprintf(stderr, "raft-host: opid-replay parent=%llu name=%s seq=%llu "
+        efs_telemetry_log(0, "raft-host: opid-replay parent=%llu name=%s seq=%llu "
                 "rc=%d ino=%llu (stub)\n", (unsigned long long)parent, name,
                 (unsigned long long)rep->seq, rep->rc,
                 (unsigned long long)rep->ino);
@@ -17938,7 +17955,7 @@ static void host_opid_reply_ino(struct efs_raft_host *h, efs_ino_t parent,
     if (gone) {
         set_inode_rc(out,EFS_OK,-1);
         out->inode.ino=rep->ino;
-        fprintf(stderr, "raft-host: opid-replay parent=%llu name=%s seq=%llu "
+        efs_telemetry_log(0, "raft-host: opid-replay parent=%llu name=%s seq=%llu "
                 "ino=%llu row authoritatively gone\n", (unsigned long long)parent, name,
                 (unsigned long long)rep->seq, (unsigned long long)rep->ino);
     } else if (out->status!=EFS_INODE_RPC_OK) {
@@ -17980,6 +17997,7 @@ static int host_test_dir_serve_read(struct efs_raft_host *h, efs_ino_t parent, u
     int rc = efs_kv_key_inode(efs_kv_inode_shard(parent), parent, key, &kl);
     if (rc == EFS_OK)
         rc = efs_kv_put(h->kv, key, kl, junk, sizeof(junk));
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "raft-host: fault dir-serve-corrupt: CREATE parent=%llu group=%u before parent read rc=%d\n",
             (unsigned long long)parent, (unsigned)pg, rc);
     return rc;
@@ -18178,7 +18196,7 @@ static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
          * committed create answered as failure (the I16 class); the
          * client's create then returns EIO. */
         if (lrc == EFS_ERR_NOT_FOUND)
-            fprintf(stderr, "raft-host: create committed but lookup missed "
+            efs_telemetry_log(0, "raft-host: create committed but lookup missed "
                     "parent=%llu name=%s idx=%llu term=%llu\n",
                     (unsigned long long)parent, name,
                     (unsigned long long)idx, (unsigned long long)term);
@@ -18194,7 +18212,7 @@ static void host_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
         return;
     }
     if (dirop_fail_on(rc))
-        fprintf(stderr, "raft-host: create parent=%llu name=%s rc=%d hint=%d "
+        efs_telemetry_log(0, "raft-host: create parent=%llu name=%s rc=%d hint=%d "
                 "dsh=%u hashed=%d\n",
                 (unsigned long long)parent, name, rc, hint, dsh, hashed);
     set_inode_rc(out, rc, hint);
@@ -18342,7 +18360,7 @@ void server_raft_host_create_retained(const struct efs_msg_create_retained *requ
 
 static int host_namespace_capacity(const char *phase, uint32_t used)
 {
-    fprintf(stderr, "raft-host: namespace-capacity phase=%s used=%u limit=%u "
+    efs_telemetry_log(0, "raft-host: namespace-capacity phase=%s used=%u limit=%u "
             "rc=%d: operation exceeds supported transaction envelope\n",
             phase, used, EFS_TXN_NAMESPACE_MAX_PART, EFS_ERR_OVERFLOW);
     return EFS_ERR_OVERFLOW;
@@ -18660,8 +18678,10 @@ static int host_decide_lost_fault(struct efs_raft_host *h, const struct efs_txid
                     (long)getpid(), coord, (unsigned)parts->n, group, led,
                     (unsigned long long)efs_txid_ns(t));
     if (write(fd, record, (size_t)size) != size)
+        /* sync: test-only fault or debug hook */
         fprintf(stderr, "raft-host: decide-lost fault: ready record write failed\n");
     close(fd);
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "raft-host: decide-lost fault: coord=%u parts=%u group=%u stepped=%d\n",
             coord, (unsigned)parts->n, group, led);
     return 1;
@@ -18691,6 +18711,7 @@ static int host_pub_fault(struct efs_raft_host *h, const char *stage)
     if (count <= 0)
         return 0;
     if (!strcmp(stage, "prepare") && !strcmp(wanted, "abort")) {
+        /* sync: test-only fault or debug hook */
         fprintf(stderr, "raft-host: W77 fault: publication unit aborted after PREPARE\n");
         return 1;
     }
@@ -18700,6 +18721,7 @@ static int host_pub_fault(struct efs_raft_host *h, const char *stage)
     fd = open(ready, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd >= 0)
         close(fd);
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "raft-host: W77 fault: publication unit parked at %s\n", stage);
     uint64_t end = now_us_() + 15000000;
     while (__atomic_load_n(&h->running, __ATOMIC_ACQUIRE) && __atomic_load_n(&h->s->running, __ATOMIC_ACQUIRE) && access(path, F_OK) == 0 && now_us_() < end)
@@ -18906,7 +18928,7 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
         if (rc == EFS_ERR_BUSY)
             host_fin_add(h, t, parts, coord, 0);
         else if (rc != EFS_ERR_PROTO && rc != EFS_ERR_STALE) {
-            fprintf(stderr, "raft-host: txn-commit coord=%u parts=%u decide rc=%d "
+            efs_telemetry_log(0, "raft-host: txn-commit coord=%u parts=%u decide rc=%d "
                     "(finisher abort)\n", coord, (unsigned)parts->n, rc);
             host_fin_add(h, t, parts, coord, HOST_FIN_ABORT);
         }
@@ -19223,7 +19245,7 @@ static int host_drop_parts(struct efs_raft_host *h, const struct efs_txid *t,
      * recovery scan; nothing is decided, so ABORT (what recovery decides)
      * at the new leaders now. */
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: txn-drop coord=%u parts=%u rc=%d (finisher abort)\n",
+        efs_telemetry_log(0, "raft-host: txn-drop coord=%u parts=%u rc=%d (finisher abort)\n",
                 efs_txn_coordinator(t, p), (unsigned)p->n, rc);
         host_fin_add(h, t, p, efs_txn_coordinator(t, p), HOST_FIN_ABORT);
     }
@@ -19263,7 +19285,7 @@ static int host_resize_decide(void *user, const struct efs_txid *t,
     if (rc != EFS_OK && rc != EFS_ERR_PROTO && rc != EFS_ERR_STALE &&
         (decision == EFS_TXN_ABORT || rc != EFS_ERR_BUSY)) {
         if (decision == EFS_TXN_COMMIT)
-            fprintf(stderr, "raft-host: txn-commit coord=%u parts=%u decide rc=%d "
+            efs_telemetry_log(0, "raft-host: txn-commit coord=%u parts=%u decide rc=%d "
                     "(finisher abort)\n", coord, (unsigned)parts->n, rc);
         host_fin_add(ctx->host, t, parts, coord, HOST_FIN_ABORT);
     } else if (rc == EFS_ERR_BUSY)
@@ -19476,7 +19498,7 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
     if(rc==EFS_ERR_BUSY && wait!=EFS_META_APPEND_WAIT_NONE)
         *empty=EFS_MD_SESSION_APPEND_RETRY_SALT+wait;
     else if(rc==EFS_ERR_BUSY)
-        fprintf(stderr,"raft-host: session append cleanup shard=%u epoch=%u ino=%llu BUSY "
+        efs_telemetry_log(0,"raft-host: session append cleanup shard=%u epoch=%u ino=%llu BUSY "
                 "uncertified at %s (transaction outcome not known)\n",rd32be(cmd+21),
                 rd32be(cmd+17),(unsigned long long)(found?ino:0),
                 efs_meta_append_cleanup_why?efs_meta_append_cleanup_why:"-");
@@ -19756,7 +19778,7 @@ static int host_append_abandon(struct efs_raft_host *h,efs_ino_t ino,uint64_t le
     struct host_resize_ctx ctx={h,hint};
     rc=efs_meta_abandon_append(h->kv,ino,len,q,&t,&host_append_ops,&ctx,retired);
     if(rc==EFS_OK && *retired)
-        fprintf(stderr,"append-abandon ino=%llu seq=%llu len=%llu retired=1\n",
+        efs_telemetry_log(0,"append-abandon ino=%llu seq=%llu len=%llu retired=1\n",
                 (unsigned long long)ino,(unsigned long long)q->id.seq,
                 (unsigned long long)len);
     /* Exact-image conflicts are retryable, as for a reserve. */
@@ -20082,6 +20104,7 @@ static void host_dir_spread_pass(struct efs_raft_host *h)
                     fprintf(ready, "%llu\n", (unsigned long long)dir);
                     int written = fclose(ready) == 0;
                     if (written && rename(tmp, serve_ready) == 0)
+                        /* sync: test-only fault or debug hook */
                         fprintf(stderr, "raft-host: fault dir-serve-corrupt: staged ino=%llu group=%u; DIR held, CREATE will inject\n",
                                 (unsigned long long)dir, (unsigned)pg);
                 }
@@ -20847,7 +20870,7 @@ mkdir_done:
     if (rc == EFS_OK)
         host_stat_from_row(&crow, &st);
     if (dirop_fail_on(rc))
-        fprintf(stderr, "raft-host: mkdir parent=%llu name=%s rc=%d "
+        efs_telemetry_log(0, "raft-host: mkdir parent=%llu name=%s rc=%d "
                 "hint=%d psh=%u csh=%u dsh=%u stage=%d ino=%llu\n",
                 (unsigned long long)parent, name, rc, hint, psh,
                 csh, dsh, stage, (unsigned long long)ino);
@@ -20856,7 +20879,7 @@ mkdir_done:
         uint64_t now=now_us_(),old=__atomic_load_n(&last,__ATOMIC_RELAXED);
         if(now-old>=1000000ull && __atomic_compare_exchange_n(&last,&old,now,0,
             __ATOMIC_RELAXED,__ATOMIC_RELAXED))
-            fprintf(stderr,"namespace-prof: mkdir rc=%d parent=%llu psh=%u csh=%u dsh=%u "
+            efs_telemetry_log(0,"namespace-prof: mkdir rc=%d parent=%llu psh=%u csh=%u dsh=%u "
                 "total_us=%llu session_us=%llu prep_us=%llu wait_us=%llu commit_us=%llu\n",
                 rc,(unsigned long long)parent,psh,csh,dsh,
                 (unsigned long long)(now-started),(unsigned long long)session_us,
@@ -20898,6 +20921,7 @@ static int host_test_rmdir_busy(const char *name, const struct efs_opid_req *q)
             int len = snprintf(buf, sizeof(buf), "%u\n", remaining - 1);
             if (pwrite(fd, buf, (size_t)len, 0) == len && ftruncate(fd, len) == 0) {
                 busy = 1;
+                /* sync: test-only fault or debug hook */
                 fprintf(stderr, "raft-host: fault rmdir-admission BUSY remaining=%u seq=%llu\n",
                         remaining - 1, (unsigned long long)(q ? q->id.seq : 0));
             }
@@ -21250,7 +21274,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     }
 rmdir_done:
     if (dirop_fail_on(rc))
-        fprintf(stderr, "raft-host: rmdir parent=%llu name=%s rc=%d hint=%d\n",
+        efs_telemetry_log(0, "raft-host: rmdir parent=%llu name=%s rc=%d hint=%d\n",
                 (unsigned long long)parent, name, rc, hint);
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
@@ -21527,7 +21551,7 @@ unlink_done:
             rc = efs_meta_apply_getattr(h->kv, row.ino, host_txn_coord, h, &st);
     }
     if (dirop_fail_on(rc))
-        fprintf(stderr,
+        efs_telemetry_log(0,
                 "raft-host: unlink-txn parent=%llu name=%s rc=%d hint=%d "
                 "last=%d held=%d dsh=%u ish=%u psh=%u\n",
                 (unsigned long long)parent, name, rc, hint, last, held,
@@ -21724,7 +21748,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
     if (rc == EFS_OK)
         rc = host_wait_verdict(h, dg, idx, term, &hint);
     if (dirop_fail_on(rc))
-        fprintf(stderr,
+        efs_telemetry_log(0,
                 "raft-host: unlink-simple parent=%llu name=%s rc=%d hint=%d "
                 "dsh=%u dg=%u\n",
                 (unsigned long long)parent, name, rc, hint, dsh, dg);
@@ -21947,6 +21971,7 @@ static void host_truncate_lazy(efs_ino_t ino, uint64_t size, uint64_t mtime,
             if (fscanf(f, "%u", &ms) != 1) ms = 0;
             fclose(f);
             unlink(gate);
+            /* sync: test-only fault or debug hook */
             fprintf(stderr, "raft-host: fault truncate ino=%llu committed, reply dropped after %u ms\n",
                     (unsigned long long)ino, ms);
             usleep(ms * 1000u);
@@ -23264,6 +23289,7 @@ static int host_fault_append_hold(efs_ino_t ino)
     if(!strncmp(word,"cleanup",7)) {
         static int noted;
         if(!ino && !__atomic_exchange_n(&noted,1,__ATOMIC_RELAXED))
+            /* sync: test-only fault or debug hook */
             fprintf(stderr,"raft-host: EFS_FAULT_APPEND_HOLD_FILE holds append cleanup\n");
         return !ino;
     }
@@ -23271,6 +23297,7 @@ static int host_fault_append_hold(efs_ino_t ino)
     int match=ino && held==(unsigned long long)ino;
     static unsigned long long noted;
     if(match && __atomic_exchange_n(&noted,held,__ATOMIC_RELAXED)!=held)
+        /* sync: test-only fault or debug hook */
         fprintf(stderr,"raft-host: EFS_FAULT_APPEND_HOLD_FILE holds ino=%llu\n",held);
     return match;
 }
@@ -23387,7 +23414,7 @@ static void host_pub_stale_note(const char *why, const struct efs_chunk_rec *rec
         __atomic_store_n(&n, 0, __ATOMIC_RELAXED);
     if (__atomic_fetch_add(&n, 1, __ATOMIC_RELAXED) >= 20)
         return;
-    fprintf(stderr, "raft-host: pub-stale why=%s ino=%llu ci=%u rec_base=%llx "
+    efs_telemetry_log(0, "raft-host: pub-stale why=%s ino=%llu ci=%u rec_base=%llx "
             "span=%u+%u flags=%u epoch=%llu want=%llx have=%llx\n", why,
             (unsigned long long)rec->ino, rec->chunk_index,
             (unsigned long long)rec->base_gen, rec->delta_off, rec->delta_len,
@@ -23419,7 +23446,7 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
         return EFS_ERR_INVAL;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (rec->nodes[i] == 0) {
-            fprintf(stderr, "raft-host: pub-reject reason=node0 fragment=%d ino=%llu ci=%u\n",
+            efs_telemetry_log(0, "raft-host: pub-reject reason=node0 fragment=%d ino=%llu ci=%u\n",
                     i,(unsigned long long)rec->ino,rec->chunk_index);
             return EFS_ERR_INVAL;
         }
@@ -23440,18 +23467,18 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
      * means the unlink already won. */
     if (rc == EFS_ERR_NOT_FOUND) {
         if (raft_dbg_on())
-            fprintf(stderr, "raft-host: pub ino=%llu ci=%u stale (deleted), settle\n",
+            efs_telemetry_log(0, "raft-host: pub ino=%llu ci=%u stale (deleted), settle\n",
                     (unsigned long long)rec->ino, rec->chunk_index);
         return EFS_ERR_NOT_FOUND; /* caller packs the GONE settle record */
     }
     if (rc != EFS_OK) {
         if (raft_dbg_on())
-            fprintf(stderr, "raft-host: pub ino=%llu ci=%u get_inode rc=%d\n",
+            efs_telemetry_log(0, "raft-host: pub ino=%llu ci=%u get_inode rc=%d\n",
                     (unsigned long long)rec->ino, rec->chunk_index, rc);
         return rc;
     }
     if (!host_holds_chunks(row.mode)) {
-        fprintf(stderr, "raft-host: pub-reject reason=mode ino=%llu ci=%u mode=%o\n",
+        efs_telemetry_log(0, "raft-host: pub-reject reason=mode ino=%llu ci=%u mode=%o\n",
                 (unsigned long long)rec->ino,rec->chunk_index,row.mode);
         return EFS_ERR_INVAL;
     }
@@ -23473,7 +23500,7 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
         host_pub_stale_note("authority", rec, row.content_epoch, row.generation);
     if (epoch_rc != EFS_OK) {
         if(epoch_rc==EFS_ERR_INVAL)
-            fprintf(stderr,"raft-host: pub-reject reason=authority ino=%llu ci=%u flags=%u file_gen=%llu epoch=%llu\n",
+            efs_telemetry_log(0,"raft-host: pub-reject reason=authority ino=%llu ci=%u flags=%u file_gen=%llu epoch=%llu\n",
                 (unsigned long long)rec->ino,rec->chunk_index,rec->publish_flags,
                 (unsigned long long)rec->file_generation,(unsigned long long)rec->publish_epoch);
         return epoch_rc;
@@ -23520,7 +23547,7 @@ static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_r
         uint64_t cur = 0;
 
         if (rec->base_gen == EFS_CHUNK_BASE_UNCOND) {
-            fprintf(stderr,"raft-host: pub-reject reason=unconditional-span ino=%llu ci=%u delta_off=%u delta_len=%u\n",
+            efs_telemetry_log(0,"raft-host: pub-reject reason=unconditional-span ino=%llu ci=%u delta_off=%u delta_len=%u\n",
                 (unsigned long long)rec->ino,rec->chunk_index,rec->delta_off,rec->delta_len);
             return EFS_ERR_INVAL;
         }
@@ -23736,7 +23763,7 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     int rc = host_report_ticket(rec, session, &t);
     if (rc == EFS_OK) rc = efs_put_ticket_from_pub(&t, &ticket);
     if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: pub-reject reason=ticket ino=%llu ci=%u seq=%llu file_gen=%llu flags=%u\n",
+        efs_telemetry_log(0, "raft-host: pub-reject reason=ticket ino=%llu ci=%u seq=%llu file_gen=%llu flags=%u\n",
                 (unsigned long long)rec->ino, rec->chunk_index,
                 (unsigned long long)rec->put_seq, (unsigned long long)rec->file_generation,
                 rec->publish_flags);
@@ -23752,7 +23779,7 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     }
     rc = efs_put_ticket_state(h->kv, &ticket, &state);
     if (rc == EFS_ERR_NOT_FOUND) {
-        fprintf(stderr, "raft-host: pub-reject reason=unadmitted ino=%llu ci=%u seq=%llu\n",
+        efs_telemetry_log(0, "raft-host: pub-reject reason=unadmitted ino=%llu ci=%u seq=%llu\n",
                 (unsigned long long)rec->ino, rec->chunk_index, (unsigned long long)rec->put_seq);
         return EFS_ERR_INVAL;
     }
@@ -23767,7 +23794,7 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     if (rc == EFS_OK && !*clen) {
         /* A mapping that already names this object while its ticket is
          * ADMITTED is impossible by construction; never settle it. */
-        fprintf(stderr, "raft-host: pub-reject reason=admitted-held ino=%llu ci=%u seq=%llu\n",
+        efs_telemetry_log(0, "raft-host: pub-reject reason=admitted-held ino=%llu ci=%u seq=%llu\n",
                 (unsigned long long)rec->ino, rec->chunk_index, (unsigned long long)rec->put_seq);
         return EFS_ERR_PROTO;
     }
@@ -24101,7 +24128,7 @@ static int host_pub_unit_txn(const struct host_pub_unit *u, uint32_t nunits,
     if ((mint > now ? mint - now : now - mint) > EFS_TXN_DECISION_RETAIN_NS / 2) {
         static int logged;
         if (!logged++)
-            fprintf(stderr, "raft-host: REPORT publication id clock is %llds off; "
+            efs_telemetry_log(0, "raft-host: REPORT publication id clock is %llds off; "
                     "using host time (retries are new transactions)\n",
                     (long long)((int64_t)(mint - now) / 1000000000ll));
         mint = now;
@@ -24237,6 +24264,7 @@ static int host_pub_unit_commit(struct efs_raft_host *h, const struct host_pub_u
         const char *np = getenv("EFS_FAULT_PUB_UNIT_NP_FILE");
         if (np && *np && access(np, F_OK) == 0) {
             unlink(np);
+            /* sync: test-only fault or debug hook */
             fprintf(stderr, "raft-host: K43 fault: unit refused NOT_PRIMARY before staging\n");
             host_fin_add(h, &t, &parts, efs_txn_coordinator(&t, &parts),
                          HOST_FIN_ABORT);
@@ -24338,7 +24366,7 @@ static int host_pub_unit_commit(struct efs_raft_host *h, const struct host_pub_u
     if (k || batch.submitted)
         host_pub_unit_abort(h, &t, &parts, ish, hint);
     if (raft_dbg_on() || (rc != EFS_OK && rc != EFS_ERR_BUSY))
-        fprintf(stderr, "raft-host: publication unit ino=%llu ci=%u n=%u units=%u rc=%d verdict=%d\n",
+        efs_telemetry_log(0, "raft-host: publication unit ino=%llu ci=%u n=%u units=%u rc=%d verdict=%d\n",
                 (unsigned long long)u->ino, u->ci0, stages, nunits, rc, verdict);
     return rc != EFS_OK ? rc : verdict;
 }
@@ -24434,7 +24462,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         return;
     }
     if (raft_dbg_on())
-        fprintf(stderr, "raft-host: report count=%u ino_count=%u\n",
+        efs_telemetry_log(0, "raft-host: report count=%u ino_count=%u\n",
                 count, ino_count);
     /* The batch can touch both groups (per-rec inode group + lane group).
      * Every group it needs must be local — a publish proposed to a group
@@ -24741,7 +24769,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                                &lg);
             t_pack += now_us_() - t0;
             if (raft_dbg_on())
-                fprintf(stderr,
+                efs_telemetry_log(0,
                         "raft-host: report pub ino=%llu ci=%u sz=%llu rc=%d clen=%u\n",
                         (unsigned long long)recs[i].ino, recs[i].chunk_index,
                         (unsigned long long)sz, rc, clen);
@@ -24770,7 +24798,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
              * chunks). */
             if (rc == EFS_ERR_STALE) {
                 if (raft_dbg_on())
-                    fprintf(stderr,
+                    efs_telemetry_log(0,
                             "raft-host: report pub ino=%llu ci=%u STALE, skipping rec\n",
                             (unsigned long long)recs[i].ino,
                             recs[i].chunk_index);
@@ -24931,7 +24959,7 @@ static void host_report_receipts_init(void)
     g_report_receipt_trace = getenv("EFS_RECEIPT_TRACE") != NULL;
     g_report_receipts_ok = efs_receipt_table_init(&g_report_receipts, 4096u) == EFS_OK;
     if (!g_report_receipts_ok)
-        fprintf(stderr, "report-receipt: table allocation failed; REPORTs run "
+        efs_telemetry_log(0, "report-receipt: table allocation failed; REPORTs run "
                 "without receipts and receipt queries answer absent\n");
 }
 
@@ -25107,12 +25135,12 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
     for (;;) {
         host_view_get(h,group,&v);*hint=v.leader;
         if (!v.has || v.role!=EFS_RAFT_LEADER || v.term!=term) {
-            if (read_prof_on()) fprintf(stderr,"raft-host: publication-read-fence group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d has=%d\n",group,(unsigned long long)term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader,v.has);
+            if (read_prof_on()) efs_telemetry_log(0,"raft-host: publication-read-fence group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d has=%d\n",group,(unsigned long long)term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader,v.has);
             return EFS_ERR_NOT_PRIMARY;
         }
         if (v.read_done && v.read_round>=round && v.read_index>=want) break;
         if (host_past_deadline(&end)) {
-            if (read_prof_on()) fprintf(stderr,"raft-host: publication-read-timeout group=%u want=%llu admitted_round=%llu admitted_term=%llu role=%d leader=%d term=%llu raw_round=%llu raw_index=%llu raw_done=%d pending=%d proven_round=%llu proven_index=%llu proven_done=%d applied=%llu commit=%llu\n",
+            if (read_prof_on()) efs_telemetry_log(0,"raft-host: publication-read-timeout group=%u want=%llu admitted_round=%llu admitted_term=%llu role=%d leader=%d term=%llu raw_round=%llu raw_index=%llu raw_done=%d pending=%d proven_round=%llu proven_index=%llu proven_done=%d applied=%llu commit=%llu\n",
                 group,(unsigned long long)want,(unsigned long long)round,(unsigned long long)term,v.role,v.leader,(unsigned long long)v.term,(unsigned long long)v.read_round,(unsigned long long)v.read_index,v.read_done,v.read_pending,(unsigned long long)v.proven_round,(unsigned long long)v.proven_index,v.proven_done,(unsigned long long)v.applied,(unsigned long long)v.commit);
             return EFS_ERR_BUSY;
         }
@@ -25745,7 +25773,7 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
         uint64_t prev = __atomic_load_n(&last_ns, __ATOMIC_RELAXED);
         if (t1 - prev > 1000000000ull &&
             __atomic_compare_exchange_n(&last_ns, &prev, t1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-            fprintf(stderr,
+            efs_telemetry_log(0,
                     "raft-host: getchunks slow ino=%llu start=%u n=%u "
                     "ri_ms=%llu total_ms=%llu rc=%d slow=%llu\n",
                     (unsigned long long)ino, start, out->count,

@@ -1,4 +1,5 @@
 #include "efs/meta_apply.h"
+#include "efs/telemetry.h"
 #include "efs/expiry.h"
 #include "efs/metadata.h"
 #include "efs/raft.h"
@@ -3650,9 +3651,11 @@ static void k48_readdir_layout_pause(efs_ino_t dir)
         return;
     if (rename(path, ready))
         return;
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "fault k48-readdir: paused inode=%llu\n", target);
     for (unsigned i = 0; i < 1000 && access(release, F_OK); i++)
         usleep(10000);
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "fault k48-readdir: released inode=%llu ready=%d\n",
             target, access(release, F_OK) == 0);
 }
@@ -6090,7 +6093,7 @@ static int pub_stage_reap_if_aborted(struct efs_kv *kv, const uint8_t *key,
         return EFS_ERR_BUSY;
     rc = efs_kv_del(kv, key, klen);
     if (rc == EFS_OK)
-        fprintf(stderr, "meta: reaped a publication stage on contact: owner "
+        efs_telemetry_log(0, "meta: reaped a publication stage on contact: owner "
                 "txn was decided ABORT\n");
     return rc == EFS_ERR_NOT_FOUND ? EFS_OK : rc;
 }

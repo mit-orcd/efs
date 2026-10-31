@@ -18,6 +18,10 @@ source=r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #define HOST_PUBLISH_LEN 202
 #define HOST_PUBLICATION_LEN 230
 #define HOST_PUBLICATION_TICKET_LEN 266

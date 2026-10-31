@@ -102,6 +102,10 @@ code = r'''
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <time.h>
 #include <unistd.h>
 #define EFS_SHUTDOWN_FORCED_RC 3
@@ -167,6 +171,10 @@ code = r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #define HOST_NGROUPS 2
 struct efs_raft {int recv_persisting,role,leader,allow_campaign,read_in_flight;
  uint64_t current_term,vote_bits,commit_index,applied;unsigned resets,exits;};
@@ -211,6 +219,10 @@ code = r"""
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <string.h>
 #include <unistd.h>
 struct efsd_server {pthread_t rejoin_tid;int rejoin_started;};

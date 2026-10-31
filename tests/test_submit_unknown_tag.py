@@ -71,6 +71,10 @@ predicate = r'''
 #include "efs/meta_cmd.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 int main(void){
     static const int applied[256]={%s};
     for(int t=0;t<256;t++)assert(efs_md_cmd_applicable((uint8_t)t)==applied[t]);
@@ -96,6 +100,10 @@ log = r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <string.h>
 static uint64_t clock_us=5000000;
 static uint64_t now_us_(void){return clock_us;}

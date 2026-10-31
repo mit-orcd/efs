@@ -47,6 +47,7 @@
 #include <sys/statvfs.h>
 #include <time.h>
 #include <unistd.h>
+#include "efs/telemetry.h"
 
 #define RJ_HDR_MAGIC "EFSRJNL1"
 #define RJ_STATE_MAGIC "EFSRJST1"
@@ -444,7 +445,7 @@ static int journal_append_locked(const struct efs_reclaim_item *items, const uin
             off_t good = (off_t)(RJ_HDR_BYTES + rj.seg_count * RJ_REC_BYTES);
             if (ftruncate(rj.seg_fd, good) || fsync_fd(rj.seg_fd) != EFS_OK) {
                 rj.wedged = 1;
-                fprintf(stderr, "reclaim: journal segment %llu tail unrepairable; acceptance stopped\n",
+                efs_telemetry_log(0, "reclaim: journal segment %llu tail unrepairable; acceptance stopped\n",
                         (unsigned long long)rj.seg_seq);
             }
             close(rj.seg_fd);
@@ -948,7 +949,7 @@ static int load_segment(uint64_t seq, int last)
         if (!rc && fsync_fd(wfd)) rc = -1;
         close(wfd);
         if (rc) return -1;
-        fprintf(stderr, "reclaim: segment %llu torn tail cut at %llu records\n",
+        efs_telemetry_log(0, "reclaim: segment %llu torn tail cut at %llu records\n",
                 (unsigned long long)seq, (unsigned long long)valid);
     }
     return 0;
@@ -1116,7 +1117,7 @@ static void *recover_main(void *arg)
     recover_flush(batch, &nb);
     free(batch);
     if (__atomic_load_n(&rj.stop, __ATOMIC_ACQUIRE)) return NULL; /* still fail closed */
-    fprintf(stderr, "reclaim: recovery complete, %llu dead inodes fenced; writes re-admitted\n",
+    efs_telemetry_log(0, "reclaim: recovery complete, %llu dead inodes fenced; writes re-admitted\n",
             (unsigned long long)__atomic_load_n(&rj.recovered, __ATOMIC_RELAXED));
     pthread_mutex_lock(&rj.mu);
     rj.recovering = 0;
@@ -1149,13 +1150,13 @@ int server_reclaim_init(struct efsd_server *s)
         server_inode_gc_epoch_bump();
         rj.ready = 1;
         for (uint64_t i = rj.head; i < rj.tail; i++) credit_record(rec_at(i));
-        fprintf(stderr, "reclaim: journal epoch=%llu segments=%u records=%llu replayed\n",
+        efs_telemetry_log(0, "reclaim: journal epoch=%llu segments=%u records=%llu replayed\n",
                 (unsigned long long)rj.epoch, rj.nseg,
                 (unsigned long long)(rj.tail - rj.head));
     } else {
         /* Fail closed, then rebuild from a scan under a fresh epoch. */
         __atomic_store_n(&s->reclaim_fail_closed, 1, __ATOMIC_RELEASE);
-        fprintf(stderr, "reclaim: journal verification FAILED in %s; data PUTs refused until recovery\n",
+        efs_telemetry_log(0, "reclaim: journal verification FAILED in %s; data PUTs refused until recovery\n",
                 rj.dir);
         /* K30: a second failure within the same second must not collide
          * with the earlier aside (rename onto a non-empty directory). */

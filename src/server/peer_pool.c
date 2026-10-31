@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <time.h>
 #include <arpa/inet.h>
+#include "efs/telemetry.h"
 
 /* Persistent server→server pool. Same idea as the client conn pool:
  * connect once per peer, upgrade to RDMA when the HCA is usable, reuse
@@ -228,7 +229,7 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
         /* auto: this connection stays TCP; say so (bounded). */
         static int noted;
         if (__sync_fetch_and_add(&noted, 1) < 5)
-            fprintf(stderr, "efsd: transport auto: RDMA upgrade to %s:%u failed; "
+            efs_telemetry_log(0, "efsd: transport auto: RDMA upgrade to %s:%u failed; "
                     "this peer connection uses tcp\n", host, port);
     }
     return nc;

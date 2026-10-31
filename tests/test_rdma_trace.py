@@ -15,7 +15,7 @@ from pathlib import Path
 import os, re, subprocess, tempfile
 root = Path(__file__).resolve().parents[1]
 
-ALLOWED_CALLS = {'fprintf', 'fflush', 'backtrace', 'backtrace_symbols_fd', '__sync_fetch_and_add',
+ALLOWED_CALLS = {'efs_telemetry_log', 'fprintf', 'fflush', 'backtrace', 'backtrace_symbols_fd', '__sync_fetch_and_add',
                  'getpeername', 'ntohs', 'efs_rdma_qpn', 'efs_conn_fd_matches', 'strerror', 'sizeof',
                  'if', 'while', 'for', 'efs_rdma_trace_on'}
 KEYWORDS = {'static', 'int', 'unsigned', 'socklen_t', 'struct', 'sockaddr_in', 'void', 'const', 'char',
@@ -74,7 +74,7 @@ assert sites >= 7, sites
 common = (root / 'src/common/common.c').read_text()
 a = common.index('int efs_rdma_trace_on(void)')
 b = common.index('\n}\n', a) + 3
-program = '#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n' + common[a:b] + \
+program = '#include <stdio.h>\n#include <stdarg.h>\nvoid efs_telemetry_log(int critical, const char *format, ...) {\n    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);\n}\n#include <stdlib.h>\n#include <string.h>\n' + common[a:b] + \
     'int main(void){printf("%d\\n",efs_rdma_trace_on());return 0;}\n'
 with tempfile.TemporaryDirectory(prefix='efs-rdma-trace-') as d:
     src, exe = Path(d) / 't.c', Path(d) / 't'

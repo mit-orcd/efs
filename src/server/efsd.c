@@ -32,6 +32,7 @@
 #include <malloc.h>
 #endif
 #include <time.h>
+#include "efs/telemetry.h"
 
 struct efsd_server *g_server = NULL;
 
@@ -89,6 +90,7 @@ static void efsd_install_crash_handlers(void)
     ss.ss_sp = g_efsd_altstack;
     ss.ss_size = sizeof(g_efsd_altstack);
     if (sigaltstack(&ss, NULL) != 0)
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "Warning: sigaltstack failed: %s\n", strerror(errno));
 
     struct sigaction sa;
@@ -113,6 +115,7 @@ static int add_storage_path(struct efsd_server *s, const char *path)
     if (!path || !*path)
         return -1;
     if (s->storage_path_count >= EFS_MAX_STORAGE_PATHS) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "Too many --storage paths (max %d)\n", EFS_MAX_STORAGE_PATHS);
         return -1;
     }
@@ -289,6 +292,7 @@ int server_shutdown_fault_park(const char *worker)
 #if EFS_FAULTS
     const char *v = getenv("EFS_FAULT_SHUTDOWN_PARK");
     if (!v || strcmp(v, worker)) return 0;
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "shutdown: injected park of %s\n", worker);
     for (;;) sleep(60);
 #else
@@ -473,6 +477,7 @@ static void *shutdown_record_thread(void *arg)
     if (!ok) {
         int e = errno;
         (void)unlink(g_report.tmp);
+        /* sync: stop-time line from a helper thread (K01); never on a joined thread */
         fprintf(stderr, "shutdown: could not write exit record %s: %s\n", g_report.path,
                 strerror(e));
     }
@@ -709,6 +714,7 @@ static int join_discover(struct efsd_server *s, struct efs_disc_answer *out, int
     int nc = 0, n, k = 0;
 
     if (!s->discovery_port) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "join: no seed given and discovery is off (--discovery-port 0); name "
                 "a member: efsd --join ADDR:PORT STORAGE\n");
         return -1;
@@ -716,6 +722,7 @@ static int join_discover(struct efsd_server *s, struct efs_disc_answer *out, int
     int nt = efs_disc_targets(s->discover_on[0] ? s->discover_on : NULL, t,
                               EFS_DISC_MAX_TARGETS, names, sizeof(names));
     if (!nt) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "join: no IPv4 interface that is up%s%s to discover a cluster on; name "
                 "a member: efsd --join ADDR:PORT STORAGE\n",
                 s->discover_on[0] ? " matches --discover-on " : "", s->discover_on);
@@ -723,11 +730,13 @@ static int join_discover(struct efsd_server *s, struct efs_disc_answer *out, int
     }
     n = efs_disc_probe(t, nt, s->discovery_port, 1500, a, 64);
     if (n < 0) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "join: cannot send a discovery probe on %s: %s\n", names, strerror(errno));
         n = 0;
     }
     for (int i = 0; i < n; i++) {
         if (strncmp(a[i].build_id, EFS_BUILD_ID, sizeof(a[i].build_id))) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "discovery: %s:%u (cluster %016llx) runs build '%s', this node "
                     "'%s'; ignored\n", a[i].addr, a[i].port, (unsigned long long)a[i].cluster,
                     a[i].build_id, EFS_BUILD_ID);
@@ -741,14 +750,17 @@ static int join_discover(struct efsd_server *s, struct efs_disc_answer *out, int
         a[k++] = a[i];
     }
     if (nc > 1) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "discovery: %d clusters answer on %s (UDP port %u):\n", nc, names,
                 s->discovery_port);
         for (int j = 0; j < nc; j++)
             for (int i = 0; i < k; i++)
                 if (a[i].cluster == clusters[j])
+                    /* sync: startup, before the reporter exists */
                     fprintf(stderr, "  cluster %016llx: %s:%u (%s, %u members)\n",
                             (unsigned long long)a[i].cluster, a[i].addr, a[i].port,
                             a[i].formed ? "formed" : "forming", a[i].count);
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "join: several clusters answer; start again naming a member of the one "
                 "to join: efsd --join ADDR:PORT STORAGE\n");
         return -1;
@@ -759,6 +771,7 @@ static int join_discover(struct efsd_server *s, struct efs_disc_answer *out, int
         uint64_t now = (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
         if (!*noted_ms || now - *noted_ms >= 30000) {
             *noted_ms = now;
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "discovery: no EFS cluster answered on %s (UDP port %u); waiting "
                     "and asking again every 5 s. Start the first node with efsd ADDR:PORT "
                     "STORAGE, or name a member on another subnet: efsd --join ADDR:PORT "
@@ -771,6 +784,7 @@ static int join_discover(struct efsd_server *s, struct efs_disc_answer *out, int
         for (int i = 0; i < k && m < max; i++)
             if (a[i].formed == pass)
                 out[m++] = a[i];
+    /* sync: startup, before the reporter exists */
     fprintf(stderr, "discovery: found cluster %016llx (%s, %u members) at %d endpoint%s, "
             "first %s:%u\n", (unsigned long long)out[0].cluster,
             out[0].formed ? "formed" : "forming", out[0].count, m, m == 1 ? "" : "s",
@@ -831,6 +845,7 @@ static int join_as_new(struct efsd_server *s, const char *seed_host, uint16_t se
         if (s->listen_fd < 0) {
             if (!have_endpoint) {
                 if (efs_disc_local_addr(host, port, s->addr, sizeof(s->addr)) != 0) {
+                    /* sync: startup, before the reporter exists */
                     fprintf(stderr, "join: no route to %s:%u; retrying\n", host, port);
                     join_pause(s, 1000);
                     continue;
@@ -839,6 +854,7 @@ static int join_as_new(struct efsd_server *s, const char *seed_host, uint16_t se
             }
             s->listen_fd = efs_listen_tcp(s->addr, s->port, EFS_LISTEN_BACKLOG);
             if (s->listen_fd < 0) {
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "Failed to listen on %s:%u: %s%s\n", s->addr, s->port,
                         strerror(errno), have_endpoint ? "" :
                         " (this node takes the address that reaches the cluster and its "
@@ -846,9 +862,11 @@ static int join_as_new(struct efsd_server *s, const char *seed_host, uint16_t se
                 return 1;
             }
             if (have_endpoint)
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "join: this node's endpoint is %s:%u (--listen)\n", s->addr,
                         s->port);
             else
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "join: this node's endpoint is %s:%u (the interface that "
                         "reaches %s, the cluster's service port)\n", s->addr, s->port, host);
         }
@@ -873,15 +891,18 @@ static int join_as_new(struct efsd_server *s, const char *seed_host, uint16_t se
         if (now - last_note >= 10) {
             last_note = now;
             if (rc == EFS_JOIN_PENDING && note.formed)
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "join: pending at %s:%u: cluster %016llx has %u members; this "
                         "store (%016llx) at %s:%u is being added; retrying every second\n",
                         host, port, (unsigned long long)note.cluster, note.count,
                         (unsigned long long)s->mstore.token, s->addr, s->port);
             else if (rc == EFS_JOIN_PENDING)
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "join: waiting at %s:%u: cluster %016llx is forming (%u "
                         "joined; formation needs %u); retrying every second\n", host, port,
                         (unsigned long long)note.cluster, note.count, EFS_FORMATION_MIN);
             else
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "join: %s:%u does not answer; retrying\n", host, port);
         }
         if (rc != EFS_JOIN_PENDING && nalt) {
@@ -920,10 +941,12 @@ static void efsd_malloc_setup(void)
 {
 #if defined(__GLIBC__) && defined(M_ARENA_MAX)
     if (mallopt(M_ARENA_MAX, EFSD_MALLOC_ARENAS) != 1)
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "malloc: M_ARENA_MAX %d not applied\n", EFSD_MALLOC_ARENAS);
 #endif
 #if defined(__GLIBC__) && defined(M_MMAP_THRESHOLD)
     if (mallopt(M_MMAP_THRESHOLD, EFSD_MALLOC_MMAP_BYTES) != 1)
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "malloc: M_MMAP_THRESHOLD %d not applied\n", EFSD_MALLOC_MMAP_BYTES);
 #endif
 }
@@ -937,6 +960,7 @@ void efsd_malloc_trim(void)
     clock_gettime(CLOCK_MONOTONIC, &b);
     long long us = (b.tv_sec - a.tv_sec) * 1000000ll + (b.tv_nsec - a.tv_nsec) / 1000;
     if (us > 100000)
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "malloc: trim took %lld ms\n", us / 1000);
 #endif
 }
@@ -969,6 +993,7 @@ int main(int argc, char **argv)
         if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur < rl.rlim_max) {
             rl.rlim_cur = rl.rlim_max;
             if (setrlimit(RLIMIT_NOFILE, &rl) != 0)
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "setrlimit(RLIMIT_NOFILE) failed: %s\n",
                         strerror(errno));
         }
@@ -998,6 +1023,7 @@ int main(int argc, char **argv)
             char *end = NULL;
             long v = strtol(argv[++i], &end, 10);
             if (!*argv[i] || *end || v < 0 || v > 65535) {
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "Invalid --discovery-port value (0..65535; 0 turns discovery off)\n");
                 usage(argv[0]);
                 return 1;
@@ -1012,6 +1038,7 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--quota") == 0 && i + 1 < argc) {
             server.quota = efs_parse_quota(argv[++i]);
             if (server.quota == 0) {
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "Invalid --quota value\n");
                 usage(argv[0]);
                 return 1;
@@ -1019,6 +1046,7 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--writers") == 0 && i + 1 < argc) {
             int n = atoi(argv[++i]);
             if (n < 0 || n > EFS_MAX_WRITERS) {
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "Invalid --writers value (0..%d total)\n",
                         EFS_MAX_WRITERS);
                 usage(argv[0]);
@@ -1034,28 +1062,33 @@ int main(int argc, char **argv)
             usage(argv[0]);
             return 0;
         } else if (!strcmp(argv[i], "--direct-io") || !strcmp(argv[i], "--no-direct-io")) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "%s was removed (D42): fragment I/O is always O_DIRECT; storage "
                     "that cannot do O_DIRECT is refused at startup\n", argv[i]);
             usage(argv[0]);
             return 1;
         } else if (!strcmp(argv[i], "--no-persist")) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "--no-persist was removed (D42): membership is always persisted\n");
             usage(argv[0]);
             return 1;
         } else if (!strcmp(argv[i], "--node-id") || !strcmp(argv[i], "--addr") ||
                    !strcmp(argv[i], "--port") || !strcmp(argv[i], "--storage")) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "%s was removed (K33): node ids come from the cluster; start a "
                     "node with efsd ADDR:PORT STORAGE (new cluster or restart) or efsd --join "
                     "[SEED] STORAGE (join)\n", argv[i]);
             usage(argv[0]);
             return 1;
         } else if (argv[i][0] == '-' && argv[i][1]) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "Unknown argument: %s\n", argv[i]);
             usage(argv[0]);
             return 1;
         } else if (npos < 2) {
             pos[npos++] = argv[i];
         } else {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "Unexpected argument: %s\n", argv[i]);
             usage(argv[0]);
             return 1;
@@ -1068,6 +1101,7 @@ int main(int argc, char **argv)
     if (join && npos == 2) {
         storage = pos[1];
         if (parse_host_port(pos[0], seed_host, sizeof(seed_host), &seed_port) != 0) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "Invalid seed address: %s (want ADDR:PORT)\n", pos[0]);
             return 1;
         }
@@ -1078,6 +1112,7 @@ int main(int argc, char **argv)
         storage = pos[1];
     }
     if (!storage) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, join ? "Missing STORAGE: efsd --join [SEED] STORAGE\n"
                              : "Missing arguments: efsd ADDR:PORT STORAGE, or efsd --join "
                                "[SEED] STORAGE\n");
@@ -1085,6 +1120,7 @@ int main(int argc, char **argv)
         return 1;
     }
     if (listen_ep && !join) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "--listen is for --join; a new cluster's node is given as ADDR:PORT\n");
         return 1;
     }
@@ -1094,12 +1130,14 @@ int main(int argc, char **argv)
         struct in_addr ia;
         if (parse_host_port(endpoint, server.addr, sizeof(server.addr), &server.port) != 0 ||
             inet_pton(AF_INET, server.addr, &ia) != 1 || ia.s_addr == htonl(INADDR_ANY)) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "Invalid endpoint %s: want an IPv4 ADDR:PORT this node listens on\n",
                     endpoint);
             return 1;
         }
     }
     if (parse_storage_arg(&server, storage) != 0 || server.storage_path_count == 0) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "Invalid STORAGE: %s\n", storage);
         usage(argv[0]);
         return 1;
@@ -1132,6 +1170,7 @@ int main(int argc, char **argv)
 
     for (uint32_t pi = 0; pi < server.storage_path_count; pi++) {
         if (mkdir_p(server.storage_paths[pi]) != 0 && errno != EEXIST) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "mkdir storage %s: %s\n", server.storage_paths[pi],
                     strerror(errno));
             return 1;
@@ -1143,6 +1182,7 @@ int main(int argc, char **argv)
          * cannot do it; never fall back to buffered I/O. */
         char why[EFS_MAX_PATH + 160];
         if (server_storage_direct_io_check(subdir, why, sizeof(why)) != EFS_OK) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "storage root %s refused: fragment I/O requires O_DIRECT (%s)\n",
                     server.storage_paths[pi], why);
             return 1;
@@ -1166,6 +1206,7 @@ int main(int argc, char **argv)
     atexit(server_put_sync_abandon);
     if (server.meta_storage[0] &&
         mkdir_p(server.meta_storage) != 0 && errno != EEXIST) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "mkdir meta-storage %s: %s\n", server.meta_storage,
                 strerror(errno));
         return 1;
@@ -1180,6 +1221,7 @@ int main(int argc, char **argv)
             int nn=snprintf(marker_path,sizeof(marker_path),"%s/meta/%s",server.storage_paths[0],markers[i]);
             if(nn<0 || (size_t)nn>=sizeof(marker_path))return 1;
             if(!lstat(marker_path,&marker_stat) || errno!=ENOENT) {
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr,"storage: %s holds unsupported state %s; refusing\n",
                         server.storage_paths[0],markers[i]);return 1;
             }
@@ -1200,6 +1242,7 @@ int main(int argc, char **argv)
 #endif
         if (member_store_open(&server.mstore, mdraft, !join, server.addr, server.port, err,
                               sizeof(err)) != EFS_OK) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "member store refused: %s\n", err);
             return 1;
         }
@@ -1209,12 +1252,14 @@ int main(int argc, char **argv)
                          (uint64_t)ts.tv_nsec;
         if (member_store_boot(&server.mstore, fresh, &server.incarnation, err,
                               sizeof(err)) != EFS_OK) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "member store refused: %s\n", err);
             member_store_close(&server.mstore);
             return 1;
         }
         struct member_store *ms = &server.mstore;
         if (!join && ms->state == EFS_MEMBER_JOINING) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "member store refused: %s was started with --join and is not a "
                     "member yet; start it again with efsd --join [SEED] %s\n", mdraft, storage);
             member_store_close(ms);
@@ -1222,6 +1267,7 @@ int main(int argc, char **argv)
         }
         if (ms->state != EFS_MEMBER_JOINING) {
             if (server.port && (server.port != ms->port || strcmp(server.addr, ms->addr))) {
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, "member store refused: %s is node %u at %s:%u of cluster "
                         "%016llx; this command names %s:%u (a member keeps its endpoint)\n",
                         mdraft, ms->member_id, ms->addr, ms->port,
@@ -1232,18 +1278,23 @@ int main(int argc, char **argv)
             server.id = ms->member_id;
             snprintf(server.addr, sizeof(server.addr), "%s", ms->addr);
             server.port = ms->port;
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "node %u: store %s, %s:%u, cluster %016llx, incarnation %llu%s, %s",
                     server.id, mdraft, server.addr, server.port, (unsigned long long)ms->cluster,
                     (unsigned long long)server.incarnation,
                     ms->created ? " (initialized now)" : "", member_store_state_name(ms->state));
             if (ms->state == EFS_MEMBER_FORMED)
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, " (%u committed members)\n", ms->members.count);
             else if (ms->state == EFS_MEMBER_PROMISED)
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, " (formation proposal of %u members)\n", ms->members.count);
             else
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr, " (new cluster: forms automatically once two nodes started "
                         "with --join have joined)\n");
         } else {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "store %s: joining (no node id yet), store %016llx, incarnation "
                     "%llu%s\n", mdraft, (unsigned long long)ms->token,
                     (unsigned long long)server.incarnation,
@@ -1289,12 +1340,14 @@ int main(int argc, char **argv)
     clock_gettime(CLOCK_MONOTONIC, &inventory_start);
     uint64_t root_usage[EFS_MAX_STORAGE_PATHS], safe_quota;
     if (server_compute_roots_usage(&server, root_usage) != EFS_OK) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "Storage quota: cannot inventory storage roots; refusing startup\n");
         return 1;
     }
     uint64_t local_usage = 0;
     for (uint32_t i = 0; i < server.storage_path_count; i++) {
         if (root_usage[i] >= UINT64_MAX - local_usage) {
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "Storage quota: inventory overflow; refusing startup\n");
             return 1;
         }
@@ -1303,6 +1356,7 @@ int main(int argc, char **argv)
     clock_gettime(CLOCK_MONOTONIC, &inventory_end);
     int64_t inventory_ms = (int64_t)(inventory_end.tv_sec - inventory_start.tv_sec) * 1000 +
                            (inventory_end.tv_nsec - inventory_start.tv_nsec) / 1000000;
+    /* sync: startup, before the reporter exists */
     fprintf(stderr, "storage-inventory: roots=%u used=%llu elapsed_ms=%lld\n",
             server.storage_path_count, (unsigned long long)local_usage,
             (long long)inventory_ms);
@@ -1311,6 +1365,7 @@ int main(int argc, char **argv)
     if (efs_storage_safe_quota_detail(server.storage_paths, root_usage,
                                       server.storage_path_count, &safe_quota,
                                       fs_budget, &fs_budgets)) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "Storage quota: cannot establish safe headroom; refusing startup\n");
         return 1;
     }
@@ -1318,6 +1373,7 @@ int main(int argc, char **argv)
      * the automatic quota is a function of this sample, not of the free
      * space a later observer sees. */
     for (uint32_t i = 0; i < fs_budgets; i++)
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "storage-budget: fs=%u total=%llu available=%llu used=%llu budget=%llu\n",
                 i, (unsigned long long)fs_budget[i].total,
                 (unsigned long long)fs_budget[i].available,
@@ -1330,6 +1386,7 @@ int main(int argc, char **argv)
     const char *quota_unit = server.quota >= (UINT64_C(1) << 40) ? "TiB" : "GiB";
     double quota_scale = server.quota >= (UINT64_C(1) << 40) ? tib : gib;
     if (server.quota > safe_quota) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "Storage quota %.2f %s exceeds safe maximum %.2f %s; refusing startup\n",
                 (double)server.quota / quota_scale, quota_unit,
                 (double)safe_quota / maximum_scale, maximum_unit);
@@ -1345,6 +1402,7 @@ int main(int argc, char **argv)
     struct efs_node *local = server_local_node(&server);
     if (!local) {
         pthread_mutex_unlock(&server.lock);
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "Storage quota: local member unavailable; refusing startup\n");
         return 1;
     }
@@ -1352,6 +1410,7 @@ int main(int argc, char **argv)
     pthread_mutex_unlock(&server.lock);
     server_sync_local_membership(&server);
     server_usage_save(&server);
+    /* sync: startup, before the reporter exists */
     fprintf(stderr, "Storage quota: %s %.2f %s (safe maximum %.2f %s; reserve 20%%, minimum 1 GiB per filesystem)\n",
             automatic_quota ? "automatic" : "explicit",
             (double)server.quota / quota_scale, quota_unit,
@@ -1361,6 +1420,7 @@ int main(int argc, char **argv)
      * pending bytes credited against the fresh inventory) before any fragment
      * write can arrive. A damaged journal fails closed, not startup. */
     if (server_reclaim_init(&server) != EFS_OK) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "reclaim: cannot initialize reclaim journal; refusing startup\n");
         return 1;
     }
@@ -1370,6 +1430,7 @@ int main(int argc, char **argv)
     if (server.listen_fd < 0)
         server.listen_fd = efs_listen_tcp(server.addr, server.port, EFS_LISTEN_BACKLOG);
     if (server.listen_fd < 0) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "Failed to listen on %s:%u: %s\n",
                 server.addr, server.port, strerror(errno));
         return 1;
@@ -1412,6 +1473,7 @@ int main(int argc, char **argv)
         if (joined == 0)
             server_save_nodes(&server);
         else if (joined != EFS_JOIN_PENDING)
+            /* sync: startup, before the reporter exists */
             fprintf(stderr,
                     "Could not reach %s:%u; starting and retrying in background\n", chost, cport);
         if (joined != 0 || !server_raft_host_formed()) {
@@ -1455,18 +1517,21 @@ int main(int argc, char **argv)
     __atomic_store_n(&server.running, !__atomic_load_n(&g_stop_signal_ms, __ATOMIC_ACQUIRE),
                      __ATOMIC_RELEASE);
     if (server_writer_pool_start(&server) != 0) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "Failed to start writer pool (%d threads, %u paths)\n",
                 server.nwriters, server.storage_path_count);
         return 1;
     }
     server_start_heartbeat(&server);
     if (server_raft_host_start(&server) != 0) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "raft-host: start failed\n");
         server_stop_heartbeat(&server);
         server_writer_pool_stop(&server);
         return 1;
     }
     if (server_packer_start(&server) != 0) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "packer: start failed\n");
         server_stop_heartbeat(&server);
         server_raft_host_stop();
@@ -1477,17 +1542,18 @@ int main(int argc, char **argv)
      * recovery proves the store; it needs the metadata groups, so it starts
      * once they run and serves in the background. */
     if (server_recovery_start(&server) != EFS_OK)
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "recovery: cannot start; the store stays fenced\n");
     /* The rejoin thread owns shared state until bounded shutdown joins it:
      * launch only after running and the Raft/storage owners are initialized. */
     if (rejoin_needed) server_start_rejoin(&server);
     if (server.discovery_port) {
         if (efs_disc_responder_start(server.discovery_port, discovery_info) != 0)
-            fprintf(stderr, "discovery: cannot answer on UDP port %u: %s; joiners must name a "
+            efs_telemetry_log(0, "discovery: cannot answer on UDP port %u: %s; joiners must name a "
                     "seed (efsd --join ADDR:PORT STORAGE)\n", server.discovery_port,
                     strerror(errno));
         else
-            fprintf(stderr, "discovery: answering on UDP port %u\n", server.discovery_port);
+            efs_telemetry_log(0, "discovery: answering on UDP port %u\n", server.discovery_port);
     }
 
     {
@@ -1518,15 +1584,15 @@ int main(int argc, char **argv)
     if (server.perf) {
         g_perf_pid = efs_start_perf_recorder(getpid(), perf_path);
         if (g_perf_pid < 0) {
-            fprintf(stderr, "Warning: could not start perf recorder; continuing without profiling\n");
+            efs_telemetry_log(0, "Warning: could not start perf recorder; continuing without profiling\n");
         }
     }
     if (server.strace) {
         g_strace_pid = efs_start_strace_recorder(getpid(), strace_path);
         if (g_strace_pid < 0)
-            fprintf(stderr, "Warning: could not start strace; continuing without it\n");
+            efs_telemetry_log(0, "Warning: could not start strace; continuing without it\n");
         else
-            fprintf(stderr, "efsd strace pid=%d -> %s\n", (int)g_strace_pid, strace_path);
+            efs_telemetry_log(0, "efsd strace pid=%d -> %s\n", (int)g_strace_pid, strace_path);
     }
 
     while (__atomic_load_n(&server.running, __ATOMIC_ACQUIRE)) {
@@ -1536,7 +1602,7 @@ int main(int argc, char **argv)
             break;
         if (ready < 0) {
             if (errno == EINTR) continue;
-            perror("listener poll");
+            efs_telemetry_log(0, "listener poll: %s\n", strerror(errno));
             break;
         }
         if (!ready) continue;
@@ -1557,14 +1623,14 @@ int main(int argc, char **argv)
              * existing handlers can finish and free fds, then resume. */
             if (errno == EMFILE || errno == ENFILE || errno == ENOBUFS ||
                 errno == ENOMEM) {
-                fprintf(stderr,
+                efs_telemetry_log(0,
                         "accept: %s (live_conns=%d); backing off\n",
                         strerror(errno), g_live_conns);
                 usleep(10 * 1000);
                 continue;
             }
             if (errno != EINVAL)
-                perror("accept");
+                efs_telemetry_log(0, "accept: %s\n", strerror(errno));
             break;
         }
 

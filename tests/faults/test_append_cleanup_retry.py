@@ -14,6 +14,10 @@ code=r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #define HOST_SESS_REG_LEN 26
 struct efs_raft_host {struct efs_kv *kv;};
 struct host_resize_ctx {struct efs_raft_host *host;int *hint;};

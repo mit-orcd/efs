@@ -285,6 +285,7 @@ int efs_listen_tcp(const char *host, uint16_t port, int backlog)
     if (!host || !*host || strcmp(host, "0.0.0.0") == 0) {
         sa.sin_addr.s_addr = htonl(INADDR_ANY);
     } else if (inet_pton(AF_INET, host, &sa.sin_addr) != 1) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "efs_listen_tcp: need numeric IPv4 addr, got '%s'\n",
                 host ? host : "(null)");
         return -1;
@@ -302,12 +303,14 @@ int efs_listen_tcp(const char *host, uint16_t port, int backlog)
     setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf));
 
     if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) != 0) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "bind failed for %s:%u: %s\n", host ? host : "*", port,
                 strerror(errno));
         close(fd);
         return -1;
     }
     if (listen(fd, backlog) != 0) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "listen failed for %s:%u: %s\n", host ? host : "*", port,
                 strerror(errno));
         close(fd);
@@ -492,6 +495,7 @@ void efs_conn_destroy(struct efs_conn *c)
          * attributable. */
         void *bt[8];
         int nb = backtrace(bt, 8);
+        /* sync: test-only fault or debug hook */
         fprintf(stderr, "rdma-trace: conn destroy fd=%d qpn=%u match=%d\n",
                 c->fd, efs_rdma_qpn(c->rc), efs_conn_fd_matches(c));
         /* fd 2, not fileno(stderr): the daemons' stderr is a cookie

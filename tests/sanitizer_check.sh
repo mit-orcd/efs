@@ -130,6 +130,8 @@ k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
 # AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.
 pump_logging|tests/test_pump_logging.py
+# K79: SIGTERM with stderr a full pipe exits rc 0 within the stop bound.
+stop_blocked_stderr|tests/test_stop_blocked_stderr.py
 LEOF
 }
 
@@ -195,6 +197,8 @@ k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
 # AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.
 pump_logging|tests/test_pump_logging.py
+# K79: SIGTERM with stderr a full pipe exits rc 0 within the stop bound.
+stop_blocked_stderr|tests/test_stop_blocked_stderr.py
 LEOF
 }
 

@@ -60,7 +60,7 @@ static int dirty_add(struct efs_query_disk *d,struct incremental *s,efs_ino_t in
          * initial buffer stays in working admission; heap growth is bounded
          * by both the caller's unchanged memory cap and a 16MiB scratch cap. */
         if(bytes>DIRTY_HEAP_MAX || bytes>d->limit-d->bytes){
-            fprintf(stderr,"query-disk: incremental fallback=dirty-directory-budget count=%u limit=%u ino=%llu\n",
+            efs_telemetry_log(0,"query-disk: incremental fallback=dirty-directory-budget count=%u limit=%u ino=%llu\n",
                     s->count,s->capacity,(unsigned long long)ino);
             return INCREMENTAL_FULL;
         }
@@ -72,7 +72,7 @@ static int dirty_add(struct efs_query_disk *d,struct incremental *s,efs_ino_t in
     }
     struct dirty_dir dir={0};int rc=locate(d,ino,&dir.node,&dir.at);
     if(rc==EFS_ERR_NOT_FOUND){
-        fprintf(stderr,"query-disk: incremental fallback=missing-directory ino=%llu count=%u\n",
+        efs_telemetry_log(0,"query-disk: incremental fallback=missing-directory ino=%llu count=%u\n",
                 (unsigned long long)ino,s->count);
         return INCREMENTAL_FULL;
     }
@@ -630,7 +630,7 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
     if(s->heap_bytes)free(s->dirs);
     uint64_t finished=query_build_clock();
     if(finished-started>=UINT64_C(1000000000))
-        fprintf(stderr,"query-disk: incremental rc=%d ranges_ms=%llu nodes_ms=%llu edges_ms=%llu aliases_ms=%llu folds_ms=%llu changes=%llu dirs=%u walked=%u\n",
+        efs_telemetry_log(0,"query-disk: incremental rc=%d ranges_ms=%llu nodes_ms=%llu edges_ms=%llu aliases_ms=%llu folds_ms=%llu changes=%llu dirs=%u walked=%u\n",
             rc,(unsigned long long)((ranges_done-started)/1000000),
             (unsigned long long)((nodes_done-ranges_done)/1000000),
             (unsigned long long)((edges_done-nodes_done)/1000000),

@@ -305,6 +305,7 @@ int server_storage_roots_init(struct efsd_server *s)
                 closedir(dd);
             } else if(errno!=ENOENT)goto fail;
             if(has_data){
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr,"storage: %s has fragment data but no root marker; "
                         "its format is unknown and this build reads only root format %u "
                         "(fragment record format 2: I25 identity-bound records); refusing\n",
@@ -316,6 +317,7 @@ int server_storage_roots_init(struct efsd_server *s)
         else if(rc)goto fail;
         else if(markers[i][8]!=EFS_STORAGE_ROOT_FORMAT){
             /* No migration and no legacy reader (not in production). */
+            /* sync: startup, before the reporter exists */
             fprintf(stderr,"storage: %s has root format %u (%s); this build reads "
                     "only root format %u (fragment format 2: I25 identity-bound "
                     "fragment records); refusing startup, reformat the root\n",
@@ -332,6 +334,7 @@ int server_storage_roots_init(struct efsd_server *s)
      * this root's index and the count; a different set is refused. */
     unsigned n=s->storage_path_count;
     if(fresh && fresh!=n){
+        /* sync: startup, before the reporter exists */
         fprintf(stderr,"storage: %u of %u roots are new; a node's storage roots are fixed "
                 "when its store is created (give the same roots, in the same order, or format "
                 "all of them as a new store)\n",fresh,n);
@@ -349,11 +352,13 @@ int server_storage_roots_init(struct efsd_server *s)
     for(unsigned i=0;i<n;i++){
         const uint8_t *m=markers[i];
         if(!root_get32(m+52)){
+            /* sync: startup, before the reporter exists */
             fprintf(stderr,"storage: %s has a root marker without a root set (an earlier "
                     "build); format a new store\n",s->storage_paths[i]);
             goto fail;
         }
         if(memcmp(m+32,markers[0]+16,16) || root_get32(m+48)!=i || root_get32(m+52)!=n){
+            /* sync: startup, before the reporter exists */
             fprintf(stderr,"storage: %s is root %u of %u of its root set; this command "
                     "gives it as root %u of %u. A node's storage roots are fixed when its "
                     "store is created: give the same roots, in the same order\n",
@@ -375,6 +380,7 @@ int server_storage_roots_init(struct efsd_server *s)
     }
     strcpy(s->storage_path, s->storage_paths[0]);
     return EFS_OK;
+    /* sync: startup, before the reporter exists */
     fail:fprintf(stderr,"storage: incompatible, busy or corrupt root; refusing startup\n");
     server_storage_roots_close(s);
     return EFS_ERR_IO;

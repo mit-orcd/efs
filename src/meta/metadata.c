@@ -1,4 +1,5 @@
 #include "efs/metadata.h"
+#include "efs/telemetry.h"
 #include "../common/stage_limit.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -2632,7 +2633,7 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
     {
     struct efs_inode_mem *dupp = inode_ptr(ex, ino_num);
     if (dupp) {
-        fprintf(stderr, "cwi-fail: ino_dup parent=%llu name=%s ino=%llu "
+        efs_telemetry_log(0, "cwi-fail: ino_dup parent=%llu name=%s ino=%llu "
                 "shard=%u cnt=%llu held_by parent=%llu name=%s mode=%o\n",
                 (unsigned long long)parent, name,
                 (unsigned long long)ino_num, ex->shard_id,
@@ -2646,14 +2647,14 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
     if (ex->inode_count >= ex->inode_capacity) {
         uint64_t new_cap = ex->inode_capacity * 2;
         if (inode_ensure_cap(ex, new_cap) != EFS_OK) {
-            fprintf(stderr, "cwi-fail: realloc parent=%llu name=%s ino=%llu\n",
+            efs_telemetry_log(0, "cwi-fail: realloc parent=%llu name=%s ino=%llu\n",
                     (unsigned long long)parent, name,
                     (unsigned long long)ino_num);
             return 0;
         }
     }
     if (export_ensure_inode_idx(ex) != 0) {
-        fprintf(stderr, "cwi-fail: idx parent=%llu name=%s ino=%llu\n",
+        efs_telemetry_log(0, "cwi-fail: idx parent=%llu name=%s ino=%llu\n",
                 (unsigned long long)parent, name,
                 (unsigned long long)ino_num);
         return 0;

@@ -9,6 +9,10 @@ source=r'''
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #define EFS_OK 0
 #define EFS_ERR_BUSY -13
 #define EFS_ERR_IO -1

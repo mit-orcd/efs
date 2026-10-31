@@ -63,6 +63,7 @@ static inline int server_test_dest_fault(const char *op)
     }
     static uint64_t said;
     if (__atomic_add_fetch(&said, 1, __ATOMIC_RELAXED) <= 20)
+        /* sync: test-only fault or debug hook */
         fprintf(stderr, "fault: EFS_FAULT_DEST_FILE %s %s\n", line, op);
     if (!strcmp(line, "refuse"))
         return EFS_ERR_IO;

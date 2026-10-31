@@ -14,12 +14,16 @@ from pathlib import Path
 import re
 import select
 import signal
+import struct
 import subprocess
 import sys
+import termios
 import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+# efsd's SIGTERM budget: EFS_SHUTDOWN_TOTAL_MS 50 s + EFS_SHUTDOWN_REPORT_MS 5 s.
+STOP_BOUND_S = 55
 sys.path.insert(0, str(ROOT / 'tests'))
 import k33_daemons as k
 
@@ -43,6 +47,7 @@ class SinkCluster(k.Cluster):
         self.active = threading.Event()
         self.done = threading.Event()
         self.readers = []
+        self.pipe_r = {}
 
     def start(self, i, join=None):
         store = self.dir / ('n%d' % i)
@@ -54,6 +59,7 @@ class SinkCluster(k.Cluster):
         log = open(self.dir / ('n%d.log' % i), 'ab', buffering=0)
         if self.mode in ('blocked', 'slow'):
             r, w = os.pipe()
+            self.pipe_r[i] = r
             fcntl.fcntl(w, getattr(fcntl, 'F_SETPIPE_SZ', 1031), 4096)
             # Linux F_LINUX_SPECIFIC_BASE+7; Python 3.9 omits the name.
             def reader():
@@ -315,13 +321,37 @@ def run(a):
                 mount.log.close()
             # unmount-blocked: the sink stays blocked through the checked
             # unmount, then drains before the daemons stop. stop-blocked
-            # (open K79) keeps it blocked through daemon exit.
+            # (K79) keeps it blocked through daemon exit.
             if not getattr(a, 'stop_blocked', False):
                 c.active.clear()
                 c.done.set()
-            for i, proc in c.procs.items():
-                proc.send_signal(signal.SIGTERM)
-                assert proc.wait(timeout=60) == 0, ('daemon stop', i)
+            stop_blocked = getattr(a, 'stop_blocked', False)
+            if stop_blocked:
+                # K79: the sink must be backed up when the daemons are told to stop:
+                # some of the 4 KiB pipe unread (a line that does not fit the
+                # remainder cannot be written, so it never fills to the byte, and
+                # the amount varies with how much the reporter wrote).
+                for i, r in c.pipe_r.items():
+                    pending = struct.unpack('i', fcntl.ioctl(r, termios.FIONREAD, b'\0\0\0\0'))[0]
+                    assert pending > 0, ('stderr pipe not full at SIGTERM', i, pending)
+            t0 = time.monotonic()
+            result['stop_s'] = {}
+            try:
+                for proc in c.procs.values():
+                    proc.send_signal(signal.SIGTERM)
+                bound = STOP_BOUND_S if stop_blocked else 60
+                for i, proc in c.procs.items():
+                    rc = proc.wait(timeout=max(1, bound-(time.monotonic()-t0)))
+                    result['stop_s'][i] = round(time.monotonic()-t0, 1)
+                    assert rc == 0, ('daemon stop rc', i, rc)
+                assert not list(c.dir.rglob('core*')), 'core file after stop'
+            except BaseException:
+                for proc in c.procs.values():
+                    proc.kill()
+                    proc.wait()
+                c.active.clear()
+                c.done.set()
+                raise
             c.active.clear()
             c.done.set()
             for t in c.readers:
@@ -357,7 +387,7 @@ if __name__ == '__main__':
     p.add_argument('--unmount-blocked', action='store_true',
                    help='keep the sink blocked through the checked unmount; drain before daemon stop')
     p.add_argument('--stop-blocked', action='store_true',
-                   help='also keep it blocked until every daemon has stopped (60 s bound; open K79)')
+                   help='also keep it blocked until every daemon has stopped (55 s bound, rc 0; K79)')
     p.add_argument('--versioned', action='store_true', help='final expected-version payload oracle')
     p.add_argument('--slow-fsync-us', type=int, default=0,
                    help='daemon-only existing W159 test interposer, for wait-log pressure')
