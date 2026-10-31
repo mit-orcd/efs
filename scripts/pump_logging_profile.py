@@ -108,6 +108,10 @@ def require_reporter_startup_failure(binary, store, output):
     assert held
     env = {key:value for key,value in os.environ.items() if not key.startswith('EFS_')}
     env['EFS_TRANSPORT'] = 'tcp'
+    # The refused process exits through main's error return without freeing
+    # its startup allocations; LeakSanitizer would fail the sanitizer gate on
+    # that expected exit, not on a defect.
+    env['ASAN_OPTIONS'] = env.get('ASAN_OPTIONS', '') + ' detect_leaks=0'
     proc = None
     try:
         with output.open('w') as log:
