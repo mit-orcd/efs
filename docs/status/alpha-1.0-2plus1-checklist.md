@@ -195,6 +195,8 @@ Historical October 22 legend (retained):
 | K76 | Task AO: cross-group directory cleanup inspected a foreign group's KV; the cleanup is not owned by one group. | metadata migration / correctness | FIXED on `ao-port`, blocks alpha: no; both owners now take part in guarded transactions. Reproduction `test_dir_migrate_route`, `test_dir_migrate_visibility` cleanup cases, `test_apply_unsupported`. ([evidence](ao-product-port-20261030.md)). |
 | K77 | Task AO: real lock conflicts were reported as transient metadata BUSY, so lock waiters retried a conflict as if it were a retryable transport state. | locks / correctness | FIXED on `ao-port`, blocks alpha: no; conflict status is explicit through apply, server and client. Reproduction `test_lock_apply_verdict`, `test_metadata_retry_budget`, `test_flock_description_release`. ([evidence](ao-product-port-20261030.md)). |
 | K78 | Task AO: unlink and link admission used the opid fallback second when no deadline was inherited, so it could fail while a healthy older RPC owned the receipt frontier. | namespace admission / availability | FIXED on `ao-port`, blocks alpha: no; admission and the RPC share the normal I/O envelope (`EFS_IO_TIMEOUT_MS`) and restore the caller's deadline. Reproduction `test_opid_admission`. ([evidence](ao-product-port-20261030.md)). |
+| K79 | Task BI/AE: daemon exit hangs while stderr is a blocked pipe. After `SIGTERM` an `efsd` whose stderr nobody reads does not exit within 60 s: non-pump threads (heartbeat, GC, apply/report paths) are blocked in synchronous `fprintf(stderr)` on the stdio lock, and stop joins them. The pump itself no longer blocks (K72, K80). | availability / logging | OPEN, blocks alpha: no (proposed; needs a sink that stays blocked through shutdown, coordinator to confirm). Reproduction: `scripts/pump_logging_profile.py --sink blocked --stop-blocked` fails `daemon stop` on every run; not in `make test`. ([evidence](ab-ae-raft-logging-20261030.md)). |
+| K80 | Task BI/AB: with the sink blocked, the checked unmount failed with `revoke rc=-13 BUSY` (and the stop-blocked variant could not even unmount): the Raft applier logged every non-ACK session event, `SESS_BEGIN` included, with synchronous `fprintf(stderr)` from the pump under `h->mu`, and term/role events were printed under `h->mu`. | availability / logging | FIXED on `claude/bi-ab-ae-5b1f22`, blocks alpha: no (diagnostic output; no durability claim). Session events and term/role events go through the one reporter. Reproduction: `tests/test_pump_logging.py` unmount-blocked phase fails without the fix. ([evidence](ab-ae-raft-logging-20261030.md)). |
 
 
 **BB branch scope:** K57/K58 rows and their linked summaries are copied
@@ -290,6 +292,8 @@ standalone rows K15/K16/K27/K28 are added without inventing historical runs.
 | K76 | FIXED on `ao-port` branch, blocks alpha: no; guarded cross-group cleanup at both owners, `test_dir_migrate_route` ([evidence](ao-product-port-20261030.md)) |
 | K77 | FIXED on `ao-port` branch, blocks alpha: no; explicit lock conflict status, `test_lock_apply_verdict` ([evidence](ao-product-port-20261030.md)) |
 | K78 | FIXED on `ao-port` branch, blocks alpha: no; shared I/O deadline, `test_opid_admission` ([evidence](ao-product-port-20261030.md)) |
+| K79 | OPEN, blocks alpha: no (proposed); `--stop-blocked` reproduction, not in `make test` ([evidence](ab-ae-raft-logging-20261030.md)) |
+| K80 | FIXED on `claude/bi-ab-ae-5b1f22`, blocks alpha: no; `tests/test_pump_logging.py` unmount-blocked phase ([evidence](ab-ae-raft-logging-20261030.md)) |
 
 **Oct 23 evidence qualification:** nuc capture bundles are reported lost;
 xorinox raw outputs were deleted. Their PASS labels below are historical
@@ -463,7 +467,7 @@ it in K with its retained reproduction. The unrelated P3-A–P3-F data/metadata
 performance tasks remain in Stage 3.0. The graphify fixer retains ownership of
 the separate data-commit correctness fixes.
 
-- [ ] **AB — Remove diagnostic output from the Raft critical section.**
+- [x] **AB — Remove diagnostic output from the Raft critical section.**
   `src/server/raft_host.c::host_pump` calls `host_obs_dump` before releasing
   `h->mu`; with `EFS_RAFT_OBS` enabled, it formats and prints role/term and
   periodic statistics while holding the main Raft mutex. Capture a bounded
@@ -472,6 +476,17 @@ the separate data-commit correctness fixes.
   and important failure/role-change evidence. Gate: deterministic slow/full log
   sink, concurrent proposals and status, shutdown and sanitizer checks; measure
   mutex hold/wait and Raft progress with diagnostics enabled and disabled.
+  **Oct 30 outcome ([AB/AE page](ab-ae-raft-logging-20261030.md)):** the periodic dump
+  already left `h->mu` with the wave 39 reporter (K72). Task BI moved the last two
+  lock-held writers behind the same reporter: term/role events (bounded numeric
+  capture under `h->mu`, format and submit after unlock) and the applier's session
+  events, whose synchronous `SESS_BEGIN` line made a checked unmount fail
+  `revoke rc=-13` with a blocked sink (K80, fixed). Gate on amd: `test_pump_logging`
+  (blocked sink, concurrent writes and stat, role events, unmount with the sink
+  blocked) PASS; TSan and ASan+UBSan+LSan PASS; three-run hold/wait/progress
+  medians with diagnostics on and off show identical Raft progress and an OBS=1
+  hold maximum of 34.5 ms to 8.2 ms. Full-gate result in the page.
+
 - [x] **AC — Avoid unused RDMA totals in routine I/O logging.**
   `src/server/iostats.c::efs_iostats_dump` uses `efs_iostats_snapshot`, which
   calls `src/common/rdma.c::efs_rdma_totals`: a scan of 4,096 registry slots
@@ -519,6 +534,18 @@ the separate data-commit correctness fixes.
   routine telemetry delivery. Define critical-event retention/error reporting
   separately; preserve timestamps and whole-record integrity. Coordinate AB
   so neither task introduces a second incompatible reporting queue.
+  **Oct 30 disposition: stays OPEN ([AB/AE page](ab-ae-raft-logging-20261030.md)).**
+  Ported by wave 39: the whole `agent/devel-task-ae` product change (K72, K73);
+  the audit finds nothing left to port (28 commits: all in devel as a squashed
+  port, evidence-only, or dropped fixture races). Done in BI: the pump's last
+  lock-held writers (K80). Open: a SIGTERM'd `efsd` does not exit within 60 s while
+  its stderr is a blocked pipe, because non-pump threads sit in synchronous
+  `fprintf(stderr)` and stop joins them (**K79**, reproduction
+  `pump_logging_profile.py --stop-blocked`); critical-event retention under a full
+  mailbox (events are counted, not kept) needs the same design decision. The
+  full-gate `test_pump_logging` can still fail with foreground `EIO` under 8-job
+  load (one nuc failure, three idle reruns PASS).
+
 - [x] **AF — Decouple management status from consensus execution.**
   `src/server/raft_host.c::server_raft_host_status` takes `h->mu` while collecting
   both groups and their peer progress, then obtains KV statistics and reads salt

@@ -3023,7 +3023,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc == EFS_ERR_STALE)
         rc = EFS_OK;
     if (rc != EFS_OK) {
-        fprintf(stderr,
+        efs_telemetry_log(0,
                 "raft-host: apply session rc=%d index=%llu ino=%llu kind=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)ino,
                 (unsigned)cmd[1]);
@@ -3031,9 +3031,10 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
          * advancing past it can pin an unlinked inode forever. */
         return rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM ? rc : EFS_OK;
     }
-    /* Routine ACK progress must not block the applier on stderr. Other
-     * session events (including fences) retain synchronous delivery. */
-    efs_telemetry_log(cmd[1] != EFS_MD_SESS_ACK,
+    /* The applier runs on the pump under h->mu: no session event, fences
+     * and failures included, may wait on stderr. All go through the
+     * reporter; a full mailbox is counted in its overflow line. */
+    efs_telemetry_log(0,
             "raft-host: applied session index=%llu kind=%u shard=%u ino=%llu\n",
             (unsigned long long)index, (unsigned)cmd[1], shard,
             (unsigned long long)ino);
@@ -8100,11 +8101,20 @@ struct host_periodic {
 };
 _Static_assert(sizeof(struct host_periodic) <= EFS_TELEMETRY_BYTES, "periodic telemetry snapshot bound");
 
-static void host_obs_roles(struct efs_raft_host *h)
+/* Term/role changes: numeric capture under h->mu, formatting and delivery
+ * after unlock through the one reporter (no second queue). Events keep group
+ * order and precede that cycle's periodic record. A full mailbox is counted
+ * by the reporter's overflow line, never silently dropped. */
+struct host_role_ev {
+    unsigned group;
+    uint64_t term0, term1, commit, applied, t_ms;
+    int role0, role1, leader;
+};
+
+static int host_obs_roles(struct efs_raft_host *h, struct host_role_ev *ev)
 {
     uint64_t now_ms = now_us_() / 1000ull;
-    int i;
-    static const char *roles[] = { "FOLLOWER", "CANDIDATE", "LEADER", "?" };
+    int i, n = 0;
 
     for (i = 0; i < HOST_NGROUPS; i++) {
         struct host_group *g = &h->g[i];
@@ -8117,19 +8127,29 @@ static void host_obs_roles(struct efs_raft_host *h)
         if (ro < 0 || ro > 2)
             ro = 3;
         if (t != g->obs_term || ro != g->obs_role) {
-            fprintf(stderr,
-                    "raft-obs: g%u term %llu->%llu role %s->%s leader=%d "
-                    "commit=%llu applied=%llu t=%llums\n",
-                    g->group,
-                    (unsigned long long)g->obs_term, (unsigned long long)t,
-                    roles[g->obs_role >= 0 && g->obs_role <= 2 ? g->obs_role : 3],
-                    roles[ro], efs_raft_leader(g->r),
-                    (unsigned long long)efs_raft_commit(g->r),
-                    (unsigned long long)efs_raft_applied(g->r),
-                    (unsigned long long)now_ms);
+            ev[n++] = (struct host_role_ev){ g->group, g->obs_term, t,
+                efs_raft_commit(g->r), efs_raft_applied(g->r), now_ms,
+                g->obs_role, ro, efs_raft_leader(g->r) };
             g->obs_term = t;
             g->obs_role = ro;
         }
+    }
+    return n;
+}
+
+static void host_obs_roles_report(struct efs_raft_host *h, const struct host_role_ev *ev, int n)
+{
+    static const char *roles[] = { "FOLLOWER", "CANDIDATE", "LEADER", "?" };
+    for (int i = 0; i < n; i++) {
+        const struct host_role_ev *e = &ev[i];
+        efs_telemetry_printf(h->telemetry,
+                "raft-obs: g%u term %llu->%llu role %s->%s leader=%d "
+                "commit=%llu applied=%llu t=%llums\n",
+                e->group, (unsigned long long)e->term0, (unsigned long long)e->term1,
+                roles[e->role0 >= 0 && e->role0 <= 2 ? e->role0 : 3],
+                roles[e->role1], e->leader,
+                (unsigned long long)e->commit, (unsigned long long)e->applied,
+                (unsigned long long)e->t_ms);
     }
 }
 
@@ -8739,7 +8759,8 @@ static void *host_pump(void *arg)
     while (__atomic_load_n(&h->running, __ATOMIC_ACQUIRE)) {
         struct pollfd pfd;
         struct host_periodic periodic;
-        int report_due = 0;
+        int report_due = 0, nroles = 0;
+        struct host_role_ev roles[HOST_NGROUPS];
         uint64_t sink;
         uint64_t c0 = 0;
         uint64_t applied_now[HOST_NGROUPS],cursor_now[HOST_NGROUPS];
@@ -8900,7 +8921,7 @@ static void *host_pump(void *arg)
             held = t_drain + t_tick;
             if (held > h->obs_pump_hold_max_us)
                 h->obs_pump_hold_max_us = held;
-            host_obs_roles(h);
+            nroles = host_obs_roles(h, roles);
         }
         uint64_t report_ms = efs_batch_obs_now_us() / 1000ull;
         if (report_ms - h->obs_last_dump_ms >= 5000) {
@@ -8909,6 +8930,7 @@ static void *host_pump(void *arg)
             report_due = 1;
         }
         pthread_mutex_unlock(&h->mu);
+        host_obs_roles_report(h, roles, nroles);
         if (report_due) efs_telemetry_submit(h->telemetry, &periodic, sizeof(periodic));
         /* Capture this cycle's WAL prefix and transfer its barrier to one
          * bounded worker. The next pump cycle may run while it flushes.
