@@ -195,7 +195,7 @@ Historical October 22 legend (retained):
 | K76 | Task AO: cross-group directory cleanup inspected a foreign group's KV; the cleanup is not owned by one group. | metadata migration / correctness | FIXED on `ao-port`, blocks alpha: no; both owners now take part in guarded transactions. Reproduction `test_dir_migrate_route`, `test_dir_migrate_visibility` cleanup cases, `test_apply_unsupported`. ([evidence](ao-product-port-20261030.md)). |
 | K77 | Task AO: real lock conflicts were reported as transient metadata BUSY, so lock waiters retried a conflict as if it were a retryable transport state. | locks / correctness | FIXED on `ao-port`, blocks alpha: no; conflict status is explicit through apply, server and client. Reproduction `test_lock_apply_verdict`, `test_metadata_retry_budget`, `test_flock_description_release`. ([evidence](ao-product-port-20261030.md)). |
 | K78 | Task AO: unlink and link admission used the opid fallback second when no deadline was inherited, so it could fail while a healthy older RPC owned the receipt frontier. | namespace admission / availability | FIXED on `ao-port`, blocks alpha: no; admission and the RPC share the normal I/O envelope (`EFS_IO_TIMEOUT_MS`) and restore the caller's deadline. Reproduction `test_opid_admission`. ([evidence](ao-product-port-20261030.md)). |
-| K79 | Task BI/AE: daemon exit hangs while stderr is a blocked pipe. After `SIGTERM` an `efsd` whose stderr nobody reads does not exit within 60 s: non-pump threads (heartbeat, GC, apply/report paths) are blocked in synchronous `fprintf(stderr)` on the stdio lock, and stop joins them. The pump itself no longer blocks (K72, K80). | availability / logging | OPEN, blocks alpha: no (proposed; needs a sink that stays blocked through shutdown, coordinator to confirm). Reproduction: `scripts/pump_logging_profile.py --sink blocked --stop-blocked` fails `daemon stop` on every run; not in `make test`. ([evidence](ab-ae-raft-logging-20261030.md)). |
+| K79 | Task BI/AE: daemon exit hangs while stderr is a blocked pipe. After `SIGTERM` an `efsd` whose stderr nobody reads did not exit within 60 s: non-pump threads were blocked in synchronous `fprintf(stderr)` on the stdio lock and stop joins them. Task BP routed the 385 routine stderr sites through the reporter (`efs_telemetry_log`); 101 startup/stop/abort and 39 fault-hook sites stay synchronous, each commented. | availability / logging | FIXED, blocks alpha: no. `tests/test_stop_blocked_stderr.py` (in `make test-long`) fails on devel `909a07d71` (rc 3, forced stop) and passes with the fix (all three daemons exit rc 0 in 0.4–5.4 s); TSan and ASan PASS. ([evidence](k79-stop-blocked-stderr-20261031.md)). |
 | K80 | Task BI/AB: with the sink blocked, the checked unmount failed with `revoke rc=-13 BUSY` (and the stop-blocked variant could not even unmount): the Raft applier logged every non-ACK session event, `SESS_BEGIN` included, with synchronous `fprintf(stderr)` from the pump under `h->mu`, and term/role events were printed under `h->mu`. | availability / logging | FIXED on `claude/bi-ab-ae-5b1f22`, blocks alpha: no (diagnostic output; no durability claim). Session events and term/role events go through the one reporter. Reproduction: `tests/test_pump_logging.py` unmount-blocked phase fails without the fix. ([evidence](ab-ae-raft-logging-20261030.md)). |
 
 
@@ -292,7 +292,7 @@ standalone rows K15/K16/K27/K28 are added without inventing historical runs.
 | K76 | FIXED on `ao-port` branch, blocks alpha: no; guarded cross-group cleanup at both owners, `test_dir_migrate_route` ([evidence](ao-product-port-20261030.md)) |
 | K77 | FIXED on `ao-port` branch, blocks alpha: no; explicit lock conflict status, `test_lock_apply_verdict` ([evidence](ao-product-port-20261030.md)) |
 | K78 | FIXED on `ao-port` branch, blocks alpha: no; shared I/O deadline, `test_opid_admission` ([evidence](ao-product-port-20261030.md)) |
-| K79 | OPEN, blocks alpha: no (proposed); `--stop-blocked` reproduction, not in `make test` ([evidence](ab-ae-raft-logging-20261030.md)) |
+| K79 | FIXED, blocks alpha: no; stop-blocked test in the gate ([evidence](k79-stop-blocked-stderr-20261031.md)) |
 | K80 | FIXED on `claude/bi-ab-ae-5b1f22`, blocks alpha: no; `tests/test_pump_logging.py` unmount-blocked phase ([evidence](ab-ae-raft-logging-20261030.md)) |
 
 **Oct 23 evidence qualification:** nuc capture bundles are reported lost;
@@ -522,7 +522,7 @@ the separate data-commit correctness fixes.
   paired capture repair pass; one original IBS capture remains partial. Full
   `test-all`: 545 commands, 0 FAIL / 4 NOTRUN (host limits/self-test marker),
   690 s plus 15 s build, six individual overbudgets. No product change or toggle.
-- [ ] **AE — Keep routine logging from blocking the Raft pump.**
+- [x] **AE — Keep routine logging from blocking the Raft pump.**
   Even after `h->mu` is released, `host_pump` calls the always-on I/O/KV dumps
   and optional batch diagnostics synchronously. `src/common/log_ts.c::ts_write`
   writes to the destination under the stdio stream lock; batch diagnostics also
@@ -545,6 +545,10 @@ the separate data-commit correctness fixes.
   mailbox (events are counted, not kept) needs the same design decision. The
   full-gate `test_pump_logging` can still fail with foreground `EIO` under 8-job
   load (one nuc failure, three idle reruns PASS).
+  **Oct 31 (Task BP, [K79 page](k79-stop-blocked-stderr-20261031.md)): ticked.** K79 is FIXED: the routine
+  stderr writers go through the reporter and the stop-blocked acceptance (SIGTERM with a full
+  stderr pipe: rc 0 within the 55 s bound) now holds and is in the gate. Still true: routine
+  lines are counted, not kept, when the 32-slot mailbox overflows.
 
 - [x] **AF — Decouple management status from consensus execution.**
   `src/server/raft_host.c::server_raft_host_status` takes `h->mu` while collecting
@@ -2066,7 +2070,7 @@ by this count reconciliation (they are decided in D45 and D46).
 
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
-| Known-defect register K (Stage 1; once per candidate) | OPEN — rows through K80 after wave 45: 37 FIXED / 0 VERIFIED / 36 VERIFY / 3 DECIDED / 3 CLOSED / 1 OPEN; open row K79 (daemon exit with blocked stderr, Task BI, blocks alpha: no); K48 moved to VERIFY by Task BG (blocks alpha: yes until the storm gate on the frozen candidate and the K74 live listing); K61 FIXED by Task BH; K54 and K55 are FIXED (K54's orcd-mini real-host stage is NOTRUN, campaign work); per-row owed acceptance in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md) | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
+| Known-defect register K (Stage 1; once per candidate) | OPEN — rows through K80 after wave 45: 38 FIXED / 0 VERIFIED / 36 VERIFY / 3 DECIDED / 3 CLOSED / 0 OPEN; K79 (daemon exit with blocked stderr) FIXED by Task BP, blocks alpha: no; K48 moved to VERIFY by Task BG (blocks alpha: yes until the storm gate on the frozen candidate and the K74 live listing); K61 FIXED by Task BH; K54 and K55 are FIXED (K54's orcd-mini real-host stage is NOTRUN, campaign work); per-row owed acceptance in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md) | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
 | Functional scope S decided (once per candidate) | PARTLY DECIDED — D45 + D46 (user, Oct 28); W122, the K54 fix and the 33-tunable audit are required work; S1 command dispositions and `--writers` remain open | (same) | (same) |
 | Candidate and profile | NOTRUN — reviewed devel `9e4d66a8c`, not a frozen release candidate; K counts above (0 VERIFIED), A1/A2/A5 profile owed | NOTRUN — same counts; A4 decision and frozen profile owed | NOTRUN — K28 cap/layout is implemented (16-node cap); same counts, concrete N/failure domains/profile unqualified; prior “UNSUPPORTED until K28” was historical |
 | Flag audit and A/B removal (A6–A10, A12; once per candidate) | PASS scoped static/startup audit at `9e4d66a8c`, driver `1164b55a4` ([Task Z](stage1-decision-sheet-20261028.md)); A8/A9/A10 and frozen-candidate obligations remain; K register counts above are not an audit verdict (11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN) | Same audit/decision owner; named K live gates remain | Same audit/decision owner; no new A/B selector or user decision approved by Task Y |

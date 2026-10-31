@@ -1,6 +1,6 @@
 # K79: daemon stop with a blocked stderr, task BP — October 31, 2026
 
-**K79: FIXED (blocks alpha: no). Gate line and sanitizer results: see Results.**
+**K79: FIXED (blocks alpha: no). Stop-blocked test fails on base, passes with the fix; gate FAIL 1 (K37 load timeout, passes alone); TSan and ASan PASS.**
 Linked items: K79, K72/K80 ([AB/AE page](ab-ae-raft-logging-20261030.md)), letter task AE.
 Tested source: branch `claude/bp-k79-stderr-dcc693`, base devel `909a07d71`.
 
@@ -23,6 +23,7 @@ through the existing reporter (K72). No second queue, no lock added or widened.
 - Mailbox: 4 → 32 slots (routine lines share it with the periodic records,
   which still coalesce); line buffer 512 → 2048 bytes (longer lines count as
   overflow). Still one queue, one reporter thread.
+- Producers: a routine line takes the binding read lock and the mailbox copy lock (blocking, bounded: no thread holds either across I/O); the pump's records keep the trylock.
 - Stop: `efs_telemetry_stop` now drains pending records for at most 200 ms on a
   sink that accepts them (before, pending records were discarded); a blocked sink
   never holds the stop longer (`emit`/`send_bytes` give up at the deadline).
@@ -115,7 +116,30 @@ Host intel2 (8 CPU, Rocky 10), build gcc `-O3 -march=native`; raw outputs in
 | devel `909a07d71` (+ the new test and profile script) | **FAIL**: `daemon stop rc 3` (forced exit after 55 s) |
 | this branch, 3 runs | **PASS**, rc 0 for all three daemons; exit 5.4 s / 0.4–0.5 s / 0.5–5.3 s after SIGTERM; wall 45, 39, 45 s |
 
-GATE_PLACEHOLDER
+Gate (`TMPDIR=$HOME/tmp EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh`, intel2, idle apart from other sessions' leftover processes):
+
+| Run | Tree | Gate line |
+| --- | --- | --- |
+| 1 | first conversion | TOTAL 582 FAIL 50 NOTRUN 10 STATUS FAIL (1672 s): 41 harness tests that compile pieces of `raft_host.c` standalone lacked `efs_telemetry_log` (stubs and link lists added), plus `k36_*`/`k33_*` losing a startup line (below) |
+| 2 | stubs + producer fix | TOTAL 582 FAIL 1 NOTRUN 10 STATUS FAIL (966 s): `test_w155_report_resolve` (same missing stub; passes alone after the fix) |
+| 3 | final tree | TOTAL 582 FAIL 1 NOTRUN 10 STATUS FAIL (835 s): `test_k37_segment_rebuild` timed out waiting for segments under 8-job load (the known K37/K82 load dependence, Task BM); PASS alone twice (158 s each) and PASS in run 2. **0 FAIL is not claimed.** NOTRUN 10 are host limits (no RDMA device, no valgrind headers). No test is over budget. |
+
+A real defect found by the gate and fixed here: the first version dropped
+routine lines when two threads logged at once (producers used a trylock on the
+binding and mailbox locks), which lost the one `raft-host: up ...` line the
+k33/k36 harnesses wait for. Routine lines now wait for the mailbox copy lock
+(never held across I/O or a wait); the pump's periodic records and printf lines
+keep the trylock. Sanitizers (intel2): TSan `telemetry` PASS 3 s, `pump_logging`
+PASS 72 s, `stop_blocked_stderr` PASS 39 s, 0 reports; ASan+UBSan
+`pump_logging` PASS 69 s, `stop_blocked_stderr` PASS 43 s.
+
+Raw outputs: intel2 `~/efs-artifacts/taskBP-20261031/` (`SHA256SUMS` sha256
+`22f9c14a8c2b3660ea8e581ac74e71992123a18ba1ddcd3978425455576e6ea7`).
+
+Merge note: Task BL (branch `claude/bl-report-stall-b59547`, K81) converts seven
+REPORT/receipt sites in `raft_host.c` to the same call and stubs
+`efs_telemetry_log` in `test_w155_report_resolve.py`; expect trivial conflicts on
+those lines and that test (this branch converts the same sites with the same format).
 
 ## Limits
 
