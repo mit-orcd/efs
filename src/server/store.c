@@ -626,8 +626,9 @@ static __thread int t_gc_defer_sync;
 #define FRAG_LOCKS 4096
 static pthread_mutex_t frag_locks[FRAG_LOCKS];
 /* K61: per fragment-lock bucket, how many superseded/orphan deletes ran and
- * the identity of the last (both written under the bucket mutex). */
-static uint64_t frag_retire_epoch[FRAG_LOCKS], frag_retire_key[FRAG_LOCKS];
+ * the identities of the last FRAG_RETIRE_RING (both written under the bucket mutex). */
+#define FRAG_RETIRE_RING 8
+static uint64_t frag_retire_epoch[FRAG_LOCKS], frag_retire_key[FRAG_LOCKS][FRAG_RETIRE_RING];
 static pthread_rwlock_t inode_gc_locks[FRAG_LOCKS];
 static uint64_t inode_gc_epoch;
 static pthread_mutex_t death_page_mu[64];
@@ -673,8 +674,9 @@ uint64_t server_fragment_retire_mark(efs_export_id_t eid, efs_ino_t ino, uint32_
     return __atomic_load_n(&frag_retire_epoch[fragment_bucket(eid, ino, ci, fi)],
                            __ATOMIC_ACQUIRE);
 }
-/* Caller holds the fragment mutex. Exactly one retire since the mark, of
- * another identity, is harmless; anything else refuses (fail closed). */
+/* Caller holds the fragment mutex. Retires since the mark of other identities
+ * are harmless; one of this identity, or more than the ring remembers,
+ * refuses (fail closed). */
 static int fragment_retired_since(efs_export_id_t eid, efs_ino_t ino, uint32_t ci,
                                   uint32_t fi)
 {
@@ -683,8 +685,15 @@ static int fragment_retired_since(efs_export_id_t eid, efs_ino_t ino, uint32_t c
         return 0;
     unsigned b = fragment_bucket(eid, ino, ci, fi);
     uint64_t now = frag_retire_epoch[b];
-    return now != mark && (now - mark > 1 ||
-                           frag_retire_key[b] == fragment_retire_key(eid, ino, ci, fi));
+    if (now == mark)
+        return 0;
+    if (now - mark > FRAG_RETIRE_RING)
+        return 1;
+    uint64_t key = fragment_retire_key(eid, ino, ci, fi);
+    for (uint64_t e = mark; e < now; e++)
+        if (frag_retire_key[b][e % FRAG_RETIRE_RING] == key)
+            return 1;
+    return 0;
 }
 
 /* GC/restart accounting decodes the stored format, not transient export
@@ -785,7 +794,8 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
     pthread_mutex_t *mu = fragment_mutex(ex->id, ino, chunk_index, fragment_index);
     pthread_mutex_lock(mu);
     unsigned rb = fragment_bucket(ex->id, ino, chunk_index, fragment_index);
-    frag_retire_key[rb] = fragment_retire_key(ex->id, ino, chunk_index, fragment_index);
+    frag_retire_key[rb][frag_retire_epoch[rb] % FRAG_RETIRE_RING] =
+        fragment_retire_key(ex->id, ino, chunk_index, fragment_index);
     __atomic_store_n(&frag_retire_epoch[rb], frag_retire_epoch[rb] + 1, __ATOMIC_RELEASE);
     for (uint32_t ri = 0; ri < n; ri++) {
         struct stat st;
