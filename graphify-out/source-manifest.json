@@ -1401,7 +1401,7 @@
     "docs/how-it-works/testing.md": "52cab1ce06e7ab3e01814482475c2523e24e56826647bb4f664b6210b2e4f569",
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "b743931616c57426c78afb3cc5f5e91d20482faf7ab6070140f3c06a7f2766a3",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "4d2bc6138e003a1601c45d5bcb2231cef4551e9f3ba7baf0e9a5f9d5f54f81c5",
     "docs/status/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
     "docs/status/alpha-1.1-consolidation.md": "bd0cbe68dab646b3a433afa10500dab2c3d80e0c0f9f1d55cf20f18dd6f523df",
     "docs/status/d39-consolidated-model-20261023.md": "343d1f6023da489ccf29b84f786919ec076c191ea27bf56f5602c0d0fc2b5a6c",
@@ -2801,5 +2801,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "1e6ab77a1e968cdae30c82ab7e9f0d395a2bafd7"
+  "source_commit": "1ed86979eedbd8d03a6e5fcdaf45ff34e35ce903"
 }
