@@ -119,6 +119,27 @@ static void regular(void)
     assert(strstr(text,"sample=19\n"));
     assert(last && !last[15]);
 }
+/* K79 fault exits: every routine line queued before efs_telemetry_flush() is
+ * on the sink when it returns (no stop, the reporter keeps running). */
+static void flushed(void)
+{
+    FILE *f = tmpfile(); assert(f);
+    int saved = dup(2);
+    fflush(stderr);
+    dup2(fileno(f), 2);
+    struct efs_telemetry *r = efs_telemetry_start(render); assert(r);
+    for (int i = 0; i < 24; i++) efs_telemetry_log(0, "queued=%d\n", i);
+    efs_telemetry_flush();
+    char text[8192]={0};
+    assert(pread(fileno(f), text, sizeof(text)-1, 0)>=0);
+    int seen = 0;
+    for (int i = 0; i < 24; i++) { char l[32]; snprintf(l, sizeof(l), "queued=%d\n", i); seen += !!strstr(text, l); }
+    efs_telemetry_stop(r);
+    dup2(saved,2); close(saved); fclose(f);
+    if (seen != 24) printf("flush: %d of 24 queued lines on the sink\n", seen);
+    assert(seen == 24);
+    efs_telemetry_flush();   /* unbound: returns at once */
+}
 int main(void)
 {
     setenv("EFS_LOG_TS","0",1);
@@ -127,7 +148,7 @@ int main(void)
     assert(dup2(unsupported,2)==2);
     assert(!efs_telemetry_start(render));
     dup2(saved,2); close(saved); close(unsupported);
-    regular(); blocked(1, 0); blocked(0, 0); blocked(1, 1); blocked(0, 1);
-    puts("telemetry: bounded concurrent producers, overflow recovery, critical fd flags, file offsets and blocked stop PASS");
+    regular(); flushed(); blocked(1, 0); blocked(0, 0); blocked(1, 1); blocked(0, 1);
+    puts("telemetry: bounded concurrent producers, overflow recovery, critical fd flags, file offsets, flush and blocked stop PASS");
     return 0;
 }

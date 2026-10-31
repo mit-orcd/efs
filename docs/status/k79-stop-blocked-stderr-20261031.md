@@ -158,3 +158,15 @@ TMPDIR=$HOME/tmp python3 tests/test_stop_blocked_stderr.py
 EFS_SAN_ONLY="stop_blocked_stderr pump_logging" bash tests/sanitizer_check.sh tsan
 EFS_SAN_ONLY="stop_blocked_stderr pump_logging" bash tests/sanitizer_check.sh asan
 ```
+
+## Wave 47 merge note
+
+The wave 47 gate (intel2, `fa5abd5b2`) failed `tests/test_k33_growth.py`: the
+`membership: committed ... as member 4` line was queued on the reporter and the
+`EFS_FAULT_MEMBER_EXIT` hook ended the process before the reporter wrote it, so a
+fault-hook exit lost the routine lines queued before it. `efs_fault_exit()` now calls
+`efs_telemetry_flush()` first: it waits until the bound reporter has written what was
+queued, at most the 200 ms drain, so a blocked sink never holds the exit longer and a
+"crashed" node answers at most that much longer (`tests/test_telemetry` checks the flush;
+`test_k33_growth` is the regression test). The `test_w155_report_resolve.py` stub this
+branch added duplicated the one Task BL merged in wave 46 and was dropped.

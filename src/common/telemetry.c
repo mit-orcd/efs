@@ -31,7 +31,7 @@ struct efs_telemetry {
     pthread_mutex_t mu;
     pthread_cond_t cv;
     pthread_t tid;
-    int fd, stop, pending, timestamps, socket_sink;
+    int fd, stop, pending, inflight, timestamps, socket_sink;
     uint64_t deadline_ns;
     unsigned head;
     uint64_t overflow, errors;
@@ -135,9 +135,10 @@ static void *report(void *arg)
         memcpy(item.data.bytes, slot->data.bytes, slot->bytes);
         r->head = (r->head+1) % SLOTS;
         r->pending--;
+        r->inflight = 1;
         pthread_mutex_unlock(&r->mu);
         FILE *f = fmemopen(output, sizeof(output), "w");
-        if (!f) { __atomic_add_fetch(&r->errors, 1, __ATOMIC_RELAXED); continue; }
+        if (!f) { __atomic_add_fetch(&r->errors, 1, __ATOMIC_RELAXED); goto done; }
         uint64_t lost = __atomic_load_n(&r->overflow, __ATOMIC_RELAXED) +
                         __atomic_load_n(&binding_overflow, __ATOMIC_RELAXED);
         uint64_t errors = __atomic_load_n(&r->errors, __ATOMIC_RELAXED);
@@ -154,6 +155,10 @@ static void *report(void *arg)
             __atomic_add_fetch(&r->overflow, 1, __ATOMIC_RELAXED);
         else if (emit(r, output, (size_t)n))
             __atomic_add_fetch(&r->errors, 1, __ATOMIC_RELAXED);
+done:
+        pthread_mutex_lock(&r->mu);
+        r->inflight = 0;
+        pthread_mutex_unlock(&r->mu);
     }
     return NULL;
 }
@@ -257,6 +262,25 @@ void efs_telemetry_log(int critical, const char *format, ...)
         pthread_rwlock_unlock(&binding_mu);
     }
     va_end(ap);
+}
+
+/* A fault-hook exit (efs_fault_exit) must not lose the routine lines queued
+ * before it: wait until the bound reporter has written them, at most DRAIN_NS
+ * (a blocked sink never holds the exit longer). No-op without a reporter. */
+void efs_telemetry_flush(void)
+{
+    uint64_t deadline = mono_ns() + DRAIN_NS;
+    pthread_rwlock_rdlock(&binding_mu);
+    struct efs_telemetry *r = bound;
+    while (r) {
+        pthread_mutex_lock(&r->mu);
+        int busy = r->pending || r->inflight;
+        pthread_mutex_unlock(&r->mu);
+        if (!busy || mono_ns() >= deadline) break;
+        struct timespec pause = {0, 1000000};
+        nanosleep(&pause, NULL);
+    }
+    pthread_rwlock_unlock(&binding_mu);
 }
 
 void efs_telemetry_stop(struct efs_telemetry *r)

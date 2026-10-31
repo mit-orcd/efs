@@ -19,5 +19,7 @@ void efs_telemetry_printf(struct efs_telemetry *, const char *, ...)
  * starts, abort paths, tools) retain synchronous stderr. */
 void efs_telemetry_log(int critical, const char *, ...)
     __attribute__((format(printf, 2, 3)));
+/* Wait (at most 200 ms) until the bound reporter has written the queued lines. */
+void efs_telemetry_flush(void);
 void efs_telemetry_stop(struct efs_telemetry *);
 #endif
