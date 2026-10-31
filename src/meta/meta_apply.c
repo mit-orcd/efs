@@ -1,4 +1,5 @@
 #include "efs/meta_apply.h"
+#include "efs/telemetry.h"
 #include "efs/expiry.h"
 #include "efs/metadata.h"
 #include "efs/raft.h"
@@ -3630,7 +3631,6 @@ static int hashed_side_claims(struct efs_kv *kv, efs_ino_t dir, const char *name
 #if EFS_FAULTS
 #include <stdio.h>
 #include <unistd.h>
-#include "efs/telemetry.h"
 /* Pin a real migration between READDIR's inode cut and its source scan.
  * No metadata is changed by this hook; the test issues a normal raft-dir
  * migration on another worker, then releases this bounded pause. */

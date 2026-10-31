@@ -1,4 +1,5 @@
 #include "kv_order.h"
+#include "efs/telemetry.h"
 #include "efs/kv_snap.h"
 #include "efs/kv_key.h"
 #include "efs/kv_lsm.h"
@@ -10,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "efs/telemetry.h"
 
 
 

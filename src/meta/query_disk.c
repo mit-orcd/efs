@@ -1,4 +1,5 @@
 #include "efs/settings.h"
+#include "efs/telemetry.h"
 #include "../common/query_stage_trace.h"
 /* Local, rebuildable query cache. Authoritative metadata remains in Raft/KV.
  * Immutable generation directories retain old query leases. Only changed raw
@@ -1214,7 +1215,6 @@ static int pending_preflight(struct efs_kv_lsm_snapshot *source,const struct efs
 
 /* Private bounded incremental builder; no public/disk ABI change. */
 #include "query_disk_incremental.h"
-#include "efs/telemetry.h"
 int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *source,
     const struct efs_query_disk *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,struct efs_query_build_times *times,
     struct efs_query_build_failure *failure,struct efs_query_disk **out)

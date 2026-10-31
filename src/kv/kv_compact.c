@@ -17,13 +17,13 @@
  * for the case where the thread failed to start. */
 
 #include "kv_lsm_internal.h"
+#include "efs/telemetry.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 #include "efs/fault_exit.h"
-#include "efs/telemetry.h"
 
 /* Fault hooks, compiled only with -DEFS_FAULTS=1. W23 stalled compactor (the
  * stalled-compactor test, tests/measure/w23_stalled_compactor.sh). A

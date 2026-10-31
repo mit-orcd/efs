@@ -1,4 +1,5 @@
 #include "efs/protocol.h"
+#include "efs/telemetry.h"
 #include "efs/wire.h"
 #include "efs/network.h"
 #include "efs/rdma.h"
@@ -14,7 +15,6 @@
 #include <limits.h>
 #include <stddef.h>
 #include <fcntl.h>
-#include "efs/telemetry.h"
 
 static int send_iov_run(int fd, struct iovec *iov, int niov)
 {

@@ -1,4 +1,5 @@
 #include "efs/metadata.h"
+#include "efs/telemetry.h"
 #include "../common/stage_limit.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +9,6 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include "efs/telemetry.h"
 
 static void time_now(uint64_t *t)
 {

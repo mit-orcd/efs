@@ -43,8 +43,8 @@ for n in (1, 2, 3):
     sync = (a.output / ('n%d-sync.log' % n)).read_text()
     assert re.search(r'slow-fsync: .*calls=[1-9][0-9]+ delay_us=10000', sync), n
 # AB/AE: the checked unmount (session revoke through Raft) completes while the
-# sink is still blocked. Daemon exit with a blocked sink is open K79
-# (pump_logging_profile.py --stop-blocked reproduces it).
+# sink is still blocked. Daemon exit with a blocked sink is K79
+# (tests/test_stop_blocked_stderr.py).
 b = argparse.Namespace(work=base/'work-stop', output=base/'out-stop', sink='blocked', obs=1,
                        seconds=10, threads=2, rate=2, slow_fsync_us=0, versioned=True,
                        require_progress=True, unmount_blocked=True)

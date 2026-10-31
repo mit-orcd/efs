@@ -1,4 +1,5 @@
 #include "kv_lsm_internal.h"
+#include "efs/telemetry.h"
 #include "efs/kv_key.h"
 #include "efs/raft.h"
 #include "blake3.h"
@@ -668,7 +669,6 @@ static int manifest_load(struct kv_lsm *l)
 
 /* --- reads ----------------------------------------------------------- */
 #include "kv_candidates.h"
-#include "efs/telemetry.h"
 
 /* EFS_OK with *op, or NOT_FOUND when no level speaks about the key.
  * Caller holds l->mu. A segment miss drops the lock around the pread

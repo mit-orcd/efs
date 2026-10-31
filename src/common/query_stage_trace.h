@@ -1,6 +1,7 @@
 #ifndef EFS_QUERY_STAGE_TRACE_H
 #define EFS_QUERY_STAGE_TRACE_H
 #include <stdint.h>
+#include "efs/telemetry.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +9,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include "efs/telemetry.h"
 /* Opt-in bounded stage records. Numeric counters only: no names or values.
  * Each event belongs to an existing bounded capture/build attempt. */
 static inline int efs_query_stage_enabled(void)

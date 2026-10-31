@@ -1,5 +1,4 @@
-
-#include "efs/telemetry.h"/* Included only by query_disk.c: candidate-only bounded scratch. A positive
+/* Included only by query_disk.c: candidate-only bounded scratch. A positive
  * FULL result is a resource/coverage fallback, never an IO-error fallback. */
 #define INCREMENTAL_FULL 1
 #define DIRTY_MAX 1024
