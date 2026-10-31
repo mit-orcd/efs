@@ -1882,7 +1882,7 @@
     "src/server/put_upload.c": "fe891c55c9faf295ab9be1e6a2e05118c86bf42f551eae136502f70daf180613",
     "src/server/query_export_lease.h": "c1bf2e3bd646f19595ea7519057e1e04fbc4a402aa30445efe43aad198edcac4",
     "src/server/query_refresh.h": "e9508ec752fc826ed93079d1b9a9b12589631fe6eee9e5a81eef922f65ceff16",
-    "src/server/raft_host.c": "4e9a069c7595b024f413f69751507cbe3752ed578893e8f34e9080ec0f46467f",
+    "src/server/raft_host.c": "3ef8d4eecead54c1ec86aeb19c8f62dcb4e2b3c76b393f083953034338f2b7dc",
     "src/server/read_index_pair_remote.h": "1a0b0bb46af5847d2ee4e6acabc474d044c26e4ed1f0cddacd3d6ac863624d62",
     "src/server/reclaim.c": "c87dd5ea1726c0bacd144cdd552845f302cd5caf0a564de52568299445ac8c10",
     "src/server/recovery.c": "ef245bfe358ba9d10dcc9077e60c6bf7400ea9083f556a5c29d5dfbcd899a52a",
@@ -2543,7 +2543,7 @@
     "tests/test_pull_absent_drop.py": "0b0ee3f39fb20a753e095efeca0bf28db4305ccf8370be11d38e64ead8aa95fa",
     "tests/test_pull_deadline.py": "e1e3118294166f8d6dd55b9093c17acb35d055b41b4d9acc6f9560000b01f309",
     "tests/test_pull_group_boundary.py": "c0a8098c2aca130516feeae21f5938750b9991f265a678682f33bf86f8d2406e",
-    "tests/test_pump_logging.py": "65b69b35d222574c0dfa205b1f692bd65ace7d7daac1317705ee845b3f72ea01",
+    "tests/test_pump_logging.py": "4555a3f53f082233ef93ea727df27825c4b35ffc09c6c0d3a6e43cab78199050",
     "tests/test_put_drain.py": "a53d0444533f6a8627afe10b4c1fa92e625d954dae110af220872b4ae3fc8c00",
     "tests/test_put_identity.py": "ce01448b0a34a11fc21a6023d40c30d51c2b4589d171738d3d850583ae9b6fca",
     "tests/test_put_orphan.c": "cfa611963af6209917ae9f9448238c60638d35d03f706838b81f859b2ca0c184",
@@ -2801,5 +2801,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "1ed86979eedbd8d03a6e5fcdaf45ff34e35ce903"
+  "source_commit": "e2c5067d171d55d9336e38b80f75cad7e7c70368"
 }
