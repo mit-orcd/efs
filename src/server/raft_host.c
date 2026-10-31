@@ -24642,7 +24642,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                 int grc = efs_meta_apply_get_inode(h->kv, recs[i].ino, &srow);
 
                 if (grc == EFS_OK) {
-                    fprintf(stderr,
+                    efs_telemetry_log(0,
                             "raft-host: REPORT rec ino=%llu ci=%u has no size record; rejecting batch\n",
                             (unsigned long long)recs[i].ino, recs[i].chunk_index);
                     n_inval++;
@@ -24748,7 +24748,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             /* Whole-batch OK releases all client dirty bodies. A permanent
              * malformed record therefore cannot be silently skipped. */
             if (rc == EFS_ERR_INVAL) {
-                fprintf(stderr, "raft-host: invalid REPORT rec ino=%llu ci=%u flags=%u nodes=%u,%u,%u base=%llu object=%llu delta=%u/%u; retaining batch\n",
+                efs_telemetry_log(0, "raft-host: invalid REPORT rec ino=%llu ci=%u flags=%u nodes=%u,%u,%u base=%llu object=%llu delta=%u/%u; retaining batch\n",
                         (unsigned long long)recs[i].ino, recs[i].chunk_index,
                         recs[i].publish_flags,recs[i].nodes[0],recs[i].nodes[1],recs[i].nodes[2],
                         (unsigned long long)recs[i].base_gen,(unsigned long long)recs[i].chunk_generation,
@@ -24810,7 +24810,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                 fail_phase = clen ? "push" : "pack";
                 fail_rc = rc;
                 if (dirop_fail_on(rc))
-                    fprintf(stderr,
+                    efs_telemetry_log(0,
                             "raft-host: report FAIL ino=%llu ci=%u rc=%d (phase=%s)\n",
                             (unsigned long long)recs[i].ino, recs[i].chunk_index, rc,
                             "pub");
@@ -24874,7 +24874,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         /* G2: name the request, so a failed split joins its receipt. */
         if (count >= 256u || n_inval ||
             (t_pack + t_push + (t_fin1 - t_fin0)) >= 100000ull)
-            fprintf(stderr,
+            efs_telemetry_log(0,
                     "report-split nrec=%u pack_ms=%llu push_ms=%llu finish_ms=%llu skip=%u stale=%u inval=%u rc=%d fail=%s/%d ino=%llu pub=%llx:%llu\n",
                     (unsigned)count,
                     (unsigned long long)(t_pack / 1000ull),
@@ -24897,7 +24897,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             int rrc = host_resolve_caught_up(h, uino[k], usz[k], session, &hint);
 
             if (rrc != EFS_OK) {
-                fprintf(stderr,
+                efs_telemetry_log(0,
                         "raft-host: report resolve ino=%llu rc=%d why=%s (retry)\n",
                         (unsigned long long)uino[k], rrc,
                         host_resolve_why ? host_resolve_why : "-");
@@ -25029,7 +25029,8 @@ void server_raft_host_report_receipted(const struct efs_chunk_rec *recs, uint32_
         g_report_receipt_trace ||
         (rc != EFS_OK && rc != EFS_ERR_STALE && rc != EFS_ERR_NOT_PRIMARY)) {
         efs_receipt_key_format(&k, id, sizeof(id));
-        fprintf(stderr, "report-receipt id=%s ino=%llu nrec=%u how=%s rc=%d "
+        /* Not stderr: a blocked sink must not hold the reply (K81). */
+        efs_telemetry_log(0, "report-receipt id=%s ino=%llu nrec=%u how=%s rc=%d "
                 "outcome=%s attempts=%u joined=%u replayed=%u phase=%s ms=%llu\n",
                 id, (unsigned long long)recs[0].ino, count, host_receipt_how_name(how),
                 rc, efs_receipt_outcome_name(r.outcome), r.attempts, r.joined,
@@ -25075,7 +25076,7 @@ void server_raft_host_report_receipt(const struct efs_opid *session,
         out->state = EFS_RECEIPT_STATE_ABSENT;
     }
     efs_receipt_key_format(&k, id, sizeof(id));
-    fprintf(stderr, "report-receipt query id=%s state=%u outcome=%s rc=%d attempts=%u "
+    efs_telemetry_log(0, "report-receipt query id=%s state=%u outcome=%s rc=%d attempts=%u "
             "age_ms=%llu stuck=%llu:%u\n", id, out->state, efs_receipt_outcome_name(out->outcome),
             out->rc, out->attempts, (unsigned long long)out->age_ms,
             (unsigned long long)out->stale_ino, out->stale_ci);
