@@ -7,7 +7,7 @@ Every lane reached a result line. Only the leak gate PASSed. The rest fail on
 **three product findings** (TSan races, a UBSan null access, an intermittent `pump_logging`
 EIO), one harness weakness (a hang when daemons die) and two host or environment limits.
 Real batch F duration on this host class: **2 h 48 min** serial (10,086 s), of which
-60 min is one test waiting out its 3600 s timeout; **2 h 08 min** without it. The matrix
+60 min is one test waiting out its 3600 s timeout; **1 h 48 min** without it. The matrix
 estimate for the same lanes (F1+F2+F3, without F4) is 85 min.
 
 Source: `909a07d717dc` (devel, wave 45 merged), shipped as `git archive` (no `.git` on
