@@ -300,7 +300,7 @@ outcomes. See the [response review](devel-integration-review-20261022.md#review-
 
 ### Stage 1 tally, end of Oct 22 (adjusted after the integration review)
 
-*Oct 30 note: this tally is historical. Current counts (35 FIXED / 35 VERIFY / 3 CLOSED / 3 DECIDED / 2 OPEN) and the acceptance owed per row are in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md).*
+*Oct 30 note: this tally is historical. Current counts (36 FIXED / 35 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN, after wave 44) and the acceptance owed per row are in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md).*
 
 **Additional alpha blocker W153:** the unset/empty metadata count silently
 selects four nodes and can remove single-loss tolerance on three-node
@@ -2039,7 +2039,7 @@ by this count reconciliation (they are decided in D45 and D46).
 
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
-| Known-defect register K (Stage 1; once per candidate) | OPEN — rows through K78 on devel `8b0d128cc`: 35 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 3 CLOSED / 2 OPEN; open rows K48 (listing-omission attribution, Task BG) and K61 (stray fragment from a delayed PUT, fix, Task BH); K54 and K55 are FIXED (K54's orcd-mini real-host stage is NOTRUN, campaign work); per-row owed acceptance in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md) | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
+| Known-defect register K (Stage 1; once per candidate) | OPEN — rows through K78 after wave 44: 36 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 3 CLOSED / 1 OPEN; open row K48 (listing-omission attribution, Task BG); K61 (stray fragment from a delayed PUT) FIXED by Task BH; K54 and K55 are FIXED (K54's orcd-mini real-host stage is NOTRUN, campaign work); per-row owed acceptance in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md) | Same register/counts; distinct-host gates owed | Same register/counts; acceptance remains OPEN ([Task Y](k-register-reconciled-20261028.md)) |
 | Functional scope S decided (once per candidate) | PARTLY DECIDED — D45 + D46 (user, Oct 28); W122, the K54 fix and the 33-tunable audit are required work; S1 command dispositions and `--writers` remain open | (same) | (same) |
 | Candidate and profile | NOTRUN — reviewed devel `9e4d66a8c`, not a frozen release candidate; K counts above (0 VERIFIED), A1/A2/A5 profile owed | NOTRUN — same counts; A4 decision and frozen profile owed | NOTRUN — K28 cap/layout is implemented (16-node cap); same counts, concrete N/failure domains/profile unqualified; prior “UNSUPPORTED until K28” was historical |
 | Flag audit and A/B removal (A6–A10, A12; once per candidate) | PASS scoped static/startup audit at `9e4d66a8c`, driver `1164b55a4` ([Task Z](stage1-decision-sheet-20261028.md)); A8/A9/A10 and frozen-candidate obligations remain; K register counts above are not an audit verdict (11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN) | Same audit/decision owner; named K live gates remain | Same audit/decision owner; no new A/B selector or user decision approved by Task Y |
