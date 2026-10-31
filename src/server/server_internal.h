@@ -281,6 +281,13 @@ extern __thread int efs_tls_path_used;
  * builds the same name the handler intended. */
 extern __thread uint64_t efs_tls_chunk_gen;
 
+/* K61: retire epoch a PUT took before reading its authority; the fragment
+ * write refuses (STALE) if a superseded delete of that fragment ran since. */
+#define EFS_RETIRE_MARK_NONE UINT64_MAX
+extern __thread uint64_t efs_tls_retire_mark;
+uint64_t server_fragment_retire_mark(efs_export_id_t eid, efs_ino_t ino, uint32_t ci,
+                                     uint32_t fi);
+
 /* Which local --storage root already holds this fragment, or -1. */
 int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
                               efs_ino_t ino, uint32_t chunk_index,

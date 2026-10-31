@@ -11,6 +11,8 @@ static int authority_rc,store_rc,race_fence,stores,authorities,export_refs;
 static uint32_t authority_state=EFS_PUT_TICKET_ADMITTED;
 static int rebuild_mode,mark_rc;static unsigned mark_checks;
 __thread int efs_tls_path_hint,efs_tls_path_used;
+__thread uint64_t efs_tls_retire_mark=EFS_RETIRE_MARK_NONE;
+uint64_t server_fragment_retire_mark(efs_export_id_t e,efs_ino_t i,uint32_t c,uint32_t f){(void)e;(void)i;(void)c;(void)f;return 0;}
 /* K34: 1 = stopping before the PUT, 2 = the stop begins during the store. */
 static int stopping;
 int server_stop_requested(void){return stopping==1;}

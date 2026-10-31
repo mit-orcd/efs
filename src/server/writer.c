@@ -22,6 +22,7 @@ struct writer_job {
     uint32_t fragment_index;
     uint32_t path_index; /* local --storage root chosen for this job */
     uint64_t chunk_generation; /* object name `{ci}.{fi}.{gen}`, nonzero */
+    uint64_t retire_mark; /* K61: the handler's efs_tls_retire_mark */
     const uint8_t *data;
     uint32_t data_len;
     const uint8_t *checksum;
@@ -194,6 +195,7 @@ static int run_job(struct writer_job *job)
     int saved_zero = efs_tls_write_known_zero;
     int saved_root = efs_tls_write_root;
     uint64_t saved_gen = efs_tls_chunk_gen;
+    uint64_t saved_mark = efs_tls_retire_mark;
     if (job->op == WRITER_OP_FRAGMENT_WITH_SUM && job->checksum &&
         job->data_len > 0) {
         uint8_t zero_ck[EFS_HASH_SIZE];
@@ -209,6 +211,7 @@ static int run_job(struct writer_job *job)
                                            job->chunk_index,
                                            job->fragment_index));
     efs_tls_chunk_gen = job->chunk_generation;
+    efs_tls_retire_mark = job->retire_mark;
 
     {
         uint64_t io_t0 = efs_iostats_now_us();
@@ -237,6 +240,7 @@ static int run_job(struct writer_job *job)
     efs_tls_write_known_zero = saved_zero;
     efs_tls_write_root = saved_root;
     efs_tls_chunk_gen = saved_gen;
+    efs_tls_retire_mark = saved_mark;
     return rc;
 }
 /* Read on the writer threads under their slot mutex, written under the
@@ -581,6 +585,7 @@ int server_write_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     job.chunk_index = chunk_index;
     job.fragment_index = fragment_index;
     job.chunk_generation = efs_tls_chunk_gen;
+    job.retire_mark = efs_tls_retire_mark;
     job.data = data;
     job.data_len = data_len;
     job.checksum = checksum;

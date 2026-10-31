@@ -9,7 +9,7 @@ static long writer_test_sysconf(int name)
 #undef sysconf
 #include <stdio.h>
 
-__thread uint64_t efs_tls_chunk_gen;
+__thread uint64_t efs_tls_chunk_gen, efs_tls_retire_mark;
 static int roots[64], calls[2], fail_thread;
 static unsigned delay_us;
 static int gate_hold, record_order;
