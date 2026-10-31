@@ -373,6 +373,21 @@ try:
         f'partial listing {len(names)} != {target_entries + 32}'
     print('[w130] target dir read complete and exact after halt')
 
+    # Listing storm (K48): the directory stays SPLITTING while one leftover
+    # migrates per GC pass (half of them cross-group transactions), so
+    # repeated listings sample many migrations per run. Before the K74 fix a
+    # 20 s storm lost a name in 6 of 6 runs, within about a second.
+    storm_end = time.monotonic() + float(os.environ.get('W130_STORM_SECS', '5'))
+    storm = 0
+    while time.monotonic() < storm_end:
+        names = sorted(e.name for e in target.iterdir())
+        storm += 1
+        if len(names) != len(expected):
+            record_partial(c, target, names, expected)
+            raise AssertionError(f'storm listing {storm}: {len(names)} != {len(expected)}')
+    if storm:
+        print(f'[w130] {storm} storm listings complete and exact', flush=True)
+
     # 4. raft-status shows the halt: node 3's applied count for the group is
     #    frozen while the leaders advance
     a3 = group_applied(c, 3, halt_group)
