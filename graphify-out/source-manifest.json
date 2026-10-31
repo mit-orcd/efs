@@ -416,7 +416,7 @@
     "src/kv/kv_compact.c": 25,
     "src/kv/kv_key.c": 52,
     "src/kv/kv_lsm.c": 102,
-    "src/kv/kv_lsm_internal.h": 23,
+    "src/kv/kv_lsm_internal.h": 22,
     "src/kv/kv_mem.c": 15,
     "src/kv/kv_order.h": 2,
     "src/kv/kv_seg.c": 56,
@@ -1406,7 +1406,7 @@
     "docs/how-it-works/testing.md": "52cab1ce06e7ab3e01814482475c2523e24e56826647bb4f664b6210b2e4f569",
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "7c3cbb76e0a788166455a580d762b28b3792cfbace4bc31f13b833de319d4905",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "298a3117de4dc3f3400d102d6a0cdd4a702327bacab0dea8dbf864f4a204d340",
     "docs/status/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
     "docs/status/alpha-1.1-consolidation.md": "bd0cbe68dab646b3a433afa10500dab2c3d80e0c0f9f1d55cf20f18dd6f523df",
     "docs/status/d39-consolidated-model-20261023.md": "343d1f6023da489ccf29b84f786919ec076c191ea27bf56f5602c0d0fc2b5a6c",
@@ -1837,7 +1837,7 @@
     "src/kv/kv_compact.c": "c21f4cf31d8a52e1a369f5b893eab4044096e3e3f75a94d43995dc85718ea7f7",
     "src/kv/kv_key.c": "0200fefd35204b99673781c999416c2053dced3c241b38ebd7f21790d2320544",
     "src/kv/kv_lsm.c": "bc485a542d9a7d2257b4f21a8b37706581d2b50f5ee2e351b98ae22d9c220a0a",
-    "src/kv/kv_lsm_internal.h": "2808643d8ba1c22c8a9e7a1e1b75c3f1e5bf55936e504e13a32756867514e1e0",
+    "src/kv/kv_lsm_internal.h": "caff24e42f2764bee85f22a0a0c197fb13ebd4f9015d5e4f8ef97a109db1f4f8",
     "src/kv/kv_mem.c": "b7b26593a232fb53c0c6af7371d8c56887a529e0b8250d3f6dd853e622327dd1",
     "src/kv/kv_order.h": "ab4ee8d0fc69e7d03c2bc6eb0e3df3f8b4ea960eb5aeca136325cf0e15621248",
     "src/kv/kv_seg.c": "52be07e955eb43098a395fb82a4173de2fe099d4b8a6a8b509637a8789182d61",
@@ -2811,5 +2811,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "53fd0df3893a7f7ecefd9bbe0c0c1a7f4920bc54"
+  "source_commit": "75bb45f4631ab6913c6a1a2f0ae8251828666c07"
 }
