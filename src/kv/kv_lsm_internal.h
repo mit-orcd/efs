@@ -329,6 +329,7 @@ static inline void lsm_lock(struct kv_lsm *l)
     /* A write inside this thread's own read section can never acquire
      * view_rw; fail loudly rather than hang (no such caller is known). */
     if (lsm_slot_in(lsm_reading, l, 0)) {
+        /* sync: the process aborts next; a queued line would be lost */
         fprintf(stderr, "kv-lsm: writer requested inside a read section\n");
         abort();
     }

@@ -78,7 +78,9 @@ GATE_TARGET_S = 1100        # the W160 gate, measured at EFS_TEST_JOBS=8: 15 min
                             # crossings cannot compress further).
 BUDGET_MARGIN = 1.5         # budgets are 1.25 x the measured 8-job time, rounded up to 5 s with a 5 s floor,
                             # so the gate they add up to may be up to 1.5 x the target
-GATE_BOUND_S = GATE_TARGET_S * BUDGET_MARGIN
+GATE_BOUND_S = 1750         # Oct 31 (wave 45, user decision): raised from GATE_TARGET_S * BUDGET_MARGIN = 1650 after Task BN
+                            # re-measured every row from three 8-job gates each on amd and node9900 (docs/status/budget-remeasure-20261030.md):
+                            # the measured table sums to about 1740 s, 50 s of it from three EXCLUSIVE rows that add in series.
 JOBS = 8
 FAST_DEFAULT_S = 1          # a `make test` command without a budget row (each runs well under a second)
 budgets = {}

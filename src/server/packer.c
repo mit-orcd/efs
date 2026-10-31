@@ -150,6 +150,7 @@ void server_pack_crash_point(const char *point)
     if (fired || !want || strcmp(want, point) || !pk.s) return;
     if (node && (uint32_t)strtoul(node, NULL, 10) != pk.s->id) return;
     fired = 1;
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "packer: injected crash at %s\n", point);
     fflush(stderr);
     efs_fault_exit(137);
@@ -282,7 +283,7 @@ static void pk_fragment_failure(const char *where,const struct efs_pack_candidat
     static uint64_t noted;
     uint64_t n=__atomic_add_fetch(&noted,1,__ATOMIC_RELAXED);
     if(n<=256 || !(n%1024))
-        fprintf(stderr,"packer: fragment-read source=%s ino=%016llx generation=%llx fi=%u node=%u rc=%d want=%u got=%u status=%d verified=%d reply_type=%d failure=%llu\n",
+        efs_telemetry_log(0,"packer: fragment-read source=%s ino=%016llx generation=%llx fi=%u node=%u rc=%d want=%u got=%u status=%d verified=%d reply_type=%d failure=%llu\n",
             where,(unsigned long long)c->ino,(unsigned long long)obj->gen,fi,obj->nodes[fi],
             rc,want,got,status,verified,reply_type,(unsigned long long)n);
 }
@@ -531,6 +532,7 @@ static int pk_stale_fault(uint32_t id)
     if (!d || !*d) return 0;
     snprintf(flag, sizeof(flag), "%s/stale-%u", d, id);
     if (unlink(flag)) return 0;
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "fault: EFS_FAULT_SEGMENT_PUT_STALE: pooled connection to node %u fails once\n", id);
     return 1;
 #else
@@ -574,7 +576,7 @@ static int pk_put_fragment(const struct efs_node *nodes, uint32_t count, uint32_
                  ? ((struct efs_msg_segment_put_reply *)reply)->rc : EFS_ERR_PROTO;
         free(reply);
         if (fresh)
-            fprintf(stderr, "packer: segment fragment for node %u sent on a new connection after "
+            efs_telemetry_log(0, "packer: segment fragment for node %u sent on a new connection after "
                     "the pooled one failed: rc=%d\n", id, rc);
         return rc;
     }
@@ -650,7 +652,7 @@ static int pk_place(const struct efs_node *nodes, uint32_t count, uint8_t group,
             efs_node_id_t bad = dest[i], spare;
             *skip |= 1u << (bad - 1);
             spare = efs_pack_spare(nodes, count, pk.s->id, bad, *skip, dest);
-            fprintf(stderr, "packer: segment g%u id=%016llx fragment %u: node %u failed the placement "
+            efs_telemetry_log(0, "packer: segment g%u id=%016llx fragment %u: node %u failed the placement "
                     "probe; %s %u\n", group, (unsigned long long)id, i, bad,
                     spare ? "placed on spare node" : "no live spare, stays on node",
                     spare ? spare : first);
@@ -727,7 +729,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         size_t geometry;
         int brc = efs_pack_build(id, gen, group, rec, n, image, EFS_SEGMENT_MAX_SIZE, &geometry, refs);
         if (brc != EFS_OK) {
-            fprintf(stderr, "packer: segment g%u of %u files not built (rc=%d)\n", group, n, brc);
+            efs_telemetry_log(0, "packer: segment g%u of %u files not built (rc=%d)\n", group, n, brc);
             goto out;
         }
         uint32_t flen = (uint32_t)geometry / 2;
@@ -796,7 +798,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
                 tries++;
             }
             if (tries)
-                fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx fragment %u for node %u resent "
+                efs_telemetry_log(0, "packer: segment g%u id=%016llx gen=%llx fragment %u for node %u resent "
                         "after rc=%d: rc=%d tries=%u ms=%llu\n", group, (unsigned long long)id,
                         (unsigned long long)gen, i, o->nodes[i], first, puts[i].rc, tries,
                         (unsigned long long)((pk_now_ns() - t_first) / 1000000ull));
@@ -814,7 +816,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         if (!put_ok && efs_pack_destinations_skip(nodes, count, pk.s->id, id, refused, again) == EFS_OK) {
             for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++)
                 if (puts[i].rc != EFS_OK)
-                    fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx fragment %u for node %u not "
+                    efs_telemetry_log(0, "packer: segment g%u id=%016llx gen=%llx fragment %u for node %u not "
                             "acknowledged (rc=%d); %s\n", group, (unsigned long long)id,
                             (unsigned long long)gen, i, o->nodes[i], puts[i].rc,
                             attempt + 1 < PK_PLACE_ATTEMPTS ? "cancelled, placed again on live spares"
@@ -835,7 +837,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
          * durable fragment, or no mark, cancels as before. */
         if (!put_ok && nok == EFS_NUM_FRAGMENTS - 1 &&
             server_segment_mark(group, id, gen, missing, EFS_PACK_DEGRADED_R_WRITE) == EFS_OK) {
-            fprintf(stderr, "packer: segment g%u id=%016llx gen=%llx written degraded: fragment %u "
+            efs_telemetry_log(0, "packer: segment g%u id=%016llx gen=%llx written degraded: fragment %u "
                     "for node %u not acknowledged (rc=%d); marked for rebuild on return\n", group,
                     (unsigned long long)id, (unsigned long long)gen, missing, o->nodes[missing],
                     puts[missing].rc);
@@ -1049,7 +1051,7 @@ static void pk_read_failure(const char *kind, uint8_t group, uint64_t object,
     static uint64_t noted;
     uint64_t n = __atomic_add_fetch(&noted, 1, __ATOMIC_RELAXED);
     if (n <= 256 || !(n % 1024))
-        fprintf(stderr, "packer: %s-read g%u object=%016llx generation=%llx rc=%d failure=%llu\n",
+        efs_telemetry_log(0, "packer: %s-read g%u object=%016llx generation=%llx rc=%d failure=%llu\n",
                 kind, group, (unsigned long long)object, (unsigned long long)generation,
                 rc, (unsigned long long)n);
 }
@@ -1327,7 +1329,7 @@ static int pk_group(uint8_t group, uint64_t term)
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_CANDIDATE};
     if (efs_kv_lsm_scan_yield(kv, prefix, 3, 4096, pk_scan_cb, &sc) < 0) goto out;
     if (sc.bad) {
-        fprintf(stderr, "packer: group=%u candidate value of %u bytes is not this format; packing stopped\n",
+        efs_telemetry_log(0, "packer: group=%u candidate value of %u bytes is not this format; packing stopped\n",
                 group, sc.bad_vl);
         goto out;
     }
@@ -1374,7 +1376,7 @@ static int pk_group(uint8_t group, uint64_t term)
              efs_raft_shard_group(efs_kv_lane_shard(f->c.ino, 0)) != group));
         if (never) {
             if (getenv("EFS_PACK_DBG"))
-                fprintf(stderr, "packer: drop ino=%llu rc=%d mode=%o nlink=%u size=%llu profile=%u ndelta=%u lanes=%llx\n",
+                efs_telemetry_log(0, "packer: drop ino=%llu rc=%d mode=%o nlink=%u size=%llu profile=%u ndelta=%u lanes=%llx\n",
                         (unsigned long long)sc.e[i].ino, rc, f->c.mode, f->c.nlink,
                         (unsigned long long)f->c.size, f->c.base.coding_profile_id, f->c.ndelta,
                         (unsigned long long)f->c.active_lanes);
@@ -1641,7 +1643,7 @@ int server_packer_start(struct efsd_server *s)
     pk.backfill_shards = (uint32_t)env_u64("EFS_PACK_BACKFILL_SHARDS", 64, 1);
     if (pthread_create(&pk.tid, NULL, pk_main, NULL)) return -1;
     pk.started = 1;
-    fprintf(stderr, "packer: started min_age_ms=%llu interval_ms=%llu segments_per_pass=%u "
+    efs_telemetry_log(0, "packer: started min_age_ms=%llu interval_ms=%llu segments_per_pass=%u "
             "files_per_s=%.0f busy_files_per_s=%.0f busy_commits_per_s=%.0f unpacked_gib=%llu space_pct=%.0f-%.0f "
             "compact_idle_s=%llu compact_idle_segs=%u compact_idle_ms=%llu compact_daily=%02u:%02u+%umin compact_cold_s=%llu\n",
             (unsigned long long)(pk.min_age_ns / 1000000ull), (unsigned long long)pk.interval_ms,

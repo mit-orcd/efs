@@ -42,7 +42,7 @@
 set -u
 cmd=$1; REL=$2; D=$3; PORT=${4:-18800}; FREL=${5:-$REL}
 ADDR=127.0.0.1
-export EFS_TRANSPORT=tcp
+export EFS_TRANSPORT=${K14_TRANSPORT:-tcp}   # rdma also needs EFS_RDMA_DEV
 export EFS_FAULT_PUB_BARRIER="$D/fault" EFS_RAFT_OBS=1
 PHASES=" ${K14_PHASES:-1 2 3 4 5 6 7} "
 on() { case "$PHASES" in *" $1 "*) return 0;; esac; return 1; }
@@ -259,6 +259,10 @@ run)
   done
   fi
 
+  if [ "$EFS_TRANSPORT" = rdma ]; then # explicit rdma never falls back: the startup line proves the mode
+    check "rdma: every efsd and client started in rdma mode" \
+      '[ "$(grep -l "transport rdma: rdma on" "$D"/logs/efsd-n*.log "$D"/logs/fuse?.log | wc -l)" = 5 ]'
+  fi
   echo "final"
   sleep 1
   for f in aligned straddle; do

@@ -15,7 +15,13 @@
 #include <unistd.h>
 
 #define OUTPUT_BYTES 65536
-#define SLOTS 4
+/* Routine daemon lines (K79) share the mailbox with the periodic records, so
+ * it holds a burst of them; every drop is still counted. */
+#define SLOTS 32
+#define LINE_BYTES 2048
+/* After stop, pending records get this long on a sink that accepts them; a
+ * sink that stays blocked never holds the stop longer. */
+#define DRAIN_NS 200000000ull
 struct telemetry_item {
     unsigned kind;
     size_t bytes;
@@ -25,7 +31,8 @@ struct efs_telemetry {
     pthread_mutex_t mu;
     pthread_cond_t cv;
     pthread_t tid;
-    int fd, stop, pending, timestamps, socket_sink;
+    int fd, stop, pending, inflight, timestamps, socket_sink;
+    uint64_t deadline_ns;
     unsigned head;
     uint64_t overflow, errors;
     efs_telemetry_render render;
@@ -35,7 +42,7 @@ struct efs_telemetry {
 /* The binding lock protects lifetime only. Producers try it and never wait;
  * stop unbinds before freeing, so a transport destructor cannot use a freed
  * reporter. No sink I/O is done while this lock is held. */
-static pthread_mutex_t binding_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_rwlock_t binding_mu = PTHREAD_RWLOCK_INITIALIZER;
 static struct efs_telemetry *bound;
 static uint64_t binding_overflow;
 
@@ -47,9 +54,22 @@ static int stopping(struct efs_telemetry *r)
     return __atomic_load_n(&r->stop, __ATOMIC_ACQUIRE);
 }
 
+static uint64_t mono_ns(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec;
+}
+
+/* Stopping and past the drain deadline: give up on the sink. */
+static int expired(struct efs_telemetry *r)
+{
+    return stopping(r) && mono_ns() >= __atomic_load_n(&r->deadline_ns, __ATOMIC_ACQUIRE);
+}
+
 static int send_bytes(struct efs_telemetry *r, const char *p, size_t n)
 {
-    while (n && !stopping(r)) {
+    while (n && !expired(r)) {
         ssize_t w = r->socket_sink
             ? send(r->fd, p, n, MSG_DONTWAIT | MSG_NOSIGNAL)
             : write(r->fd, p, n);
@@ -72,11 +92,11 @@ static int emit(struct efs_telemetry *r, const char *p, size_t n)
      * pump, this thread may wait for the sink, but shutdown remains interruptible.
      * trylock is essential: a critical logger can already be blocked in stdio. */
     while (ftrylockfile(stderr)) {
-        if (stopping(r)) return -1;
+        if (expired(r)) return -1;
         struct timespec pause = {0, 1000000};
         nanosleep(&pause, NULL);
     }
-    while (n && !stopping(r)) {
+    while (n && !expired(r)) {
         const char *nl = memchr(p, '\n', n);
         size_t len = nl ? (size_t)(nl-p)+1 : n;
         if (r->timestamps) {
@@ -106,18 +126,19 @@ static void *report(void *arg)
     pthread_sigmask(SIG_BLOCK, &blocked, NULL);
     struct telemetry_item item;
     char output[OUTPUT_BYTES];
-    while (!stopping(r)) {
+    for (;;) {
         pthread_mutex_lock(&r->mu);
         while (!r->pending && !stopping(r)) pthread_cond_wait(&r->cv, &r->mu);
-        if (stopping(r)) { pthread_mutex_unlock(&r->mu); break; }
+        if (!r->pending || expired(r)) { pthread_mutex_unlock(&r->mu); break; }
         struct telemetry_item *slot = &r->queue[r->head];
         item.kind = slot->kind;
         memcpy(item.data.bytes, slot->data.bytes, slot->bytes);
         r->head = (r->head+1) % SLOTS;
         r->pending--;
+        r->inflight = 1;
         pthread_mutex_unlock(&r->mu);
         FILE *f = fmemopen(output, sizeof(output), "w");
-        if (!f) { __atomic_add_fetch(&r->errors, 1, __ATOMIC_RELAXED); continue; }
+        if (!f) { __atomic_add_fetch(&r->errors, 1, __ATOMIC_RELAXED); goto done; }
         uint64_t lost = __atomic_load_n(&r->overflow, __ATOMIC_RELAXED) +
                         __atomic_load_n(&binding_overflow, __ATOMIC_RELAXED);
         uint64_t errors = __atomic_load_n(&r->errors, __ATOMIC_RELAXED);
@@ -134,6 +155,10 @@ static void *report(void *arg)
             __atomic_add_fetch(&r->overflow, 1, __ATOMIC_RELAXED);
         else if (emit(r, output, (size_t)n))
             __atomic_add_fetch(&r->errors, 1, __ATOMIC_RELAXED);
+done:
+        pthread_mutex_lock(&r->mu);
+        r->inflight = 0;
+        pthread_mutex_unlock(&r->mu);
     }
     return NULL;
 }
@@ -156,19 +181,23 @@ struct efs_telemetry *efs_telemetry_start(efs_telemetry_render render)
     if (pthread_mutex_init(&r->mu, NULL)) goto fail_fd;
     if (pthread_cond_init(&r->cv, NULL)) goto fail_mu;
     if (pthread_create(&r->tid, NULL, report, r)) goto fail_cv;
-    pthread_mutex_lock(&binding_mu);
+    pthread_rwlock_wrlock(&binding_mu);
     if (!bound) bound = r;
-    pthread_mutex_unlock(&binding_mu);
+    pthread_rwlock_unlock(&binding_mu);
     return r;
 fail_cv: pthread_cond_destroy(&r->cv);
 fail_mu: pthread_mutex_destroy(&r->mu);
 fail_fd: close(r->fd); free(r); return NULL;
 }
 
-static void enqueue(struct efs_telemetry *r, unsigned kind, const void *data, size_t n)
+/* BLOCK: routine lines from many threads (efs_telemetry_log) wait for the
+ * mailbox lock, which no thread holds across I/O or a wait: only a copy in
+ * or out. The pump's periodic records and printf lines keep the trylock and
+ * never wait. */
+static void enqueue(struct efs_telemetry *r, unsigned kind, const void *data, size_t n, int block)
 {
     if (!r) return;
-    if (n > EFS_TELEMETRY_BYTES || pthread_mutex_trylock(&r->mu)) {
+    if (n > EFS_TELEMETRY_BYTES || (block ? pthread_mutex_lock(&r->mu) : pthread_mutex_trylock(&r->mu))) {
         __atomic_add_fetch(&r->overflow, 1, __ATOMIC_RELAXED);
         return;
     }
@@ -196,13 +225,13 @@ static void enqueue(struct efs_telemetry *r, unsigned kind, const void *data, si
 
 void efs_telemetry_submit(struct efs_telemetry *r, const void *data, size_t n)
 {
-    enqueue(r, 0, data, n);
+    enqueue(r, 0, data, n, 0);
 }
 
 void efs_telemetry_printf(struct efs_telemetry *r, const char *format, ...)
 {
     if (!r) return;
-    char line[512];
+    char line[LINE_BYTES];
     va_list ap;
     va_start(ap, format);
     int n = vsnprintf(line, sizeof(line), format, ap);
@@ -211,7 +240,7 @@ void efs_telemetry_printf(struct efs_telemetry *r, const char *format, ...)
         __atomic_add_fetch(&r->overflow, 1, __ATOMIC_RELAXED);
         return;
     }
-    enqueue(r, 1, line, (size_t)n+1);
+    enqueue(r, 1, line, (size_t)n+1, 0);
 }
 
 void efs_telemetry_log(int critical, const char *format, ...)
@@ -220,30 +249,48 @@ void efs_telemetry_log(int critical, const char *format, ...)
     va_start(ap, format);
     if (critical) {
         vfprintf(stderr, format, ap);
-    } else if (pthread_mutex_trylock(&binding_mu)) {
-        __atomic_add_fetch(&binding_overflow, 1, __ATOMIC_RELAXED);
-    } else if (!bound) {
-        pthread_mutex_unlock(&binding_mu);
+    } else if (pthread_rwlock_rdlock(&binding_mu), !bound) {
+        pthread_rwlock_unlock(&binding_mu);
         vfprintf(stderr, format, ap);
     } else {
-        char line[512];
+        char line[LINE_BYTES];
         int n = vsnprintf(line, sizeof(line), format, ap);
         if (n < 0 || (size_t)n >= sizeof(line))
             __atomic_add_fetch(&bound->overflow, 1, __ATOMIC_RELAXED);
         else
-            enqueue(bound, 1, line, (size_t)n+1);
-        pthread_mutex_unlock(&binding_mu);
+            enqueue(bound, 1, line, (size_t)n+1, 1);
+        pthread_rwlock_unlock(&binding_mu);
     }
     va_end(ap);
+}
+
+/* A fault-hook exit (efs_fault_exit) must not lose the routine lines queued
+ * before it: wait until the bound reporter has written them, at most DRAIN_NS
+ * (a blocked sink never holds the exit longer). No-op without a reporter. */
+void efs_telemetry_flush(void)
+{
+    uint64_t deadline = mono_ns() + DRAIN_NS;
+    pthread_rwlock_rdlock(&binding_mu);
+    struct efs_telemetry *r = bound;
+    while (r) {
+        pthread_mutex_lock(&r->mu);
+        int busy = r->pending || r->inflight;
+        pthread_mutex_unlock(&r->mu);
+        if (!busy || mono_ns() >= deadline) break;
+        struct timespec pause = {0, 1000000};
+        nanosleep(&pause, NULL);
+    }
+    pthread_rwlock_unlock(&binding_mu);
 }
 
 void efs_telemetry_stop(struct efs_telemetry *r)
 {
     if (!r) return;
-    pthread_mutex_lock(&binding_mu);
+    pthread_rwlock_wrlock(&binding_mu);
     if (bound == r) bound = NULL;
-    pthread_mutex_unlock(&binding_mu);
+    pthread_rwlock_unlock(&binding_mu);
     pthread_mutex_lock(&r->mu);
+    __atomic_store_n(&r->deadline_ns, mono_ns() + DRAIN_NS, __ATOMIC_RELEASE);
     __atomic_store_n(&r->stop, 1, __ATOMIC_RELEASE);
     pthread_cond_signal(&r->cv);
     pthread_mutex_unlock(&r->mu);

@@ -45,6 +45,7 @@ work = Path(tempfile.mkdtemp(prefix='efs-w130-', dir=os.environ.get('TMPDIR')))
 env = dict(os.environ)
 env['EFS_TRANSPORT'] = 'tcp'
 env['EFS_DIR_SPREAD_MIN'] = SPREAD_MIN
+env['EFS_TRACE_READDIR'] = '1'  # one bounded log line per READDIR page (K48 attribution)
 
 
 def mgmt(*args):
@@ -117,6 +118,65 @@ def group_applied(c, i, g):
     m = re.search(rf'\s+group {g} .*?applied=(\d+)', out)
     return int(m.group(1)) if m else -1
 
+
+
+def fnv_lane(name):
+    h = 2166136261
+    for b in name.encode():
+        h = ((h ^ b) * 16777619) & 0xFFFFFFFF
+    return h % 64
+
+
+def lane_shard(ino, lane):
+    h = (ino * 2654435761) & 0xFFFFFFFF
+    return ((ino & 0xFFF) + lane * (2 * (h & 0x7FF) + 1)) & 0xFFF
+
+
+def record_partial(c, target, names, expected):
+    """K48: a partial listing leaves the missing names, their shards/inodes,
+    every voter's own paged view and the page traces in the kept work dir."""
+    parent = target.stat().st_ino
+    have = set(names)
+    missing = [n for n in expected if n not in have]
+    out = [f'parent={parent} listed={len(names)} expected={len(expected)} missing={missing}',
+           f'parent shard={parent & 0xFFF} group={0 if (parent & 0xFFF) & 1 else 2}']
+    for n in missing:
+        lane = fnv_lane(n)
+        sh = lane_shard(parent, lane)
+        try:
+            ino = (target / n).stat().st_ino
+        except OSError as e:
+            ino = f'stat failed: {e}'
+        out.append(f'missing {n}: lane={lane} lane_shard={sh} group={0 if sh & 1 else 2} '
+                   f'source_shard={parent & 0xFFF} ino={ino}')
+    out.append(f'relist now: {len(os.listdir(target))}')
+    time.sleep(1)
+    out.append(f'relist +1s: {len(os.listdir(target))}')
+    for i in (1, 2, 3):
+        cookie, seen, pages = None, [], 0
+        while pages < 64:
+            pages += 1
+            args = ['raft-readdir', c.ep(i), str(parent)] + (cookie or [])
+            rc, text = mgmt(*args)
+            m = re.search(r'status=(\d+) count=(\d+) src=(\d+) done=(\d+) cookie=(\S*) names=(\S*)', text)
+            out.append(f'voter {i} page {pages} rc={rc} {text.strip()[:60]}...' if not m else
+                       f'voter {i} page {pages} rc={rc} status={m[1]} count={m[2]} next={m[3]}/{m[5]} done={m[4]}')
+            if not m or m[1] != '0':
+                break
+            seen += [x for x in m[6].split(',') if x]
+            if m[4] == '1':
+                break
+            cookie = [m[3], m[5]]
+        out.append(f'voter {i} saw {len(set(seen))} names; missing there: '
+                   f'{[n for n in expected if n not in set(seen)]}')
+    logs = [c.dir / f'{n}.log' for n in ('n1', 'n2', 'n3')] + [c.dir / 'mnt-a.log']
+    for lp in logs:
+        for line in lp.read_text(errors='replace').splitlines():
+            if 'readdir-trace' in line and f'parent={parent} ' in line:
+                out.append(f'{lp.name}: {line}')
+    (c.dir / 'k48-partial.txt').write_text('\n'.join(out) + '\n')
+    print('[w130] K48 partial listing record:', c.dir / 'k48-partial.txt', flush=True)
+    print('\n'.join(out[:6]), flush=True)
 
 
 def serve_fault():
@@ -306,9 +366,27 @@ try:
 
     # 3. Healthy-quorum reads must succeed completely, with no application retry.
     names = sorted(e.name for e in target.iterdir())
+    expected = [f'f{k:04d}' for k in range(target_entries + 32)]
+    if len(names) != len(expected):
+        record_partial(c, target, names, expected)
     assert len(names) == target_entries + 32, \
         f'partial listing {len(names)} != {target_entries + 32}'
     print('[w130] target dir read complete and exact after halt')
+
+    # Listing storm (K48): the directory stays SPLITTING while one leftover
+    # migrates per GC pass (half of them cross-group transactions), so
+    # repeated listings sample many migrations per run. Before the K74 fix a
+    # 20 s storm lost a name in 6 of 6 runs, within about a second.
+    storm_end = time.monotonic() + float(os.environ.get('W130_STORM_SECS', '5'))
+    storm = 0
+    while time.monotonic() < storm_end:
+        names = sorted(e.name for e in target.iterdir())
+        storm += 1
+        if len(names) != len(expected):
+            record_partial(c, target, names, expected)
+            raise AssertionError(f'storm listing {storm}: {len(names)} != {len(expected)}')
+    if storm:
+        print(f'[w130] {storm} storm listings complete and exact', flush=True)
 
     # 4. raft-status shows the halt: node 3's applied count for the group is
     #    frozen while the leaders advance
@@ -347,6 +425,7 @@ try:
     # post-recovery: the directory is complete and correct everywhere
     names = sorted(e.name for e in target.iterdir())
     if len(names) != target_entries + 32:
+        record_partial(c, target, names, [f'f{k:04d}' for k in range(target_entries + 32)])
         missing = [f'f{k:04d}' for k in range(target_entries + 32)
                    if f'f{k:04d}' not in set(names)]
         raise AssertionError(f'listing {len(names)} != {target_entries + 32}; missing {missing[:8]}')

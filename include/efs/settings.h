@@ -8,7 +8,7 @@
 #define EFS_SETTINGS_CLIENT 2u
 /* Counts of the kinds the listing does not carry (A6 inventory; a test
  * keeps them equal to the inventory). */
-#define EFS_SETTINGS_OBSERVABILITY 34
+#define EFS_SETTINGS_OBSERVABILITY 35
 #define EFS_SETTINGS_FAULT_HOOKS 62
 
 /* Start the table for this process: rows for `role` take the environment

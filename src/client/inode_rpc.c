@@ -1590,21 +1590,29 @@ retry:
     rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
     unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
     if (rc != 0) {
+        efs_readdir_trace("client", nid, parent, req.max_ents, req.after_src,
+                          req.after_name, EFS_ERR_NET, NULL);
         free(payload);
         efs_client_conn_drop(nid, conn);
         return EFS_ERR_NET;
     }
     efs_client_conn_release(nid, conn);
     if (efs_client_rpc_past_deadline()) {
+        efs_readdir_trace("client", nid, parent, req.max_ents, req.after_src,
+                          req.after_name, EFS_ERR_BUSY, NULL);
         free(payload);
         return EFS_ERR_BUSY;
     }
     rpc_prof_add(EFS_MSG_INODE_READDIR, t1 - t0, t2 - t1, t3 - t2, 0);
     if (rtype != EFS_MSG_INODE_READDIR_REPLY ||
         efs_readdir_reply_for_req_ok(&req, payload, plen) != EFS_OK) {
+        efs_readdir_trace("client", nid, parent, req.max_ents, req.after_src,
+                          req.after_name, EFS_ERR_PROTO, NULL);
         free(payload);
         return EFS_ERR_PROTO;
     }
+    efs_readdir_trace("client", nid, parent, req.max_ents, req.after_src,
+                      req.after_name, 0, payload);
     {
         struct efs_msg_inode_readdir_reply *r = payload;
         uint32_t n;

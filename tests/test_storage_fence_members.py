@@ -10,6 +10,11 @@ code=r'''
 #include "efs/session.h"
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 struct efs_raft_host {struct efsd_server *s;};
 static int calls,local_calls,bad_uuid,bad_floor,change_members,mode;
 static unsigned fail_mask;

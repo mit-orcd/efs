@@ -1,4 +1,5 @@
 #include "kv_order.h"
+#include "efs/telemetry.h"
 #include "efs/kv_snap.h"
 #include "efs/kv_key.h"
 #include "efs/kv_lsm.h"
@@ -30,7 +31,7 @@ static int import_reader_barrier(struct efs_kv *kv,
         if ((kind >= EFS_KV_KIND_RESERVED_MIN && kind <= EFS_KV_KIND_RESERVED_MAX) ||
             (kind == EFS_KV_KIND_CHUNK && it->vlen >= 12 &&
              !it->val[8] && !it->val[9] && !it->val[10] && it->val[11] == 2)) {
-            fprintf(stderr, "kv-snap: import holds reserved rows; refusing\n");
+            efs_telemetry_log(0, "kv-snap: import holds reserved rows; refusing\n");
             return EFS_ERR_PROTO;
         }
         if (kind == EFS_KV_KIND_PACK_SEGMENT ||

@@ -49,7 +49,7 @@ Port reports used: [AO](ao-product-port-20261030.md), [AN](an-product-port-20261
 [H K38/K40](h-k38-publication-20261029.md), [H K22](h-k22-allocator-20261029.md), [H K33](h-k33-routing-20261029.md),
 [H K42](h-k42-session-20261029.md), [H K45/K51](h-k45-shutdown-20261029.md), [H recovery](h-recovery-20261029.md),
 [Task H baseline](task-h-devel-baseline-20261029.md); the Task H F/R inventory is
-`docs/status/task-h-wave33-reconciliation-20261029.md` on `agent/task-h-repair` (not on devel).
+[`task-h-wave33-reconciliation-20261029.md`](task-h-wave33-reconciliation-20261029.md) (migrated onto devel by Task BO, see [the migration page](task-h-evidence-migration-20261030.md)).
 
 Limits of the method:
 
@@ -137,7 +137,7 @@ Head `cd822e2f7`, 258 ahead (256 non-merge), base `330c48aea`. The Task H source
 ### Why this branch stays
 
 1. F25 is held on purpose (next section). Its origin commits `6412320f6`, `becc5729c` exist in the repository only here and in devel's reverted history.
-2. **Five evidence pages exist on no other branch and not on devel:** `task-h-wave33-reconciliation-20261029.md` (the F01–F35 / R01–R11 inventory every H port report cites as its source, "on that branch"), `task-h-publication-repair-20261026.md`, `task-h-k38-b6-repair-20261028.md`, `task-h-devel-b2-integration-20261028.md`, `task-a-finding-b-rerun-20261026.md`. Devel's port reports and the baseline link to them. Per `AGENTS.md`, evidence must be migrated before its source is removed.
+2. **Five evidence pages existed on no other branch and not on devel (migrated onto devel by Task BO on Oct 30, see [the migration page](task-h-evidence-migration-20261030.md)):** `task-h-wave33-reconciliation-20261029.md` (the F01–F35 / R01–R11 inventory every H port report cites as its source, "on that branch"), `task-h-publication-repair-20261026.md`, `task-h-k38-b6-repair-20261028.md`, `task-h-devel-b2-integration-20261028.md`, `task-a-finding-b-rerun-20261026.md`. Devel's port reports and the baseline link to them. Per `AGENTS.md`, evidence must be migrated before its source is removed.
 3. 20 forensic/verifier scripts (`scripts/k22_verify_retained.py`, `k33_verify_clone.py`, `k36_verify_retained.py`, `k42_verify_retained.py`, `qualify_publication_repair.py`, …), `tests/live/k22_*`, `tests/test_bootstrap_cohort.py`, `tests/test_storage_fence_authority.py`, `tests/test_verify_window.py`, `tools/fuse_error_trace.c` exist nowhere else. They were skipped on purpose; they are what the pages' reproduction text refers to.
 
 **To make it DELETE:** a docs-only session that copies those five pages (as summaries per `AGENTS.md`, no raw captures) onto devel and decides whether the forensic scripts are worth keeping, plus the F25 decision. Then:

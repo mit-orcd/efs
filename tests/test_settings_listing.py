@@ -66,7 +66,7 @@ try:
     rc, out = mgmt(env, 'settings', c.ep(1))
     assert rc == 0, out
     header, rows = listing(out)
-    assert 'observability (34)' in header and 'fault/test hooks (62)' in header, header
+    assert 'observability (35)' in header and 'fault/test hooks (62)' in header, header
     want = {'EFS_PACK_MIN_AGE_MS': ('12345', '60000', 'environment', 'numeric tunable'),
             'EFS_RAFT_APPLIED_INTERVAL_MS': ('50', '100', 'environment', 'numeric tunable'),
             '--writers': ('2', '8', 'command line', 'numeric tunable')}

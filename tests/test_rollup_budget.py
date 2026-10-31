@@ -14,6 +14,10 @@ args = parser.parse_args()
 source = r'''
 #include <assert.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include "metadata.c"
 void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 #define SLOT_BYTES (sizeof(efs_ino_t) + sizeof(int64_t) + sizeof(uint8_t))

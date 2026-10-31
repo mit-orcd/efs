@@ -20,6 +20,7 @@
 #include <pthread.h>
 #include <sys/uio.h>
 #include <sys/vfs.h>
+#include "efs/telemetry.h"
 
 /* writev until every iovec is consumed. O_DIRECT needs each remaining
  * iovec base/len aligned; a short write that is not a 4 KiB multiple
@@ -310,7 +311,7 @@ void server_usage_save(struct efsd_server *s)
              (unsigned long)pthread_self());
     FILE *f = fopen(tmp, "wb");
     if (!f) {
-        fprintf(stderr, "Could not save usage to %s: %s\n", tmp, strerror(errno));
+        efs_telemetry_log(0, "Could not save usage to %s: %s\n", tmp, strerror(errno));
         pthread_mutex_unlock(&usage_io_mu);
         free(path);
         free(tmp);
@@ -321,7 +322,7 @@ void server_usage_save(struct efsd_server *s)
     if (fwrite(EFS_USAGE_MAGIC, 4, 1, f) != 1 ||
         fwrite(&version, sizeof(version), 1, f) != 1 ||
         fwrite(&used, sizeof(used), 1, f) != 1) {
-        fprintf(stderr, "Could not write usage to %s: %s\n", tmp, strerror(errno));
+        efs_telemetry_log(0, "Could not write usage to %s: %s\n", tmp, strerror(errno));
         fclose(f);
         unlink(tmp);
         pthread_mutex_unlock(&usage_io_mu);
@@ -336,7 +337,7 @@ void server_usage_save(struct efsd_server *s)
         /* Parent may have been wiped mid-flight; recreate and retry once. */
         make_dir_for_file(path);
         if (rename(tmp, path) != 0) {
-            fprintf(stderr, "Could not rename usage file to %s: %s\n",
+            efs_telemetry_log(0, "Could not rename usage file to %s: %s\n",
                     path, strerror(errno));
             unlink(tmp);
             server_usage_mark_dirty(s);
@@ -492,7 +493,7 @@ int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
     uint32_t root = write_root_index(s);
 
     if (root == UINT32_MAX) {
-        fprintf(stderr, "store: fragment write without a picked storage root refused\n");
+        efs_telemetry_log(0, "store: fragment write without a picked storage root refused\n");
         return EFS_ERR_INVAL;
     }
     fragment_path_at(s, root, ex, ino, chunk_index, fragment_index, path,
@@ -771,7 +772,7 @@ static void fragment_refused(const char *op, const char *path, int rc,
     uint64_t n = __atomic_add_fetch(&fragment_refusals, 1, __ATOMIC_RELAXED);
     if (n > 256 && n % 1024)
         return;
-    fprintf(stderr, "store: I25 %s refused fragment %s: %s%s%s "
+    efs_telemetry_log(0, "store: I25 %s refused fragment %s: %s%s%s "
             "(expected export=%u ino=%llu ci=%u fi=%u gen=%llu len=%u; refusals=%llu)\n",
             op, path, efs_strerror(rc), field ? " field=" : "", field ? field : "",
             id->space, (unsigned long long)id->object, id->chunk_index,
@@ -1744,7 +1745,7 @@ static void put_sync_barrier_locked(struct put_sync_root *r)
          * unsynced and stop acknowledging asynchronously. */
         r->failures++;
         if (!r->error)
-            fprintf(stderr, "store: put sync root=%s barrier failed seq=%llu; "
+            efs_telemetry_log(0, "store: put sync root=%s barrier failed seq=%llu; "
                     "COMMIT and fsync return EIO until restart\n",
                     r->root, (unsigned long long)target);
         r->error = 1;
@@ -1857,6 +1858,7 @@ static void put_sync_attach(struct put_sync_root *r, const char *root,
         r->prev_record_ok = n==(ssize_t)sizeof(r->prev_record);
     }
     if (existed && put_sync_record_read(r->record_fd,&previous)!=EFS_OK) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "store: invalid durability record root=%s; refusing startup\n", root);
         close(r->record_fd); close(r->fd); r->fd = -1; return;
     }
@@ -1882,6 +1884,7 @@ static void put_sync_attach(struct put_sync_root *r, const char *root,
         }
     }
     if (!r->prev_clean)
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "store: root=%s recovery uncertain (unclean stop after boot=%u "
                 "durable seq=%llu); COMMIT returns EIO until verified recovery\n",
                 root, previous.boot, (unsigned long long)previous.seq);
@@ -1892,6 +1895,7 @@ static void put_sync_attach(struct put_sync_root *r, const char *root,
         r->fd = -1;
         return;
     }
+    /* sync: startup, before the reporter exists */
     fprintf(stderr, "store: put sync root=%s async boot=%u window_ms=%llu window_bytes=%llu fs=%s\n",
             root, r->boot, (unsigned long long)put_sync_window_ms,
             (unsigned long long)put_sync_window_bytes,
@@ -1912,6 +1916,7 @@ static struct put_sync_root *put_sync_root_for(struct efsd_server *s, const char
         put_sync_attach(&put_sync_roots[idx], root, s->put_boot_epoch, s->storage_path_count);
         put_sync_state[idx] = put_sync_roots[idx].fd >= 0 ? 1 : -1;
         if (put_sync_state[idx] < 0)
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "store: put sync root=%s cannot attach (epoch record "
                     "unavailable)\n", root);
     }
@@ -2079,6 +2084,7 @@ void server_put_sync_abandon(void)
             do { rc = fsync(r->fd); } while (rc < 0 && errno == EINTR);
             ok = ok && !rc;
         }
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "store: put sync root=%s startup abandoned before serving; "
                 "previous durability record %s\n", r->root,
                 ok ? (r->prev_existed ? "restored" : "removed") : "NOT restored");
@@ -2110,7 +2116,7 @@ int server_put_sync_stop(struct efsd_server *s)
         int clean = ok && !r->error &&
                     syncfs(r->fd) == 0 &&
                     put_sync_record_write(r, r->durable_seq, 1) == EFS_OK;
-        fprintf(stderr, "store: put sync root=%s stopped %s durable_seq=%llu\n", r->root,
+        efs_telemetry_log(0, "store: put sync root=%s stopped %s durable_seq=%llu\n", r->root,
                 clean ? "clean" : r->recovery_uncertain && !r->error
                     ? "UNCLEAN (recovery not verified)" : "UNCLEAN (barrier failed)",
                 (unsigned long long)r->durable_seq);
@@ -2220,7 +2226,7 @@ int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes
         pthread_mutex_unlock(&s->lock);
         server_usage_mark_dirty(s);
     }
-    fprintf(stderr, "store: recovery dropped %s (%llu bytes)\n", path,
+    efs_telemetry_log(0, "store: recovery dropped %s (%llu bytes)\n", path,
             (unsigned long long)bytes);
     return fragment_parent_sync(s, path);
 }
@@ -2605,7 +2611,7 @@ static void *shard_io_thread(void *arg)
                        4096 - EFS_FRAG_RECORD_BYTES);
                 static int once_zc;
                 if (!once_zc && __sync_bool_compare_and_swap(&once_zc, 0, 1))
-                    fprintf(stderr, "store: put O_DIRECT zero-copy "
+                    efs_telemetry_log(0, "store: put O_DIRECT zero-copy "
                             "(payload+record writev) len=%u\n", a->len);
                 struct iovec iov[2] = {
                     { .iov_base = a->buf, .iov_len = a->len },
@@ -2645,7 +2651,7 @@ static void *shard_io_thread(void *arg)
             static int once_bounce;
             if (a->rec && !__atomic_load_n(&once_bounce, __ATOMIC_RELAXED) &&
                 __sync_bool_compare_and_swap(&once_bounce, 0, 1))
-                fprintf(stderr, "store: put O_DIRECT bounce copy "
+                efs_telemetry_log(0, "store: put O_DIRECT bounce copy "
                         "(buf align=%u len=%u)\n",
                         (unsigned)((uintptr_t)a->buf & 4095u), a->len);
             memcpy(buffers->bounce, a->buf, src);
@@ -3073,6 +3079,7 @@ void server_sync_local_membership(struct efsd_server *s)
     if (!local) {
         if (s->node_count >= EFS_MAX_NODES) {
             pthread_mutex_unlock(&s->lock);
+            /* sync: startup, before the reporter exists */
             fprintf(stderr, "Cannot insert local node %u: membership full\n",
                     s->id);
             return;
@@ -3392,7 +3399,7 @@ void server_save_nodes(struct efsd_server *s)
 
         FILE *f = fopen(path, "wb");
         if (!f) {
-            fprintf(stderr, "Could not save cluster nodes to %s: %s\n",
+            efs_telemetry_log(0, "Could not save cluster nodes to %s: %s\n",
                     path, strerror(errno));
             continue;
         }
@@ -3507,6 +3514,7 @@ int server_rejoin_cluster(struct efsd_server *s)
         }
         printf("Failed to rejoin via %s:%u\n", nodes[i].addr, nodes[i].port);
     }
+    /* sync: startup, before the reporter exists */
     fprintf(stderr, "Could not rejoin any of the %u persisted peer(s)\n", node_count - 1);
     return -1;
 }

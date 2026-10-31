@@ -128,6 +128,10 @@ k36_recovery|tests/test_k36_recovery.py
 k36_segment_recovery|tests/test_k36_segment_recovery.py
 k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
+# AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.
+pump_logging|tests/test_pump_logging.py
+# K79: SIGTERM with stderr a full pipe exits rc 0 within the stop bound.
+stop_blocked_stderr|tests/test_stop_blocked_stderr.py
 LEOF
 }
 
@@ -191,6 +195,10 @@ k36_recovery|tests/test_k36_recovery.py
 k36_segment_recovery|tests/test_k36_segment_recovery.py
 k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
+# AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.
+pump_logging|tests/test_pump_logging.py
+# K79: SIGTERM with stderr a full pipe exits rc 0 within the stop bound.
+stop_blocked_stderr|tests/test_stop_blocked_stderr.py
 LEOF
 }
 
@@ -289,7 +297,9 @@ while IFS='|' read -r name cmd; do
         envs+=("TSAN_OPTIONS=log_path=$LOGDIR/$name.tsan halt_on_error=0 die_after_fork=0 detect_deadlocks=0 exitcode=66 ${TSAN_OPTIONS:-}"
                "EFS_TEST_TSAN=1") ;;
     asan)
-        envs+=("ASAN_OPTIONS=log_path=$LOGDIR/$name.asan $LSAN detect_stack_use_after_return=1 exitcode=66 ${ASAN_OPTIONS:-}"
+        # verify_asan_link_order=0: the W159 slow-fsync LD_PRELOAD interposer
+        # loads before libasan in the daemons that test_pump_logging starts.
+        envs+=("ASAN_OPTIONS=log_path=$LOGDIR/$name.asan $LSAN detect_stack_use_after_return=1 verify_asan_link_order=0 exitcode=66 ${ASAN_OPTIONS:-}"
                "UBSAN_OPTIONS=log_path=$LOGDIR/$name.ubsan print_stacktrace=1 halt_on_error=1 exitcode=67 ${UBSAN_OPTIONS:-}"
                "EFS_TEST_SANITIZE=1" "EFS_SANITIZE=1") ;;
     esac

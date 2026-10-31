@@ -70,7 +70,7 @@
   },
   "once": {
    "tcp": "loopback-3 (live harnesses: private single-host TCP clusters) and make test-all on the candidate",
-   "rdma": "not driven: no RDMA live harness"
+   "rdma": "loopback-3 with transport rdma and rdma_dev: append-failover, k14-torn-read, gc-reclamation, ao-readdir (private single-host clusters, TCP carries RDMA setup); k13, fragment-integrity, d5-expiry stay TCP"
   }
  },
  "fixture": {
@@ -135,6 +135,7 @@
     "k13-tickets",
     "fragment-integrity",
     "gc-reclamation",
+    "ao-readdir",
     "d5-expiry",
     "e1-manifest",
     "e2-client-stop",
@@ -850,6 +851,7 @@
     "k13-tickets",
     "fragment-integrity",
     "gc-reclamation",
+    "ao-readdir",
     "d5-expiry",
     "e1-manifest",
     "e2-client-stop",
@@ -1312,7 +1314,7 @@
    "prerequisites": [
     "an EFS_FAULTS build for K14 phases beyond 1 2 3 7 and lost-reply mode"
    ],
-   "note": "RDMA not driven: the live harnesses run on TCP loopback"
+   "note": "append-failover, k14-torn-read, gc-reclamation and ao-readdir run over RDMA when the cluster sets transport rdma and rdma_dev; k13, fragment-integrity and d5-expiry run on TCP loopback"
   },
   "C5": {
    "checks": [

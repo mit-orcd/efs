@@ -16,6 +16,10 @@ code=r'''
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <string.h>
 #define HOST_QUERY_REPLY_BYTES (64ULL<<20)
 #define HOST_QUERY_AUTH_N 8192

@@ -1,4 +1,5 @@
 #include "efs/settings.h"
+#include "efs/telemetry.h"
 #include "../common/query_stage_trace.h"
 /* Local, rebuildable query cache. Authoritative metadata remains in Raft/KV.
  * Immutable generation directories retain old query leases. Only changed raw
@@ -130,18 +131,21 @@ static void configure_reserve(void)
     const char *text=getenv("EFS_QUERY_DISK_RESERVE_MIB");
     char *end=NULL;errno=0;unsigned long long mib=text?strtoull(text,&end,10):64;
     if(text && (errno || !end || *end || mib<1 || mib>1048576))
+        /* sync: startup, before the reporter exists */
         fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_RESERVE_MIB; using 64\n");
     else reserve_bytes=(uint64_t)mib<<20;
     efs_setting_u64("EFS_QUERY_DISK_RESERVE_MIB",reserve_bytes>>20);
     text=getenv("EFS_QUERY_DISK_MAX_MIB");
     errno=0;end=NULL;mib=text?strtoull(text,&end,10):16384;
     if(text && (errno || !end || *end || mib<1 || mib>16777216))
+        /* sync: startup, before the reporter exists */
         fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_MAX_MIB; using 16384\n");
     else generation_limit=(uint64_t)mib<<20;
     efs_setting_u64("EFS_QUERY_DISK_MAX_MIB",generation_limit>>20);
     text=getenv("EFS_QUERY_DISK_TOTAL_MIB");
     errno=0;end=NULL;mib=text?strtoull(text,&end,10):32768;
     if(text && (errno || !end || *end || mib<1 || mib>16777216))
+        /* sync: startup, before the reporter exists */
         fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_TOTAL_MIB; using 32768\n");
     else aggregate_limit=(uint64_t)mib<<20;
     efs_setting_u64("EFS_QUERY_DISK_TOTAL_MIB",aggregate_limit>>20);
@@ -408,7 +412,7 @@ int efs_query_catalog_disk_recover(const char *root,int *lease)
         int read_rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);
         if(fd>=0)close(fd);
         if(!read_rc && header[0]==UINT64_C(0x454653514449534b) && header[1]!=QUERY_DISK_FORMAT){
-            fprintf(stderr,"query-cache: %s/%s has format version %llu; this build reads only version %u. "
+            efs_telemetry_log(0,"query-cache: %s/%s has format version %llu; this build reads only version %u. "
                     "Refusing; remove %s to rebuild the cache\n",root,current,(unsigned long long)header[1],
                     QUERY_DISK_FORMAT,root);
             close(lock);close(dirfd);return EFS_ERR_PROTO;
@@ -908,7 +912,7 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
             }
         }
     }
-    if(rc)fprintf(stderr,"query-disk: nodes shard=%u previous=%llu rc=%d\n",shard,(unsigned long long)previous,rc);
+    if(rc)efs_telemetry_log(0,"query-disk: nodes shard=%u previous=%llu rc=%d\n",shard,(unsigned long long)previous,rc);
     else d->deps_known[shard]=d->deps!=NULL;
     close(fd);return rc;
 }
@@ -991,7 +995,7 @@ static int folds_build(struct efs_query_disk *d)
             rc=read_record(d,shard,d->part[shard].begin[1]+i,&slot,key,val);
             if(!rc)rc=entry_from(key,slot.key_len,val,slot.value_len,&e);
             if(!rc)rc=fold_edge(d,shard,&e,&parent);
-            if(rc)fprintf(stderr,"query-disk: edge shard=%u parent=%llu child=%llu rc=%d\n",shard,
+            if(rc)efs_telemetry_log(0,"query-disk: edge shard=%u parent=%llu child=%llu rc=%d\n",shard,
                 (unsigned long long)e.parent,(unsigned long long)e.dentry.ino,rc);
         }
         if(!rc)rc=fold_flush(d,&parent);
@@ -1006,7 +1010,7 @@ static int folds_build(struct efs_query_disk *d)
         if(!S_ISDIR(n.row.mode))continue;
         if(n.row.nlink && n.row.ino!=EFS_ROOT_INO && !n.link.parent){
             if(d->failure)d->failure->directory=n.row.ino;
-            fprintf(stderr,"query-disk: unlinked directory ino=%llu parent=%llu nlink=%u\n",
+            efs_telemetry_log(0,"query-disk: unlinked directory ino=%llu parent=%llu nlink=%u\n",
                 (unsigned long long)n.row.ino,(unsigned long long)n.row.parent,n.row.nlink);
             rc=EFS_ERR_IO;break;
         }
@@ -1182,7 +1186,7 @@ static int orphan_preflight(struct efs_kv_lsm_snapshot *source,
     rc=efs_kv_lsm_snapshot_scan(source,NULL,0,NULL,0,backlink_probe_row,&probe);
     if(probe.found){failure->directory=0;return EFS_OK;}
     if(rc)return rc;
-    fprintf(stderr,"query-disk: unlinked directory preflight ino=%llu parent=%llu nlink=%u\n",
+    efs_telemetry_log(0,"query-disk: unlinked directory preflight ino=%llu parent=%llu nlink=%u\n",
         (unsigned long long)row.ino,(unsigned long long)row.parent,row.nlink);
     return EFS_ERR_IO;
 }
@@ -1273,7 +1277,7 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
             }
         } else {
             d->rebuilt++;rc=raw_build(d,source,shard,&sync);
-            if(rc)fprintf(stderr,"query-disk: raw shard=%u rc=%d errno=%d\n",shard,rc,errno);
+            if(rc)efs_telemetry_log(0,"query-disk: raw shard=%u rc=%d errno=%d\n",shard,rc,errno);
             if(!rc) {
                 int same_names=0;
                 if(old)rc=dentry_family_same(d,(struct efs_query_disk *)old,shard,&same_names);
@@ -1294,7 +1298,7 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
                     rc=names_build(d,shard,'n');
                     if(!rc)rc=names_build(d,shard,'a');
                 }
-                if(rc)fprintf(stderr,"query-disk: names shard=%u count=%llu rc=%d errno=%d\n",shard,
+                if(rc)efs_telemetry_log(0,"query-disk: names shard=%u count=%llu rc=%d errno=%d\n",shard,
                     (unsigned long long)d->part[shard].names,rc,errno);
             }
         }
@@ -1340,7 +1344,7 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
     if(rc){
         if(times){
             times->persist_ns=query_build_elapsed(phase_start);
-            fprintf(stderr,"query-disk: build-failed rc=%d initial=%d index_ms=%llu stats_ms=%llu persist_ms=%llu rebuilt=%u refolded=%u rows=%llu\n",
+            efs_telemetry_log(0,"query-disk: build-failed rc=%d initial=%d index_ms=%llu stats_ms=%llu persist_ms=%llu rebuilt=%u refolded=%u rows=%llu\n",
                 rc,old==NULL,(unsigned long long)(times->index_ns/1000000),
                 (unsigned long long)(times->stats_ns/1000000),
                 (unsigned long long)(times->persist_ns/1000000),d->rebuilt,d->refolded,

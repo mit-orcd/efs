@@ -79,11 +79,17 @@ for n in (1, 2, 3):
 code = r'''
 #include "efs/protocol.h"
 static void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
+#include <stdarg.h>
+#include <stdio.h>
+/* No bound reporter in this program: efs_telemetry_log writes stderr. */
+static void efs_telemetry_log(int critical, const char *f, ...) __attribute__((format(printf, 2, 3)));
+static void efs_telemetry_log(int critical, const char *f, ...) { (void)critical; va_list ap; va_start(ap, f); vfprintf(stderr, f, ap); va_end(ap); }
 #include "efs/opid.h"
 #include "efs/request_receipt.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>

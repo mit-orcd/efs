@@ -1,4 +1,5 @@
 #include "efs/protocol.h"
+#include "efs/telemetry.h"
 #include "efs/wire.h"
 #include "efs/network.h"
 #include "efs/rdma.h"
@@ -307,13 +308,13 @@ static int tcp_has_request(int fd)
      * have completely different causes: distinguish them. */
     if (n == 0) {
         if (efs_rdma_trace_on())
-            fprintf(stderr, "rdma-trace: tcp EOF (peer FIN) fd=%d\n", fd);
+            efs_telemetry_log(0, "rdma-trace: tcp EOF (peer FIN) fd=%d\n", fd);
         return -1;
     }
     if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
         return 0;
     if (efs_rdma_trace_on())
-        fprintf(stderr, "rdma-trace: tcp recv error fd=%d errno=%d (%s)\n", fd,
+        efs_telemetry_log(0, "rdma-trace: tcp recv error fd=%d errno=%d (%s)\n", fd,
                 errno, strerror(errno));
     return -1;
 }
@@ -326,7 +327,7 @@ static int tcp_has_request(int fd)
 static int wait_teardown(struct efs_conn *c, const char *why)
 {
     if (efs_rdma_trace_on())
-        fprintf(stderr, "rdma-trace: conn teardown fd=%d qpn=%u reason=%s\n",
+        efs_telemetry_log(0, "rdma-trace: conn teardown fd=%d qpn=%u reason=%s\n",
                 c->fd, c->rc ? efs_rdma_qpn(c->rc) : 0, why);
     return -1;
 }
@@ -847,7 +848,7 @@ int efs_connect_declared(const char *host, uint16_t port)
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
     int rc = efs_fd_declare(fd);
     if (rc != EFS_OK) {
-        fprintf(stderr, "efs: %s:%u refused or did not answer the protocol %u "
+        efs_telemetry_log(0, "efs: %s:%u refused or did not answer the protocol %u "
                         "declaration (rc=%d)\n", host, port, EFS_PROTOCOL_VERSION, rc);
         close(fd);
         return -1;
@@ -881,7 +882,7 @@ static void gate_refuse_log(const char *what, unsigned detail)
     static uint64_t refused;
     uint64_t n = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
     if (n <= 10 || !(n % 1000))
-        fprintf(stderr, "handler: refused %s %u; this daemon serves only after a "
+        efs_telemetry_log(0, "handler: refused %s %u; this daemon serves only after a "
                         "protocol %u declaration; closing (%llu so far)\n",
                 what, detail, EFS_PROTOCOL_VERSION, (unsigned long long)n);
 }
@@ -912,4 +913,49 @@ int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t typ
         return EFS_GATE_REFUSE;
     }
     return EFS_GATE_DISPATCH;
+}
+
+void efs_readdir_trace(const char *who, uint32_t peer, uint64_t parent,
+                       uint32_t max_ents, uint32_t after_src,
+                       const char *after_name, int rc,
+                       const struct efs_msg_inode_readdir_reply *r)
+{
+    static int on = -1;
+    int cur = __atomic_load_n(&on, __ATOMIC_ACQUIRE);
+    if (cur < 0) {
+        cur = getenv("EFS_TRACE_READDIR") != NULL;
+        __atomic_store_n(&on, cur, __ATOMIC_RELEASE);
+    }
+    if (!cur)
+        return;
+    /* Names are comma-joined into one buffer so a page is one atomic line. */
+    char *names = NULL;
+    size_t cap = 0, len = 0;
+    if (r && rc == 0)
+        for (uint32_t i = 0; i < r->count && i < EFS_READDIR_MAX; i++) {
+            size_t n = strnlen(r->ents[i].name, EFS_MAX_NAME);
+            if (len + n + 2 > cap) {
+                cap = (len + n + 2) * 2;
+                char *g = realloc(names, cap);
+                if (!g) {
+                    free(names);
+                    names = NULL;
+                    break;
+                }
+                names = g;
+            }
+            if (len)
+                names[len++] = ',';
+            memcpy(names + len, r->ents[i].name, n);
+            len += n;
+            names[len] = 0;
+        }
+    efs_telemetry_log(0,
+            "readdir-trace %s peer=%u parent=%llu max=%u after=%u/%s rc=%d "
+            "status=%d count=%u next=%u/%s done=%u names=%s\n",
+            who, peer, (unsigned long long)parent, max_ents, after_src,
+            after_name ? after_name : "", rc, r ? (int)r->status : -1,
+            r ? r->count : 0, r ? r->next_src : 0, r ? r->next_name : "",
+            r ? r->next_done : 0, names ? names : "");
+    free(names);
 }

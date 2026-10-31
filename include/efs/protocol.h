@@ -1302,6 +1302,14 @@ static inline int efs_readdir_reply_for_req_ok(const struct efs_msg_inode_readdi
     return EFS_OK;
 }
 
+/* K48 attribution trace: one stderr line per READDIR page, only when
+ * EFS_TRACE_READDIR is set. who is "client" or "server"; peer is the voter
+ * node id the page was sent to (client) or 0 (server); r may be NULL. */
+void efs_readdir_trace(const char *who, uint32_t peer, uint64_t parent,
+                       uint32_t max_ents, uint32_t after_src,
+                       const char *after_name, int rc,
+                       const struct efs_msg_inode_readdir_reply *r);
+
 /* Rename/move a specific dentry to a new parent + name. */
 struct efs_msg_inode_rename_at {
     efs_export_id_t export_id;

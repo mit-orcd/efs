@@ -2,7 +2,7 @@
 
 Purpose: port Task H fixes F10-F20 from `agent/task-h-repair` onto devel
 `126ba81d4` as small commits on `agent/h-k22-allocator` (K22; K38 for F19/F20),
-per `task-h-wave33-reconciliation-20261029.md`. Verdict: **PASS for unit and
+per [`task-h-wave33-reconciliation-20261029.md`](task-h-wave33-reconciliation-20261029.md). Verdict: **PASS for unit and
 source-extracted regressions; gate result below; live K22 gates NOTRUN**
 (blocks alpha: yes, status unchanged). F10 adds command kind 12: fresh
 clusters only, no migration or compatibility.

@@ -280,6 +280,7 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
     index_reset_residency(g);
 #if EFS_FAULTS
     if (snap_window != UINT64_MAX)
+        /* sync: test-only fault or debug hook */
         fprintf(stderr,
                 "raft-snap: window-drop group=%u last=%llu base=%llu n=%u window=%llu\n",
                 g->group, (unsigned long long)last_index,

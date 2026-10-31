@@ -28,8 +28,12 @@ def instrument(root):
     body = body.replace(marker, marker+'\n        if (batch_obs) measure_hold_start = efs_batch_obs_now_us();', 1)
     # Pick the cycle unlock immediately after the normal diagnostics block,
     # not one of the deliberately released persistence-cohort scopes.
-    marker = ('        pthread_mutex_unlock(&h->mu);\n        /* iostats:' if 'host_obs_dump(h, 0)' in body
-              else '        pthread_mutex_unlock(&h->mu);\n        if (report_due)')
+    markers = [m for m in ('        pthread_mutex_unlock(&h->mu);\n        /* iostats:',
+                           '        pthread_mutex_unlock(&h->mu);\n        host_obs_roles_report(',
+                           '        pthread_mutex_unlock(&h->mu);\n        if (report_due)')
+               if body.count(m) == 1]
+    assert len(markers) == 1, markers
+    marker = markers[0]
     assert body.count(marker) == 1
     body = body.replace(marker, '        if (batch_obs) BO_HIST(BH_MEASURE_PUMP_HOLD_US, efs_batch_obs_now_us()-measure_hold_start);\n'+marker)
     marker = '        /* Sleep until the next raft timer tick'

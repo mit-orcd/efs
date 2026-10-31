@@ -52,6 +52,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include "efs/telemetry.h"
 
 #define SR_PROBE_US 2000000ull
 #define SR_BUDGET_US 1000000ull
@@ -294,7 +295,7 @@ static void sr_audit_node(struct efsd_server *s, struct efs_kv *kv, uint8_t grou
         a->sweeping = 1;
         a->inc = rep.inc;
         a->probe_us = now;
-        fprintf(stderr, "segment-rebuild: audit node %u group %u incarnation %llu: sweep started\n",
+        efs_telemetry_log(0, "segment-rebuild: audit node %u group %u incarnation %llu: sweep started\n",
                 id, group, (unsigned long long)rep.inc);
     }
     struct sr_collect *c = calloc(1, sizeof(*c));
@@ -353,7 +354,7 @@ static void sr_audit_node(struct efsd_server *s, struct efs_kv *kv, uint8_t grou
             if (mrc == EFS_OK) {
                 a->marked++;
                 SR_ADD(segment_audit_marked, 1);
-                fprintf(stderr, "segment-rebuild: audit node %u group %u: g%u id=%016llx gen=%llx "
+                efs_telemetry_log(0, "segment-rebuild: audit node %u group %u: g%u id=%016llx gen=%llx "
                         "fragment %u %s; marked degraded for rebuild\n", id, group, group,
                         (unsigned long long)items[i].id, (unsigned long long)items[i].gen,
                         items[i].fi, v == EFS_SEGMENT_AUDIT_MISSING ? "missing" : "torn or bad");
@@ -371,7 +372,7 @@ static void sr_audit_node(struct efsd_server *s, struct efs_kv *kv, uint8_t grou
     /* End of the index: the member is audited for this incarnation only
      * when every fragment got a verdict. */
     if (a->unproven) {
-        fprintf(stderr, "segment-rebuild: audit node %u group %u: sweep had unproven answers "
+        efs_telemetry_log(0, "segment-rebuild: audit node %u group %u: sweep had unproven answers "
                 "(checked=%llu marked=%llu); starting over later\n", id, group,
                 (unsigned long long)a->checked, (unsigned long long)a->marked);
         a->sweeping = 0;
@@ -381,7 +382,7 @@ static void sr_audit_node(struct efsd_server *s, struct efs_kv *kv, uint8_t grou
     memset(&rep, 0, sizeof(rep));
     if (sr_audit_call(s, nodes, count, id, group, EFS_SEGMENT_AUDIT_F_COMPLETE, a->inc, NULL, 0,
                       &rep) == EFS_OK && rep.rc == EFS_OK && (rep.audited & bit)) {
-        fprintf(stderr, "segment-rebuild: audit node %u group %u incarnation %llu: complete "
+        efs_telemetry_log(0, "segment-rebuild: audit node %u group %u incarnation %llu: complete "
                 "checked=%llu marked=%llu\n", id, group, (unsigned long long)a->inc,
                 (unsigned long long)a->checked, (unsigned long long)a->marked);
     }
@@ -480,7 +481,7 @@ static int sr_put_rebuilt(struct efsd_server *s, const struct efs_node *nodes, u
 static void sr_say_unrecoverable(uint8_t group, uint64_t id, uint64_t gen, uint32_t mask,
                                  uint32_t reasons)
 {
-    fprintf(stderr, "segment-rebuild: g%u id=%016llx gen=%llx UNRECOVERABLE: fragments mask=%x "
+    efs_telemetry_log(0, "segment-rebuild: g%u id=%016llx gen=%llx UNRECOVERABLE: fragments mask=%x "
             "lost (reasons=%x); its files read EIO until rewritten or removed; mark kept\n",
             group, (unsigned long long)id, (unsigned long long)gen, mask, reasons);
 }
@@ -502,7 +503,7 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
         /* Rewritten, removed, compacted or cancelled: nothing to protect. */
         if (sr_propose(group, EFS_MD_PACK_DEGRADED_RETIRE, id, gen, mask, 0) == EFS_OK) {
             SR_ADD(segment_marks_retired, 1);
-            fprintf(stderr, "segment-rebuild: g%u id=%016llx gen=%llx mask=%x: segment no longer "
+            efs_telemetry_log(0, "segment-rebuild: g%u id=%016llx gen=%llx mask=%x: segment no longer "
                     "live, mark retired\n", group, (unsigned long long)id, (unsigned long long)gen,
                     mask);
             done = 1;
@@ -511,7 +512,7 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
     }
     if (rc != EFS_OK) {
         SR_ADD(segment_rebuild_failures, 1);
-        fprintf(stderr, "segment-rebuild: g%u id=%016llx gen=%llx: segment object unreadable "
+        efs_telemetry_log(0, "segment-rebuild: g%u id=%016llx gen=%llx: segment object unreadable "
                 "(rc=%d); mark kept\n", group, (unsigned long long)id, (unsigned long long)gen, rc);
         goto out;
     }
@@ -552,7 +553,7 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
         }
         sr_backoff_us[o->nodes[src[k]]] = now + SR_NODE_BACKOFF_US;
         SR_ADD(segment_rebuild_failures, 1);
-        fprintf(stderr, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u: source fragment %u "
+        efs_telemetry_log(0, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u: source fragment %u "
                 "on node %u unavailable (rc=%d); mark kept\n", group, (unsigned long long)id,
                 (unsigned long long)gen, fi, src[k], o->nodes[src[k]], rc);
         goto out;
@@ -565,7 +566,7 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
     }
     if (rc != EFS_OK) {
         SR_ADD(segment_rebuild_failures, 1);
-        fprintf(stderr, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u: rebuilt bytes do "
+        efs_telemetry_log(0, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u: rebuilt bytes do "
                 "not match the segment checksum (rc=%d); mark kept\n", group,
                 (unsigned long long)id, (unsigned long long)gen, fi, rc);
         goto out;
@@ -574,7 +575,7 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
     if (rc != EFS_OK) {
         sr_backoff_us[o->nodes[fi]] = now + SR_NODE_BACKOFF_US;
         SR_ADD(segment_rebuild_failures, 1);
-        fprintf(stderr, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u node %u: PUT failed "
+        efs_telemetry_log(0, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u node %u: PUT failed "
                 "(rc=%d); mark kept\n", group, (unsigned long long)id, (unsigned long long)gen, fi,
                 o->nodes[fi], rc);
         goto out;
@@ -583,7 +584,7 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
     uint32_t v = sr_check_one(s, nodes, count, o, fi);
     if (v != EFS_SEGMENT_AUDIT_OK) {
         SR_ADD(segment_rebuild_failures, 1);
-        fprintf(stderr, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u node %u: rebuilt copy "
+        efs_telemetry_log(0, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u node %u: rebuilt copy "
                 "not verified (audit=%u); mark kept\n", group, (unsigned long long)id,
                 (unsigned long long)gen, fi, o->nodes[fi], v);
         goto out;
@@ -591,7 +592,7 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
     if (sr_propose(group, EFS_MD_PACK_DEGRADED_CLEAR, id, gen, mask, 0) != EFS_OK)
         goto out; /* the copy stays good; the next pass clears it */
     SR_ADD(segments_rebuilt, 1);
-    fprintf(stderr, "segment-rebuild: rebuilt g%u id=%016llx gen=%llx fragment %u on node %u "
+    efs_telemetry_log(0, "segment-rebuild: rebuilt g%u id=%016llx gen=%llx fragment %u on node %u "
             "(from nodes %u,%u)\n", group, (unsigned long long)id, (unsigned long long)gen, fi,
             o->nodes[fi], o->nodes[a], o->nodes[b]);
     done = 1;
@@ -730,7 +731,7 @@ void server_segment_rebuild_pass(struct efsd_server *s, uint8_t group)
                 break;
             if (!c->ok[i]) {
                 if (report)
-                    fprintf(stderr, "segment-rebuild: group %u: malformed segment mark; kept "
+                    efs_telemetry_log(0, "segment-rebuild: group %u: malformed segment mark; kept "
                             "(fail closed)\n", group);
                 SR_ADD(segment_rebuild_failures, 1);
                 continue;

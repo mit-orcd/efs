@@ -12,6 +12,10 @@ code=r'''
 #include <stdint.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <assert.h>
 #define HOST_READ_TRIES 1
 #define HOST_TICK_US 5000

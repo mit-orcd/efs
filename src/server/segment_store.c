@@ -46,6 +46,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#include "efs/telemetry.h"
 
 #define SG_TAIL 4096u
 #define SG_GUARDS 256u
@@ -170,7 +171,7 @@ static int sg_read_tail(int fd, uint32_t group, uint64_t id, uint64_t gen, uint3
         static uint64_t refused;
         uint64_t k = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
         if (k <= 256 || !(k % 1024))
-            fprintf(stderr, "segment: I25 refused fragment g%u id=%016llx gen=%llx fi=%u: "
+            efs_telemetry_log(0, "segment: I25 refused fragment g%u id=%016llx gen=%llx fi=%u: "
                     "%s%s%s\n", group, (unsigned long long)id, (unsigned long long)gen, fi,
                     efs_strerror(rc), field ? " field=" : "", field ? field : "");
     }
@@ -283,6 +284,7 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
             if (ms) __atomic_store_n(&refuse_until_ns, now + ms * 1000000ull, __ATOMIC_RELAXED);
             else if (until) __atomic_store_n(&refuse_until_ns, 0, __ATOMIC_RELAXED);
             if (!unlink(flag)) {
+                /* sync: test-only fault or debug hook */
                 fprintf(stderr, "fault: EFS_FAULT_SEGMENT_PUT_TRANSIENT refused segment "
                         "g%u id=%016llx gen=%llx fragment %u %s (NOT_PRIMARY)\n",
                         group, (unsigned long long)id, (unsigned long long)gen, fi,
@@ -358,7 +360,7 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
                 pthread_rwlock_unlock(g);
                 return EFS_ERR_IO;
             }
-            fprintf(stderr, "segment: rebuild g%u id=%016llx gen=%llx fi=%u: removed a bad "
+            efs_telemetry_log(0, "segment: rebuild g%u id=%016llx gen=%llx fi=%u: removed a bad "
                     "copy before writing the rebuilt fragment\n", group, (unsigned long long)id,
                     (unsigned long long)gen, fi);
             pthread_mutex_lock(&s->lock);

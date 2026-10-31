@@ -13,6 +13,7 @@
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
+#include "efs/telemetry.h"
 
 /* The one data PUT path (K13): every fragment names an ADMITTED ticket.
  * Ticket authority is read before taking the local write guard. Holding the
@@ -27,7 +28,7 @@ static int put_refuse_stopping(const struct efs_put_ticket *t,uint32_t fi)
     static uint64_t refused;
     uint64_t n=__atomic_add_fetch(&refused,1,__ATOMIC_RELAXED);
     if(n<=10 || !(n%1000))
-        fprintf(stderr,"put-upload: stopping; fragment not acknowledged ino=%llu ci=%u fi=%u "
+        efs_telemetry_log(0,"put-upload: stopping; fragment not acknowledged ino=%llu ci=%u fi=%u "
                 "(%llu so far)\n",(unsigned long long)t->ino,t->ci,fi,(unsigned long long)n);
     return EFS_ERR_IO;
 }
@@ -56,6 +57,7 @@ static int put_test_busy(void)
     if(!*p || access(p,F_OK)!=0)return 0;
     static uint64_t n;
     if(__atomic_add_fetch(&n,1,__ATOMIC_RELAXED)<=10)
+        /* sync: test-only fault or debug hook */
         fprintf(stderr,"put-upload: EFS_FAULT_PUT_BUSY_FILE present; answering BUSY\n");
     return 1;
 }
@@ -70,6 +72,7 @@ static void put_test_stop_after_store(void)
         n=e?atoi(e):0;__atomic_store_n(&limit,n,__ATOMIC_RELEASE);
     }
     if(n<=0 || __atomic_add_fetch(&stored,1,__ATOMIC_RELAXED)!=(uint32_t)n)return;
+    /* sync: test-only fault or debug hook */
     fprintf(stderr,"put-upload: EFS_FAULT_PUT_STOP_AFTER=%d reached; raising SIGTERM\n",n);
     raise(SIGTERM);
 }
@@ -86,7 +89,7 @@ int server_put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     int dbg=__atomic_load_n(&debug,__ATOMIC_ACQUIRE);
     if(dbg<0){dbg=getenv("EFS_PUT_TICKET_DBG")!=NULL;__atomic_store_n(&debug,dbg,__ATOMIC_RELEASE);}
     if(rc!=EFS_OK && dbg && bytes>=EFS_PUT_UPLOAD_HEADER_LEN)
-        fprintf(stderr,"put-upload refused fi=%u seq=%llu rc=%d\n",efs_put_upload_rd32(body+4),
+        efs_telemetry_log(0,"put-upload refused fi=%u seq=%llu rc=%d\n",efs_put_upload_rd32(body+4),
                 (unsigned long long)(((uint64_t)efs_put_upload_rd32(body+28)<<32)|efs_put_upload_rd32(body+32)),rc);
     return rc;
 }
@@ -120,7 +123,7 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     struct efs_msg_raft_mkfs_reply authority;
     server_raft_host_submit(query,sizeof(query),&authority);
     if(authority.rc!=EFS_OK && getenv("EFS_PUT_TICKET_DBG"))
-        fprintf(stderr,"put-upload status rc=%d hint=%d group=%u\n",authority.rc,
+        efs_telemetry_log(0,"put-upload status rc=%d hint=%d group=%u\n",authority.rc,
                 authority.leader_hint,query[0]);
     /* K54: a member the revoke could not reach learns the sealed epoch here,
      * from the committed session shard (the lane leader's FENCED verdict),
@@ -241,7 +244,7 @@ int server_rebuild_put(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     }
     server_export_put(s,ex);
     if(getenv("EFS_PUT_TICKET_DBG"))
-        fprintf(stderr,"rebuild-put ino=%llu ci=%u fi=%u rc=%d\n",(unsigned long long)d.ino,
+        efs_telemetry_log(0,"rebuild-put ino=%llu ci=%u fi=%u rc=%d\n",(unsigned long long)d.ino,
                 d.chunk_index,fi,rc);
     return rc;
 }

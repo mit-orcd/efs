@@ -21,6 +21,10 @@ c=r'''
 #include <string.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 static unsigned calls, mode, append_mode;
 static int tick;
 static uint64_t deadline;
@@ -180,6 +184,10 @@ server_c=r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #define HOST_SESS_REG_LEN 26
 struct host_view {uint64_t applied;};
 struct efs_arc_view {uint64_t idx,term;int rc;};

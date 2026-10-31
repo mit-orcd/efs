@@ -14,6 +14,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "efs/telemetry.h"
 
 
 static void put_u64(uint8_t *p, uint64_t v)
@@ -938,7 +939,7 @@ static int rotate_run(struct efs_raft_disk *d, int drop)
                      get_u64(f + 13) != index || get_u64(f + 21) != m->term ||
                      efs_load_be32(f + 29) != m->clen ||
                      efs_crc32(f + 8, size - 8) != m->crc)) {
-                    fprintf(stderr, "raft-log: rotate bad frame group=%u "
+                    efs_telemetry_log(0, "raft-log: rotate bad frame group=%u "
                             "index=%llu off=%llu\n", group,
                             (unsigned long long)index,
                             (unsigned long long)m->phys);
@@ -953,7 +954,7 @@ static int rotate_run(struct efs_raft_disk *d, int drop)
     if (rc == EFS_OK)
         rc = rot_flush(&out);
     if (rc == EFS_OK && out.off != image_len) {
-        fprintf(stderr, "raft-log: rotate image %llu != planned %llu\n",
+        efs_telemetry_log(0, "raft-log: rotate image %llu != planned %llu\n",
                 (unsigned long long)out.off, (unsigned long long)image_len);
         rc = EFS_ERR_PROTO;
     }
@@ -1063,7 +1064,7 @@ done:
 
         if ((rc == EFS_OK && elapsed > 20000) ||
             (rc != EFS_OK && rc != EFS_ERR_STALE))
-            fprintf(stderr, "raft-log: rotate old_bytes=%llu live_bytes=%llu "
+            efs_telemetry_log(0, "raft-log: rotate old_bytes=%llu live_bytes=%llu "
                     "elapsed_us=%llu hold_max_us=%llu final_us=%llu rc=%d\n",
                     (unsigned long long)old_bytes,
                     (unsigned long long)(rc == EFS_OK ? d->bytes : 0),

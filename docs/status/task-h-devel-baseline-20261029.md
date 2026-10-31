@@ -1,6 +1,6 @@
 # Task H devel baseline — October 29
 
-**Purpose:** for each Task H fix F01–F35 (inventory: `task-h-wave33-reconciliation-20261029.md` on `agent/task-h-repair`), does the branch's regression test fail on current devel product code? Measurement only; no product code changed, no causes investigated.
+**Purpose:** for each Task H fix F01–F35 (inventory: [`task-h-wave33-reconciliation-20261029.md`](task-h-wave33-reconciliation-20261029.md)), does the branch's regression test fail on current devel product code? Measurement only; no product code changed, no causes investigated.
 
 **Verdict:** 18 DEVEL-BUG, 2 NOT-NEEDED, 13 NOCOMPILE, 2 NO-TEST, 0 FLAKY, 0 BRANCH-FAIL. No release gate or K row is changed by this page.
 

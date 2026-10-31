@@ -150,6 +150,7 @@ with tempfile.TemporaryDirectory(prefix='efs-rotate-stall-') as td:
              '-I' + str(root / 'src/raft'), '-I' + str(root / 'src/common'),
              '-I' + str(root / 'deps/blake3'), '-ffunction-sections', '-fdata-sections']
     srcs = [str(root / 'src/raft/raft_disk.c'), str(root / 'src/raft/raft_log.c'),
-            str(root / 'src/common/checksum.c'), str(root / 'src/common/batch_obs.c')]
+            str(root / 'src/common/checksum.c'), str(root / 'src/common/batch_obs.c'),
+            str(root / 'src/common/telemetry.c'), str(root / 'src/common/log_ts.c')]
     subprocess.run(cc + flags + [str(p / 'test.c')] + srcs + ['-pthread', '-lm', gc, '-o', str(p / 'test')], check=True)
     subprocess.run([str(p / 'test'), str(p / 'log')], check=True, timeout=300)

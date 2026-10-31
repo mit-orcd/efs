@@ -17,7 +17,7 @@ with tempfile.TemporaryDirectory(prefix='efs-raft-ack-window-') as directory:
  sanitized = not wrap and asan_runtime_available()
  flags=shlex.split(os.environ.get('EFS_TEST_CFLAGS','-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer' if sanitized else '-O1 -g'))
  command=[os.environ.get('CC','cc'),'-std=c99','-D_GNU_SOURCE','-Wall','-Wextra','-pthread','-I'+str(root/'include')]
- dependencies=[str(root/'tests/test_raft.c'),str(root/'src/raft/raft_mem.c'),str(root/'src/common/batch_obs.c')]
+ dependencies=[str(root/'tests/test_raft.c'),str(root/'src/raft/raft_mem.c'),str(root/'src/common/batch_obs.c'),str(root/'src/common/telemetry.c'),str(root/'src/common/log_ts.c')]
  subprocess.run([*command,*flags,*dependencies,str(root/'src/raft/raft.c'),'-o',str(binary)],check=True)
  subprocess.run([*wrap,str(binary)],check=True)
  old=p/'old-retirement.c';old.write_text(source.replace(guard,'if (1)',1))
