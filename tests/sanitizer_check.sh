@@ -128,6 +128,8 @@ k36_recovery|tests/test_k36_recovery.py
 k36_segment_recovery|tests/test_k36_segment_recovery.py
 k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
+# AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.
+pump_logging|tests/test_pump_logging.py
 LEOF
 }
 
@@ -191,6 +193,8 @@ k36_recovery|tests/test_k36_recovery.py
 k36_segment_recovery|tests/test_k36_segment_recovery.py
 k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
+# AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.
+pump_logging|tests/test_pump_logging.py
 LEOF
 }
 
