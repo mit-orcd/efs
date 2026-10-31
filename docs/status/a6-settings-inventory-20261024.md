@@ -348,6 +348,7 @@ Allowed under A8. Each reader was traced to every use of its flag: all guard std
 | `EFS_STAGE_DBG` | `client/stage_evict.c:542` (evict_pass) +1 | off; client staging-eviction lines | observability | — | — | Keep: trace only |
 | `EFS_STRACE_EXPR` | `common/recorder_start.h:68` (efs_start_strace_recorder) | with `--strace`: strace `-e` filter | observability | — | `deploy_fuse_clients.sh`, `fuse_client_remount.sh` +2; `client.sh` | Keep: recorder filter |
 | `EFS_STRACE_PATH` | `client/efs_fuse.c:8113` (main) +1 | with `--strace`: output path | observability | — | `fuse_client_remount.sh`, `roll_efsd.sh` | Keep: recorder output path |
+| `EFS_TRACE_READDIR` | `common/protocol.c:925` (efs_readdir_trace) | off; set prints one bounded stderr line per READDIR page (client and server) | observability | — | `test_w130_dir_fault.py` | Keep: K48 listing attribution trace |
 | `EFS_TXN_TRACE_STALE` | `meta/txn.c:412` (efs_txn_prepare_excl) | off; `1` prints stale-version prepares | observability | — | — | Keep: trace only |
 | `EFS_WRITE_PROF` | `server/raft_host.c:702` (write_prof_on) via `env_on` | off; server write-path timing counters | observability | — | `raft_host_mu_ab.sh` | Keep: trace only |
 
