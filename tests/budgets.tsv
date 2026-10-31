@@ -106,7 +106,7 @@ python3 tests/test_w159_apply_wait.py	70	2
 python3 tests/test_decoder_refusal.py	10	1	Three private loopback daemons: refusal, ReadIndex, CREATE and orderly stop
 python3 tests/test_k22_snapshot_import.py	425	2	drives both groups four snapshot windows past a stopped follower before the install can fire (~230 s of load), then verifies catch-up, RSS and byte-exact read-back; Task T: slowest host median 337.9 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 310 s
 python3 tests/test_k22_leader_admission.py	90	2	fills the leader's small KV budget past the admission watermark (organically, ~190 s), then proves the move, the drain and clean client service; Task T: slowest host median 69.8 s (xorinox); three runs/host, 1.25x rounded up to 5 s; previous budget 30 s
-python3 tests/test_w130_dir_fault.py	40	2	W165 intel1: 10 strict combined serve/apply fault runs, max 38 s; 1.25x rounded up; healthy-quorum operations and snapshot resync, two slots retained
+python3 tests/test_w130_dir_fault.py	50	2	K48 BG intel1: 10 serial runs with the 5 s listing storm, max 38 s (25-38 s); 1.25x rounded up; healthy-quorum operations and snapshot resync, two slots retained
 python3 tests/test_w166_authority.py	30	1	W166: compressed 1 MiB L0 fill with 4 MiB KV budget, then a read-routing fault; 28.8 s in the xorinox 8-job pool x 1.25 rounded up to 5 s
 python3 tests/test_dir_ops_busy.py	25	2	Task O: intel2 eight-job pool 19.9 s; 1.25x rounded up to 5 s; four private daemons and twenty pre-admission BUSYs before same-opid RMDIR
 python3 tests/test_k48_readdir.py	15	2	Task S intel1 standalone 11.91s; 1.25x rounded up to 5s; three daemons and one FUSE client, pinned consensus migration and one-replica halt

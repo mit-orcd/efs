@@ -20,6 +20,7 @@ static unsigned long long rpc_prof_now_us(void){return 0;}
 static void rpc_prof_add(int t,unsigned long long a,unsigned long long b,unsigned long long c,unsigned long long d){(void)t;(void)a;(void)b;(void)c;(void)d;}
 static int pauses;static int rpc_writer_retry_pause(unsigned attempt){(void)attempt;pauses++;return 0;}
 static int rpc_status_to_efs(uint8_t s){return s==EFS_INODE_RPC_BUSY?EFS_ERR_BUSY:EFS_ERR_IO;}
+void efs_readdir_trace(const char*w,uint32_t pe,uint64_t pa,uint32_t m,uint32_t as,const char*an,int rc,const struct efs_msg_inode_readdir_reply*r){(void)w;(void)pe;(void)pa;(void)m;(void)as;(void)an;(void)rc;(void)r;}
 static void test_free(void*p){if(p)freed++;free(p);}
 #define free test_free
 int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)c;(void)p;assert(t==EFS_MSG_INODE_READDIR&&n==sizeof(struct efs_msg_inode_readdir));return 0;}
