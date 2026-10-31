@@ -1626,6 +1626,8 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+[EIO product port](../status/eio-product-port-20261030.md): 6 repairs from the ORCD EIO stress branch ported (K66–K71: append reservation reply, truncate fence reuse, read-cache slots, OPEN stage pin, CREATE→OPEN fallback, lease cleanup admission), each failing on devel; diagnostics and the already-present dcache fix skipped.
+
 [ORCD-test EIO and stress repair](../status/orcd-test-eio-stress-repair-20261028.md): **IN PROGRESS / overall FAIL**, checked Oct 29 (live gates, IOR pass at 402/378 MiB/s write; serial POSIX has one 15 s mtime timeout, not a PASS; stress 272 FAIL / 372 NOTRUN). Only the product repairs listed in the port page were applied to devel.
 
 [Task H split: K45/K51 group](../status/h-k45-shutdown-20261029.md): **F24** (rejoin-thread ownership joined in bounded teardown; devel heartbeat owner kept) and **F35** (`raft-resync` retries only a definite BUSY inside the existing 30 s I/O bound) ported to `agent/h-k45-shutdown`, both named reproductions fail on devel source and pass with the change; K54 interaction checked, none. Not merged; intel1 gate 556 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
