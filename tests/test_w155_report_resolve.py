@@ -84,6 +84,10 @@ static void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (voi
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
