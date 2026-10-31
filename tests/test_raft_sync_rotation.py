@@ -16,7 +16,7 @@ code=r'''
 #include <stdint.h>
 #include <stdio.h>
 #include <stdarg.h>
-__attribute__((unused)) static void efs_telemetry_log(int critical, const char *format, ...) {
+void efs_telemetry_log(int critical, const char *format, ...) {
     (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
 }
 #include <stdlib.h>
@@ -69,5 +69,5 @@ int main(void){char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-sync-r
 with tempfile.TemporaryDirectory(prefix='efs-sync-rotate-build-') as d:
     p=Path(d)/'test.c';p.write_text(code)
     log=Path(os.environ.get('EFS_RAFT_LOG_SOURCE',root/'src/raft/raft_log.c'))
-    cmd=shlex.split(os.environ.get('CC','cc'))+['-std=c99','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'tests'),'-I'+str(root/'src/raft'),'-I'+str(root/'deps/blake3'),'-ffunction-sections','-fdata-sections',str(p),str(root/'src/raft/raft_disk.c'),str(log),str(root/'src/common/checksum.c'),str(root/'src/common/batch_obs.c'),'-pthread','-Wl,--gc-sections','-Wl,--wrap=fdatasync','-o',str(p.with_suffix(''))]
+    cmd=shlex.split(os.environ.get('CC','cc'))+['-std=c99','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'tests'),'-I'+str(root/'src/raft'),'-I'+str(root/'deps/blake3'),'-ffunction-sections','-fdata-sections',str(p),str(root/'src/raft/raft_disk.c'),str(log),str(root/'src/common/checksum.c'),str(root/'src/common/batch_obs.c'),str(root/'src/common/telemetry.c'),str(root/'src/common/log_ts.c'),'-pthread','-Wl,--gc-sections','-Wl,--wrap=fdatasync','-o',str(p.with_suffix(''))]
     subprocess.run(cmd,check=True);subprocess.run([str(p.with_suffix(''))],check=True,timeout=15)

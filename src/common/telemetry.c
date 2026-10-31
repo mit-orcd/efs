@@ -42,7 +42,7 @@ struct efs_telemetry {
 /* The binding lock protects lifetime only. Producers try it and never wait;
  * stop unbinds before freeing, so a transport destructor cannot use a freed
  * reporter. No sink I/O is done while this lock is held. */
-static pthread_mutex_t binding_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_rwlock_t binding_mu = PTHREAD_RWLOCK_INITIALIZER;
 static struct efs_telemetry *bound;
 static uint64_t binding_overflow;
 
@@ -176,19 +176,29 @@ struct efs_telemetry *efs_telemetry_start(efs_telemetry_render render)
     if (pthread_mutex_init(&r->mu, NULL)) goto fail_fd;
     if (pthread_cond_init(&r->cv, NULL)) goto fail_mu;
     if (pthread_create(&r->tid, NULL, report, r)) goto fail_cv;
-    pthread_mutex_lock(&binding_mu);
+    pthread_rwlock_wrlock(&binding_mu);
     if (!bound) bound = r;
-    pthread_mutex_unlock(&binding_mu);
+    pthread_rwlock_unlock(&binding_mu);
     return r;
 fail_cv: pthread_cond_destroy(&r->cv);
 fail_mu: pthread_mutex_destroy(&r->mu);
 fail_fd: close(r->fd); free(r); return NULL;
 }
 
+/* Producers never block, but many threads log routine lines at once: the
+ * mailbox lock is held only for a copy, so a short bounded spin keeps
+ * concurrent loggers from dropping each other's lines. */
+static int lock_spin(pthread_mutex_t *mu)
+{
+    for (int i = 0; i < 1000; i++)
+        if (!pthread_mutex_trylock(mu)) return 0;
+    return -1;
+}
+
 static void enqueue(struct efs_telemetry *r, unsigned kind, const void *data, size_t n)
 {
     if (!r) return;
-    if (n > EFS_TELEMETRY_BYTES || pthread_mutex_trylock(&r->mu)) {
+    if (n > EFS_TELEMETRY_BYTES || lock_spin(&r->mu)) {
         __atomic_add_fetch(&r->overflow, 1, __ATOMIC_RELAXED);
         return;
     }
@@ -240,10 +250,10 @@ void efs_telemetry_log(int critical, const char *format, ...)
     va_start(ap, format);
     if (critical) {
         vfprintf(stderr, format, ap);
-    } else if (pthread_mutex_trylock(&binding_mu)) {
+    } else if (pthread_rwlock_tryrdlock(&binding_mu)) {
         __atomic_add_fetch(&binding_overflow, 1, __ATOMIC_RELAXED);
     } else if (!bound) {
-        pthread_mutex_unlock(&binding_mu);
+        pthread_rwlock_unlock(&binding_mu);
         vfprintf(stderr, format, ap);
     } else {
         char line[LINE_BYTES];
@@ -252,7 +262,7 @@ void efs_telemetry_log(int critical, const char *format, ...)
             __atomic_add_fetch(&bound->overflow, 1, __ATOMIC_RELAXED);
         else
             enqueue(bound, 1, line, (size_t)n+1);
-        pthread_mutex_unlock(&binding_mu);
+        pthread_rwlock_unlock(&binding_mu);
     }
     va_end(ap);
 }
@@ -260,9 +270,9 @@ void efs_telemetry_log(int critical, const char *format, ...)
 void efs_telemetry_stop(struct efs_telemetry *r)
 {
     if (!r) return;
-    pthread_mutex_lock(&binding_mu);
+    pthread_rwlock_wrlock(&binding_mu);
     if (bound == r) bound = NULL;
-    pthread_mutex_unlock(&binding_mu);
+    pthread_rwlock_unlock(&binding_mu);
     pthread_mutex_lock(&r->mu);
     __atomic_store_n(&r->deadline_ns, mono_ns() + DRAIN_NS, __ATOMIC_RELEASE);
     __atomic_store_n(&r->stop, 1, __ATOMIC_RELEASE);

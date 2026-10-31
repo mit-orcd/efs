@@ -10,7 +10,7 @@ code=r'''
 #include <pthread.h>
 #include <stdio.h>
 #include <stdarg.h>
-__attribute__((unused)) static void efs_telemetry_log(int critical, const char *format, ...) {
+void efs_telemetry_log(int critical, const char *format, ...) {
     (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
 }
 #include <stdlib.h>
@@ -122,5 +122,5 @@ int main(void){for(int mode=0;mode<5;mode++)for(int failure=0;failure<2;failure+
 with tempfile.TemporaryDirectory(prefix='efs-recv-persist-') as d:
     p=Path(d)/'test.c';p.write_text(code)
     core=Path(os.environ.get('EFS_RAFT_CORE_SOURCE',root/'src/raft/raft.c'))
-    cmd=shlex.split(os.environ.get('CC','cc'))+['-std=c99','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),str(core),str(root/'src/raft/raft_mem.c'),str(root/'src/common/batch_obs.c'),'-pthread','-o',str(p.with_suffix(''))]
+    cmd=shlex.split(os.environ.get('CC','cc'))+['-std=c99','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),str(core),str(root/'src/raft/raft_mem.c'),str(root/'src/common/batch_obs.c'),str(root/'src/common/telemetry.c'),str(root/'src/common/log_ts.c'),'-pthread','-o',str(p.with_suffix(''))]
     subprocess.run(cmd,check=True);subprocess.run([str(p.with_suffix(''))],check=True,timeout=15)

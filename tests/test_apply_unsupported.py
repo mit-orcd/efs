@@ -43,7 +43,7 @@ code = '#define EFS_FAULTS 0\n#define HOST_APPLY_RC_RING 16\n#define HOST_APPLY_
 #include <pthread.h>
 #include <stdio.h>
 #include <stdarg.h>
-__attribute__((unused)) static void efs_telemetry_log(int critical, const char *format, ...) {
+void efs_telemetry_log(int critical, const char *format, ...) {
     (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
 }
 #include <stdlib.h>
@@ -152,6 +152,10 @@ decoders = '#define HOST_DIR_LEN %s\n' % re.search(r'^#define HOST_DIR_LEN +(\S+
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
+void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <string.h>
 #define APPLY_LOG(...) ((void)0)
 struct efs_kv;struct efs_raft_host{struct efs_kv *kv;};

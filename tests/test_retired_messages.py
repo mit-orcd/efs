@@ -27,11 +27,7 @@ assert 'break;' in block and 'free(to_free);' in block, block
 assert 'type = 0;' not in loop[check-400:dispatch].replace('uint8_t type = 0;',''), 'refusal must not dispatch as HEARTBEAT'
 a = handler.index('static int retired_refuse(uint8_t type)')
 helper = handler[a:handler.index('\n}', a)+2]
-source = '#include "efs/protocol.h"\n#include <assert.h>\n#include <stdint.h>\n#include <stdio.h>
-#include <stdarg.h>
-__attribute__((unused)) static void efs_telemetry_log(int critical, const char *format, ...) {
-    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
-}\n' + helper + r'''
+source = '#include "efs/protocol.h"\n#include <assert.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdarg.h>\nvoid efs_telemetry_log(int critical, const char *format, ...) {\n    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);\n}\n' + helper + r'''
 int main(void){
  for(int t=0;t<256;t++)if(EFS_MSG_IS_RETIRED(t))assert(retired_refuse((uint8_t)t)==1);
  assert(!EFS_MSG_IS_RETIRED(EFS_MSG_GC_INODE_BATCH)&&!EFS_MSG_IS_RETIRED(EFS_MSG_GC_FRAG_BATCH));
