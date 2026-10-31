@@ -185,7 +185,6 @@ struct efs_ino_slab {
     char *names;
     uint32_t names_used;
     uint32_t names_cap;
-    uint64_t tick;
 };
 
 /* In-memory parent → child slot list (not serialized). */
@@ -219,7 +218,6 @@ struct efs_export {
     struct efs_ino_slab *ino_slabs;
     uint32_t ino_slab_n;
     uint32_t ino_slabs_resident;
-    uint64_t ino_slab_tick;
     uint64_t inode_count;
     uint64_t inode_capacity;
     /* Names live in per-slab arenas (struct efs_ino_slab), not one table-wide

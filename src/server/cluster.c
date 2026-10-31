@@ -31,8 +31,12 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     server_format_storage_paths(s, h.storage_path, sizeof(h.storage_path));
     h.quota = s->quota;
     {
+        /* s->lock: the K36 recovery scan debits ->used under it. */
+        pthread_mutex_lock(&s->lock);
         struct efs_node *local = server_local_node(s);
-        h.used = local ? local->used : server_compute_local_usage(s);
+        uint64_t used = local ? local->used : 0;
+        pthread_mutex_unlock(&s->lock);
+        h.used = local ? used : server_compute_local_usage(s);
     }
     /* K33 (M2): this store's token, its cluster and whether it is formed. */
     h.token = s->mstore.token;
