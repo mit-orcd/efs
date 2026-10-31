@@ -73,7 +73,13 @@ Raw captures (outside Git): `~/efs-artifacts/taskBL-20261030/` on the Mac with
 
 ## Limits and remaining gates
 
-Gate: see the commit message and the final report for the `make_test_summary.sh`
-result on xorinox. Sampling with gdb perturbs timing, so only the stack content,
+Gate (`TMPDIR=$HOME/tmp EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh`, xorinox,
+commit `7ddd4bee1`): 581 commands, FAIL 2, NOTRUN 10 (RDMA, cluster scripts), 1019 s.
+Failure 1: `test_w155_report_resolve` did not compile, because it extracts
+`server_raft_host_report` and now needs an `efs_telemetry_log` stub; fixed in the
+next commit and the test passes on xorinox. Failure 2: `check_k_register.py` reports
+K79 and K80 missing, because K81 is numbered after rows that live on the unmerged
+BI (K79) and BG (K80) branches; it passes once both merge (merge-order artifact,
+not a defect). The full gate was not rerun after the stub fix. Sampling with gdb perturbs timing, so only the stack content,
 not the failure rate, comes from sampled runs. K79 (SIGTERM with blocked stderr) is
 untouched here.
