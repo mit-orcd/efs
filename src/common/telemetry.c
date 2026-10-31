@@ -185,20 +185,14 @@ fail_mu: pthread_mutex_destroy(&r->mu);
 fail_fd: close(r->fd); free(r); return NULL;
 }
 
-/* Producers never block, but many threads log routine lines at once: the
- * mailbox lock is held only for a copy, so a short bounded spin keeps
- * concurrent loggers from dropping each other's lines. */
-static int lock_spin(pthread_mutex_t *mu)
-{
-    for (int i = 0; i < 1000; i++)
-        if (!pthread_mutex_trylock(mu)) return 0;
-    return -1;
-}
-
-static void enqueue(struct efs_telemetry *r, unsigned kind, const void *data, size_t n)
+/* BLOCK: routine lines from many threads (efs_telemetry_log) wait for the
+ * mailbox lock, which no thread holds across I/O or a wait: only a copy in
+ * or out. The pump's periodic records and printf lines keep the trylock and
+ * never wait. */
+static void enqueue(struct efs_telemetry *r, unsigned kind, const void *data, size_t n, int block)
 {
     if (!r) return;
-    if (n > EFS_TELEMETRY_BYTES || lock_spin(&r->mu)) {
+    if (n > EFS_TELEMETRY_BYTES || (block ? pthread_mutex_lock(&r->mu) : pthread_mutex_trylock(&r->mu))) {
         __atomic_add_fetch(&r->overflow, 1, __ATOMIC_RELAXED);
         return;
     }
@@ -226,7 +220,7 @@ static void enqueue(struct efs_telemetry *r, unsigned kind, const void *data, si
 
 void efs_telemetry_submit(struct efs_telemetry *r, const void *data, size_t n)
 {
-    enqueue(r, 0, data, n);
+    enqueue(r, 0, data, n, 0);
 }
 
 void efs_telemetry_printf(struct efs_telemetry *r, const char *format, ...)
@@ -241,7 +235,7 @@ void efs_telemetry_printf(struct efs_telemetry *r, const char *format, ...)
         __atomic_add_fetch(&r->overflow, 1, __ATOMIC_RELAXED);
         return;
     }
-    enqueue(r, 1, line, (size_t)n+1);
+    enqueue(r, 1, line, (size_t)n+1, 0);
 }
 
 void efs_telemetry_log(int critical, const char *format, ...)
@@ -250,9 +244,7 @@ void efs_telemetry_log(int critical, const char *format, ...)
     va_start(ap, format);
     if (critical) {
         vfprintf(stderr, format, ap);
-    } else if (pthread_rwlock_tryrdlock(&binding_mu)) {
-        __atomic_add_fetch(&binding_overflow, 1, __ATOMIC_RELAXED);
-    } else if (!bound) {
+    } else if (pthread_rwlock_rdlock(&binding_mu), !bound) {
         pthread_rwlock_unlock(&binding_mu);
         vfprintf(stderr, format, ap);
     } else {
@@ -261,7 +253,7 @@ void efs_telemetry_log(int critical, const char *format, ...)
         if (n < 0 || (size_t)n >= sizeof(line))
             __atomic_add_fetch(&bound->overflow, 1, __ATOMIC_RELAXED);
         else
-            enqueue(bound, 1, line, (size_t)n+1);
+            enqueue(bound, 1, line, (size_t)n+1, 1);
         pthread_rwlock_unlock(&binding_mu);
     }
     va_end(ap);

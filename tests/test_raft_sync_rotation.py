@@ -15,10 +15,6 @@ code=r'''
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdarg.h>
-void efs_telemetry_log(int critical, const char *format, ...) {
-    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
-}
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
