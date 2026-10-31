@@ -167,7 +167,22 @@ gate test above (devel fails it; the fix passes), not this table.
 
 ### Full gate
 
-GATE_PLACEHOLDER
+`make test-all` at `EFS_TEST_JOBS=8` on nuc (8 CPUs, disk-bound pool), no other
+efsd running. **Not a clean gate: STATUS FAIL.**
+
+| Tree | Gate line | FAILs |
+| --- | --- | --- |
+| candidate `dc9f1427a` (code identical to the final commit) | TOTAL 579 FAIL 3 NOTRUN 11 STATUS FAIL (1706 s) | `test_k54_member_down_fence`, `test_k38_shared_chunk_pressure`, `test_pump_logging` |
+| first candidate run, `b753281fb` | TOTAL 579 FAIL 2 NOTRUN 11 STATUS FAIL (1750 s) | `test_k54_member_down_fence`, `test_pump_logging` |
+| devel baseline `8b0d128cc`, same host and settings | TOTAL 579 FAIL 4 NOTRUN 11 STATUS FAIL (1638 s) | the same three plus `test_d4_progress` |
+
+Devel fails the same tests under this load, so they are load failures on nuc,
+not regressions from this change. Individually on idle nuc: `test_pump_logging`
+PASS x3 (about 71 s), `test_k54_member_down_fence` PASS. `test_k38_shared_chunk_pressure`
+was not rerun alone. NOTRUN 11 are host limits (no RDMA device, no valgrind
+headers, no cluster scripts). The load failure of `test_pump_logging` (foreground
+`EIO` while client `fsync` takes seconds) is unresolved and listed in the AE
+disposition. 0 FAIL is therefore **not** claimed.
 
 ### Evidence locations
 
@@ -176,7 +191,7 @@ Raw outputs stay on the hosts and are not committed.
 - amd `~/efs-artifacts/taskBI-20261030/` (matrix, controls, sanitizer logs, both
   builds' logs; 237 files, `SHA256SUMS` sha256 `fdf472621f02b9a2bb6fae3d8d2c9f43f521e33f17429be1107a756a6acd7f7c`).
 - nuc `~/efs-artifacts/taskBI-20261030/gate/` (`run.log`, `gate1-summary.txt`, failure
-  logs, reruns; `SHA256SUMS` hash in the gate section above).
+  logs, reruns; `SHA256SUMS` sha256 `0190332b22384bf63a9802775d515c406a7e9c2920d6da50bb0d2006bd880b7c`; also `gate2-*`, `base-summary.txt`).
 
 ## Limits and remaining gates
 
