@@ -399,10 +399,12 @@ int efs_txn_prepare_excl(struct efs_kv *kv, const struct efs_txid *t,
     if (ver != expected_ver) {
         const char *trace = getenv("EFS_TXN_TRACE_STALE");
         if (trace && !strcmp(trace, "1")) {
+            /* sync: test-only fault or debug hook */
             fprintf(stderr, "txn-stale-version shard=%u kind=%u expected=%llu actual=%llu key=",
                     key_shard(key), key[2], (unsigned long long)expected_ver,
                     (unsigned long long)ver);
             for (uint32_t i = 0; i < klen; i++)
+                /* sync: test-only fault or debug hook */
                 fprintf(stderr, "%02x", key[i]);
             fputc('\n', stderr);
         }

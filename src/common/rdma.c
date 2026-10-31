@@ -131,7 +131,7 @@ static void cq_unmoderate(struct ibv_cq *cq)
     if (ibv_modify_cq(cq, &a) != 0) {
         static int logged;
         if (!__sync_lock_test_and_set(&logged, 1))
-            fprintf(stderr, "efs: CQ moderation off failed errno=%d\n",
+            efs_telemetry_log(0, "efs: CQ moderation off failed errno=%d\n",
                     errno);
     }
 }
@@ -617,6 +617,7 @@ int efs_transport_startup(const char *prog)
 {
     const char *v = getenv("EFS_TRANSPORT");
     if (v && *v && strcmp(v, "auto") && strcmp(v, "tcp") && strcmp(v, "rdma")) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "%s: EFS_TRANSPORT=%s is not auto, tcp or rdma; refusing to start\n",
                 prog, v);
         return EFS_ERR_INVAL;
@@ -625,12 +626,14 @@ int efs_transport_startup(const char *prog)
     efs_setting_str("EFS_TRANSPORT", mode == EFS_TRANSPORT_TCP ? "tcp" : mode == EFS_TRANSPORT_RDMA ? "rdma" : "auto");
     if (mode == EFS_TRANSPORT_TCP) {
         efs_settings_transport("tcp");
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "%s: transport tcp (EFS_TRANSPORT=tcp)\n", prog);
         return EFS_OK;
     }
     struct efs_rdma_dev *d = efs_rdma_available() ? dev_default() : NULL;
     const char *dev = getenv("EFS_RDMA_DEV");
     if (mode == EFS_TRANSPORT_RDMA && !d) {
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "%s: EFS_TRANSPORT=rdma but no usable RDMA device%s%s; refusing to "
                 "start (unset it or use auto to allow TCP)\n", prog,
                 dev && *dev ? " named by EFS_RDMA_DEV=" : "", dev && *dev ? dev : "");
@@ -644,9 +647,11 @@ int efs_transport_startup(const char *prog)
     } else
         efs_settings_transport("tcp (no usable RDMA device)");
     if (d)
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "%s: transport %s: rdma on %s (TCP carries setup)\n", prog,
                 mode == EFS_TRANSPORT_RDMA ? "rdma" : "auto", d->name);
     else
+        /* sync: startup, before the reporter exists */
         fprintf(stderr, "%s: transport auto: tcp (no usable RDMA device%s%s)\n", prog,
                 dev && *dev ? " named by EFS_RDMA_DEV=" : "", dev && *dev ? dev : "");
     return EFS_OK;
@@ -818,7 +823,7 @@ static void harvest_recv_wcs(struct ibv_wc *wcs, int n)
         static int nh;
         int k = __sync_fetch_and_add(&nh, 1);
         if (k < 6)
-            fprintf(stderr, "rdma-trace: harvest n=%d status0=%d len0=%u\n",
+            efs_telemetry_log(0, "rdma-trace: harvest n=%d status0=%d len0=%u\n",
                     n, n > 0 ? (int)wcs[0].status : -1,
                     n > 0 ? wcs[0].byte_len : 0);
     }
@@ -840,7 +845,7 @@ static void harvest_recv_wcs(struct ibv_wc *wcs, int n)
                 static int nrerr;
                 int k = __sync_fetch_and_add(&nrerr, 1);
                 if (k < 10 || (k % 100) == 0)
-                    fprintf(stderr,
+                    efs_telemetry_log(0,
                             "efs: RDMA recv CQE error status=%d (%s) qpn=%u "
                             "byte_len=%u\n",
                             (int)wcs[i].status,
@@ -953,7 +958,7 @@ static int dev_shared_cq_start(struct efs_rdma_dev *dev)
         if (dev->poller_pid != getpid()) {
             static int warned;
             if (!__sync_fetch_and_add(&warned, 1))
-                fprintf(stderr, "efs: RDMA device %s was initialized in pid %d and is "
+                efs_telemetry_log(0, "efs: RDMA device %s was initialized in pid %d and is "
                         "used in pid %d after fork(); its completion poller did not "
                         "survive the fork; refusing RDMA in this process\n",
                         dev->ctx && dev->ctx->device ? ibv_get_device_name(dev->ctx->device) : "?",
@@ -1232,7 +1237,7 @@ int efs_rdma_client_upgrade(struct efs_conn *c)
         !setup_peer(rc,&peer);
     free(payload);
     if (!ok) {
-        fprintf(stderr,"efs: segmented RDMA setup failed or incompatible peer\n");
+        efs_telemetry_log(0,"efs: segmented RDMA setup failed or incompatible peer\n");
         efs_rdma_conn_destroy(rc); return -1;
     }
     setup_publish(c,rc); return 0;
@@ -1342,7 +1347,7 @@ static int reap_sends(struct efs_rdma_conn *rc)
                 static int nerr;
                 int e = __sync_fetch_and_add(&nerr, 1);
                 if (e < 10 || (e % 100) == 0)
-                    fprintf(stderr,
+                    efs_telemetry_log(0,
                             "efs: RDMA send CQE error status=%d (%s) qpn=%u\n",
                             (int)wc[i].status,
                             ibv_wc_status_str(wc[i].status),
@@ -1471,7 +1476,7 @@ static void send_fail_dump(struct efs_rdma_conn *rc, uint8_t type,
     int busy = 0;
     for (int i = 0; i < EFS_RDMA_NSEND; i++)
         busy += rc->send_busy[i] ? 1 : 0;
-    fprintf(stderr,
+    efs_telemetry_log(0,
             "efs: RDMA send type=%u FAILED (%s) qpn=%u state=%d "
             "dest_qpn=%u dlid=%u rnr_retry=%u retry_cnt=%u timeout=%u "
             "busy=%d broken=%d qrc=%d\n",
@@ -1481,7 +1486,7 @@ static void send_fail_dump(struct efs_rdma_conn *rc, uint8_t type,
             qrc == 0 ? a.retry_cnt : 0, qrc == 0 ? a.timeout : 0,
             busy, rc->broken, qrc);
     if (rc->qp)
-        fprintf(stderr,
+        efs_telemetry_log(0,
                 "efs: RDMA qp obj: state=%d qp->send_cq=%p rc->send_cq=%p %s "
                 "qp->recv_cq=%p dev->recv_cq=%p handle=%u\n",
                 (int)rc->qp->state, (void *)rc->qp->send_cq,
@@ -1492,18 +1497,18 @@ static void send_fail_dump(struct efs_rdma_conn *rc, uint8_t type,
                 (void *)(rc->dev ? rc->dev->recv_cq : NULL), rc->qp->handle);
     char now_link[64];
     fd_link_now(rc->tcp_fd, now_link, sizeof(now_link));
-    fprintf(stderr, "efs: RDMA tcp_fd=%d link now=\"%s\" at-upgrade=\"%s\" %s\n",
+    efs_telemetry_log(0, "efs: RDMA tcp_fd=%d link now=\"%s\" at-upgrade=\"%s\" %s\n",
             rc->tcp_fd, now_link, rc->tcp_link,
             strcmp(now_link, rc->tcp_link) == 0
                 ? "(same socket)"
                 : "*** SOCKET CLOSED/REUSED BEHIND THIS CONN ***");
-    fprintf(stderr, "efs: RDMA conn sends posted=%llu reaped=%llu %s\n",
+    efs_telemetry_log(0, "efs: RDMA conn sends posted=%llu reaped=%llu %s\n",
             (unsigned long long)rc->n_posted, (unsigned long long)rc->n_reaped,
             rc->n_reaped >= rc->n_posted
                 ? "(send CQ drained; failure may be credit/peer/protocol wait)"
                 : "(a completion is genuinely outstanding)");
     if (rc->dev)
-        fprintf(stderr, "efs: RDMA port_xmit_packets now = %llu\n",
+        efs_telemetry_log(0, "efs: RDMA port_xmit_packets now = %llu\n",
                 (unsigned long long)ib_port_counter(rc->dev->name,
                                                     rc->dev->port,
                                                     "port_xmit_packets"));
@@ -1517,7 +1522,7 @@ static void send_fail_dump(struct efs_rdma_conn *rc, uint8_t type,
         struct ibv_async_event ev;
         int k = 0;
         while (k++ < 8 && ibv_get_async_event(rc->dev->ctx, &ev) == 0) {
-            fprintf(stderr, "efs: RDMA async event=%d (%s)\n",
+            efs_telemetry_log(0, "efs: RDMA async event=%d (%s)\n",
                     (int)ev.event_type, ibv_event_type_str(ev.event_type));
             ibv_ack_async_event(&ev);
         }

@@ -14,6 +14,7 @@
 #include <limits.h>
 #include <stddef.h>
 #include <fcntl.h>
+#include "efs/telemetry.h"
 
 static int send_iov_run(int fd, struct iovec *iov, int niov)
 {
@@ -307,13 +308,13 @@ static int tcp_has_request(int fd)
      * have completely different causes: distinguish them. */
     if (n == 0) {
         if (efs_rdma_trace_on())
-            fprintf(stderr, "rdma-trace: tcp EOF (peer FIN) fd=%d\n", fd);
+            efs_telemetry_log(0, "rdma-trace: tcp EOF (peer FIN) fd=%d\n", fd);
         return -1;
     }
     if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
         return 0;
     if (efs_rdma_trace_on())
-        fprintf(stderr, "rdma-trace: tcp recv error fd=%d errno=%d (%s)\n", fd,
+        efs_telemetry_log(0, "rdma-trace: tcp recv error fd=%d errno=%d (%s)\n", fd,
                 errno, strerror(errno));
     return -1;
 }
@@ -326,7 +327,7 @@ static int tcp_has_request(int fd)
 static int wait_teardown(struct efs_conn *c, const char *why)
 {
     if (efs_rdma_trace_on())
-        fprintf(stderr, "rdma-trace: conn teardown fd=%d qpn=%u reason=%s\n",
+        efs_telemetry_log(0, "rdma-trace: conn teardown fd=%d qpn=%u reason=%s\n",
                 c->fd, c->rc ? efs_rdma_qpn(c->rc) : 0, why);
     return -1;
 }
@@ -847,7 +848,7 @@ int efs_connect_declared(const char *host, uint16_t port)
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
     int rc = efs_fd_declare(fd);
     if (rc != EFS_OK) {
-        fprintf(stderr, "efs: %s:%u refused or did not answer the protocol %u "
+        efs_telemetry_log(0, "efs: %s:%u refused or did not answer the protocol %u "
                         "declaration (rc=%d)\n", host, port, EFS_PROTOCOL_VERSION, rc);
         close(fd);
         return -1;
@@ -881,7 +882,7 @@ static void gate_refuse_log(const char *what, unsigned detail)
     static uint64_t refused;
     uint64_t n = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
     if (n <= 10 || !(n % 1000))
-        fprintf(stderr, "handler: refused %s %u; this daemon serves only after a "
+        efs_telemetry_log(0, "handler: refused %s %u; this daemon serves only after a "
                         "protocol %u declaration; closing (%llu so far)\n",
                 what, detail, EFS_PROTOCOL_VERSION, (unsigned long long)n);
 }
@@ -949,7 +950,7 @@ void efs_readdir_trace(const char *who, uint32_t peer, uint64_t parent,
             len += n;
             names[len] = 0;
         }
-    fprintf(stderr,
+    efs_telemetry_log(0,
             "readdir-trace %s peer=%u parent=%llu max=%u after=%u/%s rc=%d "
             "status=%d count=%u next=%u/%s done=%u names=%s\n",
             who, peer, (unsigned long long)parent, max_ents, after_src,

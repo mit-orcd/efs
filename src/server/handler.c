@@ -26,6 +26,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <time.h>
+#include "efs/telemetry.h"
 
 /* Per-connection-thread arenas. Fragment PUTs/GETs used to each cost a
  * malloc/free pair per message; with ~144 conns at ~100K msg/s that showed
@@ -74,7 +75,7 @@ static int retired_refuse(uint8_t type)
     static uint64_t refused;
     uint64_t n = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
     if (n <= 10 || !(n % 1000))
-        fprintf(stderr, "handler: refused retired message %u; this build does not "
+        efs_telemetry_log(0, "handler: refused retired message %u; this build does not "
                         "serve it; closing (%llu so far)\n",
                 type, (unsigned long long)n);
     return 1;
@@ -103,7 +104,7 @@ static int unformed_metadata(uint8_t type)
     static uint64_t refused;
     uint64_t n = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
     if (n <= 10 || !(n % 1000))
-        fprintf(stderr, "handler: refused metadata message %u: the cluster is not formed; "
+        efs_telemetry_log(0, "handler: refused metadata message %u: the cluster is not formed; "
                         "start at least three members and run efs-mgmt raft-mkfs once; "
                         "closing (%llu so far)\n", type, (unsigned long long)n);
     return 1;
@@ -133,7 +134,7 @@ static int handler_stop_gate(void)
         return 0;
     uint64_t n = __atomic_add_fetch(&g_handler_stop_closes, 1, __ATOMIC_RELAXED);
     if (n == 1 || !(n % 256))
-        fprintf(stderr, "handler: shutdown: closing connection before the next request "
+        efs_telemetry_log(0, "handler: shutdown: closing connection before the next request "
                 "(closed=%llu)\n", (unsigned long long)n);
     return 1;
 }
@@ -161,7 +162,7 @@ void server_handle_conn(struct efs_conn *conn)
             static int nwait;
             int n = __sync_fetch_and_add(&nwait, 1);
             if (n < 8)
-                fprintf(stderr, "rdma-trace: wait_request chan=%s rc=%p\n",
+                efs_telemetry_log(0, "rdma-trace: wait_request chan=%s rc=%p\n",
                         chan == EFS_CONN_RDMA ? "RDMA" : "TCP",
                         (void *)conn->rc);
         }
@@ -291,7 +292,7 @@ void server_handle_conn(struct efs_conn *conn)
                     rej->assigned_id = 0;
                     rej->reject_reason = EFS_HELLO_REJECT_VERSION;
                     strncpy(rej->build_id, EFS_BUILD_ID, sizeof(rej->build_id) - 1);
-                    fprintf(stderr,
+                    efs_telemetry_log(0,
                             "HELLO rejected: node (%s:%u) runs build '%s' "
                             "(version 0x%x); this node is build '%s' "
                             "(version 0x%x) — refusing join\n",
@@ -345,7 +346,7 @@ void server_handle_conn(struct efs_conn *conn)
                         rej->node_count = committed;
                         strncpy(rej->build_id, EFS_BUILD_ID, sizeof(rej->build_id) - 1);
                         if (why == EFS_HELLO_REJECT_FORMED)
-                            fprintf(stderr, "HELLO refused: node %u (%s:%u, store %016llx) cannot "
+                            efs_telemetry_log(0, "HELLO refused: node %u (%s:%u, store %016llx) cannot "
                                     "be a member of this cluster (%u members): its id or "
                                     "endpoint belongs to another store, or it belongs to "
                                     "another cluster\n", h->node_id, haddr, h->port,
@@ -371,7 +372,7 @@ void server_handle_conn(struct efs_conn *conn)
                 if (idx < g_server->node_count && g_server->nodes[idx].token &&
                     g_server->nodes[idx].token != h->token) {
                     /* K33 (M2): before formation one store per node id. */
-                    fprintf(stderr, "HELLO refused: node id %u is held by store %016llx at "
+                    efs_telemetry_log(0, "HELLO refused: node id %u is held by store %016llx at "
                             "%s:%u; %s:%u announces store %016llx\n", h->node_id,
                             (unsigned long long)g_server->nodes[idx].token,
                             g_server->nodes[idx].addr, g_server->nodes[idx].port, h->addr,
@@ -1430,7 +1431,7 @@ void server_handle_conn(struct efs_conn *conn)
                 unsigned pport = 0;
                 if (getpeername(conn->fd, (struct sockaddr *)&pa, &pl) == 0)
                     pport = ntohs(pa.sin_port);
-                fprintf(stderr,
+                efs_telemetry_log(0,
                         "rdma-trace: SETUP done qpn=%u status=%u peer_port=%u "
                         "fd=%d, back to wait\n",
                         efs_rdma_qpn(conn->rc), conn->rc ? 0u : 1u, pport, conn->fd);
@@ -1518,7 +1519,7 @@ void server_handle_conn(struct efs_conn *conn)
             static uint64_t unknown;
             uint64_t n=__atomic_add_fetch(&unknown,1,__ATOMIC_RELAXED);
             if(n<=10 || !(n%1000))
-                fprintf(stderr,"handler: refused unknown message %u; closing (%llu so far)\n",
+                efs_telemetry_log(0,"handler: refused unknown message %u; closing (%llu so far)\n",
                         (unsigned)type,(unsigned long long)n);
             close_conn=1;
             break;

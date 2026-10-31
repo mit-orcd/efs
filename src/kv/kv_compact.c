@@ -23,6 +23,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "efs/fault_exit.h"
+#include "efs/telemetry.h"
 
 /* Fault hooks, compiled only with -DEFS_FAULTS=1. W23 stalled compactor (the
  * stalled-compactor test, tests/measure/w23_stalled_compactor.sh). A
@@ -118,6 +119,7 @@ static int kv_flush_finish_jobs(struct kv_lsm *l, struct seg_slot *neu,
             /* These are our joinable children, never self or transferred.
              * A broken join invariant cannot release their borrowed jobs
              * or let the manifest publish without a completion proof. */
+            /* sync: the process aborts next; a queued line would be lost */
             fprintf(stderr, "kv-flush: cannot join owned finish job; refusing publication\n");
             abort();
         }
@@ -256,7 +258,7 @@ int kv_flush_locked(struct kv_lsm *l)
     if (rc == EFS_OK)
         __atomic_add_fetch(&l->flushes, 1, __ATOMIC_RELAXED);
     if (t_io + t_pub >= 100)
-        fprintf(stderr, "kv-flush: files=%u io_ms=%llu manifest_ms=%llu "
+        efs_telemetry_log(0, "kv-flush: files=%u io_ms=%llu manifest_ms=%llu "
                 "view_yielded=%d rc=%d\n", nneu, (unsigned long long)t_io,
                 (unsigned long long)t_pub, outer, rc);
     return rc;
@@ -636,7 +638,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     }
     c.out_level = l0_only ? 0 : 1;
     t0 = mono_ms();
-    fprintf(stderr, "kv-compact: start l0=%u inputs=%u range=%d l0only=%d\n",
+    efs_telemetry_log(0, "kv-compact: start l0=%u inputs=%u range=%d l0only=%d\n",
             n_l0_in, n_drop, wide ? -1 : chosen, l0_only);
     if (async) {
         lsm_unlock(l);
@@ -852,7 +854,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
         /* Outputs are already in the live level. The old MANIFEST still
          * names the inputs, so a restart GCs the outputs; this engine stops. */
         l->io_failed = 1;
-        fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
+        efs_telemetry_log(0, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
                 (unsigned long long)c.bytes,
                 (unsigned long long)(mono_ms() - t0), rc);
         goto cleanup;
@@ -866,7 +868,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     }
     kv_sync_dir(l->dir);
     __atomic_add_fetch(&l->compactions, 1, __ATOMIC_RELAXED);
-    fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu l0=%u l1=%u rc=0\n",
+    efs_telemetry_log(0, "kv-compact: end bytes=%llu ms=%llu l0=%u l1=%u rc=0\n",
             (unsigned long long)c.bytes, (unsigned long long)(mono_ms() - t0),
             l->n_l0, l->n_l1);
     rc = EFS_OK;
@@ -882,7 +884,7 @@ discard:
         unlink(path);
         c.out[i].seg = NULL;
     }
-    fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
+    efs_telemetry_log(0, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
             (unsigned long long)c.bytes, (unsigned long long)(mono_ms() - t0),
             rc);
     goto cleanup;
@@ -907,7 +909,7 @@ out:
     }
     if (!held)
         lsm_lock(l);
-    fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
+    efs_telemetry_log(0, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
             (unsigned long long)c.bytes, (unsigned long long)(mono_ms() - t0),
             rc);
 cleanup:
@@ -950,7 +952,7 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
      * apply_room admission watermark bounds the unflushed tail. */
     if (kv_l0_bytes(l) >= kv_l0_cap(l) && l->n_l0 > 0) {
         if (!l->bp_logged) {
-            fprintf(stderr, "kv-compact: backpressure n_l0=%u\n", l->n_l0);
+            efs_telemetry_log(0, "kv-compact: backpressure n_l0=%u\n", l->n_l0);
             l->bp_logged = 1;
         }
         compact_kick(l);
@@ -966,7 +968,7 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
     uint64_t started=prof?mono_ms():0,bytes_before=l->mt.bytes;
     rc = kv_flush_locked(l);
     if(prof && mono_ms()-started>=20)
-        fprintf(stderr,"kv-flush-prof: bytes=%llu ms=%llu l0=%u rc=%d\n",
+        efs_telemetry_log(0,"kv-flush-prof: bytes=%llu ms=%llu l0=%u rc=%d\n",
                 (unsigned long long)bytes_before,(unsigned long long)(mono_ms()-started),l->n_l0,rc);
     if (rc == EFS_ERR_BUSY) {
         /* Not enough L0 slots for this memtable's ranges. The keys are
@@ -1002,6 +1004,7 @@ static void *compactor_main(void *arg)
             int stop;
 
             if (!fault_parked) {
+                /* sync: test-only fault or debug hook */
                 fprintf(stderr, "kv-fault: compactor parked (%s)\n",
                         fault_compact_file());
                 fault_parked = 1;
@@ -1014,6 +1017,7 @@ static void *compactor_main(void *arg)
                 break;
         }
         if (fault_parked) {
+            /* sync: test-only fault or debug hook */
             fprintf(stderr, "kv-fault: compactor released\n");
             fault_parked = 0;
         }
@@ -1088,7 +1092,7 @@ static void *compactor_main(void *arg)
 void kv_compactor_start(struct kv_lsm *l)
 {
     if (pthread_create(&l->compact_thr, NULL, compactor_main, l) != 0) {
-        fprintf(stderr, "kv-compact: thread start failed\n");
+        efs_telemetry_log(0, "kv-compact: thread start failed\n");
         return;
     }
     l->compact_started = 1;

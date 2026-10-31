@@ -64,6 +64,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#include "efs/telemetry.h"
 
 #define RV_EXPORT 1u
 #define RV_RETRY_MS 500u
@@ -113,6 +114,7 @@ void server_fault_crash(const char *point)
     uint64_t want = v[n] == ':' ? strtoull(v + n + 1, NULL, 10) : 1;
     if (__atomic_add_fetch(&hits, 1, __ATOMIC_RELAXED) != (want ? want : 1))
         return;
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "fault: injected crash at %s\n", point);
     fflush(stderr);
     efs_fault_exit(137);
@@ -159,7 +161,7 @@ static void rv_phase(uint32_t phase)
     rv.st.phase = phase;
     rv.st.reason[0] = 0;
     pthread_mutex_unlock(&rv.mu);
-    fprintf(stderr, "recovery: phase %s\n", efs_recovery_phase_name(phase));
+    efs_telemetry_log(0, "recovery: phase %s\n", efs_recovery_phase_name(phase));
 }
 
 __attribute__((format(printf, 1, 2)))
@@ -175,7 +177,7 @@ static void rv_reason(const char *fmt, ...)
     memcpy(rv.st.reason, buf, sizeof(buf));
     pthread_mutex_unlock(&rv.mu);
     if (changed)
-        fprintf(stderr, "recovery: waiting: %s\n", buf);
+        efs_telemetry_log(0, "recovery: waiting: %s\n", buf);
 }
 
 #define RV_ADD(field, n) do { pthread_mutex_lock(&rv.mu); rv.st.field += (n); \
@@ -198,13 +200,13 @@ static int rv_fail(const char *fmt, ...)
     va_end(ap);
     if (rv.st.state == EFS_RECOVERY_VERIFIED) {
         /* After the fence: a settle or rebuild step failed; retried. */
-        fprintf(stderr, "recovery: after verification: %s; retrying\n", rv.st.reason);
+        efs_telemetry_log(0, "recovery: after verification: %s; retrying\n", rv.st.reason);
         pthread_mutex_unlock(&rv.mu);
         return -1;
     }
     rv.st.state = EFS_RECOVERY_FAILED;
     rv.st.elapsed_ms = rv_now_ms() - rv.t0_ms;
-    fprintf(stderr, "recovery: FAILED in phase %s: %s; the store stays fenced (COMMIT "
+    efs_telemetry_log(0, "recovery: FAILED in phase %s: %s; the store stays fenced (COMMIT "
             "returns EIO) until a restart verifies it\n",
             efs_recovery_phase_name(rv.st.phase), rv.st.reason);
     pthread_mutex_unlock(&rv.mu);
@@ -234,7 +236,7 @@ static int rv_identity(void)
         return rv_fail("boot counter: %s", why);
     if (!rv.s->incarnation)
         return rv_fail("member store holds no incarnation");
-    fprintf(stderr, "recovery: identity node=%u incarnation=%llu: every root's record names "
+    efs_telemetry_log(0, "recovery: identity node=%u incarnation=%llu: every root's record names "
             "this boot\n", rv.s->id, (unsigned long long)rv.s->incarnation);
     return 0;
 }
@@ -245,7 +247,7 @@ static int rv_journal(void)
         struct efs_reclaim_status st;
         server_reclaim_status(rv.s, &st);
         if (!st.fail_closed && !st.recovering) {
-            fprintf(stderr, "recovery: reclaim journal epoch=%llu verified, records=%llu "
+            efs_telemetry_log(0, "recovery: reclaim journal epoch=%llu verified, records=%llu "
                     "replayed\n", (unsigned long long)st.journal_epoch,
                     (unsigned long long)st.journal_records);
             return 0;
@@ -304,7 +306,7 @@ static int rv_ledgers(void)
     closedir(d);
     if (bad)
         return rv_fail("storage session certificate %s/%s unreadable or damaged", dir, badname);
-    fprintf(stderr, "recovery: %u storage session certificates verified, %u interrupted seals "
+    efs_telemetry_log(0, "recovery: %u storage session certificates verified, %u interrupted seals "
             "removed\n", certs, leftovers);
     return 0;
 }
@@ -318,7 +320,7 @@ static int rv_fragments(void)
         return 1;
     if (rc != EFS_OK)
         return rv_fail("local fragment scan: %s", efs_strerror(rc));
-    fprintf(stderr, "recovery: fragments checked=%llu dropped=%llu (%llu bytes) foreign=%llu\n",
+    efs_telemetry_log(0, "recovery: fragments checked=%llu dropped=%llu (%llu bytes) foreign=%llu\n",
             (unsigned long long)__atomic_load_n(&rv.files.checked, __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&rv.files.dropped, __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&rv.files.bytes_dropped, __ATOMIC_RELAXED),
@@ -356,7 +358,7 @@ static int rv_raft(void)
         }
         if (rc == EFS_OK) {
             proven++;
-            fprintf(stderr, "recovery: group %u replica applied to the leader's commit "
+            efs_telemetry_log(0, "recovery: group %u replica applied to the leader's commit "
                     "(ReadIndex from this node)\n", group);
         }
     }
@@ -461,7 +463,7 @@ static int rv_mark(const struct efs_meta_degraded *d)
         }
         if (rc == EFS_ERR_STALE) {
             RV_ADD(unrecoverable, 1);
-            fprintf(stderr, "recovery: ino=%llu ci=%u gen=%llx: fragment %d lost here while "
+            efs_telemetry_log(0, "recovery: ino=%llu ci=%u gen=%llx: fragment %d lost here while "
                     "another fragment of the stripe is already marked missing; the 2+1 code "
                     "cannot rebuild it\n", (unsigned long long)d->ino, d->chunk_index,
                     (unsigned long long)d->object_gen, __builtin_ctz(d->missing_mask));
@@ -541,7 +543,7 @@ static int rv_seg_state(const struct rv_seg *g, uint32_t *mask)
 static void rv_seg_unrecoverable(const struct rv_seg *g, uint32_t mask, int later)
 {
     RV_ADD(segments_unrecoverable, 1);
-    fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u lost here %s "
+    efs_telemetry_log(0, "recovery: segment g%u id=%016llx gen=%llx fragment %u lost here %s "
             "(mask=%x): UNRECOVERABLE, its files read EIO; never healed\n", g->group,
             (unsigned long long)g->id, (unsigned long long)g->gen, g->fi,
             later ? "and another fragment was lost before the rebuild"
@@ -569,7 +571,7 @@ static int rv_seg_mark(const struct rv_seg *g)
                 rv_seg_unrecoverable(g, mask, 0);
                 return 0;
             }
-            fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u %s degraded "
+            efs_telemetry_log(0, "recovery: segment g%u id=%016llx gen=%llx fragment %u %s degraded "
                     "for rebuild\n", g->group, (unsigned long long)g->id,
                     (unsigned long long)g->gen, g->fi, wrote ? "marked" : "already marked");
             pthread_mutex_lock(&rv.mu);
@@ -629,7 +631,7 @@ static int rv_segment_ref(const uint8_t *rec)
                        (unsigned long long)g.id, (unsigned long long)g.gen, g.fi,
                        efs_strerror(rc));
     RV_ADD(segments_missing, 1);
-    fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u not proven here; "
+    efs_telemetry_log(0, "recovery: segment g%u id=%016llx gen=%llx fragment %u not proven here; "
             "dropped, marking it for rebuild\n", g.group, (unsigned long long)g.id,
             (unsigned long long)g.gen, g.fi);
     return rv_seg_mark(&g);
@@ -787,13 +789,13 @@ static void rv_seg_watch_pass(void)
         if (server_segment_check(rv.s, g.group, g.id, g.gen, g.fi, g.geometry, g.sum) ==
             EFS_SEGMENT_AUDIT_OK) {
             RV_ADD(segments_rebuilt, 1);
-            fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u rebuilt here "
+            efs_telemetry_log(0, "recovery: segment g%u id=%016llx gen=%llx fragment %u rebuilt here "
                     "and verified\n", g.group, (unsigned long long)g.id,
                     (unsigned long long)g.gen, g.fi);
             continue;
         }
         /* Cleared, yet no verified copy here: record it missing again. */
-        fprintf(stderr, "recovery: segment g%u id=%016llx gen=%llx fragment %u mark cleared "
+        efs_telemetry_log(0, "recovery: segment g%u id=%016llx gen=%llx fragment %u mark cleared "
                 "without a verified copy here; marking again\n", g.group,
                 (unsigned long long)g.id, (unsigned long long)g.gen, g.fi);
         server_segment_mark_commit((uint8_t)g.group, g.id, g.gen, g.fi,
@@ -819,7 +821,7 @@ static void rv_after(void)
     while (!rv_stopping()) {
         if (rv.nwaiting && rv_settle_pass() == 0 && !rv.nwaiting) {
             settled = 1;
-            fprintf(stderr, "recovery: every remembered ticket settled\n");
+            efs_telemetry_log(0, "recovery: every remembered ticket settled\n");
         }
         rv_watch_pass();
         rv_seg_watch_pass();
@@ -835,7 +837,7 @@ static void rv_after(void)
     pthread_mutex_lock(&rv.mu);
     rv.st.phase = 0;
     rv.st.reason[0] = 0;
-    fprintf(stderr, "recovery: rebuild complete: rebuilt=%llu superseded=%llu segments "
+    efs_telemetry_log(0, "recovery: rebuild complete: rebuilt=%llu superseded=%llu segments "
             "rebuilt=%llu superseded=%llu unrecoverable=%llu\n",
             (unsigned long long)rv.st.rebuilt, (unsigned long long)rv.st.superseded,
             (unsigned long long)rv.st.segments_rebuilt,
@@ -876,7 +878,7 @@ static void *rv_main(void *arg)
         rv.st.reason[0] = 0;
         struct efs_recovery_stats st = rv.st;
         pthread_mutex_unlock(&rv.mu);
-        fprintf(stderr, "recovery: verified in %llu ms; fence cleared, COMMIT allowed: "
+        efs_telemetry_log(0, "recovery: verified in %llu ms; fence cleared, COMMIT allowed: "
                 "files checked=%llu dropped=%llu refs checked=%llu missing=%llu marked=%llu "
                 "already_marked=%llu superseded=%llu unrecoverable=%llu tickets checked=%llu "
                 "segments checked=%llu missing=%llu marked=%llu already_marked=%llu "
@@ -893,7 +895,7 @@ static void *rv_main(void *arg)
                 (unsigned long long)st.segments_unrecoverable, st.groups_proven, st.groups);
         rv_after();
     } else if (r > 0) {
-        fprintf(stderr, "recovery: interrupted by stop in phase %s; the store stays fenced\n",
+        efs_telemetry_log(0, "recovery: interrupted by stop in phase %s; the store stays fenced\n",
                 efs_recovery_phase_name(rv.st.phase));
     }
     return NULL;
@@ -909,7 +911,7 @@ int server_recovery_start(struct efsd_server *s)
     rv.st.state = EFS_RECOVERY_RUNNING;
     rv.st.incarnation = s->incarnation;
     pthread_mutex_unlock(&rv.mu);
-    fprintf(stderr, "recovery: started after an unclean stop; COMMIT returns EIO until the "
+    efs_telemetry_log(0, "recovery: started after an unclean stop; COMMIT returns EIO until the "
             "store is verified\n");
     if (efsd_pthread_create(&rv.tid, rv_main, NULL) != 0) {
         rv_fail("cannot start the recovery thread");

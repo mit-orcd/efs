@@ -595,6 +595,7 @@ static int manifest_load(struct kv_lsm *l)
         if(sscanf(line,"KVLSM2 %llu %u %c",&ns,&requirements,&extra)!=2 ||
            requirements!=EFS_KV_READER_PACK_V2) {
             if(sscanf(line,"KVLSM2 %llu %u",&ns,&requirements)==2)
+                /* sync: startup, before the reporter exists */
                 fprintf(stderr,"kv-lsm: %s/MANIFEST has an unsupported or malformed "
                         "reader requirement (%u); refusing\n",l->dir,requirements);
             fclose(f);return EFS_ERR_PROTO;
@@ -667,6 +668,7 @@ static int manifest_load(struct kv_lsm *l)
 
 /* --- reads ----------------------------------------------------------- */
 #include "kv_candidates.h"
+#include "efs/telemetry.h"
 
 /* EFS_OK with *op, or NOT_FOUND when no level speaks about the key.
  * Caller holds l->mu. A segment miss drops the lock around the pread
@@ -1466,6 +1468,7 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
         unsigned long long b = v && v[0] ? strtoull(v, NULL, 0) : 0;
         if (b >= (1u << 20)) {
             l->l0_cap_bytes = b;
+            /* sync: test-only fault or debug hook */
             fprintf(stderr, "kv-fault: l0 cap %llu bytes\n", b);
         }
         /* Same hook for the memtable size, so the derived budget scales
@@ -1474,6 +1477,7 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
         b = v && v[0] ? strtoull(v, NULL, 0) : 0;
         if (b >= (64u << 10) && b <= (64u << 20) && !l->cfg.memtable_max) {
             l->cfg.memtable_max = (uint32_t)b;
+            /* sync: test-only fault or debug hook */
             fprintf(stderr, "kv-fault: memtable %llu bytes\n", b);
         }
     }
@@ -1837,7 +1841,7 @@ int efs_kv_lsm_apply_room(struct efs_kv *kv, int admit)
     if (!over && !admit && logged) {
         lsm_lock(l);
         if (l->room_logged && kv_memtable_bytes(l) < lim) {
-            fprintf(stderr, "kv-bound: apply resumed mt_bytes=%llu deferred=%llu\n",
+            efs_telemetry_log(0, "kv-bound: apply resumed mt_bytes=%llu deferred=%llu\n",
                     (unsigned long long)kv_memtable_bytes(l),
                     (unsigned long long)l->apply_deferred);
             l->room_logged = 0;
@@ -1857,7 +1861,7 @@ int efs_kv_lsm_apply_room(struct efs_kv *kv, int admit)
             rc = EFS_ERR_BUSY;
             l->apply_deferred++;
             if (!l->room_logged) {
-                fprintf(stderr, "kv-bound: apply deferred mt_bytes=%llu budget=%llu "
+                efs_telemetry_log(0, "kv-bound: apply deferred mt_bytes=%llu budget=%llu "
                         "l0_bytes=%llu l0_cap=%llu\n",
                         (unsigned long long)kv_memtable_bytes(l),
                         (unsigned long long)l->mem_budget,
@@ -1866,7 +1870,7 @@ int efs_kv_lsm_apply_room(struct efs_kv *kv, int admit)
                 l->room_logged = 1;
             }
         } else if (rc == EFS_OK && l->room_logged) {
-            fprintf(stderr, "kv-bound: apply resumed mt_bytes=%llu deferred=%llu\n",
+            efs_telemetry_log(0, "kv-bound: apply resumed mt_bytes=%llu deferred=%llu\n",
                     (unsigned long long)kv_memtable_bytes(l),
                     (unsigned long long)l->apply_deferred);
             l->room_logged = 0;
@@ -2191,7 +2195,7 @@ int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n)
 #if EFS_FAULTS
     /* Never print while holding the KV lock. No keys, names or values. */
     if(trace_ms)for(unsigned kind=0;kind<256;kind++)if(counts[kind][0] || counts[kind][1])
-        fprintf(stderr,"query-dirty: mono_ms=%llu kind=%u put=%llu del=%llu\n",
+        efs_telemetry_log(0,"query-dirty: mono_ms=%llu kind=%u put=%llu del=%llu\n",
             (unsigned long long)trace_ms,kind,(unsigned long long)counts[kind][0],
             (unsigned long long)counts[kind][1]);
 #endif

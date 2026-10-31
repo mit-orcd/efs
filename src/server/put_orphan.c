@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "efs/telemetry.h"
 
 /* D31 + K13: delete one abandoned fragment of a retired REJECTED ticket on
  * this member (EFS_MSG_PUT_ORPHAN_DELETE). Order matters:
@@ -63,7 +64,7 @@ int server_put_orphan_delete(struct efsd_server *s, const uint8_t *body, uint32_
         rc = server_gc_superseded_delete(s, export_id, t.ino, t.ci, fi, t.object,
                                          t.checksums[fi], 1);
     if (getenv("EFS_PUT_TICKET_DBG"))
-        fprintf(stderr, "put-orphan delete ino=%llu ci=%u fi=%u seq=%llu rc=%d\n",
+        efs_telemetry_log(0, "put-orphan delete ino=%llu ci=%u fi=%u seq=%llu rc=%d\n",
                 (unsigned long long)t.ino, t.ci, fi, (unsigned long long)t.id.seq, rc);
     return rc;
 }

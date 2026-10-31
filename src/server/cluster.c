@@ -17,7 +17,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 {
     struct efs_conn *pc = server_peer_conn_get(peer_host, peer_port);
     if (!pc) {
-        fprintf(stderr, "Cannot connect to peer %s:%u\n", peer_host, peer_port);
+        efs_telemetry_log(0, "Cannot connect to peer %s:%u\n", peer_host, peer_port);
         return -1;
     }
 
@@ -44,7 +44,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     }
 
     if (efs_conn_send_msg(pc, EFS_MSG_HELLO, &h, sizeof(h)) != 0) {
-        fprintf(stderr, "Failed to send HELLO to peer %s:%u\n", peer_host, peer_port);
+        efs_telemetry_log(0, "Failed to send HELLO to peer %s:%u\n", peer_host, peer_port);
         server_peer_conn_drop(peer_host, peer_port, pc);
         return -1;
     }
@@ -53,20 +53,20 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     void *payload = NULL;
     uint32_t payload_len = 0;
     if (efs_conn_recv_msg(pc, &type, &payload, &payload_len) != 0) {
-        fprintf(stderr, "No HELLO_ACK from peer %s:%u (timeout or disconnect)\n",
+        efs_telemetry_log(0, "No HELLO_ACK from peer %s:%u (timeout or disconnect)\n",
                 peer_host, peer_port);
         server_peer_conn_drop(peer_host, peer_port, pc);
         return -1;
     }
     if (type != EFS_MSG_HELLO_ACK) {
-        fprintf(stderr, "Peer %s:%u replied with unexpected message type %u\n",
+        efs_telemetry_log(0, "Peer %s:%u replied with unexpected message type %u\n",
                 peer_host, peer_port, type);
         free(payload);
         server_peer_conn_drop(peer_host, peer_port, pc);
         return -1;
     }
     if (payload_len != sizeof(struct efs_msg_hello_ack)) {
-        fprintf(stderr, "Peer %s:%u sent malformed HELLO_ACK (len %u)\n",
+        efs_telemetry_log(0, "Peer %s:%u sent malformed HELLO_ACK (len %u)\n",
                 peer_host, peer_port, payload_len);
         free(payload);
         server_peer_conn_drop(peer_host, peer_port, pc);
@@ -80,7 +80,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
             uint64_t now = (uint64_t)time(NULL);
             if (now - last_note >= 10) {
                 last_note = now;
-                fprintf(stderr,
+                efs_telemetry_log(0,
                         "Join pending at %s:%u — it has not learned this node's membership "
                         "yet (%u committed members there); node %llu at %s:%u (store "
                         "%016llx) retrying\n", peer_host, peer_port, ack->node_count,
@@ -92,7 +92,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
             return EFS_JOIN_PENDING;
         }
         if (ack->reject_reason == EFS_HELLO_REJECT_FORMED) {
-            fprintf(stderr,
+            efs_telemetry_log(0,
                     "Join refused by %s:%u — node %llu at %s:%u (store %016llx) can never "
                     "be a member of this cluster (%u committed members): its node id or "
                     "endpoint belongs to another store, or this store belongs to another "
@@ -104,13 +104,13 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
             return EFS_JOIN_REFUSED_FORMED;
         }
         if (ack->reject_reason == EFS_HELLO_REJECT_VERSION) {
-            fprintf(stderr,
+            efs_telemetry_log(0,
                     "Join refused by %s:%u — VERSION MISMATCH: this node runs "
                     "build '%s', the cluster runs build '%s'. Run the same "
                     "efsd build on every node.\n",
                     peer_host, peer_port, EFS_BUILD_ID, ack->build_id);
         } else {
-            fprintf(stderr,
+            efs_telemetry_log(0,
                     "Join rejected by peer %s:%u (cluster full or id mismatch; "
                     "assigned_id=%llu local_id=%llu count=%u)\n",
                     peer_host, peer_port,
@@ -130,7 +130,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         }
     }
     if (!self_in_list) {
-        fprintf(stderr,
+        efs_telemetry_log(0,
                 "Join failed: peer %s:%u ACK omitted this node (id %llu)\n",
                 peer_host, peer_port, (unsigned long long)s->id);
         free(payload);
@@ -233,20 +233,20 @@ int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t pe
         note->peer[note->npeers++].port = ack->nodes[i].port;
     }
     if (ack->reject_reason == EFS_HELLO_REJECT_VERSION) {
-        fprintf(stderr, "Join refused by %s:%u — VERSION MISMATCH: this node runs build '%s', "
+        efs_telemetry_log(0, "Join refused by %s:%u — VERSION MISMATCH: this node runs build '%s', "
                 "the cluster runs build '%.*s'. Run the same efsd build on every node.\n",
                 peer_host, peer_port, EFS_BUILD_ID, (int)sizeof(ack->build_id), ack->build_id);
     } else if (ack->reject_reason == EFS_HELLO_REJECT_PENDING) {
         rc = EFS_JOIN_PENDING;
     } else if (ack->reject_reason == EFS_HELLO_REJECT_FORMED) {
-        fprintf(stderr, "Join refused by %s:%u (cluster %016llx) — this store (%016llx) at "
+        efs_telemetry_log(0, "Join refused by %s:%u (cluster %016llx) — this store (%016llx) at "
                 "%s:%u can never be a member: its endpoint belongs to another member's store, "
                 "or this store is a member at another endpoint.\n", peer_host, peer_port,
                 (unsigned long long)ack->cluster, (unsigned long long)s->mstore.token, s->addr,
                 s->port);
         rc = EFS_JOIN_REFUSED_FORMED;
     } else if (ack->reject_reason == EFS_HELLO_REJECT_FULL) {
-        fprintf(stderr, "Join refused by %s:%u (cluster %016llx) — the cluster has the maximum "
+        efs_telemetry_log(0, "Join refused by %s:%u (cluster %016llx) — the cluster has the maximum "
                 "of %d members (%u now); this store (%016llx) at %s:%u cannot join it.\n",
                 peer_host, peer_port, (unsigned long long)ack->cluster, EFS_MAX_NODES,
                 ack->node_count, (unsigned long long)s->mstore.token, s->addr, s->port);
@@ -259,7 +259,7 @@ int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t pe
         const struct efs_member *self = efs_membership_find(&m, ack->assigned_id);
         if (!self || self->token != s->mstore.token || self->port != s->port ||
             strcmp(self->addr, s->addr)) {
-            fprintf(stderr, "Join: %s:%u sent a record that does not name this store at "
+            efs_telemetry_log(0, "Join: %s:%u sent a record that does not name this store at "
                     "%s:%u; ignored\n", peer_host, peer_port, s->addr, s->port);
         } else {
             int promise = ack->reject_reason == EFS_HELLO_PROMISE;
@@ -272,7 +272,7 @@ int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t pe
             if (!promise && rc == EFS_OK)
                 server_test_member_exit("after-learn");
             if (rc != EFS_OK) {
-                fprintf(stderr, "Join: %s refused: %s\n", promise ? "promise" : "membership",
+                efs_telemetry_log(0, "Join: %s refused: %s\n", promise ? "promise" : "membership",
                         err);
                 rc = rc == EFS_ERR_FENCED ? EFS_JOIN_REFUSED_FORMED : -1;
             } else {
@@ -285,7 +285,7 @@ int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t pe
             }
         }
     } else {
-        fprintf(stderr, "Join: %s:%u answered reason %u without a usable record\n", peer_host,
+        efs_telemetry_log(0, "Join: %s:%u answered reason %u without a usable record\n", peer_host,
                 peer_port, ack->reject_reason);
     }
     free(payload);
@@ -329,6 +329,7 @@ void server_test_member_exit(const char *point)
             return;
         close(fd);
     }
+    /* sync: test-only fault or debug hook */
     fprintf(stderr, "membership: EFS_FAULT_MEMBER_EXIT at %s; exiting\n", point);
     fflush(stderr);
     fflush(stdout);
@@ -346,7 +347,7 @@ void server_nodes_keep_members(struct efsd_server *s, const struct efs_membershi
     old = s->node_count;
     for (uint32_t i = 0; i < s->node_count && i < EFS_MAX_NODES; i++) {
         if (!efs_membership_find(m, s->nodes[i].id)) {
-            fprintf(stderr, "membership: node %u (%s:%u) is not a committed member; dropped "
+            efs_telemetry_log(0, "membership: node %u (%s:%u) is not a committed member; dropped "
                     "from the node table\n", s->nodes[i].id, s->nodes[i].addr,
                     s->nodes[i].port);
             continue;
@@ -372,7 +373,7 @@ void server_nodes_keep_members(struct efsd_server *s, const struct efs_membershi
         n->port = m->m[i].port;
         n->token = m->m[i].token;
         dirty = 1;
-        fprintf(stderr, "membership: member %u (%s:%u) added to the node table\n", n->id,
+        efs_telemetry_log(0, "membership: member %u (%s:%u) added to the node table\n", n->id,
                 n->addr, n->port);
     }
     server_heartbeat_apply_locked(s);
@@ -579,7 +580,7 @@ static int heartbeat_wait(struct efsd_server *s)
     int run = __atomic_load_n(&s->running, __ATOMIC_ACQUIRE) && rc == ETIMEDOUT;
     pthread_mutex_unlock(&s->heartbeat_lock);
     if (rc && rc != ETIMEDOUT)
-        fprintf(stderr, "heartbeat: wait failed: %s\n", strerror(rc));
+        efs_telemetry_log(0, "heartbeat: wait failed: %s\n", strerror(rc));
     return run;
 }
 
@@ -675,7 +676,7 @@ static void *heartbeat_thread(void *arg)
                 hp->streak++;
             if (hp->streak >= EFS_HB_DOWN_FAILS && hp->down_until_ms <= now) {
                 hp->down_until_ms = now + EFS_HB_DOWN_MS;
-                fprintf(stderr,
+                efs_telemetry_log(0,
                         "heartbeat: node %u (%s:%u) unresponsive — "
                         "marked down for %ds\n",
                         probe[k].id, probe[k].addr, probe[k].port,
@@ -709,12 +710,12 @@ void server_start_heartbeat(struct efsd_server *s)
         goto mutex_failed;
     }
     s->heartbeat_started = 1;
-    fprintf(stderr, "heartbeat: enabled (%d ms interval)\n", EFS_HEARTBEAT_MS);
+    efs_telemetry_log(0, "heartbeat: enabled (%d ms interval)\n", EFS_HEARTBEAT_MS);
     return;
 mutex_failed:
     pthread_mutex_destroy(&s->heartbeat_lock);
 failed:
-    fprintf(stderr, "heartbeat: start failed: %s\n", strerror(rc));
+    efs_telemetry_log(0, "heartbeat: start failed: %s\n", strerror(rc));
 }
 
 void server_stop_heartbeat(struct efsd_server *s)
@@ -759,7 +760,7 @@ static void *rejoin_thread(void *arg)
         if (s->rejoin_addr[0]) {
             rc = server_join_cluster(s, s->rejoin_addr, s->rejoin_port);
             if (rc == EFS_JOIN_REFUSED_FORMED) {
-                fprintf(stderr, "Stopping: this node cannot join the formed cluster\n");
+                efs_telemetry_log(0, "Stopping: this node cannot join the formed cluster\n");
                 __atomic_store_n(&s->join_refused, 1, __ATOMIC_RELEASE);
                 __atomic_store_n(&s->running, 0, __ATOMIC_RELEASE);
                 break;
@@ -803,7 +804,7 @@ void server_stop_rejoin(struct efsd_server *s)
     if (!s->rejoin_started) return;
     int rc = pthread_join(s->rejoin_tid, NULL);
     if (rc) {
-        fprintf(stderr, "shutdown: cannot join rejoin: %s; preserving shared state\n",
+        efs_telemetry_log(0, "shutdown: cannot join rejoin: %s; preserving shared state\n",
                 strerror(rc));
         for (;;) sleep(1);
     }
