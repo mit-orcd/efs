@@ -391,14 +391,18 @@ class Loopback(Controller):
         self.mounts = [work / 'loopback' / 'mnt-a', work / 'loopback' / 'mnt-b']
         self.procs, self.c = {}, {}
         # .efs follows the cluster commands-policy, enabled by default (D42).
-        self.env = dict(os.environ, EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'))
+        self.rdma_dev = getattr(args, 'rdma_dev', None)
+        self.transport = 'rdma' if self.rdma_dev else 'tcp'
+        self.env = dict(os.environ, EFS_TRANSPORT=self.transport, TMPDIR=str(work / 'tmp'))
+        if self.rdma_dev:
+            self.env['EFS_RDMA_DEV'] = self.rdma_dev
 
     def description(self, private_base):
         return dict(name=f'loopback-{self.n}', candidate=self.candidate, source=str(ROOT),
                     seed=self.addrs[0], owned=True,
                     nodes=[dict(addr=a, host='local', id=i + 1) for i, a in enumerate(self.addrs)],
                     mounts=[dict(path=str(m), host='local') for m in self.mounts],
-                    transport='tcp',
+                    transport=self.transport, **({'rdma_dev': self.rdma_dev} if self.rdma_dev else {}),
                     features=dict(efs_commands='cluster commands-policy (default: enabled)',
                                   packing='build default (not set by the driver)'),
                     quota=f'{self.quota} per daemon', hardware=f'{socket.gethostname()} (one host, loopback)',
@@ -511,7 +515,7 @@ class Loopback(Controller):
 
     def client_start(self, g, m):
         return g.run('client-start', 'local', f'cd {shlex.quote(str(ROOT))} && export '
-                     f'EFS_TRANSPORT=tcp && scripts/client.sh {self.addrs[0]} {shlex.quote(m["path"])}',
+                     f'EFS_TRANSPORT={self.transport} && {"EFS_RDMA_DEV=" + self.rdma_dev + " " if self.rdma_dev else ""}scripts/client.sh {self.addrs[0]} {shlex.quote(m["path"])}',
                      300)
 
     def stop_cluster(self, g):
@@ -3312,6 +3316,9 @@ def main(argv=None):
                    'or the topology\'s)')
     r.add_argument('--private-port-base', type=int, help='live harness ports with --loopback '
                    '(default 18700 or the topology\'s)')
+    r.add_argument('--rdma-dev', help='with --loopback: run the daemons, mounts and live harnesses over RDMA on this HCA')
+    r.add_argument('--fixture', action='append', default=[], metavar='KEY=JSON',
+                   help='override a fixture value (e.g. append_failover_args="--records 800"; JSON, else a string)')
     r.add_argument('--loopback-quota', help='quota of each loopback daemon (default 1G or the topology\'s)')
     r.add_argument('--out', type=Path, required=True)
     r.add_argument('--work', type=Path, help='scratch and owned stores (default OUT.work)')
@@ -3409,6 +3416,15 @@ def main(argv=None):
     if a.candidate and not re.fullmatch(r'[0-9a-f]{9,40}', a.candidate):
         p.error('--candidate must be a 9-40 digit hexadecimal commit')
     a.deadline = parse_deadlines(a.deadline)
+    overrides = {}
+    for item in a.fixture:
+        key, eq, value = item.partition('=')
+        if not eq or key not in DEFAULT_FIXTURE:
+            p.error(f'--fixture {item!r}: expected KEY=VALUE with a driver fixture key')
+        try:
+            overrides[key] = json.loads(value)
+        except ValueError:
+            overrides[key] = value
     described = None
     if a.matrix or a.topology:
         if not (a.matrix and a.topology) or a.cluster or a.loopback:
@@ -3447,6 +3463,7 @@ def main(argv=None):
         for node in cluster.get('nodes', []):
             if not re.fullmatch(r'[^\s:]+:\d+', node.get('addr', '')):
                 p.error(f'node address {node.get("addr")!r} is not HOST:PORT')
+    cluster['fixture'] = dict(cluster.get('fixture', {}), **overrides)
     if a.candidate:
         described_candidate = cluster.get('candidate')
         if described_candidate and described_candidate != 'CANDIDATE' and not (described_candidate.startswith(a.candidate) or a.candidate.startswith(described_candidate)):
