@@ -154,7 +154,7 @@ These need hardware, a harness change or a decision outside D46.
 
 1. **K23 power loss** is DECIDED out (D45 item 4, D40); K36 therefore claims recovery after unclean *process* stops only, and the H5 run must not be read as a power-loss PASS.
 2. **K33 cross-subnet** addition: the fcstor hosts share 10.1.223.x, no D46 cell crosses a subnet. Needs a decision to narrow the claim or an environment that spans two subnets.
-3. **RDMA live harnesses.** `scripts/qualify_matrix.json` states live harnesses are "not driven" over RDMA ("no RDMA live harness"). H1, H2, H3, H7, H8, H14 and H15 (K13-K16, K2, K5, K6, K12, K29, K38, K40, K50, K74, K75) are counted on RDMA in the batch table on the assumption that the driver is extended; until then their RDMA half is not runnable. Decision: extend the harnesses, or narrow RDMA acceptance to the cell gates and the orcd-mini runs.
+3. **RDMA live harnesses.** Resolved in part by Task BS ([driver page](rdma-qualification-driver-20261031.md)): `append-failover`, `k14-torn-read`, `gc-reclamation` and the new `ao-readdir` gate now run over RDMA when the cluster description sets `transport: "rdma"` and `rdma_dev` (each ran once on fstor007 `mlx5_0`, PASS, single-host loopback). So the RDMA half of H1 (K15, K29, K66, K69, K70 append stress), the torn-read part of H2 (K14), the GC part of H6 and F4 (K18, K19, K42) and the listing part of H8 (K74) is runnable by the driver. Still not driven over RDMA: `k13-tickets`, `fragment-integrity`, `d5-expiry` (TCP only), and everything the matrix names that is not a driver gate (K2, K5, K6, K12, K38, K40, K50, K75 harnesses, the other H8 scripts); those need their own RDMA wiring or the narrowing decision. The fcstor and orcd-mini topologies must also set `rdma_dev` before these gates stop being NOTRUN there.
 4. **K11 and the "partly undefined" rows (K2, K4, K16, K17, K19, K45-K47):** no named acceptance exists. The coordinator must define the gate (or accept the nearest cell gate in the matrix) before they can be scheduled; the durations above are placeholders for K17 and the nearest-gate choices.
 5. **K4 `w125_p3_compat.sh`** tests old-client compatibility that W133 and the no-backward-compatibility rule say must fail; the script needs review or replacement before O7 is meaningful.
 6. **K54 orcd-mini stage** needs an explicit user OK to use orcd-mini (the evidence records it as the reason it was not run). **K1** also needs the devops `stop.sh` patch applied (k01b patch, devops repo).
@@ -164,6 +164,10 @@ These need hardware, a harness change or a decision outside D46.
 10. **K32 target:** the row says "ior easy-write target" but states no number; the baseline `08cc16af4` A/B is the reference unless the coordinator sets one.
 11. **K72 literal matched D4 kit and exclusive host:** the AE port lists them as remaining gates; the kit must be identified and an exclusive host reserved.
 12. **K74 page-tail latency:** the AO page records that tail latency worsened; accepting it for 1.0 is the coordinator's decision, not a campaign output.
+
+## Measured short runs (Task BS, Oct 31)
+
+First measured times from the driver on fstor007 (one gate each, single-host loopback, short fixtures; [page](rdma-qualification-driver-20261031.md)). Use them as a floor for the batch estimates, not as the full-gate times: RDMA / TCP gate seconds were `append-failover` 52 / 84 (2,000 records, not the 8,000 of H1), `k14-torn-read` 88 / 88 (phases 1 and 3 only), `gc-reclamation` 52 / 52 (no `--posix`), `ao-readdir` 25 / 7 (no `--posix`). Each run adds about 8 s of driver cluster start and stop. The H1, H2, H6 and H8 estimates above are unchanged: they cover the full gates and fault phases, which were not measured.
 
 ## Limitations
 
