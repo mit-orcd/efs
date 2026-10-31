@@ -4,7 +4,7 @@
 READDIR), F28 (K43 pin retention) and F29 (K36 recovery scheduling) from
 `agent/task-h-repair` onto devel `126ba81d4` as branch `agent/h-recovery`,
 keeping only what a retained test shows failing on devel. Inventory source:
-`docs/status/task-h-wave33-reconciliation-20261029.md` on the Task H branch.
+[`task-h-wave33-reconciliation-20261029.md`](task-h-wave33-reconciliation-20261029.md).
 **Verdict:** F26, F28, F29 PASS (focused). F27 **not landed as code**: devel
 already fixes it. Full gate: see "Gate" below.
 
