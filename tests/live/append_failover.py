@@ -263,7 +263,7 @@ class Cluster:
     def __init__(self, a):
         self.a, self.root, self.rel = a, Path(a.root), Path(a.rel)
         self.procs, self.clients = {}, {}
-        self.env = dict(os.environ, EFS_TRANSPORT='tcp')
+        self.env = dict(os.environ, EFS_TRANSPORT=a.transport)
         if a.client_trace:
             self.env['EFS_REPORT_DBG'] = '1'
         (self.root / 'logs').mkdir(parents=True, exist_ok=True)
@@ -459,6 +459,8 @@ def main():
     p.add_argument('--report-latency-bound', type=float, default=3.0,
                    help='per-REPORT bound across leader changes (A11 finding 2)')
     p.add_argument('--quota', default='8G')
+    p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
+                   help='rdma needs EFS_RDMA_DEV; daemons and clients refuse to start without a device')
     p.add_argument('--failover', choices=('none', 'step-down', 'kill'), default='none')
     p.add_argument('--interval', type=float, default=20.0)
     p.add_argument('--first-event', type=float, default=10.0)
@@ -640,10 +642,15 @@ def main():
         ok_c, report['checks']['cold'] = verify(mnt / path.name, acked, failed, holes, holes_max)
         same = len({report['checks'][v]['sha256'] for v in ('warm_primary', 'warm_peer', 'cold')}) == 1
         report['checks']['views_identical'] = same
+        # An explicit rdma never falls back (efs_transport_startup): the startup line proves the mode.
+        rdma_up = a.transport == 'tcp' or all(
+            'transport rdma: rdma on' in log.read_text(errors='replace')
+            for log in (*(root / 'logs' / f'efsd-n{i}.log' for i in (1, 2, 3)), *client_logs))
+        report['checks']['transport'] = dict(requested=a.transport, started_as_requested=rdma_up)
         all_fsync_ok = report['checks']['final_fsync_zero'] and report['checks']['final_fsync_within_bound']
         report['verdict'] = 'PASS' if (ok_w and ok_p and ok_c and same and ok_l and all_fsync_ok and n67 == 0
                                        and report_lat_ok and report['checks']['availability']
-                                       and report['checks']['failover_exercised']) else 'FAIL'
+                                       and report['checks']['failover_exercised'] and rdma_up) else 'FAIL'
         # Accounted failures do not fail integrity, but do fail availability.
         report['integrity'] = 'PASS' if (ok_w and ok_p and ok_c and same and acct['ok']) else 'FAIL'
         report['accounted_failures'] = acct['accounted_failures']

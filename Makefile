@@ -613,6 +613,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_live_fixture_names.py
 	python3 tests/test_qualify_driver.py
 	python3 tests/test_qualify_standalone.py
+	python3 tests/test_qualify_rdma_live.py
 	python3 tests/test_refit_test_budgets.py
 	python3 tests/test_soak_driver.py
 	$(MAKE) test-fence-read

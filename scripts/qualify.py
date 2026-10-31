@@ -97,7 +97,7 @@ DEFAULT_FIXTURE = dict(
     posix_jobs=4, posix_timeout_s=30, e3_seconds=60, e3_file_kib=64,
     turnover_timeout_s=60, catchup_timeout_s=180,
     append_failover_args='--records 8000 --writers 4 --failover step-down --interval 4 --first-event 3',
-    k14_phases='1 2 3 7', gc_args='--posix', remote_tmp='/tmp',
+    k14_phases='1 2 3 7', gc_args='--posix', remote_tmp='/tmp', ao_base_port=0, ao_args='',
     b6_pack_wait_s=600, b6_rebuild_s=900, b6_read_s=30, b6_write_s=90, b6_fsync_s=75,
     a13_members=5, a13_quota='2G', a13_port_offset=100, a13_files=60, a13_threads=4, a13_op_deadline_s=30,
     a13_join_timeout_s=180, a13_interrupt_s=0.1,
@@ -1096,20 +1096,40 @@ def live_dir(q, g):
     return path
 
 
-def live_gate(build):
-    """A harness that starts its own private cluster on the private host."""
+def live_transport(q):
+    """('rdma', device) when the cluster description asks for RDMA, else ('tcp', None).
+    The harnesses start private loopback clusters; TCP carries RDMA setup."""
+    if q.cluster.get('transport') != 'rdma':
+        return 'tcp', None
+    return 'rdma', q.cluster.get('rdma_dev')
+
+
+def live_gate(build, rdma=False):
+    """A harness that starts its own private cluster on the private host.
+    rdma=True: the harness takes the cluster's transport (cluster.rdma_dev names
+    the HCA); other harnesses stay TCP and are labelled so."""
     def gate(q, g):
         src = q.source(q.private['host'])
         work = live_dir(q, g)
-        cmds, fixture = build(q, src, work, int(q.private['port_base']))
+        transport, dev = live_transport(q) if rdma else ('tcp', None)
+        env = ''
+        if transport == 'rdma':
+            if not dev:
+                return NOTRUN, 'cluster.rdma_dev (the HCA name, e.g. mlx5_0) is not set'
+            rc, _ = g.run('rdma-device', q.private['host'], f'test -d /sys/class/infiniband/{shlex.quote(dev)}', 60)
+            if rc:
+                return NOTRUN, f'RDMA device {dev} absent on {q.private["host"]}'
+            env = f'export EFS_RDMA_DEV={shlex.quote(dev)} && '
+        cmds, fixture = build(q, src, work, int(q.private['port_base']), transport)
         if isinstance(cmds, tuple):
             return cmds
-        g.fixture.update(fixture, private_host=q.private['host'], private_root=work)
+        g.fixture.update({'transport': transport, **({'rdma_dev': dev} if dev else {}), **fixture},
+                         private_host=q.private['host'], private_root=work)
         verdict, reason = PASS, ''
         for label, cmd, always in cmds:
             if verdict != PASS and not always:
                 continue
-            rc, text = g.run(label, q.private['host'], f'cd {shlex.quote(src)} && {cmd}')
+            rc, text = g.run(label, q.private['host'], f'{env}cd {shlex.quote(src)} && {cmd}')
             if not always:
                 verdict, reason = outcome_from_rc(rc, text, g.commands[-1].get('timed_out'))
                 g.fixture.setdefault('checks', {}).update(count_marks(text))
@@ -1117,42 +1137,56 @@ def live_gate(build):
     return gate
 
 
-def b_append(q, src, work, port):
+def b_append(q, src, work, port, transport):
     args = q.fixture['append_failover_args']
+    rdma = ' --transport rdma' if transport == 'rdma' else ''
     return [('append-failover', f'python3 tests/live/append_failover.py --rel {shlex.quote(src)} '
-             f'--root {shlex.quote(work)}/run --port {port} {args}', False)], \
+             f'--root {shlex.quote(work)}/run --port {port} {args}{rdma}', False)], \
         dict(args=args, ports=f'{port + 1}-{port + 3}', rule='K15/K29 account()')
 
 
-def b_k14(q, src, work, port):
+def b_k14(q, src, work, port, transport):
     faults = q.cluster.get('faults_source')
     phases = q.fixture['k14_phases'] if not faults else '1 2 3 4 5 6 7'
     tail = f' {shlex.quote(faults)}' if faults else ''
     base = f'scripts/k14_atomic_cluster.sh {{}} {shlex.quote(src)} {shlex.quote(work)}/run {port + 20}{tail}'
-    return [('k14-run', f'K14_PHASES={shlex.quote(phases)} ' + base.format('run'), False),
+    rdma = ' K14_TRANSPORT=rdma' if transport == 'rdma' else ''
+    return [('k14-run', f'K14_PHASES={shlex.quote(phases)}{rdma} ' + base.format('run'), False),
             ('k14-stop', base.format('stop'), True)], \
         dict(phases=phases, fault_build=bool(faults), ports=f'{port + 21}-{port + 23}')
 
 
-def b_k13(q, src, work, port):
+def b_k13(q, src, work, port, transport):
     return [('k13', f'python3 tests/live/k13_ticket_cluster.py --source {shlex.quote(src)} '
              f'--work {shlex.quote(work)}/run --port {port + 10}', False)], \
         dict(ports=f'{port + 10}-{port + 12}', stream_mib=256)
 
 
-def b_fragment(q, src, work, port):
+def b_fragment(q, src, work, port, transport):
     return [('fragment-integrity', f'mkdir -p {shlex.quote(work)}/tmp && TMPDIR={shlex.quote(work)}/tmp '
              f'python3 tests/live/fragment_integrity.py', False)], dict(configs='O_DIRECT x 1/2 roots')
 
 
-def b_gc(q, src, work, port):
+def b_gc(q, src, work, port, transport):
     w = shlex.quote(work)
     return [('gc-reclamation', f'mkdir -p {w}/p1 {w}/p2 && python3 tests/live/gc_reclamation.py '
-             f'--root {w}/p1 --root {w}/p2 --port {port + 30} {q.fixture["gc_args"]}',
+             f'--root {w}/p1 --root {w}/p2 --port {port + 30} {q.fixture["gc_args"]}'
+             f'{" --transport rdma" if transport == "rdma" else ""}',
              False)], dict(args=q.fixture['gc_args'], ports=f'{port + 30}-{port + 33}')
 
 
-def b_d5(q, src, work, port):
+def b_ao(q, src, work, port, transport):
+    """K74: AO namespace churn, leadership, halt and forwarding with live listings."""
+    w = shlex.quote(work)
+    base = q.fixture['ao_base_port']
+    ports = f' --base-port {int(base)}' if base else ''
+    return [('ao-readdir', f'python3 scripts/qualify_ao_readdir.py --work {w}/run --output {w}/out '
+             f'--transport {transport}{ports} {q.fixture["ao_args"]}', False)], \
+        dict(args=q.fixture['ao_args'], ports=f'{int(base)}-{int(base) + 3}' if base else 'free ports',
+             rule='K74 listings during migration')
+
+
+def b_d5(q, src, work, port, transport):
     """D5 (D43): expiry under the cluster expiry policy. The owned four-node
     fixture (tests/posix/posix_expiry.py -> gc_reclamation.py --expiry
     --expiry-only): policy off by default, on/off/on at runtime, folder
@@ -2537,16 +2571,18 @@ def gates(plugins):
              doc='posix_2client.py on the first two mounts'),
         Gate('posix-durability', g_durability, 'C2, E2', 'POSIX and concurrent I/O', needs=('remount',),
              deadline_s=3600, doc='posix_persist.py prepare, clean remount, verify'),
-        Gate('append-failover', live_gate(b_append), 'C3, C4 (K15/K29)', 'POSIX and concurrent I/O',
+        Gate('append-failover', live_gate(b_append, rdma=True), 'C3, C4 (K15/K29)', 'POSIX and concurrent I/O',
              deadline_s=3600, doc='tests/live/append_failover.py, private cluster'),
-        Gate('k14-torn-read', live_gate(b_k14), 'C4 (K14)', 'POSIX and concurrent I/O', deadline_s=3600,
+        Gate('k14-torn-read', live_gate(b_k14, rdma=True), 'C4 (K14)', 'POSIX and concurrent I/O', deadline_s=3600,
              doc='scripts/k14_atomic_cluster.sh, private cluster'),
         Gate('k13-tickets', live_gate(b_k13), 'C4 (K13)', 'POSIX and concurrent I/O', deadline_s=3600,
              doc='tests/live/k13_ticket_cluster.py, private cluster'),
         Gate('fragment-integrity', live_gate(b_fragment), 'B2', 'Placement/capacity and decode',
              deadline_s=3600, doc='tests/live/fragment_integrity.py, private clusters'),
-        Gate('gc-reclamation', live_gate(b_gc), 'D2', 'Packing/shared-fragment GC', deadline_s=7200,
+        Gate('gc-reclamation', live_gate(b_gc, rdma=True), 'D2', 'Packing/shared-fragment GC', deadline_s=7200,
              doc='tests/live/gc_reclamation.py, private four-node cluster'),
+        Gate('ao-readdir', live_gate(b_ao, rdma=True), 'C4 (K74)', 'POSIX and concurrent I/O', deadline_s=3600,
+             doc='scripts/qualify_ao_readdir.py, private four-node cluster'),
         Gate('d5-expiry', live_gate(b_d5), 'D5', 'Packing/shared-fragment GC', deadline_s=3600,
              doc='tests/posix/posix_expiry.py (cluster expiry policy, lifecycle, POSIX core), private four-node cluster'),
         Gate('e1-manifest', g_e1, 'E1, E2', 'Full payloads + orderly restart', partial_needs=('restart',),
@@ -2759,7 +2795,7 @@ def write_summary(q, run, results, sums):
             L.append(f'- {r["gate"]} NOTRUN: {r["reason"]}')
     if len(hosts) < len(c.get('nodes', [])) or c.get('owned'):
         L.append('- Daemons share hosts: not distinct failure domains (A4).')
-    L.append('- The live harnesses run on TCP loopback only (no RDMA live harness).')
+    L.append('- The live harnesses run on private single-host loopback clusters (TCP, or RDMA when the cluster description sets transport rdma and rdma_dev; k13, fragment-integrity and d5-expiry are TCP only); not distinct failure domains.')
     L.append('- TODO: other limitations.\n')
     L.append('## Raw evidence\n')
     L.append(f'- `{run["driver_host"]}:{out}` — {sums["files"]} files listed in `SHA256SUMS` '
