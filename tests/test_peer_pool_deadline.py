@@ -11,6 +11,10 @@ code=r'''
 #include <errno.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdarg.h>
+__attribute__((unused)) static void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 static int remaining=-1,waits,connects,destroys;
 static pthread_cond_t *last_signal;
 static int watch_signal(pthread_cond_t *cv){last_signal=cv;return 0;}

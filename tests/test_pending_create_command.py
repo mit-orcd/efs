@@ -17,6 +17,10 @@ code=r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
+__attribute__((unused)) static void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <sys/stat.h>
 #define HOST_CREATE_NAME_OFF 31
 #define HOST_CREATE_F_OPID 1

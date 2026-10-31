@@ -19,6 +19,10 @@ source = '#define HOST_LOCK_LEN '+lock_len+'\n#define HOST_APPEND_RSV_LEN '+appe
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdarg.h>
+__attribute__((unused)) static void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 #include <string.h>
 #define EFS_RAFT_LEADER 1
 struct efs_raft {int leader;};

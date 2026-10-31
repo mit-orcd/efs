@@ -74,7 +74,11 @@ assert sites >= 7, sites
 common = (root / 'src/common/common.c').read_text()
 a = common.index('int efs_rdma_trace_on(void)')
 b = common.index('\n}\n', a) + 3
-program = '#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n' + common[a:b] + \
+program = '#include <stdio.h>
+#include <stdarg.h>
+__attribute__((unused)) static void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}\n#include <stdlib.h>\n#include <string.h>\n' + common[a:b] + \
     'int main(void){printf("%d\\n",efs_rdma_trace_on());return 0;}\n'
 with tempfile.TemporaryDirectory(prefix='efs-rdma-trace-') as d:
     src, exe = Path(d) / 't.c', Path(d) / 't'

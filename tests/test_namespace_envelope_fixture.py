@@ -18,6 +18,10 @@ code = r'''
 #include <sys/stat.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
+__attribute__((unused)) static void efs_telemetry_log(int critical, const char *format, ...) {
+    (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
+}
 struct efs_raft_host { struct efs_kv *kv; };
 static efs_ino_t inodes[146],parents[146],next[4096];
 static unsigned rows;
