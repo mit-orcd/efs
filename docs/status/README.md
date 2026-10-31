@@ -1,6 +1,6 @@
 # Project status — work queue and evidence
 
-[Task BG — K48 listing recurrence](k48-listing-recurrence-20261030.md): **K48 OPEN → VERIFY (blocks alpha: yes)**. The W130 95 of 96 listing is attributed to server page serving during a cross-group directory migration (AU base: 6/6 storm and 2/100 single-listing failures; devel 0/100 and 0/26; `dabcf937a` alone fixes it). Test-only trace and listing storm added; no product behavior change. Gate: RESULT_GATE_SHORT.
+[Task BG — K48 listing recurrence](k48-listing-recurrence-20261030.md): **K48 OPEN → VERIFY (blocks alpha: yes)**. The W130 95 of 96 listing is attributed to server page serving during a cross-group directory migration (AU base: 6/6 storm and 2/100 single-listing failures; devel 0/100 and 0/26; `dabcf937a` alone fixes it). Test-only trace and listing storm added; no product behavior change. Gate on intel1: 579 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
 
 [EIO product port](eio-product-port-20261030.md): 6 repairs from the ORCD EIO stress branch ported (K66–K71: append reservation reply, truncate fence reuse, read-cache slots, OPEN stage pin, CREATE→OPEN fallback, lease cleanup admission), each failing on devel; diagnostics and the already-present dcache fix skipped.
 

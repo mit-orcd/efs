@@ -69,10 +69,10 @@ Unit-level confirmation: `tests/test_dir_migrate_visibility.py` (in `make test`,
 
 ## Gate on this branch
 
-Final tree `9c07a8e2d` (instrumentation, `tests/budgets.tsv` row for W130's 5 s storm, A6 inventory row for `EFS_TRACE_READDIR`, boundary-test stub). W130 ten serial runs: RESULT_W130. `make test-all`, 8 jobs: RESULT_GATE.
+Final tree `cdc7b419b` (instrumentation, `tests/budgets.tsv` row for W130's 5 s storm, A6 inventory row and counts for `EFS_TRACE_READDIR`, boundary-test stub). W130 ten serial runs: all 10 PASS, 25–38 s (budget row 40 → 50 s). `make test-all`, 8 jobs: **TOTAL 579, FAIL 0, NOTRUN 11, STATUS INCOMPLETE (920 s)**; NOTRUN = host limits (no RDMA device, no valgrind/memcheck.h, no cluster scripts); OVERBUDGET 2 (`test_b_geometry.py` 86.6/65 s, `test_opid_admission.py` 16.9/15 s), unrelated to this change.
 
-An earlier gate on the first instrumented tree failed two tests that this task caused and then fixed: `test_env_inventory.py` (no inventory row for `EFS_TRACE_READDIR`) and `test_readdir_reply_boundary.py` (its standalone compile lacked the trace hook); both pass on the final tree.
+Earlier gates on intermediate trees failed tests this task caused, each then fixed: `test_env_inventory.py` (no row for `EFS_TRACE_READDIR`), `test_readdir_reply_boundary.py` (no trace hook in its standalone compile), `test_settings_inventory.py` and `test_settings_listing.py` (observability count 34 → 35). One further failure, `test_k54_member_down_fence.py` (`efsd n4 exited` at cluster start under load), did not recur: 3/3 PASS alone and PASS in the final gate; its cause was not established (daemon exit reason not captured), so treat it as an unattributed load flake.
 
 ## Raw captures (outside Git)
 
-On intel1: `~/efs-artifacts/taskBG-20261030/` (`loop100`, `base100`, `base-storm`, `devel-storm`, `devel-storm2`, `v1-storm`, `final-w130`, `final-gate.log`, `k48-w130-case` copy) with `SHA256SUMS`: HASHLINE. Retained original case: intel2 `~/efs-artifacts/taskAU-20261028/k48-w130-case/` (read only). Build trees: intel1 `~/efs-taskBG/{devel,au,v1,final}-src`.
+On intel1: `~/efs-artifacts/taskBG-20261030/` (`loop100`, `base100`, `base-storm`, `devel-storm`, `devel-storm2`, `v1-storm`, `final-w130`, `final-gate.log`, `k48-w130-case` copy) with `SHA256SUMS` (6565 files; sha256 of that file `78e4a3bb60914d2ab2b9989cc453971dd448c2df21d596e434a230df8d1e82d6`; final gate summary `final-gate3-summary.txt` sha256 prefix `f796eb864eb9f4a5`). Retained original case: intel2 `~/efs-artifacts/taskAU-20261028/k48-w130-case/` (read only). Build trees: intel1 `~/efs-taskBG/{devel,au,v1,final}-src`.
