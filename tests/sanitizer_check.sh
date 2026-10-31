@@ -293,7 +293,9 @@ while IFS='|' read -r name cmd; do
         envs+=("TSAN_OPTIONS=log_path=$LOGDIR/$name.tsan halt_on_error=0 die_after_fork=0 detect_deadlocks=0 exitcode=66 ${TSAN_OPTIONS:-}"
                "EFS_TEST_TSAN=1") ;;
     asan)
-        envs+=("ASAN_OPTIONS=log_path=$LOGDIR/$name.asan $LSAN detect_stack_use_after_return=1 exitcode=66 ${ASAN_OPTIONS:-}"
+        # verify_asan_link_order=0: the W159 slow-fsync LD_PRELOAD interposer
+        # loads before libasan in the daemons that test_pump_logging starts.
+        envs+=("ASAN_OPTIONS=log_path=$LOGDIR/$name.asan $LSAN detect_stack_use_after_return=1 verify_asan_link_order=0 exitcode=66 ${ASAN_OPTIONS:-}"
                "UBSAN_OPTIONS=log_path=$LOGDIR/$name.ubsan print_stacktrace=1 halt_on_error=1 exitcode=67 ${UBSAN_OPTIONS:-}"
                "EFS_TEST_SANITIZE=1" "EFS_SANITIZE=1") ;;
     esac
