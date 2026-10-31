@@ -1277,7 +1277,7 @@ src/meta/pack_mapping.o: include/efs/pack_mapping.h include/efs/pack_ledger.h in
 tests/test_b_geometry tests/test_frag_record tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch tests/test_packed_reader tests/test_pack_validate_once tests/test_segment_reply: %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
 
-tests/test_child_vec_index: LDFLAGS += -Wl,--wrap=realloc -Wl,--wrap=calloc
+tests/test_child_vec_index: override LDFLAGS += -Wl,--wrap=realloc -Wl,--wrap=calloc
 
 tests/test_directory_sync_group: tests/test_directory_sync_group.c src/server/directory_sync_group.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
