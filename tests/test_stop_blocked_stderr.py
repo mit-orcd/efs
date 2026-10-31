@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """K79: SIGTERM'd efsd exits within its stop bound with stderr a full pipe.
 
-Three-daemon private cluster, FUSE mount, two fixed-rate rewriting writers.
+Three-daemon private cluster, FUSE mount, two fixed-rate rewriting writers
+under the W159 10 ms fsync interposer (its wait diagnostics fill the pipe).
 Every daemon's stderr is a 4 KiB pipe nobody reads from the start of the
 load; the checked unmount runs with the sink blocked, then every daemon gets
 SIGTERM while the pipe is still full. Each must exit rc 0 within
@@ -25,7 +26,7 @@ if not profile.k.fuse_ok():
 base = Path(tempfile.mkdtemp(prefix='efs-stop-blocked-'))
 print('stop blocked stderr fixture:', base, flush=True)
 a = argparse.Namespace(work=base/'work', output=base/'out', sink='blocked', obs=1,
-                       seconds=10, threads=2, rate=2, slow_fsync_us=0, versioned=True,
+                       seconds=15, threads=2, rate=2, slow_fsync_us=10000, versioned=True,
                        require_progress=True, stop_blocked=True)
 r = profile.run(a)
 assert r['verdict'] == 'PASS' and r['writes'] >= 20, r
