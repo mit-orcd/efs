@@ -71,7 +71,7 @@ assert order == sorted(order), order
 assert 'const uint64_t end = t0 + total_ms;' in bounded
 assert 'pthread_condattr_setclock(&ca, CLOCK_MONOTONIC);' in bounded
 forced = fn(efsd, 'static void shutdown_forced(')
-assert '_exit(EFS_SHUTDOWN_FORCED_RC);' in forced
+assert 'shutdown_leave(EFS_SHUTDOWN_FORCED_RC);' in forced
 # After the deadline the stopping thread never touches stdio or storage: the
 # report's I/O is on helper threads, and its wait is bounded.
 report = fn(efsd, 'static int shutdown_report(')
