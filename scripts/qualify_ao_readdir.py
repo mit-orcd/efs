@@ -27,6 +27,7 @@ def run(a):
     a.work.mkdir(parents=True,exist_ok=False);a.output.mkdir(parents=True,exist_ok=False)
     env={key:val for key,val in os.environ.items() if not key.startswith('EFS_FAULT_')}
     env.update(EFS_TRANSPORT=a.transport,EFS_DIR_SPREAD_MIN='64')
+    signal.signal(signal.SIGTERM,lambda *_:sys.exit(143)) # unwind through the finally below, as SIGINT does
     c=k.Cluster(a.work,'cluster',(1,2,3,4),env,hosts={i:a.bind for i in (1,2,3,4)})
     if a.base_port:
         for held in c.held:held.close()
@@ -143,6 +144,9 @@ def run(a):
             for held in c.held:held.close()
         except BaseException as e:result.update(verdict='FAIL',cleanup_error=repr(e));raise
         finally:
+            for p in c.procs.values():
+                if p.poll() is None:p.send_signal(signal.SIGCONT)
+            c.stop_all() # whatever the checked teardown above skipped: mounts, then every daemon
             if errors:result['verdict']='FAIL'
             for log in c.dir.glob('*.log'):(a.output/log.name).write_bytes(log.read_bytes())
             if a.transport == 'rdma' and result['verdict'] == 'PASS':

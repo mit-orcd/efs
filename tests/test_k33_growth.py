@@ -30,7 +30,7 @@ M1-M9.
 import hashlib, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster as _Cluster, EFSD, MGMT, FUSE, mgmt as _mgmt  # noqa: E402
+from k33_daemons import Cluster as _Cluster, Mount, EFSD, MGMT, FUSE, mgmt as _mgmt  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -51,29 +51,6 @@ def Cluster(name, ids):
 
 def fuse_ok():
     return FUSE.exists() and os.access('/dev/fuse', os.R_OK | os.W_OK) and shutil.which('fusermount3')
-
-
-class Mount:
-    def __init__(self, c, node, name):
-        self.path = c.dir / name
-        self.path.mkdir()
-        self.log = open(c.dir / f'{name}.log', 'w')
-        self.p = subprocess.Popen([str(FUSE), c.ep(node), str(self.path), '-f'],
-                                  stdout=self.log, stderr=subprocess.STDOUT, env=env)
-        end = time.time() + 30
-        while time.time() < end and not os.path.ismount(self.path):
-            if self.p.poll() is not None:
-                raise AssertionError((c.dir / f'{name}.log').read_text()[-2000:])
-            time.sleep(0.1)
-        assert os.path.ismount(self.path), (c.dir / f'{name}.log').read_text()[-2000:]
-
-    def close(self):
-        subprocess.run(['fusermount3', '-u', str(self.path)], capture_output=True)
-        try:
-            self.p.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            self.p.kill()
-            self.p.wait()
 
 
 def payload(name, size):
