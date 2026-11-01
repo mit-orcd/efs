@@ -28,6 +28,7 @@
 #include "../common/recorder_stop.h"
 #include "../common/recorder_start.h"
 #include <sys/resource.h>
+#include <sys/syscall.h>
 #if defined(__GLIBC__)
 #include <malloc.h>
 #endif
@@ -548,6 +549,18 @@ static int shutdown_report(const struct efsd_server *s, const char *preface,
     return started == 2 && __atomic_load_n(&g_report.done, __ATOMIC_ACQUIRE) == 2 ? 0 : -1;
 }
 
+/* Leave without stdio: ThreadSanitizer's _exit() interceptor runs
+ * fflush(NULL) first, which waits on the lock of a stderr stream whose
+ * holder is blocked in write(2) on a full pipe, so the bounded exit below
+ * hung for good under TSan (K79). exit_group is _exit minus the flush. */
+static void shutdown_leave(int rc)
+{
+#ifdef SYS_exit_group
+    syscall(SYS_exit_group, rc);
+#endif
+    _exit(rc);
+}
+
 /* Never returns. After the deadline nothing here waits on storage, stdio
  * locks or fflush beyond the report bound. */
 static void shutdown_forced(const struct efsd_server *s, const char *phase,
@@ -561,7 +574,7 @@ static void shutdown_forced(const struct efsd_server *s, const char *phase,
              "stores preserved (rc=%d)\n", total_ms, phase, worker, EFS_SHUTDOWN_FORCED_RC);
     (void)shutdown_report(s, preface, "forced", EFS_SHUTDOWN_FORCED_RC, phase, worker,
                           elapsed_ms, total_ms, barrier);
-    _exit(EFS_SHUTDOWN_FORCED_RC);
+    shutdown_leave(EFS_SHUTDOWN_FORCED_RC);
 }
 
 /* Runs the stop; T0 is when the stop signal arrived (monotonic ms).
@@ -626,7 +639,7 @@ static int shutdown_bounded(struct efsd_server *s, uint64_t t0)
      * without it, like the forced path. */
     if (shutdown_report(s, NULL, rc ? "barrier-failed" : "orderly", rc, "done", "none",
                         shutdown_now_ms() - t0, total_ms, barrier) != 0)
-        _exit(rc);
+        shutdown_leave(rc);
     return rc;
 }
 
