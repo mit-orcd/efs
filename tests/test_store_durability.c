@@ -182,6 +182,32 @@ static void test_startup_abandon(uint8_t *data)
     puts("store durability: refused startup restores the previous record; touched, serving or stopped boots stay fenced PASS");
 }
 
+/* A failing syncfs(root) is retried with back-off, not in a tight loop, and a
+ * later success is still noticed (the error stays sticky for COMMIT). */
+static void test_barrier_backoff(void)
+{
+    char root[1024],rec[1100];
+    efs_test_path(root,sizeof(root),"efs-backoff-XXXXXX");assert(efs_test_mkdtemp(root));
+    snprintf(rec,sizeof(rec),"%s/%s",root,PUT_SYNC_RECORD);
+    struct put_sync_root *r=&put_sync_roots[0];
+    abandon_reset();memset(r,0,sizeof(*r));put_sync_window_ms=20;
+    booting=1;put_sync_attach(r,root,101,1);booting=0;assert(r->fd>=0);put_sync_state[0]=1;
+    pthread_mutex_lock(&r->mu);int fd=r->fd;r->fd=-1;pthread_mutex_unlock(&r->mu); /* syncfs: EBADF */
+    put_sync_note(r,4096);usleep(1200000);
+    pthread_mutex_lock(&r->mu);
+    /* 20 ms window then 50,100,200,400,800 ms delays: about five attempts, not thousands. */
+    assert(r->error && r->failures>=3 && r->failures<=8 && !r->durable_seq);
+    assert(r->retry_delay_ns>=PUT_SYNC_BACKOFF_MIN_NS && r->retry_delay_ns<=PUT_SYNC_BACKOFF_MAX_NS);
+    r->fd=fd;pthread_mutex_unlock(&r->mu);
+    for(int i=0;i<40;i++){pthread_mutex_lock(&r->mu);int d=r->durable_seq;pthread_mutex_unlock(&r->mu);if(d)break;usleep(100000);}
+    pthread_mutex_lock(&r->mu);
+    assert(r->durable_seq>=1 && r->error && !r->retry_delay_ns);
+    pthread_mutex_unlock(&r->mu);
+    server_put_sync_stop(NULL);abandon_reset();
+    assert(!unlink(rec));assert(!rmdir(root));
+    puts("store durability: failed syncfs retries with back-off, success is noticed, error stays sticky PASS");
+}
+
 static int test_async_durability(uint8_t *data)
 {
     char root[1024],path[1100],rec[1100];
@@ -549,6 +575,7 @@ int main(void)
     test_root_set();
     int async_ran=test_async_durability(data);
     test_startup_abandon(data);
+    test_barrier_backoff();
     test_recovery_local(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
     free(data);
