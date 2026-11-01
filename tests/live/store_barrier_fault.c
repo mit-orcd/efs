@@ -1,43 +1,37 @@
-/* Test-only preload; marker selects fragment barriers and failed node IDs. */
+/* Test-only preload: refuses the batched fragment barrier, syncfs(storage root),
+ * on the nodes the marker file selects ("all" or ",<node>," tokens). */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
-int fsync(int fd)
+int syncfs(int fd)
 {
-    int (*real_fsync)(int) = dlsym(RTLD_NEXT, "fsync");
+    int (*real_syncfs)(int) = dlsym(RTLD_NEXT, "syncfs");
     const char *marker = getenv("EFS_TEST_STORE_BARRIER_FILE");
     const char *node = getenv("EFS_TEST_STORE_NODE");
-    char link[64], path[4096], selection[128] = {0};
-    struct stat st;
+    char selection[128] = {0};
     FILE *f = marker ? fopen(marker, "r") : NULL;
     if (f) {
         if (!fgets(selection, sizeof(selection), f)) selection[0] = 0;
         fclose(f);
-        int selected = !strncmp(selection, "all", 3) || !strncmp(selection, "fail fragment", 13);
+        int selected = !strncmp(selection, "all", 3);
         if (node) {
             char token[32]; snprintf(token, sizeof(token), ",%s,", node);
             selected |= strstr(selection, token) != NULL;
         }
-        int directory = strstr(selection, "directory") != NULL;
-        if (selected && !fstat(fd, &st) &&
-            (directory ? S_ISDIR(st.st_mode) : S_ISREG(st.st_mode))) {
-            snprintf(link, sizeof(link), "/proc/self/fd/%d", fd);
-            ssize_t n = readlink(link, path, sizeof(path)-1);
-            if (n > 0) {
-                path[n] = 0;
-                if (strstr(path, "/data/exports/")) {
-                    fprintf(stderr, "test-store-barrier: refusing fragment %s fsync %s\n",
-                            directory ? "directory" : "file", path);
-                    errno = EIO; return -1;
-                }
-            }
+        /* Only a root with a durability record is a fragment root. */
+        if (selected && !faccessat(fd, ".efs-durable-epoch", F_OK, 0)) {
+            static int logged; /* the syncer retries without pause */
+            if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
+                fprintf(stderr, "test-store-barrier: refusing fragment syncfs node %s\n",
+                        node ? node : "?");
+            errno = EIO; return -1;
         }
     }
-    if (!real_fsync) { errno = ENOSYS; return -1; }
-    return real_fsync(fd);
+    if (!real_syncfs) { errno = ENOSYS; return -1; }
+    return real_syncfs(fd);
 }
