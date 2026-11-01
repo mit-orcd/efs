@@ -24,6 +24,8 @@ done
 {
     echo "runs $(wc -l <"$out/results.tsv") fail $(awk -F'\t' '$3!=0' "$out/results.tsv" | wc -l)"
     echo "rc=-28 logs $(grep -l 'rc=-28' "$out"/r*.log 2>/dev/null | wc -l)"
-    echo "rc=-4 logs $(grep -l 'rc=-4\b' "$out"/r*.log 2>/dev/null | wc -l)"
+    # rc=-4 (EXIST) is also the expected line of the test's name-collision control, so it counts nothing.
+    echo "report-stuck logs $(grep -l 'report-stuck' "$out"/r*.log 2>/dev/null | wc -l)"
+    echo "stage=3 rc=-13 logs $(grep -l 'rc=-13.*stage=3' "$out"/r*.log 2>/dev/null | wc -l)"
 } >"$out/summary.txt"
 cat "$out/summary.txt"
