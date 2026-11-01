@@ -297,22 +297,26 @@ extern __thread struct lsm_owner lsm_owned[LSM_OWNER_SLOTS];
  * rdlock would deadlock behind a queued writer (writer preference). */
 extern __thread struct lsm_owner lsm_reading[LSM_OWNER_SLOTS];
 
-static inline struct lsm_owner *lsm_slot_in(struct lsm_owner *t,
-                                            const struct kv_lsm *l, int add)
-{
-    struct lsm_owner *free_slot = NULL;
-    for (unsigned i = 0; i < LSM_OWNER_SLOTS; i++) {
-        if (t[i].l == l && t[i].depth)
-            return &t[i];
-        if (!t[i].depth && !free_slot)
-            free_slot = &t[i];
-    }
-    if (add && free_slot) {
-        free_slot->l = l;
-        return free_slot;
-    }
-    return NULL;
-}
+/* A macro over the named thread-local array, not a function over a
+ * struct lsm_owner *: GCC 15 -fsanitize=null checks a pointer parameter
+ * that is the address of a TLS array, and its code for that check
+ * (lea, then je on the flags of whatever ran before) fires on a slot
+ * that was found, in kv_flush_locked's lsm_view_reclaim (K84). Indexing
+ * the array itself has no pointer to check. */
+#define lsm_slot_in(arr, owner, add) __extension__({                    \
+    struct lsm_owner *slot_ = NULL, *free_ = NULL;                      \
+    for (unsigned i_ = 0; i_ < LSM_OWNER_SLOTS && !slot_; i_++) {       \
+        if ((arr)[i_].l == (owner) && (arr)[i_].depth)                  \
+            slot_ = &(arr)[i_];                                         \
+        else if (!(arr)[i_].depth && !free_)                            \
+            free_ = &(arr)[i_];                                         \
+    }                                                                   \
+    if (!slot_ && (add) && free_) {                                     \
+        free_->l = (owner);                                             \
+        slot_ = free_;                                                  \
+    }                                                                   \
+    slot_;                                                              \
+})
 
 static inline struct lsm_owner *lsm_owner_slot(const struct kv_lsm *l, int add)
 {
