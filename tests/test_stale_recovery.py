@@ -53,6 +53,7 @@ static int dcache_note_committed(efs_ino_t ino,uint32_t ci,uint64_t gen,uint64_t
 static void putid_drop_snapshot(efs_ino_t ino,uint32_t ci,uint64_t obj,uint64_t seq) {
     (void)ino;(void)ci;(void)obj;(void)seq;
 }
+static void cbase_note(const struct efs_chunk_rec *r) {(void)r;}
 static int dcache_trace_on(void) {return 0;}
 static uint64_t dcache_base_gen_of(efs_ino_t ino,uint32_t ci,uint64_t g) {
     (void)ino;(void)ci;return g;

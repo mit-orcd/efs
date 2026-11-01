@@ -568,6 +568,49 @@ static int report_fill_owned(efs_ino_t ino, uint32_t ci,
     return 0;
 }
 
+/* K88: a chunk written through client_write_run has no dcache slot, so
+ * nothing remembers that a REPORT already committed its earlier image. The
+ * next image of that chunk (same writer, a superset of the first) still
+ * says base=0, loses to its own earlier REPORT (a background one while the
+ * writer was mid-chunk) and every retry is identical. Remember the full
+ * image the host committed, per FileID, and use it as the CAS base of the
+ * next base=0 record. Direct-mapped: a collision only forgets (the old
+ * behaviour). A truncate or recreate changes the FileID and so ignores it. */
+#define CBASE_SLOTS 4096
+static struct { efs_ino_t ino; uint32_t ci; uint64_t gen, file_gen; }
+    g_cbase[CBASE_SLOTS];
+
+static uint32_t cbase_slot(efs_ino_t ino, uint32_t ci)
+{
+    return (uint32_t)((ino * 0x9E3779B97F4A7C15ULL + ci) >> 40) % CBASE_SLOTS;
+}
+
+static void cbase_note(const struct efs_chunk_rec *r)
+{
+    if (!r->ino || r->delta_len || !r->chunk_generation || !r->file_generation)
+        return;
+    uint32_t s = cbase_slot(r->ino, r->chunk_index);
+    pthread_mutex_lock(&g_putid_mu);
+    g_cbase[s].ino = r->ino;
+    g_cbase[s].ci = r->chunk_index;
+    g_cbase[s].gen = r->chunk_generation;
+    g_cbase[s].file_gen = r->file_generation;
+    pthread_mutex_unlock(&g_putid_mu);
+}
+
+static void cbase_apply(struct efs_chunk_rec *r)
+{
+    if (r->base_gen != 0 || r->delta_len || !r->file_generation)
+        return;
+    uint32_t s = cbase_slot(r->ino, r->chunk_index);
+    pthread_mutex_lock(&g_putid_mu);
+    if (g_cbase[s].ino == r->ino && g_cbase[s].ci == r->chunk_index &&
+        g_cbase[s].file_gen == r->file_generation &&
+        g_cbase[s].gen != r->chunk_generation)
+        r->base_gen = g_cbase[s].gen;
+    pthread_mutex_unlock(&g_putid_mu);
+}
+
 static void now_ns(uint64_t *sec, uint32_t *nsec)
 {
     struct timespec ts;
@@ -1775,6 +1818,7 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
                 }
             }
             if (done) {
+                cbase_note(&obj);
                 (void)dcache_note_committed(
                     pp[i].ino, pp[i].ci,
                     obj.delta_len ? ce.generation : obj.chunk_generation,
@@ -2224,6 +2268,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
             ds.chunk_inos[i] = 0;
             continue;
         }
+        cbase_apply(&crecs[cn]);
         cn++;
     }
     shape_rc = report_units_shape(crecs, cseq, &cn, &usent, &nusent, &uheld, &nuheld);
@@ -2477,6 +2522,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
                     ds.chunk_inos[i] = 0;
                     continue;
                 }
+                cbase_apply(&crecs[cn]);
                 const struct report_streak *stuck =
                     report_rec_stuck(streaks, nstreaks, &crecs[cn], ce.generation);
                 if (stuck) {
@@ -2597,6 +2643,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync,
          * (n1: 16 pwrite+fsync per chunk) CASes on the pre-publish base,
          * loses to itself, and pays a full GET+PUT replay round. */
         for (uint32_t k = 0; k < cn; k++) {
+            cbase_note(&crecs[k]);
             (void)dcache_note_committed(
                 crecs[k].ino, crecs[k].chunk_index,
                 crecs[k].delta_len ? crecs[k].base_gen
