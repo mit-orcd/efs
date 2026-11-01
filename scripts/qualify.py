@@ -1173,10 +1173,14 @@ def b_fragment(q, src, work, port, transport):
 
 def b_gc(q, src, work, port, transport):
     w = shlex.quote(work)
-    return [('gc-reclamation', f'mkdir -p {w}/p1 {w}/p2 && python3 tests/live/gc_reclamation.py '
-             f'--root {w}/p1 --root {w}/p2 --port {port + 30} {q.fixture["gc_args"]}'
-             f'{" --transport rdma" if transport == "rdma" else ""}',
-             False)], dict(args=q.fixture['gc_args'], ports=f'{port + 30}-{port + 33}')
+    rdma = " --transport rdma" if transport == "rdma" else ""
+    gc = f'python3 tests/live/gc_reclamation.py --port {port + 30}'
+    # K11: the failed-PUT-barrier case owns its cluster (fault preload), so it is a second run.
+    return [('gc-reclamation', f'mkdir -p {w}/p1 {w}/p2 && {gc} --root {w}/p1 --root {w}/p2 '
+             f'{q.fixture["gc_args"]}{rdma}', False),
+            ('gc-put-barrier', f'mkdir -p {w}/p3 {w}/p4 && {gc} --root {w}/p3 --root {w}/p4 '
+             f'--put-barrier-fault{rdma}', False)], \
+        dict(args=q.fixture['gc_args'], ports=f'{port + 30}-{port + 33}')
 
 
 def b_ao(q, src, work, port, transport):
