@@ -206,7 +206,6 @@ static int inode_slab_ensure(struct efs_export *ex, uint32_t si)
                             (int64_t)sizeof(struct efs_inode_mem));
     ex->ino_slabs_resident++;
     slab_rows_tag(ex, si);
-    ex->ino_slabs[si].tick = ++ex->ino_slab_tick;
     return 0;
 }
 
@@ -230,11 +229,11 @@ static struct efs_inode_mem *inode_at(struct efs_export *ex, uint64_t slot)
         return NULL;
     if (!ex->ino_slabs[si].rows)
         return NULL;
-    ex->ino_slabs[si].tick = ++ex->ino_slab_tick;
     /* Stamp on every access: callers memset rows before filling them, and a
      * row whose slab_idx is stale would resolve its name against the wrong
      * arena. One store is cheaper than auditing every memset. */
-    ex->ino_slabs[si].rows[off].slab_idx = (uint16_t)si;
+    __atomic_store_n(&ex->ino_slabs[si].rows[off].slab_idx, (uint16_t)si,
+                     __ATOMIC_RELAXED); /* readers hold other locks */
     return &ex->ino_slabs[si].rows[off];
 }
 

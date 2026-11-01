@@ -1292,10 +1292,14 @@ static uint64_t inode_allocated_bytes(const struct efs_inode *ino)
     /* The partial tail counts cs unless it is provably in the count:
      * staged by this client (probe), or the server count covers every
      * chunk below size. */
-    if (n == (uint64_t)n_loc)
+    if (n == (uint64_t)n_loc) {
+        efs_client_lock_dir(ino->ino);
+        pthread_mutex_lock(&g_client.idx_mu);
         tail = file_chunk_present(ino->ino,
                                   (uint32_t)(ino->size / cs));
-    else
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino->ino);
+    } else
         tail = n * cs >= ino->size;
     if (!tail)
         return n * cs;
