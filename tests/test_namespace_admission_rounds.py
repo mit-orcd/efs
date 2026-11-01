@@ -30,7 +30,8 @@ static void wr32be(uint8_t *p,uint32_t n){p[0]=n>>24;p[1]=n>>16;p[2]=n>>8;p[3]=n
 static int host_read_index(struct efs_raft_host*h,uint8_t group,int *hint){(void)h;(void)group;(void)hint;fences++;return read_error?EFS_ERR_IO:0;}
 int efs_kv_key_sess_local(uint32_t sh,const uint8_t id[EFS_OPID_UUID_LEN],uint8_t *key,uint32_t *kl){(void)sh;(void)id;key[0]=0;*kl=1;return 0;}
 static int efs_kv_get(void *kv,const uint8_t *key,uint32_t kl,uint8_t *v,uint32_t *vl){(void)kv;(void)key;(void)kl;(void)v;(void)vl;return local_error?local_error:(local_floor?0:EFS_ERR_NOT_FOUND);}
-int efs_session_accept(struct efs_kv *kv,uint32_t sh,const uint8_t id[EFS_OPID_UUID_LEN],uint32_t epoch){(void)kv;(void)sh;(void)id;(void)epoch;accepts++;return accept_rc;}
+static int accept_unreg_once;
+int efs_session_accept(struct efs_kv *kv,uint32_t sh,const uint8_t id[EFS_OPID_UUID_LEN],uint32_t epoch){(void)kv;(void)sh;(void)id;(void)epoch;accepts++;if(accept_unreg_once){accept_unreg_once=0;return EFS_ERR_UNREGISTERED;}return accept_rc;}
 uint32_t efs_kv_session_shard(const uint8_t id[EFS_OPID_UUID_LEN]){(void)id;return 1;}
 static int host_hosts(struct efs_raft_host *h,uint8_t group){(void)h;assert(group==0);return owner_hosted;}
 static int host_session_get(struct efs_raft_host *h,const uint8_t *q,uint32_t n,uint8_t group,int *hint,uint64_t *out){(void)h;(void)group;(void)hint;assert(q[1]==0 && n==22);owner_reads++;*out=owner_value;return owner_rc;}
@@ -72,6 +73,11 @@ int main(void){struct efs_raft_host h={0};struct efs_opid_req q={0};int hint=-1;
   reset();command_rc=refusals[i];assert(host_namespace_session_admit(&h,1,&q,&hint)==refusals[i]);assert(combined==1&&!accepts);
   reset();local_floor=1;accept_rc=refusals[i];assert(host_namespace_session_admit_covered(&h,2,&q,&hint,5)==refusals[i]);assert(!owner_reads&&!creates&&!registers&&!establishes);
  }
+ /* K86: a forwarded ESTABLISH answered by the leader's reuse path carries no index; the
+  * closing accept may run before this replica applied it, so UNREGISTERED is re-read once. */
+ reset();accept_unreg_once=1;assert(!host_namespace_session_admit(&h,2,&q,&hint) && accepts==2 && fences==3);
+ reset();accept_rc=EFS_ERR_UNREGISTERED;assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_UNREGISTERED && accepts==2 && fences==3); /* still absent: fail closed */
+ reset();accept_unreg_once=1;read_error=0;command_rc=0;est_rc=0;{unsigned f=fences;assert(!host_namespace_session_admit_covered(&h,2,&q,&hint,5) && fences==f+1);}
  reset();local_error=EFS_ERR_IO;assert(host_namespace_session_admit_with_owner(&h,2,&q,1,&hint)==EFS_ERR_IO);assert(!owner_reads&&!creates&&!registers&&!accepts);
  reset();est_rc=EFS_ERR_STALE;assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_STALE);assert(registers==1&&est_checks==1&&!establishes&&!accepts);
  assert(host_namespace_session_admit(&h,2,NULL,&hint)==EFS_ERR_UNREGISTERED); /* no identity */
