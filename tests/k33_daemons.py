@@ -421,6 +421,17 @@ class Mount:
         except OSError:
             return os.path.ismount(self.path)
 
+    def text(self):
+        return self.logp.read_text(errors='replace')
+
+    def wait_log(self, pattern, timeout=30):
+        end = time.time() + timeout * SLOW
+        while time.time() < end:
+            if re.search(pattern, self.text()):
+                return
+            time.sleep(0.05)
+        raise AssertionError(f'{self.path.name}: {pattern!r} not seen\n{self.text()[-3000:]}')
+
     def lazy(self, why):
         """Say who still uses the mount (`fuser -m`), then lazy-unmount it."""
         try:
