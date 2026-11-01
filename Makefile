@@ -390,9 +390,11 @@ FORCE:
 # Architecture doc machine-gate (docs/how-it-works/developing.md). Python only;
 # safe on the login node. It links into results/, which release trees and
 # archived copies omit, so it is not part of `test` (W135): `check` runs
-# both gates independently and fails if either does.
+# both gates independently and fails if either does. It also runs
+# scripts/check_doc_links.py (relative Markdown links resolve).
 docs-check:
 	python3 docs/check-architecture.py
+	python3 scripts/check_doc_links.py
 
 # Developer navigation validation needs the pinned graphify environment and a
 # real Git index, unlike archived Linux code-gate trees. Keep it explicit.

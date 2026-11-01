@@ -191,7 +191,7 @@ writes share an inode.
   it grows:
 
   The formulas themselves are defined once, in [§7.3 of the
-  spec](../../architecture.md): a fixed `LMAX = 64` for every file, the lane
+  spec](../architecture.md): a fixed `LMAX = 64` for every file, the lane
   is the chunk index modulo `LMAX`, and the lane's shard is the odd-stride
   permutation from the inode's shard. Two properties fall out of that
   formula, and both are load-bearing:

@@ -296,3 +296,20 @@ wrapper); that wrapper encodes arguments in a query path and formats the
 server result. Python 3 provides the selected portable argument/JSON/raw-filename
 handling implementation. The existing shebang locates it automatically for
 direct invocation.
+
+## Generated files
+
+`graphify-out/`, `docs/how-it-works/architecture-full.md` and
+`docs/how-it-works/architecture.html` are generated and committed on purpose
+(never add them to `.gitignore`; stage with `git add -f`). `.rgignore` and
+`.ignore` hide them from ripgrep and ag, so a symbol search finds code, not
+copies; read them by path. `.gitattributes` marks them
+`linguist-generated=true -diff merge=ours`. Run once per clone:
+
+```sh
+git config merge.ours.driver true
+```
+
+The `merge=ours` driver keeps our side on a merge conflict, which is right
+because the file is regenerated afterwards; without the setting git merges
+normally, so nothing breaks.

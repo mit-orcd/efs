@@ -1,0 +1,6 @@
+# Generated files: committed on purpose, rewritten whole on every build.
+# merge=ours needs the one-time `git config merge.ours.driver true`
+# (docs/how-it-works/developing.md); without it git merges normally.
+/graphify-out/** linguist-generated=true -diff merge=ours
+/docs/how-it-works/architecture-full.md linguist-generated=true -diff merge=ours
+/docs/how-it-works/architecture.html linguist-generated=true -diff merge=ours
