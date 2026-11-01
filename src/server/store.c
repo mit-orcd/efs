@@ -1584,6 +1584,9 @@ static int fragment_root_lookup(struct efsd_server *s, const char *path,
  * Metadata-table fragments keep their per-file barriers. */
 #define PUT_SYNC_RECORD ".efs-durable-epoch"
 #define PUT_SYNC_RECORD_LEN 192
+#define PUT_SYNC_BACKOFF_MIN_NS 50000000ull
+#define PUT_SYNC_BACKOFF_MAX_NS 2000000000ull
+#define PUT_SYNC_FAIL_LOG_NS 60000000000ull
 struct put_sync_root {
     char root[EFS_MAX_PATH];
     int fd, record_fd;
@@ -1600,6 +1603,9 @@ struct put_sync_root {
     int recovery_uncertain; /* persists until K36 verified recovery or fresh format */
     uint64_t acked_bytes, synced_bytes, barriers, failures;
     uint64_t last_barrier_ns, last_barrier_us;
+    /* Failed-barrier retry: delay doubles PUT_SYNC_BACKOFF_MIN_NS..MAX_NS and
+     * resets on success; the log repeats at most once a minute with a count. */
+    uint64_t retry_delay_ns, retry_at_ns, fail_log_ns, fail_unlogged;
     uint32_t prev_clean;
     /* The record as found at attach, restored if startup is abandoned
      * before this boot could acknowledge any PUT (see put_sync_abandon). */
@@ -1740,14 +1746,30 @@ static void put_sync_barrier_locked(struct put_sync_root *r)
     if (rc == EFS_OK) {
         r->durable_seq = target;
         r->synced_bytes += r->inflight_bytes;
+        r->retry_delay_ns = r->retry_at_ns = 0;
     } else {
         /* Durability of these writes is unknown: keep counting them as
          * unsynced and stop acknowledging asynchronously. */
         r->failures++;
-        if (!r->error)
+        r->retry_delay_ns = !r->retry_delay_ns ? PUT_SYNC_BACKOFF_MIN_NS
+            : r->retry_delay_ns * 2 > PUT_SYNC_BACKOFF_MAX_NS ? PUT_SYNC_BACKOFF_MAX_NS
+            : r->retry_delay_ns * 2;
+        r->retry_at_ns = t1 + r->retry_delay_ns;
+        if (!r->error) {
             efs_telemetry_log(0, "store: put sync root=%s barrier failed seq=%llu; "
                     "COMMIT and fsync return EIO until restart\n",
                     r->root, (unsigned long long)target);
+            r->fail_log_ns = t1;
+            r->fail_unlogged = 0;
+        } else if (t1 - r->fail_log_ns >= PUT_SYNC_FAIL_LOG_NS) {
+            efs_telemetry_log(0, "store: put sync root=%s barrier still failing "
+                    "(%llu more attempts, retry every %llu ms)\n", r->root,
+                    (unsigned long long)r->fail_unlogged,
+                    (unsigned long long)(r->retry_delay_ns / 1000000));
+            r->fail_log_ns = t1;
+            r->fail_unlogged = 0;
+        } else
+            r->fail_unlogged++;
         r->error = 1;
         r->cur_bytes += r->inflight_bytes;
         r->cur_frags += r->inflight_frags;
@@ -1767,7 +1789,7 @@ static void *put_sync_thread(void *arg)
         int due = r->cur_frags &&
                   (r->want_now || r->cur_bytes >= put_sync_window_bytes ||
                    now - r->cur_first_ns >= put_sync_window_ms * 1000000ull);
-        if (due) {
+        if (due && now >= r->retry_at_ns) {
             put_sync_barrier_locked(r);
             continue;
         }
@@ -1779,9 +1801,10 @@ static void *put_sync_thread(void *arg)
             break;
         struct timespec until;
         clock_gettime(CLOCK_REALTIME, &until);
-        uint64_t wait_ns = r->cur_frags
-            ? put_sync_window_ms * 1000000ull - (now - r->cur_first_ns)
-            : 1000000000ull;
+        uint64_t age = now - r->cur_first_ns, win = put_sync_window_ms * 1000000ull;
+        uint64_t wait_ns = !r->cur_frags ? 1000000000ull : age < win ? win - age : 0;
+        if (r->cur_frags && r->retry_at_ns > now && r->retry_at_ns - now > wait_ns)
+            wait_ns = r->retry_at_ns - now; /* back-off after a failed barrier */
         until.tv_sec += (time_t)(wait_ns / 1000000000ull);
         until.tv_nsec += (long)(wait_ns % 1000000000ull);
         if (until.tv_nsec >= 1000000000L) { until.tv_sec++; until.tv_nsec -= 1000000000L; }
