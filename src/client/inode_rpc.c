@@ -157,9 +157,13 @@ uint64_t efs_client_rpc_resolve_budget_ms(void)
 
 static int rpc_prof_enabled(void)
 {
-    if (efs_rpc_prof_on < 0)
-        efs_rpc_prof_on = getenv("EFS_RPC_PROF") != NULL;
-    return efs_rpc_prof_on;
+    /* K83: any thread may be first; read and set atomically (as W143). */
+    int on = __atomic_load_n(&efs_rpc_prof_on, __ATOMIC_ACQUIRE);
+    if (on < 0) {
+        on = getenv("EFS_RPC_PROF") != NULL;
+        __atomic_store_n(&efs_rpc_prof_on, on, __ATOMIC_RELEASE);
+    }
+    return on;
 }
 
 static void rpc_prof_add(uint8_t type, unsigned long long checkout_us,
