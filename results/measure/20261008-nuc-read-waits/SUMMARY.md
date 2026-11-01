@@ -3,7 +3,7 @@
 ## Purpose and linked item
 
 Supports **W66** (metadata-group performance follow-up). Interpretation and the
-next gate live in `docs/status/metadata-group-perf-followup-20261008.md`. This
+next gate live in `docs/status/2026-10/metadata-group-perf-followup-20261008.md`. This
 is a read-only live investigation of why one metadata Raft group answers reads
 slower than the other on the NUC cluster; no gate verdict was sought.
 

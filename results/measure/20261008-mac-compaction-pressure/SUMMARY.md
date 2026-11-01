@@ -7,7 +7,7 @@ bound claimed.
 ## Purpose and linked item
 
 - **D30/W23/W89** compaction-pressure foundations (see
-  `docs/status/compaction-pressure-20261008.md` checkpoint).
+  `docs/status/2026-10/compaction-pressure-20261008.md` checkpoint).
 
 ## Verdict
 

@@ -4,8 +4,8 @@
 Intel's share of the human-authorized three-way qualification split (AMD / Intel / NUC)
 of frozen release branch `release-v0.3.0-pre-alpha`: run the 48 buffered TCP
 first-stage scenarios from the approved live-test runner on the Intel cluster.
-Status page: `docs/status/intel-buffered-qualification-20261011.md`; split
-authorized in `docs/status/amd-all-suites-20261011.md` ("authorized three-cluster
+Status page: `docs/status/2026-10/intel-buffered-qualification-20261011.md`; split
+authorized in `docs/status/2026-10/amd-all-suites-20261011.md` ("authorized three-cluster
 split"). Added by commit `6acd3bdda` ("docs: checkpoint Intel buffered
 qualification at user stop").
 
@@ -54,7 +54,7 @@ matching all 21,738 files on both variants.
 
 Longest PASS: peer-open-contention-only-buffered 665.4 s; compactor-buffered
 713.3 s. Full per-case table with durations in
-`docs/status/intel-buffered-qualification-20261011.md`. Production audit after
+`docs/status/2026-10/intel-buffered-qualification-20261011.md`. Production audit after
 stop: process/binary/mount identities matched pre-launch baseline; 256 original
 tiny-file payload samples verified from each host (512 checks).
 

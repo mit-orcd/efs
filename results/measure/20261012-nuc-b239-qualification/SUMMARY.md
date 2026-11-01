@@ -5,7 +5,7 @@
 NUC qualification of the approved merged v0.3.0 candidate `b239dc7d` —
 full native normal/fault suites, focused ASan/UBSan, full direct W52/POSIX
 recipe, plus a reviewed W97/W111 root-stop baseline. Linked status page:
-`docs/status/nuc-b239-qualification-20261012.md` (work items W52, W112,
+`docs/status/2026-10/nuc-b239-qualification-20261012.md` (work items W52, W112,
 W97/W111). The candidate was later superseded by the single common `c2`
 candidate; no old-source pass is inherited by later candidates.
 

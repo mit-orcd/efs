@@ -8,7 +8,7 @@ propagates hold/sync failures, returns INVAL (not whole-batch OK) for an
 invalid record, and activates overflow lanes (records beyond the 32-inode
 cache) before taking the REPORT log hold. Part of the 2026-10-09
 dependency-linked correctness package
-(`docs/status/dependency-package-20261009.md`, section "REPORT shared-log
+(`docs/status/2026-10/dependency-package-20261009.md`, section "REPORT shared-log
 coverage and overflow lanes — implemented/gated"). Raw evidence added by
 commits `b6e973cf0` and `aea76bbe2`.
 

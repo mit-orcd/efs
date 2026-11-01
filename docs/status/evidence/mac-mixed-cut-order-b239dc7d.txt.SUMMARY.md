@@ -5,7 +5,7 @@ Validation output for the reordered mixed-cut safety oracle (patch in
 `mac-mixed-cut-oracle-b239dc7d.patch`), added by commit `ce3280047`
 ("Isolate mixed cut safety oracle before scheduler negative controls",
 2026-10-11). Linked status page:
-`docs/status/mac-mixed-cut-oracle-isolation-20261012.md`.
+`docs/status/2026-10/mac-mixed-cut-oracle-isolation-20261012.md`.
 
 ## Verdict
 PASS. Both positive configurations exit 0; all six negative-control

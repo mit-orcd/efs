@@ -6,7 +6,7 @@ AMD retained-PUT / ticketed-publication evidence hour (started 02:44:12 UTC,
 2026-10-10) on branch `devel-w66`: budgeted pre-PUT admission, ticketed
 publication with unique PUT IDs, published-only retirement, and the final
 focused verification. W86/W88 staged-integration work. Linked from
-`docs/status/dependency-package-20261009.md` (sections around lines 899 and
+`docs/status/2026-10/dependency-package-20261009.md` (sections around lines 899 and
 937, "Published-only retirement and final checkpoint — Oct 10 UTC"), which
 points at this run's README.md and directory. Added by commit `7ff7cb708`
 (raw-evidence branch).

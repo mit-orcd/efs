@@ -1,6 +1,6 @@
 # W93 checkpoint cadence investigation — October 10, 2026
 
-Historical investigation: its W93-open disposition predates the later [atomic-apply acceptance](../../status/w93-atomic-apply-20261010.md). Original failed/not-run verdicts and restoration limits below are retained. W97 and [current Intel acceptance](../../status/intel-deployment-acceptance-20261011.md) remain active; this archive move closes no additional gate.
+Historical investigation: its W93-open disposition predates the later [atomic-apply acceptance](../../status/2026-10/w93-atomic-apply-20261010.md). Original failed/not-run verdicts and restoration limits below are retained. W97 and [current Intel acceptance](../../status/2026-10/intel-deployment-acceptance-20261011.md) remain active; this archive move closes no additional gate.
 
 User-authorized hour starts 04:26 UTC (00:26 EDT), NUC only. Branch
 `devel-persistence-pressure`, worktree `i-l/work/efs-find-stats`. Existing stores

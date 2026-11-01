@@ -463,7 +463,7 @@ void server_raft_host_step_down(const struct efs_msg_raft_step_down *in, struct 
 int server_raft_host_active(void);
 /* W153/K33: the committed membership. formed: a revision is committed and
  * learned here (before the host starts, as the member store recorded it).
- * member_hello admits a HELLO (docs/status/k33-membership-protocol-20261023.md
+ * member_hello admits a HELLO (docs/status/2026-10/k33-membership-protocol-20261023.md
  * M5) from a sender with a node id: EFS_HELLO_REJECT_NONE when both are
  * unformed in one cluster (the sender is a seed or holds a promise) or the
  * sender is the committed member at exactly id, addr:port and store token;

@@ -8,7 +8,7 @@ an authoritative remote ReadIndex succeeds but local catch-up times out and the
 client saw LINK EIO. The host now returns NOT_PRIMARY with the validated leader
 hint instead of ever serving the stale local view. Linked item: follower/seed
 routing portion of the W66 sequence in
-`docs/status/dependency-package-20261009.md` (evidence link at line 661);
+`docs/status/2026-10/dependency-package-20261009.md` (evidence link at line 661);
 follow-up to `results/measure/20261009-transaction-durability`
 (seed-routing-fault.txt). Run added by commit `074b65123` ("fix(raft): redirect
 reads when follower catch-up times out").

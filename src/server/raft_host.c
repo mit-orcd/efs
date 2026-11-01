@@ -14556,7 +14556,7 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         out->leader_hint = hint;
 }
 
-/* ---- K33 node addition (docs/status/k33-membership-protocol-20261023.md M5) */
+/* ---- K33 node addition (docs/status/2026-10/k33-membership-protocol-20261023.md M5) */
 
 /* Forward an eligible joiner to a group-0 member (this node hosts no
  * group-0 replica): EFS_MD_REQ_MEMBER_ADD, first member that answers. */

@@ -2,7 +2,7 @@
 # measure_cohort_durability.sh SCRATCH_PARENT [RECORDS]
 #
 # Local fragment-durability model (tools/bench_cohort_durability.c) for the
-# grouped-durability design in docs/status/intel-cohort-durability-20261015.md.
+# grouped-durability design in docs/status/2026-10/intel-cohort-durability-20261015.md.
 # Builds the tool into a temporary directory, then runs every case twice in
 # palindromic order and prints one JSON line per case.
 #

@@ -1,6 +1,6 @@
 # Historical Intel deployment acceptance — 775d935c, 2026-10-11
 
-**Archived:** the running jobs, package availability and deployed build below describe the earlier 775d935c checkpoint. They are not current runtime claims. See [current acceptance](../../status/intel-deployment-acceptance-20261011.md).
+**Archived:** the running jobs, package availability and deployed build below describe the earlier 775d935c checkpoint. They are not current runtime claims. See [current acceptance](../../status/2026-10/intel-deployment-acceptance-20261011.md).
 
 Deployed code is `775d935c`, branch devel, build `2026-10-11T01:53:55Z`. Commit `a7c2af80` and this acceptance record add documentation only; deployed executable code remains `775d935c`. A fresh wildcard origin fetch and ancestry audit finds all 19 visible local/remote refs contained in devel. Original staged/unstaged user documentation remains preserved in its original checkout. Nothing was pushed.
 

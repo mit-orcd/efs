@@ -4,7 +4,7 @@
 
 W93 internal durability batching and queue measurement on the NUC cluster, using
 opt-in diagnostic instrumentation (commits `ebe72fdb`, `9fd7862e`). Status page:
-`docs/status/batch-internals-profile-20261009.md`; also referenced from
+`docs/status/2026-10/batch-internals-profile-20261009.md`; also referenced from
 `docs/status/catalog.md` and `docs/backlog/work-items.md` (W93). Added to
 raw-evidence by commit `511cce9a1`.
 

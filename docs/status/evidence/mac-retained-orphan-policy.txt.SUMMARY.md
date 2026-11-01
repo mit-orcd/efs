@@ -4,7 +4,7 @@
 One-line policy probe captured for the retained-orphan review, added by
 commit `4124876fc` ("Reproduce retained Mac directory backlink refusal
 with safe negative controls", 2026-10-11). Linked status page:
-`docs/status/mac-retained-orphan-review-20261012.md`.
+`docs/status/2026-10/mac-retained-orphan-review-20261012.md`.
 
 ## Verdict
 Informational capture — not a pass/fail run. The probe returned rc=0,

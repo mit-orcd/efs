@@ -2,7 +2,7 @@
 # measure_read_reuse.sh FILE NIC OUT_DIR
 #
 # Read-path wire amplification and client read-cache reuse on one EFS client
-# (docs/status/intel-read-metadata-cache-20261015.md). Read-only: every dd
+# (docs/status/2026-10/intel-read-metadata-cache-20261015.md). Read-only: every dd
 # writes to /dev/null. Run on the client host as the account that owns
 # efs-fuse; strace attaches to that process (kernel.yama.ptrace_scope=0).
 #

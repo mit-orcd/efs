@@ -1563,7 +1563,7 @@ static int fragment_root_lookup(struct efsd_server *s, const char *path,
 
 /* ---- Asynchronous PUT acknowledgement ----------------------------------
  * The only data-fragment PUT mode: NFS unstable/commit
- * (docs/status/intel-async-durability-20261015.md). A fragment is ACKed
+ * (docs/status/2026-10/intel-async-durability-20261015.md). A fragment is ACKed
  * after its write and close; it joins its root's open epoch. A per-root
  * syncer runs one barrier when the epoch is EFS_PUT_SYNC_MS old (default
  * 200, 1..10000), holds EFS_PUT_SYNC_BYTES (default 256 MiB), or a

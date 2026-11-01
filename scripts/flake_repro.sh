@@ -1,6 +1,6 @@
 #!/bin/bash
 # flake_repro.sh TREE OUT N: the flake sweep's reproduction driver (Oct 25,
-# docs/status/flake-sweep-20261025.md): each intermittent daemon test N
+# docs/status/2026-10/flake-sweep-20261025.md): each intermittent daemon test N
 # times alone, keeping the daemon and client logs of every failure, then all
 # of them looped three times beside one 8-job pool run of the gate. TREE is a
 # built copy of the source tree on the host; OUT collects loop.log files.

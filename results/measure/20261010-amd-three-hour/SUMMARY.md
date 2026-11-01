@@ -3,7 +3,7 @@
 ## Purpose and linked item
 Three-hour exclusive-AMD closure round on branch `devel-amd` (based on devel
 `746ae9f0`), started 2026-10-11 03:38:46 UTC (Oct 10 EDT) with a 06:38:46 UTC
-deadline. Linked status page: `docs/status/amd-non-rdma-20261010.md`.
+deadline. Linked status page: `docs/status/2026-10/amd-non-rdma-20261010.md`.
 Work items: W89 (measurement defect), W66 (namespace coordinator routing),
 W73/W95 documentation reconciliation, symlink request/test mismatch, W94
 (combined first-descriptor adoption A/B + fault lifecycle gates).
@@ -85,7 +85,7 @@ FAIL overall (mixed round; failures preserved, not erased):
   migration/scale, D30/W23 bounds and RDMA acceptance remain open.
 - Oct 11 audit correction: original lease-count script misread the 16-byte
   applied checkpoint; corrected reader re-proves 192 vs 128 (see
-  `docs/status/amd-integration-20261011.md`). Invalid prior proof retained
+  `docs/status/2026-10/amd-integration-20261011.md`). Invalid prior proof retained
   separately.
 
 ## Evidence index (sha256 first 16 chars)

@@ -18,7 +18,7 @@ by SHA-256; private copies exclude `.git`, so their embedded version strings are
 not sufficient source identities. W64 code is `9ddcf7a2`; persistence code is
 `e77e1f13`; bounded DNS is `011ae854`. Persistence live fixture predates DNS;
 combined unit checks include it. Process restart is not physical power loss.
-See [the task ledger](../../../docs/status/replay-readiness-20261008.md) for
+See [the task ledger](../../../docs/status/2026-10/replay-readiness-20261008.md) for
 remaining W64/W88, D27, W72/W86 and D25 obligations.
 
 The historical failures above preceded the accepted coordinated append fix.

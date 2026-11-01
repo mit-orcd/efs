@@ -6,7 +6,7 @@ implementation and qualification NOTRUN.** Based on the graph/source review at
 performance result. No product binary, cluster or release was changed.
 
 [Status index](README.md) · [Alpha 1.0 gates](alpha-1.0-2plus1-checklist.md) ·
-[Distributed roadmap](distributed-cluster-roadmap-20261022.md) ·
+[Distributed roadmap](2026-10/distributed-cluster-roadmap-20261022.md) ·
 [Release placement ladder D38](decisions.md#d38--metadata-placement-ladder-across-the-alpha-releases-accepted-oct-22)
 
 ## Purpose and release boundary

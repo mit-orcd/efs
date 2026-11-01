@@ -5,7 +5,7 @@ Publication pending evidence on a private AMD source, hash-pinned.
 ## Purpose and linked item
 
 - Publication-pending behavior; scope and results in
-  `docs/status/publication-pending-20261008.md`. Baseline `6336e0d0` plus the
+  `docs/status/2026-10/publication-pending-20261008.md`. Baseline `6336e0d0` plus the
   source SHA-256 manifest (`source-sha256.txt`).
 
 ## Verdict
@@ -34,7 +34,7 @@ All pass per README.md and the status page.
 
 ## Limitations and remaining gates
 
-See `docs/status/publication-pending-20261008.md` for scope.
+See `docs/status/2026-10/publication-pending-20261008.md` for scope.
 
 ## Evidence index
 

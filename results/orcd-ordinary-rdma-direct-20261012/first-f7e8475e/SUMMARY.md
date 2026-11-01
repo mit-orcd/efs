@@ -7,7 +7,7 @@ files over native RDMA with direct I/O (2026-10-12, branch
 `fix-orcd-packing-stress`). This subdirectory retains the full evidence for
 the first reviewed snapshot `f7e8475e`, which FAILED and was superseded by
 the revised candidate `8a91cde3` (evidence in the parent directory). Linked
-status page: `docs/status/orcd-profile-review-20261012.md` (sections "First
+status page: `docs/status/2026-10/orcd-profile-review-20261012.md` (sections "First
 concurrent run and subsequent review"); the run was added by commit
 `effa10452` ("docs: record passing ORCD ordinary-file RDMA direct
 qualification"). Parent summary: `../SUMMARY.md`.

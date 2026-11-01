@@ -46,7 +46,7 @@ All four cells pass: control/candidate/candidate/control rates are
 operation/mixed-read tails. The separate 6,000-read/group default/cadence/bundle/
 default matrix resolves the initial short-sample idle-tail concern. All final
 exits are zero; final restored state and another 512 exact cold checks pass.
-W93 is closed with scope and limits in `docs/status/w93-atomic-apply-20261010.md`.
+W93 is closed with scope and limits in `docs/status/2026-10/w93-atomic-apply-20261010.md`.
 
 `harness-provenance.json` records the final control's bounded pre-load diagnostic
 readiness retry. No loader existed during its first failed startup attempt;

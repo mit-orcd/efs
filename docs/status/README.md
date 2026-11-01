@@ -1,22 +1,27 @@
 # Project status — work queue and evidence
 
-[EIO product port](eio-product-port-20261030.md): 6 repairs from the ORCD EIO stress branch ported (K66–K71: append reservation reply, truncate fence reuse, read-cache slots, OPEN stage pin, CREATE→OPEN fallback, lease cleanup admission), each failing on devel; diagnostics and the already-present dcache fix skipped.
+Layout: dated pages (`*-YYYYMMDD[-suffix].md`) live in `YYYY-MM/` directories
+(`scripts/status_layout.py` files a new top-level one); undated pages and the
+living documents stay here, including the dated
+[stage1-acceptance-matrix-20261030.md](stage1-acceptance-matrix-20261030.md).
 
-[ORCD-test EIO and stress repair](orcd-test-eio-stress-repair-20261028.md): **IN PROGRESS / overall FAIL**, checked Oct 29 (live gates, IOR pass at 402/378 MiB/s write; serial POSIX has one 15 s mtime timeout, not a PASS; stress 272 FAIL / 372 NOTRUN). Only the product repairs listed in the port page were applied to devel.
+[EIO product port](2026-10/eio-product-port-20261030.md): 6 repairs from the ORCD EIO stress branch ported (K66–K71: append reservation reply, truncate fence reuse, read-cache slots, OPEN stage pin, CREATE→OPEN fallback, lease cleanup admission), each failing on devel; diagnostics and the already-present dcache fix skipped.
 
-[Task H split: K45/K51 group](h-k45-shutdown-20261029.md): **F24** (rejoin-thread ownership joined in bounded teardown; devel heartbeat owner kept) and **F35** (`raft-resync` retries only a definite BUSY inside the existing 30 s I/O bound) ported to `agent/h-k45-shutdown`, both named reproductions fail on devel source and pass with the change; K54 interaction checked, none. Not merged; intel1 gate 556 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
+[ORCD-test EIO and stress repair](2026-10/orcd-test-eio-stress-repair-20261028.md): **IN PROGRESS / overall FAIL**, checked Oct 29 (live gates, IOR pass at 402/378 MiB/s write; serial POSIX has one 15 s mtime timeout, not a PASS; stress 272 FAIL / 372 NOTRUN). Only the product repairs listed in the port page were applied to devel.
 
-[H-recovery — Task H F26–F29](h-recovery-20261029.md): **F26 K36/K47 re-probe, F28 K43
+[Task H split: K45/K51 group](2026-10/h-k45-shutdown-20261029.md): **F24** (rejoin-thread ownership joined in bounded teardown; devel heartbeat owner kept) and **F35** (`raft-resync` retries only a definite BUSY inside the existing 30 s I/O bound) ported to `agent/h-k45-shutdown`, both named reproductions fail on devel source and pass with the change; K54 interaction checked, none. Not merged; intel1 gate 556 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
+
+[H-recovery — Task H F26–F29](2026-10/h-recovery-20261029.md): **F26 K36/K47 re-probe, F28 K43
 pin retention and F29 K36 recovery scheduling PASS focused** on branch `agent/h-recovery`
 (each test fails on devel source); F27 not ported, devel `35a6e41b0` already covers it.
 K36, K43, K47 statuses unchanged; **K48 stays OPEN**.
 
-[H-K22 allocator group](h-k22-allocator-20261029.md): Task H fixes F10-F20
+[H-K22 allocator group](2026-10/h-k22-allocator-20261029.md): Task H fixes F10-F20
 (allocator reservation, receipt replay, bootstrap/CREATE authority, snapshot
 import, KV flush cohorts, delayed-pump heartbeat) ported to
 `agent/h-k22-allocator`, pending merge; unit regressions PASS, live K22 NOTRUN.
 
-[Task BB — client overlay authority](bb-overlay-authority-audit-20261029.md):
+[Task BB — client overlay authority](2026-10/bb-overlay-authority-audit-20261029.md):
 **COMPLETE scoped**, source `02f861e4a`, branch `agent/devel-bb`, K62–K64 fixed.
 Xorinox full gate **553/0 FAIL/10 host-limited NOTRUN**; reserved-window base
 and candidate comparisons PASS. ORCD node9900 TCP/RDMA matrices **8/8 each**,
@@ -27,7 +32,7 @@ and six failed fixture trees retained on xorinox. User chose to retain passing
 scratch/build trees on both hosts for review; cleanup choice closed by retention.
 No trees deleted, merge/push or alpha closure.
 
-[K55 — slow storage COMMIT](k55-slow-commit-20261028.md): **FIXED on
+[K55 — slow storage COMMIT](2026-10/k55-slow-commit-20261028.md): **FIXED on
 `agent/devel-k55`, independent focused qualification PASS** on fcstor015,
 source `5185bfcd3`; merged into devel (wave 32, `4e4b7ec75`). Attributed K35 fix passes native/index,
 ASan/UBSan/leak, TSan, the old-source negative control, four planned TCP/RDMA
@@ -37,7 +42,7 @@ transport, reclamation and POSIX (218 core / 68 peer). Full gate:
 165-file capture sealed and verified; all original failures and three new K54
 unclean-unmount observations/fixtures retained on fcstor015. K53/K54 remain open.
 
-[Task AI — RDMA registry lifetime lock](ai-rdma-registry-lock-20261028.md):
+[Task AI — RDMA registry lifetime lock](2026-10/ai-rdma-registry-lock-20261028.md):
 **COMPLETE scoped, measured no-change**, no product locking change. User-authorized
 fcstor015 `/data1/01` substitutes for busy node9901; existing clusters untouched.
 Real mlx5_0 transport and one-rank filesystem/IOR smoke PASS scoped, with
@@ -55,35 +60,35 @@ quota failure is not waived. Sealed 520-file capture bundle, 1,091 passed target
 pruned; all seven failed roots and 8,698 failed regular files verified unchanged.
 Own processes/mounts retired, other clusters untouched; no alpha release PASS.
 
-[AM — REPORT degraded-object bookkeeping: measured, no change](am-report-degraded-batch-20261028.md):
+[AM — REPORT degraded-object bookkeeping: measured, no change](2026-10/am-report-degraded-batch-20261028.md):
 **MEASURED, NO CHANGE on branch `agent/devel-taskam` (`3fe865d98`), merged into devel (wave 32).**
 Zero `g_dgobj_mu` acquisitions with an empty table at any concurrency; ~300 ns
 per flags/drop pair with entries, 0.0025 % of REPORT wall at 32 writers — two
 orders below the 5 % threshold on intel1 and node9901. Named gates PASS;
 test-all 546/1/12 with the one FAIL the pre-existing devel b6 slow defect.
 
-[AR — PUT retries and identical-object rewrites: measured, no change](ar-put-retry-rewrites-20261028.md):
+[AR — PUT retries and identical-object rewrites: measured, no change](2026-10/ar-put-retry-rewrites-20261028.md):
 **MEASURED, NO CHANGE on branch `agent/devel-taskar` (`9b5de147e`), merged into devel (wave 32).**
 Zero EEXIST rewrites in the D4 load and both append-failover variants; the
 counter is validated by a forced lost PUT reply (one 64 KiB rewrite per node).
 Below the 1 % threshold; named gates PASS; test-all 546/1/12 with the one
 FAIL the pre-existing devel b6 slow defect.
 
-[AK — packed reads: one hash, no staging copy](ak-packed-read-staging-20261028.md):
+[AK — packed reads: one hash, no staging copy](2026-10/ak-packed-read-staging-20261028.md):
 **DONE on branch `agent/devel-taskak` (`1c2fd4188`), merged into devel (wave 33, `550b00e47`).** One fragment
 hash checked against both reply and mapping digests; TCP receive-into-scratch,
 RDMA ownership transfer. Unit + RDMA gates PASS; test-all 547/1/12 with the one
 FAIL pre-existing on devel (b6 slow-mode fsync, write path). TCP client CPU
 −26…−34 % on cold packed reads.
 
-[AT — PUT-window completion wake-ups: measured, no change](at-put-window-wakeups-20261028.md):
+[AT — PUT-window completion wake-ups: measured, no change](2026-10/at-put-window-wakeups-20261028.md):
 **MEASURED, NO CHANGE on branch `agent/devel-taskat` (`dfd5fd191`), merged into devel (wave 36).**
 ~85 wakes per satisfied waiter at 32 writers but zero deadline timeouts; wait
 durations track PUT completion, not wake latency, and broadcast-wake CPU is
 ~0.05 % of the host — no end-to-end gain from per-inode wake ownership.
 Named gates PASS; test-all 546/1/11 with the one FAIL the pre-existing b6 defect.
 
-[AW — child vectors: reverse slot→position index](aw-child-vector-index-20261028.md):
+[AW — child vectors: reverse slot→position index](2026-10/aw-child-vector-index-20261028.md):
 **IMPLEMENTED on branch `agent/devel-taskaw` (`50218c827`), not merged.** O(1)
 deletion and relocation repair (~6 map ops instead of ~D comparisons), same
 memory budget, rollup convergence verified. End-to-end latency unchanged:
@@ -105,7 +110,7 @@ superseded machinery. Alpha 1.0 tasks/gates and D38 alpha 2.0–4.0 remain intac
 
 [Stage 1 scan/index tasks AV–AX](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--workload-sized-scans-avax):
 **AW IMPLEMENTED on `agent/devel-taskaw` (`50218c827`, not merged;
-[evidence](aw-child-vector-index-20261028.md)); AV and AX OPEN /
+[evidence](2026-10/aw-child-vector-index-20261028.md)); AV and AX OPEN /
 implementation and measurements NOTRUN**, source reviewed at `ee66f837b`:
 REPORT chunk/size nested search (AV), local child-vector deletion/relocation scans (AW),
 and loaded hardlink-alias scans (AX). Scope and fixed-size fast paths distinguished;
@@ -113,7 +118,7 @@ no new K defect or measured slowdown claimed. Existing tasks remain separate.
 
 [Stage 1 wakeup/polling tasks AS–AU](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--wakeups-and-polling-asau):
 **AT MEASURED, NO CHANGE on `agent/devel-taskat` (`dfd5fd191`, merged into devel, wave 36;
-[evidence](at-put-window-wakeups-20261028.md)); AS and AU OPEN /
+[evidence](2026-10/at-put-window-wakeups-20261028.md)); AS and AU OPEN /
 implementation and measurements NOTRUN**, source reviewed at `7dc73fb68`:
 demand-read allocation polling (AS), broad PUT-window wakeups (AT), and repeated Raft
 eventfd kicks (AU). Lost-wakeup, overflow, deadline and progress gates required;
@@ -121,7 +126,7 @@ distinct from existing tasks, with no new K defect or measured gain claimed.
 
 [Stage 1 disk-I/O tasks AP–AR](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--disk-io-and-write-amplification-apar):
 **AR MEASURED, NO CHANGE on `agent/devel-taskar` (`9b5de147e`, merged into devel, wave 32;
-[evidence](ar-put-retry-rewrites-20261028.md)); AP and AQ OPEN /
+[evidence](2026-10/ar-put-retry-rewrites-20261028.md)); AP and AQ OPEN /
 implementation and measurements NOTRUN**, source reviewed at `b42015536`:
 separate segment payload/tail reads (AP), segment directory-barrier sharing (AQ), and
 identical ordinary PUT retry rewrites (AR). Existing durability barriers and prior
@@ -135,23 +140,23 @@ retained; distinct from AB–AM and P3-A–P3-F. No new K defect or measured gai
 
 [Stage 1 copies/allocation tasks AK–AM](alpha-1.0-2plus1-checklist.md#stage-1-additional-letter-tasks--copies-allocation-and-repeated-work-akam):
 **AM MEASURED, NO CHANGE on `agent/devel-taskam` (`3fe865d98`, merged into devel, wave 32;
-[evidence](am-report-degraded-batch-20261028.md)); AK and AL OPEN /
+[evidence](2026-10/am-report-degraded-batch-20261028.md)); AK and AL OPEN /
 implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
 
-**AK DONE on `agent/devel-taskak` (`1c2fd4188`, merged into devel, wave 33; [evidence](ak-packed-read-staging-20261028.md));
+**AK DONE on `agent/devel-taskak` (`1c2fd4188`, merged into devel, wave 33; [evidence](2026-10/ak-packed-read-staging-20261028.md));
 AL and AM OPEN / implementation and measurements NOTRUN**, source reviewed at `327d44a18`:
 packed-fragment staging/double hashing (AK), unnecessary decode scratch (AL), and REPORT
 degraded-object batch bookkeeping (AM). Distinct from AB–AJ and P3-A–P3-F; no K defect
 or performance acceptance claimed. Integrity, publication and memory bounds stay.
 
-[Graph sweep follow-up F4/F5](graph-defects-20261028.md#follow-up-repairs-f4f5--shared-deadline-and-retired-objects):
+[Graph sweep follow-up F4/F5](2026-10/graph-defects-20261028.md#follow-up-repairs-f4f5--shared-deadline-and-retired-objects):
 `199ad2afd` shares the sweep deadline with metadata RPCs and retires closed absent
 objects only after an authoritative read, including when fewer than two
 fragments remain durable. Both original-source regressions FAIL; repairs PASS
 15 native / 11 ASan/UBSan steps plus Linux ticket/RPC and ASan/UBSan/LSan
 component checks. Original evidence retained; no cluster or full-gate rerun.
 
-[AD shared-counter measurement](ad-counter-contention-20261028.md):
+[AD shared-counter measurement](2026-10/ad-counter-contention-20261028.md):
 **MEASURED / NO PRODUCT CHANGE**, source `1d2852da4` on private node9900
 TCP/RDMA clusters: 32-writer counter updates below 0.036% of sampled CPU on
 every daemon, versus the 1% stop criterion. 42 original D4 trials plus a clean
@@ -178,34 +183,34 @@ batched ticket-ledger compaction, bounded COMMIT reuse/coalescing, GETCHUNKS
 proof overlap and CREATE routing proofs. Planning only; Stage 2 prerequisite,
 current alpha scope and correctness gates remain unchanged.
 
-[LeakSanitizer follow-up](devel-lsan-intel2-20261028.md): devel `f029a66d5`
+[LeakSanitizer follow-up](2026-10/devel-lsan-intel2-20261028.md): devel `f029a66d5`
 on idle intel2, **49/49 ASan/UBSan/LSan entries PASS**, zero reports/NOTRUN;
 clean and deliberate-leak controls PASS. This closes the earlier LSan coverage
 gap across hosts, without rewriting the historical ORCD INCOMPLETE verdict.
 All original failures retained; other agents' clusters untouched.
 
-[Full Linux devel suite](devel-linux-orcd-mini-20261028.md): repaired source
+[Full Linux devel suite](2026-10/devel-linux-orcd-mini-20261028.md): repaired source
 `5b1f43c44` on orcd-mini node9900: 529 commands, **0 FAIL, 2 NOTRUN**, runner
 INCOMPLETE; fault-only follower arm separately PASS, Memcheck 41/41 PASS,
 Linux docs 5/5 PASS. LSan remains unavailable locally under ORCD ptrace policy;
-[subsequent intel2 coverage](devel-lsan-intel2-20261028.md) PASSes all 49 entries.
+[subsequent intel2 coverage](2026-10/devel-lsan-intel2-20261028.md) PASSes all 49 entries.
 `214c541aa` repairs abandoned replay-stripe proof and honors external scratch.
 Original failures/stores retained; other agents' clusters and ordinary deployment
 untouched. Successful final build/scratch bulk pruned with checked receipts.
 
-[Graph-led defects](graph-defects-20261028.md): three component failures confirmed
+[Graph-led defects](2026-10/graph-defects-20261028.md): three component failures confirmed
 on `3debca7ec`: pre-publication stripe retirement, receipt pending-owner eviction,
 and Raft index aliasing. Original native/sanitizer evidence retained; three repairs and scoped native/
-ASan/UBSan regressions PASS. Subsequent [Linux qualification](devel-linux-orcd-mini-20261028.md)
+ASan/UBSan regressions PASS. Subsequent [Linux qualification](2026-10/devel-linux-orcd-mini-20261028.md)
 closed with zero failures, explicit LSan limitation and an additional terminal-ticket
 repair; no broader release acceptance claim.
 
-[Defect-navigation graph](graph-scope-validation-20261028.md): directed first-party
+[Defect-navigation graph](2026-10/graph-scope-validation-20261028.md): directed first-party
 code, fault models/oracles and selected contracts; W127/W145 and W125 contract
 navigation checks PASS. Parser and unresolved-call gaps remain explicit; this
 is not a product acceptance verdict. Rebuild and validation instructions committed.
 
-[Graphify review fixes](graphify-review-findings-20261027.md):
+[Graphify review fixes](2026-10/graphify-review-findings-20261027.md):
 `graphify-review-fixes` from devel `063154e0e815`; infrastructure-error retry,
 shared byte/geometry/KV helpers and SETATTR codec implemented. Focused checks
 PASS. Complete Linux suite FAIL (515 commands, 12 failures, 5 NOTRUN);
@@ -235,156 +240,156 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[Wave 50 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Nov 1 (gate at `71c065524`)**, the three follow-ups wave 49 opened, all cut from devel `8e53122cd`: Task CI, [syncer retry back-off](syncer-retry-backoff-20261031.md): **K87 FIXED, blocks alpha: no**: after a failed `syncfs(root)` the per-root PUT syncer retried with no pause (99.7% of a core, at least 14,000 attempts/s on intel1 under CG's shim); the retry now backs off 50 ms doubling to 2 s and resets on a successful barrier, the repeat log is at most once a minute with a count (`src/server/store.c`), unit check `test_barrier_backoff` in `tests/test_store_durability.c`; after: 16 attempts in 30 s, 0.4% CPU; intel1 gate 0 FAIL. Task CH, [K79 TSan follow-up](k79-tsan-stop-bound-20261031.md): **K79 stays FIXED, blocks alpha: no**: Task CA's TSan `stop_blocked_stderr` miss of the 55 s stop bound was a stuck exit, not a slow teardown (the exit record read `orderly rc=0` in under half a second): libtsan's `_exit` interceptor runs `fflush(NULL)` and waits for the stderr lock the blocked report helper holds in `write(2)`; `shutdown_leave()` in `src/server/efsd.c` now leaves with `syscall(SYS_exit_group)`, `tests/test_shutdown_bounded.py` pins `shutdown_leave(`; TSan 5 of 5 PASS (was 6 of 6 FAIL), ASan PASS, plain 3 of 3 on xorinox. Task CJ, [K88](bench-published-readindex-20261031.md): **K88 OPEN, blocks alpha: yes**: the second `test_bench_published` failure class CE and CF counted as rc=-4 read-index timeouts is a lost chunk: `rc=-4` is `EFS_ERR_EXIST` from the test's own name-collision control (in every log, passing or failing) and `mkdir ... rc=-13 stage=3` is a retried read-index BUSY during group 2's election, neither the cause; the cause is client-side (`src/client/write.c`): a background async REPORT (`meta_flush_main`) commits a half-filled chunk, the writer's final REPORT carries `base=0`, answers STALE, the replay rebuilds an identical record and `report_rec_stuck` drops it, while `efs-bench` ignores the recorded writeback error and prints `BENCH_OK` (FUSE would return EIO); 11 of 1920 runs at 24 copies (0.57%), 1 of 1320 at 12, 1 of 1280 at 8, 0 of 15 solo on intel2; the fix is Task CK (acceptance: fix plus 3000 consecutive 24-copy runs and `test_bench_published` in F1). Merge-time: one copy of the K86 rows (CI and CJ carried CF's), K87 and K88 rows in both tables, one F-row and counts line (45 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN, rows through K88), `scripts/bench_published_par.sh` counts `report-stuck` and `stage=3 rc=-13` logs instead of `rc=-4`, code graph and architecture docs regenerated. Gate: intel2 `make test-all` (8 jobs): TOTAL 583 FAIL 0 NOTRUN 11 STATUS INCOMPLETE (848s) OVERBUDGET 1 BUILD 33s (`pump_logging` 110 s against 95; the 11 NOTRUN are RDMA hardware and valgrind headers absent on intel2); artifacts `intel2:~/efs-artifacts/merge-wave50-20261101-intel2/` (`SHA256SUMS` sha256 `267043f8fe6f6226c52e6e4577a2a46f272187aab03da4a77e781bccdd61ac88`).
+[Wave 50 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Nov 1 (gate at `71c065524`)**, the three follow-ups wave 49 opened, all cut from devel `8e53122cd`: Task CI, [syncer retry back-off](2026-10/syncer-retry-backoff-20261031.md): **K87 FIXED, blocks alpha: no**: after a failed `syncfs(root)` the per-root PUT syncer retried with no pause (99.7% of a core, at least 14,000 attempts/s on intel1 under CG's shim); the retry now backs off 50 ms doubling to 2 s and resets on a successful barrier, the repeat log is at most once a minute with a count (`src/server/store.c`), unit check `test_barrier_backoff` in `tests/test_store_durability.c`; after: 16 attempts in 30 s, 0.4% CPU; intel1 gate 0 FAIL. Task CH, [K79 TSan follow-up](2026-10/k79-tsan-stop-bound-20261031.md): **K79 stays FIXED, blocks alpha: no**: Task CA's TSan `stop_blocked_stderr` miss of the 55 s stop bound was a stuck exit, not a slow teardown (the exit record read `orderly rc=0` in under half a second): libtsan's `_exit` interceptor runs `fflush(NULL)` and waits for the stderr lock the blocked report helper holds in `write(2)`; `shutdown_leave()` in `src/server/efsd.c` now leaves with `syscall(SYS_exit_group)`, `tests/test_shutdown_bounded.py` pins `shutdown_leave(`; TSan 5 of 5 PASS (was 6 of 6 FAIL), ASan PASS, plain 3 of 3 on xorinox. Task CJ, [K88](2026-10/bench-published-readindex-20261031.md): **K88 OPEN, blocks alpha: yes**: the second `test_bench_published` failure class CE and CF counted as rc=-4 read-index timeouts is a lost chunk: `rc=-4` is `EFS_ERR_EXIST` from the test's own name-collision control (in every log, passing or failing) and `mkdir ... rc=-13 stage=3` is a retried read-index BUSY during group 2's election, neither the cause; the cause is client-side (`src/client/write.c`): a background async REPORT (`meta_flush_main`) commits a half-filled chunk, the writer's final REPORT carries `base=0`, answers STALE, the replay rebuilds an identical record and `report_rec_stuck` drops it, while `efs-bench` ignores the recorded writeback error and prints `BENCH_OK` (FUSE would return EIO); 11 of 1920 runs at 24 copies (0.57%), 1 of 1320 at 12, 1 of 1280 at 8, 0 of 15 solo on intel2; the fix is Task CK (acceptance: fix plus 3000 consecutive 24-copy runs and `test_bench_published` in F1). Merge-time: one copy of the K86 rows (CI and CJ carried CF's), K87 and K88 rows in both tables, one F-row and counts line (45 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN, rows through K88), `scripts/bench_published_par.sh` counts `report-stuck` and `stage=3 rc=-13` logs instead of `rc=-4`, code graph and architecture docs regenerated. Gate: intel2 `make test-all` (8 jobs): TOTAL 583 FAIL 0 NOTRUN 11 STATUS INCOMPLETE (848s) OVERBUDGET 1 BUILD 33s (`pump_logging` 110 s against 95; the 11 NOTRUN are RDMA hardware and valgrind headers absent on intel2); artifacts `intel2:~/efs-artifacts/merge-wave50-20261101-intel2/` (`SHA256SUMS` sha256 `267043f8fe6f6226c52e6e4577a2a46f272187aab03da4a77e781bccdd61ac88`).
 
-[Wave 49 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Nov 1 (gate at `2d3d0805d`)**, the first acceptance runs of the Stage 1 matrix on devel `8e53122cd` plus two fixes they opened: Task CA, [batch F on xorinox](batch-f-devel-8e53122cd-20261031.md): F1 FAIL 0, F2 TSan 1 of 22 failed (`stop_blocked_stderr`, K79, efsd n2 misses the 55 s stop bound under TSan, no race report, Task CH owns it), F2 ASan+UBSan+LSan 0 of 51, F3 leak 0 of 41; **K82, K83, K84 pass lane F2 and stay FIXED** (no report names `k36_recovery`, `rpc_prof_enabled`, `inode_rpc.c` or `lsm_slot_in`); none of Task BR's nine rehearsal faults recurred; `pump_logging` still over budget in F1 (117 s against 95). Task CB, [lane F4 on intel1](f4-loopback5-20261031.md): `fragment-integrity` and `gc-reclamation --posix` PASS through the driver and directly, no `fetch published .* rc=-9` in 88 kept files, so **K16, K19, K42 record F4 PASS**; the K11 `--put-barrier-fault` case FAILED because its fsync shim never fired and F4 as documented never ran it. Task CG, [K11 put-barrier case](k11-put-barrier-case-20261031.md): CB's hypothesis held, PUT durability is the per-root `syncfs` barrier, so the shim now refuses `syncfs` on fragment roots and the driver runs the case as `gc-put-barrier`; three direct runs and the driver PASS; **the case no longer asserts that the span is unpublished** (the client publishes before `fsync` proves durability, K35) but EIO, retained bytes, exact bytes after restart and cold drain; the syncer's retry storm while a barrier fails (15,000 log lines per second per node) is Task CI. Task CC, [lane F5 on amd](f5-decoder-check-20261031.md): `decoder_check.py --jobs 8` with clang 21 ASan/UBSan, **26 of 26 targets PASS** in 120 min (the definition's 25 predates the `declaration` target); K2 records F5 PASS. Task CD, [harness](cd-harness-mount-unify-20261031.md), no K row: the four private `Mount` copies are gone (`k33_growth`, `k33_client_view`, `k22_leader_admission`, `w130_dir_fault` use the shared one; `Mount` gained `text()` and `wait_log()`), `qualify_ao_readdir.py` stops its cluster in its last `finally` and SIGTERM unwinds through it (base left 3 efsd, 1 efs-fuse and a mount; fixed leaves none); nuc gate 0 FAIL. Task CE, [bench_published rc=-28](bench-published-enospc-20261031.md): BM's ENOSPC was `EFS_ERR_UNREGISTERED`, a daemon refusing a valid ACTIVE session on one worker's first mkdir while its siblings succeed (3 of 240 runs at 24 concurrent copies, 0 of 90 below), filed as **K86** OPEN, blocks alpha: yes. Task CF, [K86](k86-session-admit-race-20261031.md): **K86 OPEN → FIXED, blocks alpha: no**: a follower forwards `ESTABLISH` to the leader, the leader's reuse path answers OK without a log index, and the follower accepted against its own replica before the sibling's entry applied; the closing accept now takes one `host_read_index` and accepts again, still refusing if the floor is absent; loaded reproducer 10 of 720 before, 0 of 720 after (`scripts/bench_published_par.sh`), intel2 gate 0 FAIL; the rc=-4 read-index timeouts under that load (2 of 720 after) are Task CJ. Merge-time: K11 row carries CB's failure and CG's repair in order, one F-row and counts line (44 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 0 OPEN, rows through K86), code graph and architecture docs regenerated. Gates: nuc 8 jobs while intel2 carried Task CJ's load, FAIL 2 (`k41_packer_placement`, `k38_shared_chunk_pressure`, both in BM's nuc host-limit list, 44 OVERBUDGET) and nuc 4 jobs FAIL 1 (`b6_unavailable` full, the K53 room oracle), every failing test PASS 3 of 3 solo on nuc inside budget; intel2 `make test-all` (8 jobs): TOTAL 583 FAIL 0 NOTRUN 11 STATUS INCOMPLETE (929s) OVERBUDGET 1 (`pump_logging` 113 s against 95), NOTRUN = RDMA host limits; artifacts intel2 `~/efs-artifacts/merge-wave49-20261101-intel2/` (SHA256SUMS sha256 `76b077c074831437860eab43e3647a8c0fa540e9b8bbc3bb1ef2a58cf1c98eb2`), nuc attempts in `~/efs-artifacts/merge-wave49-20261101{,-4j}/` on nuc.
+[Wave 49 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Nov 1 (gate at `2d3d0805d`)**, the first acceptance runs of the Stage 1 matrix on devel `8e53122cd` plus two fixes they opened: Task CA, [batch F on xorinox](2026-10/batch-f-devel-8e53122cd-20261031.md): F1 FAIL 0, F2 TSan 1 of 22 failed (`stop_blocked_stderr`, K79, efsd n2 misses the 55 s stop bound under TSan, no race report, Task CH owns it), F2 ASan+UBSan+LSan 0 of 51, F3 leak 0 of 41; **K82, K83, K84 pass lane F2 and stay FIXED** (no report names `k36_recovery`, `rpc_prof_enabled`, `inode_rpc.c` or `lsm_slot_in`); none of Task BR's nine rehearsal faults recurred; `pump_logging` still over budget in F1 (117 s against 95). Task CB, [lane F4 on intel1](2026-10/f4-loopback5-20261031.md): `fragment-integrity` and `gc-reclamation --posix` PASS through the driver and directly, no `fetch published .* rc=-9` in 88 kept files, so **K16, K19, K42 record F4 PASS**; the K11 `--put-barrier-fault` case FAILED because its fsync shim never fired and F4 as documented never ran it. Task CG, [K11 put-barrier case](2026-10/k11-put-barrier-case-20261031.md): CB's hypothesis held, PUT durability is the per-root `syncfs` barrier, so the shim now refuses `syncfs` on fragment roots and the driver runs the case as `gc-put-barrier`; three direct runs and the driver PASS; **the case no longer asserts that the span is unpublished** (the client publishes before `fsync` proves durability, K35) but EIO, retained bytes, exact bytes after restart and cold drain; the syncer's retry storm while a barrier fails (15,000 log lines per second per node) is Task CI. Task CC, [lane F5 on amd](2026-10/f5-decoder-check-20261031.md): `decoder_check.py --jobs 8` with clang 21 ASan/UBSan, **26 of 26 targets PASS** in 120 min (the definition's 25 predates the `declaration` target); K2 records F5 PASS. Task CD, [harness](2026-10/cd-harness-mount-unify-20261031.md), no K row: the four private `Mount` copies are gone (`k33_growth`, `k33_client_view`, `k22_leader_admission`, `w130_dir_fault` use the shared one; `Mount` gained `text()` and `wait_log()`), `qualify_ao_readdir.py` stops its cluster in its last `finally` and SIGTERM unwinds through it (base left 3 efsd, 1 efs-fuse and a mount; fixed leaves none); nuc gate 0 FAIL. Task CE, [bench_published rc=-28](2026-10/bench-published-enospc-20261031.md): BM's ENOSPC was `EFS_ERR_UNREGISTERED`, a daemon refusing a valid ACTIVE session on one worker's first mkdir while its siblings succeed (3 of 240 runs at 24 concurrent copies, 0 of 90 below), filed as **K86** OPEN, blocks alpha: yes. Task CF, [K86](2026-10/k86-session-admit-race-20261031.md): **K86 OPEN → FIXED, blocks alpha: no**: a follower forwards `ESTABLISH` to the leader, the leader's reuse path answers OK without a log index, and the follower accepted against its own replica before the sibling's entry applied; the closing accept now takes one `host_read_index` and accepts again, still refusing if the floor is absent; loaded reproducer 10 of 720 before, 0 of 720 after (`scripts/bench_published_par.sh`), intel2 gate 0 FAIL; the rc=-4 read-index timeouts under that load (2 of 720 after) are Task CJ. Merge-time: K11 row carries CB's failure and CG's repair in order, one F-row and counts line (44 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 0 OPEN, rows through K86), code graph and architecture docs regenerated. Gates: nuc 8 jobs while intel2 carried Task CJ's load, FAIL 2 (`k41_packer_placement`, `k38_shared_chunk_pressure`, both in BM's nuc host-limit list, 44 OVERBUDGET) and nuc 4 jobs FAIL 1 (`b6_unavailable` full, the K53 room oracle), every failing test PASS 3 of 3 solo on nuc inside budget; intel2 `make test-all` (8 jobs): TOTAL 583 FAIL 0 NOTRUN 11 STATUS INCOMPLETE (929s) OVERBUDGET 1 (`pump_logging` 113 s against 95), NOTRUN = RDMA host limits; artifacts intel2 `~/efs-artifacts/merge-wave49-20261101-intel2/` (SHA256SUMS sha256 `76b077c074831437860eab43e3647a8c0fa540e9b8bbc3bb1ef2a58cf1c98eb2`), nuc attempts in `~/efs-artifacts/merge-wave49-20261101{,-4j}/` on nuc.
 
-[F4 loopback-5](f4-loopback5-20261031.md): **Task CB, Oct 31, devel `8e53122cd` on intel1**: `fragment-integrity` and `gc-reclamation --posix` PASS (driver and direct), K16, K19 and K42 record F4 PASS and no `fetch published .* rc=-9` in any client log; the K11 `--put-barrier-fault` case FAILED because its fsync shim never fired (K11 stays VERIFY, shim follow-up), and the definition's `--mode direct` is not a script option.
+[F4 loopback-5](2026-10/f4-loopback5-20261031.md): **Task CB, Oct 31, devel `8e53122cd` on intel1**: `fragment-integrity` and `gc-reclamation --posix` PASS (driver and direct), K16, K19 and K42 record F4 PASS and no `fetch published .* rc=-9` in any client log; the K11 `--put-barrier-fault` case FAILED because its fsync shim never fired (K11 stays VERIFY, shim follow-up), and the definition's `--mode direct` is not a script option.
 
-[Batch F on devel 8e53122cd](batch-f-devel-8e53122cd-20261031.md): **K82, K83, K84 lane F2 PASS on xorinox** (Oct 31; F1 FAIL 0 with 10 RDMA NOTRUN, ASan+UBSan PASS, leak PASS); TSan `stop_blocked_stderr` FAILs 4 of 4 (new, unrelated, follow-up open).
+[Batch F on devel 8e53122cd](2026-10/batch-f-devel-8e53122cd-20261031.md): **K82, K83, K84 lane F2 PASS on xorinox** (Oct 31; F1 FAIL 0 with 10 RDMA NOTRUN, ASan+UBSan PASS, leak PASS); TSan `stop_blocked_stderr` FAILs 4 of 4 (new, unrelated, follow-up open).
 
-[F5 decoder check](f5-decoder-check-20261031.md): **PASS 26 of 26 targets on devel `8e53122cd`** (Task CC, amd, clang-21 ASan/UBSan, `--jobs 8`), 120 min against the 135 min estimate; K2 stays VERIFY (frozen-candidate run owed). The definition's "25 of 25" predates the `declaration` target.
+[F5 decoder check](2026-10/f5-decoder-check-20261031.md): **PASS 26 of 26 targets on devel `8e53122cd`** (Task CC, amd, clang-21 ASan/UBSan, `--jobs 8`), 120 min against the 135 min estimate; K2 stays VERIFY (frozen-candidate run owed). The definition's "25 of 25" predates the `declaration` target.
 
-[Task CD](cd-harness-mount-unify-20261031.md): **PASS (harness, no K row, blocks alpha: no)** (Oct 31): the four private `Mount` copies (K33 growth/client view, K22 leader admission, W130 dir fault) now use the shared `Mount`; `qualify_ao_readdir.py` stops its cluster on SIGTERM and failed teardown (SIGTERM left 3 efsd + 1 efs-fuse + the mount before); nuc gate `FAIL 0`.
+[Task CD](2026-10/cd-harness-mount-unify-20261031.md): **PASS (harness, no K row, blocks alpha: no)** (Oct 31): the four private `Mount` copies (K33 growth/client view, K22 leader admission, W130 dir fault) now use the shared `Mount`; `qualify_ao_readdir.py` stops its cluster on SIGTERM and failed teardown (SIGTERM left 3 efsd + 1 efs-fuse + the mount before); nuc gate `FAIL 0`.
 
-[Syncer retry back-off](syncer-retry-backoff-20261031.md): **K87 FIXED** (Task CI, Oct 31, intel1): a failed `syncfs(root)` made the PUT syncer spin (99.7% of a core, 14k+ attempts/s); it now backs off 50 ms..2 s and logs once a minute with a count; 16 attempts in 30 s after, K11 case and gate results on the page.
+[Syncer retry back-off](2026-10/syncer-retry-backoff-20261031.md): **K87 FIXED** (Task CI, Oct 31, intel1): a failed `syncfs(root)` made the PUT syncer spin (99.7% of a core, 14k+ attempts/s); it now backs off 50 ms..2 s and logs once a minute with a count; 16 attempts in 30 s after, K11 case and gate results on the page.
 
-[K11 put-barrier case](k11-put-barrier-case-20261031.md): **F4 case PASS** (Task CG, Oct 31, intel1): `--put-barrier-fault` refused the wrong call after the batched root barrier replaced per-PUT `fsync`; the shim now refuses `syncfs(root)`, the driver runs it as `gc-put-barrier`; 3 direct and 1 driver run PASS. K11 stays VERIFY.
+[K11 put-barrier case](2026-10/k11-put-barrier-case-20261031.md): **F4 case PASS** (Task CG, Oct 31, intel1): `--put-barrier-fault` refused the wrong call after the batched root barrier replaced per-PUT `fsync`; the shim now refuses `syncfs(root)`, the driver runs it as `gc-put-barrier`; 3 direct and 1 driver run PASS. K11 stays VERIFY.
 
-[K79 TSan follow-up](k79-tsan-stop-bound-20261031.md): **FIXED, blocks alpha: no** (Task CH, Nov 1): under TSan `stop_blocked_stderr` was stuck, not slow (libtsan's `_exit` interceptor flushed stdio behind the blocked report helper); the bounded exit now uses `exit_group`; TSan 5 of 5 PASS, ASan and plain PASS.
+[K79 TSan follow-up](2026-10/k79-tsan-stop-bound-20261031.md): **FIXED, blocks alpha: no** (Task CH, Nov 1): under TSan `stop_blocked_stderr` was stuck, not slow (libtsan's `_exit` interceptor flushed stdio behind the blocked report helper); the bounded exit now uses `exit_group`; TSan 5 of 5 PASS, ASan and plain PASS.
 
-[K88](bench-published-readindex-20261031.md): **OPEN, blocks alpha: yes** (Task CJ, Nov 1): the "`rc=-4` / `stage=3 rc=-13`" failures of `test_bench_published` at 24 copies are a lost chunk (`report-stuck` after an async REPORT, 11 of 1920 runs; 1 of 1320 at 12 copies, 1 of 1280 at 8), reported as `BENCH_OK`; `rc=-4` is the test's expected collision control and the read-index BUSY is retried. Not fixed.
+[K88](2026-10/bench-published-readindex-20261031.md): **OPEN, blocks alpha: yes** (Task CJ, Nov 1): the "`rc=-4` / `stage=3 rc=-13`" failures of `test_bench_published` at 24 copies are a lost chunk (`report-stuck` after an async REPORT, 11 of 1920 runs; 1 of 1320 at 12 copies, 1 of 1280 at 8), reported as `BENCH_OK`; `rc=-4` is the test's expected collision control and the read-index BUSY is retried. Not fixed.
 
-[Wave 48 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 31 (gate at `8feb92de5`)**: Task BX, **K83** OPEN → FIXED, blocks alpha: no ([evidence](k83-rpc-prof-flag-race-20261031.md)): the lazily set `EFS_RPC_PROF` flag is read and set atomically (the W143 idiom); every other lazily set client flag was already atomic or under `pthread_once`. Task BV, **K82** OPEN → FIXED, blocks alpha: no ([evidence](k82-k36-recovery-races-20261031.md)): the client's tail-chunk probe runs under the dir and index locks, the inode slab's write-only LRU tick is gone and its stamp is a relaxed atomic store, the rejoin reads the local node's usage under the server lock the recovery scan debits under (that race never reproduced: fix by inspection); TSan lane `k36_recovery` base FAIL 4 of 4, fixed PASS 3 of 3 only together with BX's fix. Task BW, **K84** OPEN → FIXED, blocks alpha: no ([evidence](k84-lsm-slot-null-20261031.md)): not a null dereference; GCC 15.2's `-fsanitize=null` check on the address of a thread-local array compiles to a `lea` followed by a `je` with no `test`, so the report fired on a slot that exists and the daemons died of UBSan's `halt_on_error`; `lsm_slot_in` is now a macro over the named arrays, so no pointer parameter exists to check; ASan lane base FAIL 3 of 3, fixed PASS 3 of 3, `d4_progress` PASS in 96 s where the base ran to its 3600 s timeout. Task BY, [harness daemon liveness](by-harness-daemon-liveness-20261031.md), no K row: `tests/k33_daemons.py` (72 importers) watches every efsd and efs-fuse it started every 250 ms and fails the test at once with the daemon's name, signal and log (a kill of efsd fails in 16 s where the base ran on for 194 s), mounts register with the cluster and get a lazy unmount after a `fuser -m` check, tests that stop or fault-exit a daemon are exempt; four tests keep their own `Mount` copy, hangs are not detected. Task BM, [gate load failures](gate-load-failures-20261030.md), **K85** FIXED, blocks alpha: no: K54 was a test timing assumption (the certificate check now polls 15 s), K37 is K85 (its one-line fix reached devel in wave 47), K38 and D4 are a nuc host limit at 8 jobs (budget notes only; run the live pool at 4 jobs there); the one intel1 K54 `efsd n4 exited` failure and a `bench_published` ENOSPC on 2 of 10 intel1 runs stay unattributed. Merge-time: K82-K84 rows taken from the fixing branch each, one F-row and counts line (43 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 0 OPEN, rows through K85), code graph and architecture docs regenerated. intel2 `make test-all` (8 jobs): TOTAL 583 FAIL 0 NOTRUN 11 (889s) OVERBUDGET 1. OVERBUDGET `test_pump_logging.py` 116.2 s against 95 on intel2 (fourth run in a row over budget on the budget host, 111-116 s, since BL's wave 46 change; a fitting budget of about 145 s would pass the 1750 s bound, user decision pending). The 11 NOTRUN are the RDMA items without a device and the Memcheck header. Artifacts on intel2 under `~/efs-artifacts/merge-wave48-20261031/`, SHA256SUMS sha256 `809dc15d…`. The sessions' own gates on amd (BV, BW) failed only on amd's gvfs volume monitor holding `fusermount3 -u` (batch F fault 3), the same tests pass alone and on the base there; xorinox (BX, BY) and intel1 (BM) gates were 0 FAIL.
+[Wave 48 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 31 (gate at `8feb92de5`)**: Task BX, **K83** OPEN → FIXED, blocks alpha: no ([evidence](2026-10/k83-rpc-prof-flag-race-20261031.md)): the lazily set `EFS_RPC_PROF` flag is read and set atomically (the W143 idiom); every other lazily set client flag was already atomic or under `pthread_once`. Task BV, **K82** OPEN → FIXED, blocks alpha: no ([evidence](2026-10/k82-k36-recovery-races-20261031.md)): the client's tail-chunk probe runs under the dir and index locks, the inode slab's write-only LRU tick is gone and its stamp is a relaxed atomic store, the rejoin reads the local node's usage under the server lock the recovery scan debits under (that race never reproduced: fix by inspection); TSan lane `k36_recovery` base FAIL 4 of 4, fixed PASS 3 of 3 only together with BX's fix. Task BW, **K84** OPEN → FIXED, blocks alpha: no ([evidence](2026-10/k84-lsm-slot-null-20261031.md)): not a null dereference; GCC 15.2's `-fsanitize=null` check on the address of a thread-local array compiles to a `lea` followed by a `je` with no `test`, so the report fired on a slot that exists and the daemons died of UBSan's `halt_on_error`; `lsm_slot_in` is now a macro over the named arrays, so no pointer parameter exists to check; ASan lane base FAIL 3 of 3, fixed PASS 3 of 3, `d4_progress` PASS in 96 s where the base ran to its 3600 s timeout. Task BY, [harness daemon liveness](2026-10/by-harness-daemon-liveness-20261031.md), no K row: `tests/k33_daemons.py` (72 importers) watches every efsd and efs-fuse it started every 250 ms and fails the test at once with the daemon's name, signal and log (a kill of efsd fails in 16 s where the base ran on for 194 s), mounts register with the cluster and get a lazy unmount after a `fuser -m` check, tests that stop or fault-exit a daemon are exempt; four tests keep their own `Mount` copy, hangs are not detected. Task BM, [gate load failures](2026-10/gate-load-failures-20261030.md), **K85** FIXED, blocks alpha: no: K54 was a test timing assumption (the certificate check now polls 15 s), K37 is K85 (its one-line fix reached devel in wave 47), K38 and D4 are a nuc host limit at 8 jobs (budget notes only; run the live pool at 4 jobs there); the one intel1 K54 `efsd n4 exited` failure and a `bench_published` ENOSPC on 2 of 10 intel1 runs stay unattributed. Merge-time: K82-K84 rows taken from the fixing branch each, one F-row and counts line (43 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 0 OPEN, rows through K85), code graph and architecture docs regenerated. intel2 `make test-all` (8 jobs): TOTAL 583 FAIL 0 NOTRUN 11 (889s) OVERBUDGET 1. OVERBUDGET `test_pump_logging.py` 116.2 s against 95 on intel2 (fourth run in a row over budget on the budget host, 111-116 s, since BL's wave 46 change; a fitting budget of about 145 s would pass the 1750 s bound, user decision pending). The 11 NOTRUN are the RDMA items without a device and the Memcheck header. Artifacts on intel2 under `~/efs-artifacts/merge-wave48-20261031/`, SHA256SUMS sha256 `809dc15d…`. The sessions' own gates on amd (BV, BW) failed only on amd's gvfs volume monitor holding `fusermount3 -u` (batch F fault 3), the same tests pass alone and on the base there; xorinox (BX, BY) and intel1 (BM) gates were 0 FAIL.
 
-[K83](k83-rpc-prof-flag-race-20261031.md): **FIXED, blocks alpha: no** (Task BX, Oct 31): the TSan race on the lazily set `EFS_RPC_PROF` flag in `rpc_prof_enabled` now uses the W143 atomic idiom; TSan `d4_progress` PASS 2 of 2, `make test-all` FAIL 0 (race not reproduced on the base in 3 tries).
+[K83](2026-10/k83-rpc-prof-flag-race-20261031.md): **FIXED, blocks alpha: no** (Task BX, Oct 31): the TSan race on the lazily set `EFS_RPC_PROF` flag in `rpc_prof_enabled` now uses the W143 atomic idiom; TSan `d4_progress` PASS 2 of 2, `make test-all` FAIL 0 (race not reproduced on the base in 3 tries).
 
-[K82 — TSan races in `k36_recovery`](k82-k36-recovery-races-20261031.md): **FIXED, blocks alpha: no** (Task BV, branch `claude/bv-k82-tsan-k36-d6efee`): three races ordered (`inode_at` dead tick and slab stamp, `inode_allocated_bytes` tail probe under the dir and index locks, `server_join_cluster` `->used` under `s->lock`); TSan lane `k36_recovery` PASS 3 of 3 with K83's `rpc_prof_enabled` fix, FAIL on the unfixed base; gate result and the host-limited failures on the page. Acceptance: batch F lane F2 on the candidate.
+[K82 — TSan races in `k36_recovery`](2026-10/k82-k36-recovery-races-20261031.md): **FIXED, blocks alpha: no** (Task BV, branch `claude/bv-k82-tsan-k36-d6efee`): three races ordered (`inode_at` dead tick and slab stamp, `inode_allocated_bytes` tail probe under the dir and index locks, `server_join_cluster` `->used` under `s->lock`); TSan lane `k36_recovery` PASS 3 of 3 with K83's `rpc_prof_enabled` fix, FAIL on the unfixed base; gate result and the host-limited failures on the page. Acceptance: batch F lane F2 on the candidate.
 
-[K84 lsm_slot_in](k84-lsm-slot-null-20261031.md): Task BW, **K84** OPEN → FIXED, blocks alpha: no. The UBSan "member access within null pointer" was not a null dereference: GCC 15 emitted the null check on the TLS owner-array pointer as `lea` + `je` without `test`, and `halt_on_error=1` killed the daemons on stale flags; `lsm_slot_in` is a macro over the named arrays. ASan `kv_lsm pack_ledger_recovery k36_recovery` PASS (base FAIL), `d4_progress` PASS in 96 s (was a 3,604 s timeout). Full gate on loaded amd: 4 FAIL (3 pass alone, `test_settings_listing` fails the same on the base); acceptance is batch F lane F2 on the candidate.
+[K84 lsm_slot_in](2026-10/k84-lsm-slot-null-20261031.md): Task BW, **K84** OPEN → FIXED, blocks alpha: no. The UBSan "member access within null pointer" was not a null dereference: GCC 15 emitted the null check on the TLS owner-array pointer as `lea` + `je` without `test`, and `halt_on_error=1` killed the daemons on stale flags; `lsm_slot_in` is a macro over the named arrays. ASan `kv_lsm pack_ledger_recovery k36_recovery` PASS (base FAIL), `d4_progress` PASS in 96 s (was a 3,604 s timeout). Full gate on loaded amd: 4 FAIL (3 pass alone, `test_settings_listing` fails the same on the base); acceptance is batch F lane F2 on the candidate.
 
-[Task BY harness liveness](by-harness-daemon-liveness-20261031.md): **PASS, harness only, no K row**: `tests/k33_daemons.py` now watches every efsd and efs-fuse it started (`Popen.poll()` every 0.25 s on a side thread, no added sleeps) and fails at once naming daemon, signal/status and log (killed `efsd` fails `test_d4_progress.py` in 16 s; unfixed base ran on 194 s), and unmounts every mount it made (lazy after `fuser -m`); gate 0 FAIL, 11 host NOTRUN; faults 9 and 11 of the batch F rehearsal.
+[Task BY harness liveness](2026-10/by-harness-daemon-liveness-20261031.md): **PASS, harness only, no K row**: `tests/k33_daemons.py` now watches every efsd and efs-fuse it started (`Popen.poll()` every 0.25 s on a side thread, no added sleeps) and fails at once naming daemon, signal/status and log (killed `efsd` fails `test_d4_progress.py` in 16 s; unfixed base ran on 194 s), and unmounts every mount it made (lazy after `fuser -m`); gate 0 FAIL, 11 host NOTRUN; faults 9 and 11 of the batch F rehearsal.
 
-[K86 session admission race](k86-session-admit-race-20261031.md): **PASS, K86 FIXED, blocks alpha: no (Task CF)**: the follower's closing `efs_session_accept` ran before its replica applied a sibling's `ESTABLISH` that the leader answered from its reuse path with no log index; it now takes a `host_read_index` before believing `UNREGISTERED`. Loaded reproducer (24 copies x 10 rounds, intel2) 10 of 720 `rc=-28` before, 0 of 720 after; gate `TOTAL 583 FAIL 0 NOTRUN 11 (851s) OVERBUDGET 1`; 2 `rc=-4` read-index timeouts remain a separate class.
+[K86 session admission race](2026-10/k86-session-admit-race-20261031.md): **PASS, K86 FIXED, blocks alpha: no (Task CF)**: the follower's closing `efs_session_accept` ran before its replica applied a sibling's `ESTABLISH` that the leader answered from its reuse path with no log index; it now takes a `host_read_index` before believing `UNREGISTERED`. Loaded reproducer (24 copies x 10 rounds, intel2) 10 of 720 `rc=-28` before, 0 of 720 after; gate `TOTAL 583 FAIL 0 NOTRUN 11 (851s) OVERBUDGET 1`; 2 `rc=-4` read-index timeouts remain a separate class.
 
-[bench_published rc=-28](bench-published-enospc-20261031.md): **FAIL, product defect K86 OPEN (Task CE)**: BM's worker `rc=-28` is `EFS_ERR_UNREGISTERED`, not ENOSPC (disk was never short); a valid session is refused on a concurrent first `mkdir` under load. Reproduced 3 of 240 at 24 concurrent copies on intel2, 0 of 90 solo and at 8; no fix here.
+[bench_published rc=-28](2026-10/bench-published-enospc-20261031.md): **FAIL, product defect K86 OPEN (Task CE)**: BM's worker `rc=-28` is `EFS_ERR_UNREGISTERED`, not ENOSPC (disk was never short); a valid session is refused on a concurrent first `mkdir` under load. Reproduced 3 of 240 at 24 concurrent copies on intel2, 0 of 90 solo and at 8; no fix here.
 
-[Gate load failures](gate-load-failures-20261030.md): **PASS (Task BM, test and one product line)**. The four tests that failed at 8 jobs and passed alone: `test_k54_member_down_fence` was a test timing assumption (the seal follows the STALE reply by up to 0.2 s; now polled for 15 s), `test_k37_segment_rebuild` was **K85** (the once-a-minute `UNRECOVERABLE` window consumed by a pass with nothing to report; FIXED, blocks alpha: no), `test_k38_shared_chunk_pressure` and `test_d4_progress` are a nuc host limit (fail 4/5 and 2/5 at 8 jobs on 4 cores, 0 in 6 runs on intel1 and at 4 jobs). Intel1 8-job gate on the fixed tree: all four 5/5.
+[Gate load failures](2026-10/gate-load-failures-20261030.md): **PASS (Task BM, test and one product line)**. The four tests that failed at 8 jobs and passed alone: `test_k54_member_down_fence` was a test timing assumption (the seal follows the STALE reply by up to 0.2 s; now polled for 15 s), `test_k37_segment_rebuild` was **K85** (the once-a-minute `UNRECOVERABLE` window consumed by a pass with nothing to report; FIXED, blocks alpha: no), `test_k38_shared_chunk_pressure` and `test_d4_progress` are a nuc host limit (fail 4/5 and 2/5 at 8 jobs on 4 cores, 0 in 6 runs on intel1 and at 4 jobs). Intel1 8-job gate on the fixed tree: all four 5/5.
 
-[Wave 47 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 31 (gate at `13e5de215`)**: Task BP, **K79** OPEN → FIXED, blocks alpha: no ([evidence](k79-stop-blocked-stderr-20261031.md)): the 385 routine synchronous `fprintf(stderr)` sites in `efsd` go through the K72 reporter (mailbox 4 → 32 slots, producers wait on the copy lock instead of dropping, the reporter renders outside it, 200 ms drain on stop); 101 startup/stop/abort and 39 fault-hook sites stay synchronous and commented; the new `tests/test_stop_blocked_stderr.py` is in the gate (60 s budget), fails on devel `909a07d71` and passes with the fix. Task BT, [acceptance definitions](acceptance-definitions-20261031.md) for K2, K4, K11, K16, K17, K19 and K45-K47 (existing tests and cell gates, no new tests); K4's `w125_p3_compat.sh` has asserted refusal since `543255776` and stays; matrix O7 removed, O3 70 min, F5 added; the six decisions BT-1 to BT-6 are in the tree and still await the user's word. Task BR, [batch F rehearsal on amd](batch-f-rehearsal-20261031.md): FAIL on the candidate lanes (F1 2 FAIL/2 NOTRUN, TSan 3 of 21, ASan+UBSan 5 of 50, leak gate PASS 41/41), 1 h 48 min without the one 3600 s wedge against 85 min estimated, host requirements listed, `scripts/batch_f.sh` added; its three product findings are registered as **K82-K84, OPEN, blocks alpha: yes** (TSan races in `k36_recovery`, a TSan race on `rpc_prof_enabled`, a UBSan null member access in `lsm_slot_in`); its `pump_logging` EIO was K81 (fixed in wave 46). Merge-time: BL's K81 comment kept beside BP's reporter call in `raft_host.c`, BP's 60 s budget row beside BL's 95 s pump row (budgeted gate 1750 s of 1750 s), BT's matrix items 4-5 with BS's item 3; the first gate run at `fa5abd5b2` failed `test_w155_report_resolve.py` (BP's reporter stub duplicated BL's, dropped), `test_k33_growth.py` (a fault-hook exit lost the routine lines queued on the reporter: `efs_fault_exit()` now calls the new `efs_telemetry_flush()`, bounded by the 200 ms drain, checked in `tests/test_telemetry`) and `test_k37_segment_rebuild.py`; the rerun at `53fd0df38` failed K37 alone (no `UNRECOVERABLE` line within 30 s: a rebuild pass with nothing lost consumed the once-a-minute report window, Task BM's K85), so BM's one-condition fix in `segment_rebuild.c` was cherry-picked at merge time (`13e5de215`; BM's page, K85 row and load repro script stay on its branch); K counts 39 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 3 OPEN (K85 reserved for BM), code graph and architecture docs regenerated. intel2 `make test-all` (8 jobs): TOTAL 583 FAIL 0 NOTRUN 11 (976s) OVERBUDGET 1. OVERBUDGET `test_pump_logging.py` 113.0 s against 95 on intel2, the budget host: it takes 114 s alone on the merged tree and BP did not change the test, so BL's wave 46 change (a 35 s phase at a 40 ms fsync) set the pace; a fitting budget is about 145 s, which pushes the budgeted gate past the 1750 s bound, left for the user's decision. The 11 NOTRUN are the RDMA items without a device and the Memcheck header. Earlier runs: `fa5abd5b2` 3 FAIL (1010 s), `53fd0df38` 1 FAIL (966 s). Artifacts on intel2 under `~/efs-artifacts/merge-wave47-20261031{,-rerun,-k85}/`, SHA256SUMS sha256 `8bbf71e3…`, `34956890…`, `8a8c9e60…`.
+[Wave 47 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 31 (gate at `13e5de215`)**: Task BP, **K79** OPEN → FIXED, blocks alpha: no ([evidence](2026-10/k79-stop-blocked-stderr-20261031.md)): the 385 routine synchronous `fprintf(stderr)` sites in `efsd` go through the K72 reporter (mailbox 4 → 32 slots, producers wait on the copy lock instead of dropping, the reporter renders outside it, 200 ms drain on stop); 101 startup/stop/abort and 39 fault-hook sites stay synchronous and commented; the new `tests/test_stop_blocked_stderr.py` is in the gate (60 s budget), fails on devel `909a07d71` and passes with the fix. Task BT, [acceptance definitions](2026-10/acceptance-definitions-20261031.md) for K2, K4, K11, K16, K17, K19 and K45-K47 (existing tests and cell gates, no new tests); K4's `w125_p3_compat.sh` has asserted refusal since `543255776` and stays; matrix O7 removed, O3 70 min, F5 added; the six decisions BT-1 to BT-6 are in the tree and still await the user's word. Task BR, [batch F rehearsal on amd](2026-10/batch-f-rehearsal-20261031.md): FAIL on the candidate lanes (F1 2 FAIL/2 NOTRUN, TSan 3 of 21, ASan+UBSan 5 of 50, leak gate PASS 41/41), 1 h 48 min without the one 3600 s wedge against 85 min estimated, host requirements listed, `scripts/batch_f.sh` added; its three product findings are registered as **K82-K84, OPEN, blocks alpha: yes** (TSan races in `k36_recovery`, a TSan race on `rpc_prof_enabled`, a UBSan null member access in `lsm_slot_in`); its `pump_logging` EIO was K81 (fixed in wave 46). Merge-time: BL's K81 comment kept beside BP's reporter call in `raft_host.c`, BP's 60 s budget row beside BL's 95 s pump row (budgeted gate 1750 s of 1750 s), BT's matrix items 4-5 with BS's item 3; the first gate run at `fa5abd5b2` failed `test_w155_report_resolve.py` (BP's reporter stub duplicated BL's, dropped), `test_k33_growth.py` (a fault-hook exit lost the routine lines queued on the reporter: `efs_fault_exit()` now calls the new `efs_telemetry_flush()`, bounded by the 200 ms drain, checked in `tests/test_telemetry`) and `test_k37_segment_rebuild.py`; the rerun at `53fd0df38` failed K37 alone (no `UNRECOVERABLE` line within 30 s: a rebuild pass with nothing lost consumed the once-a-minute report window, Task BM's K85), so BM's one-condition fix in `segment_rebuild.c` was cherry-picked at merge time (`13e5de215`; BM's page, K85 row and load repro script stay on its branch); K counts 39 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 3 OPEN (K85 reserved for BM), code graph and architecture docs regenerated. intel2 `make test-all` (8 jobs): TOTAL 583 FAIL 0 NOTRUN 11 (976s) OVERBUDGET 1. OVERBUDGET `test_pump_logging.py` 113.0 s against 95 on intel2, the budget host: it takes 114 s alone on the merged tree and BP did not change the test, so BL's wave 46 change (a 35 s phase at a 40 ms fsync) set the pace; a fitting budget is about 145 s, which pushes the budgeted gate past the 1750 s bound, left for the user's decision. The 11 NOTRUN are the RDMA items without a device and the Memcheck header. Earlier runs: `fa5abd5b2` 3 FAIL (1010 s), `53fd0df38` 1 FAIL (966 s). Artifacts on intel2 under `~/efs-artifacts/merge-wave47-20261031{,-rerun,-k85}/`, SHA256SUMS sha256 `8bbf71e3…`, `34956890…`, `8a8c9e60…`.
 
-[Wave 46 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 31 (gate at `c43538953`)**: Task BL, **K81** FIXED, blocks alpha: no ([evidence](k72-report-stall-20261030.md)): the intermittent `test_pump_logging.py` foreground EIO was a REPORT reply held behind the reporter's stderr lock while the sink was blocked; the seven REPORT/receipt log sites in `raft_host.c` go through the one K72 reporter, and the pump-logging test runs 35 s at a 40 ms fsync delay. Task BS, [RDMA live qualification driver](rdma-qualification-driver-20261031.md): `scripts/qualify.py` runs `append-failover`, `k14-torn-read`, `gc-reclamation` and the new `ao-readdir` gate over RDMA (device checked, NOTRUN when absent, no silent TCP), eight PASS on fstor007 `mlx5_0` loopback; `k13-tickets`, `fragment-integrity` and `d5-expiry` stay TCP; `tests/test_qualify_rdma_live.py` is in `make test` and is NOTRUN on hosts without RDMA, so the gate now counts 11 NOTRUN. Task BU, [Memcheck on ORCD](orcd-memcheck-20261031.md): a user-prefix valgrind 3.28.0 in the shared `$HOME/.local` makes `test_rdma_memcheck.py` and `test_leak_gate.py` run on fstor007 with `PATH` and `CPATH` only; `make leak-check` on ORCD (K26/O9) still owed. Merge-time: pump-logging budget 85 → 95 s for BL's longer phase, `tests/test_qualify_standalone.py` passes the `transport` argument BS added to the builders (the first gate run at `cba348722` failed it: 1 FAIL, 11 NOTRUN, 1020 s), K counts 38 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN (K79, Task BP's fix awaits wave 47), budgeted gate 1735 s of 1750 s, code graph and architecture docs regenerated. xorinox `make test-all` (8 jobs, intel2 lent to Task BP): TOTAL 582 FAIL 0 NOTRUN 11 STATUS INCOMPLETE (1004 s), build 22 s. OVERBUDGET 3 (`test_k38_protection_now` 53 s of 30, grow-b geometry 147 s of 120, pump-logging 114 s of 95: xorinox is slower than the amd/node9900 budget hosts; the budgets stay as measured there). Artifacts xorinox `~/efs-artifacts/merge-wave46-20261031-rerun/` (`SHA256SUMS` sha256 `0e9ac27bdb03fd436205f099d57dbffc1d4e199a58a9a865a9f3d679b1ad20a7`); the first run's artifacts in `merge-wave46-20261031/`.
+[Wave 46 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 31 (gate at `c43538953`)**: Task BL, **K81** FIXED, blocks alpha: no ([evidence](2026-10/k72-report-stall-20261030.md)): the intermittent `test_pump_logging.py` foreground EIO was a REPORT reply held behind the reporter's stderr lock while the sink was blocked; the seven REPORT/receipt log sites in `raft_host.c` go through the one K72 reporter, and the pump-logging test runs 35 s at a 40 ms fsync delay. Task BS, [RDMA live qualification driver](2026-10/rdma-qualification-driver-20261031.md): `scripts/qualify.py` runs `append-failover`, `k14-torn-read`, `gc-reclamation` and the new `ao-readdir` gate over RDMA (device checked, NOTRUN when absent, no silent TCP), eight PASS on fstor007 `mlx5_0` loopback; `k13-tickets`, `fragment-integrity` and `d5-expiry` stay TCP; `tests/test_qualify_rdma_live.py` is in `make test` and is NOTRUN on hosts without RDMA, so the gate now counts 11 NOTRUN. Task BU, [Memcheck on ORCD](2026-10/orcd-memcheck-20261031.md): a user-prefix valgrind 3.28.0 in the shared `$HOME/.local` makes `test_rdma_memcheck.py` and `test_leak_gate.py` run on fstor007 with `PATH` and `CPATH` only; `make leak-check` on ORCD (K26/O9) still owed. Merge-time: pump-logging budget 85 → 95 s for BL's longer phase, `tests/test_qualify_standalone.py` passes the `transport` argument BS added to the builders (the first gate run at `cba348722` failed it: 1 FAIL, 11 NOTRUN, 1020 s), K counts 38 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN (K79, Task BP's fix awaits wave 47), budgeted gate 1735 s of 1750 s, code graph and architecture docs regenerated. xorinox `make test-all` (8 jobs, intel2 lent to Task BP): TOTAL 582 FAIL 0 NOTRUN 11 STATUS INCOMPLETE (1004 s), build 22 s. OVERBUDGET 3 (`test_k38_protection_now` 53 s of 30, grow-b geometry 147 s of 120, pump-logging 114 s of 95: xorinox is slower than the amd/node9900 budget hosts; the budgets stay as measured there). Artifacts xorinox `~/efs-artifacts/merge-wave46-20261031-rerun/` (`SHA256SUMS` sha256 `0e9ac27bdb03fd436205f099d57dbffc1d4e199a58a9a865a9f3d679b1ad20a7`); the first run's artifacts in `merge-wave46-20261031/`.
 
-[RDMA live qualification driver](rdma-qualification-driver-20261031.md): **PASS (Task BS, driver and harness scripts only, no product change)**. `scripts/qualify.py` now runs `append-failover`, `k14-torn-read`, `gc-reclamation` and a new `ao-readdir` gate over RDMA (`cluster.transport rdma` plus `rdma_dev`; device checked, NOTRUN when absent, no silent TCP); each ran once over RDMA and once over TCP on fstor007 `mlx5_0` (single-host loopback), all eight PASS, gate seconds RDMA/TCP 52/84, 88/88, 52/52, 25/7. The matrix's RDMA-harness gap is closed for those four; `k13-tickets`, `fragment-integrity` and `d5-expiry` stay TCP. Artifacts `~/efs-artifacts/taskBS-20261031/` (`SHA256SUMS` sha256 `38f6244ecca6dd1568e3b67798165cbb5ec63147dc23a1c32be0152092df1e14`).
+[RDMA live qualification driver](2026-10/rdma-qualification-driver-20261031.md): **PASS (Task BS, driver and harness scripts only, no product change)**. `scripts/qualify.py` now runs `append-failover`, `k14-torn-read`, `gc-reclamation` and a new `ao-readdir` gate over RDMA (`cluster.transport rdma` plus `rdma_dev`; device checked, NOTRUN when absent, no silent TCP); each ran once over RDMA and once over TCP on fstor007 `mlx5_0` (single-host loopback), all eight PASS, gate seconds RDMA/TCP 52/84, 88/88, 52/52, 25/7. The matrix's RDMA-harness gap is closed for those four; `k13-tickets`, `fragment-integrity` and `d5-expiry` stay TCP. Artifacts `~/efs-artifacts/taskBS-20261031/` (`SHA256SUMS` sha256 `38f6244ecca6dd1568e3b67798165cbb5ec63147dc23a1c32be0152092df1e14`).
 
-[Task BU — Memcheck on ORCD](orcd-memcheck-20261031.md): **PASS**. A user-prefix valgrind 3.28.0 (checksums verified) in the shared `$HOME/.local` makes `test_rdma_memcheck.py` and `test_leak_gate.py` run and pass on fstor007 with `PATH` and `CPATH` only; no test change, no root; one install serves node9900 too. `make leak-check` on ORCD (K26/O9) still owed.
+[Task BU — Memcheck on ORCD](2026-10/orcd-memcheck-20261031.md): **PASS**. A user-prefix valgrind 3.28.0 (checksums verified) in the shared `$HOME/.local` makes `test_rdma_memcheck.py` and `test_leak_gate.py` run and pass on fstor007 with `PATH` and `CPATH` only; no test change, no root; one install serves node9900 too. `make leak-check` on ORCD (K26/O9) still owed.
 
-[Task BT — acceptance definitions](acceptance-definitions-20261031.md): K2, K4, K11, K16, K17, K19, K45, K46 and K47 each name a runnable acceptance (existing tests, cell gates, `orcd_mini_c1.sh`, `decoder-check`; no new tests). K4's contradiction is resolved: `w125_p3_compat.sh` has asserted refusal since `543255776`, is superseded by `c5-protocol-live` and kept. Matrix O7 removed, O3 70 min, F5 added; six decisions BT-1 to BT-6 await the user; no status word changed, nothing run on Linux.
+[Task BT — acceptance definitions](2026-10/acceptance-definitions-20261031.md): K2, K4, K11, K16, K17, K19, K45, K46 and K47 each name a runnable acceptance (existing tests, cell gates, `orcd_mini_c1.sh`, `decoder-check`; no new tests). K4's contradiction is resolved: `w125_p3_compat.sh` has asserted refusal since `543255776`, is superseded by `c5-protocol-live` and kept. Matrix O7 removed, O3 70 min, F5 added; six decisions BT-1 to BT-6 await the user; no status word changed, nothing run on Linux.
 
-[Batch F rehearsal on amd](batch-f-rehearsal-20261031.md): Task BR ran F1, TSan, ASan+UBSan and the leak gate on devel `909a07d71`: **FAIL** (F1 2 FAIL/2 NOTRUN, TSan 3/21, ASan 5/50, leak PASS 41/41), real batch **2 h 48 min** (1 h 48 min without one 3600 s wedge) against 85 min estimated; three product findings (TSan races in k36_recovery/d4_progress, UBSan `lsm_slot_in` null, intermittent pump_logging EIO), host requirements listed.
+[Batch F rehearsal on amd](2026-10/batch-f-rehearsal-20261031.md): Task BR ran F1, TSan, ASan+UBSan and the leak gate on devel `909a07d71`: **FAIL** (F1 2 FAIL/2 NOTRUN, TSan 3/21, ASan 5/50, leak PASS 41/41), real batch **2 h 48 min** (1 h 48 min without one 3600 s wedge) against 85 min estimated; three product findings (TSan races in k36_recovery/d4_progress, UBSan `lsm_slot_in` null, intermittent pump_logging EIO), host requirements listed.
 
-[Task BP — K79 daemon stop with a blocked stderr](k79-stop-blocked-stderr-20261031.md): **K79 OPEN → FIXED (blocks alpha: no); letter task AE ticked.** The 385 routine synchronous `fprintf(stderr)` sites in `efsd` now go through the K72 reporter (101 startup/stop/abort and 39 fault-hook sites stay synchronous and commented); the new `test_stop_blocked_stderr.py` (gate, 60 s budget) fails on devel `909a07d71` (rc 3) and passes (rc 0, exit 0.4–5.4 s). intel2 gate: FAIL 1 (K37 load timeout, passes alone), TSan and ASan PASS.
+[Task BP — K79 daemon stop with a blocked stderr](2026-10/k79-stop-blocked-stderr-20261031.md): **K79 OPEN → FIXED (blocks alpha: no); letter task AE ticked.** The 385 routine synchronous `fprintf(stderr)` sites in `efsd` now go through the K72 reporter (101 startup/stop/abort and 39 fault-hook sites stay synchronous and commented); the new `test_stop_blocked_stderr.py` (gate, 60 s budget) fails on devel `909a07d71` (rc 3) and passes (rc 0, exit 0.4–5.4 s). intel2 gate: FAIL 1 (K37 load timeout, passes alone), TSan and ASan PASS.
 
-[Wave 45 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 31 (gate at `c1e456ea5`)**: Task BG, **K48** ([evidence](k48-listing-recurrence-20261030.md)) OPEN → VERIFY, blocks alpha: yes until the W130 storm gate on the frozen candidate and the K74 live listing on ORCD: the 95 of 96 listing is server page serving during a cross-group directory migration, fixed on devel by `dabcf937a` (AU base fails the listing storm 6/6 and the plain test 2/100 under load; devel 0/100 and 0/26 storms); test-only `EFS_TRACE_READDIR` trace (one atomic load when off, inventoried), W130 budget 50 s. Task BI, **AB** ticked ([evidence](ab-ae-raft-logging-20261030.md)): term/role and applier session events go through the one K72 reporter, no writer left under `h->mu` (hold max 34.5 → 8.2 ms on amd); **K80** FIXED (checked unmount failed with `revoke rc=-13` under a blocked sink); **K79** OPEN, blocks alpha: no (a SIGTERM'd efsd with blocked stderr does not exit in 60 s; design decision owed), so AE stays unticked; the pump-logging test gains role-event and unmount-blocked phases and runs under TSan and ASan in the sanitizer gate. Task BO, [Task H evidence migration](task-h-evidence-migration-20261030.md): the five pages that existed only on `agent/task-h-repair` are on devel, links repointed, keep/drop table for the 29 branch-only scripts. Task BN, [gate budget re-measurement](budget-remeasure-20261030.md): every `tests/budgets.tsv` row carries a measured note (three 8-job gates each on amd and node9900, Task T's slower medians kept); **user decision: `GATE_BOUND_S` raised from 1650 to 1750 s** (`tests/test_make_test_recipe.py`), budgeted gate 1732 s of 1750 s. Merge-time: pump-logging row at BI's 85 s (BN measured the pre-BI test), W130 at BG's 50 s, K counts 37 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN (K79), code graph and architecture docs regenerated. intel2 `make test-all` (8 jobs): TOTAL 581 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (828 s), no OVERBUDGET under the measured table; NOTRUN = host limits (no RDMA device, no Memcheck header). Artifacts on intel2 `~/efs-artifacts/merge-wave45-20261031/` (`SHA256SUMS` sha256 `47fc45d3fed94e032b6037132e1d009df68ccfa7091013963aefdbf2962e5bd6`).
+[Wave 45 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 31 (gate at `c1e456ea5`)**: Task BG, **K48** ([evidence](2026-10/k48-listing-recurrence-20261030.md)) OPEN → VERIFY, blocks alpha: yes until the W130 storm gate on the frozen candidate and the K74 live listing on ORCD: the 95 of 96 listing is server page serving during a cross-group directory migration, fixed on devel by `dabcf937a` (AU base fails the listing storm 6/6 and the plain test 2/100 under load; devel 0/100 and 0/26 storms); test-only `EFS_TRACE_READDIR` trace (one atomic load when off, inventoried), W130 budget 50 s. Task BI, **AB** ticked ([evidence](2026-10/ab-ae-raft-logging-20261030.md)): term/role and applier session events go through the one K72 reporter, no writer left under `h->mu` (hold max 34.5 → 8.2 ms on amd); **K80** FIXED (checked unmount failed with `revoke rc=-13` under a blocked sink); **K79** OPEN, blocks alpha: no (a SIGTERM'd efsd with blocked stderr does not exit in 60 s; design decision owed), so AE stays unticked; the pump-logging test gains role-event and unmount-blocked phases and runs under TSan and ASan in the sanitizer gate. Task BO, [Task H evidence migration](2026-10/task-h-evidence-migration-20261030.md): the five pages that existed only on `agent/task-h-repair` are on devel, links repointed, keep/drop table for the 29 branch-only scripts. Task BN, [gate budget re-measurement](2026-10/budget-remeasure-20261030.md): every `tests/budgets.tsv` row carries a measured note (three 8-job gates each on amd and node9900, Task T's slower medians kept); **user decision: `GATE_BOUND_S` raised from 1650 to 1750 s** (`tests/test_make_test_recipe.py`), budgeted gate 1732 s of 1750 s. Merge-time: pump-logging row at BI's 85 s (BN measured the pre-BI test), W130 at BG's 50 s, K counts 37 FIXED / 36 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN (K79), code graph and architecture docs regenerated. intel2 `make test-all` (8 jobs): TOTAL 581 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (828 s), no OVERBUDGET under the measured table; NOTRUN = host limits (no RDMA device, no Memcheck header). Artifacts on intel2 `~/efs-artifacts/merge-wave45-20261031/` (`SHA256SUMS` sha256 `47fc45d3fed94e032b6037132e1d009df68ccfa7091013963aefdbf2962e5bd6`).
 
-[Task BG — K48 listing recurrence](k48-listing-recurrence-20261030.md): **K48 OPEN → VERIFY (blocks alpha: yes)**. The W130 95 of 96 listing is attributed to server page serving during a cross-group directory migration (AU base: 6/6 storm and 2/100 single-listing failures; devel 0/100 and 0/26; `dabcf937a` alone fixes it). Test-only trace and listing storm added; no product behavior change. Gate on intel1: 579 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
+[Task BG — K48 listing recurrence](2026-10/k48-listing-recurrence-20261030.md): **K48 OPEN → VERIFY (blocks alpha: yes)**. The W130 95 of 96 listing is attributed to server page serving during a cross-group directory migration (AU base: 6/6 storm and 2/100 single-listing failures; devel 0/100 and 0/26; `dabcf937a` alone fixes it). Test-only trace and listing storm added; no product behavior change. Gate on intel1: 579 / 0 FAIL / 11 NOTRUN (host limits), INCOMPLETE.
 
-[Task H evidence migration](task-h-evidence-migration-20261030.md): Task BO migrated the five evidence pages that existed only on `agent/task-h-repair`, fixed the devel links to them, and recommends keep or drop for each of 29 branch-only scripts and tests (docs only; the branch is untouched and the user decides).
+[Task H evidence migration](2026-10/task-h-evidence-migration-20261030.md): Task BO migrated the five evidence pages that existed only on `agent/task-h-repair`, fixed the devel links to them, and recommends keep or drop for each of 29 branch-only scripts and tests (docs only; the branch is untouched and the user decides).
 
-- [Task H wave 33 reconciliation](task-h-wave33-reconciliation-20261029.md): the F01–F35 / R01–R11 inventory and merge reconciliation every Task H port report cites (migrated unshortened from `agent/task-h-repair`).
-- [Task H publication repair](task-h-publication-repair-20261026.md): the K38/K45/K22 publication repair campaign log with candidates, failures and qualification results (migrated unshortened).
-- [Task H K38/B6 repair](task-h-k38-b6-repair-20261028.md): K33/K36 recovery and B6 repair evidence including the open K33 fatal-read subfinding (migrated unshortened).
-- [Task H devel b2 integration](task-h-devel-b2-integration-20261028.md): the superseded devel `b2d57e421` integration and its gate results (migrated unshortened).
-- [Task A Finding B rerun](task-a-finding-b-rerun-20261026.md): the O_TRUNC/fsync recheck, NOT REPRODUCED (migrated unshortened).
+- [Task H wave 33 reconciliation](2026-10/task-h-wave33-reconciliation-20261029.md): the F01–F35 / R01–R11 inventory and merge reconciliation every Task H port report cites (migrated unshortened from `agent/task-h-repair`).
+- [Task H publication repair](2026-10/task-h-publication-repair-20261026.md): the K38/K45/K22 publication repair campaign log with candidates, failures and qualification results (migrated unshortened).
+- [Task H K38/B6 repair](2026-10/task-h-k38-b6-repair-20261028.md): K33/K36 recovery and B6 repair evidence including the open K33 fatal-read subfinding (migrated unshortened).
+- [Task H devel b2 integration](2026-10/task-h-devel-b2-integration-20261028.md): the superseded devel `b2d57e421` integration and its gate results (migrated unshortened).
+- [Task A Finding B rerun](2026-10/task-a-finding-b-rerun-20261026.md): the O_TRUNC/fsync recheck, NOT REPRODUCED (migrated unshortened).
 
-[Gate budget re-measurement](budget-remeasure-20261030.md): **Task BN, proposal only: the re-measured `tests/budgets.tsv` (three 8-job gates each on amd and node9900 at `e2c5067d1`, plus intel2 wave 42/44 and Task T medians) adds up to 1729 s, 79 s over the 1650 s bound (1734 s with `test_pump_logging` 85 s and a 60 s W130 placeholder); the bound is not moved and `test_make_test_recipe.py` fails until the user decides** (raw timings outside Git, hashes in the page).
+[Gate budget re-measurement](2026-10/budget-remeasure-20261030.md): **Task BN, proposal only: the re-measured `tests/budgets.tsv` (three 8-job gates each on amd and node9900 at `e2c5067d1`, plus intel2 wave 42/44 and Task T medians) adds up to 1729 s, 79 s over the 1650 s bound (1734 s with `test_pump_logging` 85 s and a 60 s W130 placeholder); the bound is not moved and `test_make_test_recipe.py` fails until the user decides** (raw timings outside Git, hashes in the page).
 
-[K81 report stall](k72-report-stall-20261030.md): **FIXED on `claude/bl-report-stall-b59547`, blocks alpha: no** (Task BL): the intermittent `test_pump_logging.py` foreground EIO is a REPORT reply held behind a synchronous `fprintf(stderr)` while the telemetry reporter holds the stdio lock on a full pipe; report-path lines now use the one reporter; the test fails on devel 5 of 5 (was 4 of 10) and passes 10 of 10 with the fix.
+[K81 report stall](2026-10/k72-report-stall-20261030.md): **FIXED on `claude/bl-report-stall-b59547`, blocks alpha: no** (Task BL): the intermittent `test_pump_logging.py` foreground EIO is a REPORT reply held behind a synchronous `fprintf(stderr)` while the telemetry reporter holds the stdio lock on a full pipe; report-path lines now use the one reporter; the test fails on devel 5 of 5 (was 4 of 10) and passes 10 of 10 with the fix.
 
-[Wave 44 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30 (`cf482da72`; gate at `cf482da72`)**: Task BH, **K61** ([evidence](k61-delayed-put-stray-20261030.md)) FIXED, blocks alpha: no: a PUT takes a per-fragment-bucket retire epoch before it reads its authority and the fragment write refuses `STALE` under the mutex it already holds when a superseded or orphan delete of that identity ran in between (last 8 retired identities per bucket; more than 8 refuses, fail closed); `test_ba_upload_retire put|rebuild` fail on devel `8b0d128cc` and pass with the fix, now in `make test-long` (two 5 s rows); `efs-bench --bench data` on xorinox within noise (−0.01 %); xorinox gate 581 / 0 FAIL / 10 NOTRUN (host limits). Task BK, [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md) (planning page: the owed gate per FIXED/VERIFY row, batch durations by host class, 63 h 30 sequential, estimates except the D46 cell figures); F-row K counts and the K66-K71 wording corrected. Task BJ, [leftover branch disposition](branch-disposition-20261030.md): no leftover branch holds an undecided product fix; five DELETE, `agent/task-h-repair` KEEP PARKED (evidence pages on no other ref; F25 held, its branch gone). Merge-time: K counts after K61 (36 FIXED / 35 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN: K48), index lines for the BJ and BK pages, code graph and architecture docs regenerated; budgeted gate 1646 s of 1650 s. intel2 `make test-all` (8 jobs): TOTAL 581 FAIL 1 NOTRUN 10 STATUS FAIL (778 s), OVERBUDGET 2 (`test_b_geometry` 84.3 s vs 65, `test_opid_admission` 17.0 s vs 15); NOTRUN = host limits (no RDMA device, no Memcheck header). The one FAIL is `test_pump_logging.py`, the K72 intermittent that predates this wave: solo on intel2 it fails 1 of 5 on the merged tree and 3 of 5 on the untouched base `8b0d128cc`, same assertion (foreground EIO after an 8 s type-67 report RPC stall answered BUSY, outcome unknown after the client bound); no daemon logged a STALE, so the K61 path is not involved. Artifacts on intel2 `~/efs-artifacts/merge-wave44-20261030/` (`SHA256SUMS` sha256 `59c4f52df4ab2484c88b8c225c79b55f89e23a0efa06aaf4bc5d1e45cca068a9`).
+[Wave 44 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30 (`cf482da72`; gate at `cf482da72`)**: Task BH, **K61** ([evidence](2026-10/k61-delayed-put-stray-20261030.md)) FIXED, blocks alpha: no: a PUT takes a per-fragment-bucket retire epoch before it reads its authority and the fragment write refuses `STALE` under the mutex it already holds when a superseded or orphan delete of that identity ran in between (last 8 retired identities per bucket; more than 8 refuses, fail closed); `test_ba_upload_retire put|rebuild` fail on devel `8b0d128cc` and pass with the fix, now in `make test-long` (two 5 s rows); `efs-bench --bench data` on xorinox within noise (−0.01 %); xorinox gate 581 / 0 FAIL / 10 NOTRUN (host limits). Task BK, [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md) (planning page: the owed gate per FIXED/VERIFY row, batch durations by host class, 63 h 30 sequential, estimates except the D46 cell figures); F-row K counts and the K66-K71 wording corrected. Task BJ, [leftover branch disposition](2026-10/branch-disposition-20261030.md): no leftover branch holds an undecided product fix; five DELETE, `agent/task-h-repair` KEEP PARKED (evidence pages on no other ref; F25 held, its branch gone). Merge-time: K counts after K61 (36 FIXED / 35 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN: K48), index lines for the BJ and BK pages, code graph and architecture docs regenerated; budgeted gate 1646 s of 1650 s. intel2 `make test-all` (8 jobs): TOTAL 581 FAIL 1 NOTRUN 10 STATUS FAIL (778 s), OVERBUDGET 2 (`test_b_geometry` 84.3 s vs 65, `test_opid_admission` 17.0 s vs 15); NOTRUN = host limits (no RDMA device, no Memcheck header). The one FAIL is `test_pump_logging.py`, the K72 intermittent that predates this wave: solo on intel2 it fails 1 of 5 on the merged tree and 3 of 5 on the untouched base `8b0d128cc`, same assertion (foreground EIO after an 8 s type-67 report RPC stall answered BUSY, outcome unknown after the client bound); no daemon logged a STALE, so the K61 path is not involved. Artifacts on intel2 `~/efs-artifacts/merge-wave44-20261030/` (`SHA256SUMS` sha256 `59c4f52df4ab2484c88b8c225c79b55f89e23a0efa06aaf4bc5d1e45cca068a9`).
 
 [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md): **planning page, no verdicts** (Task BK): what each of the 70 FIXED/VERIFY K rows still owes, which D46 cell or own run supplies it, and batch durations by host class (F 1 h 55, O 5 h 50, D-TCP 18 h 45, D-RDMA 20 h 45, S 12 h 15, N 4 h 00; only the three D46 cell durations are measured). Also fixes the F-row K summary counts and the K66-K71 wording (merged in wave 39).
 
-[Leftover agent branch disposition](branch-disposition-20261030.md): **no leftover branch holds an undecided product fix** (Task BJ, git objects only, nothing built): DELETE `agent/devel-task-an`, `-ao`, `-taskad`, `-task-h` and `agent/orcd-eio-stress-repair-20261028`; KEEP PARKED `agent/task-h-repair` (five evidence pages exist on no other ref, F25 held). F25's branch no longer exists; the synthetic K48 harness lives only on the `an` branch.
+[Leftover agent branch disposition](2026-10/branch-disposition-20261030.md): **no leftover branch holds an undecided product fix** (Task BJ, git objects only, nothing built): DELETE `agent/devel-task-an`, `-ao`, `-taskad`, `-task-h` and `agent/orcd-eio-stress-repair-20261028`; KEEP PARKED `agent/task-h-repair` (five evidence pages exist on no other ref, F25 held). F25's branch no longer exists; the synthetic K48 harness lives only on the `an` branch.
 
-[Wave 43 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30 (gate at `e1cb9febe`)**: Task BE, **K53** ([evidence](k53-full-quota-oracle-20261030.md)) closed as a harness oracle defect; no product source changes. Merge-time: `tests/budgets.tsv` keeps BE's 400 s full-quota row and trims the unmeasured `test_put_quota_reclaim.py` guess from 120 s to 60 s (nuc 33.2 s, xorinox 12.5 s, one gate each, not Task T's three-run medians) so the budgeted gate is 1645 s of 1650 s; code graph and K counts regenerated (3 CLOSED / 2 OPEN in the K table). intel1 `make test-all` (8 jobs): TOTAL 579 FAIL 3 NOTRUN 11 STATUS FAIL (930 s); `test_k54_member_down_fence` and `test_k37_segment_rebuild` pass alone (k37 unattributed, as in earlier gates); `test_pump_logging.py` is an intermittent that predates this wave: 3 of 10 solo runs fail on the untouched base `0abfa02fb` and 2 of 10 on the merged tree (identical source, 'foreground failures' or 'late writes' under the blocked sink; unattributed, 8 s type-67 report RPC stalls seen in one retained failure). No full-gate rerun.
+[Wave 43 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30 (gate at `e1cb9febe`)**: Task BE, **K53** ([evidence](2026-10/k53-full-quota-oracle-20261030.md)) closed as a harness oracle defect; no product source changes. Merge-time: `tests/budgets.tsv` keeps BE's 400 s full-quota row and trims the unmeasured `test_put_quota_reclaim.py` guess from 120 s to 60 s (nuc 33.2 s, xorinox 12.5 s, one gate each, not Task T's three-run medians) so the budgeted gate is 1645 s of 1650 s; code graph and K counts regenerated (3 CLOSED / 2 OPEN in the K table). intel1 `make test-all` (8 jobs): TOTAL 579 FAIL 3 NOTRUN 11 STATUS FAIL (930 s); `test_k54_member_down_fence` and `test_k37_segment_rebuild` pass alone (k37 unattributed, as in earlier gates); `test_pump_logging.py` is an intermittent that predates this wave: 3 of 10 solo runs fail on the untouched base `0abfa02fb` and 2 of 10 on the merged tree (identical source, 'foreground failures' or 'late writes' under the blocked sink; unattributed, 8 s type-67 report RPC stalls seen in one retained failure). No full-gate rerun.
 
-[Wave 42 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30 (`6c8f8338d`; gate at `6c8f8338d`)**: Task BD, **K54** ([evidence](k54-member-down-unmount-20261030.md)): a clean unmount completes with any one storage member down (D46 item 6): the storage fence seals every member that answers and requires a strict majority (two down still fails closed with `phase=storage-fence`), the revoked epoch is committed in the session shard log and a returned member learns and seals it before it admits a PUT or deletes an orphan; the client revoke ladder moves to another voter when a hint names a dead member (the member-2 cleanup case). 54 clean unmounts with the down member rotating over 2, 3 and 4 (intel1 TCP 30, node9901 TCP 12 and RDMA 12), six controls in `make test-long`; intel1 gate 569 / 0 FAIL with the untouched base 567 / 0 FAIL (`test_k37_segment_rebuild` failed in two earlier branch gates, unattributed). The orcd-mini real-host stage is NOTRUN; build `07f58d7b8046` is staged on both nodes. intel2 `make test-all` (8 jobs): TOTAL 578 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (803 s), NOTRUN = host limits.
+[Wave 42 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30 (`6c8f8338d`; gate at `6c8f8338d`)**: Task BD, **K54** ([evidence](2026-10/k54-member-down-unmount-20261030.md)): a clean unmount completes with any one storage member down (D46 item 6): the storage fence seals every member that answers and requires a strict majority (two down still fails closed with `phase=storage-fence`), the revoked epoch is committed in the session shard log and a returned member learns and seals it before it admits a PUT or deletes an orphan; the client revoke ladder moves to another voter when a hint names a dead member (the member-2 cleanup case). 54 clean unmounts with the down member rotating over 2, 3 and 4 (intel1 TCP 30, node9901 TCP 12 and RDMA 12), six controls in `make test-long`; intel1 gate 569 / 0 FAIL with the untouched base 567 / 0 FAIL (`test_k37_segment_rebuild` failed in two earlier branch gates, unattributed). The orcd-mini real-host stage is NOTRUN; build `07f58d7b8046` is staged on both nodes. intel2 `make test-all` (8 jobs): TOTAL 578 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (803 s), NOTRUN = host limits.
 
-[Wave 41 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30 (`ed4343683`; gate at `ed4343683`)**: Task BF, **S4 / W122** ([evidence](s4-effective-settings-20261030.md)): `efs-mgmt settings NODE:PORT` and `efs-mgmt settings --mount PATH` list the effective settings with value, default, provenance and kind (the 9 deployment inputs, the 34 numeric tunables, `--writers`, the two cluster policies, the durability window, transport and build; observability and fault hooks counted in the header, not listed), read-only, no new knob; S4 ticked, W122 DONE, limitation L24 removed. Merge-time: `tests/budgets.tsv` keeps both new rows (wave 40's `test_pump_logging.py` and `test_settings_listing.py`); architecture docs and code graph regenerated. intel2 `make test-all` (8 jobs): TOTAL 576 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (992 s), NOTRUN = host limits.
+[Wave 41 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30 (`ed4343683`; gate at `ed4343683`)**: Task BF, **S4 / W122** ([evidence](2026-10/s4-effective-settings-20261030.md)): `efs-mgmt settings NODE:PORT` and `efs-mgmt settings --mount PATH` list the effective settings with value, default, provenance and kind (the 9 deployment inputs, the 34 numeric tunables, `--writers`, the two cluster policies, the durability window, transport and build; observability and fault hooks counted in the header, not listed), read-only, no new knob; S4 ticked, W122 DONE, limitation L24 removed. Merge-time: `tests/budgets.tsv` keeps both new rows (wave 40's `test_pump_logging.py` and `test_settings_listing.py`); architecture docs and code graph regenerated. intel2 `make test-all` (8 jobs): TOTAL 576 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (992 s), NOTRUN = host limits.
 
-[S4 effective settings](s4-effective-settings-20261030.md): **`efs-mgmt settings NODE:PORT` and `--mount PATH` shipped (D46 item 3, W122 DONE, L24 removed); gate on xorinox: TOTAL 569 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (1019s)**, NOTRUN = host limits; not merged.
-[K54 member-down unmount](k54-member-down-unmount-20261030.md): **FIXED, merged into devel in wave 42**: majority-sealed storage fence, returned member learns the sealed epoch, and the client routes the revoke around a dead member (member 2 included); 42 clean unmounts rotating the down member over 2/3/4 (intel1 TCP 30, node9901 TCP 12 and RDMA 12), six controls, intel1 `make test-all` on the final tree 569 / 0 FAIL / 11 host-limited NOTRUN, untouched base 567 / 0 FAIL; `test_k37_segment_rebuild` failed in two earlier gates and is unattributed; orcd-mini stage NOTRUN (no allowance in this session).
+[S4 effective settings](2026-10/s4-effective-settings-20261030.md): **`efs-mgmt settings NODE:PORT` and `--mount PATH` shipped (D46 item 3, W122 DONE, L24 removed); gate on xorinox: TOTAL 569 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (1019s)**, NOTRUN = host limits; not merged.
+[K54 member-down unmount](2026-10/k54-member-down-unmount-20261030.md): **FIXED, merged into devel in wave 42**: majority-sealed storage fence, returned member learns the sealed epoch, and the client routes the revoke around a dead member (member 2 included); 42 clean unmounts rotating the down member over 2/3/4 (intel1 TCP 30, node9901 TCP 12 and RDMA 12), six controls, intel1 `make test-all` on the final tree 569 / 0 FAIL / 11 host-limited NOTRUN, untouched base 567 / 0 FAIL; `test_k37_segment_rebuild` failed in two earlier gates and is unattributed; orcd-mini stage NOTRUN (no allowance in this session).
 
-[K53 full-quota oracle](k53-full-quota-oracle-20261030.md): **CLOSED, harness oracle defect; not reproduced (80 clean runs on devel `7514b2145`)**. The retained fcstor007 store dates the 8 freed fragments (packer retirement) 360 ms before W0's 8 admitted ones; both reported builds predate the `d2edef6e9` harness fix. B6 full mode now explains a late free (`b6_full_oracle.judge`, replay test in `make test`) and checks that an unlink admits exactly one 128 KiB file. Runtime reclaim hold and the concurrent-writer admission check remain follow-ups.
+[K53 full-quota oracle](2026-10/k53-full-quota-oracle-20261030.md): **CLOSED, harness oracle defect; not reproduced (80 clean runs on devel `7514b2145`)**. The retained fcstor007 store dates the 8 freed fragments (packer retirement) 360 ms before W0's 8 admitted ones; both reported builds predate the `d2edef6e9` harness fix. B6 full mode now explains a late free (`b6_full_oracle.judge`, replay test in `make test`) and checks that an unlink admits exactly one 128 KiB file. Runtime reclaim hold and the concurrent-writer admission check remain follow-ups.
 
-[AN port](an-product-port-20261030.md): store ENOENT retry fix ported (K65); K48, K35 and GETCHUNKS repairs not ported (no failing reproduction on devel).
+[AN port](2026-10/an-product-port-20261030.md): store ENOENT retry fix ported (K65); K48, K35 and GETCHUNKS repairs not ported (no failing reproduction on devel).
 
-[Wave 40 merge](alpha-1.0-2plus1-checklist.md): **AO port merged into devel Oct 30; gate on intel2 at `9fd5d4cb3`: TOTAL 574 FAIL 3 NOTRUN 10 STATUS FAIL (847s)**; the three FAILs were test-harness or script issues from the port, fixed test/script-only and each rerun PASS on intel2 (`test_readdir_migration_race` needed a `dent_get_tx` stub, `test_client_metadata_authority` the call-deadline stubs, `test_ao_readdir_live` AO's final script with `missing_ok`); no full-gate rerun after them. NOTRUN = host limits. **AO** ([port](ao-product-port-20261030.md), [AO evidence](ao-readdir-pages-20261028.md)): bounded compact directory pages (wire-format change, fresh clusters only; 100K listing 1.893 -> 0.735 s, page-tail latency worse), plus K74 committed unresolved migration names in READDIR, K75 migration planner/log forwarding cycle, K76 cross-group cleanup at both owners, K77 explicit lock conflict status, K78 admission deadline. K74/K75 block alpha pending live runs; K48 itself stays OPEN. TSan/ASan not run (sanitizer builds are broken on devel by `test_child_vec_index`, see Wave 39).
+[Wave 40 merge](alpha-1.0-2plus1-checklist.md): **AO port merged into devel Oct 30; gate on intel2 at `9fd5d4cb3`: TOTAL 574 FAIL 3 NOTRUN 10 STATUS FAIL (847s)**; the three FAILs were test-harness or script issues from the port, fixed test/script-only and each rerun PASS on intel2 (`test_readdir_migration_race` needed a `dent_get_tx` stub, `test_client_metadata_authority` the call-deadline stubs, `test_ao_readdir_live` AO's final script with `missing_ok`); no full-gate rerun after them. NOTRUN = host limits. **AO** ([port](2026-10/ao-product-port-20261030.md), [AO evidence](2026-10/ao-readdir-pages-20261028.md)): bounded compact directory pages (wire-format change, fresh clusters only; 100K listing 1.893 -> 0.735 s, page-tail latency worse), plus K74 committed unresolved migration names in READDIR, K75 migration planner/log forwarding cycle, K76 cross-group cleanup at both owners, K77 explicit lock conflict status, K78 admission deadline. K74/K75 block alpha pending live runs; K48 itself stays OPEN. TSan/ASan not run (sanitizer builds are broken on devel by `test_child_vec_index`, see Wave 39).
 
-[AB/AE settlement (Task BI)](ab-ae-raft-logging-20261030.md): **AB ticked, AE left open with a written disposition** (branch `claude/bi-ab-ae-5b1f22`, not merged). The AE branch audit finds nothing left to port; term/role events and the applier's session events moved behind the one reporter (K80 fixed: a blocked sink no longer fails the checked unmount); daemon exit with a blocked sink is K79 (OPEN). amd: gate test, TSan and ASan PASS, three-run `h->mu` hold/wait/progress medians; nuc gate line in the page.
+[AB/AE settlement (Task BI)](2026-10/ab-ae-raft-logging-20261030.md): **AB ticked, AE left open with a written disposition** (branch `claude/bi-ab-ae-5b1f22`, not merged). The AE branch audit finds nothing left to port; term/role events and the applier's session events moved behind the one reporter (K80 fixed: a blocked sink no longer fails the checked unmount); daemon exit with a blocked sink is K79 (OPEN). amd: gate test, TSan and ASan PASS, three-run `h->mu` hold/wait/progress medians; nuc gate line in the page.
 
-[Wave 39 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30; gate on xorinox at `a0414e184`: TOTAL 571 FAIL 1 NOTRUN 10 STATUS FAIL (978s)**; the one FAIL, `test_stop_dirty_drain.py`, was a merge interaction (K71's open-retry pass uses `EFS_ERR_AGAIN`, which the test stub did not define) fixed test-only in `211e7a78c` and rerun PASS on xorinox; no full-gate rerun after it. NOTRUN = host limits (no cluster scripts, no RDMA device). Ported by reproduction: **EIO** K66–K71 ([EIO port](eio-product-port-20261030.md); K66, K69, K70 block alpha pending live stress) and **AE** bounded routine logging reporter K72 plus reclaim counter atomic K73 ([AE port](ae-product-port-20261030.md); AE K70/K71 renumbered, AB/AE native acceptance still held). **Not run: TSan/ASan for K72's `telemetry` entry**: `make tsan-check`/`asan-check` fail to build on devel since wave 37 because `tests/test_child_vec_index` uses `-Wl,--wrap=realloc` (AW), unrelated to this wave; sanitizer gates are broken until that test is excluded or fixed.
+[Wave 39 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30; gate on xorinox at `a0414e184`: TOTAL 571 FAIL 1 NOTRUN 10 STATUS FAIL (978s)**; the one FAIL, `test_stop_dirty_drain.py`, was a merge interaction (K71's open-retry pass uses `EFS_ERR_AGAIN`, which the test stub did not define) fixed test-only in `211e7a78c` and rerun PASS on xorinox; no full-gate rerun after it. NOTRUN = host limits (no cluster scripts, no RDMA device). Ported by reproduction: **EIO** K66–K71 ([EIO port](2026-10/eio-product-port-20261030.md); K66, K69, K70 block alpha pending live stress) and **AE** bounded routine logging reporter K72 plus reclaim counter atomic K73 ([AE port](2026-10/ae-product-port-20261030.md); AE K70/K71 renumbered, AB/AE native acceptance still held). **Not run: TSan/ASan for K72's `telemetry` entry**: `make tsan-check`/`asan-check` fail to build on devel since wave 37 because `tests/test_child_vec_index` uses `-Wl,--wrap=realloc` (AW), unrelated to this wave; sanitizer gates are broken until that test is excluded or fixed.
 
-[Wave 38 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30; gate on intel2 at `05360d91d`: TOTAL 566 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (1008s)**, NOTRUN = host limits (no RDMA device, no valgrind/memcheck.h). Task H was split by K group instead of merged whole (258 commits, 35 fixes with named reproductions, 11 refactors): **K45/K51** F24 rejoin-thread ownership and F35 resync BUSY ([evidence](h-k45-shutdown-20261029.md)); **recovery** F26, F28, F29 ([evidence](h-recovery-20261029.md)), F27 not ported because devel already guards it; **K22** F10-F20 allocator reservation, receipt replay, snapshot import, KV flush finish, delayed-pump heartbeat ([evidence](h-k22-allocator-20261029.md)); **K38/K40** F02-F04, F07-F09 ([evidence](h-k38-publication-20261029.md)), with **F25 held back** (it swaps the K55 syncer's root-wide syncfs for per-file barriers with only structural evidence; stays on `agent/h-k38-publication`); **K42** F21-F23 including the 34-byte epoch-bound session ACK, fresh clusters only ([evidence](h-k42-session-20261029.md)); **K33** F30-F32 ([evidence](h-k33-routing-20261029.md)), F33/F34 were already on devel. The 11 refactors R01-R11 are alpha 1.1 input and stay on `agent/task-h-repair`. **BB** client overlay authority ([audit](bb-overlay-authority-audit-20261029.md)): its findings were renumbered K62-K64 because Task BA took K59-K61 on devel first. **AN**: evidence and measurement scripts only ([evidence](an-put-status-batching-20261028.md)); the branch's product repairs overlap K35/K55/K48 work on devel and are not merged, they need a separate commit-by-commit port. **`test_bench_published.py`** failed once in the first wave 38 gate (file 1 read back with the right length but wrong contents) and passed in the final gate; twelve side-by-side runs on amd did not reproduce that mode (they showed unmount and write failures on both wave 38 and devel `62417ac5b`), so it is an unattributed intermittent, the third failure mode seen in this test. Task list: AB and AE (qualification incomplete), AO (in progress) and P3-A-F remain open; AN ticked (measured, no change).
+[Wave 38 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 30; gate on intel2 at `05360d91d`: TOTAL 566 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (1008s)**, NOTRUN = host limits (no RDMA device, no valgrind/memcheck.h). Task H was split by K group instead of merged whole (258 commits, 35 fixes with named reproductions, 11 refactors): **K45/K51** F24 rejoin-thread ownership and F35 resync BUSY ([evidence](2026-10/h-k45-shutdown-20261029.md)); **recovery** F26, F28, F29 ([evidence](2026-10/h-recovery-20261029.md)), F27 not ported because devel already guards it; **K22** F10-F20 allocator reservation, receipt replay, snapshot import, KV flush finish, delayed-pump heartbeat ([evidence](2026-10/h-k22-allocator-20261029.md)); **K38/K40** F02-F04, F07-F09 ([evidence](2026-10/h-k38-publication-20261029.md)), with **F25 held back** (it swaps the K55 syncer's root-wide syncfs for per-file barriers with only structural evidence; stays on `agent/h-k38-publication`); **K42** F21-F23 including the 34-byte epoch-bound session ACK, fresh clusters only ([evidence](2026-10/h-k42-session-20261029.md)); **K33** F30-F32 ([evidence](2026-10/h-k33-routing-20261029.md)), F33/F34 were already on devel. The 11 refactors R01-R11 are alpha 1.1 input and stay on `agent/task-h-repair`. **BB** client overlay authority ([audit](2026-10/bb-overlay-authority-audit-20261029.md)): its findings were renumbered K62-K64 because Task BA took K59-K61 on devel first. **AN**: evidence and measurement scripts only ([evidence](2026-10/an-put-status-batching-20261028.md)); the branch's product repairs overlap K35/K55/K48 work on devel and are not merged, they need a separate commit-by-commit port. **`test_bench_published.py`** failed once in the first wave 38 gate (file 1 read back with the right length but wrong contents) and passed in the final gate; twelve side-by-side runs on amd did not reproduce that mode (they showed unmount and write failures on both wave 38 and devel `62417ac5b`), so it is an unattributed intermittent, the third failure mode seen in this test. Task list: AB and AE (qualification incomplete), AO (in progress) and P3-A-F remain open; AN ticked (measured, no change).
 
-[Wave 37 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29; gate on intel2 at `ea54f57bf`: TOTAL 555 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (787s), NOTRUN = host limits (no RDMA device, no valgrind/memcheck.h)**. **AV** measured, no change ([REPORT join](av-report-join-20261028.md)). **AW** implemented ([child-vector reverse index](aw-child-vector-index-20261028.md)): unlink in a loaded parent no longer scans the child vector; the position map is keyed by slot+1 because the shared `idx_*` helpers reserve key 0; end-to-end unlink is unchanged because `recompute_times_up` dominates, recorded as new item **BC**. **AY** fixed **K57** ([audit](ay-upload-completion-audit-20261029.md)): a packer-path segment PUT acknowledged an existing fragment on its tail record alone; it now checks the whole fragment under the exclusive guard. **AZ** fixed **K58** ([audit](az-verification-policy-audit-20261029.md)): verified recovery no longer deletes a fragment on a read error, only on a proven mismatch; AZ's branch also called it K57, renumbered here because AY merged first. AW's earlier gate failures (B6 slow, K41 timing) did not recur on this head. Devel's AX alias index and AW's child-vector index auto-merged and passed together. Task list: AB and AE (qualification incomplete), AN and AO (in progress), BB (in progress, 5 commits) remain open with evidence on branches; P3-A–F have no commits yet.
+[Wave 37 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29; gate on intel2 at `ea54f57bf`: TOTAL 555 FAIL 0 NOTRUN 10 STATUS INCOMPLETE (787s), NOTRUN = host limits (no RDMA device, no valgrind/memcheck.h)**. **AV** measured, no change ([REPORT join](2026-10/av-report-join-20261028.md)). **AW** implemented ([child-vector reverse index](2026-10/aw-child-vector-index-20261028.md)): unlink in a loaded parent no longer scans the child vector; the position map is keyed by slot+1 because the shared `idx_*` helpers reserve key 0; end-to-end unlink is unchanged because `recompute_times_up` dominates, recorded as new item **BC**. **AY** fixed **K57** ([audit](2026-10/ay-upload-completion-audit-20261029.md)): a packer-path segment PUT acknowledged an existing fragment on its tail record alone; it now checks the whole fragment under the exclusive guard. **AZ** fixed **K58** ([audit](2026-10/az-verification-policy-audit-20261029.md)): verified recovery no longer deletes a fragment on a read error, only on a proven mismatch; AZ's branch also called it K57, renumbered here because AY merged first. AW's earlier gate failures (B6 slow, K41 timing) did not recur on this head. Devel's AX alias index and AW's child-vector index auto-merged and passed together. Task list: AB and AE (qualification incomplete), AN and AO (in progress), BB (in progress, 5 commits) remain open with evidence on branches; P3-A–F have no commits yet.
 
-- [H K38/K40 publication port](h-k38-publication-20261029.md): F02–F04, F07–F09, F25 ported from `agent/task-h-repair` with retained regressions; F01/F06 already on devel, F05 not needed; gate result in the page; not merged.
-- [Task H devel baseline](task-h-devel-baseline-20261029.md): branch fix tests run against devel `74d34d588` on nuc; 18 DEVEL-BUG, 2 NOT-NEEDED, 13 NOCOMPILE, 2 NO-TEST of 35 rows; measurement only.
-- [H-K42 session port](h-k42-session-20261029.md): Task H F21–F23 (exact-epoch revoke ACK, BEGIN cleanup reserve, empty-cleanup proof) ported to devel with fail/pass evidence; no K row changed.
+- [H K38/K40 publication port](2026-10/h-k38-publication-20261029.md): F02–F04, F07–F09, F25 ported from `agent/task-h-repair` with retained regressions; F01/F06 already on devel, F05 not needed; gate result in the page; not merged.
+- [Task H devel baseline](2026-10/task-h-devel-baseline-20261029.md): branch fix tests run against devel `74d34d588` on nuc; 18 DEVEL-BUG, 2 NOT-NEEDED, 13 NOCOMPILE, 2 NO-TEST of 35 rows; measurement only.
+- [H-K42 session port](2026-10/h-k42-session-20261029.md): Task H F21–F23 (exact-epoch revoke ACK, BEGIN cleanup reserve, empty-cleanup proof) ported to devel with fail/pass evidence; no K row changed.
 
-- [H-K33 routing fixes](h-k33-routing-20261029.md): Task H F30-F32 client routing/deadline fixes ported to `agent/h-k33-routing` with retained failing tests; F33/F34 already on devel; branch, not merged.
+- [H-K33 routing fixes](2026-10/h-k33-routing-20261029.md): Task H F30-F32 client routing/deadline fixes ported to `agent/h-k33-routing` with retained failing tests; F33/F34 already on devel; branch, not merged.
 
-[Task AX](ax-hardlink-alias-index-20261028.md): **hard-link attribute fan-out no longer scans unrelated rows** (branch `agent/devel-ax`, merged into devel Oct 29, `a50741e3e`). Measured on xorinox: chmod/truncate/link on a hard-linked file cost 13–20 ms at 1 M loaded rows (0.9–1.3 ms at 100 K), independent of alias count; a per-table alias vector makes it 0.0003–0.0006 ms, independent of rows. Gate xorinox: 553 commands, 0 FAIL, 10 host-limited NOTRUN. `make asan-check` fails 4 cases on xorinox identically on untouched devel (join does not answer): not this change, open for the coordinator. Unlink in a 1 M-child directory stays 8–15 ms: that is AW's child-vector scan.
-[Task BA](ba-deletion-authority-audit-20261029.md): **deletion authority audited** (branch `agent/devel-ba`, not merged). Every delete caller is tabulated with its fence, exact identity and non-resurrection argument. Three gaps: **K59** a delayed segment PUT or rebuild recreated a retired segment (fixed: exclusive guard before the authority read); **K60** recovery and segment delete both debited one file's bytes (fixed: only the successful unlink debits); **K61** a delayed ordinary PUT can rewrite a superseded fragment (open here; FIXED by [Task BH](k61-delayed-put-stray-20261030.md): retire epoch checked under the fragment mutex, reproduction in `test-long`, hot path within noise). Not run: a three-member Raft crash matrix. Gate on AMD: TOTAL 556, 1 FAIL (k42 teardown, intermittent on unchanged devel on AMD too, 2/5 vs 3/5), 2 host-limited NOTRUN.
+[Task AX](2026-10/ax-hardlink-alias-index-20261028.md): **hard-link attribute fan-out no longer scans unrelated rows** (branch `agent/devel-ax`, merged into devel Oct 29, `a50741e3e`). Measured on xorinox: chmod/truncate/link on a hard-linked file cost 13–20 ms at 1 M loaded rows (0.9–1.3 ms at 100 K), independent of alias count; a per-table alias vector makes it 0.0003–0.0006 ms, independent of rows. Gate xorinox: 553 commands, 0 FAIL, 10 host-limited NOTRUN. `make asan-check` fails 4 cases on xorinox identically on untouched devel (join does not answer): not this change, open for the coordinator. Unlink in a 1 M-child directory stays 8–15 ms: that is AW's child-vector scan.
+[Task BA](2026-10/ba-deletion-authority-audit-20261029.md): **deletion authority audited** (branch `agent/devel-ba`, not merged). Every delete caller is tabulated with its fence, exact identity and non-resurrection argument. Three gaps: **K59** a delayed segment PUT or rebuild recreated a retired segment (fixed: exclusive guard before the authority read); **K60** recovery and segment delete both debited one file's bytes (fixed: only the successful unlink debits); **K61** a delayed ordinary PUT can rewrite a superseded fragment (open here; FIXED by [Task BH](2026-10/k61-delayed-put-stray-20261030.md): retire epoch checked under the fragment mutex, reproduction in `test-long`, hot path within noise). Not run: a three-member Raft crash matrix. Gate on AMD: TOTAL 556, 1 FAIL (k42 teardown, intermittent on unchanged devel on AMD too, 2/5 vs 3/5), 2 host-limited NOTRUN.
 
-[Wave 36 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`4fdf8ddd2`; local checks only, no new full gate: docs, measurement scripts and one ASan-only line)**: **K56 FIXED** ([evidence](k56-asan-fuse-allocator-20261029.md)): the ASan-built `efs-fuse` no longer refuses to start (`cannot establish allocator policy`; Task I's `mallopt` policy cannot succeed under ASan's allocator), skipped under `__SANITIZE_ADDRESS__` and still fatal in every other glibc build; `make asan-check` 49 run / 5 failed → 49 run / 0 failed on xorinox. Measured, no change: AT ([PUT-window wake-ups](at-put-window-wakeups-20261028.md)), AS ([demand-read wait loop](as-demand-read-wait-20261028.md), never engaged in about 5.1M allocations), AU ([Raft pump kicks](au-pump-kicks-20261028.md); its gate recorded a K48 recurrence, `test_w130_dir_fault.py` partial listing 95 != 96, on an untouched base, which keeps K48 OPEN). Also this wave: the wave 32 merges had dropped the checklist text of AG, AH, AP, AQ and AR (a merge helper discarded the non-table lines of conflicting hunks); the entries were rebuilt from their branches in `6b3b3bad5`. Task list: AB and AE (qualification incomplete), AN and AO (in progress) are the Stage 1 items still open with evidence on branches; AV, AW, AX, AY–BB and P3-A–F have no commits yet.
+[Wave 36 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`4fdf8ddd2`; local checks only, no new full gate: docs, measurement scripts and one ASan-only line)**: **K56 FIXED** ([evidence](2026-10/k56-asan-fuse-allocator-20261029.md)): the ASan-built `efs-fuse` no longer refuses to start (`cannot establish allocator policy`; Task I's `mallopt` policy cannot succeed under ASan's allocator), skipped under `__SANITIZE_ADDRESS__` and still fatal in every other glibc build; `make asan-check` 49 run / 5 failed → 49 run / 0 failed on xorinox. Measured, no change: AT ([PUT-window wake-ups](2026-10/at-put-window-wakeups-20261028.md)), AS ([demand-read wait loop](2026-10/as-demand-read-wait-20261028.md), never engaged in about 5.1M allocations), AU ([Raft pump kicks](2026-10/au-pump-kicks-20261028.md); its gate recorded a K48 recurrence, `test_w130_dir_fault.py` partial listing 95 != 96, on an untouched base, which keeps K48 OPEN). Also this wave: the wave 32 merges had dropped the checklist text of AG, AH, AP, AQ and AR (a merge helper discarded the non-table lines of conflicting hunks); the entries were rebuilt from their branches in `6b3b3bad5`. Task list: AB and AE (qualification incomplete), AN and AO (in progress) are the Stage 1 items still open with evidence on branches; AV, AW, AX, AY–BB and P3-A–F have no commits yet.
 
-[Wave 35 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`5367beeca`; gate at `2195fd863`)**: `agent/devel-k35-slow-fsync` ([K35](k35-slow-fsync-20261029.md), [FIN accounting](fin-tcp-accounting-20261029.md), [FIN gate closure](fin-gate-notrun-closure-20261029.md)): strict TCP accounting (`tcp_counts.h`, `rdma.c`, `test_tcp_counts`: post-setup TCP counters, a one-byte violation control that still detects payload), the closure of thirteen gate prerequisites on isolated fcstor014 (546 / 0 FAIL / 0 NOTRUN with real Valgrind, sanitizers and hardware RDMA), and Task AF ([evidence](af-status-snapshot-20261028.md)): measured, no product change. Its `data_commit.c` slow-COMMIT change is identical to K55's already on devel, so that file is unchanged by the merge. Merge-time: both sides added a test entry in the same Makefile spot (kept both); `test_sanitizer_gate.py` differed only in a printed message (kept wave 34's). intel1 `make test-all` (8 jobs) at `2195fd863` (wave 34 plus K35): **552 / 0 FAIL / 11 NOTRUN** (host limits), 870 s, INCOMPLETE. Not claimed: the FIN branch's zero-NOTRUN gate needs fcstor014's Valgrind and sanitizer attach, which intel1 lacks.
+[Wave 35 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`5367beeca`; gate at `2195fd863`)**: `agent/devel-k35-slow-fsync` ([K35](2026-10/k35-slow-fsync-20261029.md), [FIN accounting](2026-10/fin-tcp-accounting-20261029.md), [FIN gate closure](2026-10/fin-gate-notrun-closure-20261029.md)): strict TCP accounting (`tcp_counts.h`, `rdma.c`, `test_tcp_counts`: post-setup TCP counters, a one-byte violation control that still detects payload), the closure of thirteen gate prerequisites on isolated fcstor014 (546 / 0 FAIL / 0 NOTRUN with real Valgrind, sanitizers and hardware RDMA), and Task AF ([evidence](2026-10/af-status-snapshot-20261028.md)): measured, no product change. Its `data_commit.c` slow-COMMIT change is identical to K55's already on devel, so that file is unchanged by the merge. Merge-time: both sides added a test entry in the same Makefile spot (kept both); `test_sanitizer_gate.py` differed only in a printed message (kept wave 34's). intel1 `make test-all` (8 jobs) at `2195fd863` (wave 34 plus K35): **552 / 0 FAIL / 11 NOTRUN** (host limits), 870 s, INCOMPLETE. Not claimed: the FIN branch's zero-NOTRUN gate needs fcstor014's Valgrind and sanitizer attach, which intel1 lacks.
 
-[Wave 34 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`5a8d34eef`; gate at `44e5bbaf7`)**: Task T ([evidence](task-t-directory-visibility-20261029.md), [budgets per host](gate-budgets-per-host-20261028.md)): directory visibility during cross-group migration (`inode_rpc.c`, `dir_layout.c`, `meta_apply.c`, `raft_host.c`), isolated TCP qualification PASS and six TCP full gates with zero FAIL on its own base, plus its per-host budget fits. **Merge-time decision:** Task T carried its own, larger fix for the slow-COMMIT fsync problem in `data_commit.c` (a poll/pipe wait, a two-fragment quorum check and a rescue path for a failed speculative degraded mark). devel keeps K55's reserve-slice mechanism, already merged and independently qualified, so T's `data_commit.c` and `test_data_commit.c` were not taken; T's rescue path (a failed degraded mark followed by an on-time third COMMIT no longer fails the fsync) is therefore **not on devel** and is separate work if wanted. intel1 `make test-all` (8 jobs) at `44e5bbaf7` (wave 33 plus T): **551 / 0 FAIL / 11 NOTRUN** (host limits), 918 s, INCOMPLETE; B6 slow PASS. The budgeted gate in `tests/budgets.tsv` is now 1,505 s of the 1,650 s bound (D44 target 1,100 s unchanged).
+[Wave 34 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`5a8d34eef`; gate at `44e5bbaf7`)**: Task T ([evidence](2026-10/task-t-directory-visibility-20261029.md), [budgets per host](2026-10/gate-budgets-per-host-20261028.md)): directory visibility during cross-group migration (`inode_rpc.c`, `dir_layout.c`, `meta_apply.c`, `raft_host.c`), isolated TCP qualification PASS and six TCP full gates with zero FAIL on its own base, plus its per-host budget fits. **Merge-time decision:** Task T carried its own, larger fix for the slow-COMMIT fsync problem in `data_commit.c` (a poll/pipe wait, a two-fragment quorum check and a rescue path for a failed speculative degraded mark). devel keeps K55's reserve-slice mechanism, already merged and independently qualified, so T's `data_commit.c` and `test_data_commit.c` were not taken; T's rescue path (a failed degraded mark followed by an on-time third COMMIT no longer fails the fsync) is therefore **not on devel** and is separate work if wanted. intel1 `make test-all` (8 jobs) at `44e5bbaf7` (wave 33 plus T): **551 / 0 FAIL / 11 NOTRUN** (host limits), 918 s, INCOMPLETE; B6 slow PASS. The budgeted gate in `tests/budgets.tsv` is now 1,505 s of the 1,650 s bound (D44 target 1,100 s unchanged).
 
-[Task AV](av-report-join-20261028.md): **PASS — measured, no change**, devel
+[Task AV](2026-10/av-report-join-20261028.md): **PASS — measured, no change**, devel
 `330c48aea` on intel2: the REPORT chunk↔inode-size join costs 1–32 comparisons
 per frame across big/small/mixed/openmany loads; C and I are never both large
 in one real frame and first-match ordering makes the common case linear, so no
 request-local index is justified. AV checkbox ticked.
 
-[Wave 33 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`550b00e47`; gate at `550b00e47`)**: Task AL ([evidence](al-decode-scratch-20261028.md)): reads allocate decode scratch only for the path taken, retained decode scratch per mount 17.3 → 8.0 MiB (`read.c`), in-place aliasing pinned by `test_erasure`; Task AK ([evidence](ak-packed-read-staging-20261028.md)): packed reads hash each fragment once and receive it without a staging copy (TCP into the caller's slot, RDMA hands over its message buffer); the one hash is checked against both the reply digest and the mapping's committed digest, so neither authority is dropped, and a mismatch names which one failed; no wire change (`efs_conn_recv_segment_reply` is a new client-side helper); Task AC ([evidence](ac-iostats-rdma-scan-20261028.md)): the periodic `iostats:` line no longer scans the RDMA registry (36 scans → 0 in the instrumented runs; no consistent speedup, TCP throughput median 0.36 % lower). Merge-time: AL and AK both edit `read.c` and merged without a source conflict; the checklist conflicts were only the order of AL/AC's status paragraphs against the already-merged AM/AD blocks. intel1 `make test-all` (8 jobs) at `550b00e47`: **549 / 0 FAIL / 12 NOTRUN** (host limits), 773 s, INCOMPLETE. Known: the Mac build of `data_commit.c` has failed since wave 32 (`pthread_condattr_setclock` is glibc-only); Linux gates build it.
+[Wave 33 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`550b00e47`; gate at `550b00e47`)**: Task AL ([evidence](2026-10/al-decode-scratch-20261028.md)): reads allocate decode scratch only for the path taken, retained decode scratch per mount 17.3 → 8.0 MiB (`read.c`), in-place aliasing pinned by `test_erasure`; Task AK ([evidence](2026-10/ak-packed-read-staging-20261028.md)): packed reads hash each fragment once and receive it without a staging copy (TCP into the caller's slot, RDMA hands over its message buffer); the one hash is checked against both the reply digest and the mapping's committed digest, so neither authority is dropped, and a mismatch names which one failed; no wire change (`efs_conn_recv_segment_reply` is a new client-side helper); Task AC ([evidence](2026-10/ac-iostats-rdma-scan-20261028.md)): the periodic `iostats:` line no longer scans the RDMA registry (36 scans → 0 in the instrumented runs; no consistent speedup, TCP throughput median 0.36 % lower). Merge-time: AL and AK both edit `read.c` and merged without a source conflict; the checklist conflicts were only the order of AL/AC's status paragraphs against the already-merged AM/AD blocks. intel1 `make test-all` (8 jobs) at `550b00e47`: **549 / 0 FAIL / 12 NOTRUN** (host limits), 773 s, INCOMPLETE. Known: the Mac build of `data_commit.c` has failed since wave 32 (`pthread_condattr_setclock` is glibc-only); Linux gates build it.
 
-[Wave 32 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`4e4b7ec75`; gate at `4e4b7ec75`)**: **K55 FIXED** ([evidence](k55-slow-commit-20261028.md)): `stripe_prove` joins the COMMIT workers only until a reserve slice (a quarter of the remaining budget, at most 5 s) before the 60 s deadline, so the required durable degraded mark can run while one slow COMMIT keeps its own deadline; B6 slow-mode fsync no longer returns EIO (it had failed deterministically since `199ad2afd`, 3/3 on devel `d62a753d9`); no storage RPC deadline is shortened and an expired sweep still retains its obligations and fails closed. Carries Task AI ([evidence](ai-rdma-registry-lock-20261028.md)): measured, no change. Measured-no-change evidence, no product change: AG ([buffer pool lock](ag-bufpool-lock-20261028.md)), AJ ([export acquire/release](aj-export-reference-lock-20261028.md)), AH ([chunk-map lock](ah-chunk-map-lock-20261028.md)), AP ([segment GET combined read](ap-segment-read-combined-20261028.md)), AQ ([segment directory barriers](aq-segment-dir-barriers-20261028.md)), AM ([REPORT degraded batch](am-report-degraded-batch-20261028.md)), AR ([PUT retry rewrites](ar-put-retry-rewrites-20261028.md)), AD ([counter contention](ad-counter-contention-20261028.md), from `agent/devel-task-ad`; the duplicate `agent/devel-taskad` is not merged). Merge-time: K55 row = the fix branch's FIXED row over AJ's OPEN registration. intel1 `make test-all` (8 jobs) at `4e4b7ec75`: **547 / 0 FAIL / 12 NOTRUN** (host limits), 786 s, INCOMPLETE; B6 slow PASS. K register: 55 rows, 12 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN (K48, K53, K54).
+[Wave 32 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 29 (`4e4b7ec75`; gate at `4e4b7ec75`)**: **K55 FIXED** ([evidence](2026-10/k55-slow-commit-20261028.md)): `stripe_prove` joins the COMMIT workers only until a reserve slice (a quarter of the remaining budget, at most 5 s) before the 60 s deadline, so the required durable degraded mark can run while one slow COMMIT keeps its own deadline; B6 slow-mode fsync no longer returns EIO (it had failed deterministically since `199ad2afd`, 3/3 on devel `d62a753d9`); no storage RPC deadline is shortened and an expired sweep still retains its obligations and fails closed. Carries Task AI ([evidence](2026-10/ai-rdma-registry-lock-20261028.md)): measured, no change. Measured-no-change evidence, no product change: AG ([buffer pool lock](2026-10/ag-bufpool-lock-20261028.md)), AJ ([export acquire/release](2026-10/aj-export-reference-lock-20261028.md)), AH ([chunk-map lock](2026-10/ah-chunk-map-lock-20261028.md)), AP ([segment GET combined read](2026-10/ap-segment-read-combined-20261028.md)), AQ ([segment directory barriers](2026-10/aq-segment-dir-barriers-20261028.md)), AM ([REPORT degraded batch](2026-10/am-report-degraded-batch-20261028.md)), AR ([PUT retry rewrites](2026-10/ar-put-retry-rewrites-20261028.md)), AD ([counter contention](2026-10/ad-counter-contention-20261028.md), from `agent/devel-task-ad`; the duplicate `agent/devel-taskad` is not merged). Merge-time: K55 row = the fix branch's FIXED row over AJ's OPEN registration. intel1 `make test-all` (8 jobs) at `4e4b7ec75`: **547 / 0 FAIL / 12 NOTRUN** (host limits), 786 s, INCOMPLETE; B6 slow PASS. K register: 55 rows, 12 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN (K48, K53, K54).
 
-[Task AG](ag-bufpool-lock-20261028.md): **PASS — measured, no change**, devel
+[Task AG](2026-10/ag-bufpool-lock-20261028.md): **PASS — measured, no change**, devel
 `9c4bfd171` on xorinox: the client buffer pool mutex `g_bp_mu` shows at most
 0.0004 % wait share at 32 I/O streams (task threshold 5 %); cold slab growth
 holds it 25–54 µs a handful of times per client lifetime; the lock stays as is.
 AG checkbox ticked.
 
-[Task AJ](aj-export-reference-lock-20261028.md): **PASS — measured, no change**,
+[Task AJ](2026-10/aj-export-reference-lock-20261028.md): **PASS — measured, no change**,
 devel `9c4bfd171` on intel1: export acquire/release under `s->lock` costs at
 most 0.021 % wait share at 64 connections / ~59k GET/s (task threshold 5 %);
 mean wait ~100 ns flat from 8 to 64 connections, 1 vs 8 exports
 indistinguishable; the lock stays as is. AJ checkbox ticked.
 
-[Task AP](ap-segment-read-combined-20261028.md): **PASS — measured, no change**,
+[Task AP](2026-10/ap-segment-read-combined-20261028.md): **PASS — measured, no change**,
 devel `9c4bfd171` on intel2 (NVMe): the packed-GET tail+payload split costs one
 pread and one bounce per GET, but no end-to-end number leaves the spread —
 cold and repeated small-file reads at 1/8 readers have identical p95/p99 within
 a 2–4× wider rep spread; the combined read does not qualify. node9901 cold-read
 column NOTRUN (ORCD keyboard-interactive login; no credentials provided).
 
-[Task AQ](aq-segment-dir-barriers-20261028.md): **PASS — measured, no change**,
+[Task AQ](2026-10/aq-segment-dir-barriers-20261028.md): **PASS — measured, no change**,
 devel `9c4bfd171` on intel2: segment directory fsyncs show 0.20–1.27 %
 same-directory in-flight overlap at full packer rate (threshold 10 %) and 0 %
 under K37 rebuilds; median directory fsync 1 µs. The existing
 `directory_sync_group_run` is not adopted for segment directories. AQ checkbox
 ticked.
 
-[Oct 28 AH: mount-wide chunk-map lock contention measured — no change](ah-chunk-map-lock-20261028.md):
+[Oct 28 AH: mount-wide chunk-map lock contention measured — no change](2026-10/ah-chunk-map-lock-20261028.md):
 **branch `agent/devel-taskah` (from devel `9c4bfd171`), docs + the committed measurement driver only; xorinox, loopback, TCP.** `g_client.idx_mu`: 2.4-5.6k acquisitions/s, flat with writers; 25-30 % trylock misses at 32 writers but ≈0.35 µs median contended wait, ≤0.15 % of wall. `test_sparse_metadata.py` PASS; `make tsan-check` 19/19; full gate below. Nothing partitioned.
 
-[Task AL](al-decode-scratch-20261028.md): **FIXED** (`cbeb09621` on devel
+[Task AL](2026-10/al-decode-scratch-20261028.md): **FIXED** (`cbeb09621` on devel
 `9c4bfd171`, intel2): decode scratch is acquired only for the selected read
 path and sized for it (one fragment in place, three otherwise, none for packed
 reads) — retained decode scratch per mount 17.3 → 8.0 MiB mixed / 16.0 → 8.0
@@ -394,21 +399,21 @@ new in-place erasure aliasing test for every missing-fragment position; TSan
 ASan-built efs-fuse refuses to start ("cannot establish allocator policy"),
 identical on clean and fixed trees — needs an owner (K row suggested).
 
-[Task AS](as-demand-read-wait-20261028.md): **PASS — measured, no change**,
+[Task AS](2026-10/as-demand-read-wait-20261028.md): **PASS — measured, no change**,
 devel `9c4bfd171` on xorinox: the `demand_read_alloc` wait loop never engaged
 in ~5.1M demand allocations over 10 runs (32 readers above the client budget
 with 0/8/32 saturating writers, plus a clamped 32 MiB/tier budget) — zero
 first-failures, sleeps or waits, so there is no notification cost to remove.
 AS checkbox ticked.
 
-[Task AU](au-pump-kicks-20261028.md): **PASS — measured, no change**, devel
+[Task AU](2026-10/au-pump-kicks-20261028.md): **PASS — measured, no change**, devel
 `9c4bfd171` on intel2: the pump thread's own eventfd syscalls cost at most
 ~1.1 % of one CPU, the entire candidate saving from coalescing redundant kick
 writes is bounded by ~0.8 % of one CPU per daemon, and
 `test_report_stepdown.py` runs show kicks/drain of 1.12–1.42. The stop rule
 holds; no pending-flag protocol is built. AU checkbox ticked.
 
-[ORCD-test merged devel qualification](orcd-test-devel-qualification-20261028.md):
+[ORCD-test merged devel qualification](2026-10/orcd-test-devel-qualification-20261028.md):
 **FAIL overall**, deployed `714d7e6fc`; profiling branch merged and deleted.
 Serial and seven-client POSIX, restart persistence, both expiry runs and all
 four IOR cases PASS; dedicated query payload oracle 120,548/120,548 PASS.
@@ -417,7 +422,7 @@ remote-step timeouts and 28-instance stress **5,658 PASS / 488 FAIL / 49 SKIP /
 49 NOTRUN** remain. Evidence sealed; fixture-retention limits recorded.
 All four servers and seven mounts healthy/running; no push or release PASS.
 
-[Task AC — routine I/O RDMA scan](ac-iostats-rdma-scan-20261028.md): **qualified within executed scope**,
+[Task AC — routine I/O RDMA scan](2026-10/ac-iostats-rdma-scan-20261028.md): **qualified within executed scope**,
 branch `agent/devel-task-ac` (merged into devel, wave 33), tested product `5f9ddae71`, base `1d2852da4`.
 Intel1 full gate546/0FAIL/12NOTRUN (host limits, INCOMPLETE); native hardware
 RDMA and management smoke PASS on node9901. Three-repeat TCP/RDMA comparisons
@@ -425,9 +430,9 @@ remove36 unused registry acquisitions/trial; no consistent speedup, TCP median
 throughput0.36% lower. Shared background disclosed; raw evidence hashed and
 retained, inactive owned scratch pruned. No setting/wire change or merge/push.
 
-[Task T: budgets across hosts](gate-budgets-per-host-20261028.md): **focused repair qualification PASS (scoped); budget completion held** on `agent/devel-task-t` (merged into devel, wave 34), per the user's October29 scope reduction. Directory35a6e41b0 passed isolated controls and six full TCP gates (three each intel1/xorinox,548 commands,0 FAIL; host-limit NOTRUN and overruns retained). Fstor007's RDMA gate failed K34 REPORT BUSY-to-EIO; the old harness deleted that fixture, so only captured error output survives and cause remains unproven. Candidate288cb4e65 adds stopping-leader/read-hint fixes and failure retention; focused real-HCA RDMA K34 10/10, blocked-shutdown 3/3 and K43 3/3 passed, plus four unit controls. Source unchanged, no contention or leftover daemon/mount. Closed214-file capture retained and hash-verified; successful scratch pruned. Single-host scope, original K34 cause unproven. Full calibration/refit/confirmation held;92 bounds/slots/1100s target/1650s margin unchanged (model1504s). No overall PASS, merge or push. Earlier Nuc/AMD failures remain unqualified; no Task AF message.
+[Task T: budgets across hosts](2026-10/gate-budgets-per-host-20261028.md): **focused repair qualification PASS (scoped); budget completion held** on `agent/devel-task-t` (merged into devel, wave 34), per the user's October29 scope reduction. Directory35a6e41b0 passed isolated controls and six full TCP gates (three each intel1/xorinox,548 commands,0 FAIL; host-limit NOTRUN and overruns retained). Fstor007's RDMA gate failed K34 REPORT BUSY-to-EIO; the old harness deleted that fixture, so only captured error output survives and cause remains unproven. Candidate288cb4e65 adds stopping-leader/read-hint fixes and failure retention; focused real-HCA RDMA K34 10/10, blocked-shutdown 3/3 and K43 3/3 passed, plus four unit controls. Source unchanged, no contention or leftover daemon/mount. Closed214-file capture retained and hash-verified; successful scratch pruned. Single-host scope, original K34 cause unproven. Full calibration/refit/confirmation held;92 bounds/slots/1100s target/1650s margin unchanged (model1504s). No overall PASS, merge or push. Earlier Nuc/AMD failures remain unqualified; no Task AF message.
 
-[FIN thirteen-check closure](fin-gate-notrun-closure-20261029.md):
+[FIN thirteen-check closure](2026-10/fin-gate-notrun-closure-20261029.md):
 **PASS (scoped)**, source `c571b862f`, isolated fcstor014 hardware IB.
 Full gate **546/0 FAIL/0 NOTRUN**, 679 s + 17 s build; all 546 exits reviewed.
 Real Valgrind, TSan/ASan/UBSan/LSan controls, isolated cluster-script contract
@@ -436,7 +441,7 @@ versus 48 MiB old negative; removed-policy control fails. All 73 ownership
 samples clear; cleanup verified. Seven advisory overruns retained, hard bounds
 unchanged. Prior failures/fixtures and closed hashes retained; no merge/push.
 
-[FIN accounting follow-up](fin-tcp-accounting-20261029.md): **FIXED (scoped)**,
+[FIN accounting follow-up](2026-10/fin-tcp-accounting-20261029.md): **FIXED (scoped)**,
 product `38f3cecba` on `agent/devel-k35-slow-fsync` (merged into devel, wave 35). Strict
 hardware audit: 785/785 measured, post-setup TCP 0/0, violations 0; the
 one-byte violation control still detects payload. Full gate 546/0 FAIL/13
@@ -444,7 +449,7 @@ NOTRUN (TCP profile/host limits); original and unsafe closed-state controls
 fail their intended assertions. Original failed audit/manifests and every
 fixture retained unchanged. No full release PASS, merge or push.
 
-[K35 slow-fsync follow-up](k35-slow-fsync-20261029.md): **FIXED (scoped)**, `agent/devel-k35-slow-fsync` (merged into devel, wave 35), product `1ab9fef83`.
+[K35 slow-fsync follow-up](2026-10/k35-slow-fsync-20261029.md): **FIXED (scoped)**, `agent/devel-k35-slow-fsync` (merged into devel, wave 35), product `1ab9fef83`.
 Proof runs before a slow COMMIT exhausts the same deadline; durability unchanged.
 Component/index/ASan/UBSan/TSan PASS; old-source control fails. Full gate
 545/0 FAIL/11 NOTRUN (host limits); hardware TCP/RDMA B6 slow + K35 PASS,
@@ -453,7 +458,7 @@ fixtures/evidence retained. Raw-zero TCP counter audit failed on 18 one-octet
 receive deltas; no-payload FIN control reproduces the accounting gap, individual
 terminal states unavailable. No all-zero telemetry or full release PASS claim.
 
-[Task AF — management status contention](af-status-snapshot-20261028.md):
+[Task AF — management status contention](2026-10/af-status-snapshot-20261028.md):
 **Measured, no product change**, `agent/devel-task-af` (merged into devel, wave 35, via the K35 branch), tested `f570fb0cd`,
 base `486aa3a46`. Thirty closed trials across xorinox and fstor007 TCP/RDMA:
 no observed10Hz pump/write bottleneck outside spread; hardware CPU/stat costs
@@ -461,12 +466,12 @@ retained. Gate545/1FAIL/11NOTRUN: K35 slow-fsync EIO60s reproduces on untouched
 base. Both failed investigations retained; successful scratch pruned, evidence
 hashed. Full release PASS is not claimed.
 
-[Wave 31 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`3c866b7bf`; gate at `d891c106e`)**: Task I ([review](task-i-20261026.md)): efs-fuse bounded malloc arenas and fixed mmap threshold, client cache small-page hint, RDMA connection buffers in dedicated mappings, non-link-local GID preference, truncate sweep yields to fragment GC with a resume cursor, pack-state proof falls back to another voter on BUSY/NOT_PRIMARY; fstor007 RDMA/TCP hours 2,080 exact files each; merge-time: devel's newer keep-on-failure and BUSY-resync fixes kept, Task I's duplicate `tests/resync_setup.py` removed. devel's own `214c541aa`…`b9c2fad85` (terminal ticket proof before fsync retires an abandoned replay PUT; 49/49 sanitizer checks on intel2) and `7b7c9007f` (Stage 3 plan) merged in. Task Z / **D46** ([decision](decisions.md), [sheet](stage1-decision-sheet-20261028.md)) as the user ruled it item by item: A4 on fcstor007–011 (`/data1/01`), 3/4/5 hosts × TCP/RDMA, and alpha 1.0 also on all 13 fcstor nodes; W122 required in alpha 1.0; member-down clean unmount a required fix (**K54**, OPEN, blocks alpha: yes); 33-tunable audit; F12 stays D45 (no authentication in any alpha); S1 command dispositions and `--writers` removal not adopted. Task X ([evidence](k52-immediate-readback-20261028.md)): Stage 2 query launches use `posix_spawn`; **K52 DECIDED under K10/W121 (D40)** after four-host controls (fork/read 17 FAIL; spawned reader 22,293 and fork-free D3 59,112 exact PASS), the eight Task V failures stay unclassified; its node9900 B6 full-quota failure is K53's second occurrence. Task X's harness test passed on intel1 against the merged tree; the full gate predates Task X and the Stage 3 docs. K register: 54 rows, 11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN (K48, K53, K54).
+[Wave 31 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`3c866b7bf`; gate at `d891c106e`)**: Task I ([review](2026-10/task-i-20261026.md)): efs-fuse bounded malloc arenas and fixed mmap threshold, client cache small-page hint, RDMA connection buffers in dedicated mappings, non-link-local GID preference, truncate sweep yields to fragment GC with a resume cursor, pack-state proof falls back to another voter on BUSY/NOT_PRIMARY; fstor007 RDMA/TCP hours 2,080 exact files each; merge-time: devel's newer keep-on-failure and BUSY-resync fixes kept, Task I's duplicate `tests/resync_setup.py` removed. devel's own `214c541aa`…`b9c2fad85` (terminal ticket proof before fsync retires an abandoned replay PUT; 49/49 sanitizer checks on intel2) and `7b7c9007f` (Stage 3 plan) merged in. Task Z / **D46** ([decision](decisions.md), [sheet](2026-10/stage1-decision-sheet-20261028.md)) as the user ruled it item by item: A4 on fcstor007–011 (`/data1/01`), 3/4/5 hosts × TCP/RDMA, and alpha 1.0 also on all 13 fcstor nodes; W122 required in alpha 1.0; member-down clean unmount a required fix (**K54**, OPEN, blocks alpha: yes); 33-tunable audit; F12 stays D45 (no authentication in any alpha); S1 command dispositions and `--writers` removal not adopted. Task X ([evidence](2026-10/k52-immediate-readback-20261028.md)): Stage 2 query launches use `posix_spawn`; **K52 DECIDED under K10/W121 (D40)** after four-host controls (fork/read 17 FAIL; spawned reader 22,293 and fork-free D3 59,112 exact PASS), the eight Task V failures stay unclassified; its node9900 B6 full-quota failure is K53's second occurrence. Task X's harness test passed on intel1 against the merged tree; the full gate predates Task X and the Stage 3 docs. K register: 54 rows, 11 FIXED / 0 VERIFIED / 35 VERIFY / 3 DECIDED / 2 CLOSED / 3 OPEN (K48, K53, K54).
 
-[Wave 30 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`833f25fe8`; gate at `d891c106e`)**: Task W ([evidence](gate-notrun-cleanup-20261028.md)): cluster-stop and the real stalled-compactor follower-bound test now run, directory BUSY contract checked without counting transport attempts; `test_code_graph.py` stays in the developer-only `make code-graph-check`, not `test-long`. ORCD dd profile ([evidence](orcd-test-dd-profile-20261028.md)): client durability records indexed by full stripe identity (`3769f44bb`), single-stream `dd` 207 → 332 MiB/s, fsync handling 8.4 s → 0.2 s, 1 GB/s still unmet; merge-time: `test_orcd_dd_profile.py` moved to `make test` (mocked unit, no budget row), and the branch gate's B6 full-quota over-admission recorded as **K53** (OPEN, blocks alpha: yes). Task AA / W170 ([evidence](w170-efs-bench-20261028.md)): `efs-bench` writes through normal ticketed publication, raw store modes removed, valgrind leak workloads fail closed, `test_bench_published.py` in `test-long`. Gated together with wave 31: intel1 `make test-all` (8 jobs) at `d891c106e`: **545 / 0 FAIL / 12 NOTRUN** (host limits: no cluster scripts, valgrind headers or RDMA device; sanitizer attach refused), 803 s, INCOMPLETE.
+[Wave 30 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`833f25fe8`; gate at `d891c106e`)**: Task W ([evidence](2026-10/gate-notrun-cleanup-20261028.md)): cluster-stop and the real stalled-compactor follower-bound test now run, directory BUSY contract checked without counting transport attempts; `test_code_graph.py` stays in the developer-only `make code-graph-check`, not `test-long`. ORCD dd profile ([evidence](2026-10/orcd-test-dd-profile-20261028.md)): client durability records indexed by full stripe identity (`3769f44bb`), single-stream `dd` 207 → 332 MiB/s, fsync handling 8.4 s → 0.2 s, 1 GB/s still unmet; merge-time: `test_orcd_dd_profile.py` moved to `make test` (mocked unit, no budget row), and the branch gate's B6 full-quota over-admission recorded as **K53** (OPEN, blocks alpha: yes). Task AA / W170 ([evidence](2026-10/w170-efs-bench-20261028.md)): `efs-bench` writes through normal ticketed publication, raw store modes removed, valgrind leak workloads fail closed, `test_bench_published.py` in `test-long`. Gated together with wave 31: intel1 `make test-all` (8 jobs) at `d891c106e`: **545 / 0 FAIL / 12 NOTRUN** (host limits: no cluster scripts, valgrind headers or RDMA device; sanitizer attach refused), 803 s, INCOMPLETE.
 
 
-[Task AA / W170 published benchmark](w170-efs-bench-20261028.md):
+[Task AA / W170 published benchmark](2026-10/w170-efs-bench-20261028.md):
 **FIXED on `agent/devel-task-aa`, merged into devel (wave 30, `833f25fe8`)**; tested `fe785536e`, budget
 `5a971fb14`. Intel2 final **529/0 FAIL/10 NOTRUN**, INCOMPLETE for RDMA/header
 limits; baseline 528/0/12. Published client writes/reads, checked shutdown,
@@ -476,10 +481,10 @@ agreement. Earlier timings overlap Task T's reported orphan; final new-test
 budget sample and matrix are afterward. Failures/traces kept, private scratch
 removed; no existing cluster or package changed. Task W integrated privately.
 
-[Wave 29 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`f3a447fa3`)**: Task Y, the known-defect register reconciled ([report](k-register-reconciled-20261028.md)): both tables carry exactly one row for each K1–K52, each opening with one canonical disposition (11 FIXED, 0 VERIFIED, 35 VERIFY, 2 DECIDED, 2 CLOSED, 2 OPEN: K48 and K52), with every earlier cell kept as history; `scripts/check_k_register.py` enforces that in `make test` (`tests/test_k_register.py`). No row was promoted to VERIFIED and no gate was rerun. Merged together with D45's K36 scope note and topology row.
+[Wave 29 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`f3a447fa3`)**: Task Y, the known-defect register reconciled ([report](2026-10/k-register-reconciled-20261028.md)): both tables carry exactly one row for each K1–K52, each opening with one canonical disposition (11 FIXED, 0 VERIFIED, 35 VERIFY, 2 DECIDED, 2 CLOSED, 2 OPEN: K48 and K52), with every earlier cell kept as history; `scripts/check_k_register.py` enforces that in `make test` (`tests/test_k_register.py`). No row was promoted to VERIFIED and no gate was rerun. Merged together with D45's K36 scope note and topology row.
 
-[Task Y — K register reconciliation](k-register-reconciled-20261028.md): reviewed wave-28 devel `9e4d66a8c`; 52 canonical rows in each table, 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN. K48/K52 remain OPEN; named live gates remain VERIFY. History preserved, stale merge/acceptance contradictions reported, structural checker in `make test`; no new live qualification or user decision.
-[ORCD-test second profiling cycle](orcd-test-dd-round2-20261028.md):
+[Task Y — K register reconciliation](2026-10/k-register-reconciled-20261028.md): reviewed wave-28 devel `9e4d66a8c`; 52 canonical rows in each table, 11 FIXED / 0 VERIFIED / 35 VERIFY / 2 DECIDED / 2 CLOSED / 2 OPEN. K48/K52 remain OPEN; named live gates remain VERIFY. History preserved, stale merge/acceptance contradictions reported, structural checker in `make test`; no new live qualification or user decision.
+[ORCD-test second profiling cycle](2026-10/orcd-test-dd-round2-20261028.md):
 Copy-elision candidate `8c20f501d` is unqualified and withdrawn by
 `1f8c56e14`; slowdown also persists after rollback, so causality remains open.
 The original durability-index fix remains. IOR exit-status/readiness fixes
@@ -489,7 +494,7 @@ full peer payload check PASS. Full gate 529/3 FAIL/5 NOTRUN: missing budget
 rows corrected in `ebac01ded` (five native focused checks PASS); two TSan
 link failures remain. No release PASS; cluster running, evidence retained.
 
-[ORCD-test dd profile and durability index](orcd-test-dd-profile-20261028.md):
+[ORCD-test dd profile and durability index](2026-10/orcd-test-dd-profile-20261028.md):
 `agent/orcd-dd-profile-20261028`, product fix `3769f44bb`, merged into devel (wave 30, `833f25fe8`; quota incident K53).
 Client inode-only durability chains consumed 65% of sampled user cycles;
 exact-object indexing raises matched unprofiled median 207 → 332 MiB/s and
@@ -501,10 +506,10 @@ assertion incident open. Original failures and profiles retained. IOR repeat PAS
 without a scale-out write improvement. Evidence manifest verification and
 final health checks are recorded on the page. No release PASS.
 
-[Wave 28 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`c0081d095`; gate at `d951ca293`)**: Task S, K48 ([evidence](k48-readdir-omission-20261028.md)): a directory page is published only if the directory's layout and used lanes are unchanged after its scan (bounded rescans, then BUSY rather than a short page), and lanes that became used during the scan are fenced before the page is served; `test_k48_readdir.py` reproduces the omission on the base. K48 stays OPEN: the original Task N capture lacks the missing name and RPC trace, so its exact cause is unproven. And Task U ([evidence](k32-write-cost-profile-20261028.md)): K32 write-cost profile (FUSE tickets 5.66, sessions 0.48, publication 0.36 Raft entries/MiB), the direct-client harness, operator `raft-resync` admission BUSY retried within the W130 test's recovery deadline; IOR NOTRUN, D4 baseline failure open. Merge-time: `test_code_graph.py` (added unwired by the code-graph commit `3debca7ec`) is now in `make test-long`, and its git-dependent case reports NOTRUN in the gate's git-archive tree. intel2 `make test-all` at `d951ca293`: 526 commands in 702 s, 1 FAIL (that test case, fixed in `c0081d095` and rerun there: OK, one NOTRUN), 12 NOTRUN host limits.
+[Wave 28 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`c0081d095`; gate at `d951ca293`)**: Task S, K48 ([evidence](2026-10/k48-readdir-omission-20261028.md)): a directory page is published only if the directory's layout and used lanes are unchanged after its scan (bounded rescans, then BUSY rather than a short page), and lanes that became used during the scan are fenced before the page is served; `test_k48_readdir.py` reproduces the omission on the base. K48 stays OPEN: the original Task N capture lacks the missing name and RPC trace, so its exact cause is unproven. And Task U ([evidence](2026-10/k32-write-cost-profile-20261028.md)): K32 write-cost profile (FUSE tickets 5.66, sessions 0.48, publication 0.36 Raft entries/MiB), the direct-client harness, operator `raft-resync` admission BUSY retried within the W130 test's recovery deadline; IOR NOTRUN, D4 baseline failure open. Merge-time: `test_code_graph.py` (added unwired by the code-graph commit `3debca7ec`) is now in `make test-long`, and its git-dependent case reports NOTRUN in the gate's git-archive tree. intel2 `make test-all` at `d951ca293`: 526 commands in 702 s, 1 FAIL (that test case, fixed in `c0081d095` and rerun there: OK, one NOTRUN), 12 NOTRUN host limits.
 
 
-[Task W gate-host NOTRUN cleanup](gate-notrun-cleanup-20261028.md):
+[Task W gate-host NOTRUN cleanup](2026-10/gate-notrun-cleanup-20261028.md):
 **coverage PASS / full gate INCOMPLETE**, `agent/devel-task-w` (merged into devel, wave 30, `833f25fe8`),
 tested `f1062b969`. Intel2: baseline **522 / 2 FAIL / 12 NOTRUN**; final
 **523 / 0 FAIL / 10 NOTRUN**, 683 s plus 30 s build. Real stalled-compactor and
@@ -513,9 +518,9 @@ headers remain unavailable. Package inventory documented, none installed.
 Brittle exact-attempt assertion corrected with the original deadline retained.
 Failed evidence kept; private scratch removed; six-script dependency retained.
 
-[Wave 27 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (blocks alpha): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); whether K52 is K10 needs the new helper's observed bytes before it is closed or kept. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
+[Wave 27 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](2026-10/a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (blocks alpha): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); whether K52 is K10 needs the new helper's observed bytes before it is closed or kept. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
 
-- [K52 immediate read-back investigation](k52-immediate-readback-20261028.md):
+- [K52 immediate read-back investigation](2026-10/k52-immediate-readback-20261028.md):
   Task X, `agent/devel-task-x`, four-host code `ec255dd13`. Original fork/read
   pattern FAIL: 17 bad first-read buffers retained. Spawn-reader control PASS
   (22,293 files); corrected fork-free-query D3 PASS (59,112 exact files,
@@ -526,9 +531,9 @@ Failed evidence kept; private scratch removed; six-script dependency retained.
   `/data1/01` task trees cleaned. Separate node9900 code gate remains
   522 / 5 FAIL / 5 NOTRUN; earlier quota failure unresolved.
 
-[Wave 27 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (then blocking alpha; later Task X DECIDED under K10/D40): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); the later [Task X](k52-immediate-readback-20261028.md) controlled reproduction classifies K52 under existing K10/D40; the original eight buffers remain unavailable. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
+[Wave 27 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`b047d4219`, fast-forward)**: Task V, first four-distinct-host TCP rehearsal ([evidence](2026-10/a4-lab-topology-dryrun-20261028.md)) on a private cluster on fcstor012–015 (destroyed afterward): topology `fcstor-4x1-tcp` in the matrix, remote two-client execution with per-host script paths, teardown that requires clean client and daemon stops and fails the run otherwise. Live: 8 of 9 gates PASS. **Found K52** (then blocking alpha; later Task X DECIDED under K10/D40): eight immediate read-back comparisons failed after write, fsync and close of fresh files under eight writers; the same 64 paths later read exact on both clients. Its signature, a read right after a successful fsync returning other bytes, matches **K10/W121** (decided a known limitation in D40: FUSE kernel page pinning); the later [Task X](2026-10/k52-immediate-readback-20261028.md) controlled reproduction classifies K52 under existing K10/D40; the original eight buffers remain unavailable. K48 recurred (95 of 96 names after resync, intel2) in Task V's code gate (522 commands, 1 FAIL, 12 NOTRUN); no product code changed in this branch.
 
-[Task V four-host driver rehearsal](a4-lab-topology-dryrun-20261028.md):
+[Task V four-host driver rehearsal](2026-10/a4-lab-topology-dryrun-20261028.md):
 **LIVE FAIL / CODE GATE FAIL**, `agent/devel-task-v`; live `578e2064b`, code
 `b9dfff609`. Eight requested four-host TCP gates PASS; D3 has eight immediate
 read-back mismatches (**K52 then OPEN**, later Task X DECIDED under K10/D40), not erased by later exact
@@ -538,7 +543,7 @@ K48-shaped 95/96 listing after resync, closed fixture retained on intel2.
 All private fcstor cluster trees and intel2 build scratch removed; sealed raw
 evidence retained. A4 topology defined and dry-run, decision open. No product fix.
 
-[K32 write cost profile](k32-write-cost-profile-20261028.md): **Task U complete
+[K32 write cost profile](2026-10/k32-write-cost-profile-20261028.md): **Task U complete
 in scope**, no product source changes. Twelve 1 GiB direct/aligned-FUSE cases
 pass filesystem byte-pattern checks (FUSE reads are cache-warm);
 ticket/session/publication work averages 5.657/0.484/0.356
@@ -550,13 +555,13 @@ packer error reproduced on untouched base and remains OPEN. Captures hashed,
 failed stores archived, scratch pruned and host free. **Real-host IOR gate
 NOTRUN; K32 remains open.**
 
-[Task S — K48 directory omission](k48-readdir-omission-20261028.md): same-signature migration race fixed; frozen `947edd15f` passes deterministic 3/3, W130/payload 10/10 each and full gate 523/0 FAIL/12 NOTRUN (679 s). Original 677 files unchanged; count-only historical incident attribution remains OPEN. Raw manifest verified; own scratch pruned.
+[Task S — K48 directory omission](2026-10/k48-readdir-omission-20261028.md): same-signature migration race fixed; frozen `947edd15f` passes deterministic 3/3, W130/payload 10/10 each and full gate 523/0 FAIL/12 NOTRUN (679 s). Original 677 files unchanged; count-only historical incident attribution remains OPEN. Raw manifest verified; own scratch pruned.
 
-[Wave 26 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`4e4f15307`; gate at `4e4f15307`)**: Task E, **K43** ([evidence](k43-coordinator-kill-20261026.md)): a publication stage whose owner transaction has a locally recorded ABORT is reaped on contact by the next unit instead of blocking it until the recovery scan's age gate, a reap's own errors are surfaced instead of collapsing into BUSY, and the K43 gate (`test_k43_coordinator_kill.py`: the coordinator SIGKILLed between PREPARE and COMMIT) fails on the base and passes on the fix; plus the heartbeat shutdown wake-up (`agent/heartbeat-stop-wakeup`: the heartbeat thread waits on a condition with a monotonic deadline and is woken by stop before the join, so an orderly stop no longer waits out a heartbeat interval). intel2 `make test-all` (8 jobs): 522 commands in 667 s, 0 FAIL, 12 NOTRUN host limits, PASS with host limits; OVERBUDGET 6 (intel1-fitted rows on intel2, Task T). **Held back:** `agent/task-h-repair` (187 commits of publication, receipt, Raft pump and client read repairs grown out of Task H): its own evidence page says IN PROGRESS, no overall PASS, with its nuc suite still running and the original K33 EIO cause open, and it conflicts with devel in eleven source files; it merges when its agent reports PASS on a rebase.
+[Wave 26 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`4e4f15307`; gate at `4e4f15307`)**: Task E, **K43** ([evidence](2026-10/k43-coordinator-kill-20261026.md)): a publication stage whose owner transaction has a locally recorded ABORT is reaped on contact by the next unit instead of blocking it until the recovery scan's age gate, a reap's own errors are surfaced instead of collapsing into BUSY, and the K43 gate (`test_k43_coordinator_kill.py`: the coordinator SIGKILLed between PREPARE and COMMIT) fails on the base and passes on the fix; plus the heartbeat shutdown wake-up (`agent/heartbeat-stop-wakeup`: the heartbeat thread waits on a condition with a monotonic deadline and is woken by stop before the join, so an orderly stop no longer waits out a heartbeat interval). intel2 `make test-all` (8 jobs): 522 commands in 667 s, 0 FAIL, 12 NOTRUN host limits, PASS with host limits; OVERBUDGET 6 (intel1-fitted rows on intel2, Task T). **Held back:** `agent/task-h-repair` (187 commits of publication, receipt, Raft pump and client read repairs grown out of Task H): its own evidence page says IN PROGRESS, no overall PASS, with its nuc suite still running and the original K33 EIO cause open, and it conflicts with devel in eleven source files; it merges when its agent reports PASS on a rebase.
 
-[Wave 25 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`269a59c97`)**: Task P, second Stage 2 rehearsal ([evidence](stage2-rehearsal-2-20261027.md)): both loopback topologies ran the full matrix (24 gates plus the end-identity check) on intel2; three qualification-driver defects fixed with their original failures kept (the standalone soak overlapping the driver's own fixture, expiry fixture ports colliding with parent endpoints, the standalone plan touching fixtures); the three-member historical expiry FAIL stays recorded, the five-member corrected run has no FAIL. Task P's final `make test-all` at `dbebab983`: 516 commands, 0 FAIL, 14 NOTRUN, 739 s. Merged: `scripts/qualify.py`, the matrix, `tests/test_qualify_standalone.py` and the rehearsal scripts; no product change, so wave 23's intel1 gate stands for the product. Physical-host and RDMA acceptance stay NOTRUN.
+[Wave 25 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`269a59c97`)**: Task P, second Stage 2 rehearsal ([evidence](2026-10/stage2-rehearsal-2-20261027.md)): both loopback topologies ran the full matrix (24 gates plus the end-identity check) on intel2; three qualification-driver defects fixed with their original failures kept (the standalone soak overlapping the driver's own fixture, expiry fixture ports colliding with parent endpoints, the standalone plan touching fixtures); the three-member historical expiry FAIL stays recorded, the five-member corrected run has no FAIL. Task P's final `make test-all` at `dbebab983`: 516 commands, 0 FAIL, 14 NOTRUN, 739 s. Merged: `scripts/qualify.py`, the matrix, `tests/test_qualify_standalone.py` and the rehearsal scripts; no product change, so wave 23's intel1 gate stands for the product. Physical-host and RDMA acceptance stay NOTRUN.
 
-[Heartbeat shutdown wakeup](heartbeat-stop-wakeup-20261028.md):
+[Heartbeat shutdown wakeup](2026-10/heartbeat-stop-wakeup-20261028.md):
 **Qualified in scope, `agent/heartbeat-stop-wakeup`, not merged.** K51's join
 is preserved; shutdown wakes a monotonic condition wait instead of waiting
 out the two-second sleep. Product `6dc0bafa8`, tested `a9bd8600c`. Intel1
@@ -568,11 +573,11 @@ No budget, timeout or workload changed. Exact skip set unchanged; remaining
 overruns recorded. Closed evidence/hashes verified, owned scratch pruned,
 no daemon/mount left, no deployment or full-hardware qualification claim.
 
-[Wave 24 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`59b0f5b56`)**: Task Q, docs audit round 3 through wave 22 ([audit](docs-audit-20261027.md)): 17 operator-page fixes (guide, POSIX, surface, `.efs` commands, release notes, testing), a metadata-replica halt runbook for W130/W165 with `raft-resync`, the release notes' open-item list rewritten for the current state (K43, K48, W166, W159 still open; K44, K45–K47, K50 fixed), the guide's duplicated Expiry section merged. Docs only: docs gate 5/5; live command checks NOTRUN (the Linux tree does not build on the Mac); wave 23's changes (K49/K51, apply errors, shared codecs) are not yet in these pages.
+[Wave 24 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`59b0f5b56`)**: Task Q, docs audit round 3 through wave 22 ([audit](2026-10/docs-audit-20261027.md)): 17 operator-page fixes (guide, POSIX, surface, `.efs` commands, release notes, testing), a metadata-replica halt runbook for W130/W165 with `raft-resync`, the release notes' open-item list rewritten for the current state (K43, K48, W166, W159 still open; K44, K45–K47, K50 fixed), the guide's duplicated Expiry section merged. Docs only: docs gate 5/5; live command checks NOTRUN (the Linux tree does not build on the Mac); wave 23's changes (K49/K51, apply errors, shared codecs) are not yet in these pages.
 
-[Wave 23 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`6967bfda2`; gate at the same commit)**: Task L ([evidence](rdma-gate-node9901-20261027.md)): **K49** RDMA request payloads moved to an aligned base before dispatch casts them, the RDMA receive poll and buffer repost serialized per device, **K51** (renumbered from Task L's K50, which Task O holds) the heartbeat thread joined before the Raft host is freed; fstor007 hardware RDMA, TSan 19/19, ASan/UBSan 49/49. And `graphify-review-fixes` ([evidence](graphify-review-findings-20261027.md)): `host_apply` keeps I/O, allocation and unsupported-encoding errors for every command family (SETATTR, XATTR, UNLINK, UTIMENS, RMDIR and TRUNCATE were missing, so such an error was consumed with the cursor advanced), plus shared byte-order, KV ordering, snapshot group filter, SETATTR codec and FUSE geometry helpers with unchanged formats. intel1 `make test-all` (8 jobs): 520 commands in 794 s, 0 FAIL, 12 NOTRUN host limits, PASS with host limits; OVERBUDGET 11, all daemon tests with repeated stops (`test_member_limit` 34.7/20 s, `test_k33_autoid` 55.3/40 s, `test_k22_leader_admission` 44.3/30 s the largest): a daemon stop now waits for the heartbeat's current sleep.
+[Wave 23 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`6967bfda2`; gate at the same commit)**: Task L ([evidence](2026-10/rdma-gate-node9901-20261027.md)): **K49** RDMA request payloads moved to an aligned base before dispatch casts them, the RDMA receive poll and buffer repost serialized per device, **K51** (renumbered from Task L's K50, which Task O holds) the heartbeat thread joined before the Raft host is freed; fstor007 hardware RDMA, TSan 19/19, ASan/UBSan 49/49. And `graphify-review-fixes` ([evidence](2026-10/graphify-review-findings-20261027.md)): `host_apply` keeps I/O, allocation and unsupported-encoding errors for every command family (SETATTR, XATTR, UNLINK, UTIMENS, RMDIR and TRUNCATE were missing, so such an error was consumed with the cursor advanced), plus shared byte-order, KV ordering, snapshot group filter, SETATTR codec and FUSE geometry helpers with unchanged formats. intel1 `make test-all` (8 jobs): 520 commands in 794 s, 0 FAIL, 12 NOTRUN host limits, PASS with host limits; OVERBUDGET 11, all daemon tests with repeated stops (`test_member_limit` 34.7/20 s, `test_k33_autoid` 55.3/40 s, `test_k22_leader_admission` 44.3/30 s the largest): a daemon stop now waits for the heartbeat's current sleep.
 
-[Task Q: user documentation audit round 3](docs-audit-20261027.md):
+[Task Q: user documentation audit round 3](2026-10/docs-audit-20261027.md):
 **Docs/static gates PASS; Mac live commands NOTRUN.** Branch
 `agent/devel-task-q`, base `e7e72e267` (waves 9–22), no product change.
 Seventeen documentation findings fixed across the alpha guide, surface, POSIX,
@@ -584,15 +589,15 @@ NOTRUN inventory and preserved local build/check evidence are recorded.
 No merge, push, cluster change or fresh Linux qualification.
 
 
-[Task P: second Stage 2 rehearsal](stage2-rehearsal-2-20261027.md): **COMPLETE, scoped intel2 loopback**. Both full three-/five-member matrices finished; standalone-soak isolation, D5 port collision and plan-side-effect driver defects fixed with negative controls. Targeted corrected D5 PASS, including 218/218 expiry-enabled POSIX cases; final `dbebab983` code gate **516 commands, 0 FAIL, 14 NOTRUN, 739 s**. Historical three-member driver FAIL remains separate; no final-driver full-matrix rerun is claimed. Both F3 ledgers, doubled-wall findings, verified raw hashes and cleanup recorded. No product defect found; physical/RDMA and endurance RSS acceptance remain open.
+[Task P: second Stage 2 rehearsal](2026-10/stage2-rehearsal-2-20261027.md): **COMPLETE, scoped intel2 loopback**. Both full three-/five-member matrices finished; standalone-soak isolation, D5 port collision and plan-side-effect driver defects fixed with negative controls. Targeted corrected D5 PASS, including 218/218 expiry-enabled POSIX cases; final `dbebab983` code gate **516 commands, 0 FAIL, 14 NOTRUN, 739 s**. Historical three-member driver FAIL remains separate; no final-driver full-matrix rerun is claimed. Both F3 ledgers, doubled-wall findings, verified raw hashes and cleanup recorded. No product defect found; physical/RDMA and endurance RSS acceptance remain open.
 
-[Wave 22 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`a7e881a7a`; gate at the same commit)**: Task O, K50 ([evidence](dir-ops-busy-under-load-20261027.md)): a namespace RPC with a caller deadline keeps retrying transient admission BUSY until that deadline instead of stopping at a fixed 16 attempts, RMDIR gets the same 30 s callback bound as MKDIR, deadline-less callers keep the 16-try cap, and every stop logs its reason. intel1 `make test-all` (8 jobs): 515 commands in 727 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (moved from intel2, where Task P's rehearsal holds the host). W159's broader latency failures, RDMA and multi-host stay open.
+[Wave 22 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`a7e881a7a`; gate at the same commit)**: Task O, K50 ([evidence](2026-10/dir-ops-busy-under-load-20261027.md)): a namespace RPC with a caller deadline keeps retrying transient admission BUSY until that deadline instead of stopping at a fixed 16 attempts, RMDIR gets the same 30 s callback bound as MKDIR, deadline-less callers keep the 16-try cap, and every stop logs its reason. intel1 `make test-all` (8 jobs): 515 commands in 727 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (moved from intel2, where Task P's rehearsal holds the host). W159's broader latency failures, RDMA and multi-host stay open.
 
-[Wave 21 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`d42099faa`)**: Task N, K15/K29 append gates ([evidence](k15-k29-append-gates-20261027.md)): on intel1 (single-host TCP), two W52 20,000-record runs, two W64 8,000-record step-down runs and two 2,000-record lost-reply runs PASS — 59,992 acknowledged records verified in warm-primary, warm-peer and cold-restart reads, eight deliberate failed writes explained, no REPORT timeout or unexplained hole; the K29 near-zero-progress stall did not reproduce. Merged: the hardened live harness `tests/live/append_failover.py` (availability and checked cold stops required, REPORT timeouts counted on both mounts, live root hint followed during formation) with `test_append_failover_accounting.py`, and the Task N controller scripts; no product change. **Found: K48** (blocks alpha), the W130 one-replica halt test listed 95 of 96 names through the healthy quorum in Task N's first full gate; not reproduced since, failed stores kept on intel1. Task N's final `make test-all` 514 commands, 0 FAIL, 14 NOTRUN; no gated product code changed, so wave 19's intel2 gate stands.
+[Wave 21 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 28 (`d42099faa`)**: Task N, K15/K29 append gates ([evidence](2026-10/k15-k29-append-gates-20261027.md)): on intel1 (single-host TCP), two W52 20,000-record runs, two W64 8,000-record step-down runs and two 2,000-record lost-reply runs PASS — 59,992 acknowledged records verified in warm-primary, warm-peer and cold-restart reads, eight deliberate failed writes explained, no REPORT timeout or unexplained hole; the K29 near-zero-progress stall did not reproduce. Merged: the hardened live harness `tests/live/append_failover.py` (availability and checked cold stops required, REPORT timeouts counted on both mounts, live root hint followed during formation) with `test_append_failover_accounting.py`, and the Task N controller scripts; no product change. **Found: K48** (blocks alpha), the W130 one-replica halt test listed 95 of 96 names through the healthy quorum in Task N's first full gate; not reproduced since, failed stores kept on intel1. Task N's final `make test-all` 514 commands, 0 FAIL, 14 NOTRUN; no gated product code changed, so wave 19's intel2 gate stands.
 
-[Wave 20 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`4a20f4ddf`)**: Task M ([evidence](gate-fstor007-20261027.md)): fstor007 full gate on the unchanged wave-19 product, 514 commands, 0 FAIL, 5 NOTRUN, 617 s, once the documented libfuse ≥ 3.12 prerequisite is met (RHEL9's system 3.10.2 cannot build EFS: a missing prerequisite, not a fallback to add); RDMA GC, POSIX all 221/223 (2 SKIP), two-client 68/68 on a private three-member RDMA fixture. Merged: the build-prerequisite section in `docs/how-it-works/testing.md`, and `tests/live/rdma_posix_gates.sh` rebuilt for current devel (positional CLI and automatic formation instead of the removed `--node-id`/`--direct-io` flags, no removed `EFS_COMMANDS`/`EFS_EXPIRY` exports, private 19xxx ports, verbs-device proof per process, a failed clean stop keeps the fixture). No gated code changed (`tests/live/rdma_posix_gates.sh` is not in `make test-all`), so wave 19's intel2 gate (514 commands, 0 FAIL) stands for this tree.
+[Wave 20 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`4a20f4ddf`)**: Task M ([evidence](2026-10/gate-fstor007-20261027.md)): fstor007 full gate on the unchanged wave-19 product, 514 commands, 0 FAIL, 5 NOTRUN, 617 s, once the documented libfuse ≥ 3.12 prerequisite is met (RHEL9's system 3.10.2 cannot build EFS: a missing prerequisite, not a fallback to add); RDMA GC, POSIX all 221/223 (2 SKIP), two-client 68/68 on a private three-member RDMA fixture. Merged: the build-prerequisite section in `docs/how-it-works/testing.md`, and `tests/live/rdma_posix_gates.sh` rebuilt for current devel (positional CLI and automatic formation instead of the removed `--node-id`/`--direct-io` flags, no removed `EFS_COMMANDS`/`EFS_EXPIRY` exports, private 19xxx ports, verbs-device proof per process, a failed clean stop keeps the fixture). No gated code changed (`tests/live/rdma_posix_gates.sh` is not in `make test-all`), so wave 19's intel2 gate (514 commands, 0 FAIL) stands for this tree.
 
-[Task M: fstor007 build and RDMA gates](gate-fstor007-20261027.md):
+[Task M: fstor007 build and RDMA gates](2026-10/gate-fstor007-20261027.md):
 COMPLETE scoped on `agent/devel-task-m`, tested7ca545e2b, not merged/pushed.
 Current devel product unchanged; missing libfuse3.12+ prerequisite documented
 and private3.16.2 dependency used. Final gate514 commands,0 FAIL,5 NOTRUN,
@@ -601,7 +606,7 @@ POSIX-all221/223 with2 explicit skips, peer68/68. Two private-launcher defects
 fixed; no product defect found. Original failures, verified closed manifests
 and budget overruns retained;7 scratch roots pruned, no task mounts/processes.
 
-[Task N: K15/K29 append gates](k15-k29-append-gates-20261027.md):
+[Task N: K15/K29 append gates](2026-10/k15-k29-append-gates-20261027.md):
 **Six completed append gates PASS** on intel1: two W52 20k, two step-down,
 two lost-reply cases; 59,992 exact acknowledged records plus eight deliberate
 holes across full warm/peer/cold views, no unexpected application error.
@@ -616,11 +621,11 @@ no placement mode or timeout changed. Branch `agent/devel-task-n`, no product
 changes, not merged; multi-host/RDMA append acceptance NOTRUN. No global
 release PASS while K48 remains open.
 
-[Task O directory BUSY retry exhaustion](dir-ops-busy-under-load-20261027.md): **K50 FIXED scoped, not merged**, `agent/devel-task-o`, tested `503e17f2d`. Intel2 full gate 515/0 FAIL/14 NOTRUN, INCOMPLETE coverage (659 s); core 218/218, K36/W159 each 5/5 on both hosts. Deterministic unchanged-client failure and xorinox latency failures retained. Broader W159 remains OPEN; RDMA/multi-host NOTRUN. Intel2 scratch deleted with verified evidence retained; xorinox cleanup waits for Task I.
+[Task O directory BUSY retry exhaustion](2026-10/dir-ops-busy-under-load-20261027.md): **K50 FIXED scoped, not merged**, `agent/devel-task-o`, tested `503e17f2d`. Intel2 full gate 515/0 FAIL/14 NOTRUN, INCOMPLETE coverage (659 s); core 218/218, K36/W159 each 5/5 on both hosts. Deterministic unchanged-client failure and xorinox latency failures retained. Broader W159 remains OPEN; RDMA/multi-host NOTRUN. Intel2 scratch deleted with verified evidence retained; xorinox cleanup waits for Task I.
 
-[Task L RDMA qualification](rdma-gate-node9901-20261027.md): **FIXED/QUALIFIED (scoped), not merged/pushed**, on `agent/devel-task-l` (product `f78bd66f9`, final self-tests `39f65ba77`). Free fstor007: `TOTAL 517 FAIL 0 NOTRUN 3 STATUS INCOMPLETE (722s)`, build 22s; same-host base 514/1 FAIL/4 NOTRUN. Nine real-HCA RDMA checks, two GC and two K38 runs PASS; TSan 19/19 and ASan/UBSan 49/49 PASS. POSIX at default refresh: 220/223, 0 FAIL, 3 SKIP twice; additional 2s refresh profile: 222/223, 0 FAIL, mmap-only SKIP twice. **K49** request alignment and **K51** heartbeat lifetime fixed; provider receive handoff and harness defects corrected. Remaining NR: external cluster scripts, Memcheck headers, follower fault-only subcase. Original node9901 failures, matching binaries and retained failed stores preserved with verified hashes; task-L scratch removed and hosts released. Prior missing-device NOTRUN history remains unchanged; no full alpha, multi-host or product LSan acceptance is claimed.
+[Task L RDMA qualification](2026-10/rdma-gate-node9901-20261027.md): **FIXED/QUALIFIED (scoped), not merged/pushed**, on `agent/devel-task-l` (product `f78bd66f9`, final self-tests `39f65ba77`). Free fstor007: `TOTAL 517 FAIL 0 NOTRUN 3 STATUS INCOMPLETE (722s)`, build 22s; same-host base 514/1 FAIL/4 NOTRUN. Nine real-HCA RDMA checks, two GC and two K38 runs PASS; TSan 19/19 and ASan/UBSan 49/49 PASS. POSIX at default refresh: 220/223, 0 FAIL, 3 SKIP twice; additional 2s refresh profile: 222/223, 0 FAIL, mmap-only SKIP twice. **K49** request alignment and **K51** heartbeat lifetime fixed; provider receive handoff and harness defects corrected. Remaining NR: external cluster scripts, Memcheck headers, follower fault-only subcase. Original node9901 failures, matching binaries and retained failed stores preserved with verified hashes; task-L scratch removed and hosts released. Prior missing-device NOTRUN history remains unchanged; no full alpha, multi-host or product LSan acceptance is claimed.
 
-[Task I review](task-i-20261026.md): user-requested clean fallback
+[Task I review](2026-10/task-i-20261026.md): user-requested clean fallback
 qualification **COMPLETE, PASS (scoped)** at source `093415c86` on quiet
 fstor007, branch `agent/devel-task-i`, merged into devel (wave 31, `e34cba345`). Full8-job gate
 **528 / 0 FAIL / 15 explicit NOTRUN**; native hardware mlx5_2 RDMA **9/9 PASS**.
@@ -665,15 +670,15 @@ unit PASS, fresh gate/hour owed. Native rxe0 RDMA 9/9 PASS; previous failures re
 All original failures/stores stay on-host; allocator probe capture hashes
 verified. No other cluster/client touched.
 
-[Wave 19 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`21630289a`; gate at the same commit)**: Task G ([W166](w166-close-eio-flush-deadline-20261026.md), [K38 repair](k38-task-g-repair-20261027.md)): W166 option B as the user decided (30 s deadline unchanged): a lagging storage member delegates the whole ticket STATUS read to the lane leader on the read pool and budget, a forwarded STATUS never forwards again, and a full L0 alone no longer refuses publication; K38 shared-chunk repairs: a definite STALE is kept when a later unit meets BUSY, receipt recovery stays inside the original completion budget, and pressure reclaim drains a bounded cohort instead of waiting for future writes. **Merge decision (user):** Task J's L0 term in `host_kv_pressure` is dropped, so admission and leadership share apply_room plus the unapplied-log watermark; `test_kv_leader_pressure.py` now asserts a full L0 alone is not pressure. intel2 targeted reruns at `7a7b9f420`: K22 leader admission 3/3, K22 snapshot import 2/2, W166 authority 3/3, K38 shared-chunk 5/5, REPORT retry/verdict tests 2/2 each. intel2 `make test-all` (8 jobs): 514 commands in 734 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run had 1 FAIL, `test_read_retry_budget.py`, a merge-resolution error fixed in `21630289a`); OVERBUDGET 5, `test_stop_progress.py` 102 s against 50 s the largest. W166's SIGSTOP, RDMA and multi-host acceptance stays NOTRUN.
+[Wave 19 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`21630289a`; gate at the same commit)**: Task G ([W166](2026-10/w166-close-eio-flush-deadline-20261026.md), [K38 repair](2026-10/k38-task-g-repair-20261027.md)): W166 option B as the user decided (30 s deadline unchanged): a lagging storage member delegates the whole ticket STATUS read to the lane leader on the read pool and budget, a forwarded STATUS never forwards again, and a full L0 alone no longer refuses publication; K38 shared-chunk repairs: a definite STALE is kept when a later unit meets BUSY, receipt recovery stays inside the original completion budget, and pressure reclaim drains a bounded cohort instead of waiting for future writes. **Merge decision (user):** Task J's L0 term in `host_kv_pressure` is dropped, so admission and leadership share apply_room plus the unapplied-log watermark; `test_kv_leader_pressure.py` now asserts a full L0 alone is not pressure. intel2 targeted reruns at `7a7b9f420`: K22 leader admission 3/3, K22 snapshot import 2/2, W166 authority 3/3, K38 shared-chunk 5/5, REPORT retry/verdict tests 2/2 each. intel2 `make test-all` (8 jobs): 514 commands in 734 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run had 1 FAIL, `test_read_retry_budget.py`, a merge-resolution error fixed in `21630289a`); OVERBUDGET 5, `test_stop_progress.py` 102 s against 50 s the largest. W166's SIGSTOP, RDMA and multi-host acceptance stays NOTRUN.
 
-[Wave 18 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`08701031d`; gate at the same commit)**: Task K, K44/W167 ([evidence](k44-retired-replica-routing-20261026.md)): a retired replica never answers for its group — forwarded commands get NOT_PRIMARY with the live leader's hint, local proposals and applied-waits route to live voters instead of waiting on the frozen cursor, routing uses the current voter set, `raft-mkfs` on a member without a group-0 replica forwards the whole operation, a retired replica stops exporting snapshots; formation notices ride transient peer refusals within their 5 s budget; `raft-change` checks convergence at the live responder. orcd-mini (RDMA): fresh formation, online fourth member, 27 management checks through the seed, POSIX core 218/218, two-client 68/68 PASS; orcd-mini now runs Task K's build `00e85a299531`. intel2 `make test-all` (8 jobs): 510 commands in 737 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 4 (k33_client_view 26.0/25, k38_shared_chunk 43.3/35, stop_progress 63.3/50, k22_leader_admission 30.4/30 s: intel2 runs slower than the intel1 refit).
+[Wave 18 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`08701031d`; gate at the same commit)**: Task K, K44/W167 ([evidence](2026-10/k44-retired-replica-routing-20261026.md)): a retired replica never answers for its group — forwarded commands get NOT_PRIMARY with the live leader's hint, local proposals and applied-waits route to live voters instead of waiting on the frozen cursor, routing uses the current voter set, `raft-mkfs` on a member without a group-0 replica forwards the whole operation, a retired replica stops exporting snapshots; formation notices ride transient peer refusals within their 5 s budget; `raft-change` checks convergence at the live responder. orcd-mini (RDMA): fresh formation, online fourth member, 27 management checks through the seed, POSIX core 218/218, two-client 68/68 PASS; orcd-mini now runs Task K's build `00e85a299531`. intel2 `make test-all` (8 jobs): 510 commands in 737 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 4 (k33_client_view 26.0/25, k38_shared_chunk 43.3/35, stop_progress 63.3/50, k22_leader_admission 30.4/30 s: intel2 runs slower than the intel1 refit).
 
-[Wave 17 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`db3ec76d4`; gate at `db3ec76d4`)**: Task J ([evidence](gate-budgets-refit-20261026.md)): the W160 budgets re-fitted from three clean 8-job intel1 gates (729/723/725 s; fitted model 1,025 s under the D44 target of 1,100 s; slots and reasons kept; `scripts/calibrate_test_budgets.sh`, `scripts/refit_test_budgets.py`), and the three defects its calibration gates surfaced, fixed on the branch and recorded as **K45** (a delayed AppendEntries below the installed snapshot fenced a healthy replica for good; now refused with the snapshot boundary as the rebase hint), **K46** (a replica with `raft-resync` pending could win an election; no election while resync is pending), **K47** (a packed read with a returned holder answering NET and an absent third fragment bypassed the returned-member re-probe; now re-probed for NET and NOT_FOUND), plus the W166 L0-pressure subcase (publication, admission and leadership share one pressure predicate; `test_kv_leader_pressure.py`); W166's stalled-follower residual stays open. Merge-time: the refit rows win where both sides had a row, Task F's W130 row (50 s) is kept. intel2 `make test-all` (8 jobs): 510 commands in 757 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 1 (test_stop_progress.py 56.8 s against its re-fitted 50 s row: intel2 runs it slower than the intel1 fit). Real-host stage: node9901 built and gated (769 s), fstor007 does not build unchanged devel (prerequisite), see the page.
+[Wave 17 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`db3ec76d4`; gate at `db3ec76d4`)**: Task J ([evidence](2026-10/gate-budgets-refit-20261026.md)): the W160 budgets re-fitted from three clean 8-job intel1 gates (729/723/725 s; fitted model 1,025 s under the D44 target of 1,100 s; slots and reasons kept; `scripts/calibrate_test_budgets.sh`, `scripts/refit_test_budgets.py`), and the three defects its calibration gates surfaced, fixed on the branch and recorded as **K45** (a delayed AppendEntries below the installed snapshot fenced a healthy replica for good; now refused with the snapshot boundary as the rebase hint), **K46** (a replica with `raft-resync` pending could win an election; no election while resync is pending), **K47** (a packed read with a returned holder answering NET and an absent third fragment bypassed the returned-member re-probe; now re-probed for NET and NOT_FOUND), plus the W166 L0-pressure subcase (publication, admission and leadership share one pressure predicate; `test_kv_leader_pressure.py`); W166's stalled-follower residual stays open. Merge-time: the refit rows win where both sides had a row, Task F's W130 row (50 s) is kept. intel2 `make test-all` (8 jobs): 510 commands in 757 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 1 (test_stop_progress.py 56.8 s against its re-fitted 50 s row: intel2 runs it slower than the intel1 fit). Real-host stage: node9901 built and gated (769 s), fstor007 does not build unchanged devel (prerequisite), see the page.
 
-[Wave 16 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`9b7a34583`; gate at `9b7a34583`)**: Task F, W165 ([evidence](w165-serve-path-damaged-row-20261026.md)): a stored row the typed readers refuse is reported through a KV decode-error callback; the apply poisons its scope and halts the group (W127 route), a serving thread answers NOT_PRIMARY with a healthy replica's hint instead of a persistent `EIO`, storage authority follows the healthy quorum through a metadata halt, and `raft-resync` heals the replica; `test_w130_dir_fault.py` is back in `make test-long` at a measured 50 s budget (the `make test-w130` target is gone), the K22 snapshot-import budget is re-fitted to 320 s, the D44 target of 1,100 s stands. intel1 8-job gates at `525cf3816`: 509 commands, 0 FAIL twice (base 508, 0 FAIL). intel2 `make test-all` (8 jobs): 509 commands in 803 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 1 (test_k33_growth.py 135.3 s against its 135 s row, within noise). Real-host (node9901, RDMA, orcd-mini) stays NOTRUN.
+[Wave 16 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 27 (`9b7a34583`; gate at `9b7a34583`)**: Task F, W165 ([evidence](2026-10/w165-serve-path-damaged-row-20261026.md)): a stored row the typed readers refuse is reported through a KV decode-error callback; the apply poisons its scope and halts the group (W127 route), a serving thread answers NOT_PRIMARY with a healthy replica's hint instead of a persistent `EIO`, storage authority follows the healthy quorum through a metadata halt, and `raft-resync` heals the replica; `test_w130_dir_fault.py` is back in `make test-long` at a measured 50 s budget (the `make test-w130` target is gone), the K22 snapshot-import budget is re-fitted to 320 s, the D44 target of 1,100 s stands. intel1 8-job gates at `525cf3816`: 509 commands, 0 FAIL twice (base 508, 0 FAIL). intel2 `make test-all` (8 jobs): 509 commands in 803 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits; OVERBUDGET 1 (test_k33_growth.py 135.3 s against its 135 s row, within noise). Real-host (node9901, RDMA, orcd-mini) stays NOTRUN.
 
-[W165: serve-first damaged metadata, healthy-quorum routing and resync](w165-serve-path-damaged-row-20261026.md):
+[W165: serve-first damaged metadata, healthy-quorum routing and resync](2026-10/w165-serve-path-damaged-row-20261026.md):
 **`agent/devel-task-f`, not merged or pushed; ten strict combined loopback runs PASS on intel1 (`31b7ce7e2`), fast suite PASS; both eight-job gates at `525cf3816`: TOTAL 509 FAIL 0 NOTRUN 14, 803/771 s (base 508/0/14, 694 s). W130 passed in both pools in 31.1/34.1 s.**
 The replica stops serving/campaigning/applying when a stored decoder refuses a row;
 its storage authority and cross-group coordinators use healthy voters. The atomic
@@ -682,9 +687,9 @@ KV scope preserves the fatal refusal even when a command handler masks its resul
 retries. Finalized captures remain on intel1 with verified hashes; explicit user approval authorized deletion of the private source/build tree and two runner scratch trees. The evidence page records the separate cleanup receipt; synthetic-store bulk is pruned. Real-host TCP/RDMA gates remain NOTRUN. D44 stays at 1,100 s; the measured
 restoration budgets estimate 1,641 s within its existing 1,650 s margin bound.
 
-[Wave 15 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it was held as its own gate, `make test-w130`, while W165 was open; the [Task F follow-up](w165-serve-path-damaged-row-20261026.md) restores it to the ordinary gate and removes that separate target. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](decisions.md), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
+[Wave 15 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](2026-10/k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it was held as its own gate, `make test-w130`, while W165 was open; the [Task F follow-up](2026-10/w165-serve-path-damaged-row-20261026.md) restores it to the ordinary gate and removes that separate target. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](decisions.md), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
 
-[W160 Task J budget calibration](gate-budgets-refit-20261026.md):
+[W160 Task J budget calibration](2026-10/gate-budgets-refit-20261026.md):
 **COMPLETE scoped, branch `agent/devel-task-j`, not merged/pushed.** Corrected
 source49e5ffd71: three full8-job gates729/723/725s,509 commands,zero failures,
 14 NOTRUN each. Refit0f72c1665:85 rows retain slots/reasons, model1025s below
@@ -696,7 +701,7 @@ stay FAIL; host skips remain INCOMPLETE and no repaired-build RDMA PASS is
 claimed. W166 pressure subcase fixed/qualified TCP; stalled-follower fault-
 window write errors and production/RDMA scope remain open.
 
-[Task K: retired-replica routing](k44-retired-replica-routing-20261026.md):
+[Task K: retired-replica routing](2026-10/k44-retired-replica-routing-20261026.md):
 **FIXED (private TCP/RDMA plus orcd-mini RDMA scope)** on `agent/devel-task-k`, product/test
 source `00e85a299`, not merged. Final routing and one-loss sweeps, seven K33
 suites, POSIX core 218/218 on both transports, and steady-state `.efs`
@@ -714,7 +719,7 @@ POSIX core, 68/68 two-client cases, exact cross-mount payloads and stable `.efs`
 Original closed logs preserved; cluster left running; existing devops config
 still lists three members, so the fourth has a retained owned lifecycle helper.
 
-[K38 Task G repair](k38-task-g-repair-20261027.md): **scoped xorinox PASS**,
+[K38 Task G repair](2026-10/k38-task-g-repair-20261027.md): **scoped xorinox PASS**,
 `agent/devel-task-g`, not merged/pushed. Original-product pooled failure
 reproduced with complete retained stores/logs; reviewed fixes and four
 intended original-code negative controls. Seven fixed K38 runs: **33,600
@@ -723,7 +728,7 @@ commands, 0 FAIL, 13 NOTRUN, INCOMPLETE** (842 s + 24 s build); both W166
 cases pass. Failed stores and matching binaries remain on xorinox; positive
 bulk pruned after hash-verified capture. Real-cluster/RDMA gates remain open.
 
-[W166 option B qualification (Task G)](w166-close-eio-flush-deadline-20261026.md):
+[W166 option B qualification (Task G)](2026-10/w166-close-eio-flush-deadline-20261026.md):
 **DECIDED / responsive-pressure paths qualified**, branch `agent/devel-task-g`;
 30 s unchanged. Both deterministic cases fail on the instrumented base and
 pass on `4bcd52ca0`; 300 s pressure has zero errors; K22 5/5 clean; all
@@ -738,14 +743,14 @@ real-cluster shared-chunk acceptance remain open.
 
 
 
-[Oct 26 K43 fixed (scoped): a writer fails when the REPORT coordinator is killed](k43-coordinator-kill-20261026.md):
+[Oct 26 K43 fixed (scoped): a writer fails when the REPORT coordinator is killed](2026-10/k43-coordinator-kill-20261026.md):
 **branch `agent/devel-taske` (from devel `394f2b791`), not merged, not pushed; intel2, fault build, TCP, loopback.** An abort-decided but unresolved publication stage is reaped on contact (`pub_stage_reap_if_aborted`): the unit gate fails on the base (BUSY) and passes with it; the deterministic incident scenario (coordinator SIGKILLed between PREPARE and decision, failover refusal, held resolve, CAS-losing resend, replay) never errors the application on any build tried — the Task D incident additionally needed soak-scale apply saturation and lost by 130 ms of REPORT budget. Neighbor gates 5/5 each; rehearsal soak PASS; one-hour soak and full gate below. NOTRUN: four-hour soak rerun, multi-host.
 
-[Wave 15 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it is its own gate, `make test-w130`, until W165 is fixed. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](decisions.md), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
+[Wave 15 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a24cabefd`; gate at `a24cabefd`)**: Task B's K22/K6 loopback gates ([evidence](2026-10/k22-k6-loopback-taskb-20261025.md)): `raft-resync` heals a W127-halted replica from the leader's snapshot image (a resyncing peer rejects AppendEntries with match 0, the leader exports an image outside the byte cadence and ships it; an import covering the halted entry clears the halt), a snapshot chunk that cannot be queued backs off one heartbeat instead of re-reading it every pump wake, a DIR step whose stored row the decoder refuses halts the group (W130) instead of being skipped, K22 leader admission at 3/4 of the unapplied bound, with `EFS_FAULT_SNAP_BYTES` and `EFS_FAULT_DIR_CORRUPT_FILE` fault hooks and three new `make test-long` gates (`test_k22_snapshot_import.py`, `test_k22_leader_admission.py`, `test_w130_dir_fault.py`). intel2 `make test-all` (8 jobs): 508 commands in 775 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits (a first run with the W130 test in the pool: 509 commands, 1 FAIL, that test). **W130 gate:** `test_w130_dir_fault.py` failed once in the wave's first pool run on its own open finding W165 (a create met the damaged row on the serve path before any DIR apply and failed EIO for good; 4 of 5 alone), so it is its own gate, `make test-w130`, until W165 is fixed. **W160 note:** the two K22 gates add 1,340 slot-seconds; the budgeted gate is 1,644 s and the target moved from 990 s to **1,100 s (18 min 20 s)**; they stay in `make test-long` ([D44](decisions.md), user, Oct 26). Task B's findings are queued as W165 (serve-path damaged row) and W166 (close EIO at the flush deadline).
 
-[Wave 14 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a81bc8dc0`, fast-forward; gate at the same commit)**: the D4 drain and reclaim branch ([drain](d4-pack-drain-20261025.md), [reclaim](d4-reclaim-20261026.md)): one packer candidate per file per pass, the fragment resend bounded by 2 s inside K41's placement loop, the truncate sweep takes an inode to retire in one pass and waits 2 s for the writer's own publication, an unconditional full image replaces spans of an older content epoch but is still refused by an unseen live span of its own epoch (`988efba3e`: the wave-13 gate's K38 writer EIO was this branch's `acb8a7318` dropping another writer's span; K36's EBUSY did not reproduce); 60-minute run: stored data bounded, drain 72 s, 0 put errors, abandoned uploads 610 → 41. intel1 8-job gate 0 FAIL twice, intel2 `make test-all` (8 jobs): 506 commands in 641 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits. The W160 target is 16 min 30 s (990 s) for the D4 plateau driver back in `make test-long` and the pack dup-candidate test.
+[Wave 14 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`a81bc8dc0`, fast-forward; gate at the same commit)**: the D4 drain and reclaim branch ([drain](2026-10/d4-pack-drain-20261025.md), [reclaim](2026-10/d4-reclaim-20261026.md)): one packer candidate per file per pass, the fragment resend bounded by 2 s inside K41's placement loop, the truncate sweep takes an inode to retire in one pass and waits 2 s for the writer's own publication, an unconditional full image replaces spans of an older content epoch but is still refused by an unseen live span of its own epoch (`988efba3e`: the wave-13 gate's K38 writer EIO was this branch's `acb8a7318` dropping another writer's span; K36's EBUSY did not reproduce); 60-minute run: stored data bounded, drain 72 s, 0 put errors, abandoned uploads 610 → 41. intel1 8-job gate 0 FAIL twice, intel2 `make test-all` (8 jobs): 506 commands in 641 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits. The W160 target is 16 min 30 s (990 s) for the D4 plateau driver back in `make test-long` and the pack dup-candidate test.
 
-[D4 reclaim lag: abandoned uploads from refused unconditional images](d4-reclaim-20261026.md):
+[D4 reclaim lag: abandoned uploads from refused unconditional images](2026-10/d4-reclaim-20261026.md):
 **branch `claude/interesting-mclean-65362a` (devel wave 13 merged at `ed01bb005`), not merged, not pushed; head `988efba3e`: intel1 `make test-all` 8-job pool twice, 506 commands, 0 FAIL, 14 NOTRUN host limits (565 s, 684 s); K36 and K38 5 of 5 each. 60-minute run at `acb8a7318`: PASS on every check, 41 abandoned uploads (was 610 at `66bfc2786`, linear quota growth to 4.2 GiB before).**
 The quota growth under the D4 rewrite load came from abandoned uploads, which D31 collects only when the mount's session
 ends. Resizing rewrites abandoned their first upload when the REPORT host refused the previous tail image (stale span list,
@@ -754,7 +759,7 @@ replace the committed base, captured records publish on a swept base, sweeps wai
 unconditional image could drop another writer's span (K38); narrowed in `988efba3e`. The D4 driver bounds abandoned uploads and
 stored data. Open: a live mount's abandoned uploads still wait for its unmount (D31 epoch rotation).
 
-[D4 drain after a rewrite load and packer put errors at a high rewrite rate](d4-pack-drain-20261025.md):
+[D4 drain after a rewrite load and packer put errors at a high rewrite rate](2026-10/d4-pack-drain-20261025.md):
 **branch `claude/interesting-mclean-65362a` (F1 follow-ups merged), not merged, not pushed; xorinox `make test-all` 8-job pool at `9670b895b`: 500 commands, 0 FAIL, 13 NOTRUN host limits, 760 s; intel1 60-minute run: drain 54.5 s ≤ 150, 0 put errors (RSS criterion FAIL on one efs-fuse, F1).**
 The F1 drain stall was not leases: a small file rewritten across a pack epoch had two candidate keys,
 and a segment holding both failed silently every pass (fixed; new `test_pack_dup_candidate.py` red 4 of 4,
@@ -763,9 +768,9 @@ green). The D25 truncate sweep retired about 5 inodes a second and its backlog h
 (K37 case 1c). `test_d4_plateau.py` is back in `make test-long`. New open finding: reclaim lags a high
 rewrite rate (quota 52 % at 60 min on intel1, ENOSPC on amd).
 
-[Wave 13 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`899c0a2e0`; gate at the same commit)**: K42/W164 ([evidence](e2-clean-stop-busy-20261025.md): a clean unmount repeats certified no-op cleanup waits instead of failing on one BUSY, the stop names its shard and the server's reason; 20 of 20 clean stops), Task D's endurance acceptance ([evidence](task-d-20261025.md): rehearsal PASS on intel2 and nuc, four-hour soak FAIL at 7,195 s on **K43** (blocks alpha), harness fixes for a returning member's not-indexed query answer and the soak tables), and the efsd RSS plateau work ([evidence](efsd-rss-plateau-20261025.md): idle connection reaping in both pools, the reclaim journal ring releases pages, segment reads and compaction in one mapping; plateau PASS on one 60-minute xorinox run). intel2 `make test-all` (8 jobs): 504 commands in 632 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits. **Held back:** the D4 drain and reclaim branch `claude/interesting-mclean-65362a` (`eec27ed50`; its evidence pages `d4-pack-drain-20261025.md` and `d4-reclaim-20261026.md` live on that branch): with it merged the same gate failed twice with different writers' errors under the 8-job pool (`test_k38_shared_chunk_pressure.py` writer `EIO`, then `test_k36_recovery.py` step 8 `mkdir` `EBUSY` after a member kill), both passing alone; without it 0 FAIL. Its publish and truncate-sweep changes are to be re-gated on their own branch (intel2 `~/efs-artifacts/merge-wave13-20261026/held-back/`).
+[Wave 13 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 26 (`899c0a2e0`; gate at the same commit)**: K42/W164 ([evidence](2026-10/e2-clean-stop-busy-20261025.md): a clean unmount repeats certified no-op cleanup waits instead of failing on one BUSY, the stop names its shard and the server's reason; 20 of 20 clean stops), Task D's endurance acceptance ([evidence](2026-10/task-d-20261025.md): rehearsal PASS on intel2 and nuc, four-hour soak FAIL at 7,195 s on **K43** (blocks alpha), harness fixes for a returning member's not-indexed query answer and the soak tables), and the efsd RSS plateau work ([evidence](2026-10/efsd-rss-plateau-20261025.md): idle connection reaping in both pools, the reclaim journal ring releases pages, segment reads and compaction in one mapping; plateau PASS on one 60-minute xorinox run). intel2 `make test-all` (8 jobs): 504 commands in 632 s, 0 FAIL, 14 NOTRUN host limits, PASS with host limits. **Held back:** the D4 drain and reclaim branch `claude/interesting-mclean-65362a` (`eec27ed50`; its evidence pages `d4-pack-drain-20261025.md` and `d4-reclaim-20261026.md` live on that branch): with it merged the same gate failed twice with different writers' errors under the 8-job pool (`test_k38_shared_chunk_pressure.py` writer `EIO`, then `test_k36_recovery.py` step 8 `mkdir` `EBUSY` after a member kill), both passing alone; without it 0 FAIL. Its publish and truncate-sweep changes are to be re-gated on their own branch (intel2 `~/efs-artifacts/merge-wave13-20261026/held-back/`).
 
-[Task D: seeded member-churn endurance](task-d-20261025.md):
+[Task D: seeded member-churn endurance](2026-10/task-d-20261025.md):
 **four-hour soak FAIL on EFS finding K43; branch
 `claude/stoic-goldwasser-06dbca`, not merged or pushed.** devel `39a1cbbbc`
 with `agent/devel-task-d` merged and one harness fix (`b2fc06ba5`: a
@@ -786,45 +791,45 @@ also fail on the base: no candidate-only failure. Raw: nuc
 `~/efs-artifacts/task-d-20261025-nuc2/`, intel2
 `~/efs-artifacts/task-d-20261025-intel2/`.
 
-[Wave 12 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`78b9e0981`; gate at `78b9e0981`)**: K41/W163 ([evidence](k41-packer-placement-20261025.md): bounded parallel heartbeat probes with the streak and down mark kept per node id across table rebuilds, the packer probes its three destinations and replaces a failed one with the next live ring member before writing, a packed read that reached a holder but gathered fewer than two fragments is `EIO` naming the segment; intel2 gate 0 FAIL, `test_k33_growth.py` 10 of 10) and Task C's last test-hygiene commits (K37 degraded-write events by identity, the refusal test checks every replica's log for the refused tag, K33 payload fixtures kept on failure). intel2 `make test-all` (8 jobs): 502 commands in 657 s, 0 FAIL, 15 NOTRUN host limits, PASS with host limits.
+[Wave 12 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`78b9e0981`; gate at `78b9e0981`)**: K41/W163 ([evidence](2026-10/k41-packer-placement-20261025.md): bounded parallel heartbeat probes with the streak and down mark kept per node id across table rebuilds, the packer probes its three destinations and replaces a failed one with the next live ring member before writing, a packed read that reached a holder but gathered fewer than two fragments is `EIO` naming the segment; intel2 gate 0 FAIL, `test_k33_growth.py` 10 of 10) and Task C's last test-hygiene commits (K37 degraded-write events by identity, the refusal test checks every replica's log for the refused tag, K33 payload fixtures kept on failure). intel2 `make test-all` (8 jobs): 502 commands in 657 s, 0 FAIL, 15 NOTRUN host limits, PASS with host limits.
 
-[Wave 11 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`d3051f273`; gate at `d3051f273`)**: K33/W157 join retry ([evidence](k33-join-retry-20261025.md): a first start killed between `boot.bin` and `identity.bin`, or in the O_DIRECT probe, is retried with the same command; a store that started before and lost its identity stays refused; intel1 gate 0 FAIL, A13 PASS with the kill before the commit) and the Task C/D agents' latest evidence commits. intel2 `make test-all` (8 jobs): 499 commands in 545 s, 0 FAIL, 15 NOTRUN host limits, PASS with host limits.
+[Wave 11 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`d3051f273`; gate at `d3051f273`)**: K33/W157 join retry ([evidence](2026-10/k33-join-retry-20261025.md): a first start killed between `boot.bin` and `identity.bin`, or in the O_DIRECT probe, is retried with the same command; a store that started before and lost its identity stays refused; intel1 gate 0 FAIL, A13 PASS with the kill before the commit) and the Task C/D agents' latest evidence commits. intel2 `make test-all` (8 jobs): 499 commands in 545 s, 0 FAIL, 15 NOTRUN host limits, PASS with host limits.
 
-[Wave 10 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`358ebc378`; gate at `358ebc378`)**: the F1 follow-ups ([evidence](f1-followups-20261025.md): K36 under TSan 10/10, the W77 publication-unit ABORT after a refused forwarded PREPARE, packer put errors 3 → 0 on the 20-minute D4 load, glibc arena cap and fixed mmap threshold with a periodic trim, crash hooks exit through `exit_group`; the efsd RSS plateau stays **OPEN**, 8–13 % growth late in 60-minute runs, and `test_d4_plateau.py` is a measurement driver outside `make test-long`), Task C's remaining decoder commits (frag-record digest kept on refusal, malformed error envelopes rejected) and Task D's endurance-harness commits (RSS qualified only in steady write-load windows, cleanup resume, writer stop before a failed mount transition). intel2 `make test-all` (8 jobs): 498 commands in 647 s, 0 FAIL, 15 NOTRUN host limits (the extra one is test_soak_driver's own 'rehearsal NOTRUN' marker), PASS with host limits.
+[Wave 10 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`358ebc378`; gate at `358ebc378`)**: the F1 follow-ups ([evidence](2026-10/f1-followups-20261025.md): K36 under TSan 10/10, the W77 publication-unit ABORT after a refused forwarded PREPARE, packer put errors 3 → 0 on the 20-minute D4 load, glibc arena cap and fixed mmap threshold with a periodic trim, crash hooks exit through `exit_group`; the efsd RSS plateau stays **OPEN**, 8–13 % growth late in 60-minute runs, and `test_d4_plateau.py` is a measurement driver outside `make test-long`), Task C's remaining decoder commits (frag-record digest kept on refusal, malformed error envelopes rejected) and Task D's endurance-harness commits (RSS qualified only in steady write-load windows, cleanup resume, writer stop before a failed mount transition). intel2 `make test-all` (8 jobs): 498 commands in 647 s, 0 FAIL, 15 NOTRUN host limits (the extra one is test_soak_driver's own 'rehearsal NOTRUN' marker), PASS with host limits.
 
-[K33/W157: an interrupted join is retried](k33-join-retry-20261025.md): **PASS (loopback), branch `claude/sweet-allen-560f74` on devel `1fc526f66` (code `d9186e38a`, `bfd0abdf6`), not merged, not pushed; intel1 `make test-all` at `bfd0abdf6` (8 jobs): 499 commands, 0 FAIL, 14 NOTRUN host limits (two earlier runs had one known intermittent each: K38 shared-chunk EIO, B6 refuse); A13 on `loopback-3` PASS with the kill before the commit (`a13_interrupt_s` 0.05) and at 0.1 s (after the commit). Raw: intel1 `~/efs-artifacts/k33-join-retry-20261025/` (`SHA256SUMS` `cc1ec97b…7963`).** Task A's Candidate A: a first start killed between `boot.bin` and `identity.bin`, or during the storage root's O_DIRECT probe, was refused on every retry. A store whose boot counter is still 0 (its token never left the process) now initializes again, and a new root's leftover probe page is removed; a lost identity, a wiped store at a member's endpoint and unknown root data stay refused. Deterministic test `tests/test_k33_join_retry.py` (fault points `before-identity`, `before-hello`). Live multi-host A13 stays NOTRUN.
+[K33/W157: an interrupted join is retried](2026-10/k33-join-retry-20261025.md): **PASS (loopback), branch `claude/sweet-allen-560f74` on devel `1fc526f66` (code `d9186e38a`, `bfd0abdf6`), not merged, not pushed; intel1 `make test-all` at `bfd0abdf6` (8 jobs): 499 commands, 0 FAIL, 14 NOTRUN host limits (two earlier runs had one known intermittent each: K38 shared-chunk EIO, B6 refuse); A13 on `loopback-3` PASS with the kill before the commit (`a13_interrupt_s` 0.05) and at 0.1 s (after the commit). Raw: intel1 `~/efs-artifacts/k33-join-retry-20261025/` (`SHA256SUMS` `cc1ec97b…7963`).** Task A's Candidate A: a first start killed between `boot.bin` and `identity.bin`, or during the storage root's O_DIRECT probe, was refused on every retry. A store whose boot counter is still 0 (its token never left the process) now initializes again, and a new root's leftover probe page is removed; a lost identity, a wiped store at a member's endpoint and unknown root data stay refused. Deterministic test `tests/test_k33_join_retry.py` (fault points `before-identity`, `before-hello`). Live multi-host A13 stays NOTRUN.
 
-[K41: packer placement on a member already known down](k41-packer-placement-20261025.md): **FIXED (scoped), branch `k41-packer-placement` on devel `1fc526f66` (`531c7c783`), not merged, not pushed; intel2 `make test-all` at 8 jobs: 499 commands, 0 FAIL, 14 NOTRUN host limits (656 s).** Serial heartbeats with 30 s timeouts let a silent joiner stall liveness detection, so the group leader never marked a stopped member down and its packer wrote a segment degraded onto it. Heartbeats now run in parallel under a 2 s deadline with per-node-id marks; the packer also uses peer-pool and Raft voter liveness, probes each destination and replaces a failed or refusing one by a live spare; a short packed read is `EIO` naming the segment. `test_k41_packer_placement.py` fails on the base and passes; growth test 10 of 10 PASS (2 spread). Live, RDMA and orcd-mini NOTRUN.
+[K41: packer placement on a member already known down](2026-10/k41-packer-placement-20261025.md): **FIXED (scoped), branch `k41-packer-placement` on devel `1fc526f66` (`531c7c783`), not merged, not pushed; intel2 `make test-all` at 8 jobs: 499 commands, 0 FAIL, 14 NOTRUN host limits (656 s).** Serial heartbeats with 30 s timeouts let a silent joiner stall liveness detection, so the group leader never marked a stopped member down and its packer wrote a segment degraded onto it. Heartbeats now run in parallel under a 2 s deadline with per-node-id marks; the packer also uses peer-pool and Raft voter liveness, probes each destination and replaces a failed or refusing one by a live spare; a short packed read is `EIO` naming the segment. `test_k41_packer_placement.py` fails on the base and passes; growth test 10 of 10 PASS (2 spread). Live, RDMA and orcd-mini NOTRUN.
 
-[K42: clean unmount BUSY in revoke cleanup](e2-clean-stop-busy-20261025.md): **FIXED, branch `claude/great-curie-e4cfb1` on devel `1fc526f66` (code `e62cc1d07` … `b9d5f9443`), not merged, not pushed.** Task A's candidate D was reproduced on amd on the first loaded run. Cause: cleanup steps that committed nothing (the peer's append cleanup meeting another client's in-flight append or its refused retirement transaction; the lease batch meeting its close transaction) reached the client as a bare BUSY that it never retries. The server now names such refusals and the client retries them within 20 s, or fails closed with the shard and reason. Intel2 at `b9d5f9443`: 20 of 20 clean stops of a loaded peer (68-case two-client suite before each); `make test-all` at 8 jobs 499 commands, 0 FAIL, 14 NOTRUN host limits (amd, where it was reproduced, went offline before the final runs). Raw: intel2 and amd `~/efs-artifacts/e2-clean-stop-20261025/`.
+[K42: clean unmount BUSY in revoke cleanup](2026-10/e2-clean-stop-busy-20261025.md): **FIXED, branch `claude/great-curie-e4cfb1` on devel `1fc526f66` (code `e62cc1d07` … `b9d5f9443`), not merged, not pushed.** Task A's candidate D was reproduced on amd on the first loaded run. Cause: cleanup steps that committed nothing (the peer's append cleanup meeting another client's in-flight append or its refused retirement transaction; the lease batch meeting its close transaction) reached the client as a bare BUSY that it never retries. The server now names such refusals and the client retries them within 20 s, or fails closed with the shard and reason. Intel2 at `b9d5f9443`: 20 of 20 clean stops of a loaded peer (68-case two-client suite before each); `make test-all` at 8 jobs 499 commands, 0 FAIL, 14 NOTRUN host limits (amd, where it was reproduced, went offline before the final runs). Raw: intel2 and amd `~/efs-artifacts/e2-clean-stop-20261025/`.
 
 [Wave 9 merge](alpha-1.0-2plus1-checklist.md): **merged into devel Oct 25 (`9ae2f36d3`; gate at `9ae2f36d3`)**: wave 8b (W159 applied-wait, flake sweep, A6–A12 hygiene, docs audit 2) with the K39 fix, K38/W161 with K40/W162, the K33 payload server fix (status protection now, packer fragment resend), D43 expiry compiled in and policy-governed with the create-path follow-up, and the Task A/C/D agent branches (Stage 2 rehearsal driver, decoder validation fail-closed, endurance harness). intel2 `make test-all` (8 jobs): 498 commands in 561 s, 0 FAIL, 14 NOTRUN host limits (no RDMA device, no valgrind, no cluster scripts, fault-build-only case), PASS with host limits. Merge-time fixes: a forwarded expiry deletion may forward its own steps (the flake sweep's never-forward-again rule refused it); Task D's 15-minute soak is `make test-soak`, outside the W160 test-all target, which is 16 min since this wave; loopback-5 runs loopback-3's gates. Found: **K41** (packer places on a stopped member the leader never marked down, then one more loss loses the segment), OPEN. Two earlier runs of the gate on this tree: 4 FAIL (the fixes above), then 3 FAIL (apply-wait build race, put-drain include, K41).
 
-[K39: write EIO with one member down](k39-write-eio-one-member-down-20261025.md): **FIXED (scoped), branch `claude/k39-write-eio` on merge-wave8b `9a28c1b1c` (code `7c4c2d318`, tests `bd330dd3c`), not merged, not pushed; intel1: `test_k35_fsync_degraded.py` 20 of 20 at the 10 s default (base 4 of 8 FAIL), `make test-all` at 8 jobs 485 commands in 471 s, 0 FAIL, 14 NOTRUN host limits. Raw: intel1 `~/efs-artifacts/k39-20261025/` (`SHA256SUMS` `ef7faa5a…a88c`).** The `EIO` was the client's put-ticket ADMIT to a stopping lane-group leader: one lost exchange was NET at once (the "REPORT" in `flush-meta stage=report` was never sent). Ticket and fsync degraded-mark RPCs now re-pick a voter; placement probes a member back for under a second that the client still marked down; an earlier fragment acknowledgement counts once and a drain-time loss is a hard failure (each was a degraded stripe where place-around was possible). The wave-8b merge waits on this branch. Open: `test_k33_payload.py` read `EIO` with one member down, 4 of 10 on the fix and 5 of 10 on the base (same `fetch published ... rc=-6` line), the K33 read session's item.
+[K39: write EIO with one member down](2026-10/k39-write-eio-one-member-down-20261025.md): **FIXED (scoped), branch `claude/k39-write-eio` on merge-wave8b `9a28c1b1c` (code `7c4c2d318`, tests `bd330dd3c`), not merged, not pushed; intel1: `test_k35_fsync_degraded.py` 20 of 20 at the 10 s default (base 4 of 8 FAIL), `make test-all` at 8 jobs 485 commands in 471 s, 0 FAIL, 14 NOTRUN host limits. Raw: intel1 `~/efs-artifacts/k39-20261025/` (`SHA256SUMS` `ef7faa5a…a88c`).** The `EIO` was the client's put-ticket ADMIT to a stopping lane-group leader: one lost exchange was NET at once (the "REPORT" in `flush-meta stage=report` was never sent). Ticket and fsync degraded-mark RPCs now re-pick a voter; placement probes a member back for under a second that the client still marked down; an earlier fragment acknowledgement counts once and a drain-time loss is a hard failure (each was a degraded stripe where place-around was possible). The wave-8b merge waits on this branch. Open: `test_k33_payload.py` read `EIO` with one member down, 4 of 10 on the fix and 5 of 10 on the base (same `fetch published ... rc=-6` line), the K33 read session's item.
 
-[A12 closure](a12-closure-20261025.md) and [A6–A12 hygiene: dead-code sweep, buffered I/O remnants, A9 leader placement](a12-hygiene-20261025.md):
+[A12 closure](2026-10/a12-closure-20261025.md) and [A6–A12 hygiene: dead-code sweep, buffered I/O remnants, A9 leader placement](2026-10/a12-hygiene-20261025.md):
 **branch `claude/fervent-wilson-67282f` on devel `5a7463440`, not merged, not pushed; intel2 `make test-all` at `ab07a9c40` (8 jobs): 480 commands in 493 s, 2 FAIL, 16 NOTRUN host limits. Both FAILs are pre-existing intermittents: `test_k33_payload.py` node-down EIO (also 2/2 FAIL on the base) and B6 `refuse` vs K37 packing; each passed 2/2 alone on the branch. Raw: intel2 `~/efs-artifacts/a12-20261025/` (`SHA256SUMS` `bf87d4c8…5759`).**
 A12: every A6 selector is removed and refused, or justified (`EFS_TRANSPORT`, A8). A/B selectors 15 → 0; reachable A/B combinations 32,768 → 1; variables a normal build reads 105 → 77. `env_inventory.py --check` now fails any read setting whose kind is not a retained one. The sweep removed two orphaned functions and the fields nothing read, and dropped the buffered/direct options from the live harnesses, the fault harness, `qualify.py` and `bench_profile.py`. A9 on loopback (600 s, 12 step-downs, 6 leader restarts): both leaders on one node 41.5 % of the run at 3 members and 20.7 % at 4 and 5. Real-host placement and live qualification of the retained paths stay open. Expiry code is untouched (D43).
 
-[K40 / W162: two clients on shared chunks, unit stages left undecided until EIO](k40-two-client-unit-busy-20261025.md):
+[K40 / W162: two clients on shared chunks, unit stages left undecided until EIO](2026-10/k40-two-client-unit-busy-20261025.md):
 **code fix PASS (scoped), branch `claude/musing-grothendieck-1a6c0c` on the K38 branch `77d973b1c`, not merged, not pushed; intel2 `make test-all` PASS with host limits at `30d7caf79` (484 commands, 0 FAIL, 16 NOTRUN; a first run had 1 FAIL, the known `test_k33_payload.py` step-5 read EIO, base 2 of 8 alone); orcd-mini NOTRUN.**
 A forwarded PREPARE batch refused for one CAS-lost chunk left the other chunks' stages with no ABORT until the recovery scan, so every REPORT on them was BUSY past the 8 s budget. The unit now ABORTs once any entry was submitted (F1's `d7a6eed7e`, cherry-picked). Loopback two clients: base 3 of 4 runs `EIO`, fix 10 of 10 PASS with no recovery ABORT; the deterministic forwarded-refusal test fails 5 of 5 without the fix. Two clients are now the K38 loopback default.
 
-[K38 / W161: STALE span re-sent on its old base until EIO](k38-stale-span-replay-20261025.md):
+[K38 / W161: STALE span re-sent on its old base until EIO](2026-10/k38-stale-span-replay-20261025.md):
 **code fix PASS (scoped), branch `claude/vibrant-wiles-325684` on devel `5af760ff1`, not merged, not pushed; intel2 `make test-all` PASS with host limits at `bac34da00` (483 commands, 0 FAIL, 16 NOTRUN; a first run had 1 FAIL, `test_k36_recovery.py` step 8 read EIO, which passed 3 of 3 alone on the branch and on the base and did not recur); orcd-mini ior hard rerun NOTRUN.**
 A unit test on the production replay proves the cause; the body-less span replay now rebuilds or fails closed, a record re-sent unchanged after two STALE rounds is stopped, and `report-resolve` names the stuck record. The loopback test found and the branch fixes two silent losses of acknowledged bytes in the same path. Loopback, 24 writers sharing chunks under dcache pressure: base 6 of 6 runs fail (5 `EIO` with the K38 signature, 1 with lost records), fix 20 of 20 pass. Two writing clients on shared chunks failed ~50 % with unit BUSY (base too): K40 above.
 
-[K38: packed read EIO after "Protection: full" in the K33 payload outages](k38-payload-protection-now-20261025.md):
+[K38: packed read EIO after "Protection: full" in the K33 payload outages](2026-10/k38-payload-protection-now-20261025.md):
 **PASS (scoped, loopback, amd), branch `claude/kind-nash-0f2244`, not merged, not pushed; `tests/test_k33_payload.py` 30 of 30 PASS alternating with the base (devel `5a7463440` + the flake-sweep client fix), which failed 8 of 30; `make test-all` on amd at `f0b51c0ed`: 480 commands, 14 FAIL, 6 NOTRUN; untouched devel 479, 12 FAIL; the 12 are shared (RDMA, host limits), the other two (D4 `put_errors`, the step-down latency bound under load) fail on devel or pass standalone on both (raw: amd `~/efs-artifacts/k38-20261025/`, `SHA256SUMS` `4df49442…ae9b`).**
 Cause of the remaining step-5 `EIO`: the packer wrote a segment degraded (often around a member that had returned 0.3 s earlier: a stale pooled peer connection or its connect cooldown gave NET) and `efs-mgmt status` still said `Degraded segments: 0`, `Protection: full`, because both degraded counts were the last rebuild pass's sample; the test (as an operator would) then stopped the member holding one of the two fragments. Fixed: STATUS counts the leader's marks at the reply; the packer resends a NET fragment once on a new connection. New `tests/test_k38_protection_now.py` (fails with either half reverted). Live multi-host NOTRUN.
 
-[D43 follow-up: creates keep the ordinary path until a folder policy is enabled](d43-expiry-fast-create-20261025.md):
+[D43 follow-up: creates keep the ordinary path until a folder policy is enabled](2026-10/d43-expiry-fast-create-20261025.md):
 **PASS (scoped, two hosts), not merged, not pushed; branch `claude/funny-blackburn-010f41` on the D43 tip, code `b5b9ffc03`. Expiry on with no folder policy now costs as much as off (amd 0.93x/1.01x, baseline 2.2x); nuc `make test-all` at 8 jobs: 484 commands, 0 FAIL, 15 NOTRUN host limits (amd: 11 FAIL, all failing on the baseline there too). Raw: nuc and amd `~/efs-artifacts/d43-fast-20261025/` (`SHA256SUMS` `2eaff79d…d92e`, `37bf20b4…9035`).**
 A folder-policy count (KV kind 57, both anchors) moves in the policy
 write's transaction; with expiry on and no folder policy enabled, creates
 take the ordinary path behind a per-group apply fence (no cache window).
 
-[D43: expiry ships under the cluster expiry policy](d43-expiry-20261025.md):
+[D43: expiry ships under the cluster expiry policy](2026-10/d43-expiry-20261025.md):
 **PASS (scoped, one host), not merged, not pushed; branch `claude/ecstatic-mccarthy-911369`, code `6b731298d`. nuc `make test-all` at 8 jobs: 484 commands, 0 FAIL, 15 NOTRUN host limits (earlier runs: one known intermittent each, D4 `put_errors=1` twice beside the new fixture before its budget fix); `d5-expiry` loopback dry run PASS (POSIX 218/218 with expiry on). Raw: nuc `~/efs-artifacts/d43-expiry-20261025/` (`SHA256SUMS` `6d6d768e…3d63`).**
 No build switch (`EFS_BUILD_EXPIRY` and `make test-expiry` removed) and no
 environment toggle (`EFS_EXPIRY` refused, naming the policy command); the
@@ -833,7 +838,7 @@ versioned, off by default) changes at runtime; a deadline acts only while
 its source folder policy is enabled. Expiry tests back in `make test-all`;
 new qualify gate `d5-expiry` (item D5) on every matrix topology.
 
-[Task A: full three- and five-member Stage 2 rehearsal](task-a-20261025.md):
+[Task A: full three- and five-member Stage 2 rehearsal](2026-10/task-a-20261025.md):
 **rehearsal complete with product findings; branch `agent/devel-task-a`,
 full matrices `c3c4fa2bd`, affected GC and final code gate `a6ba11c3a`.
 Final `make test-all`: 479 commands, 11 FAIL (all among the base's 12),
@@ -843,7 +848,7 @@ healthy cleanup BUSY on the other. Join retry refusal and rewrite/degraded-read
 EIO remain product findings. Real-host/RDMA qualification stays NOTRUN.
 Raw evidence remains external; private AMD test tree removed.
 
-[efsd RSS plateau under the fixed-working-set D4 load (F1 follow-ups item 2)](efsd-rss-plateau-20261025.md):
+[efsd RSS plateau under the fixed-working-set D4 load (F1 follow-ups item 2)](2026-10/efsd-rss-plateau-20261025.md):
 **branch `claude/wizardly-mcclintock-0e2efd`, not merged, not pushed; RSS plateau PASS on one 60-minute run at `66a3a4024` (xorinox: efsd +0.6 / −0.8 / −0.1 %, efs-fuse +0.0 / +3.6 %; the D4 run itself FAIL on one truncate EIO, not memory); FAIL on every nuc run. xorinox at `66a3a4024`: `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47, `make test-all` 481 commands, 2 FAIL (K33 read EIO under the pool: `test_k33_payload.py` fails 1 of 3 alone on the base too; `test_k33_growth.py` did not reproduce), 14 NOTRUN host limits.**
 The connection-thread hypothesis is refuted as the main cause (about 0.15 MiB per thread), but no pool
 ever closed an idle connection; both pools now close one after 30 s idle. Bounded: the reclaim journal
@@ -852,7 +857,7 @@ buffers, which fragmented the leader's arenas. On nuc the last run still stepped
 the host's page cache ran short (slab 14.6 GB, 395 MB cached), with elections; a concurrency step still
 raises arena memory for the rest of the load. amd went down during the session (cause not established).
 
-[F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](f1-followups-20261025.md):
+[F1 follow-ups: K36 under TSan, RSS plateau on a fixed working set, packer put errors, rewrite EIO](2026-10/f1-followups-20261025.md):
 **branch `claude/devel-f1-followups-ae2deb`, not merged, not pushed; xorinox: `make test-all` 480 commands, 0 FAIL, 14 NOTRUN host limits (`04408a3e4`); `make tsan-check` PASS 18/18, `make asan-check` PASS 47/47 (`758dd144c`, same code); RSS plateau FAIL (bounded, not flat).**
 `test_k36_recovery.py` under TSan PASS 10 of 10 (crash hooks now `exit_group`; a hook race and a test
 defect fixed). The D4 fixed-working-set variant rewrites 2048 files for 30 and 60 minutes with no net
@@ -863,19 +868,19 @@ put errors were follower `NOT_PRIMARY`; with the flake-sweep fix the 20-minute D
 60-minute rewrite load still with 5. New product fix: a W77 publication unit whose forwarded PREPARE batch
 was refused skipped its ABORT, which made rewrites EIO (regression test red 5 of 5, green 6 of 6).
 
-[Task C: transactional decoder validation](task-c-20261025.md):
+[Task C: transactional decoder validation](2026-10/task-c-20261025.md):
 **branch `agent/devel-task-c`, code `cd5ed9dc5`, not merged.** Original randomized
 campaign PASS 25/25, expanded two-hour apply PASS, private three-node W140
 refusal PASS, ASan PASS 47/47. Corrected full-suite and five affected decoder
 reruns RUNNING; acceptance PENDING. Raw evidence stays outside Git on intel1.
 
-[Oct 25 K22/K6 loopback gates: snapshot import into a stalled follower, leader admission at 3/4, W130 one-replica DIR fault with raft-resync recovery](k22-k6-loopback-taskb-20261025.md):
+[Oct 25 K22/K6 loopback gates: snapshot import into a stalled follower, leader admission at 3/4, W130 one-replica DIR fault with raft-resync recovery](2026-10/k22-k6-loopback-taskb-20261025.md):
 **branch `agent/devel-taskb` (from devel `5af760ff1`), not merged, not pushed; xorinox loopback, fault build, TCP. `make test-all` at the head: `TOTAL 482 FAIL 0 NOTRUN 15 STATUS INCOMPLETE (765s)` (NOTRUN = host limits: no RDMA, no cluster scripts).** All three gates PASS as new `make test-long` tests with budget rows; two product defects found and fixed on the branch (send_snap retry storm; raft-resync could not heal a halted replica), two opened (W162 serve-path decode not fail-closed, W163 close EIO while a leader's apply lags). NOTRUN: production-scale 1 GiB lag on real hosts, RDMA, multi-host.
 
-[Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](f1-memory-concurrency-gates-20261025.md):
+[Oct 25 merge: F1 memory and concurrency gates, W160 gate speed](2026-10/f1-memory-concurrency-gates-20261025.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `55eafe6d0`, first run at `EFS_TEST_JOBS=8` with the W160 budgets: 479 commands in 574 s, 1 FAIL, 16 NOTRUN host limits.** The FAIL is `test_b_geometry.py` grow-b's automatic-quota slack assertion, the known intermittent the flake sweep fixes (test defect, branch `claude/devel-flake-sweep-1505b6`, not merged); it passed 3 of 3 reruns on the same tree. Raw: intel2 `~/efs-artifacts/merge-wave8a-20261025/`, `SHA256SUMS` there.
 
-[Oct 25 user-docs audit against `ec3e09306`: every command, option, workflow and failure case exercised on a loopback cluster](docs-audit-20261025.md):
+[Oct 25 user-docs audit against `ec3e09306`: every command, option, workflow and failure case exercised on a loopback cluster](2026-10/docs-audit-20261025.md):
 **docs updated; docs gate PASS; nuc `make test-all` at `e1ce4a4d4`: 472 commands, 4 FAIL at 8 jobs (3 PASS alone, `test_report_stepdown.py` intermittent, 2 of 4 alone), 14 NOTRUN host limits (raw: nuc `~/efs-artifacts/docs-audit-20261025/`, `SHA256SUMS` `51666fda…05bf5`); no product code changed.**
 The guide, surface list, POSIX subset, release notes, operations, power-user, quick start and
 `efs-commands` pages now match the binaries (K34–K37, E2, `status` output and exit status,
@@ -886,10 +891,10 @@ lacks. The pages follow D43 (expiry and `.efs` ship in alpha 1.0); at this base 
 compiled out and being re-enabled (U19). Open for the user: U4, a clean client stop fails at the session revoke
 (`storage-fence`, `EFS_ERR_BUSY`) while any member is down; S4/W122 and F12 unchanged.
 
-[Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](a11-qualification-matrix-20261024.md):
+[Oct 25 merge: REPORT step-down fix, packer UNINDEX race, K36+K37 segment marks, E2 clean stop, Stage 2 real gates, B6 per-segment checks](2026-10/a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `0b01a2a1e`: 471 commands, 0 FAIL, 15 NOTRUN host limits (2,604 s; raw: intel2 `~/efs-artifacts/merge-wave7-20261025/`, `SHA256SUMS` in that directory).** A11 findings 1 and 2 are fixed; every Stage 2 item now maps to a real `scripts/qualify.py` gate; live and real-host runs stay NOTRUN; every store needs a fresh format.
 
-[F1: memory and concurrency gates on the candidate](f1-memory-concurrency-gates-20261025.md):
+[F1: memory and concurrency gates on the candidate](2026-10/f1-memory-concurrency-gates-20261025.md):
 **branch `claude/devel-f1-gates-46ff64` on `merge-wave7`, not merged, not pushed; xorinox, last code commit `c32cdf544`: `make leak-check` PASS 41/41, `make asan-check` PASS 47/47, `make tsan-check` PASS 18/18 (`test_k36_recovery.py` intermittent under TSan), `make test-all` PASS (861 commands, exit 0); RDMA memcheck NOTRUN (no device). Raw: xorinox `~/efs-artifacts/f1-gates-20261025/` (`SHA256SUMS` `825a4507…ab106`).**
 Two new gates (`tests/sanitizer_check.sh`: ThreadSanitizer and ASan+UBSan+LeakSanitizer over
 a sanitized copy of the tree, unit binaries, harnesses and daemons, with a self-test in `make test`),
@@ -900,7 +905,7 @@ misaligned read in `test_wire`. 20-minute D4 RSS bounded (client 247 MiB, server
 flat while the namespace grows. Open: `test_k36_recovery.py` step 4 intermittent under TSan; 3–7
 packer put errors over a 20-minute load (not memory; logs not retained).
 
-[Gate speed: `make test-all` under 15 minutes at 8 jobs (W160)](gate-speed-20261025.md):
+[Gate speed: `make test-all` under 15 minutes at 8 jobs (W160)](2026-10/gate-speed-20261025.md):
 **PARTIAL PASS, not merged; branch `claude/devel-gate-speed-8aee30` on merge-wave7: nuc `make test-all` at 8 jobs 811 s / 839 s (0 FAIL) / 989 s (2 pre-existing intermittents) against 1,182–1,217 s with 3–6 load failures before; serial 2,754 s → 2,311 s. Three clean runs under 15 min not reached: the nuc's one NVMe (raw: nuc `~/efs-artifacts/gate-speed-20261025/`).**
 The code gate had grown to 44 minutes (serial on intel2) and failed six commands under an 8-way pool on the nuc.
 Runner budgets and disk-weighted slots per `test-long` command (`tests/budgets.tsv`, largest first,
@@ -910,7 +915,7 @@ polls instead of settle sleeps, and ports held for the life of a loopback cluste
 tests check more. Follow-ups: 15 s unmount storage fence to a down member, 32 s `efs-mgmt status` with a frozen
 member, intermittent EIO on a degraded read in `test_k33_payload.py` under host load (pre-existing).
 
-[W159: fixture POSIX timeouts, slow durable barriers and the 400 ms applied-wait](w159-fixture-posix-timeouts-20261025.md):
+[W159: fixture POSIX timeouts, slow durable barriers and the 400 ms applied-wait](2026-10/w159-fixture-posix-timeouts-20261025.md):
 **CAUSE FOUND, fix PARTIAL, PASS (scoped, loopback); branch `claude/devel-w159-fe09e8` on `merge-wave7`, not merged, not pushed; amd `make test-all` on the fixed tree: see the page.**
 The expiry fixture's closing POSIX run timed out two metadata-heavy cases
 because its one consumer NVMe answers a durable barrier in 7–28 ms (29× amd)
@@ -926,11 +931,11 @@ applied-wait for a member's own committed entry is now bounded by progress
 `dir_many_files` passes one round in two there (the barrier cost, a Stage 3
 follow-up).
 
-[Flake sweep: every intermittent failure of the gate](flake-sweep-20261025.md):
+[Flake sweep: every intermittent failure of the gate](2026-10/flake-sweep-20261025.md):
 **FIXED, final gate NOTRUN (stopped after the merge into merge-wave8b, gated there); branch `claude/devel-flake-sweep-1505b6` (head of the code: `8f1d50ed8`), not merged, not pushed.** Ten 8-job `make test-all` runs (471 commands) and three serial `test-long` runs (62) on intel1 at `0b01a2a1e` failed six commands at random; the final-gate attempts surfaced a seventh. Product defects fixed: the client's away mark blocked place-around (K35 case 7, 2/10 + 1/3), the packer took one transient `NOT_PRIMARY` for a missing fragment (D4, 1/10), forwarded PUT ticket admissions were forwarded again during an election until the peer pools stalled for 5 s (report step-down, 1/10; 5/28 loaded before, 0/40 after; new wire mark on member forwards). Test defects fixed: K37 case 7, B geometry, K36 case 11, B6 refuse mode, query-first NOTRUN, the runner self-test's false NOTRUN. Open, single occurrences without logs: K36 case 8 read EIO, K33 payload read-back EIO. Raw: intel1 `~/efs-artifacts/flake-sweep-20261025/`.
 
 
-[Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](pack-unindex-race-20261024.md):
+[Packer UNINDEX race: an O_TRUNC rewrite left unpacked (B6 follow-up)](2026-10/pack-unindex-race-20261024.md):
 **FIXED, PASS (scoped), not merged; branch `claude/interesting-clarke-cfb30b`, code `6ef6e6037`; xorinox `make test-all`: 467 commands, 0 FAIL, 14 NOTRUN host limits (devel: 1 FAIL, `test_d4_progress.py`); amd: 9 FAIL, all RDMA and all failing on devel there too (raw: xorinox and amd `~/efs-artifacts/pkrace-testall-{src,base}-20261024/`).**
 The packer's UNINDEX deleted a candidate key unconditionally, so a rewrite whose publication
 re-added the key before the UNINDEX committed was never packed (B6 full: `packed 11 of 12`).
@@ -938,7 +943,7 @@ Candidate values are now `[inode generation][publish stamp]` and UNINDEX deletes
 exact match (fresh format). New unit case red without the comparison, green with it; B6 full
 15 of 15 PASS with the fix (the live race did not fire on devel in 31 runs). Multi-host NOTRUN.
 
-[B6 under K37, `test_get_integrity.py`, and a packer unindex race](b6-k37-merge-tests-20261024.md):
+[B6 under K37, `test_get_integrity.py`, and a packer unindex race](2026-10/b6-k37-merge-tests-20261024.md):
 **test fixes PASS (scoped, loopback), merged into devel (`0b01a2a1e`; tested at `335bfb5a0`), not pushed; B6 3 of 3 and `test_get_integrity.py` 3 of 3 on intel1; intel2 `make test-all` at `335bfb5a0`: 467 commands, 1 FAIL in an untouched test (`test_k33_payload.py`, intermittent EIO), 15 NOTRUN host limits (raw: intel1/intel2 `~/efs-artifacts/b6-k37-335bfb5a0-20261024/`, `SHA256SUMS` `2d0eda66…e769` / `a115365d…c825`). B6 mode `full`: known intermittent FAIL, not fixed.**
 B6's "nothing packed during a fault" predated K37's decided policy. B6 now
 checks that every segment written degraded names node 3, that nothing is
@@ -951,10 +956,10 @@ too). Proposed fix: compare-and-delete UNINDEX (Raft command and KV value
 format change). Also seen: `test_k36_recovery.py` step 11 assumes segments
 in both metadata groups (placement-dependent, failed once).
 
-[Oct 24 merge: docs-review fixes, B6/D4, K37, A11 and the K33 live-harness port](a11-qualification-matrix-20261024.md):
+[Oct 24 merge: docs-review fixes, B6/D4, K37, A11 and the K33 live-harness port](2026-10/a11-qualification-matrix-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `646a43041`: 467 commands, 2 FAIL from the merge (a duplicate `read_reprobe_down` stub in `test_get_integrity.py`; `test_b6_unavailable.py` still asserting no packing during a fault, which K37's policy allows with a degraded mark), both fixed in `12d2a7957` and rerun PASS on intel2; 15 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave6-20261024/`, `SHA256SUMS` `fd750fd9…d662`).** `add-node` and `add-storage` are gone (JOIN/ADD_STORAGE wire types removed). Live gates stay NOTRUN; every store needs a fresh format.
 
-[A11 finding 2: REPORT across a metadata leader step-down](a11-f2-report-stepdown-20261024.md):
+[A11 finding 2: REPORT across a metadata leader step-down](2026-10/a11-f2-report-stepdown-20261024.md):
 **FIXED, PASS (scoped, loopback), merged into devel (`1fee9bb04`; tested at `6654d5f15`); amd `make test-all` at `04562f14a`: 468 commands, 12 FAIL, all also failing on the base, 6 NOTRUN host limits; raw: amd `~/efs-artifacts/report-stepdown-20261024/`, `SHA256SUMS` `3857346d…41a6d6`.**
 The nuc "30 s REPORT timeout" was an 8 s BUSY stall (`recv_ms` printed the
 configured bound): a DECIDE COMMIT that failed NOT_PRIMARY at the step-down
@@ -968,7 +973,7 @@ within 3 s per leader change crossed. Daemon test `tests/test_report_stepdown.py
 no recovery-scan stall, slowest REPORT 1.8 s (base: stalls in 4 of 5, 2 over
 the bound). Multi-host, RDMA and orcd-mini NOTRUN.
 
-[Stage 2 gates A13, C5, D1/D2, D3, E4 in `scripts/qualify.py`](stage2-gates-20261024.md):
+[Stage 2 gates A13, C5, D1/D2, D3, E4 in `scripts/qualify.py`](2026-10/stage2-gates-20261024.md):
 **PASS (scoped, loopback), branch `claude/devel-stage2-gates-359865` on `merge-wave6`, not merged; no stub gate is left.**
 `a13-node-addition` grows its own cluster 3 → 4 (a killed join retried: the same member; SHARD2
 `{1,2,3}` → `{2,3,4}`) → 5 with the seed down under a client load; `c5-protocol-live` drives the
@@ -986,7 +991,7 @@ Real hosts NOTRUN (parent).
 [Oct 24 merge: READ_VERIFY, K34, A7 removals, K35, K36](decisions.md#d42--alpha-10-decisions-taken-oct-24-user-with-review-conditions):
 **merged into devel; merged-tree `make test-all` on intel2 at `0f0a79eac`: 459 commands, 0 FAIL, 14 NOTRUN host limits (1,839 s; raw: intel2 `~/efs-artifacts/merge-wave5-0f0a79eac-20261024/`, `SHA256SUMS` `01b2d681…dcd9`).** The intermediate gate at `376369aa8` had one FAIL (a missing K34 stub in `test_get_integrity.py`, fixed in `1898c4c63`). K36's recovery mark is Raft tag 248 beside K35's tag 249. devops `8bc872e` and cluster `1402762` drop the removed settings (not pushed). Every store needs a fresh format. Live gates stay NOTRUN.
 
-[K36 / F23: verified recovery after an unclean stop](k36-verified-recovery-20261024.md):
+[K36 / F23: verified recovery after an unclean stop](2026-10/k36-verified-recovery-20261024.md):
 **PASS (scoped, loopback), merged onto `merge-wave5` at `c19bf9fdb`, not in devel** (branch `claude/devel-k36-recovery-70f9de`; recovery mark is Raft tag 248, K35 holds 249).
 A crashed or killed store now proves itself (boot counter, reclaim journal,
 session certificates, every local fragment, each hosted metadata group at its
@@ -998,7 +1003,7 @@ recovery PASS (8 of 8 runs). Merged-tree gate on intel1 at `87034b518`: `test-lo
 `test` 418 of 419 PASS, the other `test_get_integrity.py` (a merge-wave5 stub gap, fixed by
 `1898c4c63`; PASS at `c19bf9fdb`); host-limit NOTRUNs only. Power-loss qualification, multi-host and RDMA NOTRUN.
 
-[Alpha 1.0 docs review: findings F2–F6, F11, F13, F14, F18–F20 fixed](s-docs-fixes-alpha-1.0-20261024.md):
+[Alpha 1.0 docs review: findings F2–F6, F11, F13, F14, F18–F20 fixed](2026-10/s-docs-fixes-alpha-1.0-20261024.md):
 **PASS (scoped), merged into devel (`77d937d27`); amd `make test-all` at `f588f6efd`: 461 commands, 11 FAIL, all also failing on the base (RDMA on `rxe0`, a fault-test timeout, `test_get_integrity.py` not compiling since the merges); raw: amd `~/efs-artifacts/sdocs-fixes-20261024/`, `SHA256SUMS` `a1ed1a7f…3b7a`.** Every
 `efs-mgmt` command has help, checked against the dispatcher in `make test`;
 `add-node` (use `efsd --join`), `add-storage` and `efs-fuse --bench*` are
@@ -1006,10 +1011,10 @@ removed and refused; a node's storage roots are fixed when its store is
 created (packed segments are placed by root count) and a changed root set is
 refused at startup; a 17th joiner is refused and exits; new POSIX cases
 (F13) and daemon tests for `raft-resync`, fixed roots and the member limit;
-README and quick start corrected. The [findings table](s-docs-alpha-1.0-20261024.md#findings-docs-and-code-disagreements)
+README and quick start corrected. The [findings table](2026-10/s-docs-alpha-1.0-20261024.md#findings-docs-and-code-disagreements)
 records every outcome. Stores formatted by an earlier build are refused.
 
-[B6 and D4: an unavailable fragment destination, bounded progress under background work](b6-d4-unavailable-progress-20261024.md):
+[B6 and D4: an unavailable fragment destination, bounded progress under background work](2026-10/b6-d4-unavailable-progress-20261024.md):
 **PASS (scoped, loopback), merged into devel (`1b3fd25b7`; tested at `834f0b7ec`); xorinox `make test-all` at `834f0b7ec`: exit 0, 0 FAIL, 14 NOTRUN host limits (raw: xorinox `~/efs-artifacts/b6-d4-20261024/`, `SHA256SUMS` `f5e519ff…8840`).**
 B6: node 3 of three down, refusing, slow past every client deadline and
 full, for ordinary and packed files during write, fsync and read; reads
@@ -1021,7 +1026,7 @@ member and failed EBUSY; a just-formed member's first `.efs` catalog waited
 60 s and every query on it failed EIO. Real-host gates `b6-member-down`
 and `d4-progress` in `scripts/qualify.py`, NOTRUN (parent).
 
-[K37: rebuild on return for packed segments](k37-segment-rebuild-20261024.md):
+[K37: rebuild on return for packed segments](2026-10/k37-segment-rebuild-20261024.md):
 **FIXED, PASS (scoped, loopback), branch `claude/devel-pack-rebuild-fa5139`,
 code `b48ec444f`, `5ef2b8d6d`, `b205cb9db`, not merged.** A packed segment with a missing fragment
 gets one durable degraded mark (KV kind 249, Raft tag 247): written
@@ -1034,7 +1039,7 @@ counts degraded segments and the cluster stays DEGRADED until they clear.
 Daemon test `tests/test_k37_segment_rebuild.py` PASS. intel2 `make test-all` at `b205cb9db`: 459 commands, 1 FAIL that also fails on the base (`tests/test_get_integrity.py`, a READ_VERIFY test / K34 merge interaction), 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/k37-20261024/`, `SHA256SUMS` `61fbd81d…98f0`). Live
 multi-host, RDMA and orcd-mini NOTRUN (parent).
 
-[K36 + K37: segment fragments dropped by verified recovery are rebuilt](k36-k37-segment-recovery-20261024.md):
+[K36 + K37: segment fragments dropped by verified recovery are rebuilt](2026-10/k36-k37-segment-recovery-20261024.md):
 **PASS (scoped, loopback), branch `claude/devel-k36-k37-segments-5885d9`,
 code `ad7fe1ded`, not merged.** A referenced packed-segment fragment that
 K36 recovery drops is now marked through K37's one authority
@@ -1050,7 +1055,7 @@ fault), 15 NOTRUN host limits (raw: intel1
 `~/efs-artifacts/k36-k37-segments-20261024/`, `SHA256SUMS` `9817196b…b7fd`).
 Live multi-host, RDMA and orcd-mini NOTRUN (parent).
 
-[E2 / A11 finding 1: clean client stop on a busy client](e2-clean-stop-20261024.md):
+[E2 / A11 finding 1: clean client stop on a busy client](2026-10/e2-clean-stop-20261024.md):
 **PASS (scoped, one host), branch `claude/devel-e2-clean-stop-a53dcb` on `merge-wave6`, not merged.**
 The unmount's session revoke took about 11 s for 765 touched shards (one
 Raft commit per shard and step, and three directory `fsync`s in every
@@ -1068,7 +1073,7 @@ failing identically on the base (`test_get_integrity.py`,
 `test_b6_unavailable.py`), 15 NOTRUN host limits (raw: nuc
 `~/efs-artifacts/e2-stop-20261024/`, `SHA256SUMS` `84a5b55d…de857`).
 
-[A11: reduced qualification matrix and the Stage 2 run plan](a11-qualification-matrix-20261024.md):
+[A11: reduced qualification matrix and the Stage 2 run plan](2026-10/a11-qualification-matrix-20261024.md):
 **plan PASS (scoped), qualification NOTRUN; merged into devel (`646a43041`).**
 Dimensions left after A6/A7/D42: transport (`tcp`, `rdma`), 3–16 members,
 `O_DIRECT` only, one root per node, one or two client mounts, built-in
@@ -1077,21 +1082,21 @@ exhaustively: TCP/RDMA × 3, 4, 5 distinct hosts; 6–16 sampled. Every
 Stage 2 item mapped in `scripts/qualify_matrix.json`; `qualify.py run
 --matrix … --topology NAME` runs a topology (orcd-mini, intel, loopback,
 bare-metal 3/4/5). The seven NOTRUN stub gates are real gates now (B6/D4 merge,
-[Stage 2 gates](stage2-gates-20261024.md)). **A4 blocked:** no
+[Stage 2 gates](2026-10/stage2-gates-20261024.md)). **A4 blocked:** no
 distinct-host topology can form today (host firewalls, amd's network, no
 three-host RDMA). Driver fixes: the `b-checks` plugin called
 `b_checks.py` with options it rejects; E3 did not retry a step-down refused
 with "retry". Findings on nuc: a clean `client.sh stop` is refused when the
 unmount session revoke takes over 10 s (2 of 2 full private runs); one
 30 s REPORT timeout in append failover (8,000/8,000 records exact; an 8 s
-BUSY stall behind a DECIDE lost to the step-down, [fixed](a11-f2-report-stepdown-20261024.md)). The four
+BUSY stall behind a DECIDE lost to the step-down, [fixed](2026-10/a11-f2-report-stepdown-20261024.md)). The four
 live harnesses now use the K33 CLI: on amd k14, k13 and fragment-integrity
 PASS, gc-reclamation FAIL on the same refused client stop. nuc `make test-all` at `8d858a791`:
 458 commands, 1 FAIL, 14 NOTRUN host limits; the FAIL,
 `tests/test_get_integrity.py`, no longer compiles on `merge-wave5` (no stub
 for K34's `read_reprobe_down`) and fails the same on the base `376369aa8`.
 
-[D42 `EFS_READ_VERIFY`: GET-path integrity audit](read-verify-audit-20261024.md):
+[D42 `EFS_READ_VERIFY`: GET-path integrity audit](2026-10/read-verify-audit-20261024.md):
 **PASS (scoped), merged into devel (`ae3e7ab75`).** The
 storage node's record check does not cover the wire or the client's
 buffers; with verification off the base returned wrong bytes in 12 of 51
@@ -1103,15 +1108,15 @@ limits (base: 1 FAIL, the intermittent K34 `test_k33_payload.py`). Cost on a
 loopback cold read: +0.49 efs-fuse CPU s per GiB (0.81 → 1.30), −6 %
 throughput.
 
-[Oct 24: A7 removals decided in D42](a7-removals-20261024.md):
+[Oct 24: A7 removals decided in D42](2026-10/a7-removals-20261024.md):
 **PASS (scoped): `make test-all` on amd at `735b82562` fails only the 11 commands that also fail on the base (RDMA on rxe0, a fault-test timeout, K34 in `test_k33_payload.py`); live qualification NOTRUN.** Direct I/O only (storage without `O_DIRECT` refused),
 12 selectors and 3 efsd flags removed and refused, expiry compiled out
-(reversed by D43 on Oct 25: [D43 expiry](d43-expiry-20261025.md)),
+(reversed by D43 on Oct 25: [D43 expiry](2026-10/d43-expiry-20261025.md)),
 `EFS_RDMA_TRACE`, strict `EFS_TRANSPORT=rdma`; A/B selectors 15 → 1
 (`EFS_READ_VERIFY`). Branch merged into devel (`6069ada62`).
 External launch/portal changes for the parent are listed there.
 
-[K35: fsync with a member down, only with proof (D42, F22)](k35-fsync-degraded-20261024.md):
+[K35: fsync with a member down, only with proof (D42, F22)](2026-10/k35-fsync-degraded-20261024.md):
 **FIXED, PASS (scoped, loopback), not merged; branch `claude/devel-k35-fsync-b63807`, code `817a71b1f`, `36ac1b7a6`; xorinox `make test-all`: exit 0 at `36ac1b7a6`, 452 test commands, 0 FAIL, 14 NOTRUN host limits (raw: xorinox `~/efs-artifacts/k35-20261024/`, `SHA256SUMS` `06836fd2…6a1e`).**
 fsync COMMITs only the nodes holding the file's unproven fragments and succeeds
 per stripe with two durable fragments and a durable degraded mark (new Raft tag
@@ -1119,10 +1124,10 @@ per stripe with two durable fragments and a durable degraded mark (new Raft tag
 to available members; `status` shows `Protection:`. Live multi-host and RDMA
 verification NOTRUN (parent).
 
-[Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](a6-settings-inventory-20261024.md):
+[Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](2026-10/a6-settings-inventory-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
 
-[K34: acknowledged files unreadable while one member stops](k34-stop-put-ack-20261024.md):
+[K34: acknowledged files unreadable while one member stops](2026-10/k34-stop-put-ack-20261024.md):
 **PASS (scoped), merged into devel (`fc5c1d64e`; tested at `6c09649a3`).**
 `tests/test_k33_payload.py` read `EIO` with one member stopping, for three
 reasons: a chunk acknowledged on the stopping member and one other while
@@ -1135,12 +1140,12 @@ test-all` 450 commands, 0 FAIL, 14 NOTRUN host limits; `tests/test_k33_payload.p
 multi-host stop under load NOTRUN. **Oct 25:** the step-5 `EIO` came back intermittently on later devel
 (W159: 1 of 10; amd, three parallel lanes: 8 of 30) from a fourth cause,
 a segment written degraded while status still reported full protection:
-fixed by [K38](k38-payload-protection-now-20261025.md) (30 of 30).
+fixed by [K38](2026-10/k38-payload-protection-now-20261025.md) (30 of 30).
 
-[Oct 24 merge: placement spread, K33 acceptance, test hygiene, W126, K15/K29 rule](k33-acceptance-20261024.md):
+[Oct 24 merge: placement spread, K33 acceptance, test hygiene, W126, K15/K29 rule](2026-10/k33-acceptance-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `a2326a369`: 449 commands, 0 FAIL, 14 NOTRUN host limits (1,340 s; raw: intel2 `~/efs-artifacts/merge-wave3-20261024/`, `SHA256SUMS` `3e1f0f95…b2c`).** Placement needs a fresh format. Live gates for all five stay NOTRUN.
 
-[Alpha 1.0 user docs and limitations, S1–S5 and F4](s-docs-alpha-1.0-20261024.md):
+[Alpha 1.0 user docs and limitations, S1–S5 and F4](2026-10/s-docs-alpha-1.0-20261024.md):
 **drafts merged into devel (`3a2b44706`), not approved.**
 [Surface list and effective settings](../using/alpha-1.0-surface.md),
 [POSIX subset](../using/alpha-1.0-posix.md),
@@ -1155,7 +1160,7 @@ member's orderly stop reads `EIO` until it returns (F24, proposed K34).**
 Also found: `fsync` returns `EIO` while any member is down, and for good
 after a member's unclean stop (F22, F23).
 
-[B1–B5 geometry, placement and usable capacity](b-geometry-capacity-20261024.md):
+[B1–B5 geometry, placement and usable capacity](2026-10/b-geometry-capacity-20261024.md):
 **PASS (scoped, loopback) merged into devel (`5a09fd938`).**
 xorinox `make test-all` at `17aac881c`: 453 commands, 0 FAIL, 13 NOTRUN
 host limits. New `tests/test_b_geometry.c` (unit) and
@@ -1171,7 +1176,7 @@ member down (base 2/3, branch 1/3), B6 follow-up.
 [D41: K9 / W87 closed without resolution](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
-[A6 settings inventory and the decision-free part of A7/A8](a6-settings-inventory-20261024.md):
+[A6 settings inventory and the decision-free part of A7/A8](2026-10/a6-settings-inventory-20261024.md):
 **PASS (scoped), merged into devel (`6ed4be4a8`).** amd `make test-all` fails only what the untouched base fails (RDMA on rxe0, one fault-test timeout).
 Before figure for A11: 139 `EFS_*` variables read on the base (13 A/B
 selectors, 44 numeric tunables, 34 observability, 3 test hooks in normal
@@ -1179,11 +1184,11 @@ builds), 127 on the branch. `make test` fails a new reader without an
 inventory row. Removed: 11 unset tunables (built-in values), the three
 normal-build test hooks (now `EFS_FAULT_*` in `EFS_FAULTS` builds); 19
 removed names stop efsd and efs-fuse. The 15 A/B selectors (13 variables,
-2 efsd options) are in a [decision table](a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)
+2 efsd options) are in a [decision table](2026-10/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)
 for the user; none removed. Portal and launch-script changes listed for the
 parent.
 
-[Stage 2 qualification driver `scripts/qualify.py`](stage2-qualify-driver-20261024.md):
+[Stage 2 qualification driver `scripts/qualify.py`](2026-10/stage2-qualify-driver-20261024.md):
 **driver PASS (scoped), merged into devel (`ebfdbfe78`).**
 One command runs the POSIX suites, the live harnesses, E1–E3 and a pluggable
 B-checks gate against a described cluster, with per-gate commands, deadlines,
@@ -1197,7 +1202,7 @@ intel1 `make test-all`: 450 commands, 0 FAIL except `tests/test_k33_payload.py`,
 a read EIO in its member-outage phase that fails 3 of 5 runs on the base too
 (proposed K34). Real-host runs NOTRUN (parent).
 
-[K15/K29 append harness accounting rule](k15-k29-accounting-rule-20261024.md):
+[K15/K29 append harness accounting rule](2026-10/k15-k29-accounting-rule-20261024.md):
 **PASS (scoped), merged into devel (`a2326a369`).**
 `tests/live/append_failover.py` accounts a write the client saw fail (record
 absent, hole explained by its abandon) and reports it separately; a lost
@@ -1206,10 +1211,10 @@ negative controls in `make test`. The harness (and `append_oracle_cluster.sh`)
 now starts efsd with the K33 CLI. amd `make test-all` fails only what the
 untouched base fails. Live failover gates NOTRUN (parent session).
 
-[Oct 24 merge: W155, D31 drain, K33 increment 2, K33 client view](k33-client-view-20261024.md#after-the-merge):
+[Oct 24 merge: W155, D31 drain, K33 increment 2, K33 client view](2026-10/k33-client-view-20261024.md#after-the-merge):
 **merged into devel; Merged-tree `make test-all` on intel2 (W155, D31 drain, K33 increment 2 and live client view at `910bbeef4`): 442 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave2-20261024/`, `SHA256SUMS` `0d13a146…4ecf`). The first run at `3e01ba95c` failed only `tests/test_k33_client_view.py`, which waited for a joiner log line that increment 2 renamed; fixed in `910bbeef4`.** Before the next deploy, devops `start.sh` and cluster `cluster.sh` must move to the positional `efsd ADDR:PORT STORAGE` / `efsd --join SEED STORAGE` form (`--node-id` is refused), and every store needs a fresh format.
 
-[Test hygiene: K32 entry-count flake, W149, W140](test-hygiene-k32-w149-w140-20261024.md):
+[Test hygiene: K32 entry-count flake, W149, W140](2026-10/test-hygiene-k32-w149-w140-20261024.md):
 **PASS (scoped) merged into devel (`e7900d8a7`).**
 On nuc at `8cd6e42be`, serial `make test-all` PASS, and the summary runner
 at 8 jobs reports 443 commands, 0 FAIL, 14 NOTRUN host limits (twice).
@@ -1223,7 +1228,7 @@ at 8 jobs reports 443 commands, 0 FAIL, 14 NOTRUN host limits (twice).
 - The merged K33 client-view test now waits for the increment-2 joiner
   lines.
 
-[W126 peek ordering fix](w126-peek-order-20261024.md): **PASS (scoped) merged into devel (`d5a1df25e`; tested at `680a7d0dd`).** Peeks take a
+[W126 peek ordering fix](2026-10/w126-peek-order-20261024.md): **PASS (scoped) merged into devel (`d5a1df25e`; tested at `680a7d0dd`).** Peeks take a
 separate `peek_mu` after `view_rw`, so a writer queued on `view_rw` behind
 a reader no longer holds them back (the K30 pinned case is now a liveness
 test). On intel1: TSan clean on the KV tests, `make leak-check` 25/25, and
@@ -1231,23 +1236,23 @@ test). On intel1: TSan clean on the KV tests, `make leak-check` 25/25, and
 `test_k33_client_view.py`, fails 5/5 on base `3e01ba95c` too. The orcd-mini
 A/B rerun is NOTRUN.
 
-[orcd-test fresh deploy of `394f2b791` (RDMA), all POSIX suites](orcd-test-devel-rdma-394f2b791-20261027.md):
+[orcd-test fresh deploy of `394f2b791` (RDMA), all POSIX suites](2026-10/orcd-test-devel-rdma-394f2b791-20261027.md):
 **PASS on all seven clients: POSIX all 220/223 (3 expected SKIPs), durability 27/27 across a full restart,
 two-client 68/68 and every live `.efs` harness.** Expiry checks PASS; the fixture's closing core run failed
 one case with EBUSY (W159). New W167: `raft-mkfs` at the seed answers BUSY forever after an online node addition.
 
-[orcd-mini fresh deploy of `5a7463440` (RDMA), POSIX and ior](orcd-mini-deploy-5a7463440-20261025.md):
+[orcd-mini fresh deploy of `5a7463440` (RDMA), POSIX and ior](2026-10/orcd-mini-deploy-5a7463440-20261025.md):
 **core 218/218, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
 two-client 68/68 PASS; ior easy PASS on both clients; ior hard FAIL 1 of 4
 runs on node9901 (EIO from a stale-generation REPORT, W161).** Expiry NOTRUN
 (`posix_expiry.py` not ported off `--disable-efs-commands`).
 
-[orcd-mini fresh deploy of `cb970ca7c` (RDMA, direct I/O)](orcd-mini-deploy-cb970ca7c-20261024.md):
+[orcd-mini fresh deploy of `cb970ca7c` (RDMA, direct I/O)](2026-10/orcd-mini-deploy-cb970ca7c-20261024.md):
 **core 216/216, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
 two-client 68/68 PASS; expiry 29/29 checks PASS** after the fixture's
 formation retry (`eb8333ddc`); its closing core run failed one case (W159).
 
-[K32 fix: batched K14 publication and K13 tickets](k32-write-fix-20261023.md):
+[K32 fix: batched K14 publication and K13 tickets](2026-10/k32-write-fix-20261023.md):
 **code fix PASS (scoped), merged into devel (`ea2dc4443`).** Merged-tree `make test-all` on intel2 (K32 + K33 at `2d03d9837`): 435 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-k32-k33-20261024/`, `SHA256SUMS` `b5649ea9…8c1c`). A REPORT's consecutive units of one file publish as one
 transaction, with PREPAREs in TXN_BATCH. Ticket admissions and settles are
 batched per Raft group (new tags 90, 91). Counted entries per 1 MiB write:
@@ -1255,7 +1260,7 @@ batched per Raft group (new tags 90, 91). Counted entries per 1 MiB write:
 what the base fails, and the K14 torn-read gate passes 30/30. **The ior
 easy write gate on orcd-mini is NOTRUN** (parent session).
 
-[K33 placement spread for more than four nodes](k33-placement-spread-20261024.md):
+[K33 placement spread for more than four nodes](2026-10/k33-placement-spread-20261024.md):
 **code gate PASS with host limits (amd `make test-all` at `f7553b06e`:
 442 commands, 11 FAIL, all also failing on the base); branch
 merged into devel (`5692db50f`); live gates NOTRUN.** The stripe start was
@@ -1266,7 +1271,7 @@ reduction; every N = 3..16 stays within ±10 % and no 64-file window leaves
 a member idle; in the daemon growth test added node 4 went from 0 to 25
 new fragments. New writes only; needs a fresh format.
 
-[K33 acceptance: node addition against the alpha checklist](k33-acceptance-20261024.md):
+[K33 acceptance: node addition against the alpha checklist](2026-10/k33-acceptance-20261024.md):
 **code gate PASS with host limits (xorinox `make test-all` at `2ebd4fd85`:
 446 commands, 0 FAIL, 13 NOTRUN); merged into devel (`cbe38a86d`); live multi-host, RDMA and
 orcd-mini NOTRUN.** Loopback daemon tests for four checklist items: additions
@@ -1281,9 +1286,9 @@ replica waited on its own apply) and a whole-cluster restart waited 30 s
 per starting peer. **Oct 25:** the payload test's single-member outages
 waited on `efs-mgmt status` counts that lagged a degraded segment write by
 up to a GC pass (read `EIO`, base 8 of 30 on amd); fixed by
-[K38](k38-payload-protection-now-20261025.md), payload 30 of 30.
+[K38](2026-10/k38-payload-protection-now-20261025.md), payload 30 of 30.
 
-[K33 live client view refresh](k33-client-view-20261024.md):
+[K33 live client view refresh](2026-10/k33-client-view-20261024.md):
 **code gate PASS with host limits (intel1 `make -k test-all` at `8b4cfbe77`,
 exit 0); merged into devel (`f00cfdd75`); live
 addition under client load and RDMA NOTRUN.** A mounted FUSE client reads
@@ -1292,7 +1297,7 @@ installs later revisions without a remount, refuses another cluster or a
 divergent record, places new writes on added members and keeps old data's
 recorded placement.
 
-[K33/W157 automatic formation and node addition](k33-w157-formation-addition-20261023.md):
+[K33/W157 automatic formation and node addition](2026-10/k33-w157-formation-addition-20261023.md):
 **model PASS; implementation merged (`0098e06c4`;
 increment 1, operator node ids; Raft tags renumbered to 92, 93 at merge;
 merged-tree `make test-all` on intel2 0 FAIL), code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN); live addition
@@ -1301,10 +1306,10 @@ stay unready; a node with the next id joins a live cluster by `--join` any
 member: a committed membership revision (store tokens, one cluster
 identity), group 2 moves {1,2,3} → {2,3,4} by joint consensus with
 catch-up, later nodes add storage only, old data keeps its recorded
-placement. [Protocol](k33-membership-protocol-20261023.md) (M1–M9).
-Live client view refresh: [above](k33-client-view-20261024.md).
+placement. [Protocol](2026-10/k33-membership-protocol-20261023.md) (M1–M9).
+Live client view refresh: [above](2026-10/k33-client-view-20261024.md).
 
-[K33/W157 increment 2: automatic node ids, positional CLI, discovery](k33-w157-autoid-discovery-20261024.md):
+[K33/W157 increment 2: automatic node ids, positional CLI, discovery](2026-10/k33-w157-autoid-discovery-20261024.md):
 **code gate PASS with host limits (xorinox `make test-all` at `53080d744`:
 436 commands, 0 FAIL, 13 NOTRUN); model PASS; merged into devel; live multi-host, cross-subnet,
 RDMA and orcd-mini gates NOTRUN; needs a fresh format.** `efsd ADDR:PORT
@@ -1313,25 +1318,25 @@ through a member or a cluster found on the local subnet; no node id (the
 seed is 1, formation allocates by promise, additions take `count + 1`).
 Open finding: placement collapses for power-of-two member counts.
 
-[W153 committed membership](w153-committed-membership-20261023.md): **code
+[W153 committed membership](2026-10/w153-committed-membership-20261023.md): **code
 fixed and merged (`4026e254d`); merged-tree `make test-all` on intel2 0 FAIL;
 live formation and failover gates NOTRUN; needs a fresh format.** `raft-mkfs` commits the
 joined membership in both groups; count and voters come from it on every
 start; `EFS_MD_RAFT_N` removed; joins after formation refused (since
 K33/W157 on its branch: added as committed revisions).
 
-[Alpha 1.0 simple startup and node addition](alpha-1.0-node-addition-20261023.md):
+[Alpha 1.0 simple startup and node addition](2026-10/alpha-1.0-node-addition-20261023.md):
 **ACCEPTED; implementation OPEN, gates NOTRUN.** Minimal seed/join startup,
 automatic identity and formation, safe live additions, always 2+1; removal
 deferred. Supersedes mandatory cluster files and fixed-membership-only D39/D40.
 
-[W158 ticketed live harnesses](w158-ticketed-harness-20261023.md):
+[W158 ticketed live harnesses](2026-10/w158-ticketed-harness-20261023.md):
 **PASS, merged (`33c68a465`); intel expiry rerun passes every expiry check (fixture POSIX timeouts are W159).**
 `gc_reclamation.py` and three wire harnesses send the K13 ticket header and
 prove that an unticketed PUT is refused; a static `make test` check guards
 it. nuc `make test-all` PASS.
 
-[K13 / D31 dead and departing clients](k13-d31-drain-20261024.md):
+[K13 / D31 dead and departing clients](2026-10/k13-d31-drain-20261024.md):
 **PASS (scoped, unit and in-process) merged into devel (`e6a21692d`; tested at `59a2308b8`); amd `make
 test-all` FAILs (RDMA, one pool timeout) also fail on the base; live gates
 NOTRUN.** After revocation the group leader drains a dead client's ticket
@@ -1339,14 +1344,14 @@ streams into the orphan ledger (anchored stream index, DRAIN refused while a
 K14 stage is pending), and a clean unmount revokes its own session. The
 unused RECLAIMING path is gone. New numbers: KV kind 250, Raft tag 250.
 
-[K13 / D31 abandoned-upload collection](k13-d31-collection-20261023.md):
+[K13 / D31 abandoned-upload collection](2026-10/k13-d31-collection-20261023.md):
 **PASS (scoped, unit and in-process) on branch `devel-k13d31`, not merged.**
 The group leader deletes a settled abandoned body on every member that holds
 a fragment, after the session's revocation is complete and behind each
 member's storage floor, and retires the record only when every fragment is
 acknowledged. Cluster gates are NOTRUN, and unsettled tickets of dead clients
 are not collected yet.
-[K29 append stall under load](k29-append-stall-20261023.md):
+[K29 append stall under load](2026-10/k29-append-stall-20261023.md):
 **cause established; two fixes on branch `claude/devel-k29-2185a1`, not
 merged; `make test-all` PASS on xorinox; load verification NOTRUN (orcd-mini).**
 Reservations and barrier retirements proposed one Raft entry per active
@@ -1354,19 +1359,19 @@ writer lane (up to 139 group-0 entries per 4 KiB record), now one TXN_BATCH
 entry per group (11 per record); commit probes no longer overtake their
 batches (`prev-beyond-log`).
 
-[K13 / W86, W88, W137 ticketed PUT/REPORT default](k13-w86-ticket-default-20261023.md):
+[K13 / W86, W88, W137 ticketed PUT/REPORT default](2026-10/k13-w86-ticket-default-20261023.md):
 **PASS (scoped) on branch `devel-k13`, not merged.** Every data PUT and REPORT
 record is bound to an admitted ticket; the W88 retry is refused by ticket
 state; W137 uses the real reply shape. `make test` and a private three-daemon
 gate pass on intel1. The D31 abandoned-upload collector is INCOMPLETE; RDMA,
 orcd-mini and multi-host are NOTRUN.
 
-[Full code-gate runtime review](make-test-runtime-review-20261023.md):
+[Full code-gate runtime review](2026-10/make-test-runtime-review-20261023.md):
 execution review complete; speedup NOTRUN. Fix the fault-daemon dependency,
 then build harnesses incrementally and schedule isolated cases concurrently.
 The fast/long split does not reduce full-gate work or qualify parallel safety.
 
-[W155 per-request receipts and same-identity resolution](w155-ambiguous-completion-20261024.md):
+[W155 per-request receipts and same-identity resolution](2026-10/w155-ambiguous-completion-20261024.md):
 **code fix PASS (scoped), branch merged into devel (`3e01ba95c`; tested at `b36710b65`); `make test-all` on nuc PASS (the one parallel-runner FAIL,
 `test_k32_entry_count`, fails the same way on the base); nuc b1/b2 live reruns NOTRUN.** A REPORT runs under a
 receipt keyed by session and publication id; a sync REPORT or identified
@@ -1374,7 +1379,7 @@ directory op whose reply was lost is resolved by identity before failing, and
 EIO remains only for an outcome still unknown after the bound. Client and
 server lines carry the request identity (G1–G6).
 
-[W155 modify oracle and correlation tooling](w155-oracle-correlation-20261023.md):
+[W155 modify oracle and correlation tooling](2026-10/w155-oracle-correlation-20261023.md):
 **self-tests PASS on nuc; the W148 campaign rerun with it is NOTRUN** (branch
 `devel-w155h`, merged Oct 23 `92886b8e2`). A failed modify records its syscall stages and
 quarantines the file with syscall-boundary candidates. It is never a PASS.
@@ -1382,33 +1387,33 @@ quarantines the file with syscall-boundary candidates. It is never a PASS.
 G1–G8. The first is that no server line records a request's receipt. The
 nuc W148 raw bundles are not lost: their location and sha256 are in the page.
 
-[Intel cluster + xorinox client CPU profile](intel-profile-20261023.md):
+[Intel cluster + xorinox client CPU profile](2026-10/intel-profile-20261023.md):
 **analysis only.** Not CPU-bound (servers 1.1–1.7 of 8 cores, client ≤0.7);
 write 155 MiB/s, read 179 MiB/s, tiny 123 files/s. Tiny files spin in 1 ms
 BUSY loops on the client's 16-position identity-admission window. Raw perf
 data stays on intel1/intel2/xorinox (paths and hashes in the page).
 
-[Intel fresh deploy of `devel-testing`, all POSIX suites](intel-devel-testing-posix-20261023.md):
+[Intel fresh deploy of `devel-testing`, all POSIX suites](2026-10/intel-devel-testing-posix-20261023.md):
 **PASS at 100% of supported cases** (core 216/216 on intel1 and xorinox,
 two-host 68/68, persist 27/27, extras 4/5 + mmap SKIP by W104, expiry 134
 checks). No EFS defect; devops `smoke-persist.sh` `.efs` remount bug fixed
 (devops `ff9701f`).
 
-[K28 / W151 cluster cap and packed-segment ring](k28-w151-cluster-cap-20261022.md):
+[K28 / W151 cluster cap and packed-segment ring](2026-10/k28-w151-cluster-cap-20261022.md):
 **merged into devel (`a2942cb0f`); unit tests and `make test` PASS on
 efs1; the live 5-node gate is NOTRUN (parent session).** Cap 16 nodes (not 64:
 uint32 node masks, 4 KiB node-table entries); each metadata group keeps three
 voters on nodes 1–4; packed segments use the data ring with a remote
 linearizable pack-object read on non-voter nodes.
 
-[K25b summary-runner exit status and test TMPDIR](k25b-summary-exit-tmpdir-20261022.md):
+[K25b summary-runner exit status and test TMPDIR](2026-10/k25b-summary-exit-tmpdir-20261022.md):
 **PASS (scoped), merged into devel; R1 closed.**
 `make_test_summary.sh` exits 1 on any failure or timeout and 3 (INCOMPLETE)
 on NOTRUN, which fixes R1. Tests keep scratch under `$TMPDIR` and remove it on success.
 Two consecutive `make test` runs on efs2 passed without scratch growth. One
 earlier run hit a `server.sh` start flake, which is unresolved.
 
-[W87/K9 append oracle on efs2](w87-append-oracle-efs2-20261022.md):
+[W87/K9 append oracle on efs2](2026-10/w87-append-oracle-efs2-20261022.md):
 **INCOMPLETE: not reproduced, no root cause; W87 OPEN.** 23 exact rounds, 19,597 acknowledged records on
 a private 3-daemon TCP buffered cluster under churn/GC and POSIX load; no loss,
 duplicate or reorder warm or cold. No fix; bounded rerun NOTRUN.
@@ -1421,32 +1426,32 @@ informational only: one found the stalled follower winning an election,
 which the capacity gate on campaigning and leadership fixed. Snapshot import
 into a stalled follower is NOTRUN.
 
-[K26 leak gate](k26-leak-gate-20261022.md): **`make leak-check` PASS on
+[K26 leak gate](2026-10/k26-leak-gate-20261022.md): **`make leak-check` PASS on
 efs2 and efs1 (25/25 unit binaries under valgrind memcheck, about 6 min) and
 `make test` PASS on both; merged into devel (`b8ef49e58`).** It works without LeakSanitizer, which
 fails only where `ptrace_scope` is 2 (ORCD); `make check` runs it. No product
 leak found. The W126 peek case it skipped now runs (see the W126 peek fix).
 node9901 run NOTRUN.
 
-[K30 intermittent tests](k30-intermittent-tests-20261023.md): **fixed on
+[K30 intermittent tests](2026-10/k30-intermittent-tests-20261023.md): **fixed on
 `devel-k30`, merged Oct 23 `b64dbe934`; 0/25 FAIL per case on amd.** `test_reclaim` was a
 product bug (same-second journal aside rename refused startup); the fork
 oracle and `test_kv_lsm` were test races. The W126 peek limitation is fixed (W126 peek fix above).
 
-[W156 client discovery](w156-client-discovery-20261023.md): **fixed on
+[W156 client discovery](2026-10/w156-client-discovery-20261023.md): **fixed on
 `devel-w156` (`dca4dd544`), not merged; `make test-all` on nuc PASS without a
 switch.** Mount owner from mountinfo, controller proven by the control
 endpoint and `/dev/fuse`; foreign processes are never inspected;
 `EFS_CLIENT_SKIP_FOREIGN` removed. Live foreign-client case NOTRUN.
 
-[K15 W52/W64 append gates](k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
+[K15 W52/W64 append gates](2026-10/k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the
 matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
-[Gate evidence-loss review](devel-integration-review-20261022.md#review-of-the-gate-review-response-2be72f2c2--october-23):
+[Gate evidence-loss review](2026-10/devel-integration-review-20261022.md#review-of-the-gate-review-response-2be72f2c2--october-23):
 Nuc bundles are reported lost and xorinox raw outputs deleted. Their scoped
 PASS labels are historical reported outcomes; independent revalidation is
 INCOMPLETE. W148 remains reported FAIL, W155 unresolved; no gate is closed
@@ -1454,21 +1459,21 @@ by missing evidence. Separate prior evidence remains separate. The acceptance
 in `2a40e3d54` was reviewed with no new findings; this evidence-policy review
 is settled, while the recorded qualification work remains open.
 
-[Oct 23 gate-merge review](devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23):
+[Oct 23 gate-merge review](2026-10/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23):
 **Qualification remains OPEN.** Scoped passes stand; W154 protection policy
 needs a decision. W155 demonstrates ambiguous visible completion, not proof
 of successful durability or rollback. A blanket old-or-new rewrite oracle
 is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
-[D39 admission implementation](d39-admission-20261023.md): **historical;
+[D39 admission implementation](2026-10/d39-admission-20261023.md): **historical;
 merged via `246bae7cf` and reverted on devel (`d7bca79d6`) by the user's
 Oct 23 decision.** devel has no `--cluster`, no `cluster.conf` and no
 admission layer; startup is seed/`--join`. The store lock and durable boot
 counter returned with W153; formation and node addition are K33/W157. The
 page records what the reverted branch did.
 
-[D39 consolidated model](d39-consolidated-model-20261023.md): **MODEL PASS on
+[D39 consolidated model](2026-10/d39-consolidated-model-20261023.md): **MODEL PASS on
 branch `devel-d39model`, merged Oct 23 `16d716308`.** Historical fixed-membership model; superseded for startup and membership growth
 by the accepted node-addition amendment. `tests/d39_model.py` in `make test`
 checks 101 traces from §§8–33, 11 negative controls under superseded rules and a
@@ -1476,13 +1481,13 @@ randomized interleaving search. It adds three model findings the proposal must
 accept and lists nine unresolved points (C13). Implementation and cluster
 gates NOTRUN.
 
-[D39 latest review (§34)](d39-cluster-membership-proposal-20261022.md):
+[D39 latest review (§34)](2026-10/d39-cluster-membership-proposal-20261022.md):
 `802416d39` resolves §32's predicate, critical-section scheduling and Raft
 ownership concerns; accepted with no new findings. Next: the consolidated
 executable model and the recorded gates. D39 proposed, W153a held; model
 and implementation gates NOTRUN. Documentation agreement is not protocol PASS.
 
-[D39 proposal: configured cluster membership](d39-cluster-membership-proposal-20261022.md):
+[D39 proposal: configured cluster membership](2026-10/d39-cluster-membership-proposal-20261022.md):
 **PROPOSED, awaiting the user.** One member list for every daemon and
 `raft-mkfs`, hashed into HELLO and the committed MKFS, replacing `--join`,
 `--node-id` and `EFS_MD_RAFT_N` (option B). **Review in §6: bootstrap direction
@@ -1498,18 +1503,18 @@ formation management needs an explicit role/path.** §12 reviews the new
 directions and recovery elections; declared endpoints do not authenticate
 peers. D39 remains proposed; W153a held.
 
-[W153 startup review](devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate):
+[W153 startup review](2026-10/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate):
 **OPEN, alpha 1.0 blocker.** Unset/empty metadata count defaults to four;
 three-node deployments can lose their promised single-loss tolerance.
 Derive topology from configured membership, validate full input and node
 agreement; startup and live gates NOTRUN. T3 remains closed.
 
-[D38 amendment review](devel-integration-review-20261022.md#review-of-the-d38-amendment-at-e328744ad):
+[D38 amendment review](2026-10/devel-integration-review-20261022.md#review-of-the-d38-amendment-at-e328744ad):
 **T3 CLOSED for the default layout.** Three nodes: both groups on 1–3;
 four or more: groups on 1–3 and 2–4. Roadmap and packed-placement wording
 corrected; local quorum arithmetic PASS, live qualification NOTRUN.
 
-[Recent devel integration review](devel-integration-review-20261022.md):
+[Recent devel integration review](2026-10/devel-integration-review-20261022.md):
 **Third pass at `0eb1511d2`: OPEN.** Original S1–S3 and R1–R3 fixes are
 merged. New T1 (P1): append-abandon repeats the session capture/fence race
 (K5/K15). T2 (P2): synchronous forced-exit reporting can exceed K1's shutdown
@@ -1517,7 +1522,7 @@ deadline. Reopen K5 and K1; K15 stays INCOMPLETE with a code gap. Focused
 local checks PASS; linked transaction test NOTRUN (missing `libefs.a`).
 The efs3 merged-suite pass is reported by `af0996a3d`; live gates remain open.
 
-[K1 / W145 R4 whole-shutdown deadline](k01b-r4-shutdown-deadline-20261022.md):
+[K1 / W145 R4 whole-shutdown deadline](2026-10/k01b-r4-shutdown-deadline-20261022.md):
 **implemented on `devel-k01b`, merged `9fd38ffb4`; unit, private-daemon and full
 `make test` PASS on efs3.** A 50 s deadline covers the handler drain and
 teardown phases; T2 remains OPEN for blocking exit-report I/O after that deadline. A stuck worker gives rc 3 with the phase and worker named,
@@ -1525,25 +1530,25 @@ and the stop script reports "stopped, forced, stores preserved", never
 orderly. A devops `stop.sh` patch is required and not applied. orcd-mini
 `stop.sh` qualification NOTRUN.
 
-[K1 / W145 remaining parts](k01-w145-remaining-20261022.md): **merged into
+[K1 / W145 remaining parts](2026-10/k01-w145-remaining-20261022.md): **merged into
 devel (`86b6ef567`). Near-follower snapshot fixed (a match-0 probe ACK reset
 `next_index` to 1); 30,929,219@62 was not acknowledged to any client;
 pre-vote ends restart election storms (efs1 cluster: terms +19 before,
 +1 after); efsd stops are bounded (handlers close before the next
 request, 40 s drain).** Unit tests PASS; orcd-mini gates NOTRUN.
-[K16 / W75 identity-bound fragment record](k16-w75-identity-format-20261022.md):
+[K16 / W75 identity-bound fragment record](2026-10/k16-w75-identity-format-20261022.md):
 **merged into devel (`e9ca0d07b`); fresh format required.** Fragment record format 2 binds export,
 inode, chunk, candidate generation, fragment index and length to the payload;
 GET/GC/segment reads refuse unknown formats and mismatched identities; root
 format 0 refuses startup. Inode generation and export salt are not bound.
 RDMA and hardware gates NOTRUN.
 
-[orcd-mini deploy of `d94ca85bf`](orcd-mini-deploy-d94ca85bf-20261022.md):
+[orcd-mini deploy of `d94ca85bf`](2026-10/orcd-mini-deploy-d94ca85bf-20261022.md):
 **deployed; all functional suites PASS** (core 216/216, extras, durability,
 `.efs` 10/10, two-client 67/67, ior hard). **ior easy write down ~40% vs
 `08cc16af4` (710–863 vs ~1,330 MiB/s); unattributed, A/B NOTRUN.**
 
-[Packing validate-once review and assessment](review-pack-validate-once-20261022.md):
+[Packing validate-once review and assessment](2026-10/review-pack-validate-once-20261022.md):
 **merged into devel `842a014b3` by user decision; read mismatch OPEN.** The
 mismatched file was 3.3–3.6 MB in every completed version; no demonstrated
 packed-read involvement. Overwrite followed by truncate-up is a hypothesis.
@@ -1558,27 +1563,27 @@ CLIENT_HELLO and HEARTBEAT needs an accepted declaration of exactly
 protocol 3. Unit gates PASS on efs3 over TCP; the RDMA unit path and the
 cluster refusal run are NOTRUN.
 
-[Alpha 1.0 plan and code review](alpha-1.0-plan-review-20261022.md):
+[Alpha 1.0 plan and code review](2026-10/alpha-1.0-plan-review-20261022.md):
 **the plan's order holds and its K register matches the code; the code caps
 a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
 
-[Intel deploy of devel `a23d45540`](intel-devel-a23d45540-20261023.md): **fresh format; make test-all 428/0 FAIL; core 216/216 (both mounts), two-client 68/68, durability 27+27, extras 4/5 (mmap skip); expiry fixture: first run stopped at a stale harness step (W158, fixed); rerun passes every expiry check, closing fixture POSIX 214/216 with two timeouts (W159).** Eight live harnesses still expected protocol 4 (fixed `2791f211d`).
+[Intel deploy of devel `a23d45540`](2026-10/intel-devel-a23d45540-20261023.md): **fresh format; make test-all 428/0 FAIL; core 216/216 (both mounts), two-client 68/68, durability 27+27, extras 4/5 (mmap skip); expiry fixture: first run stopped at a stale harness step (W158, fixed); rerun passes every expiry check, closing fixture POSIX 214/216 with two timeouts (W159).** Eight live harnesses still expected protocol 4 (fixed `2791f211d`).
 
-[Simple startup and node addition](alpha-1.0-node-addition-20261023.md): **user decision Oct 23: the `--cluster` file feature is removed; the D39 admission merge is reverted on devel; seed/`--join` is the only startup.** Alpha needs W153 (member count and voters from the committed membership, formation at three) and then node addition (K33/W157).
+[Simple startup and node addition](2026-10/alpha-1.0-node-addition-20261023.md): **user decision Oct 23: the `--cluster` file feature is removed; the D39 admission merge is reverted on devel; seed/`--join` is the only startup.** Alpha needs W153 (member count and voters from the committed membership, formation at three) and then node addition (K33/W157).
 
-[K32 write regression](k32-write-regression-20261023.md): **OPEN; code fix merged (`ea2dc4443`), real-host IOR gate NOTRUN ([fix evidence](k32-write-fix-20261023.md), [Oct 28 cost profile](k32-write-cost-profile-20261028.md)).** The Oct 23 orcd-mini run (devel `757d76844`, fresh format) passed its functional checks but measured ior easy write at ~0.36–0.5 GiB/s. Its unbatched K14 profile published each multi-chunk write separately (~20 Raft entries per 1 MiB write); K13 added ~9. Current measured costs are in the Oct 28 profile.
+[K32 write regression](2026-10/k32-write-regression-20261023.md): **OPEN; code fix merged (`ea2dc4443`), real-host IOR gate NOTRUN ([fix evidence](2026-10/k32-write-fix-20261023.md), [Oct 28 cost profile](2026-10/k32-write-cost-profile-20261028.md)).** The Oct 23 orcd-mini run (devel `757d76844`, fresh format) passed its functional checks but measured ior easy write at ~0.36–0.5 GiB/s. Its unbatched K14 profile published each multi-chunk write separately (~20 Raft entries per 1 MiB write); K13 added ~9. Current measured costs are in the Oct 28 profile.
 
-[K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
+[K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](2026-10/k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
 [D40, alpha 1.0 scope decisions Oct 23](decisions.md#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass):
 **D39 amended (simple startup, automatic identity, online addition; removal deferred; model first); W154 rebuild on return; K10 known limitation; K13 and K14 fixed in alpha; K23 stays deferred; orcd-mini reformat and the K27 A/B approved.**
 
 [Alpha 1.0 Stage 1, Oct 22](alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
 **7 K rows fixed and merged (K2, K3, K4, K8, K16, K24, K28); of the 5 rows
-REOPENED by the [integration review](devel-integration-review-20261022.md),
-their fixes are merged; the third review reopened K1 (T2) and K5 (T1), both fixed and merged Oct 23 (`c083b98b5`, `9a88e332e`); the K15 live gates on intel2 ([evidence](k15-live-gates-20261022.md)) FAILED under a load stall with integrity intact, opening K29; amd `make test` exposed intermittent devel failures, K30; the Oct 23 live gates are merged: [xorinox](gates-xorinox-20261022.md) K28 five-node PASS with finding F1 (W154), K22 scoped PASS, K9 not reproduced in 110 rounds; [nuc](gates-nuc-20261022.md) K26 x86_64 PASS, K5 fence gate PASS, K1 stop PASS, W148 signature 0 of 9 (NOT REPRODUCED on TCP) but the gate FAILS on ambiguous-completion EIO/EBUSY (W155); the nuc raw bundles were lost with the session; both confirmed by the [parent session's response](devel-integration-review-20261022.md#response-to-the-third-pass-parent-session-devel-62d30994f) (T3, the D38 placement question, closed by amending D38: two three-voter groups on nodes 1–4, K28's layout stands),
+REOPENED by the [integration review](2026-10/devel-integration-review-20261022.md),
+their fixes are merged; the third review reopened K1 (T2) and K5 (T1), both fixed and merged Oct 23 (`c083b98b5`, `9a88e332e`); the K15 live gates on intel2 ([evidence](2026-10/k15-live-gates-20261022.md)) FAILED under a load stall with integrity intact, opening K29; amd `make test` exposed intermittent devel failures, K30; the Oct 23 live gates are merged: [xorinox](2026-10/gates-xorinox-20261022.md) K28 five-node PASS with finding F1 (W154), K22 scoped PASS, K9 not reproduced in 110 rounds; [nuc](2026-10/gates-nuc-20261022.md) K26 x86_64 PASS, K5 fence gate PASS, K1 stop PASS, W148 signature 0 of 9 (NOT REPRODUCED on TCP) but the gate FAILS on ambiguous-completion EIO/EBUSY (W155); the nuc raw bundles were lost with the session; both confirmed by the [parent session's response](2026-10/devel-integration-review-20261022.md#response-to-the-third-pass-parent-session-devel-62d30994f) (T3, the D38 placement question, closed by amending D38: two three-voter groups on nodes 1–4, K28's layout stands),
 with T1 also affecting K15; the K26 valgrind leak gate is merged;
 2 INCOMPLETE (K9, K15); live gates NOTRUN. devel `0eb1511d2` returned `make test`
 rc 0 on efs3 with 15 NOTRUN: executed checks passed, full qualification INCOMPLETE.** Highlights: W148 wrong-bytes root
@@ -1595,23 +1600,23 @@ audit, removal of competing A/B implementations, built-in policies and a reduced
 qualification matrix.** 2+2, many-group distribution and
 full D36 protection remain later milestones.
 
-[Distributed EFS cluster roadmap](distributed-cluster-roadmap-20261022.md):
+[Distributed EFS cluster roadmap](2026-10/distributed-cluster-roadmap-20261022.md):
 3-node 2+1, 4+ node 2+2 target diagrams; current codec/two-group gaps, D36
 metadata protection, distributed background work and staged acceptance. Roadmap
 only; no implementation or protection gate closed.
 
-[ORCD tiny-file CPU profile analysis](orcd-tiny-profile-20261022.md):
+[ORCD tiny-file CPU profile analysis](2026-10/orcd-tiny-profile-20261022.md):
 `08cc16af4f77`, four 30-second captures; repeated whole-segment validation
 confirmed in packing, plus abandonment scans, `.efs` indexing and LSM maintenance.
 Validate-once and bounded abandon scan merged into devel (`842a014b3`; unit,
 node9900 private-cluster and `make test` gates); orcd-mini CPU A/B NOTRUN.
 
-[orcd-mini deploy of `08cc16af4`](orcd-mini-deploy-08cc16af4-20261022.md):
+[orcd-mini deploy of `08cc16af4`](2026-10/orcd-mini-deploy-08cc16af4-20261022.md):
 **cleanup merge deployed; all suites and gates PASS over RDMA + `.efs`**
 after two harness fixes (`e4bd1b6d7`, merged in `99c7a1c75`): faults 24/24,
 `.efs` commands gate PASS.
 
-[orcd-mini fresh-format deploy with D25](orcd-mini-d25-deploy-20261022.md):
+[orcd-mini fresh-format deploy with D25](2026-10/orcd-mini-d25-deploy-20261022.md):
 **deployed `ee1087129`; all suites and D25 step-5 gates PASS.** Fresh
 format (user-authorized wipe). Core 216/216, extras 4/5 + mmap skip,
 durability 27/27, two-client 67/67, ior rc 0, GC RDMA 71 checks, faults
@@ -1631,7 +1636,7 @@ correctness, all OPEN) and [W135–W139](../backlog/work-items.md#w135)
 and test evidence gaps; W127–W131 form one implementation package, not five
 independent error-handling designs. No acceptance gates are waived.
 
-[D25 logical truncate protocol](d25-logical-truncate-design-20261021.md):
+[D25 logical truncate protocol](2026-10/d25-logical-truncate-design-20261021.md):
 **implemented through step 5 on branch `d25-logical-truncate`; all D25 gates PASS on a private node9901 cluster.** One 86-byte inode-group
 TRUNCATE entry commits size, epoch and a pruned inode fence history, with
 success-only opid receipts; reads mask by the inode history; lanes adopt
@@ -1640,16 +1645,16 @@ sweep deletes or clips superseded rows, and SWEEP_DONE/RETIRE free history.
 Final review's corrections are folded in: one `adopt` transition resets lane
 EOF, receipt capacity is checked before commit (BUSY, never unprotected),
 history revision persists, g4/g5 gate acceptance. Both call-site audits
-are done (§8). [Step 2](d25-step2-gates-20261021.md) (`3e133c257`): inode-authority
+are done (§8). [Step 2](2026-10/d25-step2-gates-20261021.md) (`3e133c257`): inode-authority
 views, lane adoption, BOOTSTRAP floor; g4/g5 step-2 form PASS on node9901, and a
 pre-existing peer read of truncated data (fails on 47ba6b590) is fixed.
-[Step 3](d25-step3-gates-20261021.md) (lazy 86-byte TRUNCATE, off by default): g0-g4
+[Step 3](2026-10/d25-step3-gates-20261021.md) (lazy 86-byte TRUNCATE, off by default): g0-g4
 PASS on node9901, sparse 100 GiB O_TRUNC 0.024 s, after fixing a pre-existing
 stale-cache republish the eager baseline 47ba6b590 still fails (UNCOND images now
-carry their formation epoch). [Step 4](d25-step4-gates-20261022.md): lane-cursor sweep,
+carry their formation epoch). [Step 4](2026-10/d25-step4-gates-20261022.md): lane-cursor sweep,
 SWEEP_DONE/RETIRE, base clips, masked packing; g5-g8 PASS (2 GiB O_TRUNC 0.020 s, sweep
 9 s, space returned; history bound, restart mid-sweep, packed files).
-[Step 5](d25-step5-gates-20261022.md): the eager path, LANE_FENCE, tail stubs, the
+[Step 5](2026-10/d25-step5-gates-20261022.md): the eager path, LANE_FENCE, tail stubs, the
 client tail rewrite and the switch are removed; logical truncate is the only path, and
 every D25 gate (g0-g8, step-2 g4/g5, the repro) passes again on node9901, and after
 merging devel on node9900 over TCP and RDMA. Multi-host placement and the sweep
@@ -1657,21 +1662,21 @@ scheduler's both-groups-local assumption remain.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
-[orcd-test tiny-files slow-client profile](orcd-test-tiny-files-profile-20261022.md):
+[orcd-test tiny-files slow-client profile](2026-10/orcd-test-tiny-files-profile-20261022.md):
 **explained, no fix.** The 2× per-client gap in the 7 × 10M tiny-files run is metadata-group
 placement: inode parity put 4 client trees in group 2 and 3 in group 0, and one node
 led both groups. Commit-to-apply latency on that leader is the limit, not server CPU. Clean A/B on fresh formats: spreading leaders (`EFS_METADATA_BALANCE=2`) is 27% slower, because routing sends both groups' requests to the dual-group node; colocated leaders give a 1.07× gap. New:
 a group-2 follower received no appends for 30 minutes after a snapshot-time
 reconnect, until a snapshot install caught it up.
 
-[orcd-test devel suites over TCP and RDMA](orcd-test-devel-suites-20261022.md):
+[orcd-test devel suites over TCP and RDMA](2026-10/orcd-test-devel-suites-20261022.md):
 **PASS** on devel `08cc16af4`, `.efs` on, both transports: POSIX all 218/221 (3 SKIP by
 design/budget) on 7 clients, persist across a full restart and transport switch,
 two-client 67/67, every live `.efs` harness, IOR little/wide easy/hard with
 verification. Four harness bugs fixed on `claude/orcd-test-suites`; W121 reproduced
 (still OPEN, kernel).
 
-[orcd-test cleanup and W127–W131 run](orcd-test-cleanup-w127-20261022.md):
+[orcd-test cleanup and W127–W131 run](2026-10/orcd-test-cleanup-w127-20261022.md):
 **PASS** on a reformatted orcd-test (RDMA, `.efs`): POSIX core 216/216 on 7
 concurrent clients twice, the live `.efs` harnesses, a restart on existing
 data. Branch `claude/dead-code-cleanup-5f7087`, not merged.
@@ -1705,7 +1710,7 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
 
-[orcd-mini profile on `08cc16af4`](orcd-mini-profile-08cc16af4-20261022.md):
+[orcd-mini profile on `08cc16af4`](2026-10/orcd-mini-profile-08cc16af4-20261022.md):
 **profiling only.**
 - Two tiny-file writers: ~3,000 creates/s, limited by the leader's `h->mu`
   and apply lag (known plan).
@@ -1730,7 +1735,7 @@ links in 96 pages now name the archived path. Read one with
 - All nodes are in sync and POSIX smoke passes 216/216. orcd-mini runs
   `a569de971`.
 
-[W126 on orcd-mini, `8fb4247ad` A/B](orcd-mini-w126-ab-8fb4247ad-20261022.md):
+[W126 on orcd-mini, `8fb4247ad` A/B](2026-10/orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**
 - Read-only LSM peeks take `mu` only, and flush file I/O yields the
   exclusive view.
@@ -1740,7 +1745,7 @@ links in 96 pages now name the archived path. Read one with
 - `make test` 813/813 with one environmental failure; POSIX smoke 216/216.
 - The user's 32M-file run was stopped at ~5.67 M files for the deploy.
 
-[orcd-mini profile under the 32M-file create run, `47ba6b590`](orcd-mini-profile-47ba6b590-20261021.md):
+[orcd-mini profile under the 32M-file create run, `47ba6b590`](2026-10/orcd-mini-profile-47ba6b590-20261021.md):
 **profiling only; no PASS/FAIL gate.**
 - From ~1.0 to ~2.6 M files, creates fell from 2,564 to 1,130 files/s.
 - Leader LSM lock waits rose from 3.3% to 16–18% of its switches. LOOKUP
@@ -1756,7 +1761,7 @@ links in 96 pages now name the archived path. Read one with
 - `h->mu` waits did not grow (8–13%).
 - Errors: only `report-split` `EFS_ERR_BUSY` apply-wait timeouts.
 
-[ORCD-test detached campaign](orcd-test-detached-campaign-20261020.md):
+[ORCD-test detached campaign](2026-10/orcd-test-detached-campaign-20261020.md):
 **FAIL / BLOCKED.** 8,437,752 successful-write counts of 40 M target;
 117 writer-thread EIO reports, `.efs` command/query failures, post-load
 remount discovery failure. Initial core 216/216, peer 67/67 and persistence
@@ -1807,7 +1812,7 @@ and splitting-READDIR fixes4058d8141/f8b7a7818 for the next build; not deployed.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
-[evidence](w124-reclaim-20261018.md).
+[evidence](2026-10/w124-reclaim-20261018.md).
 - Batched journal-first node reclaim replaces the per-inode reaper (removed,
   no switch); quota is credited at member acceptance and settled exactly
   at deletion; journal loss fails closed.
@@ -1818,14 +1823,14 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
-[Readdir misses names at the directory-split frontier](readdir-split-frontier-20261021.md):
+[Readdir misses names at the directory-split frontier](2026-10/readdir-split-frontier-20261021.md):
 **PASS on a private cluster; C7 rerun on orcd-mini NOTRUN (stopped at the user's request; design roadblock: directories must always be spread, not co-located then migrated).** A listing of a
 directory being split (>65,536 entries) scanned hashed lanes before the
 local range, so names the migrator moved between pages were lost. The local
 range is now listed first. 500 k-file reproducer: 0 missing in 12 of 12
 listings (was 3–8 per listing).
 
-[W125 closure tests C0–C8](w125-closure-20261021.md): **STOPPED; C1
+[W125 closure tests C0–C8](2026-10/w125-closure-20261021.md): **STOPPED; C1
 rerun 2, C9 and C10 NOTRUN** at the user's request (design roadblock:
 directories must always be spread, not co-located then migrated). **No
 data errors from packing.** C0 (2 h, both clients), C2, C3, C4, C5 and
@@ -1841,7 +1846,7 @@ grown-file fold).
   chunk. Fixed in `4058d8141`, and orcd-mini now runs `4058d81416a0`.
 - Not run: C1 rerun 2 (stopped), C9 24 h soak (cancelled), C10.
 
-[0a: lane epoch behind the inode](w0a-lane-epoch-lag-20261021.md):
+[0a: lane epoch behind the inode](2026-10/w0a-lane-epoch-lag-20261021.md):
 **fix PASS on a private node9901 cluster; orcd-mini C1 rerun NOTRUN
 (stopped at the user's request).** The C1 large-file EIO came from a
 cross-group lane stamp lagging the inode's epoch, so every publish failed
@@ -1849,14 +1854,14 @@ the authority check until D27 stalled it. Fixed builds: 0 stalls and 0
 publish EIO in 3 runs of the C1 workload, about 64 min (unfixed: 2 stalls,
 11 EIO in 15 min).
 
-[W125 packer throughput and busy budget](w125-packer-throughput-20261020.md):
+[W125 packer throughput and busy budget](2026-10/w125-packer-throughput-20261020.md):
 **gates PASS; copy throughput ~1,020 → ~5,000 files/s; lag-controlled busy
 budget bounds the backlog but costs a saturating writer 37% (FAIL vs
 foreground target); policy decision open.** orcd-mini runs `445b8b549c82`.
 - ior on a fresh orcd-mini matches W124/pre-change builds; one ior-hard
   fsync failure is open item 0a (STALE replay), not packing.
 
-[W125 on devel: merge, full regression and busy-rate default](w125-devel-20261019.md):
+[W125 on devel: merge, full regression and busy-rate default](2026-10/w125-devel-20261019.md):
 **PASS.** W125 merged into devel (`1b2c3b638`); devel `27c20cd4b` passes
 `make test`, crash points, two-client, durability, GC, expiry 6/6, landing
 8/8 and the P5 matrix; orcd-mini runs it (smoke 216/216, two-client 67/67,
@@ -1865,13 +1870,13 @@ persist 27/27, live packing PASS).
   (16 workers) and +0.4% (one writer) against base.
 - Stale uncommitted Raft/KV edits saved unmerged on `raft-rotate-wip`.
 
-[W125 on orcd-mini: fresh deploy of `e6771854e`](w125-orcd-mini-deploy-e6771854e-20261019.md):
+[W125 on orcd-mini: fresh deploy of `e6771854e`](2026-10/w125-orcd-mini-deploy-e6771854e-20261019.md):
 **PASS.** orcd-mini wiped and redeployed with `w125-packing`; smoke
 216/216, XFS comparison, extras 0 fail, persist 27/27, two-client 67/67.
 - 20,000 small files: 1,337 MB → 78 MB per node, verified from the other
   client, fully reclaimed after delete. User workload profile not run.
 
-[W125 P7: node9901 qualification](w125-p7-node9901-20261019.md):
+[W125 P7: node9901 qualification](2026-10/w125-p7-node9901-20261019.md):
 **crash injection, two-client, durability, GC and expiry PASS;
 one-writer −10.9% while packing.**
 - Found and fixed: segments placed on non-voters in 4-node clusters.
@@ -1879,20 +1884,20 @@ one-writer −10.9% while packing.**
   down cooldown (COMMIT now reprobes; latent in base). Expiry gate with
   the packer active 8/8 PASS (8 of 13 before). orcd-mini: see above.
 
-[W125 P6: landing checks and POSIX core](w125-p6-20261019.md): **PASS.**
+[W125 P6: landing checks and POSIX core](2026-10/w125-p6-20261019.md): **PASS.**
 - Behavioural landing checks 7/7 (packing, retirement, large and empty
   files, repack after modification, backfill, no switch).
 - POSIX core 216/216 in three runs with the packer packing during the
   suite.
 
-[W125 P5: modifying packed files](w125-p5-20261019.md): **matrix PASS.**
+[W125 P5: modifying packed files](2026-10/w125-p5-20261019.md): **matrix PASS.**
 - Overwrite, mid-file write, append, shrink, truncate to zero, extend and
   shrink-then-extend all read back correctly, are repacked, and survive a
   remount; files grown past 16 KiB move to per-file fragments.
 - Hole punch is EOPNOTSUPP for every efs file. New clients refuse to mount
   daemons that do not accept their protocol (no backward compatibility).
 
-[W125 P3: client read path and handshake](w125-p3-20261019.md):
+[W125 P3: client read path and handshake](2026-10/w125-p3-20261019.md):
 **packed read-back PASS; old clients on new daemons refused PASS; new
 clients on old daemons refused but hang until their deadline.**
 - 3,000 packed files (1 B–16 KiB) verified byte for byte, also after a
@@ -1900,7 +1905,7 @@ clients on old daemons refused but hang until their deadline.**
 - Base-build client: GETCHUNKS refused and logged, EIO on packed reads,
   writes still work.
 
-[W125 P4: packer budget, compaction and backfill](w125-p4-budget-20261019.md):
+[W125 P4: packer budget, compaction and backfill](2026-10/w125-p4-budget-20261019.md):
 **foreground impact while packing PASS; compaction and backfill PASS;
 read-back NOTRUN (P3).**
 - Packing concurrently: −1.2% (16 workers), −4.3% (one writer), three
@@ -1910,7 +1915,7 @@ read-back NOTRUN (P3).**
 - 15-of-16 random delete: 10 segments compacted to 3; a base-build store
   is backfilled and packed after upgrade (its MANIFEST becomes KVLSM2).
 
-[W125 P4 early: background packer on a private cluster](w125-p4-early-20261018.md):
+[W125 P4 early: background packer on a private cluster](2026-10/w125-p4-early-20261018.md):
 **packing works end to end; space PASS; foreground impact while packing
 FAILS the 10% target (not tuned yet).**
 - 60,000 tiny files packed into 156 segments: 10.6 MB per node against
@@ -1921,7 +1926,7 @@ FAILS the 10% target (not tuned yet).**
 - Next: rate budget and back-off, repeated runs, compaction, backfill;
   read-back needs P3.
 
-[W125 P1 early: singleton publication cost](w125-p1-early-20261018.md):
+[W125 P1 early: singleton publication cost](2026-10/w125-p1-early-20261018.md):
 **the GO condition FAILS for the archived packing code.**
 - Packed singleton close is 3.53 ms against 0.65 ms (single writer).
 - Throughput falls 71–78%; 9.9 Raft entries per file against 4.0.
@@ -1929,7 +1934,7 @@ FAILS the 10% target (not tuned yet).**
 - The user chose background packing after close (2026-10-18); W125's
   design and plan are revised accordingly.
 
-[W125 P0: allocation and cost go/no-go](w125-p0-20261018.md): **conditional
+[W125 P0: allocation and cost go/no-go](2026-10/w125-p0-20261018.md): **conditional
 GO for option (a) with singleton segments and merge compaction.**
 - A packed singleton costs 8,749 B per node on XFS against 71,241 today
   (8.1× less, measured), and about 175 B per file after merging
@@ -1963,7 +1968,7 @@ GO for option (a) with singleton segments and merge compaction.**
   private-cluster checks PASS; P7 (qualification, orcd-mini with the
   user's go-ahead, landing) open; not merged or deployed.
 
-[orcd-mini deletes, GC and crawl on `5d673efa8`](orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
+[orcd-mini deletes, GC and crawl on `5d673efa8`](2026-10/orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
 **profiling only.**
 - GC reclaim is schedule-bound: 0.18–0.21 GiB/min per node, one pass per
   second capped at 32 reap markers per group, the GC thread idle about
@@ -1972,7 +1977,7 @@ GO for option (a) with singleton segments and merge compaction.**
 - The crawl runs at 49.0 K stat ops/s, CPU-bound in the LOOKUP KV read
   (`kv_mtab_pos`).
 
-[orcd-mini profile on `5d673efa8`](orcd-mini-profile-5d673efa8-20261018.md):
+[orcd-mini profile on `5d673efa8`](2026-10/orcd-mini-profile-5d673efa8-20261018.md):
 **profiling only; no new hot path.**
 - Leader lock waits are 11.6% of its switches (15.6% on `9099380f3`).
 - The cover-pick and verdict waits stay gone. What remains is proposals
@@ -1982,7 +1987,7 @@ GO for option (a) with singleton segments and merge compaction.**
 - The test's writer filled orcd-mini's quota. The tree is deleted; GC is
   reclaiming at ~0.23 GiB/min per node.
 
-[orcd-mini deploy `5d673efa8`](orcd-mini-deploy-5d673efa8-20261018.md):
+[orcd-mini deploy `5d673efa8`](2026-10/orcd-mini-deploy-5d673efa8-20261018.md):
 **deployed from branch `raft-host-mu`; every suite PASS, private
 `posix_expiry` 6/6 (was 4/6).**
 - `h->mu` steps 1–3, plus a fix for creates that failed fsync with EIO for
@@ -1993,7 +1998,7 @@ GO for option (a) with singleton segments and merge compaction.**
 - Open: the intermittent `expiry show` failure (now names its step);
   creates still fail while a member is down (product gap §1.2).
 
-[`h->mu` plan steps 1–3](raft-host-mu-steps-20261017.md): **branch
+[`h->mu` plan steps 1–3](2026-10/raft-host-mu-steps-20261017.md): **branch
 `raft-host-mu`; private RDMA A/B PASS, `make test` PASS; deployed in
 `5d673efa8`.**
 - Verdict reads and leader-cover picks no longer wait for `h->mu`
@@ -2001,7 +2006,7 @@ GO for option (a) with singleton segments and merge compaction.**
 - Leader lock-wait share fell 16.7% → 12.6%. Creates/s, CPU per create and
   latency are unchanged within noise.
 
-[`h->mu` contention plan and review](raft-host-mu-plan-20261016.md):
+[`h->mu` contention plan and review](2026-10/raft-host-mu-plan-20261016.md):
 **NOTRUN; plan only.** Measure per-phase timing → routing snapshot →
 race-free result-ring reads → reassess → conditional REPORT change →
 proposal queue only if justified. Routing and the result ring are A/B'd
@@ -2009,7 +2014,7 @@ separately. Rechecked at `d68d9a58a`: the code findings still hold. The
 `9099380f3` profile is the live lock-wait baseline: submit 27.9%, REPORT
 13.9%, leader-cover picks 8.9%. Per-phase timing is still NOTRUN.
 
-[orcd-mini `e04a80f63`: deferral, expiry fixtures, refused-startup fence](orcd-mini-open-items-e04a80f63-20261017.md):
+[orcd-mini `e04a80f63`: deferral, expiry fixtures, refused-startup fence](2026-10/orcd-mini-open-items-e04a80f63-20261017.md):
 **deployed; core, extras, two-client, persist and private GC POSIX PASS;
 `posix_expiry` 2/4 (intermittent).**
 - Cleanup deferral now works live: `deferred_cleanup` climbs, and there
@@ -2019,14 +2024,14 @@ separately. Rechecked at `d68d9a58a`: the code findings still hold. The
   repaired with the user's approval (orderly stop, syncfs, records set
   clean), and the quota lowered to 720 GiB.
 
-[orcd-mini profile on `9099380f3`](orcd-mini-profile-9099380f3-20261017.md):
+[orcd-mini profile on `9099380f3`](2026-10/orcd-mini-profile-9099380f3-20261017.md):
 **profiling only.** Under two writers, a delete and two crawlers, the cv_mu
 wake-up waits are gone from the leader's top lock waits (45% on
 `f4a373b13`). Lock waits are 15.6% of leader switches, nearly all `h->mu`
 on submit, REPORT, retained CREATE and unlink. This is the live step-1
-baseline for the [Raft host mutex plan](raft-host-mu-plan-20261016.md).
+baseline for the [Raft host mutex plan](2026-10/raft-host-mu-plan-20261016.md).
 
-[orcd-mini deploy `9099380f3`: "not indexed yet"](orcd-mini-deploy-9099380f3-20261017.md):
+[orcd-mini deploy `9099380f3`: "not indexed yet"](2026-10/orcd-mini-deploy-9099380f3-20261017.md):
 **deployed; every POSIX suite PASS, no failures.** smoke 216/216, XFS
 comparison PASS, extras 0 fail (the `.efs` freshness checks SKIP with "not
 indexed yet"), two-client 67/67, persist 27/27, private GC + POSIX gates
@@ -2037,7 +2042,7 @@ TCP and RDMA PASS.
   captures under `/tmp`, `/data1/efs/prof/ab`, `/data1/efs/work` and
   `/data1/efs/evidence/testsuite` were deleted at the user's direction.
 
-[orcd-mini deploy `8ad79fcd5` and full POSIX qualification](orcd-mini-deploy-8ad79fcd5-20261017.md):
+[orcd-mini deploy `8ad79fcd5` and full POSIX qualification](2026-10/orcd-mini-deploy-8ad79fcd5-20261017.md):
 **deployed; core POSIX PASS.** smoke 216/216, XFS comparison PASS,
 two-client 67/67, persist 27/27, private GC + POSIX TCP and RDMA PASS.
 - `posix_extras` fails 2/5: `.efs` stats/find on a just-created directory
@@ -2045,7 +2050,7 @@ two-client 67/67, persist 27/27, private GC + POSIX TCP and RDMA PASS.
 - `posix_expiry` fails in its fixture ("different inode group"),
   identically on the previous release `4aff22c62f9f`.
 
-[Raft log rotation off the metadata path](raft-rotate-stall-20261017.md):
+[Raft log rotation off the metadata path](2026-10/raft-rotate-stall-20261017.md):
 **implementation, unit and private-cluster A/B PASS; orcd-mini live
 NOTRUN (needs a deploy).**
 - orcd-mini's ~14 s stall on all three daemons was rotation rewriting
@@ -2059,7 +2064,7 @@ NOTRUN (needs a deploy).**
 - What remains is the snapshot export (3.6–4.7 s here, all three replicas at
   once). That is the next gate.
 
-[GC backlog CPU is query-catalog rebuilds](orcd-mini-gc-query-catalog-20261017.md):
+[GC backlog CPU is query-catalog rebuilds](2026-10/orcd-mini-gc-query-catalog-20261017.md):
 **deployed to orcd-mini (`859b2b9eb320`); all live suites PASS** (smoke
 216/216, two-client 67/67, persist 27/27, private GC gate TCP and RDMA).
 During a GC-only backlog, efsd CPU fell from about 52% to 3–7% per node.
@@ -2074,7 +2079,7 @@ defect); the 60 s cap and exact dependencies carry the gain.
   from 2 s to 60 s.
 - GC schedule untouched.
 
-[Client staging evictor: O(1) LRU](orcd-mini-stage-evict-20261017.md):
+[Client staging evictor: O(1) LRU](2026-10/orcd-mini-stage-evict-20261017.md):
 **deployed to both orcd-mini clients (`155695ccd`); PASS under the
 user's workload shape:** the node9900 writer held about 1,000 and then
 about 1,900 files/s, against about 50 before.
@@ -2090,7 +2095,7 @@ about 1,900 files/s, against about 50 before.
 - Separate, pre-existing: a 14 s Raft log rotation on all three daemons
   exhausted the client retry budget and failed one close with EIO.
 
-[Waiter wake-up outside `cv_mu`](orcd-mini-waiter-wake-20261016.md):
+[Waiter wake-up outside `cv_mu`](2026-10/orcd-mini-waiter-wake-20261016.md):
 **deployed to orcd-mini (`4aff22c62`); smoke 216/216 PASS.**
 `host_waiters_wake` decides under `cv_mu` and signals after unlocking.
 - Under the user's workload, condvar re-acquire is 6.8% of the leader's lock
@@ -2099,13 +2104,13 @@ about 1,900 files/s, against about 50 before.
   reads 17%, leader-cover picks 14%.
 - Private A/B: 21.4% → 2.2%; creates/s and latency unchanged within noise.
 
-[orcd-mini profile on `f4a373b13`](orcd-mini-profile-f4a373b13-20261016.md):
+[orcd-mini profile on `f4a373b13`](2026-10/orcd-mini-profile-f4a373b13-20261016.md):
 **profiling only.** Under the user's workload, LOOKUP ReadIndex lock waits
 stay at 0.8% (9.1% before the fix). The leader's top lock wait (45%) is woken
 waiters re-acquiring `cv_mu` after `host_waiters_wake` signals while holding
 it; proposals on `h->mu` come next.
 
-[ORCD-test devel qualification `48644535f`](orcd-test-beta-48644535f-20261016.md):
+[ORCD-test devel qualification `48644535f`](2026-10/orcd-test-beta-48644535f-20261016.md):
 **deployed; overall FAIL.** RDMA/direct-I/O, .efs enabled, expiry off;
 packing/containers removed. Live core POSIX 1,512/1,512, cross-host 67/67,
 cold durability 189/189, 109,452 exact mixed cycles and 4,715 queries PASS.
@@ -2117,7 +2122,7 @@ with the committed cleanup-name correction, including physical cleanup.
 Annotated RDMA unit rechecks PASS. Kernel W121 and automatic recovery W71
 remain open; this is not large-namespace/400-GiB acceptance.
 
-[ReadIndex admission without `h->mu`](orcd-mini-readindex-lock-20261016.md):
+[ReadIndex admission without `h->mu`](2026-10/orcd-mini-readindex-lock-20261016.md):
 **deployed to orcd-mini (`8391950f0`); PASS under the user's tiny-file
 workload** (POSIX smoke 216/216). Fresh metadata readers admit themselves from
 the published view plus a per-group `ri_begun`, raised before probes leave.
@@ -2132,7 +2137,7 @@ spike of 24–27 ms, which is not explained.
 
 [W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; source review only.** Reuse root barrier watermarks if epoch history, exact write tags and retained file versions prove recovery. No extra fsync-time metadata commit remains a hypothesis; eight-byte/zero-I/O cost claims are unproven. Implementation and acceptance NOTRUN; W71 remains open.
 
-[orcd-mini deployment of `09f8af09c`](orcd-mini-deploy-09f8af09c-20261016.md)
+[orcd-mini deployment of `09f8af09c`](2026-10/orcd-mini-deploy-09f8af09c-20261016.md)
 (now running `47ba6b590`: W123-branch reclaim-retirement and fragment-attempt fixes ported; oversized-truncate refusal not merged, D25 logical truncate proposed instead; make test and smoke 216/216 PASS; under a 32M-file create load: core 216/216, extras 4/5 + 1 skip, durability 27/27, two-client 67/67, ior easy/hard rc 0, no user-visible errors)
 (daemons `4aff22c62`, clients `155695ccd`; smoke POSIX 216/216 PASS):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
@@ -2140,7 +2145,7 @@ spike of 24–27 ms, which is not explained.
 integration FAIL on the known W71 uncertain-recovery fence, the same as the
 previous deployment `4d6530dd8`. Includes the RDMA credit fix.
 
-[Crash-path gates under the W71 fence](crash-gate-fence-fixtures-20261016.md):
+[Crash-path gates under the W71 fence](2026-10/crash-gate-fence-fixtures-20261016.md):
 **PASS (scoped), test-only change.** The fault suite uses a fresh cluster for
 each server kill and asserts fsync EIO after restart: 24/24 PASS (RDMA
 mlx5_0, direct). The GC gate asserts the EIO after its four-server crash, then
@@ -2153,11 +2158,11 @@ and the portal with defaults, effective values and startup/runtime scope. The
 portal launch-environment draft is partial; backend implementation and acceptance
 are NOTRUN. Small-cluster AMD/Intel qualification is sufficient.
 
-[Native LMCache versus NIXL for AMD/NVIDIA GPU transfers](efs-kv-gpu-api-comparison-20261016.md): **API review only; implementation and hardware tests NOTRUN.** Prefer NIXL/UCX data movement plus EFS cache control and a GPU-aware adapter extension. Both current LMCache L2 paths use host buffers.
+[Native LMCache versus NIXL for AMD/NVIDIA GPU transfers](2026-10/efs-kv-gpu-api-comparison-20261016.md): **API review only; implementation and hardware tests NOTRUN.** Prefer NIXL/UCX data movement plus EFS cache control and a GPU-aware adapter extension. Both current LMCache L2 paths use host buffers.
 
-[LMCache through native NIXL: EFS integration direction](efs-lmcache-nixl-direction-20261016.md): **design only; implementation and performance NOTRUN.** Target native asynchronous EFS transfers; AMD GPU-direct support and shared publication/eviction require qualification.
+[LMCache through native NIXL: EFS integration direction](2026-10/efs-lmcache-nixl-direction-20261016.md): **design only; implementation and performance NOTRUN.** Target native asynchronous EFS transfers; AMD GPU-direct support and shared publication/eviction require qualification.
 
-[ORCD Raft/KV decisions](orcd-raft-kv-20261016.md): mixed correctness **PASS**
+[ORCD Raft/KV decisions](2026-10/orcd-raft-kv-20261016.md): mixed correctness **PASS**
 (297,651 exact readbacks; 57,935 queries), loaded POSIX **FAIL** (seven
 15-second timeouts). Keep Raft batching, 100 ms checkpoint interval, concurrent
 KV readers and 32 cache stripes; scan-seek cache benefit remains unproven here.
@@ -2191,7 +2196,7 @@ failures: LeakSanitizer is broken on that host (a trivial leak program fails
 too; the three affected tests pass with `detect_leaks=0`), and
 `check-architecture` needs the omitted `results/` (5/5 on the checkout).
 
-[RDMA credit overrun](orcd-mini-rdma-credit-20261016.md): **PASS on
+[RDMA credit overrun](2026-10/orcd-mini-rdma-credit-20261016.md): **PASS on
 orcd-mini under the user's workload** (`09f8af09c`): group-2 commits 229 →
 ~6,500/s; loaded create/stat p50 71/21 → 6.1/2.7 ms. Next bottleneck: LOOKUP
 ReadIndex on the Raft host mutex. DATA plus CREDIT frames could exceed a peer's
@@ -2201,7 +2206,7 @@ review fix `bbebedea8` bound each window at half the smaller receive pool
 (6 receives by default). Private 3-node RDMA cluster: 16-thread creates
 348–388 → 2,529–2,675 files/s; stat p90 2.3–4.5 → 0.3 ms.
 
-[orcd-mini truncate](orcd-mini-truncate-20261016.md): **scoped PASS
+[orcd-mini truncate](2026-10/orcd-mini-truncate-20261016.md): **scoped PASS
 (functional).** A staged DEL's garbage vlen wedged one replica's apply
 (`apply lane-fence rc=-5` forever; truncate EIO, mkdir/rm EBUSY), fixed in
 `502277d19`. Truncating files over ~1 GiB returned EIO (32-chunk lane-fence
@@ -2209,15 +2214,15 @@ cap); `4d6530dd8` pages the fence and reads the TRUNCATE verdict. A 100 GiB
 `dd if=/dev/null` now completes in 4.3 s; data/regrow checks PASS. Crash
 during paging NOTRUN.
 
-[ORCD queued-read-vote comparison](orcd-queued-read-vote-20261016.md):
+[ORCD queued-read-vote comparison](2026-10/orcd-queued-read-vote-20261016.md):
 **NO—keep reverted.** Frozen `fa29f9277`, native RDMA/direct, `.efs` enabled,
 no expiry; OFF–ON–ON–OFF across seven clients. POSIX
 failures15/0/10/0;22,182 mounted queries PASS, no repeatable net benefit.
-**W121 OPEN, kernel remediation deferred:** [fork/read diagnosis](orcd-w121-fork-read-20261016.md). Correct daemon replies can reach stale application pages on ORCD; the performance harness now isolates query-launch processes. Original evidence: 255 immediate readbacks returned wrong bytes after successful
+**W121 OPEN, kernel remediation deferred:** [fork/read diagnosis](2026-10/orcd-w121-fork-read-20261016.md). Correct daemon replies can reach stale application pages on ORCD; the performance harness now isolates query-launch processes. Original evidence: 255 immediate readbacks returned wrong bytes after successful
 fsync across both variants. W119 remains open; this is not full acceptance.
 
 
-[Raft follower batching default](intel-raft-follower-batching-20261016.md):
+[Raft follower batching default](2026-10/intel-raft-follower-batching-20261016.md):
 **scoped PASS (performance)** measured on `3fba43af7` with the opt-in bundle
 (`EFS_RAFT_BATCH_OVERLAP=1`, `EFS_RAFT_BATCH_NOOP=1`, 100 ms applied interval),
 now the default for both engines: lease edges 25 → 3.7–3.9 ms, AMD small-file
@@ -2227,13 +2232,13 @@ retained-close fix and hashed open table (`ae3a49d8a`), concurrent LSM reads
 concurrent reads (`6b5c34624`); merged with the AMD durability branch.
 Qualification NOTRUN.
 
-[ORCD fresh-store read/close baseline](orcd-read-close-baseline-20261016.md):
+[ORCD fresh-store read/close baseline](2026-10/orcd-read-close-baseline-20261016.md):
 W119 native RDMA/direct baseline on frozen852caf1ae, features disabled,
 exclusive after graceful crawler/service stop. Three fresh-store core runs
 216/216 PASS (11.3/11.0/11.1s), local peer67/67 PASS; no seven-client run. TCP leg pending scope clarification;
 no A/B conclusion or AMD timeout closure.
 
-[AMD asynchronous durability fixes](amd-async-durability-20261015.md):
+[AMD asynchronous durability fixes](2026-10/amd-async-durability-20261015.md):
 **durability scoped PASS, loaded POSIX FAIL** on `c4178ea81`, branch
 `devel-amd-durability-20261015` from `84ffe7a68`. Early ACKs retained; all-node
 COMMIT, boot verifiers and persistent unclean-recovery refusal pass focused
@@ -2272,7 +2277,7 @@ and deep>64 1.5s PASS, original deadlines/features unchanged. NUC RDMA remains
 NOTRUN (no device/Soft-RoCE kernel); AMD timeout closure is not claimed.
 
 
-[Asynchronous PUT acknowledgement](intel-async-durability-20261015.md):
+[Asynchronous PUT acknowledgement](2026-10/intel-async-durability-20261015.md):
 **scoped PASS** on `3edc7b846` (async ACK from `d8af2c325`, concurrent-fsync
 COMMIT fix, 200 ms read-mapping TTL with refresh-ahead and close-to-open), now
 the only data PUT mode. On Intel/xorinox 2 GiB writes 151 → 166–180 MiB/s,
@@ -2280,7 +2285,7 @@ with fsync 141 → 176–179, four writers 94–101 → 173 (network-bound: 1.5�
 erasure-coded bytes on 2.5 GbE); reads 237–255 MiB/s (88–92% of the link).
 Two-client peer suite 67/67 PASS. Crash/power-loss qualification NOTRUN.
 
-[AMD ordinary RDMA/direct POSIX](amd-rdma-posix-20261015.md): **FAIL loaded,
+[AMD ordinary RDMA/direct POSIX](2026-10/amd-rdma-posix-20261015.md): **FAIL loaded,
 scoped functional PASS** on `c8d057391`, branch `devel-amd-posix-20261015`
 from devel `761c91c42`. Full native/strict transport, serial216/216, peer67/67,
 cold27/27 and paused-follower32MiB pass. One-mount jobs16 is215/216:
@@ -2289,13 +2294,13 @@ ACK-window fixes are committed; the loaded gate stays open. Queries, expiry
 and seven-client load are excluded. This predates
 asynchronous PUT acknowledgement (`d8af2c325`) and does not qualify it.
 
-[Grouped fragment durability](intel-cohort-durability-20261015.md) (superseded):
+[Grouped fragment durability](2026-10/intel-cohort-durability-20261015.md) (superseded):
 opt-in `EFS_PUT_COHORT=1` in `5cef06ac4`, removed by `d8af2c325`. On Intel with the xorinox
 client, four concurrent writers 94–101 → 119–132 MiB/s and single-stream
 146–149 → 169–170 MiB/s, with half the device flushes per MiB; local model
 2.5–3x. Kept as evidence for why per-fragment barriers limited writes.
 
-[Intel read metadata and read-cache fixes](intel-read-metadata-cache-20261015.md):
+[Intel read metadata and read-cache fixes](2026-10/intel-read-metadata-cache-20261015.md):
 **PASS (scoped)** on `b3e93177c138` (compact GETCHUNKS replies) and
 `49d721a4f180` (read-cache admission past the speculative budget), Intel
 cluster with the xorinox client. Wire bytes per byte read 1.24→1.08 (1 MiB)
@@ -2303,19 +2308,19 @@ and 10.49→1.15 (32 KiB); single-stream 1 MiB 124→218 MiB/s, 32 KiB 12→43 M
 POSIX/peer/persistence/fault qualification NOTRUN; old clients reject the new
 servers, so the AMD Intel-export client is stopped.
 
-[ORCD TCP/direct, `.efs` disabled rerun](orcd-tcp-direct-disabled-20261015.md):
+[ORCD TCP/direct, `.efs` disabled rerun](2026-10/orcd-tcp-direct-disabled-20261015.md):
 **FAIL** on the same `b3e93177c138` product source:895 PASS/120 FAIL/520 NOTRUN
 in the seven-client round, peer61/67, clean stop refused. All23 successfully
 prepared persistence cases verify after authorized forced restart; private
 TCP POSIX/peer/GC, faults and memory gates pass. Current ORCD profile is
 TCP/direct/files with commands and expiry disabled.
 
-[ORCD latest-devel qualification, October 15](orcd-devel-qualification-20261015.md): deployment
+[ORCD latest-devel qualification, October 15](2026-10/orcd-devel-qualification-20261015.md): deployment
 PASS on `b3e93177c138`; qualification **FAIL**. Seven-client POSIX, cross-host
 peer, enabled commands and clean stop have failures; W119/W120 track follow-up.
 Valgrind and the standalone native-RDMA fault suite pass their selected scopes.
 
-[October 15 open-item reconciliation](open-item-reconciliation-20261015.md) identifies superseded
+[October 15 open-item reconciliation](2026-10/open-item-reconciliation-20261015.md) identifies superseded
 implementation claims, existing closures, deferred work and gates that remain.
 It includes current-source checks; it is not new runtime qualification.
 
@@ -2324,13 +2329,13 @@ running clusters. Newer source commits do not inherit earlier test verdicts.
 
 | Area | Evidence and limits |
 | --- | --- |
-| Intel/AMD sequential reads | [October 15 read coordination](intel-read-coordination-20261015.md) and [AMD read profile](intel-amd-read-profile-20261015.md) are measurement evidence. [Read metadata and read-cache fixes](intel-read-metadata-cache-20261015.md) record scoped PASS for `b3e93177c138`/`49d721a4f180`; full qualification of those sources remains NOTRUN. |
-| Intel write path | [Eight-writer deployment](intel-default-eight-writers-20261015.md), [pressure draining](intel-pressure-drain-20261014.md), [sync batching](intel-sync-batching-20261014.md). Scoped smoke/native results; observations do not establish universal throughput gains. [Grouped durability design](intel-cohort-durability-20261015.md) is a local model only. |
-| REPORT / W100 | [Newer-snapshot report](intel-report-newer-snapshot-20261014.md): W100 closed by scoped human acceptance October 14. Older OPEN entries are historical; this does not establish the cause or resolution of the original ORCD EIO. |
-| Integrated RDMA source | [Merged devel qualification](devel-rdma-merge-qualification-20261014.md). AMD software-RDMA evidence does not replace ORCD hardware gates. |
-| `.efs` functional versus scale work | [Three work packages and feature matrix](three-work-packages-20261013.md), [AMD package 2](amd-package2-query-20261013.md), [ORCD package 1](orcd-package1-20261013.md), [later query fixes](orcd-query-name-ordinals-20261013.md). General 400 GiB acceptance remains recorded as on hold; targeted fixes and marker checks do not close it. |
-| Small-cluster follow-ups | [ORCD findings reproducible on AMD/Intel](orcd-small-cluster-followups-20261013.md). Preserve unresolved ordinary-I/O and scale obligations separately. |
-| Expiry | [Implementation](expiry-implementation-20261012.md) and [foreground fairness](expiry-foreground-latency-20261013.md) retain scoped evidence. Expiry stays excluded from the three-package profiles. |
+| Intel/AMD sequential reads | [October 15 read coordination](2026-10/intel-read-coordination-20261015.md) and [AMD read profile](2026-10/intel-amd-read-profile-20261015.md) are measurement evidence. [Read metadata and read-cache fixes](2026-10/intel-read-metadata-cache-20261015.md) record scoped PASS for `b3e93177c138`/`49d721a4f180`; full qualification of those sources remains NOTRUN. |
+| Intel write path | [Eight-writer deployment](2026-10/intel-default-eight-writers-20261015.md), [pressure draining](2026-10/intel-pressure-drain-20261014.md), [sync batching](2026-10/intel-sync-batching-20261014.md). Scoped smoke/native results; observations do not establish universal throughput gains. [Grouped durability design](2026-10/intel-cohort-durability-20261015.md) is a local model only. |
+| REPORT / W100 | [Newer-snapshot report](2026-10/intel-report-newer-snapshot-20261014.md): W100 closed by scoped human acceptance October 14. Older OPEN entries are historical; this does not establish the cause or resolution of the original ORCD EIO. |
+| Integrated RDMA source | [Merged devel qualification](2026-10/devel-rdma-merge-qualification-20261014.md). AMD software-RDMA evidence does not replace ORCD hardware gates. |
+| `.efs` functional versus scale work | [Three work packages and feature matrix](2026-10/three-work-packages-20261013.md), [AMD package 2](2026-10/amd-package2-query-20261013.md), [ORCD package 1](2026-10/orcd-package1-20261013.md), [later query fixes](2026-10/orcd-query-name-ordinals-20261013.md). General 400 GiB acceptance remains recorded as on hold; targeted fixes and marker checks do not close it. |
+| Small-cluster follow-ups | [ORCD findings reproducible on AMD/Intel](2026-10/orcd-small-cluster-followups-20261013.md). Preserve unresolved ordinary-I/O and scale obligations separately. |
+| Expiry | [Implementation](2026-10/expiry-implementation-20261012.md) and [foreground fairness](2026-10/expiry-foreground-latency-20261013.md) retain scoped evidence. Expiry stays excluded from the three-package profiles. |
 
 The full chronological index is [preserved intact](archive/status-index-before-restructure-20261015.md).
 Its old deployment instructions and grouped open counts are historical, not a
@@ -2357,4 +2362,4 @@ gate or authorize deployment. Keep unresolved work linked from its queue/ledger.
 
 **Raw evidence note (2026-10-23):** the bulk data in `testsuite` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.
 
-[AE port](ae-product-port-20261030.md): `agent/devel-task-ae` ported onto devel `7514b2145`: routine-logging reporter (K70) and `rj.recovered` atomic (K71) ported; the fault-fixture, K48 forensics and AB/AE native acceptance are **not** closed. Evidence pages [AB](ab-obs-dump-20261028.md) and [AE](ae-pump-logging-20261028.md) merged with renumbered K rows.
+[AE port](2026-10/ae-product-port-20261030.md): `agent/devel-task-ae` ported onto devel `7514b2145`: routine-logging reporter (K70) and `rj.recovered` atomic (K71) ported; the fault-fixture, K48 forensics and AB/AE native acceptance are **not** closed. Evidence pages [AB](2026-10/ab-obs-dump-20261028.md) and [AE](2026-10/ae-pump-logging-20261028.md) merged with renumbered K rows.

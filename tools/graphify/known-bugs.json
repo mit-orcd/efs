@@ -68,7 +68,7 @@
     },
     {
       "id": "F1-stripe-prepublication",
-      "contract": "docs/status/graph-defects-20261028.md",
+      "contract": "docs/status/2026-10/graph-defects-20261028.md",
       "heading": "F1 \u2014 Sweep can retire a stripe that has not been published (P1)",
       "production": {
         "file": "src/client/data_commit.c",
@@ -90,7 +90,7 @@
     },
     {
       "id": "F2-pending-receipt-ownership",
-      "contract": "docs/status/graph-defects-20261028.md",
+      "contract": "docs/status/2026-10/graph-defects-20261028.md",
       "heading": "F2 \u2014 Receipt pressure permits concurrent execution of one identity (P2)",
       "production": {
         "file": "src/common/request_receipt.c",
@@ -112,7 +112,7 @@
     },
     {
       "id": "F3-raft-index-width",
-      "contract": "docs/status/graph-defects-20261028.md",
+      "contract": "docs/status/2026-10/graph-defects-20261028.md",
       "heading": "F3 \u2014 Raft lookup aliases indices separated by 2^32 (P2)",
       "production": {
         "file": "src/raft/raft_disk.c",
@@ -134,7 +134,7 @@
     },
     {
       "id": "F4-sweep-metadata-deadline",
-      "contract": "docs/status/graph-defects-20261028.md",
+      "contract": "docs/status/2026-10/graph-defects-20261028.md",
       "heading": "F4 \u2014 Sweep metadata RPCs miss the shared deadline (P2)",
       "production": {
         "file": "src/client/data_commit.c",
@@ -160,7 +160,7 @@
     },
     {
       "id": "F5-retired-stripe-two-lost",
-      "contract": "docs/status/graph-defects-20261028.md",
+      "contract": "docs/status/2026-10/graph-defects-20261028.md",
       "heading": "F5 \u2014 Closed absent stripes with fewer than two durable fragments never retire (P2)",
       "production": {
         "file": "src/client/data_commit.c",

@@ -63,7 +63,7 @@ Checks (each one recorded in the JSON report, the run fails on any miss):
     abandoned with rc=0; peer writers completed (the frontier was never
     stranded); other failed writes are accounted under the rule above
 
-Raw logs stay under ROOT (outside Git). Usage: see docs/status/k15-w52-w64-20261022.md.
+Raw logs stay under ROOT (outside Git). Usage: see docs/status/2026-10/k15-w52-w64-20261022.md.
 """
 import argparse, calendar, hashlib, json, multiprocessing as mp, os, re, signal, socket
 import struct, subprocess, sys, time

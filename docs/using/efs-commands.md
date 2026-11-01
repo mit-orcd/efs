@@ -117,9 +117,9 @@ ignored ("expiry unavailable" in their status). Expiry itself ships (D43) and
 is operated with `efs-mgmt expiry-policy` (the cluster expiry policy, off by
 default, and folder policies) and `efs-mgmt expiry`; see the
 [alpha guide](alpha-1.0-guide.md#expiry) and the
-[expiry test status](../status/efs-command-options-20261008.md#expiry-testing).
+[expiry test status](../status/2026-10/efs-command-options-20261008.md#expiry-testing).
 For activation and restart/catch-up behavior, see
-[persistent server policy](../status/efs-query-persistent-policy-20261010.md).
+[persistent server policy](../status/2026-10/efs-query-persistent-policy-20261010.md).
 
 Human status on stderr uses relative freshness, for example:
 
@@ -147,8 +147,8 @@ live tree. A cold or returning publisher may report not indexed yet, an
 explicit refusal, or an older snapshot with freshness/error diagnostics.
 Do not count those as a fresh-query PASS or raise refresh budgets to hide a
 failed default-profile check. Current cold-query acceptance is incomplete
-([Task K](../status/k44-retired-replica-routing-20261026.md),
-[Task M](../status/gate-fstor007-20261027.md)).
+([Task K](../status/2026-10/k44-retired-replica-routing-20261026.md),
+[Task M](../status/2026-10/gate-fstor007-20261027.md)).
 
 Stored-row decoder failures fence the affected metadata replica (W130/W165).
 Preserve evidence and use the [follower resync runbook](alpha-1.0-guide.md#a-metadata-replica-halts-w130w165);
@@ -195,7 +195,7 @@ Check server `query-restore`, `query-refresh` and `query-publish` logs if comman
 fail. Stale/corrupt checkpoints are rebuilt after authority checks. A misplaced
 live directory entry can refuse the entire candidate; raising a memory budget
 does not repair that condition. Do not edit authoritative metadata to clear a
-cache error. See [W92 deployment and remaining gates](../status/query-disk-backend-20261009.md).
+cache error. See [W92 deployment and remaining gates](../status/2026-10/query-disk-backend-20261009.md).
 
 ## Administrator command policy
 
@@ -219,7 +219,7 @@ This policy is the only switch for `.efs` (D42): `EFS_COMMANDS` and
 its query worker, which idles when nothing changed. Fresh queries and export pages check server policy and current quorum;
 already acquired immutable bytes remain readable. Ordinary file I/O continues
 when command policy is disabled. Final scale/platform acceptance is
-tracked in the [W92 ledger](../status/query-cache-closure-20261010.md).
+tracked in the [W92 ledger](../status/2026-10/query-cache-closure-20261010.md).
 
 ## NFS gateways
 

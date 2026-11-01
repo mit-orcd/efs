@@ -23,7 +23,7 @@ settled serial/candidate captures wait120 seconds on four-node fixtures.
 The compile-only transaction barrier is used solely by the coordinator-death
 fixture; normal service builds do not include it.
 
-See [the status ledger](../../../docs/status/tcp-five-gates-20261007.md).
+See [the status ledger](../../../docs/status/2026-10/tcp-five-gates-20261007.md).
 
 `tcp-five-namespace-fault-fixed.log` is the second failing run, after only the
 FUSE errno fix. `namespace-replay-uw4d4xlb` clones that failed fixture and

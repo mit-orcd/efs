@@ -3,7 +3,7 @@
 ## Purpose and linked item
 Query stage-trace review output, added by commit `daa3f35af` ("Review
 post-unlock query trace emission and timing limits", 2026-10-11).
-Linked status page: `docs/status/mac-query-discriminator-review-20261012.md`.
+Linked status page: `docs/status/2026-10/mac-query-discriminator-review-20261012.md`.
 Verifies the opt-in `query-stage` trace emission and the capture-retry
 bounds, with tracing disabled and enabled.
 

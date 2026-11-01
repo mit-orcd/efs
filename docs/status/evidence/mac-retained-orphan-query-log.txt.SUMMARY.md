@@ -5,7 +5,7 @@ Daemon-side query restore/refresh log excerpt captured for the
 retained-orphan review, added by commit `4124876fc` ("Reproduce
 retained Mac directory backlink refusal with safe negative controls",
 2026-10-11). Linked status page:
-`docs/status/mac-retained-orphan-review-20261012.md`. Shows the live
+`docs/status/2026-10/mac-retained-orphan-review-20261012.md`. Shows the live
 daemon repeatedly refusing query restore for the retained-orphan shape.
 
 ## Verdict

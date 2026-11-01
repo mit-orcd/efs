@@ -4,7 +4,7 @@
 Implementation checkpoint for three work items: **W93** (broader durable Raft
 group commit / bounded follower batching), **W94** (atomic CREATE and open-lease
 acquisition), **W96** (bounded preallocation and discarded-tail recovery for the
-KV WAL). Status page: `docs/status/w93-w96-implementation-20261008.md`. Baseline
+KV WAL). Status page: `docs/status/2026-10/w93-w96-implementation-20261008.md`. Baseline
 `devel` merge `d4e70492`; subdir manifests pin per-fixture source/binary hashes.
 The run is a set of nested phase fixtures, one per subtopic.
 

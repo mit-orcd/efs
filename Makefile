@@ -956,7 +956,7 @@ tests/measure/getattr_lane_smoke: tests/measure/getattr_lane_smoke.c $(LIB)
 tests/measure/lsm_index_smoke: tests/measure/lsm_index_smoke.c $(LIB) src/kv/kv_lsm_internal.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/kv -o $@ $< $(LIB) $(LDFLAGS)
 
-# Offline query-cache scale benchmarks (docs/status/query-cache-closure-20261010.md).
+# Offline query-cache scale benchmarks (docs/status/2026-10/query-cache-closure-20261010.md).
 tests/measure/bench_query_disk_scale: tests/measure/bench_query_disk_scale.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
 

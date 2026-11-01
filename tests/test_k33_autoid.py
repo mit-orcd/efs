@@ -4,7 +4,7 @@
 Real efsd daemons on loopback (127.0.0.0/8), private ports and stores under
 TMPDIR (tests/k33_daemons.py). Discovery uses private UDP ports and probes
 only `lo` (broadcast 127.255.255.255), so it never reaches another host or
-the real clusters' ports. docs/status/k33-membership-protocol-20261023.md
+the real clusters' ports. docs/status/2026-10/k33-membership-protocol-20261023.md
 M4' (promise formation) and M1 (discovery finds peers only).
 1. No answer: a joiner without a seed says that nobody answered and waits;
    once a seed and a second joiner start on its discovery port it finds

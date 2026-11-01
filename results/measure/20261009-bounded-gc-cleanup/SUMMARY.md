@@ -6,7 +6,7 @@ Acceptance run for bounded GC/reap cleanup at code commit `978caaf7`: an
 RPC-only SWEEP_NEXT request, REAP_BATCH entries carrying at most eight exact
 reservation/receipt keys, and a fairness fix so partial progress on one lane no
 longer starves later lanes. Part of the 2026-10-09 dependency-linked
-correctness package (`docs/status/dependency-package-20261009.md`, "Implemented
+correctness package (`docs/status/2026-10/dependency-package-20261009.md`, "Implemented
 cleanup portion" and "Installed deployment" sections). Added to raw-evidence by
 commit `3dec69958`.
 

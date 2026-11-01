@@ -6,7 +6,7 @@ Merged checkpoint for the W86 (durable PUT tickets) / W88 (typed
 publication/writeback) integration: durable storage-session barrier
 certificates, storage revocation gates and the merged ticket + storage-fence
 integration. Linked from
-`docs/status/dependency-package-20261009.md` ("Merged baseline and durable
+`docs/status/2026-10/dependency-package-20261009.md` ("Merged baseline and durable
 storage-session barrier — Oct 10 UTC", line 949, points at this run's
 README.md) and from `docs/backlog/work-items.md` W86 "Oct 10 merged
 storage-barrier progress". Added by commits `478a4306c` and `61fb92386`

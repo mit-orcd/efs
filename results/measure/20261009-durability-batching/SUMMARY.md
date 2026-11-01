@@ -6,7 +6,7 @@ Observational measurement of the deployed W93 WAL durability batching under a
 sustained tiny-file workload — how many Raft entries each WAL sync actually
 amortizes. No code, deployment, batching limit, filesystem option or durability
 contract changed. Linked item: W93 (bounded follower durability batching) —
-docs/status/durability-batching-profile-20261009.md and
+docs/status/2026-10/durability-batching-profile-20261009.md and
 docs/backlog/work-items.md ("Oct 9 production measurement"). Run added by
 commit e11c6d3bb.
 

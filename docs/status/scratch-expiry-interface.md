@@ -2,7 +2,7 @@
 
 Status: historical design discussion, Oct 8, 2026.
 
-**Current authority:** D33/D34 were subsequently accepted in [the policy contract](accepted-namespace-scratch-20261008.md). Proposal language below does not reopen those choices. W92 records newer find/stats implementation and acceptance; this document preserves the original discussion. The user prefers the directory-local
+**Current authority:** D33/D34 were subsequently accepted in [the policy contract](2026-10/accepted-namespace-scratch-20261008.md). Proposal language below does not reopen those choices. W92 records newer find/stats implementation and acceptance; this document preserves the original discussion. The user prefers the directory-local
 `.efs/` command interface below. No implementation, deployment, expiry defaults,
 wire format or acceptance is claimed. This document records ideas and separates
 that interface preference from policy choices still requiring design.
@@ -140,7 +140,7 @@ of nonempty directories.
 - Record due/backlogged files, deletion failures, retained references, reclamation
   progress and time-health state. A deleted name is not proof of reclaimed bytes.
 
-The [GC checkpoint](gc-implementation-20261007.md) expressly forbids treating
+The [GC checkpoint](2026-10/gc-implementation-20261007.md) expressly forbids treating
 age alone as authority to delete unpublished fragments. Scratch expiry must
 enter through the namespace lifecycle and retain session revocation, publication
 ownership and storage-fencing requirements. Existing staged lifecycle integration

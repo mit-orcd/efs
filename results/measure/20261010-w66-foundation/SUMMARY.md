@@ -6,7 +6,7 @@ W66 "Metadata leadership distribution and routing" (`docs/backlog/work-items.md`
 line 2767): four-voter Raft engine foundation, membership-persistence
 correction, GETCHUNKS failover routing correction, and private four-voter live
 integration gates. Linked from `docs/status/metadata-scaling.md` (lines 151,
-174, 186, 194) and `docs/status/w66-protection-routing-design-20261010.md`
+174, 186, 194) and `docs/status/2026-10/w66-protection-routing-design-20261010.md`
 (line 6), all pointing into this run. Added by commits `1a96908ad`,
 `a4aa757fe`, `4d5755898`, `6c1a93b90` (raw-evidence branch). Branch
 `devel-w66`, parent `444b0d77`.

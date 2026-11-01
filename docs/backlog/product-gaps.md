@@ -99,7 +99,7 @@ but not qualified.
 The current GET path fails closed on missing/corrupt checksum evidence,
 compares returned digests with the captured metadata view, and re-hashes
 every received fragment payload before decode (built in since the
-[D42 audit](../status/read-verify-audit-20261024.md); `EFS_READ_VERIFY` is
+[D42 audit](../status/2026-10/read-verify-audit-20261024.md); `EFS_READ_VERIFY` is
 removed). NUC corruption/metadata-digest gates are recorded in
 [W75](work-items.md#w75). The older inventory's fresh-hash fallback and
 parallel-path bypass statements are superseded.
@@ -229,4 +229,4 @@ Two capacity costs dominate a tiny-file workload:
   - [W124](fast-delete-reclaim.md) proposes quota credit at delete commit
     and batched, node-local reclaim.
 
-Evidence: [orcd-mini deletes, GC and crawl](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md).
+Evidence: [orcd-mini deletes, GC and crawl](../status/2026-10/orcd-mini-gc-delete-profile-5d673efa8-20261018.md).

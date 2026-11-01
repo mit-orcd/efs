@@ -4,7 +4,7 @@
 
 ORCD merged-branch rollout: merge all current devel/AMD/Intel/Mac/NUC branch
 commits into `devel-orcd`, deploy to the ORCD cluster and run live acceptance.
-Linked status page: `docs/status/orcd-merged-rollout-20261011.md`; run
+Linked status page: `docs/status/2026-10/orcd-merged-rollout-20261011.md`; run
 preserved by commit `de348f871` ("record merged rollout and failed loaded
 acceptance gates"). Open items: W108 owner-name rollout gate (blocked by query
 failure), W109/W110 acceptance. An existing `README.md` in the run dir records
@@ -45,7 +45,7 @@ open.
 
 ## Method
 
-Procedure and gate table in `docs/status/orcd-merged-rollout-20261011.md`;
+Procedure and gate table in `docs/status/2026-10/orcd-merged-rollout-20261011.md`;
 bulk build/unit/runtime logs kept outside Git under
 `~/orcd/scratch/efs/orcd-test/` (`merged-orcd-c52a464391a6/` and
 `merged-orcd-c52a464391a6-30s/`). Sequence: build exact snapshot on eleven

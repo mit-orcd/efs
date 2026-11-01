@@ -1,6 +1,6 @@
 #!/bin/bash
 # flake_sweep.sh TREE OUT LABEL NPOOL NSERIAL: the flake sweep's gate driver
-# (docs/status/flake-sweep-20261025.md): scripts/make_test_summary.sh NPOOL
+# (docs/status/2026-10/flake-sweep-20261025.md): scripts/make_test_summary.sh NPOOL
 # times at EFS_TEST_JOBS=8 (test-all), then NSERIAL times at one job
 # (test-long), keeping each run's summary.txt, timings.tsv, progress.txt,
 # cmds.txt, build.log and tmp/fail-*.log under OUT/LABEL-{pool,serial}-NN.

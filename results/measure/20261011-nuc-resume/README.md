@@ -6,7 +6,7 @@ Current installed engine: f52cd2dd-nuc. Both placement matrices use the earlier 
 
 Focused staged W52 native transaction/recovery and actual host-loop outputs are retained here; the original GCC test-only warning is retained beside its corrected pass. The original bounded-batch native suite passes; its direct fixture timed out and was not installed. The later f52cd2dd native and both full direct/buffered live suites pass; restoration and qualified installation pass; the separate preserved-store long/cold gates remain pending. `meta-placement/` retains all three completed ten-minute placement cells, 64 cold samples per cell, sync counters, Raft observations, physical counter samples, catch-up and successful regular-service restoration. The summary preserves measurement limits.
 
-Remote root: /data1/efs/devel-nuc-20261011. See docs/status/nuc-w52-w97-resume-20261011.md for scope and checkpoints.
+Remote root: /data1/efs/devel-nuc-20261011. See docs/status/2026-10/nuc-w52-w97-resume-20261011.md for scope and checkpoints.
 
 `data-placement/` retains the accepted SATA → NVMe → SATA data control,
 always with SATA metadata and the same 108afa3e engine. The last cold startup

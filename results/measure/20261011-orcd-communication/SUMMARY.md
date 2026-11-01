@@ -5,8 +5,8 @@
 Derived analysis of the ORCD communication capture
 `communication-20261011T045504Z` for work items W109 (metadata/query
 contention) and W110 (EFS/IB/TCP communication diagnosis). Linked status
-pages: `docs/status/orcd-communication-20261011.md` and
-`docs/status/orcd-communication-hypotheses-20261011.md`.
+pages: `docs/status/2026-10/orcd-communication-20261011.md` and
+`docs/status/2026-10/orcd-communication-hypotheses-20261011.md`.
 
 ## Verdict
 

@@ -1,6 +1,6 @@
 # Three-package NUC acceptance evidence — Oct 7, 2026
 
-See the [status ledger](../../../docs/status/three-package-gates-20261007.md)
+See the [status ledger](../../../docs/status/2026-10/three-package-gates-20261007.md)
 for scope, source fixes and remaining gates. Private TCP fixtures only; no
 normal-service rollout. Every source snapshot lives under `/data1/efs` on NUC.
 Fixture JSON records the source/test/binary hashes and exact CLI options.

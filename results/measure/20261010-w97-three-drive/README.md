@@ -42,4 +42,4 @@ are separately recorded. Optional root health scripts change no settings.
 cluster and both mounts restore with normal default settings and diagnostics off;
 final active binary identity is asserted. Both collector stop markers are set.
 No private daemon/loader/perf remains. Private storage/data is preserved outside
-this evidence folder. Full report: `docs/status/w97-three-drive-20261010.md`.
+this evidence folder. Full report: `docs/status/2026-10/w97-three-drive-20261010.md`.

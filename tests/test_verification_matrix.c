@@ -7,7 +7,7 @@
  *  - a read error is never absence, corruption or a reason to delete;
  *  - a missing file is absence.
  * The observed matrix is printed; justified differences are in
- * docs/status/az-verification-policy-audit-20261029.md. */
+ * docs/status/2026-10/az-verification-policy-audit-20261029.md. */
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>

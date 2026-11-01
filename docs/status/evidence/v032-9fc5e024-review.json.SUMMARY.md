@@ -5,7 +5,7 @@ Machine-readable verdict for the user-requested review of ORCD evidence
 commit `9fc5e024534a311f423315421e6e227a5997b90d` and its integration
 into `release-v0.3.2-pre-alpha`. Added by commit `b4f26e9d4` ("docs:
 record v0.3.2 ORCD evidence review and unchanged qualified code").
-Linked status page: `docs/status/v032-integration-review-20261012.md`.
+Linked status page: `docs/status/2026-10/v032-integration-review-20261012.md`.
 
 ## Verdict
 PASS as a documentation/evidence review: `blocking_findings` is empty

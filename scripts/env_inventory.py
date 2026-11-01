@@ -26,7 +26,7 @@ fails when a variable read by the product has no inventory row with a kind
 (the fourth cell of a seven-cell row) or a kind other than the retained
 ones in KINDS, so an A/B behavior selector, an experimental or a legacy
 switch cannot be read without failing the gate. A new EFS_* reader
-therefore needs a row in docs/status/a6-settings-inventory-20261024.md.
+therefore needs a row in docs/status/2026-10/a6-settings-inventory-20261024.md.
 """
 import bisect
 import json

@@ -7,7 +7,7 @@ repair (red/green), sanitizer acceptance, and the final full-acceptance dir.
 ## Purpose and linked item
 
 - Writeback PUT path hardening; scope and results:
-  `docs/status/writeback-hour-20261008.md`. The durability driver fix (no more
+  `docs/status/2026-10/writeback-hour-20261008.md`. The durability driver fix (no more
   forced TCP on remount) is devops commit `e0fcc1f`.
 
 ## Verdict

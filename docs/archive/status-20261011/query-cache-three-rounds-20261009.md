@@ -1,6 +1,6 @@
 # W92 — three additional tiny-file cache rounds
 
-**Archived Oct 11, 2026:** dated profiling and integration evidence. These rounds do not close W92 or establish the current Intel deployment. The [active W92 acceptance ledger](../../status/query-cache-closure-20261010.md) retains unresolved scale and platform gates.
+**Archived Oct 11, 2026:** dated profiling and integration evidence. These rounds do not close W92 or establish the current Intel deployment. The [active W92 acceptance ledger](../../status/2026-10/query-cache-closure-20261010.md) retains unresolved scale and platform gates.
 Oct 9 EDT / Oct 10 UTC, `devel-find-stats`; Xorinox files/direct-I/O/TCP.
 Three additional 6000-file trees use the original tiny_files.py with four workers,
 1..512-byte payloads and up to three directory levels. Every storage daemon has

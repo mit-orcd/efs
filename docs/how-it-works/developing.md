@@ -4,7 +4,7 @@
 four nodes provide the maximum two-node-loss safety target; additional nodes
 scale volume and performance across all dimensions. Today's fixed 2+1 data and
 three-voter metadata groups do not implement that four-node guarantee. See
-[binding requirement and implementation gates](../status/node-count-protection-20261009.md); preserve the requirement
+[binding requirement and implementation gates](../status/2026-10/node-count-protection-20261009.md); preserve the requirement
 rather than deriving the design from current code.
 
 [Architecture](architecture.md) · [Status](../status/README.md) ·
@@ -313,3 +313,15 @@ git config merge.ours.driver true
 The `merge=ours` driver keeps our side on a merge conflict, which is right
 because the file is regenerated afterwards; without the setting git merges
 normally, so nothing breaks.
+
+## Status page layout
+
+A status page whose name ends in `-YYYYMMDD.md` (or `-YYYYMMDD-<suffix>.md`)
+lives in `docs/status/YYYY-MM/`. Undated pages and the living documents
+(`README.md`, `alpha-1.0-2plus1-checklist.md`,
+`stage1-acceptance-matrix-20261030.md`) stay at the top of `docs/status/`.
+Create a new dated page in its month directory, or write it at the top level
+and run `python3 scripts/status_layout.py`: it `git mv`s the page and rewrites
+every link and `docs/status/<name>` path to it (idempotent; nothing to move
+means no change). `scripts/check_doc_links.py`, part of `make docs-check`,
+fails on any dangling relative Markdown link.

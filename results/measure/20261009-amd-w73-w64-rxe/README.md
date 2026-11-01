@@ -2,7 +2,7 @@
 
 Run October 8, 2026 New York / October 9 UTC. Source commit
 `f6233987b9d1243d5dc95167e9aaabc77e32b44d`, branch `devel-gate-closure`, build ID
-`f6233987b9d1`. [Status report](../../../docs/status/amd-rxe-gate-closure-20261009.md).
+`f6233987b9d1`. [Status report](../../../docs/status/2026-10/amd-rxe-gate-closure-20261009.md).
 
 | Mode | Core POSIX | Peer | Mount sync | Exact cold append/GC |
 | --- | --- | --- | --- | --- |

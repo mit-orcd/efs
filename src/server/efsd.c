@@ -932,7 +932,7 @@ static int join_as_new(struct efsd_server *s, const char *seed_host, uint16_t se
     return 2;
 }
 
-/* F1 RSS plateau (docs/status/f1-followups-20261025.md): efsd's live heap
+/* F1 RSS plateau (docs/status/2026-10/f1-followups-20261025.md): efsd's live heap
  * is flat under a fixed working set, yet its RSS crept upward for the
  * whole 30-minute D4 load. glibc gave each of efsd's 60-80 threads an
  * arena (59-73 per daemon), and freed memory stayed resident in them:

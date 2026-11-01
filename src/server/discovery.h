@@ -4,7 +4,7 @@
 /* K33/W157: discovery of a cluster on the local subnet (efsd --join
  * STORAGE). Discovery finds peers only; it never defines membership (M1):
  * the joiner still says HELLO to a peer it found, and the committed record
- * decides. See docs/status/k33-membership-protocol-20261023.md.
+ * decides. See docs/status/2026-10/k33-membership-protocol-20261023.md.
  *
  * A seed, promised or formed node answers UDP probes on the discovery
  * port (default EFS_DISCOVERY_PORT, --discovery-port; 0 turns it off). A

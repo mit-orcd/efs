@@ -1,6 +1,6 @@
 {
  "version": 1,
- "about": "A11 reduced qualification matrix (docs/status/a11-qualification-matrix-20261024.md). Run one topology: python3 scripts/qualify.py run --matrix scripts/qualify_matrix.json --topology NAME --out DIR; list and validate: python3 scripts/qualify.py plan. CANDIDATE is replaced by the frozen candidate commit before the run.",
+ "about": "A11 reduced qualification matrix (docs/status/2026-10/a11-qualification-matrix-20261024.md). Run one topology: python3 scripts/qualify.py run --matrix scripts/qualify_matrix.json --topology NAME --out DIR; list and validate: python3 scripts/qualify.py plan. CANDIDATE is replaced by the frozen candidate commit before the run.",
  "dimensions": {
   "transport": {
    "values": [

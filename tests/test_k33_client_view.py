@@ -2,7 +2,7 @@
 """K33 live client view: mounted FUSE clients use added members without a remount.
 
 Real efsd daemons on loopback with private stores under TMPDIR and free
-ports (never 17xxx); docs/status/k33-membership-protocol-20261023.md M7.
+ports (never 17xxx); docs/status/2026-10/k33-membership-protocol-20261023.md M7.
 1. Three nodes form; mount A (through node 1) and mount B (through node 3)
    start at revision 1 with three members. Files written before any
    addition.

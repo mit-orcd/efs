@@ -2,7 +2,7 @@
 """A6: every EFS_* setting the product reads has an inventory row.
 
 1. scripts/env_inventory.py --check passes on this tree against
-   docs/status/a6-settings-inventory-20261024.md.
+   docs/status/2026-10/a6-settings-inventory-20261024.md.
 2. Negative controls on a copy of src/, include/ and the inventory: a new
    reader through a two-level name-taking helper, a reader through a macro,
    a new compile-time mode, a fault hook outside #if EFS_FAULTS, a hook only
@@ -16,7 +16,7 @@ from pathlib import Path
 import shutil, subprocess, sys, tempfile
 root = Path(__file__).resolve().parents[1]
 script = root / 'scripts/env_inventory.py'
-doc = 'docs/status/a6-settings-inventory-20261024.md'
+doc = 'docs/status/2026-10/a6-settings-inventory-20261024.md'
 
 
 def check(tree):

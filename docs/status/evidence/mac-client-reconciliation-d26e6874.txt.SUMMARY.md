@@ -4,7 +4,7 @@
 Functional test output for the Mac FUSE client CREATE-ownership
 reconciliation, added by commit `46609ad7f` ("Reconcile Mac CREATE
 ownership with retained release adoption", 2026-10-11). Linked status
-page: `docs/status/mac-client-reconciliation-20261012.md`. It compares
+page: `docs/status/2026-10/mac-client-reconciliation-20261012.md`. It compares
 the `devel-mac` tree against the frozen `efs-mac-client-reconcile-d26e6874`
 tree on the two client-ownership suites.
 

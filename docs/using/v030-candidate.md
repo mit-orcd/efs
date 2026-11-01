@@ -10,7 +10,7 @@ alpha surface. The current pages are the [alpha 1.0 guide](alpha-1.0-guide.md),
 the [surface list](alpha-1.0-surface.md) and the
 [release notes draft](../release-notes/alpha-1.0.md).
 
-**Latest exact-source result:** `4e239d029029b8105a6e07f0e69a26fdc449de32` passes AMD ordinary-files qualification after the deep-directory fix; .efs remains disabled. [Report](../status/v030-deep-directory-fix-20261012.md). No push or tag. Earlier failed checkpoints below are historical.
+**Latest exact-source result:** `4e239d029029b8105a6e07f0e69a26fdc449de32` passes AMD ordinary-files qualification after the deep-directory fix; .efs remains disabled. [Report](../status/2026-10/v030-deep-directory-fix-20261012.md). No push or tag. Earlier failed checkpoints below are historical.
 
 **Latest alpha scope:** ordinary files/TCP/direct only, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. `.efs`, RDMA, buffered and dedicated repair/recovery are excluded.
 

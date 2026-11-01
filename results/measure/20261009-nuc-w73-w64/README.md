@@ -21,7 +21,7 @@ audit. Candidate fix and validation are described in the linked status report.
 No RXE device was available. Installed-service restoration closes the shared
 runner lock FD before launching daemons.
 
-See [status report](../../../docs/status/nuc-gate-closure-20261009.md).
+See [status report](../../../docs/status/2026-10/nuc-gate-closure-20261009.md).
 
 
 Final candidate `04e9d616-handoff-de2f8b286694` (production fixes committed

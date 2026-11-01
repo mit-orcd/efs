@@ -16,8 +16,8 @@ Archive SHA-256: `3c2758887fe5ea82a40c5b6a031da05dc3aab6c549ceeeaae12c484f9b2d48
 
 ## Follow-up correctness checkpoint
 
-The [rollup allocation-failure fix](../status/rollup-allocation-failure-20261011.md) implements the focused ownership repair after this report checkpoint and records before/after sanitizer evidence. The S1 allocator blocker below is addressed by that implementation, subject to full merged/Linux acceptance; [queue accounting/admission](../status/rollup-budget-20261011.md) and
-[recorder shutdown](../status/recorder-stop-20261011.md) now have separate focused
+The [rollup allocation-failure fix](../status/2026-10/rollup-allocation-failure-20261011.md) implements the focused ownership repair after this report checkpoint and records before/after sanitizer evidence. The S1 allocator blocker below is addressed by that implementation, subject to full merged/Linux acceptance; [queue accounting/admission](../status/2026-10/rollup-budget-20261011.md) and
+[recorder shutdown](../status/2026-10/recorder-stop-20261011.md) now have separate focused
 fixes and regressions. Their full merged/Linux/live acceptance remains pending.
 
 ## Release correctness and compatibility gates

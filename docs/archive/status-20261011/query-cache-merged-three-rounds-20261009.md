@@ -1,6 +1,6 @@
 # W92 — merged-source suites and three further tiny-file rounds
 
-**Archived Oct 11, 2026:** dated profiling and integration evidence. These rounds do not close W92 or establish the current Intel deployment. The [active W92 acceptance ledger](../../status/query-cache-closure-20261010.md) retains unresolved scale and platform gates.
+**Archived Oct 11, 2026:** dated profiling and integration evidence. These rounds do not close W92 or establish the current Intel deployment. The [active W92 acceptance ledger](../../status/2026-10/query-cache-closure-20261010.md) retains unresolved scale and platform gates.
 Oct 9 EDT / Oct 10 UTC, `devel-find-stats`, Xorinox files/direct-I/O/TCP.
 Baseline `8aeb9c4b` includes the devel, W66 and persistence-pressure merges.
 The user explicitly grants exclusive Xorinox access. No wipe or push.

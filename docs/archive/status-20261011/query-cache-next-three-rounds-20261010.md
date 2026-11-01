@@ -1,6 +1,6 @@
 # W92 — branch integration and three further tiny-file profiles
 
-**Archived Oct 11, 2026:** dated profiling and integration evidence. These rounds do not close W92 or establish the current Intel deployment. The [active W92 acceptance ledger](../../status/query-cache-closure-20261010.md) retains unresolved scale and platform gates.
+**Archived Oct 11, 2026:** dated profiling and integration evidence. These rounds do not close W92 or establish the current Intel deployment. The [active W92 acceptance ledger](../../status/2026-10/query-cache-closure-20261010.md) retains unresolved scale and platform gates.
 October 10, 2026 EDT, isolated `devel-find-stats`, exclusive Xorinox,
 files/direct-I/O/TCP. Retained namespace preserved; no wipe or push.
 

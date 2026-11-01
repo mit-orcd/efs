@@ -4,7 +4,7 @@
 Function-test output for the retained-orphan (unlinked directory)
 query preflight, added by commit `4124876fc` ("Reproduce retained Mac
 directory backlink refusal with safe negative controls", 2026-10-11).
-Linked status page: `docs/status/mac-retained-orphan-review-20261012.md`.
+Linked status page: `docs/status/2026-10/mac-retained-orphan-review-20261012.md`.
 Reproduces the retained-directory backlink refusal against two source
 trees and validates an unsafe-suppression negative control.
 

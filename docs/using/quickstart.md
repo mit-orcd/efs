@@ -4,7 +4,7 @@
 four nodes provide the maximum two-node-loss safety target; additional nodes
 scale volume and performance across all dimensions. Today's fixed 2+1 data and
 three-voter metadata groups do not implement that four-node guarantee. See
-[binding requirement and implementation gates](../status/node-count-protection-20261009.md); preserve the requirement
+[binding requirement and implementation gates](../status/2026-10/node-count-protection-20261009.md); preserve the requirement
 rather than deriving the design from current code.
 
 [Docs index](../README.md) · [Power user](power-user.md) ·

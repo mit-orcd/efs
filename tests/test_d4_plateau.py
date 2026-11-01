@@ -5,7 +5,7 @@ D4 and F1), loopback version.
 In `make test-long` (75 s load, 150 s drain). Its drain once missed 150 s:
 a file rewritten in a later pack epoch before it packed had two candidate
 entries, and a segment holding both failed every pass (fixed in the packer's
-selection, tests/test_pack_dup_candidate.py; docs/status/d4-pack-drain-20261025.md).
+selection, tests/test_pack_dup_candidate.py; docs/status/2026-10/d4-pack-drain-20261025.md).
 
 The same cluster as tests/test_d4_progress.py (three efsd of the EFS_FAULTS
 build and two efs-fuse on loopback, private stores under TMPDIR, free ports,

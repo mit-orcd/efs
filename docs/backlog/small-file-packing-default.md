@@ -3,7 +3,7 @@
 **Class:** capacity / performance. **Recorded:** 2026-10-18.
 **Status:** PROPOSED; design revised 2026-10-18 to **background packing
 after close** (the user's choice after the
-[early P1 measurement](../status/w125-p1-early-20261018.md)).
+[early P1 measurement](../status/2026-10/w125-p1-early-20261018.md)).
 [Implementation plan](small-file-packing-plan.md) (phases P0–P7).
 Design decisions, port, qualification and landing: **NOTRUN**.
 Related:
@@ -19,7 +19,7 @@ Every file, however small, is stored as at least one full fragment per node.
   bytes (64 KiB payload plus header and digest), so a 200-byte file uses
   three of them, one per node, with 2+1 coding.
 - **Measured 2026-10-18,** in the
-  [deletes, GC and crawl profile](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md)
+  [deletes, GC and crawl profile](../status/2026-10/orcd-mini-gc-delete-profile-5d673efa8-20261018.md)
   and W124's space accounting:
   - 4.6 M live tiny files of 0.2–0.3 KiB (all under 1 KiB) hold about
     1–1.5 GB of data;
@@ -43,10 +43,10 @@ Every file, however small, is stored as at least one full fragment per node.
   is `6c274f47f`, at tag `archive/packing-containers-20261016` on branch
   `packing-containers`.
 - **Packing at close was measured and rejected (2026-10-18).**
-  - [P0](../status/w125-p0-20261018.md) accepted singletons at close plus
+  - [P0](../status/2026-10/w125-p0-20261018.md) accepted singletons at close plus
     merge compaction, on condition that a singleton's publication costs no
     more than today's close.
-  - The [early P1 measurement](../status/w125-p1-early-20261018.md) of the
+  - The [early P1 measurement](../status/2026-10/w125-p1-early-20261018.md) of the
     archived code failed that condition:
     - close 3.53 ms against 0.65 ms;
     - throughput −71% (one writer) and −78% (16 workers);

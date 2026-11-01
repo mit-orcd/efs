@@ -21,7 +21,7 @@ The user gives exclusive AMD access and requests quick closures first.
   +23.3% buffered, 131072 exact cold files and independent empty inventories.
   Additional fault gates are being completed.
 
-The [status checkpoint](../../../docs/status/amd-non-rdma-20261010.md) records
+The [status checkpoint](../../../docs/status/2026-10/amd-non-rdma-20261010.md) records
 exact scopes and limitations. The earlier buffered MKDIR failure and unsupported
 native-ISA Valgrind attempt are preserved as failures, not passing gates.
 

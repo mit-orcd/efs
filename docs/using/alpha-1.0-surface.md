@@ -3,7 +3,7 @@
 **Draft for user approval, October 24, 2026, audited through `e7e72e267` (waves 9–22); checklist
 items S1 and S4 of the [alpha 1.0 checklist](../status/alpha-1.0-2plus1-checklist.md#s-stage-2-functional-scope).
 Checked against current source and merged evidence
-([round 3 audit](../status/docs-audit-20261027.md)); live execution on the Mac
+([round 3 audit](../status/2026-10/docs-audit-20261027.md)); live execution on the Mac
 is NOTRUN because the Linux build fails there. The October 25 binary audit
 is historical evidence, not a fresh qualification. `tests/test_cli_docs.py`
 (`make test`) keeps this page and the CLI help in step.** "In" marks a surface the alpha
@@ -15,7 +15,7 @@ outside the alpha support claim.
 
 [Alpha guide](alpha-1.0-guide.md) · [POSIX subset](alpha-1.0-posix.md) ·
 [Release notes draft](../release-notes/alpha-1.0.md) ·
-[Findings](../status/s-docs-alpha-1.0-20261024.md)
+[Findings](../status/2026-10/s-docs-alpha-1.0-20261024.md)
 
 The alpha profile (A2) is: Linux FUSE client, RDMA or TCP, direct fragment
 I/O, `.efs` commands on, background packing on, expiry governed by the
@@ -136,10 +136,10 @@ descriptions are not a support statement.
 ## S4 — effective settings
 
 **Status: implemented (W122, D46 item 3); evidence in
-[S4 effective settings](../status/s4-effective-settings-20261030.md).**
+[S4 effective settings](../status/2026-10/s4-effective-settings-20261030.md).**
 `efs-mgmt settings NODE:PORT` lists the node's effective settings, one line
 per setting, from the values the daemon recorded when it read them; the
-[A6 inventory](../status/a6-settings-inventory-20261024.md) is the list of
+[A6 inventory](../status/2026-10/a6-settings-inventory-20261024.md) is the list of
 what is covered (the 9 deployment inputs and the numeric tunables, plus the
 active policies, the transport and the build). The command is read-only and
 has no write form.
@@ -185,4 +185,4 @@ control socket for `efs-fuse --stop`; `settings` is one more command on it
 (the socket is mode 0600, owner only), so the listing works whether or not
 `.efs` is enabled and is read by the same user who mounted.
 
-Removed settings (A6, `docs/status/a6-settings-inventory-20261024.md`) such as `EFS_FEATURES_TTL_MS`, `EFS_QUERY_CATALOG_MIB`, `EFS_GC_DISABLE` and `EFS_KV_COMPACT_DIE` are not settings any more: efsd and efs-fuse stop with a message naming one that is still set.
+Removed settings (A6, `docs/status/2026-10/a6-settings-inventory-20261024.md`) such as `EFS_FEATURES_TTL_MS`, `EFS_QUERY_CATALOG_MIB`, `EFS_GC_DISABLE` and `EFS_KV_COMPACT_DIE` are not settings any more: efsd and efs-fuse stop with a message naming one that is still set.

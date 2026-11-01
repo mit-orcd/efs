@@ -5,7 +5,7 @@
 [Status index](../README.md) · [Decisions](../decisions.md) ·
 [Architecture](../../how-it-works/architecture.md)
 
-**Current state:** narrowed qualification RESUMED under explicit human start, reporting every15minutes. Common candidatedef46109909c793e58ae2c453c5de537cdb2c627 on qualification-v030-tcp-direct; AMD groups1/4, Intel group2, NUC group3. All received exactSHA. TCP/direct/files only; dedicated repair/recovery deferred. No old-binary/data or backward-compatibility preservation effort required; identified EFS test stores may be erased if easier. Keep raw evidence and source identity; unrelated services untouched. No push/tag/promotion. [Scope and assignments](../v030-release-scope-20261012.md).
+**Current state:** narrowed qualification RESUMED under explicit human start, reporting every15minutes. Common candidatedef46109909c793e58ae2c453c5de537cdb2c627 on qualification-v030-tcp-direct; AMD groups1/4, Intel group2, NUC group3. All received exactSHA. TCP/direct/files only; dedicated repair/recovery deferred. No old-binary/data or backward-compatibility preservation effort required; identified EFS test stores may be erased if easier. Keep raw evidence and source identity; unrelated services untouched. No push/tag/promotion. [Scope and assignments](../2026-10/v030-release-scope-20261012.md).
 
 ## Superseded assignments and evidence (before human stop)
 
@@ -21,7 +21,7 @@ Full Linux units and preserved file samples pass. Loaded 30-second POSIX gates
 remain failed (1,475 pass, 23 fail, 7 skip, 42 NOTRUN), and virtual listings
 cannot close W108 while query RPCs fail. The fresh 512-byte benchmark is running
 in `/tmp/efs-mount/tiny-files-merged-c52a464391a6`; the original screen run was
-interrupted cleanly at 9,514,331 files. [Rollout and evidence](../orcd-merged-rollout-20261011.md).
+interrupted cleanly at 9,514,331 files. [Rollout and evidence](../2026-10/orcd-merged-rollout-20261011.md).
 The bounded query pause was restored to policy mask 3, version 2. The
 older package instructions below are historical context for this assignment.
 
@@ -34,7 +34,7 @@ Do not use a historical cluster address, binary hash or mount as current state.
 
 The user authorized replay/writeback correctness followed by durability and
 production activation readiness while offline. Follow the
-[Oct 8 implementation ledger](../replay-readiness-20261008.md), with direct-I/O/TCP
+[Oct 8 implementation ledger](../2026-10/replay-readiness-20261008.md), with direct-I/O/TCP
 for short functional cycles and a four-mode batch gate. Benchmark sources and
 harnesses are outside this work. D28/D29/D30 were accepted Oct 8 in the [decision register](../decisions.md).
 D28 defers salvage; implement D29 with W88, then D30 admission/pacing, keeping
@@ -42,7 +42,7 @@ their implementation and fault/recovery gates separate from design acceptance.
 
 ## Accepted namespace and feature policies
 
-[D32–D35](../accepted-namespace-scratch-20261008.md) are accepted: W84's existing
+[D32–D35](../2026-10/accepted-namespace-scratch-20261008.md) are accepted: W84's existing
 144-participant product limit, W90 opt-in fixed expiry, W91 directory-local
 commands, W81 sustained-contention spreading. Preserve all linked gates;
 acceptance is not implementation or activation. These supersede older open-policy
@@ -52,10 +52,10 @@ wording without cancelling replay/readiness priorities.
 
 Follow-up round 1 implements W82 fresh read rounds and correlated acknowledgements.
 NUC real-daemon partition GETATTR acceptance passes; wider W82 RPC/configuration
-gates remain open. Follow the [round ledger](../roadmap-followup-20261007.md).
+gates remain open. Follow the [round ledger](../2026-10/roadmap-followup-20261007.md).
 
 **W61/W62/W63 — GC:** repairs are committed in `3a1b4a52`; the
-[implementation checkpoint](../gc-implementation-20261007.md) records isolated
+[implementation checkpoint](../2026-10/gc-implementation-20261007.md) records isolated
 NUC direct-store acceptance. Buffered broad concurrent append lost records
 (**W87**) despite later isolated repeats passing. Xorinox was rolled to `cb5e86de` on Oct 7 with safe drains and full units;
 24.2 GiB payload reclamation and increased physical free space were observed.
@@ -95,7 +95,7 @@ WITHHOLD faults and controlled stop exist. Strict whole-call timing, remaining
 legacy PUT coverage, recorded fault/recovery/contention and small-host RSS
 acceptance remain owed. Accepted workers retain caller-owned completion state;
 a timeout must not free it. DNS resolution now has bounded ownership/deadlines in `011ae854`; the
-[readiness ledger](../replay-readiness-20261008.md) records its tests.
+[readiness ledger](../2026-10/replay-readiness-20261008.md) records its tests.
 D28 accepts client-death loss of unpublished bytes and defers automatic salvage. Keep the D27 decision's fault-before-publication gates.
 
 **W64 — append:** host-local replay races were fixed in `ec1500ec`; replay
@@ -112,9 +112,9 @@ NUC fixture contains missing W1S0002/W0S0004 records, beyond first-record loss.
 AMD buffered broad POSIX/peer and mixed append/GC with 800 exact cold records
 pass; this is acceptance evidence, not a proven single cause for W87.
 
-**Oct 8 AMD package:** [evidence](../amd-functional-gates-20261008.md).
+**Oct 8 AMD package:** [evidence](../2026-10/amd-functional-gates-20261008.md).
 Functional cycles use direct I/O/TCP; only transport/buffered-specific gates
-change modes. [W84 is closed for accepted D32 bounded scope](../w84-closure-20261009.md):
+change modes. [W84 is closed for accepted D32 bounded scope](../2026-10/w84-closure-20261009.md):
 explicit prompt EOVERFLOW, atomic refusal and exact144 coordinator-crash gates
 pass. Larger-operation protocol remains deferred. RDMA eager send-slot registration caused
 a 1 GiB whole-fixture OOM. Lazy registration keeps the 32-slot pipeline and passes
@@ -122,7 +122,7 @@ the same 1 GiB recovery gate with zero OOM events; the allocation budgets did no
 increase. No benchmark source or harness was changed.
 
 **W65 — shutdown:** the historical NUC SIGTERM failures are superseded for TCP
-by the [six active-write stop/recovery gates](../tcp-five-gates-20261007.md).
+by the [six active-write stop/recovery gates](../2026-10/tcp-five-gates-20261007.md).
 AMD RXE active-write, idle/partial TCP reader and connection-churn stop gates
 now pass with exact acknowledged bytes after cold restart. Hardware RoCE/native IB
 remain separate platform obligations.
@@ -152,7 +152,7 @@ measurement work and decisions. This handoff adds no deployment authorization.
 
 ## Operator review findings
 
-[W78–W80](../devel-nuc-closure-20261010.md) close on Oct11 current-code NUC
+[W78–W80](../2026-10/devel-nuc-closure-20261010.md) close on Oct11 current-code NUC
 operator acceptance: actual stale-PID startup/stop, both mkfs aliases and
 consumed-reply retry, and explicit retired-query refusal without false totals.
 W70's running-quota reporting and W96's isolated allocation/recovery gates also
@@ -183,7 +183,7 @@ quorum/recovery and cold-value gate (276 complete observations). The malformed
 Oct 5 evidence and withdrawn interpretation remain retained. D30/W23's
 production memory/lag and sustained-stall bounds remain open; measurement
 closure does not activate that policy. See the
-[current AMD checkpoint](../amd-non-rdma-20261010.md#w89) and historical
+[current AMD checkpoint](../2026-10/amd-non-rdma-20261010.md#w89) and historical
 [round-6 ledger](../../archive/contract-review-20261007-round6.md).
 W87 still needs its original broad-load failure investigated rather than
 being inferred closed from clean repeats.
@@ -193,7 +193,7 @@ folded identity can be evicted and its old retry reintroduced over a later
 base. Actual host/FUSE byte and lost-ACK/restart gates remain open. Keep the
 durable identity/retirement primitives separate from bounded trailer hints.
 
-Human-authorized three-way qualification split: AMD remaining direct/overload/RXE, Intel buffered first-stage matrix, NUC additional recovery/query matrix. All use release-v0.3.0-pre-alpha source `28b2089be6a5df835cc7bb46b9c2a9e2f10df190`; see [current execution ledger](../amd-all-suites-20261011.md#authorized-three-cluster-split--october-11-2026). Other owner stops remain effective. No source fixes, promotion or pushes authorized by this testing split.
+Human-authorized three-way qualification split: AMD remaining direct/overload/RXE, Intel buffered first-stage matrix, NUC additional recovery/query matrix. All use release-v0.3.0-pre-alpha source `28b2089be6a5df835cc7bb46b9c2a9e2f10df190`; see [current execution ledger](../2026-10/amd-all-suites-20261011.md#authorized-three-cluster-split--october-11-2026). Other owner stops remain effective. No source fixes, promotion or pushes authorized by this testing split.
 
 Subsequent human authority permits pressure-timeout and repair-gap implementation fixes on separate frozen28-based worktrees, review/integration into release-v0.3.0-pre-alpha and affected reruns. Intel owns pressure timeouts, NUC repair, AMD integration. Earlier testing-only prohibition is superseded for these fixes; no push/tag/promotion authorization.
 
@@ -211,7 +211,7 @@ Subsequent human authority permits pressure-timeout and repair-gap implementatio
 query), NUC group3 (direct TCP files POSIX/peer/mutation/GC). All agents
 start from full baseline8b7391b3f3edcf9fc99440d9aad3c240325acb83 and must use the
 same centrally published candidate SHA, including any intended read-progress
-fix, before execution. [Freeze/dependency contract](../v030-release-scope-20261012.md#common-source-and-parallel-execution-contract).
+fix, before execution. [Freeze/dependency contract](../2026-10/v030-release-scope-20261012.md#common-source-and-parallel-execution-contract).
 
 
-[Current common52 group results and next blocker](../v030-tcp-direct-qualification-20261012.md): Intel quietfailure remains open; collect exact raw diagnostic evidence, review NUC passes; AMD normal/faultnative+RaftsanPASS.
+[Current common52 group results and next blocker](../2026-10/v030-tcp-direct-qualification-20261012.md): Intel quietfailure remains open; collect exact raw diagnostic evidence, review NUC passes; AMD normal/faultnative+RaftsanPASS.

@@ -4,7 +4,7 @@
 Query root-refusal / capture-retry / page-barrier review output, added
 by commit `aaf6a3e8a` ("Review opt-in root and transaction stage
 diagnostics", 2026-10-11). Linked status page:
-`docs/status/mac-query-discriminator-review-20261012.md`. Runs three
+`docs/status/2026-10/mac-query-discriminator-review-20261012.md`. Runs three
 query test suites in both sanitizer modes.
 
 ## Verdict

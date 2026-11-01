@@ -5,7 +5,7 @@
 Reviewed-source ORCD qualification of ordinary files over native RDMA with
 direct I/O for the in-development source reviewed on 2026-10-12 (branch
 `fix-orcd-packing-stress`). Linked status page:
-`docs/status/orcd-profile-review-20261012.md`; the run was added by commit
+`docs/status/2026-10/orcd-profile-review-20261012.md`; the run was added by commit
 `effa10452` ("docs: record passing ORCD ordinary-file RDMA direct
 qualification"). Scope: normal operations and orderly stop/restart; `.efs`
 commands/queries and unplanned-event repair/recovery are excluded.

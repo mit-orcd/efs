@@ -4,7 +4,7 @@
 
 NUC acceptance run for the five implemented-fix packages **W27, W69, W76,
 W82, W85**, requested after the 30-round gate pass. Linked status page:
-[docs/status/next-five-gates-20261007.md](../../../docs/status/next-five-gates-20261007.md)
+[docs/status/2026-10/next-five-gates-20261007.md](../../../docs/status/2026-10/next-five-gates-20261007.md)
 (run added by commit `ceadd6d26` "docs(status): close four next-five gates and
 retain W69 performance obligation").
 

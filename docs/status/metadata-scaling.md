@@ -9,7 +9,7 @@ capacity and the D36 recovery contract are not yet proved.
 [Status queue](work-queue.md#1a-the-work-queue) ·
 [Architecture §7.1](../how-it-works/architecture.md#71-sharded-raft-and-linearizable-reads)
 
-See the [distributed cluster roadmap](distributed-cluster-roadmap-20261022.md)
+See the [distributed cluster roadmap](2026-10/distributed-cluster-roadmap-20261022.md)
 for the 3-, 4- and larger-node diagrams, data/metadata dependencies and acceptance stages.
 
 ## D36 protection obligation — Oct 9
@@ -19,7 +19,7 @@ metadata; larger clusters add scale rather than raising the failure target.
 Current three-voter groups cannot meet that requirement. W66 must select and
 prove its metadata persistence/commit/recovery mechanism as well as routing.
 Safe refusal without quorum cannot substitute for preserving committed metadata.
-See [binding D36](node-count-protection-20261009.md). No topology change is made
+See [binding D36](2026-10/node-count-protection-20261009.md). No topology change is made
 or advertised by this note.
 
 ## Current implementation and intended behavior
@@ -120,7 +120,7 @@ and proposed implementation approach, not an assertion that it is implemented.
 
 ## Oct 8 measurement follow-up
 
-The [NUC metadata-group performance follow-up](metadata-group-perf-followup-20261008.md)
+The [NUC metadata-group performance follow-up](2026-10/metadata-group-perf-followup-20261008.md)
 records group-dependent read latency on the NUC. It supplies a bounded
 measurement/routing investigation for W66 phase 1. It does not establish the cause, implement
 generalized multi-Raft routing, or close W66.
@@ -136,7 +136,7 @@ change was made and W66 remains open.
 
 ## Tiny-file measurement follow-up — Oct 9
 
-[W92 cache profiling](query-cache-tiny-profile-20261009.md) improved controlled
+[W92 cache profiling](2026-10/query-cache-tiny-profile-20261009.md) improved controlled
 cache refreshes, but live file creation fell 225 → 85 files/s after advancing
 other devel code and retaining a larger namespace. This does not identify a
 W66 defect. Repeat with controlled revision, namespace/placement and foreground
@@ -198,7 +198,7 @@ and exact target inode identity through cold restart. See
 Both leaders initially occupied one node: replica count is not leadership
 balancing or additional useful capacity. Installed topology was untouched.
 
-The [protection/routing implementation proposal](w66-protection-routing-design-20261010.md)
+The [protection/routing implementation proposal](2026-10/w66-protection-routing-design-20261010.md)
 makes the remaining protocol and gates explicit. D36 leaves post-two-loss
 availability unresolved. The recommendation is verified preservation followed
 by replacement nodes and quorum restoration before writes resume; the user has
@@ -395,7 +395,7 @@ separate defects; these are not inevitable consequences of adaptive placement:
   files in one directory on orcd-mini) listed 999,990 names, and `rm -rf`
   left 5 files behind. Names at the moving split frontier were missed for
   the hours the directory stayed SPLITTING
-  ([readdir split frontier](readdir-split-frontier-20261021.md), code fix
+  ([readdir split frontier](2026-10/readdir-split-frontier-20261021.md), code fix
   `f8b7a7818`, focused private-cluster PASS; original orcd-mini C7 rerun NOTRUN).
 - **An archived migrator improved one bounded run.** In a 500 k-file
   create workload, HASHED was reached 1,124 s after creation started; 64,516
@@ -428,9 +428,9 @@ Observed load (passive orcd-mini profiles, single snapshots, workloads not
 controlled):
 - On `9099380f3`, lock waits were 15.6% of the leader's context switches,
   nearly all on the Raft host mutex `h->mu` (submit 28%, REPORT 14%,
-  retained CREATE 13%, unlink 8%) — [profile](orcd-mini-profile-9099380f3-20261017.md).
+  retained CREATE 13%, unlink 8%) — [profile](2026-10/orcd-mini-profile-9099380f3-20261017.md).
 - On `f4a373b13`, the leader used about 5.8 cores and each follower about
-  2.5 — [profile](orcd-mini-profile-f4a373b13-20261016.md).
+  2.5 — [profile](2026-10/orcd-mini-profile-f4a373b13-20261016.md).
 
 These show one busy leader. They do not show how much spreading would gain.
 
@@ -453,7 +453,7 @@ contention in place.
 4. Design more groups with bounded transaction fan-out, plus migration,
    versioning and recovery. Don't replicate every group to every node.
    **Open conflict:** the review suggests three replicas per group, while
-   [D36](node-count-protection-20261009.md) requires four-node, two-loss
+   [D36](2026-10/node-count-protection-20261009.md) requires four-node, two-loss
    protection that three-voter groups cannot provide. The replica count per
    group must satisfy D36.
 5. A leader-spreading A/B is worthwhile. It must not be presented as the fix
@@ -466,7 +466,7 @@ contention in place.
 
 Remaining gates: the decision page itself, per-group traffic and blocked-time
 instrumentation (the step 1 metrics in the
-[Raft host mutex plan](raft-host-mu-plan-20261016.md)), and the leader-spreading
+[Raft host mutex plan](2026-10/raft-host-mu-plan-20261016.md)), and the leader-spreading
 A/B. All NOTRUN.
 
 ### Independent review of the origin narrative — Oct 21

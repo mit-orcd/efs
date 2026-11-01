@@ -2,8 +2,8 @@
 """D39 consolidated model: counterexample traces, gates and a randomized search.
 
 Every test is named after the review section whose counterexample or gate it
-runs (docs/status/d39-cluster-membership-proposal-20261022.md); the rules
-are tests/d39_model.py and docs/status/d39-consolidated-model-20261023.md.
+runs (docs/status/2026-10/d39-cluster-membership-proposal-20261022.md); the rules
+are tests/d39_model.py and docs/status/2026-10/d39-consolidated-model-20261023.md.
 Negative controls (`neg_*`) run a trace under a superseded rule set and
 require the failure that section's review predicted.
 
@@ -1890,7 +1890,7 @@ def neg_random_search_detects_superseded_rules():
 
 # ---------------------------------------------------------------------------
 # C16-C22: automatic formation and online node addition (K33/W157). The
-# rules are docs/status/k33-membership-protocol-20261023.md M1-M9; every
+# rules are docs/status/2026-10/k33-membership-protocol-20261023.md M1-M9; every
 # `explore` enumerates all interleavings of the scenario and settles every
 # k-th reachable state to the converged membership.
 

@@ -6,7 +6,7 @@ Manager-narrowed "group3" release gates for the v0.3.0 pre-alpha candidate on
 the NUC cluster: re-qualify the frozen commit `52bcfd35` with the existing GC
 reclamation fixture (POSIX core + two-client peer, direct/TCP) plus a mounted
 packing gate and the native `test_store_gc` suite. Linked status page:
-`docs/status/nuc-release-52bc-group3-20261012.md`. Explicitly does NOT close
+`docs/status/2026-10/nuc-release-52bc-group3-20261012.md`. Explicitly does NOT close
 the earlier full W52/W112 assignment or establish any W97 improvement.
 
 ## Verdict

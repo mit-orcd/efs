@@ -6,7 +6,7 @@ W97: matched three-node drive comparison (NVMe-only vs SATA-only), requested
 after the earlier four-node mixed-drive observation showed only the NVMe drive
 slowing under a durable tiny-file workload. The NUC persistence-latency
 investigation was later retagged W111. Full report:
-`docs/status/w97-three-drive-20261010.md`.
+`docs/status/2026-10/w97-three-drive-20261010.md`.
 
 ## Verdict
 

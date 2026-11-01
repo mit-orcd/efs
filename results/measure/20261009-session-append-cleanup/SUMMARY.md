@@ -6,7 +6,7 @@ Gate for the bounded revoked-session append cleanup phase: RPC-only
 `SESSION_APPEND_NEXT` plus `raft-session NODE:PORT cleanup-appends UUID OLD_EPOCH
 SHARD` resolve one exact old-session OPEN reservation per transaction. Linked
 item: "Bounded revoked-session append phase" in
-`docs/status/dependency-package-20261009.md` (branch devel-w66, D29/D30 cleanup
+`docs/status/2026-10/dependency-package-20261009.md` (branch devel-w66, D29/D30 cleanup
 sequence). Run added by commit `28d941824` ("feat(sessions): recover revoked
 append reservations in bounded transactions").
 

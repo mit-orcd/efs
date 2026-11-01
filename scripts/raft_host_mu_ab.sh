@@ -1,7 +1,7 @@
 #!/bin/bash
 # raft_host_mu_ab.sh RELEASE_DIR LABEL [LOAD_SECONDS]
 #
-# h->mu plan A/B (docs/status/raft-host-mu-plan-20261016.md) on a private
+# h->mu plan A/B (docs/status/2026-10/raft-host-mu-plan-20261016.md) on a private
 # 3-daemon RDMA cluster on node9901: ports $PORT+1..$PORT+3 (default
 # 17651-17653), scratch stores under /tmp/efs-mu-ab/LABEL (/data1 is too
 # full for efsd's free-space check). Never touches orcd-mini (17432-17434)

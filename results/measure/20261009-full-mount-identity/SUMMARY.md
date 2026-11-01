@@ -6,7 +6,7 @@ Unify mount identity: production append no longer replaces the full namespace
 UUID with native-order token bytes; HOLD and lock RPCs carry the existing
 explicit session suffix (full UUID/epoch), with grants establishing their
 session/shard before RPC. Identity alignment prerequisite for the W72/W86
-session/ticket sequence in `docs/status/dependency-package-20261009.md`
+session/ticket sequence in `docs/status/2026-10/dependency-package-20261009.md`
 (evidence link at line 465). Run added by commit `77d9b7b03` ("fix(client):
 share full mount identity across append leases and locks").
 
