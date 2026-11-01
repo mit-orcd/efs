@@ -119,7 +119,9 @@ class Cluster:
         log = open(self.work / f'n{i+1}.log', 'ab'); self.logs.append(log)
         self.procs[i] = subprocess.Popen(cmd, env=self.env, stdout=log, stderr=log)
         for _ in range(300):
-            assert self.procs[i].poll() is None, f'efsd n{i+1} exited'
+            assert self.procs[i].poll() is None, (
+                f'efsd n{i+1} exited rc={self.procs[i].returncode}: '
+                + (self.work / f'n{i+1}.log').read_text(errors='replace')[-1500:])
             try:
                 with socket.create_connection(('127.0.0.1', self.base + i), .1): return
             except OSError: time.sleep(.1)

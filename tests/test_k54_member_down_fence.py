@@ -144,6 +144,11 @@ def main():
             cluster.start(victim)
             late_all_stale(t, 'returned after clean stop, replayed before resync')
             cert = work / f'n{victim+1}/meta/put-session' / t.wire[:16].hex()
+            # The seal follows the STALE reply by a moment: 0.0-0.2 s measured with
+            # 8-job gate load on nuc (Task BM); 15 s bound.
+            end = time.monotonic() + 15
+            while not cert.is_file() and time.monotonic() < end:
+                time.sleep(.05)
             assert cert.is_file(), 'the returned member did not seal the epoch it learned'
             assert stored(work, [victim]) == before, 'the returned member stored a revoked-epoch fragment'
             print('(ii) member stopped cleanly: revoke rc=0; replay before any resync wait is STALE, certificate sealed, nothing stored PASS', flush=True)
