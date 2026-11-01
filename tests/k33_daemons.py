@@ -15,7 +15,7 @@ source built with EFS_FAULTS, so the tests can interrupt a handoff
 (EFS_FAULT_MEMBER_EXIT) and stop GC (EFS_FAULT_GC_DISABLE). ./efsd carries
 neither hook.
 """
-import os, re, signal, socket, subprocess, time
+import _thread, os, re, signal, socket, subprocess, sys, threading, time
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
@@ -70,6 +70,57 @@ class Cluster:
         self.ports = dict(zip(ids, free_ports(len(ids))))
         self.held = [h for h in (hold_port(self.hosts.get(i, HOST), p) for i, p in self.ports.items()) if h]
         self.procs = {}
+        self.mounts = []      # live Mounts of this cluster, unmounted by stop_all
+        self.expected = set() # nodes whose death the test arranged (expect_exit)
+        self.dead = None      # message once the watchdog saw an unexpected death
+        self.notes = []       # what stop_all had to clean up
+        self._wd = None
+        self._wd_stop = threading.Event()
+
+    def expect_exit(self, i):
+        """The test makes node i end (fault exit, kill): its death is not a
+        failure. stop(), wait_exit() and procs.pop() expect it too."""
+        self.expected.add(i)
+
+    def check_alive(self):
+        """Fail at once, naming daemon, status and log, if a started daemon
+        or mount process died unexpectedly (Popen.poll() also reaps zombies).
+        Called from the wait loops; the watchdog calls it for everything else."""
+        if self.dead:
+            raise AssertionError(self.dead)
+
+    def _watch(self):
+        seen = set()   # dead on one tick: a test that waits and pops is given the next
+        while not self._wd_stop.wait(0.25):
+            procs = [(i, f'efsd node {i}', p, self.dir / f'n{i}.log') for i, p in list(self.procs.items())
+                     if i not in self.expected]
+            procs += [(m, f'efs-fuse {m.path.name}', m.p, m.logp) for m in list(self.mounts) if not m.closing]
+            for key, name, p, logp in procs:
+                rc = p.poll()
+                # Exit 0 is a clean stop; an efs-fuse that ended and left no mount was
+                # unmounted by the test. A crash leaves the dead mount behind.
+                if rc is None or rc == 0 or (isinstance(key, Mount) and not key.mounted()):
+                    seen.discard(key)
+                    continue
+                if key not in seen:
+                    seen.add(key)
+                elif not self.dead:
+                    how = f'signal {signal.Signals(-rc).name}' if rc < 0 else f'status {rc}'
+                    self.dead = f'{name} died unexpectedly: exit {how}; log {logp}'
+                    print(f'[harness] {self.dead}', file=sys.stderr, flush=True)
+                    _thread.interrupt_main()
+                    # The main thread may sit in a call that ignores the interrupt
+                    # (a hung FUSE read): tear down here and exit instead of waiting.
+                    if not self._wd_stop.wait(15):
+                        self._cleanup_mounts()
+                        for q in list(self.procs.values()):
+                            q.kill()
+                        self._report()
+                        os._exit(1)
+
+    def _cleanup_mounts(self):
+        for m in list(self.mounts):
+            m.close()
 
     def ep(self, i):
         return f'{self.hosts.get(i, HOST)}:{self.ports[i]}'
@@ -93,6 +144,14 @@ class Cluster:
         if quota:
             argv += ['--quota', quota]
         argv += ['--writers', '2', '--discovery-port', str(self.disc_port), *args]
+        if any(re.search(r'EFS_FAULT_.*(EXIT|CRASH|DIE)', k) and v not in ('', '0')
+               for k, v in dict(self.env, **(extra_env or {})).items()):
+            self.expected.add(i)   # a fault hook is armed: its exit is the test's doing
+        else:
+            self.expected.discard(i)
+        if self._wd is None:
+            self._wd = threading.Thread(target=self._watch, daemon=True)
+            self._wd.start()
         with open(self.dir / f'n{i}.log', 'a') as log:
             log.write(f'\n==== start {time.time():.3f} {" ".join(argv)}\n')
             log.flush()
@@ -111,6 +170,7 @@ class Cluster:
         while time.time() < end:
             if re.search(pattern, self.last_run(i) if run else self.log(i)):
                 return
+            self.check_alive()
             if i in self.procs and self.procs[i].poll() is not None and run:
                 if re.search(pattern, self.last_run(i)):
                     return
@@ -162,16 +222,25 @@ class Cluster:
                 p.wait()
 
     def stop_all(self):
+        self._cleanup_mounts()
         for i in list(self.procs):
             self.stop(i)
         for h in self.held:
             h.close()
         self.held = []
+        self._wd_stop.set()
+        self._report()
+
+    def _report(self):
+        for n in self.notes:
+            print(f'[harness] cleanup: {n}', file=sys.stderr, flush=True)
+        self.notes = []
 
     def status(self, i):
         out = ''
         for _ in range(3):
             rc, out = mgmt(self.env, 'raft-status', self.ep(i))
+            self.check_alive()
             if rc == 0:
                 # (serves, voters): a retired replica (K33 M6) does not serve.
                 return {int(g): (int(h) and not int(r), int(v, 16)) for g, h, v, r in
@@ -186,6 +255,7 @@ class Cluster:
             got = {i: self.status(i) for i in ids}
             if all(want(i, got[i]) for i in ids):
                 return got
+            self.check_alive()
             time.sleep(0.3)
         raise AssertionError(f'voters never settled: {got}\n' +
                              '\n'.join(self.last_run(i)[-1500:] for i in ids))
@@ -235,6 +305,7 @@ class Cluster:
                         led[int(g)] = int(nid)
                 assert len(led) == int(m.group(2)) and len(set(led.values())) == int(m.group(3)), out
                 return led
+            self.check_alive()
             time.sleep(0.5)
         raise AssertionError('leader placement never settled:\n' + out)
 
@@ -247,6 +318,7 @@ class Cluster:
                 last = {i: self.members(i) for i in ids}
             except AssertionError as e:
                 last = {'error': str(e)}
+                self.check_alive()
                 time.sleep(0.3)
                 continue
             tabs = [{k: v[0] for k, v in t.items()} for t in last.values()]
@@ -321,9 +393,12 @@ class Mount:
         self.path.mkdir()
         self.logp = c.dir / f'{name}.log'
         self.log = open(self.logp, 'w')
+        self.c = c
+        self.closing = False
         self.p = subprocess.Popen([str(FUSE), c.ep(node), str(self.path), '-f'],
                                   stdout=self.log, stderr=subprocess.STDOUT,
                                   env=env or c.env)
+        c.mounts.append(self)
         try:
             end = time.time() + 30 * SLOW
             while time.time() < end and not os.path.ismount(self.path):
@@ -338,14 +413,40 @@ class Mount:
             self.log.close()
             raise
 
-    def close(self):
-        subprocess.run(['fusermount3', '-u', str(self.path)], capture_output=True)
+    def mounted(self):
+        """In /proc/mounts: os.path.ismount() is False for a dead FUSE mount
+        (ENOTCONN), which is the one left behind that must be found."""
         try:
-            self.p.wait(timeout=30 * SLOW)
+            return f' {self.path} fuse' in Path('/proc/mounts').read_text().replace('\\040', ' ')
+        except OSError:
+            return os.path.ismount(self.path)
+
+    def lazy(self, why):
+        """Say who still uses the mount (`fuser -m`), then lazy-unmount it."""
+        try:
+            users = subprocess.run(['fuser', '-m', str(self.path)], capture_output=True, text=True,
+                                   timeout=10).stdout.split()
+        except (OSError, subprocess.TimeoutExpired):
+            users = ['unknown']
+        subprocess.run(['fusermount3', '-uz', str(self.path)], capture_output=True)
+        self.c.notes.append(f'{self.path}: {why} (efs-fuse exit {self.p.returncode}, users '
+                            f'{users or "none"}): lazy unmount, now {"MOUNTED" if self.mounted() else "gone"}')
+
+    def close(self):
+        self.closing = True
+        busy = subprocess.run(['fusermount3', '-u', str(self.path)], capture_output=True).returncode
+        if busy and self.mounted():
+            self.lazy('fusermount3 -u failed')   # busy or dead efs-fuse: do not wait 30 s for a clean exit
+        try:
+            self.p.wait(timeout=(5 if busy else 30) * SLOW)
         except subprocess.TimeoutExpired:
-            subprocess.run(['fusermount3', '-uz', str(self.path)], capture_output=True)
             self.p.kill()
             self.p.wait()
+        if self.mounted():
+            self.lazy('still mounted after efs-fuse ended')
+        if self in self.c.mounts:
+            self.c.mounts.remove(self)
+        self.log.close()
 
 
 def payload(name, size):

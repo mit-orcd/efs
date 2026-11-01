@@ -82,7 +82,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 for failed_exit in (False, True):
     with tempfile.TemporaryDirectory(prefix='efs-mount-setup-') as directory:
-        c = SimpleNamespace(dir=Path(directory), env={}, ep=lambda i: '127.0.0.1:19999')
+        c = SimpleNamespace(dir=Path(directory), env={}, mounts=[], notes=[], ep=lambda i: '127.0.0.1:19999')
         process = Mock()
         process.poll.return_value = 1 if failed_exit else None
         process.wait.return_value = 0
@@ -96,5 +96,6 @@ for failed_exit in (False, True):
             else:
                 raise AssertionError('failed mount falsely succeeded')
         process.wait.assert_called_once()
+        assert not c.mounts, 'a failed mount constructor left itself registered'
         assert (c.dir / 'mount.log').exists()
 print('K33 failed mount constructor: child joined, fixture/log retained on exit and timeout PASS')
