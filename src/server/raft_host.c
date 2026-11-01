@@ -17729,9 +17729,15 @@ static int host_namespace_session_admit_covered(struct efs_raft_host *h,uint32_t
     cmd[1]=EFS_MD_SESS_ESTABLISH;
     rc=host_session_establish_admit_covered(h,cmd,sizeof(cmd),group,hint,covered);
     if(rc==EFS_OK)rc=host_namespace_session_command(h,group,cmd,sizeof(cmd),hint);
-    /* Command settlement already waited for our hosted floor to apply;
-     * its exact verdict plus this RPC's authority covers the final accept. */
-    if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
+    /* A leader-forwarded ESTABLISH is answered by the leader's reuse path
+     * (a sibling request already established this shard) with no log index,
+     * so our replica may not have applied that entry yet: UNREGISTERED is
+     * only believable after a fresh read boundary (K86). */
+    if(rc==EFS_OK) {
+        rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
+        if(rc==EFS_ERR_UNREGISTERED && !host_read_index(h,group,hint))
+            rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
+    }
     return rc;
 }
 static int host_namespace_session_admit_after_group(struct efs_raft_host *h,
