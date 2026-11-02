@@ -2,8 +2,9 @@
 """Execute actual v4 page dispatch: one fresh cut, fresh continuations, refusal."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('int server_raft_host_query_page(')
 b=s.index('\nint server_raft_host_start(',a)
 h=s.index('static int query_reply_status(')

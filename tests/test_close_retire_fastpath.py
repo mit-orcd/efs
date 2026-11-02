@@ -2,7 +2,8 @@
 """Actual GC close pass: atomic empty retirement, bounded busy cleanup and errors."""
 from pathlib import Path
 import os,subprocess,tempfile,shlex
-root=Path(__file__).resolve().parents[1];s=Path(os.environ.get('EFS_CLOSE_GC_SOURCE',str(root/'src/server/raft_host.c'))).read_text();a=s.index('struct close_step_scan {');b=s.index('static void host_gc_close_pass(',a)
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host','EFS_CLOSE_GC_SOURCE');a=s.index('struct close_step_scan {');b=s.index('static void host_gc_close_pass(',a)
 code=r'''
 #include "efs/common.h"
 #include "efs/session.h"

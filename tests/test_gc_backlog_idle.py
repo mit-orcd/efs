@@ -2,8 +2,9 @@
 """Actual GC idle policy: idle/blocked scans retain backoff; progress is bounded."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static int host_gc_backlog_config(')
 b=s.index('/* D43: the cluster expiry policy decides',a)
 code='''#include "efs/common.h"

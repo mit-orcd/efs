@@ -2,10 +2,11 @@
 """Separate the actual namespace participant and ancestry fixture envelopes."""
 from pathlib import Path
 import ast, os, shlex, subprocess, tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
 fixture = Path(os.environ.get('EFS_NAMESPACE_ENVELOPE_SOURCE', root/'tests/live/gc_reclamation.py'))
-host = (root/'src/server/raft_host.c').read_text()
+host = csrc.module('raft_host')
 start = host.index('static int host_namespace_capacity(')
 expiry_start=host.index('static int host_expiry_collect(',start)
 host=host[:expiry_start]+host[host.index('\n}',expiry_start)+2:]

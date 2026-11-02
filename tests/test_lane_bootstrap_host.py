@@ -2,8 +2,9 @@
 """Cold authority adoption validates export geometry before any transaction."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-text=(root/'src/server/raft_host.c').read_text();start=text.index('void server_raft_host_lane_bootstrap_rpc(')
+text=csrc.module('raft_host');start=text.index('void server_raft_host_lane_bootstrap_rpc(')
 function=text[start:text.index('\n}',start)+2]
 hint_start=text.index('static efs_node_id_t host_reply_hint(')
 hint=text[hint_start:text.index('\n}',hint_start)+2]

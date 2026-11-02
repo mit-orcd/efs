@@ -2,8 +2,9 @@
 """Production last-close deferral: BUSY cannot strand a later RESOLVE entry."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-source = (root/'src/server/raft_host.c').read_text()
+source = csrc.module('raft_host')
 a = source.index('static int host_lease_close_effects(')
 function = source[a:source.index('\n}', a)+2]
 fixture = r'''

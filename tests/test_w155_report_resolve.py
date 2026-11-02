@@ -28,10 +28,11 @@ fails (the reply-loss cases end in an error).
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile, shutil, sys
+import csrc
 
 root = Path(__file__).resolve().parents[1]
 cli = Path(os.environ.get('EFS_INODE_RPC_SOURCE', root / 'src/client/inode_rpc.c')).read_text()
-srv = (root / 'src/server/raft_host.c').read_text()
+srv = csrc.module('raft_host')
 
 
 def fn(src, prefix, nth=1):

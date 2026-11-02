@@ -2,8 +2,9 @@
 """A captured dentry followed by a missing inode must not become name absence."""
 from pathlib import Path
 import subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('void server_raft_host_lookup(');b=s.index('\n}',a)+2
+s=csrc.module('raft_host');a=s.index('void server_raft_host_lookup(');b=s.index('\n}',a)+2
 code=r'''
 static int host_read_leader_hint(void *h,unsigned g){(void)h;(void)g;return -1;}
 

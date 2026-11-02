@@ -3,8 +3,9 @@
 read-only selection, and (K42) a step whose meta call names a wait reason."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import sys; sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import csrc
 root=Path(__file__).resolve().parents[2]
-s=Path(os.environ.get('EFS_CLEANUP_SERVER_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','EFS_CLEANUP_SERVER_SOURCE')
 start=s.index('static int host_session_append_step(struct efs_raft_host *h,')
 function=s[start:s.index('\n}',start)+2]
 code=r'''

@@ -2,8 +2,9 @@
 """Execute production leader routing against committed group membership."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('HOST_COVER_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','HOST_COVER_SOURCE')
 r=s.index('static uint32_t host_route_voters(');a=s.index('static int host_leader_cover_pick(');b=s.index('\n}',a)+2
 fa=s.index('static int host_group_retired(');fb=s.index('\n}',fa)+2
 def function(name):

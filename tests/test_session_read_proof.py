@@ -2,8 +2,9 @@
 """Actual session reader: same-request group reuse, errors and fresh defaults."""
 from pathlib import Path
 import os,subprocess,tempfile,shlex
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_SESSION_READ_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','EFS_SESSION_READ_SOURCE')
 a=s.index('static int host_session_get_covered(');b=s.index('/* ESTABLISH must follow',a)
 c=r'''
 #include "efs/session.h"

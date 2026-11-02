@@ -10,10 +10,10 @@ An optional source argument permits an unchanged-source negative control.
 """
 from pathlib import Path
 import os, re, shlex, subprocess, sys, tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-source = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'src/server/raft_host.c'
-s = source.read_text()
+s = Path(sys.argv[1]).read_text() if len(sys.argv) > 1 else csrc.module('raft_host')
 assert 'static int host_kv_pressure(' in s, 'missing shared KV leadership/admission predicate'
 assert 'intkv_over=host_kv_pressure(h);' in re.sub(r'\s+', '', s), 'pump must consume the same pressure'
 code = r'''

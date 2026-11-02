@@ -2,8 +2,9 @@
 """Actual lock apply verdict and Raft advancement/retry classification."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host')
 a=s.index('static int apply_lock_cmd(');b=s.index('\n}',a)+2
 c=s.index('    ret = (cmd[0]', s.index('static int host_apply('));d=s.index('    /* Finish the atomic apply scope',c)
 status_start=s.index('static uint8_t rc_to_inode_status(');status_end=s.index('\n}',status_start)+2

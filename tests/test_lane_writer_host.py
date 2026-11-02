@@ -2,8 +2,9 @@
 """Execute the production lane read adapter on a host owning only that group."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-text=(root/'src/server/raft_host.c').read_text()
+text=csrc.module('raft_host')
 start=text.index('void server_raft_host_lane_writer_view(')
 function=text[start:text.index('\n}',start)+2]
 hint_start=text.index('static efs_node_id_t host_reply_hint(')

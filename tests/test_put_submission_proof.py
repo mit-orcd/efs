@@ -2,8 +2,9 @@
 """Actual ticket result proof: exact settlement, fresh queries and local fences."""
 from pathlib import Path
 import subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('        int settled=cmd[0]!=EFS_MD_REQ_PUT_TICKET_STATUS');b=s.index('        out->rc=rc;out->salt=',a)
+s=csrc.module('raft_host');a=s.index('        int settled=cmd[0]!=EFS_MD_REQ_PUT_TICKET_STATUS');b=s.index('        out->rc=rc;out->salt=',a)
 body=s[a:b]
 code=r'''
 #include "efs/common.h"

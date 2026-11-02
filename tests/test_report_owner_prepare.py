@@ -2,8 +2,9 @@
 """REPORT owner preparation: fresh authority, never a host-created session (K5), strict errors."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-s = (root/'src/server/raft_host.c').read_text()
+s = csrc.module('raft_host')
 a = s.index('static int host_namespace_session_prepare_owner(')
 b = s.index('static int host_namespace_session_admit_covered', a)
 pre = r'''

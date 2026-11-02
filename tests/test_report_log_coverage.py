@@ -4,8 +4,9 @@ from pathlib import Path
 import subprocess
 import re
 import tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 def fn(name):
  # Require a definition: a forward declaration is not executable coverage.
  match=re.search(r'static int '+re.escape(name)+r'\([^;{]*\)\s*\{',s)

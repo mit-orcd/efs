@@ -2,8 +2,9 @@
 """Actual host functions: one completion proposal, applied verdict before reply."""
 import os, re, shlex, subprocess, tempfile
 from pathlib import Path
+import csrc
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/server/raft_host.c').read_text()
+source = csrc.module('raft_host')
 def function(name):
     begin = source.index('static int ' + name + '(')
     return source[begin:source.index('\n}', begin) + 2]

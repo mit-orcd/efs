@@ -3,8 +3,9 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static int host_namespace_leader_hint(struct efs_raft_host *h,')
 b=s.index('\n}',a)+2
 code=r'''

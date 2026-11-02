@@ -7,8 +7,9 @@ proposal; stalled or over-cap progress and unknown/failed verdicts still refuse.
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('PREPARE_WAIT_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','PREPARE_WAIT_SOURCE')
 def fn(name):
     m=re.search(r'^static int '+name+r'\([^;]+?\)\n\{',s,re.M)
     assert m,name

@@ -2,8 +2,9 @@
 """Compile production stream admission/lifetime; exercise independent caller pins."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-s = (root / 'src/server/raft_host.c').read_text()
+s = csrc.module('raft_host')
 a = s.index('#define HOST_QUERY_PAGE_SESSIONS ')
 b = s.index('static int host_query_cancel', a)
 code = r'''

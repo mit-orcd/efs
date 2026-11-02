@@ -4,7 +4,8 @@ the expiry fence bit refuses (AGAIN, before any create) while the group's anchor
 counts an enabled folder policy."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 def fn(name):
  a=s.index('static '+name);return s[a:s.index('\n}',a)+2]
 o=(root/'src/sim/opid.c').read_text();a=o.index('int efs_opid_req_valid(');valid=o[a:o.index('\n}',a)+2]

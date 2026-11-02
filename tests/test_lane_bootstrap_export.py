@@ -3,8 +3,9 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('void server_raft_host_lane_bootstrap_rpc(');b=s.index('\nvoid server_raft_host_lane_writer_view',a)
+s=csrc.module('raft_host');a=s.index('void server_raft_host_lane_bootstrap_rpc(');b=s.index('\nvoid server_raft_host_lane_writer_view',a)
 hs=s.index('static efs_node_id_t host_reply_hint(');hint=s[hs:s.index('\n}',hs)+2]
 code=r'''
 #include "efs/protocol.h"

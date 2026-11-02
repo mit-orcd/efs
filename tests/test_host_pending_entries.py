@@ -2,8 +2,9 @@
 """Actual host enqueue refusal preserves ordered work."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host')
 def fn(name):
     starts=[f'static void {name}(',f'static int {name}(']
     a=next(s.index(x) for x in starts if x in s)

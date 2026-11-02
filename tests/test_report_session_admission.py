@@ -2,7 +2,8 @@
 """Actual REPORT first-touch helper: bounded workers, dedup, refusal and joins."""
 from pathlib import Path
 import subprocess,tempfile,os,shlex
-root=Path(__file__).resolve().parents[1];s=Path(os.environ.get('EFS_REPORT_SESSION_SOURCE',root/'src/server/raft_host.c')).read_text();a=s.index('struct host_report_session_work {');b=s.index('/* I16 leader-side probe:',a)
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host','EFS_REPORT_SESSION_SOURCE');a=s.index('struct host_report_session_work {');b=s.index('/* I16 leader-side probe:',a)
 source=r'''
 #include <pthread.h>
 #include <stdint.h>

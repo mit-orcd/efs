@@ -2,8 +2,9 @@
 """Execute the host allocator guard with equal values/different sidecars and races."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/server/raft_host.c').read_text()
+source = csrc.module('raft_host')
 def function(prefix):
     start = source.index(prefix)
     return source[start:source.index('\n}', start) + 2]

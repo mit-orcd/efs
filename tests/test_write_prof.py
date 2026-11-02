@@ -2,6 +2,7 @@
 """Write-path phase histograms: buckets, quantile bounds and the stderr line."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
 code = r'''
 #include "write_prof.h"
@@ -50,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix='efs-write-prof-') as d:
     cc = shlex.split(os.environ.get('CC', 'cc'))
     subprocess.run(cc + ['-std=gnu11', '-Wall', '-Wextra', '-Werror', '-pthread', '-I' + str(root / 'src/server'), str(p), '-o', str(p.with_suffix(''))], check=True)
     subprocess.run([str(p.with_suffix(''))], check=True)
-src = (root / 'src/server/raft_host.c').read_text()
+src = csrc.module('raft_host')
 # Every phase is fed somewhere in the host, and only behind write_prof_on().
 for name in ['WP_HOLD', 'WP_MU', 'WP_APPEND', 'WP_SPIN', 'WP_PERSIST', 'WP_MU_AFTER',
              'WP_PROPOSE', 'WP_APPLY', 'WP_COVER', 'WP_REPORT_MU']:

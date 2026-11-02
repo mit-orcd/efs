@@ -2,8 +2,9 @@
 """Actual apply dispatcher preserves REGISTER/ESTABLISH business verdicts."""
 import os,shlex,subprocess,tempfile
 from pathlib import Path
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_SESSION_APPLY_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','EFS_SESSION_APPLY_SOURCE')
 a=s.index('static uint64_t host_session_register_active_proof(')
 b=s.index('\n}',s.index('static int apply_session_cmd(',a))+2
 code=r'''

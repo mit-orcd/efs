@@ -2,8 +2,9 @@
 """Actual host append admission: global errors/fencing never become permission."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_append_session_admit_covered(');b=s.index('static int host_pack_session_cleanup(',a);f=s[a:b]
+s=csrc.module('raft_host');a=s.index('static int host_append_session_admit_covered(');b=s.index('static int host_pack_session_cleanup(',a);f=s[a:b]
 c=r'''
 #include "efs/meta_cmd.h"
 #include "efs/protocol.h"

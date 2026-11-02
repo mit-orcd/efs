@@ -20,8 +20,9 @@ when a writer holds the slot.
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-text = (root / 'src/server/raft_host.c').read_text()
+text = csrc.module('raft_host')
 
 def function(name):
     match = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', text, re.M)

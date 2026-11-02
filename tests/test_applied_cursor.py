@@ -2,8 +2,9 @@
 """Run actual restart cursor decoding with KV and legacy checkpoint fault inputs."""
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 def function(name):
  a=s.index('static '+name);b=s.index('\n}',a)+2
  return s[a:b]

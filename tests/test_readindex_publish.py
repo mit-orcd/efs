@@ -2,7 +2,8 @@
 """Exercise actual coherent host publication; historical proof is not raw quorum."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text();r=(root/'src/raft/raft.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host');r=(root/'src/raft/raft.c').read_text()
 def func(src,name):
  a=src.index(name+'(');a=src.rfind('\n',0,a)+1;return src[a:src.index('\n}',a)+2]
 a=s.index('    uint64_t v_seq;');b=s.index('\n};',a)

@@ -2,7 +2,8 @@
 """Actual atomic append adapter: exact authority, routing and error propagation."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 def fn(name):
  a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
 c=r'''

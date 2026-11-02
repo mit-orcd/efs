@@ -2,7 +2,8 @@
 """Production marker worker: one slot, durable-prefix ownership and drain."""
 from pathlib import Path
 import os,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 a=s.index('struct host_checkpoint_worker {');b=s.index('struct host_kv_worker {',a)
 code=r'''
 #include "efs/common.h"

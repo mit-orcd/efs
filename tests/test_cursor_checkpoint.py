@@ -2,7 +2,8 @@
 """Captured recovery cursors may replace markers only after their KV barrier."""
 from pathlib import Path
 import os,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 def fn(signature):
  a=s.index('static '+signature);return s[a:s.index('\n}',a)+2]
 code=r'''

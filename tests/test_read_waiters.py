@@ -2,8 +2,9 @@
 """Fresh-read wake predicates and one notification per registered sleeper."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-s = Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+s = csrc.module('raft_host')
 def section(start, end):
     a=s.index(start); return s[a:s.index(end,a)]
 def structure(name):

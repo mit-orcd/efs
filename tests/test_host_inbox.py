@@ -2,8 +2,9 @@
 """Compile the actual bounded inbox slicing and pump wake checks."""
 from pathlib import Path
 import os,re,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 take=s.index('static int host_inbox_take(');take_end=s.index('\n}',take)+2
 poll=s.index('static int host_pump_poll_timeout(');poll_end=s.index('\n}',poll)+2
 limit=int(re.search(r'#define HOST_INBOX_SLICE_MAX\s+(\d+)',s).group(1))

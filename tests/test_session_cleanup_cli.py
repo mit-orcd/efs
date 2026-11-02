@@ -2,13 +2,14 @@
 """Exercise the actual management cleanup loop with definite/ambiguous results."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_CLEANUP_CLIENT_SOURCE',root/'src/common/session_revoke.c')).read_text()
 a=s.index('int efs_session_cleanup_bounded(')
 f=s[a:s.index('\n}',a)+2]
 new_reason_api='uint64_t *last_wait_reason' in f
 f=f.replace('int efs_session_cleanup_bounded(', 'int cleanup_under_test(', 1)
-server=Path(os.environ.get('EFS_CLEANUP_SERVER_SOURCE',root/'src/server/raft_host.c')).read_text()
+server=csrc.module('raft_host','EFS_CLEANUP_SERVER_SOURCE')
 start=server.index('    if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {')
 end=server.index('    } else if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH)',start)
 route=server[start:end]+'    }\n'

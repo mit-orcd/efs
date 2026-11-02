@@ -2,8 +2,9 @@
 """Execute all-storage acknowledgements, including offline and changing rosters."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static int host_storage_fence_members(');b=s.index('\n}',a)+2
 code=r'''
 #include "src/server/server_internal.h"

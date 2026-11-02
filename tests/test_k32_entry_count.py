@@ -35,10 +35,11 @@ Usage: make libefs.a && python3 tests/test_k32_entry_count.py
 """
 from pathlib import Path
 import os, shlex, subprocess, sys, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
 if not (root / 'libefs.a').exists():
     sys.exit('build libefs.a first (make libefs.a)')
-s = (root / 'src/server/raft_host.c').read_text()
+s = csrc.module('raft_host')
 def fn(head, src=None):
     src = src or s
     a = src.index(head)

@@ -2,8 +2,9 @@
 """A superseded quorum completes admitted waiters, never post-send arrivals."""
 from pathlib import Path
 import subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-raft=(root/'src/raft/raft.c').read_text();host=(root/'src/server/raft_host.c').read_text()
+raft=(root/'src/raft/raft.c').read_text();host=csrc.module('raft_host')
 def function(source,name):
  a=source.index('int '+name+'(');return source[a:source.index('\n}',a)+2]
 a=host.index('struct host_view {');b=host.index('\n};',a)+3

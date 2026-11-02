@@ -3,9 +3,10 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/server/raft_host.c').read_text()
+source = csrc.module('raft_host')
 a = source.index('static void host_note_queued_reads(')
 helper = source[a:source.index('\n}', a) + 2]
 code = r'''

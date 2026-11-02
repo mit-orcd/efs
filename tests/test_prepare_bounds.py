@@ -3,8 +3,9 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 def function(signature):
     a=s.index(signature)
     return s[a:s.index('\n}',a)+2]

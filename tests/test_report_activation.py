@@ -3,8 +3,9 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static int apply_activate_lane_cmd(');b=s.index('\n/* D25 sweep commands',a)
 code=r'''
 #include "efs/protocol.h"

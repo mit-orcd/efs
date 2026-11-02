@@ -450,6 +450,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_k_register.py
 	python3 tests/test_graph_community_labels.py
 	python3 tests/test_leader_placement.py
+	python3 tests/csrc.py
 	python3 tests/test_env_removed.py
 	python3 tests/test_cli_surface.py
 	python3 tests/test_cli_docs.py

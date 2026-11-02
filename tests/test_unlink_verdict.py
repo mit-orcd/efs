@@ -2,8 +2,9 @@
 """A losing simple UNLINK must propagate its apply verdict, not just its index."""
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-text = (root / 'src/server/raft_host.c').read_text()
+text = csrc.module('raft_host')
 def function(name):
     match = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', text, re.M)
     if not match: raise RuntimeError(name)

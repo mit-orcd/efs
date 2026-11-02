@@ -4,7 +4,8 @@ the session-owned reservation path (K5: no unidentified reservation and no
 in-memory replay cache for one)."""
 from pathlib import Path
 import subprocess,tempfile,os
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 def fn(p):
  a=s.index(p);return s[a:s.index('\n}',a)+2]
 code=r"""

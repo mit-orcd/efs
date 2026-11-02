@@ -2,7 +2,8 @@
 """Execute the production server callback across empty-name source boundaries."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text();a=s.index('void server_raft_host_readdir(');b=s.index('\n}',a)+2
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host');a=s.index('void server_raft_host_readdir(');b=s.index('\n}',a)+2
 code=r'''
 #include <efs/protocol.h>
 #include <efs/meta_apply.h>

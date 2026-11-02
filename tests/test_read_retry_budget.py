@@ -1,7 +1,8 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static int host_remote_cmd_impl(');b=s.index('\nstatic int host_wait_applied(',a)
 c=s.index('static int host_submit_read_only(');helper=s[c:s.index('\n}',c)+2]
 code=r'''

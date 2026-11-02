@@ -24,8 +24,9 @@ Not covered: a running Raft group or cluster (NOTRUN).
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-s = (root/'src/server/raft_host.c').read_text()
+s = csrc.module('raft_host')
 
 def function(head):
     a = s.index(head)

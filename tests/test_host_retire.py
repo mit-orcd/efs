@@ -2,8 +2,9 @@
 """Exercise actual checkpoint order and KV/marker EIO guards."""
 from pathlib import Path
 import os,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 def function(name):
  a=s.index('static int '+name+'(')
  return s[a:s.index('\n}',a)+2]

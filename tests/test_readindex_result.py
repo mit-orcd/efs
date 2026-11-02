@@ -2,7 +2,8 @@
 """Actual admitted reader returns its exact proof floor, not later apply."""
 from pathlib import Path
 import os,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 def fn(name):
  a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
 a=s.index('struct host_view {');view=s[a:s.index('\n};',a)+3]

@@ -2,8 +2,9 @@
 """Execute production truncate maintenance under slow proposals and a stuck prefix."""
 import os, subprocess, tempfile
 from pathlib import Path
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_TRUNC_GC_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','EFS_TRUNC_GC_SOURCE')
 a=s.index('struct trunc_pass_result {') if 'struct trunc_pass_result {' in s else s.index('static int trunc_pass_room(') if 'static int trunc_pass_room(' in s else s.index('struct trunc_scan_ctx {')
 b=s.index('/* ---- W154 rebuild on return',a)
 code=r'''

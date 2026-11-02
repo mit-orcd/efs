@@ -2,8 +2,9 @@
 """Actual fragment-GC pass only reports successfully progressing budget stops."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_GC_FRAGMENT_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','EFS_GC_FRAGMENT_SOURCE')
 a=s.index('static int host_gc_frag_pass(');b=s.index('\n}',a)+2
 ctx=s[s.index('struct gc_scan_ctx {'):s.index('\n};',s.index('struct gc_scan_ctx {'))+3]
 source=r'''

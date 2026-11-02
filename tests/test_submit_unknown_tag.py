@@ -21,9 +21,10 @@ remaining gate.
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
 header = (root/'include/efs/meta_cmd.h').read_text()
-s = (root/'src/server/raft_host.c').read_text()
+s = csrc.module('raft_host')
 
 def function(head):
     a = s.index(head)

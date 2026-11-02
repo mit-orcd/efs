@@ -4,8 +4,9 @@ completion read back from lane keys, all-member handoff, REAP_MULTI only for
 accepted inodes, and shutdown between proposals leaves every durable marker."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('/* W124 multi-entry builder');b=s.index('\n}',s.index('static void host_gc_reap_pass(',a))+2
 ctx=s[s.index('struct reap_scan_ctx {'):s.index('\n};',s.index('struct reap_scan_ctx {'))+3]
 code=r'''

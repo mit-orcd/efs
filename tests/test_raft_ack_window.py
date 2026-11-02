@@ -3,9 +3,10 @@
 from sanitize_env import asan_runtime_available
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
 source=(root/'src/raft/raft.c').read_text()
-host=(root/'src/server/raft_host.c').read_text()
+host=csrc.module('raft_host')
 assert 'cfg.preserve_ack_window = 1;' in host, 'the server host must keep the tested ACK-window protection'
 guard="""if (!r->preserve_ack_window || !in->success ||
             in->match_index >= r->ae_inflight[in->from])"""

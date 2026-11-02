@@ -11,8 +11,9 @@ import re
 import shlex
 import subprocess
 import tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-s = Path(os.environ.get('K38_HOST_SOURCE', root/'src/server/raft_host.c')).read_text()
+s = csrc.module('raft_host','K38_HOST_SOURCE')
 m = re.search(r'^static int host_report_stale_verdict\([^;]+?\)\n\{', s, re.M)
 if m:
     body = s[m.start():s.index('\n}', m.end())+2]
