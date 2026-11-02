@@ -1,6 +1,6 @@
 # K88: a chunk lost to the writer's own earlier REPORT (Task CK)
 
-Task CK, Nov 1 2026, intel1 (8 CPU, XFS, TCP). Purpose: fix K88 from [bench-published-readindex-20261031.md](bench-published-readindex-20261031.md) (a cold FUSE read returns the right length and wrong bytes while `efs-bench` printed `BENCH_OK`). Gate: F1 (`tests/test_bench_published.py`) and the K register. Verdict: **PASS (K88 FIXED, blocks alpha: no)**; remaining acceptance below.
+Task CK, Nov 1 2026, intel1 (8 CPU, XFS, TCP). Purpose: fix K88 from [bench-published-readindex-20261031.md](../2026-10/bench-published-readindex-20261031.md) (a cold FUSE read returns the right length and wrong bytes while `efs-bench` printed `BENCH_OK`). Gate: F1 (`tests/test_bench_published.py`) and the K register. Verdict: **PASS (K88 FIXED, blocks alpha: no)**; remaining acceptance below.
 
 Tested source: devel `9c4abd8cb` (wave 49, with CF's K86 fix) plus Task CI's K87 (`acd241816`) and Task CJ's page (`952c273eb`) plus the Task CK change in `src/client/write.c` and `src/client/efs_bench.c` (this commit). Build: plain `make`, gcc -O3 (`EFS_BUILD_ID` unknown) on intel1.
 
