@@ -455,6 +455,7 @@ static void *data_worker_main(void *arg)
     char name[80]; struct efs_inode row;
     efs_ino_t ino = 0, dir = 0;
     char *buf = NULL;
+    struct efs_wb_description *wb = NULL;
     double deadline;
     int cancel;
     snprintf(name, sizeof(name), "bench-data-%llu-w%u",
@@ -491,6 +492,12 @@ ready:
     cancel = w->gate->cancel;
     pthread_mutex_unlock(&w->gate->mu);
     if (cancel || w->rc != EFS_OK) goto done;
+    /* A chunk the client drops is a recorded writeback error, not a failed
+     * call: the open description is what reports it (as fsync/close do). */
+    if (!w->reading && !(wb = efs_wb_description_open(ino))) {
+        w->rc = EFS_ERR_NOMEM;
+        goto done;
+    }
     do {
         uint64_t offset = 0;
         while (offset < w->limit && (!deadline || now_sec() < deadline)) {
@@ -509,9 +516,13 @@ ready:
         }
         if (w->rc || !w->reading || !deadline) break;
     } while (now_sec() < deadline);
-    if (!w->reading && w->rc == EFS_OK)
+    if (!w->reading && w->rc == EFS_OK) {
         w->rc = efs_client_report_dirty_ino(ino, 1);
+        if (efs_wb_description_sync(wb, 0) && w->rc == EFS_OK)
+            w->rc = EFS_ERR_IO;
+    }
 done:
+    if (wb) efs_wb_description_close(wb);
     free(buf);
     return NULL;
 }
@@ -715,10 +726,13 @@ static void *meta_worker(void *arg)
             __atomic_store_n(&st->files[i].ino, ino, __ATOMIC_RELEASE);
             st->files[i].dir_idx = di;
             if (st->write_size && st->write_buf) {
+                struct efs_wb_description *wb = efs_wb_description_open(ino);
                 if (efs_client_write(ino, 0, (size_t)st->write_size,
                                      st->write_buf) != EFS_OK ||
-                    efs_client_report_dirty_ino(ino, 1) != EFS_OK)
+                    efs_client_report_dirty_ino(ino, 1) != EFS_OK ||
+                    !wb || efs_wb_description_sync(wb, 0))
                     a->fail++;
+                if (wb) efs_wb_description_close(wb);
             }
             a->ops++;
         }
