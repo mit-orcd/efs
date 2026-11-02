@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFS sessions and fencing</title>
+<meta name="description" content="How EFS tells a dead client from a slow one: sessions, the revocation barrier, clean unmount with a member down, POSIX locks and open-unlinked files.">
+<link rel="stylesheet" href="illustrated.css?v=2">
+</head>
+<body>
+<header class="site"></header>
+<main>
+<h1>Sessions and fencing</h1>
+<p class="lead">A network partition looks exactly like a dead client. EFS therefore never takes a client's locks or open files on a timeout alone. It fences the old session with a real barrier first, and only then reclaims what it held.</p>
+
+<h2>The session</h2>
+<div class="grid">
+<div class="card"><h3>Every mount has one</h3><p>A session is a client identity plus an epoch, committed through Raft. Every change the client sends carries the identity, the epoch and a request id.</p></div>
+<div class="card"><h3>Stale epochs are refused</h3><p>Once a newer epoch is committed, a request from the old one is rejected as stale. Stale work is harmless, never accepted.</p></div>
+<div class="card"><h3>Retries are safe</h3><p>The request id lets a server recognise a repeated request and answer the recorded result instead of doing it twice, even after a lost reply.</p></div>
+<div class="card"><h3>Storage nodes check too</h3><p>Before a fragment PUT, the storage node asks the metadata leader whether the upload ticket is still admitted. A fenced client's PUT is refused. Orphans come from a writer that stored fragments but never published.</p></div>
+</div>
+
+<h2>Revoking a session: a barrier, not an announcement</h2>
+<p>Committing the new epoch is not enough: other shards may still act on the old one. So revocation is a ladder, and nothing that depends on the old session being dead happens before its last rung. This is the sequence a clean unmount runs. Choose how many of the three storage members are down.</p>
+<div class="card">
+  <div class="controls"><label for="down">Members down</label>
+  <select id="down"><option value="0">none</option><option value="1" selected>one</option><option value="2">two</option></select>
+  <button id="run" class="primary">Run the unmount</button></div>
+  <ol class="steps" id="ladder"></ol>
+  <div class="log" id="lout" aria-live="polite"></div>
+</div>
+<ul>
+<li><strong>Majority-sealed fence.</strong> The storage fence seals every member that answers and needs a strict majority. Sealing makes a member refuse any PUT from the old epoch. With one member down the unmount completes; with two down it fails closed and reports <code>phase=storage-fence</code>, and nothing is reclaimed.</li>
+<li><strong>A returning member catches up first.</strong> A member that missed the fence learns the committed epoch before it accepts a PUT or deletes an orphan, so it can never serve the old epoch.</li>
+<li><strong>The client routes around a dead member.</strong> If a hint names a dead voter, the revoke is retried through another one.</li>
+<li><strong>Status.</strong> Merged into the devel branch in wave 42 (<a href="../status/k54-member-down-unmount-20261030.md">evidence</a>). The run on the orcd-mini hosts is still open, so treat it as implemented but not yet qualified.</li>
+</ul>
+
+<h3>What a client stop prints</h3>
+<p><code>client.sh stop</code> refuses while a process uses the mount, then follows the client's stop record through its phases and waits while a phase or step changes at least every 30 s, with a 600 s cap on the whole wait.</p>
+<svg class="fig" viewBox="0 0 900 90" role="img" aria-label="Stop phases: flushing, draining, settling, revoking, then done or failed">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+  <g class="frag d"><rect x="10" y="25" width="150" height="40" rx="8"/></g><text x="85" y="50" text-anchor="middle">flushing</text>
+  <g class="frag d"><rect x="205" y="25" width="150" height="40" rx="8"/></g><text x="280" y="50" text-anchor="middle">draining</text>
+  <g class="frag d"><rect x="400" y="25" width="150" height="40" rx="8"/></g><text x="475" y="50" text-anchor="middle">settling</text>
+  <g class="frag p"><rect x="595" y="25" width="150" height="40" rx="8"/></g><text x="670" y="50" text-anchor="middle">revoking</text>
+  <path class="arrow" d="M160 45 L205 45" marker-end="url(#a)"/><path class="arrow" d="M355 45 L400 45" marker-end="url(#a)"/><path class="arrow" d="M550 45 L595 45" marker-end="url(#a)"/><path class="arrow" d="M745 45 L790 45" marker-end="url(#a)"/>
+  <text x="800" y="40" class="b">done</text><text x="800" y="58" class="small muted">or failed + reason</text>
+</svg>
+<p>A stall or failure is reported with its reason and the client is not killed. <code>--force-discard</code> detaches and loses unresolved writes, for a client that cannot drain. A signal or plain <code>umount</code> bypasses the drain.</p>
+
+<h2>POSIX locks and a crashed client</h2>
+<p>Lock records live on the metadata shard of the inode, so every client sees one authority. A blocked waiter waits there. Try the sequence: a holder dies, but the lock stays until the session is fenced.</p>
+<div class="card">
+  <div class="controls"><button id="la">A locks bytes 0–99 (exclusive)</button><button id="lb">B asks for bytes 50–149</button><button id="lc">A crashes</button><button id="lf">Fence A's session</button><button id="lr">Reset</button></div>
+  <svg class="fig" id="lsvg" viewBox="0 0 900 190" role="img" aria-label="Lock state of client A and client B"></svg>
+  <div class="log" id="llog" aria-live="polite"></div>
+</div>
+<ul>
+<li>Range arithmetic is plain POSIX: ranges split, merge and upgrade as <code>fcntl</code> specifies, all decided by the one authority.</li>
+<li>Deadlock detection covers cycles through one inode, which is all POSIX requires for a single-lock wait.</li>
+<li>Heartbeat loss only starts the attempt to replace a session. The fence decides.</li>
+</ul>
+
+<h2>Open but unlinked</h2>
+<p>If a file is unlinked while someone has it open, the name goes at once, but the inode and its data stay until the last descriptor closes. The open is recorded as a lease under the session. If the client dies, fencing drops the lease and the orphan becomes reclaimable. That is the same road the <a href="space.html">space page</a> follows.</p>
+
+<h2>When a client dies</h2>
+<table>
+<thead><tr><th>What the client had</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td>Writes it had published (fsync, close)</td><td>Durable and visible. Nothing to do.</td></tr>
+<tr><td>Buffered writes it had not published</td><td>Lost. This is the POSIX contract of a buffered write, not a failure.</td></tr>
+<tr><td>Fragments uploaded but never published</td><td>Orphans, collected later; <code>status</code> counts abandoned uploads.</td></tr>
+<tr><td>Locks and open-unlinked leases</td><td>Reclaimed after the revocation barrier completes, not before.</td></tr>
+<tr><td>Append reservations in flight</td><td>Resolved as zero-filled holes so later appends are not blocked.</td></tr>
+<tr><td>Retries still in flight</td><td>Recognised as duplicates; the recorded outcome is returned.</td></tr>
+</tbody></table>
+</main>
+<footer class="site"></footer>
+<script src="illustrated.js?v=2"></script>
+<script>
+(function () {
+  var RUNGS = [
+    ['BEGIN', 'The session shard commits <code>FENCING(E+1)</code> and freezes the set of shards that ever acted for this session. No new shard may register for epoch E.'],
+    ['Storage fence', 'The node that runs the fence seals the session epoch on every storage member it can reach. A sealed member refuses PUTs from the old epoch.'],
+    ['Fence the shards', 'Each touched metadata shard durably rejects epoch E, resolves or aborts this session\'s undecided work, and acknowledges.'],
+    ['FINISH', 'Only after every acknowledgement does the session shard commit <code>ACTIVE(E+1)</code>.'],
+    ['Cleanup', 'Locks, open-unlinked leases and append reservations of epoch E are now reclaimed, and the mount session is retired.']
+  ];
+  function ladder(mark, failAt) {
+    var ol = $('ladder'); ol.innerHTML = '';
+    RUNGS.forEach(function (r, i) { var li = document.createElement('li'); li.className = i < mark ? 'done' : (i === failAt ? 'fail' : ''); li.innerHTML = '<strong>' + r[0] + '.</strong> ' + r[1]; ol.appendChild(li); });
+  }
+  function run() {
+    var d = +$('down').value, reached = 3 - d, o = $('lout');
+    if (reached * 2 > 3) {
+      ladder(5, -1);
+      o.innerHTML = '<p><strong style="color:var(--ok)">Clean unmount.</strong> ' + reached + ' of 3 members were sealed (a strict majority). ' + (d ? 'The member that was down learns the committed epoch when it returns, before it accepts a PUT or deletes an orphan.' : 'Every member was sealed.') + ' <code>client.sh stop</code> exits 0.</p>';
+    } else {
+      ladder(1, 1);
+      o.innerHTML = '<p><strong style="color:var(--down)">Fails closed.</strong> Only ' + reached + ' of 3 members answered, not a majority. The unmount reports <code>revoke … phase=storage-fence</code> and exits 1. Locks and leases of the session stay unrevoked until members are back and <code>efs-mgmt raft-session fence</code> or the next cleanup retires them. Safety is kept; availability is not.</p>';
+    }
+  }
+  $('run').onclick = run; $('down').onchange = run; ladder(0, -1);
+  $('lout').innerHTML = '<p class="muted">Pick how many members are down and run it.</p>';
+
+  /* locks */
+  var A, B, crashed, fenced;
+  function lreset() { A = false; B = null; crashed = false; fenced = false; $('llog').innerHTML = '<p class="muted">Start with “A locks”.</p>'; ldraw(); }
+  function lsay(t, c) { var p = document.createElement('p'); p.innerHTML = t; if (c) p.style.color = 'var(' + c + ')'; $('llog').appendChild(p); }
+  function ldraw() {
+    var s = $('lsvg'); s.innerHTML = ''; var x0 = 120, sc = 5;
+    svg('text', { x: 10, y: 55, class: 'b' }, s, 'Client A' + (crashed ? ' (crashed)' : '')); svg('text', { x: 10, y: 125, class: 'b' }, s, 'Client B');
+    svg('line', { x1: x0, y1: 90, x2: x0 + 750, y2: 90, stroke: 'var(--line)' }, s);
+    [0, 50, 100, 150].forEach(function (b) { svg('text', { x: x0 + b * sc, y: 176, 'text-anchor': 'middle', class: 'small muted' }, s, String(b)); });
+    if (A) { var g = svg('g', { class: 'frag d' }, s); svg('rect', { x: x0, y: 30, width: 100 * sc, height: 36, rx: 6 }, g); svg('text', { x: x0 + 50 * sc, y: 53, 'text-anchor': 'middle', class: 'small' }, g, 'locked 0–99'); }
+    if (B === 'wait') { var gw = svg('g', { class: 'frag miss' }, s); svg('rect', { x: x0 + 50 * sc, y: 105, width: 100 * sc, height: 36, rx: 6 }, gw); svg('text', { x: x0 + 100 * sc, y: 128, 'text-anchor': 'middle', class: 'small' }, gw, 'waiting 50–149 (held at the authority)'); }
+    if (B === 'held') { var gh = svg('g', { class: 'frag p' }, s); svg('rect', { x: x0 + 50 * sc, y: 105, width: 100 * sc, height: 36, rx: 6 }, gh); svg('text', { x: x0 + 100 * sc, y: 128, 'text-anchor': 'middle', class: 'small' }, gh, 'granted 50–149'); }
+  }
+  $('la').onclick = function () { if (A || fenced) return; A = true; lsay('A: lock granted by the inode shard\'s authority.'); ldraw(); };
+  $('lb').onclick = function () { if (B) return; if (A) { B = 'wait'; lsay('B: ranges overlap at 50–99. B\'s request <strong>waits at the authority</strong>; it does not poll.'); } else { B = 'held'; lsay('B: free range, granted at once.'); } ldraw(); };
+  $('lc').onclick = function () { if (!A || crashed) return; crashed = true; lsay('A crashed. The servers see its connection die, but a failure detector never reclaims state by itself: <strong>the lock stays held</strong> and B keeps waiting. A may only be partitioned.', '--parity'); ldraw(); };
+  $('lf').onclick = function () { if (!A || fenced) return; fenced = true; lsay('The session is fenced: epoch bumped, touched shards acknowledged the barrier (see the ladder above). Only now are A\'s locks reclaimed.'); A = false; if (B === 'wait') { B = 'held'; lsay('B is granted 50–149.', '--ok'); } if (!crashed) lsay('A was alive after all. It learns <code>FENCED</code> on its next request and must start a new session, a sacrificed availability, never a safety violation.', '--parity'); ldraw(); };
+  $('lr').onclick = lreset; lreset();
+})();
+</script>
+</body>
+</html>

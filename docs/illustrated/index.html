@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFS illustrated</title>
+<meta name="description" content="A guided tour of how EFS works in alpha 1.0, with interactive pictures of the cluster, data path, metadata, space, sessions, failures and operations.">
+<link rel="stylesheet" href="illustrated.css?v=2">
+<style>
+.hero { display: grid; gap: 1rem; margin: .5rem 0 1rem; }
+.hero .cta { display: flex; flex-wrap: wrap; gap: .6rem; }
+a.btn { display: inline-block; text-decoration: none; padding: .55rem 1.1rem; border-radius: 8px; border: 1px solid var(--accent); color: var(--accent); font-weight: 600; }
+a.btn.primary { background: var(--accent); color: #fff; }
+.facts { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin: 1rem 0; }
+.fact { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; }
+.fact b { display: block; font-size: 1.35rem; line-height: 1.2; }
+.fact span { color: var(--muted); font-size: .85rem; }
+svg .part { transition: opacity .25s; }
+svg.step .part:not(.on) { opacity: .15; }
+.tour { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .6rem 0; }
+.dots { display: flex; gap: .35rem; margin-left: auto; }
+.dots i { width: .7rem; height: .7rem; border-radius: 50%; background: var(--line); display: inline-block; }
+.dots i.on { background: var(--accent); }
+.cap { min-height: 5.2rem; }
+.cap h3 { margin: 0 0 .2rem; }
+.q { display: block; text-decoration: none; color: inherit; }
+.q:hover { border-color: var(--accent); }
+.q h3 { margin: 0 0 .2rem; color: var(--accent); font-size: 1rem; }
+.q p { margin: 0; color: var(--muted); font-size: .93rem; }
+</style>
+</head>
+<body>
+<header class="site"></header>
+<main>
+<div class="hero">
+  <div>
+    <h1>How EFS works, in pictures</h1>
+    <p class="lead">EFS is a file system that spreads your files over several servers, so one server can fail and nothing is lost. You mount it like any folder on Linux. These pages show how, and most of them let you break a server and watch what happens.</p>
+  </div>
+  <div class="cta"><a class="btn primary" href="#tour">Take the two-minute tour</a><a class="btn" href="#questions">Jump to a question</a></div>
+</div>
+
+<div class="facts" aria-label="Key facts">
+  <div class="fact"><b>3 to 16</b><span>servers (nodes), one per host</span></div>
+  <div class="fact"><b>2 + 1</b><span>two data pieces plus one parity piece per chunk</span></div>
+  <div class="fact"><b>1 node</b><span>can fail without losing data or access</span></div>
+  <div class="fact"><b>Linux</b><span>FUSE mount over RDMA or TCP</span></div>
+</div>
+
+<h2 id="tour">The two-minute tour</h2>
+<p>Follow one file from your application to the cluster and see what happens when a server dies. Use the buttons or the arrow keys.</p>
+<svg class="fig" id="tourfig" viewBox="0 0 900 400" role="img" aria-label="A client cuts a chunk into two data fragments and one parity fragment, sends them to three nodes and publishes the result to a metadata group.">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker>
+  <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>
+  <g class="part" data-on="1 2 3 4 5"><g class="node"><rect x="20" y="150" width="150" height="100" rx="10"/></g>
+    <text x="95" y="178" text-anchor="middle" class="b">Your computer</text>
+    <text x="95" y="198" text-anchor="middle" class="small muted">efs-fuse, one mount</text>
+    <text x="95" y="216" text-anchor="middle" class="small muted">knows every node</text>
+    <text x="95" y="234" text-anchor="middle" class="small muted">RDMA or TCP</text></g>
+  <g class="part" data-on="3 5"><g class="node" id="n1"><rect x="330" y="20" width="170" height="86" rx="10"/></g><text x="415" y="98" text-anchor="middle" class="b">Node 1</text></g>
+  <g class="part" data-on="3 5"><g class="node" id="n2"><rect x="330" y="124" width="170" height="86" rx="10"/></g><text x="415" y="202" text-anchor="middle" class="b" id="n2t">Node 2</text></g>
+  <g class="part" data-on="3 5"><g class="node" id="n3"><rect x="330" y="228" width="170" height="86" rx="10"/></g><text x="415" y="306" text-anchor="middle" class="b">Node 3</text></g>
+  <g class="part" data-on=""><g class="node"><rect x="330" y="332" width="170" height="56" rx="10"/></g><text x="415" y="355" text-anchor="middle" class="b">Nodes 4 to 16</text><text x="415" y="373" text-anchor="middle" class="small muted">more room, same protection</text></g>
+  <g class="part" data-on="2 3 5"><g class="frag d"><rect x="350" y="40" width="60" height="30" rx="5"/></g><text x="380" y="60" text-anchor="middle" class="small">D1 64K</text></g>
+  <g class="part" data-on="2 3 5" id="d2g"><g class="frag d" id="d2f"><rect x="350" y="144" width="60" height="30" rx="5"/></g><text x="380" y="164" text-anchor="middle" class="small">D2 64K</text></g>
+  <g class="part" data-on="2 3 5"><g class="frag p"><rect x="350" y="248" width="60" height="30" rx="5"/></g><text x="380" y="268" text-anchor="middle" class="small">P 64K</text></g>
+  <g class="part" data-on="3"><path class="arrow hot" d="M170 180 C 250 120, 270 70, 345 56" marker-end="url(#ah2)"/><path class="arrow hot" d="M170 200 L 345 160" marker-end="url(#ah2)"/><path class="arrow hot" d="M170 225 C 250 250, 270 270, 345 264" marker-end="url(#ah2)"/></g>
+  <g class="part" data-on="4 5"><rect class="g0" x="580" y="40" width="300" height="130" rx="12" stroke-width="1.5" fill-opacity=".6"/>
+    <text x="730" y="64" text-anchor="middle" class="b">Metadata group 0</text>
+    <text x="730" y="84" text-anchor="middle" class="small muted">3 voters: nodes 1, 2, 3 (Raft)</text>
+    <text x="730" y="108" text-anchor="middle" class="small">names, attributes, chunk maps,</text><text x="730" y="124" text-anchor="middle" class="small">sessions, locks</text>
+    <text x="730" y="152" text-anchor="middle" class="small muted">any voter accepts a request</text></g>
+  <g class="part" data-on="4 5"><rect class="g2" x="580" y="210" width="300" height="130" rx="12" stroke-width="1.5" fill-opacity=".6"/>
+    <text x="730" y="234" text-anchor="middle" class="b">Metadata group 2</text>
+    <text x="730" y="254" text-anchor="middle" class="small muted">3 voters: nodes 2, 3, 4 (nodes 1, 2, 3 at three nodes)</text>
+    <text x="730" y="278" text-anchor="middle" class="small">the other half of the shards</text></g>
+  <g class="part" data-on="4"><path class="arrow hot" d="M170 160 C 300 -10, 480 -10, 580 70" marker-end="url(#ah2)"/><text x="330" y="12" class="small" style="fill:var(--accent)">publish: only now is the file visible to others</text></g>
+</svg>
+<div class="card cap" aria-live="polite"><h3 id="ctitle"></h3><p id="ctext" style="margin:0"></p></div>
+<div class="tour"><button id="tb">← Back</button><button id="tn" class="primary">Next →</button><button id="tr">Overview</button><span class="dots" id="dots" aria-hidden="true"></span></div>
+<div class="legend"><span><i class="d"></i>data fragment (half a chunk)</span><span><i class="p"></i>parity fragment (XOR of the two)</span><span><i class="m0"></i>metadata group 0</span><span><i class="m2"></i>metadata group 2</span></div>
+
+<h2 id="questions">Pick a question</h2>
+<div class="grid">
+  <a class="card q" href="failure.html"><h3>What if a server dies?</h3><p>Switch nodes off at any cluster size and see what keeps working.</p></a>
+  <a class="card q" href="data-path.html"><h3>Where does my file's data go?</h3><p>Write a chunk, lose a node, read it back, rebuild.</p></a>
+  <a class="card q" href="metadata.html"><h3>How do names and directories work?</h3><p>Shards, Raft groups, what each operation touches.</p></a>
+  <a class="card q" href="cluster.html"><h3>How big can it get?</h3><p>3 to 16 nodes: who votes, who just stores, usable capacity.</p></a>
+  <a class="card q" href="space.html"><h3>Why is free space late, and what is packing?</h3><p>Small files, quota, delete, truncate, expiry.</p></a>
+  <a class="card q" href="sessions.html"><h3>What happens to a crashed client?</h3><p>Sessions, locks and a clean unmount with a node down.</p></a>
+  <a class="card q" href="operate.html"><h3>How do I run it?</h3><p>Start, stop, read <code>status</code>, settings, <code>.efs</code> commands.</p></a>
+</div>
+<p><strong>Suggested order for a first read:</strong> this tour, then <a href="cluster.html">Cluster</a>, <a href="data-path.html">Data path</a>, <a href="failure.html">Failures</a>, and the rest as you need them.</p>
+
+<h2>What alpha 1.0 includes</h2>
+<p>Source: <a href="../using/alpha-1.0-surface.md">supported surface</a> and the checklist scope (S1). “In” means in the alpha 1.0 release scope; “out” means not supported, whatever the binaries can do. Whether each item is implemented and qualified is tracked in the checklist.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Feature</th><th>Alpha 1.0</th><th>Pictured on</th></tr></thead>
+<tbody>
+<tr><td>Cluster of 3 to 16 nodes, one export, online node add</td><td><span class="tag in">in</span></td><td><a href="cluster.html">Cluster</a></td></tr>
+<tr><td>2+1 erasure coding, checksums, degraded writes, rebuild on return</td><td><span class="tag in">in</span></td><td><a href="data-path.html">Data path</a>, <a href="failure.html">Failures</a></td></tr>
+<tr><td>Linux FUSE client over RDMA or TCP, always direct fragment I/O</td><td><span class="tag in">in</span></td><td><a href="data-path.html">Data path</a>, <a href="operate.html">Operate</a></td></tr>
+<tr><td>Raft metadata, linearizable reads, cross-shard transactions</td><td><span class="tag in">in</span></td><td><a href="metadata.html">Metadata</a></td></tr>
+<tr><td>Background packing of small files, reclaim, quota and <code>df</code></td><td><span class="tag in">in</span></td><td><a href="space.html">Space</a></td></tr>
+<tr><td>Logical truncate and expiry under the cluster policy</td><td><span class="tag in">in</span></td><td><a href="space.html">Space</a></td></tr>
+<tr><td>Sessions, fencing, POSIX locks, open-unlinked files, clean unmount</td><td><span class="tag in">in</span></td><td><a href="sessions.html">Sessions</a></td></tr>
+<tr><td><code>efs-mgmt</code> status and settings, <code>.efs</code> commands, start and stop scripts</td><td><span class="tag in">in</span></td><td><a href="operate.html">Operate</a></td></tr>
+<tr><td>2+2 coding, protection against a second node loss</td><td><span class="tag out">out</span></td><td>after alpha 1.0</td></tr>
+<tr><td>Automatic repair to another node, node removal, rebalancing</td><td><span class="tag out">out</span></td><td>after alpha 1.0</td></tr>
+<tr><td>Recovery after sudden power loss</td><td><span class="tag out">out</span></td><td>deferred (W71)</td></tr>
+<tr><td>NFS re-export, macOS client, containers, several exports</td><td><span class="tag out">out</span></td><td>decided out</td></tr>
+</tbody></table></div>
+
+<h2>Words you will meet</h2>
+<dl class="kv">
+<dt>Node</dt><dd>One storage server running <code>efsd</code>. A cluster has 3 to 16.</dd>
+<dt>Chunk</dt><dd>A 128 KiB slice of a file, the unit that is protected.</dd>
+<dt>Fragment</dt><dd>A 64 KiB piece of a chunk kept on one node. Two data fragments (D1, D2) and one parity fragment (P).</dd>
+<dt>Parity</dt><dd>P is D1 XOR D2. Any two of the three rebuild the third.</dd>
+<dt>Degraded</dt><dd>Stored or running with one piece missing. Still correct, but a second loss would hurt.</dd>
+<dt>Metadata</dt><dd>Everything about files except their bytes: names, sizes, permissions, where fragments are.</dd>
+<dt>Shard</dt><dd>A slice of the metadata. In alpha 1.0 the shards belong to two groups.</dd>
+<dt>Raft, voter, leader</dt><dd>The agreement protocol. Each group has three voters; one is leader; a change counts when two of three have it.</dd>
+<dt>Publish</dt><dd>The metadata commit that makes written data visible. Other clients do not see the write before it.</dd>
+<dt>Session, fence</dt><dd>A mount's identity. Fencing cuts off an old session safely before its locks are released.</dd>
+<dt>Reclaim</dt><dd>Background deletion of fragments nothing refers to any more.</dd>
+</dl>
+
+<h2>How to read the pictures</h2>
+<ul>
+<li><strong>Blue</strong> is data, <strong>amber</strong> is parity, <strong>violet</strong> is the second metadata group, a <strong>dashed red</strong> outline is a node that is down.</li>
+<li>Sizes are real where the code fixes them: a chunk is 128 KiB, a fragment 64 KiB, at most 16 nodes, two metadata groups of three voters.</li>
+<li>Which node holds which fragment in the diagrams is illustrative. The product places fragments by a hash of the file and chunk, and records the result in the chunk map.</li>
+</ul>
+</main>
+<footer class="site"></footer>
+<script src="illustrated.js?v=2"></script>
+<script>
+(function () {
+  var T = [
+    ['Overview', 'This is the whole system. A Linux machine mounts EFS and talks directly to every node. Data lives on the nodes; names and attributes live in two small Raft groups. Press Next to follow one file.'],
+    ['1. You write a file', 'An application writes to the mounted folder. A buffered write can initially remain in the client\'s cache. Background writeback can publish it before close; a successful buffered write alone does not promise durability.'],
+    ['2. The client cuts it into pieces', 'During writeback the client takes a 128 KiB chunk, splits it into halves D1 and D2, and computes parity P as their XOR. Three 64 KiB fragments, any two of which rebuild the chunk.'],
+    ['3. Pieces go straight to three nodes', 'The client sends each fragment to a different node in parallel over RDMA or TCP. No server sits in the middle. A PUT acknowledgement means uploaded, not yet proven durable. Background barriers or fsync establish durability.'],
+    ['4. The write is published', 'Now the client asks a metadata group to record "this chunk is these three fragments". Two of three voters agree, making the mapping authoritative. Other mounts observe it through their metadata and cache-validation rules. Before this step, a crash leaves only orphan fragments that get cleaned up.'],
+    ['5. A node dies', 'After durability is confirmed, node 2 stops. Its fragment D2 is unavailable, but D1 and P are not: a reader fetches them and XORs to get D2 back. Metadata keeps two of three voters. Nothing is lost, the system is degraded until node 2 returns and is rebuilt.']
+  ];
+  var step = 0, svgEl = $('tourfig');
+  function show() {
+    svgEl.classList.toggle('step', step > 0);
+    Array.prototype.forEach.call(svgEl.querySelectorAll('.part'), function (p) {
+      var on = (p.getAttribute('data-on') || '').split(' ');
+      p.classList.toggle('on', step > 0 && on.indexOf(String(step)) >= 0);
+    });
+    var dead = step === 5;
+    $('n2').classList.toggle('down', dead); $('d2f').classList.toggle('miss', dead);
+    $('n2t').textContent = dead ? 'Node 2 (down)' : 'Node 2';
+    $('ctitle').textContent = T[step][0]; $('ctext').textContent = T[step][1];
+    $('tb').disabled = step === 0; $('tn').disabled = step === T.length - 1;
+    var d = $('dots'); d.innerHTML = ''; T.forEach(function (_, i) { var e = document.createElement('i'); if (i === step) e.className = 'on'; d.appendChild(e); });
+  }
+  $('tn').onclick = function () { step = Math.min(T.length - 1, step + 1); show(); };
+  $('tb').onclick = function () { step = Math.max(0, step - 1); show(); };
+  $('tr').onclick = function () { step = 0; show(); };
+  document.addEventListener('keydown', function (e) {
+    if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+    if (e.key === 'ArrowRight') $('tn').click(); else if (e.key === 'ArrowLeft') $('tb').click();
+  });
+  show();
+})();
+</script>
+</body>
+</html>

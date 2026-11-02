@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFS space lifecycle</title>
+<meta name="description" content="Small-file packing, quotas and ENOSPC, deferred reclaim, logical truncate with its background sweep, and expiry in EFS alpha 1.0.">
+<link rel="stylesheet" href="illustrated.css?v=2">
+</head>
+<body>
+<header class="site"></header>
+<main>
+<h1>Space: packing, quota, reclaim, truncate, expiry</h1>
+<p class="lead">EFS publishes new data versions and reclaims obsolete objects in the background. Retries may rewrite the same fragment object; new file versions use new objects. Reclamation can lag the metadata change, so deleting a file does not immediately return disk space.</p>
+
+<h2>Small files get packed</h2>
+<p>Each file is first written as ordinary fragments. A per-file fragment costs a whole 69,632-byte file on each of three nodes, however small the file. A background packer moves closed files of at most 16 KiB into shared segments of up to 128 KiB, still erasure coded, and the old fragments are reclaimed.</p>
+<div class="card">
+  <div class="controls"><label for="pf">Files</label><input id="pf" type="number" value="1000000" min="1" style="width:8rem"><label for="ps">Size of each (KiB)</label><input id="ps" type="range" min="1" max="16" value="4"><output id="pso">4</output></div>
+  <div class="grid" id="pk"></div>
+  <p class="muted">Estimate: a full segment holds 128 KiB of file bodies and costs three fragment files of 68 KiB, ignoring the small per-file record. Real savings depend on how closely files are grouped.</p>
+</div>
+<ul>
+<li><strong>Nothing changes for the application.</strong> Close and <code>fsync</code> behave as before; packing happens afterwards. There is no switch to turn it off.</li>
+<li><strong>It compare-and-swaps.</strong> One Raft entry moves up to 128 files, each guarded by the exact old chunk row; a file changed, opened or deleted meanwhile stays as it was.</li>
+<li><strong>It steps back under load.</strong> Packing drops to a floor while the foreground is busy and ramps up only under space pressure. <code>efs-mgmt pack-compact NODE:PORT 0</code> prints the packer state.</li>
+<li><strong>Segments are compacted.</strong> Files are grouped by creation time and directory so deleting a tree empties whole segments; survivors of mostly dead segments are compacted forward in idle batches or a daily window.</li>
+<li><strong>Segments are protected too.</strong> A segment holds files only with two of its three fragments durable. A missing one is rebuilt by the group leader, and until then <code>status</code> shows the cluster as degraded. Two lost fragments are reported as lost and the files read <code>EIO</code>.</li>
+<li><strong>Segments spread over all nodes.</strong> They follow the data ring of every node, not only the metadata voters.</li>
+</ul>
+
+<h3>Deleting small files leaves holes, and holes are not refilled</h3>
+<p>A packed segment is written once, as an erasure-coded stripe, and never changed. Deleting a file only marks its record dead. New small files go into <em>new</em> segments, never into the hole. The space comes back in one of two ways: a segment with no live record left is retired and its fragment files are reclaimed, or compaction copies the survivors of a holey segment into new cold segments and then retires the old one. Click a live record, or focus it and press Enter or Space, to delete it.</p>
+<div class="card">
+  <div class="controls"><button id="cs">Delete a random 30 %</button><button id="cc" class="primary">Run compaction</button><button id="cr">Reset</button></div>
+  <svg class="fig" id="cg" viewBox="0 0 900 250" role="group" aria-label="Packed segments with live and dead files"></svg>
+  <div class="log" id="cl" aria-live="polite"></div>
+</div>
+<ul>
+<li><strong>Whole-tree deletes are cheap.</strong> Files are grouped by creation time and directory, so deleting a tree tends to empty whole segments, which retire without any copying.</li>
+<li><strong>Scattered deletes are not.</strong> Deleting one file in each segment frees nothing until compaction runs. Compaction is background maintenance: after 60 s of idle load, in a daily window, or on demand with <code>efs-mgmt pack-compact</code>. Tiny holes and cold segments go first.</li>
+<li><strong>It needs headroom.</strong> Compaction writes new segments before the old ones go, so a node keeps a reserve; without it, a node at quota could never pack its way back under it.</li>
+<li><strong>No hole punching.</strong> EFS does not punch holes in any file, so there is no partial free inside a segment.</li>
+</ul>
+
+<h2>Quota, ENOSPC and delayed free space</h2>
+<p>The quota is per node. A write needs all three fragments to fit on three distinct nodes. Write chunks until a node fills, then delete and watch the three stages: the delete, the node accepting the cleanup (quota is credited, so new writes fit again), and the files leaving the disk. New published versions use new objects. A retry of the same object may rewrite its fragment file; reclamation releases the quota held by obsolete objects rather than reusing their identity.</p>
+<div class="card">
+  <div class="controls"><label for="qn">Nodes</label><select id="qn"><option>3</option><option selected>4</option><option>5</option></select><button id="qw" class="primary">Write 1 chunk</button><button id="qw10">Write 10</button><button id="qd">Delete oldest file</button><button id="qa">Node accepts cleanup</button><button id="qr">Remove files from disk</button><button id="qx">Reset</button></div>
+  <svg class="fig" id="qs" viewBox="0 0 900 230" role="img" aria-label="Quota use per node"></svg>
+  <div class="log" id="ql" aria-live="polite"></div>
+</div>
+<ul>
+<li>A <em>full</em> node is not a <em>down</em> node. With a member down, a write may succeed on two fragments and be recorded as degraded. With a member full, the client places the chunk again on a member that has room (four or more nodes); if none is left, the write gets <code>ENOSPC</code>, never a two-fragment acknowledgement.</li>
+<li>A write that cannot place all three fragments on members with room gets <code>ENOSPC</code>. That is not permanent: space freed in the background by reclaim, a pack or a session cleanup lets a later write succeed.</li>
+<li><code>df</code> shows <em>logical</em> 2+1 capacity using cached member figures. An unreachable member keeps its last known figures, so node loss alone does not reduce <code>df</code>. Usage can still change as reachable members report updates; unlinks and truncates lag until cleanup is accepted. Use <code>status</code> for member availability. <code>used</code> counts fragment payload only, not metadata or logs.</li>
+<li>The default quota keeps 20 % of each filesystem free (at least 1 GiB) and uses 7/8 of the rest for fragments. A node refuses to start without that headroom.</li>
+</ul>
+
+<h2>Where space goes when you delete</h2>
+<ol class="steps">
+<li><strong>Unlink or overwrite.</strong> Metadata changes at once: the name is gone, or the chunk map points at the new generation. Fragments are still on disk and still counted against the quota until a node accepts the cleanup.</li>
+<li><strong>Last reference dropped.</strong> A file that is still open is kept until its last descriptor closes. Then the inode is removed and the metadata group's cleanup pass queues it, in batches, to the nodes that hold its fragments.</li>
+<li><strong>The node accepts.</strong> It writes the batch to its reclaim journal and syncs it, refuses any late write to those inodes, and credits their bytes back to its quota. From here new writes fit again, even though the files are still on disk. A physical headroom check still guards the real filesystem.</li>
+<li><strong>Files are deleted.</strong> Background threads remove the fragment files and retire the journal records. A crash in between replays the deletion.</li>
+</ol>
+<p>Orphans take the same road. Fragments from a client that died before publishing are collected, and <code>status</code> reports abandoned uploads.</p>
+
+<h2>Truncate is logical</h2>
+<p>Shrinking a file changes one inode record in constant time, whatever the file size. Chunks beyond the new end are masked at once; their fragments are swept in the background.</p>
+<div class="card">
+  <div class="controls"><label for="ts">Truncate to chunk</label><input id="ts" type="range" min="0" max="12" value="12"><output id="tso">12</output><button id="tsw" class="primary">Run sweep</button><button id="trs">Reset</button></div>
+  <svg class="fig" id="ts_svg" viewBox="0 0 900 150" role="img" aria-label="File chunks, masked chunks and swept chunks"></svg>
+  <div class="log" id="tlog" aria-live="polite"></div>
+</div>
+
+<h2>Expiry</h2>
+<p>Expiry removes files at a deadline fixed when they were created inside a folder with an enabled policy. It is part of every build and has one control, the cluster expiry policy, which is off until an operator turns it on. Set the conditions to see whether an overdue file goes.</p>
+<div class="card">
+  <div class="grid">
+    <label><input type="checkbox" id="e1" checked> the file got a deadline when created (cluster policy was on, folder policy enabled)</label>
+    <label><input type="checkbox" id="e2" checked> cluster expiry policy is on now</label>
+    <label><input type="checkbox" id="e3" checked> the folder policy it came from is still enabled on a live folder</label>
+    <label><input type="checkbox" id="e4" checked> the node clock is healthy</label>
+    <label><input type="checkbox" id="e5" checked> both metadata groups are available</label>
+    <label><input type="checkbox" id="e6" checked> the deadline has passed</label>
+  </div>
+  <div class="log" id="eout" aria-live="polite"></div>
+</div>
+<ul>
+<li>Files created while the policy was off never get a deadline, and turning it on later does not give them one.</li>
+<li><code>expiry renew</code> moves a deadline within the folder's renewal limit. A renamed file keeps its deadline. A file with a deadline cannot get a second hard link.</li>
+<li>Turning a policy off keeps every file; turning it on again lets overdue deadlines act.</li>
+<li>Removal goes through the same unlink and reclaim path as above, so space returns after the last close and the background cleanup.</li>
+</ul>
+</main>
+<footer class="site"></footer>
+<script src="illustrated.js?v=2"></script>
+<script>
+(function () {
+  /* packing */
+  function fmt(x) { return x >= 1e12 ? (x / 1e12).toFixed(2) + ' TB' : x >= 1e9 ? (x / 1e9).toFixed(2) + ' GB' : (x / 1e6).toFixed(1) + ' MB'; }
+  function num(x) { return Math.round(x).toLocaleString('en-US'); }
+  function pack() {
+    var files = Math.max(1, +$('pf').value || 1), kib = +$('ps').value, per = Math.min(128, Math.floor(128 / kib));
+    $('pso').textContent = kib;
+    var beforeFiles = files * 3, beforeBytes = files * 3 * 69632;
+    var segs = Math.ceil(files / per), afterFiles = segs * 3, afterBytes = segs * 3 * 69632;
+    $('pk').innerHTML = '<div class="card"><h3>Before packing</h3><p><strong>' + num(beforeFiles) + '</strong> fragment files<br><strong>' + fmt(beforeBytes) + '</strong> of fragment space</p></div>' +
+      '<div class="card"><h3>After packing</h3><p><strong>' + num(afterFiles) + '</strong> fragment files (' + per + ' files per segment)<br><strong>' + fmt(afterBytes) + '</strong> of fragment space</p></div>' +
+      '<div class="card"><h3>Saved</h3><p><strong>' + (beforeBytes / afterBytes).toFixed(1) + '×</strong> less space<br><strong>' + (beforeFiles / afterFiles).toFixed(0) + '×</strong> fewer files on the nodes</p></div>';
+  }
+  $('pf').addEventListener('input', pack); $('ps').addEventListener('input', pack); pack();
+
+  /* packed segment holes */
+  var SEGS = 5, SLOTS = 16, seg;
+  function creset() { seg = []; for (var i = 0; i < SEGS; i++) { var a = []; for (var j = 0; j < SLOTS; j++) a.push(1); seg.push(a); } $('cl').innerHTML = '<p class="muted">Five segments of 16 small files each. Click a live record, or focus it and press Enter or Space, to delete it.</p>'; cdraw(); }
+  function csay(t) { var p = document.createElement('p'); p.innerHTML = t; $('cl').appendChild(p); $('cl').scrollTop = 1e6; }
+  function sweepEmpty() { var n = 0; seg = seg.filter(function (a) { if (a.length && !a.some(Boolean)) { n++; return false; } return true; }); if (n) csay('Retired ' + n + ' segment(s) with no live file: their fragment files go to reclaim. No copying needed.'); }
+  function cdraw() {
+    var s = $('cg'); s.innerHTML = ''; var w = 900 / 5, live = 0;
+    seg.forEach(function (a, i) {
+      var x = i * w + 12, cell = (w - 24) / 8, l = a.filter(Boolean).length; live += l;
+      svg('text', { x: x, y: 22, class: 'b' }, s, 'Segment ' + (i + 1) + '  (' + l + '/' + a.length + ' live)');
+      a.forEach(function (v, j) { var cx = x + (j % 8) * cell, cy = 34 + Math.floor(j / 8) * 34;
+        var g = svg('g', { class: 'frag ' + (v ? 'd' : 'ghost'), style: 'cursor:pointer' }, s); g.setAttribute('role', 'button'); g.setAttribute('tabindex', v ? '0' : '-1'); g.setAttribute('aria-label', 'Segment ' + (i + 1) + ' record ' + (j + 1) + (v ? ': delete file' : ': deleted')); g.setAttribute('aria-disabled', v ? 'false' : 'true'); function remove() { if (!a[j]) return; a[j] = 0; csay('Deleted one file. Its record cannot be restored; Reset starts a new example.'); sweepEmpty(); cdraw(); var next=s.querySelector('[tabindex="0"]'); if(next) next.focus(); else $('cr').focus(); } g.addEventListener('click', remove); g.addEventListener('keydown', function(e) { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remove(); } });
+        svg('rect', { x: cx + 1, y: cy, width: cell - 3, height: 26, rx: 4 }, g); });
+    });
+    var segs = seg.length;
+    svg('text', { x: 12, y: 130, class: 'b' }, s, 'On disk: ' + segs + ' segment(s) = ' + segs * 3 + ' fragment files, holding ' + live + ' live file(s)');
+    svg('text', { x: 12, y: 152, class: 'small muted' }, s, 'Dead files (grey) still occupy their segment until it is retired or compacted.');
+    svg('text', { x: 12, y: 172, class: 'small muted' }, s, 'Segment capacity is illustrative: 16 files each.');
+  }
+  $('cs').onclick = function () { seg.forEach(function (a) { for (var j = 0; j < a.length; j++) if (a[j] && Math.random() < .3) a[j] = 0; }); csay('Deleted about 30 % of the files, scattered. Only segments left with no live file retire; the rest keep their holes.'); sweepEmpty(); cdraw(); };
+  $('cc').onclick = function () {
+    var holey = seg.filter(function (a) { return a.some(function (v) { return !v; }); }), keep = seg.filter(function (a) { return a.every(Boolean); });
+    if (!holey.length) { csay('Nothing to compact: no segment has a hole.'); return; }
+    var surv = []; holey.forEach(function (a) { a.forEach(function (v) { if (v) surv.push(1); }); });
+    var out = []; for (var i = 0; i < surv.length; i += SLOTS) { var chunk = surv.slice(i, i + SLOTS); out.push(chunk); }
+    csay('Compaction read ' + surv.length + ' live record(s) from ' + holey.length + ' holey segment(s), wrote them into ' + out.length + ' new segment(s), switched the files over, then retired the old segments. Net: ' + (holey.length - out.length) + ' segment(s) freed.');
+    seg = keep.concat(out); cdraw();
+  };
+  $('cr').onclick = creset; creset();
+
+  /* quota: q = fragments counted against quota (live + deleted but not yet accepted), pend = subset not yet accepted,
+     cred = deleted and accepted: credited back to quota but still on disk until removed. */
+  var CAP = 12, PCAP = 15, q, pend, cred, files, fid;
+  function qreset() { var n = +$('qn').value; q = []; pend = []; cred = []; for (var i = 0; i <= n; i++) { q.push(0); pend.push(0); cred.push(0); } files = []; fid = 1; $('ql').innerHTML = '<p class="muted">Each node\'s quota is ' + CAP + ' fragments; its disk has headroom for ' + PCAP + '. A chunk needs 3.</p>'; qdraw(); }
+  function qsay(t, c) { var p = document.createElement('p'); p.innerHTML = t; if (c) p.style.color = 'var(' + c + ')'; $('ql').appendChild(p); $('ql').scrollTop = 1e6; }
+  function qdraw() {
+    var n = +$('qn').value, s = $('qs'); s.innerHTML = ''; var w = 900 / n;
+    for (var k = 1; k <= n; k++) { var x = (k - 1) * w + 14, bw = w - 28, live = q[k] - pend[k], u = bw / PCAP;
+      svg('rect', { x: x, y: 40, width: bw, height: 30, rx: 6, fill: 'none', stroke: 'var(--line)', 'stroke-width': 1.5 }, s);
+      svg('rect', { x: x, y: 40, width: u * live, height: 30, rx: 6, fill: 'var(--data-bg)', stroke: 'var(--data)' }, s);
+      svg('rect', { x: x + u * live, y: 40, width: u * pend[k], height: 30, fill: 'var(--parity-bg)', stroke: 'var(--parity)', 'stroke-dasharray': '4 3' }, s);
+      svg('rect', { x: x + u * q[k], y: 40, width: u * cred[k], height: 30, fill: 'var(--code-bg)', stroke: 'var(--muted)', 'stroke-dasharray': '2 3' }, s);
+      svg('line', { x1: x + u * CAP, y1: 34, x2: x + u * CAP, y2: 76, stroke: 'var(--down)', 'stroke-width': 2 }, s);
+      svg('text', { x: x + bw / 2, y: 28, 'text-anchor': 'middle', class: 'b' }, s, 'Node ' + k);
+      svg('text', { x: x + bw / 2, y: 94, 'text-anchor': 'middle', class: 'small' }, s, q[k] + ' / ' + CAP + ' quota' + (cred[k] ? ', +' + cred[k] + ' on disk, credited' : '')); }
+    var tot = 0, usedT = 0; for (k = 1; k <= n; k++) { tot += CAP; usedT += q[k]; }
+    svg('text', { x: 20, y: 134, class: 'b' }, s, 'df would report about ' + Math.max(0, Math.floor((tot - usedT) / 3)) + ' chunks free (logical 2+1)');
+    svg('text', { x: 20, y: 156, class: 'small muted' }, s, 'Blue: live. Amber: deleted, quota not yet credited. Grey: deleted and credited, still on disk. Red line: quota.');
+    svg('text', { x: 20, y: 176, class: 'small muted' }, s, files.length + ' file(s), one chunk each.');
+  }
+  function qwrite(quiet) {
+    var n = +$('qn').value, nodes = placeChunk(n, fid, 0), got = [], f;
+    function ok(k) { return q[k] < CAP && q[k] + cred[k] < PCAP; }
+    for (f = 0; f < 3; f++) { if (ok(nodes[f])) { got.push(nodes[f]); continue; }
+      var alt = []; for (var k = 1; k <= n; k++) if (ok(k) && nodes.indexOf(k) < 0 && got.indexOf(k) < 0) alt.push(k);
+      if (alt.length) got.push(alt[0]); }
+    if (got.length < 3) { if (!quiet) qsay('<strong>ENOSPC</strong>: only ' + got.length + ' node(s) have room and a chunk needs three. A full node never leads to a two-fragment acknowledgement; the write fails.', '--down'); return false; }
+    got.forEach(function (k) { q[k]++; }); files.push({ id: fid, nodes: got }); fid++;
+    if (!quiet) qsay('Chunk written to nodes ' + got.join(', ') + '.');
+    return true;
+  }
+  $('qw').onclick = function () { qwrite(); qdraw(); };
+  $('qw10').onclick = function () { var ok = 0; for (var i = 0; i < 10; i++) if (qwrite(true)) ok++; qsay(ok + ' of 10 writes fit' + (ok < 10 ? '; the rest got <strong>ENOSPC</strong>.' : '.'), ok < 10 ? '--down' : null); qdraw(); };
+  $('qd').onclick = function () { var f = files.shift(); if (!f) { qsay('No files.'); return; } f.nodes.forEach(function (k) { pend[k]++; }); qsay('Unlinked. The name is gone at once, but the fragments on nodes ' + f.nodes.join(', ') + ' still count against quota until those nodes accept the cleanup.'); qdraw(); };
+  $('qa').onclick = function () { var t = 0; for (var k = 1; k < q.length; k++) { q[k] -= pend[k]; cred[k] += pend[k]; t += pend[k]; pend[k] = 0; } qsay(t ? 'Nodes accepted the cleanup for ' + t + ' fragment(s): journal synced, quota credited. New writes fit again, but the old files are still on disk, and the disk headroom check still applies.' : 'Nothing waiting for acceptance.'); qdraw(); };
+  $('qr').onclick = function () { var t = 0; for (var k = 1; k < cred.length; k++) { t += cred[k]; cred[k] = 0; } qsay(t ? 'Background deleters removed ' + t + ' fragment file(s) from disk.' : 'Nothing to remove from disk.'); qdraw(); };
+  $('qx').onclick = qreset; $('qn').onchange = qreset; qreset();
+
+  /* truncate */
+  var CH = 12, state;
+  function treset() { state = []; for (var i = 0; i < CH; i++) state.push('live'); $('ts').value = CH; $('tlog').innerHTML = '<p class="muted">A 12-chunk file. Drag the slider to truncate or extend it.</p>'; tdraw(); }
+  function tdraw() {
+    var cut = +$('ts').value; $('tso').textContent = cut; var s = $('ts_svg'); s.innerHTML = ''; var w = 900 / CH;
+    for (var i = 0; i < CH; i++) { var st = state[i], label, cls;
+      if (i >= cut) { label = st === 'freed' ? 'beyond end, freed' : st === 'masked' ? 'masked' : 'chunk ' + i; cls = st === 'live' ? 'd' : st === 'masked' ? 'p' : 'ghost'; if (st === 'live') { label = 'chunk ' + i; } }
+      else { label = st === 'live' ? 'chunk ' + i : 'reads as zeros'; cls = st === 'live' ? 'd' : st === 'masked' ? 'p' : 'ghost'; }
+      var g = svg('g', { class: 'frag ' + cls }, s); svg('rect', { x: i * w + 5, y: 30, width: w - 10, height: 50, rx: 6 }, g);
+      svg('text', { x: i * w + w / 2, y: 52, 'text-anchor': 'middle', class: 'small' }, g, label.split(' ')[0]);
+      svg('text', { x: i * w + w / 2, y: 68, 'text-anchor': 'middle', class: 'small muted' }, g, label.split(' ').slice(1).join(' ')); }
+    svg('text', { x: cut * w, y: 24, 'text-anchor': 'middle', class: 'small b' }, s, '▼ end of file');
+    svg('text', { x: 20, y: 112, class: 'small' }, s, 'Reads past the end give end-of-file. Extending later exposes zeros, never the old bytes.');
+    svg('text', { x: 20, y: 132, class: 'small muted' }, s, 'Amber: cut off but still on disk and never served. Grey: reclaimed.');
+  }
+  $('ts').addEventListener('input', function () {
+    var cut = +this.value; for (var i = cut; i < CH; i++) if (state[i] === 'live') state[i] = 'masked';
+    $('tlog').innerHTML = '<p>Size set to ' + cut + ' chunks: <strong>one Raft entry</strong> on the inode, constant work. The size and a content epoch change; nothing is deleted and no data is rewritten.</p>'; tdraw(); });
+  $('tsw').onclick = function () { var n = 0; for (var i = 0; i < CH; i++) if (state[i] === 'masked') { state[i] = 'freed'; n++; }
+    $('tlog').innerHTML = '<p>Background sweep: ' + (n ? 'queued ' + n + ' cut-off chunk(s) for reclaim in bounded steps, then retired the truncate record. <code>df</code> catches up after reclaim.' : 'nothing left to sweep.') + '</p>'; tdraw(); };
+  $('trs').onclick = treset; treset();
+
+  /* expiry */
+  function ex() {
+    var v = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'].map(function (id) { return $(id).checked; }), out;
+    if (!v[0]) out = ['kept', 'The file never got a deadline, so there is nothing to act on.'];
+    else if (!v[5]) out = ['kept', 'The deadline has not passed yet.'];
+    else if (!v[1] || !v[2]) out = ['kept', 'The deadline is not covered: the cluster policy or the folder policy is off. Files stay, and overdue deadlines act again when it is turned back on.'];
+    else if (!v[3]) out = ['kept for now', 'Removal waits for a healthy node clock. An uncertain clock needs an operator reset (<code>expiry-clock</code>).'];
+    else if (!v[4]) out = ['kept for now', 'Removal needs both metadata groups.'];
+    else out = ['removed', 'The expiry worker unlinks the file. Space is reclaimed like any unlink, after the last open descriptor closes.'];
+    $('eout').innerHTML = '<p><strong style="color:' + (out[0] === 'removed' ? 'var(--down)' : 'var(--ok)') + '">' + out[0] + '</strong> — ' + out[1] + '</p>';
+  }
+  ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'].forEach(function (id) { $(id).addEventListener('change', ex); }); ex();
+})();
+</script>
+</body>
+</html>

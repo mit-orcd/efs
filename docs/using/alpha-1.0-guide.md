@@ -233,19 +233,23 @@ limitation or changes it is an open user decision
 
 ### `df`
 
-`df /mnt/efs` reports the logical 2+1 capacity of the members that are up:
+`df /mnt/efs` reports logical 2+1 capacity from cached member figures:
 each node's quota (or free capacity) through the 3-of-N placement bound,
 about two thirds of the sum on equal nodes. It is not raw disk space. Space
 freed by unlink and truncate returns after background cleanup, so `df`
 lags. `efs-mgmt status` prints the same model (`Usable (2+1 logical)`) with
-exact byte counts.
+exact byte counts when all members answer. An unreachable member retains its
+last known figures in `df`; node loss alone does not subtract its capacity.
+Reachable members can still update usage. `df` is not an availability guarantee:
+`status` reports `Usable (2+1 logical): degraded (2/3 nodes up)` for that
+three-member example.
 
 ### Quotas
 
-The quota is per node, across its roots. When a write cannot place two of
-its three fragments within quota, the application gets `ENOSPC`. A write can
-succeed with one fragment refused for quota; it is then recorded as
-degraded, and its rebuild can complete only once that node has room again. `used` counts fragment payload, not
+The quota is per node, across its roots. A full member triggers re-placement onto another
+member with room. If no eligible placement remains, the application gets
+`ENOSPC`, never a two-fragment acknowledgement because of quota refusal.
+Degraded acknowledgement for an unavailable member is a separate case. `used` counts fragment payload, not
 metadata, checksum tails or logs; compare with the physical `df` of each
 root. To change a quota, restart the node with another `--quota` (the
 runtime `shrink-quota` is lost at restart and out of alpha).
@@ -413,11 +417,11 @@ to PASS. See the [release blockers](../release-notes/alpha-1.0.md#open-items-tha
 | --- | --- | --- |
 | One node down | Reads reconstruct from the other two fragments; each metadata group keeps a quorum. On four or more nodes new writes place all three fragments on the available nodes; on three, writes go on with two fragments and are recorded as degraded. `fsync` and `fdatasync` commit only on the nodes holding the file's fragments (K35, D42): a stripe with two fragments proven durable succeeds after its degraded mark is durable. Small files are still packed: a segment written with two durable fragments carries a degraded mark (K37) | Reads, writes, `close`, `fsync` and `fdatasync` continue (run on the loopback cluster: 4 MiB written, `fsync` and `fdatasync` OK, every file read back exact). Stripes left on two fragments have no fault tolerance until rebuilt: the client logs `put_fragments ino=… degraded acknowledgement, fragment f for node N not acknowledged; published degraded for rebuild on return` for a write made while the node is down, or `fsync ino=… marked degraded for rebuild on return` for a write made before it went down; `status` exits 1 and shows the node `DOWN`, `Usable (2+1 logical): degraded`, `Cluster state: DEGRADED`, `Degraded chunks: N`, `Degraded segments: M` and `Protection: DEGRADED`. Requests to the lost node time out (about 30 s) until the client marks it down (after four failures, for 30 s) |
 | A node stops in order while writes are in flight | The stopping daemon acknowledges no fragment it still receives (`put-upload: stopping; fragment not acknowledged` in its log); the client resends that fragment to another member or records the stripe degraded, naming the member that left (K34, fixed Oct 24) | The write finishes; the file reads back exact with the node down and after its return (run: 200 MiB written through an orderly stop of a member, 3.5 s stop, file exact) |
-| A node hangs without exiting | Untested gray failure | Requests to it time out after 30 s; an `open` was seen to return `EIO` (W154 notes) |
+| A node hangs without exiting | B6 slow mode covers injected 8 s replies and a 65 s COMMIT delay beyond the 60 s sweep budget; focused TCP/RDMA cases pass after the merged K55 fix. Arbitrary gray failures are not thereby qualified | Operations can wait for timeouts. Two proven durable fragments plus a durable degraded mark can satisfy fsync while the slow worker retains its deadline. The original slow-COMMIT fsync EIO remains historical failure evidence, not current expected behavior; see [qualification and limits](../status/k55-slow-commit-20261028.md) |
 | The node returns | Rebuild on return (W154): each group leader rebuilds the missing fragment of every degraded stripe, at most 256 per pass, and clears its mark; degraded packed segments are rebuilt and verified the same way (K37), and the leader audits the returned member's segment fragments once its stores are settled | `Degraded chunks` and `Degraded segments` fall to 0, `rebuilt=` rises, `Protection: full`, `Cluster state: OK` (run: 33 chunks in 12 s, 1,515 chunks in 84 s on one host). No other repair exists |
 | A node lost for good | Degraded stripes stay degraded; there is no rebuild to another node and no removal | Data stays readable while every other node is up; a second loss then makes those stripes unreadable. `fsync` goes on, marking the stripes on that node degraded |
 | A metadata decoder refuses a stored row | The affected replica/group halts; healthy voters serve; operator `raft-resync` can heal an eligible follower as above | Halt diagnostic and frozen local apply cursor; resync is asynchronous. K48's intermittent incomplete healthy-quorum listing remains OPEN, not an accepted limitation |
-| A client is stopped while a node is down | The recorded case completed drain and settle; the session revoke's storage fence needs every configured member and fails (`EFS_ERR_BUSY`) | `client.sh stop` exits 1 after 15 s with `revoke rc=-13 phase=storage-fence`; this is not a successful clean stop: check the separate flush/settle results; the mount is gone, the session's leases stay until the member returns (open decision U4) |
+| A client is stopped while a node is down | K54 now seals a strict majority of configured storage members, with unchanged membership, before durable revocation; the earlier all-member failure is retained as baseline evidence | Clean unmount with one member down passed focused TCP/RDMA gates on intel1 and node9901. The real-host orcd-mini stage remains NOTRUN. Insufficient sealing still fails closed at `phase=storage-fence`; a failed revoke is never a clean stop. See [K54 evidence and remaining gate](../status/k54-member-down-unmount-20261030.md) |
 | Two nodes down at once | Stripes with fragments on both are unreadable; a metadata group with two of its three voters down has no quorum | `EIO` or timeouts for the affected files; `fsync`/`fdatasync` of a file with such a stripe return `EIO` and the client log names the stripe (`1 of 3 durable; need 2`) until a node returns; with two of nodes 1–4 down in one group, metadata operations on that group stop until a node returns |
 | Client process dies | Writes it had not yet published are lost (D28); its abandoned uploads are collected | `Abandoned uploads` counters in `status` |
 | A daemon crashes, is killed or stops forced (rc 3) | Its roots restart "recovery uncertain". Verified recovery (K36) proves the boot counter, the reclaim journal, the session certificates, every local fragment and every published reference, drops what it cannot prove, marks those stripes and packed segments for rebuild on return and then clears the fence | While the node is away, writes and reads go on as with one node down, and `fsync` succeeds with two durable fragments and a mark (run: `fsync` OK before, during and after the kill; files exact). After the restart and until recovery is verified the node refuses COMMIT: `fsync` marks every stripe with a fragment on that node degraded and returns `EIO` only for a stripe that needs that fragment. Afterwards the node COMMITs again and the marked stripes are rebuilt on it. A write acknowledged by the crashed run and not yet committed is not proven by recovery (K35 treats that fragment as lost). The log says `recovery: verified in N ms`; `sync-status` shows `recovery running phase=…`, then `recovery verified` with its counts (`segments checked= missing= marked= … rebuilt=`), or `recovery FAILED` and the reason (the node then stays fenced until a restart verifies it) |
