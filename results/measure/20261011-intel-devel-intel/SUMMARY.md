@@ -5,7 +5,7 @@ Long-running acceptance ledger for the `devel-intel` repair branch on the Intel
 cluster: qualify each candidate source (775d935c → 0ae7e480 → 31abdd5e →
 c2bfb9e9) through native, sanitizer, fault and live mounted gates before any
 production deployment. Status page:
-`docs/status/intel-deployment-acceptance-20261011.md` (final checkpoint
+`docs/status/2026-10/intel-deployment-acceptance-20261011.md` (final checkpoint
 `docs/archive/status-20261012/intel-stop-checkpoint-20261011.md`). Raw evidence
 added across commits `85f98aedd`, `fe39dce41`, `6a42a1ea9` and successors.
 

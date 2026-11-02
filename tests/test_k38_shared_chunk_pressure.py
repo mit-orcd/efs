@@ -26,7 +26,7 @@ Before K40 that failed about half the runs on devel 5af760ff1 with EIO:
 a forwarded PREPARE batch refused for one CAS-lost chunk left the other
 chunks' stages undecided (no ABORT) until txn-recover, and every REPORT
 touching them answered BUSY for the whole 8 s budget
-(docs/status/k40-two-client-unit-busy-20261025.md). `--clients 1` keeps
+(docs/status/2026-10/k40-two-client-unit-busy-20261025.md). `--clients 1` keeps
 the single-client K38 shape.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """

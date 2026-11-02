@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Growth per efsd over minutes [A, B) of a D4 load from a
 rss_mappings_sample.py series, split by component (F1; see
-docs/status/efsd-rss-plateau-20261025.md).
+docs/status/2026-10/efsd-rss-plateau-20261025.md).
 
 Usage: rss_mappings_split.py SERIES.jsonl LOAD_START_EPOCH_S A B [RING_KIB]
 

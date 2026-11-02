@@ -6,7 +6,7 @@ A/B diagnostic for W109 (loaded query/virtual-command contention on ORCD):
 measure the running tiny-files benchmark's throughput with derived `.efs`
 queries enabled versus temporarily disabled via commands policy, to test
 whether query refresh contributes to the loaded slowdown. Linked status page:
-`docs/status/orcd-communication-20261011.md` (cites this run; W109 remains
+`docs/status/2026-10/orcd-communication-20261011.md` (cites this run; W109 remains
 open). Run preserved by commit `5a5caee9c`. An existing `README.md` in the run
 dir records the method and numbers.
 

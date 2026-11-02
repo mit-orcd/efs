@@ -4,7 +4,7 @@
 **Status:** PROPOSED; design/ordering review required before implementation.
 Implementation, migration, performance and hardware acceptance: **NOTRUN**.
 Related: [W71 durability](work-items.md#w71) and the
-[existing persistent crash-fence blocker](../status/amd-async-durability-20261015.md#review-follow-up-clean-restart-versus-uncertain-recovery).
+[existing persistent crash-fence blocker](../status/2026-10/amd-async-durability-20261015.md#review-follow-up-clean-restart-versus-uncertain-recovery).
 This feature does not close W71 or authorize a deployment.
 
 ## Goal and constraints

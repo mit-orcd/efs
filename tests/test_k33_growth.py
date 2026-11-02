@@ -3,7 +3,7 @@
 
 Real efsd daemons on loopback with private stores under TMPDIR and free
 ports (never 17xxx), the positional CLI without node ids
-(tests/k33_daemons.py); docs/status/k33-membership-protocol-20261023.md
+(tests/k33_daemons.py); docs/status/2026-10/k33-membership-protocol-20261023.md
 M1-M9.
 1. One and two nodes stay unready: they log why, no metadata is served,
    nothing is formed.

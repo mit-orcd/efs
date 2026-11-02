@@ -1,6 +1,6 @@
 # AMD POSIX link of symlink failure
 
-Status: closed AMD test mismatch. Explicit no-follow correction and historical full four-mode reruns already passed. New follow/dangling/unlink-count and peer cases now pass native storage and AMD direct/buffered TCP at `8cb41c929ca0`. No production hard-link behavior changed. The baseline buffered peer MKDIR EIO is retained separately as a pre-fix result; the later W66 routing repair and combined candidate pass full buffered acceptance. See [current checkpoint](amd-non-rdma-20261010.md) and [historical release acceptance](v020-amd-release.md).
+Status: closed AMD test mismatch. Explicit no-follow correction and historical full four-mode reruns already passed. New follow/dangling/unlink-count and peer cases now pass native storage and AMD direct/buffered TCP at `8cb41c929ca0`. No production hard-link behavior changed. The baseline buffered peer MKDIR EIO is retained separately as a pre-fix result; the later W66 routing repair and combined candidate pass full buffered acceptance. See [current checkpoint](2026-10/amd-non-rdma-20261010.md) and [historical release acceptance](v020-amd-release.md).
 
 ## Finding
 
@@ -91,5 +91,5 @@ The earlier NUC/Python comparison is optional portability evidence; it is not
 claimed by this AMD-only round. Raw libc syscall coverage remains optional.
 
 The later W66 routing repair and combined candidate pass all 67 peer cases in
-both TCP I/O modes; see the [current checkpoint](amd-non-rdma-20261010.md#acceptance-checkpoint).
+both TCP I/O modes; see the [current checkpoint](2026-10/amd-non-rdma-20261010.md#acceptance-checkpoint).
 The earlier 66/67 result remains pre-fix evidence.

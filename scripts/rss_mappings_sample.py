@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sidecar RSS breakdown for the D4 plateau runs (F1; method of
-docs/status/efsd-rss-plateau-20261025.md). Read-only: /proc only, no
+docs/status/2026-10/efsd-rss-plateau-20261025.md). Read-only: /proc only, no
 ptrace, so it does not pause the daemons.
 
 Usage: rss_mappings_sample.py TAG OUT.jsonl [INTERVAL_S=30]

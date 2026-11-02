@@ -6,7 +6,7 @@ Validation run for atomic, capped last-close lock cleanup: lock grants cap each
 of two domains at 32 rows; final-close cleanup validates that envelope and
 performs one atomic batch of at most 64 deletes, failing closed on invalid or
 over-cap records. Linked to the dependency-linked correctness package of
-2026-10-09 (`docs/status/dependency-package-20261009.md`); added to the
+2026-10-09 (`docs/status/2026-10/dependency-package-20261009.md`); added to the
 raw-evidence branch by commit `2830a709f` ("fix(leases): make final-close lock
 cleanup bounded and atomic").
 

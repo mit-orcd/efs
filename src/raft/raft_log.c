@@ -532,7 +532,7 @@ int raft_log_replay(struct efs_raft_disk *d)
  * It used to run whole under d->mu, from save_snap, while the host pump
  * held h->mu: on orcd-mini a 5.8 GB log with 1.5 GB live stalled every
  * proposal, read and apply on all three replicas for 12-15 s
- * (docs/status/raft-rotate-stall-20261017.md). Now d->mu is held only in
+ * (docs/status/2026-10/raft-rotate-stall-20261017.md). Now d->mu is held only in
  * short steps and production runs it on its own thread. The new file is:
  *
  *   image   the live state as of the capture point X (old-file bytes

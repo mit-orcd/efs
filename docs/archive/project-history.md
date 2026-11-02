@@ -1781,7 +1781,7 @@ Do not raise the per-test 15 s budget or the suite cap.
   in order: `ior_hard_scaling.sh` at `NPS="1 4 9 36" SEGS=3000`
   (open-cost §2 is already answered by the smoke).
 - **11:30 (Sep 21)** — **Runbooks for every open measurement item**
-  ([runbooks.md](runbooks.md), `tests/measure/*.sh`, `tests/preflight.sh`),
+  ([runbooks.md](../operations/runbooks.md), `tests/measure/*.sh`, `tests/preflight.sh`),
   all pinned to the running build `b2184a5c7faf-dirty`, each smoke-run
   once (dirs under `results/measure/20260921-*`). Two findings from the
   smokes that change the questions: **(1) 1 GiB cold open is 0.23 s idle,
@@ -2810,7 +2810,7 @@ RAM blob.** Two facts drive it:
   `efs_kv_group_import` on the assembled bytes, unchanged.
 
 Steps, once ratified (after W13's step 1, which builds the pinned view):
-1. Spec: add to [architecture.md](../architecture.md) §KV the snapshot
+1. Spec: add to [architecture.md](../how-it-works/architecture.md) §KV the snapshot
    rule — snapshot point = memtable flushed + `save_snap`; export is lazy,
    from a pinned immutable segment view taken in one pump cycle at applied
    index N (so it is exactly the state at N); shipped as ≤ 4 MiB `SNAP_REQ`
@@ -9979,7 +9979,7 @@ queue refers to). Older blocks are archived in
 [project-history.md](project-history.md) under "START-HERE
 handoff archive".
 
-[Work queue + status](README.md) · [Decisions](decisions.md) ·
+[Work queue + status](README.md) · [Decisions](../status/decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
 ---

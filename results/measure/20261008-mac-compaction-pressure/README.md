@@ -1,6 +1,6 @@
 # Mac D30/W23/W89 pressure foundations
 
-See [checkpoint](../../../docs/status/compaction-pressure-20261008.md).
+See [checkpoint](../../../docs/status/2026-10/compaction-pressure-20261008.md).
 
 - `kv-pressure.log`: real unchanged 1 GiB production KV cap, finite tail growth,
   idle drain and durable reopen. Engine-only, no Raft follower bound claimed.

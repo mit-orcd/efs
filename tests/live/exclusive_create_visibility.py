@@ -7,7 +7,7 @@ with the required profile; successful cases remove only their own fixtures.
 The stock case starts its writers with fork(). Under concurrent workers that
 fork races other threads' FUSE direct-I/O reads, and on kernels without
 upstream 738adade96b2 the reader can see stale bytes although efs-fuse
-replied correctly (W121, docs/status/orcd-w121-fork-read-20261016.md).
+replied correctly (W121, docs/status/2026-10/orcd-w121-fork-read-20261016.md).
 --spawn starts the same two writers with posix_spawn, which does not split
 the parent's pages, so it checks EFS O_EXCL/EOF visibility apart from W121.
 """

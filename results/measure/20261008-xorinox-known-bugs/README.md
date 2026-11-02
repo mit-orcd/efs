@@ -43,5 +43,5 @@ EFS_GIT_BRANCH=devel-known-bugs because rsync omitted Git metadata.
 The macOS installed-NFS baseline did not pass: plain cp failed extended-attribute
 copying with EPERM, then the export was no longer mounted and its local root-owned
 mountpoint refused mkdir. No completed 20/20 cp gate or branch NFS acceptance is
-claimed. See ../../../docs/status/known-bugs-validation-20261008.md for scope and
+claimed. See ../../../docs/status/2026-10/known-bugs-validation-20261008.md for scope and
 remaining original-incident gates.

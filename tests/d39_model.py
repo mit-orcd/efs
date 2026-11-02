@@ -2,9 +2,9 @@
 """D39 consolidated executable model (no daemon).
 
 The rules modelled here are stated once in
-docs/status/d39-consolidated-model-20261023.md; section references "C<n>"
+docs/status/2026-10/d39-consolidated-model-20261023.md; section references "C<n>"
 point at that page, "§<n>" at the review history in
-docs/status/d39-cluster-membership-proposal-20261022.md.
+docs/status/2026-10/d39-cluster-membership-proposal-20261022.md.
 
 The model is a deterministic state machine. Every daemon thread is a Python
 generator that yields at each scheduling point; the scheduler (Cluster.step)
@@ -2563,7 +2563,7 @@ def random_search(seed, n=3, steps=1500, rules=CONSOLIDATED, crashes=2, settle_s
 # ===========================================================================
 # C16-C22. Automatic formation and online node addition (K33/W157)
 #
-# The rules are stated in docs/status/k33-membership-protocol-20261023.md
+# The rules are stated in docs/status/2026-10/k33-membership-protocol-20261023.md
 # (sections M1-M9 there). This part is a separate explicit-state model: every
 # action below is one durable or soft step of the protocol, `Growth.explore`
 # enumerates every interleaving of a bounded scenario (breadth first, states

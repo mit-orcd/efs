@@ -1091,7 +1091,7 @@ What to implement:
 
 > **Current status (Oct 2 2026; a document claim — the cited gate directory is the evidence):** steps 1–2 DONE (Sep 29, `present_chunks`/`present_extra`, `ll_setattr` reads `size` from the row). The residual — `st_blocks` is 0 for files this client did not write — is **D17, decided Oct 2** (per-lane present-chunk count in the lane stamp), plan row E.
 >
-> **D17 closure (Oct 7):** the actual ecrawl false-positive gate passes on NUC direct and buffered private four-node TCP fixtures: dense files zero false positives, true sparse files two, errors zero. Cold non-writing-client dense, partial-tail, truncated, empty and sparse allocation counts pass. See [the acceptance ledger](../status/allocation-gc-fold-gates-20261007.md). The under-1-ms idle stat performance claim is separate and is not established by these allocation correctness tests.
+> **D17 closure (Oct 7):** the actual ecrawl false-positive gate passes on NUC direct and buffered private four-node TCP fixtures: dense files zero false positives, true sparse files two, errors zero. Cold non-writing-client dense, partial-tail, truncated, empty and sparse allocation counts pass. See [the acceptance ledger](../status/2026-10/allocation-gc-fold-gates-20261007.md). The under-1-ms idle stat performance claim is separate and is not established by these allocation correctness tests.
 >
 > **Historical remaining action (superseded for D17):** implementation landed; the ecrawl false-positive gate remained owed. D17 landed Oct 4 (dev cluster): lane stamps carry a present-chunk count, getattr sums it into the row image, the client takes the max with its local table; `du` on a non-writing client = size/512 (16 unit suites + posix2 two-client PASS; the ecrawl false-positive check is owed to 19810, which is down).
 >
@@ -1756,7 +1756,7 @@ the actual 1 GiB L0 cap. Idle deferred-memtable recovery and unsafe concurrent
 WAL truncation are repaired and tested against their old-binary failures.
 The memtable still grows while the compactor remains parked; a universal
 follower memory/lag bound is not established. See the
-[round ledger](../status/three-package-gates-20261007.md).
+[round ledger](../status/2026-10/three-package-gates-20261007.md).
 
 > **Current status (reviewed Oct 7, round 6):** D9–D13 implementation and Sep 29 rollout are historical acceptance. The follower memory/lag bound remains unproven. The first [completed Oct 5 measurement](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) wrote 4352 MiB and stopped after 27 seconds at the RSS threshold. The summary's zero-L0/no-effect interpretation is invalid: [W89](#w89) finds four KV values packed into one TSV field. Re-expanding the retained samples shows node3 reached 22 L0 files / 3,367,253 bytes, versus node1 4 / 105,281. Raw server logs confirm L0=22 during the park. The run still does not validate the pressure bound. The earlier [setup failure](../../results/measure/20261005-014440-w23-stalled-compactor/SUMMARY.txt) is superseded, not the only run.
 >
@@ -1926,16 +1926,16 @@ project-history.md "START-HERE closed items".**
 ## W54 · a fold's GC deletes the live base (queue row 0i)
 
 **Oct 8 AMD follow-up:** AMD direct-I/O/RXE real four-rank IOR verifies 12,000 records by cold IOR read and independent hardscan, zero bad/short; two-peer folds, physical GC, unavailable-member ledger retention, restart/quota and late-PUT fences pass. The harness now requires actual fragment absence alongside sampled queue counters. One FUSE client/one host is not the nine-physical-host gate.
-See [the package evidence](../status/amd-functional-gates-20261008.md).
+See [the package evidence](../status/2026-10/amd-functional-gates-20261008.md).
 
-**TCP scope follow-up (Oct 7):** supported NUC fold/GC/cold-read gates pass. RDMA is deferred at the user’s request; nine physical hosts remain owed, so W54/W38 is not closed. See [five-package ledger](../status/tcp-five-gates-20261007.md).
+**TCP scope follow-up (Oct 7):** supported NUC fold/GC/cold-read gates pass. RDMA is deferred at the user’s request; nine physical hosts remain owed, so W54/W38 is not closed. See [five-package ledger](../status/2026-10/tcp-five-gates-20261007.md).
 
-**Oct 7 acceptance:** real traced IOR cold verification and separate-remount hardscan pass on NUC direct at 4/36 ranks and buffered at 4 ranks. Nine independent FUSE clients on one physical host verify 108000 records with zero bad/short reads; the complete nine-client GC/restart fixture passes. Nine physical hosts/RDMA remain open. [Evidence and limitations](../status/allocation-gc-fold-gates-20261007.md).
+**Oct 7 acceptance:** real traced IOR cold verification and separate-remount hardscan pass on NUC direct at 4/36 ranks and buffered at 4 ranks. Nine independent FUSE clients on one physical host verify 108000 records with zero bad/short reads; the complete nine-client GC/restart fixture passes. Nine physical hosts/RDMA remain open. [Evidence and limitations](../status/2026-10/allocation-gc-fold-gates-20261007.md).
 
 **Gate follow-up (Oct 7):** NUC direct/buffered authoritative chunk views
 observe eight fold transitions and verify cold bytes after physical GC/restart.
 Historical cold IOR-hard/hardscan and nine-host acceptance remain. See the
-[gate ledger](../status/gate-30-rounds-20261007.md).
+[gate ledger](../status/2026-10/gate-30-rounds-20261007.md).
 
 **Oct 5 implementation checkpoint — IN TREE, local gates pass; uncommitted,
 cluster gate pending.** `efs_meta_apply_publish` now skips GC for a superseded
@@ -1965,7 +1965,7 @@ files, and all 331 live nonzero base/span generations have two exact fragment
 indices on their named nodes. Plain cp still fails source provenance attribute
 copying. This adds original-protocol coverage without proving the historical
 missing-object cause or storage power-loss durability. W55 remains open; see
-[current evidence and blockers](../status/known-bugs-create-negative-verdict-20261008.md).
+[current evidence and blockers](../status/2026-10/known-bugs-create-negative-verdict-20261008.md).
 
 **W55 · a span is committed to raft naming generations/node sets whose fragment objects do not exist on any node — nothing was ever PUT, nothing was reaped — and every subsequent read of the chunk fails with `EFS_ERR_DECODE` (-9) → EIO (Oct 5 2026, xorinox test cluster: 3-node libvirt, 2+1, gateway nfsd re-export mounted by a macOS client). Data loss with no repair; same user-visible signature as W54 but a different mechanism — W54's reaper deletes objects that exist, here the objects never exist.**
 
@@ -1976,7 +1976,7 @@ missing-object cause or storage power-loss durability. W55 remains open; see
 
 ## W56 · root-level rename leaves a ghost name in the renaming client's local lookup (queue row 0l)
 
-**Closed (Oct 7):** root rename/reuse passes64 NUC repeats. Xorinox’s running FUSE binary and installed binary have identical SHA256 and version cb5e86de, containing f8fef814. W60’s missing historical tree does not reopen W56. See [ledger](../status/tcp-five-gates-20261007.md).
+**Closed (Oct 7):** root rename/reuse passes64 NUC repeats. Xorinox’s running FUSE binary and installed binary have identical SHA256 and version cb5e86de, containing f8fef814. W60’s missing historical tree does not reopen W56. See [ledger](../status/2026-10/tcp-five-gates-20261007.md).
 
 **Oct 6 fix:** `f8fef814` drops matching old-directory-name cache rows from both lookup tabs after authoritative rename. It preserves other names/chunks and ignores a replacement inode. NUC full POSIX jobs=4/jobs=1 and full posix2 PASS; the root directory regression now passes. Xorinox roll remains owed.
 
@@ -2020,11 +2020,11 @@ performed. Next code item in the agreed sequence is W38.
 ## W38 · ior-hard fold tombstone without the span's bytes (queue row 0e)
 
 **Oct 8 AMD follow-up:** AMD direct-I/O/RXE real IOR, independent cold hardscan and authoritative fold transitions pass with physical GC/restart and retained live bytes. The nine-physical-host obligation remains. The IOR gate was corrected to wait for physical deletion as well as sampled-empty GC queues.
-See [the package evidence](../status/amd-functional-gates-20261008.md).
+See [the package evidence](../status/2026-10/amd-functional-gates-20261008.md).
 
-**TCP scope follow-up (Oct 7):** RDMA deferred; nine physical hosts remain owed. Actual nine-process IOR cold verification and physical GC/restart pass on NUC. See [ledger](../status/tcp-five-gates-20261007.md).
+**TCP scope follow-up (Oct 7):** RDMA deferred; nine physical hosts remain owed. Actual nine-process IOR cold verification and physical GC/restart pass on NUC. See [ledger](../status/2026-10/tcp-five-gates-20261007.md).
 
-**Oct 7 acceptance:** real traced IOR cold verification and separate-remount hardscan pass on NUC direct at 4/36 ranks and buffered at 4 ranks. Nine independent FUSE clients on one physical host verify 108000 records with zero bad/short reads; the complete nine-client GC/restart fixture passes. Nine physical hosts/RDMA remain open. [Evidence and limitations](../status/allocation-gc-fold-gates-20261007.md).
+**Oct 7 acceptance:** real traced IOR cold verification and separate-remount hardscan pass on NUC direct at 4/36 ranks and buffered at 4 ranks. Nine independent FUSE clients on one physical host verify 108000 records with zero bad/short reads; the complete nine-client GC/restart fixture passes. Nine physical hosts/RDMA remain open. [Evidence and limitations](../status/2026-10/allocation-gc-fold-gates-20261007.md).
 
 **Oct 5 implementation checkpoint — IN TREE, uncommitted; deterministic
 local regressions pass, historical IOR gate pending.** Two unsafe paths were
@@ -2121,13 +2121,13 @@ next rollout. No cluster rollout or artifact cleanup in this follow-up.
 and skipped files-engine usage accounting. STATUS now carries deduplicated
 filesystem capacity/free bytes, shared by FUSE and management; the portal accepts
 TiB. Native-RDMA unlimited-store and guarded-session reclamation gates pass.
-See [capacity and test evidence](../status/orcd-capacity-tests-20261011.md).
+See [capacity and test evidence](../status/2026-10/orcd-capacity-tests-20261011.md).
 Live ORCD deployment confirms nonzero matching capacity, preservation of the
 100 GiB file samples, 1526 live POSIX passes and 264 peer passes. Other W42
 protection-debt/repair gates remain open.
 
 
-**Gate follow-up (Oct 7):** NUC full-node gate: one member limited to 64 KiB, 32 MiB write, cold remount bytes, physical deletion and restart all pass. This does not prove three-fragment protection debt/repair or the named 19810 capacity gate. See [gate ledger](../status/gate-30-rounds-20261007.md).
+**Gate follow-up (Oct 7):** NUC full-node gate: one member limited to 64 KiB, 32 MiB write, cold remount bytes, physical deletion and restart all pass. This does not prove three-fragment protection debt/repair or the named 19810 capacity gate. See [gate ledger](../status/2026-10/gate-30-rounds-20261007.md).
 
 **Current state, reviewed Oct 7.** Both FUSE statfs and management status
 use `efs_capacity_logical`. Final four-node NUC evidence reports 500 GiB
@@ -2145,7 +2145,7 @@ third fragment. Trace and validate protection debt/repair before closing W42.
 
 **Follow-up steps.** mechanical: replace `total_logical = 2 × min_quota` (`efs_fuse_statfs`, `efs_fuse.c:3108–3120`) and `usable_cap = 2 × min_quota` / `usable_free = 2 × min_free` (`efs_mgmt.c:129–185`) with the 3-of-N placement bound: the largest `M` (chunks) with `Σ_i min(c_i, M) ≥ 3M`, `c_i` = node `i`'s quota (or free) in 64 KiB fragments, times 128 KiB; count only up nodes with a quota, as today. Reduces to `2 × min` on three nodes and to `Σ × 2/3` on N equal nodes. Also make `f_blocks` and the used figure come from the same model (statfs today derives used from `Σ phys × 2/3` and total from `2 × min`, so on four nodes used can exceed total and `avail` clamps to 0 while writes still succeed). Unit test with 3 equal, 4 equal, 3 unequal (100/100/1000 → 200, not 800). Then verify on 19810 (`df` vs `efs-mgmt status` vs `4 × 36T × 2/3`)
 
-**Evidence and limits.** Both comments say "every chunk places one fragment on each node" — true for three nodes only. Four 500 GiB nodes show 1000 GiB instead of 1333. Not a data-path change; no decision needed. **Verify while there:** what a PUT does when exactly one stripe member answers `EFS_ERR_QUOTA` (`put_fragments_parallel_once`: `quota_errors >= 2` → QUOTA, `acks >= 2` → OK) — if the chunk publishes with two fragments, a full node creates protection debt silently ([product-gaps](product-gaps.md) §1.2); if `reroute_down_fragments` moves it, say so in [the failure-tolerance table](../how-it-works/failure-tolerance.md). **Answered Oct 24 (B5, [evidence](../status/b-geometry-capacity-20261024.md)):** it published with two fragments (silent debt); now a QUOTA refusal is never a degraded acknowledgement: the object is placed again on a member that is neither down nor full, or the write fails ENOSPC; [failure-tolerance](../how-it-works/failure-tolerance.md) says so
+**Evidence and limits.** Both comments say "every chunk places one fragment on each node" — true for three nodes only. Four 500 GiB nodes show 1000 GiB instead of 1333. Not a data-path change; no decision needed. **Verify while there:** what a PUT does when exactly one stripe member answers `EFS_ERR_QUOTA` (`put_fragments_parallel_once`: `quota_errors >= 2` → QUOTA, `acks >= 2` → OK) — if the chunk publishes with two fragments, a full node creates protection debt silently ([product-gaps](product-gaps.md) §1.2); if `reroute_down_fragments` moves it, say so in [the failure-tolerance table](../how-it-works/failure-tolerance.md). **Answered Oct 24 (B5, [evidence](../status/2026-10/b-geometry-capacity-20261024.md)):** it published with two fragments (silent debt); now a QUOTA refusal is never a degraded acknowledgement: the object is placed again on a member that is neither down nor full, or the write fails ENOSPC; [failure-tolerance](../how-it-works/failure-tolerance.md) says so
 
 
 ## W27 · REPORT identity from the staging table (queue row 0b)
@@ -2158,7 +2158,7 @@ nonzero observed nodes while retaining genuine dirty ownership, and makes the
 rate-limited miss counter race-free. The diagnostic now says rejection rather
 than claiming a staging mapping was published. A 2048-file fsync/close tree
 verifies cold with zero identity misses and passes physical GC/restart and full
-POSIX. See [next-five ledger](../status/next-five-gates-20261007.md).
+POSIX. See [next-five ledger](../status/2026-10/next-five-gates-20261007.md).
 
 **Oct 6 drain follow-up:** `febc55e5` distinguishes a phantom span-only
 staging-row mark from actual local ownership before requeuing a missing PUT
@@ -2215,7 +2215,7 @@ into EIO. The fix checks activation against the epoch, makes the truncate
 BUSY on a lane registered since its snapshot, stamps absent lanes, and
 registers the tail lane. Private C1-workload runs: unfixed 2 stalls and
 11 EIO in 15 min; fixed 0 stalls and no publish EIO in 3 runs (~64 min); orcd-mini rerun NOTRUN (stopped at the user's request). Evidence:
-[status page](../status/w0a-lane-epoch-lag-20261021.md). Open:
+[status page](../status/2026-10/w0a-lane-epoch-lag-20261021.md). Open:
 - orcd-mini C1 rerun after deploy;
 - whether the fstor007 and ior-hard captures below share this cause;
 - the same-length read mismatch, probably the `4058d8141` defect (status page).
@@ -2278,7 +2278,7 @@ as accepted on that build. [Raw evidence](../archive/queue-review-20261007-round
 ## W59 · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains (queue row 0p)
 
 **Oct 8 AMD follow-up:** AMD RXE whole-fixture 1 GiB stress initially OOMed during publication recovery. Commit `ec5e0387` lazily registers/reuses send slots while preserving 32-slot capacity. The same 256+64 MiB cache/drain settings now pass at 596.8 MiB whole-fixture peak with zero OOM events, retained sparse writes and same-mount recovery.
-See [the package evidence](../status/amd-functional-gates-20261008.md).
+See [the package evidence](../status/2026-10/amd-functional-gates-20261008.md).
 
 **Current status — closed (Oct 7 memory follow-up):** NUC direct/buffered
 live publication failure plus physically exhausted recovery scratch passes
@@ -2286,14 +2286,14 @@ at 32+32 and production 256+64 MiB values inside a 1 GiB/no-swap cgroup.
 Same-mount new admission, cold bytes, GC/restart/quota and zero OOM events
 are verified. Earlier remaining-gate statements below are historical and
 superseded by this closure. D27's broader recovery/timing is separate.
-See the [closure ledger](../status/memory-closure-20261007.md).
+See the [closure ledger](../status/2026-10/memory-closure-20261007.md).
 
 **Acceptance update (Oct 7, three-package round):** NUC direct/buffered
 withheld-publication gates reach finite refusal, preserve the refused write
 size, recover every accepted range on cold clients and drain physical GC.
 Effective 32+32 MiB budgets and allocator drain exhaustion are checked.
 Combined live reserve failure and small-host RSS acceptance remain owed.
-See the [round ledger](../status/three-package-gates-20261007.md).
+See the [round ledger](../status/2026-10/three-package-gates-20261007.md).
 
 **W59 · `dd bs=1M count=1024 conv=fsync` on a FUSE mount died on the FIRST write with `No space left on device` (0 bytes) while the export showed 156 GiB free and every node disk 85 GiB free (Oct 6 2026, xorinox cluster, xefsct1). Not a capacity problem: the client maps its internal write-cache budget exhaustion to ENOSPC, and one of the two budgets — the fixed 8 MiB dcache metadata pool — never drains, so once it pins at its cap every subsequent write on that mount fails ENOSPC until remount.**
 
@@ -2374,7 +2374,7 @@ are **NOTRUN**. One efs3 attempt was stopped at 1,640 records: rate fell
 recovery. A node9901 attempt was stopped by direction at 6,535 records with
 zero REPORT retries. The current client publishes every 32 writes or 1 s, so
 no REPORT carries thousands of reservations.
-[K15 evidence](../status/k15-w52-w64-20261022.md).
+[K15 evidence](../status/2026-10/k15-w52-w64-20261022.md).
 
 **Oct 11 follow-up candidate:** REPORT now submits one inode-group
 `APPEND_CATCHUP` proposal for every caught-up reservation, then waits for a
@@ -2388,7 +2388,7 @@ that command tag 45 collides with a reserved tag; APPEND_CATCHUP is reassigned t
 52 before any NUC admission. Both corrected-tag native suites pass.
 Direct/buffered live, deployed 20k and cold gates remain pending. All voters must
 support the new log command; no timeout or durability guarantee is relaxed.
-[Implementation and acceptance ledger](../status/nuc-w52-w97-resume-20261011.md).
+[Implementation and acceptance ledger](../status/2026-10/nuc-w52-w97-resume-20261011.md).
 
 **Oct 11 client feedback fix:** `f52cd2dd` starts append burst age after
 successful publication. Previously a flush exceeding one second immediately
@@ -2410,7 +2410,7 @@ across up to eight reservations, shrinking to the unchanged per-shard image
 bound when needed. Actual transaction/cold recovery/session-fencing/gap and
 host fallback regressions pass. Full new-build/live performance acceptance and
 the agreed all-caught-up single proposal remain open.
-[Continuation ledger](../status/nuc-w52-w97-resume-20261011.md).
+[Continuation ledger](../status/2026-10/nuc-w52-w97-resume-20261011.md).
 
 **Oct 11 NUC partial optimization:** guarded per-reservation REPORT completion
 PREPARE operations share the existing bounded pipeline after owner/inode guards.
@@ -2421,7 +2421,7 @@ gain established. Both 20,000-record runs decline and are cleanly stopped as
 incomplete. The exact long gate remains open. The accepted
 single-proposal completion of all caught-up reservations remains open; this
 smaller pipeline is not that implementation.
-[Integration ledger](../status/devel-nuc-integration-20261011.md).
+[Integration ledger](../status/2026-10/devel-nuc-integration-20261011.md).
 
 **Implementation check, Oct 7.** Approved shape A is still pending:
 `host_resolve_caught_up()` loops over each eligible reservation and calls
@@ -2579,7 +2579,7 @@ Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections be
 
 ## P2.2 · D26 — the GC pass (performance plan row)
 
-**Oct 7 acceptance follow-up:** 10 GiB logical deletion reclaims 245760 fragments / 15 GiB payload to zero physical usage. The retained-table probe after a 180-second startup wait still has a transient 1393-ms active pass (1377 ms reap; 41271 fragment keys, 41231 tombstones), and create/append medians 44.342/60.650 ms before returning near baseline. D26/W44 remain open for retained-table latency; do not equate drained namespace or queues with this gate. [Ledger](../status/allocation-gc-fold-gates-20261007.md).
+**Oct 7 acceptance follow-up:** 10 GiB logical deletion reclaims 245760 fragments / 15 GiB payload to zero physical usage. The retained-table probe after a 180-second startup wait still has a transient 1393-ms active pass (1377 ms reap; 41271 fragment keys, 41231 tombstones), and create/append medians 44.342/60.650 ms before returning near baseline. D26/W44 remain open for retained-table latency; do not equate drained namespace or queues with this gate. [Ledger](../status/2026-10/allocation-gc-fold-gates-20261007.md).
 
 **Item.** **D26** GC pass
 
@@ -2637,7 +2637,7 @@ results dirs; move this plan's finished rows to project-history.
 
 ## W61 · Local GC discards failed lane-sweep apply verdicts (queue row 0r)
 
-**Class:** correctness bug. **Status:** repaired in `3a1b4a52`; private-store acceptance is recorded in the [GC checkpoint](../status/gc-implementation-20261007.md). Existing-service rollout and reconciliation of the incident remain open; this review did not inspect the remote raw fixture logs.
+**Class:** correctness bug. **Status:** repaired in `3a1b4a52`; private-store acceptance is recorded in the [GC checkpoint](../status/2026-10/gc-implementation-20261007.md). Existing-service rollout and reconciliation of the incident remain open; this review did not inspect the remote raw fixture logs.
 
 **Evidence and required change:** [GC reclamation review](../status/gc-reclamation-review.md#w61--local-gc-proposals-discard-the-apply-verdict). The reported xorinox 40 GiB deletion remains an investigation; these entries do not claim its cause is established.
 
@@ -2650,7 +2650,7 @@ results dirs; move this plan's finished rows to project-history.
 
 ## W62 · Sweep/truncate batch boundaries lose delta GC records (queue row 0s)
 
-**Class:** correctness bug. **Status:** repaired in `3a1b4a52`; private-store acceptance is recorded in the [GC checkpoint](../status/gc-implementation-20261007.md). Existing-service rollout and reconciliation of the incident remain open; this review did not inspect the remote raw fixture logs.
+**Class:** correctness bug. **Status:** repaired in `3a1b4a52`; private-store acceptance is recorded in the [GC checkpoint](../status/2026-10/gc-implementation-20261007.md). Existing-service rollout and reconciliation of the incident remain open; this review did not inspect the remote raw fixture logs.
 
 **Evidence and required change:** [GC reclamation review](../status/gc-reclamation-review.md#w62--batch-capacity-can-drop-delta-gc-records). The reported xorinox 40 GiB deletion remains an investigation; these entries do not claim its cause is established.
 
@@ -2663,7 +2663,7 @@ results dirs; move this plan's finished rows to project-history.
 
 ## W63 · GC progress and backlog visibility (queue row gc-obs)
 
-**Class:** observability enhancement. **Status:** reporting implemented in `3a1b4a52`; [GC checkpoint](../status/gc-implementation-20261007.md) records private-store testing. Operational rollout, reliable interpretation and the original incident remain open; remote raw logs were not inspected in this review.
+**Class:** observability enhancement. **Status:** reporting implemented in `3a1b4a52`; [GC checkpoint](../status/2026-10/gc-implementation-20261007.md) records private-store testing. Operational rollout, reliable interpretation and the original incident remain open; remote raw logs were not inspected in this review.
 
 **Evidence and required change:** [GC reclamation review](../status/gc-reclamation-review.md#w63--missing-operational-visibility). The reported xorinox 40 GiB deletion remains an investigation; these entries do not claim its cause is established.
 
@@ -2685,7 +2685,7 @@ never overtakes a completion. The client abandons after a failed sent reserve
 (`EFS_APPEND_ABANDON`). Unit tests through the real apply path pass
 (`tests/test_append_cleanup.c`). The live gate with injected lost replies
 (`append_failover.py --lose-reserve-every`) is **NOTRUN**, so W64 stays
-**INCOMPLETE**. [K15 evidence](../status/k15-w52-w64-20261022.md).
+**INCOMPLETE**. [K15 evidence](../status/2026-10/k15-w52-w64-20261022.md).
 
 **Oct 22 K15 (`devel-k15`):** a step-down gate (4 writers, both group
 leaders stepped down every 20 s) kept integrity: 596 acknowledged records
@@ -2698,7 +2698,7 @@ COMMIT is never converted (`tests/test_fin_abort_handoff.py`). New
 `efs-mgmt raft-step-down`. The matched after-fix failover gate is **NOTRUN**,
 so W64 stays **INCOMPLETE**. K5/W72 must provide production sessions whose
 fencing lets `cleanup-appends` retire a reservation abandoned after an unknown
-outcome. [K15 evidence](../status/k15-w52-w64-20261022.md).
+outcome. [K15 evidence](../status/2026-10/k15-w52-w64-20261022.md).
 
 **Oct 10 NUC regression:** integrated d4f2ddb3 private 100 ms checkpoint gate
 fails sequence-2/ACK-1 replay: 31/32 identical requests return offset 16 rather
@@ -2715,7 +2715,7 @@ recovery, durable replay/32-identical-request/leader-death and exact 800-record
 cold append/GC gates on AMD. The same binaries are deployed direct/RXE with
 all six processes verified using verbs. W72 session/unknown-outcome and broader
 physical-host obligations remain open. See the
-[RXE report](../status/amd-rxe-gate-closure-20261009.md).
+[RXE report](../status/2026-10/amd-rxe-gate-closure-20261009.md).
 
 **Oct 9 NUC continuation:** commits `795a17c2`, `e5d95c1d` and `393f5bae`
 repair a required-close apply deadlock, legacy truncate retaining/conflicting
@@ -2724,7 +2724,7 @@ units, captured-store deferred cleanup replay/restart, eight focused peer
 append/truncate races and mount-sync in both TCP I/O modes pass. Final direct and buffered TCP
 POSIX are each 213/0/4 and peers each 64/64; both cold 800-record append/GC
 audits pass. Evidence is recorded in the
-[NUC gate report](../status/nuc-gate-closure-20261009.md). These gates do not
+[NUC gate report](../status/2026-10/nuc-gate-closure-20261009.md). These gates do not
 activate D25 or replace W72 production-session/unknown-outcome acceptance.
 
 **Oct 8 coordinated-authority acceptance:** `593becf3`, `3a2033d8` and
@@ -2736,7 +2736,7 @@ requests, explicit inode-leader death, cold exact bytes, 216 POSIX/64 peer tests
 and 800 concurrent append records during GC pass. The cross-group redirect
 cycle below is corrected. Production sessions/unknown-outcome recovery and
 broader failover/mode acceptance remain open; D25 is not activated.
-See the [readiness ledger](../status/replay-readiness-20261008.md).
+See the [readiness ledger](../status/2026-10/replay-readiness-20261008.md).
 
 **Oct 8 durable-receipt continuation:** Production ACK-bearing append requests
 now select inode-shard receipts committed atomically with reservation creation.
@@ -2747,12 +2747,12 @@ lost-reply, cold replay, exact-byte, full POSIX/peer and GC checks pass. Explici
 leader-death replay and full units now pass. A W73 candidate exposed a
 single-group inode-leader / dual-host redirect cycle after cross-group lanes
 activate. That blocker and remaining EOF authority are tracked in the
-[implementation ledger](../status/replay-readiness-20261008.md). Legacy suffixes
+[implementation ledger](../status/2026-10/replay-readiness-20261008.md). Legacy suffixes
 remain legacy; mount-session fencing and stream-floor reclamation require W72.
 Concurrent cross-lane EOF/failover coverage remains required before closure.
 
 **Oct 8 AMD follow-up:** Real 32 simultaneous identical APPEND RPCs reproduced duplicate reservation (offset 8/end 16). Commit `311c4e4e` uses nonblocking per-inode reserve/reply ownership, with routing outside the lock. The repaired real-RPC gate and exact cold extent pass; durable restart/leader-change receipts remain open.
-See [the package evidence](../status/amd-functional-gates-20261008.md).
+See [the package evidence](../status/2026-10/amd-functional-gates-20261008.md).
 
 **Class:** correctness / recovery. **Status:** open; indexed Oct 7, 2026.
 
@@ -2778,9 +2778,9 @@ bounded retirement and the original W87 broad-load acceptance remain open.
 ## W65 · Daemon exceeds graceful shutdown wait (queue row 0u)
 
 **Oct 8 AMD follow-up:** AMD RXE active fsynced writes, 16 idle TCP readers, 16 partial TCP frames and connection churn pass graceful leader stop and exact cold acknowledged-byte verification. Earlier RXE stops pass too. This extends supported-TCP evidence to software RXE, not hardware RoCE/native IB.
-See [the package evidence](../status/amd-functional-gates-20261008.md).
+See [the package evidence](../status/2026-10/amd-functional-gates-20261008.md).
 
-**Closed for supported TCP (Oct 7):** six writer-active-at-signal leader SIGTERM fixtures pass, three direct and three buffered. All acknowledged fsynced bytes verify after full restart/cold remount; physical GC and quota drain also pass. RDMA is deferred, not tested. This supersedes earlier open TCP mutation gates below. See [ledger](../status/tcp-five-gates-20261007.md).
+**Closed for supported TCP (Oct 7):** six writer-active-at-signal leader SIGTERM fixtures pass, three direct and three buffered. All acknowledged fsynced bytes verify after full restart/cold remount; physical GC and quota drain also pass. RDMA is deferred, not tested. This supersedes earlier open TCP mutation gates below. See [ledger](../status/2026-10/tcp-five-gates-20261007.md).
 
 **Class:** liveness investigation. **Status:** open; indexed Oct 7, 2026.
 
@@ -2820,7 +2820,7 @@ returning EIO before the competing MKDIR; genuine hosted authority/storage
 errors remain errors. Direct and buffered TCP each pass 64 competing MKDIR
 races, exact cold directory recovery and reclamation; the combined candidate's
 full native suite passes. Default placement/quorum and W66/D36 protection
-obligations remain unchanged. [Checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing).
+obligations remain unchanged. [Checkpoint](../status/2026-10/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing).
 
 **Class:** scalability enhancement / metadata protection protocol. **Status:** open; indexed Oct 7, 2026.
 
@@ -2829,7 +2829,7 @@ any-two-loss preservation of acknowledged authoritative metadata. Current Raft
 majority placement does not meet it. Select and prove the metadata protocol;
 never substitute a five-node minimum for the accepted requirement. Larger
 clusters must scale metadata service while retaining the same protection target.
-See [binding decision](../status/node-count-protection-20261009.md).
+See [binding decision](../status/2026-10/node-count-protection-20261009.md).
 
 **Evidence/current state:** Oct 10 AMD engine and explicit private host four-voter
 membership, persistence-error fencing, snapshot ordering, GETCHUNKS endpoint
@@ -2851,7 +2851,7 @@ Logical shard count is not independent leadership capacity.
 ## W67 · Sparse dirty writes and bounded body admission (queue row mem1)
 
 **Oct 8 AMD follow-up:** The AMD RXE memory follow-up fixes eager transport-send registration (`ec5e0387`), with production 256+64 MiB body/drain budgets unchanged. Actual 1 GiB/no-swap failed-publication/scratch exhaustion, eight concurrent sparse writers, cold bytes and physical reclaim pass. See W59 for the original failing transport footprint.
-See [the package evidence](../status/amd-functional-gates-20261008.md).
+See [the package evidence](../status/2026-10/amd-functional-gates-20261008.md).
 
 **Current status — closed (Oct 7 memory follow-up):** NUC direct/buffered
 live publication failure plus physically exhausted recovery scratch passes
@@ -2859,13 +2859,13 @@ at 32+32 and production 256+64 MiB values inside a 1 GiB/no-swap cgroup.
 Same-mount new admission, cold bytes, GC/restart/quota and zero OOM events
 are verified. Earlier remaining-gate statements below are historical and
 superseded by this closure. D27's broader recovery/timing is separate.
-See the [closure ledger](../status/memory-closure-20261007.md).
+See the [closure ledger](../status/2026-10/memory-closure-20261007.md).
 
 **Acceptance update (Oct 7, three-package round):** live withheld-publication
 pressure reaches finite refusal, retains accepted bytes and recovers on NUC
 direct/buffered clients with traced 32+32 MiB budgets. Allocator unit exhausts
 both capacities; live combined drain exhaustion and small-host RSS remain.
-See the [round ledger](../status/three-package-gates-20261007.md).
+See the [round ledger](../status/2026-10/three-package-gates-20261007.md).
 
 **Budget evidence correction (Oct 7):** earlier 32 + 8 MiB requests actually
 used a 32 + 64 MiB bound because 8 MiB is below the drain's 32 MiB slab minimum.
@@ -2923,13 +2923,13 @@ and compile-only allocation/TLS/growth fault variants pass. Respectively
 282/318/283 injected failures, 165/155/161 surfaced ENOMEMs, zero surviving
 reply owners and 4156/2556/3792 KiB post-warm RSS spans. The key/failure units
 also pass, and normal binaries exclude fault strings. See the
-[30-round gate ledger](../status/gate-30-rounds-20261007.md).
+[30-round gate ledger](../status/2026-10/gate-30-rounds-20261007.md).
 
 <a id="w69"></a>
 
 ## W69 · Lookup memo returns pre-mutation stats (queue row 0j)
 
-**Oct 10 Intel directory-binding follow-up:** A creator's cached directory name survived a peer rename: both old and new paths appeared to exist while readdir listed only the new name. Ordinary LOOKUP now obtains authoritative name binding before adopting any inode, including directories. The production lookup fixture and a primed two-host peer case retain failing old-build controls; actual-function checks pass on both Intel Linux hosts. [Repair and limits](../status/intel-peer-directory-cache-20261010.md). This does not close the broader original stale-reply/partition gate.
+**Oct 10 Intel directory-binding follow-up:** A creator's cached directory name survived a peer rename: both old and new paths appeared to exist while readdir listed only the new name. Ordinary LOOKUP now obtains authoritative name binding before adopting any inode, including directories. The production lookup fixture and a primed two-host peer case retain failing old-build controls; actual-function checks pass on both Intel Linux hosts. [Repair and limits](../status/2026-10/intel-peer-directory-cache-20261010.md). This does not close the broader original stale-reply/partition gate.
 
 **Targeted correctness acceptance (Oct 7):** a fault-build real LOOKUP reply
 is held across local fchmod, then released; later stat returns the new mode
@@ -2937,7 +2937,7 @@ instead of a stale memo. Direct/buffered checks, immediate mutation stats,
 POSIX and GC/restart pass. Cold GNU du allocation/elapsed samples are recorded.
 The historical, unidentified “Spark du” performance workload still needs its
 tool/input specified; this package remains open only for that measurement.
-See [next-five ledger](../status/next-five-gates-20261007.md).
+See [next-five ledger](../status/2026-10/next-five-gates-20261007.md).
 
 **Class:** correctness bug. **Status:** open; indexed Oct 7, 2026.
 
@@ -2958,7 +2958,7 @@ See [next-five ledger](../status/next-five-gates-20261007.md).
 running-quota reporting. Current-code NUC direct/buffered × one/two-root
 acceptance passes accepted/refused reductions, unchanged quota on refusal and
 exact retained bytes. No migration or restart-persistent quota is claimed.
-[Closure evidence](../status/devel-nuc-closure-20261010.md).
+[Closure evidence](../status/2026-10/devel-nuc-closure-20261010.md).
 
 **Historical Oct 7 evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
 requested amount from the running node quota, refusing a result below usage.
@@ -2988,12 +2988,12 @@ fix; claiming migration/repair from an IN_PROGRESS enum name alone.
 
 **October 15 contract update:** asynchronous PUT acknowledgement from
 `d8af2c325` supersedes the historical per-PUT barrier below. The user explicitly
-retained early acknowledgements. [AMD durability follow-up](../status/amd-async-durability-20261015.md)
+retained early acknowledgements. [AMD durability follow-up](../status/2026-10/amd-async-durability-20261015.md)
 adds all-node COMMIT, boot verifiers and fail-closed unclean recovery; its
 exact-source qualification is separate from these older barrier passes.
 
 
-**October 15 review:** The original missing-production-barrier evidence below is historical. Current production PUTs have file and parent barriers; later barrier grouping is implemented. Remaining hardware qualification is distinct from reimplementing durability. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+**October 15 review:** The original missing-production-barrier evidence below is historical. Current production PUTs have file and parent barriers; later barrier grouping is implemented. Remaining hardware qualification is distinct from reimplementing durability. See [reconciliation](../status/2026-10/open-item-reconciliation-20261015.md).
 
 **Class:** durability correctness. **Status:** implemented, hardware acceptance open.
 
@@ -3005,7 +3005,7 @@ units and private live POSIX/peer, replay/leader-death, 800-record cold append,
 active shutdown and physical GC/restart pass. Bench O_SYNC remains opt-in.
 Installed service binaries were not upgraded. Physical power-loss behavior
 and any future barrier-batching optimization remain separate acceptance work.
-See the [ledger](../status/replay-readiness-20261008.md).
+See the [ledger](../status/2026-10/replay-readiness-20261008.md).
 
 **Evidence:** `src/server/store.c:server_write_fragment_to_path` zero-initializes
 `shard_io_arg`; `sync_write` is assigned only under `EFS_BENCH_BUILD`.
@@ -3042,7 +3042,7 @@ regressions fail on their respective old sources. Six cold-mount first-mutation
 paths pass in each mode; full direct/buffered each pass POSIX216/216 and
 peer67/67 plus the selected sync/append/cold/fault/GC gates. Intermediate failed
 fixtures are retained. This does not close production publication integration.
-[Integration ledger](../status/devel-nuc-integration-20261011.md).
+[Integration ledger](../status/2026-10/devel-nuc-integration-20261011.md).
 
 **Class:** fencing integration. **Status:** partial; full mount identity, retained
 FUSE CREATE/adoption/OPEN/CLOSE and namespace shard admission are implemented and
@@ -3066,7 +3066,7 @@ rejection floors reject legacy HOLD and FLOCK grants; rejected lock apply
 verdicts are audible and storage failures retain replay. Actual client deferred
 lease OPEN/CLOSE/probe transport has exact cold replay proof, and FUSE now retains these identities through unknown replies and cleanup.
 Only authoritative completed global revocation permits terminal abandonment. See the
-[dependency checkpoint](../status/dependency-package-20261009.md).
+[dependency checkpoint](../status/2026-10/dependency-package-20261009.md).
 
 **Original identity mismatch (fixed by the Oct 9 full-UUID bridge):** `efs_client_append_begin` copies
 `flock_token` into UUID bytes in native order, whereas `host_hold_uuid` encodes
@@ -3107,7 +3107,7 @@ hardware power-loss acceptance remains separate under W71.
 certificate base error; `e85b1b9c` uses `log_base`, preserving the unsynced append
 fence after snapshot/rotation. Native and sanitizer store regressions PASS on
 `devel-expiry`; this is not new RXE or hardware power-loss acceptance.
-[Evidence](../status/expiry-rss-cleanup-20261013.md).
+[Evidence](../status/2026-10/expiry-rss-cleanup-20261013.md).
 
 Both production FUSE write callbacks now flush/publish positive O_SYNC/O_DSYNC
 writes before replying, after admission credits and append locks are released
@@ -3121,7 +3121,7 @@ from a peer before allowing close, requires the actual callback trace, then
 crashes/restarts the private daemons and verifies exact hashes. The same run
 passes 216 POSIX/64 peer tests, replay/leader death, dirty-stop recovery,
 graceful shutdown and 800 exact cold append records during GC. Full AMD units
-and failure/deadline helper checks pass. [Evidence](../status/replay-readiness-20261008.md).
+and failure/deadline helper checks pass. [Evidence](../status/2026-10/replay-readiness-20261008.md).
 
 **Historical failure:** the initial 2 MiB O_SYNC+O_APPEND candidate exposed
 W64's cross-group redirect cycle and was removed. It was reapplied only after
@@ -3136,14 +3136,14 @@ and two append/truncate/handoff defects. NUC is reachable again. The repaired
 final direct/TCP run passes POSIX 213/0/4, peer 64/64, sync-write fault recovery,
 append replay/leader death and exact 800-record cold append/GC. Final buffered/TCP also passes POSIX 213/0/4 and peer 64/64 with the same
 recovery and cold append/GC gates. The runner restores service successfully.
-RXE remains unavailable on NUC, so W73 is not closed. See the [NUC gate report](../status/nuc-gate-closure-20261009.md).
+RXE remains unavailable on NUC, so W73 is not closed. See the [NUC gate report](../status/2026-10/nuc-gate-closure-20261009.md).
 
 **Oct 8 New York / Oct 9 UTC RXE completion:** integrated source `f6233987`
 passes both AMD RXE modes: core POSIX 212/212, peer 64/64, mount-sync, actual
 O_SYNC/O_DSYNC failure retention/recovery, cold exact bytes and mixed append/GC.
 The accepted exact binaries are installed direct/RXE, verified with verbs
 handles on four daemons and two clients. The optional suite has 1 pass / 4
-explicit capability skips. See the [AMD RXE report](../status/amd-rxe-gate-closure-20261009.md).
+explicit capability skips. See the [AMD RXE report](../status/2026-10/amd-rxe-gate-closure-20261009.md).
 
 **Remaining boundary:** the supported software TCP/RXE matrix is complete. Physical multi-host/hardware RDMA evidence is separate. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
 crash now pass for partial bodies; W71 retains
@@ -3160,14 +3160,14 @@ hardware power-loss proof.
 
 **Removed from devel October 16, 2026:** the manual repair experiment (coordinator, worker, debt guards, `EFS_REPAIR_EXPERIMENT`/`EFS_REPAIR_INIT_STORE`). Daemons refuse roots that carry its markers, its Raft tags 55–57, KV kinds 40–41 and wire messages 145–150 stay reserved. No repair path exists in devel; the W74 gap is open again. The code is preserved at tag `archive/experimental-group-a-20261016`; the text below is the record up to that point.
 
-**October 15 review:** The inactive-only October 12 checkpoint and “both repair GAPs stay open” below are superseded by the ordinary-fragment standalone repair qualification, whose implementation is now in devel ancestry. Automatic/unplanned recovery and D36 profile protection remain deferred/open, not accepted. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+**October 15 review:** The inactive-only October 12 checkpoint and “both repair GAPs stay open” below are superseded by the ordinary-fragment standalone repair qualification, whose implementation is now in devel ancestry. Automatic/unplanned recovery and D36 profile protection remain deferred/open, not accepted. See [reconciliation](../status/2026-10/open-item-reconciliation-20261015.md).
 
 **Class:** protection/recovery feature gap. **Status:** accepted design, absent
 public control-plane/data-plane integration. **D36 (Oct 9) supersedes the
 former protection ladder:** three nodes minimum/2+1, four nodes maximum
 two-loss safety/2+2, more nodes for scale with the same protection target.
 Authoritative metadata must meet the same loss envelope; coordinate its
-unresolved four-node protocol with W66. See [binding decision](../status/node-count-protection-20261009.md).
+unresolved four-node protocol with W66. See [binding decision](../status/2026-10/node-count-protection-20261009.md).
 
 **Evidence:** `EFS_NUM_FRAGMENTS` is 3 and `erasure.h` specifies fixed 2+1.
 `efs_publication_from_rec` stamps K2F1; `meta_apply.c:evidence_ok` rejects other
@@ -3186,7 +3186,7 @@ subsequent loss, durable debt across restart and authority changes, and safe
 profile cutover while writers remain active. Retain actual configured RF/EC
 and permanent-loss evidence. Coordinate with W66 metadata topology.
 
-**October 12 implementation checkpoint:** corrected inactive durable job/floor journal, separate repair storage certificate domain, GC-scheduled admission refusal and fresh readonly job authority are integrated on the release branch. Full normal/fault native suites pass exact `b2593687` on AMD; focused journal cold/WAL EIO/bounds and storage-fence tests also pass. No receiver, worker or live GC hook is enabled, and no physically restored protection is claimed. The named-temp intermediate remains excluded; its corrected anonymous missing-role writer passes AMD build, functional and sanitizer checks but has no receiver/worker callers. Initial physical scope is ordinary missing fragments on one files storage root. Multiple roots, corrupt replacement, spare placement and profile cutover remain unsupported. Both original repair GAPs stay open. See [current repair investigation](../status/nuc-repair-gap-design-20261012.md) and [source-specific execution ledger](../status/amd-all-suites-20261011.md).
+**October 12 implementation checkpoint:** corrected inactive durable job/floor journal, separate repair storage certificate domain, GC-scheduled admission refusal and fresh readonly job authority are integrated on the release branch. Full normal/fault native suites pass exact `b2593687` on AMD; focused journal cold/WAL EIO/bounds and storage-fence tests also pass. No receiver, worker or live GC hook is enabled, and no physically restored protection is claimed. The named-temp intermediate remains excluded; its corrected anonymous missing-role writer passes AMD build, functional and sanitizer checks but has no receiver/worker callers. Initial physical scope is ordinary missing fragments on one files storage root. Multiple roots, corrupt replacement, spare placement and profile cutover remain unsupported. Both original repair GAPs stay open. See [current repair investigation](../status/2026-10/nuc-repair-gap-design-20261012.md) and [source-specific execution ledger](../status/2026-10/amd-all-suites-20261011.md).
 
 **Forbidden:** counting returning/empty nodes as restored fragments, calling
 GC or metadata snapshot recovery repair, advertising D36 as implemented, or
@@ -3196,7 +3196,7 @@ replacing the accepted four-node target with a five-node minimum/f=3 ladder.
 
 ## W75 · Integrity evidence is payload-only and missing evidence is accepted (queue row spec5)
 
-**October 15 review:** The title retains the original defect. Missing/corrupt evidence now fails closed; identity-bound format and broader integrity requirements remain separate. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+**October 15 review:** The title retains the original defect. Missing/corrupt evidence now fails closed; identity-bound format and broader integrity requirements remain separate. See [reconciliation](../status/2026-10/open-item-reconciliation-20261015.md).
 
 **K16 (Oct 22, branch `devel-k16`): identity-bound fragment record implemented.**
 Every chunk and packed-segment fragment file now ends in a 128-byte fragment
@@ -3211,7 +3211,7 @@ root format 0 refuses startup. Inode generation and export salt are not in
 the record because GET/GC do not carry them; FileID separation rests on the
 unique candidate generation (follow-up). Format in
 [data.md](../how-it-works/protocols/data.md#fragment-record-format-2-implemented-w75);
-evidence in [K16 summary](../status/k16-w75-identity-format-20261022.md).
+evidence in [K16 summary](../status/2026-10/k16-w75-identity-format-20261022.md).
 Not merged; RDMA and hardware gates NOTRUN.
 
 **Class:** integrity correctness. **Status:** open, inspected source gap to I25;
@@ -3281,9 +3281,9 @@ FUSE mount reaches 512. Real CREATE/LINK/RENAME/UNLINK lost replies replay with
 identical identities and a single namespace effect across leader death and
 full-server restart. LINK leaves exactly one link after the original name is
 removed. Full POSIX and physical GC/restart pass.
-See [next-five ledger](../status/next-five-gates-20261007.md).
+See [next-five ledger](../status/2026-10/next-five-gates-20261007.md).
 
-**Gate follow-up (Oct 7):** NUC byte-identical CREATE/RENAME/UNLINK operation-identity replay passes across full owned-server crash/restart after committed reply loss. Maximum concurrency and failover acceptance remain. See [gate ledger](../status/gate-30-rounds-20261007.md).
+**Gate follow-up (Oct 7):** NUC byte-identical CREATE/RENAME/UNLINK operation-identity replay passes across full owned-server crash/restart after committed reply loss. Maximum concurrency and failover acceptance remain. See [gate ledger](../status/2026-10/gate-30-rounds-20261007.md).
 
 **Class:** conditional retry/idempotency correctness. **Status:** closed after targeted acceptance; historical source
 finding below; reaching this limit on an ordinary mounted workload is not established.
@@ -3361,7 +3361,7 @@ absent/dead/invalid/unrelated/wrong-storage/stale-start records, matching daemon
 and recorder retirement, and actual starts with stale records. Unrelated owned
 fixture processes survive both start and stop. Timeouts retain processes;
 daemon-internal shutdown remains W65.
-[Closure evidence](../status/devel-nuc-closure-20261010.md).
+[Closure evidence](../status/2026-10/devel-nuc-closure-20261010.md).
 **Historical Oct 7 evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
 passes it to `kill_pid_graceful`. That helper checks only `kill -0`, sends
 SIGTERM, then SIGKILL after about three seconds. Startup and path-based stop
@@ -3414,7 +3414,7 @@ initialization pass on NUC direct/buffered private clusters. A relay consumes
 each alias's actual successful reply without delivering it; the CLI reports
 failure, and an explicit retry preserves the authoritative namespace and salt.
 This is single-export idempotency, not named-export creation or a reset.
-[Closure evidence](../status/devel-nuc-closure-20261010.md).
+[Closure evidence](../status/2026-10/devel-nuc-closure-20261010.md).
 **Historical Oct 7 evidence:** `src/mgmt/efs_mgmt.c` general help advertises
 `mkfs <node:port> <export-name>`, but `cmd_raft_mkfs` only parses `argv[0]`
 and ignores extra arguments. Both mkfs aliases use that handler. Metadata
@@ -3454,7 +3454,7 @@ fragment fixtures reject false totals in normal/raw output; help names the
 retirement, and unsupported/legacy/malformed reply fixtures pass. Mounted
 server-owned snapshot features and their remaining scale acceptance stay W92;
 this closure does not claim implementation of legacy per-user totals.
-[Closure evidence](../status/devel-nuc-closure-20261010.md).
+[Closure evidence](../status/2026-10/devel-nuc-closure-20261010.md).
 **Historical Oct 7 review:** `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
 notes that the whole-table query was retired, zeroes a reply and sends it.
 `src/query/efs_query.c` accepts that reply and prints total files/bytes and
@@ -3491,7 +3491,7 @@ server, was removed with the binary.
 
 ## W81 · Automatic directory spread responds to size, not pressure
 
-**Policy accepted Oct 8 (D35):** sustained directory-local serialization wait and queue pressure plus activity; retain size trigger, use hysteresis/cooldowns and bounded fair migration. Exclude global overload signals; select explicit configurable thresholds from AMD measurements before activation. [Contract](../status/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading).
+**Policy accepted Oct 8 (D35):** sustained directory-local serialization wait and queue pressure plus activity; retain size trigger, use hysteresis/cooldowns and bounded fair migration. Exclude global overload signals; select explicit configurable thresholds from AMD measurements before activation. [Contract](../status/2026-10/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading).
 
 **Class/state:** accepted scalability requirement / feature gap; source-reviewed
 Oct 7, awaiting triage. The directory protocol requires size OR sustained
@@ -3530,9 +3530,9 @@ transaction-decision query RPC; the live gate exercises the namespace transactio
 path and the unit covers its internal decision callback. Existing Raft units
 cover delayed contexts/current-term completion. This closes stale-read reuse,
 not D25 activation or W72 session integration.
-See [next-five ledger](../status/next-five-gates-20261007.md).
+See [next-five ledger](../status/2026-10/next-five-gates-20261007.md).
 
-**Gate follow-up (Oct 7):** NUC configuration partition gate found and fixed a synchronous solo-proposal replication send-limit omission (`0960bf5b`). The deterministic regression failed before the fix; after the fix, the isolated old leader refuses reads across a voter change and restoring three voters catches up and serves current metadata. Transaction/publication partition gates remain. See [gate ledger](../status/gate-30-rounds-20261007.md).
+**Gate follow-up (Oct 7):** NUC configuration partition gate found and fixed a synchronous solo-proposal replication send-limit omission (`0960bf5b`). The deterministic regression failed before the fix; after the fix, the isolated old leader refuses reads across a voter change and restoring three voters catches up and serves current metadata. Transaction/publication partition gates remain. See [gate ledger](../status/2026-10/gate-30-rounds-20261007.md).
 
 **Class/state:** linearizable-read correctness; core-model reproduction Oct 7.
 `host_read_index` captures the local commit index and returns immediately when
@@ -3635,17 +3635,17 @@ capacity from contention and missing entries. The144 envelope and all guards
 remain. Exact/mixed boundaries, atomic authoritative refusal, cycle/progress,
 full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD
 normal/fault full POSIX/peer/GC gates pass. Larger namespace protocol is deferred.
-[Closure, retained initial cache-view discrepancy and evidence](../status/w84-closure-20261009.md).
+[Closure, retained initial cache-view discrepancy and evidence](../status/2026-10/w84-closure-20261009.md).
 
 **Historical implementation and acceptance narrative follows; later closure
 supersedes its old open-limit/gate statements.**
 
-**Policy accepted Oct 8 (D32):** retain the current 144-participant product limit, with no fixed depth promise; require prompt atomic refusal and clear diagnostics. Larger-operation protocol is deferred. Earlier finite-limit asks below are superseded; remaining diagnostics/refusal and recovery gates govern closure. [Contract](../status/accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions).
+**Policy accepted Oct 8 (D32):** retain the current 144-participant product limit, with no fixed depth promise; require prompt atomic refusal and clear diagnostics. Larger-operation protocol is deferred. Earlier finite-limit asks below are superseded; remaining diagnostics/refusal and recovery gates govern closure. [Contract](../status/2026-10/accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions).
 
 **Oct 8 AMD follow-up:** AMD direct-I/O/TCP now passes exact 144-participant coordinator death at both PREPARE and COMMIT, including cold atomic recovery. The existing depth 143 acceptance/depth 144 bounded refusal also passes. Full-ancestry versus a supported finite transaction envelope remains a product decision; no universal 143-depth promise follows from this fixture.
-See [the package evidence](../status/amd-functional-gates-20261008.md).
+See [the package evidence](../status/2026-10/amd-functional-gates-20261008.md).
 
-**TCP recovery follow-up (Oct 7):** ancestry guards now use the144-record envelope; depth143 succeeds and depth144 refuses safely within the8-second budget. Full64-lane removal/replacement and prepared/committed coordinator death (66 participants) pass cold. The fault gate found and repaired FUSE error-to-ENOENT mapping and split dentry/inode LOOKUP absence. Exact144-participant crash acceptance and an approved finite full-ancestry limit remain open. See [ledger](../status/tcp-five-gates-20261007.md).
+**TCP recovery follow-up (Oct 7):** ancestry guards now use the144-record envelope; depth143 succeeds and depth144 refuses safely within the8-second budget. Full64-lane removal/replacement and prepared/committed coordinator death (66 participants) pass cold. The fault gate found and repaired FUSE error-to-ENOENT mapping and split dentry/inode LOOKUP absence. Exact144-participant crash acceptance and an approved finite full-ancestry limit remain open. See [ledger](../status/2026-10/tcp-five-gates-20261007.md).
 
 **Envelope follow-up (Oct 7):** the shared transaction capacity is now 144:
 64 used-directory lanes plus 64 ancestry shards and fixed namespace participants.
@@ -3655,7 +3655,7 @@ size check could detect overflow only after the stack buffer was overwritten.
 The one-byte count encoding is unchanged, and existing <=64-participant records
 remain readable. All participating servers must be upgraded together before
 larger transactions are admitted; downgrade while larger intents exist is unsafe.
-See [acceptance ledger](../status/w84-envelope-20261007.md). W84 remains open:
+See [acceptance ledger](../status/2026-10/w84-envelope-20261007.md). W84 remains open:
 the independent 64-hop ancestry limit and leader-failure acceptance remain.
 
 
@@ -3663,9 +3663,9 @@ the independent 64-hop ancestry limit and leader-failure acceptance remain.
 and one shared eight-second rename retry budget are repaired. Exact guard and
 participant helper boundaries pass; NUC direct maximum-envelope refusal and
 restart recovery pass. Fully spread-directory support and boundary leader
-failure remain open. See the [round ledger](../status/three-package-gates-20261007.md).
+failure remain open. See the [round ledger](../status/2026-10/three-package-gates-20261007.md).
 
-**Gate follow-up (Oct 7):** NUC direct/buffered captured-inode opposite directory-move races pass: 16 races per mode preserve acyclic ancestry and retry progress. Maximum participant/hop-bound acceptance remains. See [gate ledger](../status/gate-30-rounds-20261007.md).
+**Gate follow-up (Oct 7):** NUC direct/buffered captured-inode opposite directory-move races pass: 16 races per mode preserve acyclic ancestry and retry progress. Maximum participant/hop-bound acceptance remains. See [gate ledger](../status/2026-10/gate-30-rounds-20261007.md).
 
 **Class/state:** namespace completeness / admission gap; source-reviewed Oct 7.
 `EFS_TXN_MAX_PART` is 64 for general transaction envelopes, but
@@ -3726,7 +3726,7 @@ fault-client gates with two roots per node now retain the generation, retry with
 probe hints, have no duplicate fragment identities and quota charge equals the
 physical inventory. Cold bytes, client/server restart and final deletion pass;
 normal binaries exclude fault controls. First-send NEW optimization remains.
-See [next-five ledger](../status/next-five-gates-20261007.md).
+See [next-five ledger](../status/2026-10/next-five-gates-20261007.md).
 
 **Round-6 current source:** a concurrent repair, now committed as `6d6056c3`, owns first-send
 state in the PUT attempt and locks the root cache; cache misses on retry probe.
@@ -3773,7 +3773,7 @@ first-send optimization still respects D7 and retries never falsely assert NEW.
 
 ## W86 · Durable PUT tickets — staged ownership and revocation integration
 
-**Class/state:** feature / safe reclamation; metadata implementation plus fixed-endian replicated admission/authoritative status transport committed (`b3a11877`, `0aaf7d32`), staged for production data-plane integration. The [GC checkpoint](../status/gc-implementation-20261007.md#approved-unpublished-body-policy) records user approval of the narrow abandoned-upload policy; [D31](../status/decisions.md#d31--recorded-abandoned-upload-policy) indexes that record. This review creates no new approval and does not resolve D28's broader salvage question.
+**Class/state:** feature / safe reclamation; metadata implementation plus fixed-endian replicated admission/authoritative status transport committed (`b3a11877`, `0aaf7d32`), staged for production data-plane integration. The [GC checkpoint](../status/2026-10/gc-implementation-20261007.md#approved-unpublished-body-policy) records user approval of the narrow abandoned-upload policy; [D31](../status/decisions.md#d31--recorded-abandoned-upload-policy) indexes that record. This review creates no new approval and does not resolve D28's broader salvage question.
 
 **Evidence:** `include/efs/put_ticket.h`, `src/meta/put_ticket.c`, metadata publication hooks and `tests/test_put_ticket.c` exist. Admission is bounded at 128 tickets per lane-shard/session; PUBLISHED joins the mapping batch; reclamation requires authoritative global and shard revocation state, and retirement preserves a sequence floor. The helper explicitly requires colocated authoritative session/shard views. Host/client admission and pure status transport now have AMD exact/discarded reply, collision, completed revocation and cold restart gates. Production mount/data-plane coordination still does not carry the complete lifecycle. [Transport evidence](../../results/measure/20261009-put-ticket-transport/README.md).
 
@@ -3793,7 +3793,7 @@ direct/TCP same/cross-group lost-reply, actual leader-death and cold replay gate
 pass, alongside core212/212 and peer64/64. These uploads still use legacy PUT
 transport after admission: default FUSE flush/PUT, durable storage rejection
 fences, stable server membership capture and abandoned all-member ACKs remain
-open. [Current checkpoint](../status/dependency-package-20261009.md#retained-put-ownership-and-ticketed-publications--oct-10-utc).
+open. [Current checkpoint](../status/2026-10/dependency-package-20261009.md#retained-put-ownership-and-ticketed-publications--oct-10-utc).
 
 **Oct 10 merged storage-barrier progress:** durable full-UUID storage-session
 certificates and every-current-member seal/check are implemented. FINISH now
@@ -3801,7 +3801,7 @@ logs the verified epoch and preserves incomplete-barrier BUSY/STALE instead of
 reporting success. AMD injected certificate-sync EIO and four-member cold-floor
 gates cover these primitives. This does not close production PUT validation,
 default flush, durable per-ticket membership or abandoned-member deletion ACKs.
-See the [merged checkpoint](../status/dependency-package-20261009.md#merged-baseline-and-durable-storage-session-barrier--oct-10-utc).
+See the [merged checkpoint](../status/2026-10/dependency-package-20261009.md#merged-baseline-and-durable-storage-session-barrier--oct-10-utc).
 
 **Oct 10 ticketed receiver progress:** actual typed publication helpers now
 upload via a fixed-endian ticketed receiver. It checks fresh ADMITTED/FileID
@@ -3809,7 +3809,7 @@ views, exact fragment digest/destination/configured geometry and guards storage
 with the durable session floor. Three real unpublished fragments survive cold
 restart; completed revocation rejects actual late uploads on every destination.
 Default FUSE flush, durable per-ticket membership capture and all-member abandoned
-collection remain open. [Checkpoint](../status/dependency-package-20261009.md#exact-finish-apply-and-ticketed-put-receiver--oct-10-0600-utc).
+collection remain open. [Checkpoint](../status/2026-10/dependency-package-20261009.md#exact-finish-apply-and-ticketed-put-receiver--oct-10-0600-utc).
 
 ## W87 · Buffered concurrent append loses records under broader load
 
@@ -3819,7 +3819,7 @@ rounds, 19,597 acknowledged records, on a private 3-daemon TCP buffered cluster
 under churn/GC, a 4 MiB client cache and concurrent POSIX load. No record was
 lost, duplicated, torn or reordered warm or cold. Not reproduced on devel
 `7c510c60f`; INCOMPLETE, no root cause or fix; keep W87 open. Bounded rerun NOTRUN.
-[Summary and commands](../status/w87-append-oracle-efs2-20261022.md).
+[Summary and commands](../status/2026-10/w87-append-oracle-efs2-20261022.md).
 
 **Oct 11 NUC integration acceptance:** merged fixed core passes full POSIX
 216/216 and peer 67/67 in both direct and buffered modes. An additional focused
@@ -3827,12 +3827,12 @@ round per mode combines four two-mount persistent/per-record-close APPEND
 writers with GC of 128 files: 800 exact warm/peer/cold records per round and
 zero physical/quota state after cleanup. These green results do not isolate
 the original missing-record cause or replace repeated original-load acceptance;
-keep W87 open. [Retained failures and new gates](../status/devel-nuc-integration-20261011.md).
+keep W87 open. [Retained failures and new gates](../status/2026-10/devel-nuc-integration-20261011.md).
 
 **Oct 8 AMD follow-up:** Retrieved the original NUC failure TSV/manifest: missing W1S0002 and W0S0004 records, beyond first-record loss. AMD broad buffered POSIX 216/0/1 skip and peer 64/64 pass, plus mixed-close append during GC and 800 exact cold records. The separate identical-RPC reservation race is fixed, but is not established as this incident's sole cause.
-See [the package evidence](../status/amd-functional-gates-20261008.md).
+See [the package evidence](../status/2026-10/amd-functional-gates-20261008.md).
 
-**Class/state:** correctness investigation; failure recorded in the Oct 7 [GC checkpoint](../status/gc-implementation-20261007.md#tests-and-limits). Fixture `/data1/efs/evidence/gc-buffered-3ohdte4d` reportedly passed focused GC checks but failed both broad POSIX concurrent-append cases with missing records. Ten isolated repeats subsequently passed; they do not erase the original failure. Raw remote fixture logs were not inspected in this round.
+**Class/state:** correctness investigation; failure recorded in the Oct 7 [GC checkpoint](../status/2026-10/gc-implementation-20261007.md#tests-and-limits). Fixture `/data1/efs/evidence/gc-buffered-3ohdte4d` reportedly passed focused GC checks but failed both broad POSIX concurrent-append cases with missing records. Ten isolated repeats subsequently passed; they do not erase the original failure. Raw remote fixture logs were not inspected in this round.
 
 **Next:** retain failing results, process/source hashes and reservation/publication traces; record the traced full buffered rerun's outcome. Distinguish append admission offsets, identity replay, byte ownership and publication before assigning a cause. W64 concerns durable failover replay; it is related coverage, not a proven explanation of this loaded buffered failure.
 
@@ -3851,7 +3851,7 @@ preserve peer bytes, return the original committed locator after supersession,
 and reject retired replay after cold restart. Fresh typed overlays require
 complete matching fences; legacy truncate interop updates authority/history
 with the stamp atomically.
-[Checkpoint and evidence](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated).
+[Checkpoint and evidence](../status/2026-10/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated).
 This driver is staged. Default FUSE REPORT/PUT still uses the legacy flow, so the
 original W88 span-history-eviction bug remains open until production integration
 and its full eviction/re-PUT/session/leader-change gates pass.
@@ -3876,7 +3876,7 @@ The [retained fixture](../archive/round6-span-replay-repro.c) uses the actual me
 drain and concurrent unapplied-WAL truncation defects are repaired with
 old-binary reproductions and crash/recovery tests. This does not establish
 a stalled Raft follower memory/lag bound. See the
-[round ledger](../status/three-package-gates-20261007.md).
+[round ledger](../status/2026-10/three-package-gates-20261007.md).
 
 **Class/state:** closed verification defect (Oct 10 AMD round); raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
 
@@ -3897,7 +3897,7 @@ writes, preserves healthy-quorum progress, recovers with InstallSnapshot and
 checks exact cold values on three replicas plus the FUSE payload oracle.
 All 276 TSV observations match every raw JSON field. The driver now requires
 this comparison before PASS; focused regressions reject shifted values, lost
-rows and fabricated availability. [Current evidence](../status/amd-non-rdma-20261010.md#w89).
+rows and fabricated availability. [Current evidence](../status/2026-10/amd-non-rdma-20261010.md#w89).
 The Oct 8 policy implementation and this fresh pressure gate satisfy W89's
 measurement-correctness acceptance. D30/W23 production activation, universal
 memory/lag bounds and sustained permanent-stall throughput remain open.
@@ -3931,16 +3931,16 @@ The real 400 GiB writer's initial CREATE PROTO failure and acknowledged 124983
 files are preserved. The unrouted BUSY retry fix passes focused/full native;
 the fixed client rehashed all acknowledged prefixes and continues, with its
 complete cold/hash/export verifier queued. Neither large gate is complete.
-[Closure ledger](../status/query-cache-closure-20261010.md).
+[Closure ledger](../status/2026-10/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.
 Three Xorinox profiles pass 6000-file oracles each (124 / 165 / 159 files/s); cache
 refresh coalescing reduces sampled cost. Full sequential discovery, aggregate
 cache capacity and scale/fault acceptance remain open.
-[Implementation, profiles and gates](../status/query-cache-incremental-20261010.md).
+[Implementation, profiles and gates](../status/2026-10/query-cache-incremental-20261010.md).
 
-**Oct 9 disk backend progress:** [implementation checkpoint](../status/query-disk-backend-20261009.md)
+**Oct 9 disk backend progress:** [implementation checkpoint](../status/2026-10/query-disk-backend-20261009.md)
 records the persistent partition backend, bounded scratch, immutable generation
 leases and validated cold restore. Functional differential and private live
 gates pass, including clean Xorinox mutation queries after an explicitly authorized
@@ -3953,7 +3953,7 @@ cache-space budgets and the scale gates below remain open.
 reuse deployed as `6e841662`; identical 25425-file metadata copies show median
 unchanged refresh 1.977 → 0.955 seconds. Unit preads fall 50.2%. Live creation
 225 → 85 files/s remains a confounded follow-up, not a cache-only verdict.
-See [indexed checkpoint](../status/query-cache-tiny-profile-20261009.md).
+See [indexed checkpoint](../status/2026-10/query-cache-tiny-profile-20261009.md).
 Incremental stats were still open at this checkpoint and are now implemented
 by the Oct 10 work above; aggregate disk control remains open.
 
@@ -4015,7 +4015,7 @@ real evidence separately; synthetic index acceptance does not certify end-to-end
 EFS capacity. Measure foreground latency, query latency and freshness under load.
 Full implementation acceptance and these scale gates remain pending. See
 [architecture requirement](../status/virtual-find-stats.md#billions-of-files--disk-backed-bounded-memory-catalog)
-and [five-minute evidence](../status/tiny-file-five-minute-profile-20261009.md).
+and [five-minute evidence](../status/2026-10/tiny-file-five-minute-profile-20261009.md).
 
 Oct 9 CPU/memory follow-up: deployed `a62cbd5f6ca2` on NUC. Immutable decoded
 inode/stat blocks are retained per partition with lane dependency invalidation;
@@ -4023,13 +4023,13 @@ mutable rollups are allocated only for directories. Publication recovers beyond
 the former 1 GiB cap failure without raising the cap. Differential/lifetime,
 full native, POSIX 212/212, peer 64/64 and restart/command/export gates pass;
 loaded pinned export returns 1,187,139 unique paths. Global lookup-index and
-pointer-vector work remain. See [measured results](../status/find-stats-refresh-cpu-20261009.md).
+pointer-vector work remain. See [measured results](../status/2026-10/find-stats-refresh-cpu-20261009.md).
 This performance result does not close unrelated scale/fault/NFS acceptance.
 
 Activated Oct 8, 2026 by user. Branch `devel-find-stats`, baseline `e86b85ac`.
 Current user scope replaces synthetic `.find`/`.stats` with `.efs/find` and
 `.efs/stats`; W91 supplies Python commands and versioned query paths. Real
-legacy-named user entries are preserved. The [command implementation checkpoint](../status/efs-commands-20261008.md)
+legacy-named user entries are preserved. The [command implementation checkpoint](../status/2026-10/efs-commands-20261008.md)
 records opt-in FUSE integration, wire v2 JSON, immediate ls, permissions, immutable
 results and private POSIX/peer/restart/resource gates. W91/W92 remain open for
 loaded/scale/fault/export-policy/NFS acceptance; W90 expiry is separate.
@@ -4038,14 +4038,14 @@ Oct 8 follow-up: transaction-specific refresh fence, tombstone scan/deadline bou
 retained allocation compaction and sampled lag diagnostics implemented. Clean
 `ecabac6ff587-commands-d2573704` passes POSIX 216/0/1, peer 64/64, sustained-write
 publication/payload oracle, publisher loss/rejoin, noexec, cold opt-out and restart
-oracle. [Evidence and remaining acceptance](../status/efs-command-followups-20261008.md).
+oracle. [Evidence and remaining acceptance](../status/2026-10/efs-command-followups-20261008.md).
 This does not close 400 GiB, persistent remote export-policy or NFS/macOS gates.
 
 Server startup disablement now uses `EFS_COMMANDS_SERVER=0` on every daemon:
 no query worker/catalog, no dirty tracking, zero advertised query features and
 both query versions refused. Re-enable rebuilds all partitions from current
 persisted metadata, without an accumulated query-index queue. See
-[policy and catch-up gates](../status/efs-command-policy-20261008.md).
+[policy and catch-up gates](../status/2026-10/efs-command-policy-20261008.md).
 This is distinct from future live replicated per-export policy transitions.
 
 Nine successive NUC command profiling rounds target immutable KV searches, Python
@@ -4055,11 +4055,11 @@ Rounds 8–9 add CPU/storage/concurrency measurements: the hardware-ceiling clai
 is not supported; bounded mount admission and repeated lookup/open snapshots
 remain software costs. Raw perf
 callgraphs, strace, timing samples and correctness evidence are retained in the
-[command performance report](../status/efs-command-performance-20261008.md).
+[command performance report](../status/2026-10/efs-command-performance-20261008.md).
 The measurements do not close the separate scale/platform acceptance.
 
 Oct 8 command options add long metadata display, date/size/name ordering and
-server-side type, size and modification-time predicates. [Usage and acceptance](../status/efs-command-options-20261008.md).
+server-side type, size and modification-time predicates. [Usage and acceptance](../status/2026-10/efs-command-options-20261008.md).
 Expiry coverage is explicitly limited to unavailable/refusal behavior; W90
 lifecycle implementation and gates remain open.
 
@@ -4073,7 +4073,7 @@ reuses dependency-valid folded stats and namespace contributions, deployed on
 NUC: warm median 508 ms versus about 1.4 s. Global reconstruction remains.
 Loaded broad command gates also hit the separate million-entry scan cap and
 retry EFS_ERR_BUSY; scoped traversal/paging and explicit limit errors remain open.
-[Perf/strace evidence](../status/find-stats-refresh-cpu-20261009.md).
+[Perf/strace evidence](../status/2026-10/find-stats-refresh-cpu-20261009.md).
 
 **Oct 9 bounded commands and export:** `30634dd1` + `abcd9b7b` implement a
 100-result display default, `--limit`/`--size` up to 10,000, truthful additional
@@ -4084,7 +4084,7 @@ the old global million-entry ceiling for the new command protocol; legacy
 protocol limits remain. Global ordering/top-N is not supplied: display sorting
 is within the selected subset, and export uses index order. W92 stays open for
 remaining payload-scale/platform/CPU/memory acceptance, not the old all-results
-response requirement. [Contract and evidence](../status/efs-command-pages-20261009.md).
+response requirement. [Contract and evidence](../status/2026-10/efs-command-pages-20261009.md).
 
 
 **Oct 8 New York loaded-namespace investigation:** devel merged into
@@ -4093,7 +4093,7 @@ JSON response cap at roughly 992k files; it returns EOVERFLOW with zero partial
 bytes, while exact and directory-scoped queries pass. Add limit-specific
 command diagnostics and bounded immutable-snapshot paging with complete/sorted
 output semantics before claiming large-result acceptance. This is not fixed
-by the investigation. [Evidence and code path](../status/find-output-overflow-20261009.md).
+by the investigation. [Evidence and code path](../status/2026-10/find-output-overflow-20261009.md).
 
 Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
 NUC target: staged population toward 400 GiB real logical payload, with a large
@@ -4144,7 +4144,7 @@ large-tree/load/checksum and remaining fault/gateway gates stay open.
 The accepted design below is retained, with no implementation or activation
 authorization inferred from this work profile.
 
-**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; initial implementation closed Oct 12 after both NUC matrices passed. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
+**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; initial implementation closed Oct 12 after both NUC matrices passed. [Contract](../status/2026-10/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
 
 **Class/state:** feature; closed for accepted D33 initial scope, Oct 12, 2026. Recorded Oct 8, 2026 at the user's request.
 No universal default retention period is selected. The proposal below is historical; the accepted D33 contract governs.
@@ -4163,17 +4163,17 @@ expiry to W91 and optionally through a defined extended attribute.
 Implement accepted D33 policy; hard links to expiring files and enabling expiry
 on multiply linked files are refused. Symlink and recursive directory expiry
 remain outside initial scope. Audit namespace/open-reference/GC integration,
-including W72/W86 and the [GC checkpoint](../status/gc-implementation-20261007.md).
+including W72/W86 and the [GC checkpoint](../status/2026-10/gc-implementation-20261007.md).
 Age alone never authorizes deletion of unpublished fragments. Test on NUC with
 TCP, direct I/O, FILES storage, `.efs` disabled.
 Normal and clock-fault matrices at `0e975936` PASS: expiry/recovery/physical GC,
-216/216 core and 67/67 peer tests in each. [Evidence and reproduction](../status/expiry-implementation-20261012.md#final-qualification--pass).
+216/216 core and 67/67 peer tests in each. [Evidence and reproduction](../status/2026-10/expiry-implementation-20261012.md#final-qualification--pass).
 
 **Oct 12 follow-up complete:** readable management path inspection and worker
 status; expiry-specific confirmed namespace file/observed logical-byte counters,
 separate from all-cause physical GC totals. Normal 24/24 and fault 25/25 gates,
 30-minute two-mount soak (1,644 expirations, six restarts), and both core/peer
-matrices PASS. [Evidence, limitations and commands](../status/expiry-inspection-soak-20261012.md).
+matrices PASS. [Evidence, limitations and commands](../status/2026-10/expiry-inspection-soak-20261012.md).
 
 **Oct 12–13 follow-up PASS:** `--expire-after`/`--renewal-limit` plus duration/help
 regressions; three 10,000-file queues including mid-drain restart and global
@@ -4183,7 +4183,7 @@ normal 1s yield); this is asynchronous eligibility, not immediate disappearance.
 Peak sampled RSS rose 185→263→392 MiB across phases, within the 512 MiB fixture guard
 but not proof of a memory plateau. Worker cadence and retained-metadata/memory
 investigation remain performance follow-ups, without attributing an expiry leak
-or claiming a hardware ceiling. [Exact-source evidence and reproduction](../status/expiry-backlog-20261012.md).
+or claiming a hardware ceiling. [Exact-source evidence and reproduction](../status/2026-10/expiry-backlog-20261012.md).
 
 **Oct 13 performance follow-up:** `afbce294` bounds command-cache retention,
 uses Linux file-backed derived indices with cold residency eviction, and shortens
@@ -4192,7 +4192,7 @@ and cold checks; drains 212–218s versus 22–23min, sampled peak node RSS 60�
 versus 185–392 MiB. Foreground p95 is higher; no universal memory/hardware ceiling
 claim. Normal 24/24 and clock-fault 25/25 lifecycle gates, core 216/216 and peer
 67/67 in both builds, plus cold physical/queue/quota/fencing gates PASS.
-[Exact measurements and regression evidence](../status/expiry-rss-cleanup-20261013.md).
+[Exact measurements and regression evidence](../status/2026-10/expiry-rss-cleanup-20261013.md).
 
 **Oct 13 foreground fairness follow-up:** `99f6ef0c` retains fast physical GC,
 spreads expiry into two-file bursts, and schedules broader housekeeping at its
@@ -4202,7 +4202,7 @@ run PASS: p95 29.2/32.9/33.0 → 23.3/19.7/21.2ms, physical drain
 Clock-fault 25/25, core 216/216, peer 67/67 and cold physical/queue/quota/fencing
 gates also PASS. Peak RSS 76.1 MiB; isolated maximum-latency outliers remain. Fully separating
 physical GC was tested and rejected because reclamation lagged.
-[Measurements, rejected experiment and reproduction](../status/expiry-foreground-latency-20261013.md).
+[Measurements, rejected experiment and reproduction](../status/2026-10/expiry-foreground-latency-20261013.md).
 
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and
@@ -4221,9 +4221,9 @@ truthful stats/peer convergence, permissions/hidden descendants, immutable
 output, raw/NUL names, query identity exhaustion/recovery, sorting/filtering,
 formatting and zero physical/quota state after cleanup. Expiry arguments remain
 unavailable/refused; this is not expiry deletion, NFS or large-scale acceptance.
-[Integration evidence](../status/devel-nuc-integration-20261011.md).
+[Integration evidence](../status/2026-10/devel-nuc-integration-20261011.md).
 
-**Policy accepted Oct 8 (D34):** opt-in `.efs/` commands, initially readable Python 3 scripts with bounded versioned query paths and immutable results. Real entries take precedence; NFS support requires separate gates. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands).
+**Policy accepted Oct 8 (D34):** opt-in `.efs/` commands, initially readable Python 3 scripts with bounded versioned query paths and immutable results. Real entries take precedence; NFS support requires separate gates. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/2026-10/accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands).
 
 **Class/state:** usability feature; accepted D34 policy. The Oct 8 proposal below is historical; W92 and its newer evidence govern implemented find/stats commands. Remaining expiry/help/list and compatibility gates retain their separate scope.
 [Interface design](../status/scratch-expiry-interface.md#preferred-user-experience).
@@ -4281,7 +4281,7 @@ cold records. Queue/apply bounds, RSS/lag/refusals and 512 cold service payloads
 are retained. NUC is restored on the repaired build, both mounts up, default
 10 ms, `.efs`/diagnostics and optional experiments off. The tested bundle remains
 opt-in; W53/W94/W97 and hardware power-loss/distributed-RDMA obligations are separate.
-[Final evidence, limits and repairs](../status/w93-atomic-apply-20261010.md).
+[Final evidence, limits and repairs](../status/2026-10/w93-atomic-apply-20261010.md).
 
 **Oct 10 checkpoint investigation:** All 16 frozen local branch tips are merged
 into `devel-persistence-pressure`. `4bb7b169` fixes failed applied-marker writes
@@ -4315,7 +4315,7 @@ twenty repeated append/truncate and actual-source/sanitizer/negative controls
 pass. All 384 sampled exact cold-payload checks and private sync/append/dirty-stop/
 shutdown/WAL-tail/GC fault gates pass. W93 remains open; prioritize the
 serial KV/marker tail with an explicit recovery contract, not earlier ACKs.
-[Detailed evidence](../status/w93-read-pressure-20261009.md).
+[Detailed evidence](../status/2026-10/w93-read-pressure-20261009.md).
 
 **Oct 9 verified-overlap experiment:** `devel-persistence-pressure` adds guarded,
 default-off `EFS_RAFT_BATCH_OVERLAP=1`. Stable follower requests with a verified
@@ -4354,7 +4354,7 @@ GC fault gates pass; no physical power-loss or hardware-ceiling claim.
 Measured serial KV/marker tail remains; safe bounded checkpoint overlap is
 designed but unimplemented. About four foreground metadata commands per tiny
 file confirm W94's guarded CREATE/lease adoption as an outstanding reduction.
-[Detailed scope, recovery contract and evidence](../status/w93-persistence-efficiency-20261009.md).
+[Detailed scope, recovery contract and evidence](../status/2026-10/w93-persistence-efficiency-20261009.md).
 
 **Oct 9 .efs-disabled control:** rate still declines 118.4 → 81.7 → 42.4
 files/s. n3 drops 112,982 inbox frames; all measured tail mismatches are
@@ -4363,7 +4363,7 @@ requests. n3/n4 sync latency rises across windows; receiver pressure and
 persistence remain linked, without proving a device ceiling. Investigate
 group-specific in-flight/retry handling and sync-blocking feedback before
 policy changes. The cluster is left with .efs and diagnostics disabled.
-[Control evidence](../status/batch-no-efs-profile-20261009.md).
+[Control evidence](../status/2026-10/batch-no-efs-profile-20261009.md).
 
 **Oct 9 internal measurement:** opt-in counters on NUC capture actual durable
 cohorts, hold/waiter/proposer depths and host/follower boundaries. n3 inbox
@@ -4376,7 +4376,7 @@ boundary-specific reject and behind/ahead classification, before larger caps.
 No yield-cap, byte-budget or admission failures are observed. Preserve ACK/read
 ordering and cold/fault gates for any policy A/B; this measurement is not a fix
 or a hardware-ceiling proof. Instrumentation is disabled after the run.
-[Evidence and follow-up scope](../status/batch-internals-profile-20261009.md).
+[Evidence and follow-up scope](../status/2026-10/batch-internals-profile-20261009.md).
 
 **Oct 9 tracepoint rerun:** newly enabled kernel access allows tracing the running
 NUC daemons without restart. Continuous five-minute capture (1.7 million events,
@@ -4387,7 +4387,7 @@ about 14.5% of n2/n3 WAL traffic. This confirms persistence cost without proving
 a hardware ceiling; internal hold/queue/eligibility instrumentation and controlled
 policy A/B remain the next gate. The earlier generator stop claim is corrected:
 inherited ignored SIGINT prevented stopping; the same bounded loader was reused.
-[Tracepoint evidence and limitations](../status/durability-tracepoints-profile-20261009.md).
+[Tracepoint evidence and limitations](../status/2026-10/durability-tracepoints-profile-20261009.md).
 
 **Oct 9 production measurement:** unchanged NUC build `800122c5e86d` was traced
 in three windows per daemon during a five-minute eight-worker tiny-file run.
@@ -4398,10 +4398,10 @@ cohorts, hold/waiter depth and follower flush reasons before a controlled policy
 A/B with idle/mixed p99 and durability fault gates. This is observational,
 syscall-boundary evidence with ptrace overhead, not hardware-ceiling proof or
 new end-to-end batching acceptance. See
-[measurement and limitations](../status/durability-batching-profile-20261009.md).
+[measurement and limitations](../status/2026-10/durability-batching-profile-20261009.md).
 
 **Implementation update (Oct 8):** Bounded follower durability batching, durable ACK ordering, storage-failure fencing and committed-prefix protection are implemented. Fault/full Linux/live AMD direct/TCP gates pass. Six balanced 4,096-file same-code mixed-load fixtures pass cold verification and physical reclamation, with overlapping close tails; separate pump/barrier diagnostics are retained.
-[Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
+[Current evidence and remaining gates](../status/2026-10/w93-w96-implementation-20261008.md).
 
 **Class/status:** Performance; **closed Oct 10** for bounded follower batching and the recorded AMD/NUC acceptance. Durable ACK ordering, persistence fencing, committed-prefix protection and atomic apply recovery pass fault/cold/POSIX/peer gates. Repeated NUC gains and the larger matched idle-read matrix complete the remaining acceptance. Optional experiments remain off by default; rejected group scheduling/early retirement are not adopted.
 
@@ -4412,7 +4412,7 @@ sync around `drain_inbox` alone is unsafe because each receive can apply state
 and emit messages before returning; gate visibility/replies and hard-state
 persistence as well as data ACKs. Devel still uses `fsync` and has no Raft
 preallocation; round-7 `fdatasync`/allocation numbers describe an unmerged
-candidate. [Reviewed baseline and order](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
+candidate. [Reviewed baseline and order](../status/2026-10/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
 
 **Evidence:** NUC round 7, `c22754236b38-tiny-r7`, buffered/TCP. In an eight-second
@@ -4447,7 +4447,7 @@ existing preallocation experiment closes this item.
 ## W94 · Atomic CREATE and open-lease acquisition
 
 **Historical implementation update (Oct 8):** Atomic server CREATE/lease and rejected-reply cleanup pass full Linux/live gates. Staged one-key pending ownership, atomic pending CREATE, replay-pressure/retirement refusal and cold ownership edges are tested; production adoption and guarded HOLD/runtime-session integration remain open.
-[Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
+[Current evidence and remaining gates](../status/2026-10/w93-w96-implementation-20261008.md).
 
 **Class/status:** Client/server metadata performance; **closed Oct 11 for atomic
 CREATE/adoption**, by the user's explicit scope decision. Broader production
@@ -4465,7 +4465,7 @@ loss/negative cleanup, CREATE retry/name reuse, certificate-persistence refusal,
 APPEND/sync recovery and physical GC. Actual-helper ENOMEM and deterministic
 CREATE-adoption/competing-OPEN barriers prove no token handoff on allocation
 failure, one lease for two descriptors, and exact last-close release.
-[Closure and preserved limits](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision).
+[Closure and preserved limits](../status/2026-10/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision).
 
 **Oct 10/11 AMD candidate:** the first retained FUSE CREATE adopts its pending
 ownership with one existing guarded OPEN|CLEAR_PENDING edge. Existing normal
@@ -4480,8 +4480,8 @@ crash gates pass. The legacy guarded-lease PREPARE fixture was repaired; final
 captured `90a47313` full normal/fault native and both TCP matrices pass, including
 cold first-mutation namespace and APPEND/sync recovery. Sustained-service and
 full integration remain open, so this is not full W94 closure.
-[Integration follow-up](../status/amd-integration-20261011.md).
-[Evidence and limits](../status/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
+[Integration follow-up](../status/2026-10/amd-integration-20261011.md).
+[Evidence and limits](../status/2026-10/amd-non-rdma-20261010.md#w94--combined-first-descriptor-adoption-candidate).
 
 **Historical pre-merge devel review (`cde67dca`, Oct 8):** the flags-0/separate-HOLD observation
 still applies. CREATE reply reuse is also absent from devel. The existing
@@ -4490,7 +4490,7 @@ cross-group HASHED/SPLITTING lanes use a namespace transaction followed by a
 separate lease proposal, while early opid replay bypasses that second step.
 Add interruption/replay at that boundary, both directory paths, and post-create
 GETATTR/FUSE-reply cleanup to the gates. Existing per-inode edge locks do not
-alone prove safe CREATE lease adoption. [Review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
+alone prove safe CREATE lease adoption. [Review](../status/2026-10/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
 
 **Original evidence (before the Oct 9 client integration):** `efs_fuse_create_at` passes flags 0 to CREATE, then
@@ -4501,13 +4501,13 @@ attribute all latency to HOLD. The client profile contains
 `efs_client_rpc_hold`. Historical Aug 24 piggybacking is not evidence that the
 current open-description lifecycle safely supports it.
 
-**Oct 9 update:** Retained FUSE CREATE/adoption, sequenced OPEN/CLOSE, reply rejection cleanup and authoritative terminal revocation recovery are implemented; AMD direct/TCP cold replay, exact lease edges and POSIX/GC gates pass. [Current checkpoint](../status/dependency-package-20261009.md).
+**Oct 9 update:** Retained FUSE CREATE/adoption, sequenced OPEN/CLOSE, reply rejection cleanup and authoritative terminal revocation recovery are implemented; AMD direct/TCP cold replay, exact lease edges and POSIX/GC gates pass. [Current checkpoint](../status/2026-10/dependency-package-20261009.md).
 
 **Earlier Oct 11 AMD continuation (superseded by closure above):** An actual FUSE bookkeeping ENOMEM regression
 confirms no OPEN/adoption edge or pending-token handoff on failed owner
 allocation. Current feedback-enabled two-mode lifecycle and real combined
 reply-loss/negative/certificate-fsync gates are in progress; this is not full
-W94 closure. [Current ledger](../status/amd-feedback-integration-20261011.md).
+W94 closure. [Current ledger](../status/2026-10/amd-feedback-integration-20261011.md).
 
 **Remaining related work:** W72 owns complete production session integration,
 W86 the default durable PUT-ticket lifecycle and W88 typed publication/replay
@@ -4544,10 +4544,10 @@ cold WAL-tail repair. Actual follower KV fsync failure refuses periodic/shutdown
 checkpoint publication and cold replays the durable Raft tail with exact bytes.
 WAL ASan/UBSan and normal-binary Valgrind pass. Hardware power loss and W97's
 sustained drive slowdown remain separate.
-[Acceptance and limits](../status/devel-nuc-closure-20261010.md).
+[Acceptance and limits](../status/2026-10/devel-nuc-closure-20261010.md).
 
 **Historical implementation update (Oct 8):** EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded reservation are tested. The final guard passes full Linux/live cold/POSIX/peer/GC gates. Quiet NUC two-device performance acceptance remains open while an unrelated million-file generator runs.
-[Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
+[Current evidence and remaining gates](../status/2026-10/w93-w96-implementation-20261008.md).
 
 **Pre-merge devel review (`cde67dca`, Oct 8): recovery correctness comes first.** Neither
 Raft nor KV preallocation from the experimental build is in devel. WAL replay
@@ -4558,7 +4558,7 @@ Fix or reject the tail before new appends and add repeated-restart gates before
 preallocation. This is proven at the WAL layer; cluster-level recovery/data-loss
 consequences still need testing. Existing WAL group commit/holds must be
 preserved. [Reproducer](../../results/measure/20261008-w93-w96-review/README.md)
-and [review](../status/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
+and [review](../status/2026-10/tiny-file-performance-plan-20261008.md#review-against-devel-oct-8).
 
 **Class/status:** Metadata storage performance; closed Oct11 after isolated two-device and full software recovery acceptance. Historical implementation and acceptance notes below describe the earlier outstanding gates.
 
@@ -4608,7 +4608,7 @@ across critical, both group probes and data, preserving lane FIFO and consensus
 ACK authority. Local scheduler and Linux normal/fault async gates pass; live
 two-mode/fault/pressure comparisons are in progress. No default feedback
 promotion or W97 closure is claimed.
-[Acceptance ledger](../status/amd-feedback-integration-20261011.md).
+[Acceptance ledger](../status/2026-10/amd-feedback-integration-20261011.md).
 
 **Oct 11 AMD mixed-load follow-up:** eight rotating tiny workers plus four
 unpaced 16-MiB overwrite-ring writers reach the explicit 4-GiB-per-node quota
@@ -4618,7 +4618,7 @@ the failed load has not passed a cold-byte oracle. This is a retained GC/admissi
 pressure finding, not proof of the historical NUC incident's cause. A separately
 paced 2-MiB/s-per-writer gate cannot close the unpaced failure. Require bounded
 reclamation/admission, fairness and exact cold-byte recovery before claiming a
-fix. [AMD evidence](../status/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
+fix. [AMD evidence](../status/2026-10/amd-sustained-20261011.md#unpaced-mixed-load-failure--retained-not-closed).
 
 **Oct 11 controlled data placement:** with the same accepted engine and SATA
 metadata, the first SATA-data cell passes 212,648 files and 64 cold samples;
@@ -4634,7 +4634,7 @@ ancestry seal, retaining file, descendant-directory and root syncs and full
 fallback for uninitialized roots. The actual production Linux regression
 passes and the old scope fails its new assertion. Full native/live acceptance
 and measured benefit remain pending; it is not part of the frozen append-timer candidate.
-[Current placement and source ledger](../status/nuc-w52-w97-resume-20261011.md).
+[Current placement and source ledger](../status/2026-10/nuc-w52-w97-resume-20261011.md).
 
 **Oct 11 deployed continuation:** the validated merged engine is installed on
 preserved NUC stores. A five-minute measured create/write/close run again
@@ -4645,7 +4645,7 @@ cells: NVMe 9,763 files, SATA 74,183 files, repeated NVMe 9,971 files in ten min
 SATA metadata keeps Raft sync near 0.1 ms, but throughput still declines as NVMe
 data-write latency rises. Regular-service restoration and previous-payload checks passed.
 No production placement change or hardware ceiling is claimed.
-[Continuation ledger](../status/nuc-w52-w97-resume-20261011.md).
+[Continuation ledger](../status/2026-10/nuc-w52-w97-resume-20261011.md).
 
 **Oct 11 repeated physical-trace follow-up:** all four 240-second written-ring
 controls pass 49,152 exact reopened blocks. NVMe repeats decline about
@@ -4656,7 +4656,7 @@ issued-FF means also rise. All eight windows report no observed error/lost
 records, but only about half of NVMe issues have unambiguous paired completions.
 This confirms a device-path contribution outside EFS, not a NAND/cache diagnosis
 or hardware ceiling. Software append fanout and the separate EFS SATA decline
-remain open. [Current raw-evidence ledger](../status/devel-nuc-integration-20261011.md).
+remain open. [Current raw-evidence ledger](../status/2026-10/devel-nuc-integration-20261011.md).
 
 **Oct 11 AMD continuation:** fragment-budget scheduling passes buffered short
 sustained acceptance but direct drain still fails. All-member inode-fence fanout
@@ -4666,7 +4666,7 @@ A 20-ms follow-up passes native/direct functional and both ten-minute cold/physi
 Default idle stays 1 second; these are explicit private experiments.
 Independent cells do not prove a general throughput improvement, and this
 does not resolve the unpaced quota/admission finding or historical NUC cause.
-[Verdicts and raw summary](../status/amd-sustained-20261011.md#fanout-build-e9ea8ca1--short-gates-accepted).
+[Verdicts and raw summary](../status/2026-10/amd-sustained-20261011.md#fanout-build-e9ea8ca1--short-gates-accepted).
 
 **Oct 11 AMD unpaced admission:** current 20-ms unpaced baseline still hits
 ENOSPC. An opt-in data-quota/actual-GC-progress BUSY candidate passes full
@@ -4681,7 +4681,7 @@ explicit, with commands disabled and all normal stores retained. W94
 CREATE/adoption is closed; broader W72/W86/W88 integration, W97
 receiver-feedback and W99 capacity-domain policy remain open independently;
 NUC persistence attribution is [W111](#w111).
-[Indexed follow-up](../status/amd-overload-admission-20261011.md).
+[Indexed follow-up](../status/2026-10/amd-overload-admission-20261011.md).
 
 **Oct 11 Intel resume follow-up:** A large-directory inventory could cycle indefinitely because READDIR discarded a source-only continuation when its name was empty. The actual callback now preserves that source; old-source regressions fail and both native Intel regressions pass. The deployed wire probe reaches EOF with 92,557 entries in 1.580 seconds, and full FUSE enumeration returns the same count in 1.183 seconds. This repairs enumeration termination, not sustained write latency; W97 remains open. [Cursor repair and limits](../archive/status-20261011/intel-readdir-source-cursor-20261011.md).
 
@@ -4695,7 +4695,7 @@ recovery, passing corrected full and twenty repeated peer gates. All 384 sampled
 sync/append/shutdown/WAL-tail/GC fault gates pass. Retained-store n3 startup takes 33.5 seconds against the
 devops 30-second readiness window; bounded idempotent measurement retries retain
 processes/data. A configurable readiness budget remains a devops follow-up.
-[Evidence and limits](../status/w93-read-pressure-20261009.md).
+[Evidence and limits](../status/2026-10/w93-read-pressure-20261009.md).
 
 **Implemented experimental candidate (Oct 9):** Commits 9728d07b,
 eb110217 and ec5b53b3 on `devel-persistence-pressure` implement opt-in
@@ -4716,7 +4716,7 @@ recovery. Keep durable consensus ACKs authoritative. Preserve legacy empty
 reply handling and test TCP/RDMA channel ordering. First trial: 5–50 ms retry
 backoff, with queue/byte bounds and watermarks explicitly tested. No durability
 or partial-reply tracking change belongs in this candidate.
-[Detailed proposal, compatibility, limits and acceptance gates](../status/w97-solution-investigation-20261009.md#proposed-fix-bounded-receiver-pressure-feedback).
+[Detailed proposal, compatibility, limits and acceptance gates](../status/2026-10/w97-solution-investigation-20261009.md#proposed-fix-bounded-receiver-pressure-feedback).
 Fewer drops alone does not close W97: require repeated sustained throughput
 and tail improvement, bounded catch-up, async host regressions, full POSIX/peer
 and applicable W64/W73 gates. If persistence remains dominant, investigate W93
@@ -4739,7 +4739,7 @@ tracking candidate was rejected and reverted after an append timeout and
 worse late throughput. Group isolation measures 139.6 → 43.7 → 70.1 files/s,
 versus baseline 112.2 → 60.5 → 48.4; n3 drops increase to 129,365. The defect
 is fixed, but pressure and inconsistent sustained performance remain open.
-[Trials, exact evidence and remaining solution gates](../status/w97-solution-investigation-20261009.md).
+[Trials, exact evidence and remaining solution gates](../status/2026-10/w97-solution-investigation-20261009.md).
 
 **Class/status:** Replication/admission performance investigation; open for
 receiver feedback and bounded queue/catch-up acceptance. AMD data-GC admission
@@ -4759,7 +4759,7 @@ which starts the feedback, why SSD latency rises, or a hardware ceiling.
 TCP/direct I/O; five-minute run 13:04:59–13:09:59 UTC, preserved existing data,
 fresh output tree and cooperative stop. Exact boundary reasons, cumulative
 histograms, device counters and final cluster settings are retained in the
-[measurement report](../status/batch-no-efs-profile-20261009.md) and
+[measurement report](../status/2026-10/batch-no-efs-profile-20261009.md) and
 [raw evidence](../../results/measure/20261009-batch-no-efs/README.md).
 Behind-tail counts include eligibility rechecks, not unique operations.
 Device counters include all users and queue time; enabled observer overhead
@@ -4885,7 +4885,7 @@ owns distributed query design and its integration with that foundation. W92 owns
 the local disk-backed query cache and should continue independently. Implementation
 requires the design/compatibility review above; this note does not change voters.
 
-**Discussion handoff:** [status note](../status/all-node-metadata-queries-20261009.md).
+**Discussion handoff:** [status note](../status/2026-10/all-node-metadata-queries-20261009.md).
 
 <a id="w99"></a>
 
@@ -4909,12 +4909,12 @@ remains separate implementation work.
 
 **Gate:** constrained-capacity tests for every topology, shared writers, byte/
 inode/quota pressure, cold restart, acknowledged-data integrity and recovery.
-See [policy and pending details](../status/storage-pressure-read-only-20261009.md).
+See [policy and pending details](../status/2026-10/storage-pressure-read-only-20261009.md).
 
 
 ## Intel follow-ups indexed Oct 11, 2026
 
-These IDs track the previously unnumbered Intel follow-ups. They do not duplicate W97, W74/W66, W71/W73 or W99, and do not approve new feature scope or settle pending policy choices. Evidence baseline: [Intel deployment acceptance](../status/intel-deployment-acceptance-20261011.md).
+These IDs track the previously unnumbered Intel follow-ups. They do not duplicate W97, W74/W66, W71/W73 or W99, and do not approve new feature scope or settle pending policy choices. Evidence baseline: [Intel deployment acceptance](../status/2026-10/intel-deployment-acceptance-20261011.md).
 
 <a id="w100"></a>
 
@@ -4930,7 +4930,7 @@ and resolved by these Intel fixes, or that untested profiles passed. Historical
 failures and qualification limits below remain evidence; earlier open states,
 remaining actions and gates are superseded for W100 by this decision.
 
-**Oct14 newer-snapshot ownership correction:** [Private Intel follow-up](../status/intel-report-newer-snapshot-20261014.md).
+**Oct14 newer-snapshot ownership correction:** [Private Intel follow-up](../status/2026-10/intel-report-newer-snapshot-20261014.md).
 Fresh qualification reproduces ftruncate EIO on both hosts. An older REPORT can
 free a newer snapshot while its PUT is in flight; the guard retains bytes,
 ranges and eviction pin until the matching newer ACK. Full native, sanitizer
@@ -4943,7 +4943,7 @@ Qualification limit: original ORCD REPORT BUSY/EIO and broader sustained/profile
 acceptance were not resolved by this Intel matrix. They do not block the human
 closure decision above; a future observed stall receives a new issue.
 
-**Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/intel-opid-report-correctness-20261014.md).
+**Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/2026-10/intel-opid-report-correctness-20261014.md).
 Production-code regressions reproduce lease admission's lock dependency and a
 retained partial PUT borrowing a newer dirty UNCOND base. Both corrections pass
 full native and targeted ASan/UBSan/leaks on both Intel hosts; old-source controls
@@ -4955,7 +4955,7 @@ but exposes ftruncate EIO; the newer-snapshot follow-up above records its fix
 and final passing Intel matrix. The earlier open W100 verdict is superseded
 by the closure decision above; no original ORCD root-cause repair is claimed.
 
-**Oct14 default queue guard:** [Intel queue qualification](../status/intel-queue-guard-20261014.md).
+**Oct14 default queue guard:** [Intel queue qualification](../status/2026-10/intel-queue-guard-20261014.md).
 Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass
 both hosts. Seven-client rounds1506/1512 and1507/1512 retain only depth60timeouts;
 read-only sample confirms at most one pending ordered frame/group/peer with
@@ -4963,7 +4963,7 @@ experimental flow off. Paused-daemon writes and exact peer/cold bytes pass; full
 passes; final cross-host peer66/67 hits shared-pwrite15s timeout. Three focused
 unchanged repeats pass; original failure is retained. Queue bounding alone is not a demonstrated directory-latency correction.
 
-**Earlier Oct14 qualification:** [Merged devel private Intel](../status/intel-devel-merged-qualification-20261013.md).
+**Earlier Oct14 qualification:** [Merged devel private Intel](../status/2026-10/intel-devel-merged-qualification-20261013.md).
 Server EOF refusal/client retry repairs are qualified separately. Completed-batch
 host-mutex handoff382d537d6 passes a clean seven-client1512/1512 round, cold
 persistence and peer checks; both the heavier EOF1000/fsync4096 round and
@@ -5002,7 +5002,7 @@ separate OPEN gate.
 
 ## W102 · Complete Intel2 private peer and GC acceptance
 
-**October 15 review:** W100 is closed by human acceptance. Its October 14 final Intel report includes both-host recovery/GC and cross-host peer PASS. Reconcile those exact fixtures and modes with this item before closing; do not keep “after W100 is repaired” as a current dependency. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+**October 15 review:** W100 is closed by human acceptance. Its October 14 final Intel report includes both-host recovery/GC and cross-host peer PASS. Reconcile those exact fixtures and modes with this item before closing; do not keep “after W100 is repaired” as a current dependency. See [reconciliation](../status/2026-10/open-item-reconciliation-20261015.md).
 
 **Class/state:** Validation follow-up; in progress, aggregate acceptance remains open.
 
@@ -5068,14 +5068,14 @@ four32MiB paused reads/digests, three quiet cores4536/4536, peer/cold/EOF and
 three targeted sanitizers PASS. Quiet/loaded O_EXCL1000 each plus additional
 loaded core1512/1512 PASS; stock deadlines, optional features OFF. Source-specific
 Intel failures and broader/hardware gates remain open. See
-[merged-source evidence/reproduction](../status/devel-rdma-merge-qualification-20261014.md).
+[merged-source evidence/reproduction](../status/2026-10/devel-rdma-merge-qualification-20261014.md).
 
 **Later Oct 14 AMD read update:** `ade336daf` bounded advisory peer ordering
 passes four full32MiB paused-follower reads/digests at the unchanged180s outer
 and30s read/5s pair budgets. Fresh quiet core4536/4536, peer/cold/EOF, clean full
 native and targeted ASan/UBSan PASS. .efs/expiry disabled;
 no TCP comparison. Earlier degraded failures retained. W106 broader/hardware
-scope remains OPEN; see [current source/config/reproduction ledger](../status/rdma-paused-follower-read-20261014.md).
+scope remains OPEN; see [current source/config/reproduction ledger](../status/2026-10/rdma-paused-follower-read-20261014.md).
 
 **Oct 14 AMD update:** `a7e2b6b7d` early namespace leader routing qualified
 on files/direct/strict Soft-RoCE with .efs/expiry disabled:
@@ -5083,7 +5083,7 @@ full native and three unchanged seven-client/jobs16 cores4536/4536 PASS,
 no unlink/link EBUSY or admission refusals. Peer/cold/EOF PASS. Paused-follower
 32MiB read gate FAIL (first8MiB verified, next read-length assertion).
 W106 remains open; hardware acceptance and broader gates are not borrowed.
-See [source/config/reproduction ledger](../status/rdma-namespace-admission-20261014.md).
+See [source/config/reproduction ledger](../status/2026-10/rdma-namespace-admission-20261014.md).
 
 **Remaining action:** Run relevant current-code software RDMA gates on AMD and hardware IB/RDMA gates on `orcd-test`, retaining actual transport/device, code/build, topology and per-suite verdict evidence. Intel RDMA enablement or NIC/package changes are not part of this task.
 
@@ -5098,17 +5098,17 @@ No-fork native controls pass 80,000 files; adding forks fails after seven.
 The W92 oracle's mount validation now uses exact in-process mount IDs so it
 can qualify all bytes without causing that separate platform race. This is
 not a general fork-safety fix or W106 closure. See the
-[400 GiB source/control ledger](../status/orcd-efs-400g-20261012.md).
+[400 GiB source/control ledger](../status/2026-10/orcd-efs-400g-20261012.md).
 
 ## W108 · Resolve owner names in directory-local long listings
 
-**October 15 review:** Recorded scoped acceptance supersedes the numeric-only implementation description below; that description is retained as the historical trigger. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+**October 15 review:** Recorded scoped acceptance supersedes the numeric-only implementation description below; that description is retained as the historical trigger. See [reconciliation](../status/2026-10/open-item-reconciliation-20261015.md).
 
 **Class/state:** Command usability; closed (rebuilt ORCD rollout PASS Oct 12).
 
 **Oct 12 acceptance:** `devel-efs` source `0dd2a7c7` passes all seven rebuilt
 ORCD clients, warm/cold shared ls/find names, numeric mode and JSON, plus29
-native regressions. RDMA/direct/files, commands enabled. [Exact-source qualification](../status/devel-efs-query-20261012.md).
+native regressions. RDMA/direct/files, commands enabled. [Exact-source qualification](../status/2026-10/devel-efs-query-20261012.md).
 
 **Historical Oct 11 checkpoint:** names/fallback, bounded NSS cache, numeric `-n` mode and
 safe output are implemented; 29 local regressions and the live candidate using
@@ -5120,7 +5120,7 @@ formatting, so ORCD UID 246111 appears as a number rather than `erbmi1`.
 Resolve human-readable names on the executing client, retain numeric fallback
 and explicit numeric mode, and keep stored/JSON IDs unchanged. Gate known and
 unknown mappings, safe output, repeated NSS lookup caching, and the rebuilt
-ORCD virtual command. Now owned by `devel-orcd` under the user's ORCD assignment. See the [cause and plan](../status/w108-owner-name-display-20261011.md).
+ORCD virtual command. Now owned by `devel-orcd` under the user's ORCD assignment. See the [cause and plan](../status/2026-10/w108-owner-name-display-20261011.md).
 
 <a id="w109"></a>
 
@@ -5135,7 +5135,7 @@ Three quiet seven-client ordinary-file rounds pass4,536 core/63 query cases,
 peer67 and enabled cold exact-payload/path checks. The a54 baseline retains14
 query failures. Broader original namespace/pressure/scale investigations stay
 open; expiry and unplanned recovery are outside this profile.
-[Fix and reproduction](../status/devel-efs-query-20261012.md).
+[Fix and reproduction](../status/2026-10/devel-efs-query-20261012.md).
 
 C profiles show substantial query rebuild work (42.96% inclusive on fcstor005);
 fcstor004 logs 15 apply waits of 21.668–50.117 ms. Earlier full-load gates retain
@@ -5146,13 +5146,13 @@ queues, storage durability and query refresh before selecting a repair.
 **Gate:** repeat unchanged-limit full native and peer gates under representative
 load with no FAIL/NOTRUN, complete/correct query results and cold preserved
 bytes. Related W66/W92/W23/D30 remain independently open. See
-[evidence and closure plan](../status/orcd-communication-20261011.md).
+[evidence and closure plan](../status/2026-10/orcd-communication-20261011.md).
 
 **Investigation update (Oct 11):** sustained deltas exceed the 1,024-change
 incremental budget while each publication refolds over a million rows. Full
 fallback is the strongest repair hypothesis; compaction overlap and GC BUSY
 semantics need separate attribution. See the
-[findings, hypotheses and discriminating tests](../status/orcd-communication-hypotheses-20261011.md).
+[findings, hypotheses and discriminating tests](../status/2026-10/orcd-communication-hypotheses-20261011.md).
 
 **Mac confirmation (Oct 11, devel-mac):** production-builder oracle tests
 reproduce the 1,024 changed-inode cliff. Commits `7c3b48d2`, `dadbb2ef`, `ff5f1c87`, `408043b6` and `c09ef7f8`
@@ -5162,14 +5162,14 @@ and deployment are recorded separately from other clusters.
 Dirty-directory fallback, representative performance and original liveness
 gates remain open. The retained Mac namespace also rejects an old unlinked
 directory during initial query build. See
-[Mac evidence and gate checkpoint](../status/mac-query-delta-20261011.md).
+[Mac evidence and gate checkpoint](../status/2026-10/mac-query-delta-20261011.md).
 
 
 <a id="w110"></a>
 
 ## W110 · ORCD communication-loss diagnosis across EFS, IB and TCP
 
-**October 15 review:** The oversized-frame TCP fallback statement below describes the old deployed source. Current devel uses segmented RDMA for application traffic on upgraded connections regardless of frame size (39d93093a). TCP setup and hardware loss/stall attribution remain separate; this is not W106 hardware closure. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+**October 15 review:** The oversized-frame TCP fallback statement below describes the old deployed source. Current devel uses segmented RDMA for application traffic on upgraded connections regardless of frame size (39d93093a). TCP setup and hardware loss/stall attribution remain separate; this is not W106 hardware closure. See [reconciliation](../status/2026-10/open-item-reconciliation-20261015.md).
 
 **Class/state:** transport observability/validation investigation; open.
 **Assigned cluster:** `orcd-test` — native hardware IB/RDMA and TCP side-channel.
@@ -5185,13 +5185,13 @@ with endpoint/QP, TCP and IB evidence during a reproduced stall; validate
 ambiguous-request recovery and acknowledged cold bytes with existing fault/
 persistence gates. Use a private TCP comparison if needed; retain W106 broader
 acceptance. Do not confuse EAGAIN, empty polls or retransmission with permanent
-message loss. See [capture and plan](../status/orcd-communication-20261011.md).
+message loss. See [capture and plan](../status/2026-10/orcd-communication-20261011.md).
 
 **Investigation update (Oct 11):** loss-probe/DSACK counter deltas support a
 duplicate-probe hypothesis rather than demonstrated permanent RPC loss. The
 five-second software send guard qualifies the hardware RNR retry concern.
 Per-flow causality and deadline/recovery gates remain open; see the
-[evidence and test hypotheses](../status/orcd-communication-hypotheses-20261011.md).
+[evidence and test hypotheses](../status/2026-10/orcd-communication-hypotheses-20261011.md).
 
 
 <a id="w111"></a>
@@ -5223,7 +5223,7 @@ also decline1373/1356→450/439ops/s, while block write/flush elapsed averages
 increase~3×; written SATA stays near7100ops/s. This excludes allocation as the
 whole cause but does not isolate drive firmware from the block queue.
 W111 remains open; no drive settings or production defaults change.
-[Evidence and limitations](../status/devel-nuc-closure-20261010.md).
+[Evidence and limitations](../status/2026-10/devel-nuc-closure-20261010.md).
 
 **XFS mechanism observed:** separate writer-TID counts show roughly two log-force
 calls per fdatasync on growing files on both devices; warmed rings show zero.
@@ -5245,7 +5245,7 @@ checks per drive. Normal four-node service/both mounts restore and verify.
 **W111 remains open:** isolate growing-file/XFS versus drive service latency;
 NAND cache cause and hardware ceiling remain unproved. This compares these two
 models/storage paths, one run each, not protocols in general.
-[Report](../status/w97-three-drive-20261010.md).
+[Report](../status/2026-10/w97-three-drive-20261010.md).
 
 **Oct 10 latest merged-code observation:** all 16 newly captured branch tips
 integrate at `6b8f05acb484` and deploy to preserved NUC stores. A continuous
@@ -5261,7 +5261,7 @@ pass (POSIX 212/212, peer 64/64), but retain the earlier concurrent-append
 cold payload checks and live executable hashes pass. **Keep W111 open.**
 Next isolate sustained durable-write latency with root NVMe health and matched
 EFS-stopped/loaded growing-WAL versus preallocated-overwrite probes.
-[Report](../status/w97-latest-nvme-20261010.md).
+[Report](../status/2026-10/w97-latest-nvme-20261010.md).
 
 **Oct 10 NUC:** return control reproduces fast-then-slow rates at 10 ms.
 NVMe host flush mean rises 2.38 to 3.70 ms while rates fall; an independent
@@ -5289,12 +5289,12 @@ limit, document the measured boundary and mitigation without calling the
 software repaired. No drive setting change is authorized by this split.
 
 **Related:** W97 replication feedback, W93 group commit, W96 KV WAL allocation, W53 mixed-write tails and W99 capacity policy.
-See the [current status and evidence index](../status/w111-nuc-persistence-investigation-20261011.md).
+See the [current status and evidence index](../status/2026-10/w111-nuc-persistence-investigation-20261011.md).
 
 
 ### W112 — ordinary full overwrite loses acknowledged bytes on STALE replay
 
-**October 15 review:** The closure at 02b9918b is the recorded scoped verdict. The older “close only after” sentence below preserves its original gate, not a reopened implementation task. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+**October 15 review:** The closure at 02b9918b is the recorded scoped verdict. The older “close only after” sentence below preserves its original gate, not a reopened implementation task. See [reconciliation](../status/2026-10/open-item-reconciliation-20261015.md).
 
 **Status:** closed at `02b9918b` for the reproduced canonical full-overwrite replay defect. **Cluster:** AMD/TCP, direct and buffered.
 **Owner:** release integration; coordinate with NUC/writeback owner.
@@ -5306,7 +5306,7 @@ passes complete normal/fault native, eleven sanitizer gates and both-mode exact
 primary/peer/cold bytes plus physical cleanup; input and binary identities are retained. Keep partial-write ownership and fresh
 publication/fence observations. Close only after full merged normal/fault,
 sanitisers and both-mode exact immediate/cold/live gates pass.
-[Evidence and closure scope](../status/w112-full-overwrite-replay-20261012.md).
+[Evidence and closure scope](../status/2026-10/w112-full-overwrite-replay-20261012.md).
 
 
 <a id="w113"></a>
@@ -5485,7 +5485,7 @@ missing, qualify an appropriate vendor kernel fix/equivalent upstream
 `738adade96b2` backport. Do not change cache-coherence behavior or label Intel's
 non-reproduction as a universal fix. ORCD was not changed or requalified here.
 
-**Qualification/reproduction:** [Private Intel fork/read ledger](../status/intel-direct-read-fork-20261014.md).
+**Qualification/reproduction:** [Private Intel fork/read ledger](../status/2026-10/intel-direct-read-fork-20261014.md).
 The ledger separates source-specific controls, final qualification, historical
 failures and interrupted runs. W100 stays closed by human acceptance.
 
@@ -5503,7 +5503,7 @@ writes/leases on008. Fresh private TCP core216/216, peer67/67, physical GC/cold
 cleanup,23 standalone fault checks and selected Valgrind gates PASS. Thus the
 retained multi-host failures are not confined to RDMA or enabled queries; the
 fresh/private and retained/multi-host differences still need isolation. No new
-product fix is implied. [Full TCP configuration, commands, limits and verdicts](../status/orcd-tcp-direct-disabled-20261015.md).
+product fix is implied. [Full TCP configuration, commands, limits and verdicts](../status/2026-10/orcd-tcp-direct-disabled-20261015.md).
 
 **Class/state:** correctness/liveness investigation; OPEN, October15,2026.
 Source `b3e93177c138` on physical orcd-test, files/direct/native RDMA,
@@ -5520,7 +5520,7 @@ full concurrent/peer/query gates and orderly drain/restart/payload verification;
 prove owned physical cleanup independently of a zero queue estimate. Keep
 W106 hardware, W109/W92 query and W118 platform scopes distinct. This new
 observed failure does not reopen human-closed W100 or attribute its root cause.
-[Configuration, commands and evidence](../status/orcd-devel-qualification-20261015.md).
+[Configuration, commands and evidence](../status/2026-10/orcd-devel-qualification-20261015.md).
 
 <a id="w120"></a>
 
@@ -5540,13 +5540,13 @@ safe ownership validation for the uniquely named options fixture. Require the
 existing semantic positives/negative controls, complete command cleanup,
 `make test` and docs-check to pass on the repaired integrated source. Do not
 replace asserted behavior with a skip or merely suppress the failing command.
-[Original failures and reproduction](../status/orcd-devel-qualification-20261015.md).
+[Original failures and reproduction](../status/2026-10/orcd-devel-qualification-20261015.md).
 
 
 **October 15 AMD follow-up (isolated branch):** `f6235bb73` repairs the LOOKUP
 stub and tests both null and present reader identity. `85a9ad6b5` regenerates
 architecture outputs and passes full native testing on AMD. Subsequent Raft
-changes have separate acceptance in the [AMD RDMA/direct ledger](../status/amd-rdma-posix-20261015.md).
+changes have separate acceptance in the [AMD RDMA/direct ledger](../status/2026-10/amd-rdma-posix-20261015.md).
 Enabled-command cleanup ownership remains NOTRUN in this commands-disabled
 profile; W120 is not closed and the earlier frozen-source FAIL is retained.
 
@@ -5592,9 +5592,9 @@ by the user; W121 remains OPEN. Isolate query subprocesses from reader
 address spaces for performance experiments, without treating that workaround
 as application correctness acceptance. Require a fixed-kernel fork/read
 rerun plus original mixed load, peer and clean-restart checks.
-[Diagnosis and regression](../status/orcd-w121-fork-read-20261016.md).
+[Diagnosis and regression](../status/2026-10/orcd-w121-fork-read-20261016.md).
 Unplanned recovery remains deferred.
-[Reproduction, source identities and results](../status/orcd-queued-read-vote-20261016.md).
+[Reproduction, source identities and results](../status/2026-10/orcd-queued-read-vote-20261016.md).
 
 
 <a id="w122"></a>
@@ -5602,7 +5602,7 @@ Unplanned recovery remains deferred.
 ## W122 · Discoverable effective settings for efsd, efs-fuse and the portal
 
 **Class/state:** product observability feature; the alpha 1.0 part (D46 item 3)
-is DONE Oct 30, 2026: `efs-mgmt settings` ([evidence](../status/s4-effective-settings-20261030.md)).
+is DONE Oct 30, 2026: `efs-mgmt settings` ([evidence](../status/2026-10/s4-effective-settings-20261030.md)).
 The JSON interface and the portal Settings section below remain beta backlog,
 PROPOSED October 16, 2026; the rest of this item records that feature and
 its acceptance is NOTRUN. It does not restore
@@ -5667,9 +5667,9 @@ No live configuration editor or automatic rollout is included in this item.
 <a id="w126"></a>
 ## W126 — KV readers convoy behind exclusive LSM phases on a busy leader
 
-**Performance; opened 2026-10-21. Steps 1 and 3 deployed on orcd-mini (`8fb4247ad`, 2026-10-21 23:14Z). Lock-wait gate PASS; create-rate gate FAIL (no measurable gain; throughput is bounded elsewhere). Step 4 deferred.** [A/B evidence](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md).
+**Performance; opened 2026-10-21. Steps 1 and 3 deployed on orcd-mini (`8fb4247ad`, 2026-10-21 23:14Z). Lock-wait gate PASS; create-rate gate FAIL (no measurable gain; throughput is bounded elsewhere). Step 4 deferred.** [A/B evidence](../status/2026-10/orcd-mini-w126-ab-8fb4247ad-20261022.md).
 Found under the user's 32M-file `tiny_files.py` run on orcd-mini `47ba6b590`
-([profile](../status/orcd-mini-profile-47ba6b590-20261021.md)). From ~1.0 to
+([profile](../status/2026-10/orcd-mini-profile-47ba6b590-20261021.md)). From ~1.0 to
 ~2.6 M files, creates fell from 2,564 to 1,130 files/s. Over the same span,
 leader n1's LSM lock waits rose from 3.3% to 16–18% of its context switches.
 - About 93% of the read waits were LOOKUP → `efs_meta_apply_getattr` gets.
@@ -5683,7 +5683,7 @@ node. The lock is writer-preferring so Raft apply cannot starve. Each
 exclusive acquisition (`lsm_lock`) therefore waits for every in-flight
 reader, including long scans, and new readers queue behind it. Both Raft
 groups share the node's KV, so W66's leader distribution alone does not
-remove this ([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)).
+remove this ([`h->mu` plan](../status/2026-10/raft-host-mu-plan-20261016.md)).
 
 **Step 1 (implemented).** Writer-owned flags and counters change only under
 `mu`, and readers only read them. A new `lsm_peek_lock` takes `mu` without
@@ -5730,7 +5730,7 @@ memtable still clears only after the MANIFEST write succeeds.
     the build.
 
 The remaining leader waits are `h->mu` in `host_pump`, proposals and REPORT
-([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)), plus XFS log
+([`h->mu` plan](../status/2026-10/raft-host-mu-plan-20261016.md)), plus XFS log
 fsync waits.
 
 **Peek ordering (October 24, `680a7d0dd` on
@@ -5743,7 +5743,7 @@ and cond waits release and retake it with the view, so peeks also run
 during flush I/O. A peek inside a read section is now allowed.
 `test_peek_beside_reader` is a liveness test in four modes, and there are
 new peek storms beside flushes and compactions. `make leak-check` no
-longer skips the case. [Evidence](../status/w126-peek-order-20261024.md);
+longer skips the case. [Evidence](../status/2026-10/w126-peek-order-20261024.md);
 the orcd-mini A/B rerun is NOTRUN.
 
 **Remaining.** Step 4 (bound how long `merge_scan` holds the shared view) is
@@ -6321,7 +6321,7 @@ gate changes.
 
 **Performance; opened and closed 2026-10-22 (both gates recorded); deployed in `46496416e`. Verified: `getenv` is gone from both clients' on-CPU profiles under the same load. `make test` 816/816 with one environmental failure (docs check without `results/`).**
 Found by passively profiling orcd-mini on `08cc16af4` under two
-`tiny_files.py` writers ([profile](../status/orcd-mini-profile-08cc16af4-20261022.md)).
+`tiny_files.py` writers ([profile](../status/2026-10/orcd-mini-profile-08cc16af4-20261022.md)).
 On the node9901 client, `getenv` was 2.9% self and 3.7% with children of
 efs-fuse on-CPU time. `__strncmp_evex` and `__strlen_evex`, used by
 `getenv`'s environment scan, added another 1.8% and 1.1%. On node9900 it
@@ -6359,7 +6359,7 @@ The client is not the throughput limit here: both mounts used only
 
 **Performance; opened and closed 2026-10-22 (both gates recorded); deployed in `784bcc6ee`. Verified with split leadership (n3 led group 0, n2 led group 2): `host_namespace_leader_hint` no longer appears in the leaders' lock waits. `make test` 816/816 with one environmental failure.**
 Found in the orcd-mini profile on `46496416e`
-([profile, p2](../status/orcd-mini-profile-08cc16af4-20261022.md)). There,
+([profile, p2](../status/2026-10/orcd-mini-profile-08cc16af4-20261022.md)). There,
 leadership was split: n2 led group 0 and n1 led group 2. On n1,
 `host_namespace_leader_hint` ← `host_read_leader_hint` ←
 `server_raft_host_lookup` was the largest lock-wait site: 22.1% of n1's
@@ -6391,7 +6391,7 @@ assertions are unchanged and PASS. `test_host_cover_route` and
 **Raft safety; opened 2026-10-22. Root cause fixed and deployed (`76614e8e8`); orcd-mini n2 repaired 16:20Z with `efs-mgmt raft-resync`. The four remaining parts are fixed or answered on branch `devel-k01` (no client was acknowledged for 30,929,219@62); orcd-mini deploy gate NOTRUN.** Seen on orcd-mini (`784bcc6ee`, two
 `tiny_files.py` writers, ~16 M files) after a 3 s `perf --call-graph dwarf`
 capture stalled the group-2 leader n2 at 12:54:41–44Z
-([profile, p4](../status/orcd-mini-profile-08cc16af4-20261022.md)).
+([profile, p4](../status/2026-10/orcd-mini-profile-08cc16af4-20261022.md)).
 
 **What happened.** The sequence is reconstructed from the three nodes'
 `raft.log` files: a read-only record scan of each group's ENTRY, TRUNC,
@@ -6493,7 +6493,7 @@ HARD, SNAP and CFG records.
    wait. `stop.sh` then leaves the remaining daemons running.
 
 **K1 follow-up (branch `devel-k01`,
-[status note](../status/k01-w145-remaining-20261022.md)).**
+[status note](../status/2026-10/k01-w145-remaining-20261022.md)).**
 1. Snapshot to a near follower: fixed in `48d14a37d`. The new leader's
    first commit/read probe went out with `prev_index` 0; its success reply
    (match 0) set `next_index` to 1, below the log floor. A success now never
@@ -6586,7 +6586,7 @@ repair, together with W146).
 <a id="w150"></a>
 ## W150 — No test for the abandon scan's work-budget stop and resume
 
-**Test coverage; opened 2026-10-22 from the [packing validate-once review](../status/review-pack-validate-once-20261022.md); FIXED on `devel-k25` (October 22).**
+**Test coverage; opened 2026-10-22 from the [packing validate-once review](../status/2026-10/review-pack-validate-once-20261022.md); FIXED on `devel-k25` (October 22).**
 - `efs_pack_abandon_scan` (`src/meta/pack_mapping.c`) is bounded by
   `efs_kv_lsm_scan_work`, which counts tombstones. A stop by that budget
   resumes after the work cursor, not the callback's last live key.
@@ -6625,7 +6625,7 @@ Ten strict combined serve/apply fault runs pass; both eight-job gates at
 `525cf3816` have 509 commands, 0 FAIL and 14 unchanged NOTRUNs (803/771 s).
 Node9901 TCP/RDMA and multi-host gates remain NOTRUN. Original failures and
 synthetic stores are retained on intel1; private cleanup was blocked by approval review.
-[Implementation, preserved failures and acceptance](../status/w165-serve-path-damaged-row-20261026.md).
+[Implementation, preserved failures and acceptance](../status/2026-10/w165-serve-path-damaged-row-20261026.md).
 
 
 **Correctness; opened 2026-10-25 from the W130 one-replica gate (tests/test_w130_dir_fault.py on `agent/devel-taskb`).**
@@ -6658,7 +6658,7 @@ K22 repetitions report zero client errors; three full gates and a separate
 post-refit gate have zero failures, with14 NOTRUN host/self-test markers each.
 No deadline was relaxed. This does not close the stalled-follower fault-
 window errors or supply production-scale/RDMA evidence; W166 remains OPEN
-for that residual scope. [Task J evidence](../status/gate-budgets-refit-20261026.md).
+for that residual scope. [Task J evidence](../status/2026-10/gate-budgets-refit-20261026.md).
 
 - A stalled follower (SIGSTOP; log present, sockets open) makes client
   closes fail EIO at the 30 s flush deadline during the first ~2.5 min of
@@ -6701,7 +6701,7 @@ are exact through fresh clients after orderly process restarts. Full gate:
 13 NOTRUN; no unconditional suite PASS or K38/K40 closure. Harness setup and
 long-TMPDIR cleanup failures were fixed without weakening their assertions.
 
-[Evidence, exact commands and retention](../status/w166-close-eio-flush-deadline-20261026.md)
+[Evidence, exact commands and retention](../status/2026-10/w166-close-eio-flush-deadline-20261026.md)
 record every original failure, the declared quota change, both full-gate
 failures and checked/pruned private fixtures. Original full-process SIGSTOP /
 production-window acceptance plus live RDMA/multi-host gates remain NOTRUN.
@@ -6724,4 +6724,4 @@ strict completion, fresh FUSE byte/EOF/count regression and timed-worker readine
 are qualified on intel2. Full gate 529/0 FAIL/10 NOTRUN; twelve matched GiB rows
 read exact. Four of six timing pairs agree within 10%; uniform performance
 calibration is not established. Earlier non-quiet timing observations remain
-qualified. [Evidence, failures, method and cleanup](../status/w170-efs-bench-20261028.md).
+qualified. [Evidence, failures, method and cleanup](../status/2026-10/w170-efs-bench-20261028.md).

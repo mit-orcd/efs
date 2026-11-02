@@ -2,7 +2,7 @@
 
 **Status:** PLAN, revised 2026-10-18 for **background packing after close**
 (the user's choice after the
-[early P1 measurement](../status/w125-p1-early-20261018.md)). No code
+[early P1 measurement](../status/2026-10/w125-p1-early-20261018.md)). No code
 written; all phases and gates are **NOTRUN**.
 Design and requirements: [W125](small-file-packing-default.md).
 Prerequisite: [W124](fast-delete-reclaim.md) parts 1–2 (batched reclaim,
@@ -154,8 +154,8 @@ misread.
 ### P0 — Decisions and measurements (no product code)
 
 **Status 2026-10-18:** measurements done
-([P0 evidence](../status/w125-p0-20261018.md),
-[early P1 evidence](../status/w125-p1-early-20261018.md)).
+([P0 evidence](../status/2026-10/w125-p0-20261018.md),
+[early P1 evidence](../status/2026-10/w125-p1-early-20261018.md)).
 
 **Superseded by the user's choice of background packing (2026-10-18):**
 - option (a) with no seal window, singleton segments at close, and fused
@@ -291,7 +291,7 @@ written by a test driver, and retire a superseded per-file generation.
 core PASS on a private cluster.
 
 **Status 2026-10-19: read path and handshake on `w125-packing`
-(`de3823c29`)** ([evidence](../status/w125-p3-20261019.md)): packed files
+(`de3823c29`)** ([evidence](../status/2026-10/w125-p3-20261019.md)): packed files
 read back byte for byte; old clients on new daemons refused cleanly. The
 gate covers GETCHUNKS and segment messages only (the write path is
 unchanged, so PUT, REPORT and publications stay ungated), narrower than gap
@@ -344,13 +344,13 @@ a private cluster.
 **Status 2026-10-19: packer with budget, compaction and backfill on
 `w125-packing` (`1b7f0d7d2`):** foreground within 10% while packing
 (−1.2% / −4.3%, three runs), compaction and backfill checked on a private
-cluster ([evidence](../status/w125-p4-budget-20261019.md)). Remaining in
+cluster ([evidence](../status/2026-10/w125-p4-budget-20261019.md)). Remaining in
 P4: crash injection at each packer step, leader change mid-pass, the
 24 h churn and space-pressure gates, tighter small-segment merging.
 
 **Earlier (2026-10-18): first packer (`6df0a4d3c`).** Candidate index (KV kind 46,
 MD 77 UNINDEX), packer thread, private-cluster check and
-[early measurement](../status/w125-p4-early-20261018.md): 60,000 tiny files
+[early measurement](../status/2026-10/w125-p4-early-20261018.md): 60,000 tiny files
 in 156 segments (395× less space), whole-tree deletes retire segments
 without copying, but foreground −12% (16 workers) and −20% (one writer)
 while packing concurrently, above the 10% target. Next: rate budget and
@@ -373,7 +373,7 @@ and concurrent readers.
 **Exit:** the modification matrix PASS.
 
 **Status 2026-10-19: done on `w125-packing` (`2fb0a0148`)**
-([evidence](../status/w125-p5-20261019.md)): ten-case matrix PASS
+([evidence](../status/2026-10/w125-p5-20261019.md)): ten-case matrix PASS
 (including repack after modification); hole punch is EOPNOTSUPP for every
 efs file; new clients refuse to mount clusters that do not accept their
 protocol. Backward compatibility is not a goal (user, 2026-10-19). Crash
@@ -399,7 +399,7 @@ packed write path or opt-in was ported.
 **Exit:** `make test` PASS, plus the behavioural landing tests.
 
 **Status 2026-10-19: done on `w125-packing` (`79013a2c0`)**
-([evidence](../status/w125-p6-20261019.md)): landing checks 7/7 PASS,
+([evidence](../status/2026-10/w125-p6-20261019.md)): landing checks 7/7 PASS,
 POSIX core 216/216 in three runs with the packer active, architecture and
 protocol docs updated on the branch. There was no old write path to remove.
 
@@ -423,7 +423,7 @@ protocol docs updated on the branch. There was no old write path to remove.
    - update D37's register entry, the W125 status and the status index.
 
 **Status 2026-10-19 (node9901 only,
-[evidence](../status/w125-p7-node9901-20261019.md)):** rebased onto devel
+[evidence](../status/2026-10/w125-p7-node9901-20261019.md)):** rebased onto devel
 `d9cee1ffd`; crash injection PASS at five points; two-client, durability
 and GC gates PASS; final A/B one-writer −10.9% while packing (six runs),
 just above target. Found and fixed segment placement on non-voters

@@ -4,7 +4,7 @@
 Test-only patch to `tests/test_query_capture_retry.py`, added with its
 validation output by commit `ce3280047` ("Isolate mixed cut safety
 oracle before scheduler negative controls", 2026-10-11). Linked status
-page: `docs/status/mac-mixed-cut-oracle-isolation-20261012.md`. The
+page: `docs/status/2026-10/mac-mixed-cut-oracle-isolation-20261012.md`. The
 patch moves the `scheduler_oracle()` call to after the mixed-distributed-
 cut scenario, so the safety oracle runs before the scheduler negative
 controls instead of before the mixed-cut check.

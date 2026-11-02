@@ -4,7 +4,7 @@
 Real efsd daemons on loopback (tests/k33_daemons.py), private stores under
 TMPDIR, free ports (never 17xxx), discovery off. The EFS_FAULT_MEMBER_EXIT
 hooks end a daemon (status 86) at one handoff of
-docs/status/k33-membership-protocol-20261023.md M9; with
+docs/status/2026-10/k33-membership-protocol-20261023.md M9; with
 EFS_FAULT_MEMBER_EXIT_ONCE the hook is given to every member and only the
 first one to reach the point ends (the leader of the step, whichever node
 that is). After every interruption the ended daemon is restarted (or the

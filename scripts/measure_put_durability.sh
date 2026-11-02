@@ -2,7 +2,7 @@
 # measure_put_durability.sh MOUNT FIXTURE READ_FILE NODES OUT_DIR [RUNS]
 #
 # 2 GiB write and read throughput on one client, for asynchronous PUT
-# acknowledgement (docs/status/intel-async-durability-20261015.md).
+# acknowledgement (docs/status/2026-10/intel-async-durability-20261015.md).
 #
 #   MOUNT      EFS mount, e.g. /data1/efs/intel-mnt
 #   FIXTURE    local file of at least 2 GiB with nonzero data (page cached)

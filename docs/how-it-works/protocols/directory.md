@@ -16,7 +16,7 @@ protocol itself.
 ## Placement rules
 
 - **The inode row lives on `inode_shard(ino)`** ([§5 of the
-  spec](../../architecture.md) defines the function; this document never
+  spec](../architecture.md) defines the function; this document never
   restates placement formulas, it explains them).
 - **A dentry lives on its parent's shard**
   (`dentry_shard = inode_shard(parent_ino)`), with a **threshold-based

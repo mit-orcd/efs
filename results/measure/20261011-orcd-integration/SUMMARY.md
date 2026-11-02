@@ -6,7 +6,7 @@ ORCD branch-integration acceptance: after merging 33 AMD/Intel/NUC commits
 into devel through `eb7d449d`, run the POSIX and cross-client (peer) suites
 against a freshly deployed four-daemon cluster, then repeat with a corrected
 symlink-follow fixture. Linked status page:
-`docs/status/orcd-integration-20261011.md`; run preserved by commit
+`docs/status/2026-10/orcd-integration-20261011.md`; run preserved by commit
 `82f0f59d4` ("record merged rollout and unresolved repeated-load gates").
 Open contention investigation tracked under W66/W23/D30.
 
@@ -44,7 +44,7 @@ or peer runs.
 ## Method
 
 Deployment and gate procedure are described in
-`docs/status/orcd-integration-20261011.md`; bulk logs/TSVs were kept outside
+`docs/status/2026-10/orcd-integration-20261011.md`; bulk logs/TSVs were kept outside
 Git under `~/orcd/scratch/efs/orcd-test/` (`test-52bc8edb3d1a.log`,
 `merged-52bc8edb-20261011/`, `linkat-gates-20261011/`). Sequence: drain seven
 clients, stop four daemons, switch runtime, rebuild on eleven hosts, run Linux

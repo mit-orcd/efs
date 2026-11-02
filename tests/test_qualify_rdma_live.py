@@ -2,7 +2,7 @@
 """Live qualification gates select RDMA from the cluster description (Task BS).
 
 Hardware-free: the driver's gate is run against a fake runner. The RDMA runs on
-a real HCA are NOTRUN here; see docs/status/rdma-qualification-driver-20261031.md.
+a real HCA are NOTRUN here; see docs/status/2026-10/rdma-qualification-driver-20261031.md.
 """
 import importlib.util
 import subprocess

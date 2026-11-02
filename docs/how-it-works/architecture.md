@@ -187,7 +187,7 @@ This is the **accepted requirement, not today's deployment guarantee**. Current
 data code remains fixed 2+1. Default metadata groups still use three voters
 (nodes 1/2/3 and 2/3/4 for N>3). They do not satisfy the four-node contract.
 W74 owns protection profiles/repair; W66 owns metadata topology and consensus.
-See [D36 and acceptance gaps](../status/node-count-protection-20261009.md).
+See [D36 and acceptance gaps](../status/2026-10/node-count-protection-20261009.md).
 
 **Metadata mechanism remains unresolved at four nodes.** Ordinary majority
 Raft requires RF ≥ 2f+1 to remain authoritative after any f replica losses;
@@ -272,7 +272,7 @@ this list, before it ships.
   verifier changed, so a fragment the crashed run acknowledged stays lost
   to its client's `fsync`. See
   [verified recovery](protocols/data.md#verified-recovery-k36) and
-  [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
+  [AMD durability fixes](../status/2026-10/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
   bytes retained as pending; the next `fsync` retries. If a publish of
   the file has been classified **stalled** (D27, [decisions.md](../status/decisions.md): repeated
@@ -322,7 +322,7 @@ this list, before it ships.
   rules above; this adds no recall protocol. A held unlink-open file retains
   its local data and may report local attributes on RPC failure, but that
   fallback never authorizes a new permission or namespace operation. See the
-  [BB authority audit](../status/bb-overlay-authority-audit-20261029.md).
+  [BB authority audit](../status/2026-10/bb-overlay-authority-audit-20261029.md).
 - **One `write()`/`pwrite()` publishes atomically.** POSIX makes regular-file
   `read()`/`write()` effects atomic with respect to one another, so a
   concurrent reader never observes a mix of old and new chunks from a single
@@ -1502,7 +1502,7 @@ participant ReadIndexes. Other groups remain available. `raft-resync` installs
 a validated leader snapshot covering the halt frontier before clearing the
 halt and restoring local service; neither a redirect nor successful remote
 read authorizes local use of the refused row. The wire status format is
-unchanged. [W165 evidence](../status/w165-serve-path-damaged-row-20261026.md)
+unchanged. [W165 evidence](../status/2026-10/w165-serve-path-damaged-row-20261026.md)
 records the standalone and pooled acceptance scope.
 
 Two fixed node-local cursor keys have an invalid shard prefix and are excluded

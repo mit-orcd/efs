@@ -61,4 +61,4 @@ query gate is not passed.
 the stopped-state private clone. `deployed-sha256.txt` and `runtime.txt` record
 the deployment at collection time.
 
-[Implementation status](../../../docs/status/query-disk-backend-20261009.md).
+[Implementation status](../../../docs/status/2026-10/query-disk-backend-20261009.md).

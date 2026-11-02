@@ -1093,7 +1093,7 @@ NOTRUN.
 - The orcd-test stores were in the archived packing format (KV `MANIFEST`
   reader capability 1). Every build since D37 refuses them, so the cluster
   could not start on that data; it was wiped and reformatted on October 22
-  ([run](../status/orcd-test-cleanup-w127-20261022.md)).
+  ([run](../status/2026-10/orcd-test-cleanup-w127-20261022.md)).
 - Both handler refusals answered a `HEARTBEAT_ACK` before closing (fixed,
   row "Refusal reply").
 - The proposal RPC accepts metadata tags the build cannot apply; since

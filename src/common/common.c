@@ -109,7 +109,7 @@ unsigned efs_faults_env_ignored(const char *prog)
 
 /* A6/A10: settings removed from the product. A launch that still sets one
  * (even empty) stops naming it, never runs without it. The inventory
- * (docs/status/a6-settings-inventory-20261024.md) lists every row; the
+ * (docs/status/2026-10/a6-settings-inventory-20261024.md) lists every row; the
  * make test check (scripts/env_inventory.py) reads this table. */
 static const struct { const char *name, *why; } removed_env[] = {
     { "EFS_MD_RAFT_N", "W153): the member count and the metadata voters come from the "

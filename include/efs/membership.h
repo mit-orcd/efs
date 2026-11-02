@@ -4,7 +4,7 @@
 /* W153/K33: the committed cluster membership. It is the only source of
  * the member count and of each metadata group's voters (efs_md_group_voters
  * over count); the HELLO node table never is. See
- * docs/status/k33-membership-protocol-20261023.md (M1-M3).
+ * docs/status/2026-10/k33-membership-protocol-20261023.md (M1-M3).
  *
  * A record is one revision of an ordered sequence under a stable cluster
  * identity: formation commits revision 1 (count == formed); every addition

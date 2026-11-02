@@ -4,7 +4,7 @@
 Namespace transaction-envelope review output, added by commit
 `0bde74a68` ("Review namespace fixture envelope and bounded cut retry
 proposal", 2026-10-11). Linked status page:
-`docs/status/mac-namespace-fixture-review-20261012.md`. Verifies that
+`docs/status/2026-10/mac-namespace-fixture-review-20261012.md`. Verifies that
 the namespace fixture's admission limits match the exact extracted
 production namespace admission code from release `95d3f1b1`.
 

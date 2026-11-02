@@ -23,7 +23,7 @@ No system library needs to be replaced for a private test.
 
 `make test-all` still reports separate host limits, such as a missing RDMA
 device or `valgrind/memcheck.h`; successful compilation does not qualify
-those missing runtime checks. [fstor007 Task M](../status/gate-fstor007-20261027.md)
+those missing runtime checks. [fstor007 Task M](../status/2026-10/gate-fstor007-20261027.md)
 records the current ORCD prerequisite and gate results.
 
 ## Memcheck and sanitizer host packages
@@ -65,7 +65,7 @@ repositories. GCC runtime package roles are documented for
 [libasan](https://packages.fedoraproject.org/pkgs/gcc/libasan/),
 [libubsan](https://packages.fedoraproject.org/pkgs/gcc/libubsan/) and
 [libtsan](https://packages.fedoraproject.org/pkgs/gcc/libtsan/).
-The [Task W inventory](../status/gate-notrun-cleanup-20261028.md) records actual
+The [Task W inventory](../status/2026-10/gate-notrun-cleanup-20261028.md) records actual
 host versions and missing packages; it does not assert cross-distribution runtime
 qualification. No package was installed as part of that inventory.
 
@@ -146,7 +146,7 @@ every `test-long` command, a reason for a budget above 300 s, and keeps
 the gate the budgets add up to (the pool's schedule plus the exclusive
 commands) under the 1,100 s target × 1.5 budget margin (1,650 s), so a new or slower test must raise its budget in
 the same change or fail the recipe test. Measured on nuc (8 CPUs, one
-NVMe, October 25; docs/status/gate-speed-20261025.md): see that page for
+NVMe, October 25; docs/status/2026-10/gate-speed-20261025.md): see that page for
 the serial and 8-job times before and after the budgets.
 
 Verdicts must be identical in serial and pooled runs. A test that fails
@@ -163,7 +163,7 @@ exercise logical behavior; public callbacks, real storage and RDMA require
 their own acceptance gates. [Verification](verification.md) distinguishes
 simulation, process restart and hardware power loss.
 
-The wave-17 [three-run refit](../status/gate-budgets-refit-20261026.md)
+The wave-17 [three-run refit](../status/2026-10/gate-budgets-refit-20261026.md)
 measured 729/723/725 s on quiet eight-CPU intel1; its 1,025 s fitted model
 keeps D44's 1,100 s target and 1,650 s budget bound. These are host-specific
 measurements, not a guarantee for shared disks or a new acceptance threshold.
@@ -235,7 +235,7 @@ does the leak check instead.
   `EFS_VALGRIND` names the valgrind binary.
 - **Runtime.** About 6 minutes on efs2 (4 vCPU aarch64): 24 s build and
   316 s of runs, of which `test_txn_retire` takes 203 s
-  ([evidence](../status/k26-leak-gate-20261022.md)). That is short
+  ([evidence](../status/2026-10/k26-leak-gate-20261022.md)). That is short
   enough for `make check`.
 - **Self-test.** `tests/test_leak_gate.py` runs under `make test`. A
   leaking fixture must FAIL, a clean one PASS, valgrind absent NOTRUN
@@ -308,7 +308,7 @@ the sanitized binaries. `make sanitize-check` runs both.
   NOTRUN exit 3, and `VAR=value` prefixes and `.py` entries work.
 - **Not in `make check`.** The daemon entries make each mode take tens of
   minutes; `make check` keeps `leak-check`. F1 runs all three
-  ([evidence](../status/f1-memory-concurrency-gates-20261025.md)).
+  ([evidence](../status/2026-10/f1-memory-concurrency-gates-20261025.md)).
 - **RSS plateau (F1, fixed working set).** `tests/test_d4_plateau.py`
   (`make test-long`: a 75 s load, then the 150 s drain bound) runs the D4 loopback cluster with
   `scripts/d4_progress.py --working-set`: every writer creates its files
@@ -330,8 +330,8 @@ the sanitized binaries. `make sanitize-check` runs both.
   rewrites (an abandoned upload is collectable only when its mount's
   session ends). The F1 measurement is
   `EFS_D4_LOAD_S=3600 EFS_D4_SET=256 EFS_D4_QUOTA=8G python3 tests/test_d4_plateau.py`
-  ([evidence](../status/f1-followups-20261025.md); drain within the default
-  150 s since the duplicate-candidate fix, [evidence](../status/d4-pack-drain-20261025.md)).
+  ([evidence](../status/2026-10/f1-followups-20261025.md); drain within the default
+  150 s since the duplicate-candidate fix, [evidence](../status/2026-10/d4-pack-drain-20261025.md)).
 - **Pack duplicate candidate (D4).** `tests/test_pack_dup_candidate.py`
   rewrites small files in place across a pack-epoch boundary inside the
   minimum age, so each has two candidate entries, and requires the backlog
@@ -397,7 +397,7 @@ document that environment; they are not a general cluster installer.
 
 ## Current merged fault gates and open failures
 
-The [round 3 docs audit](../status/docs-audit-20261027.md) indexes merged
+The [round 3 docs audit](../status/2026-10/docs-audit-20261027.md) indexes merged
 waves 9–22. Current focused gates include:
 
 - `python3 tests/test_w130_dir_fault.py`: apply-first and serve-first stored
@@ -417,9 +417,9 @@ waves 9–22. Current focused gates include:
   negative control and inherited namespace deadline; no broader W159
   latency PASS is implied.
 
-The [Task N append gates](../status/k15-k29-append-gates-20261027.md) are
+The [Task N append gates](../status/2026-10/k15-k29-append-gates-20261027.md) are
 scoped single-host TCP PASS with exact warm/peer/cold reads. The
-[Task D soak](../status/task-d-20261025.md) remains FAIL on K43. Keep all
+[Task D soak](../status/2026-10/task-d-20261025.md) remains FAIL on K43. Keep all
 failed and NOTRUN outcomes alongside later successful results. These
 requirements remain product gates, not accepted alpha limitations.
 

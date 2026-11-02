@@ -4,7 +4,7 @@
 Live metadata snapshot captured for the retained-orphan directory
 review, added by commit `4124876fc` ("Reproduce retained Mac directory
 backlink refusal with safe negative controls", 2026-10-11). Linked
-status page: `docs/status/mac-retained-orphan-review-20261012.md`.
+status page: `docs/status/2026-10/mac-retained-orphan-review-20261012.md`.
 Records the on-disk state of the retained unlinked directory
 (ino 4091, parent 2098) and its replacement (`level_4`, ino 8187) on
 the deployed node.

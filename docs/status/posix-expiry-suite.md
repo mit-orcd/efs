@@ -47,7 +47,7 @@ suite does not require `.efs` commands. `--jobs` controls core POSIX concurrency
 it does not parallelize restart/fault lifecycle phases.
 
 For sustained two-mount churn/restart validation, add `--soak-seconds 1800`.
-See [inspection/status and soak details](expiry-inspection-soak-20261012.md).
+See [inspection/status and soak details](2026-10/expiry-inspection-soak-20261012.md).
 A single `--root` is accepted and used for both node pairs.
 
 For large finite backlogs, append `--backlog-files 10000`: three phases each
@@ -67,8 +67,8 @@ test, not an immediate-deletion promise.
 Counts must be 1000..100000; zero omits this opt-in gate. Larger counts need
 adequate private quota and deadline preparation time; the default fixture is
 not a claimed 100,000-file capacity qualification. See
-[original backlog results](expiry-backlog-20261012.md) and
-[bounded-history/cadence follow-up](expiry-rss-cleanup-20261013.md).
+[original backlog results](2026-10/expiry-backlog-20261012.md) and
+[bounded-history/cadence follow-up](2026-10/expiry-rss-cleanup-20261013.md).
 
 ## Results and cleanup
 
@@ -90,7 +90,7 @@ The harness stops its owned mounts/processes on exit and retains private evidenc
 Inspect retained logs before deleting only the generated fixture directories;
 never remove an existing user store or force-discard pending writes.
 
-[Implementation and full qualification](expiry-implementation-20261012.md).
+[Implementation and full qualification](2026-10/expiry-implementation-20261012.md).
 
 ## NUC entry-point validation — October 12, 2026
 
@@ -98,7 +98,7 @@ never remove an existing user store or force-discard pending writes.
 `5b41b8d3` invoked through `bash tests/run_tests.sh posix expiry`, with the
 exact native fault-enabled daemon/client/management binaries from
 `0e975936ce3c4496883fa9ee192aa20c34439853`. No C sources changed between these
-commits; [binary SHA256 identities](expiry-implementation-20261012.md#final-qualification--pass)
+commits; [binary SHA256 identities](2026-10/expiry-implementation-20261012.md#final-qualification--pass)
 are the fault column of the preceding qualification. The wrapper source and
 companion scripts came from a clean archive of the runner commit.
 

@@ -8,7 +8,7 @@ observability enhancement. The canonical queue is [the status index](README.md).
 No new architectural decision is made by this review.
 
 Initial incident review was read-only. Later repairs are committed in
-`3a1b4a52`; the [GC implementation checkpoint](gc-implementation-20261007.md)
+`3a1b4a52`; the [GC implementation checkpoint](2026-10/gc-implementation-20261007.md)
 records private-store tests, the buffered append failure W87, and staged PUT
 tickets W86/D31. Round 6 inspected source and the checkpoint, not its remote
 raw fixture logs. Existing-service rollout and the incident's lost-reference

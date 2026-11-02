@@ -14,7 +14,7 @@ updated for D31; generated artifacts are regenerated from source.
 ## Current status reconciliation
 
 - W61/W62/W63 repairs are committed in `3a1b4a52`, rather than merely visible
-  in the working tree. The [GC checkpoint](../status/gc-implementation-20261007.md)
+  in the working tree. The [GC checkpoint](../status/2026-10/gc-implementation-20261007.md)
   reports isolated direct-store tests: 216 passing single-client cases with
   one mmap skip, 64 peer cases passing, zero inventory/quota after restart and
   fenced late PUTs. Remote raw fixtures were **not retrieved in this round**;

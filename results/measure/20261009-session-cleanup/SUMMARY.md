@@ -5,7 +5,7 @@
 Gate for the bounded session lease/lock cleanup phase: staged `LEASE_LOCK_NEXT`
 (RPC only) and `LEASE_LOCK_BATCH` subcommands that select and log at most eight
 exact lease/lock keys under completed global revocation. Linked item: "Bounded
-session lease/lock phase (staged)" in `docs/status/dependency-package-20261009.md`
+session lease/lock phase (staged)" in `docs/status/2026-10/dependency-package-20261009.md`
 (branch devel-w66, D29/D30 cleanup sequence). Run added by commit `9cec68e14`
 ("fix(session): add staged exact lease and lock cleanup batches").
 

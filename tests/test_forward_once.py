@@ -25,7 +25,7 @@ src/server/raft_host.c and checks their contract, then checks the wiring:
 the sender sets the mark, the submit entry sets the flag from the helper
 and restores it, and host_propose consults the helper before its forward.
 The end-to-end evidence (loaded step-down loops before and after) is in
-docs/status/flake-sweep-20261025.md.
+docs/status/2026-10/flake-sweep-20261025.md.
 """
 import re, subprocess, tempfile
 from pathlib import Path

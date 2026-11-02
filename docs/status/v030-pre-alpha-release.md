@@ -1,10 +1,10 @@
 # v0.3.0-pre-alpha integration and acceptance
 
-**Latest exact-source result:** `4e239d029029b8105a6e07f0e69a26fdc449de32` passes AMD ordinary-files qualification after the deep-directory fix; .efs remain disabled. [Report](v030-deep-directory-fix-20261012.md). No push or tag. Earlier failed checkpoints below are historical.
+**Latest exact-source result:** `4e239d029029b8105a6e07f0e69a26fdc449de32` passes AMD ordinary-files qualification after the deep-directory fix; .efs remain disabled. [Report](2026-10/v030-deep-directory-fix-20261012.md). No push or tag. Earlier failed checkpoints below are historical.
 
 **Latest alpha scope:** ordinary files/TCP/direct only, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. `.efs`, RDMA, buffered and dedicated repair/recovery are excluded.
 
-Latest integrated-source verdict: **1e3a46384e897a47751871b15e82ead86c9d0abd** is not accepted. Native/fault/sanitizers, peer/teardown and ordinary cold/reclamation PASS; seven-client deep-directory30s failures remain. [Final qualification](v030-final-qualification-1e3a4638-20261012.md).
+Latest integrated-source verdict: **1e3a46384e897a47751871b15e82ead86c9d0abd** is not accepted. Native/fault/sanitizers, peer/teardown and ordinary cold/reclamation PASS; seven-client deep-directory30s failures remain. [Final qualification](2026-10/v030-final-qualification-1e3a4638-20261012.md).
 
 Status: qualification STOPPED/checkpointed; incomplete and unaccepted. Planned alpha scope is TCP/direct I/O/files with `.efs` disabled; dedicated repair/recovery deferred. Nothing tagged or pushed. User authorization, Oct 11: create an isolated integration
 branch, coordinate all agents, add and test all improvements, prioritize
@@ -21,7 +21,7 @@ America/New_York; no schedule or push is created by this checkpoint.
 
 ## Current authoritative checkpoint
 
-Current pending frozen candidate is `03bd89fb7de56c2c6af44ab3bd26c54caf4b8274`. Qualification remains stopped. The latest human decision excludes `.efs` features from the planned alpha; clients and daemons must disable the interface and query-cache work explicitly. [Scope and gate contract](v030-release-scope-20261012.md) and [source-specific results](v030-tcp-direct-qualification-20261012.md) govern. AMD native gates pass, but broad live tests with `.efs` enabled failed; they do not qualify the new disabled-feature scope. Deep paths and ordinary I/O refusals remain unresolved.
+Current pending frozen candidate is `03bd89fb7de56c2c6af44ab3bd26c54caf4b8274`. Qualification remains stopped. The latest human decision excludes `.efs` features from the planned alpha; clients and daemons must disable the interface and query-cache work explicitly. [Scope and gate contract](2026-10/v030-release-scope-20261012.md) and [source-specific results](2026-10/v030-tcp-direct-qualification-20261012.md) govern. AMD native gates pass, but broad live tests with `.efs` enabled failed; they do not qualify the new disabled-feature scope. Deep paths and ordinary I/O refusals remain unresolved.
 
 The source410/frozen28 and multi-mode rollout statements below are historical;
 older passes do not qualify the next merged candidate. No resumption, push, tag
@@ -260,7 +260,7 @@ Ordinary-write pressure controls pass all seven suites in both modes on the
 same binaries/jobs16/30s limits, with explicit create/read-only warm-up. These
 are case-only controls, not cold/GC or identical mixed-mutation warm-up proof.
 The initial helper-import failure is not an I/O result. Mixed-mutation OFF
-controls instead expose [W112](w112-full-overwrite-replay-20261012.md): ordinary
+controls instead expose [W112](2026-10/w112-full-overwrite-replay-20261012.md): ordinary
 full overwrite loses first-chunk bytes despite successful fsync, including
 cold reads. It blocks release independently of the pressure timeouts. A bounded
 actual-code repair and focused regressions pass; full/live qualification is next.
@@ -271,7 +271,7 @@ Frozen `02b9918b` passes complete AMD normal/fault native and eleven sanitizer
 gates with all1,335 source/linked inputs unchanged. Both ordinary-overwrite
 modes pass exact primary/peer/cold bytes for all four cases, physical cleanup
 and normal mount restoration. Independent review reproduces baseline loss and
-passes ownership boundary probes. [W112 closure](w112-full-overwrite-replay-20261012.md)
+passes ownership boundary probes. [W112 closure](2026-10/w112-full-overwrite-replay-20261012.md)
 is limited to that reproduced defect. Direct seven-client/jobs16 pressure still
 fails; this is not release acceptance. New ORCD follower-read deadline and
 Mac append completion checkpoints require reconciliation and full qualification.
@@ -295,7 +295,7 @@ merged full AMD qualification and both-mode pressure are pending.
 Latest `02b9918b` pressure gate fails both modes (direct six209/4/1/7, one210/3/1/7;
 buffered seven209/4/1/7), cold/GC NOTRUN after busy extra-client stop, restore0.
 Frozen `d26e6874` full merged AMD qualification is active after correcting an
-imported Mac fixture mismatch in `6819c127`. [Manager handoff](v030-amd-handoff-20261012.md)
+imported Mac fixture mismatch in `6819c127`. [Manager handoff](2026-10/v030-amd-handoff-20261012.md)
 records the missing Mac client adoption prerequisite and exact pending gates.
 
 ### Latest frozen merged qualification d26e6874
@@ -321,12 +321,12 @@ prerequisite is assigned separately; it is not silently certified by server ance
 Mac46609ad7 confirms release combined CREATE/OPEN behavior is already present
 with independent retained-edge bookkeeping; eight focused exact-source gates
 PASS. The earlier missing-client blocker is withdrawn, optional alternate pointer
-layout held. [Reconciliation](mac-client-reconciliation-20261012.md).
+layout held. [Reconciliation](2026-10/mac-client-reconciliation-20261012.md).
 
 NUC501205b6, ORCD1bee6f43, Intel801218f3 and Mac e7ebbd25 are merged as
 documentation/evidence checkpoints; none confers merged-cluster acceptance.
-[ORCD six-wave diagnosis](orcd-query-starvation-disposition-20261012.md) and
-[Mac boundary inspection](mac-query-stage-disposition-20261012.md) leave cut
+[ORCD six-wave diagnosis](2026-10/orcd-query-starvation-disposition-20261012.md) and
+[Mac boundary inspection](2026-10/mac-query-stage-disposition-20261012.md) leave cut
 collision, pending transactions, authority and publication lock delay unresolved.
 
 Opt-in `EFS_QUERY_STAGE_TRACE=1` stage records are being prepared for one separate
@@ -359,7 +359,7 @@ fprintf, including lock-held events, perturbs diagnostic latency. Preserve this
 source/results first; add that missing discriminator only if evidence requires
 it. Instrumented timing is never quiet acceptance.
 
-[Latest exact-stage evidence](v030-query-stage-diagnostic-20261012.md) establishes
+[Latest exact-stage evidence](2026-10/v030-query-stage-diagnostic-20261012.md) establishes
 146 cut revision collisions and46.915/48.816s publication gaps under the original
 pressure budgets. d485 full normal/fault/sixteen sanitizers and ordinary exact
 both-mode cold/cleanup PASS, instrumented pressure FAIL/restored0; no additional
@@ -367,11 +367,11 @@ fix or quiet ON/OFF acceptance. Mac/ORCD now own bounded design/admission analys
 
 ### Second diagnostic checkpoint, 95d3f1b1
 
-[Exact evidence](v030-query-stage-diagnostic-20261012.md#second-frozen-amd-diagnostic-95d3f1b1) records full normal/fault/17 focused sanitizer/real-LSM sanitizer PASS and both-mode ordinary overwrite PASS on unchanged inputs. One instrumented direct seven-client run remains failing. Fourteen roots absent from retained generation 2 explain the logged query refusals; 145 cut mismatches and 47–48 second publication gaps are measured. Foreground deep-nesting causation remains unresolved. Cold/GC NOTRUN, mounts restored, no jobs, no release acceptance. Intel's newly diagnosed older-source namespace fixture incorrectly crossed the participant bound before its ancestry oracle; its test-only repair requires separate integration/qualification, never retroactive acceptance.
+[Exact evidence](2026-10/v030-query-stage-diagnostic-20261012.md#second-frozen-amd-diagnostic-95d3f1b1) records full normal/fault/17 focused sanitizer/real-LSM sanitizer PASS and both-mode ordinary overwrite PASS on unchanged inputs. One instrumented direct seven-client run remains failing. Fourteen roots absent from retained generation 2 explain the logged query refusals; 145 cut mismatches and 47–48 second publication gaps are measured. Foreground deep-nesting causation remains unresolved. Cold/GC NOTRUN, mounts restored, no jobs, no release acceptance. Intel's newly diagnosed older-source namespace fixture incorrectly crossed the participant bound before its ancestry oracle; its test-only repair requires separate integration/qualification, never retroactive acceptance.
 
 ### Superseded quiet candidate, b239dc7d
 
-Full normal/fault/18 focused sanitizer/real-LSM sanitizer gates and direct/buffered ordinary warm/peer/cold/physical gates PASS on unchanged frozen inputs. One quiet original-budget direct seven-client attempt remains FAIL (all seven 209/4/1/7). The reviewed shorter cut-only capture retry does not close acceptance; publication gaps remain approximately 46.5 s. Buffered and cold/shared-GC gates NOTRUN, mounts restored/no jobs. [Exact evidence](v030-query-stage-diagnostic-20261012.md#reviewed-candidate-quiet-result-b239dc7d-still-blocked). Next is phase/in-flight evidence, with no unchanged repeat, deadline increase or stale-snapshot fallback.
+Full normal/fault/18 focused sanitizer/real-LSM sanitizer gates and direct/buffered ordinary warm/peer/cold/physical gates PASS on unchanged frozen inputs. One quiet original-budget direct seven-client attempt remains FAIL (all seven 209/4/1/7). The reviewed shorter cut-only capture retry does not close acceptance; publication gaps remain approximately 46.5 s. Buffered and cold/shared-GC gates NOTRUN, mounts restored/no jobs. [Exact evidence](2026-10/v030-query-stage-diagnostic-20261012.md#reviewed-candidate-quiet-result-b239dc7d-still-blocked). Next is phase/in-flight evidence, with no unchanged repeat, deadline increase or stale-snapshot fallback.
 
 ## Supersession of earlier running/next checkpoints
 

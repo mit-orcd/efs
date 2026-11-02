@@ -6,7 +6,7 @@ Acceptance evidence for five grouped TCP work packages on NUC: W54/W38 (IOR/
 hardscan + cold GC/restart), W56/W60 (root-rename reuse + mixed reads), W65
 (writer-active-at-signal shutdown), W84 (namespace depth envelope), D26/W44
 (inode-GC reap timing/fan-out investigation). Linked status ledger:
-`docs/status/tcp-five-gates-20261007.md`. Run added by commit `ce0582a0f`
+`docs/status/2026-10/tcp-five-gates-20261007.md`. Run added by commit `ce0582a0f`
 ("docs(status): reconcile five TCP gate packages and retain NUC evidence").
 
 ## Verdict

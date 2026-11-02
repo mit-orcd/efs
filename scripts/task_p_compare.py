@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 
 root = Path(__file__).resolve().parents[1]
-text = (root/'docs/status/task-a-20261025.md').read_text()
+text = (root/'docs/status/2026-10/task-a-20261025.md').read_text()
 section = text.split('## Corrected full runs and final F3 review', 1)[1].split('##',1)[0]
 baseline = {}
 for line in section.splitlines():

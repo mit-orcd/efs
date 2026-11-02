@@ -2,7 +2,7 @@
 """S4/W122: the settings table has one row for every A6 inventory entry of
 the two listed kinds, so a new setting without a row fails here.
 
-Reads docs/status/a6-settings-inventory-20261024.md (the table `make test`
+Reads docs/status/2026-10/a6-settings-inventory-20261024.md (the table `make test`
 already keeps complete against the readers: tests/test_env_inventory.py) and
 src/common/settings.c; the header counts of the kinds the listing leaves out
 must equal the inventory's. Negative control: a table without one row fails."""
@@ -12,7 +12,7 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'scripts'))
 import env_inventory  # noqa: E402
 
-kinds = env_inventory.inventory_kinds(str(root / 'docs/status/a6-settings-inventory-20261024.md'))
+kinds = env_inventory.inventory_kinds(str(root / 'docs/status/2026-10/a6-settings-inventory-20261024.md'))
 listed = {n for n, k in kinds.items() if k in ('deployment input', 'numeric tunable')}
 
 

@@ -2,9 +2,9 @@
 
 **Draft, October 24, 2026, audited through devel `e7e72e267` (waves 9–22);
 checklist items S3 and S5.** CLI and behavior were checked against source and
-the merged evidence in the [round 3 audit](../status/docs-audit-20261027.md).
+the merged evidence in the [round 3 audit](../status/2026-10/docs-audit-20261027.md).
 Live commands and failure cases were **NOTRUN on the Mac** (the Linux tree
-does not build there); the [October 25 loopback audit](../status/docs-audit-20261025.md)
+does not build there); the [October 25 loopback audit](../status/2026-10/docs-audit-20261025.md)
 is historical evidence on `ec3e09306`, not a run of this revision. This is the user guide for
 the alpha 1.0 milestone: 2+1 erasure coding on 3 to 16 nodes with the Linux
 FUSE client. The alpha release is not approved yet; the qualification gates
@@ -229,7 +229,7 @@ client has exited; only the mount session's leases and locks stay
 unrevoked until the member is back and `efs-mgmt raft-session fence` or
 the next session cleanup retires them. Whether alpha keeps this as a
 limitation or changes it is an open user decision
-([audit finding U4](../status/docs-audit-20261025.md)).
+([audit finding U4](../status/2026-10/docs-audit-20261025.md)).
 
 ### `df`
 
@@ -268,7 +268,7 @@ one of nodes 1–4 is down); members five and up add storage only. New writes
 use the new node at once; existing data stays where it is (no rebalancing).
 Mounted clients learn the new member without a remount. Online removal is
 not available in alpha. Loopback addition tests and the scoped four-member
-orcd-mini RDMA run in [Task K](../status/k44-retired-replica-routing-20261026.md)
+orcd-mini RDMA run in [Task K](../status/2026-10/k44-retired-replica-routing-20261026.md)
 pass. Task K has a cross-host client and management sweep, but all four
 daemons share node9901. Addition across distinct storage hosts, including
 under client load, remains NOTRUN.

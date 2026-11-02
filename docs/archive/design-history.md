@@ -3,7 +3,7 @@
 > larger clusters for scale. Round 6's unsafe-merge finding remains valid, but
 > its revised protection ladder no longer governs the accepted requirement.
 > See [current architecture §2](../how-it-works/architecture.md) and
-> [D36](../status/node-count-protection-20261009.md).
+> [D36](../status/2026-10/node-count-protection-20261009.md).
 
 # Design history
 

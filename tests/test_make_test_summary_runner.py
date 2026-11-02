@@ -5,7 +5,7 @@ Exit 0 must mean "every command ran and passed". A failed or timed-out
 command exits 1 with STATUS FAIL; all passing but one NOTRUN/SKIP line exits
 3 with STATUS INCOMPLETE. Each failure keeps its full output in
 tmp/fail-<index>.log, named on its summary line. The first case is the
-reproducer from docs/status/devel-integration-review-20261022.md (R1), which
+reproducer from docs/status/2026-10/devel-integration-review-20261022.md (R1), which
 exited 0 before the fix. Runs the extracted Python block in a temporary
 directory: no build, no make, no cluster.
 """

@@ -7,7 +7,7 @@ W93 control run: same internal-batching/queue measurement as
 disabled (`EFS_COMMANDS_SERVER=0` on all servers, `EFS_COMMANDS=0` on both
 mounts), to test whether enabled `.efs` refresh is a necessary condition for
 the observed throughput decline. Status page:
-`docs/status/batch-no-efs-profile-20261009.md`; W93 in
+`docs/status/2026-10/batch-no-efs-profile-20261009.md`; W93 in
 `docs/backlog/work-items.md`. Added to raw-evidence by commit `6431dd92b`.
 
 ## Verdict

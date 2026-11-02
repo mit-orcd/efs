@@ -6,7 +6,7 @@ Gate for the staged deferred/sequenced close successor: a distinct deferred
 edge/probe identity domain (generation/UUID/epoch/sequence, 36-byte value) that
 commits lease state, replay floor/result and a CLOSE_STEP34 marker atomically,
 plus capped CLOSE_STEP command36 cleanup and RPC-only CLOSE_APPEND_NEXT37
-cross-group delegation. Linked item: docs/status/dependency-package-20261009.md,
+cross-group delegation. Linked item: docs/status/2026-10/dependency-package-20261009.md,
 section "Replay-identified bounded close successor" (Oct 9 dependency-linked
 correctness package, devel-w66 line of work). Run added by commit 9e474f135
 ("feat(leases): stage replay-safe bounded close recovery across lane groups").

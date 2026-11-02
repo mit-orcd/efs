@@ -104,7 +104,7 @@ source remains uncommitted on devel-find-stats and installed on NUC.
 
 ## Seventh round — separate leaders, explain slowdown, reserve Raft log space
 
-Read the current status in `docs/status/nuc-tiny-file-create-20261008.md`.
+Read the current status in `docs/status/2026-10/nuc-tiny-file-create-20261008.md`.
 Separate client, n1/group-0 leader, n2/group-2 leader and n3 follower profiles
 are retained under round-7/before and round-7/after. Earlier pooled daemon
 profiles were insufficient to attribute the slow group. All eight sampled

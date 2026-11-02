@@ -5,8 +5,8 @@
 Final integrated qualification of the frozen release-v0.3.0-pre-alpha candidate
 `1e3a46384e897a47751871b15e82ead86c9d0abd` (merge of reviewed qualification fixes),
 run by root alone on AMD. Linked status pages:
-`docs/status/v030-final-qualification-1e3a4638-20261012.md` and
-`docs/status/v030-tcp-direct-qualification-20261012.md`; release gate:
+`docs/status/2026-10/v030-final-qualification-1e3a4638-20261012.md` and
+`docs/status/2026-10/v030-tcp-direct-qualification-20261012.md`; release gate:
 `docs/status/v030-pre-alpha-release.md` (v0.3.0 pre-alpha release acceptance).
 Added by commit `5de00c40f` ("test: record final integrated ordinary-files
 qualification and deep timeout blocker").

@@ -1,6 +1,6 @@
 # W92 — .efs/find and .efs/stats replacement commands
 
-Status: open. [Active closure ledger](query-cache-closure-20261010.md) records
+Status: open. [Active closure ledger](2026-10/query-cache-closure-20261010.md) records
 the current incremental implementation, aggregate admission and remaining gates.
  The accepted Oct 8 user revision replaces synthetic `.find` and
 `.stats` with executable `.efs/find` and `.efs/stats`. W91 supplies readable
@@ -8,10 +8,10 @@ Python command source and the separate versioned query path. Real user entries
 named `.find`, `.stats` or `.efs` must remain available. Compatibility with the
 legacy synthetic paths is not required.
 
-The [command-options and expiry-test report](efs-command-options-20261008.md),
-[latest profiling report](efs-command-performance-20261008.md),
-[policy/catch-up report](efs-command-policy-20261008.md) and
-[command checkpoint](efs-commands-20261008.md) record implemented
+The [command-options and expiry-test report](2026-10/efs-command-options-20261008.md),
+[latest profiling report](2026-10/efs-command-performance-20261008.md),
+[policy/catch-up report](2026-10/efs-command-policy-20261008.md) and
+[command checkpoint](2026-10/efs-commands-20261008.md) record implemented
 command/query infrastructure, tests, activation and remaining acceptance.
 Nine profiling rounds now include hardware-utilization and concurrent-query
 measurements; remaining software limits are recorded in that report.
@@ -24,7 +24,7 @@ index gate. Normal Xorinox runs `cf4e365a`, including bounded merge and raw
 write batching; its full native, Mac/Linux NFS and native FUSE oracles pass.
 The prior cdc13b88 checkpoint also passed 96 fresh Mac queries and cold retained
 payload hashes. The active reused-source 2^32 run and its corrected cold watcher
-are recorded in the closure ledger. The [durable single-export policy](efs-query-persistent-policy-20261010.md)
+are recorded in the closure ledger. The [durable single-export policy](2026-10/efs-query-persistent-policy-20261010.md)
 is implemented and passes private live/cold/quorum/lost-reply/ceiling/fault gates. Historical deployment statements below are superseded by these reports.
 
 ## Billions of files — disk-backed, bounded-memory catalog
@@ -36,7 +36,7 @@ The prior server catalog is entirely resident in RAM, derived from persistent
 filesystem metadata. The observed 1024 MiB cap near 1.25 million files is a
 query-catalog limit, not a filesystem capacity limit; failed refresh retains an
 older snapshot. Partition reuse and paging do not fix the namespace-dependent
-RAM footprint. The [latest profile](tiny-file-five-minute-profile-20261009.md)
+RAM footprint. The [latest profile](2026-10/tiny-file-five-minute-profile-20261009.md)
 supersedes earlier smaller-namespace cap-recovery observations.
 
 Persist partition/shard indexes and incremental statistics, with bounded caches,
@@ -54,10 +54,10 @@ cold-cache and concurrent-mutation/export gates, restart/fault/recovery oracles,
 and a synthetic partitioned-index gate of at least 2^32 entries. Staged real
 filesystem tests remain constrained by measured physical space/inodes; synthetic
 index tests must not be presented as real multi-billion-file EFS acceptance.
-[Oct 9 disk backend progress](query-disk-backend-20261009.md) records the new
+[Oct 9 disk backend progress](2026-10/query-disk-backend-20261009.md) records the new
 persistent partition implementation and initial functional gates. The authorized clean Xorinox
 namespace passes mutation query oracles; the earlier retained-data refusal is
-historical. Per-generation logical disk budgeting is implemented. The [Oct 10 closure work](query-cache-closure-20261010.md) implements incremental
+historical. Per-generation logical disk budgeting is implemented. The [Oct 10 closure work](2026-10/query-cache-closure-20261010.md) implements incremental
 exact statistics, durable partition checkpoints/catch-up and aggregate cache
 admission. Native, live cold and disabled/re-enabled payload oracles pass;
 actual scale acceptance remains open. The current implementation replaces the

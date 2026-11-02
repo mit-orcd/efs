@@ -5,7 +5,7 @@ scripts/w125_concurrent.py, with stubbed cluster helpers, fake daemons and
 synthetic mismatches. No cluster, daemon or mount is started; everything
 runs in a temporary directory (TMPDIR) and finishes in a few seconds.
 
-Checks (docs/status/review-pack-validate-once-20261022.md, harness findings
+Checks (docs/status/2026-10/review-pack-validate-once-20261022.md, harness findings
 2 and 3 and the remote-read point; devel-integration-review-20261022.md,
 "W125 cleanup and remote/final evidence"):
   stop:    the real helper's stop with fake run-daemon processes: all orderly
@@ -26,7 +26,7 @@ Checks (docs/status/review-pack-validate-once-20261022.md, harness findings
            version; a final-verification mismatch is captured too.
   capture: the --keep-dir copy is unchanged after the file is modified
            once the lock is released (a hard link would have followed).
-W155 (docs/status/w155-oracle-correlation-20261023.md), with a fault hook
+W155 (docs/status/2026-10/w155-oracle-correlation-20261023.md), with a fault hook
 instead of a cluster:
   stages:  a modify failing at open, truncate (not applied / applied),
            the second write(2) and close (not applied / applied, the nuc b1

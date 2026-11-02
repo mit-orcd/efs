@@ -5,7 +5,7 @@ AMD RXE W73/W64 gate closure: direct and buffered modes over software RoCE.
 ## Purpose and linked item
 
 - **W73/W64** gate closure; status report
-  `docs/status/amd-rxe-gate-closure-20261009.md`. Source commit
+  `docs/status/2026-10/amd-rxe-gate-closure-20261009.md`. Source commit
   `f6233987b9d1243d5dc95167e9aaabc77e32b44d`, branch `devel-gate-closure`,
   build ID `f6233987b9d1`.
 

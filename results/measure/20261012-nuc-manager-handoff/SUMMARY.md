@@ -6,7 +6,7 @@ State-capture/handoff checkpoint for the NUC owner to the release manager on
 2026-10-12: freeze source at `101598d2`, document installed-vs-active builds,
 record exact verdicts of running/held gates, and wait for a merged-candidate
 assignment. Linked status page:
-`docs/status/nuc-manager-handoff-20261012.md` (work items W52, W97, W112).
+`docs/status/2026-10/nuc-manager-handoff-20261012.md` (work items W52, W97, W112).
 Not a release gate run — a coordination evidence bundle.
 
 ## Verdict

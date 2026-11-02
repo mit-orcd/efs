@@ -1,6 +1,6 @@
 # Decisions — taken and pending (register D1–D46)
 
-**October 15 reconciliation:** [Review of stale claims and remaining gates](open-item-reconciliation-20261015.md). Read these annotations before treating dated implementation descriptions as current tasks. No new global acceptance or deployment is implied.
+**October 15 reconciliation:** [Review of stale claims and remaining gates](2026-10/open-item-reconciliation-20261015.md). Read these annotations before treating dated implementation descriptions as current tasks. No new global acceptance or deployment is implied.
 
 **Decided means the design was accepted; it does not mean implementation or
 acceptance is complete. Preserve accepted choices and check their current work
@@ -27,11 +27,11 @@ former ASK descriptions are historical.
 The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
-remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
+remaining gates and limits](2026-10/v030-release-scope-20261012.md). Execution stays stopped.
 
 ## D46 — Task Z decisions, item by item (user, Oct 28)
 
-The user ruled on Task Z's [decision sheet](stage1-decision-sheet-20261028.md)
+The user ruled on Task Z's [decision sheet](2026-10/stage1-decision-sheet-20261028.md)
 item by item against D45. These are accepted scope and required work, not
 completed implementation or passing gates.
 
@@ -60,7 +60,7 @@ therefore 1,100 s (18 min 20 s) at `EFS_TEST_JOBS=8`, recorded in `tests/test_ma
 At this decision, `test_w130_dir_fault.py` stayed its own gate until W165 was fixed.
 **Implementation update, wave 16:** W165 is fixed in merged devel; W130 is
 back in `make test-long` and `make test-w130` has been removed. The 1,100 s
-target is unchanged ([Task F evidence](w165-serve-path-damaged-row-20261026.md)).
+target is unchanged ([Task F evidence](2026-10/w165-serve-path-damaged-row-20261026.md)).
 
 ## D43 — `.efs` and expiry ship in alpha 1.0 (user, Oct 25)
 
@@ -89,7 +89,7 @@ product" (A7 compiled expiry out behind `EFS_BUILD_EXPIRY`). Binding:
 | A9 `EFS_METADATA_BALANCE` | **Elections only for alpha.** Remove the co-location pump and its variable; an unqualified tiny-file speedup does not justify another production mode. Elections alone do not guarantee distributed leaders: measure and report actual leader placement, and keep the metadata-distribution roadmap. This does not complete the "nothing concentrated on one node" goal. |
 | Buffered and direct fragment I/O | **Direct I/O only** (user, Oct 24; replaces the earlier "both, qualified"). Remove the `--direct-io`/`--no-direct-io` flag and the buffered path. Storage that cannot meet `O_DIRECT` requirements is refused with a clear error, never a silent fallback. Small and unaligned operations stay correct internally, and explicit durability barriers stay: `O_DIRECT` alone does not make a write durable. Qualify the retained path for reads, writes, packing, `fsync` and recovery. |
 
-A6 read-path selectors ([table](a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)), user Oct 24:
+A6 read-path selectors ([table](2026-10/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)), user Oct 24:
 
 - `EFS_READ_PREFETCH`: **16 chunks built in**; remove the variable.
 - `EFS_FUSE_SPLICE_READ`: **off**; remove the switch and the splice path.
@@ -122,7 +122,7 @@ With this, every A6 selector is decided except `EFS_READ_VERIFY`, which waits on
 The buffered concurrent append record loss (K9 / W87) is **closed without a
 root cause or fix**. It was never reproduced: 23 oracle rounds, 19,597
 records, churn/GC/POSIX load on efs2
-([attempt](w87-append-oracle-efs2-20261022.md)). The oracle
+([attempt](2026-10/w87-append-oracle-efs2-20261022.md)). The oracle
 (`tests/live/append_oracle.py`, `append_oracle_cluster.sh`) stays in the
 tree. If a record loss is seen again, K9 reopens with that evidence. This is
 not a passing gate: no run showed the defect fixed.
@@ -131,7 +131,7 @@ not a passing gate: no run showed the defect fixed.
 
 | Item | Decision |
 | --- | --- |
-| D39 scope | **Online node addition required; removal deferred.** Final Oct 23: the `--cluster cluster.conf` feature is removed (the D39 admission merge `246bae7cf` is reverted); seed/`--join` is the only startup; the member count comes from the committed membership (W153 fix). Oct 23 user amendment supersedes fixed membership; see [simple startup and node addition](alpha-1.0-node-addition-20261023.md) |
+| D39 scope | **Online node addition required; removal deferred.** Final Oct 23: the `--cluster cluster.conf` feature is removed (the D39 admission merge `246bae7cf` is reverted); seed/`--join` is the only startup; the member count comes from the committed membership (W153 fix). Oct 23 user amendment supersedes fixed membership; see [simple startup and node addition](2026-10/alpha-1.0-node-addition-20261023.md) |
 | D39 local identity | **Automatic durable member identity through formation/join**; no manual node id, member count or mandatory cluster file |
 | D39 initial formation | **Automatic formation with at least three agreeing storage members** and both groups ready; minimal seed/join commands, then safe online additions; restart remains quorum-based |
 | W154 degraded stripes | **Rebuild on return**: a stripe acknowledged with two fragments is re-protected when the missing node returns; the write path logs the degraded acknowledgement; write availability on three nodes with one down is kept |
@@ -142,7 +142,7 @@ not a passing gate: no run showed the defect fixed.
 | W153a | **Model first**: the consolidated D39 model and its tests come first; fail-closed count validation lands inside the admission implementation |
 | orcd-mini | Reformat (fragment format 2) and deploy current devel approved; run the NOTRUN live gates and the K27 ior A/B/A' there |
 
-**Later Oct 23 user amendment:** [simple startup and node addition](alpha-1.0-node-addition-20261023.md) is the current startup and membership contract. Mandatory `--cluster`, removal of `--join` and fixed-membership-only alpha are superseded. The earlier proposal/review chronology below is historical where it conflicts. D39 safety checks remain required; the model and implementation must be extended for additions.
+**Later Oct 23 user amendment:** [simple startup and node addition](2026-10/alpha-1.0-node-addition-20261023.md) is the current startup and membership contract. Mandatory `--cluster`, removal of `--join` and fixed-membership-only alpha are superseded. The earlier proposal/review chronology below is historical where it conflicts. D39 safety checks remain required; the model and implementation must be extended for additions.
 
 Alpha stays 2+1 only on 3, 4 and more nodes; no compatibility, no new
 operator knob. D39 is therefore **accepted** with the three choices above;
@@ -153,7 +153,7 @@ cluster gates).
 ## D39 — authoritative configured cluster membership (accepted Oct 23, see D40; implementation model-first)
 
 Proposal written at the user's request after the W153 review:
-[d39-cluster-membership-proposal-20261022.md](d39-cluster-membership-proposal-20261022.md).
+[d39-cluster-membership-proposal-20261022.md](2026-10/d39-cluster-membership-proposal-20261022.md).
 Today identity (`--node-id`), membership (`--join` + HELLO + persisted node
 table) and metadata topology (`EFS_MD_RAFT_N`, default 4) have no shared
 source of truth, which is the W153 defect. Options: A, strict per-daemon
@@ -250,7 +250,7 @@ incarnation with the counter-transition exception for Raft control, own
 record for continuations), the lock is held across check and register so a
 declaration cannot publish between them, and effect records carry identity
 authority only, never Raft validation or persistence.
-The consolidated executable model ([page](d39-consolidated-model-20261023.md),
+The consolidated executable model ([page](2026-10/d39-consolidated-model-20261023.md),
 `tests/d39_model.py`) passes merged into devel Oct 23 (`16d716308`);
 implementation and cluster gates NOTRUN.
 Awaiting the user;
@@ -365,7 +365,7 @@ protection for acknowledged data and authoritative metadata; additional nodes
 increase volume and performance across all dimensions. Default data profiles
 are 2+1 at three nodes and 2+2 from four onward. This supersedes the older
 four-node/f=1 and f=3 ladder. The four-node metadata mechanism remains unresolved,
-not permission to weaken the requirement. See [binding contract and gates](node-count-protection-20261009.md)
+not permission to weaken the requirement. See [binding contract and gates](2026-10/node-count-protection-20261009.md)
 and [architecture §2](../how-it-works/architecture.md). W74/W66 implementation
 and acceptance remain open.
 
@@ -373,7 +373,7 @@ and acceptance remain open.
 as completing 2+1 on 3, 4 and >4 nodes before continuing the remaining roadmap.
 This intermediate release does not claim D36 two-loss protection on 4+ nodes;
 the accepted final requirement above is unchanged. **Reaffirmed October 22
-after the [plan review](alpha-1.0-plan-review-20261022.md):** >4-node clusters
+after the [plan review](2026-10/alpha-1.0-plan-review-20261022.md):** >4-node clusters
 stay in alpha 1.0, so raising the code's four-node cap (W151) is alpha work;
 2+2 and broader metadata distribution follow alpha 1.0. The user's three
 conditions for alpha 1.0: fix all known in-scope bugs; functional completeness
@@ -439,7 +439,7 @@ Read the relevant contract before changing its component.
 
 | ID | Accepted choice | Current state / gates |
 | --- | --- | --- |
-| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Branch `d25-logical-truncate` (Oct 22, not yet merged): one 86 B inode-group TRUNCATE with opid receipts, lazy lane adoption, `TRUNC_SWEEP`/`SWEEP_DONE`/`RETIRE` with metadata clips and masked packing; the eager path, `LANE_FENCE`, tail stubs, the client tail rewrite and the switch are removed (step 5). Gates g0–g8 PASS on private node9901 and node9900 clusters (TCP and RDMA); multi-host placement, a sweep scheduler without both groups local, and >2 GiB sweep throughput remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [protocol](d25-logical-truncate-design-20261021.md), [step 5 evidence](d25-step5-gates-20261022.md), [routing](d25-admission-routing.md) |
+| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Branch `d25-logical-truncate` (Oct 22, not yet merged): one 86 B inode-group TRUNCATE with opid receipts, lazy lane adoption, `TRUNC_SWEEP`/`SWEEP_DONE`/`RETIRE` with metadata clips and masked packing; the eager path, `LANE_FENCE`, tail stubs, the client tail rewrite and the switch are removed (step 5). Gates g0–g8 PASS on private node9901 and node9900 clusters (TCP and RDMA); multi-host placement, a sweep scheduler without both groups local, and >2 GiB sweep throughput remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [protocol](2026-10/d25-logical-truncate-design-20261021.md), [step 5 evidence](2026-10/d25-step5-gates-20261022.md), [routing](d25-admission-routing.md) |
 | D26 / W44 | Pending-GC watermark plus bounded resumable scan | Historical development gate recorded; current reclamation correctness/diagnostics are W61–W63. [Contract](../backlog/decision-contracts.md#d26--bounded-gc-scan) |
 | D27 / 0a | Bound recovery attempts, retain unresolved bytes, sticky inode errors and refuse ordinary teardown before unresolved drain | Runtime foundations present; strict timing, contention/fault/recovery/RSS gates remain. [Contract](../backlog/decision-contracts.md#d27--retained-failed-writeback), [handoff](in-flight.md) |
 
@@ -489,14 +489,14 @@ activate the staged inode-plus-lane RPC per application write. See the
 
 ## D31 — recorded abandoned-upload policy
 
-The Oct 7 [GC implementation checkpoint](gc-implementation-20261007.md#approved-unpublished-body-policy)
+The Oct 7 [GC implementation checkpoint](2026-10/gc-implementation-20261007.md#approved-unpublished-body-policy)
 records user approval: unpublished uploaded fragments may be discarded only
 after their client's session is durably revoked, using durable PUT tickets.
 This review assigns the missing register identity to that recorded policy; it
 does not create a new approval or independently recover the approving exchange.
 
 **Implementation:** [W86](../backlog/work-items.md#w86), pure metadata
-state machine committed in `b3a11877`, staged for integration; production integration and distributed fault gates remain open. Oct 24: dead clients' unsettled tickets are drained into the orphan ledger after revocation, and a clean unmount revokes its own session ([evidence](k13-d31-drain-20261024.md)).
+state machine committed in `b3a11877`, staged for integration; production integration and distributed fault gates remain open. Oct 24: dead clients' unsettled tickets are drained into the orphan ledger after revocation, and a clean unmount revokes its own session ([evidence](2026-10/k13-d31-drain-20261024.md)).
 Completed global revocation, durable lane/storage rejection floors, all-member
 deletion acknowledgements and replay-floor retirement are required. Age,
 disconnect and missing receipt are not authority. D28 accepts loss of unpublished buffered writes after client death and defers
@@ -509,10 +509,10 @@ W84 sizing and W91 command/script clarifications.
 
 | ID / work item | Accepted choice | Contract / remaining gates |
 | --- | --- | --- |
-| D32 / W84 | Current 144-participant limit, no hardcoded directory depth; prompt atomic refusal with diagnostics; larger-operation protocol deferred. | [Contract](accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions) |
-| D33 / W90 | Opt-in fixed deadlines, owner renewal within operator limits, singly linked regular files, clock-safe conditional namespace deletion. No universal TTL. | [Contract](accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry) |
-| D34 / W91 | Opt-in `.efs/` commands, initially readable Python 3 scripts using bounded versioned query paths and immutable results; real names win collisions. User revision: `.efs/find` and `.efs/stats` replace legacy `.find`/`.stats` under W92. | [Contract](accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands) |
-| D35 / W81 | Sustained directory-local contention plus activity triggers spread, with hysteresis, bounded migration and measured configurable thresholds. | [Contract](accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading) |
+| D32 / W84 | Current 144-participant limit, no hardcoded directory depth; prompt atomic refusal with diagnostics; larger-operation protocol deferred. | [Contract](2026-10/accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions) |
+| D33 / W90 | Opt-in fixed deadlines, owner renewal within operator limits, singly linked regular files, clock-safe conditional namespace deletion. No universal TTL. | [Contract](2026-10/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry) |
+| D34 / W91 | Opt-in `.efs/` commands, initially readable Python 3 scripts using bounded versioned query paths and immutable results; real names win collisions. User revision: `.efs/find` and `.efs/stats` replace legacy `.find`/`.stats` under W92. | [Contract](2026-10/accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands) |
+| D35 / W81 | Sustained directory-local contention plus activity triggers spread, with hysteresis, bounded migration and measured configurable thresholds. | [Contract](2026-10/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading) |
 
 Accepted policy does not establish deployment acceptance. Numeric W81 settings,
 query encoding and other implementation details must satisfy the linked gates;

@@ -42,5 +42,5 @@ records the deployed code build ID and current source hashes.
 Drivers preserve old namespace trees for cold oracles. Re-running a profile with
 the same directory or model names is not a new equivalent trial. Cold restart
 checks are not hardware power-loss testing. Final status and open acceptance:
-../../../docs/status/query-cache-incremental-20261010.md (repository-relative
+../../../docs/status/2026-10/query-cache-incremental-20261010.md (repository-relative
 from the results directory: use the status index if browsing from a renderer).

@@ -6,7 +6,7 @@ Final evidence for the 30-round NUC continuation campaign, specifically Round 30
 ("combined buffered acceptance and reproducible evidence") plus retained direct-mode
 fixtures from Rounds 27 (W67 bounded sparse pressure) and 28 (W76 lost-reply
 namespace replay). Linked status page:
-`docs/status/roadmap-30-continuation-20261007.md`. Run added by commit
+`docs/status/2026-10/roadmap-30-continuation-20261007.md`. Run added by commit
 `23c788955` ("Complete NUC continuation gates with PID-scoped retirement and GC
 evidence").
 

@@ -7,7 +7,7 @@ from ownership cleanup: `efs_lease_guarded_retire` now requires completed
 global revocation, a local rejection floor, and no remaining old-epoch
 lease/lock rows; residual ownership returns BUSY and exact eight-row cleanup
 stays separate. Part of the 2026-10-09 dependency-linked correctness package
-(`docs/status/dependency-package-20261009.md`). Added to raw-evidence by
+(`docs/status/2026-10/dependency-package-20261009.md`). Added to raw-evidence by
 commit `920eb217c` ("fix(leases): separate bounded receipt retirement from
 ownership cleanup").
 

@@ -27,5 +27,5 @@ Result: 113.40 / 50.55 / 55.80 files/s across the three 100-second windows;
 94,175 n3 drops (34,276 data / 59,899 empty), zero on n4. Core POSIX 212/212
 in 70.8 s; clean restart, 32 sampled cold payloads on both mounts, six process
 environments verified with observations disabled. See analysis.json for exact
-histogram windows and docs/status/w97-solution-investigation-20261009.md for
+histogram windows and docs/status/2026-10/w97-solution-investigation-20261009.md for
 attribution and remaining work. Peer/fault suites not repeated in this run.

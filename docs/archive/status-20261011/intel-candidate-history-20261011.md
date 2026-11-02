@@ -1,6 +1,6 @@
 # Historical Intel candidate observations — Oct 11, 2026
 
-Retained counterexamples and partial results from preceding candidates. This archive does not close W100–W106, W97 or Intel acceptance. Current production and final-source test obligations remain in the [active Intel ledger](../../status/intel-deployment-acceptance-20261011.md). All original FAIL, pending and NOTRUN statements below describe their named historical attempts.
+Retained counterexamples and partial results from preceding candidates. This archive does not close W100–W106, W97 or Intel acceptance. Current production and final-source test obligations remain in the [active Intel ledger](../../status/2026-10/intel-deployment-acceptance-20261011.md). All original FAIL, pending and NOTRUN statements below describe their named historical attempts.
 
 ## Historical candidate observations (not current verdicts)
 

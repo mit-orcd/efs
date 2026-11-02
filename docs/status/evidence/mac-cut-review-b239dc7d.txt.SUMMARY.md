@@ -4,7 +4,7 @@
 Cut-capture / query-retry review output for frozen test source
 `b239dc7d`, added by commit `0e24f213f` ("Qualify cheap cut retry
 classification and independent negative controls", 2026-10-11). Linked
-status page: `docs/status/mac-query-stage-disposition-20261012.md`.
+status page: `docs/status/2026-10/mac-query-stage-disposition-20261012.md`.
 Exercises `tests/test_query_capture_retry.py` positive paths plus three
 unsafe-flag negative controls, and an isolated mixed-cut oracle run
 (scheduler bypassed in the local harness only).

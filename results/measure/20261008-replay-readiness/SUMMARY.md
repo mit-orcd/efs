@@ -5,7 +5,7 @@
 AMD replay, persistence and production-readiness checkpoint for the Oct 8, 2026
 replay/writeback package: W64 durable append reservation replay, W73 synchronous
 append publication, D27 bounded DNS/partial-body drain, and W71-style persistence
-fencing. Linked ledger: `docs/status/replay-readiness-20261008.md`. Run added by
+fencing. Linked ledger: `docs/status/2026-10/replay-readiness-20261008.md`. Run added by
 commits including `3798deb3b`, `5ff9ad5af`, `593becf31`.
 
 ## Verdict

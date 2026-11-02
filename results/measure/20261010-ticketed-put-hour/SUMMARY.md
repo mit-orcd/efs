@@ -5,7 +5,7 @@
 One-hour continuation checkpoint (started 05:44:32 UTC, last-tip boundary 06:42
 UTC) for the exact-FINISH apply policy and the staged ticketed PUT data-plane
 receiver — W86 (durable PUT tickets) / W88 (typed publication) work.
-Linked from `docs/status/dependency-package-20261009.md` ("Exact FINISH apply
+Linked from `docs/status/2026-10/dependency-package-20261009.md` ("Exact FINISH apply
 and ticketed PUT receiver — Oct 10, 06:00 UTC", lines 1032/1061/1087, pointing
 at this run's README.md). Added by commits `454c2afbc`, `d334f15f4`,
 `444b0d770` (raw-evidence branch).

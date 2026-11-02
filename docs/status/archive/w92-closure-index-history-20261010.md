@@ -2,9 +2,9 @@
 
 Captured Oct 10, 2026. This is historical text formerly accumulated in the
 status index; pending/deployment statements here are superseded by the
-[active closure ledger](../query-cache-closure-20261010.md).
+[active closure ledger](../2026-10/query-cache-closure-20261010.md).
 
-[W92 closure work](query-cache-closure-20261010.md) preserves the full acceptance
+[W92 closure work](../2026-10/query-cache-closure-20261010.md) preserves the full acceptance
 matrix, including durable bounded catch-up and 2^32 synthetic index entries.
 Aggregate retained-cache admission passes focused and full native gates;
 100,000- and 1,000,000-file native-format pilots pass complete streaming oracles

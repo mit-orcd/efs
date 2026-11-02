@@ -22,7 +22,7 @@ outside this bound; oversized exports may require explicit larger budgets.
 Local allocation/reservation/failure and ownership regressions passed. The
 NUC rebuilt unit suite and broad POSIX gates are recorded in the
 [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
-The [memory closure](memory-closure-20261007.md) completes live failed
+The [memory closure](2026-10/memory-closure-20261007.md) completes live failed
 publication plus physically exhausted scratch under a 1 GiB/no-swap cgroup,
 for both I/O modes and 32+32 / production 256+64 MiB values. Same-mount
 admission, cold bytes, concurrent sparse pressure and GC/restart pass.
@@ -34,7 +34,7 @@ Keep dirty bytes pinned until the matching commit; never drop on retry count.
 owner/destructor frees read/readdir reply storage on worker retirement.
 Local retirement and TLS/allocation-failure regressions passed. Unit success
 alone does not prove production RSS across repeated FUSE worker creation and
-retirement. The targeted direct/buffered gates and allocation/TLS/growth variants now pass; see the [30-round gate ledger](gate-30-rounds-20261007.md) for retained evidence.
+retirement. The targeted direct/buffered gates and allocation/TLS/growth variants now pass; see the [30-round gate ledger](2026-10/gate-30-rounds-20261007.md) for retained evidence.
 
 ## W60 — demand reads under speculative pressure
 

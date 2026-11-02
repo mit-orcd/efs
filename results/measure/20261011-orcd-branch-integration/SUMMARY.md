@@ -5,7 +5,7 @@
 Regression qualification of the ORCD branch integration: candidate `fd83b30d`
 (104 newly reachable commits from `4534b3be`), preceded by retained-data rollout
 `66be74b7` and mounted-suite passes under `5de44c4d`. Linked status page:
-`docs/status/orcd-branch-integration-20261011.md`. Related open items W109/W110
+`docs/status/2026-10/orcd-branch-integration-20261011.md`. Related open items W109/W110
 (metadata/query contention, communication diagnosis) — the loaded-cluster
 failures here reproduce the W109 symptom class.
 

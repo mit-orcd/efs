@@ -191,7 +191,7 @@ writes share an inode.
   it grows:
 
   The formulas themselves are defined once, in [§7.3 of the
-  spec](../../architecture.md): a fixed `LMAX = 64` for every file, the lane
+  spec](../architecture.md): a fixed `LMAX = 64` for every file, the lane
   is the chunk index modulo `LMAX`, and the lane's shard is the odd-stride
   permutation from the inode's shard. Two properties fall out of that
   formula, and both are load-bearing:
@@ -634,7 +634,7 @@ writes share an inode.
   was retired fails STALE rather than fabricating offset zero. Receipt streams
   survive resize and are removed with the dead, unheld inode. Session-wide
   reclamation still depends on W72; a timer cannot authorize it. Older
-  suffixes retain their legacy guarantees. See [the acceptance ledger](../../status/replay-readiness-20261008.md).
+  suffixes retain their legacy guarantees. See [the acceptance ledger](../../status/2026-10/replay-readiness-20261008.md).
 - **O_APPEND is a serialized reservation sequence feeding a parallel data
   path.** EOF allocation is the one same-file serialization the semantics
   truly require, and it lives on `inode_shard(ino)`:
@@ -860,7 +860,7 @@ or recompute EOF from a replica's lane view. The host subsequently waits for a
 guarded cross-shard transaction to retire lane barriers before replying to
 REPORT. A partial publication retains the remaining barriers. Implementation
 and outstanding live acceptance are recorded in the
-[W52/NUC ledger](../../status/nuc-w52-w97-resume-20261011.md).
+[W52/NUC ledger](../../status/2026-10/nuc-w52-w97-resume-20261011.md).
 
 The internal Raft command uses big-endian integers:
 
@@ -1054,7 +1054,7 @@ leader scan of inode shards, for stores written before packing.
 
 Built in since A6 (a set variable stops efsd): a 10 s work cap per idle
 compaction batch, a 120 min daily window and full coldness at 86400 s
-([inventory](../../status/a6-settings-inventory-20261024.md)).
+([inventory](../../status/2026-10/a6-settings-inventory-20261024.md)).
 
 **Reads.** GETCHUNKS returns a packed base with `EFS_CHUNK_REC_F_PACKED`
 and the 96-byte reference; nodes and checksums are the segment's. The
@@ -1233,7 +1233,7 @@ by the reader. The node's check ends at its reply buffer, so the client
 hashes every received fragment payload (BLAKE3) and compares it with the
 reply's digest before the fragment is decoded: TCP checksums and RDMA's ICRC
 do not cover host memory or the receive path. There is no switch
-([D42 audit](../../status/read-verify-audit-20261024.md)). Two refused fragments fail the read with EIO. Nothing is
+([D42 audit](../../status/2026-10/read-verify-audit-20261024.md)). Two refused fragments fail the read with EIO. Nothing is
 repaired automatically (W74).
 
 **GC.** The checksum-conditional delete reads the record, verifies identity

@@ -1,6 +1,6 @@
 #!/bin/bash
 # flake_load.sh TREE OUT LABEL TEST LOOPS ITERATIONS: the flake sweep's loaded
-# reproduction (docs/status/flake-sweep-20261025.md). One 8-job pool run of
+# reproduction (docs/status/2026-10/flake-sweep-20261025.md). One 8-job pool run of
 # the gate (scripts/make_test_summary.sh, test-all) as load, and beside it
 # LOOPS parallel loops of tests/TEST, ITERATIONS each, through
 # scripts/flake_loop.sh (failing iterations keep their logs under

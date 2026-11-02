@@ -37,4 +37,4 @@ The fixture metrics include failed attempts; consult the corresponding log.
 | 29 | Combined direct POSIX/GC/namespace/worker gate | PASS | raw log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-gates30/attempt-d/round29.log`) |
 | 30 | Combined buffered POSIX/GC/namespace/worker gate | PASS | raw log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-gates30/attempt-d/round30.log`) |
 
-[Package disposition and limitations](../../../docs/status/gate-30-rounds-20261007.md).
+[Package disposition and limitations](../../../docs/status/2026-10/gate-30-rounds-20261007.md).

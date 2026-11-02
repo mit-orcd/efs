@@ -6,7 +6,7 @@ Committed-branch integration checkpoint for `devel-find-stats`: merge all
 then-current local branch tips (devel `fee363f5`, devel-w66 `70daa5a4`,
 devel-persistence-pressure `437b7890`) into one tree, regenerate architecture
 docs, and run full Linux build/unit acceptance on the merged snapshot. Linked
-item: `docs/status/find-stats-all-branches-20261009.md` (deferred from the W92
+item: `docs/status/2026-10/find-stats-all-branches-20261009.md` (deferred from the W92
 derived-stat work). Run added by commit `8aeb9c4b9` ("docs: record all-branch
 find-stats integration and full Linux gates").
 

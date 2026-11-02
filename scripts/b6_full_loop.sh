@@ -1,7 +1,7 @@
 #!/bin/bash
 # b6_full_loop.sh TREE OUTDIR RUNS: build TREE (efsd, efs-fuse, efs-mgmt and
 # the EFS_FAULTS efsd) and run `EFS_B6_MODES=full tests/test_b6_unavailable.py`
-# RUNS times, for the packer UNINDEX race (docs/status/
+# RUNS times, for the packer UNINDEX race (docs/status/2026-10/
 # pack-unindex-race-20261024.md). Linux with /dev/fuse and fusermount3; the
 # test picks free ports and keeps its stores under TMPDIR (default
 # $HOME/efs-b6loop-tmp). OUTDIR gets summary.txt (one `runN rc= secs=` line

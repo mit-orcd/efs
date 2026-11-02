@@ -4,7 +4,7 @@
 four nodes provide the maximum two-node-loss safety target; additional nodes
 scale volume and performance across all dimensions. Today's fixed 2+1 data and
 three-voter metadata groups do not implement that four-node guarantee. See
-[binding requirement and implementation gates](../status/node-count-protection-20261009.md); preserve the requirement
+[binding requirement and implementation gates](../status/2026-10/node-count-protection-20261009.md); preserve the requirement
 rather than deriving the design from current code.
 
 [Quick start](../using/quickstart.md) ·
@@ -129,7 +129,7 @@ membership.
 The cluster forms by itself once the first node and two joiners are there:
 the first node proposes node ids in endpoint order, each joiner persists a
 promise for that proposal, and the cluster commits it in both metadata
-groups (docs/status/k33-membership-protocol-20261023.md, M4'). Every daemon
+groups (docs/status/2026-10/k33-membership-protocol-20261023.md, M4'). Every daemon
 derives the member count and the voters from the committed record from then
 on, across restarts. A node that joins later is added online with the next
 id; group 2 moves to {2,3,4} at four members and later nodes add storage.
@@ -273,7 +273,7 @@ and physical deletion makes progress in that pass. Empty scans and wholly blocke
 normal backoff; partially blocked work can still accelerate if other deletions
 succeed. Per-group scan/fragment/ACK budgets, deletion authority and durability
 ordering remain unchanged. This is an opt-in experiment, not an overload fix
-or production default. [AMD gates and limits](../status/amd-sustained-20261011.md#opt-in-gc-scheduling-candidate).
+or production default. [AMD gates and limits](../status/2026-10/amd-sustained-20261011.md#opt-in-gc-scheduling-candidate).
 
 Metadata plane (Raft + KV):
 

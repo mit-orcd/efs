@@ -3,9 +3,9 @@
 ## Purpose and linked item
 Three-hour exclusive-NUC closure session on branch `devel-nuc`, starting at
 devel `746ae9f0`; session window 2026-10-11 03:41–06:41 UTC (Oct 10 EDT).
-Linked status page: `docs/status/devel-nuc-closure-20261010.md`. The
+Linked status page: `docs/status/2026-10/devel-nuc-closure-20261010.md`. The
 persistence-latency investigation begun here as "W97" was re-tracked as W111
-(`docs/status/w111-nuc-persistence-investigation-20261011.md`); dated W97
+(`docs/status/2026-10/w111-nuc-persistence-investigation-20261011.md`); dated W97
 labels in the raw files are historical.
 
 ## Verdict

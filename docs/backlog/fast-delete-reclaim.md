@@ -9,7 +9,7 @@ PASS; private and orcd-mini acceptance: see the evidence page linked from
 - **Proceed:** part 1 (bounded batched reclaim) and part 2 (explicit
   accounting), then W125.
 - **Deferred:** parts 4 (slot reuse) and 5 (subtree delete).
-Evidence: [orcd-mini deletes, GC and crawl](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md)
+Evidence: [orcd-mini deletes, GC and crawl](../status/2026-10/orcd-mini-gc-delete-profile-5d673efa8-20261018.md)
 and the space accounting below.
 
 ## Problem

@@ -4,7 +4,7 @@
 
 ORCD release qualification of `release-v0.3.1-pre-alpha` for ordinary files
 over native RDMA with direct I/O. Linked status page:
-`docs/status/orcd-v031-rdma-direct-20261012.md`; the run was added by commit
+`docs/status/2026-10/orcd-v031-rdma-direct-20261012.md`; the run was added by commit
 `9fc5e0245` ("docs: qualify v0.3.1 ordinary files RDMA direct on ORCD").
 This is a fresh ORCD execution; earlier AMD TCP results do not transfer.
 Scope exclusions: `.efs` commands/queries and dedicated unplanned-event

@@ -8,4 +8,4 @@ The production helper test now checks unavailable/absent subsequent state cannot
 
 ## Historical scope
 
-This dated repair record is archived after the earlier Intel deployment verified the corrected exclusive-MKDIR and source-cursor gates. The [775d935c acceptance](intel-deployment-acceptance-775d935c-20261011.md) retains the deployed results. Any original pending language above belongs to that snapshot. Final-candidate full suites, rollout and sustained tiny-file performance remain active in the [current Intel ledger](../../status/intel-deployment-acceptance-20261011.md); W97/W100/W101 are not closed by moving this note.
+This dated repair record is archived after the earlier Intel deployment verified the corrected exclusive-MKDIR and source-cursor gates. The [775d935c acceptance](intel-deployment-acceptance-775d935c-20261011.md) retains the deployed results. Any original pending language above belongs to that snapshot. Final-candidate full suites, rollout and sustained tiny-file performance remain active in the [current Intel ledger](../../status/2026-10/intel-deployment-acceptance-20261011.md); W97/W100/W101 are not closed by moving this note.

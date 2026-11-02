@@ -1,7 +1,7 @@
 # tests/budgets.tsv (W160): every `make test-long` command, its wall-time budget in
 # seconds at EFS_TEST_JOBS=8: Task T maximum of three host medians (three clean
 # gates each on intel1/xorinox/fstor007), times 1.25 rounded up to 5 s. Evidence:
-# docs/status/gate-budgets-per-host-20261028.md. Task BN (docs/status/budget-remeasure-20261030.md)
+# docs/status/2026-10/gate-budgets-per-host-20261028.md. Task BN (docs/status/2026-10/budget-remeasure-20261030.md)
 # re-measured every row on amd and node9900 (three 8-job gates each, passing runs only) with
 # intel2's wave 42/44 gates and earlier measured notes as further evidence: the "BN:" note
 # gives the slowest median that sets the row. The pool slots and historical
@@ -17,7 +17,7 @@
 # 1 a test that mostly waits on daemon timers (member-down detection, unmount fences,
 # the slow member's deliberate delays) or a CPU-bound process. scripts/make_test_summary.sh starts the
 # largest budgets first and lists OVERBUDGET commands; tests/test_make_test_recipe.py
-# bounds the budgets and the budgeted gate time. Evidence: docs/status/gate-speed-20261025.md.
+# bounds the budgets and the budgeted gate time. Evidence: docs/status/2026-10/gate-speed-20261025.md.
 command	budget_s	slots	reason
 python3 tests/test_shutdown_blocked_io.py	15	1	BN: slowest median 11.4 s (intel2) -> 15 s; amd 11.3, node9900 11.3, intel2 11.4 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 15 s
 python3 tests/test_w153_formation.py	15	1	BN: slowest median 11.4 s (intel2) -> 15 s; amd 10.4, node9900 10.6, intel2 11.4 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 15 s

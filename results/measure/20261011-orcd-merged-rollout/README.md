@@ -2,7 +2,7 @@
 
 Runtime `c52a464391a685a766ee49aa76a162de58162a81`, branch `devel-orcd`, four direct-I/O servers and seven native mlx5_2 RDMA clients. This snapshot integrates devel/AMD/Intel/Mac/NUC commits and repairs the combined LOOKUP test fixture. Full Linux units pass; loaded live acceptance does not.
 
-See [rollout and limitations](../../../docs/status/orcd-merged-rollout-20261011.md). `posix-summary.json` counts exact rows and preserves completion markers. The 15-second minimum run and repeated prior 30-second minimum run have separate TSVs; longer per-case budgets remain. `peer.tsv` is complete: 66 pass, one concurrent-append step deadline fail. `deep-control.txt` records native/EFS focused tests at the unchanged per-case deadline. Failed virtual command probes do not close the owner-name rollout gate.
+See [rollout and limitations](../../../docs/status/2026-10/orcd-merged-rollout-20261011.md). `posix-summary.json` counts exact rows and preserves completion markers. The 15-second minimum run and repeated prior 30-second minimum run have separate TSVs; longer per-case budgets remain. `peer.tsv` is complete: 66 pass, one concurrent-append step deadline fail. `deep-control.txt` records native/EFS focused tests at the unchanged per-case deadline. Failed virtual command probes do not close the owner-name rollout gate.
 
 `preflight.txt` and `postflight.json` preserve 100 GiB file attributes and four sample hashes; this is not a full-file checksum. `worker-audit.json` accounts for the running peer steps and shows prior suite workers retired. `runtime-settings.json` records only selected EFS environment variables, process arguments and ownership.
 

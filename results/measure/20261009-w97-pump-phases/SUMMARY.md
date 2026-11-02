@@ -2,7 +2,7 @@
 
 ## Purpose and linked item
 Work item W97 (replication / persistence throughput collapse investigation).
-Linked status page: `docs/status/w97-solution-investigation-20261009.md`, which
+Linked status page: `docs/status/2026-10/w97-solution-investigation-20261009.md`, which
 references this run's README as "Raw phase evidence and method". The run
 reproduces the W97 throughput collapse with opt-in pump-phase timing
 instrumentation (queue residence, pump-lock, inbox-drain, KV WAL release,
