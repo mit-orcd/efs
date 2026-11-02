@@ -63,7 +63,7 @@ Checks: `summary.txt` shows `fail 0` and `report-stuck logs 0`. Cleanup: `rm -rf
 ## Limitations and remaining gates
 
 - Only intel1 and TCP; RDMA and a FUSE writer under the 24-copy load were not run (the FUSE path is unchanged and already returns EIO).
-- No deterministic unit test: the interleaving needs a background REPORT between the two PUTs of one chunk; the loaded reproducer is the acceptance (gate tests were not to be added).
+- The interleaving itself is only reproduced under load, but `cbase_check()` in `tests/test_stale_recovery.py` (Task CM) now deterministically drives the real `cbase_slot`/`cbase_note`/`cbase_apply`: same FileID takes the committed base, a different FileID or equal generation stays 0, a slot collision only forgets.
 - K88 acceptance on the frozen candidate: `test_bench_published` in F1 and one more loaded run.
 
 ## Artifacts
