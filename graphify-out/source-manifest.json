@@ -1538,7 +1538,7 @@
     "scripts/build-code-graph.py": "417eb64aa7671a11a706d2143e89018ada4add4d5c9e9095729e2f7f02ce730d",
     "scripts/calibrate_test_budgets.sh": "26d0675574f0749aeb33127f7c390bdcbb7d2beee6b6adbb48dae840972bd51d",
     "scripts/capture_intel_put_stages.sh": "49e971a21f6e7bd4c3b4632336646d82286abc5a3ee9640c20a85f934d2d2cb8",
-    "scripts/check_doc_links.py": "8808948b1fcba41534370d0bb27876ec1100550d8b34d12ab465ad89e44e6f6f",
+    "scripts/check_doc_links.py": "9f8504809e3d1f2da3ba119439a57e67155c50f1776b5b5e7cb8a5948b6e8c34",
     "scripts/check_k_register.py": "bee7eea3696a7bd0559b00545e8c87e3223b12d9a1c6b272cc324c4936ee4391",
     "scripts/client.sh": "155b5db39a1e7e0375c38421748753eb8cce5b2ccadba0484ccea6937b24998a",
     "scripts/client_processes.py": "49ad026be5050680b4d2dedc2e716eab972995b7f941b9cf0fa178798970e00d",
@@ -1680,7 +1680,7 @@
     "scripts/soak_tables.py": "7ebdc408c006edfbf53c97c0ecffcb99fc8fab7439180bf72a4dad110efe6b85",
     "scripts/soak_verify_retained.py": "4088c287aa9eb83a5b0f1bb93218aca123792ca9d6bfc46df2c8342aeac0d6f2",
     "scripts/stage2_helpers.py": "56ce1c40813da0578ecf9366c5c4ee80b319791a78d524c0dd61f9c2d7aad83d",
-    "scripts/status_layout.py": "6b03f17ad9f03d39d3d70944913d16a1ddf35a142dca46e9ee9c5a008ae04e07",
+    "scripts/status_layout.py": "8aec38640c928792eb4e88db61e90030ccdd134e49546ba7915d7c7806240496",
     "scripts/summarize_intel_rpc_trace.py": "e1de26cd6ff98ad688324d25f5160dd1f37e2c592d59901923c9587a8600c0e4",
     "scripts/summarize_put_stages.py": "9f176676e570bfbd0f12c8ec223d45358e816a734bd6f652e8816e766ec49f73",
     "scripts/task_i_alloc_probe.c": "0652220360368676d604c530cabb0364c96c173d47a41d2018e991a77eb437a1",
@@ -2821,5 +2821,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "f212b6f19d7df5154b02c99a03527572383e8a65"
+  "source_commit": "80a74d28f43f111eb258de22baa102bf04f928f2"
 }

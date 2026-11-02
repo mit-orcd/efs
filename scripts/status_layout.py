@@ -43,10 +43,10 @@ def rewrite_links(text, old_dir, new_dir, moved):
         t = m.group(2)
         if re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", t) or t.startswith(("#", "/")):
             return m.group(0)
-        rel, sep, rest = t.partition("#")
+        rel, rest = re.match(r"([^?#]*)(.*)", t).groups()
         old = Path(os.path.normpath(old_dir / rel))
         new = moved.get(old, old)
-        t2 = os.path.relpath(new, new_dir) + sep + rest
+        t2 = os.path.relpath(new, new_dir) + rest
         return m.group(1) + t2 if t2 != t else m.group(0)
     return LINK.sub(sub, text)
 
@@ -60,6 +60,13 @@ def main():
     counts = Counter(str(n.parent.name) for n in moved.values())
     for month, n in sorted(counts.items()):
         print(f"status_layout: {n} page(s) -> docs/status/{month}/")
+    # Preflight before the first `git mv`: a failing move halfway through leaves
+    # moved pages whose links a rerun no longer rewrites.
+    tracked = set(git("ls-files", "--", str(STATUS)).splitlines())
+    untracked = [str(o) for o in moved if str(o) not in tracked]
+    if untracked:
+        print("status_layout: untracked page(s), git add them first: " + " ".join(untracked), file=sys.stderr)
+        return 1
     if dry:
         return 0
     for old, new in moved.items():

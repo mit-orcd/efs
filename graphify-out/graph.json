@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "f212b6f19d7df5154b02c99a03527572383e8a65"
+      "source_commit": "80a74d28f43f111eb258de22baa102bf04f928f2"
     }
   },
   "links": [
@@ -214506,7 +214506,7 @@
       "relation": "contains",
       "source": "scripts_check_doc_links",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L52",
+      "source_location": "L50",
       "target": "scripts_check_doc_links_main",
       "weight": 1.0
     },
@@ -214529,7 +214529,7 @@
       "relation": "calls",
       "source": "scripts_check_doc_links_main",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L53",
+      "source_location": "L51",
       "target": "scripts_check_doc_links_dangling",
       "weight": 1.0
     },
@@ -214541,7 +214541,7 @@
       "relation": "calls",
       "source": "scripts_check_doc_links_main",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L53",
+      "source_location": "L51",
       "target": "scripts_check_doc_links_md_files",
       "weight": 1.0
     },
@@ -244488,7 +244488,7 @@
       "relation": "calls",
       "source": "scripts_status_layout_main",
       "source_file": "scripts/status_layout.py",
-      "source_location": "L67",
+      "source_location": "L65",
       "target": "scripts_status_layout_git",
       "weight": 1.0
     },
@@ -244512,7 +244512,7 @@
       "relation": "calls",
       "source": "scripts_status_layout_main",
       "source_file": "scripts/status_layout.py",
-      "source_location": "L84",
+      "source_location": "L91",
       "target": "scripts_status_layout_rewrite_links",
       "weight": 1.0
     },
@@ -873082,7 +873082,7 @@
       "id": "scripts_check_doc_links_main",
       "label": "main()",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L52"
+      "source_location": "L50"
     },
     {
       "_callable": true,

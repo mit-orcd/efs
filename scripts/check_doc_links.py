@@ -25,11 +25,9 @@ def dangling(path):
     fence = None
     for n, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
         m = re.match(r"\s*(`{3,}|~{3,})", line)
-        if m:
-            if fence is None:
-                fence = m.group(1)[0]
-            elif m.group(1)[0] == fence:
-                fence = None
+        # A closing fence is the same character, at least as long as the opener.
+        if m and (fence is None or (m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence))):
+            fence = None if fence else m.group(1)
             continue
         if fence:
             continue
