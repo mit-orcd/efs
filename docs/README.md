@@ -30,6 +30,7 @@ in this repository. Pick the guide below for your task.
 
 ## How it works
 
+- **Illustrated tour (alpha 1.0)** → [illustrated/index.html](illustrated/index.html) — interactive pictures of the cluster, data path, metadata, space, sessions, failures and operations; open the file in a browser. A teaching aid; the architecture and the alpha guide win where they differ.
 - **Software developer (changing code)** → [how-it-works/developing.md](how-it-works/developing.md) — modularity rules, task routing, what "done" means; [how-it-works/verification.md](how-it-works/verification.md) — the simulator and the gates; [how-it-works/testing.md](how-it-works/testing.md) — test suites and honest measurement.
 - **Architect (understanding or questioning the design)** → [how-it-works/architecture.md](how-it-works/architecture.md) — the normative spec; wire-level detail: [data](how-it-works/protocols/data.md), [directory](how-it-works/protocols/directory.md), [transactions](how-it-works/protocols/transactions.md), [sessions](how-it-works/protocols/sessions.md); [how-it-works/design-rationale.md](how-it-works/design-rationale.md) — why it has this shape; [how-it-works/naming.md](how-it-works/naming.md); [how-it-works/performance.md](how-it-works/performance.md) — the hot-path contract; [how-it-works/failure-tolerance.md](how-it-works/failure-tolerance.md) — the node-count guarantee derived.
 

@@ -6,7 +6,7 @@ supersedes this model's mandatory cluster file and fixed membership. The
 model must be extended for automatic formation and live additions; historical
 MODEL PASS below does not qualify those requirements. Removal is deferred.
 
-**Status: MODEL PASS on branch `devel-d39model` (not merged); implementation
+**Status: MODEL PASS merged into devel Oct 23 (`16d716308`); implementation
 and cluster gates NOTRUN.** This page is the single statement an implementer
 reads instead of the review history. It consolidates
 [the D39 proposal](d39-cluster-membership-proposal-20261022.md) §§1–34 as

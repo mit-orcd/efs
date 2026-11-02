@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFS metadata</title>
+<meta name="description" content="Shards, the two Raft metadata groups, leader and quorum behaviour, which shards each POSIX operation touches, and cross-shard transactions.">
+<link rel="stylesheet" href="illustrated.css?v=2">
+</head>
+<body>
+<header class="site"></header>
+<main>
+<h1>Metadata</h1>
+<p class="lead">Names, attributes, chunk maps, sessions and locks live in a replicated key-value store split into shards. In alpha 1.0 the shards map to two Raft groups of three voters each. A change is visible only once a majority of a group holds it.</p>
+
+<h2>From inode number to voters</h2>
+<div class="card">
+  <div class="controls"><label for="ino">Inode number</label><input id="ino" type="number" value="4097" min="1" style="width:8rem"><label for="mn">Cluster</label><select id="mn"><option>3</option><option>4</option><option>5</option><option>8</option></select></div>
+  <div class="log" id="where" aria-live="polite"></div>
+</div>
+<p>The shard is the low 12 bits of the inode number, so consecutive numbers spread over all 4096 shards. Today every odd shard belongs to group 0 and every even shard to group 2. The root directory, inode 1, is on shard 1, in group 0.</p>
+
+<h3>Create stays on one shard</h3>
+<div class="card">
+  <p>A new file's inode number is drawn from a range whose low 12 bits equal its parent directory's shard. The new name and the new inode row then sit on the same shard, so a <code>create</code> is one Raft entry, not a transaction.</p>
+  <div class="controls"><label for="par">Parent directory inode</label><input id="par" type="number" value="4097" min="1" style="width:8rem"><button id="mk" class="primary">create a file</button><button id="mkreset">reset</button></div>
+  <div class="log" id="mklog" aria-live="polite"><p class="muted">Press “create a file”.</p></div>
+</div>
+
+<h2>A Raft group in action</h2>
+<p>Each group has three voters and one leader. Any live voter accepts a client request and passes it to the leader. A write commits when two of the three hold it. Switch voters off and send requests.</p>
+<div class="card">
+  <div class="controls" id="rv" role="group" aria-label="Voters"></div>
+  <svg class="fig" id="raft" viewBox="0 0 900 190" role="img" aria-label="Three voters of one metadata group"></svg>
+  <div class="controls"><button id="rw" class="primary">Create a file (write)</button><button id="rr">Stat it (linearizable read)</button><button id="rx">Reset</button></div>
+  <div class="log" id="rlog" aria-live="polite"></div>
+</div>
+<ul>
+<li><strong>No clocks decide anything.</strong> A read is answered by the leader after a fresh majority round (ReadIndex), never by a time-limited lease. A deposed leader cannot serve a stale answer.</li>
+<li><strong>Uncertainty is never “not found”.</strong> If a node cannot establish authority, the client gets a retryable error. A cache miss is resolved from stored state; only a real absence returns <code>ENOENT</code>.</li>
+<li><strong>Clients retry smartly.</strong> The client follows leader hints, picks another voter when one is dead, and keeps the same request identity so a retry is recognised as a duplicate.</li>
+</ul>
+
+<h2>What each operation touches</h2>
+<p>The operation matrix of the architecture (§6), abridged. “Shards” is how many Raft groups' shards have to agree.</p>
+<div class="controls"><button class="on" data-f="all">All</button><button data-f="1">One shard</button><button data-f="2">Several shards (transaction)</button></div>
+<div class="tablewrap"><table id="ops"><thead><tr><th>Operation</th><th>State touched</th><th>Shards</th><th>Protocol</th></tr></thead><tbody></tbody></table></div>
+
+<h2>A cross-shard transaction</h2>
+<p>Operations that span shards, such as a hard link or cross-directory rename, use prepared intents and one durable decision. Intents are invisible until the decision commits. Prepares never wait, so deadlock cannot happen. Step through it and try the two failure toggles.</p>
+<div class="card">
+  <div class="controls"><label><input type="checkbox" id="tconf"> a concurrent operation conflicts on the same key</label><label><input type="checkbox" id="tcrash"> the coordinator dies after prepare</label></div>
+  <div class="controls"><button id="tback">← Back</button><button id="tnext" class="primary">Next →</button><button id="treset">Restart</button></div>
+  <ol class="steps" id="tx"></ol>
+</div>
+
+<h2>What other clients see</h2>
+<ul>
+<li>A namespace change such as <code>create</code>, <code>rename</code> or <code>unlink</code> is visible to every client as soon as it returns. There are no time-based attribute caches.</li>
+<li>File contents are visible to others after the writer's <code>fsync</code> or last <code>close</code> publishes them, see <a href="data-path.html">Data path</a>.</li>
+<li><code>readdir</code> returns only names that existed at some point during the scan; concurrent renames are handled by the transaction rules above.</li>
+<li>Directories keep their entries on the parent's shard. The hot-directory spread across many shards is after alpha 1.0.</li>
+</ul>
+</main>
+<footer class="site"></footer>
+<script src="illustrated.js?v=2"></script>
+<script>
+(function () {
+  /* inode -> shard -> group */
+  function where() {
+    var ino = Math.max(1, Math.floor(+$('ino').value || 1)), n = +$('mn').value, shard = ino % 4096, g = (shard & 1) ? 0 : 2, v = voters(g, n);
+    $('where').innerHTML = '<p>Inode <strong>' + ino + '</strong> = <code>0x' + ino.toString(16) + '</code> → shard <strong>' + shard + '</strong> (low 12 bits) → metadata <strong>group ' + g + '</strong> (shard is ' + (shard & 1 ? 'odd' : 'even') + ')</p>' +
+      '<p>At ' + n + ' nodes group ' + g + ' has voters <strong>nodes ' + v.join(', ') + '</strong>. Any of them accepts the request; the leader commits it.</p>';
+  }
+  $('ino').addEventListener('input', where); $('mn').addEventListener('change', where); where();
+
+  /* create co-location */
+  var counter = 1000;
+  $('mk').onclick = function () {
+    var par = Math.max(1, Math.floor(+$('par').value || 1)), shard = par % 4096, ino = counter * 4096 + shard; counter++;
+    var p = document.createElement('p');
+    p.innerHTML = 'create in directory ' + par + ' (shard ' + shard + ') → new inode <strong>' + ino + '</strong> → shard <strong>' + (ino % 4096) + '</strong>. Name and inode row: <strong>same shard → one Raft entry</strong>.';
+    var l = $('mklog'); if (l.querySelector('.muted')) l.innerHTML = ''; l.appendChild(p);
+  };
+  $('mkreset').onclick = function () { counter = 1000; $('mklog').innerHTML = '<p class="muted">Press “create a file”.</p>'; };
+
+  /* raft widget */
+  var up, leader, term, idx;
+  function rreset() { up = [false, true, true, true]; leader = 1; term = 1; idx = 0; $('rlog').innerHTML = '<p>Group 0 with voters 1, 2, 3. Node 1 leads (term 1).</p>'; rdraw(); }
+  function rsay(t, c) { var p = document.createElement('p'); p.innerHTML = t; if (c) p.style.color = 'var(' + c + ')'; $('rlog').appendChild(p); }
+  function count() { return up.slice(1).filter(Boolean).length; }
+  function rdraw() {
+    var t = $('rv'); t.innerHTML = '';
+    [1, 2, 3].forEach(function (i) { var b = document.createElement('button'); b.textContent = 'voter ' + i + (up[i] ? ' up' : ' DOWN'); b.className = up[i] ? 'on' : ''; b.setAttribute('aria-pressed', up[i]);
+      b.onclick = function () { up[i] = !up[i]; rsay('Voter ' + i + (up[i] ? ' returns.' : ' goes down.')); if (!up[leader] && count() >= 2) elect(); rdraw(); }; t.appendChild(b); });
+    var s = $('raft'); s.innerHTML = '';
+    [1, 2, 3].forEach(function (i) { var x = 150 + (i - 1) * 300, g = svg('g', { class: 'node' + (up[i] ? '' : ' down') }, s);
+      svg('rect', { x: x - 100, y: 30, width: 200, height: 110, rx: 12 }, g);
+      svg('text', { x: x, y: 60, 'text-anchor': 'middle', class: 'b' }, g, 'Voter ' + i + (leader === i && up[i] ? '  ★ leader' : ''));
+      svg('text', { x: x, y: 85, 'text-anchor': 'middle', class: 'small muted' }, g, up[i] ? (leader === i ? 'term ' + term : 'follower') : 'down');
+      svg('text', { x: x, y: 108, 'text-anchor': 'middle', class: 'small' }, g, up[i] ? 'log entries: ' + idx : 'log entries: (behind)'); });
+    svg('text', { x: 450, y: 172, 'text-anchor': 'middle', class: 'small muted' }, s, count() >= 2 ? 'majority available: 2 of 3' : 'NO majority: this group cannot commit or answer authoritatively');
+  }
+  function elect() {
+    var c = [1, 2, 3].filter(function (i) { return up[i]; }); leader = c[0]; term++;
+    rsay('The leader is gone. After a timeout the voters elect voter <strong>' + leader + '</strong> (term ' + term + ').', '--accent');
+  }
+  $('rw').onclick = function () {
+    if (count() < 2) { rsay('Request sent to a live voter… <strong>no majority</strong>. The write cannot commit. The client retries within its budget and then reports an error; it never pretends success.', '--down'); return; }
+    var entry = [1, 2, 3].filter(function (i) { return up[i]; }); var via = entry[Math.floor(Math.random() * entry.length)];
+    if (!up[leader]) elect();
+    idx++;
+    rsay('Client → voter ' + via + (via === leader ? ' (the leader)' : ' → bounced to leader ' + leader) + '. Leader appends, ' + (count() === 3 ? 'both followers persist' : 'the other live voter persists') + ' it → <strong>committed</strong> on a majority → applied → reply. <span style="color:var(--ok)">OK</span>'); rdraw();
+  };
+  $('rr').onclick = function () {
+    if (count() < 2) { rsay('Read: the leader cannot confirm a majority, so it does <strong>not</strong> answer from memory. The client gets a retryable error, never “not found”.', '--down'); return; }
+    if (!up[leader]) elect();
+    rsay('Read: leader ' + leader + ' asks a majority “am I still leader?”, waits until its applied index covers that point, then reads. <span style="color:var(--ok)">Linearizable, no lease.</span>'); rdraw();
+  };
+  $('rx').onclick = rreset; rreset();
+
+  /* ops table */
+  var OPS = [
+    ['create (file)', 'name + inode row', 1, 'one Raft entry (co-located)'], ['mkdir (local nested)', 'name, parent link count, new directory inode', 1, 'one atomic Raft entry'], ['mkdir (cross-group or spread)', 'name, parent link count, new directory inode', 2, 'transaction'],
+    ['rmdir', 'name, parent link count, directory inode; emptiness check', 2, 'transaction with an emptiness guard'], ['unlink (last link)', 'name + inode row', 1, 'one entry when both are on one shard, otherwise a transaction'],
+    ['link (hard link)', 'new name, link count on the inode', 2, 'transaction'], ['lookup', 'name', 1, 'single read'], ['stat', 'inode row and the file\'s active write marks', 1, 'validated double read'],
+    ['chmod / chown', 'inode row', 1, 'one Raft entry'], ['rename in one directory', 'two names on the parent shard', 1, 'one entry; replacing a target on another shard widens it'],
+    ['rename across directories', 'both names, inode, parent link counts', 2, 'transaction (directories add a cycle check)'], ['write (publish a chunk)', 'chunk map entry, size and times', 1, 'one Raft entry'],
+    ['truncate', 'inode row: size, content epoch', 1, 'one entry, constant work; space is reclaimed later'], ['readdir', 'names of one directory', 1, 'range scan'], ['fcntl / flock lock', 'lock records on the inode shard', 1, 'one entry per grant or release']
+  ];
+  function opsTable(f) {
+    var tb = document.querySelector('#ops tbody'); tb.innerHTML = '';
+    OPS.forEach(function (o) { if (f !== 'all' && String(o[2]) !== f) return; var tr = document.createElement('tr');
+      tr.innerHTML = '<td><strong>' + o[0] + '</strong></td><td>' + o[1] + '</td><td>' + (o[2] === 1 ? '1' : '2 or more') + '</td><td>' + o[3] + '</td>'; tb.appendChild(tr); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-f]'), function (b) { b.onclick = function () { Array.prototype.forEach.call(document.querySelectorAll('[data-f]'), function (x) { x.classList.remove('on'); }); b.classList.add('on'); opsTable(b.getAttribute('data-f')); }; });
+  opsTable('all');
+
+  /* transaction stepper */
+  var tstep = 0;
+  function tsteps() {
+    var conf = $('tconf').checked, crash = $('tcrash').checked, s = [];
+    s.push(['Prepare, in parallel', 'The coordinator asks each shard to record a conditional intent: “if the parent still has version V and the name is free, hold it for T”. Intents are invisible to readers.']);
+    if (conf) { s.push(['Conflict: no waiting', 'A concurrent operation already holds an intent on the same key, so one prepare fails at once. Nobody waits while holding something, so deadlock is impossible by construction.']);
+      s.push(['Abort and retry', 'The loser releases its intents and retries after a randomized backoff. Meanwhile readers still see the old state.']); }
+    s.push(['Write the decision', 'One durable decision record is committed on a participant chosen by hash of the transaction id. This single entry is the moment the change becomes visible.']);
+    if (crash) { s.push(['The coordinator dies', 'The intents are still prepared. Any reader that meets one asks for the decision: COMMIT shows the new value, ABORT or NO-DECISION shows the old one. If authority cannot be established the reader gets a retryable error, never “absent”.']);
+      s.push(['Recovery finishes it', 'Recovery drives every prepared transaction to COMMIT or ABORT. Nothing stays half done.']); }
+    s.push(['Resolve and clean up', 'Each shard turns its intent into the real value (or drops it), folding link-count and time changes in as commutative deltas. Decision records are kept until every participant has acknowledged.']);
+    return s;
+  }
+  function tdraw() {
+    var s = tsteps(); tstep = Math.min(tstep, s.length - 1); var ol = $('tx'); ol.innerHTML = '';
+    s.forEach(function (x, i) { var li = document.createElement('li'); li.className = i < tstep ? 'done' : i === tstep ? 'cur' : ''; if (i === tstep && /Conflict|dies/.test(x[0])) li.className = 'cur fail'; li.innerHTML = '<strong>' + x[0] + '.</strong> ' + x[1]; ol.appendChild(li); });
+    $('tback').disabled = tstep === 0; $('tnext').disabled = tstep === s.length - 1;
+  }
+  $('tnext').onclick = function () { tstep++; tdraw(); }; $('tback').onclick = function () { tstep = Math.max(0, tstep - 1); tdraw(); };
+  $('treset').onclick = function () { tstep = 0; tdraw(); }; $('tconf').onchange = $('tcrash').onchange = function () { tstep = 0; tdraw(); };
+  tdraw();
+})();
+</script>
+</body>
+</html>

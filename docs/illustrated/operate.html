@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFS operations</title>
+<meta name="description" content="The alpha 1.0 operator surface: start and stop, reading efs-mgmt status and settings, .efs directory commands and the transport knobs.">
+<link rel="stylesheet" href="illustrated.css?v=2">
+</head>
+<body>
+<header class="site"></header>
+<main>
+<h1>Operating a cluster</h1>
+<p class="lead">Configuration is the command line. There is no config file, node id or member count. Four programs and two wrapper scripts make up the whole alpha surface.</p>
+
+<div class="grid">
+<div class="card"><h3><code>efsd</code></h3><p>Storage and metadata daemon. <code>efsd ADDR:PORT STORAGE</code> creates a cluster or restarts the node; <code>--join [SEED]</code> joins one. One to 24 storage roots, <code>--quota</code>, <code>--meta-storage</code>.</p></div>
+<div class="card"><h3><code>efs-fuse</code></h3><p>The Linux client. <code>efs-fuse NODE:PORT MOUNTPOINT</code>; one address is enough. <code>--stop</code> drains and unmounts.</p></div>
+<div class="card"><h3><code>efs-mgmt</code></h3><p>Status, settings, policies, diagnostics. Mostly read-only; a few commands change policy or ask a member to act.</p></div>
+<div class="card"><h3><code>server.sh</code>, <code>client.sh</code></h3><p>Wrappers with logs, PID files and orderly-stop checks. Stop clients first, then servers.</p></div>
+</div>
+
+<h2>Starting and stopping</h2>
+<ol class="steps">
+<li><strong>Start servers.</strong> <code>./scripts/server.sh 10.0.0.11:17432 /data/efs</code> on the first host; the same with a seed address on two joiners. The cluster forms at the third member.</li>
+<li><strong>Check.</strong> <code>./efs-mgmt status 10.0.0.11:17432</code> exits 0 only when every member is up.</li>
+<li><strong>Mount.</strong> <code>./scripts/client.sh 10.0.0.11:17432 /mnt/efs</code> returns once <code>stat</code> works.</li>
+<li><strong>Unmount.</strong> <code>./scripts/client.sh stop /mnt/efs</code> refuses while a process uses the mount, drains writes, revokes the session. See <a href="sessions.html">Sessions</a>.</li>
+<li><strong>Stop servers.</strong> <code>./scripts/server.sh stop /data/efs</code> on each host. A daemon stops on SIGTERM within 55 s and writes an exit record.</li>
+</ol>
+<table>
+<thead><tr><th><code>server.sh stop</code> exits</th><th>Meaning</th></tr></thead>
+<tbody><tr><td><strong>0</strong></td><td>Orderly: fragment syncs, reclaim journal and usage flushed.</td></tr>
+<tr><td><strong>3</strong></td><td>Forced exit; stores preserved, the next start runs verified recovery.</td></tr>
+<tr><td><strong>4</strong></td><td>A barrier failed or the outcome is unknown; stores preserved, rerun to start on them.</td></tr></tbody></table>
+
+<h2>Reading <code>efs-mgmt status</code></h2>
+<p>Pick a situation, then click a line to see what it tells you. The numbers here are made up; the section names and their order follow the alpha guide.</p>
+<div class="card">
+  <div class="controls"><label for="sc">Situation</label><select id="sc"><option value="ok">All three nodes up</option><option value="down" selected>Node 3 down</option><option value="rebuild">Node 3 back, rebuilding</option></select></div>
+  <div class="grid" style="grid-template-columns: minmax(280px, 1.3fr) minmax(240px, 1fr)">
+    <div id="stl" role="list" style="font-family: ui-monospace, Menlo, monospace; font-size: .85rem"></div>
+    <div class="log" id="stx" aria-live="polite"></div>
+  </div>
+</div>
+
+<h2>Effective settings</h2>
+<p><code>efs-mgmt settings NODE:PORT</code> lists what a daemon is actually running with; <code>efs-mgmt settings --mount MOUNTPOINT</code> does the same for a client, on the host that mounted it. Read-only. One line per setting, tab separated:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>name</th><th>value</th><th>default</th><th>provenance</th><th>kind</th></tr></thead>
+<tbody>
+<tr><td>the setting</td><td>what is in force</td><td>the built-in default</td><td><code>built-in</code>, <code>environment</code>, <code>command line</code>, <code>automatic</code> or <code>policy</code></td><td>deployment input, numeric tunable, policy, transport or build</td></tr>
+</tbody></table></div>
+<ul>
+<li>Covered: the 9 deployment inputs, the numeric tunables, the cluster <code>.efs</code> and expiry policies with their versions, the durability window, the transport and the build.</li>
+<li>Left out and only counted in the header: observability switches (34) and fault or test hooks (62).</li>
+<li>One reply of at most 8 KiB. The command exits non-zero if the node refuses, cannot be reached or the reply is truncated.</li>
+</ul>
+
+<h2><code>.efs</code> directory commands</h2>
+<p>On a mount, every directory has a lookup-only <code>.efs/</code> folder with <code>ls</code> and <code>find</code> that query the cluster directly instead of walking the tree through the kernel. They need Python 3 on the client, and they work only while the cluster commands-policy allows them (on by default; <code>efs-mgmt commands-policy NODE:PORT get</code>). Build a command:</p>
+<div class="card">
+  <div class="controls">
+    <label for="bc">Command</label><select id="bc"><option>ls</option><option>find</option></select>
+    <label for="bp">Name pattern</label><input id="bp" value=".log" style="width:7rem">
+    <label for="bm">Match</label><select id="bm"><option>contains</option><option>prefix</option><option>suffix</option><option>exact</option></select>
+  </div>
+  <div class="controls">
+    <label><input type="checkbox" id="bl"> -l long</label><label><input type="checkbox" id="bh"> --human-readable</label><label><input type="checkbox" id="bj"> --json</label><label><input type="checkbox" id="br"> --relative</label>
+    <label for="bs">Sort</label><select id="bs"><option value="">default (name)</option><option>mtime</option><option>size</option></select>
+    <label for="bt">Type</label><select id="bt"><option value="">any</option><option>file</option><option>dir</option><option>symlink</option></select>
+    <label for="bz">Min size</label><input id="bz" placeholder="100MiB" style="width:6rem">
+  </div>
+  <pre><code id="bo"></code></pre>
+  <div class="log" id="bw" aria-live="polite"></div>
+</div>
+
+<h2>Knobs you may touch</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Input</th><th>How</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>Transport</td><td><code>EFS_TRANSPORT=auto|tcp|rdma</code>, <code>EFS_RDMA_DEV</code>, <code>EFS_RDMA_GID_INDEX</code>, the same on servers and clients</td><td><code>auto</code>: RDMA when an active device exists</td></tr>
+<tr><td>Quota</td><td><code>--quota SIZE</code> at start; change it by restarting the node</td><td>20 % of each filesystem kept free (at least 1 GiB), 7/8 of the rest for fragments</td></tr>
+<tr><td>Discovery</td><td><code>--discovery-port N</code> (0 off), <code>--discover-on IFACE</code></td><td>UDP 17430, every interface</td></tr>
+<tr><td>Metadata root</td><td><code>--meta-storage PATH</code></td><td>the first storage root</td></tr>
+<tr><td><code>.efs</code> commands</td><td>the cluster commands-policy</td><td>on (mask 3)</td></tr>
+<tr><td>Expiry</td><td>the cluster expiry policy, <code>efs-mgmt expiry-policy NODE:PORT cluster set on 0</code></td><td>off</td></tr>
+</tbody></table></div>
+<p class="muted">There is no switch for packing, for direct I/O or for the metadata layout; those are the same everywhere in alpha 1.0.</p>
+</main>
+<footer class="site"></footer>
+<script src="illustrated.js?v=2"></script>
+<script>
+(function () {
+  var INFO = {
+    nodes: 'Every member with reachability (up or DOWN), used bytes, quota and roots. A DOWN member makes <code>status</code> exit 1.',
+    usable: 'Usable logical 2+1 capacity. With a member down it says <code>degraded (2/3 nodes up)</code>. This is the figure <code>df</code> shows.',
+    state: '<code>OK</code>, <code>DEGRADED</code> (a node down, or degraded chunks or segments not yet rebuilt), <code>FULL</code> (two or more nodes full) or <code>UNAVAILABLE</code> (fewer than two up).',
+    chunks: 'Stripes acknowledged with two of three fragments, per metadata group, with <code>rebuilt=</code>, <code>retired=</code> and <code>unrecoverable=</code> counters. This is the repair debt.',
+    segs: 'The same for packed small-file segments. <code>unrecoverable</code> above zero means two fragments of a segment are gone.',
+    prot: '<code>full</code>; or <code>DEGRADED</code> with how many chunks and segments sit on two fragments and have no fault tolerance until rebuilt; or <code>LOST</code> when a segment lost two fragments.',
+    aband: 'Collection counters for uploads whose client died before publishing.',
+    ver: 'The build identity of every member. <code>MISMATCH</code> lists the nodes; a peer with a different build is refused at connection.',
+    leader: 'Which node leads which metadata group, self-reported, and how many distinct nodes hold leaders.'
+  };
+  var SC = {
+    ok: [['nodes', 'Cluster nodes (3): 1 up, 2 up, 3 up'], ['usable', 'Usable (2+1 logical): 21.3 TiB'], ['state', 'Cluster state: OK (3 up, 0 down)'], ['chunks', 'Degraded chunks: 0'], ['segs', 'Degraded segments: 0'], ['prot', 'Protection: full'], ['aband', 'Abandoned uploads: 0'], ['ver', 'Versions: 3/3 identical'], ['leader', 'Metadata leader placement: g0 → node 1, g2 → node 2']],
+    down: [['nodes', 'Cluster nodes (3): 1 up, 2 up, 3 DOWN'], ['usable', 'Usable (2+1 logical): degraded (2/3 nodes up)'], ['state', 'Cluster state: DEGRADED (2 up, 1 down)'], ['chunks', 'Degraded chunks: 412 (written on two of three fragments)'], ['segs', 'Degraded segments: 3'], ['prot', 'Protection: DEGRADED: 412 chunks and 3 packed segments on two of three fragments, no fault tolerance until rebuilt'], ['aband', 'Abandoned uploads: 0'], ['ver', 'Versions: 2/2 identical (node 3 unreachable)'], ['leader', 'Metadata leader placement: g0 → node 1, g2 → node 2']],
+    rebuild: [['nodes', 'Cluster nodes (3): 1 up, 2 up, 3 up'], ['usable', 'Usable (2+1 logical): 21.3 TiB'], ['state', 'Cluster state: DEGRADED (3 up, 0 down; rebuild in progress)'], ['chunks', 'Degraded chunks: 156 rebuilt=256 (at most 256 per pass)'], ['segs', 'Degraded segments: 0 rebuilt=3'], ['prot', 'Protection: DEGRADED: 156 chunks on two of three fragments, no fault tolerance until rebuilt'], ['aband', 'Abandoned uploads: 0'], ['ver', 'Versions: 3/3 identical'], ['leader', 'Metadata leader placement: g0 → node 1, g2 → node 2']]
+  };
+  function st() {
+    var l = $('stl'); l.innerHTML = ''; $('stx').innerHTML = '<p class="muted">Click a line.</p>';
+    SC[$('sc').value].forEach(function (r) { var b = document.createElement('button'); b.style.cssText = 'display:block;width:100%;text-align:left;margin:.15rem 0;font:inherit;border-radius:5px;overflow-wrap:anywhere'; b.setAttribute('role', 'listitem'); b.textContent = r[1];
+      if (/DOWN|DEGRADED|LOST/.test(r[1])) b.style.borderColor = 'var(--parity)';
+      b.onclick = function () { Array.prototype.forEach.call(l.children, function (x) { x.classList.remove('on'); }); b.classList.add('on'); $('stx').innerHTML = '<p>' + INFO[r[0]] + '</p>'; }; l.appendChild(b); });
+  }
+  $('sc').onchange = st; st();
+
+  function build() {
+    var cmd = $('bc').value, a = ['.efs/' + cmd], warn = [], L = $('bl').checked, H = $('bh').checked, J = $('bj').checked, R = $('br').checked;
+    if (cmd === 'find') { a.push("'" + $('bp').value + "'"); if ($('bm').value !== 'contains') a.push('--match ' + $('bm').value); if ($('bt').value) a.push('--type ' + $('bt').value); if ($('bz').value) a.push('--min-size ' + $('bz').value); }
+    if (J && L) { warn.push('--long cannot be combined with --json (or NUL output).'); L = false; }
+    if (H && !L && !J) { warn.push('--human-readable needs --long.'); }
+    if (J && R) { warn.push('--json already keeps raw relative paths and rejects --relative.'); R = false; }
+    if (L) a.push('-l'); if (H && L) a.push('--human-readable'); if (J) a.push('--json'); if (R) a.push('--relative'); if ($('bs').value) a.push('--sort ' + $('bs').value);
+    $('bo').textContent = a.join(' ');
+    $('bw').innerHTML = warn.length ? warn.map(function (w) { return '<p style="color:var(--down)">' + w + '</p>'; }).join('') : '<p class="muted">Dates are modification times in UTC. Sizes and times are exact; the pattern is a literal filename match, not a glob.</p>';
+  }
+  ['bc', 'bp', 'bm', 'bl', 'bh', 'bj', 'br', 'bs', 'bt', 'bz'].forEach(function (id) { $(id).addEventListener('input', build); $(id).addEventListener('change', build); }); build();
+})();
+</script>
+</body>
+</html>

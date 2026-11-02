@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFS failures</title>
+<meta name="description" content="What EFS alpha 1.0 does when one node, two nodes, a client or a daemon fails, and how it recovers.">
+<link rel="stylesheet" href="illustrated.css?v=2">
+</head>
+<body>
+<header class="site"></header>
+<main>
+<h1>When things fail</h1>
+<p class="lead">Alpha 1.0 protects against the loss of <strong>one</strong> node, on any cluster size. It keeps working degraded, repairs when the node returns, and refuses to guess when it cannot be sure. It does not survive a second loss, and it does not yet repair onto a different node.</p>
+
+<h2>Break nodes and see</h2>
+<div class="card">
+  <div class="controls"><label for="fn">Cluster</label><select id="fn"><option>3</option><option selected>4</option><option>5</option><option>8</option><option>16</option></select></div>
+  <div class="controls" id="ft" role="group" aria-label="Node power"></div>
+  <svg class="fig" id="fs" viewBox="0 0 900 190" role="img" aria-label="Nodes and metadata group quorums"></svg>
+  <div class="legend"><span><i class="m0"></i>voter of group 0</span><span><i class="m2"></i>voter of group 2</span><span><i class="dn"></i>down</span></div>
+  <div id="fr" class="grid" aria-live="polite"></div>
+</div>
+<p class="muted">The share of unreadable chunks assumes fragments are spread uniformly over all three-node subsets, which is what the placement ring approximates. Exact numbers depend on the files.</p>
+
+<h2>Event by event</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Event</th><th>What happens</th><th>What you see</th></tr></thead>
+<tbody>
+<tr><td><strong>One node down</strong></td><td>Reads reconstruct from the other two fragments. Each metadata group keeps two of three voters. On four or more nodes new writes put all three fragments on available nodes; on three nodes they carry two fragments and are marked degraded.</td><td><code>status</code>: <code>Cluster state: DEGRADED (2 up, 1 down)</code>, <code>Usable (2+1 logical): degraded (2/3 nodes up)</code>, exit code 1. No error on the mount.</td></tr>
+<tr><td><strong>A node stops in order</strong></td><td>It stops acknowledging fragments; the client resends them elsewhere or records the stripe degraded.</td><td>Writes carry on; the log names the member that left.</td></tr>
+<tr><td><strong>A node returns</strong></td><td>Each group leader rebuilds the missing fragment of every degraded stripe (at most 256 per pass), verifies it and clears the mark. Degraded packed segments are rebuilt and verified the same way.</td><td><code>Protection:</code> goes from <code>DEGRADED: N chunks…</code> back to <code>full</code>.</td></tr>
+<tr><td><strong>A node hangs</strong> (no exit)</td><td>Injected slow replies and a storage COMMIT beyond the 60 s sweep deadline have focused TCP/RDMA coverage. This does not qualify every gray failure.</td><td>Operations can wait for timeouts. The slow-COMMIT fsync defect is fixed: two durable fragments plus a durable degraded mark can succeed while the slow worker retains its deadline. See <a href="../status/k55-slow-commit-20261028.md">qualification and limits</a>.</td></tr>
+<tr><td><strong>A node is lost for good</strong></td><td>Degraded stripes stay degraded. There is no rebuild to another node and no removal in alpha 1.0.</td><td>Everything stays readable while every other node is up; a second loss would make those stripes unreadable.</td></tr>
+<tr><td><strong>Two nodes down</strong></td><td>Stripes with fragments on both are unreadable. A metadata group with two voters down has no quorum and refuses.</td><td><code>EIO</code> or timeouts for affected files; <code>fsync</code> returns <code>EIO</code> for a stripe with fewer than two durable fragments.</td></tr>
+<tr><td><strong>Client unmounts with a member down</strong></td><td>The storage fence needs a strict majority, so one member down is fine, two is not. See <a href="sessions.html">Sessions</a>.</td><td>Clean stop with one down; <code>revoke … phase=storage-fence</code> with two.</td></tr>
+<tr><td><strong>A client dies</strong></td><td>Unpublished writes are lost; abandoned uploads are collected; locks and open files are reclaimed after fencing.</td><td><code>Abandoned uploads</code> counters in <code>status</code>.</td></tr>
+<tr><td><strong>A daemon crashes or is killed</strong></td><td>Its storage roots restart “recovery uncertain”. Verified recovery checks the boot counter, the reclaim journal, session certificates, every local fragment and every published reference, drops what it cannot prove and marks those stripes for rebuild.</td><td>The node starts at once; <code>sync-status</code> shows the recovery phase and result. A stop during recovery ends with rc 4 and the store intact.</td></tr>
+<tr><td><strong>A packed segment loses two fragments</strong></td><td>There is no source left to rebuild from.</td><td><code>Protection: LOST</code>; the files in it read <code>EIO</code> until rewritten or removed.</td></tr>
+<tr><td><strong>A metadata replica refuses a stored row</strong></td><td>That replica halts its group and stops serving; healthy voters carry on. An operator can request a snapshot with <code>raft-resync</code>.</td><td>Log line <code>apply halted, group not served</code>; the cluster stays up on the other two voters.</td></tr>
+<tr><td><strong>Sudden power loss</strong></td><td>Not qualified in alpha 1.0.</td><td>Unknown durability; then the crash row above.</td></tr>
+</tbody></table></div>
+
+<h2>The recovery picture</h2>
+<ol class="steps">
+<li><strong>Detect.</strong> The client marks a peer down after four consecutive failures and probes it about once a second. Servers track members the same way; a returning node gets a new incarnation.</li>
+<li><strong>Keep serving.</strong> Reads decode from two fragments; writes carry on degraded; metadata uses the surviving voters.</li>
+<li><strong>Remember.</strong> Every degraded stripe or segment is marked on its metadata group, so the debt is visible and counted.</li>
+<li><strong>Return.</strong> The group leader audits the returned member, rebuilds the fragments it missed, verifies each by reading it back, and only then clears the mark.</li>
+<li><strong>Close.</strong> <code>Protection: full</code>. Until then a second loss would be fatal for those stripes.</li>
+</ol>
+
+<h2>What alpha 1.0 does not claim</h2>
+<ul>
+<li>No protection against a second node loss on any cluster size. Four nodes are not 2+2.</li>
+<li>No automatic repair to another node, no online node removal, no rebalancing.</li>
+<li>No sudden-power-loss qualification, and no indication of degraded state on the mount itself, only in <code>status</code> and the client log.</li>
+</ul>
+<p>Open defects and the gates still owed are listed in the <a href="../status/alpha-1.0-2plus1-checklist.md">alpha 1.0 checklist</a> and the <a href="../release-notes/alpha-1.0.md">release notes</a>. The full table is in the <a href="../using/alpha-1.0-guide.md">alpha guide</a>.</p>
+</main>
+<footer class="site"></footer>
+<script src="illustrated.js?v=2"></script>
+<script>
+(function () {
+  var n = 4, up = [];
+  function C(a, b) { if (b < 0 || b > a) return 0; var r = 1; for (var i = 1; i <= b; i++) r = r * (a - b + i) / i; return r; }
+  function reset() { n = +$('fn').value; up = [false]; for (var i = 1; i <= n; i++) up.push(true); build(); draw(); }
+  function build() {
+    var t = $('ft'); t.innerHTML = '<span class="muted">Nodes:</span>';
+    for (var i = 1; i <= n; i++) (function (i) { var b = document.createElement('button'); b.textContent = i + (up[i] ? '' : ' ✕'); b.className = up[i] ? 'on' : ''; b.setAttribute('aria-pressed', up[i]); b.setAttribute('aria-label', 'node ' + i + (up[i] ? ' up' : ' down'));
+      b.onclick = function () { up[i] = !up[i]; build(); draw(); }; t.appendChild(b); })(i);
+  }
+  function draw() {
+    var s = $('fs'); s.innerHTML = ''; var per = Math.min(n, 16), w = 900 / per, g0 = voters(0, n), g2 = voters(2, n), downN = 0;
+    for (var i = 1; i <= n; i++) { if (!up[i]) downN++; var cx = (i - 1) * w + w / 2, g = svg('g', { class: 'node' + (up[i] ? '' : ' down') }, s);
+      svg('circle', { cx: cx, cy: 60, r: Math.min(26, w / 2 - 4) }, g); svg('text', { x: cx, y: 65, 'text-anchor': 'middle', class: 'b' }, g, String(i));
+      if (g0.indexOf(i) >= 0) svg('rect', { class: 'g0', x: cx - 14, y: 108, width: 28, height: 8, rx: 3, 'stroke-width': 1.2 }, s);
+      if (g2.indexOf(i) >= 0) svg('rect', { class: 'g2', x: cx - 14, y: 120, width: 28, height: 8, rx: 3, 'stroke-width': 1.2 }, s); }
+    function q(v) { return v.filter(function (x) { return up[x]; }).length; }
+    var q0 = q(g0), q2 = q(g2), m0 = q0 * 2 > g0.length, m2 = q2 * 2 > g2.length, upN = n - downN;
+    svg('text', { x: 450, y: 160, 'text-anchor': 'middle', class: 'small muted' }, s, 'group 0: ' + q0 + ' of ' + g0.length + ' voters up   ·   group 2: ' + q2 + ' of ' + g2.length + ' voters up');
+    var state = downN === 0 ? 'OK' : upN < 2 ? 'UNAVAILABLE' : 'DEGRADED';
+    var unread = downN < 2 ? 0 : (C(downN, 2) * (n - downN) + C(downN, 3)) / C(n, 3);
+    var meta = m0 && m2 ? ['ok', 'Both metadata groups have a majority. Namespace operations work.'] : (m0 || m2) ? ['bad', 'One metadata group has lost its majority: operations on its shards (about half the namespace) refuse with errors or timeouts.'] : ['bad', 'Neither group has a majority: no namespace operation can complete.'];
+    var data = downN === 0 ? ['ok', 'All fragments reachable. Reads take the fast two-fragment path.'] : downN === 1 ? ['ok', 'Every chunk is readable: a stripe with a fragment on the down node decodes from the other two.'] : ['partial', 'About ' + (unread * 100).toFixed(unread < .1 ? 1 : 0) + '% of chunks have two or more fragments on down nodes and cannot be read. A second loss is outside the protection claim.'];
+    var wr;
+    if (downN === 0) wr = ['ok', 'Writes place three fragments and publish fully protected.'];
+    else if (!m0 || !m2) wr = ['bad', 'A metadata group without a majority cannot commit: writes and namespace changes on its shards wait and then fail with errors.'];
+    else if (downN === 1) wr = ['ok', n >= 4 ? 'Writes place all three fragments on available nodes.' : 'Writes carry two fragments and publish degraded, rebuilt when the node returns.'];
+    else if (upN >= 3) wr = ['partial', 'New chunks can still place three fragments on the nodes that are up. Files whose existing stripes lost two fragments return errors.'];
+    else wr = ['bad', 'Fewer than three nodes are up, so a stripe cannot be placed on three distinct nodes: writes publish with two fragments at best, or fail.'];
+    var LBL = { ok: 'ok', partial: 'partial', bad: 'impaired' }, COL = { ok: 'in', partial: 'open', bad: 'open' };
+    function card(h, c, t) { return '<div class="card"><h3>' + h + ' <span class="tag ' + COL[c] + '" style="' + (c === 'bad' ? 'color:var(--down)' : '') + '">' + LBL[c] + '</span></h3><p>' + t + '</p></div>'; }
+    $('fr').innerHTML = '<div class="card"><h3>Cluster state</h3><p><code>' + state + '</code> (' + upN + ' of ' + n + ' up)<br>' + (downN ? 'status exits 1' : 'status exits 0') + '</p></div>' + card('Metadata', meta[0], meta[1]) + card('Reads', data[0], data[1]) + card('Writes', wr[0], wr[1]);
+  }
+  $('fn').onchange = reset; reset();
+})();
+</script>
+</body>
+</html>

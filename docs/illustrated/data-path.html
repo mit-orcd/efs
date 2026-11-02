@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFS data path</title>
+<meta name="description" content="How EFS writes, publishes and reads a chunk with 2+1 erasure coding, including a node down, rebuild on return and checksum failures.">
+<link rel="stylesheet" href="illustrated.css?v=2">
+</head>
+<body>
+<header class="site"></header>
+<main>
+<h1>The data path</h1>
+<p class="lead">A file is a series of 128 KiB chunks. Each chunk becomes two data fragments and one parity fragment on three different nodes. The client sends them itself, and a write only becomes visible when metadata publishes it.</p>
+
+<h2>Try it: write, break a node, read</h2>
+<div class="card">
+  <div class="controls">
+    <label for="nn">Cluster</label>
+    <select id="nn"><option>3</option><option selected>4</option><option>5</option><option>6</option><option>8</option></select>
+  </div>
+  <div class="controls"><label for="filesize">File size</label><select id="filesize"><option value="32">32 KiB</option><option value="512">512 KiB</option><option value="1024">1 MiB</option></select></div>
+  <p>Choose a file size and write it once. The diagram shows every chunk’s fragments across the nodes. Reads, fsync and rebuild apply to the whole file.</p>
+  <div id="filefacts" class="state-grid" aria-live="polite"></div>
+  <details><summary>Advanced: file identity</summary><div class="controls">
+    <label for="file">File</label><input id="file" type="number" value="7" min="1" style="width:4.5rem">
+  </div>
+  </details>
+  <div class="controls"><label for="scenario">Guided scenario</label><select id="scenario"><option value="one">One node fails after a durable write</option><option value="quorum">Metadata quorum lost</option><option value="corrupt">Corrupt data fragment</option><option value="recover">Degraded write, then recovery</option></select><button id="preset">Load scenario</button></div>
+  <p id="instructions">Start with Write the file, then Confirm durability (fsync). Switch a node off and read. Reset restores this starting point.</p>
+  <div id="state" class="state-grid" aria-live="polite"></div>
+  <div class="controls" id="toggles" role="group" aria-label="Node power"></div>
+  <div class="controls">
+    <button id="bwrite" class="primary">Write the file</button>
+    <button id="bsync">Confirm durability (fsync)</button>
+    <button id="bread">Read it back</button>
+    <button id="brebuild" disabled>Rebuild missing fragments</button>
+    <label><input type="checkbox" id="corrupt"> corrupt chunk 0’s D1 on disk</label>
+    <button id="breset">Reset</button>
+  </div>
+  <p id="action-help" class="muted"></p>
+  <p class="muted">This whole-file model checks a metadata group for each chunk; real operations can involve additional authorities. Barriers and elections are explicit steps here, not timing predictions.</p>
+  <div class="log" id="log" aria-live="polite"><p class="muted">Press “Write the file”. Then switch a node off and read it back. To see a rebuild: use a 3-node cluster, switch a node off, write, switch it back on, then press “Rebuild missing fragments”.</p></div>
+  <svg class="fig" id="stage" viewBox="0 0 900 385" role="img" aria-label="All file chunks distributed as fragments across the nodes"></svg>
+  <p id="fileplacement"></p>
+  <p class="muted">Short chunks are zero-padded for encoding, but reads return only file bytes. File totals count encoded payload, excluding headers, metadata, alignment and old versions. Placement is illustrative. These are simulated barriers, not a product qualification or a promise of whole-file atomicity.</p>
+  <div class="legend"><span><i class="d"></i>data fragment</span><span><i class="p"></i>parity fragment</span><span><i class="dn"></i>missing or node down</span></div>
+</div>
+
+<h2>One write, step by step</h2>
+<ol class="steps">
+<li><strong>Buffer.</strong> A buffered <code>write()</code> need not wait for durability. Unpublished bytes are private to the writer; background work may publish before close. A client crash can lose bytes that have not completed the required publication and durability steps.</li>
+<li><strong>Allocate a candidate generation.</strong> Every attempt gets a globally unique identity (never “the old one plus one”), so two writers can never put different bytes under one name.</li>
+<li><strong>Encode and send.</strong> The chunk is cut into D1 and D2, parity is their XOR, and the three fragments go out in parallel over RDMA or TCP. Each lands as a file of 64 KiB payload plus a 4 KiB tail that carries its identity and checksum, written with direct I/O.</li>
+<li><strong>Acknowledgements.</strong> Before it accepts a fragment, a node checks its identity and placement and asks the metadata leader whether the upload ticket is still admitted for a live, unfenced session; a fenced client is refused. It answers once the fragment is written and closed. It is then in the root's open epoch, <em>not yet durable</em>: a background barrier targets an approximately 200 ms window by default, or <code>fsync</code> requests a barrier through <code>DATA_COMMIT</code>. This is not a completion deadline: slow or failed barriers can delay or fail durability confirmation.</li>
+<li><strong>Publish.</strong> The client asks the chunk's metadata group to swap the chunk map from the old generation to the new, carrying the acknowledgement evidence. The leader rejects evidence that does not match the current placement. A write that spans several chunks uses a transaction, so the chunks become visible together.</li>
+<li><strong>Return.</strong> <code>fsync</code>/<code>fdatasync</code> prove sufficient durable fragments for every relevant stripe: two may suffice with a durably recorded degraded mark. <code>O_SYNC</code>/<code>O_DSYNC</code> writes invoke the corresponding sync path. Close drives publication; do not treat publication or a PUT acknowledgement alone as durability proof. Visibility begins at publication, not necessarily when close or fsync returns.</li>
+</ol>
+<p>A crashed writer can leave fragments nobody published. Those are orphans, collected later; they never become visible. A fenced client's later uploads are refused at the storage node, which learns the sealed epoch from metadata. See <a href="space.html">Space</a> and <a href="sessions.html">Sessions</a>.</p>
+
+<h2>Parity is just XOR</h2>
+<div class="card">
+  <p>With two data fragments, the parity fragment is their bitwise XOR. Edit the bytes, then “lose” one fragment and rebuild it from the other two.</p>
+  <div class="controls">
+    <label for="x1">D1</label><input id="x1" value="45 46 53 21" style="width:9rem" class="mono">
+    <label for="x2">D2</label><input id="x2" value="C0 FF EE 07" style="width:9rem">
+    <label for="xl">Lose</label><select id="xl"><option value="0">D1</option><option value="1">D2</option><option value="2">P</option></select>
+  </div>
+  <pre><code id="xout"></code></pre>
+</div>
+
+<h2>Reads and integrity</h2>
+<ul>
+<li><strong>The fast path reads two fragments.</strong> The client asks for D1 and D2 in parallel and joins them. Parity is only fetched when one of them is unavailable.</li>
+<li><strong>The chunk map says where fragments are.</strong> A reader uses the nodes recorded at publication and never recomputes placement, so changing the cluster does not move existing data.</li>
+<li><strong>Every fragment is checksummed.</strong> A fragment that fails verification counts as missing and is rebuilt, never decoded. Erasure coding without this would reconstruct confidently from corrupt input.</li>
+<li><strong>Reads are consistent.</strong> A read that spans chunks collects the chunk maps, fetches, and revalidates, so it never splices old and new halves of one published write. The unit of atomicity is the write request EFS receives from FUSE; the kernel may split a very large application write into several requests.</li>
+</ul>
+
+<h2>Transport and caching</h2>
+<div class="grid">
+<div class="card"><h3>RDMA or TCP</h3><p><code>EFS_TRANSPORT=auto</code> uses RDMA when an active device exists, otherwise TCP. <code>rdma</code> never falls back. Set the same value on servers and clients.</p></div>
+<div class="card"><h3>Always direct I/O</h3><p>Daemons read and write fragments with <code>O_DIRECT</code>; a root that cannot do it is refused. The client bypasses the kernel page cache too. Direct I/O alone is not durability; the explicit sync barriers remain.</p></div>
+<div class="card"><h3>Flash only</h3><p>The design assumes NVMe-class devices and deep queues. Spinning disks are out of scope.</p></div>
+</div>
+</main>
+<footer class="site"></footer>
+<script src="illustrated.js?v=2"></script>
+<script>
+(function () {
+  var n=4, up=[], stripes=[], W=900, names=['D1','D2','P'];
+  var logEl=$('log');
+  function say(text){var p=document.createElement('p');p.textContent=text;logEl.appendChild(p);}
+  function count(){return Math.ceil(+$('filesize').value/128);}
+  function metaOk(st){return voters(st.grp,n).filter(function(v){return up[v];}).length>=2;}
+  function good(st,f){return up[st.nodes[f]]&&!st.missing[f]&&!(st.chunk===0&&f===0&&$('corrupt').checked);}
+  function sources(st){return names.filter(function(_,f){return good(st,f);}).length;}
+  function reset(){n=+$('nn').value;up=Array(n+1).fill(true);stripes=[];$('corrupt').checked=false;logEl.replaceChildren();say('Ready. Write the file to distribute all '+count()+' chunks.');buildToggles();draw();}
+  function buildToggles(){var t=$('toggles');t.replaceChildren();for(var i=1;i<=n;i++)(function(i){var b=document.createElement('button');b.textContent='node '+i+(up[i]?' up':' DOWN');b.className=up[i]?'on':'';b.setAttribute('aria-pressed',String(up[i]));b.onclick=function(){up[i]=!up[i];say('Node '+i+(up[i]?' returned.':' went down.'));buildToggles();draw();};t.appendChild(b);})(i);}
+  function rows(id,values){$(id).replaceChildren();values.forEach(function(r){var box=document.createElement('div'),h=document.createElement('strong'),v=document.createElement('span');h.textContent=r[0];v.textContent=r[1];box.append(h,v);$(id).appendChild(box);});}
+  function draw(){
+    var size=+$('filesize').value, total=count(), published=stripes.length, available=stripes.reduce(function(a,st){return a+sources(st);},0), unreadable=stripes.filter(function(st){return sources(st)<2;}).length, blocked=stripes.filter(function(st){return !metaOk(st);}).length;
+    rows('filefacts',[['File size',size===1024?'1 MiB':size+' KiB'],['Chunks',total],['Fragments',total*3],['Encoded payload',total*192+' KiB']]);
+    rows('state',[['Published chunks',published+' / '+total],['Usable fragments',available+' / '+(published*3)],['Metadata',published?(blocked?'Unavailable for '+blocked+' chunks':'Available'):'Not checked'],['Durability',published===total&&stripes.every(function(st){return st.synced;})?'Confirmed by simulated fsync':'Not confirmed'],['File read',!published?'Not written':unreadable||blocked||published!==total?'Cannot read whole file':'All chunks readable']]);
+    var repairable=stripes.some(function(st){return metaOk(st)&&sources(st)>=2&&st.missing.some(function(m,f){return m&&up[st.intended[f]];});});
+    $('bread').disabled=!published;$('bsync').disabled=!published;$('brebuild').disabled=!repairable;
+    $('action-help').textContent=!published?'Write the file first.':repairable?'Missing fragments can now be rebuilt.':blocked?'A required metadata group has no quorum.':'All actions apply to the whole file. Corruption affects D1 of chunk 0; it is reconstructed on read, not repaired by this rebuild demonstration.';
+    var byNode=Array.from({length:n},function(){return [];});
+    stripes.forEach(function(st){st.nodes.forEach(function(home,f){byNode[home-1].push({st:st,f:f});});});
+    var max=Math.max.apply(null,byNode.map(function(a){return a.length;})), height=Math.max(220,115+max*22), w=W/n,s=$('stage');s.innerHTML='';s.setAttribute('viewBox','0 0 900 '+height);
+    svg('text',{x:16,y:25,class:'b'},s,published?published+' chunks → '+published*3+' fragment positions across '+n+' nodes':'Write the file to see every fragment distributed');
+    for(var k=0;k<n;k++){var x=k*w+5,g=svg('g',{class:'node'+(up[k+1]?'':' down')},s);svg('rect',{x:x,y:45,width:w-10,height:height-55,rx:8},g);svg('text',{x:x+(w-10)/2,y:68,'text-anchor':'middle',class:'b'},g,'Node '+(k+1)+(up[k+1]?'':' ↓'));byNode[k].forEach(function(item,j){var f=item.f,st=item.st,fg=svg('g',{class:'frag '+(!good(st,f)?'miss':f===2?'p':'d')},s),y=80+j*22;svg('rect',{x:x+5,y:y,width:w-20,height:19,rx:3},fg);svg('text',{x:x+(w-10)/2,y:y+14,'text-anchor':'middle',class:'small'},fg,'C'+st.chunk+' '+names[f]+(st.missing[f]?' ∅':!good(st,f)?' !':''));});}
+    $('fileplacement').textContent=published?'Each label identifies its chunk and fragment: C0 D1 is chunk 0’s first data fragment. Dashed positions are missing, unavailable or corrupt. Counts include those positions. '+byNode.map(function(a,i){return 'Node '+(i+1)+': '+a.length;}).join(' · '):'A file is split into '+total+' chunk'+(total===1?'':'s')+'. Each chunk has two data fragments and one parity fragment, placed on three distinct nodes.';
+  }
+  function write(){
+    logEl.replaceChildren();var candidate=[], file=+$('file').value;
+    for(var c=0;c<count();c++){var nodes=placeChunk(n,file,c),st={chunk:c,grp:(file+c)%2===0?0:2,nodes:nodes,intended:nodes.slice(),missing:[false,false,false],synced:false};
+      for(var f=0;f<3;f++)if(!up[nodes[f]]){var spare=0;for(var k=1;k<=n;k++)if(up[k]&&nodes.indexOf(k)<0){spare=k;break;}if(spare)nodes[f]=spare;else st.missing[f]=true;}
+      if(!metaOk(st)||st.missing.filter(function(m){return !m;}).length<2){say('Write failed at chunk '+c+': insufficient metadata quorum or fragment availability. The previous published file remains in this teaching model; real failures can have partial or uncertain outcomes.');draw();return;}candidate.push(st);
+    }
+    stripes=candidate;$('corrupt').checked=false;say('Wrote the file: '+stripes.length+' chunks published; '+stripes.filter(function(st){return sources(st)<3;}).length+' degraded. Durability still needs fsync.');draw();
+  }
+  function sync(){if(stripes.length!==count()||stripes.some(function(st){return !metaOk(st)||sources(st)<2;})){say('File fsync failed: every chunk needs metadata authority and at least two durable fragments.');draw();return;}stripes.forEach(function(st){st.synced=true;});say('File fsync succeeded for all '+stripes.length+' chunks, with durable degraded marks wherever only two fragments are available.');draw();}
+  function read(){var bad=stripes.filter(function(st){return sources(st)<2;}).length,blocked=stripes.filter(function(st){return !metaOk(st);}).length,reconstructed=stripes.filter(function(st){return !(good(st,0)&&good(st,1))&&sources(st)>=2;}).length;if(stripes.length!==count()||bad||blocked)say('File read failed: '+bad+' chunks lack two usable fragments; '+blocked+' lack metadata quorum. No whole-file success is claimed.');else say('Read the whole file: '+stripes.length+' chunks, '+reconstructed+' reconstructed with parity. Returned exactly '+$('filesize').value+' KiB, excluding padding.');draw();}
+  function rebuild(){var repaired=0;stripes.forEach(function(st){if(!metaOk(st)||sources(st)<2)return;st.missing.forEach(function(m,f){if(m&&up[st.intended[f]]){st.nodes[f]=st.intended[f];st.missing[f]=false;repaired++;}});});say('Rebuilt and verified '+repaired+' missing fragments across the file. Original write durability still requires fsync if not already confirmed.');draw();}
+  function xorLab() {
+    function parse(v) { return v.trim().split(/\s+/).map(function (h) { return parseInt(h, 16) & 255; }); }
+    function hx(a) { return a.map(function (b) { return ('0' + b.toString(16)).slice(-2).toUpperCase(); }).join(' '); }
+    var a = parse($('x1').value), b = parse($('x2').value), len = Math.min(a.length, b.length), i;
+    a = a.slice(0, len); b = b.slice(0, len);
+    var p = []; for (i = 0; i < len; i++) p.push(a[i] ^ b[i]);
+    var lost = +$('xl').value, out = 'D1 = ' + hx(a) + '\nD2 = ' + hx(b) + '\nP  = D1 xor D2 = ' + hx(p) + '\n\n';
+    var src = [a, b, p], keep = [0, 1, 2].filter(function (x) { return x !== lost; }), r = [];
+    for (i = 0; i < len; i++) r.push(src[keep[0]][i] ^ src[keep[1]][i]);
+    out += 'Lose ' + names[lost] + '. ' + names[keep[0]] + ' xor ' + names[keep[1]] + ' = ' + hx(r) + '  ' + (hx(r) === hx(src[lost]) ? '(equals the lost ' + names[lost] + ')' : '(mismatch)');
+    $('xout').textContent = out;
+  }
+  $('filesize').onchange=reset;
+  $('file').onchange=function(){reset();};
+  $('bsync').onclick = sync;
+  $('preset').onclick = function () {
+    var mode=$('scenario').value; reset();
+    if (mode === 'recover') { up[3]=false; write(); sync(); say(n === 3 ? 'Node 3 is still down. Click its DOWN button to bring it back, then press Rebuild missing fragments.' : 'Node 3 is still down. Other live nodes hold all three fragments, using spares if needed. Click its DOWN button to bring it back; no missing fragments need rebuilding.'); }
+    else { write(); sync(); if (mode === 'one' && stripes.length) up[stripes[0].nodes[0]]=false; if (mode === 'quorum' && stripes.length) { var quorumVoters=voters(stripes[0].grp,n); up[quorumVoters[0]]=false; up[quorumVoters[1]]=false; } if (mode === 'corrupt') $('corrupt').checked=true; say('Scenario ready. Press Read it back to inspect the outcome.'); }
+    buildToggles(); draw();
+  };
+  $('nn').onchange = reset; $('breset').onclick = reset; $('bwrite').onclick = write; $('bread').onclick = read; $('brebuild').onclick = rebuild;
+  $('corrupt').onchange = function () { draw(); };
+  ['x1', 'x2', 'xl'].forEach(function (id) { $(id).addEventListener('input', xorLab); });
+  reset(); xorLab();
+})();
+</script>
+</body>
+</html>

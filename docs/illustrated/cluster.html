@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFS cluster shape</title>
+<meta name="description" content="How an EFS cluster forms, who votes for metadata at 3, 4 and more nodes, and how a client finds the members.">
+<link rel="stylesheet" href="illustrated.css?v=2">
+</head>
+<body>
+<header class="site"></header>
+<main>
+<h1>The cluster</h1>
+<p class="lead">A cluster is three to sixteen storage nodes on separate hosts. Every node stores data. Exactly three nodes vote for each of the two metadata groups, so adding nodes adds capacity and spreads work but not protection.</p>
+
+<h2>Who does what at N nodes</h2>
+<div class="card">
+  <div class="controls"><label for="n">Nodes</label><input id="n" type="range" min="3" max="16" value="3" aria-describedby="nout"><output id="nout" for="n"><strong>3</strong></output></div>
+  <svg class="fig" id="ring" viewBox="0 0 900 250" role="img" aria-label="Nodes with their metadata group roles"></svg>
+  <div class="legend"><span><i class="m0"></i>votes in metadata group 0</span><span><i class="m2"></i>votes in metadata group 2</span><span>every node: stores data fragments</span></div>
+  <div class="log" id="facts" aria-live="polite"></div>
+</div>
+
+<h2>How a cluster grows</h2>
+<p>Click through the steps. The operator never assigns node ids or member counts; the cluster allocates them.</p>
+<div class="card">
+  <div class="controls"><button id="prev">← Back</button><button id="next" class="primary">Next →</button><span id="stepno" class="muted"></span></div>
+  <ol class="steps" id="grow"></ol>
+</div>
+
+<h2>How a client finds the members</h2>
+<svg class="fig" viewBox="0 0 900 230" role="img" aria-label="A client asks one bootstrap node for the member list, then talks to every member directly.">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+  <g class="node"><rect x="20" y="85" width="150" height="60" rx="10"/></g><text x="95" y="112" text-anchor="middle" class="b">efs-fuse</text><text x="95" y="130" text-anchor="middle" class="small muted">mount command</text>
+  <g class="node"><rect x="350" y="20" width="150" height="50" rx="10"/></g><text x="425" y="50" text-anchor="middle" class="b">bootstrap node</text>
+  <g class="node"><rect x="350" y="95" width="150" height="40" rx="10"/></g><text x="425" y="120" text-anchor="middle">node 2</text>
+  <g class="node"><rect x="350" y="160" width="150" height="40" rx="10"/></g><text x="425" y="185" text-anchor="middle">node 3 … N</text>
+  <path class="arrow" d="M170 100 L 350 55" marker-end="url(#ah)"/><text x="200" y="68" class="small">1  LIST_NODES</text>
+  <path class="arrow" d="M170 115 L 350 115" marker-end="url(#ah)" stroke-dasharray="5 4"/>
+  <path class="arrow" d="M170 130 L 350 180" marker-end="url(#ah)" stroke-dasharray="5 4"/><text x="200" y="165" class="small">2  direct connections</text>
+  <text x="560" y="45" class="small">The address on the command line is only a bootstrap:</text>
+  <text x="560" y="63" class="small">the reply carries every member's real id and address.</text>
+  <text x="560" y="105" class="small">A member that fails 4 times in a row is skipped for 30 s;</text>
+  <text x="560" y="123" class="small">a background probe tries it about once a second and</text>
+  <text x="560" y="141" class="small">puts it back in use as soon as it answers, no remount.</text>
+  <text x="560" y="183" class="small muted">Later membership changes reach a mounted client as well.</text>
+</svg>
+<p>That is why a node failure is not a connection loss for the client: there is no single address to lose, so a floating virtual IP would add nothing. The client already tries another voter for metadata and another fragment for data. See <a href="failure.html">Failures</a>.</p>
+
+<h2>Usable capacity</h2>
+<div class="card">
+  <div class="controls"><label for="q">Quota per node (TiB)</label><input id="q" type="number" min="1" value="10" style="width:5rem"> <span class="muted">equal nodes</span></div>
+  <p id="cap"></p>
+  <p class="muted">Every chunk stores 1.5 bytes of fragment per byte of data (two data plus one parity fragment), so usable space is about two thirds of the summed quotas. <code>df</code> and <code>efs-mgmt status</code> report this logical figure, not raw disk space, but differ when a member is unreachable: <code>df</code> retains its last known figures, while <code>status</code> reports degraded capacity and the up count. Node loss alone does not reduce <code>df</code>; it is not an availability guarantee. Unequal quotas are bounded by the three-node placement rule and need the exact calculation in <code>status</code>.</p>
+</div>
+
+<h2>Rules worth knowing</h2>
+<ul>
+<li><strong>Same build everywhere.</strong> A peer or client with a different build identity is refused at connection, so upgrades stop everything, replace binaries and start again.</li>
+<li><strong>Storage roots are fixed</strong> when a node's store is created (one to 24 directories). To add capacity, add a node.</li>
+<li><strong>No rebalancing.</strong> New writes use a new node at once; existing data stays where it is.</li>
+<li><strong>No online removal</strong> and no automatic re-homing of a lost node's data in alpha 1.0.</li>
+</ul>
+</main>
+<footer class="site"></footer>
+<script src="illustrated.js?v=2"></script>
+<script>
+(function () {
+  var n = 3, step = 0;
+  function draw() {
+    var s = $('ring'); s.innerHTML = '';
+    var per = n > 8 ? Math.ceil(n / 2) : n, rows = n > 8 ? 2 : 1, w = 900 / per;
+    s.setAttribute('viewBox', '0 0 900 ' + (rows === 1 ? 210 : 330));
+    var g0 = voters(0, n), g2 = voters(2, n);
+    for (var i = 1; i <= n; i++) {
+      var r = Math.floor((i - 1) / per), c = (i - 1) % per, cx = w * c + w / 2, cy = 70 + r * 180;
+      var grp = svg('g', { class: 'node' }, s);
+      svg('circle', { cx: cx, cy: cy, r: 30 }, grp);
+      svg('text', { x: cx, y: cy + 5, 'text-anchor': 'middle', class: 'b' }, grp, String(i));
+      var y = cy + 44;
+      if (g0.indexOf(i) >= 0) { svg('rect', { class: 'g0', x: cx - 32, y: y, width: 30, height: 20, rx: 4, 'stroke-width': 1.5 }, s); svg('text', { x: cx - 17, y: y + 14, 'text-anchor': 'middle', class: 'small' }, s, 'g0'); }
+      if (g2.indexOf(i) >= 0) { svg('rect', { class: 'g2', x: cx + 2, y: y, width: 30, height: 20, rx: 4, 'stroke-width': 1.5 }, s); svg('text', { x: cx + 17, y: y + 14, 'text-anchor': 'middle', class: 'small' }, s, 'g2'); }
+      if (g0.indexOf(i) < 0 && g2.indexOf(i) < 0) svg('text', { x: cx, y: y + 14, 'text-anchor': 'middle', class: 'small muted' }, s, 'data only');
+    }
+    $('nout').innerHTML = '<strong>' + n + '</strong>';
+    var f = '';
+    if (n === 3) f = '<p>Three nodes: both metadata groups use nodes 1, 2, 3. All three also hold data. Any <strong>one</strong> node can be lost; two down leaves no metadata quorum.</p>';
+    else if (n === 4) f = '<p>Four nodes: group 0 on nodes 1, 2, 3; group 2 on nodes 2, 3, 4, so every node votes in at least one group. Data uses all four, rotating which three hold a stripe. This is <strong>not</strong> 2+2: a second loss is still not survived.</p>';
+    else f = '<p>' + n + ' nodes: the two groups stay on nodes 1–3 and 2–4. ' + (n === 5 ? 'Node 5 holds' : 'Nodes 5–' + n + ' hold') + ' data only, so ' + (n === 5 ? 'it adds' : 'they add') + ' capacity and spreads fragment traffic but no metadata capacity and no extra protection. Each stripe still picks three distinct nodes.</p>';
+    f += '<p class="muted">Metadata layout is fixed in alpha 1.0 (decision D38). More groups and wider placement come after alpha.</p>';
+    $('facts').innerHTML = f;
+    cap();
+  }
+  function cap() {
+    var q = Math.max(0, parseFloat($('q').value) || 0), raw = q * n, use = raw * 2 / 3;
+    $('cap').innerHTML = '<strong>' + n + ' nodes × ' + q + ' TiB = ' + raw.toFixed(1) + ' TiB raw quota → about ' + use.toFixed(1) + ' TiB usable.</strong>';
+  }
+  var steps = [
+    ['Start the first node', '<code>efsd 10.0.0.11:17432 /data/efs</code> on a fresh store creates the cluster; this node is id 1. It serves no metadata yet.'],
+    ['Join two more', '<code>efsd --join 10.0.0.11:17432 /data/efs</code> on two hosts. A joiner finds the cluster through a seed address or UDP discovery (port 17430), and never creates a cluster by itself.'],
+    ['Formation at three members', 'When the third member is present the cluster forms by itself (the log says <code>raft-host: formed: 3 members</code>) and starts serving. <code>efs-mgmt mkfs</code> is optional and only forms sooner.'],
+    ['Mount a client', 'One address is enough: <code>efs-fuse 10.0.0.11:17432 /mnt/efs</code> discovers the rest.'],
+    ['Add a fourth node', 'Start a fresh store with <code>--join</code>. Metadata group 2 moves from nodes 1, 2, 3 to 2, 3, 4 by joint consensus. That change needs a quorum of both the old and the new voters, so it waits while one of nodes 1–4 is down.'],
+    ['Add a fifth and later nodes', 'They join online as data-only members: capacity and fragment traffic grow at once, mounted clients learn the new member without a remount, and nothing is moved to it.']
+  ];
+  function grow() {
+    var ol = $('grow'); ol.innerHTML = '';
+    steps.forEach(function (s, i) {
+      var li = document.createElement('li'); li.className = i < step ? 'done' : i === step ? 'cur' : '';
+      li.innerHTML = '<strong>' + s[0] + '.</strong> ' + s[1]; ol.appendChild(li);
+    });
+    $('stepno').textContent = 'Step ' + (step + 1) + ' of ' + steps.length;
+    $('prev').disabled = step === 0; $('next').disabled = step === steps.length - 1;
+  }
+  $('n').addEventListener('input', function () { n = +this.value; draw(); });
+  $('q').addEventListener('input', cap);
+  $('prev').onclick = function () { step = Math.max(0, step - 1); grow(); };
+  $('next').onclick = function () { step = Math.min(steps.length - 1, step + 1); grow(); };
+  draw(); grow();
+})();
+</script>
+</body>
+</html>
