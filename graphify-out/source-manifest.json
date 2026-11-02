@@ -1412,13 +1412,13 @@
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
     "docs/status/2026-10/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
-    "docs/status/2026-10/d39-consolidated-model-20261023.md": "6ba2536ff8a35275b218f65a3833476e4b20d590187bd5a47f39cb360258be3b",
+    "docs/status/2026-10/d39-consolidated-model-20261023.md": "68211f94877f2acbf05645ba2ef455c9f320cde460e821371b534451284f8bcc",
     "docs/status/2026-10/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
     "docs/status/2026-10/w100-eof-contract-20261013.md": "28014869365f057282c99f3632e40a1894d7c5229840386e9b34301fd714f612",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "ade21b3c6735bab4cdc410b720f5154a800d6f60b8789f86eef39fb02eebd1d5",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "e6eb6c75d0554ddf4902e8ecb99b0789c21ca15685049e25a3f53d34bcbf4061",
     "docs/status/alpha-1.1-consolidation.md": "c24210e5af50ff0c1d9f0fea74efb982947486c547230718a00b59f6c6d106a2",
     "docs/status/decisions.md": "1217bfafdf7b349bf453ad7a646f524fc6fdceaefc036d5ce637117126069ff7",
-    "docs/using/alpha-1.0-guide.md": "4b5e5e0bee1e385079c243a1acb3f33552192c732fa85fa6a2fcd977e358f034",
+    "docs/using/alpha-1.0-guide.md": "1e01ccd2e2e09c25dda11c927e4c956ccb8ed433aa4b985115e6be96b22339a9",
     "docs/using/alpha-1.0-posix.md": "5f63ca8d0009e06bf10adb1f86bc9d7f077e5f87372e45319f4ae50813af1646",
     "docs/using/alpha-1.0-surface.md": "60fdd71922745d0d5d0438af511724ba0407c34101675c27df7a338fd7d28697",
     "docs/using/benchmarks.md": "3f444b5bd106ee68f3588eec58db1b9f3b2561931aa7ed521eeea61a622805a9",
@@ -2821,5 +2821,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "f3ce438b5a067a57479aa21688acfc667396983b"
+  "source_commit": "8e46a1e3fa0e267caee577f46a312a141e7173a8"
 }
