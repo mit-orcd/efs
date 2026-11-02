@@ -1,0 +1,13 @@
+# W123 crash recovery — current state
+
+Undated on purpose: this page is the one place that says where W123 stands. Update it when the source, verdict, failures, active run or next action changes; dated evidence pages keep the detail.
+
+**Current state (Nov 2, 2026)**
+
+- **Source and branch:** branch `devel-w123-recovery`, head `7de0b8b22352f47fb7c5397b1e6dde0409df8e41` (docs only). Active corrected source under test: `c549df4df4d818013c966d1d3c59cccabb01be78` (immutable archive SHA256 `e12488ea5abd6f8645e7311aff16e93ad4af0bebbded7973f59e5a05dae40b9c`). The branch is not merged into devel and nothing is pushed; the dated W123 pages named below exist on that branch and are filed here when it merges.
+- **Verdict:** **not accepted.** The closed runtime `983…` passed all 121 correctness gates but its formal performance comparison FAILED (throughput −15.808 % in comparison 2; fsync p95 +1389.763 %, visibility p95 +609.161 %); the later six-arm comparisons also fail throughput (−16.46 %, −15.20 %). Intrusive diagnostics do not qualify performance. The work-queue row stays PROPOSED/NOTRUN for acceptance ([queue](work-queue.md)).
+- **Remaining failures:** the performance FAIL above (metadata-progress waits correlate with slow fsyncs; cause not fixed); the read-observer normal-suite gates failed twice on settings and inventory counts (35/62 vs 38/81), corrected in `c549df4df` and re-validated on Linux only as far as the active run reaches. All failed stores and logs stay in place on their fleet hosts.
+- **Active run:** components for `c549df4df` RUNNING on fcstor003 (lanes on 02 and 03) under `/data1/01/efs/evidence/w123-fleet-read-observer-counts-20261102`; one supervisor waits for components, a live settings-listing control and 60 s observed quiet on fcstor015, then the v3 wait capture to `fcstor015:/data1/04/efs-w123-fleet/w123-cpu-diagnostic-read-observation-merged-20261102-v3/`. Capture had not started at the last checkpoint (Nov 2).
+- **Next action:** let the supervisor finish; if the settings control and the capture pass, use the wait capture to decide the performance fix. Then a fresh correctness pass plus formal comparison on the fixed source before any merge. AMD stays paused. W171's `raft_host.c` split waits for this branch to merge.
+
+**Evidence (dated pages on `devel-w123-recovery`, see the [feature and gates](../backlog/crash-safe-durable-versions.md) for the design):** `w123-wait-diagnostic-20261031` (current evidence and raw paths), `w123-wait-correlation-20261031`, `w123-full-cpu-diagnostic-20261030`, `w123-devel-integration-20261030` (exact integrated source and methods), `w123-fleet-gates-20261029` (distributed qualification history).

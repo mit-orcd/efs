@@ -3,6 +3,8 @@
 **User-directed release scope, October 22, 2026. Status: OPEN; no release
 candidate or topology acceptance recorded by this checklist.**
 
+**Current state (Nov 2):** source: devel at the latest wave gate (`99fb88ea7`, wave 52, [November ledger](2026-11/ledger.md)). Verdict: OPEN; no release candidate or topology acceptance recorded. Remaining failures: the open and VERIFY rows of section K (blocks-alpha flag per row; K88 is FIXED, blocks alpha: no). Active run: none claimed here; see [in-flight.md](in-flight.md) and the [Stage 1 matrix](stage1-acceptance-matrix-20261030.md). Next action: run the matrix's acceptance campaign, then close K rows against their named gates.
+
 Phase 1 finishes and qualifies the existing **two data fragments plus one parity
 fragment** architecture at every supported cluster size. Completion is the
 **alpha 1.0** milestone. Afterwards comes [alpha 1.1 architectural

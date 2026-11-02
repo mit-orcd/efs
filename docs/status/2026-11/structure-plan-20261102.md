@@ -7,6 +7,8 @@ a change to one module is decidable from that module's source, its interface
 and its tests. The measure is how few files an agent must read for one
 behaviour change, not lines removed.
 
+**Current state (Nov 2):** source devel `7b983fbb6`, no code changed; verdict PROPOSED (nothing qualified). Remaining failures: none recorded, phases not started. Active run: none; phase 1a (status landing page) is in progress on its own branch. Next action: merge phase 1 (1a status page, 1b test catalogue, 1c component READMEs) and 2a/2c as one wave; the `raft_host.c` split waits for W123.
+
 ## Measured on devel
 
 | Area | Measured | Note |

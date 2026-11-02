@@ -4,6 +4,8 @@
 
 **Linked items:** [Section K register](alpha-1.0-2plus1-checklist.md#k-stage-1-known-defects-in-the-alpha-scope), [D46](decisions.md#d46--task-z-decisions-item-by-item-user-oct-28) (six cells on fcstor007-011 over TCP and RDMA, plus all 13 fcstor nodes), D45 item 5 (campaign order), D40 and D42.
 
+**Current state (Nov 2):** source: matrix written against devel `8b0d128cc`; acceptance runs have since started on devel `8e53122cd` and wave 52 gated at `99fb88ea7` (per-run sources in the [November ledger](2026-11/ledger.md) and [October ledger](2026-10/ledger.md)). Verdict: this page is planning only and records no PASS/FAIL; row verdicts live in the K register. Remaining failures: see the open rows of the [K register](alpha-1.0-2plus1-checklist.md#k-stage-1-known-defects-in-the-alpha-scope). Active run: none recorded here; live gates are deferred by the user, in-flight sessions are listed in [in-flight.md](in-flight.md). Next action: schedule the D46 campaign runs per this matrix once the user releases the live gates.
+
 **Update Oct 31 (Task BT):** K2, K4, K11, K16, K17, K19, K45, K46 and K47 now name their acceptance (see [the definitions](2026-10/acceptance-definitions-20261031.md)); O3 is 70 min, O7 is removed, F5 is added and the totals are recomputed. Row statuses are unchanged.
 
 **Source state:** checklist at devel `8b0d128cc` (wave 43): 35 FIXED, 35 VERIFY, 3 CLOSED, 3 DECIDED, 2 OPEN. This page covers the 70 FIXED and VERIFY rows; K48 and K61 (OPEN), K9, K27, K53 (CLOSED), K10, K23, K52 (DECIDED) are not rows here. No code was run for this page; durations are estimates from the cited measurements and are labelled as such.
