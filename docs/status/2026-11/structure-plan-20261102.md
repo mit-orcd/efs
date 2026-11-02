@@ -1,0 +1,158 @@
+# W171 · Structure plan: less context per change
+
+**Status: PROPOSED Nov 2 (devel `7b983fbb6`); no code changed.** Reviews an
+external structure proposal against devel and turns it into gated tasks.
+Goal, as [developing.md](../../how-it-works/developing.md) already states it:
+a change to one module is decidable from that module's source, its interface
+and its tests. The measure is how few files an agent must read for one
+behaviour change, not lines removed.
+
+## Measured on devel
+
+| Area | Measured | Note |
+| --- | --- | --- |
+| `src/server/raft_host.c` | 26,112 lines, 604 static functions, `struct efs_raft_host` at line 391, 63 public `server_raft_host_*` declarations in `src/server/server_internal.h` | prefix map below |
+| `src/meta/meta_apply.c` / `src/client/write.c` / `src/client/efs_fuse.c` | 11,063 / 9,689 / ~8,000 lines | `meta_apply.c` is in `meta/`, not `server/` |
+| Tests that splice C source by string search and compile it | 318 of 894 tracked test files; 133 read `raft_host.c` (91 with the identical `root/'src/server/raft_host.c').read_text()` idiom, 15 through `EFS_RAFT_HOST_SOURCE`, the rest ad hoc), 57 read `efs_fuse.c`, 35 `write.c` | the dominant cost of any split |
+| Test catalogue | `tests/budgets.tsv` has 102 `make test-long` rows (command, budget, slots; the runner reads only the first three columns); the fast `make test` list is inline in the Makefile; `tests/test_make_test_recipe.py` enforces completeness | half a catalogue exists |
+| Status index | `docs/status/README.md` 2,371 lines: 230 narrative lines above "Start here", then ~2,100 lines of dated entries; `work-queue.md`, `in-flight.md`, `decisions.md`, `catalog.md` all current (Nov 1) and its own "Maintaining this index" rule says keep it short | the current-state docs exist; the rule is not enforced |
+| Settings | single source is a dated evidence page, `docs/status/2026-10/a6-settings-inventory-20261024.md`, checked against `src/common/settings.c` (23 `R()` rows plus header counts) by `tests/test_settings_inventory.py` and against the readers by `tests/test_env_inventory.py` | move, then generate |
+| Cross-directory private includes | 21 `#include "../<dir>/*.h"` under `src/` | a check starts as an allowlist |
+| `scripts/` | 277 top-level files, most named after the task that made them | triage, phase 3 |
+| Branches touching `raft_host.c` | `devel-w123-recovery` (+662 lines, last commit Nov 2) | the split window is closed until it merges |
+
+`raft_host.c` function-prefix map (definitions with at least six functions):
+`host_append_` 27, `host_gc_` 23, `host_read_` 22, `host_fwd_` 18, `host_pub_` 17,
+`host_expiry_` 16, `host_txn_` 14, `host_session_` 12, `host_report_` 12,
+`host_snap_` 9, `host_query_` 9, `host_prep_` 9, `host_namespace_` 9,
+`host_wait_` 8, `host_member_` 8, `host_kv_` 8, `host_reap_` 7, `host_dir_` 7,
+`host_unpack_` 6, `host_command_` 6. Banner comments already mark GC reaper,
+stranded-transaction recovery, W154 rebuild, D31 collection and drain, K33
+addition, K36 recovery, W77 publication and W155 receipts.
+
+## Where this plan departs from the proposal
+
+1. **Splice harnesses come before the split, not after.** The proposal's
+   step 3 (tests link real modules) is a programme, not a phase: 318 tests.
+   It becomes the rule for new tests and for any test a split actually
+   breaks. The bridge is one shared source resolver (phase 2a) and a
+   mechanical conversion of the 133 `raft_host.c` readers; first-match
+   `s.index` semantics make the concatenation order part of the contract.
+2. **No repo-wide `tests/` tree move.** Subsystem and purpose columns in the
+   existing catalogue give the same selection without moving 894 files and
+   re-pathing budgets, recipes and evidence pages. Revisit once the catalogue
+   exists.
+3. **The status layer is enforcement, not design.** The living docs the
+   proposal asks for exist; the README ignores its own rule.
+4. **The dependency-cycle check is dropped.** The code graph has 1,751
+   unresolved call edges; it stays a navigation aid. The include check is the
+   compiler-visible boundary and starts as an allowlist of the 21 existing
+   cross-directory includes.
+5. **The `raft_host.c` split waits for W123 recovery.** `devel-w123-recovery`
+   carries 662 lines in that file; splitting under it would conflict every
+   W123 commit.
+
+## Phases
+
+Each item is one Sonnet task in its own worktree from devel, merged through a
+gated wave (intel2 `make test-all` 0 FAIL). Items marked ∥ touch disjoint
+files and can run in parallel. New checks go in `make test` or
+`make docs-check`, never `test-long` (the gate stays at its budget bound).
+
+### Phase 1 — navigation, no product risk
+
+**1a ∥ Status landing page.** `docs/status/README.md` becomes: the layout
+note, "Start here", and a **Current** table of at most ten rows, one per
+active effort, each linking one current-state page that states exact source,
+verdict, remaining failures, active run and next action. The 230 narrative
+lines and ~2,100 dated entries move verbatim to `docs/status/2026-10/ledger.md`
+and `docs/status/2026-11/ledger.md` (undated names, so `status_layout.py`
+leaves them alone); wave entries are appended to the month ledger from now on
+(the merge script's anchor changes in the same commit). W123 gets one
+current-state page naming the authoritative controller; the Stage 1 matrix
+and the K register already are current-state pages. Done: README under 120
+lines, `check_doc_links.py` 0, every Current row's page has the five fields.
+
+**1b ∥ Test catalogue.** `tests/budgets.tsv` gains columns `target`
+(`test`/`test-long`), `subsystem` and `purpose` after the three the runner
+reads, and rows for every `make test` command. `tests/test_make_test_recipe.py`
+(already in `make test`) also fails when a recipe command has no row or a row
+lacks subsystem or purpose. `scripts/tests_for.py <subsystem>` prints or runs
+that subsystem's commands. Done: 100 percent of recipe commands classified;
+`tests_for.py raft_host` lists the ReadIndex tests without reading the
+Makefile. Generating the Makefile recipes from the catalogue is a later step,
+after the check-only stage has held for a few waves.
+
+**1c ∥ Component entry points.** `src/<dir>/README.md` for `raft`, `kv`,
+`meta`, `wire`, `data`, `server`, `client`, `sim`, `common`, `mgmt`, `bench`:
+at most 80 lines each, five sections (files and what each owns; contract
+header and its invariants, lock ownership, lifetime; what it may call and who
+may call it; tests, as the `tests_for.py` command rather than a list that
+drifts; open K rows and W items by subsystem). Links point at existing
+contracts, never restate them. `check_doc_links.py` scans `src/**/README.md`
+(one line in `md_files()`); `docs/check-architecture.py` gains "every `src/`
+directory has a README". A short `AGENTS.md` in a directory only where
+routing differs from the root one.
+
+### Phase 2 — one gated commit each
+
+**2a ∥ Source resolver.** `tests/csrc.py` with `module(name)` returning the
+concatenated text of a module's files in one fixed order (`raft_host` is the
+single file today, the directory after 2b); the per-file override
+environment variables map onto it. A script converts the 91 identical
+idioms; the 15 override and ~8 ad hoc readers are converted by hand; the same
+resolver serves `efs_fuse.c` (57) and `write.c` (35) readers. No assertion
+changes. Done: 133 files changed mechanically, gate 0 FAIL. Can land before
+W123 merges; it does not touch `raft_host.c`.
+
+**2b Pilot split of `raft_host.c`, ReadIndex first.** After
+`devel-w123-recovery` merges and while no branch touches the file:
+`src/server/raft_host/host_internal.h` takes `struct efs_raft_host` and the
+shared statics; `read_index.c` takes `host_read_*` and `host_wait_*` (30
+functions); then one file per prefix per commit (`append.c`, `gc.c`, `fwd.c`,
+`pub.c`, `expiry.c`, `txn.c`, `session.c`, `report.c`, `snapshot.c`, …). Each
+commit moves code, changes `static` to internal linkage and nothing else: no
+synchronization change, no reordering inside a function. The gate is the
+proof; the F2 TSan lane on the result is recommended because visibility
+changes alter inlining. Done for the pilot: an agent changing ReadIndex
+reads `src/server/README.md`, `host_internal.h`, `read_index.c` and the
+`tests_for.py raft_host.read_index` output, under 3,000 lines against 26,112
+today, with zero test edits beyond 2a.
+
+**2c ∥ Settings single source.** The inventory table moves from the dated A6
+page to `docs/how-it-works/settings.md`; the 23 `R()` rows and the header
+counts in `src/common/settings.c` are generated from it with a regen-diff
+check in `make test` (same pattern as the architecture gate);
+`env_inventory.py --check` stays as the independent check that the readers
+match the table. Done: adding a setting edits one file.
+
+### Phase 3 — after phase 2 holds
+
+- `meta_apply.c`, `write.c`, `efs_fuse.c` by the 2a/2b recipe, each between
+  waves with no branch on the file.
+- `scripts/` triage: the top level keeps the tools agents run (`qualify.py`,
+  `make_test_summary.sh`, `batch_f.sh`, the checkers, …); task-named scripts
+  move under `scripts/evidence/<task>/` and the evidence pages that cite them
+  are re-pointed (`check_doc_links.py` proves it). Target: under 40 top-level
+  files.
+- K register: one file per row with the state in a header, both tables of
+  `alpha-1.0-2plus1-checklist.md` generated, `check_k_register.py` becomes the
+  regen check.
+- Include boundary check in `make docs-check`: report `#include "../<dir>/"`
+  across `src/` directories, allowlist the 21 existing ones, fail on new ones.
+- Makefile `test`/`test-long` recipes generated from the catalogue.
+
+## Sequencing and risks
+
+- 1a, 1b, 1c, 2a and 2c are independent and can run as one wave of five
+  tasks; 1a must be the only branch in its wave that edits
+  `docs/status/README.md`, and the merge script changes with it.
+- 2b runs alone, between waves, after W123 recovery merges. Any agent branch
+  open on `raft_host.c` at that time conflicts on every commit.
+- 2a touches 133 test files in one commit; it is mechanical and the gate
+  proves it, but review it as a diff of the conversion script, not of the
+  files.
+- 1a changes where wave evidence is filed; links into the old README anchors
+  from outside the repository break (none are known).
+- Nothing here changes product behaviour. Any phase whose gate shows a
+  difference stops and is reported, not patched forward.
