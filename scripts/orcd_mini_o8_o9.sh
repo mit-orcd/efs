@@ -1,0 +1,33 @@
+#!/bin/bash
+# Run ON node9900 (detached, in screen): orcd-mini batch O rows O8 (real-HCA
+# TSan and ASan/UBSan gates, K49/K51) and O9 (Memcheck leak gate, K26).
+# Usage: orcd_mini_o8_o9.sh RELEASE_DIR OUTDIR
+# Copies RELEASE_DIR to a fresh /tmp tree (deleted at the end), runs
+#   make tsan-check; make asan-check; make leak-check
+# with the RDMA device, the private libfuse and, for Memcheck, the private
+# Valgrind headers/runtime retained under devel-linux-28a3 (read only).
+# O8_STEPS (default "tsan asan leak") selects steps; EFS_SAN_ONLY narrows the sanitizer entries.
+# Per step: log, exit status and seconds in OUTDIR/summary.txt. OUTDIR must not exist.
+set -u
+REL=$1; O=$2
+[ -e "$O" ] && { echo "$O exists" >&2; exit 2; }
+mkdir -p "$O"
+T=/tmp/bq-o8-$$; mkdir -p "$T"
+cp -a "$REL" "$T/src" && make -C "$T/src" clean > /dev/null 2>&1
+export EFS_GIT_ID=909a07d717dc EFS_GIT_BRANCH=devel EFS_GIT_DESCRIBE=v0.3.2-pre-alpha-2434-g909a07d71
+export EFS_RDMA_DEV=mlx5_0 EFS_FUSE_PREFIX=/data1/efs/deps/libfuse EFS_TRANSPORT=auto
+export PKG_CONFIG_PATH=/data1/efs/deps/libfuse/lib64/pkgconfig LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64
+export TMPDIR=$T/tmp ASAN_OPTIONS=detect_leaks=0; mkdir -p "$TMPDIR"
+V=/data1/efs/evidence/devel-linux-28a3
+step() { # name target [env...]
+  n=$1; shift; t0=$(date +%s)
+  (cd "$T/src" && "$@") > "$O/$n.log" 2>&1; rc=$?
+  echo "$n rc=$rc seconds=$(( $(date +%s) - t0 ))" >> "$O/summary.txt"
+}
+case " ${O8_STEPS:-tsan asan leak} " in *' tsan '*) step tsan-check make tsan-check;; esac
+case " ${O8_STEPS:-tsan asan leak} " in *' asan '*) step asan-check make asan-check;; esac
+case " ${O8_STEPS:-tsan asan leak} " in *' leak '*)
+CPATH=$V/include PATH=$V/tools/usr/bin:$PATH VALGRIND_LIB=$V/tools/usr/libexec/valgrind \
+  step leak-check make leak-check EFS_LEAK_LOGDIR="$O/memcheck";; esac
+echo "done $(date -u +%FT%TZ)" >> "$O/summary.txt"
+"$HOME/bin/edelete" --force --delete "$T" > /dev/null 2>&1
