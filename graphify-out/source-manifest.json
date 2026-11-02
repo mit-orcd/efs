@@ -2730,7 +2730,7 @@
     "tests/test_sparse_metadata.py": "3958ff4f6f5d5d643a0725779cec11431abf7e2451512fe655787e19838e3e02",
     "tests/test_stage_evict.c": "e7f7599f010e1d3efe9baf6d7a92ac0efb66dea0566d9b657461b5ea357faf24",
     "tests/test_stage_evict_lru.py": "8debc200ac23f37ce6d4c3e89d5749f0c5a7ef77b9f4f761afd6f8e92c69f535",
-    "tests/test_stale_recovery.py": "b460c021652e88bcc0ffd1e63d3e1f3fe6ea20453b0a16290d71c669304b6345",
+    "tests/test_stale_recovery.py": "7c863580eb94e8931ac22bcea2f77808f9ba6303e7044e7f27f36ff17ee7d14f",
     "tests/test_status_version.py": "48e451933f881968bcf7b2c98ab63d81da11dba71904f78285ebbf009804791c",
     "tests/test_stop_blocked_stderr.py": "7c9b6862138a3b7b7686877589d8575484e3caeee54c8cf6f6eb0b7611c7de05",
     "tests/test_stop_control.c": "6bb5ec9f78c8c90ffddeccb50576a8d9f4fb40e56e201ea2c09e5c37f1070a23",
@@ -2821,5 +2821,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "8e46a1e3fa0e267caee577f46a312a141e7173a8"
+  "source_commit": "f212b6f19d7df5154b02c99a03527572383e8a65"
 }
