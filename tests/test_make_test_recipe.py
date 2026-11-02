@@ -84,31 +84,42 @@ GATE_BOUND_S = 1750         # Oct 31 (wave 45, user decision): raised from GATE_
 JOBS = 8
 FAST_DEFAULT_S = 1          # a `make test` command without a budget row (each runs well under a second)
 budgets = {}
-for line in (root / 'tests/budgets.tsv').read_text().splitlines():
-    f = line.split('\t')
-    if not line.strip() or line.startswith('#') or f[0] == 'command':
-        continue
-    assert len(f) == 4, 'tests/budgets.tsv: want command, budget_s, slots, reason: %r' % line
-    cmd, budget, slots, reason = f[0].strip(), float(f[1]), int(f[2]), f[3].strip()
-    assert cmd not in budgets, 'tests/budgets.tsv: %s twice' % cmd
-    assert budget > 0 and 1 <= slots <= JOBS, line
-    assert budget <= COMMAND_BOUND_S or reason, \
-        'tests/budgets.tsv: %s is budgeted %g s, above %d s, with no reason' % (cmd, budget, COMMAND_BOUND_S)
-    budgets[cmd] = (budget, slots, reason)
-long_cmds = [c.strip() for c in slow if runs(c)]
-missing = [c for c in long_cmds if c not in budgets]
-assert not missing, 'test-long commands without a row in tests/budgets.tsv: %s' % missing
-gone = sorted(c for c in budgets if c not in long_cmds)
-assert not gone, 'tests/budgets.tsv rows for commands `make test-long` no longer runs: %s' % gone
-
-exclusive = re.search(r'EXCLUSIVE=re\.compile\((.*?)\)\n', (root / 'scripts/make_test_summary.sh').read_text(), re.S).group(1)
-exclusive = re.compile(''.join(re.findall(r'"([^"]*)"', exclusive)))
-pool, alone = [], 0.0
+# W171 1b: the same file is the test catalogue, one row per recipe command.
+catalogue = {}
 # Four temporary compile-and-run C wrappers start with `set -e;`, not
 # python3 or ./tests/. They are shared prerequisites, so keep them out of
 # the fast/long duplication check above, but count each once in the full
 # recipe's runtime model, just as make_test_summary.sh executes it.
 modeled_runs = lambda c: runs(c) or c.startswith('set -e; ')
+for line in (root / 'tests/budgets.tsv').read_text().splitlines():
+    f = line.split('\t')
+    if not line.strip() or line.startswith('#') or f[0] == 'command':
+        continue
+    assert len(f) == 7, 'tests/budgets.tsv: want command, budget_s, slots, reason, target, subsystem, purpose: %r' % line
+    cmd, budget, slots, reason = f[0].strip(), float(f[1]), int(f[2]), f[3].strip()
+    target, subsystem, purpose = f[4].strip(), f[5].strip(), f[6].strip()
+    assert cmd not in catalogue, 'tests/budgets.tsv: %s twice' % cmd
+    assert target in ('test', 'test-long'), 'tests/budgets.tsv: target of %s is %r, want test or test-long' % (cmd, target)
+    assert subsystem and purpose, 'tests/budgets.tsv: %s needs a subsystem and a purpose' % cmd
+    assert budget > 0 and 1 <= slots <= JOBS, line
+    assert budget <= COMMAND_BOUND_S or reason, \
+        'tests/budgets.tsv: %s is budgeted %g s, above %d s, with no reason' % (cmd, budget, COMMAND_BOUND_S)
+    catalogue[cmd] = target
+    # `test` rows carry placeholders (5 s, 1 slot): only test-long budgets are modeled.
+    if target == 'test-long':
+        budgets[cmd] = (budget, slots, reason)
+for tgt, recipe in (('test', fast), ('test-long', slow)):
+    cmds_of = [c.strip() for c in recipe if modeled_runs(c)]
+    missing = [c for c in cmds_of if c not in catalogue]
+    assert not missing, 'make %s commands without a row in tests/budgets.tsv: %s' % (tgt, missing)
+    wrong = [c for c in cmds_of if catalogue[c] != tgt]
+    assert not wrong, 'tests/budgets.tsv rows whose target disagrees with the `make %s` recipe they are in: %s' % (tgt, wrong)
+gone = sorted(c for c in catalogue if c not in set(x.strip() for x in fast + slow))
+assert not gone, 'tests/budgets.tsv rows for commands neither `make test` nor `make test-long` runs: %s' % gone
+
+exclusive = re.search(r'EXCLUSIVE=re\.compile\((.*?)\)\n', (root / 'scripts/make_test_summary.sh').read_text(), re.S).group(1)
+exclusive = re.compile(''.join(re.findall(r'"([^"]*)"', exclusive)))
+pool, alone = [], 0.0
 for c in [c.strip() for c in cmds if modeled_runs(c)]:
     budget, slots = budgets.get(c, (FAST_DEFAULT_S, 1))[:2]
     slots = min(slots, JOBS)

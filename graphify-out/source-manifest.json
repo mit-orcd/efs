@@ -1408,7 +1408,7 @@
     "docs/how-it-works/protocols/directory.md": "2e9f346007213ba7e1d23c8d79969f7cf5c9d59426b5d0f951c86ed53f6296be",
     "docs/how-it-works/protocols/sessions.md": "97134e8eb13cdf3f47c9247391c8f3ca663d78b9f91996a3c55bb7a15aaa368a",
     "docs/how-it-works/protocols/transactions.md": "5e1989bad26f62d59d69d697a83ace63716ff8d13d7b992d63cdab1be1011077",
-    "docs/how-it-works/testing.md": "1a8b069fc68e1649a306661ce874564e35349a3f9ccc2c0d9746807f076adee8",
+    "docs/how-it-works/testing.md": "d7bee5ac4e8a543921e7dff979660ecb0fbd7c34b0560675d0da442275af2846",
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
     "docs/status/2026-10/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
@@ -2470,7 +2470,7 @@
     "tests/test_lookup_path_authority.py": "8af21d0536bbaf44de45b589adcac8e6b44a8154d018ffd500157b2e34e5faf1",
     "tests/test_lookup_read_group.py": "9197ae2a307bfdca18c9246e38d6449a6f43d4d30f9460c10f9b493ae2b6068e",
     "tests/test_lookup_replacement.py": "0c75c45d9221e392a51bc67594881467d8b1f4cbcf9c9a0c8845e60579465f72",
-    "tests/test_make_test_recipe.py": "f24a6b78e1735aaf1919214caf8f67c3da3564998ef58017806dec94c1b5aabe",
+    "tests/test_make_test_recipe.py": "58ed651eb9b616e20da7a5e641960ca035a299797addc931081f1399a698593a",
     "tests/test_make_test_summary_runner.py": "65fa5394fdc192838404120001267f4859b97699c88ff42df48aba44b709ecbb",
     "tests/test_map_fresh_open.py": "c5ec8db87e79ef87f7f953a994de79b95af501e8bebf198e53b15a924135c6e8",
     "tests/test_member_limit.py": "ef9dac9f73620e46edf000a752917216bb80ec913f79c897048fce526f008d9b",
@@ -2821,5 +2821,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "7b983fbb66eb74089e2b81bc7bb05262e2b4d38a"
+  "source_commit": "0540c95369449899a36c21a5d2638128a02e34f9"
 }
