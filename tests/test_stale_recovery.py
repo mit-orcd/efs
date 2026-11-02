@@ -16,6 +16,7 @@ def function(name,source=None):
     return source[m.start():source.index('\n}',m.end())+2]
 a=w.index('struct stale_pair {');pair=w[a:w.index('\n};',a)+3]
 a=w.index('struct stale_sent {');pair+='\n'+w[a:w.index('\n};',a)+3]
+a=w.index('#define CBASE_SLOTS');cbase=w[a:w.index(';\n',w.index('g_cbase[CBASE_SLOTS]'))+2]
 a=current.index('struct put_id {');put=current[a:current.index('\n};',a)+3]
 a=current.index('struct stale_retry_view {');put+='\n'+current[a:current.index('\n};',a)+3]
 source=r'''
@@ -53,7 +54,6 @@ static int dcache_note_committed(efs_ino_t ino,uint32_t ci,uint64_t gen,uint64_t
 static void putid_drop_snapshot(efs_ino_t ino,uint32_t ci,uint64_t obj,uint64_t seq) {
     (void)ino;(void)ci;(void)obj;(void)seq;
 }
-static void cbase_note(const struct efs_chunk_rec *r) {(void)r;}
 static int dcache_trace_on(void) {return 0;}
 static uint64_t dcache_base_gen_of(efs_ino_t ino,uint32_t ci,uint64_t g) {
     (void)ino;(void)ci;return g;
@@ -68,6 +68,7 @@ static int replay_fan_run(struct stale_pair *rp,uint64_t n) {
 '''+put+r'''
 static struct put_id owner;
 static pthread_mutex_t g_putid_mu=PTHREAD_MUTEX_INITIALIZER;
+'''+cbase+'\n'+function('cbase_slot')+'\n'+function('cbase_note')+'\n'+function('cbase_apply')+r'''
 static struct efs_msg_inode_writer_view_reply authority;
 static int attr_error;static unsigned attr_reads;
 static int ticket_live=1;static unsigned ticket_checks;
@@ -81,7 +82,22 @@ static void reset(void) {
     memset(&map,0,sizeof(map));map.generation=7;
     verdicts=replays=commits=pulls=0;pull_error=absent=verdict_error=replay_error=fail_bits=0;
 }
+/* K88: the real cbase table; a slot-less second image takes the committed
+ * generation as its CAS base, a different FileID or generation does not, and
+ * a slot collision only forgets. */
+static void cbase_check(void) {
+    struct efs_chunk_rec n={.ino=5,.chunk_index=3,.chunk_generation=10,.file_generation=22};
+    struct efs_chunk_rec r={.ino=5,.chunk_index=3,.chunk_generation=11,.file_generation=22};
+    cbase_note(&n);cbase_apply(&r);assert(r.base_gen==10);
+    r.base_gen=0;r.file_generation=23;cbase_apply(&r);assert(!r.base_gen);
+    r.file_generation=22;r.chunk_generation=10;cbase_apply(&r);assert(!r.base_gen);
+    efs_ino_t ino=6;while(cbase_slot(ino,3)!=cbase_slot(5,3))ino++;
+    struct efs_chunk_rec o={.ino=ino,.chunk_index=3,.chunk_generation=30,.file_generation=22};
+    cbase_note(&o);r.chunk_generation=11;cbase_apply(&r);assert(!r.base_gen);
+    o.chunk_generation=31;cbase_apply(&o);assert(o.base_gen==30);
+}
 int main(void) {
+    cbase_check();
     (void)stale_retry_owned; /* baseline classifier may not call this helper */
     efs_ino_t inos[2]={1,1};uint32_t cis[2]={0,0};
     struct dirty_snap ds={2,inos,cis};
@@ -210,6 +226,7 @@ int main(void) {
     owner.stale_retry=0;owner.ci=1;owner.gen=11;owner.put_seq=82;
     sent[0].chunk_index=1;sent[0].chunk_generation=11;sent[0].put_seq=82;
     assert(stale_retry_owned(sent,11,&map,0,&cached)&&attr_reads==1);
+    puts("K88 cbase: committed generation becomes base only for the same FileID; collisions forget PASS");
     puts("STALE recovery: authoritative pull, sent-object identity, owned unchanged-view reuse with fresh ADMITTED-ticket proof; changed epochs/mappings/identities replay and unknown authority refuses PASS");
 }
 '''
