@@ -1054,7 +1054,7 @@ leader scan of inode shards, for stores written before packing.
 
 Built in since A6 (a set variable stops efsd): a 10 s work cap per idle
 compaction batch, a 120 min daily window and full coldness at 86400 s
-([inventory](../../status/2026-10/a6-settings-inventory-20261024.md)).
+([inventory](../settings.md)).
 
 **Reads.** GETCHUNKS returns a packed base with `EFS_CHUNK_REC_F_PACKED`
 and the 96-byte reference; nodes and checksums are the segment's. The

@@ -77,7 +77,7 @@ without a usable device; `auto` logs the transport it uses.
 | `EFS_FAULT_COMPACT_DIE=<n>` | **test only:** `_exit(99)` after the n-th finished compaction output segment, before the manifest rename; compiled only with `EFS_FAULTS=1` and exercised by `tests/faults/test_kv_compact_crash` (K24; was `EFS_KV_COMPACT_DIE`, read in every build). A normal `efsd` or `efs-fuse` prints `<prog>: <VAR> ignored: this build has no fault hooks` at startup for each `EFS_FAULT_*` and for `EFS_KV_COMPACT_DIE` in its environment (W149) |
 
 Every setting the binaries read, with its kind and disposition, is in the
-[A6 settings inventory](../status/2026-10/a6-settings-inventory-20261024.md). A
+[A6 settings inventory](../how-it-works/settings.md). A
 removed setting that is still set (for example `EFS_MD_RAFT_N`,
 `EFS_GC_DISABLE`, `EFS_FEATURES_TTL_MS`) stops efsd and efs-fuse with a
 message naming it.
