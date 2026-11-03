@@ -1406,7 +1406,7 @@
     "docs/backlog/work-items.md": "76ee153b4530d28b34d805842f75ca119a563f5c2c49f2504213da1d1564107b",
     "docs/how-it-works/architecture.md": "d9112ac49ca0745c009d6ae08f858fae3b126dd6075db0a205802fdd8a734b6e",
     "docs/how-it-works/design-rationale.md": "839a9fd92895b7f84e13b761e5bc48473f3ea35e37c364cee372a39e177db55f",
-    "docs/how-it-works/developing.md": "229fd65f67c251f01523c7697326b4bbf0bf375cafee76f6c63cc384b4ef039a",
+    "docs/how-it-works/developing.md": "971e8de952f6d7edfe63ecfa2af16faf7288838951c6a6259dedeffdab0c34bc",
     "docs/how-it-works/failure-tolerance.md": "4d2adb1e3c21f81b5fe4b6391fc701f49ee5f8260e0788f7a6a2a48c36df89ed",
     "docs/how-it-works/naming.md": "e71f66d282fe0ee6ee9f8fae4e37c6eeafa2d1948b10de267ad2586721ce8a3c",
     "docs/how-it-works/performance.md": "07a59cebbdd235e724c08dd2a9a7da699ee32d511313a43310e1cf213eb9e9b6",
@@ -1544,7 +1544,7 @@
     "scripts/build-code-graph.py": "417eb64aa7671a11a706d2143e89018ada4add4d5c9e9095729e2f7f02ce730d",
     "scripts/calibrate_test_budgets.sh": "26d0675574f0749aeb33127f7c390bdcbb7d2beee6b6adbb48dae840972bd51d",
     "scripts/capture_intel_put_stages.sh": "49e971a21f6e7bd4c3b4632336646d82286abc5a3ee9640c20a85f934d2d2cb8",
-    "scripts/check_doc_links.py": "9f8504809e3d1f2da3ba119439a57e67155c50f1776b5b5e7cb8a5948b6e8c34",
+    "scripts/check_doc_links.py": "dbd7b5abe619a8c68699ee13d93893115361670dac45266c59952c5337ade6b3",
     "scripts/check_k_register.py": "bee7eea3696a7bd0559b00545e8c87e3223b12d9a1c6b272cc324c4936ee4391",
     "scripts/client.sh": "155b5db39a1e7e0375c38421748753eb8cce5b2ccadba0484ccea6937b24998a",
     "scripts/client_processes.py": "49ad026be5050680b4d2dedc2e716eab972995b7f941b9cf0fa178798970e00d",
@@ -2833,5 +2833,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "2b243c01bfb190dbeaab45417163a5047947acde"
+  "source_commit": "ab264d99ec9da20c52c082e0dad670f203113e2d"
 }

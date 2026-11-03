@@ -19,6 +19,7 @@ CODE = re.compile(r"`[^`]*`")
 def md_files():
     yield from sorted(ROOT.glob("*.md"))
     yield from sorted((ROOT / "docs").rglob("*.md"))
+    yield from sorted((ROOT / "src").rglob("README.md"))
 
 
 def dangling(path):

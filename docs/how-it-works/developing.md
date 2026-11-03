@@ -78,6 +78,12 @@ client/     `efs-fuse`: `efs_fuse.c` is the FUSE adapter; `ops.c`,
 sim/        the deterministic simulator the state machines run under.
 ```
 
+Each `src/<dir>/` has a `README.md` that is the component's entry point: read
+it before the source. It holds exactly five sections, at most 80 lines, linking
+to contracts rather than restating them: Files, Contract, Calls, Tests (the
+`scripts/tests_for.py` commands) and Open findings. `make docs-check` fails when
+a directory lacks the file or a heading.
+
 **Rules that enforce it:**
 
 - **Depend on the interface, not the implementation.** Modules include each

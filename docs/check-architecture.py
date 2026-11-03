@@ -22,6 +22,8 @@ Implements the documentation gate specified in docs/how-it-works/developing.md
                          they never restate; the status pages link rather
                          than restate; architecture.html is generated,
                          not an md source.
+  6. component-readmes   every directory under src/ has a README.md with the
+                         headings Files, Contract, Calls, Tests, Open findings.
 
 Normative-check scope: the normative index (docs/how-it-works/architecture.md) plus the
 satellites that docs/gen-architecture-full.py renders as appendices (the
@@ -373,6 +375,25 @@ def check_single_home(index_text):
 
 
 # ------------------------------------------------------------------- main
+COMPONENT_SECTIONS = ["Files", "Contract", "Calls", "Tests", "Open findings"]
+
+
+def check_component_readmes():
+    problems = []
+    for d in sorted(p for p in (DOCS.parent / "src").iterdir() if p.is_dir()):
+        readme = d / "README.md"
+        if not readme.is_file():
+            problems.append(f"src/{d.name}: README.md missing")
+            continue
+        heads = re.findall(r"^## (.+?)\s*$", readme.read_text(), re.M)
+        for h in COMPONENT_SECTIONS:
+            if h not in heads:
+                problems.append(f"src/{d.name}/README.md: missing heading '## {h}'")
+        if heads[:len(COMPONENT_SECTIONS)] != COMPONENT_SECTIONS and all(h in heads for h in COMPONENT_SECTIONS):
+            problems.append(f"src/{d.name}/README.md: headings out of order: {heads}")
+    return problems
+
+
 def main():
     checks = []
 
@@ -398,6 +419,9 @@ def main():
 
     checks.append(("single-home: normative tables / invariants / formulas "
                    "defined once", check_single_home(INDEX.read_text())))
+
+    checks.append(("component-readmes: every src/ directory has a README.md "
+                   "with the five section headings", check_component_readmes()))
 
     failed = 0
     for name, problems in checks:

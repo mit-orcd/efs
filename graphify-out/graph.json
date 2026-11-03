@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "2b243c01bfb190dbeaab45417163a5047947acde"
+      "source_commit": "ab264d99ec9da20c52c082e0dad670f203113e2d"
     }
   },
   "links": [
@@ -12652,8 +12652,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/developing.md",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L107",
-      "target": "efs:section:docs/how-it-works/developing.md:107"
+      "source_location": "L113",
+      "target": "efs:section:docs/how-it-works/developing.md:113"
     },
     {
       "confidence": "EXTRACTED",
@@ -12661,8 +12661,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/developing.md",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L154",
-      "target": "efs:section:docs/how-it-works/developing.md:154"
+      "source_location": "L160",
+      "target": "efs:section:docs/how-it-works/developing.md:160"
     },
     {
       "confidence": "EXTRACTED",
@@ -12670,8 +12670,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/developing.md",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L185",
-      "target": "efs:section:docs/how-it-works/developing.md:185"
+      "source_location": "L191",
+      "target": "efs:section:docs/how-it-works/developing.md:191"
     },
     {
       "confidence": "EXTRACTED",
@@ -12679,8 +12679,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/developing.md",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L207",
-      "target": "efs:section:docs/how-it-works/developing.md:207"
+      "source_location": "L213",
+      "target": "efs:section:docs/how-it-works/developing.md:213"
     },
     {
       "confidence": "EXTRACTED",
@@ -12688,8 +12688,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/developing.md",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L218",
-      "target": "efs:section:docs/how-it-works/developing.md:218"
+      "source_location": "L224",
+      "target": "efs:section:docs/how-it-works/developing.md:224"
     },
     {
       "confidence": "EXTRACTED",
@@ -12697,8 +12697,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/developing.md",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L254",
-      "target": "efs:section:docs/how-it-works/developing.md:254"
+      "source_location": "L260",
+      "target": "efs:section:docs/how-it-works/developing.md:260"
     },
     {
       "confidence": "EXTRACTED",
@@ -12706,8 +12706,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/developing.md",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L268",
-      "target": "efs:section:docs/how-it-works/developing.md:268"
+      "source_location": "L274",
+      "target": "efs:section:docs/how-it-works/developing.md:274"
     },
     {
       "confidence": "EXTRACTED",
@@ -12715,8 +12715,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/developing.md",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L300",
-      "target": "efs:section:docs/how-it-works/developing.md:300"
+      "source_location": "L306",
+      "target": "efs:section:docs/how-it-works/developing.md:306"
     },
     {
       "confidence": "EXTRACTED",
@@ -12724,8 +12724,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/developing.md",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L317",
-      "target": "efs:section:docs/how-it-works/developing.md:317"
+      "source_location": "L323",
+      "target": "efs:section:docs/how-it-works/developing.md:323"
     },
     {
       "confidence": "EXTRACTED",
@@ -167308,7 +167308,7 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/how-it-works/developing.md:1",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L85",
+      "source_location": "L91",
       "target": "src_bench_storage_principles_pattern"
     },
     {
@@ -167326,7 +167326,7 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/how-it-works/developing.md:1",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L89",
+      "source_location": "L95",
       "target": "src_client_commands_command_run"
     },
     {
@@ -167380,151 +167380,151 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/how-it-works/developing.md:1",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L99",
+      "source_location": "L105",
       "target": "src_meta_pack_mapping_load"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:107",
+      "source": "efs:section:docs/how-it-works/developing.md:113",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L116",
+      "source_location": "L122",
       "target": "src_common_rdma_message_fail"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:107",
+      "source": "efs:section:docs/how-it-works/developing.md:113",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L147",
+      "source_location": "L153",
       "target": "src_kv_kv_key_start"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:107",
+      "source": "efs:section:docs/how-it-works/developing.md:113",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L150",
+      "source_location": "L156",
       "target": "src_meta_query_disk_save"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:154",
+      "source": "efs:section:docs/how-it-works/developing.md:160",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L162",
+      "source_location": "L168",
       "target": "src_kv_kv_lsm_lookup"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:154",
+      "source": "efs:section:docs/how-it-works/developing.md:160",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L170",
+      "source_location": "L176",
       "target": "src_raft_raft_efs_raft_snapshot"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:154",
+      "source": "efs:section:docs/how-it-works/developing.md:160",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L161",
+      "source_location": "L167",
       "target": "src_raft_raft_solo"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:185",
+      "source": "efs:section:docs/how-it-works/developing.md:191",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L197",
+      "source_location": "L203",
       "target": "src_client_commands_command_run"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:185",
+      "source": "efs:section:docs/how-it-works/developing.md:191",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L201",
+      "source_location": "L207",
       "target": "src_client_commands_command_run"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:218",
+      "source": "efs:section:docs/how-it-works/developing.md:224",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L252",
+      "source_location": "L258",
       "target": "src_bench_storage_principles_pattern"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:218",
+      "source": "efs:section:docs/how-it-works/developing.md:224",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L249",
+      "source_location": "L255",
       "target": "src_common_pack_ledger_unique"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:218",
+      "source": "efs:section:docs/how-it-works/developing.md:224",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L238",
+      "source_location": "L244",
       "target": "src_common_telemetry_report"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:218",
+      "source": "efs:section:docs/how-it-works/developing.md:224",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L252",
+      "source_location": "L258",
       "target": "src_meta_query_disk_matches"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:254",
+      "source": "efs:section:docs/how-it-works/developing.md:260",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L266",
+      "source_location": "L272",
       "target": "src_client_commands_command_run"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:268",
+      "source": "efs:section:docs/how-it-works/developing.md:274",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L294",
+      "source_location": "L300",
       "target": "src_client_commands_command_run"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:268",
+      "source": "efs:section:docs/how-it-works/developing.md:274",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L296",
+      "source_location": "L302",
       "target": "src_meta_query_disk_filename"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/developing.md:317",
+      "source": "efs:section:docs/how-it-works/developing.md:323",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L324",
+      "source_location": "L330",
       "target": "src_client_commands_command_run"
     },
     {
@@ -214790,7 +214790,7 @@
       "relation": "contains",
       "source": "scripts_check_doc_links",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L24",
+      "source_location": "L25",
       "target": "scripts_check_doc_links_dangling",
       "weight": 1.0
     },
@@ -214801,7 +214801,7 @@
       "relation": "contains",
       "source": "scripts_check_doc_links",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L50",
+      "source_location": "L51",
       "target": "scripts_check_doc_links_main",
       "weight": 1.0
     },
@@ -214824,7 +214824,7 @@
       "relation": "calls",
       "source": "scripts_check_doc_links_main",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L51",
+      "source_location": "L52",
       "target": "scripts_check_doc_links_dangling",
       "weight": 1.0
     },
@@ -214836,7 +214836,7 @@
       "relation": "calls",
       "source": "scripts_check_doc_links_main",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L51",
+      "source_location": "L52",
       "target": "scripts_check_doc_links_md_files",
       "weight": 1.0
     },
@@ -851539,11 +851539,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/developing.md:107",
+      "id": "efs:section:docs/how-it-works/developing.md:113",
       "kind": "document_section",
       "label": "The specification itself is under a machine gate",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L107"
+      "source_location": "L113"
     },
     {
       "_origin": "semantic",
@@ -851551,11 +851551,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/developing.md:154",
+      "id": "efs:section:docs/how-it-works/developing.md:160",
       "kind": "document_section",
       "label": "2. Routing: \"I am changing X\"",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L154"
+      "source_location": "L160"
     },
     {
       "_origin": "semantic",
@@ -851563,11 +851563,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/developing.md:185",
+      "id": "efs:section:docs/how-it-works/developing.md:191",
       "kind": "document_section",
       "label": "3. Done means",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L185"
+      "source_location": "L191"
     },
     {
       "_origin": "semantic",
@@ -851575,11 +851575,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/developing.md:207",
+      "id": "efs:section:docs/how-it-works/developing.md:213",
       "kind": "document_section",
       "label": "4. Never, without asking",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L207"
+      "source_location": "L213"
     },
     {
       "_origin": "semantic",
@@ -851587,11 +851587,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Architecture",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/developing.md:218",
+      "id": "efs:section:docs/how-it-works/developing.md:224",
       "kind": "document_section",
       "label": "5. If you are an AI agent \u2014 or briefing one",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L218"
+      "source_location": "L224"
     },
     {
       "_origin": "semantic",
@@ -851599,11 +851599,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/developing.md:254",
+      "id": "efs:section:docs/how-it-works/developing.md:260",
       "kind": "document_section",
       "label": "Keeping the agent handoff current",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L254"
+      "source_location": "L260"
     },
     {
       "_origin": "semantic",
@@ -851611,11 +851611,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/developing.md:268",
+      "id": "efs:section:docs/how-it-works/developing.md:274",
       "kind": "document_section",
       "label": "Command-line help style",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L268"
+      "source_location": "L274"
     },
     {
       "_origin": "semantic",
@@ -851623,11 +851623,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/developing.md:300",
+      "id": "efs:section:docs/how-it-works/developing.md:306",
       "kind": "document_section",
       "label": "Generated files",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L300"
+      "source_location": "L306"
     },
     {
       "_origin": "semantic",
@@ -851635,11 +851635,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/developing.md:317",
+      "id": "efs:section:docs/how-it-works/developing.md:323",
       "kind": "document_section",
       "label": "Status page layout",
       "source_file": "docs/how-it-works/developing.md",
-      "source_location": "L317"
+      "source_location": "L323"
     },
     {
       "_origin": "semantic",
@@ -875634,7 +875634,7 @@
       "id": "scripts_check_doc_links_dangling",
       "label": "dangling()",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L24"
+      "source_location": "L25"
     },
     {
       "_callable": true,
@@ -875646,7 +875646,7 @@
       "id": "scripts_check_doc_links_main",
       "label": "main()",
       "source_file": "scripts/check_doc_links.py",
-      "source_location": "L50"
+      "source_location": "L51"
     },
     {
       "_callable": true,
