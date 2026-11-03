@@ -129,6 +129,14 @@ binary and Python test, and that no command runs in both groups.
 sanitizers, benchmarks or build introspection still run one at a time,
 after the pool.
 
+`tests/budgets.tsv` is also the test catalogue (W171): every `test` and
+`test-long` command has a row with its target, a subsystem (a source directory
+plus an optional component, such as `server/raft_host.read_index`) and a
+purpose, and `tests/test_make_test_recipe.py` fails on a missing or
+inconsistent row. `python3 scripts/tests_for.py SUBSYSTEM` prints the commands
+of a subsystem and its dotted components; add `--run` to run them after
+`make all`.
+
 Every `test-long` command has a row in `tests/budgets.tsv` (W160): the
 seconds it may take at `EFS_TEST_JOBS=8` on an 8-CPU host, the pool slots
 it occupies and, above the per-command bound, why. Slots weigh disk use,
