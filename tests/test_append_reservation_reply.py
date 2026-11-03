@@ -2,8 +2,9 @@
 """A proved reservation reply must not depend on a later attribute collect."""
 from pathlib import Path
 import os, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_APPEND_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','EFS_APPEND_HOST_SOURCE')
 a=s.index('static void host_append_owner(');b=s.index('\n}',a)+2
 code=r'''
 #include "efs/meta_apply.h"

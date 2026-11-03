@@ -6,9 +6,10 @@ success and a fenced failure; this does not replace durable-store fault gates.
 """
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
 ref=os.environ.get('EFS_HANDOFF_SOURCE_REF')
-s=subprocess.check_output(['git','show',ref+':src/server/raft_host.c'],cwd=root,text=True) if ref else (root/'src/server/raft_host.c').read_text()
+s=subprocess.check_output(['git','show',ref+':src/server/raft_host.c'],cwd=root,text=True) if ref else csrc.module('raft_host')
 def fn(signature):
     a=s.index(signature);return s[a:s.index('\n}',a)+2]
 helper=fn('static void host_inbox_batch_handoff(') if 'static void host_inbox_batch_handoff(' in s else ''

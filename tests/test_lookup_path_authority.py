@@ -2,8 +2,9 @@
 """A batched path fences each encountered group once within that RPC."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host')
 a=s.index('void server_raft_host_lookup_path(');handler=s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/meta_apply.h"

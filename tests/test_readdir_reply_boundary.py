@@ -2,6 +2,7 @@
 """Actual readdir RPC rejects over-counts, broken cursors and late replies."""
 from pathlib import Path
 import subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/inode_rpc.c').read_text();a=s.index('int efs_client_rpc_readdir_cur(');b=s.index('\n}',a)+2
 code=r'''
 #include "efs/protocol.h"
@@ -50,7 +51,7 @@ print('readdir reply: count/cursor limits, output retention, late admission and 
 
 # Execute the real peer forwarding receive boundary too. A malformed frame
 # must not be zero-extended/copied into output or returned to the peer pool.
-host=(root/'src/server/raft_host.c').read_text();a=host.index('static int host_inode_rpc_peer(');b=host.index('\n}',a)+2
+host=csrc.module('raft_host');a=host.index('static int host_inode_rpc_peer(');b=host.index('\n}',a)+2
 forward=r'''
 #include "efs/protocol.h"
 #include <assert.h>

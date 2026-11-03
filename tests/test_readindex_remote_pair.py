@@ -2,8 +2,9 @@
 """Actual bounded worker pool: overlap, deadline ownership, refusal and reuse."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-source=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+source=csrc.module('raft_host')
 a=source.index('static unsigned host_read_pair_capacity(');capacity=source[a:source.index('\n}',a)+2]
 code=r'''
 #include "efs/common.h"

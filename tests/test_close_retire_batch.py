@@ -2,8 +2,9 @@
 """Actual close-retirement coordinator preserves each independent verdict."""
 from pathlib import Path
 import subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static void host_gc_close_retire_batch(struct efs_raft_host *h,')
 body=s[a:s.index('\n}',a)+2]
 code=r'''

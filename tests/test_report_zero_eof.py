@@ -13,9 +13,10 @@ import os
 import shlex
 import subprocess
 import tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/server/raft_host.c').read_text()
+source = csrc.module('raft_host')
 start = source.index('            sz = 0;', source.index('void server_raft_host_report('))
 end = source.index('            /* Zero is an explicit', start)
 block = source[start:end]

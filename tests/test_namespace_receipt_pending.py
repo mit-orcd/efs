@@ -2,8 +2,9 @@
 """Actual replay helper must distinguish a missing and materializing receipt."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('NAMESPACE_REPLAY_SOURCE',root/'src/server/raft_host.c')).read_text();a=s.index('static int host_opid_replay(');b=s.index('\n}',a)+2
+s=csrc.module('raft_host','NAMESPACE_REPLAY_SOURCE');a=s.index('static int host_opid_replay(');b=s.index('\n}',a)+2
 source=r'''
 #include <stdint.h>
 #include <string.h>

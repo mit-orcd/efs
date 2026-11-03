@@ -2,8 +2,9 @@
 """Actual bounded sender read probe; original replication stays owed."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host')
 a=s.index('static void host_read_probe(');fn=s[a:s.index('\n}',a)+2]
 timing = 'efs_batch_obs_now_us' in fn
 pure_helper=''

@@ -2,8 +2,9 @@
 """A LOOKUP reuses only the same request's already-read parent group."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_read_inode_lanes_reuse(');b=s.index('\n/* Process a bounded FIFO prefix',a)
+s=csrc.module('raft_host');a=s.index('static int host_read_inode_lanes_reuse(');b=s.index('\n/* Process a bounded FIFO prefix',a)
 code=r'''
 #include <stdint.h>
 #include <sys/stat.h>

@@ -2,8 +2,9 @@
 """Compile production stats serialization for legacy and retained snapshots."""
 from pathlib import Path
 import json, os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('            struct efs_query_rollup stats;',s.index('static int query_consume('))
 b=s.index('        } else if (!rc) {',a)
 code=r'''

@@ -2,8 +2,9 @@
 """A coordinator lookup cannot interpret failed fresh authority as absence."""
 from pathlib import Path
 import re,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-text=(root/'src/server/raft_host.c').read_text()
+text=csrc.module('raft_host')
 match=re.search(r'^static int host_txn_coord\([^;]+?\)\n\{',text,re.M)
 function=text[match.start():text.index('\n}',match.end())+2]
 code=r'''

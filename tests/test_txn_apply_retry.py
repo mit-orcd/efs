@@ -2,8 +2,9 @@
 """Exercise the host's actual apply-return policy, including business verdicts."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_APPLY_POLICY_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','EFS_APPLY_POLICY_SOURCE')
 defines='\n'.join(line for line in s.splitlines() if line.startswith(('#define HOST_APPEND_RSV_LEN ', '#define HOST_LOCK_LEN ')))
 a=s.index('    ret = (cmd[0]', s.index('static int host_apply('))
 # Test only verdict classification; the atomic commit scope has its own tests.

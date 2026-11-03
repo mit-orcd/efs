@@ -2,8 +2,9 @@
 """Execute production cut capture: bounded recapture never reuses a failed pin."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile, sys
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_QUERY_CAPTURE_SOURCE',str(root/'src/server/raft_host.c'))).read_text()
+s=csrc.module('raft_host','EFS_QUERY_CAPTURE_SOURCE')
 a=s.index('static int host_query_source_once(')
 b=s.index('/* Disk builders stream bounded scratch',a)
 body=s[a:b]

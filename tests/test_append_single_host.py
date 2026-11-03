@@ -2,8 +2,9 @@
 """Production single-reservation selector: coverage, identity and exact verdict."""
 from pathlib import Path
 import subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_complete_single_append(');b=s.index('\n}',a)+2
+s=csrc.module('raft_host');a=s.index('static int host_complete_single_append(');b=s.index('\n}',a)+2
 code=r'''
 #include "efs/meta_cmd.h"
 #include "efs/common.h"

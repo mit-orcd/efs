@@ -2,8 +2,9 @@
 """Execute actual root authority/binding branches with controlled boundaries."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static int query_directory_binding(');b=s.index('\nstatic int query_ancestry(',a)
 code=r'''
 #include "efs/meta_apply.h"

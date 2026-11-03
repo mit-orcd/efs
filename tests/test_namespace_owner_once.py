@@ -2,8 +2,9 @@
 """Applied REGISTER proof is exact; namespace admission never caches that proof."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_NAMESPACE_OWNER_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','EFS_NAMESPACE_OWNER_SOURCE')
 # Reconciled callers now pass a request-local group bitmap, never a remembered
 # owner-preparation verdict. Fresh ACTIVE/epoch/floor behavior is exercised by
 # test_namespace_admission_rounds and test_session_read_proof.

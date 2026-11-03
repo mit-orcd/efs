@@ -6,7 +6,8 @@ at the cohort item size); every shard is resolved, in order, and a group with
 one RESOLVE proposes it unchanged."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 a=s.index('#define HOST_CMD_COHORT_MAX');b=s.index('/* DECIDE COMMIT at the coordinator',a)
 ca=s.index('static int host_txn_commit(');cb=s.index('\n}',ca)+2
 ra=s.index('static int host_resize_resolve(');rb=s.index('\n}',ra)+2

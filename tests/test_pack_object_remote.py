@@ -7,8 +7,9 @@ NOT_FOUND. The serving side refuses unless it hosts the group, and returns
 NOT_FOUND only after a successful ReadIndex."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_PACK_READ_SOURCE',str(root/'src/server/raft_host.c'))).read_text()
+s=csrc.module('raft_host','EFS_PACK_READ_SOURCE')
 a=s.index('static uint32_t host_pack_degraded_mask(')
 b=s.index('\n}',s.index('int server_raft_host_pack_object(uint32_t group'))+2
 code=r'''

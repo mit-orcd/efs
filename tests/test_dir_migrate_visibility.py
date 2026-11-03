@@ -17,6 +17,7 @@ import resource
 import shlex
 import subprocess
 import tempfile
+import csrc
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
@@ -25,7 +26,7 @@ args = parser.parse_args()
 # The unchanged-source negative control deliberately trips a C assertion.
 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 root = args.root.resolve()
-source = (root / 'src/server/raft_host.c').read_text()
+source = csrc.module('raft_host')
 start = source.index('static int host_dir_migrate_txn(')
 end = source.index('\nstatic int host_dir_migrate(', start)
 head = r'''

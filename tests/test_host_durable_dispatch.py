@@ -2,7 +2,8 @@
 """Handler durability notes cannot apply outside the pump's KV hold."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 a=s.index('static void host_durable_synced_mode(');b=s.index('/* h->mu held. An outer REPORT',a)
 code=r'''
 #include "efs/common.h"

@@ -2,8 +2,9 @@
 """Early inbox votes retain ordered receive and credit ownership."""
 from pathlib import Path
 import os, shlex, subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('static void host_pending_reads(');b=s.index('\n}',a)+2
+s=csrc.module('raft_host');a=s.index('static void host_pending_reads(');b=s.index('\n}',a)+2
 pure=s.index('static int outbox_pure_read_control(');pure_end=s.index('\n}',pure)+2
 code=r'''
 #include "efs/raft.h"

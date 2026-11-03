@@ -3,8 +3,9 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static void unpack_report_ticket(');b=s.index('\n/* Same encoding as sim_txn_apply.',a)
 c=s.index('static int host_save_applied(');d=s.index('\nstatic int load_applied(',c)
 code=r'''

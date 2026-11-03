@@ -7,8 +7,9 @@ committed revision this node learned (membership_copy), never the HELLO table;
 unformed refuses everything."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static void host_gc_inode_nodes_batch(');b=s.index('/* Propose one GC command',a)
 code=r'''
 #include "efs/common.h"

@@ -27,6 +27,7 @@ Checks, on slices of the real sources:
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile, time
+import csrc
 
 root = Path(__file__).resolve().parents[1]
 handler = (root/'src/server/handler.c').read_text()
@@ -160,7 +161,7 @@ print('test_shutdown_bounded: OK')
 # K33: a stopping leader must release its readers before handler drain closes
 # the reply paths needed for fresh quorum proofs. Execute the host helper with
 # the actual core step-down/campaign functions, including persistence fencing.
-raft_host = (root/'src/server/raft_host.c').read_text()
+raft_host = csrc.module('raft_host')
 raft_core = (root/'src/raft/raft.c').read_text()
 pump = fn(raft_host, 'static void *host_pump(void *arg)')
 stop_call = 'host_stop_leading(h, h->s && server_stop_requested());'

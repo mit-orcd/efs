@@ -2,8 +2,9 @@
 """Actual follower coalescer: delayed delivery retains first fresh proof."""
 from pathlib import Path
 import os,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host')
 legacy=os.environ.get('EFS_TEST_LEGACY_COALESCER')=='1'
 a=s.index('struct host_ri_coal {' if legacy else 'struct host_ri_wait {');b=s.index('/* ReadIndex for one group',a)
 code=r'''

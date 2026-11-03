@@ -3,7 +3,8 @@
 from sanitize_env import asan_runtime_available
 from pathlib import Path
 import os,shlex,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 a=s.index('static int host_read_index_pair(');b=s.index('\n}',a)+2
 code=r'''
 #include "efs/common.h"

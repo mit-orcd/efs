@@ -5,8 +5,9 @@ from pathlib import Path
 import shlex
 import subprocess
 import tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host')
 refresh=(root/'src/server/query_refresh.h').read_text()
 unsettled=refresh[refresh.index('static inline int efs_query_refresh_unsettled('):]
 unsettled=unsettled[:unsettled.index('\n}')+2]

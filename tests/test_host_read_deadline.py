@@ -2,8 +2,9 @@
 """Execute actual read scope and forwarded RPC with controlled transport waits."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 def function(name):
     a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
 scope=r'''

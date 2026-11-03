@@ -5,8 +5,9 @@ import os
 import shlex
 import subprocess
 import tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/server/raft_host.c').read_text()
+source = csrc.module('raft_host')
 begin = source.index("    /* APPEND's reserved offset", source.index('static int host_propose_impl('))
 end = source.index('\n}\n', begin)
 code = '''

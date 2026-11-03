@@ -2,8 +2,9 @@
 """Exact production submit must own a hold despite concurrent hold closure."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_propose_impl(');b=s.index('\n}',a)+2
+s=csrc.module('raft_host');a=s.index('static int host_propose_impl(');b=s.index('\n}',a)+2
 # The forward-once refusal (flake sweep, Oct 25) is part of the exact production body.
 fa=s.index('static int host_forward_refused(');fb=s.index('\n}',fa)+2
 code=r'''

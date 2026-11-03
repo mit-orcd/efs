@@ -2,8 +2,9 @@
 """An RPC may share its own authority fences, never another RPC's fences."""
 from pathlib import Path
 import subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-source = (root/'src/server/raft_host.c').read_text()
+source = csrc.module('raft_host')
 def function(name):
     start = source.index('static int '+name+'(')
     return source[start:source.index('\n}', start)+2]

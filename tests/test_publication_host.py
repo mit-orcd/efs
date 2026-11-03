@@ -2,8 +2,9 @@
 """Run the real host adapter with lost apply verdicts and delayed outcomes."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('void server_raft_host_publication(')
+s=csrc.module('raft_host');a=s.index('void server_raft_host_publication(')
 fn=s[a:s.index('\n}',a)+2]
 pack_a=s.index('static int pack_publish_cmd(uint8_t *out');pack=s[pack_a:s.index('\n}',pack_a)+2]
 unpack_a=s.index('static void unpack_publication(');unpack=s[unpack_a:s.index('\n}',unpack_a)+2]

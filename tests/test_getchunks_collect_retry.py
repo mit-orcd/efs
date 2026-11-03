@@ -7,8 +7,9 @@ previously used for a packed record. The client's strict validator stays on.
 """
 from pathlib import Path
 import os, shlex, subprocess, sys, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-s = (Path(sys.argv[1]) if len(sys.argv)>1 else root/'src/server/raft_host.c').read_text()
+s = Path(sys.argv[1]).read_text() if len(sys.argv)>1 else csrc.module('raft_host')
 a=s.index('struct host_chunk_stamp {');b=s.index('\n};',a)+3
 stamp=s[a:b]
 a=s.index('static int host_getchunks_collect(');b=s.index('\n}',a)+2

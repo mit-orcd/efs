@@ -2,8 +2,9 @@
 """Verify the actual pump/shutdown helper cannot save past failed KV sync."""
 from pathlib import Path
 import os,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static int host_save_applied(');b=s.index('\n}',a)+2
 c=s.index('static int host_persist_durable_tail(');d=s.index('\n}',c)+2
 code=r'''

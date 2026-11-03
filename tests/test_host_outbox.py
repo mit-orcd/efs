@@ -3,8 +3,9 @@
 from sanitize_env import asan_runtime_available
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 a=s.index('static int outbox_pri_replace(');b=s.index('\n}',a)+2
 helper=s.index('static int outbox_pure_read_control(');helper_end=s.index('\n}',helper)+2
 code=r'''

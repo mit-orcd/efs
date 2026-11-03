@@ -2,8 +2,9 @@
 """Production transaction reads reuse authority, never decisions or absence."""
 from pathlib import Path
 import subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_txn_coord(');b=s.index('static void stat_to_inode(',a)
+s=csrc.module('raft_host');a=s.index('static int host_txn_coord(');b=s.index('static void stat_to_inode(',a)
 code=r'''
 #include "efs/txn.h"
 #include "efs/raft.h"

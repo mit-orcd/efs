@@ -29,8 +29,9 @@ docs/status/2026-10/flake-sweep-20261025.md.
 """
 import re, subprocess, tempfile
 from pathlib import Path
+import csrc
 root = Path(__file__).resolve().parents[1]
-s = (root / 'src/server/raft_host.c').read_text()
+s = csrc.module('raft_host')
 
 
 def fn(name):

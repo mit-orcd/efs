@@ -2,6 +2,7 @@
 """Execute the shared fence coordinator: FINISH keeps its epoch while certificates are BUSY."""
 from pathlib import Path
 import os, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('SESSION_BARRIER_SOURCE',root/'src/common/session_revoke.c')).read_text()
 def function(name):
@@ -86,7 +87,7 @@ print('session FINISH: BUSY retries keep UUID/epoch, one BEGIN, both cleanup sta
 # BEGIN cannot be starved by soft new-work admission: it freezes an existing
 # session before cleanup. Execute the production predicate at memory/log
 # pressure; new session/namespace work must remain refused.
-host=Path(os.environ.get('SESSION_ADMIT_SOURCE',root/'src/server/raft_host.c')).read_text()
+host=csrc.module('raft_host','SESSION_ADMIT_SOURCE')
 a=host.index('static int host_kv_pressure(');body=host[a:host.index('\n}',a)+2]
 a=host.index('static int host_admit(');body+='\n'+host[a:host.index('\n}',a)+2]
 code=r'''

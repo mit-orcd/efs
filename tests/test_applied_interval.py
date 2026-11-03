@@ -2,8 +2,9 @@
 """Actual marker helper: throttling, entry budget, sync errors and force drain."""
 from pathlib import Path
 import os, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 assert 'EFS_RAFT_BATCH_' not in s and 'host_batch_flag' not in s, 'D42: Raft batching has no switch'
 def fn(name):
  a=s.index('static int '+name+'(')

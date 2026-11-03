@@ -2,8 +2,9 @@
 """Exercise production GC command decoders, local and forwarded verdicts."""
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-text = Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+text = csrc.module('raft_host')
 def function(name):
     m = re.search(r'^static [^\n;]*\b'+name+r'\([^;]+?\)\n\{', text, re.M)
     if not m: raise RuntimeError(name)

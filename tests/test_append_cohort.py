@@ -2,7 +2,8 @@
 """Captured append PREPs must settle before a decision; ambiguous COMMIT stays."""
 from pathlib import Path
 import os,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 a=s.index('#define HOST_CMD_COHORT_MAX');b=s.index('/* DECIDE COMMIT at the coordinator',a)
 c=s.index('struct host_append_batch {');d=s.index('static int host_append_transaction(',c)
 batch=s[c:d]

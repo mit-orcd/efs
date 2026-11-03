@@ -2,7 +2,8 @@
 """A stale follower may redirect only after an authoritative remote read."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 a=s.index('static int host_follower_read_result(');b=s.index('\n}',a)+2
 code='#include "efs/common.h"\n#include <assert.h>\n#include <stdio.h>\n'+s[a:b]+r'''
 int main(void){

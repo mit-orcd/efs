@@ -4,7 +4,8 @@ session for an unknown uuid (K5), so an absent owner is UNREGISTERED and a
 different owner epoch is FENCED."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 a=s.index('static int host_namespace_session_admit_covered(');b=s.index('\n}',s.index('static int host_namespace_session_admit(',a))+2
 code=r'''
 #include "efs/session.h"

@@ -2,8 +2,9 @@
 """Execute MKDIR's actual apply-time reservation helper under hot allocations."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_MKDIR_ALLOC_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host','EFS_MKDIR_ALLOC_SOURCE')
 a=s.index('static int host_mkdir_alloc_reserve(');b=s.index('\n}',a)+2
 code=r'''
 #include "efs/txn.h"

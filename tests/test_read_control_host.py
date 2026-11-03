@@ -2,8 +2,9 @@
 """Quorum notes may bypass tail I/O; queued replication still receives ACKs."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-source=(root/'src/server/raft_host.c').read_text()
+source=csrc.module('raft_host')
 start=source.index('static int host_read_control(')
 helper=source[start:source.index('\n}',start)+2]
 pure=source.index('static int outbox_pure_read_control(');pure_end=source.index('\n}',pure)+2

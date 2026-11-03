@@ -2,8 +2,9 @@
 """Run the production truncate handler; fences stay inside one RPC."""
 from pathlib import Path
 import os, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-s = Path(os.environ.get('EFS_TRUNCATE_HOST_SOURCE', root/'src/server/raft_host.c')).read_text()
+s = csrc.module('raft_host','EFS_TRUNCATE_HOST_SOURCE')
 a = s.index('static void host_truncate_lazy(')
 b = s.index('\nvoid server_raft_host_setattr(', a)
 code = r'''

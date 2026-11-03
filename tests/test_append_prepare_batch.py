@@ -10,8 +10,9 @@ buffered image. Negative control: EFS_APPEND_BATCH_PER_IMAGE=1 restores the
 per-image proposal and must fail the K29 count."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text()
+s=csrc.module('raft_host')
 def function(name):
  a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
 start=s.index('static int host_append_prepare_ref(')

@@ -15,10 +15,11 @@ from pathlib import Path
 import os, shlex, subprocess, sys, tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sanitize_env import cflags, timeout, wrap  # noqa: E402
+import csrc
 root = Path(__file__).resolve().parents[1]
 if not (root / 'libefs.a').exists():
     sys.exit('build libefs.a first (make libefs.a)')
-s = (root / 'src/server/raft_host.c').read_text()
+s = csrc.module('raft_host')
 def fn(head):
     a = s.index(head)
     while s.find(';', a) < s.find('{', a):

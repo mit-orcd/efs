@@ -5,8 +5,9 @@ from pathlib import Path
 import shlex
 import subprocess
 import tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+s=csrc.module('raft_host')
 a=s.index('static void host_txn_recover_pass(');b=s.index('\n/* W125:',a)
 code=r'''
 #include <efs/txn.h>

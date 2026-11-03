@@ -2,11 +2,12 @@
 """Actual feature reply distinguishes unavailable authority from disabled policy."""
 from pathlib import Path
 import os,subprocess,tempfile,shlex
+import csrc
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_FEATURE_HANDLER_SOURCE',str(root/'src/server/handler.c'))).read_text()
 a=s.index('case EFS_MSG_GET_FEATURES: {');b=s.index('case EFS_MSG_QUERY_SNAPSHOT:',a)
 handler=s[a:b]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('int server_raft_host_query_features_checked(');b=s.index('\n}',a)+2
+s=csrc.module('raft_host');a=s.index('int server_raft_host_query_features_checked(');b=s.index('\n}',a)+2
 helper=s[a:b]
 code=r'''
 #include "efs/protocol.h"

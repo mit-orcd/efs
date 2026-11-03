@@ -2,7 +2,8 @@
 """The combined two-row admission must never enter another Raft group."""
 from pathlib import Path
 import os,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
 a=s.index('static int host_session_combined_group(');b=s.index('\n}',a)+2
 code=r'''
 #include "efs/common.h"

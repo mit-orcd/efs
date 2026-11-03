@@ -2,8 +2,9 @@
 """Real Raft core plus actual host barrier handoff: no early authority, other-group progress."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_receive_persist(');hook=s[a:s.index('\n}',a)+2]
+s=csrc.module('raft_host');a=s.index('static int host_receive_persist(');hook=s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/raft.h"
 #include <assert.h>

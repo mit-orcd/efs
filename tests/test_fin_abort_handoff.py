@@ -9,8 +9,9 @@ finish, which decides ABORT itself once no decision appeared within
 HOST_FIN_DECIDE_NS (the COMMIT entry was truncated)."""
 import os, shlex, subprocess, tempfile
 from pathlib import Path
+import csrc
 root = Path(__file__).resolve().parents[1]
-s = (root / 'src/server/raft_host.c').read_text()
+s = csrc.module('raft_host')
 def function(head):
     a = s.index(head)
     return s[a:s.index('\n}', a) + 2]
