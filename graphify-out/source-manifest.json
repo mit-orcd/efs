@@ -648,7 +648,7 @@
     "tests/live/storage_session_fence.c": 1,
     "tests/live/storage_session_fence_fault.c": 1,
     "tests/live/store_barrier_fault.c": 1,
-    "tests/live/ticket_put.py": 24,
+    "tests/live/ticket_put.py": 26,
     "tests/live/ticket_put_cluster.py": 7,
     "tests/live/tiny_churn.py": 5,
     "tests/live/tiny_md5_publication.py": 8,
@@ -2080,7 +2080,7 @@
     "tests/live/storage_session_fence.c": "88cd1e7e3416eb8948a7db6c910484274681364b42f23f8583f5105af323ff95",
     "tests/live/storage_session_fence_fault.c": "71cd7c9da6fe0767c029ea72d9649c38c7e8a8bd191dcf8a0ee8bc96af3ed42d",
     "tests/live/store_barrier_fault.c": "aaf727f2a5a7f0fe891a67b6353fc4cdfd3420a6daf4c8852054433849ed7f18",
-    "tests/live/ticket_put.py": "da85a352453f7afbe6d4c3a5b71aedb3b319ac315d3ad3bc4eb60dccf52837d8",
+    "tests/live/ticket_put.py": "54100604fbac6d2114ffaabbdcf1c52954388c0662bb35867b8c7d6c286dfa09",
     "tests/live/ticket_put_cluster.py": "d82d26afd7c2011c085a434b515a84b19ee8f34f08bd75cbc14784dcfca96cfe",
     "tests/live/tiny_churn.py": "10d20482d08f868fc21e7690251f1bc25a3cddebfd54d7569f9517b27796f4a8",
     "tests/live/tiny_md5_publication.py": "ddedf7293f55d1763f6358781ed13d4548b8cdf06e4fc64baba4ce9234c0b0d1",
@@ -2828,10 +2828,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1761
+    "calls": 1762
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "2b243c01bfb190dbeaab45417163a5047947acde"
+  "source_commit": "71a783375acbe35b69d6ddb5f35e7875cd0f4b9f"
 }
