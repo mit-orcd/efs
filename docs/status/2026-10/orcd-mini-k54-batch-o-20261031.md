@@ -2,7 +2,7 @@
 
 Purpose: run the K54 real-host stage ([K54](k54-member-down-unmount-20261030.md),
 D46 item 6) and rehearse batch O of the
-[Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md) on orcd-mini,
+[Stage 1 acceptance matrix](../stage1-acceptance-matrix-20261030.md) on orcd-mini,
 with measured minutes against the matrix estimates. This is a **rehearsal on
 devel `909a07d71`, not the acceptance verdict**: the acceptance run is owed on
 the frozen candidate.
