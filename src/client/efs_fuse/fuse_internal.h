@@ -311,9 +311,16 @@ int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offset,
                              struct fuse_file_info *fi);
 
 /* writeback.c */
+extern struct efs_wb_state g_wb;
+char *bounce_alloc(size_t size, size_t *cap_out);
+void bounce_release(char *p, size_t cap);
 void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
                              uint64_t offset, size_t size, const char *path);
+int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
+                                char *copy, char *free_base, size_t buf_cap);
 int efs_wb_sync(void);
+int efs_wb_ino_pending_locked(efs_ino_t ino);
+int efs_wb_sync_ino(efs_ino_t ino);
 
 /* namespace.c */
 int efs_rc_to_errno(int rc);
