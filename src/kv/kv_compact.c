@@ -849,8 +849,17 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     if (l->n_l1 > 1)
         qsort(l->l1, l->n_l1, sizeof(l->l1[0]), kv_l1_cmp);
     kv_candidates_changed(l);
+    /* The replacement files are complete and logically equivalent to the
+     * still-retained inputs. Keep writer ownership, but let readers/peeks
+     * progress through MANIFEST I/O, as the flush path already does. */
+    int publication_yielded = lsm_view_yield(l);
     rc = kv_manifest_write(l);
+    lsm_view_reclaim(l, publication_yielded);
     if (rc != EFS_OK) {
+        /* Release detached view references without dooming their files:
+         * a lost MANIFEST rename still needs every original input. */
+        for (i = 0; i < n_doomed; i++)
+            kv_seg_close(doomed[i].seg);
         /* Outputs are already in the live level. The old MANIFEST still
          * names the inputs, so a restart GCs the outputs; this engine stops. */
         l->io_failed = 1;
