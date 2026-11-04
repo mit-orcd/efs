@@ -643,10 +643,46 @@ static void test_note_durable_without_apply(void)
     CHECK(efs_raft_durable(n.r[leader],commit)==EFS_OK && efs_raft_commit(n.r[leader])>=index &&
           app[leader].n==before+1 && app[leader].last=='N',
           "pump commits/applies same exact command from monotonic watermark");
+    CHECK(efs_raft_commit(n.r[follower])>=index && app[follower].n==before+1,
+          "a durable-path commit reaches the follower at once, not with the next heartbeat");
     CHECK(efs_raft_note_durable(n.r[follower],index)==EFS_ERR_NOT_PRIMARY,
           "follower cannot acquire a durable leader vote");
     CHECK(efs_raft_note_durable(NULL,index)==EFS_ERR_INVAL,"null durable-note refusal");
     for(int i=0;i<2;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
+}
+
+/* The first ack commits an entry and the push that follows reaches the
+ * other follower as a probe below the entry (its match at the time), which
+ * on_ae_req caps: that follower learned the commit only from the next
+ * heartbeat (50 ms of apply-sleep per forwarded command on a loopback
+ * cluster with the two metadata leaders on different nodes). Its own ack
+ * must carry the commit to it. */
+static void test_second_ack_commit_probe(void)
+{
+    struct net n={.n=3};struct app app[3]={0};struct efs_raft_store *store[3];
+    struct efs_raft_cfg cfg={0};cfg.n=3;cfg.send=send_now;cfg.net=&n;
+    cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
+    for(int i=0;i<3;i++) {
+        store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
+        cfg.election_ticks=(uint32_t)(4+i*4);cfg.app=&app[i];n.r[i]=test_raft_new(&cfg);
+    }
+    CHECK(elect(&n,20)==1,"second-ack fixture elects");
+    int lid=leader_id(&n),a=(lid+1)%3,b=(lid+2)%3;uint64_t idx=0;uint8_t cmd='S';
+    n.hold_ae_replies=1;   /* both followers append the entry; neither ack arrives */
+    CHECK(efs_raft_propose(n.r[lid],&cmd,1,&idx)==EFS_OK && idx>0,"propose with acks held");
+    n.hold_ae_replies=0;
+    CHECK(efs_raft_commit(n.r[lid])<idx,"no ack, no commit");
+    struct efs_raft_msg rep={0};rep.type=EFS_RAFT_MSG_AE_REP;rep.to=lid;
+    rep.term=efs_raft_term(n.r[lid]);rep.success=1;rep.match_index=idx;
+    rep.from=a;
+    CHECK(efs_raft_recv(n.r[lid],&rep)==EFS_OK && efs_raft_commit(n.r[lid])==idx,"first ack commits");
+    CHECK(efs_raft_commit(n.r[a])==idx,"the first acker gets the commit with the push");
+    CHECK(efs_raft_commit(n.r[b])<idx,"the push reached the second acker below its entry");
+    rep.from=b;
+    CHECK(efs_raft_recv(n.r[lid],&rep)==EFS_OK,"second ack");
+    CHECK(efs_raft_commit(n.r[b])==idx && app[b].n==app[lid].n,
+          "the second acker learns the commit from its own ack, before any heartbeat");
+    for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
 }
 
 /* The network can service a pure current read round while the pump is in
@@ -3595,6 +3631,7 @@ int main(void)
     for (ack_window_fixture_mode=0;ack_window_fixture_mode<2;ack_window_fixture_mode++) {
         test_wall_heartbeat_coarse_pump();
         test_note_durable_without_apply();
+        test_second_ack_commit_probe();
         test_readindex_control();
         test_read_quorum_before_apply();
         test_read_applied_floor();
