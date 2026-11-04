@@ -343,7 +343,23 @@ int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
 int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi);
 
 /* namespace.c */
+int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
+                              mode_t mode, struct fuse_file_info *fi,
+                              efs_ino_t *out_ino, struct efs_inode *created);
+int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mode,
+                             efs_ino_t *out_ino, struct efs_inode *created);
+int efs_fuse_unlink_at(fuse_ino_t parent_ino, const char *name);
+int efs_fuse_rmdir_at(fuse_ino_t parent_ino, const char *name);
+int efs_fuse_statfs(const char *path, struct statvfs *stbuf);
 int efs_rc_to_errno(int rc);
+int efs_fuse_chmod_ino(fuse_ino_t ino, mode_t mode);
+int efs_fuse_chown_ino(fuse_ino_t ino, uid_t uid, gid_t gid);
+int efs_fuse_symlink_at(const char *link, fuse_ino_t parent_ino,
+                               const char *name, efs_ino_t *out_ino);
+int efs_fuse_readlink_ino(fuse_ino_t ino, char *buf, size_t size);
+int efs_fuse_link_at(fuse_ino_t src_ino, fuse_ino_t newparent,
+                            const char *newname);
+int efs_fuse_utimens_ino(fuse_ino_t ino, const struct timespec tv[2]);
 int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
                                  struct fuse_file_info *fi);
 
