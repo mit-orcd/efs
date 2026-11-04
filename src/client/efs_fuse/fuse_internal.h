@@ -382,4 +382,25 @@ extern int g_fuse_ready_wr;
 int efs_fuse_wait_ready(int rfd, pid_t child, int timeout_ms);
 void efs_fuse_init(void *userdata, struct fuse_conn_info *conn);
 
+/* lookup.c */
+void fill_entry(fuse_ino_t ino, struct fuse_entry_param *e,
+                       const struct stat *st);
+void fill_entry_row(fuse_ino_t ino, struct fuse_entry_param *e,
+                           const struct efs_inode *row);
+int lookup_fill(fuse_ino_t ino, struct fuse_entry_param *e,
+                       struct fuse_file_info *fi);
+int lookup_fill_committed(fuse_ino_t ino, struct fuse_entry_param *e,
+                                 const char *op, fuse_ino_t parent,
+                                 const char *name);
+int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
+                              struct fuse_entry_param *e);
+int efs_fuse_setattr_ino(fuse_ino_t ino, struct stat *attr, int to_set,
+                                struct fuse_file_info *fi);
+int dirbuf_add(fuse_req_t req, char *buf, size_t bufsize, size_t *used,
+                      const char *name, fuse_ino_t ino, mode_t mode, off_t next);
+struct deep_callback_sample deep_callback_begin(fuse_req_t req, const char *name);
+void deep_callback_reply_begin(struct deep_callback_sample *sample);
+void deep_callback_end(struct deep_callback_sample sample, const char *op,
+                              fuse_ino_t parent, int rc);
+
 #endif
