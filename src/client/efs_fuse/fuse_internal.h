@@ -56,7 +56,6 @@
 #include <sys/syscall.h>
 #include <sched.h>
 
-
 struct efs_file_handle {
     efs_ino_t ino;
     struct efs_wb_description *errors;
@@ -77,6 +76,5 @@ uint64_t stats_now_ms(void);
 int virt_kind(fuse_ino_t ino);
 int fuse_stat_errno(int rc);
 int efs_rc_to_errno(int rc);
-
 
 #endif

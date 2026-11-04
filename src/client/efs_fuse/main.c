@@ -9,8 +9,7 @@
 #include "ll_run.h"
 #include "../stop_control.h"
 
-/* Canonical absolute mountpoint, set once in main and logged there. The
- * .find results are rendered as host-absolute paths on the server side. */
+/* Canonical absolute mountpoint, set once in main and logged at startup. */
 static char g_mountpoint[EFS_MAX_PATH] = "/";
 
 /* Nonzero once a clean unmount failed to flush, report, settle or revoke:

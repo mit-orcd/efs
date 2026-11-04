@@ -140,7 +140,9 @@ match the table. Done: adding a setting edits one file.
   bare); (c) a narrow interface per file: owner, lock, lifetime and failure
   behaviour of the eleven globals and the shared structs in
   `fuse_internal.h` (465 lines), globals made private where the call graph
-  allows; (d) a measured reading set: for three representative fixes
+  allows (done Nov 4, [evidence](efs-fuse-interfaces-20261104.md): eleven
+  `<area>.h` headers with the contract at the top, `fuse_internal.h` 80
+  lines, `g_mountpoint` private, instruction stream identical in all twelve objects); (d) a measured reading set: for three representative fixes
   (release cleanup, a ReadIndex refusal, write-back error handling) record
   the files and lines an agent must read and validate before and after,
   baseline taken on current devel before (c) lands
