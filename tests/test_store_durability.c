@@ -120,9 +120,17 @@ static void test_clean_verifier_selection(void)
  * the roots marked as an unclean boot: that fences COMMIT (EIO) until W71
  * recovery, for a boot that wrote nothing. Before serving, the exit
  * handler restores the previous record; a touched or serving boot does not. */
+/* A syncer thread left running on a struct about to be memset keeps barriering
+ * the reused root (a stray syncfs success showed up as durable_seq in the back-off case). */
+static void quiesce(struct put_sync_root *r)
+{
+    if(!r->thread_started || r->stop)return;
+    pthread_mutex_lock(&r->mu);r->stop=1;pthread_cond_broadcast(&r->cv);pthread_mutex_unlock(&r->mu);
+    pthread_join(r->thread,NULL);
+}
 static void reattach(struct put_sync_root *r,const char *root)
 {
-    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    quiesce(r);close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
     booting=1;put_sync_attach(r,root,101,1);booting=0;assert(r->fd>=0);put_sync_state[0]=1;
 }
 static void abandon_reset(void){put_sync_serving=0;put_sync_stopped=0;}
@@ -170,7 +178,7 @@ static void test_startup_abandon(uint8_t *data)
     put_sync_state[0]=1;server_put_sync_stop(NULL);server_put_sync_abandon();
     abandon_reset();reattach(r,root);assert(r->recovery_uncertain);
     /* A corrupt previous record is never resurrected as clean. */
-    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    quiesce(r);close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
     fd=open(rec,O_WRONLY|O_TRUNC);assert(fd>=0 && write(fd,"bad",3)==3);close(fd);
     abandon_reset();booting=1;put_sync_attach(r,root,101,1);booting=0;assert(r->fd<0);
     server_put_sync_abandon();
@@ -190,16 +198,27 @@ static void test_barrier_backoff(void)
     efs_test_path(root,sizeof(root),"efs-backoff-XXXXXX");assert(efs_test_mkdtemp(root));
     snprintf(rec,sizeof(rec),"%s/%s",root,PUT_SYNC_RECORD);
     struct put_sync_root *r=&put_sync_roots[0];
+    quiesce(r);
     abandon_reset();memset(r,0,sizeof(*r));put_sync_window_ms=20;
     booting=1;put_sync_attach(r,root,101,1);booting=0;assert(r->fd>=0);put_sync_state[0]=1;
     pthread_mutex_lock(&r->mu);int fd=r->fd;r->fd=-1;pthread_mutex_unlock(&r->mu); /* syncfs: EBADF */
-    put_sync_note(r,4096);usleep(1200000);
+    uint64_t t0=put_sync_now_ns();put_sync_note(r,4096);
+    /* Wait for the observed state, not a wall-clock window: under load the retry thread may run late. */
+    uint64_t fails=0,delay=0,t1=0;
+    for(int i=0;i<10000 && fails<3;i++){
+        pthread_mutex_lock(&r->mu);fails=r->failures;delay=r->retry_delay_ns;t1=put_sync_now_ns();pthread_mutex_unlock(&r->mu);
+        if(fails<3)usleep(1000);
+    }
     pthread_mutex_lock(&r->mu);
-    /* 20 ms window then 50,100,200,400,800 ms delays: about five attempts, not thousands. */
-    assert(r->error && r->failures>=3 && r->failures<=8 && !r->durable_seq);
-    assert(r->retry_delay_ns>=PUT_SYNC_BACKOFF_MIN_NS && r->retry_delay_ns<=PUT_SYNC_BACKOFF_MAX_NS);
+    assert(fails>=3); /* 10 s timeout fails the test */
+    assert(r->error && !r->durable_seq);
+    /* failures and retry_delay_ns change together under mu: delay doubled per failure from MIN, capped at MAX. */
+    uint64_t want=PUT_SYNC_BACKOFF_MIN_NS;for(uint64_t k=1;k<fails && want<PUT_SYNC_BACKOFF_MAX_NS;k++)want=want*2>PUT_SYNC_BACKOFF_MAX_NS?PUT_SYNC_BACKOFF_MAX_NS:want*2;
+    assert(delay==want && delay>=PUT_SYNC_BACKOFF_MIN_NS && delay<=PUT_SYNC_BACKOFF_MAX_NS);
+    /* A tight loop would reach 3 failures at once; back-off needs >= 20 ms window + 50 + 100 ms (load only delays). */
+    assert(t1-t0>=150000000ull);
     r->fd=fd;pthread_mutex_unlock(&r->mu);
-    for(int i=0;i<40;i++){pthread_mutex_lock(&r->mu);int d=r->durable_seq;pthread_mutex_unlock(&r->mu);if(d)break;usleep(100000);}
+    for(int i=0;i<100;i++){pthread_mutex_lock(&r->mu);int d=r->durable_seq;pthread_mutex_unlock(&r->mu);if(d)break;usleep(100000);}
     pthread_mutex_lock(&r->mu);
     assert(r->durable_seq>=1 && r->error && !r->retry_delay_ns);
     pthread_mutex_unlock(&r->mu);
