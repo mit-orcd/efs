@@ -1420,7 +1420,7 @@
     "docs/backlog/work-items.md": "1b832070f5dd1b71a31269ddad65ddc7499663dbb311ae1bd69a5761aa7cbb74",
     "docs/how-it-works/architecture.md": "d9112ac49ca0745c009d6ae08f858fae3b126dd6075db0a205802fdd8a734b6e",
     "docs/how-it-works/design-rationale.md": "839a9fd92895b7f84e13b761e5bc48473f3ea35e37c364cee372a39e177db55f",
-    "docs/how-it-works/developing.md": "db11dd894e018092fb7cfa0a5613583cc9ee00a22b35a0851979be11e54cf0cd",
+    "docs/how-it-works/developing.md": "6e90504eaf36fb6e7b2734628d28c3646f4e69cfdb961ca413cd2e688edc54fa",
     "docs/how-it-works/failure-tolerance.md": "4d2adb1e3c21f81b5fe4b6391fc701f49ee5f8260e0788f7a6a2a48c36df89ed",
     "docs/how-it-works/naming.md": "e71f66d282fe0ee6ee9f8fae4e37c6eeafa2d1948b10de267ad2586721ce8a3c",
     "docs/how-it-works/performance.md": "07a59cebbdd235e724c08dd2a9a7da699ee32d511313a43310e1cf213eb9e9b6",
@@ -1429,7 +1429,7 @@
     "docs/how-it-works/protocols/sessions.md": "97134e8eb13cdf3f47c9247391c8f3ca663d78b9f91996a3c55bb7a15aaa368a",
     "docs/how-it-works/protocols/transactions.md": "5e1989bad26f62d59d69d697a83ace63716ff8d13d7b992d63cdab1be1011077",
     "docs/how-it-works/settings.md": "d699f3c467686f937e57b1a1981230f38032aac92eabe396d6080c6d63e38fb1",
-    "docs/how-it-works/testing.md": "d7bee5ac4e8a543921e7dff979660ecb0fbd7c34b0560675d0da442275af2846",
+    "docs/how-it-works/testing.md": "0d34e4ed71aa24ced1c4b707b500f311ccbca7d078dafa51d49e86cb692985b8",
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
     "docs/status/2026-10/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
@@ -2512,7 +2512,7 @@
     "tests/test_lookup_path_authority.py": "602c11aa112585efa041bfad8c3092d6f7e33ec47b9ab42e39e0eec77b3fbd3a",
     "tests/test_lookup_read_group.py": "c4f82cedc293ee09c4e80f9323055845e91c1f7f0624a04cd6b8b5aa15f1289e",
     "tests/test_lookup_replacement.py": "a0efa9232098bf3a259187488f321fe737611832e7ea9a86b8614bca7bb0f472",
-    "tests/test_make_test_recipe.py": "58ed651eb9b616e20da7a5e641960ca035a299797addc931081f1399a698593a",
+    "tests/test_make_test_recipe.py": "35b62774340839236ab3b3713f626d6251252542407d65a43af56794981bc7de",
     "tests/test_make_test_summary_runner.py": "65fa5394fdc192838404120001267f4859b97699c88ff42df48aba44b709ecbb",
     "tests/test_map_fresh_open.py": "c5ec8db87e79ef87f7f953a994de79b95af501e8bebf198e53b15a924135c6e8",
     "tests/test_member_limit.py": "ef9dac9f73620e46edf000a752917216bb80ec913f79c897048fce526f008d9b",
@@ -2862,5 +2862,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "dfc5615d9bb7aecd444d67593376414a08787137"
+  "source_commit": "73933f1956d4f7a2003f399d92747b4abcf94369"
 }
