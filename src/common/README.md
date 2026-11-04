@@ -22,6 +22,7 @@
 ## Calls
 
 - May call: only the C library and other `common/` files.
+- Other `src/` directories may include `common/` headers as `../common/<header>`; `scripts/check_include_boundary.py` (`make docs-check`) allowlists the existing ones and fails on new cross-directory includes.
 - Called by: every other directory.
 
 ## Tests

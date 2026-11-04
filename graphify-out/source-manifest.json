@@ -1399,7 +1399,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "707cf2d2f3b48a46c35fff015d5c51e73ec77c3d7c0bc66c112e34a8496e5916",
+    "Makefile": "e1d37545997ffe4f1d530a1b86960831c95d26297e5228c0800d4ae287d9c54a",
     "README.md": "f646cf19b6605664ea80ee9a539ea8c7938be322ee12ba520447204095e3d216",
     "docs/backlog/crash-safe-durable-versions.md": "b57a8c2376ec9e85d9403196a237c57b69f7515a60e73ceb2ac997788016d6b3",
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
@@ -1407,7 +1407,7 @@
     "docs/backlog/work-items.md": "76ee153b4530d28b34d805842f75ca119a563f5c2c49f2504213da1d1564107b",
     "docs/how-it-works/architecture.md": "d9112ac49ca0745c009d6ae08f858fae3b126dd6075db0a205802fdd8a734b6e",
     "docs/how-it-works/design-rationale.md": "839a9fd92895b7f84e13b761e5bc48473f3ea35e37c364cee372a39e177db55f",
-    "docs/how-it-works/developing.md": "971e8de952f6d7edfe63ecfa2af16faf7288838951c6a6259dedeffdab0c34bc",
+    "docs/how-it-works/developing.md": "950ad0d36eb481e04a49267b9acaef359fa14a432c4c1eef06dc6bca1f114d89",
     "docs/how-it-works/failure-tolerance.md": "4d2adb1e3c21f81b5fe4b6391fc701f49ee5f8260e0788f7a6a2a48c36df89ed",
     "docs/how-it-works/naming.md": "e71f66d282fe0ee6ee9f8fae4e37c6eeafa2d1948b10de267ad2586721ce8a3c",
     "docs/how-it-works/performance.md": "07a59cebbdd235e724c08dd2a9a7da699ee32d511313a43310e1cf213eb9e9b6",
@@ -2836,5 +2836,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "718372cfc056b58413f29125b3b65773cf4d2bbb"
+  "source_commit": "15f346b48df9ea7e7883be8df8a61631fa65e0a0"
 }

@@ -394,6 +394,7 @@ FORCE:
 # scripts/check_doc_links.py (relative Markdown links resolve).
 docs-check:
 	python3 docs/check-architecture.py
+	python3 scripts/check_include_boundary.py
 	python3 scripts/check_doc_links.py
 
 # Developer navigation validation needs the pinned graphify environment and a
@@ -447,6 +448,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_env_inventory.py
 	python3 scripts/gen_settings.py --check
 	python3 scripts/check_k_register.py
+	python3 scripts/check_include_boundary.py --selftest
 	python3 tests/test_k_register.py
 	python3 tests/test_graph_community_labels.py
 	python3 tests/test_leader_placement.py
