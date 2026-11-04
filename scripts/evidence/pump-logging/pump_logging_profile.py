@@ -256,7 +256,7 @@ def run(a):
                 for task in Path('/proc/%d/task' % proc.pid).iterdir():
                     try:
                         sample['wchan'][i][task.name] = (task / 'wchan').read_text().strip()
-                    except FileNotFoundError:
+                    except OSError:   # the thread ended between the listing and the read
                         pass
             samples.append(sample)
             time.sleep(.5)
