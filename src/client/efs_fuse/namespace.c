@@ -4,6 +4,7 @@
 #include "support.h"
 #include "open.h"
 #include "append.h"
+#include "release.h"
 
 /* A busy directory RPC is EBUSY. Mapping it to EIO made a leader-freeze
  * rmdir look like metadata corruption (Sep 23, fcstor007). */

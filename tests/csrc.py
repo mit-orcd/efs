@@ -43,6 +43,7 @@ MODULES = {
         'src/client/efs_fuse/append.h',
         'src/client/efs_fuse/write.h',
         'src/client/efs_fuse/namespace.h',
+        'src/client/efs_fuse/release.h',
     ]),
     'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),
 }

@@ -3,6 +3,7 @@
 #include "getattr.h"
 #include "support.h"
 #include "namespace.h"
+#include "release.h"
 #include "../commands/source.h"
 
 /* LOOKUP already returns a full row; with attr_timeout=0 the kernel

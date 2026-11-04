@@ -79,12 +79,6 @@ int fuse_stat_errno(int rc);
 int efs_rc_to_errno(int rc);
 
 
-/* Bounded wait (1 ms steps) for a CLOSE identity position, and the most
- * retained releases one background pass may drain. A full window is
- * transient (milliseconds); keep the bound short so an unreachable owner
- * cannot hold FUSE workers in RELEASE (the drain retries the rest). */
-#define CLOSE_ADMIT_SPINS 250u
-
 #ifndef OFF_MAX
 #define OFF_MAX ((off_t)(((unsigned long long)1 << (sizeof(off_t) * 8 - 1)) - 1))
 #endif
@@ -94,15 +88,6 @@ struct deep_callback_sample {
     long pid;
     char name[6];
 };
-
-/* release.c */
-int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi);
-int efs_control_drain(uint64_t deadline, int force);
-int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
-                              fuse_ino_t newparent, const char *newname,
-                              unsigned int flags, efs_ino_t *out_src);
-off_t efs_fuse_lseek_ino(fuse_ino_t ino, off_t off, int whence,
-                                struct fuse_file_info *fi);
 
 /* plock_init.c */
 int efs_fuse_getlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
