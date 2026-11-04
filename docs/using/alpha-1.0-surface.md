@@ -139,7 +139,7 @@ descriptions are not a support statement.
 [S4 effective settings](../status/2026-10/s4-effective-settings-20261030.md).**
 `efs-mgmt settings NODE:PORT` lists the node's effective settings, one line
 per setting, from the values the daemon recorded when it read them; the
-[A6 inventory](../status/2026-10/a6-settings-inventory-20261024.md) is the list of
+[A6 inventory](../how-it-works/settings.md) is the list of
 what is covered (the 9 deployment inputs and the numeric tunables, plus the
 active policies, the transport and the build). The command is read-only and
 has no write form.
@@ -185,4 +185,4 @@ control socket for `efs-fuse --stop`; `settings` is one more command on it
 (the socket is mode 0600, owner only), so the listing works whether or not
 `.efs` is enabled and is read by the same user who mounted.
 
-Removed settings (A6, `docs/status/2026-10/a6-settings-inventory-20261024.md`) such as `EFS_FEATURES_TTL_MS`, `EFS_QUERY_CATALOG_MIB`, `EFS_GC_DISABLE` and `EFS_KV_COMPACT_DIE` are not settings any more: efsd and efs-fuse stop with a message naming one that is still set.
+Removed settings (A6, `docs/how-it-works/settings.md`) such as `EFS_FEATURES_TTL_MS`, `EFS_QUERY_CATALOG_MIB`, `EFS_GC_DISABLE` and `EFS_KV_COMPACT_DIE` are not settings any more: efsd and efs-fuse stop with a message naming one that is still set.

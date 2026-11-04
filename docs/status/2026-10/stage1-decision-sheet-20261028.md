@@ -40,10 +40,10 @@ Recreate in a **new private home directory**, exporting product source with
 export TMPDIR="$HOME/efs-taskZ-NEW/tmp"
 export EFS_GIT_ID=9e4d66a8c EFS_GIT_DESCRIBE=9e4d66a8c EFS_GIT_BRANCH=agent/devel-task-z
 make -j8 efsd efs-fuse efs-mgmt
-python3 scripts/env_inventory.py --check docs/status/2026-10/a6-settings-inventory-20261024.md
+python3 scripts/env_inventory.py --check docs/how-it-works/settings.md
 python3 scripts/env_inventory.py
 python3 scripts/env_inventory.py --json
-python3 scripts/env_inventory.py --kinds docs/status/2026-10/a6-settings-inventory-20261024.md
+python3 scripts/env_inventory.py --kinds docs/how-it-works/settings.md
 python3 tests/test_env_inventory.py
 python3 tests/test_env_removed.py
 python3 tests/test_faults_env_ignored.py

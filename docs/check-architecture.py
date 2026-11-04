@@ -334,7 +334,7 @@ def check_single_home(index_text):
                 headers.setdefault(key, []).append((src, lineno - 1))
             prev = line
     for key, locs in sorted(headers.items()):
-        if len(locs) > 1:
+        if len({f for f, _ in locs}) > 1:  # one file may repeat a header (settings.md sections)
             where = ", ".join(f"{rel(f)}:{n}" for f, n in locs)
             problems.append(
                 f"normative table defined {len(locs)} times ({where}): | {key} |"

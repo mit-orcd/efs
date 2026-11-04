@@ -1362,7 +1362,7 @@ alternatives reduces both product complexity and the supported test matrix.
   `getenv(name)` helpers in `bufpool.c`, `write.c`, `packer.c`, `raft_host.c`,
   `sim_disk.c`); grepping `getenv("` alone undercounts.
   **Oct 24 (branch merged into devel (`6ed4be4a8`)):
-  [inventory](2026-10/a6-settings-inventory-20261024.md) of every variable, CLI
+  [inventory](../how-it-works/settings.md) of every variable, CLI
   option, runtime management setting and compile-time mode, found by
   `scripts/env_inventory.py` (helpers by fixed point); `make test` fails a
   new `EFS_*` reader, mode or removed name without a row. Before figure:

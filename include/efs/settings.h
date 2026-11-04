@@ -6,8 +6,8 @@
 
 #define EFS_SETTINGS_DAEMON 1u
 #define EFS_SETTINGS_CLIENT 2u
-/* Counts of the kinds the listing does not carry (A6 inventory; a test
- * keeps them equal to the inventory). */
+/* Counts of the kinds the listing does not carry (settings inventory;
+ * scripts/gen_settings.py keeps them equal to it). */
 #define EFS_SETTINGS_OBSERVABILITY 35
 #define EFS_SETTINGS_FAULT_HOOKS 62
 

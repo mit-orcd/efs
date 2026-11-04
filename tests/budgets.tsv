@@ -148,7 +148,7 @@ python3 tests/test_decoder_inputs.py	30	1	fast suite, 30 s ceiling	test	common/r
 python3 tests/test_k37_events.py	30	1	fast suite, 30 s ceiling	test	harness	K37 regression: growth in an earlier node log must not select old losses
 python3 tests/test_raft_log_entries.py	30	1	fast suite, 30 s ceiling	test	harness	W140 oracle regression: legitimate background entries may advance indexes
 python3 tests/test_env_inventory.py	30	1	fast suite, 30 s ceiling	test	common/settings	A6: every EFS_* setting the product reads has an inventory row
-python3 tests/test_settings_inventory.py	30	1	fast suite, 30 s ceiling	test	common/settings	S4/W122: the settings table has one row for every A6 inventory entry of the two listed kinds, so a new
+python3 scripts/gen_settings.py --check	30	1	fast suite, 30 s ceiling	test	common/settings	W171 2c: settings.c rows and settings.h counts equal what docs/how-it-works/settings.md generates
 python3 scripts/check_k_register.py	30	1	fast suite, 30 s ceiling	test	docs	Check the two alpha K-register tables
 python3 tests/test_k_register.py	30	1	fast suite, 30 s ceiling	test	docs	Negative controls for K-register structure and canonical states
 python3 tests/test_graph_community_labels.py	30	1	fast suite, 30 s ceiling	test	harness	Code-graph community labels
