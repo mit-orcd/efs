@@ -34,7 +34,7 @@ MODULES = {
         'src/client/efs_fuse/plock_init.c',
         'src/client/efs_fuse/lookup.c',
         'src/client/efs_fuse/ll_run.c',
-        'src/client/efs_fuse.c',
+        'src/client/efs_fuse/main.c',
         'src/client/efs_fuse/fuse_internal.h',
     ]),
     'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),

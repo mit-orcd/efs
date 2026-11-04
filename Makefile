@@ -153,8 +153,7 @@ SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orph
               src/server/recovery.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
-CLIENT_SRCS = src/client/efs_fuse.c \
-              src/client/efs_fuse/support.c \
+CLIENT_SRCS = src/client/efs_fuse/support.c \
               src/client/efs_fuse/getattr.c \
               src/client/efs_fuse/open.c \
               src/client/efs_fuse/writeback.c \
@@ -164,7 +163,8 @@ CLIENT_SRCS = src/client/efs_fuse.c \
               src/client/efs_fuse/release.c \
               src/client/efs_fuse/plock_init.c \
               src/client/efs_fuse/lookup.c \
-              src/client/efs_fuse/ll_run.c
+              src/client/efs_fuse/ll_run.c \
+              src/client/efs_fuse/main.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 
 # Simulator objects embed public Raft/KV layouts too. Keep them on the same

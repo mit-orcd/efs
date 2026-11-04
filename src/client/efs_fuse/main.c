@@ -1,5 +1,6 @@
-#include "efs_fuse/fuse_internal.h"
-#include "stop_control.h"
+/* efs-fuse: mutation-gated operation wrappers, the operation table, destroy, startup and main. */
+#include "fuse_internal.h"
+#include "../stop_control.h"
 
 /* Nonzero once a clean unmount failed to flush, report, settle or revoke:
  * efs-fuse then exits 1, never reporting a clean completion (D42). The
