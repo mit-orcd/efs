@@ -68,8 +68,9 @@ assert 'tests/faults/test_follower_bound: tests/test_follower_bound.c $(FAULT_KV
 # and the gate the budgets add up to (the pool's list schedule at 8 slots,
 # largest budget first, as scripts/make_test_summary.sh runs it, plus the
 # EXCLUSIVE commands' budgets in series and the fast suite) stays under
-# GATE_BOUND_S: the 15 min target with the budgets' own margin. A new or slower test therefore raises its budget here, in
-# the same change, or fails this test; the gate cannot drift unnoticed.
+# GATE_BOUND_S: the 15 min target with the budgets' own margin. A new test adds its measured row here; a slower test is
+# fixed, not re-budgeted, and GATE_BOUND_S does not rise (user rule, docs/how-it-works/developing.md section 4); the
+# gate cannot drift unnoticed.
 COMMAND_BOUND_S = 300
 GATE_TARGET_S = 1100        # the W160 gate, measured at EFS_TEST_JOBS=8: 15 min until wave 9 (Oct 25) added the
                             # D43 expiry fixture, decoder refusal, K38, W159 and W77 tests; 16 min since; 16.5 min after the

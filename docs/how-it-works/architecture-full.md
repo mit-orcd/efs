@@ -12892,7 +12892,12 @@ substitute one for another.
 - Add a component as new monolith code; it lands inside the carved
   boundaries ([development.md](#appendix-14--development--modularity-constraint)).
 - Weaken an invariant to make a test pass.
-- Widen a timeout instead of removing the work that made it slow.
+- Widen a timeout, raise a budget row in `tests/budgets.tsv` or the gate bound
+  in `tests/test_make_test_recipe.py`, or add a sleep or a retry delay, to make
+  a slow or flaky test pass. The direction is always the code: remove the hot
+  path, fix the algorithm, make the test wait on the condition it checks.
+  Budgets are measurements and only move down; the bound never rises
+  (user rule, Oct 31 and Nov 4).
 
 ---
 
@@ -12915,7 +12920,8 @@ Read first, in order, and read nothing else:
 Task: <one step, decomposed until mechanical: what moves, what does
 not, what is forbidden>
 Hard rules: no logic changes outside the task; no renames; no new
-dependencies; no files outside the ones named; if anything seems to
+dependencies; no files outside the ones named; no wider timeout, larger
+budget or added sleep to make a test pass (fix the cause instead); if anything seems to
 need a design decision the spec does not contain, STOP and report —
 do not decide.
 Done means: builds on a test node (never in $HOME), make test-all passes,

@@ -152,8 +152,11 @@ free, skipping to the next that fits. A command that runs past its budget
 is listed `OVERBUDGET` in `summary.txt` (the verdict does not change). `tests/test_make_test_recipe.py` requires a row for
 every `test-long` command, a reason for a budget above 300 s, and keeps
 the gate the budgets add up to (the pool's schedule plus the exclusive
-commands) under the 1,100 s target × 1.5 budget margin (1,650 s), so a new or slower test must raise its budget in
-the same change or fail the recipe test. Measured on nuc (8 CPUs, one
+commands) under the gate bound (1,750 s since Oct 31, [budget re-measure](../status/2026-10/budget-remeasure-20261030.md)).
+A new test adds a row from its measured 8-job time; a test that grows past its
+budget gets its cause fixed, in the product or in the harness logic, never a
+larger budget, a wider timeout or a sleep, and the bound does not rise
+([developing.md §4](developing.md#4-never-without-asking)). Measured on nuc (8 CPUs, one
 NVMe, October 25; docs/status/2026-10/gate-speed-20261025.md): see that page for
 the serial and 8-job times before and after the budgets.
 
