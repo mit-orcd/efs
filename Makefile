@@ -155,7 +155,8 @@ SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c \
               src/client/efs_fuse/support.c \
-              src/client/efs_fuse/getattr.c
+              src/client/efs_fuse/getattr.c \
+              src/client/efs_fuse/open.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 
 # Simulator objects embed public Raft/KV layouts too. Keep them on the same

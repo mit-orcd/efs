@@ -286,6 +286,35 @@ void dirh_free(struct efs_dirh *dh);
 int dirh_fill(struct efs_dirh *dh, fuse_ino_t ino);
 int efs_fuse_access_ino(fuse_ino_t ino, int mask);
 
+/* open.c */
+extern pthread_mutex_t g_open_mu;
+struct efs_open_ref *open_ref_find(efs_ino_t ino);
+pthread_mutex_t *open_edge_mu(efs_ino_t ino);
+int efs_close_note(efs_ino_t ino, int *leased);
+int efs_open_release_pending(efs_ino_t ino);
+int efs_open_close_unadmitted(efs_ino_t ino);
+int wb_lock_budget(pthread_mutex_t *mu);
+int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation);
+int efs_open_acquire_created(efs_ino_t ino, uint64_t generation,
+                                    uint64_t token, int *handed_off);
+struct efs_pending_create *efs_pending_create_alloc(void);
+void efs_pending_create_free(struct efs_pending_create *entry);
+void efs_pending_create_queue(struct efs_pending_create *entry);
+int efs_open_retry_pass(uint64_t deadline);
+void efs_open_retry_start(void);
+void efs_open_retry_stop(void);
+void fuse_fi_direct_io(struct fuse_file_info *fi);
+int fuse_odirect_unaligned(const struct fuse_file_info *fi,
+                                  off_t offset, size_t size);
+int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi);
+int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offset,
+                             struct fuse_file_info *fi);
+
+/* writeback.c */
+void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
+                             uint64_t offset, size_t size, const char *path);
+int efs_wb_sync(void);
+
 /* namespace.c */
 int efs_rc_to_errno(int rc);
 int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
