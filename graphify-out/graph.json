@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "1886276255dc84100411367fefed99b78911fc94"
+      "source_commit": "718372cfc056b58413f29125b3b65773cf4d2bbb"
     }
   },
   "links": [
@@ -176236,6 +176236,15 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:216",
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L264",
+      "target": "src_common_telemetry_report"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:216",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L307",
       "target": "src_common_telemetry_report"
     },
@@ -176344,6 +176353,15 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:216",
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L264",
+      "target": "src_meta_pack_mapping_load"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:216",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L274",
       "target": "src_meta_pack_mapping_load"
     },
@@ -176399,6 +176417,15 @@
       "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:216",
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L241",
+      "target": "src_meta_query_disk_pending"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:216",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L264",
       "target": "src_meta_query_disk_pending"
     },
     {
@@ -176517,6 +176544,15 @@
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L301",
       "target": "src_meta_query_disk_pending"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:216",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L264",
+      "target": "src_raft_raft_solo"
     },
     {
       "confidence": "EXTRACTED",
@@ -177497,6 +177533,15 @@
       "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:86",
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L150",
+      "target": "src_client_commands_command_run"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:86",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L159",
       "target": "src_client_commands_command_run"
     },
     {
@@ -178576,6 +178621,15 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:86",
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L159",
+      "target": "src_meta_pack_mapping_load"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:86",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L169",
       "target": "src_meta_pack_mapping_load"
     },
@@ -178947,6 +179001,15 @@
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L143",
       "target": "src_raft_raft_send_snap"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:86",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L159",
+      "target": "src_raft_raft_solo"
     },
     {
       "confidence": "EXTRACTED",
