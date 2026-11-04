@@ -140,6 +140,11 @@ how the index and a satellite come to disagree, and the rule "if they
 disagree, the index wins" is a fallback, not a substitute for the tables
 being single-sourced.
 
+`make docs-check` also runs `scripts/check_include_boundary.py`, which counts
+`#include "../<dir>/..."` lines per (including `src/` dir, included `src/` dir)
+pair against an allowlist at the top of the script and fails on a new pair or a
+higher count; see [the evidence page](../status/2026-11/include-boundary-20261104.md).
+
 The gate is `docs/check-architecture.py` (stdlib only). Run it with
 `make docs-check` (login-node safe). It is not part of `make test`: the
 link check resolves into `results/`, which release trees and archived
