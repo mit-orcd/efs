@@ -1,54 +1,7 @@
-#include "efs/settings.h"
-#include "../common/parse_host_port.h"
-#include "efs/cli_help.h"
-#define FUSE_USE_VERSION 312
-
-#include "client_internal.h"
-#include "efs/put_ticket.h"
-#include "efs/session.h"
+#include "efs_fuse/fuse_internal.h"
+#include "commands/source.h"
 #include "reply_buffers.h"
 #include "stop_control.h"
-#include "efs/common.h"
-#include "efs/write_extent.h"
-#include <limits.h>
-#include "efs/network.h"
-#include "efs/protocol.h"
-#include "efs/command_path.h"
-#include "commands/source.h"
-#include "efs/kv_key.h"
-#include "efs/log_ts.h"
-#include "efs/version.h"
-#include "efs/placement.h"
-#include "efs/checksum.h"
-#include "efs/erasure.h"
-#include "efs/rdma.h"
-#include <stdio.h>
-#include <stdlib.h>
-#ifdef __GLIBC__
-#include <malloc.h>
-#endif
-#include <stdint.h>
-#include <string.h>
-#include <pthread.h>
-#include <fuse_lowlevel.h>
-#include <fuse_opt.h>
-#include <errno.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include "../common/recorder_stop.h"
-#include "../common/recorder_start.h"
-#include <sys/statvfs.h>
-#include <poll.h>
-#include <time.h>
-#include <fcntl.h> /* FALLOC_FL_KEEP_SIZE (_GNU_SOURCE) */
-#include <sys/file.h>
-#include <limits.h>
-#include <signal.h>
-#include <execinfo.h>
-#include <dirent.h>
-#include <sys/syscall.h>
-#include <sched.h>
 
 /* Async-signal-safe crash breadcrumb. Uses an alternate signal stack so a
  * stack-overflow SIGSEGV can still report instead of dying silently. */
@@ -211,17 +164,7 @@ static void stat_set_size_blocks(struct stat *stbuf, uint64_t size,
 
 /* Virtual stats bytes come from a published server aggregate. Every new
  * snapshot validates credentials; open descriptors retain immutable bytes. */
-#define EFS_STATS_TEXT   2048
 
-struct stats_ent {
-    int valid;
-    efs_ino_t dir_ino;
-    uint64_t computed_ms; /* CLOCK_MONOTONIC ms when computed */
-    uint64_t uid, gid;
-    uint64_t mtime, atime, ctime;
-    int len;
-    char text[EFS_STATS_TEXT];
-};
 
 static uint64_t stats_now_ms(void)
 {
@@ -460,12 +403,6 @@ static struct {
 #define EFS_VIRTUAL_OPEN_BYTES (64u << 20)
 static pthread_mutex_t g_virtual_open_mu = PTHREAD_MUTEX_INITIALIZER;
 static size_t g_virtual_open_bytes;
-struct efs_file_handle {
-    efs_ino_t ino;
-    struct efs_wb_description *errors;
-    char *snapshot; /* Immutable virtual-file bytes owned by this open. */
-    size_t snapshot_len;
-};
 static struct efs_file_handle *efs_file_handle(const struct fuse_file_info *fi)
 {
     return fi && (fi->fh & EFS_FILE_FH_TAG) ?
@@ -913,21 +850,7 @@ static int virtual_access(efs_ino_t ino)
     return ctx ? check_access(&row, ctx->uid, ctx->gid, R_OK | X_OK) : 0;
 }
 
-/* Rendered bytes shared by lookup/getattr/open while immutable per-open
- * descriptions own their copies. Every ensure revalidates on the server. */
-#define EFS_FIND_RES_N 16
-static struct {
-    int valid;
-    efs_node_id_t owner;
-    efs_ino_t dir_ino;
-    char term[EFS_MAX_NAME]; /* raw pattern, e.g. "*report*" */
-    uint64_t ms;
-    uid_t uid;
-    gid_t gid;
-    int len;
-    size_t allocated;
-    char *text;
-} g_find_res[EFS_FIND_RES_N];
+static struct efs_find_res g_find_res[EFS_FIND_RES_N];
 static pthread_mutex_t g_find_res_mu = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t g_find_res_bytes;
 static pthread_mutex_t g_find_work_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -1612,30 +1535,8 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
     return 0;
 }
 
-struct readdir_ent {
-    char name[EFS_MAX_NAME];
-    struct stat st;
-};
 
-struct readdir_collect_arg {
-    struct readdir_ent *ents;
-    size_t count;
-    size_t cap;
-    size_t *name_index; /* Entry index plus one; zero is an empty bucket. */
-    size_t name_index_cap;
-};
 
-/* Per-opendir listing. fi->fh is this pointer (files carry an open-description handle).
- * First READDIR fills it; later READDIR / EOF getdents reuse it. */
-struct efs_dirh {
-    efs_ino_t ino;
-    struct readdir_ent *ents;
-    size_t count;
-    fuse_ino_t parent_ino;
-    mode_t self_mode;
-    mode_t parent_mode;
-    int listed;
-};
 
 static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col,
                                 struct efs_inode *self_out);
@@ -1879,23 +1780,6 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi);
  * flock UNLOCK on close, so the last-close lease edge is also what drops
  * the inode's server-side locks. */
 static pthread_mutex_t g_open_mu = PTHREAD_MUTEX_INITIALIZER;
-struct efs_open_ref {
-    efs_ino_t ino;
-    uint64_t n;
-    uint32_t append_burst;
-    uint64_t append_burst_ms;
-    uint64_t append_handoff_ms;
-    int append_publishing;
-    int leased; /* first open took HOLD; last close must release it */
-    int close_pending; /* retain ownership until release is confirmed */
-    uint64_t lease_generation;
-    uint64_t retry_order; /* published under g_open_mu; edge is stripe-owned */
-    uint64_t retry_turn; /* fair retry visits, protected by g_open_mu */
-    struct efs_client_lease_request edge; /* immutable OPEN or CLOSE identity */
-    struct efs_client_lease_request adoption; /* clear pending before CLOSE */
-    struct efs_open_ref *next, *prev; /* every row, for retry scans */
-    struct efs_open_ref *hnext; /* inode hash chain */
-};
 static struct efs_open_ref *g_open_refs;
 
 /* At most one row per inode. Rows retained for an unconfirmed last close
@@ -1905,11 +1789,6 @@ static struct efs_open_ref *g_open_refs;
  * of the table under g_open_mu (Oct 16 xorinox: 20,308 rows, ~80% of
  * efs-fuse CPU in list walks). All helpers run with g_open_mu held. */
 #define OPEN_REF_BUCKETS 4096u
-/* Bounded wait (1 ms steps) for a CLOSE identity position, and the most
- * retained releases one background pass may drain. A full window is
- * transient (milliseconds); keep the bound short so an unreachable owner
- * cannot hold FUSE workers in RELEASE (the drain retries the rest). */
-#define CLOSE_ADMIT_SPINS 250u
 #define OPEN_DRAIN_PER_PASS 4096u
 static struct efs_open_ref *g_open_hash[OPEN_REF_BUCKETS];
 
@@ -2426,11 +2305,6 @@ static int efs_open_acquire_created(efs_ino_t ino, uint64_t generation,
 }
 
 #define EFS_PENDING_CREATES_MAX 128u
-struct efs_pending_create {
-    struct efs_client_create_request request;
-    struct efs_client_lease_request cleanup;
-    struct efs_pending_create *next;
-};
 static pthread_mutex_t g_pending_create_mu=PTHREAD_MUTEX_INITIALIZER;
 static struct efs_pending_create *g_pending_creates;
 static unsigned g_pending_create_count;
@@ -2773,32 +2647,7 @@ static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offse
     return (int)got;
 }
 
-/* Write pool: FUSE write() waits until each job's PUT has 2-of-3 fragment
- * quorum. The pool still overlaps PUTs across concurrent FUSE requests
- * (many files / max_background). Do not ACK after a bounce copy — that
- * made ewrite succeed while servers never saw the data. */
-#define EFS_WB_DEPTH        256
-#define EFS_WB_WORKERS_MAX  16
-#define EFS_WB_RESERVED     4
 
-struct efs_wb_job {
-    efs_ino_t ino;
-    uint64_t offset;
-    size_t size;
-    char *buf;
-    /* If set, this is the allocation that contains buf (stolen FUSE
-     * receive buffer). Free this instead of buf when the job completes. */
-    char *free_base;
-    /* Non-zero: buf/free_base came from the bounce pool (see bounce_release). */
-    size_t buf_cap;
-    uint64_t queued_ms;
-    uint64_t deadline;
-    /* Caller waits for PUT quorum. Worker writes rc and signals done_cv
-     * while holding g_wb.mu. */
-    int *done;
-    int *done_rc;
-    pthread_cond_t *done_cv;
-};
 
 /* Per-ino write serialization. WB workers run jobs concurrently, but two jobs
  * touching the same inode (overlapping partial chunks) must not RMW the same
@@ -2818,24 +2667,7 @@ static pthread_mutex_t *efs_wb_ino_lock(efs_ino_t ino)
     return &g_wb_ino_mu[efs_ino_lock_slot(ino, EFS_WB_INO_STRIPES)];
 }
 
-static struct {
-    pthread_mutex_t mu;
-    pthread_cond_t not_empty;
-    pthread_cond_t not_full;
-    pthread_cond_t idle;
-    struct efs_wb_job q[EFS_WB_DEPTH];
-    int head, tail, count, inflight;
-    uint64_t queued_bytes, inflight_bytes, admission_waits, admission_timeouts;
-    int err;
-    efs_ino_t err_ino; /* inode that set err; 0 = none / global */
-    int ready;
-    int shutdown;
-    pthread_t workers[EFS_WB_WORKERS_MAX];
-    efs_ino_t busy_ino[EFS_WB_WORKERS_MAX];
-    uint64_t busy_off[EFS_WB_WORKERS_MAX];
-    size_t busy_len[EFS_WB_WORKERS_MAX];
-    int nworkers;
-} g_wb = {
+static struct efs_wb_state g_wb = {
     .mu = PTHREAD_MUTEX_INITIALIZER,
     .not_empty = PTHREAD_COND_INITIALIZER,
     .not_full = PTHREAD_COND_INITIALIZER,
@@ -5216,103 +5048,6 @@ static int efs_control_drain(uint64_t deadline, int force)
     return result;
 }
 
-/* Nonzero once a clean unmount failed to flush, report, settle or revoke:
- * efs-fuse then exits 1, never reporting a clean completion (D42). The
- * first reason goes into the stop record. */
-static int g_unmount_unclean;
-static char g_unclean_reason[192];
-
-static void unmount_unclean(const char *reason)
-{
-    if (!g_unmount_unclean && reason && *reason)
-        snprintf(g_unclean_reason, sizeof(g_unclean_reason), "%s", reason);
-    g_unmount_unclean = 1;
-}
-
-static void efs_fuse_destroy(void *userdata)
-{
-    (void)userdata;
-    efs_client_set_stop_observer(efs_stop_phase);
-    efs_stop_phase("flushing", 0, 0);
-    fuse_pressure_stop();
-    int wrc = efs_wb_sync();
-    int drc = efs_dcache_flush_all();
-    if (wrc != EFS_OK || drc != EFS_OK) {
-        char why[96];
-        fprintf(stderr, "efs-fuse: unmount: data flush incomplete "
-                        "(writeback=%d dcache=%d)\n", wrc, drc);
-        snprintf(why, sizeof(why), "data flush writeback=%d dcache=%d", wrc, drc);
-        unmount_unclean(why);
-    }
-    if (g_wb.ready) {
-        pthread_mutex_lock(&g_wb.mu);
-        g_wb.shutdown = 1;
-        pthread_cond_broadcast(&g_wb.not_empty);
-        pthread_mutex_unlock(&g_wb.mu);
-        for (int i = 0; i < g_wb.nworkers; i++)
-            pthread_join(g_wb.workers[i], NULL);
-        g_wb.ready = 0;
-        g_wb.shutdown = 0;
-    }
-    /* Drain the dirty set before efs_client_shutdown frees the table.
-     *
-     * One forced report is not enough. efs_client_report_dirty gives up on a
-     * shard after 4 attempts (~750 ms total) while its owner answers BUSY,
-     * which is exactly what an owner does while it is rebuilding a shard --
-     * something every node does briefly after a fresh mkfs, and again
-     * whenever a joiner catches up. On give-up the records are merged back
-     * into the in-memory table, and shutdown then frees it, so the writes
-     * were lost with no error and no log line: files came back after the
-     * remount with the correct size and all-zero contents.
-     *
-     * The BUSY window is short (seconds) and self-healing, so retry until the
-     * report succeeds. If it still will not drain, say so -- an unmount that
-     * silently discards acknowledged writes is worse than a noisy one. */
-    {
-        const long drain_s = 60;
-        struct timespec t0, now;
-        int mrc;
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-        for (uint64_t attempt = 1;; attempt++) {
-            efs_stop_phase("draining", attempt, 0);
-            mrc = efs_client_note_meta_change(1);
-            if (mrc == EFS_OK)
-                break;
-            /* A fenced session can never publish again (K5/I23): waiting
-             * would only delay the unmount. Report the loss once. */
-            if (mrc == EFS_ERR_FENCED || efs_client_session_fenced()) {
-                fprintf(stderr, "efs-fuse: mount session fenced; writes that "
-                                "were never reported are discarded\n");
-                mrc = EFS_OK;
-                break;
-            }
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            if (now.tv_sec - t0.tv_sec >= drain_s)
-                break;
-            usleep(200000);
-        }
-        if (mrc != EFS_OK) {
-            char why[96];
-            fprintf(stderr, "efs-fuse: UNMOUNT DATA LOSS: metadata flush "
-                            "still failing (rc=%d) after %lds; writes that "
-                            "were never reported are gone\n", mrc, drain_s);
-            snprintf(why, sizeof(why), "metadata report rc=%d after %lds", mrc, drain_s);
-            unmount_unclean(why);
-        }
-    }
-    /* Free cached .find query results. */
-    pthread_mutex_lock(&g_find_res_mu);
-    for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        free(g_find_res[i].text);
-        g_find_res[i].text = NULL;
-        g_find_res[i].valid = 0;
-    }
-    pthread_mutex_unlock(&g_find_res_mu);
-    efs_open_retry_stop();
-    efs_client_view_stop();
-    if (efs_client_shutdown() != EFS_OK)
-        unmount_unclean(efs_client_shutdown_reason());
-}
 
 static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
                               fuse_ino_t newparent, const char *newname,
@@ -5355,9 +5090,6 @@ static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
 #endif
 #ifndef SEEK_HOLE
 #define SEEK_HOLE 4
-#endif
-#ifndef OFF_MAX
-#define OFF_MAX ((off_t)(((unsigned long long)1 << (sizeof(off_t) * 8 - 1)) - 1))
 #endif
 
 static off_t inode_seek_data_hole(const struct efs_inode *ino, off_t off, int whence)
@@ -6058,11 +5790,6 @@ static int deep_callback_name(const char *name)
            name[2] >= '0' && name[2] <= '9' && name[3] == '\0';
 }
 
-struct deep_callback_sample {
-    uint64_t begin, service_end;
-    long pid;
-    char name[6];
-};
 
 static struct deep_callback_sample deep_callback_begin(fuse_req_t req, const char *name)
 {
@@ -7004,6 +6731,103 @@ static void ll_removexattr_run(fuse_req_t req, fuse_ino_t ino, const char *name)
     fuse_reply_err(req, rc ? -rc : 0);
 }
 
+/* Nonzero once a clean unmount failed to flush, report, settle or revoke:
+ * efs-fuse then exits 1, never reporting a clean completion (D42). The
+ * first reason goes into the stop record. */
+static int g_unmount_unclean;
+static char g_unclean_reason[192];
+
+static void unmount_unclean(const char *reason)
+{
+    if (!g_unmount_unclean && reason && *reason)
+        snprintf(g_unclean_reason, sizeof(g_unclean_reason), "%s", reason);
+    g_unmount_unclean = 1;
+}
+
+static void efs_fuse_destroy(void *userdata)
+{
+    (void)userdata;
+    efs_client_set_stop_observer(efs_stop_phase);
+    efs_stop_phase("flushing", 0, 0);
+    fuse_pressure_stop();
+    int wrc = efs_wb_sync();
+    int drc = efs_dcache_flush_all();
+    if (wrc != EFS_OK || drc != EFS_OK) {
+        char why[96];
+        fprintf(stderr, "efs-fuse: unmount: data flush incomplete "
+                        "(writeback=%d dcache=%d)\n", wrc, drc);
+        snprintf(why, sizeof(why), "data flush writeback=%d dcache=%d", wrc, drc);
+        unmount_unclean(why);
+    }
+    if (g_wb.ready) {
+        pthread_mutex_lock(&g_wb.mu);
+        g_wb.shutdown = 1;
+        pthread_cond_broadcast(&g_wb.not_empty);
+        pthread_mutex_unlock(&g_wb.mu);
+        for (int i = 0; i < g_wb.nworkers; i++)
+            pthread_join(g_wb.workers[i], NULL);
+        g_wb.ready = 0;
+        g_wb.shutdown = 0;
+    }
+    /* Drain the dirty set before efs_client_shutdown frees the table.
+     *
+     * One forced report is not enough. efs_client_report_dirty gives up on a
+     * shard after 4 attempts (~750 ms total) while its owner answers BUSY,
+     * which is exactly what an owner does while it is rebuilding a shard --
+     * something every node does briefly after a fresh mkfs, and again
+     * whenever a joiner catches up. On give-up the records are merged back
+     * into the in-memory table, and shutdown then frees it, so the writes
+     * were lost with no error and no log line: files came back after the
+     * remount with the correct size and all-zero contents.
+     *
+     * The BUSY window is short (seconds) and self-healing, so retry until the
+     * report succeeds. If it still will not drain, say so -- an unmount that
+     * silently discards acknowledged writes is worse than a noisy one. */
+    {
+        const long drain_s = 60;
+        struct timespec t0, now;
+        int mrc;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        for (uint64_t attempt = 1;; attempt++) {
+            efs_stop_phase("draining", attempt, 0);
+            mrc = efs_client_note_meta_change(1);
+            if (mrc == EFS_OK)
+                break;
+            /* A fenced session can never publish again (K5/I23): waiting
+             * would only delay the unmount. Report the loss once. */
+            if (mrc == EFS_ERR_FENCED || efs_client_session_fenced()) {
+                fprintf(stderr, "efs-fuse: mount session fenced; writes that "
+                                "were never reported are discarded\n");
+                mrc = EFS_OK;
+                break;
+            }
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            if (now.tv_sec - t0.tv_sec >= drain_s)
+                break;
+            usleep(200000);
+        }
+        if (mrc != EFS_OK) {
+            char why[96];
+            fprintf(stderr, "efs-fuse: UNMOUNT DATA LOSS: metadata flush "
+                            "still failing (rc=%d) after %lds; writes that "
+                            "were never reported are gone\n", mrc, drain_s);
+            snprintf(why, sizeof(why), "metadata report rc=%d after %lds", mrc, drain_s);
+            unmount_unclean(why);
+        }
+    }
+    /* Free cached .find query results. */
+    pthread_mutex_lock(&g_find_res_mu);
+    for (int i = 0; i < EFS_FIND_RES_N; i++) {
+        free(g_find_res[i].text);
+        g_find_res[i].text = NULL;
+        g_find_res[i].valid = 0;
+    }
+    pthread_mutex_unlock(&g_find_res_mu);
+    efs_open_retry_stop();
+    efs_client_view_stop();
+    if (efs_client_shutdown() != EFS_OK)
+        unmount_unclean(efs_client_shutdown_reason());
+}
 /* Low-level (inode-based) FUSE ops. Timeouts stay 0 (Part C later). */
 static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
                        int to_set, struct fuse_file_info *fi)

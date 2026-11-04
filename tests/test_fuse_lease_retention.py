@@ -73,7 +73,7 @@ int efs_client_lease_reset(struct efs_client_lease_request *r) {
 '''
 # RPC mock references the production mutex, so place bookkeeping first.
 mock=source[source.index('int efs_client_rpc_getchunks_fileid'):]
-source=source[:source.index('int efs_client_rpc_getchunks_fileid')]+s[a:b]+mock+r'''
+source=source[:source.index('int efs_client_rpc_getchunks_fileid')]+csrc.hblock('efs_fuse','struct efs_open_ref {','\n};\n')+csrc.hblock('efs_fuse','#define CLOSE_ADMIT_SPINS')+s[a:b]+mock+r'''
 static int fixture_sleep(unsigned us){
  if(following_opener) {
   pthread_mutex_lock(&adoption_gate);opener_blocked=1;pthread_cond_broadcast(&adoption_cv);pthread_mutex_unlock(&adoption_gate);

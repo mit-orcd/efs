@@ -22,7 +22,10 @@ root = Path(__file__).resolve().parents[1]
 # module name -> (override environment variable, source files in order)
 MODULES = {
     'raft_host': ('EFS_RAFT_HOST_SOURCE', ['src/server/raft_host.c']),
-    'efs_fuse': ('EFS_FUSE_SOURCE', ['src/client/efs_fuse.c']),
+    'efs_fuse': ('EFS_FUSE_SOURCE', [
+        'src/client/efs_fuse.c',
+        'src/client/efs_fuse/fuse_internal.h',
+    ]),
     'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),
 }
 
@@ -32,6 +35,18 @@ def module(name, env=None):
     override = os.environ.get(env or var)
     paths = [Path(override)] if override else [root / f for f in files]
     return ''.join(p.read_text() for p in paths)
+
+
+def hblock(name, start, end='\n', env=None):
+    """Text from `start` through `end` in the module's shared header: a type a
+    splice needs when its slice used to contain that type's definition. Empty
+    when an override file replaces the module (it still holds the type inline)."""
+    var, files = MODULES[name]
+    if os.environ.get(env or var):
+        return ''
+    h = (root / files[-1]).read_text()
+    a = h.index(start)
+    return h[a:h.index(end, a) + len(end)]
 
 
 def upto(text, marker):

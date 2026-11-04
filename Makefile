@@ -870,7 +870,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_lane_bootstrap_export.py
 
 $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h
-src/client/efs_fuse.o: src/client/reply_buffers.h src/client/stop_control.h
+$(CLIENT_OBJS): src/client/efs_fuse/fuse_internal.h src/client/reply_buffers.h src/client/stop_control.h
 src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
 
 tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/storage_roots.c src/server/server_internal.h src/bench/writer.o $(LIB)
@@ -1018,7 +1018,7 @@ src/server/handler.o src/server/storage_roots.o src/bench/storage_roots.o: inclu
 # The synthetic scripts are file bytes, embedded without running queries.
 src/client/commands/source.h: src/client/commands/command.py src/client/commands/embed.py
 	python3 src/client/commands/embed.py
-src/client/efs_fuse.o: src/client/commands/source.h include/efs/command_path.h
+$(CLIENT_OBJS): src/client/commands/source.h include/efs/command_path.h
 
 # Native programs share one help renderer and option reference.
 $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ): include/efs/cli_help.h
@@ -1135,7 +1135,7 @@ tests/test_retained_namespace_audit: tests/test_retained_namespace_audit.c tests
 # Broad subtree queries share the bounded immutable-KV traversal.
 src/meta/query_catalog.o src/meta/query_disk.o: src/meta/query_walk.h
 # Profiler launches and child retirement share one implementation.
-src/server/efsd.o src/client/efs_fuse.o src/client/efs_bench.o: src/common/recorder_start.h src/common/recorder_stop.h
+src/server/efsd.o $(CLIENT_OBJS) src/client/efs_bench.o: src/common/recorder_start.h src/common/recorder_stop.h
 
 .PHONY: test-rdma-message
 test-rdma-message:

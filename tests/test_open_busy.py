@@ -53,7 +53,7 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe){
  r->complete=1;r->result=EFS_OK;return EFS_OK;
 }
 int efs_client_lease_reset(struct efs_client_lease_request *r){assert(!r->active||r->complete);memset(r,0,sizeof(*r));return EFS_OK;}
-''' + s[a:b]
+''' + csrc.hblock('efs_fuse','struct efs_open_ref {','\n};\n')+csrc.hblock('efs_fuse','#define CLOSE_ADMIT_SPINS') + s[a:b]
 for name in ('efs_open_note','efs_open_set_leased','efs_open_retry_order','efs_close_note','efs_open_release_pending_run','efs_open_release_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire'):
  if name=='wb_lock_budget' and not function('efs_open_acquire_fileid_run'):continue
  code+='\n'+function(name)
