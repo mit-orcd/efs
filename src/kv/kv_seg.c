@@ -104,6 +104,7 @@ static pthread_mutex_t *seg_cmu(struct kv_seg *s, uint32_t bi)
 /* --- writer ---------------------------------------------------------- */
 
 struct kv_seg_w {
+    char *stdio_buf; /* owned through fclose, including finish/abort failures */
     char *path;
     char *tmp;
     FILE *f;
@@ -180,10 +181,12 @@ int kv_seg_w_open(const char *path, struct kv_seg_w **out)
     w->tmp = malloc(n + 5);
     w->blk_cap = KV_LSM_BLOCK_TARGET + KV_LSM_KLEN_MAX + 64;
     w->blk = malloc(w->blk_cap);
-    if (!w->path || !w->tmp || !w->blk) {
+    w->stdio_buf = malloc(1u << 20);
+    if (!w->path || !w->tmp || !w->blk || !w->stdio_buf) {
         free(w->path);
         free(w->tmp);
         free(w->blk);
+        free(w->stdio_buf);
         free(w);
         return EFS_ERR_NOMEM;
     }
@@ -194,13 +197,21 @@ int kv_seg_w_open(const char *path, struct kv_seg_w **out)
         free(w->path);
         free(w->tmp);
         free(w->blk);
+        free(w->stdio_buf);
         free(w);
         return EFS_ERR_IO;
     }
     /* stdio's default buffer is st_blksize (4 KiB), so a 250 MiB
      * compaction output was 64K write() calls (5.25M of them in one
      * 20-minute trace, Sep 29). One syscall per MiB instead. */
-    setvbuf(w->f, NULL, _IOFBF, 1u << 20);
+    /* glibc may allocate st_blksize when buf is NULL, ignoring size.
+     * Supply storage explicitly so this actually uses the intended MiB. */
+    if (setvbuf(w->f, w->stdio_buf, _IOFBF, 1u << 20) != 0) {
+        fclose(w->f);
+        unlink(w->tmp);
+        free(w->path);free(w->tmp);free(w->blk);free(w->stdio_buf);free(w);
+        return EFS_ERR_IO;
+    }
     *out = w;
     return EFS_OK;
 }
@@ -267,6 +278,7 @@ static void w_free(struct kv_seg_w *w)
         free(w->idx[i].key);
     free(w->idx);
     free(w->blk);
+    free(w->stdio_buf);
     free(w->prev_key);
     free(w->path);
     free(w->tmp);

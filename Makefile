@@ -142,8 +142,8 @@ TEST_BINS += tests/test_retained_namespace_audit
 TEST_BINS += tests/test_kv_reader_gate
 TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
-TEST_SRCS += tests/test_crc32.c
-TEST_BINS += tests/test_crc32
+TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c
+TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
@@ -808,6 +808,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_segment_reply
 	./tests/test_child_vec_index
 	./tests/test_crc32
+	./tests/test_kv_seg_stdio
 	./tests/test_pack_validate_once
 	./tests/test_kv_reader_gate
 	./tests/test_placement
@@ -1301,6 +1302,7 @@ tests/test_b_geometry tests/test_frag_record tests/test_packed_segment tests/tes
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
 
 tests/test_child_vec_index: override LDFLAGS += -Wl,--wrap=realloc -Wl,--wrap=calloc
+tests/test_kv_seg_stdio: override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=setvbuf -Wl,--wrap=fsync
 
 tests/test_directory_sync_group: tests/test_directory_sync_group.c src/server/directory_sync_group.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
