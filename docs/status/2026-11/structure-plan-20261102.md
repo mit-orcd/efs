@@ -143,7 +143,8 @@ match the table. Done: adding a setting edits one file.
   allows; (d) a measured reading set: for three representative fixes
   (release cleanup, a ReadIndex refusal, write-back error handling) record
   the files and lines an agent must read and validate before and after,
-  baseline taken on current devel before (c) lands. Target per fix: one
+  baseline taken on current devel before (c) lands
+  ([baseline, Nov 4](reading-set-baseline-20261104.md)). Target per fix: one
   guide, one interface, one implementation area, the routed tests.
 - `tests/csrc.py` concatenation is a transition mechanism: it keeps the 318
   source-splicing tests working across splits but ties them to text order.
