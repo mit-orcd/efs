@@ -322,6 +322,17 @@ int efs_wb_sync(void);
 int efs_wb_ino_pending_locked(efs_ino_t ino);
 int efs_wb_sync_ino(efs_ino_t ino);
 
+/* append.c */
+pthread_mutex_t *append_mu(efs_ino_t ino);
+int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino);
+int fuse_pressure_flush(efs_ino_t ino);
+int fuse_pressure_kick(void);
+void fuse_pressure_stop(void);
+int efs_utimens_flush_dirty(efs_ino_t ino);
+off_t append_end_offset(efs_ino_t ino);
+int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out);
+int append_publish_burst(efs_ino_t ino);
+
 /* namespace.c */
 int efs_rc_to_errno(int rc);
 int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
