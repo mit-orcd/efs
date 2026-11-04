@@ -1,6 +1,7 @@
 /* efs-fuse: lookup, setattr and deep-callback sampling. */
 #include "fuse_internal.h"
 #include "support.h"
+#include "getattr.h"
 #include "../commands/source.h"
 
 void fill_entry(fuse_ino_t ino, struct fuse_entry_param *e,

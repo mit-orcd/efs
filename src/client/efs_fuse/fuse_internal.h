@@ -79,31 +79,6 @@ int fuse_stat_errno(int rc);
 int efs_rc_to_errno(int rc);
 
 
-struct readdir_ent {
-    char name[EFS_MAX_NAME];
-    struct stat st;
-};
-
-struct readdir_collect_arg {
-    struct readdir_ent *ents;
-    size_t count;
-    size_t cap;
-    size_t *name_index; /* Entry index plus one; zero is an empty bucket. */
-    size_t name_index_cap;
-};
-
-/* Per-opendir listing. fi->fh is this pointer (files carry an open-description handle).
- * First READDIR fills it; later READDIR / EOF getdents reuse it. */
-struct efs_dirh {
-    efs_ino_t ino;
-    struct readdir_ent *ents;
-    size_t count;
-    fuse_ino_t parent_ino;
-    mode_t self_mode;
-    mode_t parent_mode;
-    int listed;
-};
-
 struct efs_open_ref {
     efs_ino_t ino;
     uint64_t n;
@@ -191,22 +166,6 @@ struct deep_callback_sample {
     long pid;
     char name[6];
 };
-
-/* getattr.c */
-extern __thread uint64_t t_lookup_memo_serial;
-extern __thread struct efs_inode t_getattr_row;
-extern __thread efs_ino_t t_getattr_ino;
-uint64_t fuse_now_us(void);
-uint64_t lookup_memo_start(void);
-void lookup_memo_mutation_begin(void);
-void lookup_memo_mutation_end(void);
-void lookup_memo_put(const struct efs_inode *row);
-int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
-                                struct fuse_file_info *fi);
-struct efs_dirh *dirh_new(efs_ino_t ino);
-void dirh_free(struct efs_dirh *dh);
-int dirh_fill(struct efs_dirh *dh, fuse_ino_t ino);
-int efs_fuse_access_ino(fuse_ino_t ino, int mask);
 
 /* open.c */
 extern pthread_mutex_t g_open_mu;

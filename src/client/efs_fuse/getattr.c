@@ -1,5 +1,6 @@
 /* efs-fuse: lookup memo, getattr and readdir collection. */
 #include "fuse_internal.h"
+#include "getattr.h"
 #include "support.h"
 #include "../commands/source.h"
 
