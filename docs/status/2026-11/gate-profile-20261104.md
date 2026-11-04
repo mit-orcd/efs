@@ -1,6 +1,6 @@
 # Gate profile: where the slow `make test-all` rows spend their time (Task DA, Nov 4 2026)
 
-**Verdict: PASS.** The budgeted gate in `tests/budgets.tsv` (the recipe test's own model at 8 jobs, `GATE_BOUND_S` 1750 unchanged): **1750 s before, 1305 s after**, from faster tests and two product fixes, with 13 rows re-measured on fstor007 and node9900 and every other row's budget kept. Measured gates on the final tree: 651 to 722 s (the Nov 3 and 4 gates ran 686 to 894 s).
+**Verdict: PASS.** The budgeted gate in `tests/budgets.tsv` (the recipe test's own model at 8 jobs, `GATE_BOUND_S` 1750 unchanged): **1750 s before, 1301 s after**, from faster tests and two product fixes, with 13 rows re-measured on fstor007 and node9900 and every other row's budget kept. Measured gates on the final tree: 651 to 722 s (the Nov 3 and 4 gates ran 686 to 894 s).
 Two product defects found and fixed (K89 Raft commit propagation, blocks alpha: no; the packer's 30 s failure pause is now a setting); one product defect recorded, not fixed (K90: unmount drain after ENOSPC on a full member spins on BUSY for the 60 s stop bound).
 
 ## Method
@@ -65,7 +65,7 @@ Three `make test-all` gates per host at `EFS_TEST_JOBS=8` on the final tree (`3b
 
 NOTRUN rows are the host limits (cluster scripts, the Memcheck header on fstor007, valgrind on node9900, RDMA live qualification). Passing runs only count toward a median.
 
-Rows re-measured (the file's rule: max of the two host medians x 1.25, rounded up to 5 s; the row note carries the six runs). Touched means the test changed, or its product path changed (the packer pause for the four B6 modes), or the earlier bimodality was K89 and the medians moved on both hosts:
+Rows re-measured (the file's rule: max of the two host medians x 1.25, rounded up to 5 s, and a budget only ever moves down; the row note carries the six runs). Touched means the test changed, or its product path changed (the packer pause for the four B6 modes), or the earlier bimodality was K89 and the medians moved on both hosts:
 
 | Row | Before | After | Host medians (fstor007 / node9900) |
 |---|---|---|---|
@@ -76,7 +76,7 @@ Rows re-measured (the file's rule: max of the two host medians x 1.25, rounded u
 | `EFS_B6_MODES=slow` | 260 | 255 | 201.3 / 199.0 |
 | `test_stop_progress` | 175 | 20 | 12.6 / 13.0 |
 | `test_k33_interrupt` | 120 | 95 | 48.4 / 75.6 |
-| `test_pump_logging` | 95 | 110 | 87.8 / 87.6 (was 108 to 115 s measured against 95) |
+| `test_pump_logging` | 95 | 95 | 87.8 / 87.6 (the rule gives 110; kept, budgets only move down; was 108 to 115 s measured against 95) |
 | `test_k36_recovery` | 70 | 55 | 43.1 / 38.7 |
 | `test_k38_shared_chunk_pressure` | 70 | 25 | 17.8 / 16.5 |
 | `EFS_B6_MODES=down` | 60 | 30 | 23.7 / 23.4 |
