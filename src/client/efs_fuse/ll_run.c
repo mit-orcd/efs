@@ -2,6 +2,7 @@
 #include "fuse_internal.h"
 #include "support.h"
 #include "getattr.h"
+#include "open.h"
 #include "../reply_buffers.h"
 
 void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)

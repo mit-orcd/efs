@@ -79,35 +79,11 @@ int fuse_stat_errno(int rc);
 int efs_rc_to_errno(int rc);
 
 
-struct efs_open_ref {
-    efs_ino_t ino;
-    uint64_t n;
-    uint32_t append_burst;
-    uint64_t append_burst_ms;
-    uint64_t append_handoff_ms;
-    int append_publishing;
-    int leased; /* first open took HOLD; last close must release it */
-    int close_pending; /* retain ownership until release is confirmed */
-    uint64_t lease_generation;
-    uint64_t retry_order; /* published under g_open_mu; edge is stripe-owned */
-    uint64_t retry_turn; /* fair retry visits, protected by g_open_mu */
-    struct efs_client_lease_request edge; /* immutable OPEN or CLOSE identity */
-    struct efs_client_lease_request adoption; /* clear pending before CLOSE */
-    struct efs_open_ref *next, *prev; /* every row, for retry scans */
-    struct efs_open_ref *hnext; /* inode hash chain */
-};
-
 /* Bounded wait (1 ms steps) for a CLOSE identity position, and the most
  * retained releases one background pass may drain. A full window is
  * transient (milliseconds); keep the bound short so an unreachable owner
  * cannot hold FUSE workers in RELEASE (the drain retries the rest). */
 #define CLOSE_ADMIT_SPINS 250u
-
-struct efs_pending_create {
-    struct efs_client_create_request request;
-    struct efs_client_lease_request cleanup;
-    struct efs_pending_create *next;
-};
 
 /* Write pool: FUSE write() waits until each job's PUT has 2-of-3 fragment
  * quorum. The pool still overlaps PUTs across concurrent FUSE requests
@@ -166,30 +142,6 @@ struct deep_callback_sample {
     long pid;
     char name[6];
 };
-
-/* open.c */
-extern pthread_mutex_t g_open_mu;
-struct efs_open_ref *open_ref_find(efs_ino_t ino);
-pthread_mutex_t *open_edge_mu(efs_ino_t ino);
-int efs_close_note(efs_ino_t ino, int *leased);
-int efs_open_release_pending(efs_ino_t ino);
-int efs_open_close_unadmitted(efs_ino_t ino);
-int wb_lock_budget(pthread_mutex_t *mu);
-int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation);
-int efs_open_acquire_created(efs_ino_t ino, uint64_t generation,
-                                    uint64_t token, int *handed_off);
-struct efs_pending_create *efs_pending_create_alloc(void);
-void efs_pending_create_free(struct efs_pending_create *entry);
-void efs_pending_create_queue(struct efs_pending_create *entry);
-int efs_open_retry_pass(uint64_t deadline);
-void efs_open_retry_start(void);
-void efs_open_retry_stop(void);
-void fuse_fi_direct_io(struct fuse_file_info *fi);
-int fuse_odirect_unaligned(const struct fuse_file_info *fi,
-                                  off_t offset, size_t size);
-int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi);
-int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offset,
-                             struct fuse_file_info *fi);
 
 /* writeback.c */
 extern struct efs_wb_state g_wb;

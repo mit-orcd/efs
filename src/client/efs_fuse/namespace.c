@@ -1,6 +1,7 @@
 /* efs-fuse: create, mkdir, unlink, statfs, attributes, symlink, link, truncate. */
 #include "fuse_internal.h"
 #include "support.h"
+#include "open.h"
 
 /* A busy directory RPC is EBUSY. Mapping it to EIO made a leader-freeze
  * rmdir look like metadata corruption (Sep 23, fcstor007). */
