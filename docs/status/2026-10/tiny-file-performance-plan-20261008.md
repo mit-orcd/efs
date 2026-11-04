@@ -44,7 +44,7 @@ packages remain open. W90–W92 retain their existing scopes.
 1. **The round-7 candidate is not the devel baseline.**
    [Raft log](../../../src/raft/raft_log.c) and [KV WAL](../../../src/kv/kv_wal.c)
    still call `fsync`; neither contains the candidate's allocation logic.
-   [CREATE](../../../src/client/efs_fuse.c) still uses `lookup_fill` after
+   [CREATE](../../../src/client/efs_fuse/lookup.c) still uses `lookup_fill` after
    `efs_fuse_create_at`, which obtains attributes through the ordinary path;
    `efs_client_create_result` discards the returned inode after staging it.
    Reusing the CREATE reply is not present. The subsequent devel deadline

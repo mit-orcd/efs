@@ -97,7 +97,7 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| `EFS_NUMA_NODE` | `client/efs_fuse.c:7200` (numa_pin_startup) | pin to the HCA's NUMA node; `none`/`-1` disables, `N` forces node N | deployment input | portal (observed only) | — | Keep: host topology input |
+| `EFS_NUMA_NODE` | `client/efs_fuse/` (numa_pin_startup) | pin to the HCA's NUMA node; `none`/`-1` disables, `N` forces node N | deployment input | portal (observed only) | — | Keep: host topology input |
 | `EFS_RDMA_BUFS` | `common/rdma.c:145` (nrecv_bufs) | 6 posted receive buffers per QP (2..64) | numeric tunable | portal (observed only) | `README.md`, `run_xprt.sh` +2 | Keep until A8: set by `test_rdma_segmented.c` and the xprt bench; qualify the built-in value |
 | `EFS_RDMA_DEV` | `common/rdma.c:462` (dev_for_fd) +1 | device chosen from the route to the peer; names a verbs device | deployment input | cluster:orcd-test.py, devops:amd.env, devops:env.sh, devops:orcd-mini.env +1; portal (observed only) | `harness.py`, `rdma_pinned_probe.cpp` +7; `client.sh`, `k08_two_client.sh` +15; `rdma_pingpong.c` | Keep: hardware input |
 | `EFS_RDMA_GID_INDEX` | `common/rdma.c:287` (dev_open) | first nonzero GID on RoCE; pins a GID index | deployment input | devops:amd.env, devops:env.sh, devops:start.sh; portal (observed only) | `rdma_async_commit.py`, `rdma_four_node_qualification.sh` | Keep: hardware input |
@@ -166,12 +166,12 @@ Allowed under A8. Each reader was traced to every use of its flag: all guard std
 | `EFS_BATCH_OBS` | `common/batch_obs.c:48` (init_once) | off; `1` counts Raft batching shapes and rejects | observability | cluster:cluster.sh | `rdma_async_commit.py`, `amd_names_loaded.py` +16 | Keep: trace only |
 | `EFS_BUF_BUDGET_TRACE` | `client/bufpool.c:65` (buf_init) | off; prints the client buffer budget once | observability | — | `gc_reclamation.py` | Keep: trace only |
 | `EFS_DCACHE_TRACE` | `client/write.c:3690` (dcache_trace_on) | off; client dcache/publish lines | observability | — | `append_oracle.py`, `gc_reclamation.py` | Keep: trace only |
-| `EFS_DEEP_PATH_PROF` | `client/efs_fuse.c:6017` (deep_callback_begin) | off; with `EFS_RPC_PROF`, deep FUSE callback samples | observability | — | `rdma_four_node_qualification.sh` | Keep: trace only |
-| `EFS_FLOCK_DBG` | `client/efs_fuse.c:5576` (efs_fuse_flock_ino) | off; flock lines | observability | — | — | Keep: trace only |
+| `EFS_DEEP_PATH_PROF` | `client/efs_fuse/` (deep_callback_begin) | off; with `EFS_RPC_PROF`, deep FUSE callback samples | observability | — | `rdma_four_node_qualification.sh` | Keep: trace only |
+| `EFS_FLOCK_DBG` | `client/efs_fuse/` (efs_fuse_flock_ino) | off; flock lines | observability | — | — | Keep: trace only |
 | `EFS_GC_DBG` | `server/raft_host.c:9084` (host_gc_inode_nodes_batch) via `env_on` +15 | off; every GC pass logged (else passes over 5 s) | observability | — | `gc_reclamation.py` | Keep: trace only |
 | `EFS_LOG_TS` | `common/log_ts.c:121` (efs_log_timestamps_install) | on; `0` drops the UTC timestamp wrapper on stdout/stderr | observability | portal (observed only) | — | Keep: log format only |
 | `EFS_OPID_STATS` | `client/inode_rpc.c:344` (opid_take_locked) | off; client operation-id slot statistics | observability | — | `intel_perf_round.sh` | Keep: trace only |
-| `EFS_OPID_TRACE` | `client/efs_fuse.c:2050` (efs_open_release_pending_run) +3 | off; client operation-id lines | observability | — | `gc_reclamation.py`; `intel_package3_tests.py`, `intel_w100_private.py` | Keep: trace only |
+| `EFS_OPID_TRACE` | `client/efs_fuse/` (efs_open_release_pending_run) +3 | off; client operation-id lines | observability | — | `gc_reclamation.py`; `intel_package3_tests.py`, `intel_w100_private.py` | Keep: trace only |
 | `EFS_OPID_TRACE_VERBOSE` | `client/inode_rpc.c:392` (opid_begin) +10 | off; every operation-id begin/end | observability | — | `intel_package3_tests.py`, `intel_w100_private.py` | Keep: trace only |
 | `EFS_PACK_DBG` | `server/packer.c:1083` (pk_group) | off; packer drop reasons | observability | — | `d25_step4_gates.sh` | Keep: trace only |
 | `EFS_PERF_PATH` | `bench/bench_local.c:1060` (run_local_bench) +4 | with `--perf`: perf output path (default under the store or /tmp) | observability | — | `fuse_client_remount.sh`, `roll_efsd.sh`; `bench_profile.py` | Keep: recorder output path |
@@ -187,10 +187,10 @@ Allowed under A8. Each reader was traced to every use of its flag: all guard std
 | `EFS_RECEIPT_TRACE` | `server/raft_host.c:22880` (host_report_receipts_init) | off; REPORT receipt lines | observability | — | — | Keep: trace only |
 | `EFS_REPLY_BUFFER_TRACE` | `client/reply_buffers.h:59` (reply_buffers_init) | off; client reply-buffer lines | observability | — | `gc_reclamation.py` | Keep: trace only |
 | `EFS_REPORT_DBG` | `client/write.c:1515` (stale_repull_replay) | off; REPORT stale-replay detail | observability | — | `append_failover.py`, `gc_reclamation.py` | Keep: trace only |
-| `EFS_RPC_PROF` | `client/efs_fuse.c:1418` (lookup_memo_observe) +4 | off; client per-RPC timing counters | observability | cluster:gw-up.sh | `deploy_fuse_clients.sh`, `fuse_client_remount.sh` +9; `intel_network_workload.py`, `intel_package3_tests.py` +2 | Keep: trace only |
+| `EFS_RPC_PROF` | `client/efs_fuse/` (lookup_memo_observe) +4 | off; client per-RPC timing counters | observability | cluster:gw-up.sh | `deploy_fuse_clients.sh`, `fuse_client_remount.sh` +9; `intel_network_workload.py`, `intel_package3_tests.py` +2 | Keep: trace only |
 | `EFS_STAGE_DBG` | `client/stage_evict.c:542` (evict_pass) +1 | off; client staging-eviction lines | observability | — | — | Keep: trace only |
 | `EFS_STRACE_EXPR` | `common/recorder_start.h:68` (efs_start_strace_recorder) | with `--strace`: strace `-e` filter | observability | — | `deploy_fuse_clients.sh`, `fuse_client_remount.sh` +2; `client.sh` | Keep: recorder filter |
-| `EFS_STRACE_PATH` | `client/efs_fuse.c:8113` (main) +1 | with `--strace`: output path | observability | — | `fuse_client_remount.sh`, `roll_efsd.sh` | Keep: recorder output path |
+| `EFS_STRACE_PATH` | `client/efs_fuse/` (main) +1 | with `--strace`: output path | observability | — | `fuse_client_remount.sh`, `roll_efsd.sh` | Keep: recorder output path |
 | `EFS_TRACE_READDIR` | `common/protocol.c:925` (efs_readdir_trace) | off; set prints one bounded stderr line per READDIR page (client and server) | observability | — | `test_w130_dir_fault.py` | Keep: K48 listing attribution trace |
 | `EFS_TXN_TRACE_STALE` | `meta/txn.c:412` (efs_txn_prepare_excl) | off; `1` prints stale-version prepares | observability | — | — | Keep: trace only |
 | `EFS_WRITE_PROF` | `server/raft_host.c:702` (write_prof_on) via `env_on` | off; server write-path timing counters | observability | — | `raft_host_mu_ab.sh` | Keep: trace only |
@@ -218,7 +218,7 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_L0_BYTES` | `kv/kv_lsm.c:1435` (efs_kv_lsm_open) | off; KV L0 cap override | fault/test hook | — | `k22_follower_bound.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_SNAP_BYTES` | `raft/raft_disk.c` (raft_group_snap), `server/raft_host.c` (host_snap_window_bytes) | off; snapshot cadence and retained log window override (bytes) so snapshot tests fit test budgets | fault/test hook | — | `k22_snapshot_import.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_DECIDE_LOST` | `server/raft_host.c` (host_decide_lost_fault) | off; the next multi-part DECIDE COMMIT steps its coordinator-group leader down and is not proposed (NOT_PRIMARY), one-shot until `<file>.ready` is removed (A11 finding 2) | fault/test hook | — | `test_report_stepdown.py` | Keep in `EFS_FAULTS` builds |
-| `EFS_FAULT_LOOKUP_BARRIER` | `client/efs_fuse.c:5755` (lookup_reply_barrier) | off; park a LOOKUP reply at a barrier directory | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_LOOKUP_BARRIER` | `client/efs_fuse/` (lookup_reply_barrier) | off; park a LOOKUP reply at a barrier directory | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_MEMBER_EXIT` | `server/cluster.c:308` (server_test_member_exit) | off; `_exit(86)` at a named K33 handoff point (was `EFS_TEST_MEMBER_EXIT`; `before-identity` and `before-hello` added by the K33 join retry, `member_store.c` reaches the hook through `member_store_fault_exit`) | fault/test hook | — | `k33_daemons.py`, `test_k33_autoid.py` +9 | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUT_BUSY_FILE` | `server/put_upload.c` (put_test_busy) | off; this member answers fragment PUTs BUSY while the named file exists (K34; was `EFS_TEST_PUT_BUSY_FILE` on its branch) | fault/test hook | — | `test_k34_stop_put.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUT_STOP_AFTER` | `server/put_upload.c` (put_test_stop_after_store) | off; SIGTERM on this member right after its n-th stored fragment (K34; was `EFS_TEST_PUT_STOP_AFTER` on its branch) | fault/test hook | — | `test_k34_stop_put.py` | Keep in `EFS_FAULTS` builds |
@@ -301,8 +301,8 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_TEST_MEMBER_EXIT_ONCE` | `server/cluster.c`, every build | `EFS_FAULT_MEMBER_EXIT_ONCE` | `test_k33_interrupt.py` |
 | `EFS_PACK_CRASH` | `server/packer.c`, `EFS_FAULTS` builds | `EFS_FAULT_PACK_CRASH` | `scripts/w125_p7_crash.sh` |
 | `EFS_PACK_CRASH_NODE` | `server/packer.c`, `EFS_FAULTS` builds | `EFS_FAULT_PACK_CRASH_NODE` | `scripts/w125_p7_crash.sh` |
-| `EFS_FEATURES_TTL_MS` | `client/efs_fuse.c` (features_ttl_ms) | built in: 2000 ms | none; documented in power-user.md (row removed) |
-| `EFS_META_BATCH_OPS` | `client/efs_fuse.c` (efs_fuse_init) | built in: 4096 | none; portal observes |
+| `EFS_FEATURES_TTL_MS` | `client/efs_fuse/` (features_ttl_ms) | built in: 2000 ms | none; documented in power-user.md (row removed) |
+| `EFS_META_BATCH_OPS` | `client/efs_fuse/` (efs_fuse_init) | built in: 4096 | none; portal observes |
 | `EFS_PACK_COMPACT_COLD_S` | `server/packer.c` (server_packer_start) | built in: 86400 s | none; data.md table |
 | `EFS_PACK_COMPACT_DAILY_MIN` | `server/packer.c` | built in: 120 min | none; data.md table |
 | `EFS_PACK_COMPACT_IDLE_MS` | `server/packer.c` | built in: 10000 ms | none; data.md table |
@@ -317,13 +317,13 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_RAFT_BATCH_OVERLAP` | as above, A7 | always on | as above |
 | `EFS_QUERY_BACKEND` | `server/raft_host.c` (host_query_thread), A7 | disk catalog only | none; portal observes |
 | `EFS_READ_PREFETCH` | `client/read.c` (prefetch_depth), A7 | built in: 16 chunks | none; portal observes |
-| `EFS_FUSE_SPLICE_READ` | `client/efs_fuse.c` (efs_fuse_init), A7 | off, no switch | none; portal observes |
+| `EFS_FUSE_SPLICE_READ` | `client/efs_fuse/` (efs_fuse_init), A7 | off, no switch | none; portal observes |
 | `EFS_KV_BLOOM` | `server/raft_host.c`, `kv_seg.c` enable switch, A7 | always on | none; portal observes |
 | `EFS_UNMOUNT_REVOKE` | `client/inode_rpc.c` (efs_client_session_end), A7 | always revoke after the last settle; failures exit 1 | none |
-| `EFS_COMMANDS` | `client/efs_fuse.c` (commands_enabled), A7 | the cluster commands-policy (`efs-mgmt commands-policy`) | many test harnesses and launch env files (updated here; external listed in the [A7 evidence](../status/2026-10/a7-removals-20261024.md)) |
+| `EFS_COMMANDS` | `client/efs_fuse/` (commands_enabled), A7 | the cluster commands-policy (`efs-mgmt commands-policy`) | many test harnesses and launch env files (updated here; external listed in the [A7 evidence](../status/2026-10/a7-removals-20261024.md)) |
 | `EFS_COMMANDS_SERVER` | `server/raft_host.c` (server_raft_host_start), A7 | query workers always run | as above |
 | `EFS_EXPIRY` | `server/raft_host.c` (server_raft_host_start), A7 | none: the cluster expiry policy, off by default (D43; until Oct 25 compiled out behind `EFS_BUILD_EXPIRY`) | launch env files, expiry tests |
-| `EFS_FUSE_EXPORT` | `client/efs_fuse.c` (efs_fuse_init), A7 | none: no NFS re-export | cluster `ct-up.sh`, `gw-up.sh` |
+| `EFS_FUSE_EXPORT` | `client/efs_fuse/` (efs_fuse_init), A7 | none: no NFS re-export | cluster `ct-up.sh`, `gw-up.sh` |
 | `EFS_RDMA_FIRST` | `common/network.c` +5, A7 | `EFS_RDMA_TRACE=1` | `clean_cluster.sh`, `rdma_first_inode.sh` (updated) |
 
 ## Compile-time modes
@@ -346,7 +346,7 @@ before/after counts earlier on this page describe the original Oct 24 audit.
 | `EFS_BUILD_TIME` | `common/version.c`; `Makefile` | build time in `--version` | build identity | Keep |
 | `EFS_PUT_ADMIT_LINGER_US` | `client/client_internal.h` (1000 µs) | PUT admission linger; tests that count admissions build with 20 s | test override | Keep: `#ifndef` seam for exact-count tests (K32) |
 | `EFS_FAULT_FILE` | `client/write.c` (`/tmp/efs/fault`) | REPORT withhold control file path (`EFS_FAULTS`) | test override | Keep: `test_wb_fault.py` |
-| `EFS_APPEND_ABANDON_MS` | `client/efs_fuse.c` (10000) | APPEND abandon bound | overridable constant | No override anywhere; A8 may make it a plain constant |
+| `EFS_APPEND_ABANDON_MS` | `client/efs_fuse/` (10000) | APPEND abandon bound | overridable constant | No override anywhere; A8 may make it a plain constant |
 | `EFS_DEFAULT_SHARD_BITS` | `include/efs/common.h` (3) | default KV shard bits | overridable constant | No override anywhere; A8 may make it a plain constant |
 | `EFS_KV_WAL_RESERVE_BYTES` | `kv/kv_wal.c` (1 MiB) | WAL reserve | overridable constant | No override anywhere; A8 may make it a plain constant |
 | `EFS_SEGMENT_TEST_AUTHORITY` | `server/segment_store.c` | a test that includes the file supplies its own pack-object oracle | test seam | Keep |

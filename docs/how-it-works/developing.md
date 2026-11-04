@@ -72,7 +72,7 @@ data/       the data plane — EC encode/decode, store + transport vtables
             (`efs/store.h`, `efs/transport.h`), loop/conn transports.
 server/     `efsd`: handlers, the production Raft host (`raft_host.c`),
             the NVMe fragment store (`store.c`), writer pool, peer pool.
-client/     `efs-fuse`: `efs_fuse.c` is the FUSE adapter; `ops.c`,
+client/     `efs-fuse`: `efs_fuse/` is the FUSE adapter (12 files, see its README); `ops.c`,
             `read.c`, `write.c`, `inode_rpc.c`, `stage_evict.c` hold the
             path/RPC/data logic.
 sim/        the deterministic simulator the state machines run under.
