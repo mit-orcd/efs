@@ -1307,6 +1307,30 @@ static int sst_names(char names[][64], int cap)
     return n;
 }
 
+/* Model a crash that loses an obsolete SST unlink AFTER durable manifest
+ * publication. The resurrected old file must never supply stale contents. */
+static void test_compact_lost_unlink(void)
+{
+    rmtree(g_dir);struct efs_kv *kv=open_store(EFS_KV_LSM_SYNC,0);
+    CHECK(kv,"lost unlink store");if(!kv)return;
+    CHECK(!put_s(kv,"retired","old"),"old value");
+    CHECK(!efs_kv_lsm_flush(kv) && !efs_kv_lsm_compact(kv) && !efs_kv_lsm_quiesce(kv),"old compacted segment");
+    char names[8][64],old[1024],saved[1024];int n=sst_names(names,8);
+    CHECK(n==1,"one old segment");if(n!=1){efs_kv_lsm_close(kv);return;}
+    snprintf(old,sizeof(old),"%s/%s",g_dir,names[0]);
+    snprintf(saved,sizeof(saved),"%s/saved-obsolete",g_dir);
+    CHECK(!link(old,saved),"preserve obsolete segment bytes");
+    CHECK(!put_s(kv,"retired","new"),"new value");
+    CHECK(!efs_kv_lsm_flush(kv) && !efs_kv_lsm_compact(kv) && !efs_kv_lsm_quiesce(kv),"replacement published");
+    CHECK(access(old,F_OK)!=0,"old segment was unlinked");
+    efs_kv_lsm_close(kv);
+    CHECK(!link(saved,old),"simulate lost unlink");
+    kv=open_store(EFS_KV_LSM_SYNC,0);CHECK(kv,"reopen with resurrected SST");
+    if(kv){CHECK(!get_is(kv,"retired","new"),"manifest excludes obsolete value");
+        CHECK(access(old,F_OK)!=0,"reopen cleans obsolete SST");efs_kv_lsm_close(kv);}
+    CHECK(kv_sync_dir("/dev/null")==EFS_ERR_IO,"required directory barrier failure is reported");
+}
+
 static void test_partitioned_flush(void)
 {
     struct efs_kv_lsm_cfg cfg;
@@ -2161,6 +2185,7 @@ int main(void)
     test_cleanup_scope_hints();
     test_cleanup_scope_apply();
     test_durable_query_hints();
+    test_compact_lost_unlink();
     test_sync_hold();
     test_partitioned_flush();
     test_view_export_overlap();

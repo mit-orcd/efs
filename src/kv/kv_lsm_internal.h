@@ -502,7 +502,7 @@ int kv_mtab_merge(struct kv_mtab *to, struct kv_mtab *from);
 
 void kv_seg_path(const struct kv_lsm *l, int level, uint64_t seq, char *out,
                  size_t n);
-void kv_sync_dir(const char *dir);
+int kv_sync_dir(const char *dir);
 void kv_mtab_clear(struct kv_mtab *m);
 uint32_t kv_mtab_pos(const struct kv_mtab *m, const uint8_t *key, uint32_t klen,
                      int *found);

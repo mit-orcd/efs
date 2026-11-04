@@ -87,14 +87,14 @@ static int mkdir_p(const char *path)
     return EFS_OK;
 }
 
-void kv_sync_dir(const char *dir)
+int kv_sync_dir(const char *dir)
 {
-    int fd = open(dir, O_RDONLY);
-
-    if (fd < 0)
-        return;
-    fsync(fd);
-    close(fd);
+    int fd = open(dir, O_RDONLY | O_DIRECTORY);
+    if (fd < 0)return EFS_ERR_IO;
+    int rc;
+    do { rc=fsync(fd); } while(rc<0 && errno==EINTR);
+    int closed=close(fd);
+    return rc || closed ? EFS_ERR_IO : EFS_OK;
 }
 
 /* --- memtable -------------------------------------------------------- */
@@ -424,7 +424,8 @@ static int query_checkpoint_load(struct kv_lsm *l)
     valid=fread(l->query_lineage,1,sizeof(l->query_lineage),f)==sizeof(l->query_lineage);fclose(f);
     if(!valid || !(l->query_lineage[0] || l->query_lineage[1]))return EFS_ERR_IO;
     (void)query_checkpoint_write(l,manifest); /* optional derived state */
-    kv_sync_dir(l->dir);return EFS_OK;
+    (void)kv_sync_dir(l->dir); /* optional derived state */
+    return EFS_OK;
 }
 int kv_manifest_write(struct kv_lsm *l)
 {
@@ -459,8 +460,7 @@ int kv_manifest_write(struct kv_lsm *l)
         unlink(tmp);
         return EFS_ERR_IO;
     }
-    kv_sync_dir(l->dir);
-    return EFS_OK;
+    return kv_sync_dir(l->dir);
 
 fail:
     fclose(f);
@@ -2628,7 +2628,8 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
         slash = strrchr(dir, '/');
         if (slash) {
             *slash = 0;
-            kv_sync_dir(dir);
+            rc=kv_sync_dir(dir);
+            if(rc!=EFS_OK)goto out;
         }
     }
     rc = EFS_OK;
