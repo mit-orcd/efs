@@ -19,6 +19,11 @@ REPORTs with their W77 units and barrier retirements are always in flight.
    raft-step-down) of both metadata groups' leaders, GAP_S apart, while the
    writers keep going. GAP_S > BOUND_S, so an operation within the bound
    crosses at most one leader change (the bound is per change crossed).
+   Each writer appends at least EFS_RSD_RECORDS records and then keeps
+   appending until the schedule has run (a `stop` file in the work
+   directory), so the step-downs always land on live writers however fast
+   the appends drain (Nov 4: the Raft commit push made 4 x 400 records
+   finish in 17 s, before the third round).
 
 Checks:
 - the fault fired, and its coordinator handed the transaction to the
@@ -62,10 +67,12 @@ GAP_S = 4.0
 t0 = time.time()
 
 
-def writer(index, path, count, q):
+def writer(index, path, count, q, stop):
     acked, errors, wmax, fmax, slow = [], [], 0.0, 0.0, []
     fd = os.open(path, os.O_WRONLY | os.O_APPEND)
-    for seq in range(count):
+    seq = synced = -1
+    while seq + 1 < count or not stop.exists():
+        seq += 1
         b, w0 = time.monotonic(), time.time()
         try:
             if os.write(fd, body(index, seq)) == REC:
@@ -78,7 +85,7 @@ def writer(index, path, count, q):
         wmax = max(wmax, d)
         if d > 1.0:
             slow.append(('write', seq, round(d, 2), w0))
-        if (seq + 1) % FSYNC_EVERY == 0 or seq + 1 == count:
+        if (seq + 1) % FSYNC_EVERY == 0 or (seq + 1 >= count and stop.exists()):
             b, w0 = time.monotonic(), time.time()
             try:
                 os.fsync(fd)
@@ -88,6 +95,17 @@ def writer(index, path, count, q):
             fmax = max(fmax, d)
             if d > 1.0:
                 slow.append(('fsync', seq, round(d, 2), w0))
+            synced = seq
+    if synced != seq:   # stop appeared after the last fsync check: the tail is still fsynced
+        b, w0 = time.monotonic(), time.time()
+        try:
+            os.fsync(fd)
+        except OSError as e:
+            errors.append(f'fsync seq={seq} errno={e.errno}')
+        d = time.monotonic() - b
+        fmax = max(fmax, d)
+        if d > 1.0:
+            slow.append(('fsync', seq, round(d, 2), w0))
     os.close(fd)
     q.put(dict(writer=index, acked=acked, errors=errors, write_max_s=wmax, fsync_max_s=fmax, slow=slow))
 
@@ -159,7 +177,8 @@ try:
     path.write_bytes(b'')
     ctx = mp.get_context('fork')  # the module is a script, not importable by forkserver
     q = ctx.Queue()
-    procs = [ctx.Process(target=writer, args=(i, str(path), PER, q)) for i in range(WRITERS)]
+    stop = work / 'stop'
+    procs = [ctx.Process(target=writer, args=(i, str(path), PER, q, stop)) for i in range(WRITERS)]
     for p in procs:
         p.start()
     end = time.time() + 60
@@ -177,13 +196,12 @@ try:
     time.sleep(GAP_S)
     for _ in range(STEPDOWNS):
         for g in (0, 2):
-            if not any(p.is_alive() for p in procs):
-                break
             led = leaders(c)
             if g in led:
                 rc, out = mgmt(c.env, 'raft-step-down', c.ep(led[g]), str(g))
                 events.append((g, led[g], rc, out.strip()[-120:]))
             time.sleep(GAP_S)
+    stop.touch()
     results = [q.get(timeout=600) for _ in procs]
     for p in procs:
         p.join(timeout=60)
