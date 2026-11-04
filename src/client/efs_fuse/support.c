@@ -1,5 +1,6 @@
 /* efs-fuse: crash handlers, stats, features, file handles, virtual inodes, query results, invalidation, find and access checks. */
 #include "fuse_internal.h"
+#include "support.h"
 
 /* Async-signal-safe crash breadcrumb. Uses an alternate signal stack so a
  * stack-overflow SIGSEGV can still report instead of dying silently. */
@@ -342,11 +343,6 @@ static ino_t find_synthetic_ino(efs_ino_t parent_ino)
 {
     return (ino_t)((1ULL << 61) | (parent_ino & ((1ULL << 60) - 1)));
 }
-
-/* Canonical absolute mountpoint, set once in main. .find results are rendered
- * as host-absolute paths (mountpoint + fs-root path) so they can be piped or
- * looped over from any working directory. */
-char g_mountpoint[EFS_MAX_PATH] = "/";
 
 /* Low-level FUSE: nodeid == efs ino (FUSE_ROOT_ID == EFS_ROOT_INO == 1).
  * Virtual .stats / .find names sit in unused high bits so they never collide

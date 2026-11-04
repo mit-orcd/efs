@@ -1,5 +1,6 @@
 /* efs-fuse: write-back pool and bounce buffers. */
 #include "fuse_internal.h"
+#include "support.h"
 
 /* Per-ino write serialization. WB workers run jobs concurrently, but two jobs
  * touching the same inode (overlapping partial chunks) must not RMW the same

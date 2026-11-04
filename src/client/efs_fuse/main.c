@@ -1,6 +1,11 @@
 /* efs-fuse: mutation-gated operation wrappers, the operation table, destroy, startup and main. */
 #include "fuse_internal.h"
+#include "support.h"
 #include "../stop_control.h"
+
+/* Canonical absolute mountpoint, set once in main and logged there. The
+ * .find results are rendered as host-absolute paths on the server side. */
+static char g_mountpoint[EFS_MAX_PATH] = "/";
 
 /* Nonzero once a clean unmount failed to flush, report, settle or revoke:
  * efs-fuse then exits 1, never reporting a clean completion (D42). The

@@ -883,7 +883,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_lane_bootstrap_export.py
 
 $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h
-$(CLIENT_OBJS): src/client/efs_fuse/fuse_internal.h src/client/reply_buffers.h src/client/stop_control.h
+$(CLIENT_OBJS): $(wildcard src/client/efs_fuse/*.h) src/client/reply_buffers.h src/client/stop_control.h
 src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
 
 tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/storage_roots.c src/server/server_internal.h src/bench/writer.o $(LIB)

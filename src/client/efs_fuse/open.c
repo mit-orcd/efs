@@ -1,5 +1,6 @@
 /* efs-fuse: open references, lease acquire and retry, open and read. */
 #include "fuse_internal.h"
+#include "support.h"
 #include "../commands/source.h"
 
 /* Per-ino open-description count. The sequenced server lease is an edge

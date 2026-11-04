@@ -1,5 +1,6 @@
 /* efs-fuse: write admission, store, buf, fsync and flush. */
 #include "fuse_internal.h"
+#include "support.h"
 
 /* Reserve worst-case chunk capacity before any append range is accepted.
  * Capacity pressure drains bounded PUT/REPORT cohorts, never future writes
