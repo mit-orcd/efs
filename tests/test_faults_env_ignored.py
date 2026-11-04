@@ -11,11 +11,12 @@ tests/test_env_removed.py).
 Usage: make libefs.a && python3 tests/test_faults_env_ignored.py"""
 from pathlib import Path
 import os, subprocess, sys, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
 if not (root / 'libefs.a').exists():
     sys.exit('build libefs.a first (make libefs.a)')
-for f, prog in (('src/server/efsd.c', 'efsd'), ('src/client/efs_fuse.c', 'efs-fuse')):
-    s = (root / f).read_text()
+for f, prog in (('src/server/efsd.c', 'efsd'), ('efs_fuse', 'efs-fuse')):
+    s = csrc.module('efs_fuse') if f == 'efs_fuse' else (root / f).read_text()
     m = s[s.index('int main(int argc, char **argv)'):]
     assert '#if !EFS_FAULTS\n    efs_faults_env_ignored("%s");\n#endif' % prog in m, f
 k = (root / 'src/kv/kv_compact.c').read_text()

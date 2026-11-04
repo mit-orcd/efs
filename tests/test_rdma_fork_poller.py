@@ -13,9 +13,10 @@ most test hosts, so this is a source-order check plus the fail-closed guard.
 """
 from pathlib import Path
 import re
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-fuse = (root / 'src/client/efs_fuse.c').read_text()
+fuse = csrc.module('efs_fuse')
 rdma = (root / 'src/common/rdma.c').read_text()
 
 def body(src, sig):

@@ -2,18 +2,19 @@
 """Production FUSE locks preserve same-inode exclusion without shard-wide locks."""
 from pathlib import Path
 import os, subprocess, tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/client/efs_fuse.c').read_text()
+source = csrc.module('efs_fuse')
 sections = []
 ops = Path(os.environ.get('EFS_DIR_LOCK_SOURCE', root / 'src/client/ops.c')).read_text()
 a = ops.index('static int dir_stripe(')
 sections.append('#define EFS_DIR_LOCKS 64\n' + ops[a:ops.index('\n}', a)+2])
 for start, end in [('#define OPEN_EDGE_SHARDS', '/* Returns 1 when this is the first open'),
-                   ('#define EFS_WB_INO_STRIPES', '\nstatic struct {'),
+                   ('#define EFS_WB_INO_STRIPES', 'struct efs_wb_state g_wb = {'),
                    ('#define APPEND_MU_N', '/* Close: flush')]:
     a = source.index(start)
-    sections.append(source[a:source.index(end, a)])
+    sections.append(source[a:csrc.upto(source, end) if end.startswith('struct ') else source.index(end, a)])
 code = r'''
 #include "efs/common.h"
 #include "efs/kv_key.h"

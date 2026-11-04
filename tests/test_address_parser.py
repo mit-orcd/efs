@@ -7,19 +7,21 @@ import re
 import shlex
 import subprocess
 import tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--revision', help='Read wrappers from a historical Git revision')
 parser.add_argument('--sanitize', action='store_true')
 args = parser.parse_args()
-files = [('src/client/efs_fuse.c','parse_addr'),('src/client/node_cache.c','parse_host_port'),
+files = [('efs_fuse','parse_addr'),('src/client/node_cache.c','parse_host_port'),
          ('src/mgmt/efs_mgmt.c','parse_host_port'),
          ('src/server/efsd.c','parse_host_port'),('src/client/efs_bench.c','parse_host_port')]
 source = '#include <assert.h>\n#include <stdlib.h>\n#include <stdio.h>\n#include "src/common/parse_host_port.h"\n'
 for i, (filename, name) in enumerate(files):
-    text = (subprocess.check_output(['git','show',args.revision+':'+filename],cwd=root,text=True)
-            if args.revision else (root/filename).read_text())
-    match = re.search(r'^static int '+name+r'\([^;]+?\)\n\{',text,re.M)
+    path = 'src/client/efs_fuse.c' if filename == 'efs_fuse' else filename
+    text = (subprocess.check_output(['git','show',args.revision+':'+path],cwd=root,text=True)
+            if args.revision else csrc.module('efs_fuse') if filename == 'efs_fuse' else (root/filename).read_text())
+    match = re.search(r'^(?:static )?int '+name+r'\([^;]+?\)\n\{',text,re.M)
     if not match:
         raise RuntimeError(filename)
     body = text[match.start():text.index('\n}',match.end())+2]

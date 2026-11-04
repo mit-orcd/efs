@@ -8,9 +8,10 @@ import re
 import subprocess
 import tempfile
 import sys
+import csrc
 root = Path(__file__).resolve().parents[1]
 w = Path(os.environ.get('EFS_CLIENT_MEMORY_WRITE_SOURCE', root / 'src/client/write.c')).read_text()
-f = (root / 'src/client/efs_fuse.c').read_text()
+f = csrc.module('efs_fuse')
 r = (root / 'src/client/read.c').read_text()
 def function(s, name):
     m = re.search(r'^(?:static )?[^\n;]*\b' + name + r'\([^;]+?\)\n\{', s, re.M)

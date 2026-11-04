@@ -22,7 +22,21 @@ root = Path(__file__).resolve().parents[1]
 # module name -> (override environment variable, source files in order)
 MODULES = {
     'raft_host': ('EFS_RAFT_HOST_SOURCE', ['src/server/raft_host.c']),
-    'efs_fuse': ('EFS_FUSE_SOURCE', ['src/client/efs_fuse.c']),
+    'efs_fuse': ('EFS_FUSE_SOURCE', [
+        'src/client/efs_fuse/support.c',
+        'src/client/efs_fuse/getattr.c',
+        'src/client/efs_fuse/open.c',
+        'src/client/efs_fuse/writeback.c',
+        'src/client/efs_fuse/append.c',
+        'src/client/efs_fuse/write.c',
+        'src/client/efs_fuse/namespace.c',
+        'src/client/efs_fuse/release.c',
+        'src/client/efs_fuse/plock_init.c',
+        'src/client/efs_fuse/lookup.c',
+        'src/client/efs_fuse/ll_run.c',
+        'src/client/efs_fuse/main.c',
+        'src/client/efs_fuse/fuse_internal.h',
+    ]),
     'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),
 }
 
@@ -32,6 +46,25 @@ def module(name, env=None):
     override = os.environ.get(env or var)
     paths = [Path(override)] if override else [root / f for f in files]
     return ''.join(p.read_text() for p in paths)
+
+
+def hblock(name, start, end='\n', env=None):
+    """Text from `start` through `end` in the module's shared header: a type a
+    splice needs when its slice used to contain that type's definition. Empty
+    when an override file replaces the module (it still holds the type inline)."""
+    var, files = MODULES[name]
+    if os.environ.get(env or var):
+        return ''
+    h = (root / files[-1]).read_text()
+    a = h.index(start)
+    return h[a:h.index(end, a) + len(end)]
+
+
+def upto(text, marker):
+    """Index where the declaration containing `marker` starts, so a slice that
+    ends before a function also stops before its `static ` when it has one."""
+    i = text.index(marker)
+    return i - 7 if text[i - 7:i] == 'static ' else i
 
 
 if __name__ == '__main__':
@@ -48,4 +81,5 @@ if __name__ == '__main__':
         assert module('efs_fuse') != 'int alt;\n'
         os.environ['EFS_CSRC_TEST'] = str(alt)
         assert module('write', 'EFS_CSRC_TEST') == 'int alt;\n'
+    assert upto('a static int f(', 'int f(') == 2 and upto('a int f(', 'int f(') == 2
     print('csrc self-check ok')

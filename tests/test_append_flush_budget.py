@@ -2,7 +2,8 @@
 """Actual append flush refuses expired work even when its stripe is free."""
 from pathlib import Path
 import os,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/client/efs_fuse.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse')
 def fn(p):
  a=s.index(p);return s[a:s.index('\n}',a)+2]
 code=r'''
@@ -26,7 +27,7 @@ static int efs_wb_sync_ino(efs_ino_t n){(void)n;syncs++;if(expire_sync)deadline=
 static pthread_mutex_t *append_mu(efs_ino_t n){(void)n;return &stripe;}
 int efs_dcache_flush_ino(efs_ino_t n){(void)n;flushes++;return flush_rc;}
 int efs_client_report_dirty_ino(efs_ino_t n,int sync){(void)n;(void)sync;reports++;return EFS_OK;}
-'''+fn('static int wb_lock_budget(')+fn('static int efs_append_flush_report_run(')+r'''
+'''+fn('int wb_lock_budget(')+fn('static int efs_append_flush_report_run(')+r'''
 static void reset(void){dirty=1;sync_rc=flush_rc=expire_sync=0;flushes=reports=syncs=0;deadline=now_ms()+100;}
 int main(void){reset();deadline=now_ms();assert(efs_append_flush_report_run(NULL,42)==EFS_ERR_BUSY&&!syncs&&!flushes&&!reports);
  reset();expire_sync=1;assert(efs_append_flush_report_run(NULL,42)==EFS_ERR_BUSY&&syncs==1&&!flushes&&!reports);

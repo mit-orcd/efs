@@ -2,10 +2,11 @@
 """Production WB worker must inherit budgets and finish ownership on expiry."""
 from pathlib import Path
 import re,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/efs_fuse.c').read_text()
+s=csrc.module('efs_fuse')
 def fn(name):
- m=re.search(r'^static [^\n;]*\b'+name+r'\([^;]+?\)\n\{',s,re.M)
+ m=re.search(r'^(?:static )?[^\n;]*\b'+name+r'\([^;]+?\)\n\{',s,re.M)
  return s[m.start():s.index('\n}',m.end())+2]
 a=s.index('struct efs_wb_job {');job=s[a:s.index('\n};',a)+3]
 code=r'''

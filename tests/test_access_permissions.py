@@ -6,9 +6,10 @@ import re
 import shlex
 import subprocess
 import tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-source=Path(os.environ.get('EFS_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text()
-m=re.search(r'^static int check_access\([^;]+?\)\n\{',source,re.M)
+source=csrc.module('efs_fuse')
+m=re.search(r'^(?:static )?int check_access\([^;]+?\)\n\{',source,re.M)
 function=source[m.start():source.index('\n}',m.end())+2]
 code=r'''
 #include <efs/metadata.h>

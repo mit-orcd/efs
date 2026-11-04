@@ -2,7 +2,7 @@
 """Task AH reproduction: g_client.idx_mu contention on one mount.
 
 Builds a SHIM COPY of the tree (never the working tree): every
-`pthread_mutex_lock(&g_client.idx_mu)` in read.c/write.c/ops.c/efs_fuse.c
+`pthread_mutex_lock(&g_client.idx_mu)` in read.c/write.c/ops.c/efs_fuse/*.c
 becomes idx_meas_lock(), which counts acquisitions, contended acquisitions
 (a trylock miss) and wait nanoseconds, printed every 2 s. The shim source
 is SHIM_C below. Then: a 3-daemon loopback cluster of the production efsd,
@@ -72,8 +72,7 @@ def main():
     ht = hdr.read_text()
     ht += '\nvoid idx_meas_lock(void);\nvoid idx_meas_unlock(void);\n'
     hdr.write_text(ht)
-    for f in ('read.c', 'write.c', 'ops.c', 'efs_fuse.c'):
-        p = shim / 'src/client' / f
+    for p in [shim / 'src/client' / f for f in ('read.c', 'write.c', 'ops.c')] + sorted((shim / 'src/client/efs_fuse').glob('*.c')):
         t = p.read_text()
         t = t.replace('pthread_mutex_lock(&g_client.idx_mu)', 'idx_meas_lock()')
         t = t.replace('pthread_mutex_unlock(&g_client.idx_mu)', 'idx_meas_unlock()')

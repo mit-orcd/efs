@@ -2,10 +2,11 @@
 """Exercise production FUSE truncate with failed flush and nested deadlines."""
 from pathlib import Path
 import re,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/efs_fuse.c').read_text()
+s=csrc.module('efs_fuse')
 def fn(name):
- m=re.search(r'^static int '+name+r'\([^;]+?\)\n\{',s,re.M)
+ m=re.search(r'^(?:static )?int '+name+r'\([^;]+?\)\n\{',s,re.M)
  return s[m.start():s.index('\n}',m.end())+2]
 code=r'''
 #include "efs/metadata.h"

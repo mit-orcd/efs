@@ -2,9 +2,10 @@
 """Execute the actual MKDIR path with exact committed rows and refused creates."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=Path(os.environ.get('EFS_MKDIR_REPLY_SOURCE',str(root/'src/client/efs_fuse.c'))).read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse','EFS_MKDIR_REPLY_SOURCE')
 def function(name):
- m=re.search(r'^static (?:int|void) '+name+r'\([^;]+?\)\n\{',s,re.M);assert m,name
+ m=re.search(r'^(?:static )?(?:int|void) '+name+r'\([^;]+?\)\n\{',s,re.M);assert m,name
  return s[m.start():s.index('\n}',m.end())+2]
 compat = '' if 'struct efs_inode *created)' in function('efs_fuse_mkdir_at') else r'''
 static int efs_client_create_result(efs_ino_t p,const char *n,uint32_t mode,uid_t uid,gid_t gid,uint32_t flags,efs_ino_t *ino) {struct efs_inode row;return efs_client_create_result_inode(p,n,mode,uid,gid,flags,ino,&row);}

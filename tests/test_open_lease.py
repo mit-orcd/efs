@@ -2,13 +2,14 @@
 """Exercise the production inode lease edges, including failed and overlapping opens."""
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-text = (root / 'src/client/efs_fuse.c').read_text()
+text = csrc.module('efs_fuse')
 def function(name):
-    match = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', text, re.M)
+    match = re.search(r'^(?:static )?[^\n;]*\b' + name + r'\([^;]+?\)\n\{', text, re.M)
     if not match: raise RuntimeError(name)
     return text[match.start():text.index('\n}', match.end()) + 2]
-refs = text[text.index('static pthread_mutex_t g_open_mu'):text.index('/* Returns 1 when this is the first open')]
+refs = text[text.index('pthread_mutex_t g_open_mu'):text.index('/* Returns 1 when this is the first open')]
 source = r"""
 #include "client_internal.h"
 static __thread uint64_t t_open_read_size;
@@ -69,7 +70,7 @@ static int efs_rc_to_errno(int rc){return rc?-EIO:0;}
 int efs_client_rpc_flock(efs_export_id_t ex, efs_ino_t ino, uint32_t op, uint64_t owner) {
     (void)ex; (void)ino; (void)op; (void)owner; return EFS_OK;
 }
-""" + refs + '\n'.join(function(n) for n in ['efs_open_note', 'efs_open_set_leased', 'efs_open_retry_order', 'efs_close_note', 'efs_open_release_pending_run', 'efs_open_release_pending', 'efs_open_close_unadmitted', 'wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire', 'efs_fuse_release_ino']) + r"""
+""" + csrc.hblock('efs_fuse','struct efs_open_ref {','\n};\n')+csrc.hblock('efs_fuse','#define CLOSE_ADMIT_SPINS') + refs + '\n'.join(function(n) for n in ['efs_open_note', 'efs_open_set_leased', 'efs_open_retry_order', 'efs_close_note', 'efs_open_release_pending_run', 'efs_open_release_pending', 'efs_open_close_unadmitted', 'wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire', 'efs_fuse_release_ino']) + r"""
 static void release(void) { struct fuse_file_info fi = {.fh = 42}; assert(!efs_fuse_release_ino(42, &fi)); }
 static void *opener(void *arg) { (void)arg; assert(efs_open_acquire(42) == EFS_OK); return NULL; }
 static void *closer(void *arg) { (void)arg; release(); return NULL; }

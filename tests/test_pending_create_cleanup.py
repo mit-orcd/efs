@@ -2,8 +2,10 @@
 """Execute FUSE abandoned CREATE cleanup with ambiguous proof and lease edges."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/client/efs_fuse.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse')
 a=s.index('#define EFS_PENDING_CREATES_MAX');b=s.index('/* A lost last-close reply must not pin',a)
+structs=csrc.hblock('efs_fuse','struct efs_pending_create {','\n};\n')
 code=r'''
 #include "client_internal.h"
 #include "efs/session.h"
@@ -19,7 +21,7 @@ static int release_rc,create_known,create_rc,lease_rc,begins,submits,cancels;
 static int efs_open_release_pending(efs_ino_t ino){assert(ino==42);return release_rc;}
 '''
 # Forward declarations from the production header suffice for mock RPCs below.
-code+=s[a:b]+r'''
+code+=structs+s[a:b]+r'''
 int efs_client_create_cancel(struct efs_client_create_request *r){assert(!r->attempted);cancels++;memset(r,0,sizeof(*r));return EFS_OK;}
 int efs_client_create_reset(struct efs_client_create_request *r){assert(r->complete);memset(r,0,sizeof(*r));return EFS_OK;}
 int efs_client_create_resume(struct efs_client_create_request *r,int probe) {

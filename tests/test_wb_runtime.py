@@ -2,9 +2,10 @@
 """Run production D27 registry, cycle verdict and file-handle helpers."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
 w=(root/'src/client/write.c').read_text()
-f=(root/'src/client/efs_fuse.c').read_text()
+f=csrc.module('efs_fuse')
 def function(text,name):
     m=re.search(r'^(?:static )?[^\n;]*\b'+name+r'\([^;]+?\)\n\{',text,re.M)
     if not m: raise RuntimeError(name)
@@ -15,7 +16,7 @@ registry=w[w.index('#define WB_ERROR_BUCKETS'):w.index('static void dcache_cycle
 for name in ('data_chunk_size', 'data_frag_size', 'frag_ptrs'):
     registry = registry.replace(function(w, name), '')
 entry=w[w.index('struct dcache_ent {'):w.index('\n};',w.index('struct dcache_ent {'))+3]
-handles=f[f.index('#define EFS_FILE_FH_TAG'):f.index('static int virt_kind(')]
+handles=csrc.hblock('efs_fuse','struct efs_file_handle {','\n};\n')+f[f.index('#define EFS_FILE_FH_TAG'):csrc.upto(f,'int virt_kind(')]
 source=r'''
 #include "efs/protocol.h"
 #include "efs/metadata.h"

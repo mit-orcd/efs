@@ -2,9 +2,10 @@
 """A blocked lease admission must leave time for the CREATE owning its slot."""
 from pathlib import Path
 import os,resource,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_FUSE_RETRY_SOURCE',root/'src/client/efs_fuse.c')).read_text()
-a=s.index('static int efs_open_retry_pass(');b=s.index('static void *efs_open_retry_worker(',a)
+s=csrc.module('efs_fuse','EFS_FUSE_RETRY_SOURCE')
+a=s.index('int efs_open_retry_pass(');b=s.index('static void *efs_open_retry_worker(',a)
 code=r'''
 #include <assert.h>
 #include <stdint.h>

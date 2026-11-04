@@ -10,10 +10,11 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-s = (root/'src/client/efs_fuse.c').read_text()
-m = re.search(r'^static int fuse_allocator_init\(void\)\n\{', s, re.M)
+s = csrc.module('efs_fuse')
+m = re.search(r'^(?:static )?int fuse_allocator_init\(void\)\n\{', s, re.M)
 assert m
 policy = s[m.start():s.index('\n}',m.end())+2]
 source = r'''

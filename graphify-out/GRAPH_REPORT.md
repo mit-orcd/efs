@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `718372cfc056b58413f29125b3b65773cf4d2bbb`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,771 nodes, 74,152 directed typed edges, 593 communities.
+Source base: `8eb6c3d85cdddea32872e2407792e1b1899183d8`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,837 nodes, 74,252 directed typed edges, 565 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -21,27 +21,27 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 - `affects`: 8
 - `calls`: 27365
 - `case_of`: 118
-- `contains`: 26764
+- `contains`: 26782
 - `defines`: 1996
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7726
+- `imports`: 7794
 - `imports_from`: 976
 - `indirect_call`: 737
 - `inherits`: 17
 - `invokes`: 2
 - `mentions_symbol`: 2954
 - `method`: 644
-- `rationale_for`: 1381
+- `rationale_for`: 1383
 - `references`: 2158
-- `references_path`: 1187
+- `references_path`: 1199
 - `regression_for`: 8
 - `uses`: 96
 
 ## Extraction warnings
 
 - warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 331, 851 symbol(s) extracted)
-- warning: 51 code file(s) yielded no symbols (0.19 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+46 more)
+- warning: 52 code file(s) yielded no symbols (0.21 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+47 more)
 
 ## Limits
 

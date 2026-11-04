@@ -6,9 +6,10 @@ import re
 import shlex
 import subprocess
 import tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-source = Path(os.environ.get('EFS_FUSE_SOURCE', root / 'src/client/efs_fuse.c')).read_text()
+source = csrc.module('efs_fuse')
 structs = source[source.index('struct readdir_ent {'):source.index('/* Per-opendir listing.')]
 start = source.find('static size_t readdir_name_hash(')
 if start < 0:

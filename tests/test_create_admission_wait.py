@@ -2,8 +2,9 @@
 """FUSE waits for receipt capacity without issuing or replacing an identity."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/efs_fuse.c').read_text()
+s=csrc.module('efs_fuse')
 a=s.index('static int efs_fuse_create_begin_wait(');b=s.index('\n}',a)+2
 e=s.index('static int efs_fuse_create_resume_wait(');f=s.index('\n}',e)+2
 c=s.index('static void ll_create(fuse_req_t req,');d=s.index('\n}',c)+2

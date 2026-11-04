@@ -62,7 +62,7 @@ assert 'efs_session_revoke(&rpc,id.client_uuid,&res)' in end and 'session_fenced
 # makes efs-fuse exit 1 instead of reporting a clean unmount.
 assert 'getenv' not in end, 'clean unmount revoke has no switch'
 assert 'return result;' in sd
-fz = (root / 'src/client/efs_fuse.c').read_text()
+fz = csrc.module('efs_fuse')
 assert 'if (efs_client_shutdown() != EFS_OK)\n        unmount_unclean(efs_client_shutdown_reason());' in fz
 # A11 finding 1: the verdict reaches the stop record the stop tooling reads.
 assert 'efs_stop_status("failed", 0, 0, ret, why);' in fz and 'efs_stop_status("done", 0, 0, 0, NULL);' in fz

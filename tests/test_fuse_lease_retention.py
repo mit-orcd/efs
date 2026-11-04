@@ -2,13 +2,14 @@
 """Execute production lease bookkeeping through ambiguous sequenced replies."""
 from pathlib import Path
 import os,re,resource,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text()
+s=csrc.module('efs_fuse')
 def function(name):
- m=re.search(r'^static (?:int|void|uint64_t) '+name+r'\([^;]+?\)\n\{',s,re.M)
+ m=re.search(r'^(?:static )?(?:int|void|uint64_t) '+name+r'\([^;]+?\)\n\{',s,re.M)
  assert m,name
  return s[m.start():s.index('\n}',m.end())+2]
-a=s.index('static pthread_mutex_t g_open_mu')
+a=s.index('pthread_mutex_t g_open_mu')
 b=s.index('/* Returns 1 when this is the first open',a)
 source=r'''
 #include <assert.h>
@@ -72,7 +73,7 @@ int efs_client_lease_reset(struct efs_client_lease_request *r) {
 '''
 # RPC mock references the production mutex, so place bookkeeping first.
 mock=source[source.index('int efs_client_rpc_getchunks_fileid'):]
-source=source[:source.index('int efs_client_rpc_getchunks_fileid')]+s[a:b]+mock+r'''
+source=source[:source.index('int efs_client_rpc_getchunks_fileid')]+csrc.hblock('efs_fuse','struct efs_open_ref {','\n};\n')+csrc.hblock('efs_fuse','#define CLOSE_ADMIT_SPINS')+s[a:b]+mock+r'''
 static int fixture_sleep(unsigned us){
  if(following_opener) {
   pthread_mutex_lock(&adoption_gate);opener_blocked=1;pthread_cond_broadcast(&adoption_cv);pthread_mutex_unlock(&adoption_gate);

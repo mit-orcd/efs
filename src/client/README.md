@@ -2,7 +2,7 @@
 
 ## Files
 
-- `efs_fuse.c` — the FUSE adapter; `client.c` — client setup, connection pool and mount state; `efs_bench.c` — benchmark driver.
+- `efs_fuse/` — the FUSE adapter, one file per area (read `fuse_internal.h` first; the concatenation order is `MODULES["efs_fuse"]` in `tests/csrc.py`): `support.c` crash handlers, stats, features, virtual inodes, invalidation, find, access checks; `getattr.c` lookup memo, getattr, readdir; `open.c` open references, leases, open, read; `writeback.c` write-back pool; `append.c` append and pressure flush; `write.c` write admission, store, fsync, flush; `namespace.c` create, mkdir, unlink, attributes, link, truncate; `release.c` release, drain, rename, lseek; `plock_init.c` POSIX locks and `FUSE_INIT`; `lookup.c` lookup and setattr; `ll_run.c` operation bodies; `main.c` destroy, gated wrappers, op table, `main`. `client.c` — client setup, connection pool and mount state; `client.c` — client setup, connection pool and mount state; `efs_bench.c` — benchmark driver.
 - `ops.c`, `read.c`, `write.c`, `inode_rpc.c` — path logic, reads, writes and inode RPCs; `write.c` owns the dirty cache.
 - `writer_state.c` — per-file writer state; `data_commit.c` — per-stripe fsync commit record (K35).
 - `stage_evict.c` — staging-table evictor; `bufpool.c` — shared body/scratch budget; `node_cache.c` — peer up/down marks.

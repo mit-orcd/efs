@@ -6,9 +6,10 @@ import os
 import shlex
 import subprocess
 import tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/client/efs_fuse.c').read_text()
-begin = source.index('static int commands_enabled(void)')
+source = csrc.module('efs_fuse')
+begin = source.index('int commands_enabled(void)')
 end = source.index('\n}\n', begin) + 3
 code = '''
 #include "efs/common.h"

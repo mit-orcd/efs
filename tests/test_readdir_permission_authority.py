@@ -2,11 +2,12 @@
 """Production listing checks fresh permissions before any enumeration RPC."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text()
-m=re.search(r'static int efs_fuse_readdir_ino\([^;]+?\n\{',s)
+s=csrc.module('efs_fuse')
+m=re.search(r'(?:static )?int efs_fuse_readdir_ino\([^;]+?\n\{',s)
 a=m.start();b=s.index('\n}',a)+2
-c=re.search(r'static int check_access\([^;]+?\n\{',s).start();d=s.index('\n}',c)+2
+c=re.search(r'(?:static )?int check_access\([^;]+?\n\{',s).start();d=s.index('\n}',c)+2
 code=r'''
 #include "efs/metadata.h"
 #include "efs/protocol.h"
@@ -44,7 +45,7 @@ static int efs_client_rpc_readdir_cur(efs_export_id_t id,efs_ino_t ino,struct ef
 }
 static int vq_lookup(uint64_t ino,efs_ino_t *parent,char *term,size_t n){(void)ino;(void)parent;(void)term;(void)n;return -1;}
 static int readdir_collect_page(struct readdir_collect_arg*c,const struct efs_inode*p,uint32_t n){(void)c;(void)p;(void)n;return 0;}
-'''+s[a:b]+s[s.index('static int efs_fuse_access_ino('):s.index('\n}',s.index('static int efs_fuse_access_ino('))+2]+r'''
+'''+s[a:b]+s[s.index('int efs_fuse_access_ino('):s.index('\n}',s.index('int efs_fuse_access_ino('))+2]+r'''
 static void reset(void){fresh_calls=local_calls=lists=result=empty_pages=0;context.uid=1001;fresh=(struct efs_inode){.ino=99,.uid=1001,.gid=1001,.mode=S_IFDIR|0300};stale=(struct efs_inode){.ino=99,.uid=1001,.gid=1001,.mode=S_IFDIR|0755};}
 int main(void){struct readdir_collect_arg col={0};struct efs_inode row;
  reset();assert(efs_fuse_readdir_ino(99,&col,&row)==-EACCES);assert(fresh_calls==1&&!local_calls&&!lists);
