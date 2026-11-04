@@ -365,5 +365,11 @@ int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
 
 /* release.c */
 int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi);
+int efs_control_drain(uint64_t deadline, int force);
+int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
+                              fuse_ino_t newparent, const char *newname,
+                              unsigned int flags, efs_ino_t *out_src);
+off_t efs_fuse_lseek_ino(fuse_ino_t ino, off_t off, int whence,
+                                struct fuse_file_info *fi);
 
 #endif
