@@ -61,6 +61,7 @@ Three `make test-all` gates per host at `EFS_TEST_JOBS=8` on the final tree (`3b
 | node9900 | 4 (new budgets) | TOTAL 585 FAIL 1 (`test_pump_logging`: the profile's wchan sampler read a thread that had just ended, `ProcessLookupError`; harness race, fixed in `d0cf0a658`) NOTRUN 4 | 660 s |
 | fstor007 | 5 (final tree) | TOTAL 585 FAIL 1 (`test_server_processes`, an EXCLUSIVE real-process test, while five solo `k35` runs of mine shared the host; 3 of 3 solo after, 5 to 6 s) NOTRUN 3 | 671 s |
 | node9900 | 5 (final tree) | **TOTAL 585 FAIL 0 NOTRUN 4 INCOMPLETE** | 649 s |
+| fstor007 | 6 (final tree, nothing else on the host) | **TOTAL 585 FAIL 0 NOTRUN 3 INCOMPLETE** | 647 s |
 
 NOTRUN rows are the host limits (cluster scripts, the Memcheck header on fstor007, valgrind on node9900, RDMA live qualification). Passing runs only count toward a median.
 
@@ -85,4 +86,4 @@ Rows re-measured (the file's rule: max of the two host medians x 1.25, rounded u
 The three largest savings in the model: `test_report_stepdown` (exclusive, counts 1:1: 250 s), `test_k22_snapshot_import` (2 slots: 60 s of pool time) and `EFS_B6_MODES=full` (2 slots: 33 s). `python3 tests/test_make_test_recipe.py` passes at every commit; the bound stays 1750.
 
 ## Artifacts
-`~/efs-artifacts/taskDA-20261104/` on the ORCD hosts (NFS home): `before-solo-node9900/`, `before-solo-fstor007-instrumented/`, `after1-solo-*`, `fix2-solo-node9900/`, `probes/` (the Raft trace of a split-leader mkdir, the k22 unmount-drain log), `gate-<host>-g1..g5/` with `summary.txt`, `timings.tsv`, `progress.txt`, `gate.log` and any `fail-*.log`, `solo-checks-*/`; `SHA256SUMS` (sha256 5868fe5635289a19a0dc9c3fd227602b286b52b2446446b6e35f2957ebb389b1). The final gate on each host is the last clean one on the final code: node9900 gate 5 (FAIL 0), fstor007 gates 2 and 3 (FAIL 0; gates 4 and 5 differ from them only by `budgets.tsv` and the one-line sampler fix, and each failed one known or self-inflicted intermittent).
+`~/efs-artifacts/taskDA-20261104/` on the ORCD hosts (NFS home): `before-solo-node9900/`, `before-solo-fstor007-instrumented/`, `after1-solo-*`, `fix2-solo-node9900/`, `probes/` (the Raft trace of a split-leader mkdir, the k22 unmount-drain log), `gate-<host>-g1..g5/` with `summary.txt`, `timings.tsv`, `progress.txt`, `gate.log` and any `fail-*.log`, `solo-checks-*/`; `SHA256SUMS` (sha256 d8d5be0c7ef664eb8f7ca0d0bb34c2cc665b1fdd9f963ec8750b02644d6a763f). The final gate on each host is FAIL 0 on the final tree: node9900 gate 5 (649 s) and fstor007 gate 6 (647 s).
