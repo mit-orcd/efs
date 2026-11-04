@@ -372,4 +372,14 @@ int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
 off_t efs_fuse_lseek_ino(fuse_ino_t ino, off_t off, int whence,
                                 struct fuse_file_info *fi);
 
+/* plock_init.c */
+int efs_fuse_getlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
+                              struct flock *lock);
+int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
+                              struct flock *lock, int sleep);
+int efs_fuse_flock_ino(fuse_ino_t ino, struct fuse_file_info *fi, int op);
+extern int g_fuse_ready_wr;
+int efs_fuse_wait_ready(int rfd, pid_t child, int timeout_ms);
+void efs_fuse_init(void *userdata, struct fuse_conn_info *conn);
+
 #endif

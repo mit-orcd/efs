@@ -31,6 +31,7 @@ MODULES = {
         'src/client/efs_fuse/write.c',
         'src/client/efs_fuse/namespace.c',
         'src/client/efs_fuse/release.c',
+        'src/client/efs_fuse/plock_init.c',
         'src/client/efs_fuse.c',
         'src/client/efs_fuse/fuse_internal.h',
     ]),
