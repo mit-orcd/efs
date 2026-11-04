@@ -3,6 +3,7 @@
 dispatch, and every program that opens a connection to efsd declares first."""
 from pathlib import Path
 import glob, re
+import csrc
 root = Path(__file__).resolve().parents[1]
 proto = (root/'include/efs/protocol.h').read_text()
 handler = (root/'src/server/handler.c').read_text()
@@ -57,7 +58,7 @@ peer = (root/'src/server/peer_pool.c').read_text()
 pc = peer[peer.index('static struct efs_conn *peer_connect('):]
 pc = pc[:pc.index('\n}\n')]
 assert pc.index('efs_conn_declare(nc)') < pc.index('efs_rdma_client_upgrade(nc)'), 'peers declare before the RDMA upgrade'
-fuse = (root/'src/client/efs_fuse.c').read_text()
+fuse = csrc.module('efs_fuse')
 boot = fuse[fuse.index('static int raft_bootstrap_metadata('):]
 boot = boot[:boot.index('\nready:')]
 assert boot.index('efs_fd_declare(fd)') < boot.index('EFS_MSG_RAFT_STATUS'), 'bootstrap declares before RAFT_STATUS'

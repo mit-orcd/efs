@@ -10,9 +10,10 @@ import os
 import shlex
 import subprocess
 import tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-source = Path(os.environ.get('EFS_FUSE_SOURCE',root / 'src/client/efs_fuse.c')).read_text()
+source = csrc.module('efs_fuse')
 def function(name):
     match = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', source, re.M)
     assert match, name

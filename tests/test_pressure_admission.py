@@ -2,7 +2,8 @@
 """Production admission preserves credits and fallback when background is unavailable."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
-s=Path(os.environ.get('PRESSURE_ADMISSION_SOURCE',Path(__file__).resolve().parents[1]/'src/client/efs_fuse.c')).read_text()
+import csrc
+s=csrc.module('efs_fuse','PRESSURE_ADMISSION_SOURCE')
 a=s.index('static int fuse_write_admit(size_t size)');b=s.index('\n}',a)+2
 code=r'''
 #include <stdint.h>

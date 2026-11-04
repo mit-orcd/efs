@@ -2,8 +2,9 @@
 """Actual FUSE OPEN ownership across transient BUSY and a single call deadline."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text()
+s=csrc.module('efs_fuse')
 def function(name):
  m=re.search(r'^static (?:int|void|uint64_t) '+name+r'\([^;]+?\)\n\{',s,re.M)
  return s[m.start():s.index('\n}',m.end())+2] if m else ''

@@ -5,9 +5,10 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-s = Path(os.environ.get('EFS_FUSE_SOURCE', root / 'src/client/efs_fuse.c')).read_text()
+s = csrc.module('efs_fuse')
 def fn(name):
     m = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', s, re.M)
     return s[m.start():s.index('\n}', m.end()) + 2] if m else ''

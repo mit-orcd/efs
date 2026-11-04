@@ -10,14 +10,14 @@ a=s.index('static int host_namespace_capacity(');expiry_start=s.index('static in
 s=s[:expiry_start]+s[s.index('\n}',expiry_start)+2:]
 b=s.index('\nstruct host_idx_ref',a)
 def function(path,name):
-    text=csrc.module('raft_host') if path=='raft_host' else (root/path).read_text()
+    text=csrc.module(path) if path in ('raft_host','efs_fuse') else (root/path).read_text()
     match=re.search(r'^static [^\n;]*\b'+name+r'\([^;]+?\)\n\{',text,re.M)
     assert match,name
     return text[match.start():text.index('\n}',match.end())+2]
 mapping='\n'.join(function(path,name) for path,name in (
  ('raft_host','rc_to_inode_status'),
  ('src/client/inode_rpc.c','rpc_status_to_efs'),
- ('src/client/efs_fuse.c','efs_rc_to_errno')))
+ ('efs_fuse','efs_rc_to_errno')))
 code=r'''
 #include <efs/txn.h>
 #include <efs/raft.h>

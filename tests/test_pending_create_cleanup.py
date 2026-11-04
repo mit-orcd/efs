@@ -2,7 +2,8 @@
 """Execute FUSE abandoned CREATE cleanup with ambiguous proof and lease edges."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/client/efs_fuse.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse')
 a=s.index('#define EFS_PENDING_CREATES_MAX');b=s.index('/* A lost last-close reply must not pin',a)
 code=r'''
 #include "client_internal.h"

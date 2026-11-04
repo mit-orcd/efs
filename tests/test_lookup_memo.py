@@ -8,9 +8,10 @@ import re
 import shlex
 import subprocess
 import tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-fuse = (root / "src/client/efs_fuse.c").read_text()
+fuse = csrc.module('efs_fuse')
 
 def function(name):
     original = name

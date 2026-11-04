@@ -2,7 +2,8 @@
 """Execute the actual MKDIR path with exact committed rows and refused creates."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=Path(os.environ.get('EFS_MKDIR_REPLY_SOURCE',str(root/'src/client/efs_fuse.c'))).read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse','EFS_MKDIR_REPLY_SOURCE')
 def function(name):
  m=re.search(r'^static (?:int|void) '+name+r'\([^;]+?\)\n\{',s,re.M);assert m,name
  return s[m.start():s.index('\n}',m.end())+2]

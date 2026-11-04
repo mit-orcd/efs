@@ -2,8 +2,9 @@
 """Execute production CREATE/OPEN callbacks with rejected kernel replies."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/efs_fuse.c').read_text()
+s=csrc.module('efs_fuse')
 def function(name):
  m=re.search(r'^static void '+name+r'\([^;]+?\)\n\{',s,re.M)
  assert m,name

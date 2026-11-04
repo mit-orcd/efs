@@ -2,7 +2,8 @@
 """Production global/per-inode drains retain errors and pending ownership on expiry."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/client/efs_fuse.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse')
 def fn(prefix):
  a=s.index(prefix)
  while ';' in s[a:s.index('\n',a)]:a=s.index(prefix,a+len(prefix))

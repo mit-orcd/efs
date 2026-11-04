@@ -2,8 +2,9 @@
 """Exercise the production defaults against the real libfuse parser."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile,sys
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/efs_fuse.c').read_text()
+s=csrc.module('efs_fuse')
 a=s.index('static int efs_fuse_parse_cmdline(');f=s[a:s.index('\n}',a)+2]
 try:
  flags=shlex.split(subprocess.check_output(['pkg-config','--cflags','--libs','fuse3'],text=True,stderr=subprocess.DEVNULL))

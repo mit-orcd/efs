@@ -2,6 +2,7 @@
 """Explicit stop drains unpublished partial bodies without reclaim's skip."""
 from pathlib import Path
 import re,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/client/write.c').read_text()
 m=re.search(r'^int efs_dcache_drain_pending\(void\)\n\{',s,re.M)
@@ -71,7 +72,7 @@ print('stop dirty drain: partial bodies, bounded pages, duplicate inodes, unlock
 
 # Compile the real stop loop too: an empty pending queue is insufficient
 # while a reporter still owns its detached in-flight page.
-s=(root/'src/client/efs_fuse.c').read_text()
+s=csrc.module('efs_fuse')
 m=re.search(r'^static int efs_control_drain\([^;]+?\)\n\{',s,re.M)
 control=s[m.start():s.index('\n}',m.end())+2]
 retry_start=s.index('static int efs_open_retry_pass(')

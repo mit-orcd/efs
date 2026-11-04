@@ -2,8 +2,9 @@
 """Exercise the production inode lease edges, including failed and overlapping opens."""
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
-text = (root / 'src/client/efs_fuse.c').read_text()
+text = csrc.module('efs_fuse')
 def function(name):
     match = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', text, re.M)
     if not match: raise RuntimeError(name)

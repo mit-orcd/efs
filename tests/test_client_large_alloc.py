@@ -10,9 +10,10 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import csrc
 
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_ALLOCATOR_SOURCE',root/'src/client/efs_fuse.c')).read_text()
+s=csrc.module('efs_fuse','EFS_ALLOCATOR_SOURCE')
 m=re.search(r'^static int fuse_allocator_init\(void\)\n\{',s,re.M)
 policy=s[m.start():s.index('\n}',m.end())+2]
 code=r'''

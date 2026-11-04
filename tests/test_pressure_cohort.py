@@ -9,8 +9,9 @@ adapters, and both production completion entry points execute in this test.
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-w=(root/'src/client/write.c').read_text();f=Path(os.environ.get('K38_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text()
+w=(root/'src/client/write.c').read_text();f=csrc.module('efs_fuse','K38_FUSE_SOURCE')
 def fn(s,name):
  m=re.search(r'^(?:static )?(?:int|void) '+name+r'\([^;]+?\)\n\{',s,re.M);assert m,name
  return s[m.start():s.index('\n}',m.end())+2]

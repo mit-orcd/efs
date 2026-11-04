@@ -2,7 +2,8 @@
 """Execute the production worker: coalescing, failure retention, retry and join."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
-s=(Path(__file__).resolve().parents[1]/'src/client/efs_fuse.c').read_text()
+import csrc
+s=csrc.module('efs_fuse')
 a=s.index('/* One coalesced pressure wakeup,');b=s.index('/* utimens(mtime)',a)
 code=r'''
 #include <pthread.h>

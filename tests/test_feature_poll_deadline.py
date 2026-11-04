@@ -2,7 +2,8 @@
 """Execute the actual advisory feature-poll wrapper's shared deadline scope."""
 from pathlib import Path
 import shlex,subprocess,tempfile,os
-root=Path(__file__).resolve().parents[1];s=(root/'src/client/efs_fuse.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse')
 a=s.index('static int features_poll(uint32_t *out)');b=s.index('\n}',a)+2
 code=r'''
 #include <assert.h>

@@ -2,9 +2,10 @@
 """Run production D27 registry, cycle verdict and file-handle helpers."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
 w=(root/'src/client/write.c').read_text()
-f=(root/'src/client/efs_fuse.c').read_text()
+f=csrc.module('efs_fuse')
 def function(text,name):
     m=re.search(r'^(?:static )?[^\n;]*\b'+name+r'\([^;]+?\)\n\{',text,re.M)
     if not m: raise RuntimeError(name)

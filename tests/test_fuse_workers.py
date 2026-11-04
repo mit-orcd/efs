@@ -2,8 +2,9 @@
 """Check production active-worker configuration, including allocation failure."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/efs_fuse.c').read_text()
+s=csrc.module('efs_fuse')
 m=re.search(r'^static struct fuse_loop_config \*efs_fuse_worker_config\([^;]+?\)\n\{',s,re.M)
 f=s[m.start():s.index('\n}',m.end())+2]
 source=r'''

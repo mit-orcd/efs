@@ -2,7 +2,8 @@
 """A busy inode stripe cannot steal the budget reserved for another queue."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=Path(os.environ.get('EFS_FUSE_RETRY_SOURCE',root/'src/client/efs_fuse.c')).read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse','EFS_FUSE_RETRY_SOURCE')
 def function(name):
  a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
 code=r'''

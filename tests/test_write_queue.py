@@ -2,8 +2,9 @@
 """Exercise production WB enqueue: bounded admission and owned-buffer lifetime."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-f=(root/'src/client/efs_fuse.c').read_text()
+f=csrc.module('efs_fuse')
 def function(name):
     m=re.search(r'^static [^\n;]*\b'+name+r'\([^;]+?\)\n\{',f,re.M)
     return f[m.start():f.index('\n}',m.end())+2]

@@ -2,7 +2,8 @@
 """Actual append flush refuses expired work even when its stripe is free."""
 from pathlib import Path
 import os,subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/client/efs_fuse.c').read_text()
+import csrc
+root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse')
 def fn(p):
  a=s.index(p);return s[a:s.index('\n}',a)+2]
 code=r'''

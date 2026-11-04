@@ -2,9 +2,10 @@
 """Exercise production create result/error mapping with overlapping RPC outcomes."""
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
+import csrc
 root = Path(__file__).resolve().parents[1]
 ops = (root / 'src/client/ops.c').read_text()
-fuse = (root / 'src/client/efs_fuse.c').read_text()
+fuse = csrc.module('efs_fuse')
 def function(text, name):
     match = re.search(r'^(?:static )?[^\n;]*\b' + name + r'\([^;]+?\)\n\{', text, re.M)
     if not match:

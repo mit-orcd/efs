@@ -2,8 +2,9 @@
 """Production listing checks fresh permissions before any enumeration RPC."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
+import csrc
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text()
+s=csrc.module('efs_fuse')
 m=re.search(r'static int efs_fuse_readdir_ino\([^;]+?\n\{',s)
 a=m.start();b=s.index('\n}',a)+2
 c=re.search(r'static int check_access\([^;]+?\n\{',s).start();d=s.index('\n}',c)+2

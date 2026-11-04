@@ -2,9 +2,10 @@
 """Production FUSE locks preserve same-inode exclusion without shard-wide locks."""
 from pathlib import Path
 import os, subprocess, tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/client/efs_fuse.c').read_text()
+source = csrc.module('efs_fuse')
 sections = []
 ops = Path(os.environ.get('EFS_DIR_LOCK_SOURCE', root / 'src/client/ops.c')).read_text()
 a = ops.index('static int dir_stripe(')

@@ -2,6 +2,7 @@
 """Run actual recorder stop wrappers with stubbed process syscalls."""
 from pathlib import Path
 import argparse
+import csrc
 import os
 import re
 import shlex
@@ -14,7 +15,7 @@ parser.add_argument('--revision', help='Test historical wrappers, e.g. HEAD befo
 args = parser.parse_args()
 files = [('src/bench/bench_local.c', 'stop_perf_recorder'),
          ('src/client/efs_bench.c', 'stop_perf_recorder'),
-         ('src/client/efs_fuse.c', 'stop_recorder'),
+         ('efs_fuse', 'stop_recorder'),
          ('src/server/efsd.c', 'stop_recorder')]
 source = r'''
 #include <assert.h>
@@ -56,8 +57,9 @@ static int fake_usleep(useconds_t delay) { assert(delay == 100000); sleeps++; re
 #include "src/common/recorder_stop.h"
 '''
 for i, (filename, function) in enumerate(files):
-    text = (subprocess.check_output(['git', 'show', args.revision + ':' + filename], cwd=root, text=True)
-            if args.revision else (root / filename).read_text())
+    path = 'src/client/efs_fuse.c' if filename == 'efs_fuse' else filename
+    text = (subprocess.check_output(['git', 'show', args.revision + ':' + path], cwd=root, text=True)
+            if args.revision else csrc.module('efs_fuse') if filename == 'efs_fuse' else (root / filename).read_text())
     match = re.search(r'^static void ' + function + r'\([^;]+?\)\n\{', text, re.M)
     if not match:
         raise RuntimeError(filename)
