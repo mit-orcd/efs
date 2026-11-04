@@ -142,6 +142,8 @@ TEST_BINS += tests/test_retained_namespace_audit
 TEST_BINS += tests/test_kv_reader_gate
 TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
+TEST_SRCS += tests/test_crc32.c
+TEST_BINS += tests/test_crc32
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
@@ -805,6 +807,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_packed_reader
 	./tests/test_segment_reply
 	./tests/test_child_vec_index
+	./tests/test_crc32
 	./tests/test_pack_validate_once
 	./tests/test_kv_reader_gate
 	./tests/test_placement

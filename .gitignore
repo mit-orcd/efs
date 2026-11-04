@@ -130,3 +130,6 @@ tests/test_kv_reader_gate
 
 /tests/decoders/apply
 /tests/test_ba_delete_accounting
+tests/test_crc32
+tests/test_kv_seg_stdio
+tests/test_kv_compact_manifest_view

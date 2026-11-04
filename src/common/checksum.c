@@ -13,7 +13,7 @@ void efs_hash(const void *data, size_t len, uint8_t out[EFS_HASH_SIZE])
     blake3_hasher_finalize(&hasher, out, EFS_HASH_SIZE);
 }
 
-static uint32_t crc_tab[256];
+static uint32_t crc_tab[8][256];
 static pthread_once_t crc_once = PTHREAD_ONCE_INIT;
 
 static void crc_init(void)
@@ -24,7 +24,14 @@ static void crc_init(void)
         c = i;
         for (j = 0; j < 8; j++)
             c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
-        crc_tab[i] = c;
+        crc_tab[0][i] = c;
+    }
+    for (i = 0; i < 256; i++) {
+        c = crc_tab[0][i];
+        for (j = 1; j < 8; j++) {
+            c = crc_tab[0][c & 0xFF] ^ (c >> 8);
+            crc_tab[j][i] = c;
+        }
     }
 }
 
@@ -32,11 +39,22 @@ uint32_t efs_crc32(const void *data, size_t len)
 {
     const uint8_t *p = data;
     uint32_t c = 0xFFFFFFFFu;
-    size_t i;
-
     pthread_once(&crc_once, crc_init);
-    for (i = 0; i < len; i++)
-        c = crc_tab[(c ^ p[i]) & 0xFF] ^ (c >> 8);
+    /* Slicing by eight keeps the IEEE polynomial and initial/final XORs.
+     * Explicit little-endian assembly is alignment- and endian-independent;
+     * the x86 CRC32 instruction computes a different polynomial (CRC32C). */
+    while (len >= 8) {
+        c ^= (uint32_t)p[0] | (uint32_t)p[1] << 8 |
+             (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+        c = crc_tab[7][c & 0xFF] ^ crc_tab[6][(c >> 8) & 0xFF] ^
+            crc_tab[5][(c >> 16) & 0xFF] ^ crc_tab[4][c >> 24] ^
+            crc_tab[3][p[4]] ^ crc_tab[2][p[5]] ^
+            crc_tab[1][p[6]] ^ crc_tab[0][p[7]];
+        p += 8;
+        len -= 8;
+    }
+    while (len--)
+        c = crc_tab[0][(c ^ *p++) & 0xFF] ^ (c >> 8);
     return c ^ 0xFFFFFFFFu;
 }
 
