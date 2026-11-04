@@ -61,10 +61,10 @@ the slice; the final form is inline.
 ```sh
 git archive <commit> | ssh HOST 'mkdir -p ~/efs-taskCF/src && tar -x -C ~/efs-taskCF/src'
 ssh HOST 'cd ~/efs-taskCF/src && TMPDIR=$HOME/efs-taskCF/tmp make -j8 efsd efs-fuse efs-bench efs-mgmt'
-ssh HOST 'cd ~/efs-taskCF/src && TMPDIR=$HOME/efs-taskCF/tmp scripts/bench_published_par.sh OUTDIR 24 10'
+ssh HOST 'cd ~/efs-taskCF/src && TMPDIR=$HOME/efs-taskCF/tmp scripts/evidence/measurement/bench_published_par.sh OUTDIR 24 10'
 ```
 
-`scripts/bench_published_par.sh` (added here) runs the copies with separate `TMPDIR`s, keeps failing logs and writes
+`scripts/evidence/measurement/bench_published_par.sh` (added here) runs the copies with separate `TMPDIR`s, keeps failing logs and writes
 `results.tsv` and `summary.txt`. Expect 3-4 `rc=-28` per 240 on the unfixed tree, 0 on the fixed. Prerequisites: FUSE;
 expected about 3 minutes per 240 runs. Cleanup: delete `~/efs-taskCF/src` and `tmp`.
 

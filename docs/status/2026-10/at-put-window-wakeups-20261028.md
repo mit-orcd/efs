@@ -30,8 +30,8 @@ and unconditionally `pthread_cond_broadcast(&put_win_cv)` (line 5010);
 `put_win_wait` (line 5028) re-checks the inode predicate under `put_win_mu`
 with a 50 ms capped timed wait per slice.
 
-Driver `scripts/at_measure.py` with the temporary, never committed counter
-patch `scripts/at-instrument.patch`: private 3-daemon loopback cluster on
+Driver `scripts/evidence/at/at_measure.py` with the temporary, never committed counter
+patch `scripts/evidence/at/at-instrument.patch`: private 3-daemon loopback cluster on
 xorinox, one mount, writers looping create/write-1MiB/fsync/close so fsync
 waits for its inode's in-flight PUT windows (1/8/32 writers, 20 s each).
 
@@ -69,9 +69,9 @@ Raw: xorinox `~/efs-artifacts/taskAT-20261029/test-all-summary.txt`.
 ## Reproduction
 
 ```
-patch -p1 < scripts/at-instrument.patch   # TEMP-AT counters (never committed)
+patch -p1 < scripts/evidence/at/at-instrument.patch   # TEMP-AT counters (never committed)
 make -j16 efsd efs-fuse
-python3 scripts/at_measure.py --src . --work /tmp/at --writers 1,8,32 --seconds 20
+python3 scripts/evidence/at/at_measure.py --src . --work /tmp/at --writers 1,8,32 --seconds 20
 ```
 
 Restore `src/client/write.c` and `src/client/efs_fuse.c` afterwards. Raw

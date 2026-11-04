@@ -34,7 +34,7 @@ orcd-mini: node9901 (four efsd n1-n4, 10.1.99.1:17432-17435, stores
 node9900 (client mount `/data1/efs/orcd-mini-mnt`). RHEL, XFS, RDMA `mlx5_0`,
 192 CPUs, buffered I/O unless stated, private libfuse. All times UTC,
 2026-11-02 unless stated. The devops orcd-mini env names only three members, so
-n4 was started and stopped by hand (the `scripts/task_k_mini_fourth.sh`
+n4 was started and stopped by hand (the `scripts/evidence/orcd-mini/task_k_mini_fourth.sh`
 pattern).
 
 ## Inventory
@@ -127,7 +127,7 @@ retained Valgrind headers and runtime from `devel-linux-28a3`.
 
 ## Procedure faults found
 
-* `scripts/w125_p0_cluster.sh` (used by `w125_modify_repro.sh` and
+* `scripts/evidence/w125/w125_p0_cluster.sh` (used by `w125_modify_repro.sh` and
   `w125_p3_compat.sh` for the new build) still uses the pre-K33 efsd CLI
   (`--node-id --addr --port --storage --direct-io`); on devel the daemons answer
   `Could not discover cluster`. O6 and O7 case 3 ran from an overlay copy
@@ -148,18 +148,18 @@ test. Scripts (all in `scripts/`, run from a Mac checkout of `909a07d71`):
 ```sh
 # K54: orcd_mini_ssh.sh is the ssh helper (host + command); cluster restarted
 # with EFS_TRANSPORT=tcp or rdma before each stage
-python3 scripts/orcd_mini_k54_stage.py --transport rdma --out k54-rdma.tsv --runs 6
-python3 scripts/orcd_mini_k54_stage.py --transport tcp  --out k54-tcp.tsv  --runs 12
+python3 scripts/evidence/orcd-mini/orcd_mini_k54_stage.py --transport rdma --out k54-rdma.tsv --runs 6
+python3 scripts/evidence/orcd-mini/orcd_mini_k54_stage.py --transport tcp  --out k54-tcp.tsv  --runs 12
 # O1 on node9900: ior hard|easy REPS OUTDIR [TAG]; two-client shared chunk
-sh scripts/orcd_mini_batch_o_ior.sh hard 4 OUTDIR
-python3 scripts/orcd_mini_shared_chunk.py write FILE --writers 8 --ranks 0-3
+sh scripts/evidence/orcd-mini/orcd_mini_batch_o_ior.sh hard 4 OUTDIR
+python3 scripts/evidence/orcd-mini/orcd_mini_shared_chunk.py write FILE --writers 8 --ranks 0-3
 # O3
-sh scripts/orcd_mini_c1.sh 3600
+sh scripts/evidence/orcd-mini/orcd_mini_c1.sh 3600
 # O8/O9 on node9900 (copies the release to /tmp)
-sh scripts/orcd_mini_o8_o9.sh RELEASE_DIR OUTDIR
+sh scripts/evidence/orcd-mini/orcd_mini_o8_o9.sh RELEASE_DIR OUTDIR
 ```
 
-O6 and O7 use `scripts/w125_modify_repro.sh` and `scripts/w125_p3_compat.sh`
+O6 and O7 use `scripts/evidence/w125/w125_modify_repro.sh` and `scripts/evidence/w125/w125_p3_compat.sh`
 with the overlay described above. Cleanup: `edelete --force --delete` for trees,
 `rm -f` for files. The `orcd_mini_ssh.sh` helper named in the K54 driver's
 default is not part of this change; pass `--ssh` with any helper that takes

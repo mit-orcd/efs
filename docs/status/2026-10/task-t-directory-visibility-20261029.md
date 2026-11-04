@@ -32,7 +32,7 @@ The original stores remain at
 `/home/maik/efs-taskT-20261028-b13b8867e-calibration17/tmp/case-507/efs-w130-ifo92zq4/w130`.
 All 456 original files were hashed before inspection and verified unchanged
 afterward. Only disposable on-host copies were opened with the exact source's
-`scripts/forensics/k48_store_scan.c`; opening an LSM can recover its WAL.
+`scripts/evidence/k48/k48_store_scan.c`; opening an LSM can recover its WAL.
 
 All three copied KVs contain target directory inode 855 and `f0057`, inode
 238423. Static READDIR returns all 96 names at page sizes 1, 2, 4, 8, 16,

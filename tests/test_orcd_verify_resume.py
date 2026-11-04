@@ -2,7 +2,7 @@
 """Resume must skip recorded paths while carrying failed verification forward."""
 import hashlib,json,os,pathlib,runpy,socket,sys,tempfile
 from unittest.mock import patch
-script=pathlib.Path(__file__).parents[1]/'scripts/orcd_verify_existing.py'
+script=pathlib.Path(__file__).parents[1]/'scripts/evidence/orcd/orcd_verify_existing.py'
 real_path=type(pathlib.Path())
 with tempfile.TemporaryDirectory() as tmp:
  root=real_path(tmp);run=root/'campaign';old=root/'old';out=root/'new';mount=root/'mount'/'new-scale'

@@ -21,7 +21,7 @@ TICKETED = re.compile(r"\.body\(|unticketed_body\(")
 REFUSED = re.compile(r"bytes\(\[7,\s*1\]\)|ticket_put\.ERROR")
 bad, sites = [], 0
 files = [p for d in ('tests/live', 'tests/measure', 'tests/faults') for p in (root/d).glob('*.py')]
-files += [p for p in (root/'scripts').glob('*') if p.is_file()]
+files += [p for p in (root/'scripts').rglob('*') if p.is_file()]
 for p in sorted(files):
     rel = str(p.relative_to(root)); t = p.read_text(errors='replace'); lines = t.splitlines()
     if rel != OWNER and OLD_HEADER.search(t): bad.append(f'{rel}: pre-K13 PUT header')

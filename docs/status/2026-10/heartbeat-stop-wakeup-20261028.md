@@ -81,7 +81,7 @@ not counted as an unclassified product failure or silently retried.
 
 ## Linux comparison and full-gate qualification
 
-The committed driver `scripts/measure_heartbeat_stop.py` runs nine checked
+The committed driver `scripts/evidence/measurement/measure_heartbeat_stop.py` runs nine checked
 SIGTERM stops per source (three repetitions at each of 0.05/0.3/0.8 s after
 startup), with a fresh single **unformed** seed, TCP, O_DIRECT, 1 GiB quota,
 auto-reserved private loopback endpoints and discovery off. It requires
@@ -95,7 +95,7 @@ candidate `a9bd8600c` trees on the same idle Linux host with exact
 
 ```sh
 make -j8 all
-python3 /path/to/candidate/scripts/measure_heartbeat_stop.py \
+python3 /path/to/candidate/scripts/evidence/measurement/measure_heartbeat_stop.py \
     --source /path/to/source --work /private/new-work-directory \
     --output /stable/evidence/new-result-directory
 # Candidate full code gate, on the isolated source tree:

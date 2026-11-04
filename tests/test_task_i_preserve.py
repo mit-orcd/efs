@@ -4,7 +4,7 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts/evidence/task-i'))
 from task_i_preserve import verify_fixture_copy
 with tempfile.TemporaryDirectory(prefix='efs-preserve-test-') as directory:
     root=Path(directory);original=root/'original';saved=root/'saved'

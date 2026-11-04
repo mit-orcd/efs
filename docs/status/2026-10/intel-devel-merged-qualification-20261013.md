@@ -138,8 +138,8 @@ EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 make -j8 EFS
 For fresh private stores, run locally:
 
 ```sh
-python3 scripts/intel_w100_private.py start UNIQUE devel-382d537d6 --quota 16G
-python3 scripts/intel_package3_tests.py concurrent --run-id UNIQUE --output /OUTSIDE/GIT --source-root /data1/efs/w100-private/devel-382d537d6 --mount /data1/efs/w100-private/runtime-UNIQUE/mnt --seed-port 27432 --remote-output-root /data1/efs/w100-private/results --extra-mount-root /data1/efs/w100-private/extra-mounts
+python3 scripts/evidence/intel/intel_w100_private.py start UNIQUE devel-382d537d6 --quota 16G
+python3 scripts/evidence/intel/intel_package3_tests.py concurrent --run-id UNIQUE --output /OUTSIDE/GIT --source-root /data1/efs/w100-private/devel-382d537d6 --mount /data1/efs/w100-private/runtime-UNIQUE/mnt --seed-port 27432 --remote-output-root /data1/efs/w100-private/results --extra-mount-root /data1/efs/w100-private/extra-mounts
 ```
 
 Replace concurrent with core/extras for individual suites. Do not run the

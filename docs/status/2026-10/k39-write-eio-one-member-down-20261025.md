@@ -206,8 +206,8 @@ On a Linux host with `/dev/fuse` and `fusermount3`, in a private tree:
 ```bash
 git archive bd330dd3c | tar -x -C ~/efs-k39/fix
 cd ~/efs-k39/fix && make -j8 EFS_GIT_ID=bd330dd3c all efs-fuse efs-mgmt tests/faults/efsd
-EFS_PUT_TICKET_DBG=1 bash scripts/flake_loop.sh ~/efs-k39/fix ~/efs-artifacts/k39-20261025 fix-k35 20 python3 tests/test_k35_fsync_degraded.py
-bash scripts/flake_loop.sh ~/efs-k39/fix ~/efs-artifacts/k39-20261025 fix-k33 10 python3 tests/test_k33_payload.py
+EFS_PUT_TICKET_DBG=1 bash scripts/evidence/flake/flake_loop.sh ~/efs-k39/fix ~/efs-artifacts/k39-20261025 fix-k35 20 python3 tests/test_k35_fsync_degraded.py
+bash scripts/evidence/flake/flake_loop.sh ~/efs-k39/fix ~/efs-artifacts/k39-20261025 fix-k33 10 python3 tests/test_k33_payload.py
 EFS_GIT_ID=bd330dd3c EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh
 ```
 

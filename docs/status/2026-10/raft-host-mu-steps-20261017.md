@@ -24,7 +24,7 @@ Branch `raft-host-mu`, based on devel `e04a80f63`:
 | `a0eae0f09` | 1 | `EFS_WRITE_PROF=1`: per-phase log2 histograms on the leader's write path (`src/server/write_prof.h`), one `write-phase-prof` stderr line per 10,000 local-leader proposals. Off by default. |
 | `05c44513f` | 2 | The per-group published view also carries the committed voter set; `host_leader_cover_pick` reads the view instead of taking `h->mu`. Routing stays a hint: the receiver still validates authority. |
 | `fa26387a0` | 3 | Apply-result ring slots are seqlocks with atomic payload fields (`src/server/apply_ring.h`). All verdict readers copy a slot without `h->mu`, after at most 64 attempts falling back to a copy under `h->mu`. |
-| `df9609d1c`, `382249415` | — | `scripts/raft_host_mu_ab.sh` and `scripts/raft_host_mu_ab_summary.py`. |
+| `df9609d1c`, `382249415` | — | `scripts/evidence/measurement/raft_host_mu_ab.sh` and `scripts/evidence/measurement/raft_host_mu_ab_summary.py`. |
 
 ### Step 1: phases
 
@@ -139,7 +139,7 @@ in `store.c`/`efsd.c` that sits outside the write path measured here.
 
 ### Method
 
-`scripts/raft_host_mu_ab.sh <arm> <arm><round> 40`, three rounds of base →
+`scripts/evidence/measurement/raft_host_mu_ab.sh <arm> <arm><round> 40`, three rounds of base →
 route → ring, with `EFS_WRITE_PROF=1` in every arm. Each run on its fresh
 cluster:
 1. An idle probe.
@@ -225,9 +225,9 @@ for a in base:a0eae0f09 route:05c44513f ring:fa26387a0; do
      make -j48 EFS_GIT_ID=$c efsd efs-fuse efs-mgmt)
 done
 for r in 1 2 3; do for a in base route ring; do
-  scripts/raft_host_mu_ab.sh /tmp/efs-mu-arm/$a $a$r 40 >> /tmp/efs-mu-ab/results.txt
+  scripts/evidence/measurement/raft_host_mu_ab.sh /tmp/efs-mu-arm/$a $a$r 40 >> /tmp/efs-mu-ab/results.txt
 done; done
-python3 scripts/raft_host_mu_ab_summary.py /tmp/efs-mu-ab/results.txt
+python3 scripts/evidence/measurement/raft_host_mu_ab_summary.py /tmp/efs-mu-ab/results.txt
 ```
 
 Prerequisites:

@@ -89,7 +89,7 @@ mentioned above.
 The baseline failure printed only the bound. Four rounds of the same
 loaded setup (`test_report_stepdown.py` looped 10 times in four parallel
 loops beside one 8-job pool run of the gate; driver
-`~/efs-artifacts/rsd-load.sh` on intel1, method in `scripts/flake_repro.sh`)
+`~/efs-artifacts/rsd-load.sh` on intel1, method in `scripts/evidence/flake/flake_repro.sh`)
 narrowed it, each round keeping the failing trees:
 
 | Round | Build | Runs | Failures | What it showed |
@@ -157,11 +157,11 @@ tar keeps their old mtimes), then on the host, in `screen`:
 
 ```
 # the gate: N pool runs at 8 jobs, then M serial test-long runs
-bash scripts/flake_sweep.sh ~/TREE ~/efs-artifacts/flake-sweep-20261025 LABEL 10 3
+bash scripts/evidence/flake/flake_sweep.sh ~/TREE ~/efs-artifacts/flake-sweep-20261025 LABEL 10 3
 # the intermittent daemon tests alone, then beside one pool run
-bash scripts/flake_repro.sh ~/TREE ~/efs-artifacts/flake-sweep-20261025/repro 5
+bash scripts/evidence/flake/flake_repro.sh ~/TREE ~/efs-artifacts/flake-sweep-20261025/repro 5
 # one test in parallel loops beside a pool run (the step-down rounds)
-bash scripts/flake_load.sh ~/TREE ~/efs-artifacts/flake-sweep-20261025/repro rsd test_report_stepdown.py 4 10
+bash scripts/evidence/flake/flake_load.sh ~/TREE ~/efs-artifacts/flake-sweep-20261025/repro rsd test_report_stepdown.py 4 10
 ```
 Prerequisites: fuse3 and `/dev/fuse`, `~/bin/edelete`, about 2 GB free under
 the tree. Each run cleans its own `tmp/`; a stopped run is cleaned by

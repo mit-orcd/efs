@@ -47,7 +47,7 @@ On BOTH external hosts:
 - Source/binaries: `/data1/efs/intel-client/releases/85f2a199aa39`.
 - Dedicated source link: `/data1/efs/intel-client/src`.
 - Standalone launcher: `/data1/efs/intel-client/client.sh`, copied from
-  [intel_external_client.sh](../../../scripts/intel_external_client.sh).
+  [intel_external_client.sh](../../../scripts/evidence/intel/intel_external_client.sh).
 - Dedicated log: `/data1/efs/intel-client/logs/efs-fuse-intel-mnt.log`.
 - Mount: `/data1/efs/intel-mnt`; source, transport and optional-feature flags
   are fixed by the standalone launcher, without sourcing cluster configuration.

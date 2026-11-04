@@ -49,7 +49,7 @@ suites and ior. No format change, so no wipe. No backward compatibility
 | Durability (`smoke-persist.sh`) | 27/27 + 27/27 PASS |
 | ior hard (8 ranks, 47008 B × 2000) | rc 0; write 47.9 MiB/s, read 240 MiB/s |
 | `.efs` virtual interfaces (`virtual_interfaces.py --freshness-s 150`) | 10/10 PASS, including `nested_authorization` |
-| Two-client (`scripts/orcd_mini_posix2.py`, from the Mac) | 67/67 PASS (371 s) |
+| Two-client (`scripts/evidence/orcd-mini/orcd_mini_posix2.py`, from the Mac) | 67/67 PASS (371 s) |
 | ior easy (8 ranks, 1 MiB × 2 GiB per file) | rc 0; three runs below |
 
 ior easy, three runs on `d94ca85bf` against earlier builds on the same
@@ -82,7 +82,7 @@ The write slowdown repeats across three runs and comes with longer close
   `EFS_QUERY_TEST_HOST=10.1.99.1 EFS_QUERY_TEST_PORT=17432`.
 - ior easy: `mpirun -np 8 --host localhost:8 ior -a POSIX -F -e -w -r -t 1m -b 2048m`.
 - ior hard: `mpirun -np 8 --host localhost:8 ior -a POSIX -e -w -r -t 47008 -b 47008 -s 2000`.
-- Two-client: `python3 scripts/orcd_mini_posix2.py RESULTS.tsv` from the Mac.
+- Two-client: `python3 scripts/evidence/orcd-mini/orcd_mini_posix2.py RESULTS.tsv` from the Mac.
 
 Raw output stays outside Git, on node9901 in
 `/data1/efs/prof/suites-20261022-1711/`, with the ior reruns as

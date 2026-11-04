@@ -122,12 +122,12 @@ were corrected before the final full native/sanitizer runs.
 Owned lifecycle (locally), preserving stores, no mkfs or busy-mount discard:
 
 ```sh
-python3 scripts/intel_w100_private.py stop merged-aa508c820 CURRENT_SOURCE_LABEL
-python3 scripts/intel_w100_private.py resume merged-aa508c820 NEW_SOURCE_LABEL --quota 16G
+python3 scripts/evidence/intel/intel_w100_private.py stop merged-aa508c820 CURRENT_SOURCE_LABEL
+python3 scripts/evidence/intel/intel_w100_private.py resume merged-aa508c820 NEW_SOURCE_LABEL --quota 16G
 python3 tests/live/tiny_md5_publication.py --source /data1/efs/w100-private/devel-a58e93942 --files 2000 --output OUT
 python3 tests/live/private_intel_receive_persist.py --source /data1/efs/w100-private/devel-a58e93942 --fault-source /data1/efs/w100-private/devel-a58e93942-fault --output OUT
-python3 scripts/intel_package3_tests.py concurrent --run-id UNIQUE --output OUT --source-root /data1/efs/w100-private/devel-a58e93942 --mount /data1/efs/w100-private/runtime-merged-aa508c820/mnt --seed-port 27432 --remote-output-root /data1/efs/w100-private/results --extra-mount-root /data1/efs/w100-private/extra-mounts
-python3 scripts/intel_queue_sample.py --source /data1/efs/w100-private/devel-a58e93942 --seconds 30 --output OUT.json
+python3 scripts/evidence/intel/intel_package3_tests.py concurrent --run-id UNIQUE --output OUT --source-root /data1/efs/w100-private/devel-a58e93942 --mount /data1/efs/w100-private/runtime-merged-aa508c820/mnt --seed-port 27432 --remote-output-root /data1/efs/w100-private/results --extra-mount-root /data1/efs/w100-private/extra-mounts
+python3 scripts/evidence/intel/intel_queue_sample.py --source /data1/efs/w100-private/devel-a58e93942 --seconds 30 --output OUT.json
 ```
 
 Writer harness:7writers/7peer crawlers total on two main FUSE clients,128B files,

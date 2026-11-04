@@ -48,7 +48,7 @@ rehearsal** soak profile. Other topology defaults retain four-hour endurance.
 This workload choice introduces no product flag. Rehearsal RSS growth is
 explicitly NOTRUN: the interrupted short windows cannot qualify endurance.
 
-Committed serial controller `scripts/task_p_rehearsal.py` records commands,
+Committed serial controller `scripts/evidence/task-p/task_p_rehearsal.py` records commands,
 process walls and exit codes; runs each matrix to its end despite gate
 failures; verifies its manifest; then runs `make test-all` with eight jobs.
 It refuses to advance with owned processes/mounts still active. The second
@@ -61,7 +61,7 @@ export EFS_GIT_ID=FULL_COMMIT EFS_GIT_DESCRIBE=FULL_COMMIT
 export EFS_GIT_BRANCH=agent/devel-task-p EFS_FUSE_PREFIX=/usr
 export EFS_BUILD_JOBS=8 EFS_TEST_JOBS=8 EFS_TEST_TARGET=test-all
 SCREENDIR="$HOME/.screen" screen -dmS taskP-UNIQUE bash -c \
- 'cd "$HOME/efs-taskP-UNIQUE/src" && python3 scripts/task_p_rehearsal.py FULL_COMMIT "$HOME/efs-artifacts/taskP-20261027-UNIQUE"'
+ 'cd "$HOME/efs-taskP-UNIQUE/src" && python3 scripts/evidence/task-p/task_p_rehearsal.py FULL_COMMIT "$HOME/efs-artifacts/taskP-20261027-UNIQUE"'
 ```
 
 The controller executes plan validation, the Linux driver, standalone and
@@ -145,7 +145,7 @@ payload checks, not a verification of an arbitrary retained cluster.
 
 ## Per-gate wall comparison with Task A
 
-`scripts/task_p_compare.py ARTIFACT_ROOT` reads Task A's corrected full-run
+`scripts/evidence/task-p/task_p_compare.py ARTIFACT_ROOT` reads Task A's corrected full-run
 table and these closed result files. Every wall appears below. Task A ran
 on AMD with overlapping matrices/other work; Task P is serial on intel2.
 D5 and soak have no Task A corrected-full baseline. D5's failed 0.723 s is

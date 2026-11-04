@@ -42,7 +42,7 @@ Environment: orcd-mini, three efsd on node9901 (RDMA mlx5_0, direct I/O,
 | POSIX extras | `ee1087129` | 4/5 PASS, 1 SKIP (mmap unsupported) |
 | Durability (`smoke-persist.sh`) | `49679a570` | 27/27 + 27/27 PASS |
 | ior easy / hard (8 ranks, OpenMPI 4.1.7) | `49679a570` | rc 0 / rc 0; easy write 1,304 MiB/s, read 6,296 MiB/s |
-| Two-client (`scripts/orcd_mini_posix2.py`) | `49679a570` | 67/67 PASS (307 s) |
+| Two-client (`scripts/evidence/orcd-mini/orcd_mini_posix2.py`) | `49679a570` | 67/67 PASS (307 s) |
 | `make test` (`scripts/make_test_summary.sh`) | `ef7b1735d`, then `ff93f8e86` | 812 / 811 commands, 5 environmental failures each: `test_readindex_pair`, `test_raft_ack_window`, `test_host_outbox` and `test_stage_evict_lru` fail only from the host's LeakSanitizer and pass with `ASAN_OPTIONS=detect_leaks=0`; `check-architecture` needs the absent `results/` |
 | D25 step-5 gates (`d25_step2/3/4_gates.sh`, repro; `EFS_FAULTS=1` tree of `ef7b1735d`) | private node9901 cluster | **PASS**: step 2 17 checks, step 3 39, step 4 1,454, repro 2; 0 FAIL |
 | GC + POSIX, RDMA direct (`gc_reclamation.py --transport rdma --posix`) | `ef7b1735d` tree | PASS (71 checks), after relinking efs-fuse (runner bug below) |
@@ -67,7 +67,7 @@ change only `.efs` query scheduling and error mapping.
      transient refusal with no catalog answers NODATA. Failed builds keep
      their backoff.
    - **Measured:** private three-node restart A/B
-     (`scripts/query_restart_ab.sh`, a new directory queried from the first
+     (`scripts/evidence/measurement/query_restart_ab.sh`, a new directory queried from the first
      second). Before: 7 EBUSY failures, first success at 60.8 s. After:
      0 failures, first success at 1.5 s. On orcd-mini the catalog now
      publishes 1.1 s after the refused capture.
@@ -85,7 +85,7 @@ change only `.efs` query scheduling and error mapping.
 
 Commands are as in the table. Use
 [d25-step5-gates-20261022.md](d25-step5-gates-20261022.md) for the gates
-and `bash scripts/query_restart_ab.sh <release-or-tree> <label>` on node9901
+and `bash scripts/evidence/measurement/query_restart_ab.sh <release-or-tree> <label>` on node9901
 for the restart A/B.
 
 Raw outputs stay outside Git on node9901:

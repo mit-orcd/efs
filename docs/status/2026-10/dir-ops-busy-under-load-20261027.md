@@ -42,7 +42,7 @@ Build and run the committed controller from the source root:
 ```sh
 make -j8 test-bins
 # load1 and load2 are independent built copies of this same source tree.
-python3 scripts/qualify_dir_ops.py --work ~/efs-taskO/base-stress \
+python3 scripts/evidence/dir-ops/qualify_dir_ops.py --work ~/efs-taskO/base-stress \
   --output ~/efs-artifacts/taskO-20261027/base-stress --rounds 10 \
   --load-tree ~/efs-taskO/load1 --load-tree ~/efs-taskO/load2
 ```
@@ -144,7 +144,7 @@ are in `environment.txt`. No live existing cluster is used.
 Run the committed isolated controller after the deliberate load pools finish:
 
 ```sh
-bash scripts/qualify_dir_ops.sh ~/efs-taskO \
+bash scripts/evidence/dir-ops/qualify_dir_ops.sh ~/efs-taskO \
   ~/efs-artifacts/taskO-20261027/qualification-503e17f2d \
   503e17f2d ~/efs-taskO/DONE
 ```

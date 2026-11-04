@@ -323,7 +323,7 @@ try:
     assert 'posix_2client.py --local /mnt/a /mnt/b' in joined['posix-2client']
     assert '--port 18710' in joined['k13-tickets'] and '--rel /src' in joined['append-failover']
     assert '--direct' not in joined['append-failover'] and '--mode' not in joined['gc-reclamation']
-    assert "K14_PHASES='1 2 3 7' scripts/k14_atomic_cluster.sh run /src" in joined['k14-torn-read']
+    assert "K14_PHASES='1 2 3 7' scripts/evidence/k14/k14_atomic_cluster.sh run /src" in joined['k14-torn-read']
     assert '/src/efs-mgmt version 10.0.0.2:17432' in joined['identity']
     assert joined['e2-client-stop'] == '' and joined['posix-durability'] == ''
     reasons = {g['gate']: g['reason'] for g in load(tmp / 'out7/run.json')['gates']}
@@ -585,10 +585,10 @@ try:
     # 9. ssh wrapper replaces ssh; relative wrappers resolve in the tree.
     from unittest.mock import patch
     with patch.object(Q, 'is_local', return_value=False):
-        argv = Q.Runner(ssh='scripts/orcd_mini_ssh.sh').argv('node9901', 'echo hi', 10)
-    assert argv[:2] == [str(root / 'scripts/orcd_mini_ssh.sh'), 'node9901'] and 'echo hi' in argv[2]
+        argv = Q.Runner(ssh='scripts/evidence/orcd-mini/orcd_mini_ssh.sh').argv('node9901', 'echo hi', 10)
+    assert argv[:2] == [str(root / 'scripts/evidence/orcd-mini/orcd_mini_ssh.sh'), 'node9901'] and 'echo hi' in argv[2]
     with patch.object(Q, 'is_local', return_value=True):
-        assert Q.Runner(ssh='scripts/orcd_mini_ssh.sh').argv('node9901', 'echo hi', 10) == ['bash', '-c', 'echo hi']
+        assert Q.Runner(ssh='scripts/evidence/orcd-mini/orcd_mini_ssh.sh').argv('node9901', 'echo hi', 10) == ['bash', '-c', 'echo hi']
 
     # 10. The committed matrix validates; broken ones are caught.
     with contextlib.redirect_stdout(io.StringIO()) as buf:

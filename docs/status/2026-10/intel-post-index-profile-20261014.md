@@ -63,7 +63,7 @@ No matched old/new throughput comparison is inferred from changing live jobs.
 
 ### RPC evidence: publication cost, but no demonstrated retry storm
 
-[Offline trace summarizer](../../../scripts/summarize_intel_rpc_trace.py) pairs
+[Offline trace summarizer](../../../scripts/evidence/intel/summarize_intel_rpc_trace.py) pairs
 complete TCP request/reply frames and validates reply type. AMD completed:
 
 - 1,597 REPORT replies, all OK; mean3.744ms, p9511.384ms, maximum45.83ms.
@@ -151,7 +151,7 @@ checksum removal or expiry feature is proposed.
 Requires same-user ptrace access, perf/strace installed, native frame-pointer
 builds, and active human-approved jobs. Resolve current PIDs, checking command
 line/export/profile before each attachment; never reuse these stale PIDs blindly.
-From the repository, copy `scripts/profile_intel_live.sh` to each host and run:
+From the repository, copy `scripts/evidence/intel/profile_intel_live.sh` to each host and run:
 
 ```sh
 bash profile_intel_live.sh NEW_OUTPUT_DIR DAEMON1,DAEMON2,CLIENT 60 # each Intel host
@@ -163,7 +163,7 @@ timeout -s INT 10 strace -f -ttt -T -yy -xx -s 8 \
   -p INTEL_CLIENT_PID -o OUT/rpc-headers.txt
 timeout -s INT 6 strace -f -ttt -T -yy -s 0 -e trace=fsync,fdatasync \
   -p DAEMON1 -p DAEMON2 -o OUT/storage-sync.txt
-python3 scripts/summarize_intel_rpc_trace.py LOCAL_RPC_TRACE > OUT/rpc-summary.json
+python3 scripts/evidence/intel/summarize_intel_rpc_trace.py LOCAL_RPC_TRACE > OUT/rpc-summary.json
 ```
 
 Timeout124 is expected for bounded attachments. Compare process inventories

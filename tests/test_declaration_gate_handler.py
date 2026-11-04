@@ -65,8 +65,8 @@ assert boot.index('efs_fd_declare(fd)') < boot.index('EFS_MSG_RAFT_STATUS'), 'bo
 hello = "struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)"
 for f in ['tests/live/expiry_lifecycle.py', 'tests/live/fragment_integrity.py', 'tests/live/fragment_tail_smoke.py',
           'tests/live/io_stats_smoke.py', 'tests/live/gc_reclamation.py', 'tests/live/query_rpc.py',
-          'tests/live/raft_read_freshness.py', 'scripts/w127_incompatible_entry.sh']:
+          'tests/live/raft_read_freshness.py', 'scripts/evidence/w127/w127_incompatible_entry.sh']:
     assert hello in (root/f).read_text(), (f, 'declares with CLIENT_HELLO v5')
-assert 'PASS 2 old client' in (root/'scripts/w125_p3_compat.sh').read_text() or \
-       'check "2 daemons logged the refusal"' in (root/'scripts/w125_p3_compat.sh').read_text(), 'compat script expects refusal'
+assert 'PASS 2 old client' in (root/'scripts/evidence/w125/w125_p3_compat.sh').read_text() or \
+       'check "2 daemons logged the refusal"' in (root/'scripts/evidence/w125/w125_p3_compat.sh').read_text(), 'compat script expects refusal'
 print('declaration gate: handler gates every frame before dispatch; every opener declares; protocol 5 exact PASS')

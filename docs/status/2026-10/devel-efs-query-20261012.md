@@ -29,7 +29,7 @@ and runtime paths, start the above profile, then create a second independent
 RDMA FUSE mount on fcstor007. Run:
 
 ```sh
-python3 scripts/orcd_efs_commands.py /tmp/efs-mount /tmp/efs-command-peer \
+python3 scripts/evidence/orcd/orcd_efs_commands.py /tmp/efs-mount /tmp/efs-command-peer \
   --query-host 172.16.223.58 --query-port 17432 \
   --output /home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007/NEW-command-results
 ```

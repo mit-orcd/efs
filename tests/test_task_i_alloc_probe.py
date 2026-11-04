@@ -46,7 +46,7 @@ int main(void) {
     exe = d/'efs-fuse';observer = d/'observer.so'
     subprocess.run(['cc','-O2','-pthread',str(source),'-o',str(exe)],check=True)
     subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-shared','-fPIC','-pthread',
-                    str(root/'scripts/task_i_alloc_probe.c'),'-o',str(observer)],check=True)
+                    str(root/'scripts/evidence/task-i/task_i_alloc_probe.c'),'-o',str(observer)],check=True)
     (d/'load-start').write_text(str(time.time()-3601)+'\n')
     env = dict(os.environ,LD_PRELOAD=str(observer),TASK_I_ALLOC_DIR=str(d))
     result = subprocess.run([str(exe)],env=env,text=True,capture_output=True,timeout=10,check=True)

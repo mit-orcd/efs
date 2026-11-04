@@ -23,7 +23,7 @@ unchanged** because a different, pre-existing O(D) mechanism —
 `recompute_times_up`, not named in the brief — dominates the cost. That
 finding is recorded for the coordinator below; it needs its own item.
 
-## Measurement (in-process driver `scripts/aw_measure.c` + TEMP counter patch)
+## Measurement (in-process driver `scripts/evidence/aw/aw_measure.c` + TEMP counter patch)
 
 Private in-memory export, one parent with D children, 200 unlinks/renames
 per D on intel1 (production build with a temporary comparison counter in the
@@ -96,10 +96,10 @@ free paths include the map. Memory is charged to `staged_child_bytes`.
 ## Reproduction
 
 ```
-patch -p1 < scripts/aw-instrument.patch   # TEMP comparison counter only
+patch -p1 < scripts/evidence/aw/aw-instrument.patch   # TEMP comparison counter only
 make -j8 libefs.a
 gcc -O2 -Iinclude -Isrc/common -Ideps/blake3 -o /tmp/aw_measure \
-  scripts/aw_measure.c libefs.a -lpthread -lm -ldl -libverbs
+  scripts/evidence/aw/aw_measure.c libefs.a -lpthread -lm -ldl -libverbs
 /tmp/aw_measure 1000000 200
 make -j8 tests/test_child_vec_index && ./tests/test_child_vec_index
 ```

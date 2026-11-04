@@ -140,9 +140,9 @@ python3 tests/posix/posix_suite.py /tmp/efs-mount --suite all --jobs 16 --tag UN
 python3 tests/posix/posix_persist.py /tmp/efs-mount --tag UNIQUE --phase prepare --results PREPARE.tsv
 # Checked stop of all seven mounts and four daemons; restart, readiness, remount:
 python3 tests/posix/posix_persist.py /tmp/efs-mount --tag UNIQUE --phase verify --results VERIFY.tsv
-bash scripts/orcd_test_ior.sh NEW_IOR_OUTPUT /tmp/efs-mount
+bash scripts/evidence/orcd/orcd_test_ior.sh NEW_IOR_OUTPUT /tmp/efs-mount
 # Separate second mount on fcstor007:
-bash scripts/orcd_test_live_suites.sh NEW_LIVE_OUTPUT /tmp/efs-mount /tmp/efs-mount-devel-peer
+bash scripts/evidence/orcd/orcd_test_live_suites.sh NEW_LIVE_OUTPUT /tmp/efs-mount /tmp/efs-mount-devel-peer
 # Remote two-client: prepare a unique parent, then --remote on pairs
 # 007/008, 009/010 and 011/012, with the explicit deployed script on both sides.
 python3 tests/posix/posix_expiry.py --private

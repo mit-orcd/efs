@@ -15,7 +15,7 @@ A reader compiled against the exact original source `f98578e697d3` opens
 **copies** of each W130 KV, never the originals. This is forensic inspection,
 not backward-compatibility support or an upgrade test. The original KV
 format is read by its own original implementation. Reproduction utility:
-`scripts/forensics/k48_store_scan.c`, linked to that source's `libefs.a`.
+`scripts/evidence/k48/k48_store_scan.c`, linked to that source's `libefs.a`.
 Opening the LSM can recover/truncate a WAL, so using copies is mandatory.
 Target directory inode **2205**, group 0:
 
@@ -93,7 +93,7 @@ The pause changes no metadata and is absent from normal efsd.
 
 The new test is in `make test-long`, 15 s / two slots, derived from
 1.25×11.91 s rounded up to 5 s. Timeouts/oracles and D44 target remain unchanged.
-Qualification uses `scripts/task_s_qualify.py FULL_COMMIT ARTIFACT_ROOT`:
+Qualification uses `scripts/evidence/task-s/task_s_qualify.py FULL_COMMIT ARTIFACT_ROOT`:
 unit/authority checks, three deterministic live runs, W130 and K33 payload
 ten times each serially/alone, then the eight-job full code gate. It stops
 on the first failure, retains evidence and never retries it into PASS.
@@ -230,7 +230,7 @@ Run the committed controller from a fresh exact-commit archive below
 `intel1:~/efs-taskS/` with no private test processes/mounts active:
 
 ```sh
-python3 scripts/task_s_qualify.py \
+python3 scripts/evidence/task-s/task_s_qualify.py \
   947edd15f3ecb6b0b95c2acafe9eb62a241ce910 \
   /home/maik/efs-artifacts/taskS-20261028/UNIQUE_OUTPUT
 ```

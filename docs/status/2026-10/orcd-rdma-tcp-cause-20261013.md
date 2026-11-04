@@ -72,9 +72,9 @@ unless explicitly matched to socket inode IDs.
 Reproduction requires SSH access, node Python3, ss, tc and ethtool:
 
 ```sh
-python3 scripts/orcd_tcp_rdma_diagnose.py --seconds 120 --interval 5 \
+python3 scripts/evidence/orcd/orcd_tcp_rdma_diagnose.py --seconds 120 --interval 5 \
   --output /outside/git/orcd-tcp-rdma
-python3 scripts/orcd_tcp_rdma_diagnose.py --seconds 60 --interval 5 \
+python3 scripts/evidence/orcd/orcd_tcp_rdma_diagnose.py --seconds 60 --interval 5 \
   --output /outside/git/orcd-tcp-rdma-extended
 ```
 

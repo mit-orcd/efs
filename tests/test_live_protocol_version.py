@@ -11,7 +11,7 @@ import re
 root = Path(__file__).resolve().parents[1]
 ver = int(re.search(r'#define EFS_PROTOCOL_VERSION (\d+)u', (root/'include/efs/protocol.h').read_text()).group(1))
 bad, seen = [], 0
-for p in sorted(list((root/'tests/live').glob('*.py')) + list((root/'scripts').glob('*'))):
+for p in sorted(list((root/'tests/live').glob('*.py')) + list((root/'scripts').rglob('*'))):
     if not p.is_file(): continue
     t = p.read_text(errors='replace')
     for m in re.finditer(r"b'EFSP'\+struct\.pack\('=IQ',(\d+),0\)", t):

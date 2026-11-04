@@ -84,7 +84,7 @@ them. Item 1 is host-level and is covered by the live reproducer.
 ## Reproduction
 
 ```
-scripts/w0a_lane_lag_repro.sh REL DIR [PORT=17800] [SECONDS=1500]
+scripts/evidence/w125/w0a_lane_lag_repro.sh REL DIR [PORT=17800] [SECONDS=1500]
 ```
 
 Run on node9901 in a named screen. REL is a built release dir, DIR is under
@@ -142,7 +142,7 @@ That matches this pattern, but the match is not proven.
   for the tail chunk: GETCHUNKS returned no row for a chunk that holds
   data.
 - **Status:** not 0a. Treat it as the `4058d8141` defect, which was
-  fixed before this commit (its reproducer is `scripts/w125_evict_rmw.py`).
+  fixed before this commit (its reproducer is `scripts/evidence/w125/w125_evict_rmw.py`).
   It stays open if it recurs on a build that includes `4058d8141`.
 
 ## Limitations and remaining gates

@@ -58,7 +58,7 @@ restarted member until it expired.
 - **Server:** a successful heartbeat (every 2 s) ends that peer's pool
   cooldown. `server_peer_note_up` never creates a pool slot.
 
-**Reproduction:** `scripts/rejoin_fsync_repro.sh` runs a private 4-node TCP
+**Reproduction:** `scripts/evidence/measurement/rejoin_fsync_repro.sh` runs a private 4-node TCP
 cluster with direct I/O on node9901. It stops node 2 and restarts it, then
 creates, writes and fsyncs a file every 0.2 s for 40 s.
 
@@ -130,7 +130,7 @@ would mask it.
 | Core POSIX, one mount (`smoke.sh`) | **PASS 216/216** |
 | Core vs local XFS (`compare.py`, baseline `posix-xfs-20261017-151359.tsv`) | **PASS** |
 | `posix_extras` | **0 fail**: 2 PASS, 3 SKIP (mmap ENODEV; two `.efs` freshness checks "not indexed yet"), as before |
-| Two-client (`scripts/orcd_mini_posix2.py`) | **PASS 67/67** (443 s) |
+| Two-client (`scripts/evidence/orcd-mini/orcd_mini_posix2.py`) | **PASS 67/67** (443 s) |
 | Durability (`smoke-persist.sh`) | **PASS 27/27** |
 | Private `gc_reclamation --mode direct --posix`, TCP | **PASS** (71 PASS lines) |
 | Same, RDMA | **PASS** (71 PASS lines) |
@@ -143,7 +143,7 @@ and GC over TCP and RDMA. It failed both `posix_expiry` runs.
 
 ## Tiny-file workload
 
-**Recipe:** `scripts/orcd_mini_workload_profile.sh LABEL 180` from the
+**Recipe:** `scripts/evidence/orcd-mini/orcd_mini_workload_profile.sh LABEL 180` from the
 Mac, with `MD5_DIR=tiny-files6`. It runs on node9900:
 - `tiny_files.py` with 16 workers into a new directory;
 - `tiny_files_md5.py` with 16 workers over `tiny-files6`;

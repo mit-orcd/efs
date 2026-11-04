@@ -132,7 +132,7 @@ remain attributed to the reviewer above.
 
 ### Make the reproduction preserve failures first
 
-At `1df84466d`, `scripts/w125_modify_repro.sh` stops and removes
+At `1df84466d`, `scripts/evidence/w125/w125_modify_repro.sh` stops and removes
 `/tmp/w125-modify-PORT` at the start. Reusing the same port therefore destroys the
 previous storage. Give every attempt a unique retained run directory or preserve
 and inventory the failed stopped store before any subsequent run. Keep logs,
@@ -236,14 +236,14 @@ version of the file can be recomputed with the script's own `body`,
   before freeing its image. Compaction keeps `images[si]` until the copied
   records are used. Read-through views never escape their function.
 - **Harness defects confirmed and fixed (this commit):**
-  - `scripts/w125_modify_repro.sh` deleted the previous run's store, and
+  - `scripts/evidence/w125/w125_modify_repro.sh` deleted the previous run's store, and
     returned success after a failed workload.
   - It now uses a fresh directory for each run, refuses to reuse one, keeps
     the store of any failing run, and deletes only passing stores. It
     records the arguments and the sha256 of `efsd`/`efs-fuse`, and exits with
     the workload's status (2 when the cluster does not start, 3 when only the
     stop fails).
-  - `scripts/w125_concurrent.py --mismatch-dir` saves the exact bytes of each
+  - `scripts/evidence/w125/w125_concurrent.py --mismatch-dir` saves the exact bytes of each
     mismatching local read (first 20), so `w125_modify_inspect.py DIR/N NAME`
     can show which version each 64 KiB block holds. This records the state of
     the transient read itself.

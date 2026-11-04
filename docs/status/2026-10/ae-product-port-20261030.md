@@ -27,7 +27,7 @@ box is ticked.
 make -j12 all tests/faults/efsd tests
 TMPDIR=$HOME/ae-port/tmp python3 tests/test_pump_logging.py          # fix tree
 # devel tree, same harness script copied in:
-TMPDIR=$HOME/ae-port/tmp python3 scripts/pump_logging_profile.py \
+TMPDIR=$HOME/ae-port/tmp python3 scripts/evidence/pump-logging/pump_logging_profile.py \
   --work W --output NEW_OUT --sink blocked --obs 1 --seconds 35 --threads 2 \
   --rate 2 --slow-fsync-us 10000 --versioned --require-progress
 ```

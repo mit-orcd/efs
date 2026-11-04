@@ -97,7 +97,7 @@ failed cases and remove successful owned fixtures; failures are retained:
 ```sh
 python3 tests/live/concurrent_extend_eof.py /data1/efs/mnt --cases 160 --workers 16
 python3 tests/live/fsync_admission.py /data1/efs/mnt --files 1025 --workers 16
-python3 scripts/intel_package3_tests.py concurrent --run-id UNIQUE --output /OUTSIDE/GIT
+python3 scripts/evidence/intel/intel_package3_tests.py concurrent --run-id UNIQUE --output /OUTSIDE/GIT
 EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 make -j8 test
 python3 tests/test_opid_admission.py
 python3 tests/test_report_zero_eof.py

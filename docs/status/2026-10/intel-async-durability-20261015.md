@@ -85,7 +85,7 @@ async (`boot=1`, 200 ms / 256 MiB window, XFS). Environment otherwise as in
 files storage, `.efs` commands/expiry off; xorinox client, GNU dd 9.5,
 PCIe 2.5 GbE.
 
-`scripts/measure_put_durability.sh`, three runs each, 2 GiB, `bs=1M`, from a
+`scripts/evidence/measurement/measure_put_durability.sh`, three runs each, 2 GiB, `bs=1M`, from a
 page-cached 4 GiB random fixture; each written file SHA-256 verified then
 removed; reads from the existing 10 GiB `001.dat` at offsets 0/2/4 GiB:
 
@@ -249,7 +249,7 @@ Reproduce: build and roll out as in Reproduce below
 (`~/git/devops/profiling/runs/20261015-rollout-next/rollout.py RELEASE_ID`,
 which aborts if a mount is in use), then from `~/git/devops/nuc-efs` run
 `python3 intel-smoke2.py ""` (whole two-client suite; it writes only under a
-new `intel-posix2-*` directory) and `scripts/measure_put_durability.sh` on
+new `intel-posix2-*` directory) and `scripts/evidence/measurement/measure_put_durability.sh` on
 xorinox as below.
 
 ## Limitations and remaining gates
@@ -275,7 +275,7 @@ xorinox as below.
 On the client, from a release tree (it calls `../efs-mgmt`):
 
 ```sh
-scripts/measure_put_durability.sh /data1/efs/intel-mnt FIXTURE_2GIB_OR_LARGER \
+scripts/evidence/measurement/measure_put_durability.sh /data1/efs/intel-mnt FIXTURE_2GIB_OR_LARGER \
   /data1/efs/intel-mnt/EXISTING_6GIB_FILE \
   10.0.0.207:17432,10.0.0.207:17433,10.0.0.209:17432,10.0.0.209:17433 NEW_OUT_DIR 3
 efs-mgmt sync-status 10.0.0.207:17432 10.0.0.207:17433 10.0.0.209:17432 10.0.0.209:17433

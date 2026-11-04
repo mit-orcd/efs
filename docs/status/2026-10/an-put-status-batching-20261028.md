@@ -60,7 +60,7 @@ the writable local NVMe /data1/01/efs/evidence; scratch clusters are under /tmp.
 Two all-account quiet checks twenty seconds apart precede each controller;
 ten-second ownership sampling continues. No existing-client exemption.
 
-The committed tools are scripts/an_put_probe.py, an_put_measure.py,
+The committed tools are scripts/evidence/an/an_put_probe.py, an_put_measure.py,
 an_stat_client.c, an_host_run.py and an_base_control.py. Export a committed
 tree first; the probe refuses a Git checkout and records before/after hashes.
 It adds temporary cumulative relaxed-atomic counters to two exported C files,
@@ -84,7 +84,7 @@ No probe/state RPC is substituted for the real authority path.
 An exported pilot is built and launched in detached screen with:
 
 ```sh
-python3 scripts/an_host_run.py --base /tmp/efs-taskAN-FRESH \
+python3 scripts/evidence/an/an_host_run.py --base /tmp/efs-taskAN-FRESH \
   --out /data1/01/efs/evidence/an-put-status-FRESH --commit COMMIT
 # --matrix adds 36 fresh 60-second cells after a passing 15-second pilot.
 ```
@@ -186,7 +186,7 @@ same storage-fence failure on a fresh read-only RDMA mount after hard-stopping
 member 3. Evidence /data1/01/efs/evidence/an-base-down-f8d and fixture
 /tmp/efs-taskAN-base-down-f8d remain. This narrow control proves the shutdown
 signature exists on base; it is not a completed 32-writer baseline comparison.
-Exact command: `python3 scripts/an_down_shutdown_control.py --source
+Exact command: `python3 scripts/evidence/an/an_down_shutdown_control.py --source
 /tmp/efs-taskAN-9258fd89b/src --work /tmp/efs-taskAN-base-down-f8d --out
 /data1/01/efs/evidence/an-base-down-f8d`. Its diagnostic shell exit 0 means
 reproduced as expected; result verdict FAIL and FUSE exit 1 remain authoritative.
@@ -201,7 +201,7 @@ scenario; it does not replace alpha's required K54 gate.
 
 Fresh source /tmp/efs-taskAN-matrix-866/src, separate temporary probe tree,
 private screen directory /tmp/efs-taskAN-matrix-866/screen, session
-taskAN-matrix-866. Controller command: `python3 scripts/an_host_run.py --base
+taskAN-matrix-866. Controller command: `python3 scripts/evidence/an/an_host_run.py --base
 /tmp/efs-taskAN-matrix-866 --out /data1/01/efs/evidence/an-put-status-matrix-866
 --commit 8661b6a5f --matrix`. Pilot PASS; matrix running. No active-host staging,
 heavy review or hashing. The closed-capture summary tool `an_put_summarize.py`
@@ -246,7 +246,7 @@ calibration remain NOTRUN. This code has not been staged onto the active
 host and changes no product source or authority decisions. Fresh precise
 measurements are owed before treating that part of the shared kit as covered.
 
-Native qualification driver `scripts/an_qualify.py` is prepared but NOTRUN.
+Native qualification driver `scripts/evidence/an/an_qualify.py` is prepared but NOTRUN.
 It refuses an active/failed prior matrix, requires two quiet checks, uses
 uninstrumented src/, runs the eight-job full gate (including the fast suite), then five
 fresh K35 and K33 payload runs on each TCP/RDMA transport and five W166
@@ -408,7 +408,7 @@ is not sanitizer qualification. No suppression or race-report waiver is used.
 Fresh committed source `f62df2fc1` is validating via:
 
 ```sh
-python3 scripts/an_qualify.py --source /tmp/efs-taskAN-slow-f62/src \
+python3 scripts/evidence/an/an_qualify.py --source /tmp/efs-taskAN-slow-f62/src \
   --prior /data1/01/efs/evidence/an-put-status-matrix-866 \
   --out /data1/01/efs/evidence/an-slow-f62 --commit f62df2fc1 \
   --private-tools /tmp/efs-taskAN-deps/tools --sanitizer-preflight --slow-only
@@ -431,7 +431,7 @@ Source `/tmp/efs-taskAN-full-d4aa/src`, raw
 Source and dependency transfers completed before launch. Exact command:
 
 ```sh
-python3 scripts/an_qualify.py --source /tmp/efs-taskAN-full-d4aa/src \
+python3 scripts/evidence/an/an_qualify.py --source /tmp/efs-taskAN-full-d4aa/src \
   --prior /data1/01/efs/evidence/an-put-status-matrix-866 \
   --out /data1/01/efs/evidence/an-full-d4aa --commit d4aa07160 \
   --private-tools /tmp/efs-taskAN-deps/tools \
@@ -459,7 +459,7 @@ operation and every 10 Hz stat slot, and allows existing EFS_RAFT_OBS=0 only
 in counterless observer calibration. The historical 866 results already
 reported exact counts, but remain a separate pre-COMMIT-repair baseline.
 
-Observer calibration method is committed in `scripts/an_observer_calibrate.py`.
+Observer calibration method is committed in `scripts/evidence/an/an_observer_calibrate.py`.
 After a fresh precise matrix closes, it requires two quiet checks and runs
 three fresh 60 s repeats of native OBS=0, native OBS=1 and probe OBS=1 at
 1/32 writers on both transports. It keeps payload, missed-slot, cleanup and
@@ -469,9 +469,9 @@ must not be cited as degraded-state overhead proof. It has only passed
 Python syntax validation; no calibration result is claimed. Run it serially:
 
 ```sh
-python3 scripts/an_host_run.py --base /tmp/efs-taskAN-NEW \
+python3 scripts/evidence/an/an_host_run.py --base /tmp/efs-taskAN-NEW \
   --out /data1/01/efs/evidence/an-precise-NEW --commit COMMIT --matrix
-python3 scripts/an_observer_calibrate.py --base /tmp/efs-taskAN-NEW \
+python3 scripts/evidence/an/an_observer_calibrate.py --base /tmp/efs-taskAN-NEW \
   --prior /data1/01/efs/evidence/an-precise-NEW \
   --out /data1/01/efs/evidence/an-calibration-NEW --commit COMMIT
 ```
@@ -573,7 +573,7 @@ Fresh source `/tmp/efs-taskAN-final-ed9/src`, private screen taskAN-final-ed9,
 raw `/data1/01/efs/evidence/an-final-ed9`; full gate and native audits RUNNING:
 
 ```sh
-python3 scripts/an_qualify.py --source /tmp/efs-taskAN-final-ed9/src \
+python3 scripts/evidence/an/an_qualify.py --source /tmp/efs-taskAN-final-ed9/src \
   --prior /data1/01/efs/evidence/an-put-status-matrix-866 \
   --out /data1/01/efs/evidence/an-final-ed9 --commit ed9b0bacf \
   --private-tools /tmp/efs-taskAN-deps/tools \
@@ -607,7 +607,7 @@ Actual failed fixture and all stores/logs remain:
 No application retries or relaxed listing assertion are introduced.
 
 Forensics use only disposable copies at `/tmp/efs-taskAN-k48-ed9/copies`.
-The committed `scripts/forensics/k48_store_scan.c` was compiled against this
+The committed `scripts/evidence/k48/k48_store_scan.c` was compiled against this
 exact source's libefs.a. All three copied KVs contain f0064 at shard 714,
 inode 266769. Static READDIR returns 96 at every page size 1,2,4,8,16,32,64,128.
 All final directory rows are SPLITTING with all 64 lane bits. This shows no
@@ -623,7 +623,7 @@ fixed same-signature layout/bitmap race and unresolved historical attribution.
 This new missing-name capture is a recurrence requiring attribution, not proof
 that the old incident or the same fix explains it. At the ed9 failure, product metadata C was unchanged by AN; only store.c
 and data_commit.c differed from 9c. The new
-synthetic `scripts/forensics/an_readdir_commit_gap.c` explores a committed
+synthetic `scripts/evidence/an/an_readdir_commit_gap.c` explores a committed
 cross-group DIR migration with source resolved and destination still prepared:
 transaction-aware LOOKUP versus raw enumeration. Both exact ed9 and untouched 9c archives reproduce the synthetic gap: LOOKUP
 returns EFS_OK while READDIR returns 95 without f0064 after source-only
@@ -632,7 +632,7 @@ with build 0. Raw `/data1/01/efs/evidence/an-k48-commit-gap-ee612`; source
 `ee6122c52`, binaries `/tmp/efs-taskAN-k48-ed9/commit-gap-{ed9,base9c}`.
 This is a real committed-migration materialization gap on the base product,
 not proof of the exact interleaving behind either retained live omission. Export-only
-`scripts/an_readdir_probe.py` can record exact client/server page cookies,
+`scripts/evidence/ao/an_readdir_probe.py` can record exact client/server page cookies,
 replica IDs and names under existing EFS_RPC_PROF. It changes no decisions,
 retry or metadata; any use is diagnostic, never native timing qualification.
 Two local generation-check failures remain under `/private/tmp/an-readdir-probe-check-_beetzd0`
@@ -652,7 +652,7 @@ ed9; all source/dependency transfers completed before launch. Raw
 `/data1/01/efs/evidence/an-k48-base-9c`, private screen taskAN-k48-base-9c:
 
 ```sh
-python3 scripts/an_qualify.py --source /tmp/efs-taskAN-k48-base-9c/src \
+python3 scripts/evidence/an/an_qualify.py --source /tmp/efs-taskAN-k48-base-9c/src \
   --prior /data1/01/efs/evidence/an-put-status-matrix-866 \
   --out /data1/01/efs/evidence/an-k48-base-9c --commit 9c4bfd171+ANed9 \
   --private-tools /tmp/efs-taskAN-deps/tools \
@@ -713,7 +713,7 @@ source archive finished transferring before launch. Raw
 `/data1/01/efs/evidence/an-k48-bca`; its run.sh launches:
 
 ```sh
-python3 scripts/an_qualify.py --source /tmp/efs-taskAN-k48-bca/src \
+python3 scripts/evidence/an/an_qualify.py --source /tmp/efs-taskAN-k48-bca/src \
   --prior /data1/01/efs/evidence/an-put-status-matrix-866 \
   --out /data1/01/efs/evidence/an-k48-bca/qualification --commit bca5ac4a7 \
   --private-tools /tmp/efs-taskAN-deps/tools \
@@ -744,7 +744,7 @@ Closed 26-file qualification receipt manifest:
 Four FAILs were caused by this session's incomplete source archive: cases
 6 env inventory, 7 K register, 12 CLI docs and 134 tiny-fragment audit needed
 omitted docs/ or tools/. These are preserved FAILs, not host NOTRUNs or passing
-product checks. `scripts/an_export_source.py` now exports the entire committed
+product checks. `scripts/evidence/an/an_export_source.py` now exports the entire committed
 Git tree without path filtering and records the archive identity; it never
 exports untracked runtime payloads/stores. Complete bca archive SHA-256 is
 `6da21f3bfe82f0670d7129f6160a0e32eab7ea4172f117ce3b76476483d7257e`.
@@ -806,7 +806,7 @@ unchanged default K38 fixtures and stops at the first failure**, preserving
 all stdout, logs and stores. run.sh executes:
 
 ```sh
-python3 scripts/an_qualify.py --source /tmp/efs-taskAN-k38-proto-ef514/src \
+python3 scripts/evidence/an/an_qualify.py --source /tmp/efs-taskAN-k38-proto-ef514/src \
   --prior /data1/01/efs/evidence/an-put-status-matrix-866 \
   --out /data1/01/efs/evidence/an-k38-proto-ef514/diagnostic --commit ef514fbd8 \
   --private-tools /tmp/efs-taskAN-deps/tools --k38-diagnostic-repeats 5
@@ -917,7 +917,7 @@ SCREENDIR `/tmp/efs-taskAN-clean-f7/screen`, session `taskAN-clean-f7`, raw
 `/data1/01/efs/evidence/an-clean-f7`. run.sh invokes:
 
 ```sh
-python3 scripts/an_qualify.py --source /tmp/efs-taskAN-clean-f7/src \
+python3 scripts/evidence/an/an_qualify.py --source /tmp/efs-taskAN-clean-f7/src \
   --prior /data1/01/efs/evidence/an-put-status-matrix-866 \
   --out /data1/01/efs/evidence/an-clean-f7/qualification --commit f7b74f714 \
   --private-tools /tmp/efs-taskAN-deps/tools \
@@ -972,7 +972,7 @@ Closed 91-file SHA256SUMS verified; manifest SHA-256
 `421066cca5f8a3deb0decd5df4242411868b5eb749590e9474ee08238b6f77b9`.
 All fixtures remain on fcstor014, with open investigation failures unchanged.
 
-Additional directory confirmations use committed scripts/an_directory_confirm.py
+Additional directory confirmations use committed scripts/evidence/an/an_directory_confirm.py
 (867817f1c) outside the verified f7 source: five fresh W130/K48 pairs, original
 checks and deadlines, no rebuild, stop on first failure. Raw output:
 `/data1/01/efs/evidence/an-dir-confirm-f7`. Exact invocation:
@@ -1019,7 +1019,7 @@ The reserved exact f7 source now runs the precise matrix, private session
 
 ```sh
 cd /tmp/efs-taskAN-precise-f7/src
-python3 scripts/an_host_run.py --base /tmp/efs-taskAN-precise-f7 \
+python3 scripts/evidence/an/an_host_run.py --base /tmp/efs-taskAN-precise-f7 \
   --out /data1/01/efs/evidence/an-put-status-precise-f7 \
   --commit f7b74f714 --matrix
 ```
@@ -1046,7 +1046,7 @@ matrix repeat. Full gate/named/native correctness remains a separate protocol.
 Raw `/data1/01/efs/evidence/an-put-status-precise-f7`; closed 349-file manifest
 SHA-256 `2f0627c4956275c4d2f37c1232d8aac70fc5318605ac793a2b6452975bc03158`,
 verified with sha256sum before the next build. Reproduce with the preceding
-an_host_run command and summarize using `python3 scripts/an_put_summarize.py RAW`.
+an_host_run command and summarize using `python3 scripts/evidence/an/an_put_summarize.py RAW`.
 
 Every entry below is median [minimum–maximum] across three fresh repeats.
 STATUS counts only actual storage→leader frame sends; local authority checks
@@ -1116,7 +1116,7 @@ The healthy observer controls now compare native OBS=0, native OBS=1 and
 probe OBS=1 at 1/32 writers, TCP/RDMA, three fresh repeats each:
 
 ```sh
-python3 scripts/an_observer_calibrate.py --base /tmp/efs-taskAN-precise-f7 \
+python3 scripts/evidence/an/an_observer_calibrate.py --base /tmp/efs-taskAN-precise-f7 \
   --out /data1/01/efs/evidence/an-observer-calibrate-f7 \
   --prior /data1/01/efs/evidence/an-put-status-precise-f7 --commit f7b74f714
 ```

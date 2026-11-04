@@ -11,7 +11,7 @@ By user direction this sub-session ends at the fix, regression tests and
 | T1 (P1) append-abandon uses an unvalidated session row as the owner CAS image | **FIXED** on `devel-k05t1`, regression test PASS, negative control FAIL as expected |
 | `tests/test_append_cleanup` (K15 decide-once rules) | **PASS** |
 | `make test` on amd | **PASS with three host exclusions** (rc 0; three lines run with `-`, each shown below to fail identically on unmodified devel or to be host-caused) |
-| Fence cluster gate (`scripts/k05_session_fence_gate.sh`) | **NOTRUN** (runs in another session) |
+| Fence cluster gate (`scripts/evidence/k05/k05_session_fence_gate.sh`) | **NOTRUN** (runs in another session) |
 | RDMA paths of `make test` | **NOTRUN** (`EFS_TRANSPORT=tcp`, see Environment) |
 
 ## Finding
@@ -136,7 +136,7 @@ ssh amd 'rm -rf ~/efs-k05t1'
 ## Limitations and remaining gates
 
 - Not merged into devel; the parent session merges and updates tallies.
-- NOTRUN: the fence cluster gate `scripts/k05_session_fence_gate.sh` (runs
+- NOTRUN: the fence cluster gate `scripts/evidence/k05/k05_session_fence_gate.sh` (runs
   in another session), the K15 live lost-reply gate
   (`append_failover.py --lose-reserve-every`), the RDMA paths.
 - The amd host exclusions above are pre-existing and unrelated to T1, but

@@ -463,9 +463,9 @@ TMPDIR=PRIVATE/tmp EFS_GIT_ID=2fb508759 EFS_GIT_BRANCH=agent/devel-task-ao \
 ```
 
 For each measurement, instrument a **different archived copy**, then build and
-run `scripts/measure/ao_readdir.py --work NEW_FIXTURE --output NEW_EVIDENCE`.
+run `scripts/evidence/ao/ao_readdir.py --work NEW_FIXTURE --output NEW_EVIDENCE`.
 Defaults cover all four sizes and three repetitions of getdents/`ls -ln`.
-Use `scripts/measure/ao_summary.py EVIDENCE` for aggregates. Linux pidfd, FUSE,
+Use `scripts/evidence/ao/ao_summary.py EVIDENCE` for aggregates. Linux pidfd, FUSE,
 fusermount3 and a C compiler are prerequisites. The 1,200 s listing watchdog
 is a measurement bound, not a changed product or regression-test timeout.
 
@@ -481,7 +481,7 @@ EFS_GIT_ID=2fb508759 EFS_GIT_BRANCH=agent/devel-task-ao \
  EFS_GIT_DESCRIBE=2fb508759 make -j4 \
  FUSE_LIBS="$(pkg-config --libs fuse3) -Wl,-rpath,$EFS_FUSE_PREFIX/lib64" \
  efsd efs-fuse efs-mgmt tests/faults/efsd
-EFS_RDMA_DEV=mlx5_0 python3 scripts/qualify_ao_readdir.py \
+EFS_RDMA_DEV=mlx5_0 python3 scripts/evidence/ao/qualify_ao_readdir.py \
  --work NEW_FIXTURE --output NEW_EVIDENCE --transport rdma \
  --bind 172.16.99.1 --base-port 19381 --posix
 ```
@@ -498,7 +498,7 @@ The historical intrusive version is reconstructible from `591ef117c`.
 Reproduce the exact fixed three-round diagnostic from committed source:
 
 ```sh
-python3 scripts/measure/ao_three_rounds.py "$PWD"
+python3 scripts/evidence/ao/ao_three_rounds.py "$PWD"
 EFS_RDMA_DEV=mlx5_0 python3 scripts/ao_fixed_three.py \
  --work NEW_STRESS_FIXTURE --output NEW_STRESS_EVIDENCE \
  --transport rdma --bind 172.16.99.1 --base-port 19861 --posix

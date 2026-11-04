@@ -180,7 +180,7 @@ change's files overlaid, built with `EFS_GIT_ID=qcat00000001`.
 | Suite | Result |
 | --- | --- |
 | `smoke.sh` POSIX, one mount | **PASS 216/216** (15.3 s) |
-| `scripts/orcd_mini_posix2.py`, node9901 + node9900 | **PASS 67/67** (450 s) |
+| `scripts/evidence/orcd-mini/orcd_mini_posix2.py`, node9901 + node9900 | **PASS 67/67** (450 s) |
 | `smoke-persist.sh` prepare/remount/verify | **PASS 27/27** |
 | `tests/live/gc_reclamation.py --mode direct --posix`, TCP, private, 2 `/tmp` roots | **PASS** (71 PASS lines, physical inventory empty after restart) |
 | Same with `--transport rdma`, `EFS_RDMA_DEV=mlx5_0` | **PASS** (71 PASS lines) |
@@ -199,8 +199,8 @@ The pending-GC estimate showed 1.93M records. That estimate only
 overshoots; the real remaining backlog was about 8k fragments, reclaimed in
 the first ~9 minutes after the restart.
 
-Live test on `859b2b9eb320`, run with `scripts/orcd_mini_gc_delete_live.sh`
-on node9900 and `scripts/orcd_mini_efsd_sampler.sh` on node9901 (30 s
+Live test on `859b2b9eb320`, run with `scripts/evidence/orcd-mini/orcd_mini_gc_delete_live.sh`
+on node9900 and `scripts/evidence/orcd-mini/orcd_mini_efsd_sampler.sh` on node9901 (30 s
 samples):
 - **Create:** 200,000 × 256 B files by 16 writers in 89.7 s, 2,229 files/s.
 - **Delete:** `rm -rf` by 16 threads in 27.1 s, 7,382 files/s. Unlink p50
@@ -239,7 +239,7 @@ per publish while only reaps ran.
 
 ### ior (node9900, 8 local ranks, OpenMPI 5.0.10)
 
-Run with `scripts/orcd_mini_ior_node9900.sh` (geometry from
+Run with `scripts/evidence/orcd-mini/orcd_mini_ior_node9900.sh` (geometry from
 `tests/perf/io500/run.sh`):
 
 | Test | Write | Read |

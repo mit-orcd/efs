@@ -36,8 +36,8 @@ samples; `pidstat.txt`, `top.txt`). The node9900 client capture failed
   remain; foreground commit rate measured over ≥ 1 s windows.
 - Log line: `lag_s`, `rate`, `scan_ms`, `read_ms`, `seg_ms`, `pass_ms`.
 - Tests and scripts: `tests/test_pack_budget.py` (in `make test`),
-  `scripts/w125_pack_drain.sh`, `scripts/w125_budget_ab.sh`,
-  `scripts/w125_budget_rates.py`.
+  `scripts/evidence/w125/w125_pack_drain.sh`, `scripts/evidence/w125/w125_budget_ab.sh`,
+  `scripts/evidence/w125/w125_budget_rates.py`.
 
 ## Environment
 
@@ -51,7 +51,7 @@ release `445b8b549c82` (`v0.3.2-pre-alpha-681-g445b8b549`, branch devel).
 
 ## Copy throughput (idle drain)
 
-`scripts/w125_pack_drain.sh REL OUT 17680 300000`: 300,000 files written
+`scripts/evidence/w125/w125_pack_drain.sh REL OUT 17680 300000`: 300,000 files written
 with packing held back, then a restart at minimum age 0; drain time
 includes ~30 s of restart.
 
@@ -76,7 +76,7 @@ includes ~30 s of restart.
 
 ## Sustained-writer A/B
 
-`scripts/w125_budget_ab.sh /tmp/w125-base2/src REL OUT 17680 2 1200000`:
+`scripts/evidence/w125/w125_budget_ab.sh /tmp/w125-base2/src REL OUT 17680 2 1200000`:
 16 workers write 1,200,000 files (`w125_p0_capture.py`, ≤ 512 B each) on
 a fresh cluster per configuration, default minimum age 60 s; two
 round-robin reps.
@@ -100,7 +100,7 @@ An earlier A/B on `27c20cd4b` + lag budget without the copy changes
 (`/data1/efs/prof/w125-budget-ab.txt`) gave A −14%/−17% while still falling
 behind (packing capped near 1,000 files/s); it motivated the copy changes.
 
-## ior on orcd-mini (node9900, 8 ranks, `scripts/orcd_mini_ior_node9900.sh`)
+## ior on orcd-mini (node9900, 8 ranks, `scripts/evidence/orcd-mini/orcd_mini_ior_node9900.sh`)
 
 | Build / state | Easy write / read MiB/s | Hard write / read MiB/s |
 | --- | --- | --- |
@@ -162,14 +162,14 @@ drains `/data1/efs/prof/w125-budget/drain1/packer.log` `0d87b66ab282ec5e`,
 ```sh
 # node9901, REL/FAULT = 445b8b549 builds, BASE = d9cee1ffd build
 cd REL && ASAN_OPTIONS=detect_leaks=0 make -i test
-cd FAULT && scripts/w125_p7_crash.sh FAULT /tmp/w125-dv2-crash
-cd REL && scripts/w125_p7_suites.sh REL OUT/suites
-scripts/w125_p6_landing.sh REL BASE /tmp/w125-dv2-landing
-scripts/w125_p5_matrix.sh REL /tmp/w125-dv2-p5
-scripts/w125_pack_drain.sh REL OUT/drain 17680 300000
-scripts/w125_budget_ab.sh BASE REL OUT/ab 17680 2 1200000
+cd FAULT && scripts/evidence/w125/w125_p7_crash.sh FAULT /tmp/w125-dv2-crash
+cd REL && scripts/evidence/w125/w125_p7_suites.sh REL OUT/suites
+scripts/evidence/w125/w125_p6_landing.sh REL BASE /tmp/w125-dv2-landing
+scripts/evidence/w125/w125_p5_matrix.sh REL /tmp/w125-dv2-p5
+scripts/evidence/w125/w125_pack_drain.sh REL OUT/drain 17680 300000
+scripts/evidence/w125/w125_budget_ab.sh BASE REL OUT/ab 17680 2 1200000
 # node9900 against orcd-mini
-scripts/orcd_mini_ior_node9900.sh
+scripts/evidence/orcd-mini/orcd_mini_ior_node9900.sh
 ```
 
 Cleanup: the scripts stop their fixtures; remove `/tmp/w125-dv2-*` and

@@ -35,7 +35,7 @@ Both hashes matched
 The local source fixture is retained. Xorinox's existing four-worker MD5 crawl
 (PID 727786) continued throughout; it was not paused or restarted.
 
-During first write, use `scripts/profile_intel_live.sh OUT PIDS 20` on each host
+During first write, use `scripts/evidence/intel/profile_intel_live.sh OUT PIDS 20` on each host
 (AMD PIDS `3989623,4022539`, Intel as above). This collects 20 seconds of
 `perf record -e cycles:u -F 99 --call-graph fp`, counters/waits, then bounded
 12-second `strace -f -c -w`. Requires perf/strace and permission to trace owned
@@ -56,7 +56,7 @@ timeout -s INT 10 strace -f -ttt -T -yy \
   -p PID1 -p PID2 -o write-sync.trace
 ```
 
-Analyze RPCs with `scripts/summarize_intel_rpc_trace.py write-rpc.trace`.
+Analyze RPCs with `scripts/evidence/intel/summarize_intel_rpc_trace.py write-rpc.trace`.
 Its `syscalls()` helper reconstructs unfinished calls for storage analysis.
 Separate fragment file paths, containing directories, and `mdraft` WAL paths;
 exclude TCP writes and daemon log writes. Sum durations only as overlapping

@@ -897,7 +897,7 @@ and four members queue on it: about 39 fsync/fdatasync per create-and-unlink
 pair across the members, so the Raft pump's apply lag passed the server's
 fixed 400 ms applied-wait, each expiry answered BUSY and the client's backoff
 ladder made the 2–7 s RPCs. Reproduced on amd on the untouched base with an
-emulated 7 ms barrier queued on one lock (`scripts/w159_fixture.py`); the
+emulated 7 ms barrier queued on one lock (`scripts/evidence/w159/w159_fixture.py`); the
 same fixture on amd's disk passes everything with no RPC over 1 s. The
 applied-wait for a member's own committed entry is now bounded by progress
 (`src/server/apply_wait.h`, 400 ms grants renewed while the member applies,

@@ -56,7 +56,7 @@ still fails visibly rather than inventing a chunk-rounded size.
 **Environment.** Intel1 (`10.0.0.207`) + Intel2 (`10.0.0.209`), Core
 Ultra 7 256V, owned four-daemon fixture on ports 27432/27433 (2 GiB
 quota per node, direct I/O, TCP), per
-`scripts/intel_w100_private.py`; features `EFS_COMMANDS=0`,
+`scripts/evidence/intel/intel_w100_private.py`; features `EFS_COMMANDS=0`,
 `EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`,
 `EFS_MD_RAFT_N=4`. Fault client env `EFS_FAULT_REPORT_SIZE_FILE` (the
 `OMIT_SIZE <ino>` hook drops one size record after valid construction).
@@ -66,14 +66,14 @@ main Intel cluster (ports 17432/17433) untouched.
 **Reproduction.**
 
 ```sh
-python3 scripts/intel_w100_private.py stop rounding-baseline baseline   # if running
-python3 scripts/intel_w100_private.py start <run> <source-label>
+python3 scripts/evidence/intel/intel_w100_private.py stop rounding-baseline baseline   # if running
+python3 scripts/evidence/intel/intel_w100_private.py start <run> <source-label>
 ssh intel1_efs python3 tests/live/report_eof_contract.py \
     /data1/efs/w100-private/runtime-<run>/mnt \
     /data1/efs/w100-private/runtime-<run>/omit-size --expect rounded|refused
 ```
 
-Cleanup: `python3 scripts/intel_w100_private.py stop <run> <source-label>`;
+Cleanup: `python3 scripts/evidence/intel/intel_w100_private.py stop <run> <source-label>`;
 fixture storage under `/data{1,2}/efs/w100-private-<run>/` may then be
 deleted. The contract test requires the `intel2_efs` alias to resolve
 *on Intel1* (provisioned 2026-10-13: intel1 efs key in intel2's

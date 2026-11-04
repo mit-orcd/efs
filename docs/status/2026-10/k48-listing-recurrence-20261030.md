@@ -20,7 +20,7 @@ intel1 (8 CPUs, Linux 6.12 el10), private three-node loopback cluster per run, T
 
 ## What the retained Task AU case contains
 
-Copied read-only from intel2 `~/efs-artifacts/taskAU-20261028/k48-w130-case/` and scanned with the Task S offline reader (`scripts/forensics/k48_store_scan.c`) against the AU source, on copies only.
+Copied read-only from intel2 `~/efs-artifacts/taskAU-20261028/k48-w130-case/` and scanned with the Task S offline reader (`scripts/evidence/k48/k48_store_scan.c`) against the AU source, on copies only.
 
 - Directory inode **327** (odd, so metadata group 0). Node 3's group 0 halted at Raft index 411, a directory-migrate transaction, at 21:13:12.8Z; nodes 1 and 2 hold identical state: **96 dentries** (26 on the source shard, 36 on group-2 lane shards, 34 on group-0 lane shards), layout SPLITTING, 65 entries, so the directory was still migrating at shutdown. Node 3's group 0 is frozen at split-begin (64 local rows).
 - **Not recoverable:** which name was missing, which voter served the listing, the page boundaries, and whether the missing dentry's commit preceded the listing. The case has no READDIR log lines and `mnt-a.log` has no RPC lines. This is the evidence gap Task S already named; it is why the attribution below uses reproduction.
@@ -29,12 +29,12 @@ Copied read-only from intel2 `~/efs-artifacts/taskAU-20261028/k48-w130-case/` an
 
 1. `tests/test_w130_dir_fault.py` now sets `EFS_TRACE_READDIR=1` (client and server print one bounded stderr line per READDIR page: peer, cursor, count, next cursor and the names) and, on any short listing, writes `k48-partial.txt` into the kept work directory: missing names with lane, lane shard, group and source shard; stat inodes; relists after 0 s and 1 s; per-voter `efs-mgmt raft-readdir` paging; the page trace for the parent. The lane maths (FNV-1a mod 64, shard = `(ino&0xFFF + lane*(2*((ino*2654435761)&0x7FF)+1)) & 0xFFF`, group = shard parity) is a Python port of `src/meta/dir_layout.c`.
 2. After the existing step-3 check the test now lists the directory repeatedly for `W130_STORM_SECS` (default 5 s) and fails on any count other than 96 ("storm listing"), so the transient migration window is sampled thousands of times instead of once.
-3. `scripts/k48_attribution_loop.sh SRC OUTDIR RUNS` runs the test N times, one fresh cluster per run, keeping only failing cases.
+3. `scripts/evidence/k48/k48_attribution_loop.sh SRC OUTDIR RUNS` runs the test N times, one fresh cluster per run, keeping only failing cases.
 
 Reproduce: build `SRC` as above, start a load (`EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 sh scripts/make_test_summary.sh` in another tree), then
 
 ```
-W130_STORM_SECS=20 sh scripts/k48_attribution_loop.sh SRC $HOME/efs-artifacts/taskBG-20261030/NAME 20
+W130_STORM_SECS=20 sh scripts/evidence/k48/k48_attribution_loop.sh SRC $HOME/efs-artifacts/taskBG-20261030/NAME 20
 ```
 
 (`W130_STORM_SECS=0` for the single-listing form). Expected on a fixed tree: `rc=0`, "N storm listings complete and exact". Cleanup: `~/bin/edelete --force --delete` on the OUTDIR scratch.

@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
-    'orcd_dd_profile', Path(__file__).resolve().parents[1]/'scripts/orcd_dd_profile.py')
+    'orcd_dd_profile', Path(__file__).resolve().parents[1]/'scripts/evidence/orcd/orcd_dd_profile.py')
 profile = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(profile)
 

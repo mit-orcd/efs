@@ -124,7 +124,7 @@ These small tests do not establish sustained NAND bandwidth or power-loss safety
 ## Shared-directory control: remove a layout confound
 
 The existing benchmark creates one directory per worker, so changing worker count
-also changes directory layout. `scripts/intel_shared_dir_durability.py` removes
+also changes directory layout. `scripts/evidence/intel/intel_shared_dir_durability.py` removes
 that confound: all workers create unique files in **one common directory**, use
 O_DIRECT, fsync each file and the shared directory, and verify every full record.
 It uses a deterministic nonzero 64 KiB payload with per-record identity and a
@@ -169,10 +169,10 @@ Run the committed measurement wrapper on each host (binary and phase paths are
 absolute); the phase directory must already exist and be empty:
 
 ```sh
-python3 scripts/measure_intel_durability.py BINARY EMPTY_PHASE_DIR loaded-before
-python3 scripts/measure_intel_durability.py BINARY EMPTY_PHASE_DIR quiet
-python3 scripts/measure_intel_durability.py BINARY EMPTY_PHASE_DIR stat-only
-python3 scripts/measure_intel_durability.py BINARY EMPTY_PHASE_DIR loaded-after
+python3 scripts/evidence/intel/measure_intel_durability.py BINARY EMPTY_PHASE_DIR loaded-before
+python3 scripts/evidence/intel/measure_intel_durability.py BINARY EMPTY_PHASE_DIR quiet
+python3 scripts/evidence/intel/measure_intel_durability.py BINARY EMPTY_PHASE_DIR stat-only
+python3 scripts/evidence/intel/measure_intel_durability.py BINARY EMPTY_PHASE_DIR loaded-after
 ```
 
 Each invocation prints commands, results, identity, full-check verdicts and disk
@@ -188,7 +188,7 @@ phase. Pause/resume the identified PID with a finite automatic-resume guard; do
 not kill/restart it or discard its output. For stat-only use:
 
 ```sh
-python3 scripts/intel_stat_pressure.py /data1/efs/intel-mnt \
+python3 scripts/evidence/intel/intel_stat_pressure.py /data1/efs/intel-mnt \
   --seconds 180 --stop-file UNIQUE_HOST_LOCAL_STOP_FILE
 # Signal early completion by creating only that owned stop file.
 ```
@@ -198,7 +198,7 @@ file-body reads and rejects identity changes. Then stop that load, keep the huma
 crawl paused briefly, and run:
 
 ```sh
-python3 scripts/intel_shared_dir_durability.py DEDICATED_SHARED_TEST_PARENT
+python3 scripts/evidence/intel/intel_shared_dir_durability.py DEDICATED_SHARED_TEST_PARENT
 ```
 
 Resume the crawl before `loaded-after`; retire the owned guard after confirming

@@ -45,7 +45,7 @@ Not a release gate.
 | `posix_persist` prepare | 27/27 on all 7 clients |
 | Full `orcd-test.py stop`, `start --transport rdma`, remount | clean; 4/4 identical versions |
 | `posix_persist` verify after the restart | 27/27 on all 7 clients |
-| Live suites, fcstor007, two RDMA mounts (`scripts/orcd_test_live_suites.sh`) | PASS all harnesses |
+| Live suites, fcstor007, two RDMA mounts (`scripts/evidence/orcd/orcd_test_live_suites.sh`) | PASS all harnesses |
 | ↳ `posix_2client --local` | 68/68 PASS |
 | ↳ `efs_commands`, `efs_command_options`, `efs_command_pages` | PASS |
 | ↳ `virtual_interfaces --freshness-s 150` | PASS |
@@ -100,7 +100,7 @@ then `posix_persist.py /tmp/efs-mount/persist-$(hostname -s) --phase prepare`.
 Then `./orcd-test.py stop`, `start --transport rdma`, `mount --transport rdma`
 and `--phase verify` on every client. On fcstor007: a second RDMA mount at
 `/tmp/efs-mount2` with `scripts/client.sh`, then
-`scripts/orcd_test_live_suites.sh OUT /tmp/efs-mount /tmp/efs-mount2`, then
+`scripts/evidence/orcd/orcd_test_live_suites.sh OUT /tmp/efs-mount /tmp/efs-mount2`, then
 `posix_expiry.py ROOT/m1 --suite expiry --root ROOT/a --root ROOT/b
 --peer-mount ROOT/m2 --jobs 4` under /tmp.
 

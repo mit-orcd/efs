@@ -249,10 +249,10 @@ On node9901, from a checkout of this commit (`$NEW`) and of its parent
 `859b2b9eb` (`$OLD`):
 
 ```bash
-scripts/raft_rotate_stall_ab.sh build $OLD 128
-scripts/raft_rotate_stall_ab.sh build $NEW 128
-scripts/raft_rotate_stall_ab.sh run $NEW-snap128 new 1800
-scripts/raft_rotate_stall_ab.sh run $OLD-snap128 old 1800
+scripts/evidence/measurement/raft_rotate_stall_ab.sh build $OLD 128
+scripts/evidence/measurement/raft_rotate_stall_ab.sh build $NEW 128
+scripts/evidence/measurement/raft_rotate_stall_ab.sh run $NEW-snap128 new 1800
+scripts/evidence/measurement/raft_rotate_stall_ab.sh run $OLD-snap128 old 1800
 ```
 
 - `build` copies the tree to `<src>-snap128` and sets

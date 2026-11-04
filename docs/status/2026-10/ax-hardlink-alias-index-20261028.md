@@ -15,7 +15,7 @@ paid nothing.
 
 ## Measurement
 
-`scripts/ax_alias_bench.c` links `libefs.a`, loads ROWS unrelated files spread
+`scripts/evidence/ax/ax_alias_bench.c` links `libefs.a`, loads ROWS unrelated files spread
 over 1,000 directories, then times 100 operations each on a hard-linked file
 (2 or 8 names) and on a single-link control. Mean ms per operation, xorinox,
 single thread:

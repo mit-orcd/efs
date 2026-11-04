@@ -174,7 +174,7 @@ Root owns the reply normalization draft to avoid duplicate edits. No workload
 deadline, quorum, feature mask, cache limit or data-plane transport was changed.
 
 Queue observations can be reproduced without private controller files using
-`scripts/orcd_queue_sample.py --node fcstor005 --revision FULL_INSTALLED_SHA
+`scripts/evidence/orcd/orcd_queue_sample.py --node fcstor005 --revision FULL_INSTALLED_SHA
 --seconds 10 --output /tmp/orcd-queue-sample.json`. Supply `--ssh-control PATH`
 when reusing an authenticated login master. The script validates source/UID/exe,
 reads gdb types without attaching, accounts for PIE, and samples only the
@@ -368,7 +368,7 @@ management CLI used RDMA; raw protocol compatibility probes use TCP.
 Three loaded concurrent cohorts PASS63/63 at unchanged30s case deadlines.
 Finite create/write/fsync/close/read/unlink PASS140,000 files, seven16-worker
 clients ×20,000:413.290–561.364s, within unchanged1800s controller limit.
-Reproduction remains installed scripts/orcd_efs_commands.py, existing
+Reproduction remains installed scripts/evidence/orcd/orcd_efs_commands.py, existing
 virt_ extra cases, and tests/live/fsync_admission.py. Raw runs retained under
 /home/erbmi1/orcd/scratch/efs/orcd-test/HOST with revision8249d92e993b.
 These passes do not replace the retained earlier failures.

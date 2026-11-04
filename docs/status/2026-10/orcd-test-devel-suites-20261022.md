@@ -34,7 +34,7 @@ release gate.
 | `exclusive_create_visibility --spawn` | 1000/1000 twice | 160/160 |
 | same, stock fork writers (W121, informational) | 150/160; 1000-case runs 971–994/1000 on all 7 clients | 156/160 |
 
-### IOR (`scripts/orcd_test_ior.sh`)
+### IOR (`scripts/evidence/orcd/orcd_test_ior.sh`)
 
 Every case writes with fsync (`-e`), reads back with data verification
 (`-R`) and deletes its files. Wide cases reorder tasks (`-C`) so no rank
@@ -103,10 +103,10 @@ on the clients, or deploy that ref. Then, from `/tmp/efs`:
 - Persist: `tests/posix/posix_persist.py /tmp/efs-mount --phase prepare` on all clients, then
   `orcd-test.py stop` + `start`/`mount` (other transport), then `--phase verify`.
 - fcstor007: `EFS_TRANSPORT=<t> EFS_RDMA_DEV=mlx5_2 EFS_COMMANDS=1 bash scripts/client.sh 172.16.223.57:17432 /tmp/efs-mount2`,
-  then `bash scripts/orcd_test_live_suites.sh OUTDIR` (writes `summary.tsv`;
+  then `bash scripts/evidence/orcd/orcd_test_live_suites.sh OUTDIR` (writes `summary.tsv`;
   `w121_` rows do not count toward its PASS line). About 30 minutes.
 - fcstor007, with an ssh agent that reaches every client (mpirun):
-  `bash scripts/orcd_test_ior.sh OUTDIR /tmp/efs-mount`. Run it alone, so it doesn't overlap other load.
+  `bash scripts/evidence/orcd/orcd_test_ior.sh OUTDIR /tmp/efs-mount`. Run it alone, so it doesn't overlap other load.
 - Cleanup: `bash scripts/client.sh stop /tmp/efs-mount2` before `orcd-test.py stop`.
 
 Raw output stays on the cluster under `/home/erbmi1/orcd/scratch/efs/orcd-test/`:

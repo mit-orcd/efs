@@ -41,10 +41,10 @@ is not used by the product gate/native tests.
 
 ```sh
 # intel1, private HOME trees
-bash ~/efs-task-ac/candidate/src/scripts/ac_campaign.sh \
+bash ~/efs-task-ac/candidate/src/scripts/evidence/ac/ac_campaign.sh \
   /home/maik/efs-task-ac /home/maik/efs-artifacts/ac-20261028-5f9ddae71 5f9ddae71
 # node9901, private /tmp trees, raw evidence under infrastructure evidence/
-bash /tmp/efs-task-ac/candidate/src/scripts/ac_campaign.sh \
+bash /tmp/efs-task-ac/candidate/src/scripts/evidence/ac/ac_campaign.sh \
   /tmp/efs-task-ac /data1/efs/evidence/ac-20261028-5f9ddae71 5f9ddae71
 ```
 
@@ -65,7 +65,7 @@ lifetime caller, harvest-processing duration and pump work excluding idle
 poll. Bounded log2 histogram quantiles are upper bounds, not exact percentiles;
 maxima are exact clock differences. Raft printed hold/wait high-water values
 also include fixture setup and are labelled accordingly. Results are summarized
-with `python3 scripts/ac_summarize.py CAPTURE` as median and min/max over all
+with `python3 scripts/evidence/ac/ac_summarize.py CAPTURE` as median and min/max over all
 three trials. An improvement is claimed only outside the measured spread.
 
 After measurement, intel1 builds the uninstrumented candidate and runs the
@@ -150,7 +150,7 @@ management reply fields retain the original aggregation semantics.
 Reproduce the negative control by linking tests/test_iostats_snapshot.c with
 original iostats.c exported by `git show 1d2852da4:src/server/iostats.c` and
 the same include flags as its Makefile target; expect nonzero/assertion.
-For status cost, compile scripts/ac_status_cost.c with src/server/iostats.c,
+For status cost, compile scripts/evidence/ac/ac_status_cost.c with src/server/iostats.c,
 libefs.a, project include paths, pthread/math/dl/ibverbs, then run with
 `EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0`. The committed source includes the
 native test handshake; no external payload capture is required.

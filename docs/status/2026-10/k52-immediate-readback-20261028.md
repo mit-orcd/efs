@@ -75,7 +75,7 @@ trigger still needs investigation. No packing change is justified here.
 Use frozen `ec255dd13`, native builds with the libfuse prefix above and the
 retained `cluster.json` as a configuration template. Replace source, private
 root and evidence output with new approved paths; do not reuse old stores or
-outputs. `scripts/task_v_ssh.sh` requires forwarded SSH to the four hosts.
+outputs. `scripts/evidence/task-v/task_v_ssh.sh` requires forwarded SSH to the four hosts.
 From the controller source tree on fcstor012:
 
 ```sh

@@ -130,7 +130,7 @@ For negative controls, select pre-correction production source with
 `SPAN_READER_SOURCE=/old/src/client/write.c`, or
 `EFS_FUSE_SOURCE=/old/src/client/efs_fuse.c` respectively. Preserve the current
 fixture/headers and require the old executable to reach and fail its assertion.
-Private start/resume/stop uses `scripts/intel_w100_private.py`; resume existing
+Private start/resume/stop uses `scripts/evidence/intel/intel_w100_private.py`; resume existing
 stores rather than formatting them. Extra concurrent mounts are stopped in the
 controller's `finally`; retained byte fixtures remain available for cold checks.
 
@@ -138,9 +138,9 @@ From the Mac, after draining all private extra clients, switch the existing
 fixture without touching production or discarding writes:
 
 ```sh
-python3 scripts/intel_w100_private.py stop deadline-posix devel-opid-diag1
-python3 scripts/intel_w100_private.py resume deadline-posix devel-opid-fix1 --quota 16G --opid-trace
-python3 scripts/intel_package3_tests.py concurrent --rounds 3 --run-id opid-fix1-20261014 --output /OUTSIDE/GIT/fix1-concurrent --source-root /data1/efs/w100-private/devel-opid-fix1 --mount /data1/efs/w100-private/runtime-deadline-posix/mnt --seed-port 27432 --remote-output-root /data1/efs/w100-private/results --extra-mount-root /data1/efs/w100-private/fix1-extra --opid-trace
+python3 scripts/evidence/intel/intel_w100_private.py stop deadline-posix devel-opid-diag1
+python3 scripts/evidence/intel/intel_w100_private.py resume deadline-posix devel-opid-fix1 --quota 16G --opid-trace
+python3 scripts/evidence/intel/intel_package3_tests.py concurrent --rounds 3 --run-id opid-fix1-20261014 --output /OUTSIDE/GIT/fix1-concurrent --source-root /data1/efs/w100-private/devel-opid-fix1 --mount /data1/efs/w100-private/runtime-deadline-posix/mnt --seed-port 27432 --remote-output-root /data1/efs/w100-private/results --extra-mount-root /data1/efs/w100-private/fix1-extra --opid-trace
 ```
 
 Choose a fresh run ID/output directory for a new reproduction. Only the first

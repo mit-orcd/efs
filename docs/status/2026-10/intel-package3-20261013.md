@@ -58,14 +58,14 @@ EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_START_TIMEOUT=300`.
 Build both hosts before stopping services. Globally drain both clients before
 stopping any daemon, then activate the built source and run `start.sh`.
 Do not remove storage or rerun formatting on existing stores.
-Deploy `scripts/intel_package3_verify.py` to
+Deploy `scripts/evidence/intel/intel_package3_verify.py` to
 `/data1/efs/devops/intel_package3_verify.py` and execute on each host. This
 asserts actual running features, storage flags, quota, mount and persisted policy.
 For a full native copy include tracked docs/results assets as well as runtime
 source; run `make -j8 test` under the four disabled feature variables.
 
 Driver:
-`python3 scripts/intel_package3_tests.py core --output OUT --run-id UNIQUE`.
+`python3 scripts/evidence/intel/intel_package3_tests.py core --output OUT --run-id UNIQUE`.
 Repeat with `extras`, `runtime`, `concurrent`, `latency --seconds 600`.
 Concurrent creates five temporary clients in addition to the two real mounts,
 uses4+3 clients/jobs16, then cleanly drains only those temporary mounts.
@@ -79,7 +79,7 @@ from the driver. The helper loads the deployed suite and runs its actual remote
 steps on both production mounts with existing120s peer-step deadlines. Its TSV
 path is printed; keep raw output outside Git. The preparation is automatic.
 
-W106 small-fixture preparation: `python3 scripts/intel_package3_fork_fixture.py
+W106 small-fixture preparation: `python3 scripts/evidence/intel/intel_package3_fork_fixture.py
 prepare /data1/efs/mnt/package3-fork-UNIQUE --count 128` on Intel1. Compile
 `gcc -O2 -pthread tests/live/efs_direct_read_fork.c -ldl -o /tmp/read-fork`.
 Run `/tmp/read-fork ROOT 0 128 128` then `EFS_DIAG_FORK=1 /tmp/read-fork ROOT

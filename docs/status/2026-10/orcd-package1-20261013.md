@@ -100,7 +100,7 @@ All six suites on deployed `19b14609` **FAIL**: `efs_commands`20.136s,
 mounts. Help/listing and selected permission cases pass, but none closes its
 suite. Private peer orderly stop **PASS**. This preserves the footprint failure
 at unchanged budgets rather than attributing it to payload disk capacity.
-Reproduce `python3 scripts/orcd_efs_commands.py /tmp/efs-mount PEER --query-host
+Reproduce `python3 scripts/evidence/orcd/orcd_efs_commands.py /tmp/efs-mount PEER --query-host
 172.16.223.58 --output NEW_EXTERNAL_DIRECTORY`, with two same-export native
 RDMA mounts and the requested profile. Preserve failures and normally unmount
 the peer; do not widen the per-suite deadlines or delete authoritative stores.

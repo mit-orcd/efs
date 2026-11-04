@@ -64,6 +64,6 @@ finally:
 assert g.fixture['transport'] == 'tcp' and 'EFS_RDMA_DEV' not in ' '.join(c for _, c in g.cmds)
 
 assert 'ao-readdir' in {x.name for x in Q.gates(Q.default_plugins({}, []))}
-for script in ('scripts/k14_atomic_cluster.sh',):
+for script in ('scripts/evidence/k14/k14_atomic_cluster.sh',):
     assert subprocess.run(['bash', '-n', str(root / script)]).returncode == 0, script
 print('PASS test_qualify_rdma_live (RDMA hardware runs NOTRUN here)')

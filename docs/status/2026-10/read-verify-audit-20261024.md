@@ -121,19 +121,19 @@ never served.
   `tests/test_get_integrity.py`; `tests/test_store_gc.c` gains the torn-file
   cases; `tests/test_fragment_attempt.py` and `tests/live/get_pair_deadline.py`
   drop the old init stub; `tests/live/gate_rounds.py` runs the new test.
-- `scripts/read_verify_cost.sh`: the CPU-cost reproduction below.
+- `scripts/evidence/measurement/read_verify_cost.sh`: the CPU-cost reproduction below.
 
 ## CPU cost
 
-`scripts/read_verify_cost.sh` on intel2, idle host (no gate running):
+`scripts/evidence/measurement/read_verify_cost.sh` on intel2, idle host (no gate running):
 private 3-daemon TCP loopback cluster, `--direct-io`, one efs-fuse mount,
 one 2 GiB random file, four cold reads per run (remount before each, so the
 client read cache is empty; `dd bs=1M`), efs-fuse CPU from `/proc`. Two
 passes, alternating base and branch:
 
 ```bash
-scripts/read_verify_cost.sh run REL DIR 18820 2048 4   # REL = base or branch tree
-scripts/read_verify_cost.sh stop REL DIR 18820         # then delete DIR
+scripts/evidence/measurement/read_verify_cost.sh run REL DIR 18820 2048 4   # REL = base or branch tree
+scripts/evidence/measurement/read_verify_cost.sh stop REL DIR 18820         # then delete DIR
 ```
 
 | Build | efs-fuse CPU s per GiB read (rounds 2–4, both passes) | Read MiB/s | Round 1 (with sha256 check) |

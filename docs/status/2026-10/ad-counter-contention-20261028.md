@@ -122,11 +122,11 @@ without perf. Report medians **and ranges**, not just the best run.
 Reproduce with built, matching daemon/client/management binaries in each root:
 
 ```sh
-python3 scripts/measure_counter_cost.py \
+python3 scripts/evidence/measurement/measure_counter_cost.py \
   --source BASELINE_OR_LOCAL_EXPERIMENT --scratch NEW_PRIVATE_SCRATCH \
   --out NEW_RAW_DIRECTORY --writers 32 --transport tcp \
   --load-s 45 --profile-s 30 --working-set 64
-python3 scripts/analyze_counter_profile.py NEW_RAW_DIRECTORY \
+python3 scripts/evidence/measurement/analyze_counter_profile.py NEW_RAW_DIRECTORY \
   BASELINE_OR_LOCAL_EXPERIMENT/tests/faults/efsd
 ```
 

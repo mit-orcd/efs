@@ -131,7 +131,7 @@ The Intel 32-helper experiment was withdrawn in this same code commit. Its
 already-running native checks finished on both hosts, but it was never deployed.
 Ordinary-file helper capacity is restored to8; related normal/sanitizer fixture
 variants pass. Further Intel performance experiments are paused by human scope.
-Both Intel hosts were rechecked with `scripts/intel_package3_verify.py`: actual
+Both Intel hosts were rechecked with `scripts/evidence/intel/intel_package3_verify.py`: actual
 process/profile, mounts and disabled server command-policy gates PASS.
 No new production deployment or enabled-command workload was started.
 

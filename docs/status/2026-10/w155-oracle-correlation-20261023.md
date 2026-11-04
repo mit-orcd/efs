@@ -25,7 +25,7 @@ from evidence.
 
 ## What the oracle records and decides
 
-`scripts/w125_concurrent.py` (the W125/W148 workload):
+`scripts/evidence/w125/w125_concurrent.py` (the W125/W148 workload):
 
 - **Stages.** A modify runs as recorded syscalls: `open`, `fstat`, `truncate`
   (rewrite, shrink, extend), `seek`, `write` in 1 MiB calls (`WRITE_CHUNK`),
@@ -74,7 +74,7 @@ version and cannot know another client's unresolved attempts.
 
 ## Correlation tool
 
-`scripts/w155_correlate.py OUT [--efsd-log F ...] [--pad S] [--json FILE]`
+`scripts/evidence/w125/w155_correlate.py OUT [--efsd-log F ...] [--pad S] [--json FILE]`
 prints one table per failed attempt. The window is the failing stage
 ± 5 s. A receive retry belongs to the window when its request was sent inside
 it (log time minus `recv_ms`) or it was logged inside it.
@@ -156,7 +156,7 @@ make -j8
 make test            # stopped at tests/test_apply_ring.py, see below
 make -k test         # every remaining target
 grep -E '^make(\[[0-9]+\])?: .*Error' LOG
-python3 scripts/w155_correlate.py OUT --efsd-log RUN/logs/efsd-n1.log ...
+python3 scripts/evidence/w125/w155_correlate.py OUT --efsd-log RUN/logs/efsd-n1.log ...
 ```
 
 - `tests/test_w125_harness.py`: **PASS** on the Mac (Python 3.9.6) and on nuc

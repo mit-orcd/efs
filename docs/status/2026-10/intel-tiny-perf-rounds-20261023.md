@@ -20,12 +20,12 @@ window (`EFS_OPID_REPLY_CACHE`), W126 (KV maintenance).
 - **Workload:** `tiny_files.py --workers 32 --max-depth 2`, files of
   1–512 B, one 120 s run per measurement, without perf attached. The
   metric is files created divided by 120 s.
-- **Rounds:** `scripts/intel_perf_round.sh OUT` deploys HEAD (devops
+- **Rounds:** `scripts/evidence/intel/intel_perf_round.sh OUT` deploys HEAD (devops
   `stop.sh`, `deploy.sh`, then `start.sh` with `EFS_COMMANDS=1`, storage
   kept), builds the client and runs the measurement. Since round 3 it also
   records 60 s of mid-run `iostat` on both servers.
-- **Off-CPU:** `scripts/intel_offcpu_profile.sh` and
-  `scripts/offcpu_summary.py` (`sched_switch` with DWARF stacks).
+- **Off-CPU:** `scripts/evidence/intel/intel_offcpu_profile.sh` and
+  `scripts/evidence/intel/offcpu_summary.py` (`sched_switch` with DWARF stacks).
 
 ## Results
 

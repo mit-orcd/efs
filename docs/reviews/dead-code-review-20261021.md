@@ -81,7 +81,7 @@ source lines** of the client library are reachable only from test harnesses
 3. **P1/P3: the server serves undeclared and newer-version clients, and
    accepts unauthenticated `NODE_LEFT`.** Only GETCHUNKS, GET_SEGMENT and
    PUT_SEGMENT require the W125 declaration. Writes and namespace
-   mutations do not. `scripts/w125_p3_compat.sh` expects an old client's
+   mutations do not. `scripts/evidence/w125/w125_p3_compat.sh` expects an old client's
    writes to keep working. `NODE_LEFT` has no sender, yet any connection
    can use it to drop a node from in-memory membership.
 4. **S1: unregistered session identities are accepted
@@ -278,7 +278,7 @@ To clean up, remove `/data1/efs/evidence/testsuite/deadcode-0bdf55256` and
   (`handler.c:196`, `src/common/protocol.c:697`), so a *newer* declared
   version is accepted too.
 - `include/efs/protocol.h:237–242` documents the old-client intent.
-- `scripts/w125_p3_compat.sh` case 2 expects "old client … writes still
+- `scripts/evidence/w125/w125_p3_compat.sh` case 2 expects "old client … writes still
   work".
 - Action: require one exact supported declaration. Define this as a
   connection-state and message matrix, not a single "before any request"
@@ -694,7 +694,7 @@ NOTRUN" verdict, not a silent pass.
   change.
 
 ### E3 — Mixed-build script · maintenance · High · **delete or rewrite**
-- `scripts/w125_p3_compat.sh` tests an old efs-fuse on new daemons and a
+- `scripts/evidence/w125/w125_p3_compat.sh` tests an old efs-fuse on new daemons and a
   new client on old daemons, which AGENTS.md rules out. It also encodes
   P1's fail-open behaviour as expected.
 

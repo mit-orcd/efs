@@ -98,7 +98,7 @@ for the cache fix. The AMD column differs in client, NIC, dd and offsets; its
 wire ratios are protocol properties and comparable, its throughput is not.
 
 RPC requests for 4 MiB of 32 KiB reads (128 reads over 32 chunks), counted from
-`strace` of the client (`scripts/summarize_intel_rpc_trace.py`):
+`strace` of the client (`scripts/evidence/intel/summarize_intel_rpc_trace.py`):
 
 | Build, cache state | GETCHUNKS | Fragment GETs | Wire bytes |
 | --- | ---: | ---: | ---: |
@@ -155,8 +155,8 @@ and `kernel.yama.ptrace_scope=0`, from a source tree (the summarizer reads
 `include/efs/protocol.h`):
 
 ```sh
-scripts/intel_external_client.sh stop && scripts/intel_external_client.sh start   # empty read cache
-scripts/measure_read_reuse.sh /data1/efs/intel-mnt/001.dat enp2s0 NEW_OUT_DIR
+scripts/evidence/intel/intel_external_client.sh stop && scripts/evidence/intel/intel_external_client.sh start   # empty read cache
+scripts/evidence/intel/measure_read_reuse.sh /data1/efs/intel-mnt/001.dat enp2s0 NEW_OUT_DIR
 ```
 
 It prints three 32 KiB traced runs (current cache, after 300 MiB, after a

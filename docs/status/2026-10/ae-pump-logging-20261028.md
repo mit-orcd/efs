@@ -68,7 +68,7 @@ Reproduction (fresh archived build on an otherwise idle Linux host):
 ```sh
 make -j8 all tests/faults/efsd
 ./tests/test_telemetry
-python3 scripts/pump_logging_profile.py --work PRIVATE/fixture \
+python3 scripts/evidence/pump-logging/pump_logging_profile.py --work PRIVATE/fixture \
   --output EVIDENCE/case --sink blocked --obs 1 --require-progress
 python3 tests/test_pump_logging.py
 make tsan-check
@@ -278,7 +278,7 @@ that triggers the intended replica-3 halt. The healthy-quorum listing includes
 all 96 before resync; the later listing after resync omits that name. This is
 more specific than the older count-only incident, but establishes no cause.
 
-The existing `scripts/forensics/k48_store_scan.c`, compiled against this
+The existing `scripts/evidence/k48/k48_store_scan.c`, compiled against this
 fixture's **bb57ef69b** `libefs.a`, opens **disposable copies only** of each
 closed `w130/nN/mdraft/kv`. All three copies contain 96 physical live dentries,
 including `f0064` on shard 2778, child inode 266625. Static READDIR returns all
@@ -288,7 +288,7 @@ match their full manifest after inspection. Outputs and scanner hash are under
 raw `k48-forensics/`; original stores remain under `open-k48/`.
 
 Reproduce inspection on an otherwise idle host with exact-source library:
-`cc -std=gnu11 -O0 -g -Iinclude scripts/forensics/k48_store_scan.c libefs.a -pthread -lm -ldl -libverbs -o PRIVATE/scan`,
+`cc -std=gnu11 -O0 -g -Iinclude scripts/evidence/k48/k48_store_scan.c libefs.a -pthread -lm -ldl -libverbs -o PRIVATE/scan`,
 copy each saved KV to a new `PRIVATE/nN`, then `PRIVATE/scan PRIVATE/nN 385`.
 Opening an LSM can recover/repair its WAL; never open an original capture.
 This is static forensic evidence after shutdown, **not** a replay of the failed

@@ -47,7 +47,7 @@ suite after deploying all of devel, to find out whether the code base works.
 | Core POSIX, one mount | node9901 `EFS_CLUSTER=orcd-mini ./smoke.sh` (`posix_suite.py`, jobs 4, 30 s case timeout) | **PASS 216/216** (13.8 s) |
 | Core vs local XFS | `posix_suite.py` on an XFS `/tmp` directory, then `compare.py XFS orcd-mini` | **PASS** (every test passes on both sides) |
 | POSIX extras | `posix_extras.py /data1/efs/mnt --jobs 4 --timeout-s 30` | **FAIL 2/5**, 1 skip (see below) |
-| Two-client, node9901 + node9900 | `scripts/orcd_mini_posix2.py RESULTS.tsv` from the Mac | **PASS 67/67** (446 s) |
+| Two-client, node9901 + node9900 | `scripts/evidence/orcd-mini/orcd_mini_posix2.py RESULTS.tsv` from the Mac | **PASS 67/67** (446 s) |
 | Durability prepare/remount/verify | node9901 `EFS_CLUSTER=orcd-mini ./smoke-persist.sh` | **PASS 27/27** |
 | Private GC + POSIX, direct, TCP | `tests/live/gc_reclamation.py --mode direct --posix --root /tmp/A --root /tmp/B` | **PASS** (71 PASS lines) |
 | Private GC + POSIX, direct, RDMA | same with `--transport rdma`, `EFS_RDMA_DEV=mlx5_0` | **PASS** (71 PASS lines) |

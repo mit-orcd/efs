@@ -134,7 +134,7 @@ During separate bounded reads, attach to the current Intel-export client PID:
 `timeout -s INT 8 strace -f -ttt -T -yy -xx -s48
 -e trace=sendmsg,writev,recvfrom -p PID -o TRACE`;
 `timeout -s INT 3 strace -f -ttt -T -xx -s96 -e trace=read -p PID -o TRACE`.
-Use `scripts/summarize_intel_rpc_trace.py` for exchanges. Decode GET request
+Use `scripts/evidence/intel/summarize_intel_rpc_trace.py` for exchanges. Decode GET request
 payload as little-endian `I4xQIIQ`; FUSE READ opcode 15, offset at byte 48,
 size at byte 56 after its input header. Restrict decoding to complete syscalls.
 

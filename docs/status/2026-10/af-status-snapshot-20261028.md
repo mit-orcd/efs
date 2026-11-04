@@ -41,21 +41,21 @@ pin the host/path, preserve exit receipts, logs and fixtures. Exact commands:
 
 ```sh
 # Primary product/probe source f570fb0cd, nine balanced trials then clean full gate
-bash scripts/af_campaign.sh /home/maik/efs-task-af/run-3 \
+bash scripts/evidence/af/af_campaign.sh /home/maik/efs-task-af/run-3 \
   /home/maik/efs-artifacts/af-20261028-f570fb0cd f570fb0cd
 # Untouched git archive486aa3a46 in base-486/src; external tools at1d5c31e24
-bash scripts/af_base_b6.sh /home/maik/efs-task-af/base-486/src \
+bash scripts/evidence/af/af_base_b6.sh /home/maik/efs-task-af/base-486/src \
   /home/maik/efs-artifacts/af-20261028-f570fb0cd \
   /home/maik/efs-artifacts/af-base-b6-20261028-486aa3a46
 # After base reproduction closed; same instrumented binaries, corrected driver1d5c31e24
-bash scripts/af_50_after.sh /home/maik/efs-task-af/run-3 \
+bash scripts/evidence/af/af_50_after.sh /home/maik/efs-task-af/run-3 \
   /home/maik/efs-artifacts/af-20261028-f570fb0cd \
   /home/maik/efs-artifacts/af-50hz-20261028-1d5c31e24 1d5c31e24
 # Separate committed967db0570 source and private /tmp fixtures on fstor007
-bash scripts/af_real_campaign.sh /tmp/efs-task-af/real-967db0570 \
+bash scripts/evidence/af/af_real_campaign.sh /tmp/efs-task-af/real-967db0570 \
   /data1/efs/evidence/af-real-20261028-967db0570 967db0570
 # Aggregate a capture, or use --rates 50 for the strict supplement
-python3 scripts/af_summarize.py CAPTURE
+python3 scripts/evidence/af/af_summarize.py CAPTURE
 ```
 
 Clean xorinox: `efsd f570fb0cd`, branch agent/devel-task-af, built

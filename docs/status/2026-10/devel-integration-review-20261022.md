@@ -635,7 +635,7 @@ an unbounded wait or presume every REPORT sub-operation shares one receipt.
 
 ### P1 — A blanket old-or-new harness rule would assert unprovided atomicity
 
-`scripts/w125_concurrent.py:modifier` rewrites with `truncate(0)` followed by
+`scripts/evidence/w125/w125_concurrent.py:modifier` rewrites with `truncate(0)` followed by
 buffered `write`, with close on leaving the context. It does not issue an
 explicit fsync, and its exception handler leaves the expected version
 unchanged. The error may arise at truncate, write, buffer flush or close.

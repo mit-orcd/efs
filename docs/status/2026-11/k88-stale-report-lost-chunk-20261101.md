@@ -27,7 +27,7 @@ FUSE already returns EIO: `efs_file_open` opens an `efs_wb_description` and `fsy
 
 ## Results
 
-Fixture and tool: `tests/test_bench_published.py`, `scripts/bench_published_par.sh OUT COPIES ROUNDS` (each copy with its own `TMPDIR`), intel1 load average 25 to 50 at 24 copies. A failure is a non-zero exit; every failure below had `report-stuck`.
+Fixture and tool: `tests/test_bench_published.py`, `scripts/evidence/measurement/bench_published_par.sh OUT COPIES ROUNDS` (each copy with its own `TMPDIR`), intel1 load average 25 to 50 at 24 copies. A failure is a non-zero exit; every failure below had `report-stuck`.
 
 | Build | Copies | Runs | Failures (`report-stuck`) | Notes |
 |---|---|---|---|---|
@@ -50,8 +50,8 @@ Prerequisites: a clone at the tested commit, FUSE usable, 8 CPUs, `screen`; priv
 ```sh
 export TMPDIR=$HOME/efs-taskCK/tmp; mkdir -p "$TMPDIR"
 make -j8 efsd efs-fuse efs-bench efs-mgmt
-sh scripts/bench_published_par.sh OUT/par24 24 10     # about 2 min; expect 0 failures after the fix
-sh scripts/bench_published_par.sh OUT/par24l 24 100   # about 15 min
+sh scripts/evidence/measurement/bench_published_par.sh OUT/par24 24 10     # about 2 min; expect 0 failures after the fix
+sh scripts/evidence/measurement/bench_published_par.sh OUT/par24l 24 100   # about 15 min
 # trace variant: add env["EFS_DCACHE_TRACE"]="1"; env["EFS_REPORT_DBG"]="1" after the
 # env['EFS_TRANSPORT'] line of a copy of the test; before the fix about 0.3 % of runs show
 # `putid-fill ... putbase=0`, `stale-class ... done=0 base=0` twice and `report-stuck`.

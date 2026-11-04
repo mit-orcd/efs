@@ -14,7 +14,7 @@ unrelated to this read-path change; recorded here, owner decision pending.
 
 ## What was measured first
 
-Cold packed-read workload (`scripts/ak_measure.py`, committed): a private
+Cold packed-read workload (`scripts/evidence/ak/ak_measure.py`, committed): a private
 3-daemon loopback cluster of the production build, 2000 small files (1–8 KiB,
 8,314,296 B total), packer at `EFS_PACK_MIN_AGE_MS=500`, then cold passes
 through a fresh mount per pass; every file opened, read and verified. Client
@@ -109,10 +109,10 @@ NOTRUN, as on devel.
 
 ```
 # TCP column (any Linux host with /dev/fuse and fusermount3)
-EFS_TRANSPORT=tcp python3 scripts/ak_measure.py --src . --work /tmp/ak --files 2000 --seconds 60
+EFS_TRANSPORT=tcp python3 scripts/evidence/ak/ak_measure.py --src . --work /tmp/ak --files 2000 --seconds 60
 # RDMA column (RoCE host; RDMA cannot hairpin loopback, bind the node IP)
 EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 \
-  python3 scripts/ak_measure.py --src . --work /tmp/ak --bind 10.1.99.1 --files 2000 --seconds 60
+  python3 scripts/evidence/ak/ak_measure.py --src . --work /tmp/ak --bind 10.1.99.1 --files 2000 --seconds 60
 perf report -i /tmp/ak/perf-cold.data --stdio | grep -E 'blake3|memmove'
 ```
 

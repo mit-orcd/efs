@@ -59,7 +59,7 @@ paths must be absent before fresh source copies; never replace another run.
 
 1. Freeze `C=$(git rev-parse HEAD)` on this branch and export `git archive "$C"`
    into `/tmp/efs-taskV-20261028/src` on each host using
-   `scripts/task_v_ssh.sh HOST 'mkdir ...; tar -xf - -C ...'`. Build separately
+   `scripts/evidence/task-v/task_v_ssh.sh HOST 'mkdir ...; tar -xf - -C ...'`. Build separately
    on every host (native CPU flags) with identical `EFS_GIT_ID=$C`,
    `EFS_GIT_DESCRIBE=$C`, `EFS_GIT_BRANCH=agent/devel-task-v`.
    Set `PKG_CONFIG_PATH` to the compatible private libfuse prefix and link

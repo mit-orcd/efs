@@ -41,10 +41,10 @@ Normal native builds used the same source under `retry-normal`, without faults.
 
 Prerequisites: existing Intel SSH aliases, build dependencies, mutual peer SSH
 for the live oracle, and private ports allowed between hosts. Use the committed
-`scripts/intel_w100_private.py` with staged source/binaries in `retry-fix`:
+`scripts/evidence/intel/intel_w100_private.py` with staged source/binaries in `retry-fix`:
 
 ```sh
-python3 scripts/intel_w100_private.py start retry-fixed retry-fix
+python3 scripts/evidence/intel/intel_w100_private.py start retry-fixed retry-fix
 ```
 
 Run on each host from `/data1/efs/w100-private/retry-normal`:
@@ -102,7 +102,7 @@ Remote logs are `/data1/efs/w100-private/retry-{native-final,sanitizer-final,cor
 The live files contain JSON plus a final PASS line.
 
 Cleanup completed with
-`python3 scripts/intel_w100_private.py stop retry-fixed retry-fix`: both clients
+`python3 scripts/evidence/intel/intel_w100_private.py stop retry-fixed retry-fix`: both clients
 unmounted/drained and all four owned daemons stopped safely. Private storage and
 logs remain for inspection. Production ports 17432/17433 and original main
 Intel processes/mounts were left unchanged. No ORCD changes.
