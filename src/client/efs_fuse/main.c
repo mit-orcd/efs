@@ -6,6 +6,7 @@
 #include "append.h"
 #include "release.h"
 #include "plock_init.h"
+#include "ll_run.h"
 #include "../stop_control.h"
 
 /* Canonical absolute mountpoint, set once in main and logged there. The
