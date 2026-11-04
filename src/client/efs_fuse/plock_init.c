@@ -1,5 +1,6 @@
 /* efs-fuse: POSIX locks and FUSE init. */
 #include "fuse_internal.h"
+#include "plock_init.h"
 #include "support.h"
 #include "open.h"
 #include "append.h"

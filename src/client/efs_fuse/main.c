@@ -5,6 +5,7 @@
 #include "writeback.h"
 #include "append.h"
 #include "release.h"
+#include "plock_init.h"
 #include "../stop_control.h"
 
 /* Canonical absolute mountpoint, set once in main and logged there. The

@@ -79,25 +79,11 @@ int fuse_stat_errno(int rc);
 int efs_rc_to_errno(int rc);
 
 
-#ifndef OFF_MAX
-#define OFF_MAX ((off_t)(((unsigned long long)1 << (sizeof(off_t) * 8 - 1)) - 1))
-#endif
-
 struct deep_callback_sample {
     uint64_t begin, service_end;
     long pid;
     char name[6];
 };
-
-/* plock_init.c */
-int efs_fuse_getlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
-                              struct flock *lock);
-int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
-                              struct flock *lock, int sleep);
-int efs_fuse_flock_ino(fuse_ino_t ino, struct fuse_file_info *fi, int op);
-extern int g_fuse_ready_wr;
-int efs_fuse_wait_ready(int rfd, pid_t child, int timeout_ms);
-void efs_fuse_init(void *userdata, struct fuse_conn_info *conn);
 
 /* lookup.c */
 void fill_entry(fuse_ino_t ino, struct fuse_entry_param *e,

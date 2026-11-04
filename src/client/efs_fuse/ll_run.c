@@ -7,6 +7,7 @@
 #include "write.h"
 #include "namespace.h"
 #include "release.h"
+#include "plock_init.h"
 #include "../reply_buffers.h"
 
 void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
