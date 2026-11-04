@@ -4,6 +4,8 @@
 
 ## Recent evidence and remaining acceptance
 
+[K54 one-off (Task CU)](k54-revoked-epoch-oneoff-20261103.md): verdict **C**. CS's single `returned member stored a revoked-epoch fragment` failure is not the port race (victim answered STALE and sealed its certificate; the port-race failures die earlier at `cluster.start`), but it did not recur in 60 churn runs on node9900 (49 pass, 9 port race, 2 new `participant-floor` revoke failures, 0 revoked-epoch). The assertion now prints the added/removed files; an *added* file on recurrence would open a K row. No K row added.
+
 [Task CT: test_barrier_backoff](store-durability-backoff-window-20261103.md): **test defect fixed, no K row, blocks alpha: no** (Nov 3, node9900): the fixed 1.2 s sleep is replaced by a bounded wait on `failures` with exact back-off schedule checks, plus a leaked-syncer-thread fix in the test harness; old test failed 2 of 10 under gate load, new passed 10 of 10 and 60 of 60 solo; the gate showed only the known K54 port-race flake (Task CS).
 
 [Task CS — K54 harness port race](k54-harness-port-race-20261103.md): **PASS, harness defect, no K row**. `tests/test_k54_member_down_fence.py` failed with `Address already in use` on a restarted member because `ticket_put.Cluster` released its probed ports at construction; it now holds one SO_REUSEADDR socket per member port until `close()`. With 8 loopback port churners on node9900: devel harness 24 of 30, fixed 30 of 30; clean-build gate `FAIL 0`.
