@@ -380,17 +380,21 @@ COMPONENT_SECTIONS = ["Files", "Contract", "Calls", "Tests", "Open findings"]
 
 def check_component_readmes():
     problems = []
-    for d in sorted(p for p in (DOCS.parent / "src").iterdir() if p.is_dir()):
+    src = DOCS.parent / "src"
+    # every src/<dir>, plus any deeper directory that holds C files (a split module such as client/efs_fuse/)
+    dirs = sorted({p for p in src.iterdir() if p.is_dir()} | {c.parent for c in src.rglob("*.c") if c.parent.parent != src})
+    for d in dirs:
+        name = d.relative_to(src).as_posix()
         readme = d / "README.md"
         if not readme.is_file():
-            problems.append(f"src/{d.name}: README.md missing")
+            problems.append(f"src/{name}: README.md missing")
             continue
         heads = re.findall(r"^## (.+?)\s*$", readme.read_text(), re.M)
         for h in COMPONENT_SECTIONS:
             if h not in heads:
-                problems.append(f"src/{d.name}/README.md: missing heading '## {h}'")
+                problems.append(f"src/{name}/README.md: missing heading '## {h}'")
         if heads[:len(COMPONENT_SECTIONS)] != COMPONENT_SECTIONS and all(h in heads for h in COMPONENT_SECTIONS):
-            problems.append(f"src/{d.name}/README.md: headings out of order: {heads}")
+            problems.append(f"src/{name}/README.md: headings out of order: {heads}")
     return problems
 
 

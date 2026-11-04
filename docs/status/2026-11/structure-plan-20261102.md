@@ -130,8 +130,31 @@ match the table. Done: adding a setting edits one file.
 
 ### Phase 3 — after phase 2 holds
 
-- `meta_apply.c`, `write.c`, `efs_fuse.c` by the 2a/2b recipe, each between
-  waves with no branch on the file.
+- `efs_fuse.c` split landed in wave 55 (Nov 4, [evidence](efs-fuse-split-20261104.md)):
+  12 files under `src/client/efs_fuse/`. **Finish this pilot before any further
+  large split** (review of Nov 4): (a) a component guide,
+  `src/client/efs_fuse/README.md`, mapping symptom to file, contract and
+  tests, and the README gate recursing into split directories (done Nov 4);
+  (b) the catalogue routes the 50 FUSE tests per file,
+  `client/efs_fuse.<file>` (done Nov 4, six rows that span files stay
+  bare); (c) a narrow interface per file: owner, lock, lifetime and failure
+  behaviour of the eleven globals and the shared structs in
+  `fuse_internal.h` (465 lines), globals made private where the call graph
+  allows; (d) a measured reading set: for three representative fixes
+  (release cleanup, a ReadIndex refusal, write-back error handling) record
+  the files and lines an agent must read and validate before and after,
+  baseline taken on current devel before (c) lands. Target per fix: one
+  guide, one interface, one implementation area, the routed tests.
+- `tests/csrc.py` concatenation is a transition mechanism: it keeps the 318
+  source-splicing tests working across splits but ties them to text order.
+  Tests migrate towards compiling the real module through its narrow
+  interface as (c) produces one; no deadline.
+- `meta_apply.c`, `write.c` and the `raft_host.c` pilot (2b) by the 2a/2b
+  recipe, each between waves with no branch on the file, and only once (d)
+  shows the FUSE pilot reduced the reading set.
+- Graph queries: a broad `graphify query` returns hundreds of nodes; agents
+  need a small ranked starting set (the component README's symptom map is
+  the interim answer).
 - `scripts/` triage: the top level keeps the tools agents run (`qualify.py`,
   `make_test_summary.sh`, `batch_f.sh`, the checkers, …); task-named scripts
   move under `scripts/evidence/<task>/` and the evidence pages that cite them
