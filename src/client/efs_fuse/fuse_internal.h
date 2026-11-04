@@ -205,4 +205,72 @@ struct deep_callback_sample {
     char name[6];
 };
 
+/* support.c */
+void efs_fuse_install_crash_handlers(void);
+uint32_t fuse_chunk_size(void);
+void stat_set_size_blocks(struct stat *stbuf, uint64_t size,
+                                 uint64_t allocated);
+uint64_t stats_now_ms(void);
+int stats_snapshot(efs_ino_t dir_ino,struct stats_ent *out);
+int stats_fill_stat(const struct efs_inode *parent, struct stat *stbuf);
+int feature_enabled(uint32_t bit);
+extern char g_mountpoint[EFS_MAX_PATH];
+extern __thread fuse_req_t t_req;
+extern struct fuse_session *g_fuse_se;
+struct efs_file_handle *efs_file_handle(const struct fuse_file_info *fi);
+efs_ino_t efs_file_ino(const struct fuse_file_info *fi, efs_ino_t fallback);
+int efs_file_open(struct fuse_file_info *fi, efs_ino_t ino);
+void efs_file_close(struct fuse_file_info *fi);
+int virtual_file_open(struct fuse_file_info *fi, efs_ino_t ino,
+                             const char *text, size_t len);
+int efs_file_sync_error(struct fuse_file_info *fi, efs_ino_t ino,
+                                int was_stalled, int rc);
+int virt_kind(fuse_ino_t ino);
+efs_ino_t virt_parent(fuse_ino_t ino);
+fuse_ino_t virt_find_ino(efs_ino_t parent);
+fuse_ino_t virt_commands_ino(efs_ino_t parent);
+int commands_enabled(void);
+int command_script(const char *term);
+uint64_t virtual_version(const char *text, size_t len);
+fuse_ino_t vq_intern(efs_ino_t dir_ino, const char *term,
+                            uint64_t version, size_t len);
+void vq_unreserve(fuse_ino_t nodeid);
+int vq_lookup(fuse_ino_t nodeid, efs_ino_t *dir_out, char *term_out,
+                     size_t term_cap);
+void vq_nlookup_add(fuse_ino_t nodeid, uint32_t n);
+void vq_nlookup_sub(fuse_ino_t nodeid, uint64_t n);
+int vq_pinned_size(efs_ino_t ino, size_t *len, int open_only);
+int vq_version_matches(efs_ino_t ino, const char *text, size_t len);
+const struct fuse_ctx *ll_ctx(void);
+void efs_create_credentials(const struct efs_inode *parent, mode_t *mode,
+                                   uid_t *uid, gid_t *gid);
+void ll_inval_entry(fuse_ino_t parent, const char *name);
+void ll_inval_inode(fuse_ino_t ino, off_t off, off_t len);
+int ll_inval_start(void);
+void ll_inval_stop(void);
+int virtual_access(efs_ino_t ino);
+extern struct efs_find_res g_find_res[EFS_FIND_RES_N];
+extern pthread_mutex_t g_find_res_mu;
+int find_res_caller(int i);
+int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
+                             const char *pattern);
+int find_query_read(efs_ino_t dir_ino, const char *query_path,
+                           const char *pattern,
+                           char *buf, size_t size, off_t offset);
+int find_dir_fill_stat(const struct efs_inode *parent, struct stat *stbuf);
+int find_query_fill_stat(const struct efs_inode *parent,
+                                const char *query_path, const char *pattern,
+                                struct stat *stbuf);
+int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid,
+                        int mask);
+int check_dir_wx(const struct efs_inode *dir);
+int check_dir_x(const struct efs_inode *dir);
+void fill_stat_from_inode(struct stat *stbuf, const struct efs_inode *ino);
+int check_chown_perm(const struct efs_inode *ino, uid_t uid, gid_t gid);
+int file_chunk_present(efs_ino_t ino, uint32_t ci);
+int fuse_stat_errno(int rc);
+
+/* namespace.c */
+int efs_rc_to_errno(int rc);
+
 #endif

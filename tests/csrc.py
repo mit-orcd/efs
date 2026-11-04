@@ -23,6 +23,7 @@ root = Path(__file__).resolve().parents[1]
 MODULES = {
     'raft_host': ('EFS_RAFT_HOST_SOURCE', ['src/server/raft_host.c']),
     'efs_fuse': ('EFS_FUSE_SOURCE', [
+        'src/client/efs_fuse/support.c',
         'src/client/efs_fuse.c',
         'src/client/efs_fuse/fuse_internal.h',
     ]),
