@@ -49,6 +49,7 @@ kind (deployment inputs first) then name; `--writers` comes last.
 | `EFS_PACK_COMPACT_IDLE_S` | `60` | daemon |
 | `EFS_PACK_COMPACT_IDLE_SEGS` | `256` | daemon |
 | `EFS_PACK_FILES_PER_S` | `5000` | daemon |
+| `EFS_PACK_FAIL_BACKOFF_MS` | `30000` | daemon |
 | `EFS_PACK_INTERVAL_MS` | `1000` | daemon |
 | `EFS_PACK_MIN_AGE_MS` | `60000` | daemon |
 | `EFS_PACK_SEGMENTS_PER_PASS` | `8` | daemon |
@@ -135,6 +136,7 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 | `EFS_PACK_COMPACT_IDLE_S` | `server/packer.c:1323` (server_packer_start) via `env_u64` | 60 s idle before compaction | numeric tunable | — | `d25_step4_gates.sh`, `w125_mac_churn.sh` | Keep until A8: set by D25/W125 scripts |
 | `EFS_PACK_COMPACT_IDLE_SEGS` | `server/packer.c:1328` (server_packer_start) via `env_u64` | 256 segments per idle batch | numeric tunable | — | `test_pack_compact_schedule.py` | Keep until A8: set by `test_pack_compact_schedule.py` |
 | `EFS_PACK_FILES_PER_S` | `server/packer.c:1317` (server_packer_start) via `env_u64` | 5000 files/s idle pack rate | numeric tunable | — | `w125_p6_landing.sh` | Keep until A8: set by `w125_p6_landing.sh` |
+| `EFS_PACK_FAIL_BACKOFF_MS` | `server/packer.c:1316` (server_packer_start) via `env_u64` | 30000 ms packer pause per group after a failed or degraded segment upload | numeric tunable | — | `test_b6_unavailable.py`, `test_k37_segment_rebuild.py` | Keep until A8: set by the member-down tests (Task DA) |
 | `EFS_PACK_INTERVAL_MS` | `server/packer.c:1315` (server_packer_start) via `env_u64` | 1000 ms packer pass interval | numeric tunable | — | `test_k33_payload.py`; `w125_p6_landing.sh` | Keep until A8: set by `test_k33_payload.py`, W125 scripts |
 | `EFS_PACK_MIN_AGE_MS` | `server/packer.c:1314` (server_packer_start) via `env_u64` | 60000 ms before a file is packed | numeric tunable | — | `gate_k28_five_node.sh`, `reclaim_crash.py` +3; `bigdir_readdir_repro.sh`, `d25_step4_gates.sh` +19 | Keep until A8: set by many packing scripts and K33 tests |
 | `EFS_PACK_SEGMENTS_PER_PASS` | `server/packer.c:1316` (server_packer_start) via `env_u64` | 8 segments per pass | numeric tunable | — | `w125_p6_landing.sh` | Keep until A8: set by `w125_p6_landing.sh` |
