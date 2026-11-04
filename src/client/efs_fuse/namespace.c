@@ -1,5 +1,6 @@
 /* efs-fuse: create, mkdir, unlink, statfs, attributes, symlink, link, truncate. */
 #include "fuse_internal.h"
+#include "namespace.h"
 #include "support.h"
 #include "open.h"
 #include "append.h"

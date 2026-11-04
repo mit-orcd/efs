@@ -3,6 +3,7 @@
 #include "open.h"
 #include "support.h"
 #include "writeback.h"
+#include "namespace.h"
 #include "../commands/source.h"
 
 /* Per-ino open-description count. The sequenced server lease is an edge
