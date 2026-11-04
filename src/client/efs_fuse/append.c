@@ -1,5 +1,6 @@
 /* efs-fuse: append reservation and pressure flush. */
 #include "fuse_internal.h"
+#include "append.h"
 #include "open.h"
 #include "writeback.h"
 

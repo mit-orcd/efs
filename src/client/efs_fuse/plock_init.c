@@ -2,6 +2,7 @@
 #include "fuse_internal.h"
 #include "support.h"
 #include "open.h"
+#include "append.h"
 
 /* In-memory POSIX byte-range locks. Overlapping exclusive ranges conflict
  * even for the same lock-owner: that matches the suite (two fds, one
