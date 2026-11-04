@@ -270,7 +270,28 @@ int check_chown_perm(const struct efs_inode *ino, uid_t uid, gid_t gid);
 int file_chunk_present(efs_ino_t ino, uint32_t ci);
 int fuse_stat_errno(int rc);
 
+/* getattr.c */
+extern __thread uint64_t t_lookup_memo_serial;
+extern __thread struct efs_inode t_getattr_row;
+extern __thread efs_ino_t t_getattr_ino;
+uint64_t fuse_now_us(void);
+uint64_t lookup_memo_start(void);
+void lookup_memo_mutation_begin(void);
+void lookup_memo_mutation_end(void);
+void lookup_memo_put(const struct efs_inode *row);
+int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
+                                struct fuse_file_info *fi);
+struct efs_dirh *dirh_new(efs_ino_t ino);
+void dirh_free(struct efs_dirh *dh);
+int dirh_fill(struct efs_dirh *dh, fuse_ino_t ino);
+int efs_fuse_access_ino(fuse_ino_t ino, int mask);
+
 /* namespace.c */
 int efs_rc_to_errno(int rc);
+int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
+                                 struct fuse_file_info *fi);
+
+/* release.c */
+int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi);
 
 #endif
