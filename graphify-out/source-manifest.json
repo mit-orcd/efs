@@ -1321,7 +1321,7 @@
     "tests/test_storage_fence_retry.py": 1,
     "tests/test_storage_principles.py": 13,
     "tests/test_storage_root_inventory.py": 1,
-    "tests/test_store_durability.c": 17,
+    "tests/test_store_durability.c": 18,
     "tests/test_store_gc.c": 14,
     "tests/test_store_overwrite.c": 11,
     "tests/test_store_tls.py": 1,
@@ -2753,7 +2753,7 @@
     "tests/test_storage_fence_retry.py": "36e2104f304d9aae65e6cb3b76a8ffc19b02b0c51bfbdbe64d89f848ad3847f4",
     "tests/test_storage_principles.py": "d87adf328084717ee835ffa8c6d2c0381d435722da07f0f759d5e096f3c7f481",
     "tests/test_storage_root_inventory.py": "42c3f52cf88cb8769060c768c283c345aba9e64e57c7384b3f3fe16fe8986000",
-    "tests/test_store_durability.c": "a61c60ab134a12ec70c1557d17dc613e959681279f583f19e46b363d3b05568a",
+    "tests/test_store_durability.c": "7569a8178c769381ad656d2549b632c2cb1f231b2d84724a9c2e6fc9d9c41ee5",
     "tests/test_store_gc.c": "60748a51e3406b048ca201735e5fe968c7f874a1f3b14f4a4e8e31f2c84010b4",
     "tests/test_store_overwrite.c": "58a791cc881d4b76c99cba03ea74476a0cebe932b7db25740d009c109fce8c62",
     "tests/test_store_tls.py": "99068a58131b4cbb71ce9ad8cebbbc84c97dda44151b7f9c7300a13aec616e27",
@@ -2833,5 +2833,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "2b243c01bfb190dbeaab45417163a5047947acde"
+  "source_commit": "db8a837b6111283544c0b278504157fc8e78a65c"
 }
