@@ -75,19 +75,28 @@ def unticketed_body(ino, ci=0, fi=0, gen=987654321, length=65536):
                        length, gen, 0)
     return head + b'x' * length
 
+def hold(port):
+    """A SO_REUSEADDR socket bound (not listening) to 127.0.0.1:port, or None
+    if the port is taken. While it is held the kernel gives the port to no
+    bind(0) and no outgoing connection; efsd binds its listener with
+    SO_REUSEADDR too (src/common/network.c) and listens beside it."""
+    s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try: s.bind(('127.0.0.1', port))
+    except OSError: s.close(); return None
+    return s
+
 def free_base(count):
-    """An ephemeral base port with `count` consecutive free ports."""
+    """(base, held): an ephemeral base port with `count` consecutive ports,
+    each held by a socket the caller closes when its daemons are done."""
     for _ in range(100):
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0)); base = s.getsockname()[1]
         if base + count >= 65536: continue
-        ok = True
-        for p in range(base, base + count):
-            with socket.socket() as s:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                try: s.bind(('127.0.0.1', p))
-                except OSError: ok = False; break
-        if ok: return base
+        held = [hold(p) for p in range(base, base + count)]
+        if all(held): return base, held
+        for h in held:
+            if h: h.close()
     raise AssertionError('no free consecutive ports')
 
 class Cluster:
@@ -95,7 +104,10 @@ class Cluster:
     storage(i) -> list of storage roots for member i; extra -> efsd flags."""
     def __init__(self, source, work, members=3, base=None, extra=(), storage=None, env=None):
         self.source, self.work, self.members = Path(source), Path(work), members
-        self.base = base or free_base(members)
+        # Hold every member port until close(): a member that is killed and
+        # restarted must find its port again, not one an outgoing connection took.
+        if base: self.base, self.held = base, [h for h in map(hold, range(base, base + members)) if h]
+        else: self.base, self.held = free_base(members)
         self.extra = list(extra)
         self.storage = storage or (lambda i: [self.work / f'n{i+1}'])
         # W153: the member count comes from formation; EFS_MD_RAFT_N stops efsd.
@@ -152,3 +164,5 @@ class Cluster:
     def close(self):
         for i in list(self.procs): self.stop(i)
         for log in self.logs: log.close()
+        for h in self.held: h.close()
+        self.held = []
