@@ -163,7 +163,8 @@ CLIENT_SRCS = src/client/efs_fuse.c \
               src/client/efs_fuse/namespace.c \
               src/client/efs_fuse/release.c \
               src/client/efs_fuse/plock_init.c \
-              src/client/efs_fuse/lookup.c
+              src/client/efs_fuse/lookup.c \
+              src/client/efs_fuse/ll_run.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 
 # Simulator objects embed public Raft/KV layouts too. Keep them on the same
