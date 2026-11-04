@@ -862,7 +862,7 @@
     "tests/test_b_geometry.py": 20,
     "tests/test_b_geometry_status.py": 3,
     "tests/test_ba_delete_accounting.c": 10,
-    "tests/test_ba_upload_retire.c": 7,
+    "tests/test_ba_upload_retire.c": 8,
     "tests/test_bench_cli.py": 3,
     "tests/test_bench_latency.c": 2,
     "tests/test_bench_lookup_walk.py": 2,
@@ -1923,7 +1923,7 @@
     "src/server/server_internal.h": "3f8a8e3f33652c15851b0f95cbbb8e4013febacb09c548be08506a5e6c2604db",
     "src/server/storage_roots.c": "edaeb53f3548f0a80288290be15f9bd6c32a49a1b53e1f308567d2b24042e875",
     "src/server/storage_roots.h": "5d6417f28f1bf6e0b23423607632fba6076a4a0457ba2202bbd5b35ac9dce774",
-    "src/server/store.c": "dda786657b5ce2ca79b02554d323d28c42e13df9339e6ed215e446475de62b87",
+    "src/server/store.c": "fb490a76f0814425f143a5c88f3ea2797c62da81c385bc4879ab099256f2fd88",
     "src/server/store_nvme.c": "a368af1975f41953d11ec8cc11186471ba36740919becc200d9fd3fc0ba58f75",
     "src/server/thread.c": "21a7dbc7cfa4a0991808b108247000218fc6e402bed5aac8663a3e016ca8f84d",
     "src/server/write_prof.h": "e720c6cc4b4acffe196115d5132e678de930ca56ff3c8e91aa0607dd745ad677",
@@ -2296,7 +2296,7 @@
     "tests/test_b_geometry.py": "2abbae2bd755246af2829708c28398e60adfd74d4983420e2892157c8d462c61",
     "tests/test_b_geometry_status.py": "d8b3c1607c3dd6b47041284c7535e19c09cb2b5ca9d5690e07e7d01d0f5ee67b",
     "tests/test_ba_delete_accounting.c": "b166bdd3dddeb77a4e4274d57b0fa17e8f8adc3d9c5e2f39d4a87af4b5a7e006",
-    "tests/test_ba_upload_retire.c": "c35e1679f61095495e695d9a6c84646e23d9bb87b470e0257cdf4d65b402dbd1",
+    "tests/test_ba_upload_retire.c": "3dac330806f336b7bf5ed8ce0ea63b7923565042d66d06effc132e42eab88ef0",
     "tests/test_bench_cli.py": "5dc63c1f7b3ef9dfca2cd2cd8600fed7950816f498f33b40e40f49781da6187a",
     "tests/test_bench_latency.c": "995ad6f2e8a2f9ae0e8280f7a881e73b8bd0704efcc8a39bb4272e21933b7983",
     "tests/test_bench_lookup_walk.py": "ac1ac661f5529af2d4b65b811bc691d71f4e884e4b9a9eb609b6732347c7625e",
@@ -2836,5 +2836,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "1886276255dc84100411367fefed99b78911fc94"
+  "source_commit": "718372cfc056b58413f29125b3b65773cf4d2bbb"
 }

@@ -103,6 +103,32 @@ static void ordinary_delayed_authority(void)
     assert(used() == base);
     free(ordinary_frame); free(rebuild_frame);
 }
+/* K38 (task CV): a GC burst that retires more superseded generations of this
+ * chunk than the ring holds cannot be judged: BUSY (retry, fresh mark), never
+ * STALE. A retire of this object itself stays STALE. */
+static void retire_ring_burst(void)
+{
+    boot();
+    assert(!posix_memalign((void **)&body, 4096, EFS_FRAGMENT_SIZE));
+    memset(body, 0x61, EFS_FRAGMENT_SIZE); memset(sum, 0x62, sizeof(sum));
+    const efs_ino_t ino = 9100;
+    efs_tls_write_root = 0; efs_tls_path_hint = -1;
+    uint64_t mark = server_fragment_retire_mark(1, ino, 0, 0);
+    for (uint64_t g = 0; g < FRAG_RETIRE_RING + 1; g++) {
+        efs_tls_chunk_gen = 500 + g; efs_tls_retire_mark = EFS_RETIRE_MARK_NONE;
+        assert(!server_delete_fragment_if_sum(&S, &EX, ino, 0, 0, sum));
+    }
+    efs_tls_chunk_gen = 900; efs_tls_retire_mark = mark;
+    assert(server_write_fragment_with_sum_sync(&S, &EX, ino, 0, 0, body, EFS_FRAGMENT_SIZE, sum) == EFS_ERR_BUSY);
+    efs_tls_retire_mark = server_fragment_retire_mark(1, ino, 0, 0);
+    assert(!server_write_fragment_with_sum_sync(&S, &EX, ino, 0, 0, body, EFS_FRAGMENT_SIZE, sum));
+    mark = server_fragment_retire_mark(1, ino, 0, 0);
+    efs_tls_retire_mark = EFS_RETIRE_MARK_NONE;
+    assert(!server_delete_fragment_if_sum(&S, &EX, ino, 0, 0, sum)); /* this object (gen 900) */
+    efs_tls_retire_mark = mark;
+    assert(server_write_fragment_with_sum_sync(&S, &EX, ino, 0, 0, body, EFS_FRAGMENT_SIZE, sum) == EFS_ERR_STALE);
+    efs_tls_retire_mark = EFS_RETIRE_MARK_NONE;
+}
 int main(int argc, char **argv)
 {
     assert(argc == 2 && (!strcmp(argv[1], "put") || !strcmp(argv[1], "rebuild")));
@@ -111,5 +137,6 @@ int main(int argc, char **argv)
     efs_test_path(roots[1], sizeof(roots[1]), "efs-ba-upload-b-XXXXXX");
     assert(efs_test_mkdtemp(roots[0]) && efs_test_mkdtemp(roots[1]));
     run(argv[1], ordinary_delayed_authority, 0);
+    if (!ordinary_rebuild) run("retire-ring-burst", retire_ring_burst, 0);
     return 0;
 }
