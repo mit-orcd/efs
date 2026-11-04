@@ -385,7 +385,7 @@ same client script, RDMA mlx5_2 and its own log. Reproduction after readiness:
 cd /tmp/efs
 EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_2 bash scripts/client.sh \
   172.16.223.57:17432 /tmp/efs-mount-qualification-098333947-peer
-bash scripts/orcd_test_live_suites.sh OUTPUT/live /tmp/efs-mount \
+bash scripts/evidence/orcd/orcd_test_live_suites.sh OUTPUT/live /tmp/efs-mount \
   /tmp/efs-mount-qualification-098333947-peer
 ```
 

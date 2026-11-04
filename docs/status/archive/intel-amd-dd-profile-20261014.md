@@ -118,9 +118,9 @@ Requires same-user SSH, perf and strace permissions; confirm current PIDs and
 commands first. Use a new output directory, without restarting the human writer:
 
 ```sh
-ssh amd_efs 'bash -s -- /data1/efs/NEW-dd-profile CLIENT_PID,DD_PID 30' < scripts/profile_intel_live.sh
-ssh intel1_efs 'bash -s -- /data1/efs/NEW-dd-profile N1_PID,N2_PID 30' < scripts/profile_intel_live.sh
-ssh intel2_efs 'bash -s -- /data1/efs/NEW-dd-profile N3_PID,N4_PID 30' < scripts/profile_intel_live.sh
+ssh amd_efs 'bash -s -- /data1/efs/NEW-dd-profile CLIENT_PID,DD_PID 30' < scripts/evidence/intel/profile_intel_live.sh
+ssh intel1_efs 'bash -s -- /data1/efs/NEW-dd-profile N1_PID,N2_PID 30' < scripts/evidence/intel/profile_intel_live.sh
+ssh intel2_efs 'bash -s -- /data1/efs/NEW-dd-profile N3_PID,N4_PID 30' < scripts/evidence/intel/profile_intel_live.sh
 ```
 
 The committed helper captures 30-second perf/counters, then 12-second strace
@@ -128,7 +128,7 @@ summaries and detaches. For RPC headers:
 
 ```sh
 timeout -s INT 10 strace -f -ttt -T -yy -xx -s 8 -e trace=sendmsg,writev,recvfrom,poll,clock_nanosleep -p CLIENT_PID -o rpc.trace
-python3 scripts/summarize_intel_rpc_trace.py rpc.trace
+python3 scripts/evidence/intel/summarize_intel_rpc_trace.py rpc.trace
 timeout -s INT 5 strace -f -ttt -T -yy -e trace=fsync,fdatasync -p N1_PID -o sync.trace
 ```
 

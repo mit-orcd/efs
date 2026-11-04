@@ -53,7 +53,7 @@ on node9901 under `/data1/efs/evidence/testsuite/09f8af09c2be-live/` and
 | Suite | Command | Result |
 | --- | --- | --- |
 | POSIX, one mount | node9901 `EFS_CLUSTER=orcd-mini ./smoke.sh` (jobs 4, 30 s timeout) | **PASS 216/216**, 13.5 s (`posix-20261016-165512.tsv`) |
-| Two-client, node9901 + node9900 | `scripts/orcd_mini_posix2.py RESULTS.tsv` from the Mac | **PASS 67/67**, 287 s (round trips through the login node) |
+| Two-client, node9901 + node9900 | `scripts/evidence/orcd-mini/orcd_mini_posix2.py RESULTS.tsv` from the Mac | **PASS 67/67**, 287 s (round trips through the login node) |
 | Durability prepare / remount / verify | node9901 `EFS_CLUSTER=orcd-mini ./smoke-persist.sh` | **PASS 27/27** (`persist-{prepare,verify}-20261016-170115.tsv`) |
 | Unit suite `make test` | test tree `/data1/efs/evidence/testsuite/09f8af09c2be`, `run_all.sh` | 766 commands, **4 environmental failures** (see below) |
 | Private GC + POSIX gate, direct | `tests/live/gc_reclamation.py --mode direct --posix --root A --root B` | **FAIL** after 40 PASS lines: fsync EIO at `offline-member` after the crash-restart step |
@@ -194,7 +194,7 @@ on node9901, from `/data1/efs/devops`.
 | Durability (`smoke-persist.sh`: prepare, remount, verify) | 27/27 + 27/27 PASS |
 | ior easy (8 ranks, OpenMPI 4.1.7, `-F -t 1m -b 2048m`) | rc 0; write 1,091 MiB/s, read 3,057 MiB/s |
 | ior hard (8 ranks, shared file, `-t/-b 47008 -s 2000`) | rc 0; write 28.9 MiB/s, read 125.8 MiB/s |
-| Two-client, node9901 + node9900 (`scripts/orcd_mini_posix2.py` from the Mac) | 67/67 PASS (314 s) |
+| Two-client, node9901 + node9900 (`scripts/evidence/orcd-mini/orcd_mini_posix2.py` from the Mac) | 67/67 PASS (314 s) |
 
 The ior binary is `~/orcd/scratch/efs-io500/io500/bin/ior` with
 `/usr/mpi/gcc/openmpi-4.1.7rc1/bin/mpivars.sh` sourced.

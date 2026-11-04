@@ -217,10 +217,10 @@ Do not alter sysctls just to reproduce. Confirm current PIDs before attaching;
 never substitute a private Intel or AMD-local daemon. From the repository:
 
 ```sh
-ssh intel1_efs 'bash -s -- /data1/efs/NEW-PROFILE 3837635,3837642,3838384 45' < scripts/profile_intel_live.sh
-ssh intel2_efs 'bash -s -- /data1/efs/NEW-PROFILE 4111174,4111181,4111567 45' < scripts/profile_intel_live.sh
-ssh amd_efs 'bash -s -- /data1/efs/NEW-PROFILE 3217005 45' < scripts/profile_intel_live.sh
-ssh xorinox_efs 'bash -s -- /data1/efs/NEW-PROFILE 650200 45' < scripts/profile_intel_live.sh
+ssh intel1_efs 'bash -s -- /data1/efs/NEW-PROFILE 3837635,3837642,3838384 45' < scripts/evidence/intel/profile_intel_live.sh
+ssh intel2_efs 'bash -s -- /data1/efs/NEW-PROFILE 4111174,4111181,4111567 45' < scripts/evidence/intel/profile_intel_live.sh
+ssh amd_efs 'bash -s -- /data1/efs/NEW-PROFILE 3217005 45' < scripts/evidence/intel/profile_intel_live.sh
+ssh xorinox_efs 'bash -s -- /data1/efs/NEW-PROFILE 650200 45' < scripts/evidence/intel/profile_intel_live.sh
 ```
 
 Launch these concurrently with distinct/new output directories. The helper

@@ -16,7 +16,7 @@ Check: `test_barrier_backoff` in `tests/test_store_durability.c` (existing unit 
 
 ## Measurement
 
-Host intel1 (8 CPU, XFS, direct fragment I/O, TCP, private four-member cluster, ports 18700-18703, 1 GiB quota), tree `54d0db3ff` (CG's shim and case) built with `make -j4`, build id `unknown`; "after" adds this change. `scripts/measure/syncer_retry.sh <tree> <out> 18700 30` runs `gc_reclamation.py --put-barrier-fault`, freezes the driver once node 1's first barrier failed (daemons and marker keep running), then samples node 1 for 30 s: `top -H` for CPU, `strace -f -e trace=faccessat,faccessat2` counting the shim's check of `.efs-durable-epoch` (one per refused attempt; ptrace slows the thread, so the before rate is a lower bound), and the growth of `n1.log`.
+Host intel1 (8 CPU, XFS, direct fragment I/O, TCP, private four-member cluster, ports 18700-18703, 1 GiB quota), tree `54d0db3ff` (CG's shim and case) built with `make -j4`, build id `unknown`; "after" adds this change. `scripts/evidence/measurement/syncer_retry.sh <tree> <out> 18700 30` runs `gc_reclamation.py --put-barrier-fault`, freezes the driver once node 1's first barrier failed (daemons and marker keep running), then samples node 1 for 30 s: `top -H` for CPU, `strace -f -e trace=faccessat,faccessat2` counting the shim's check of `.efs-durable-epoch` (one per refused attempt; ptrace slows the thread, so the before rate is a lower bound), and the growth of `n1.log`.
 
 | 30 s window, node 1 | before | after |
 |---|---|---|
@@ -36,7 +36,7 @@ Raw captures are outside Git: `intel1:~/efs-artifacts/taskCI-20261031/` (`SHA256
 
 ```bash
 # built tree on a host with FUSE, strace, python3; ports 18700-18799 free
-mkdir -p $OUT; bash scripts/measure/syncer_retry.sh $PWD $OUT 18700 30   # summary in $OUT/summary.txt
+mkdir -p $OUT; bash scripts/evidence/measurement/syncer_retry.sh $PWD $OUT 18700 30   # summary in $OUT/summary.txt
 python3 tests/live/gc_reclamation.py --put-barrier-fault --root $D/p1 --root $D/p2 --port 18710
 ./tests/test_store_durability
 rm -rf $OUT/roots $D        # cleanup (use edelete for trees)

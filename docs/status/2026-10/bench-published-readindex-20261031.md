@@ -41,19 +41,19 @@ Fixture: `tests/test_bench_published.py` (3 nodes, 2 MiB + 68 B, 3 writers), N c
 
 ## Attribution
 
-(a) **Product defect**, but not the one the task text guessed. The read-index bound is not the cause: the BUSY is retried and succeeds, and 10 of 20 failing logs at 24 copies have no `stage=3` line. The defect is client-side: a single writer that is the only client loses a chunk to its own earlier async REPORT, the STALE loop does not converge because the rebuilt record is identical, and the stuck-record guard turns that into a dropped chunk with a successful REPORT. (b) holds only for the `stage=3` BUSY (transient election window at cluster start under CPU starvation, retried by the client): not worth a row. (c) harness: the test is correct (it caught the loss); two harness faults were found and fixed: the `rc=-4` counter in `scripts/bench_published_par.sh` (now counts `report-stuck` and `stage=3 rc=-13`), and the `efs-bench` write path that ignores the recorded writeback error (left, see K88).
+(a) **Product defect**, but not the one the task text guessed. The read-index bound is not the cause: the BUSY is retried and succeeds, and 10 of 20 failing logs at 24 copies have no `stage=3` line. The defect is client-side: a single writer that is the only client loses a chunk to its own earlier async REPORT, the STALE loop does not converge because the rebuilt record is identical, and the stuck-record guard turns that into a dropped chunk with a successful REPORT. (b) holds only for the `stage=3` BUSY (transient election window at cluster start under CPU starvation, retried by the client): not worth a row. (c) harness: the test is correct (it caught the loss); two harness faults were found and fixed: the `rc=-4` counter in `scripts/evidence/measurement/bench_published_par.sh` (now counts `report-stuck` and `stage=3 rc=-13`), and the `efs-bench` write path that ignores the recorded writeback error (left, see K88).
 
 Register: **K88** OPEN, blocks alpha: **yes** (proposed; the user may downgrade). A fix needs the dcache base/ack ordering understood first, which is more than one shared-code change with its own check, so it is left OPEN.
 
 ## Reproduction
 
-Prerequisites: a built tree (`make efsd efs-fuse efs-bench efs-mgmt`), FUSE usable (the test prints NOTRUN otherwise), 8 CPUs; on intel2 outside `~/efs-merge*`, ports from the test's own free-port choice (not 17432-17435). Source: devel `8e53122cd` plus the two Task CE/CF commits (`f76ce78e9`, `2a0c257a1` on this branch) plus the counter change in `scripts/bench_published_par.sh`. Build identity: `EFS_BUILD_ID` unknown (plain `make`, gcc -O3, intel2 build `2026-11-01T04:28:29Z`).
+Prerequisites: a built tree (`make efsd efs-fuse efs-bench efs-mgmt`), FUSE usable (the test prints NOTRUN otherwise), 8 CPUs; on intel2 outside `~/efs-merge*`, ports from the test's own free-port choice (not 17432-17435). Source: devel `8e53122cd` plus the two Task CE/CF commits (`f76ce78e9`, `2a0c257a1` on this branch) plus the counter change in `scripts/evidence/measurement/bench_published_par.sh`. Build identity: `EFS_BUILD_ID` unknown (plain `make`, gcc -O3, intel2 build `2026-11-01T04:28:29Z`).
 
 ```sh
 export TMPDIR=$HOME/efs-taskCJ/tmp; mkdir -p "$TMPDIR"
-sh scripts/bench_published_par.sh OUT/par24 24 60     # about 10 min; expect ~0.5 % failures
-sh scripts/bench_published_par.sh OUT/par12 12 100    # about 15 min
-sh scripts/bench_published_par.sh OUT/par8 8 150      # about 21 min
+sh scripts/evidence/measurement/bench_published_par.sh OUT/par24 24 60     # about 10 min; expect ~0.5 % failures
+sh scripts/evidence/measurement/bench_published_par.sh OUT/par12 12 100    # about 15 min
+sh scripts/evidence/measurement/bench_published_par.sh OUT/par8 8 150      # about 21 min
 # trace variant: add EFS_DCACHE_TRACE=1 EFS_REPORT_DBG=1 to the test's env (a local edit after the
 # `env['EFS_TRANSPORT']` line), then run the 24-copy line
 ```

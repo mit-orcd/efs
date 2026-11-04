@@ -9,7 +9,7 @@ import tempfile
 import time
 from types import SimpleNamespace
 root=Path(__file__).resolve().parents[1]
-spec=importlib.util.spec_from_file_location('qualify_ao',root/'scripts/qualify_ao_readdir.py')
+spec=importlib.util.spec_from_file_location('qualify_ao',root/'scripts/evidence/ao/qualify_ao_readdir.py')
 ao=importlib.util.module_from_spec(spec);spec.loader.exec_module(ao)
 if not ao.k.EFSD.exists() or not ao.k.FUSE.exists() or not os.access('/dev/fuse',os.R_OK|os.W_OK) or not shutil.which('fusermount3'):
     print('NOTRUN: AO live gate needs fault daemon, FUSE binary/device and fusermount3');sys.exit(0)

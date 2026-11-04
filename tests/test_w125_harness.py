@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """W125 modify-under-load harness self-tests: the failure paths of
-scripts/w125_p0_cluster.sh, scripts/w125_modify_repro.sh and
-scripts/w125_concurrent.py, with stubbed cluster helpers, fake daemons and
+scripts/evidence/w125/w125_p0_cluster.sh, scripts/evidence/w125/w125_modify_repro.sh and
+scripts/evidence/w125/w125_concurrent.py, with stubbed cluster helpers, fake daemons and
 synthetic mismatches. No cluster, daemon or mount is started; everything
 runs in a temporary directory (TMPDIR) and finishes in a few seconds.
 
@@ -40,7 +40,7 @@ instead of a cluster:
            mismatch and foreign at final verification (saved, verdict FAIL).
   verdict: errors or unresolved files never PASS (FAIL 1, INCOMPLETE 5);
            the wrapper writes INCOMPLETE and copies the daemon logs.
-  correlate: scripts/w155_correlate.py on sample client/server lines from
+  correlate: scripts/evidence/w125/w155_correlate.py on sample client/server lines from
            the nuc b1 capture: the retry, report-loop, flush-meta, failed
            report-split, raft change, missing receipt and final version
            land in the failure's table; a legacy OUT (a.txt + meta.json)
@@ -49,9 +49,9 @@ instead of a cluster:
 import hashlib, importlib.util, json, os, pathlib, shutil, stat, subprocess, sys, tempfile, time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-HELPER = ROOT / "scripts/w125_p0_cluster.sh"
-WRAPPER = ROOT / "scripts/w125_modify_repro.sh"
-WORKLOAD = ROOT / "scripts/w125_concurrent.py"
+HELPER = ROOT / "scripts/evidence/w125/w125_p0_cluster.sh"
+WRAPPER = ROOT / "scripts/evidence/w125/w125_modify_repro.sh"
+WORKLOAD = ROOT / "scripts/evidence/w125/w125_concurrent.py"
 
 def sh(*args, env=None, ok=None, timeout=120):
     e = dict(os.environ); e.update(env or {})
@@ -140,7 +140,7 @@ def test_stop(tmp):
 
 def stub_helper(rel, stop_rc=0, stop_text="stopped clean", start_rc=0):
     """A cluster helper that creates the mount directory and ends stop with stop_text/stop_rc."""
-    write_exec(rel / "scripts/w125_p0_cluster.sh", """#!/bin/bash
+    write_exec(rel / "scripts/evidence/w125/w125_p0_cluster.sh", """#!/bin/bash
 cmd=$1; D=$3
 case $cmd in
 start) mkdir -p "$D/logs" "$D/mnt/c" && echo "started stub" > "$D/logs/fuse.log"; echo "mounted $D/mnt"; exit %d ;;
@@ -326,7 +326,7 @@ def test_inspect_still_reads_model(tmp):
     m = load_workload()
     c = tmp / "i/c"; name = "w0/d001/f000003"
     f = c / name; f.parent.mkdir(parents=True); f.write_bytes(m.contents(name, 3))
-    p = sh(sys.executable, ROOT / "scripts/w125_modify_inspect.py", c, name, ok=True)
+    p = sh(sys.executable, ROOT / "scripts/evidence/w125/w125_modify_inspect.py", c, name, ok=True)
     assert "exact=[3]" in p.stdout, p.stdout
     print("inspect: content model still importable PASS")
 
@@ -518,7 +518,7 @@ def test_w155_main(tmp):
 def test_w155_wrapper(tmp):
     stub = tmp / "stub_incomplete.py"; stub_workload(stub, 5)
     rel = fake_rel(tmp / "wi"); stub_helper(rel)
-    h = rel / "scripts/w125_p0_cluster.sh"
+    h = rel / "scripts/evidence/w125/w125_p0_cluster.sh"
     h.write_text(h.read_text().replace('echo "started stub" > "$D/logs/fuse.log";',
                                        'echo "started stub" > "$D/logs/fuse.log"; echo n1 > "$D/logs/efsd-n1.log";'))
     run, out = tmp / "wi-run", tmp / "wi-out"
@@ -591,7 +591,7 @@ def test_w155_correlate(tmp, big):
     write_log(out / "efsd-n1.log", end, B1_N1, u["ino"])
     write_log(out / "efsd-n2.log", end, B1_N2, u["ino"])
     js = tmp / "corr.json"
-    p = sh(sys.executable, ROOT / "scripts/w155_correlate.py", out, "--json", js, ok=True)
+    p = sh(sys.executable, ROOT / "scripts/evidence/w125/w155_correlate.py", out, "--json", js, ok=True)
     res = json.loads(js.read_text())
     assert len(res) == 1, res
     r = res[0]
@@ -620,7 +620,7 @@ def test_w155_correlate(tmp, big):
                               "ERR errors unlink w1/d048/f000148: [Errno 16] Device or resource busy: '/x'\n" % name)
     write_log(lo / "fuse.log", end, B1_CLIENT, u["ino"])
     js2 = tmp / "corr2.json"
-    p = sh(sys.executable, ROOT / "scripts/w155_correlate.py", lo, "--json", js2, ok=True)
+    p = sh(sys.executable, ROOT / "scripts/evidence/w125/w155_correlate.py", lo, "--json", js2, ok=True)
     res = json.loads(js2.read_text())
     assert [x["failure"]["kind"] for x in res] == ["modify", "unlink"], res
     assert res[0]["anchor"].startswith("client lines naming ino=%d" % u["ino"]) and res[0]["client"]["retries"][0]["type"] == 67
@@ -633,7 +633,7 @@ def test_w155_correlate(tmp, big):
     write_log(wo / "fuse.log", end, W155_CLIENT, u["ino"])
     write_log(wo / "efsd-n1.log", end, W155_N1, u["ino"])
     js3 = tmp / "corr3.json"
-    p = sh(sys.executable, ROOT / "scripts/w155_correlate.py", wo, "--json", js3, ok=True)
+    p = sh(sys.executable, ROOT / "scripts/evidence/w125/w155_correlate.py", wo, "--json", js3, ok=True)
     r3 = json.loads(js3.read_text())[0]
     assert r3["client"]["retries"][0]["id"] == W155_ID and r3["client"]["retries"][0]["nid"] == "1"
     assert [e["id"] for e in r3["identity"]] == [W155_ID], r3["identity"]

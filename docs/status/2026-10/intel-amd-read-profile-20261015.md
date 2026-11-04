@@ -21,7 +21,7 @@ This is a repeated/warm workload, not cold-cache performance or content integrit
 qualification: dd to /dev/null checks successful transfer, not a known checksum.
 No drop_caches, mounts, restarts or file changes. Profiles perturb its throughput.
 
-Existing `scripts/profile_intel_live.sh` captured20s cycles:u at99Hz with FP
+Existing `scripts/evidence/intel/profile_intel_live.sh` captured20s cycles:u at99Hz with FP
 stacks, CPU/network/disk snapshots and one-second wait-channel samples, followed
 by12s strace -f -c -w. Targets: AMD client1127604; Intel1 daemons3908856/3908863;
 Intel2 daemons4173451/4173458. A separate12s `strace -ttt -T -s0 -e trace=read,write`
@@ -84,7 +84,7 @@ based only on perf percentages. No implementation attempted in this task.
 ## Reproduction and raw evidence
 
 Run the exact dd command above against an existing stable10GiB file. Capture
-`bash scripts/profile_intel_live.sh NEW_OUTPUT_DIR MAIN_PID_LIST 20` on each
+`bash scripts/evidence/intel/profile_intel_live.sh NEW_OUTPUT_DIR MAIN_PID_LIST 20` on each
 host while dd is active, and `timeout -s INT 12 strace -ttt -T -s0
 -e trace=read,write -p DD_PID -o DD_TRACE` on AMD. Paths/PIDs must be re-inventoried.
 Do not include unrelated AMD/private Intel processes. Native profile scripts

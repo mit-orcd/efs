@@ -295,7 +295,7 @@
    "cluster": {
     "name": "orcd-mini-rdma",
     "candidate": "CANDIDATE",
-    "ssh": "scripts/orcd_mini_ssh.sh",
+    "ssh": "scripts/evidence/orcd-mini/orcd_mini_ssh.sh",
     "source": "/data1/efs/src",
     "sources": {
      "node9901": "/data1/efs/src",
@@ -889,7 +889,7 @@
    "cluster": {
     "name": "fcstor-4x1-tcp",
     "candidate": "CANDIDATE",
-    "ssh": "scripts/task_v_ssh.sh",
+    "ssh": "scripts/evidence/task-v/task_v_ssh.sh",
     "source": "/tmp/efs-taskV-20261028/src",
     "seed": "10.1.223.66:19340",
     "nodes": [
@@ -1302,7 +1302,7 @@
     "qualify:k14-torn-read",
     "qualify:k13-tickets",
     "live:tests/live/k13_ticket_cluster.py",
-    "live:scripts/k14_atomic_cluster.sh"
+    "live:scripts/evidence/k14/k14_atomic_cluster.sh"
    ],
    "topologies": [
     "once"

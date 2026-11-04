@@ -64,7 +64,7 @@ and `suite-57ea88201/` (posix TSVs and harness logs), daemon logs in
 
 - One cluster, one run per suite; no fault injection, no node loss, no NFS.
 - W127–W131 refusal itself was exercised on a private 3-node TCP set on
-  node9901 (`scripts/w127_incompatible_entry.sh`), not on orcd-test,
+  node9901 (`scripts/evidence/w127/w127_incompatible_entry.sh`), not on orcd-test,
   because a committed unsupported entry halts its group until reformat.
 - The archived-format data that was on orcd-test before October 22 was
   deleted, not migrated (no backward compatibility).

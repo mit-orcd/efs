@@ -111,15 +111,15 @@ make -j8 EFS_FAULTS=1 efsd
 ```
 
 ```bash
-scripts/k14_atomic_cluster.sh run <build-tree> <empty-dir> 18800 <faults-tree>
+scripts/evidence/k14/k14_atomic_cluster.sh run <build-tree> <empty-dir> 18800 <faults-tree>
 ```
 
 ```bash
-scripts/k14_atomic_cluster.sh stop <build-tree> <empty-dir> 18800 <faults-tree>
+scripts/evidence/k14/k14_atomic_cluster.sh stop <build-tree> <empty-dir> 18800 <faults-tree>
 ```
 
 Then delete `<empty-dir>`. Control without this change: build devel
-`bf16436e8` and run `K14_PHASES=1 scripts/k14_atomic_cluster.sh run
+`bf16436e8` and run `K14_PHASES=1 scripts/evidence/k14/k14_atomic_cluster.sh run
 <devel-tree> <empty-dir> 18800` from this branch (phase 1 needs no fault
 hooks). The script prints one PASS/FAIL line per check; raw logs stay in
 `<empty-dir>/logs`.

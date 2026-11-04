@@ -263,12 +263,12 @@ The helper rejects `.efs` visibility, checks mounted FUSE identity, creates
 files exclusively, and verifies the whole owned directory before cleanup.
 Never run `clean` against a human tree.
 
-Use `scripts/profile_intel_live.sh NEW_OUTPUT PIDLIST 25` with verified same-user
+Use `scripts/evidence/intel/profile_intel_live.sh NEW_OUTPUT PIDLIST 25` with verified same-user
 main PIDs only. Capture headers separately with bounded
 `timeout -s INT 10 strace -f -ttt -T -yy -xx -s 8
 -e trace=sendmsg,writev,recvfrom,poll,clock_nanosleep -p CLIENT_PID -o TRACE`;
 run the six-file stat smoke through an otherwise idle client. Summarize offline
-with `scripts/summarize_intel_rpc_trace.py TRACE`; EAGAIN is not an RPC retry.
+with `scripts/evidence/intel/summarize_intel_rpc_trace.py TRACE`; EAGAIN is not an RPC retry.
 Raw payload prefixes remain outside Git. Clean only the newly created probe
 mount using its own client.sh; never stop unrelated cluster controllers.
 

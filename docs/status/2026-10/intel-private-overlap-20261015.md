@@ -88,7 +88,7 @@ Client/server environment: `EFS_TRANSPORT=tcp EFS_COMMANDS=0
 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_MD_RAFT_N=4`.
 Cluster commands policy was set to mask zero. No expiry feature.
 
-Use `scripts/intel_w100_private.py` with a fresh run label and existing production
+Use `scripts/evidence/intel/intel_w100_private.py` with a fresh run label and existing production
 release, adding the existing daemon argument `--writers N` to its launch list.
 The temporary controller varied only N, using start once and stop/resume between
 phases. Preserve any existing private fixture and restore it afterward. For each

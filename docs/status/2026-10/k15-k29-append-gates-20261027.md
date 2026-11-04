@@ -175,12 +175,12 @@ and new work/evidence directories. Never use the production 17xxx ports,
 `/data1/efs`, or another agent's tree. Build on the host, not on the Mac.
 
 The corrected current method is the committed
-`scripts/task_n_append_gates.py`: export a current Task N commit into
+`scripts/evidence/task-n/task_n_append_gates.py`: export a current Task N commit into
 `WORK/plain` and `WORK/fault`, then run detached with all descriptors closed
 or redirected:
 
 ```sh
-python3 scripts/task_n_append_gates.py --work WORK --out EVIDENCE --source COMMIT
+python3 scripts/evidence/task-n/task_n_append_gates.py --work WORK --out EVIDENCE --source COMMIT
 ```
 
 It builds normal/fault binaries independently with eight jobs, then runs
@@ -200,7 +200,7 @@ mandatory. Gates use full reads, never samples.
 
 Original execution used source `f98578e697d3` plus the separately retained
 measurement overlays described above. After the classified setup error,
-`scripts/task_n_followup.py` (`2d04cac23`) retained the initial full gate,
+`scripts/evidence/task-n/task_n_followup.py` (`2d04cac23`) retained the initial full gate,
 ran the corrected second lost-reply fixture, an untouched base full gate,
 then the final full gate, without overlap. Its two staging files can be
 recreated with `git show 77556050e:tests/live/append_failover.py` and
@@ -239,7 +239,7 @@ all **677 files / 55,139,383 bytes** were copied and checked by full SHA256.
 forensic copy, not a running cluster. Their original endpoints/storage paths
 are in the logs/manifests; inspect a working copy when investigating.
 
-`scripts/task_n_retain.py` (`040901fd6`) checked no private owner/mount
+`scripts/evidence/task-n/task_n_retain.py` (`040901fd6`) checked no private owner/mount
 remained, copied and hashed every retained source/result, kept this open
 fixture and used `edelete` to prune only completed synthetic stores/payloads,
 normal/fault/base source/build trees and other gate scratch. `copy-check.json`,

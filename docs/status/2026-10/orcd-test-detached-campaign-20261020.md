@@ -75,7 +75,7 @@ Raw evidence stays outside Git at
 `mail/<host>/<job>.log`, and FUSE log snapshots. The source archive SHA256 is
 `f4abcd639b3dbc03e9cb76aeac5c2efd28ba375bb12722a51c27817c3a4ce777`;
 `binaries.sha256` records the built executables. Reproducer is
-`scripts/orcd_test_campaign.py`; preserve its original results and use a
+`scripts/evidence/orcd/orcd_test_campaign.py`; preserve its original results and use a
 separate explicitly authorized run for any future corrected harness.
 
 ## Authorized repair follow-up (in progress)
@@ -85,7 +85,7 @@ first. Original failures above remain FAIL. The original build is still serving
 retained stores; no repaired daemon has been deployed yet.
 
 - All four read-only mounts recovered once the restarted servers were ready.
-  `scripts/orcd_verify_existing.py` reads every acknowledged file against the
+  `scripts/evidence/orcd/orcd_verify_existing.py` reads every acknowledged file against the
   deterministic 256-byte oracle, including exact length/EOF. Target: all
   8,437,752 files. Failed-write paths are audited separately. Verification is
   **RUNNING**, not a payload PASS. At 2,114,639 checked, two reads returned
@@ -110,7 +110,7 @@ retained stores; no repaired daemon has been deployed yet.
   before concurrent reads, and require multiple successful snapshot generations
   over at least two refresh periods. Exact count/byte and payload oracles remain.
   A NODATA response never counts as a successful concurrent query.
-- `scripts/orcd_test_ready.py` checks recovered export, full hosted voter sets,
+- `scripts/evidence/orcd/orcd_test_ready.py` checks recovered export, full hosted voter sets,
   self-reported leaders, matching term/views, applied leader commits and a fresh
   root read. Two stable observations replace mounting after a fixed startup sleep.
 - Initial isolated Linux build and ledger, ledger-recovery, packed-switch and
@@ -127,9 +127,9 @@ mailbox job logs remain in the original campaign mailbox with `profile-`,
 
 ```sh
 # On each fcstor003–006, with the retained filesystem mounted read-only:
-python3 scripts/orcd_verify_existing.py /path/to/campaign-20261020 /path/to/existing-payloads
+python3 scripts/evidence/orcd/orcd_verify_existing.py /path/to/campaign-20261020 /path/to/existing-payloads
 # On a test client, before any remount after restart:
-python3 scripts/orcd_test_ready.py 172.16.223.57:17432 172.16.223.58:17432 172.16.223.59:17432 172.16.223.60:17432
+python3 scripts/evidence/orcd/orcd_test_ready.py 172.16.223.57:17432 172.16.223.58:17432 172.16.223.59:17432 172.16.223.60:17432
 # Profiles (daemon PID explicitly identified per host):
 perf record -F 99 -g -p "$daemon_pid" -o "$host-perf.data" -- sleep 30
 perf report -i "$host-perf.data" --stdio --children --percent-limit 5 -g caller,5,callee,function,percent
@@ -166,7 +166,7 @@ Full KV tests previously passed on `602e67d2c` (unchanged KV code).
 | efs-mgmt | `5dc972da2b166ac634c5f2bd9da8bfb9b20c643e70b4c3497a3ea17c0ef04b2c` |
 
 Verifier job deadlines are around 03:31 UTC; old daemon deadlines around
-03:51 UTC. `scripts/orcd_verify_existing.py --resume CHECKPOINT_DIR` now
+03:51 UTC. `scripts/evidence/orcd/orcd_verify_existing.py --resume CHECKPOINT_DIR` now
 supports continuing only unchecked records into a **different** output directory.
 Prior failure counts/details remain failures; the old checkpoint is untouched.
 `python3 tests/test_orcd_verify_resume.py` checks that an already-checked path
@@ -237,7 +237,7 @@ remain open.
   `/tmp/efs` now points at the verified shared source. Old binaries are
   retained offline at `/tmp/efs-before-campaign-20261020`; there is no
   second running deployment. New stores use `/data1/01/efs-orcd-test-campaign`.
-- Controller source: `scripts/orcd_test_campaign.py`, staged as `campaign.py`.
+- Controller source: `scripts/evidence/orcd/orcd_test_campaign.py`, staged as `campaign.py`.
   Screen `orcd-campaign-controller` on fcstor003 started at approximately
   2026-10-20 21:00 UTC (16:00 America/Bogota). Status timestamps are UTC Unix
   seconds; use the actual `started` field for exact timing.
@@ -401,7 +401,7 @@ points at the repaired source on these four hosts.
 
 Authoritative deployment/job journal: `repair-20261020/deployment-643f6104f.json`.
 New evidence: `repair-20261020/qualification-643f6104f/`. Full verification
-started from zero on all four hosts using `scripts/orcd_verify_existing.py`
+started from zero on all four hosts using `scripts/evidence/orcd/orcd_verify_existing.py`
 against the original campaign manifests, output `full-existing/<host>.json`,
 with six-hour limits from ~04:15 UTC. Every prior EBUSY path is included.
 POSIX core runs concurrently against a separate test fixture. Acceptance is
@@ -420,7 +420,7 @@ On deployed 643f6104f with full retained-payload verification running concurrent
   this remains incomplete, not a full-payload PASS.
 
 Diagnostic strace could not run: host rejects `PTRACE_TRACEME` with EPERM;
-that diagnostic failure is preserved. `scripts/orcd_mtime_probe.py MOUNT`
+that diagnostic failure is preserved. `scripts/evidence/orcd/orcd_mtime_probe.py MOUNT`
 reproduces the 80-append pattern with per-operation timings, retains its fixture,
 and asserts mtime monotonicity. Its separate bounded 120-second job completed
 in 11.64 seconds: close total 8.11 s / max 489 ms, open total 1.95 s / max
@@ -467,7 +467,7 @@ CPU percentages overlap and do not measure blocking time or establish the
 current leader. No root-cause claim or further product change is justified yet.
 Raw files: `qualification-643f6104f/fcstor00{3,4}-mtime-perf.data` and
 `mtime-probe-{1,2,3}.jsonl`. Reproduce the captures with the earlier perf command
-and `scripts/orcd_mtime_probe.py /tmp/efs-mount`; current daemon PIDs and jobs
+and `scripts/evidence/orcd/orcd_mtime_probe.py /tmp/efs-mount`; current daemon PIDs and jobs
 are in the deployment journal. New diagnostic `tests` entries use
 `{"host": "fcstor003", "job": "..."}`; earlier suite entries are job strings
 on fcstor003.
@@ -551,7 +551,7 @@ intermittency, not resolution of the preserved NODATA failure.
 Code review shows any dual-group-capable node can serve its own published
 catalog. Helper warmup and a separately routed raw request may reach different
 catalogs; this is a hypothesis to test, not an established cause. New bounded
-`scripts/orcd_query_snapshot_probe.py` creates one retained directory, warms it
+`scripts/evidence/orcd/orcd_query_snapshot_probe.py` creates one retained directory, warms it
 through the helper, then records direct per-node status/boot/generation every
 two seconds for 45 rounds. It does not accept NODATA as a passing gate.
 Run with deployed `tests/live` on PYTHONPATH and the campaign endpoint environment.
@@ -644,7 +644,7 @@ cause/timing cannot be recovered from detailed raft-obs logs.
 
 Additional bounded captures used `perf record -e context-switches --call-graph
 dwarf,16384 -p PID -o OUTPUT -- sleep 5`, then `perf script -i OUTPUT |
-python3 scripts/cs_dwarf_locks.py` from deployed source. Exact requests/results
+python3 scripts/evidence/orcd-mini/cs_dwarf_locks.py` from deployed source. Exact requests/results
 are journal tests `HOST-scale-blocked` and `HOST-blocked-report`. Raw data is
 `qualification-643f6104f/HOST-scale-blocked.data`; copied client logs are
 `HOST-scale-errors-client.log`. All recording and analysis jobs exited0.
@@ -691,7 +691,7 @@ The two additional uncertain paths (003 worker25/index70883 and005 worker8/
 index71650) both match their complete256-byte expected payloads; journal tests
 `HOST-uncertain12`, exit0. All12 uncertain writes match; all failed closes remain.
 
-Committed launcher `scripts/orcd_verify_after_scale.py` waits for all four
+Committed launcher `scripts/evidence/orcd/orcd_verify_after_scale.py` waits for all four
 writer results and complete manifests, rejects timeout/cancellation/leftover
 children, preserves final manifests and original writer result codes in a new
 per-host directory, then invokes the exact full verifier. rc1 writer failures

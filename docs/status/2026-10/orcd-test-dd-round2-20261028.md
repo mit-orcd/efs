@@ -217,7 +217,7 @@ Use the committed sampler and payload oracle, with Linux perf/sysstat, the
 same private libfuse/MPI/IOR prerequisites and an SSH agent (no BatchMode):
 
 ```sh
-python3 scripts/orcd_dd_profile.py --label UNIQUE --seconds 120 \
+python3 scripts/evidence/orcd/orcd_dd_profile.py --label UNIQUE --seconds 120 \
   --source FULL_INSTALLED_COMMIT
 dd if=/dev/zero of=UNIQUE_FILE bs=1M count=8192 conv=fdatasync status=progress
 python3 tests/test_k38_install_order.py
@@ -227,10 +227,10 @@ python3 tests/test_k38_stale_span_replay.py
 python3 tests/test_fold_observation.py
 python3 tests/test_orcd_ready.py
 python3 tests/test_orcd_ior_exit.py
-python3 scripts/orcd_dd_payload.py prepare /tmp/efs-mount/UNIQUE.bin
+python3 scripts/evidence/orcd/orcd_dd_payload.py prepare /tmp/efs-mount/UNIQUE.bin
 # Different client, before and after a checked restart:
-python3 scripts/orcd_dd_payload.py verify /tmp/efs-mount/UNIQUE.bin
-bash scripts/orcd_test_ior.sh UNIQUE_OUTPUT /tmp/efs-mount
+python3 scripts/evidence/orcd/orcd_dd_payload.py verify /tmp/efs-mount/UNIQUE.bin
+bash scripts/evidence/orcd/orcd_test_ior.sh UNIQUE_OUTPUT /tmp/efs-mount
 ```
 
 For a timing comparison, use the same committed deployment on all nodes in

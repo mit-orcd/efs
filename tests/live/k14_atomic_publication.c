@@ -1,4 +1,4 @@
-/* K14 / W77 observation workload (scripts/k14_atomic_cluster.sh).
+/* K14 / W77 observation workload (scripts/evidence/k14/k14_atomic_cluster.sh).
  *
  *   writer FILE OFF LEN SECONDS LOG [FIRST_VERSION [COUNT]]
  *       Rewrites [OFF, OFF+LEN) with version v = FIRST.. as ONE pwrite

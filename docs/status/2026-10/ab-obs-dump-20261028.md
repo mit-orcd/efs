@@ -15,7 +15,7 @@ periodic `raft-obs`, I/O, KV and batch records. Term/role events retain their
 synchronous path and identity. Snapshot fields read across thread ownership use
 atomic diagnostic accesses. There is no new product switch or wire/store format.
 
-Matched probes in `scripts/pump_logging_measure.py` measure actual mutex hold
+Matched probes in `scripts/evidence/pump-logging/pump_logging_measure.py` measure actual mutex hold
 through unlock and active cycle through the persistence/logging tail, excluding
 poll sleep, on archived baseline/candidate copies only. Existing
 `pump_hold_max` omits part of the old formatting/write interval. The first
@@ -41,7 +41,7 @@ hashes are retained with each run. Exact reproduction and all failures are in
 on/off cost outside measurement spread, nor a throughput-capacity gain.
 
 The literal shared-kit follow-up uses committed
-`scripts/pump_logging_d4_profile.py`: unchanged
+`scripts/evidence/pump-logging/pump_logging_d4_profile.py`: unchanged
 `d4_progress.Run.writer_fixed`, four writers, 16 files/writer, deterministic
 mixed overwrite/truncate/in-place operations, small 1 B–8 KiB and large
 1–2 MiB payloads, paced at five operations/s/writer. Every final acknowledged

@@ -64,9 +64,9 @@ clusters only (ports 18xxx/19xxx).
 ## Reproduction
 
 ```
-scripts/gate_load_repro.sh loaded 5 OUTDIR   # EFS_TEST_JOBS=${BM_JOBS:-8} EFS_TEST_TARGET=test-long
-scripts/gate_load_repro.sh full   5 OUTDIR   # test-all (the "after" gate)
-scripts/gate_load_repro.sh solo   5 OUTDIR   # the four tests one after another
+scripts/evidence/flake/gate_load_repro.sh loaded 5 OUTDIR   # EFS_TEST_JOBS=${BM_JOBS:-8} EFS_TEST_TARGET=test-long
+scripts/evidence/flake/gate_load_repro.sh full   5 OUTDIR   # test-all (the "after" gate)
+scripts/evidence/flake/gate_load_repro.sh solo   5 OUTDIR   # the four tests one after another
 ```
 
 Run inside `screen -dmS name` on the host with `SCREENDIR=$HOME/.screen`. Each

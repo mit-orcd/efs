@@ -84,7 +84,7 @@ cluster files and matching headers/runtime under its sibling dependency
 directories, then run the committed driver (included in `c571b862f`):
 
 ```sh
-python3 scripts/fin_complete_controller.py scripts/fin_complete_host.sh \
+python3 scripts/evidence/fin/fin_complete_controller.py scripts/evidence/fin/fin_complete_host.sh \
   /tmp/efs-fin-complete-FRESH/src \
   /data1/01/efs/evidence/fin-complete-FRESH \
   c571b862f /tmp/efs-fin-complete-FRESH/cluster-scripts

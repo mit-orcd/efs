@@ -156,7 +156,7 @@ EFS_K33_KEEP=1 EFS_READ_FRAG_PROF=1 python3 tests/test_k33_payload.py
 EFS_TEST_JOBS=8 EFS_TEST_TARGET=test-all bash scripts/make_test_summary.sh
 ```
 
-`scripts/k38_payload_ab.sh FIX_TREE BASE_TREE OUTDIR 10` (three in parallel)
+`scripts/evidence/k38/k38_payload_ab.sh FIX_TREE BASE_TREE OUTDIR 10` (three in parallel)
 runs each tree's `tests/test_k33_payload.py` alternately,
 keeps the work directory (`EFS_K33_KEEP=1`) of every failed run and deletes
 the others; a side loop copied every `written degraded` and

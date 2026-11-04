@@ -118,7 +118,7 @@ class GraphChecks(unittest.TestCase):
         config = json.loads((ROOT / 'tools/graphify/scope.json').read_text())
         code, docs = m.select_files(ROOT, config)
         self.assertIn('tests/d39_model.py', code)
-        self.assertIn('scripts/w127_incompatible_entry.sh', code)
+        self.assertIn('scripts/evidence/w127/w127_incompatible_entry.sh', code)
         self.assertIn('tests/live/raft_read_freshness.py', code)
         self.assertIn('docs/status/decisions.md', docs)
         self.assertNotIn('docs/how-it-works/architecture-full.md', docs)

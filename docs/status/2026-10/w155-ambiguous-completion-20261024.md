@@ -92,7 +92,7 @@ limits. The nuc b1/b2 live reruns are NOTRUN** (parent session).
   `report-loop … pub=<mint>:<seq> sent=<mask>` (G3); `flush-meta
   stage=report|writeback ino= report_rc= rc= stalled=` (G5); the BUSY
   exhaustion line names the op id (G6).
-- `scripts/w155_correlate.py` joins a failure's retries, report-loop,
+- `scripts/evidence/w125/w155_correlate.py` joins a failure's retries, report-loop,
   resolve lines and the servers' receipt lines by request identity (whole
   logs, not only the window) and reports G1–G6 as closed when a run carries
   them. Legacy logs are handled as before.

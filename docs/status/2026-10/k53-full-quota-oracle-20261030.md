@@ -65,7 +65,7 @@ already contains that fix.
 
 ## Reproduction
 
-Not reproduced. `scripts/b6_full_loop.sh` with `EFS_PACK_DBG=1` on
+Not reproduced. `scripts/evidence/b6/b6_full_loop.sh` with `EFS_PACK_DBG=1` on
 `7514b2145`: nuc 40/40 PASS (170–201 s per run) and fstor007 40/40 PASS
 (two loops of 20; native build with the private libfuse prefix, stores under
 `/tmp`). With the attribution above this is the expected result.
@@ -142,7 +142,7 @@ python3 tests/test_b6_full_oracle.py
 # the live case, on a Linux host with /dev/fuse (private TMPDIR, keep outside Git)
 EFS_B6_MODES=full EFS_B6_ARTIFACTS=$HOME/efs-artifacts/NEW python3 tests/test_b6_unavailable.py
 # the loop used for the not-reproduced result
-EFS_PACK_DBG=1 scripts/b6_full_loop.sh TREE OUTDIR 40
+EFS_PACK_DBG=1 scripts/evidence/b6/b6_full_loop.sh TREE OUTDIR 40
 ```
 
 Environment: nuc (Linux 6.12 el10, 8 CPUs, 30 GiB, loopback TCP, buffered

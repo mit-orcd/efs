@@ -151,14 +151,14 @@ make -j8 EFS_GIT_ID=4bcd52ca0 EFS_GIT_BRANCH=agent/devel-task-g \
   EFS_GIT_DESCRIBE=4bcd52ca0 all tests/faults/efsd
 python3 -u tests/test_w166_authority.py
 # Original pressure: --quota 1G; declared extended-capacity fixture: 8G.
-python3 -u scripts/w166_flush_diagnostic.py --work "$HOME/PRIVATE/pressure" \
+python3 -u scripts/evidence/w166/w166_flush_diagnostic.py --work "$HOME/PRIVATE/pressure" \
   --seconds 300 --quota 8G --source-revision 4bcd52ca0
 for n in 1 2 3 4 5; do python3 -u tests/test_k22_leader_admission.py --keep; done
 EFS_GIT_ID=4bcd52ca0 EFS_GIT_BRANCH=agent/devel-task-g \
   EFS_GIT_DESCRIBE=4bcd52ca0 EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 \
   EFS_BUILD_JOBS=8 bash scripts/make_test_summary.sh
 # Verifier from 71d856de6; SOURCE is that fixture's matching binary tree.
-python3 -u scripts/w166_verify_retained.py --run "$HOME/PRIVATE/pressure" \
+python3 -u scripts/evidence/w166/w166_verify_retained.py --run "$HOME/PRIVATE/pressure" \
   --source "$HOME/PRIVATE/source" --output "$HOME/PRIVATE/cold-read" --quota 8G
 ```
 

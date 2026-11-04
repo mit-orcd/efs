@@ -59,8 +59,8 @@ Ownership never depends on another user's process.
 - **`list`** prints the caller's own efs-fuse mounts (including stale ones)
   and own detached clients; other users' mounts are no longer listed.
 - `EFS_CLIENT_SKIP_FOREIGN` is deleted, with its uses in
-  `scripts/gates_nuc_k01_stop.sh`, `scripts/gates_nuc_w148_campaign.sh` and
-  `scripts/k14_atomic_cluster.sh` (no `w125_*` or K05 script set it).
+  `scripts/evidence/k01/gates_nuc_k01_stop.sh`, `scripts/evidence/w148/gates_nuc_w148_campaign.sh` and
+  `scripts/evidence/k14/k14_atomic_cluster.sh` (no `w125_*` or K05 script set it).
 
 Linux exposes no mapping from a `/dev/fuse` descriptor to its FUSE
 connection, so the connection is bound to the process through the

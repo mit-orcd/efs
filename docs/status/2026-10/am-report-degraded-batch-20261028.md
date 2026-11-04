@@ -31,8 +31,8 @@ checklist are untouched.
 probe the open-addressing degraded-object table under `g_dgobj_mu`
 (src/client/write.c:2852) whenever the live count is nonzero.
 
-Driver `scripts/am_measure.py` (committed) with the temporary, never
-committed counter patch `scripts/am-instrument.patch` (clock_gettime around
+Driver `scripts/evidence/am/am_measure.py` (committed) with the temporary, never
+committed counter patch `scripts/evidence/am/am-instrument.patch` (clock_gettime around
 each acquisition, REPORT call timing histogram, `EFS_AM_SEED_DGOBJ` seeding,
 SIGPROF dump — the `perf lock` tool is unavailable on intel1, so the brief's
 temporary-instrumentation alternative is used): a private 3-daemon loopback
@@ -107,10 +107,10 @@ intel1 `~/efs-artifacts/taskAM-20261029/test-all-summary.txt`.
 ## Reproduction
 
 ```
-patch -p1 -R < scripts/am-instrument.patch   # no-op check: tree must be clean
-patch -p1    < scripts/am-instrument.patch   # apply TEMP-AM instrumentation
+patch -p1 -R < scripts/evidence/am/am-instrument.patch   # no-op check: tree must be clean
+patch -p1    < scripts/evidence/am/am-instrument.patch   # apply TEMP-AM instrumentation
 make -j8 efsd efs-fuse
-python3 scripts/am_measure.py --src . --work /tmp/am --writers 1,8,32 --seconds 20
+python3 scripts/evidence/am/am_measure.py --src . --work /tmp/am --writers 1,8,32 --seconds 20
 ```
 
 Then restore the three touched files (`src/client/write.c`,

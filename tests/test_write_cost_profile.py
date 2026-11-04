@@ -9,7 +9,7 @@ import tempfile
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('cost', ROOT / 'scripts/write_cost_profile.py')
+spec = importlib.util.spec_from_file_location('cost', ROOT / 'scripts/evidence/measurement/write_cost_profile.py')
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 

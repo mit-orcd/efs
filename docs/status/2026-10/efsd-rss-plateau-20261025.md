@@ -43,8 +43,8 @@ Branch `claude/wizardly-mcclintock-0e2efd`, from `claude/devel-f1-followups-ae2d
 EFS_D4_KEEP=1`. That is three efsd of the `EFS_FAULTS` build and two
 efs-fuse on loopback TCP with buffered I/O, 8 writers rewriting 2048 files,
 and a 32-file foreground ring. Each ran alone on nuc. Beside it,
-`scripts/rss_mappings_sample.py` read `/proc` every 30 s (no ptrace, no gdb).
-`scripts/rss_mappings_split.py` splits the growth of a window by
+`scripts/evidence/measurement/rss_mappings_sample.py` read `/proc` every 30 s (no ptrace, no gdb).
+`scripts/evidence/measurement/rss_mappings_split.py` splits the growth of a window by
 component.
 
 Two diagnostics, on the runs marked *diag*, are not in the tree; their
@@ -125,7 +125,7 @@ a block after it; the output segment bounds that block.
 Runs A–E on nuc, alone (another session's runs moved off it at 18:50 on Oct
 25); run F on xorinox, alone, on Oct 26. Growth and verdict from
 `scripts/rss_plateau.py` as the test prints them. Run F's split by component
-over minutes 40–60 (`scripts/rss_mappings_split.py`): every component within
+over minutes 40–60 (`scripts/evidence/measurement/rss_mappings_split.py`): every component within
 ±0.9 MiB per node, the ring at 0.
 
 | Run | Tree | Rewrites (ow / trunc / rewrite) | efs-fuse fg / load | efsd 1 / 2 / 3 | Peak efsd / efs-fuse | Packer put errors | Other failures |
@@ -228,7 +228,7 @@ A 60-minute run with the RSS sampler beside it (alone on the host). Delete
 `~/efs-x`, `~/efs-x-tmp` and `~/efs-x-out` afterwards:
 
 ```bash
-ssh xorinox 'cd ~/efs-x && mkdir -p ~/efs-x-tmp ~/efs-x-out && (python3 scripts/rss_mappings_sample.py efs-x/ ~/efs-x-out/mem.jsonl 30 & echo $! > ~/efs-x-out/sampler.pid) && TMPDIR=$HOME/efs-x-tmp EFS_D4_LOAD_S=3600 EFS_D4_SET=256 EFS_D4_DRAIN_S=900 EFS_D4_QUOTA=8G EFS_D4_ARTIFACTS=$HOME/efs-x-out python3 tests/test_d4_plateau.py; kill $(cat ~/efs-x-out/sampler.pid)'
+ssh xorinox 'cd ~/efs-x && mkdir -p ~/efs-x-tmp ~/efs-x-out && (python3 scripts/evidence/measurement/rss_mappings_sample.py efs-x/ ~/efs-x-out/mem.jsonl 30 & echo $! > ~/efs-x-out/sampler.pid) && TMPDIR=$HOME/efs-x-tmp EFS_D4_LOAD_S=3600 EFS_D4_SET=256 EFS_D4_DRAIN_S=900 EFS_D4_QUOTA=8G EFS_D4_ARTIFACTS=$HOME/efs-x-out python3 tests/test_d4_plateau.py; kill $(cat ~/efs-x-out/sampler.pid)'
 ```
 
 Expected: the RSS table with every efsd and efs-fuse `PLATEAU` for a pass,
@@ -236,7 +236,7 @@ and the D4 line. The split of a window, with `LOAD_START` being the mtime of
 `d4-samples.json` minus its last `t`:
 
 ```bash
-ssh xorinox 'python3 ~/efs-x/scripts/rss_mappings_split.py ~/efs-x-out/mem.jsonl LOAD_START 40 60 24576'
+ssh xorinox 'python3 ~/efs-x/scripts/evidence/measurement/rss_mappings_split.py ~/efs-x-out/mem.jsonl LOAD_START 40 60 24576'
 ```
 
 The fixes' own tests: `./tests/test_reclaim` (`make test-long`) and

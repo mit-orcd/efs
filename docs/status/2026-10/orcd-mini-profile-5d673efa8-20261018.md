@@ -18,7 +18,7 @@ Follows the [`9099380f3` profile](orcd-mini-profile-9099380f3-20261017.md)
   `EFS_WRITE_PROF` off.
 - **Leadership:** node 3 led both groups in every round.
 - **Workload:** started 2026-10-18T04:40:53Z on node9900 with the user's
-  recipe (`launch.sh`, as in `scripts/orcd_mini_workload_profile.sh`,
+  recipe (`launch.sh`, as in `scripts/evidence/orcd-mini/orcd_mini_workload_profile.sh`,
   with a 900 s cap):
   - `tiny_files.py --workers 16` into a new `tiny-files-prof-hot` tree;
   - `tiny_files_md5.py --workers 16` over `tiny-files6`;
@@ -156,7 +156,7 @@ On node9901, while the workload runs, from a copy of the scripts in
   node9901 probe and an efsd CPU delta per round.
 
 Start the workload on node9900 with the `launch.sh` heredoc from
-`scripts/orcd_mini_workload_profile.sh`, using `MD5_DIR=tiny-files6`, a
+`scripts/evidence/orcd-mini/orcd_mini_workload_profile.sh`, using `MD5_DIR=tiny-files6`, a
 900 s `timeout`, and a `--max-files` that fits the free quota. Run
 `/data1/efs/orcd-mini-client/prof/probe.py` on the node9900 mount at each
 round's start.

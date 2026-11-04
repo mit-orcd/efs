@@ -54,7 +54,7 @@ All owned mounted outputs removed after verification; local input fixtures kept.
 
 20s `perf record -e cycles:u -F99 --call-graph fp`, followed by12s
 `strace -f -c -w`, for each main daemon and the independent AMD client. Existing
-`scripts/profile_intel_live.sh` also sampled wait channels and CPU/disk/network
+`scripts/evidence/intel/profile_intel_live.sh` also sampled wait channels and CPU/disk/network
 counters. CPU snapshots span12:20:54–12:21:14 UTC. No lost perf samples reported.
 
 * AMD client3.67 CPU-seconds/20s:18.4% of one core. Intel daemons6.70/7.58/8.02/7.55
@@ -111,7 +111,7 @@ EFS_COMMANDS_SERVER=0, EFS_EXPIRY=0.
 On AMD: `python3 tests/measure/intel_dd_sync_batch.py /data1/efs/intel-mnt
 /data1/efs/intel-client/default8-measure candidate --mib 1024 --repeats 3`.
 For diagnostic use `--mib 4096 --repeats 1`; prepare/reuse the local input before
-capture. On each observed host: `bash scripts/profile_intel_live.sh NEW_DIR
+capture. On each observed host: `bash scripts/evidence/intel/profile_intel_live.sh NEW_DIR
 PID_COMMA_LIST 20`. Restrict PIDs to the current main Intel daemons / AMD Intel
 client. No production/private PID matching by broad process name.
 

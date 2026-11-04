@@ -106,9 +106,9 @@ From the Mac, stop the existing private source with `intel_w100_private.py stop`
 then resume the same run from the new source (never use `start` on retained stores):
 
 ```sh
-python3 scripts/intel_w100_private.py resume merged-aa508c820 devel-1ac603128 --quota 16G
-python3 scripts/intel_package3_tests.py concurrent --run-id queue1ac-round1 --output /tmp/intel-queue-results --source-root /data1/efs/w100-private/devel-1ac603128 --mount /data1/efs/w100-private/runtime-merged-aa508c820/mnt --seed-port 27432 --remote-output-root /data1/efs/w100-private/results --extra-mount-root /data1/efs/w100-private/extra-mounts
-python3 scripts/intel_queue_sample.py --source /data1/efs/w100-private/devel-1ac603128 --seconds 30 --output /tmp/queue-samples.json
+python3 scripts/evidence/intel/intel_w100_private.py resume merged-aa508c820 devel-1ac603128 --quota 16G
+python3 scripts/evidence/intel/intel_package3_tests.py concurrent --run-id queue1ac-round1 --output /tmp/intel-queue-results --source-root /data1/efs/w100-private/devel-1ac603128 --mount /data1/efs/w100-private/runtime-merged-aa508c820/mnt --seed-port 27432 --remote-output-root /data1/efs/w100-private/results --extra-mount-root /data1/efs/w100-private/extra-mounts
+python3 scripts/evidence/intel/intel_queue_sample.py --source /data1/efs/w100-private/devel-1ac603128 --seconds 30 --output /tmp/queue-samples.json
 python3 tests/live/private_intel_queue_pause.py --source /data1/efs/w100-private/devel-1ac603128
 ```
 

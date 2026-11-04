@@ -137,7 +137,7 @@ hashing/allocation is lower priority given 6–9% absolute client CPU.
 As the efs account, with verified current PIDs and a new output directory:
 
 ```sh
-bash scripts/profile_intel_live.sh NEW_OUTPUT PIDLIST 30
+bash scripts/evidence/intel/profile_intel_live.sh NEW_OUTPUT PIDLIST 30
 # PIDLIST in this capture:
 # Intel1: 3855183,3855190,3855890
 # Intel2: 4127354,4127361,4128153
@@ -146,7 +146,7 @@ bash scripts/profile_intel_live.sh NEW_OUTPUT PIDLIST 30
 timeout -s INT 10 strace -f -ttt -T -yy -xx -s 8 \
   -e trace=sendmsg,writev,recvfrom,poll,clock_nanosleep \
   -p CLIENT_PID -o RPC_TRACE
-python3 scripts/summarize_intel_rpc_trace.py RPC_TRACE
+python3 scripts/evidence/intel/summarize_intel_rpc_trace.py RPC_TRACE
 timeout -s INT 10 strace -f -c -w -p APPLICATION_PID -o APPLICATION_SUMMARY
 ```
 

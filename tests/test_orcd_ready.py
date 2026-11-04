@@ -5,7 +5,7 @@ import importlib.util
 from unittest.mock import patch
 from types import SimpleNamespace
 from pathlib import Path
-spec=importlib.util.spec_from_file_location('ready',Path(__file__).parents[1]/'scripts/orcd_test_ready.py')
+spec=importlib.util.spec_from_file_location('ready',Path(__file__).parents[1]/'scripts/evidence/orcd/orcd_test_ready.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 states=[]
 for node in range(1,5):

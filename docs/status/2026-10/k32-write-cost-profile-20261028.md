@@ -353,7 +353,7 @@ percentage of wall time. The source identifies these distinct kinds of work:
   [batch apply](../../../tests/test_txn_batch_apply.py),
   [publication persistence](../../../tests/test_publication_persistence.py),
   and the version-discriminating, independent-reader
-  [K14 cluster gate](../../../scripts/k14_atomic_cluster.sh), including its
+  [K14 cluster gate](../../../scripts/evidence/k14/k14_atomic_cluster.sh), including its
   eight-units-per-transaction phase. This constant-payload matrix does not
   replace that gate or assert it ran here.
 - **Session admission/lifecycle (rank 2):** `apply_session_cmd`,
@@ -401,13 +401,13 @@ Build the normal product, then run:
 ```sh
 export EFS_GIT_ID=75db7afb0 EFS_GIT_BRANCH=agent/devel-task-u EFS_GIT_DESCRIBE=75db7afb0
 make -j8 all
-python3 scripts/write_cost_profile.py \
+python3 scripts/evidence/measurement/write_cost_profile.py \
   --work "$HOME/efs-taskU-reproduce/work" \
   --output "$HOME/efs-artifacts/taskU-reproduce/matrix"
 ```
 
 Both directories must be new; the default is all twelve 1 GiB cases. The
-driver compiles only `scripts/write_cost_client.c` against `libefs.a` into
+driver compiles only `scripts/evidence/measurement/write_cost_client.c` against `libefs.a` into
 the private work directory. `--modes bench --total-mib 16 --io-mib 1
 --writers 1` reproduces the original diagnostic in separate new directories
 and is expected to FAIL. Do not substitute it for the direct rows.

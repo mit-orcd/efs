@@ -230,7 +230,7 @@ On each Intel host, with EFS idle, from a source tree containing
 
 ```sh
 mkdir /data1/efs/cohort-bench-NEW        # must not exist; never a daemon root
-scripts/measure_cohort_durability.sh /data1/efs/cohort-bench-NEW 4096 > results.jsonl
+scripts/evidence/measurement/measure_cohort_durability.sh /data1/efs/cohort-bench-NEW 4096 > results.jsonl
 ```
 
 The script builds the tool in a temporary directory, runs the nine cases twice

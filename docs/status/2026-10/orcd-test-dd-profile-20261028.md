@@ -202,16 +202,16 @@ Prerequisites: normal ORCD-test SSH agent (no BatchMode), matching deployed
 snapshot, Linux perf/sysstat and mounted RDMA export. Scripts committed here:
 
 ```sh
-python3 scripts/orcd_dd_profile.py --label UNIQUE --seconds 120 \
+python3 scripts/evidence/orcd/orcd_dd_profile.py --label UNIQUE --seconds 120 \
   --source 3769f44bb2ada18aa6959a4dc66d110a661bd1de
 make -j8 tests/test_data_commit tests/test_data_commit_index
 ./tests/test_data_commit
 ./tests/test_data_commit_index
 # Before/after a checked cluster restart, on separate mounted clients:
-python3 scripts/orcd_dd_payload.py prepare /tmp/efs-mount/UNIQUE.bin
-python3 scripts/orcd_dd_payload.py verify  /tmp/efs-mount/UNIQUE.bin
+python3 scripts/evidence/orcd/orcd_dd_payload.py prepare /tmp/efs-mount/UNIQUE.bin
+python3 scripts/evidence/orcd/orcd_dd_payload.py verify  /tmp/efs-mount/UNIQUE.bin
 # Same four IOR cases as the original campaign:
-bash scripts/orcd_test_ior.sh NEW_OUTPUT /tmp/efs-mount
+bash scripts/evidence/orcd/orcd_test_ior.sh NEW_OUTPUT /tmp/efs-mount
 ```
 
 The sampler validates same-user PID and exact target mount/store arguments,

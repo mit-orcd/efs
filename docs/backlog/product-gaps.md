@@ -89,7 +89,7 @@ mutation, carries the session on every metadata mutation (protocol 4), and
 latches fenced on a refused epoch; the server has one check at every apply
 (`efs_session_accept`: UNREGISTERED or FENCED), and the legacy acceptance
 is deleted. What remains is evidence, not mechanism: the fence cluster gate
-(`scripts/k05_session_fence_gate.sh`), the NUC/AMD live harnesses, and the
+(`scripts/evidence/k05/k05_session_fence_gate.sh`), the NUC/AMD live harnesses, and the
 partitioned-client and leader-change barrier gates of
 [W72](work-items.md#w72) are NOTRUN. Until they pass, I23 is implemented
 but not qualified.

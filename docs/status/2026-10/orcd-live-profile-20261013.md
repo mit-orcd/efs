@@ -95,7 +95,7 @@ this profile identifies plausible delay paths, not a complete EIO causal proof.
 
 ## Reproduce and retained evidence
 
-Run the committed `scripts/profile-live-efsd.sh PID NEW_DIRECTORY 45` natively
+Run the committed `scripts/evidence/measurement/profile-live-efsd.sh PID NEW_DIRECTORY 45` natively
 on each host with the same user as efsd, perf/pidstat installed and perf event
 permissions available. Output belongs outside Git. The script records exact binary
 SHA, arguments, CPU stacks, thread activity, wait states and proc I/O deltas.

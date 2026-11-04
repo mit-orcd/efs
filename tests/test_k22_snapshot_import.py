@@ -5,7 +5,7 @@ Real fault-build efsd daemons on loopback (tests/k33_daemons.py). The daemons
 run with EFS_FAULT_SNAP_BYTES shrinking the retained log window so a follower
 stopped with SIGSTOP falls behind it in minutes; the production-scale version
 (1 GiB of command log past the follower's match, normal build, real hosts) is
-scripts/k22_snapshot_import.sh for the coordinator.
+scripts/evidence/k22/k22_snapshot_import.sh for the coordinator.
 
 1. Three daemons form the cluster; a FUSE client writes payload files
    (sha256 manifest kept).

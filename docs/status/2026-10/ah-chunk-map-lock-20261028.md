@@ -38,7 +38,7 @@ two orders below. **Recorded; nothing partitioned.**
 
 - Host xorinox, 3 production `efsd` daemons on loopback (ports 19411–19413,
   free per `ss -ltn`), stores under `~/efs-taskAH/`, TCP.
-- `scripts/ah_measure.py` (committed) builds a shim copy of the tree —
+- `scripts/evidence/ah/ah_measure.py` (committed) builds a shim copy of the tree —
   never the working tree — where each `pthread_mutex_lock/unlock
   (&g_client.idx_mu)` becomes a counting wrapper (acquisitions, trylock
   misses, wait ns, a 2 s report; the shim source is embedded in the script
@@ -68,5 +68,5 @@ two orders below. **Recorded; nothing partitioned.**
 Raw measurement output (the per-phase sample lines, the shim tree's log)
 and the gate summary: xorinox `~/efs-artifacts/taskAH-20261028/` with
 `SHA256SUMS`; the shim copy of the tree is recreated by
-`scripts/ah_measure.py` from any checkout, so it was deleted after the
+`scripts/evidence/ah/ah_measure.py` from any checkout, so it was deleted after the
 runs (`PRUNED.txt` in the artifacts directory).

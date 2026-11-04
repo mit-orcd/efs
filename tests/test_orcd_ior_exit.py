@@ -29,7 +29,7 @@ print('read 456.0')
         env = dict(os.environ, PATH=str(d/'bin')+os.pathsep+os.environ['PATH'],
                    MPIVARS=str(d/'mpivars.sh'), IOR='synthetic-ior', HOSTS='localhost',
                    PPN='1', MOCK_WIDE_FAIL=str(int(fail)))
-        run = subprocess.run(['bash', str(root/'scripts/orcd_test_ior.sh'), str(out), str(mount)],
+        run = subprocess.run(['bash', str(root/'scripts/evidence/orcd/orcd_test_ior.sh'), str(out), str(mount)],
                              env=env, text=True, capture_output=True, timeout=20)
         rows = list(csv.DictReader((out/'summary.tsv').open(), delimiter='\t'))
         assert len(rows) == 4, (run.stdout, run.stderr, rows)

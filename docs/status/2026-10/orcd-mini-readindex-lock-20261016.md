@@ -158,7 +158,7 @@ Raw perf data and run logs stay outside Git on node9901:
 
 ```sh
 # node9901, from a build of the tree under test (efsd, efs-fuse, efs-mgmt)
-scripts/orcd_mini_readindex_ab.sh <release-dir> <label> 40
+scripts/evidence/orcd-mini/orcd_mini_readindex_ab.sh <release-dir> <label> 40
 ```
 
 Prerequisites: free ports 17631–17633, `perf_event_paranoid <= 1`, the RDMA
@@ -188,7 +188,7 @@ candidate alternately; each run formats, measures and removes its own cluster
 - **POSIX.** node9901 `EFS_CLUSTER=orcd-mini ./smoke.sh`: 216/216 PASS in
   13.9 s (`/data1/efs/logs/posix-20261016-181416.tsv`).
 
-**Workload and method.** `scripts/orcd_mini_workload_profile.sh` runs the
+**Workload and method.** `scripts/evidence/orcd-mini/orcd_mini_workload_profile.sh` runs the
 user's recipe from the node9900 shell history, all on the node9900 client:
 - writer: `tiny_files.py --max-depth 8 --max-files-per-folder 1000
   --workers 16` into a new `tiny-files-prof-<label>` directory;

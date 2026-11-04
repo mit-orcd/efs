@@ -146,7 +146,7 @@ installation was required. From a source checkout on either host:
 
 ```sh
 cc -O2 -g -Wall -Wextra -Werror -pthread tests/live/efs_direct_read_fork.c -ldl -o /tmp/read-fork
-python3 scripts/intel_package3_fork_fixture.py prepare /data1/efs/w100-private/runtime-deadline-posix/mnt/package3-fork-UNIQUE --count 512
+python3 scripts/evidence/intel/intel_package3_fork_fixture.py prepare /data1/efs/w100-private/runtime-deadline-posix/mnt/package3-fork-UNIQUE --count 512
 # Run prepare on ONE host only, then use this same root from either mount.
 /tmp/read-fork /data1/efs/w100-private/runtime-deadline-posix/mnt/package3-fork-UNIQUE 0 512 512
 EFS_DIAG_FORK=1 /tmp/read-fork /data1/efs/w100-private/runtime-deadline-posix/mnt/package3-fork-UNIQUE 0 512 512

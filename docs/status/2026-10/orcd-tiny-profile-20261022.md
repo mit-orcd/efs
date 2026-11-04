@@ -208,7 +208,7 @@ found exactly once, a corrupt object is refused, not cancelled.
 segment for ten files over two segments, per-file stale-reference refusal and
 failure isolation. Existing pack tests are unchanged in behaviour.
 
-**Micro-benchmark** (`scripts/pack_validate_bench.sh 50bbd693a HEAD`, one
+**Micro-benchmark** (`scripts/evidence/measurement/pack_validate_bench.sh 50bbd693a HEAD`, one
 512-record segment, Apple M2, portable BLAKE3): ledger init ~160–198 ms →
 ~0.5–1.6 ms; compaction-style enumeration ~158–199 ms → ~0.4–0.7 ms.
 
@@ -234,6 +234,6 @@ All private clusters stopped themselves; `/tmp/pvo` and the run directories
 were deleted afterwards. Raw output was not kept.
 
 **NOTRUN:** live CPU A/B on orcd-mini under the user's tiny-file workload
-(`scripts/orcd_mini_workload_profile.sh`, old build first) — the only test
+(`scripts/evidence/orcd-mini/orcd_mini_workload_profile.sh`, old build first) — the only test
 of the profile percentages above; compaction of holed segments on a cluster
 (covered by unit tests only); `.efs` and LSM findings 3–5 are unchanged.

@@ -74,7 +74,7 @@ same tree with the comparison line removed fails at the race assertion
 (`cand_value(kv, 0, rx, &other) == EFS_OK && other.stamp == cur.stamp`,
 abort); with the fix it passes.
 
-**B6 full, `scripts/b6_full_loop.sh TREE OUTDIR RUNS`.**
+**B6 full, `scripts/evidence/b6/b6_full_loop.sh TREE OUTDIR RUNS`.**
 
 | Tree | Host | Runs | PASS | Notes | Raw (`SHA256SUMS` sha256) |
 |---|---|---|---|---|---|
@@ -113,7 +113,7 @@ UNFORMED race not occurring, and the runner's self-test marker.
 ```bash
 git archive 6ef6e6037 | ssh HOST 'mkdir -p ~/efs-x && tar -x -C ~/efs-x'
 ssh HOST 'cd ~/efs-x && make -j8 tests/test_pack_switch && ./tests/test_pack_switch'
-ssh HOST 'cd ~/efs-x && scripts/b6_full_loop.sh ~/efs-x ~/efs-artifacts/b6-full-$(date +%Y%m%d) 5'
+ssh HOST 'cd ~/efs-x && scripts/evidence/b6/b6_full_loop.sh ~/efs-x ~/efs-artifacts/b6-full-$(date +%Y%m%d) 5'
 ssh HOST 'cd ~/efs-x && TMPDIR=$HOME/efs-x-tmp scripts/make_test_summary.sh'
 ```
 

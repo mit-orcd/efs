@@ -8,7 +8,7 @@
  * private heap buffers each pass. This targets read/fork overlap without
  * requiring repeated metadata opens.
  * No-fork, original fork, and fork+COW are distinct controls, not fixes.
- * Fixture: scripts/intel_package3_fork_fixture.py prepare ROOT --count COUNT
+ * Fixture: scripts/evidence/intel/intel_package3_fork_fixture.py prepare ROOT --count COUNT
  * (use COUNT as both FILES_PER_WORKER and STRIDE). Historical W92 fixture
  * defaults: 10000 files per worker, stride 204800, one round.
  * Each 256 KiB file contains SHA256("W92-real-payload:" + be64(index)) repeated.

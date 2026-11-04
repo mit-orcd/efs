@@ -43,7 +43,7 @@ four-node profile and mounted export, Linux Python3, ss, ethtool, existing
 No extra root packages or firewall rules were required. Run from this repository:
 
 ```sh
-python3 scripts/intel_network_workload.py run --run-id net-20261013-a \
+python3 scripts/evidence/intel/intel_network_workload.py run --run-id net-20261013-a \
   --output /Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-network-20261013-a
 ```
 

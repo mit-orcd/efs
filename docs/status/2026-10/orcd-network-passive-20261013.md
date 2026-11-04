@@ -34,9 +34,9 @@ wall-clock windows. Reproduction from this repository, with SSH aliases and
 nonroot erbmi1 access to the same nodes:
 
 ```sh
-python3 scripts/orcd_network_observe.py --seconds 120 --interval 10 --jobs 4 \
+python3 scripts/evidence/orcd/orcd_network_observe.py --seconds 120 --interval 10 --jobs 4 \
   --output /outside/git/orcd-network
-python3 scripts/orcd_tcp_observe.py --output /outside/git/orcd-network
+python3 scripts/evidence/orcd/orcd_tcp_observe.py --output /outside/git/orcd-network
 ```
 
 Requires node Python3 and ss, readable RDMA/sysfs counters and existing logs;

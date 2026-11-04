@@ -158,7 +158,7 @@ running after 60 s (`TimeoutExpired`, FAIL); branch `f588f6efd` PASS in
 - F14 is tested with 17 daemons on one host; multi-host NOTRUN.
 - `raft-resync` is checked on a healthy follower (accepted, keeps
   following); a follower with a conflicting log, the repair case, is only
-  covered by the RDMA script `scripts/w145_deposed_leader.sh`.
+  covered by the RDMA script `scripts/evidence/w145/w145_deposed_leader.sh`.
 - Fixed roots mean a failed disk under one root of a multi-root node cannot
   be replaced in place: the node is formatted again and joins under a new
   id (online removal of the old id does not exist in alpha).

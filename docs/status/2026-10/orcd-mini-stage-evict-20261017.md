@@ -78,7 +78,7 @@ It runs plain and under ASan/UBSan, and is part of `make test`.
   efsd's 20% free-space startup reserve. One local efs-fuse mount runs with
   `EFS_CLIENT_META_MB=16`, so the table stays over its cap the whole run,
   as on orcd-mini.
-- **Script:** `scripts/orcd_mini_stage_evict_ab.sh DAEMON_REL CLIENT_REL
+- **Script:** `scripts/evidence/orcd-mini/orcd_mini_stage_evict_ab.sh DAEMON_REL CLIENT_REL
   LABEL SECONDS`:
   1. 32 threads populate 200,000 files of 256 B in 400 directories.
   2. 16 writers create 256 B files, each in its own directory, while one
@@ -149,13 +149,13 @@ and reloaded; at the default 256 MB this happens much less.
 ```sh
 # node9901, with a daemon release and a client build of each tree
 for r in 1 2 3; do
-  scripts/orcd_mini_stage_evict_ab.sh <daemon-rel> <old-client> old$r 60
-  scripts/orcd_mini_stage_evict_ab.sh <daemon-rel> <new-client> new$r 60
+  scripts/evidence/orcd-mini/orcd_mini_stage_evict_ab.sh <daemon-rel> <old-client> old$r 60
+  scripts/evidence/orcd-mini/orcd_mini_stage_evict_ab.sh <daemon-rel> <new-client> new$r 60
 done
 export QUOTA=300G INTERVAL=60
-scripts/orcd_mini_stage_evict_ab.sh <daemon-rel> <old-client> long-old 600
-scripts/orcd_mini_stage_evict_ab.sh <daemon-rel> <new-client> long-new 600
-META_MB=65536 scripts/orcd_mini_stage_evict_ab.sh <daemon-rel> <new-client> long-nocap 600
+scripts/evidence/orcd-mini/orcd_mini_stage_evict_ab.sh <daemon-rel> <old-client> long-old 600
+scripts/evidence/orcd-mini/orcd_mini_stage_evict_ab.sh <daemon-rel> <new-client> long-new 600
+META_MB=65536 scripts/evidence/orcd-mini/orcd_mini_stage_evict_ab.sh <daemon-rel> <new-client> long-nocap 600
 ```
 
 - **Prerequisites:** free ports 17631–17633, `perf_event_paranoid <= 1`,

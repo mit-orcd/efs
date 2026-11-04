@@ -84,7 +84,7 @@ Raw logs: nuc `~/efs-artifacts/a11-20261024/loopback-3-r1/gates/append-failover/
 - Diagnostics: `report resolve … why=state|authority|inode|complete|catchup|retire`
   names the stage that refused; the client's REPORT receive retry logs
   `wait_ms` and `cut=deadline|bound|conn` next to `recv_ms`
-  (`scripts/w155_correlate.py` reads both).
+  (`scripts/evidence/w125/w155_correlate.py` reads both).
 - Exactly-once is unchanged: the hand-off proposes exactly what the recovery
   scan proposes, earlier. A retry of the same publication id or append
   identity meets the decision as before (twin attempts, W155 receipts).
@@ -134,7 +134,7 @@ python3 tests/live/append_failover.py --rel REL --root RUN --port PORT \
 
 The harness and summary are from `584ce426a` for both builds; `REL` is the
 base tree (`646a43041`, `merge-wave6`) or the fix tree. Two base and two fix
-runs at a time on amd. Table: `python3 scripts/report_stepdown_summary.py RUN…`
+runs at a time on amd. Table: `python3 scripts/evidence/measurement/report_stepdown_summary.py RUN…`
 (columns trimmed; `per change` = slowest REPORT divided by the leader
 changes it crossed).
 

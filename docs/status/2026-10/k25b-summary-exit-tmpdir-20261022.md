@@ -58,7 +58,7 @@ Product defaults that still use `/tmp` were left unchanged, as briefed:
 - The client control socket is `/tmp/efs-control-*.sock`.
 - The perf and strace outputs of `efs-fuse`, `efs-bench` and `bench_local`
   go to `/tmp`.
-- The socket of `scripts/posix_phase_runner.py` is in `/tmp`.
+- The socket of `scripts/evidence/intel/posix_phase_runner.py` is in `/tmp`.
 - Cluster operation scripts such as `tests/cluster.sh` and
   `tests/roll_efsd.sh` use the `/tmp/efs` deployment tree.
 

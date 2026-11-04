@@ -88,8 +88,8 @@ Nothing is left to port. Undecided: none.
 ```sh
 make -j12 all tests/faults/efsd tests            # amd, gcc 15.2, -O3 -march=native
 TMPDIR=$HOME/work/tmp python3 tests/test_pump_logging.py          # the gate test
-sh scripts/ab_hold_matrix.sh BASE_TREE NEW_TREE OUT 3 45          # hold/wait matrix
-python3 scripts/pump_logging_profile.py --work W --output O --sink blocked \
+sh scripts/evidence/pump-logging/ab_hold_matrix.sh BASE_TREE NEW_TREE OUT 3 45          # hold/wait matrix
+python3 scripts/evidence/pump-logging/pump_logging_profile.py --work W --output O --sink blocked \
   --stop-blocked --obs 1 --seconds 15 --threads 2 --rate 2 --versioned  # K79, expected FAIL
 EFS_SAN_ONLY="telemetry pump_logging" bash tests/sanitizer_check.sh tsan
 EFS_SAN_ONLY="pump_logging" bash tests/sanitizer_check.sh asan
@@ -97,7 +97,7 @@ EFS_SAN_ONLY="pump_logging" bash tests/sanitizer_check.sh asan
 
 `TMPDIR` must be under `$HOME`; output paths must be new. For the matrix both trees
 are archived non-Git copies (`git archive`) that went through
-`scripts/pump_logging_measure.py instrument`, which adds the same two histograms
+`scripts/evidence/pump-logging/pump_logging_measure.py instrument`, which adds the same two histograms
 to both: actual `h->mu` hold through unlock, and the active pump cycle. `wait` is
 the existing `pump_lock_us` histogram (time to acquire `h->mu`).
 

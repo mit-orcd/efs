@@ -77,10 +77,10 @@ Existing KEEP flags retain every related fixture. No preload/GID override.
 
 ```sh
 # External wrappers from 690169143/217007986; source export stays 38f3cecba.
-bash scripts/fin_accounting_hardware.sh /tmp/efs-k35-slow-fin38f/src \
+bash scripts/evidence/fin/fin_accounting_hardware.sh /tmp/efs-k35-slow-fin38f/src \
   /data1/efs/evidence/k35-slow-fin-20261029-38f3cecba 38f3cecba
 # Requires closed successful hardware/audit receipts and two new host guards.
-bash scripts/fin_accounting_gate.sh /tmp/efs-k35-slow-fin38f/src \
+bash scripts/evidence/fin/fin_accounting_gate.sh /tmp/efs-k35-slow-fin38f/src \
   /data1/efs/evidence/fin-fullgate-node9900-20261029-38f3cecba 38f3cecba \
   /data1/efs/evidence/k35-slow-fin-20261029-38f3cecba
 ```
@@ -163,7 +163,7 @@ qualified commit.
 
 ```sh
 git show b4d512ace:src/common/rdma.c > /tmp/fin-old-rdma.c
-python3 scripts/fin_accounting_controls.py /tmp/efs-k35-slow-fin38f/src \
+python3 scripts/evidence/fin/fin_accounting_controls.py /tmp/efs-k35-slow-fin38f/src \
   /tmp/fin-old-rdma.c /data1/efs/evidence/fin-controls-FRESH
 ```
 

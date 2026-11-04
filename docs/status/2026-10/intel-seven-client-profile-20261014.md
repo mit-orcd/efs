@@ -174,9 +174,9 @@ matching devel clients already built/mounted, Python3, `perf`, `strace`,
 `perf_event_paranoid=-1` and `ptrace_scope=0`; no root changes were made.
 
 ```sh
-python3 scripts/intel_private_posix_profile.py --output /OUTSIDE/GIT/unique-run
+python3 scripts/evidence/intel/intel_private_posix_profile.py --output /OUTSIDE/GIT/unique-run
 # On each host, using the remote_output printed by the controller:
-python3 scripts/intel_private_profile_summary.py /data1/efs/w100-private/results/profile-seven-TIMESTAMP
+python3 scripts/evidence/intel/intel_private_profile_summary.py /data1/efs/w100-private/results/profile-seven-TIMESTAMP
 ```
 
 The controller validates only the existing selected private processes, runs

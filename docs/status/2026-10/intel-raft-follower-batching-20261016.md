@@ -90,7 +90,7 @@ Run a small-file read/create load on the clients, take the last `batch-obs`
 JSON line of each `/data1/efs/logs/efsd-n*.log` before and after a ~50 s
 window and diff counters/histograms (`sync`, `batch_overlap`, `tail_behind`,
 `wal_entries`, `pump_drain_us`, `inbox_age_us`), and strace a client's
-efs-fuse for 10 s, summarised with `scripts/summarize_intel_rpc_trace.py`
+efs-fuse for 10 s, summarised with `scripts/evidence/intel/summarize_intel_rpc_trace.py`
 (the session command shows as `EFS_MSG_RAFT_MKFS`, message type 95).
 
 Raw (not in Git), `~/git/devops/profiling/runs/`:

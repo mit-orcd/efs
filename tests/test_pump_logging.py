@@ -19,7 +19,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(ROOT / 'scripts/evidence/pump-logging'))
 import pump_logging_profile as profile
 
 if not profile.k.fuse_ok():

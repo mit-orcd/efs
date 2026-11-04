@@ -61,7 +61,7 @@ Raft, `--direct-io`, `--quota 30G`, fresh scratch stores under
 
 ## Method
 
-`scripts/orcd_mini_readindex_ab.sh REL LABEL 40`, alternating baseline and
+`scripts/evidence/orcd-mini/orcd_mini_readindex_ab.sh REL LABEL 40`, alternating baseline and
 candidate three times (base1, cand1, … cand3). Each run: idle probe (200 ×
 create/stat/negative lookup/unlink), then 40 s of 16 writer threads creating
 256 B files plus one reader and one crawler, with the same probe in the
@@ -112,8 +112,8 @@ node9901. The runner kept the updated `test_read_waiters.py`.
 ```sh
 # node9901, from a build of each tree (efsd, efs-fuse, efs-mgmt + scripts/)
 for r in 1 2 3; do
-  scripts/orcd_mini_readindex_ab.sh <baseline-release> base$r 40
-  scripts/orcd_mini_readindex_ab.sh <candidate-build> cand$r 40
+  scripts/evidence/orcd-mini/orcd_mini_readindex_ab.sh <baseline-release> base$r 40
+  scripts/evidence/orcd-mini/orcd_mini_readindex_ab.sh <candidate-build> cand$r 40
 done
 ```
 
@@ -154,7 +154,7 @@ built 2026-10-16T23:45:38Z). The only runtime change is this waiter wake-up.
 The workload ran on both clients at once. Each client ran `tiny_files.py`
 (16 workers), `tiny_files_md5.py` and `ecrawl --no-write`. Raft commits were
 3,900–4,600/s on group 0 and 2,300–3,300/s on group 2. The captures are
-`scripts/orcd_mini_lockprof.sh`, run three times about 3 minutes apart.
+`scripts/evidence/orcd-mini/orcd_mini_lockprof.sh`, run three times about 3 minutes apart.
 
 **Leader-detection note.** `efs-mgmt raft-status` prints `leader=` as a
 0-based peer index, so `leader=1` means n2. Rounds 1–2 read it as a node ID
@@ -212,7 +212,7 @@ which ran with one client's workload; this run had two.
 Raw captures (outside Git): node9901 `/data1/efs/prof/wl-4aff-r{1,2,3}/`
 (`dwarf-n*.data`, `cs-all.data`, `oncpu-n*.data`, `rs*.txt`) and node9900
 `/data1/efs/orcd-mini-client/prof/`. Reproduce on node9901 while the workload
-runs: `scripts/orcd_mini_lockprof.sh <dir>` (needs `cs_lock.py` and
+runs: `scripts/evidence/orcd-mini/orcd_mini_lockprof.sh <dir>` (needs `cs_lock.py` and
 `cs_dwarf_locks.py` next to it, `perf_event_paranoid <= 1`). Run the
 200-file probe on the node9900 mount at the same time.
 

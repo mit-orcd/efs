@@ -149,7 +149,7 @@ The snapshot does not justify calling their raw bandwidth exhausted.
 
 ## Reproduce and validate
 
-Use `scripts/capture_intel_put_stages.sh` on Intel1 and Intel2 as root. The script
+Use `scripts/evidence/intel/capture_intel_put_stages.sh` on Intel1 and Intel2 as root. The script
 pins this deployment/PIDs deliberately; for later reproduction first resolve
 current main-daemon PIDs and exact executable, then update its explicit guards
 and use a fresh output directory. Never point it at private Intel processes.
@@ -179,11 +179,11 @@ timeout -s INT 12 strace -f -ttt -T -yy -xx -s 8 \
 Analyze locally:
 
 ```sh
-python3 scripts/summarize_put_stages.py events.txt --ino WORKLOAD_INODE
-python3 scripts/summarize_put_stages.py events.txt --ino WORKLOAD_INODE --skip-seconds 15
-python3 scripts/summarize_intel_rpc_trace.py rpc.trace
-PYTHONDONTWRITEBYTECODE=1 python3 scripts/test_summarize_put_stages.py
-bash -n scripts/capture_intel_put_stages.sh
+python3 scripts/evidence/intel/summarize_put_stages.py events.txt --ino WORKLOAD_INODE
+python3 scripts/evidence/intel/summarize_put_stages.py events.txt --ino WORKLOAD_INODE --skip-seconds 15
+python3 scripts/evidence/intel/summarize_intel_rpc_trace.py rpc.trace
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/evidence/intel/test_summarize_put_stages.py
+bash -n scripts/evidence/intel/capture_intel_put_stages.sh
 ```
 
 The two deterministic parser tests pass: cross-thread identity, decimal/hex

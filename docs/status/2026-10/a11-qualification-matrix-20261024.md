@@ -337,7 +337,7 @@ run before the commit. Raw: amd `~/efs-artifacts/k33-harnesses-20261024/r2` Top-
 - `scripts/qualify.py`: `topology` gate; seven NOTRUN stub gates (`STUBS`);
   `b-checks` default plugin fixed to `b_checks.py`'s CLI; `ssh` description
   field (a wrapper called as `PROG HOST COMMAND`, e.g.
-  `scripts/orcd_mini_ssh.sh`, also passed to `posix_2client.py --ssh`);
+  `scripts/evidence/orcd-mini/orcd_mini_ssh.sh`, also passed to `posix_2client.py --ssh`);
   `private_cluster` descriptions with the `PrivateCluster` controller and the
   `_node start|stop` helper; `run --matrix … --topology …` with
   `--user-approved`/`--ignore-blocked`; `plan [--topology] [--check]`;

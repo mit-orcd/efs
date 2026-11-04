@@ -61,7 +61,7 @@ shell-quoted, so never quote them in the template):
                  "stop_timeout_s": 300, "ready_timeout_s": 300},
      "plugins": {"b-checks": {"command": "...", "deadline_s": 3600,
                               "host": "local", "needs": [], "items": "B1-B6"}},
-     "ssh": "scripts/orcd_mini_ssh.sh",       # optional: PROG HOST COMMAND replaces ssh
+     "ssh": "scripts/evidence/orcd-mini/orcd_mini_ssh.sh",       # optional: PROG HOST COMMAND replaces ssh
      "private_cluster": {"root": "/home/u/efs-qual", "quota": "4G", "env": {}}}
 
 With private_cluster the driver owns the cluster: every node names its
@@ -1153,7 +1153,7 @@ def b_k14(q, src, work, port, transport):
     faults = q.cluster.get('faults_source')
     phases = q.fixture['k14_phases'] if not faults else '1 2 3 4 5 6 7'
     tail = f' {shlex.quote(faults)}' if faults else ''
-    base = f'scripts/k14_atomic_cluster.sh {{}} {shlex.quote(src)} {shlex.quote(work)}/run {port + 20}{tail}'
+    base = f'scripts/evidence/k14/k14_atomic_cluster.sh {{}} {shlex.quote(src)} {shlex.quote(work)}/run {port + 20}{tail}'
     rdma = ' K14_TRANSPORT=rdma' if transport == 'rdma' else ''
     return [('k14-run', f'K14_PHASES={shlex.quote(phases)}{rdma} ' + base.format('run'), False),
             ('k14-stop', base.format('stop'), True)], \
@@ -1188,7 +1188,7 @@ def b_ao(q, src, work, port, transport):
     w = shlex.quote(work)
     base = q.fixture['ao_base_port']
     ports = f' --base-port {int(base)}' if base else ''
-    return [('ao-readdir', f'python3 scripts/qualify_ao_readdir.py --work {w}/run --output {w}/out '
+    return [('ao-readdir', f'python3 scripts/evidence/ao/qualify_ao_readdir.py --work {w}/run --output {w}/out '
              f'--transport {transport}{ports} {q.fixture["ao_args"]}', False)], \
         dict(args=q.fixture['ao_args'], ports=f'{int(base)}-{int(base) + 3}' if base else 'free ports',
              rule='K74 listings during migration')
@@ -2582,7 +2582,7 @@ def gates(plugins):
         Gate('append-failover', live_gate(b_append, rdma=True), 'C3, C4 (K15/K29)', 'POSIX and concurrent I/O',
              deadline_s=3600, doc='tests/live/append_failover.py, private cluster'),
         Gate('k14-torn-read', live_gate(b_k14, rdma=True), 'C4 (K14)', 'POSIX and concurrent I/O', deadline_s=3600,
-             doc='scripts/k14_atomic_cluster.sh, private cluster'),
+             doc='scripts/evidence/k14/k14_atomic_cluster.sh, private cluster'),
         Gate('k13-tickets', live_gate(b_k13), 'C4 (K13)', 'POSIX and concurrent I/O', deadline_s=3600,
              doc='tests/live/k13_ticket_cluster.py, private cluster'),
         Gate('fragment-integrity', live_gate(b_fragment), 'B2', 'Placement/capacity and decode',
@@ -2590,7 +2590,7 @@ def gates(plugins):
         Gate('gc-reclamation', live_gate(b_gc, rdma=True), 'D2', 'Packing/shared-fragment GC', deadline_s=7200,
              doc='tests/live/gc_reclamation.py, private four-node cluster'),
         Gate('ao-readdir', live_gate(b_ao, rdma=True), 'C4 (K74)', 'POSIX and concurrent I/O', deadline_s=3600,
-             doc='scripts/qualify_ao_readdir.py, private four-node cluster'),
+             doc='scripts/evidence/ao/qualify_ao_readdir.py, private four-node cluster'),
         Gate('d5-expiry', live_gate(b_d5), 'D5', 'Packing/shared-fragment GC', deadline_s=3600,
              doc='tests/posix/posix_expiry.py (cluster expiry policy, lifecycle, POSIX core), private four-node cluster'),
         Gate('e1-manifest', g_e1, 'E1, E2', 'Full payloads + orderly restart', partial_needs=('restart',),

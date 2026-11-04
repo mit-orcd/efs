@@ -153,9 +153,9 @@ without verifying them. Do not start or stop the human workload for observation.
 Run the committed script on each host with a fresh output path:
 
 ```sh
-bash scripts/profile_intel_live.sh NEW_OUTPUT_DIR AMD_FUSE_PID,DD_PID 30
-bash scripts/profile_intel_live.sh NEW_OUTPUT_DIR INTEL1_N1_PID,INTEL1_N2_PID 30
-bash scripts/profile_intel_live.sh NEW_OUTPUT_DIR INTEL2_N3_PID,INTEL2_N4_PID 30
+bash scripts/evidence/intel/profile_intel_live.sh NEW_OUTPUT_DIR AMD_FUSE_PID,DD_PID 30
+bash scripts/evidence/intel/profile_intel_live.sh NEW_OUTPUT_DIR INTEL1_N1_PID,INTEL1_N2_PID 30
+bash scripts/evidence/intel/profile_intel_live.sh NEW_OUTPUT_DIR INTEL2_N3_PID,INTEL2_N4_PID 30
 ```
 
 The script records `perf record -e cycles:u -F 99 --call-graph fp`, counter and
@@ -165,7 +165,7 @@ For bounded protocol and durability inspection, equivalent commands are:
 ```sh
 timeout -s INT 10 strace -f -ttt -T -yy -xx -s 8 -e trace=sendmsg,recvfrom -p AMD_FUSE_PID -o rpc.trace
 timeout -s INT 6 strace -f -ttt -T -yy -e trace=fsync,fdatasync -p INTEL2_N3_PID -o sync.trace
-python3 scripts/summarize_intel_rpc_trace.py rpc.trace
+python3 scripts/evidence/intel/summarize_intel_rpc_trace.py rpc.trace
 ```
 
 Timeout 124 is expected for bounded attach; verify tracers detached. No test

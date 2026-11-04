@@ -299,8 +299,8 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_GC_DISABLE` | `server/raft_host.c` (server_raft_host_start), **every build** | `EFS_FAULT_GC_DISABLE`, `EFS_FAULTS` builds | the K33 and W153 daemon tests, now on `tests/faults/efsd` |
 | `EFS_TEST_MEMBER_EXIT` | `server/cluster.c` (server_test_member_exit), **every build** | `EFS_FAULT_MEMBER_EXIT` | `test_k33_growth.py`, `test_k33_interrupt.py` and the env filters of the other K33 tests |
 | `EFS_TEST_MEMBER_EXIT_ONCE` | `server/cluster.c`, every build | `EFS_FAULT_MEMBER_EXIT_ONCE` | `test_k33_interrupt.py` |
-| `EFS_PACK_CRASH` | `server/packer.c`, `EFS_FAULTS` builds | `EFS_FAULT_PACK_CRASH` | `scripts/w125_p7_crash.sh` |
-| `EFS_PACK_CRASH_NODE` | `server/packer.c`, `EFS_FAULTS` builds | `EFS_FAULT_PACK_CRASH_NODE` | `scripts/w125_p7_crash.sh` |
+| `EFS_PACK_CRASH` | `server/packer.c`, `EFS_FAULTS` builds | `EFS_FAULT_PACK_CRASH` | `scripts/evidence/w125/w125_p7_crash.sh` |
+| `EFS_PACK_CRASH_NODE` | `server/packer.c`, `EFS_FAULTS` builds | `EFS_FAULT_PACK_CRASH_NODE` | `scripts/evidence/w125/w125_p7_crash.sh` |
 | `EFS_FEATURES_TTL_MS` | `client/efs_fuse/` (features_ttl_ms) | built in: 2000 ms | none; documented in power-user.md (row removed) |
 | `EFS_META_BATCH_OPS` | `client/efs_fuse/` (efs_fuse_init) | built in: 4096 | none; portal observes |
 | `EFS_PACK_COMPACT_COLD_S` | `server/packer.c` (server_packer_start) | built in: 86400 s | none; data.md table |

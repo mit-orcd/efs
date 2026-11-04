@@ -41,7 +41,7 @@ refuses pre-W153 stores, so the user authorized a wipe and fresh format.
 | POSIX extras | `posix_extras.py --jobs 4 --timeout-s 150` | 4/5 PASS, 1 SKIP (`mmap_write_read`, W104) |
 | Durability across remount | devops `smoke-persist.sh` | 27/27 prepare + 27/27 verify PASS |
 | `.efs` virtual interfaces | `tests/live/virtual_interfaces.py --freshness-s 150`, temporary peer mount | 10/10 PASS |
-| Two-client (node9901 ↔ node9900) | `scripts/orcd_mini_posix2.py` from the Mac | 68/68 PASS (314 s) |
+| Two-client (node9901 ↔ node9900) | `scripts/evidence/orcd-mini/orcd_mini_posix2.py` from the Mac | 68/68 PASS (314 s) |
 | Expiry lifecycle (private four-node fixture, /tmp, port 24410) | `posix_expiry.py --suite expiry` | first run: fixture stopped at `raft-mkfs` (below). Rerun with the fix: 29/29 expiry checks PASS; the fixture's closing core POSIX run 215/216 (`dir_times_mkdir_rmdir` rmdir EBUSY; W159) |
 
 ## Harness defect (fixed)
@@ -75,7 +75,7 @@ already retried.
   posix_extras.py, smoke-persist.sh, virtual_interfaces.py (with
   `EFS_QUERY_TEST_HOST=10.1.99.1 EFS_QUERY_TEST_PORT=17432` and a peer mount
   under /tmp), then posix_expiry.py (roots and mounts under /tmp).
-- **Two-client:** `python3 scripts/orcd_mini_posix2.py RESULTS.tsv` from the Mac.
+- **Two-client:** `python3 scripts/evidence/orcd-mini/orcd_mini_posix2.py RESULTS.tsv` from the Mac.
 - **Raw output:** on node9901 under `/data1/efs/evidence/orcd-mini-posix-cb970ca7c-20261024-0033`, plus the two-client TSV on the
   driver Mac.
 

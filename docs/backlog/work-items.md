@@ -5779,7 +5779,7 @@ as the scope review asked:
   sticky; another group on the same KV still applies; a missing engine is
   refused; DIR storage errors retry; unknown or short DIR/TXN frames are
   unsupported. `test_gc_verdict.py` checks that no verdict list absorbs it.
-- `scripts/w127_incompatible_entry.sh`: a private 3-node TCP efsd set
+- `scripts/evidence/w127/w127_incompatible_entry.sh`: a private 3-node TCP efsd set
   (ports 17631–17633). An entry with unknown tag 200 is committed to
   group 0; all replicas log the diagnostic and keep `applied` below it;
   group 0 has no leader and refuses a new MKFS; group 2 keeps its leader
@@ -5937,7 +5937,7 @@ NOTRUN.**
   on an undeclared connection.
 - The version check is `>= EFS_PROTOCOL_MIN_VERSION` (`handler.c:196`,
   `src/common/protocol.c:697`), so newer versions are accepted too.
-- `scripts/w125_p3_compat.sh` case 2 expects an old client's writes to keep
+- `scripts/evidence/w125/w125_p3_compat.sh` case 2 expects an old client's writes to keep
   working, which contradicts the no-backward-compatibility rule.
 
 **Fix and gate:**
@@ -5970,14 +5970,14 @@ NOTRUN.**
   - **efs-mgmt:** every command uses `efs_connect_declared`. The status
     probe declares under its own 2 s bound.
   - **Tests:** the live and measure C programs, the raw-socket Python live
-    tests and `scripts/w127_incompatible_entry.sh` all declare.
+    tests and `scripts/evidence/w127/w127_incompatible_entry.sh` all declare.
 - These openers are exempt:
   - Reachability probes in `node_cache.c` connect and close without
     sending anything.
   - `tests/perf/tcp_rdma/xprt_bench` and the self-hosted unit tests
     (`test_rdma_xprt`, `test_rdma_segmented`, `test_data`) are their own
     server, not efsd.
-- `scripts/w125_p3_compat.sh` now expects old clients to be refused and
+- `scripts/evidence/w125/w125_p3_compat.sh` now expects old clients to be refused and
   exits nonzero otherwise.
 - **Gates:**
   - `tests/test_declaration_gate.c` PASS on efs3 (TCP frame path). It
@@ -6195,7 +6195,7 @@ archived, delete the test with it.
 - Since W127, every replica refuses such an entry at apply and the group
   stops serving until it is reformatted. So one request from any connection
   can halt a metadata group.
-- Shown by `scripts/w127_incompatible_entry.sh` on node9901 (tag 200 to
+- Shown by `scripts/evidence/w127/w127_incompatible_entry.sh` on node9901 (tag 200 to
   group 0, October 22).
 
 **Fix (`8b8048a5b`, October 22):**
@@ -6221,7 +6221,7 @@ archived, delete the test with it.
 **Remaining gate:**
 - Cluster: tag 200 to group 0 through the proposal RPC answers PROTO, the
   group's log and applied index do not move, and the group keeps serving.
-  `scripts/w127_incompatible_entry.sh` can no longer plant an incompatible
+  `scripts/evidence/w127/w127_incompatible_entry.sh` can no longer plant an incompatible
   entry through the RPC; the W127 B1-B4 gate needs another vehicle (a log
   entry written below the gate) before it is rerun.
 - Who may submit at all is W133 (connection-state matrix); this item only
@@ -6444,7 +6444,7 @@ HARD, SNAP and CFG records.
   oversize inbox frames are counted.
 - Elections, votes, step-downs (with the commit quorum and match table)
   and any commit by a non-leader are logged.
-- `scripts/w145_deposed_leader.sh` reproduces deposition on a private
+- `scripts/evidence/w145/w145_deposed_leader.sh` reproduces deposition on a private
   cluster; its SIGSTOP and perf modes passed without reproducing.
 
 **Deployed** `76614e8e8` on orcd-mini (2026-10-22 14:22Z):

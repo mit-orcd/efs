@@ -7,7 +7,7 @@ packing one.
 ## Symptom
 
 - orcd-mini, devel `5c41111d106b`, 1,000,000 files in one directory
-  (`scripts/w125_big_dir.sh`):
+  (`scripts/evidence/w125/w125_big_dir.sh`):
   - `ls -f` listed 999,990 names and a scandir pass listed 999,994;
   - `rm -rf` left 5 files behind (f0032778–80, f0032783–84). All 5 could
     be stat'ed and read.
@@ -88,10 +88,10 @@ adds this page). On node9901 it was built as release tree
 - `tests/test_readdir_{collection,permission_authority,reply_boundary,source_cursor}.py`;
 - `tests/test_query_retained_orphan.py`.
 
-**Reproducer:** `scripts/bigdir_readdir_repro.sh REL OUT PORT [N] [ROUNDS]
+**Reproducer:** `scripts/evidence/w125/bigdir_readdir_repro.sh REL OUT PORT [N] [ROUNDS]
 [AGE_MS]`, run on node9901 in a named screen.
 
-- It starts a private 3-daemon RDMA cluster (`scripts/w125_p0_cluster.sh`,
+- It starts a private 3-daemon RDMA cluster (`scripts/evidence/w125/w125_p0_cluster.sh`,
   `--direct-io`, quota 200 G, stores under `/tmp`).
 - It creates N files in one directory with 32 threads. File sizes are
   1–4,000 B.
@@ -103,8 +103,8 @@ adds this page). On node9901 it was built as release tree
 Commands (node9901, 2026-10-21, both runs at the same time):
 
 ```
-fix/scripts/bigdir_readdir_repro.sh /data1/efs/prof/bdfix/fix /data1/efs/prof/bdfix/out-fix 17850 500000 6
-fix/scripts/bigdir_readdir_repro.sh /data1/efs/prof/bdfix/fix /data1/efs/prof/bdfix/out-fix-pack 17860 500000 6 1000
+fix/scripts/evidence/w125/bigdir_readdir_repro.sh /data1/efs/prof/bdfix/fix /data1/efs/prof/bdfix/out-fix 17850 500000 6
+fix/scripts/evidence/w125/bigdir_readdir_repro.sh /data1/efs/prof/bdfix/fix /data1/efs/prof/bdfix/out-fix-pack 17860 500000 6 1000
 ```
 
 | Run | Packing | Create | Rounds | ls / listdir per round | Missing | Result |

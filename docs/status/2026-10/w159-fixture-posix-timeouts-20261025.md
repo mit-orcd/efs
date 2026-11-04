@@ -43,7 +43,7 @@ fix does not change: the per-operation barrier count, so the fixture stays
 - **Source:** this branch at the commit named in the commit log of this
   page; the base for the A/B runs is `merge-wave7` `0b01a2a1e`, built in
   `~/w159/base` with the same flags (`make -j32 all`).
-- **Fixture:** `scripts/w159_fixture.py`: four efsd (`efsd ADDR:PORT STORE`
+- **Fixture:** `scripts/evidence/w159/w159_fixture.py`: four efsd (`efsd ADDR:PORT STORE`
   seed, `--join` for the others, `--discovery-port 0`, `--quota 4G` or
   `1G`, `EFS_TRANSPORT=tcp`, `EFS_RAFT_OBS=1`, direct I/O, the build
   default), `raft-mkfs`, one `efs-fuse ... -f` with `EFS_RPC_PROF=1`, loopback
@@ -70,7 +70,7 @@ fix does not change: the per-operation barrier count, so the fixture stays
 
 ## Reproduction on amd
 
-| Run | Conditions (`scripts/w159_fixture.py`) | Core run | Three cases under load | RPCs ≥ 1 s | Server `wait_timeouts` (BUSY from an expired applied-wait), max per member |
+| Run | Conditions (`scripts/evidence/w159/w159_fixture.py`) | Core run | Three cases under load | RPCs ≥ 1 s | Server `wait_timeouts` (BUSY from an expired applied-wait), max per member |
 | --- | --- | --- | --- | --- | --- |
 | 1 | base binaries, quota 4G, refresh 2000 ms | 218/218, 173 s | 9/9 PASS, 27 k creates in 49 s | 0 | — |
 | 2 | quota 1G (the expiry fixture's), refresh 2000 ms | 218/218, 73 s | 9/9 PASS | 0 | — |
@@ -194,7 +194,7 @@ On a Linux host with `/dev/fuse`, from a private copy of the tree
 (`make -j32 all`):
 
 ```
-python3 scripts/w159_fixture.py --work ~/w159/run --out OUT --port 24510 \
+python3 scripts/evidence/w159/w159_fixture.py --work ~/w159/run --out OUT --port 24510 \
     --quota 4G --query-refresh-ms 2000 --repeat 2 --load-threads 4 \
     --fsync-delay-us 7000 --fsync-lock
 ```

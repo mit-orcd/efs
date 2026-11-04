@@ -32,11 +32,11 @@ report bugs to the session "Dead-code cleanup from the 2026-10-21 audit".
 | POSIX extras (`posix_extras.py --timeout-s 150`) | 4/5 PASS, 1 SKIP (mmap) |
 | Durability (`smoke-persist.sh`) | 27/27 + 27/27 PASS |
 | ior easy / hard (8 ranks, OpenMPI 4.1.7) | rc 0 / rc 0; easy write 1,329 MiB/s, read 4,391 MiB/s |
-| Two-client (`scripts/orcd_mini_posix2.py`) | 67/67 PASS (264 s) |
+| Two-client (`scripts/evidence/orcd-mini/orcd_mini_posix2.py`) | 67/67 PASS (264 s) |
 | `virtual_interfaces.py --freshness-s 150` | 11/11 PASS (`nested_authorization` needs `EFS_QUERY_TEST_HOST=10.1.99.1 EFS_QUERY_TEST_PORT=17432`) |
 | `make test` (`scripts/make_test_summary.sh`) | 816 commands, 1 FAIL: `check-architecture` (environmental, no `results/`) |
 | D25 step 2/3/4 gates + repro (`EFS_TRANSPORT=rdma`) | PASS: 17 / 39 / 1,454 / 2 checks, 0 FAIL |
-| `scripts/w127_incompatible_entry.sh` (`EFS_TRANSPORT=rdma`) | 19/19 PASS |
+| `scripts/evidence/w127/w127_incompatible_entry.sh` (`EFS_TRANSPORT=rdma`) | 19/19 PASS |
 | GC + POSIX (`gc_reclamation.py --transport rdma --posix`) | 71 PASS |
 | GC `.efs` commands (`gc_reclamation.py --transport rdma --efs-commands-only`) | **FAIL**, harness bug 2; rerun with `e4bd1b6d7` test files: PASS |
 | Fault suite (`run_faults.sh --integrate --transport rdma --rdma-device mlx5_0`) | **FAIL** 6 PASS / 5 FAIL, harness bug 1; rerun with `e4bd1b6d7` test files: 24/24 PASS |

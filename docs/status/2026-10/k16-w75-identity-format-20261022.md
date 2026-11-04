@@ -47,11 +47,11 @@ make -j4 && TMPDIR=<disk-backed dir> make test
 ```
 
 ```bash
-scripts/k16_identity_cluster.sh run <build-tree> <empty-dir> 18400
+scripts/evidence/k16/k16_identity_cluster.sh run <build-tree> <empty-dir> 18400
 ```
 
 ```bash
-scripts/k16_identity_cluster.sh stop <build-tree> <empty-dir> 18400
+scripts/evidence/k16/k16_identity_cluster.sh stop <build-tree> <empty-dir> 18400
 ```
 
 Then delete `<empty-dir>`. `K16_DIRECT=0` runs the buffered mode. The script

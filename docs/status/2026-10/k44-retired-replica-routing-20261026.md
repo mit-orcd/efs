@@ -231,10 +231,10 @@ one online addition. O_DIRECT fragment I/O only. TCP loopback; RDMA
    `EFS_TRANSPORT=tcp EFS_BUILD_JOBS=8 EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8
    bash scripts/make_test_summary.sh`. Preserve summary, timings, progress,
    build/enumeration logs and all `tmp/fail-*.log` before any later run.
-3. Copy only `scripts/task_k_routing.py` from `3846ecc1c` into that built
+3. Copy only `scripts/evidence/task-k/task_k_routing.py` from `3846ecc1c` into that built
    tree. Run with fresh `--out` directories, `--port-min 19601`, first TCP
    loopback, then RDMA address/device above, then TCP
-   `--one-loss-transition`. `scripts/task_k_qualify.sh` records the earlier
+   `--one-loss-transition`. `scripts/evidence/task-k/task_k_qualify.sh` records the earlier
    combined build/focused/gate method; dispatch scripts in the raw directory
    record the exact serial attempts and final test-only revision.
 4. Export/build unchanged base `4066f74df` separately with its own build id.
@@ -244,10 +244,10 @@ one online addition. O_DIRECT fragment I/O only. TCP loopback; RDMA
    test under a long TMPDIR; only the diagnostic rc print is added in its
    recorded diagnostic run. The teardown negative uses the committed new
    test against the unchanged base helper, with only its root redirected.
-5. Copy `scripts/task_k_query_warm.py` from `6780925c9` after the gate, run
+5. Copy `scripts/evidence/task-k/task_k_query_warm.py` from `6780925c9` after the gate, run
    sequential TCP/RDMA with `--product-source 00e85a299 --port-min 19801`
    and new `--out` paths. Cold extras have a separate reproduction in
-   `scripts/task_k_query_surface.py` at `a17f6cd71`; never substitute warm
+   `scripts/evidence/task-k/task_k_query_surface.py` at `a17f6cd71`; never substitute warm
    results for those unchanged cold-case skips.
 
 Raw evidence is on node9900:
@@ -342,20 +342,20 @@ only its named stores and must not be run as an unattended regression:
 
 1. Export `git archive 00e85a299531` to each host's
    `/tmp/efs-taskK-mini-20261027/source`; run
-   `scripts/task_k_mini_build.sh` detached on each host. Inspect both
+   `scripts/evidence/orcd-mini/task_k_mini_build.sh` detached on each host. Inspect both
    `build-exit` records and retain binary hashes.
 2. On node9900, use the new source's `scripts/client.sh stop` for
    `/data1/efs/orcd-mini-mnt`, verify mount absence, archive the old client
    logs, move the built source to
    `/data1/efs/orcd-mini-client/releases/00e85a299531` and switch its `src`
    symlink. This uses the clean-stop helper fix, without forced discard.
-3. On node9901, run `scripts/task_k_mini_deploy.sh` detached. It records old
+3. On node9901, run `scripts/evidence/orcd-mini/task_k_mini_deploy.sh` detached. It records old
    identities/status/config, stops the configured local client and daemons,
    closes/verifies the log archive, checks no process owns the product
    stores, uses `edelete` for n1..n3, switches the built release and invokes
    `EFS_CLUSTER=orcd-mini EFS_START_TIMEOUT=900 ./start.sh` from the existing
    `/data1/efs/devops`. Inspect `deployment-exit` and formed-three status.
-4. Start member 4 with `scripts/task_k_mini_fourth.sh start` on node9901;
+4. Start member 4 with `scripts/evidence/orcd-mini/task_k_mini_fourth.sh start` on node9901;
    record its owned PID. Start node9900's existing client wrapper. Observe
    seed retirement and live mask `0xe` before proceeding.
 5. On node9900, with the RDMA environment above:
@@ -370,12 +370,12 @@ only its named stores and must not be run as an unattended regression:
    These are the committed `task_k_mini_sweep.py` and
    `task_k_mini_queries.py` copied outside the product tree. Output paths
    must not exist. The query fixture is separate and remains quiescent.
-6. From the driver, run `scripts/task_k_mini_two_clients.py NEW_RESULT.tsv`;
+6. From the driver, run `scripts/evidence/orcd-mini/task_k_mini_two_clients.py NEW_RESULT.tsv`;
    it uses `task_k_mini_ssh.sh` without BatchMode, the unchanged POSIX
    two-client cases and the existing orcd-mini 120 s remote-step bound.
 7. Run the same sweep on node9901 with `--source /data1/efs/src
    --mount /data1/efs/mnt --verify-only --out NEW_EVIDENCE/peer-full-read`.
-   Then capture closed snapshots with `scripts/task_k_mini_capture.py` on
+   Then capture closed snapshots with `scripts/evidence/orcd-mini/task_k_mini_capture.py` on
    each host, hash/verify the retained files and leave the services running.
 
 The devops repository was **not edited**. Its checked-in orcd-mini arrays

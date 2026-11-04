@@ -27,7 +27,7 @@ tail) without comparing the existing object — so a client retry after a lost
 PUT reply writes the same immutable bytes twice. The question is how often
 that happens in practice.
 
-- `scripts/ar_d4_measure.sh`: private 3-daemon loopback cluster on intel1,
+- `scripts/evidence/ar/ar_d4_measure.sh`: private 3-daemon loopback cluster on intel1,
   `scripts/d4_progress.py` (8 threads, 120 s, create/unlink/rewrite small
   files + foreground 1 MiB write/fsync). **D4 PASS**, `ar_over=0` on all
   three daemons.
@@ -57,7 +57,7 @@ retry tail is the reserve-abandon ladder, not fragment rewrites.
 
 ## Counter validation (the zero is not dead code)
 
-`scripts/ar_collision_check.sh` (fault build,
+`scripts/evidence/ar/ar_collision_check.sh` (fault build,
 `EFS_FAULT_PUT_REPLY_COLLISION=1` on the mount) drops the first PUT reply of
 each fragment of one chunk: the client log shows 3 `put-reply fault` lines
 and each daemon then reports **ar_over=1, ar_bytes=65536** — exactly one
@@ -78,13 +78,13 @@ Raw: intel1 `~/efs-artifacts/taskAR-20261029/test-all-summary.txt`.
 ## Reproduction
 
 ```
-patch -p1 < scripts/ar-instrument.patch   # TEMP-AR daemon counters (never committed)
+patch -p1 < scripts/evidence/ar/ar-instrument.patch   # TEMP-AR daemon counters (never committed)
 make -j8 efsd efs-fuse efs-mgmt
-bash scripts/ar_d4_measure.sh . /tmp/ar-d4 120
+bash scripts/evidence/ar/ar_d4_measure.sh . /tmp/ar-d4 120
 # append baseline / lost-reserve: tests/live/append_failover.py with --rel .
 # counter validation (fault build):
 make -j8 EFS_FAULTS=1 efsd efs-fuse efs-mgmt
-bash scripts/ar_collision_check.sh . /tmp/ar-collision
+bash scripts/evidence/ar/ar_collision_check.sh . /tmp/ar-collision
 ```
 
 Restore `src/server/store.c` and `src/server/iostats.c` afterwards. Raw

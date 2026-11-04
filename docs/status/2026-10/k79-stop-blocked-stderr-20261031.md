@@ -154,7 +154,7 @@ those lines and that test (this branch converts the same sites with the same for
 ```sh
 make -j8 efsd efs-fuse efs-mgmt tests/faults/efsd
 TMPDIR=$HOME/tmp python3 tests/test_stop_blocked_stderr.py
-# negative control: the same script and scripts/pump_logging_profile.py in a tree at 909a07d71
+# negative control: the same script and scripts/evidence/pump-logging/pump_logging_profile.py in a tree at 909a07d71
 EFS_SAN_ONLY="stop_blocked_stderr pump_logging" bash tests/sanitizer_check.sh tsan
 EFS_SAN_ONLY="stop_blocked_stderr pump_logging" bash tests/sanitizer_check.sh asan
 ```

@@ -22,7 +22,7 @@ The load verification is NOTRUN (the parent session's, on orcd-mini).**
   `efs-mgmt` `57ab8b3ed78af0adaefb9a33581672b00f425e4b01f1d9f6f2367202b7096779`,
   `libefs.a` `efc9b381ae3e2a6d67c89926639cdb79a1ae61b294be47402014c57d2922f7bd`.
   The later commit that adds the no-retirement columns to
-  `scripts/k29_append_entry_count.py` changes no built code or test.
+  `scripts/evidence/k29/k29_append_entry_count.py` changes no built code or test.
 - **Environment:** xorinox, Rocky Linux 10.2, kernel 6.12.0-211.67.1, 16 CPU,
   60 GB, gcc 14.3.1, Python 3.12.15. Work tree under `$HOME/efs-k29`,
   `TMPDIR=$HOME/efs-k29/tmp`. In-process tests only: no daemon cluster, no
@@ -67,7 +67,7 @@ The load verification is NOTRUN (the parent session's, on orcd-mini).**
    (`src/meta/meta_apply.c:8778`) clears the barrier on every active lane: a
    second transaction of the same size. A sequential writer retires after
    every record; concurrent writers retire whenever the open count reaches 0.
-5. **Entries per record (counted).** `scripts/k29_append_entry_count.py` runs
+5. **Entries per record (counted).** `scripts/evidence/k29/k29_append_entry_count.py` runs
    the real capture, execute, catch-up and retirement code on an in-memory
    KV, counts every PREPARE/DECIDE/RESOLVE per group and maps them onto the
    host's entries. It excludes data publication, PUT tickets and session work,
@@ -248,7 +248,7 @@ cd ~/efs-k29/gate && export TMPDIR=$HOME/efs-k29/tmp
 make -j16 EFS_GIT_ID=438d613d9df7 EFS_GIT_BRANCH=devel-k29
 make test-all EFS_GIT_ID=438d613d9df7 EFS_GIT_BRANCH=devel-k29
 grep -E '^make(\[[0-9]+\])?: .*Error' <log>      # expect nothing
-python3 scripts/k29_append_entry_count.py           # the table above
+python3 scripts/evidence/k29/k29_append_entry_count.py           # the table above
 EFS_APPEND_BATCH_PER_IMAGE=1 python3 tests/test_append_prepare_batch.py   # must fail
 ```
 
