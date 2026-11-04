@@ -4,6 +4,7 @@
 #include "getattr.h"
 #include "open.h"
 #include "append.h"
+#include "write.h"
 #include "../reply_buffers.h"
 
 void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)

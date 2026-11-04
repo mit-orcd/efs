@@ -95,15 +95,6 @@ struct deep_callback_sample {
     char name[6];
 };
 
-/* write.c */
-int efs_fuse_write(const char *path, const char *buf, size_t size,
-                          off_t offset, struct fuse_file_info *fi);
-int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
-                              off_t offset, struct fuse_file_info *fi);
-int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
-                              struct fuse_file_info *fi);
-int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi);
-
 /* namespace.c */
 int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
                               mode_t mode, struct fuse_file_info *fi,

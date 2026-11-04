@@ -1,5 +1,6 @@
 /* efs-fuse: write admission, store, buf, fsync and flush. */
 #include "fuse_internal.h"
+#include "write.h"
 #include "support.h"
 #include "open.h"
 #include "writeback.h"
