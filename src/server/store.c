@@ -676,25 +676,30 @@ uint64_t server_fragment_retire_mark(efs_export_id_t eid, efs_ino_t ino, uint32_
                            __ATOMIC_ACQUIRE);
 }
 /* Caller holds the fragment mutex. Retires since the mark of other identities
- * are harmless; one of this identity, or more than the ring remembers,
- * refuses (fail closed). */
+ * are harmless. A retire of this identity is STALE (terminal: the object was
+ * superseded). More retires than the ring remembers cannot be judged (a GC
+ * burst reaping many superseded generations of this very chunk): BUSY, which
+ * the client retries with the same ticket and a fresh mark. STALE there was a
+ * live object refused as if superseded and surfaced as EIO (the K61 ring's
+ * residual, seen as the K38-signature d4_plateau EIO). Fail closed
+ * either way: nothing is written. */
 static int fragment_retired_since(efs_export_id_t eid, efs_ino_t ino, uint32_t ci,
                                   uint32_t fi)
 {
     uint64_t mark = efs_tls_retire_mark;
     if (mark == EFS_RETIRE_MARK_NONE)
-        return 0;
+        return EFS_OK;
     unsigned b = fragment_bucket(eid, ino, ci, fi);
     uint64_t now = frag_retire_epoch[b];
     if (now == mark)
-        return 0;
+        return EFS_OK;
     if (now - mark > FRAG_RETIRE_RING)
-        return 1;
+        return EFS_ERR_BUSY;
     uint64_t key = fragment_retire_key(eid, ino, ci, fi);
     for (uint64_t e = mark; e < now; e++)
         if (frag_retire_key[b][e % FRAG_RETIRE_RING] == key)
-            return 1;
-    return 0;
+            return EFS_ERR_STALE;
+    return EFS_OK;
 }
 
 /* GC/restart accounting decodes the stored format, not transient export
@@ -3323,10 +3328,11 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     if (dead) { pthread_rwlock_unlock(im); return dead > 0 ? EFS_ERR_STALE : EFS_ERR_IO; }
     pthread_mutex_t *mu = fragment_mutex(ex->id, ino, chunk_index, fragment_index);
     pthread_mutex_lock(mu);
-    if (fragment_retired_since(ex->id, ino, chunk_index, fragment_index)) {
+    int retired = fragment_retired_since(ex->id, ino, chunk_index, fragment_index);
+    if (retired != EFS_OK) {
         pthread_mutex_unlock(mu);
         pthread_rwlock_unlock(im);
-        return EFS_ERR_STALE;
+        return retired;
     }
     int rc = server_write_fragment_to_path(s, ex, ino, chunk_index,
                                          fragment_index, data, data_len, path,
@@ -3355,10 +3361,11 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
     if (dead) { pthread_rwlock_unlock(im); return dead > 0 ? EFS_ERR_STALE : EFS_ERR_IO; }
     pthread_mutex_t *mu = fragment_mutex(ex->id, ino, chunk_index, fragment_index);
     pthread_mutex_lock(mu);
-    if (fragment_retired_since(ex->id, ino, chunk_index, fragment_index)) {
+    int retired = fragment_retired_since(ex->id, ino, chunk_index, fragment_index);
+    if (retired != EFS_OK) {
         pthread_mutex_unlock(mu);
         pthread_rwlock_unlock(im);
-        return EFS_ERR_STALE;
+        return retired;
     }
     int rc = server_write_fragment_to_path(s, ex, ino, chunk_index,
                                          fragment_index, data, data_len, path,
