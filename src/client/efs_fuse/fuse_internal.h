@@ -333,6 +333,15 @@ off_t append_end_offset(efs_ino_t ino);
 int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out);
 int append_publish_burst(efs_ino_t ino);
 
+/* write.c */
+int efs_fuse_write(const char *path, const char *buf, size_t size,
+                          off_t offset, struct fuse_file_info *fi);
+int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
+                              off_t offset, struct fuse_file_info *fi);
+int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
+                              struct fuse_file_info *fi);
+int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi);
+
 /* namespace.c */
 int efs_rc_to_errno(int rc);
 int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,

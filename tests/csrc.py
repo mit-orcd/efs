@@ -28,6 +28,7 @@ MODULES = {
         'src/client/efs_fuse/open.c',
         'src/client/efs_fuse/writeback.c',
         'src/client/efs_fuse/append.c',
+        'src/client/efs_fuse/write.c',
         'src/client/efs_fuse.c',
         'src/client/efs_fuse/fuse_internal.h',
     ]),
