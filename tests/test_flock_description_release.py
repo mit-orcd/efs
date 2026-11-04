@@ -7,7 +7,7 @@ import csrc
 root = Path(__file__).resolve().parents[1]
 source = csrc.module('efs_fuse')
 def function(name):
-    match = re.search(r'static int '+name+r'\([^;]*?\)\n\{', source)
+    match = re.search(r'(?:static )?int '+name+r'\([^;]*?\)\n\{', source)
     assert match, name
     a = match.start()
     return source[a:source.index('\n}', a)+2]+'\n'

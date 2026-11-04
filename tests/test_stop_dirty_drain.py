@@ -73,9 +73,9 @@ print('stop dirty drain: partial bodies, bounded pages, duplicate inodes, unlock
 # Compile the real stop loop too: an empty pending queue is insufficient
 # while a reporter still owns its detached in-flight page.
 s=csrc.module('efs_fuse')
-m=re.search(r'^static int efs_control_drain\([^;]+?\)\n\{',s,re.M)
+m=re.search(r'^(?:static )?int efs_control_drain\([^;]+?\)\n\{',s,re.M)
 control=s[m.start():s.index('\n}',m.end())+2]
-retry_start=s.index('static int efs_open_retry_pass(')
+retry_start=s.index('int efs_open_retry_pass(')
 retry=s[retry_start:s.index('static void *efs_open_retry_worker(',retry_start)]
 code=r'''
 #include <assert.h>

@@ -11,7 +11,7 @@ s=s[:expiry_start]+s[s.index('\n}',expiry_start)+2:]
 b=s.index('\nstruct host_idx_ref',a)
 def function(path,name):
     text=csrc.module(path) if path in ('raft_host','efs_fuse') else (root/path).read_text()
-    match=re.search(r'^static [^\n;]*\b'+name+r'\([^;]+?\)\n\{',text,re.M)
+    match=re.search(r'^(?:static )?[^\n;]*\b'+name+r'\([^;]+?\)\n\{',text,re.M)
     assert match,name
     return text[match.start():text.index('\n}',match.end())+2]
 mapping='\n'.join(function(path,name) for path,name in (

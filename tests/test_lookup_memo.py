@@ -15,11 +15,11 @@ fuse = csrc.module('efs_fuse')
 
 def function(name):
     original = name
-    if re.search(r"^static void " + name + r"_run\(", fuse, re.M):
+    if re.search(r"^(?:static )?void " + name + r"_run\(", fuse, re.M):
         wrapper = fuse[fuse.index("static void " + name + "("): ]
         assert "efs_stop_mutation_enter()" in wrapper[:wrapper.index("\n}")], name
         name += "_run"
-    match = re.search(r"^static [^\n;]*\b" + name + r"\([^;]+?\)\n\{", fuse, re.M)
+    match = re.search(r"^(?:static )?[^\n;]*\b" + name + r"\([^;]+?\)\n\{", fuse, re.M)
     if not match:
         raise RuntimeError(name)
     return fuse[match.start():fuse.index("\n}", match.end()) + 2].replace(name + "(", original + "(", 1)

@@ -6,10 +6,10 @@ import csrc
 root = Path(__file__).resolve().parents[1]
 text = csrc.module('efs_fuse')
 def function(name):
-    match = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', text, re.M)
+    match = re.search(r'^(?:static )?[^\n;]*\b' + name + r'\([^;]+?\)\n\{', text, re.M)
     if not match: raise RuntimeError(name)
     return text[match.start():text.index('\n}', match.end()) + 2]
-refs = text[text.index('static pthread_mutex_t g_open_mu'):text.index('/* Returns 1 when this is the first open')]
+refs = text[text.index('pthread_mutex_t g_open_mu'):text.index('/* Returns 1 when this is the first open')]
 source = r"""
 #include "client_internal.h"
 static __thread uint64_t t_open_read_size;

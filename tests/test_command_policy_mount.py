@@ -9,7 +9,7 @@ import tempfile
 import csrc
 root = Path(__file__).resolve().parents[1]
 source = csrc.module('efs_fuse')
-begin = source.index('static int commands_enabled(void)')
+begin = source.index('int commands_enabled(void)')
 end = source.index('\n}\n', begin) + 3
 code = '''
 #include "efs/common.h"

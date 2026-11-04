@@ -24,7 +24,7 @@ int efs_client_rpc_past_deadline(void){return deadline&&stats_now_ms()>=deadline
 static int timed_wait(pthread_cond_t*c,pthread_mutex_t*m,const struct timespec*t){return fail_wait?EINVAL:pthread_cond_timedwait(c,m,t);}
 #define pthread_cond_timedwait timed_wait
 '''
-for p in ['static int wb_wait_idle_budget(', 'static int wb_lock_budget(', 'static int efs_wb_sync(void)', 'static int efs_wb_ino_pending_locked(', 'static int efs_wb_sync_ino(']:code+=fn(p)
+for p in ['int wb_wait_idle_budget(', 'int wb_lock_budget(', 'int efs_wb_sync(void)', 'int efs_wb_ino_pending_locked(', 'int efs_wb_sync_ino(']:code+=fn(p)
 code+=r'''
 static int drain(int per){return per?efs_wb_sync_ino(42):efs_wb_sync();}
 int main(void){g_wb.ready=1;g_wb.count=1;g_wb.q[0].ino=42;g_wb.err=EFS_ERR_IO;g_wb.err_ino=42;

@@ -6,7 +6,7 @@ import csrc
 root=Path(__file__).resolve().parents[1]
 f=csrc.module('efs_fuse')
 def function(name):
-    m=re.search(r'^static [^\n;]*\b'+name+r'\([^;]+?\)\n\{',f,re.M)
+    m=re.search(r'^(?:static )?[^\n;]*\b'+name+r'\([^;]+?\)\n\{',f,re.M)
     return f[m.start():f.index('\n}',m.end())+2]
 a=f.index('struct efs_wb_job {');job=f[a:f.index('\n};',a)+3]
 source=r'''

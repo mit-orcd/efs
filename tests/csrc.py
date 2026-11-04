@@ -34,6 +34,13 @@ def module(name, env=None):
     return ''.join(p.read_text() for p in paths)
 
 
+def upto(text, marker):
+    """Index where the declaration containing `marker` starts, so a slice that
+    ends before a function also stops before its `static ` when it has one."""
+    i = text.index(marker)
+    return i - 7 if text[i - 7:i] == 'static ' else i
+
+
 if __name__ == '__main__':
     import tempfile
     for key in {v for v, _ in MODULES.values()} | {'EFS_CSRC_TEST'}:
@@ -48,4 +55,5 @@ if __name__ == '__main__':
         assert module('efs_fuse') != 'int alt;\n'
         os.environ['EFS_CSRC_TEST'] = str(alt)
         assert module('write', 'EFS_CSRC_TEST') == 'int alt;\n'
+    assert upto('a static int f(', 'int f(') == 2 and upto('a int f(', 'int f(') == 2
     print('csrc self-check ok')

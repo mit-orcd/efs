@@ -5,7 +5,7 @@ import os, subprocess, tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
 source=csrc.module('efs_fuse')
-start=source.index('static int append_publish_burst(')
+start=source.index('int append_publish_burst(')
 body=source[start:source.index('\n}',start)+2]
 if os.environ.get('EFS_APPEND_BURST_OLD_TIMING')=='1':
     body=body.replace('r->append_burst_ms=completed_ms;','')

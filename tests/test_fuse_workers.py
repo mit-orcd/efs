@@ -5,7 +5,7 @@ import os,re,shlex,subprocess,tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
 s=csrc.module('efs_fuse')
-m=re.search(r'^static struct fuse_loop_config \*efs_fuse_worker_config\([^;]+?\)\n\{',s,re.M)
+m=re.search(r'^(?:static )?struct fuse_loop_config \*efs_fuse_worker_config\([^;]+?\)\n\{',s,re.M)
 f=s[m.start():s.index('\n}',m.end())+2]
 source=r'''
 #include <assert.h>

@@ -11,7 +11,7 @@ root = Path(__file__).resolve().parents[1]
 source = csrc.module('efs_fuse')
 
 def function(name):
-    match = re.search(r'^static int ' + name + r'\([^;]+?\)\n\{', source, re.M)
+    match = re.search(r'^(?:static )?int ' + name + r'\([^;]+?\)\n\{', source, re.M)
     assert match, name
     return source[match.start():source.index('\n}', match.end()) + 2]
 

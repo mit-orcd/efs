@@ -6,10 +6,10 @@ import csrc
 root=Path(__file__).resolve().parents[1]
 s=csrc.module('efs_fuse')
 def function(name):
- m=re.search(r'^static (?:int|void|uint64_t) '+name+r'\([^;]+?\)\n\{',s,re.M)
+ m=re.search(r'^(?:static )?(?:int|void|uint64_t) '+name+r'\([^;]+?\)\n\{',s,re.M)
  assert m,name
  return s[m.start():s.index('\n}',m.end())+2]
-a=s.index('static pthread_mutex_t g_open_mu')
+a=s.index('pthread_mutex_t g_open_mu')
 b=s.index('/* Returns 1 when this is the first open',a)
 source=r'''
 #include <assert.h>

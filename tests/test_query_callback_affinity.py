@@ -6,7 +6,7 @@ import csrc
 root=Path(__file__).resolve().parents[1]
 s=csrc.module('efs_fuse','EFS_QUERY_FUSE_SOURCE')
 a=s.index('#define EFS_FIND_RES_N');b=s.index('/* Fetch an authorized',a);state=s[a:b]
-a=s.index('static int find_query_ensure(');b=s.index('\n/* Result length',a);function=s[a:b]
+a=s.index('int find_query_ensure(');b=s.index('\n/* Result length',a);function=s[a:b]
 code=r'''
 #include "efs/common.h"
 #include "efs/protocol.h"

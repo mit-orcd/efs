@@ -5,7 +5,7 @@ import os,shlex,subprocess,tempfile
 import csrc
 root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse','EFS_FUSE_RETRY_SOURCE')
 def function(name):
- a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
+ a=s.index('int '+name+'(');return s[a:s.index('\n}',a)+2]
 code=r'''
 #include <assert.h>
 #include <stdint.h>

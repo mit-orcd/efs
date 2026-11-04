@@ -9,7 +9,7 @@ import csrc
 
 root=Path(__file__).resolve().parents[1]
 s=csrc.module('efs_fuse')
-m=re.search(r'^static int check_chown_perm\([^;]+?\)\n\{',s,re.M)
+m=re.search(r'^(?:static )?int check_chown_perm\([^;]+?\)\n\{',s,re.M)
 function=s[m.start():s.index('\n}',m.end())+2]
 code=r'''
 #include <efs/metadata.h>

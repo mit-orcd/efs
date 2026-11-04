@@ -14,7 +14,7 @@ import csrc
 
 root=Path(__file__).resolve().parents[1]
 s=csrc.module('efs_fuse','EFS_ALLOCATOR_SOURCE')
-m=re.search(r'^static int fuse_allocator_init\(void\)\n\{',s,re.M)
+m=re.search(r'^(?:static )?int fuse_allocator_init\(void\)\n\{',s,re.M)
 policy=s[m.start():s.index('\n}',m.end())+2]
 code=r'''
 #define _GNU_SOURCE

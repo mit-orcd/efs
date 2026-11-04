@@ -16,7 +16,7 @@ registry=w[w.index('#define WB_ERROR_BUCKETS'):w.index('static void dcache_cycle
 for name in ('data_chunk_size', 'data_frag_size', 'frag_ptrs'):
     registry = registry.replace(function(w, name), '')
 entry=w[w.index('struct dcache_ent {'):w.index('\n};',w.index('struct dcache_ent {'))+3]
-handles=f[f.index('#define EFS_FILE_FH_TAG'):f.index('static int virt_kind(')]
+handles=f[f.index('#define EFS_FILE_FH_TAG'):csrc.upto(f,'int virt_kind(')]
 source=r'''
 #include "efs/protocol.h"
 #include "efs/metadata.h"

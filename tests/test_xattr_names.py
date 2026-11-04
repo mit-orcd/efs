@@ -6,7 +6,7 @@ import csrc
 root=Path(__file__).resolve().parents[1]
 s=csrc.module('efs_fuse')
 def function(name):
- m=re.search(r'^static (?:int|void) '+name+r'\([^;]+?\)\n\{',s,re.M)
+ m=re.search(r'^(?:static )?(?:int|void) '+name+r'\([^;]+?\)\n\{',s,re.M)
  return s[m.start():s.index('\n}',m.end())+2]
 code=r'''
 #include <efs/metadata.h>

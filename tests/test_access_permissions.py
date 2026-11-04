@@ -9,7 +9,7 @@ import tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
 source=csrc.module('efs_fuse')
-m=re.search(r'^static int check_access\([^;]+?\)\n\{',source,re.M)
+m=re.search(r'^(?:static )?int check_access\([^;]+?\)\n\{',source,re.M)
 function=source[m.start():source.index('\n}',m.end())+2]
 code=r'''
 #include <efs/metadata.h>

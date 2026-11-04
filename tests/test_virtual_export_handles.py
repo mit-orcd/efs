@@ -15,11 +15,11 @@ import csrc
 root = Path(__file__).resolve().parents[1]
 source = csrc.module('efs_fuse')
 def function(name):
-    match = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', source, re.M)
+    match = re.search(r'^(?:static )?[^\n;]*\b' + name + r'\([^;]+?\)\n\{', source, re.M)
     assert match, name
     return source[match.start():source.index('\n}', match.end()) + 2]
-state = source[source.index('#define EFS_VQ_N'):source.index('static uint64_t virtual_version')]
-reservation=function('vq_unreserve') if 'static void vq_unreserve(' in source else 'static void vq_unreserve(fuse_ino_t id){(void)id;}'
+state = source[source.index('#define EFS_VQ_N'):csrc.upto(source,'uint64_t virtual_version')]
+reservation=function('vq_unreserve') if 'void vq_unreserve(' in source else 'static void vq_unreserve(fuse_ino_t id){(void)id;}'
 code = r'''
 #include <assert.h>
 #include <stdint.h>
