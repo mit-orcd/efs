@@ -39,6 +39,7 @@ MODULES = {
         'src/client/efs_fuse/support.h',
         'src/client/efs_fuse/getattr.h',
         'src/client/efs_fuse/open.h',
+        'src/client/efs_fuse/writeback.h',
     ]),
     'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),
 }

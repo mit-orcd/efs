@@ -85,54 +85,6 @@ int efs_rc_to_errno(int rc);
  * cannot hold FUSE workers in RELEASE (the drain retries the rest). */
 #define CLOSE_ADMIT_SPINS 250u
 
-/* Write pool: FUSE write() waits until each job's PUT has 2-of-3 fragment
- * quorum. The pool still overlaps PUTs across concurrent FUSE requests
- * (many files / max_background). Do not ACK after a bounce copy — that
- * made ewrite succeed while servers never saw the data. */
-#define EFS_WB_DEPTH        256
-
-#define EFS_WB_WORKERS_MAX  16
-
-#define EFS_WB_RESERVED     4
-
-struct efs_wb_job {
-    efs_ino_t ino;
-    uint64_t offset;
-    size_t size;
-    char *buf;
-    /* If set, this is the allocation that contains buf (stolen FUSE
-     * receive buffer). Free this instead of buf when the job completes. */
-    char *free_base;
-    /* Non-zero: buf/free_base came from the bounce pool (see bounce_release). */
-    size_t buf_cap;
-    uint64_t queued_ms;
-    uint64_t deadline;
-    /* Caller waits for PUT quorum. Worker writes rc and signals done_cv
-     * while holding g_wb.mu. */
-    int *done;
-    int *done_rc;
-    pthread_cond_t *done_cv;
-};
-
-struct efs_wb_state {
-    pthread_mutex_t mu;
-    pthread_cond_t not_empty;
-    pthread_cond_t not_full;
-    pthread_cond_t idle;
-    struct efs_wb_job q[EFS_WB_DEPTH];
-    int head, tail, count, inflight;
-    uint64_t queued_bytes, inflight_bytes, admission_waits, admission_timeouts;
-    int err;
-    efs_ino_t err_ino; /* inode that set err; 0 = none / global */
-    int ready;
-    int shutdown;
-    pthread_t workers[EFS_WB_WORKERS_MAX];
-    efs_ino_t busy_ino[EFS_WB_WORKERS_MAX];
-    uint64_t busy_off[EFS_WB_WORKERS_MAX];
-    size_t busy_len[EFS_WB_WORKERS_MAX];
-    int nworkers;
-};
-
 #ifndef OFF_MAX
 #define OFF_MAX ((off_t)(((unsigned long long)1 << (sizeof(off_t) * 8 - 1)) - 1))
 #endif
@@ -142,18 +94,6 @@ struct deep_callback_sample {
     long pid;
     char name[6];
 };
-
-/* writeback.c */
-extern struct efs_wb_state g_wb;
-char *bounce_alloc(size_t size, size_t *cap_out);
-void bounce_release(char *p, size_t cap);
-void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
-                             uint64_t offset, size_t size, const char *path);
-int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
-                                char *copy, char *free_base, size_t buf_cap);
-int efs_wb_sync(void);
-int efs_wb_ino_pending_locked(efs_ino_t ino);
-int efs_wb_sync_ino(efs_ino_t ino);
 
 /* append.c */
 pthread_mutex_t *append_mu(efs_ino_t ino);

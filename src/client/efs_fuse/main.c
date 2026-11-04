@@ -2,6 +2,7 @@
 #include "fuse_internal.h"
 #include "support.h"
 #include "open.h"
+#include "writeback.h"
 #include "../stop_control.h"
 
 /* Canonical absolute mountpoint, set once in main and logged there. The

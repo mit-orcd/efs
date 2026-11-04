@@ -1,5 +1,6 @@
 /* efs-fuse: write-back pool and bounce buffers. */
 #include "fuse_internal.h"
+#include "writeback.h"
 #include "support.h"
 #include "getattr.h"
 #include "open.h"

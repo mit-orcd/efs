@@ -2,6 +2,7 @@
 #include "fuse_internal.h"
 #include "open.h"
 #include "support.h"
+#include "writeback.h"
 #include "../commands/source.h"
 
 /* Per-ino open-description count. The sequenced server lease is an edge

@@ -1,6 +1,7 @@
 /* efs-fuse: append reservation and pressure flush. */
 #include "fuse_internal.h"
 #include "open.h"
+#include "writeback.h"
 
 /* Serialize O_APPEND reserve+patch with close/fsync flush. Four threads
  * each write+close: without this, two flushes GET the same unpublished
