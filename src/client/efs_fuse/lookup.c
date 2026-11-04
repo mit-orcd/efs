@@ -1,5 +1,6 @@
 /* efs-fuse: lookup, setattr and deep-callback sampling. */
 #include "fuse_internal.h"
+#include "lookup.h"
 #include "support.h"
 #include "getattr.h"
 #include "namespace.h"

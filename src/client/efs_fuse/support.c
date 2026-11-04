@@ -1,6 +1,7 @@
 /* efs-fuse: crash handlers, stats, features, file handles, virtual inodes, query results, invalidation, find and access checks. */
 #include "fuse_internal.h"
 #include "support.h"
+#include "lookup.h"
 
 /* Async-signal-safe crash breadcrumb. Uses an alternate signal stack so a
  * stack-overflow SIGSEGV can still report instead of dying silently. */

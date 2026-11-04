@@ -45,6 +45,7 @@ MODULES = {
         'src/client/efs_fuse/namespace.h',
         'src/client/efs_fuse/release.h',
         'src/client/efs_fuse/plock_init.h',
+        'src/client/efs_fuse/lookup.h',
     ]),
     'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),
 }
