@@ -7,9 +7,12 @@
  * the rows every area reads.
  *
  * Owns
- *   meta_write_*       the only KV writes of the module. meta_write_check
- *                      refuses a key a prepared EXCL image or a staged
- *                      publication holds (EFS_ERR_BUSY), so every mutation
+ *   meta_write_*       the checked KV writes: every inode, lane, chunk,
+ *                      fence, append and dentry write goes through them
+ *                      (pub_stage.c writes its stage and pin records
+ *                      directly). meta_write_check refuses a key a
+ *                      prepared EXCL image or a staged publication holds
+ *                      (EFS_ERR_BUSY), so every mutation
  *                      honours transactions without knowing about them;
  *                      meta_write_batch_as(dry) runs the checks and writes
  *                      nothing (a W77 PREPARE). One batch is one atomic

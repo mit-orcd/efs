@@ -2,7 +2,7 @@
 
 ## Files
 
-- `meta_apply.c` — applies metadata commands to the KV (create/link/rename/setattr/append, transactions' local steps); owns no state beyond the KV it is handed.
+- `meta_apply/` — applies metadata commands to the KV (create/link/rename/setattr/append, publication, GC, packing, transactions' local steps), one file per area; its [README](meta_apply/README.md) maps symptom to file, header and tests. State beyond the KV: the two per-anchor counts in `gc.c` and the STALE reason in `publish.c`.
 - `txn.c` — cross-shard transaction coordinator/participant records and decisions.
 - `session.c` — pure session and open-lease state machine over one KV, no I/O.
 - `lock.c` — POSIX/OFD lock state.
@@ -33,7 +33,7 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 - `python3 scripts/tests_for.py meta/append_plan`
 - `python3 scripts/tests_for.py meta/expiry`
 - `python3 scripts/tests_for.py meta/lock`
-- `python3 scripts/tests_for.py meta/meta_apply`
+- `python3 scripts/tests_for.py meta/meta_apply` (per file: `meta/meta_apply.<file>`, see [meta_apply/README.md](meta_apply/README.md))
 - `python3 scripts/tests_for.py meta/metadata`
 - `python3 scripts/tests_for.py meta/name_index`
 - `python3 scripts/tests_for.py meta/pack_mapping`
