@@ -5,9 +5,9 @@ OUTPUT OBSERVER_DIRECTORY POSIX_SUITE [suite arguments...]. The actual suite
 and worker arguments/deadlines are preserved. The capability-safe observer is
 loaded only by fresh workers through PYTHONPATH. A full sink cannot block them.
 """
-import os,runpy,socket,sys,threading
+import os,runpy,socket,sys,tempfile,threading
 output,observer,suite=sys.argv[1:4]
-address='/tmp/efs-posix-phase-'+str(os.getpid())+'.sock'
+address=os.path.join(tempfile.gettempdir(),'efs-posix-phase-'+str(os.getpid())+'.sock')
 sock=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM);sock.bind(address);sock.settimeout(.1)
 stop=threading.Event();errors=[]
 def receive():

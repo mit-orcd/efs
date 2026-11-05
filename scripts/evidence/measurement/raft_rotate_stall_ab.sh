@@ -73,7 +73,7 @@ build)
     ;;
 run)
     rel=${2:?build dir}; label=${3:?label}; secs=${4:?seconds}; writers=${5:-16}
-    ab=/tmp/efs-rot/run/$label
+    ab=${TMPDIR:-/tmp}/efs-rot/run/$label
     rm -rf "$ab"; mkdir -p "$ab"/{n1,n2,n3,logs,mnt}
     export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0
     export LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}

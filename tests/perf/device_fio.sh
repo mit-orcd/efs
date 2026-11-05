@@ -20,9 +20,9 @@ MODE=${3:-full}
 
 HOST=$(hostname -s)
 DIR="$MNT/perf/$HOST"
-# Logs go to /tmp, never under $DIR: the harness must not depend on the very
+# Logs go to $TMPDIR (default /tmp), never under $DIR: the harness must not depend on the very
 # path it is benchmarking.
-LOGDIR=$(mktemp -d "/tmp/efs-dev-fio-$HOST.XXXXXX")
+LOGDIR=$(mktemp -d "${TMPDIR:-/tmp}/efs-dev-fio-$HOST.XXXXXX")
 trap 'rm -rf "$LOGDIR"' EXIT
 mkdir -p "$DIR" "$(dirname "$OUT")"
 

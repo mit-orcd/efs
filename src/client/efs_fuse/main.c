@@ -848,7 +848,7 @@ int main(int argc, char **argv)
         if (pp && *pp)
             snprintf(g_perf_path, sizeof(g_perf_path), "%s", pp);
         else
-            snprintf(g_perf_path, sizeof(g_perf_path), "/tmp/efs-fuse-perf-%d/perf.data", (int)getpid());
+            efs_tmp_path(g_perf_path, sizeof(g_perf_path), "efs-fuse-perf-%d/perf.data", (int)getpid());
         g_perf_want = 1;
     }
     if (strace_opt) {
@@ -856,7 +856,7 @@ int main(int argc, char **argv)
         if (sp && *sp)
             snprintf(g_strace_path, sizeof(g_strace_path), "%s", sp);
         else
-            snprintf(g_strace_path, sizeof(g_strace_path), "/tmp/efs-fuse-strace-%d.txt", (int)getpid());
+            efs_tmp_path(g_strace_path, sizeof(g_strace_path), "efs-fuse-strace-%d.txt", (int)getpid());
         g_strace_want = 1;
     }
 
@@ -872,14 +872,11 @@ int main(int argc, char **argv)
         ret = 1;
     }
     /* The stop record's last word: the stop tooling reports this verdict. */
-    if (ret) {
-        char why[sizeof(g_unclean_reason) + 32];
-        snprintf(why, sizeof(why), "%s", g_unclean_reason[0] ? g_unclean_reason : "");
-        if (!why[0])
-            snprintf(why, sizeof(why), "efs-fuse exit %d", ret);
-        efs_stop_status("failed", 0, 0, ret, why);
-    } else
-        efs_stop_status("done", 0, 0, 0, NULL);
+    char why[sizeof(g_unclean_reason) + 32];
+    snprintf(why, sizeof(why), "%s", g_unclean_reason[0] ? g_unclean_reason : "");
+    if (ret && !why[0])
+        snprintf(why, sizeof(why), "efs-fuse exit %d", ret);
+    efs_stop_exit(ret, ret ? why : NULL);
     return ret;
 }
 

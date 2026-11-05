@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include "../include/efs/tmpdir.h"
 
 #define EFS_TEST_PATH 1024
 #define EFS_TEST_UNUSED __attribute__((unused))
@@ -30,22 +31,14 @@ static char **efs_test_owned;
 static int efs_test_nowned;
 static pid_t efs_test_owner;
 
-static EFS_TEST_UNUSED const char *efs_test_tmpdir(void)
-{
-    const char *t = getenv("TMPDIR");
-    return t && *t ? t : "/tmp";
-}
+static EFS_TEST_UNUSED const char *efs_test_tmpdir(void) { return efs_tmpdir(); }
 
-/* buf = "$TMPDIR/<fmt...>", without a doubled '/'. */
+/* buf = "$TMPDIR/<fmt...>", without a doubled '/' (include/efs/tmpdir.h). */
 static EFS_TEST_UNUSED char *efs_test_path(char *buf, size_t len, const char *fmt, ...)
 {
-    const char *t = efs_test_tmpdir();
-    int tl = (int)strlen(t);
-    while (tl > 1 && t[tl - 1] == '/') tl--;
-    int n = snprintf(buf, len, "%.*s/", tl, t);
     va_list ap;
     va_start(ap, fmt);
-    if (n > 0 && (size_t)n < len) vsnprintf(buf + n, len - (size_t)n, fmt, ap);
+    efs_tmp_vpath(buf, len, fmt, ap);
     va_end(ap);
     return buf;
 }
