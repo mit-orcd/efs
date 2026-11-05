@@ -142,10 +142,11 @@ uses `${TMPDIR:-/tmp}`. `tests/test_tmpdir_hygiene.py` fails on a
 in any Python under `tests/` or `scripts/`. efs-fuse removes its `.stop`
 record at exit unless a stop tool sent DRAIN or FORCE and still waits for the
 verdict; `scripts/client_processes.py retire` then removes the record after
-reading it. A mount and the tool that stops it must therefore share `TMPDIR`;
-a mismatch fails closed with "no control endpoint". A `TMPDIR` longer than
-about 78 characters cannot hold the endpoint in `sun_path`, so efs-fuse
-refuses to mount.
+reading it. A mount and every tool that reaches its endpoint (`efs-fuse
+--stop`/`--resume`, `client.sh stop`, `client_processes.py`, and efs-mgmt's
+SETTINGS page) must therefore share `TMPDIR`; a mismatch fails closed with "no
+control endpoint". A `TMPDIR` longer than 73 characters cannot hold the
+endpoint in `sun_path`, so efs-fuse refuses to mount.
 
 `tests/budgets.tsv` is also the test catalogue (W171): every `test` and
 `test-long` command has a row with its target, a subsystem (a source directory
