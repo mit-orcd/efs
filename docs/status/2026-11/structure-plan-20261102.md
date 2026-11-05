@@ -147,14 +147,19 @@ match the table. Done: adding a setting edits one file.
   the files and lines an agent must read and validate before and after,
   baseline taken on current devel before (c) lands
   ([baseline, Nov 4](reading-set-baseline-20261104.md)). Target per fix: one
-  guide, one interface, one implementation area, the routed tests.
+  guide, one interface, one implementation area, the routed tests. Measured
+  after (c) and routing ([after, Nov 5](reading-set-after-20261104.md)): the
+  pilot cut dead ends and validation lines but not the lines an agent must
+  read, and meets two of the four target parts.
 - `tests/csrc.py` concatenation is a transition mechanism: it keeps the 318
   source-splicing tests working across splits but ties them to text order.
   Tests migrate towards compiling the real module through its narrow
   interface as (c) produces one; no deadline.
 - `meta_apply.c`, `write.c` and the `raft_host.c` pilot (2b) by the 2a/2b
   recipe, each between waves with no branch on the file, and only once (d)
-  shows the FUSE pilot reduced the reading set.
+  shows the FUSE pilot reduced the reading set. **Condition not met** (Nov 5,
+  [after-page](reading-set-after-20261104.md)): lines needed rose on both FUSE
+  fixes; going ahead anyway is the user's decision.
 - Graph queries: a broad `graphify query` returns hundreds of nodes; agents
   need a small ranked starting set (the component README's symptom map is
   the interim answer).
