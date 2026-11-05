@@ -62,6 +62,7 @@ endif
 
 # src/meta/meta_apply/: one file per area (src/meta/meta_apply/README.md).
 META_APPLY_SRCS = src/meta/meta_apply/rows.c \
+                  src/meta/meta_apply/lookup.c \
                   src/meta/meta_apply.c
 
 COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/publication_ack.c \
