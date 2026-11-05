@@ -278,7 +278,7 @@ python3 tests/test_open_retry_fairness.py	30	1	fast suite, 30 s ceiling	test	cli
 python3 tests/test_open_retry_lock_budget.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.open	A busy inode stripe cannot steal the budget reserved for another queue
 python3 tests/test_write_acceptance_gate.py	30	1	fast suite, 30 s ceiling	test	client/write	Run actual write acceptance and REPORT exclusion through an early reclaim
 python3 tests/test_mount_identity_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Actual HOLD/lock RPCs share a full UUID and admit the session (K5)
-python3 tests/test_flock_description_release.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.plock_init	Actual FUSE callbacks: flock follows the kernel open-description release
+python3 tests/test_flock_description_release.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.release	Actual FUSE callbacks: flock follows the kernel open-description release
 python3 tests/test_readdir_permission_authority.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.getattr	Production listing checks fresh permissions before any enumeration RPC
 python3 tests/test_pending_create_command.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Daemon pending CREATE encoding/apply preserves identity and rejects malformed input
 python3 tests/test_lock_apply_verdict.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Actual lock apply verdict and Raft advancement/retry classification
@@ -327,7 +327,7 @@ python3 tests/test_read_cache_reuse.py	30	1	fast suite, 30 s ceiling	test	client
 set -e; ranges_test=$(mktemp "${TMPDIR:-/tmp}/efs-test-dirty-ranges.XXXXXX"); \	30	1	fast suite, 30 s ceiling	test	client/write	Dirty-range tracker, compiled standalone
 set -e; writer_test=$(mktemp "${TMPDIR:-/tmp}/efs-test-writer-ranges.XXXXXX"); \	30	1	fast suite, 30 s ceiling	test	client/write	Writer range coalescing, compiled standalone
 set -e; wb_test=$(mktemp "${TMPDIR:-/tmp}/efs-test-wb-recovery.XXXXXX"); \	30	1	fast suite, 30 s ceiling	test	client/write	Write-back recovery, compiled standalone
-python3 tests/test_wb_runtime.py	30	1	fast suite, 30 s ceiling	test	client/write	Run production D27 registry, cycle verdict and file-handle helpers
+python3 tests/test_wb_runtime.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.write	Run production D27 registry, cycle verdict and file-handle helpers
 python3 tests/test_wb_fault.py	30	1	fast suite, 30 s ceiling	test	client/write	WITHHOLD must filter the outgoing records, never send a fabricated failure
 python3 tests/test_stale_recovery.py	30	1	fast suite, 30 s ceiling	test	client/write	Production STALE classifier must have pull authority before ACK or replay
 python3 tests/test_replay_fan_budget.py	30	1	fast suite, 30 s ceiling	test	client/write	Production STALE replay fan-out stops claiming work once its budget expires
@@ -389,7 +389,7 @@ python3 tests/test_kv_wal_faults.py	30	1	fast suite, 30 s ceiling	test	common/ch
 python3 tests/test_create_errors.py	30	1	fast suite, 30 s ceiling	test	client/ops	Exercise production create result/error mapping with overlapping RPC outcomes
 python3 tests/test_committed_directory_stage.py	30	1	fast suite, 30 s ceiling	test	client/ops	Committed MKDIR mirrors owe no data REPORT, even under report pressure
 python3 tests/test_create_retry_identity.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Production CREATE wrapper and retry loop preserve identity and real errors
-python3 tests/test_open_lease.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.open	Exercise the production inode lease edges, including failed and overlapping opens
+python3 tests/test_open_lease.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.release	Exercise the production inode lease edges, including failed and overlapping opens
 python3 tests/test_open_busy.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.open	Actual FUSE OPEN ownership across transient BUSY and a single call deadline
 python3 tests/test_unlink_verdict.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	A losing simple UNLINK must propagate its apply verdict, not just its index
 python3 tests/test_gc_verdict.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.gc	Exercise production GC command decoders, local and forwarded verdicts
