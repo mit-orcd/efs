@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `c9e976a0465bc7dfd953cbd6f83d9eeb528cfd46`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,906 nodes, 74,566 directed typed edges, 581 communities.
+Source base: `97df2b00d354e92c4a7389ed96412c94c507c3a3`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,919 nodes, 74,622 directed typed edges, 581 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,21 +19,21 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27440
+- `calls`: 27463
 - `case_of`: 118
-- `contains`: 26864
-- `defines`: 1996
+- `contains`: 26880
+- `defines`: 1997
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7901
+- `imports`: 7913
 - `imports_from`: 982
 - `indirect_call`: 748
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 2969
+- `mentions_symbol`: 2971
 - `method`: 644
-- `rationale_for`: 1387
-- `references`: 2159
+- `rationale_for`: 1388
+- `references`: 2160
 - `references_path`: 1212
 - `regression_for`: 8
 - `uses`: 96
@@ -46,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1769}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1768}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
