@@ -29,7 +29,7 @@ Symptom → file → tests (`python3 scripts/tests_for.py client/efs_fuse.<file>
 | POSIX locks, flock, `FUSE_INIT`, readiness pipe | `plock_init.c` | `plock_init.h` | `g_fuse_ready_wr` | `.plock_init` (1) |
 | LOOKUP, SETATTR, deep-callback sampling | `lookup.c` | `lookup.h` | — | `.lookup` (1) |
 | The `ll_*_run` operation bodies (xattr, opendir, read/readdir dispatch) | `ll_run.c` | `ll_run.h` | — | `.ll_run` (2) |
-| `efs_fuse_destroy`, the mutation-gated `ll_*` wrappers, the operation table, option parsing, startup, `main` | `main.c` | — | `g_mountpoint` and the stop-control state (`static`) | `.main` (9) |
+| `efs_fuse_destroy`, the mutation-gated `ll_*` wrappers, the operation table, option parsing, startup, `main` | `main.c` | — | `g_mountpoint` and the stop-control state (`static`) | `.main` (10) |
 
 Six catalogue rows span files and keep the bare `client/efs_fuse` tag
 (`opendir_authority_errno`, `fallocate_errno`, `inode_lock_stripes`,
@@ -59,6 +59,12 @@ compile).
   substitutes a default; a timeout or BUSY is retried on the call's inherited
   budget, then surfaces as that error. The per-area headers say which errno
   each area returns for BUSY, timeout and I/O failure.
+- Unmount (K90): `efs_fuse_destroy` retries what is transient within its 60 s
+  stop bound and decides what is not. Each attempt PUTs every dirty chunk, new
+  partial chunks included, then REPORTs. A fresh `ENOSPC` answer ends the drain:
+  the chunks are named by `force-discard ... cause=unmount-enospc`, the stop is
+  unclean (exit 1, stop record). The application already got `ENOSPC` at its
+  FSYNC or FLUSH.
 
 ## Calls
 
@@ -70,7 +76,7 @@ compile).
 
 ## Tests
 
-- `python3 scripts/tests_for.py client/efs_fuse` lists all 50 rows; the dotted
+- `python3 scripts/tests_for.py client/efs_fuse` lists all 51 rows; the dotted
   forms above select one file's rows (add `--run` after `make all`).
 - Gate evidence for the split:
   [efs-fuse-split-20261104](../../../docs/status/2026-11/efs-fuse-split-20261104.md);
