@@ -4,9 +4,12 @@ bound. Three private daemons, node 3 at a small quota and filled through the
 real refusal path (no hook). A 300000 B write is one W77 unit of three chunks;
 its close answers ENOSPC with the 37856 B tail chunk still dirty.
 - Mount A unmounts with node 3 still full: exit 1 within the bound below, the
-  tail named by force-discard, no 60 s `UNMOUNT DATA LOSS`.
+  tail named by force-discard, no 60 s `UNMOUNT DATA LOSS`. Before the fix this
+  exit came from the full chunks' PUT and the tail was dropped unnamed.
 - Mount B holds the same refusal while node 3 restarts with room: exit 0, the
-  tail lands, the unit publishes, the file reads back exact.
+  tail lands, the unit publishes, the file reads back exact. This is the K90
+  hold: before the fix the full chunks landed, the tail was skipped, and the
+  unit stayed held until the bound (the wait below times out).
 Skipped (NOTRUN) without FUSE.
 """
 import errno,os,re,subprocess,tempfile,threading,time

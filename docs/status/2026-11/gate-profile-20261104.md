@@ -37,7 +37,7 @@ Solo wall seconds (one run each unless slashed), `EFS_TEST_JOBS=8` in the enviro
 | `test_pack_dup_candidate` (75, exclusive) | 40.0 / 46.3 | 51.8 / 40.1 | waits for a wall-clock pack-epoch boundary (up to 60 s) by design | none |
 
 ## What was left and why
-- **K90**, the unmount drain spin after a refused write: 30 s in every B6 full run and in some k22 runs on node9900; a client-side held-unit question, not traced in this task.
+- **K90**, the unmount drain spin after a refused write: 30 s in every B6 full run and in some k22 runs on node9900; a client-side held-unit question, not traced in this task. Fixed later by Task DF ([K90](k90-unmount-drain-20261104.md)).
 - **`k33_interrupt` is still bimodal** in the gates (node9900 31.7 / 75.8 / 75.6 s, fstor007 30.0 / 48.4 / 75.7 s) after the K89 fix; its budget follows the rule (95 s, was 120) and the second mode is untraced.
 - **`k33_growth` on fstor007** runs twice its node9900 time in every run (117 to 124 s against 60 to 63 s; 7.7 s of it in formation `wait_log`s); untraced, budget kept at 225.
 - **`b6 slow`, `k35`, the D4 pair, `posix_expiry`, `b_geometry`**: their time is deliberate delays, load windows, TTLs or member restarts; nothing in the harness waits slower than the condition changes. Budgets kept, although several measure at half their budget (the rule applied to the six gates would give `k35` 170, `d4_progress` 120, `d4_plateau` 165, `posix_expiry` 145, `grow-a` 35, `grow-b` 55, `k36_segment_recovery` 45); re-budgeting an untouched row is the user's call.
