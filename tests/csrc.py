@@ -53,6 +53,7 @@ MODULES = {
         'src/meta/meta_apply/rows.c',
         'src/meta/meta_apply/lookup.c',
         'src/meta/meta_apply/init.c',
+        'src/meta/meta_apply/create.c',
         'src/meta/meta_apply.c',
         'src/meta/meta_apply/apply_internal.h',
         'src/meta/meta_apply/rows.h',
