@@ -9,6 +9,7 @@
 #include "efs/raft.h"
 #include "efs/raft_disk.h"
 #include "efs/store.h"
+#include "efs/tmpdir.h"
 #include "../server/server_internal.h"
 #include <dirent.h>
 #include <errno.h>
@@ -1060,7 +1061,7 @@ static int run_local_bench(struct efsd_server *s, const char *kind,
         if (pp && *pp)
             snprintf(perf_path, sizeof(perf_path), "%s", pp);
         else
-            snprintf(perf_path, sizeof(perf_path), "/tmp/efs-bench-local-perf-%d/perf.data",
+            efs_tmp_path(perf_path, sizeof(perf_path), "efs-bench-local-perf-%d/perf.data",
                      (int)getpid());
         g_perf_pid = start_perf_recorder(getpid(), perf_path);
         if (g_perf_pid < 0)

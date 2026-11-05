@@ -46,19 +46,29 @@ def canonical(mount, cwd=None):
     return '/' + '/'.join(parts)
 
 
-def endpoint(mount, tmp='/tmp'):
+def tmpdir():
+    """$TMPDIR, else /tmp, as efs_tmpdir() in include/efs/tmpdir.h: efs-fuse
+    keeps its endpoint there, so stop and mount must share TMPDIR."""
+    t = os.environ.get('TMPDIR') or '/tmp'
+    while len(t) > 1 and t.endswith('/'):
+        t = t[:-1]
+    return t
+
+
+def endpoint(mount, tmp=None):
+    tmp = tmp or tmpdir()
     value = 14695981039346656037
     for byte in os.fsencode(canonical(mount)):
         value = ((value ^ byte) * 1099511628211) & ((1 << 64)-1)
     return f'{tmp}/efs-control-{value:016x}.sock'
 
 
-def stop_record_path(mount, tmp='/tmp'):
+def stop_record_path(mount, tmp=None):
     """Stop record efs-fuse keeps next to its control endpoint."""
     return endpoint(mount, tmp)[:-len('.sock')] + '.stop'
 
 
-def stop_record(mount, pid, uid, tmp='/tmp'):
+def stop_record(mount, pid, uid, tmp=None):
     """{phase, step, total, rc, reason} from the stop record of PID, or None.
     The record must be a regular file owned by uid (any owner when uid is
     None) and name this PID; anything else is not this client's record."""
@@ -92,7 +102,7 @@ def describe(record):
     return text
 
 
-def await_exit(mount, pid, stamp, proc=Path('/proc'), tmp='/tmp', stall_s=None,
+def await_exit(mount, pid, stamp, proc=Path('/proc'), tmp=None, stall_s=None,
                deadline_s=None):
     """Wait for a retiring client to leave while its stop record shows
     progress; then require its final record to say done. Raises RuntimeError
@@ -125,6 +135,12 @@ def await_exit(mount, pid, stamp, proc=Path('/proc'), tmp='/tmp', stall_s=None,
                                f'({describe(record)}); client remains alive, no forced kill attempted')
         time.sleep(.1)
     record = stop_record(mount, pid, uid, tmp)
+    if record and record['phase'] in FINAL_PHASES:
+        # This retire requested the stop; efs-fuse left the verdict for it (DI).
+        try:
+            os.unlink(stop_record_path(mount, tmp))
+        except FileNotFoundError:
+            pass
     if not record or record['phase'] not in FINAL_PHASES:
         raise RuntimeError(f'efs-fuse PID {pid} for {mount} exited without a final stop record '
                            f'(last seen: {describe(record or seen)})')
@@ -218,6 +234,7 @@ def socket_owner(path):
 
 def controllers(proc, uid, tmp):
     """{endpoint path: [(pid, stamp, links)]} for inspectable efs-fuse holders."""
+    tmp = tmp or tmpdir()
     paths = {}
     for line in (proc/'net/unix').read_text().splitlines()[1:]:
         fields = line.split()
@@ -239,7 +256,7 @@ def controllers(proc, uid, tmp):
     return result
 
 
-def controller(mount, proc=Path('/proc'), tmp='/tmp', uid=None):
+def controller(mount, proc=Path('/proc'), tmp=None, uid=None):
     """(pid, stamp) controlling mount, None when no process controls it.
     Raises RuntimeError when ownership is foreign or ambiguous."""
     uid = os.getuid() if uid is None else uid
@@ -304,7 +321,7 @@ def name(proc, pid, path):
     return names.pop()
 
 
-def clients(proc=Path('/proc'), tmp='/tmp', uid=None):
+def clients(proc=Path('/proc'), tmp=None, uid=None):
     """(pid, mount, stamp) of every client this caller controls, mounted or
     detached. Mounts of other uids and their processes are ignored."""
     uid = os.getuid() if uid is None else uid
@@ -330,7 +347,7 @@ def clients(proc=Path('/proc'), tmp='/tmp', uid=None):
     return sorted(set(result))
 
 
-def retire(mount, pid, stamp, proc=Path('/proc'), tmp='/tmp', stall_s=None, deadline_s=None):
+def retire(mount, pid, stamp, proc=Path('/proc'), tmp=None, stall_s=None, deadline_s=None):
     """Await the drained, unmounted controller identified by `has`.
     Unmount makes the FUSE loop exit; teardown owns flush/settle/revoke.
     Never signal it: ownership can disappear immediately after the proof,

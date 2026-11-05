@@ -8,13 +8,14 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include "../test_tmpdir.h"
 static void key(unsigned id,uint8_t k[20])
 { memset(k,0,20);k[0]=1;k[2]=7;for(int j=19;j>=12;--j){k[j]=(uint8_t)id;id>>=8;} }
 static uint64_t ns(void)
 {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000000000+t.tv_nsec;}
 int main(void)
 {
-    char dir[]="/tmp/efs-block-hash-lsm-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-block-hash-lsm-XXXXXX");assert(efs_test_mkdtemp(dir));
     struct efs_kv_lsm_cfg cfg={.sync_mode=EFS_KV_LSM_NOSYNC,.memtable_max=64u<<20,.l0_max=64};
     struct efs_kv *kv=efs_kv_lsm_open(dir,&cfg);assert(kv);kv_compactor_stop(kv->ctx);
     uint8_t k[20],v[16],got[16];

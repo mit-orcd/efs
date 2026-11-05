@@ -25,6 +25,12 @@ def refused(text,call,*args,**kw):
 
 assert m.canonical('/a/../../b/./c//')=='/b/c' and m.canonical('x/../y','/m')=='/m/y'
 assert m.endpoint('/mnt/a/../efs')==m.endpoint('/mnt/efs')
+# DI: the endpoint follows TMPDIR exactly as efs_tmpdir() does in efs-fuse.
+saved=os.environ.get('TMPDIR')
+for value,want in (('/var/di-tmp//','/var/di-tmp/efs-control-'),('','/tmp/efs-control-')):
+    os.environ['TMPDIR']=value;assert m.endpoint('/mnt/efs').startswith(want),value
+if saved is None: os.environ.pop('TMPDIR')
+else: os.environ['TMPDIR']=saved
 ME,OTHER=1000,2000
 with tempfile.TemporaryDirectory(prefix='efs-processes-') as directory:
     proc=Path(directory)/'proc';tmp=str(Path(directory)/'tmp')
@@ -206,6 +212,7 @@ else: time.sleep(30)
                     with patch.object(m,'controller',proven_before_teardown):
                         assert m.retire(mount,process.pid,stamp)['phase']=='done' 
                     assert process.wait(timeout=2)==0
+                    assert not os.path.exists(record), 'retire removes the verdict it read (DI)'
                 elif case=='closing':
                     assert m.controller(mount) is None
                     m.retire(mount,process.pid,stamp)
@@ -235,7 +242,7 @@ else: time.sleep(30)
                     assert process.poll() is None
         finally:
             if process.poll() is None: process.terminate();process.wait()
-            for path in (bound,record):
+            for path in (bound,record,record+'.release',record+'.teardown'):
                 try: os.unlink(path)
                 except FileNotFoundError: pass
     # A record of another PID, or one that is not a regular file, is not this client's.

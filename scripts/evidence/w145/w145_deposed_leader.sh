@@ -28,7 +28,7 @@ REL=$(cd "$1" && pwd); L=$2
 PORT=${PORT:-17760}; GROUP=${GROUP:-2}; ROUNDS=${ROUNDS:-3}; FREEZE=${FREEZE:-3}
 WARMUP=${WARMUP:-45}; CATCHUP=${CATCHUP:-90}; LAG=${LAG:-2000}; KEEP=${KEEP:-0}
 FREEZE_MODE=${FREEZE_MODE:-stop}
-AB=/tmp/efs-w145/$L
+AB=${TMPDIR:-/tmp}/efs-w145/$L
 FUSE_LIBDIR=/data1/efs/deps/libfuse/lib64
 for p in 1 2 3; do
   ss -ltn | grep -q ":$((PORT+p)) " && { echo "port $((PORT+p)) in use"; exit 2; }

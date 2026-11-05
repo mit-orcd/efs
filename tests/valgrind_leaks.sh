@@ -53,7 +53,7 @@
 set -u
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-WORK="${1:-/tmp/efs-vg}"
+WORK="${1:-${TMPDIR:-/tmp}/efs-vg}"
 PORT="${EFS_VG_PORT:-19811}"
 SEED="127.0.0.1:$PORT"
 STORAGE="$WORK/storage"

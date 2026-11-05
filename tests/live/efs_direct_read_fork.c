@@ -12,7 +12,7 @@
  * (use COUNT as both FILES_PER_WORKER and STRIDE). Historical W92 fixture
  * defaults: 10000 files per worker, stride 204800, one round.
  * Each 256 KiB file contains SHA256("W92-real-payload:" + be64(index)) repeated.
- * Mismatch dumps go only to /tmp. External timeout bounds live runs.
+ * Mismatch dumps go only to $TMPDIR (default /tmp). External timeout bounds live runs.
  */
 #include <pthread.h>
 #include <stdatomic.h>
@@ -101,8 +101,9 @@ static void *worker(void *arg)
                             (unsigned long long)index, part, bad, n, prefill,
                             n < 0 ? saved_errno : 0);
                         char dump[256];
+                        const char *tmp = getenv("TMPDIR"); /* standalone build: no efs/tmpdir.h */
                         snprintf(dump, sizeof(dump),
-                            "/tmp/native-mismatch-%ld-%llu-%u.bin", (long)getpid(),
+                            "%s/native-mismatch-%ld-%llu-%u.bin", tmp && *tmp ? tmp : "/tmp", (long)getpid(),
                             (unsigned long long)index, part);
                         int out = open(dump, O_WRONLY | O_CREAT | O_EXCL, 0600);
                         if (out >= 0) {

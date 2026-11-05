@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#include "../test_tmpdir.h"
 
 struct observed {
     struct efs_kv *inner;
@@ -99,7 +100,7 @@ static uint64_t ns(void)
 { struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000000000+t.tv_nsec; }
 static void measure(unsigned lanes, unsigned iterations)
 {
-    char dir[]="/tmp/efs-getattr-lane-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-getattr-lane-XXXXXX");assert(efs_test_mkdtemp(dir));
     struct efs_kv_lsm_cfg cfg={.sync_mode=EFS_KV_LSM_NOSYNC,.memtable_max=64u<<20,.l0_max=64};
     struct observed o={.inner=efs_kv_lsm_open(dir,&cfg)};assert(o.inner);seed(&o,lanes);
     /* Unrelated records give real immutable block/index searches. */

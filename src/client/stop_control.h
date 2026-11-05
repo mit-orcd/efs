@@ -17,6 +17,7 @@
 #include <string.h>
 #include <limits.h>
 #include <time.h>
+#include "efs/tmpdir.h"
 #ifndef EFS_STOP_MS
 #define EFS_STOP_MS 60000u
 #endif
@@ -30,8 +31,11 @@ static struct {
     char path[sizeof(((struct sockaddr_un *)0)->sun_path)];
     /* Stop record (A11 finding 1): the endpoint path with ".stop" for
      * ".sock". It outlives the endpoint: the drain closes the socket
-     * before the unmount flushes, settles and revokes. */
+     * before the unmount flushes, settles and revokes. efs_stop_exit()
+     * removes it unless a stop tool sent DRAIN/FORCE and still awaits the
+     * verdict (requested); that tool removes it after reading it (DI). */
     pthread_mutex_t status_mu;
+    int requested;
     char status[sizeof(((struct sockaddr_un *)0)->sun_path)];
     char status_phase[24];
     uint64_t status_step, status_ms;
@@ -83,8 +87,8 @@ static int efs_stop_path(const char *mount, char *out, size_t len)
     uint64_t hash=14695981039346656037ull;
     for (const unsigned char *p=(const unsigned char *)name;*p;p++)
         hash=(hash^*p)*1099511628211ull;
-    return snprintf(out,len,"/tmp/efs-control-%016llx.sock",
-                     (unsigned long long)hash)>=(int)len ? -1 : 0;
+    int n=efs_tmp_path(out,len,"efs-control-%016llx.sock",(unsigned long long)hash);
+    return n<0 || n>=(int)len ? -1 : 0;
 }
 /* One line, replaced by rename so a reader sees a whole record:
  *   pid=P phase=NAME step=N total=T rc=R reason=TEXT
@@ -257,10 +261,12 @@ static void *efs_stop_server(void *unused)
         }
         n=(ssize_t)used;
         if(n>0 && strcmp(command,"RESUME\n")==0) {
+            __atomic_store_n(&g_stop.requested,0,__ATOMIC_RELEASE);
             efs_stop_resume();efs_stop_reply(fd,"OK\n");
         } else if(n>0 && (strcmp(command,"DRAIN\n")==0 ||
                           strcmp(command,"FORCE\n")==0)) {
             int force=strcmp(command,"FORCE\n")==0;
+            __atomic_store_n(&g_stop.requested,1,__ATOMIC_RELEASE);
             efs_stop_reply(fd,efs_stop_prepare(force)==0?"OK\n":"BUSY\n");
         } else if(n>0 && strcmp(command,"SETTINGS\n")==0 && efs_stop_settings_text) {
             char page[8192];
@@ -308,6 +314,7 @@ static int efs_stop_start(const char *mount,int (*drain)(uint64_t,int))
     g_stop.listener=fd;g_stop.drain=drain;
     __atomic_store_n(&g_stop.quiesce,0,__ATOMIC_RELEASE);
     __atomic_store_n(&g_stop.quit,0,__ATOMIC_RELEASE);
+    __atomic_store_n(&g_stop.requested,0,__ATOMIC_RELEASE);
     if(pthread_create(&g_stop.server,NULL,efs_stop_server,NULL)!=0) {
         close(fd);unlink(addr.sun_path);g_stop.listener=-1;return -1;
     }
@@ -326,6 +333,22 @@ static void efs_stop_finish(void)
     }
     close(g_stop.listener);unlink(g_stop.path);
     g_stop.listener=-1;g_stop.started=0;
+}
+/* The stop record's last word at process exit: "done" (rc 0) or "failed"
+ * with why, kept for the stop tool that requested the stop; with no
+ * requester waiting the record is removed, so mounts stopped by unmount or
+ * signal leave nothing behind (the verdict is the exit status). */
+static void efs_stop_exit(int rc,const char *why)
+{
+    if(__atomic_load_n(&g_stop.requested,__ATOMIC_ACQUIRE)) {
+        efs_stop_status(rc ? "failed" : "done",0,0,rc,why);
+        return;
+    }
+    pthread_mutex_lock(&g_stop.status_mu);
+    if(g_stop.status[0])
+        unlink(g_stop.status);
+    g_stop.status[0]=0; /* later status writes become no-ops */
+    pthread_mutex_unlock(&g_stop.status_mu);
 }
 /* The SETTINGS page of a mounted client into out (NUL-terminated); 0 on success. */
 static inline int efs_stop_settings(const char *mount,char *out,size_t size)

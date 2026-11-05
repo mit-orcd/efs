@@ -28,7 +28,7 @@ env=dict(os.environ,EFS_TRANSPORT='rdma',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0
          EFS_EXPIRY='0')
 root=Path(tempfile.mkdtemp(prefix='rdma-seven-',dir='/home/efs'))
 (a.output/'mount-root.txt').write_text(str(root)+'\n')
-sockdir=Path(tempfile.mkdtemp(prefix='rdma-phases-',dir='/tmp'))
+sockdir=Path(tempfile.mkdtemp(prefix='rdma-phases-'))
 s=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM);s.bind(str(sockdir/'socket'));s.settimeout(.1)
 stop=threading.Event();streams=[];children=[];mounts=[];count=0
 phase=(a.output/'phases.log').open('w')

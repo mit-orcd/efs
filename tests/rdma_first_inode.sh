@@ -4,8 +4,8 @@
 set -euo pipefail
 ADDR=${ADDR:-172.16.223.61}
 PORT=${PORT:-19950}
-WORK=/tmp/efs-rdma-first
-MNT=/tmp/efs-rdma-first-mnt
+WORK=${TMPDIR:-/tmp}/efs-rdma-first
+MNT=${TMPDIR:-/tmp}/efs-rdma-first-mnt
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 cd "$HERE"
 

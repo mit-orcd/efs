@@ -22,7 +22,7 @@
 # dwarf. Raw perf data and logs stay under /tmp/efs-mu-ab (outside Git).
 set -u
 REL=$1; L=$2; LOAD=${3:-40}; DWARF_SECONDS=${DWARF_SECONDS:-3}; PORT=${PORT:-17650}
-AB=/tmp/efs-mu-ab/$L
+AB=${TMPDIR:-/tmp}/efs-mu-ab/$L
 rm -rf "$AB"; mkdir -p "$AB"/{n1,n2,n3,logs,mnt,perf}
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_WRITE_PROF=1
 # efs-fuse links the private libfuse (FUSE >= 3.12) used by orcd-mini builds.

@@ -114,7 +114,7 @@ mnt, out = sys.argv[1], sys.argv[2]
 # having written 1 MiB. The clock must cover a real 256 MiB source.
 blob = bytes((i % 251) + 1 for i in range(1024 * 1024))
 nbytes = 256 * 1024 * 1024
-pat = "/tmp/efs-bench-pattern-256m.bin"
+pat = os.path.join(os.environ.get("TMPDIR") or "/tmp", "efs-bench-pattern-256m.bin")
 if not os.path.exists(pat) or os.path.getsize(pat) != nbytes:
     with open(pat, "wb") as f:
         for _ in range(256):

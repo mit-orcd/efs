@@ -13,6 +13,10 @@ new tests on that path:
 - no bare mkdtemp()/mkstemp() there (the wrappers register cleanup);
 - no mkdtemp-style "/tmp/...XXXXXX" template or dir='/tmp' in the Python
   tests (embedded C included) and no `mktemp /tmp/...` in the Makefile.
+DI widened it: no "/tmp/efs..." literal in any src/ or tests/ C file (daemons,
+client and tools build scratch and the stop-control endpoint with
+efs_tmp_path() from include/efs/tmpdir.h), no raw "/tmp/...XXXXXX" template
+anywhere in tests/ C, and no dir='/tmp' in any Python under tests/ or scripts/.
 """
 from pathlib import Path
 import re
@@ -20,7 +24,12 @@ import re
 root = Path(__file__).resolve().parents[1]
 # File -> literals allowed because they are data, not scratch locations.
 ALLOWED = {
-    'tests/test_stop_control.c': {'"/tmp/nonexistent/../efs-target/"', '"/tmp/./efs-target"'},
+    'tests/test_stop_control.c': {'"/tmp/nonexistent/../efs-target/"', '"/tmp/./efs-target"',
+                                  '"/tmp"', '"/tmp/"'},  # the asserted fallback
+    # EFS_FAULTS trigger file read by fault builds (env overrides it); the
+    # fault cluster scripts create it there. Not scratch.
+    'src/client/write.c': {'"/tmp/efs/fault"'},
+    'src/kv/kv_compact.c': {'"/tmp/efs/fault"'},
 }
 bad = []
 for p in sorted(list(root.glob('tests/*.c')) + list(root.glob('tests/faults/*.c'))):
@@ -37,11 +46,24 @@ for p in sorted(list(root.glob('tests/test_*.py')) + list(root.glob('tests/fault
         bad.append('%s: hard-coded template %s' % (rel, m.group(0)))
     for m in re.finditer(r"""dir\s*=\s*['"]/tmp['"]""", text):
         bad.append('%s: %s (tempfile already honours TMPDIR)' % (rel, m.group(0)))
+first = set(root.glob('tests/*.c')) | set(root.glob('tests/faults/*.c'))
+c_all = [p for d in ('src', 'tests') for p in (root / d).rglob('*') if p.suffix in ('.c', '.h')]
+for p in sorted(set(c_all) - first):
+    rel = str(p.relative_to(root)); text = p.read_text(errors='replace')
+    for m in re.finditer(r'"/tmp/(?:efs[^"]*|[^"]*XXXXXX)"', text):
+        if m.group(0) not in ALLOWED.get(rel, ()):
+            bad.append('%s: hard-coded %s (use efs_tmp_path / efs_test_path)' % (rel, m.group(0)))
+py_all = [p for d in ('tests', 'scripts') for p in (root / d).rglob('*.py')]
+for p in sorted(py_all):
+    if p == Path(__file__).resolve(): continue
+    for m in re.finditer(r"""dir\s*=\s*['"]/tmp['"]""", p.read_text(errors='replace')):
+        bad.append('%s: %s (tempfile already honours TMPDIR)' % (p.relative_to(root), m.group(0)))
 for m in re.finditer(r'mktemp\s+/tmp/\S+', (root / 'Makefile').read_text()):
     bad.append('Makefile: %s (use "$${TMPDIR:-/tmp}")' % m.group(0))
 for rel, lits in ALLOWED.items():
     text = (root / rel).read_text()
     stale = [l for l in lits if l not in text]
     assert not stale, 'stale ALLOWED entries in %s: %s' % (rel, stale)
+bad = sorted(set(bad))
 assert not bad, 'test scratch outside TMPDIR or without cleanup (K25):\n  ' + '\n  '.join(bad)
 print('test scratch paths: TMPDIR only, removed on success (C, Python, Makefile) PASS')
