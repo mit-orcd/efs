@@ -1,6 +1,6 @@
 # /tmp hygiene (Task DI)
 
-**Verdict: code PASS; host clean-up listed, removal NOTRUN (awaiting approval)** (Nov 5, 2026). Purpose: stop EFS runs from littering the shared `/tmp` on the ORCD gate hosts, then clear what earlier runs left. Not a K row; blocks alpha: no.
+**Verdict: PASS; code fixed and host leftovers removed** (Nov 5, 2026). Purpose: stop EFS runs from littering the shared `/tmp` on the ORCD gate hosts, then clear what earlier runs left. Not a K row; blocks alpha: no.
 
 - Source: branch `claude/nice-haslett-d41299` cut from `devel` `104eb5e10` (wave 57 merge `86c500d0b` included). Code commit `cac172b6b`; test and docs follow-up `08397211e`. This tree is what was tested.
 - Host test: fstor007 (`fstor007-mgmt`), tree `/tmp/efs-taskDI/src` shipped with `git archive`, private libfuse shim, `TMPDIR=/tmp/efs-taskDI-tmp/test`, `EFS_TEST_TARGET=test bash scripts/make_test_summary.sh`. The tree was removed afterwards.
@@ -42,12 +42,14 @@ On Nov 5, before any clean-up (`*-list-counts-before.txt`), `erbmi1` owned these
 
 `scripts/evidence/task-di/tmp_hygiene.sh` (`ssh <host> 'bash -s list' < tmp_hygiene.sh`, then `remove`) selects `find /tmp -maxdepth 1 -mindepth 1 -user erbmi1 -mmin +1440` in the families `efs-control-*.stop*`, `efs-control-*.sock`, `efs-gc-*`, `efs-sort-*`, `efs-query-*`, `efs-k41-*`, `efs-meta-reap-cleanup-*`, `efs-ba-upload-*`, `efs-subtree-*`, `efs-session-admission-cold-*` and `efs-retained-audit-*`. It keeps a `.sock` listed in `/proc/net/unix` and a `.stop` whose `pid=` is alive. In remove mode it refuses any path outside those families, deletes directories with `edelete --force --delete` and files with `rm -f`, and writes the after-counts. It never selects `efs-merge*`, `efs-task*`, `efs-mount` or anything under `/data1`. No `wave57` screen was running on either host.
 
-| Host | Candidates (files / dirs) | Kept as live | Younger than 24 h (stay) | Removed | After |
-|---|---|---|---|---|---|
-| fstor007 | 6,974 `.stop` / 617 | 1 `.stop` (its pid is now a kworker; kept to be safe) | about 909 `.stop` | NOTRUN | NOTRUN |
-| node9900 | 5,217 `.stop`, 5 dead `.sock`, 2 `.stop.*` / 274 | `efs-control-4d2bbb54cdde711f.sock` and `.stop` (live efs-fuse pid 3806523, since Nov 2) | about 637 `.stop` | NOTRUN | NOTRUN |
+Listed first (`*-list-*`). The user approved removal, and it ran at about 16:10 with `bash -s remove`, which recomputes candidates at run time (`*-remove-*`, `LEFT` count 0 on both hosts):
 
-The removal step was refused by this session's permission check. Approve it to run `bash -s remove` on each host; that writes `<host>-remove-*` logs and after-counts.
+| Host | Before removal (`.stop` / `.sock` / `.stop.*` / scratch dirs) | Removed (files / dirs) | Kept as live | After (`.stop` / `.sock` / scratch dirs) |
+|---|---|---|---|---|
+| fstor007 | 7,962 / 0 / 0 / 619 | 7,107 `.stop` / 617 | 1 `.stop` (its pid is now a kworker; kept to be safe) | 855 / 0 / 0 |
+| node9900 | 5,995 / 6 / 2 / 275 | 5,217 `.stop`, 5 dead `.sock`, 2 `.stop.*` / 274 | `efs-control-4d2bbb54cdde711f.sock` and `.stop` (live efs-fuse pid 3806523, since Nov 2) | 778 / 1 / 0 |
+
+The `.stop` files left are the kept ones plus records younger than 24 h (from today's gates and from Tasks DG and DH on devel binaries); a later pass with the same script clears them once they age. The task trees (25 entries on fstor007 and 29 on node9900, plus the `efs-taskCW`, `efs-taskDG` and `efs-taskDH` trees) were not touched.
 
 Old task trees awaiting the user (listed, untouched; `*-task-trees.tsv`):
 
@@ -72,13 +74,13 @@ Old task trees awaiting the user (listed, untouched; `*-task-trees.tsv`):
 
 ## Raw data and reproduction
 
-Raw listings, logs and the make-test summary and timings are outside Git at `~/efs-artifacts/taskDI-20261105/` (NFS home, visible from both hosts; `SHA256SUMS` sha256 `d348d91d91f01e1925849f5fadb58353c2d9f5691f997458b62cc52594352f30`).
+Raw listings, logs and the make-test summary and timings are outside Git at `~/efs-artifacts/taskDI-20261105/` (NFS home, visible from both hosts; 28 files, `SHA256SUMS` sha256 `ccd6d5e399bfbb7583da7c09cd59ab6ed566bf8a14cb70cf347ebc78972309a3`).
 
 ```
 python3 tests/test_tmpdir_hygiene.py
 make test-stop-control                      # C unit test: path derivation and exit-time removal
 EFS_TEST_TARGET=test TMPDIR=/tmp/efs-<name>-tmp bash scripts/make_test_summary.sh
-ssh <host> 'bash -s list' < scripts/evidence/task-di/tmp_hygiene.sh
+ssh <host> 'bash -s list' < scripts/evidence/task-di/tmp_hygiene.sh    # then 'bash -s remove'
 ```
 
 Limits: a client killed with SIGKILL still leaves its `.stop` (phase `serving` or `draining`), and only a later mount of the same path replaces it. Under a gate that file lands in the case's `TMPDIR`, which the runner deletes. A mount and the tools that reach its endpoint (`efs-fuse --stop/--resume`, `client.sh stop`, `client_processes.py`, efs-mgmt's SETTINGS page) must share `TMPDIR`; a mismatch fails closed with "no control endpoint". Long-lived operator mounts started with an exported `TMPDIR` must be stopped with the same value. The cluster tooling (`~/git/cluster`, `~/git/devops`) exports no `TMPDIR` when it starts or stops clients, so the orcd-mini client and its stop both use `/tmp`. `client.sh stop --force-discard` on a client whose endpoint refused (rc 3) still retires it without a DRAIN having reached it; such a client now removes its record at exit, so `retire` reports "exited without a final stop record" where it used to read `done`.
