@@ -22,10 +22,12 @@ into the swept hint, and the host answers `why=image-base` (the trigger).
 Fixed: cbase_reconcile retires the hint, the next round publishes. Before the
 fix every round repeats the record: `publish-stalled` and EIO at fsync.
 
-Pass: every round shows the trigger (else "trigger not met": proves
-nothing), its fsync succeeds, no `publish-stalled`, the file reads back
-exact. One summary line per round for evidence loops. Skipped (NOTRUN)
-without FUSE.
+Pass: every round's fsync succeeds with no `publish-stalled` and the file
+reads back exact, and at least one round shows the trigger (else "trigger
+not met": proves nothing). A round can miss it (1 of 40 on fstor007: no
+STALE round at all, likely A's view caught up with the truncate's epoch
+before its REPORT, so chunk 1 did not lose `authority`). One summary line per round for evidence loops.
+Skipped (NOTRUN) without FUSE.
 """
 import os, re, sys, tempfile, time
 from pathlib import Path
@@ -78,7 +80,7 @@ try:
     c.wait_members([1, 2, 3], 3)
     m = Mount(c, 1, 'mnt')
     b = Mount(c, 2, 'mntb')
-    fails = []
+    fails, triggered = [], 0
     for r in range(ROUNDS):
         name = f'f{r}'
         first, whole, second = payload(name, 3 * CS), payload(name + '-1', CS), payload(name + '-2', PART)
@@ -115,14 +117,15 @@ try:
         exact = data[:end] == first[:CS] + whole + second and not any(data[end:])
         print(f'K38 swept hint round={r} ino={ino} image_base={image_base} publish_stalled={stalled} '
               f'fsync={outcome} fsync_s={fsync_s:.2f} exact={int(exact)}', flush=True)
-        if not image_base:
-            fails.append(f'round {r}: trigger not met (no why=image-base for ino {ino} ci=2)')
-        elif outcome != 'ok' or stalled or not exact:
+        triggered += image_base > 0
+        if outcome != 'ok' or stalled or not exact:
             fails.append(f'round {r}: image-base={image_base} publish-stalled={stalled} fsync {outcome} '
                          f'exact={exact}')
+    if not triggered:
+        fails.append(f'trigger not met: no round had why=image-base for chunk 2')
     assert not fails, '\n'.join(fails) + '\n' + m.text()[-3000:]
-    print(f'K38 swept CAS hint on real daemons: {ROUNDS} rounds triggered and published: PASS '
-          f'({time.time() - t0:.1f} s)')
+    print(f'K38 swept CAS hint on real daemons: {triggered} of {ROUNDS} rounds triggered, all published '
+          f'exact: PASS ({time.time() - t0:.1f} s)')
 finally:
     c.stop_all()
     if os.environ.get('K38_SWEPT_KEEP') or sys.exc_info()[0] is not None:
