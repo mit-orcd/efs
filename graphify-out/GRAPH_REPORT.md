@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `c9e976a0465bc7dfd953cbd6f83d9eeb528cfd46`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,906 nodes, 74,566 directed typed edges, 581 communities.
+Source base: `89a5f607870d919fd6962672c227820c0099bfbe`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,916 nodes, 74,595 directed typed edges, 583 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,22 +19,22 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27440
+- `calls`: 27442
 - `case_of`: 118
-- `contains`: 26864
+- `contains`: 26876
 - `defines`: 1996
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7901
-- `imports_from`: 982
+- `imports`: 7912
+- `imports_from`: 984
 - `indirect_call`: 748
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 2969
+- `mentions_symbol`: 2968
 - `method`: 644
-- `rationale_for`: 1387
+- `rationale_for`: 1389
 - `references`: 2159
-- `references_path`: 1212
+- `references_path`: 1213
 - `regression_for`: 8
 - `uses`: 96
 
@@ -46,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1769}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1771}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
