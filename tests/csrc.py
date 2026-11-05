@@ -49,6 +49,9 @@ MODULES = {
         'src/client/efs_fuse/ll_run.h',
     ]),
     'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),
+    'meta_apply': ('EFS_META_SOURCE', [
+        'src/meta/meta_apply.c',
+    ]),
 }
 
 

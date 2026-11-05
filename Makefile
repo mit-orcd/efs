@@ -60,6 +60,9 @@ else
 BLAKE3_ARCH_SRCS =
 endif
 
+# src/meta/meta_apply/: one file per area (src/meta/meta_apply/README.md).
+META_APPLY_SRCS = src/meta/meta_apply.c
+
 COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/publication_ack.c \
               $(COMMON_DIR)/common.c $(COMMON_DIR)/frag_record.c $(COMMON_DIR)/packed_segment.c $(COMMON_DIR)/pack_ledger.c $(COMMON_DIR)/packed_reader.c \
               $(COMMON_DIR)/log_ts.c \
@@ -83,7 +86,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               src/meta/query_catalog.c src/meta/query_disk.c src/meta/query_policy.c src/meta/expiry.c \
               src/meta/name_index.c \
               src/meta/metadata.c \
-              src/meta/meta_apply.c src/meta/pack_mapping.c \
+              $(META_APPLY_SRCS) src/meta/pack_mapping.c \
               src/meta/txn.c \
               src/meta/session.c \
               src/meta/put_ticket.c src/meta/put_orphan.c \
@@ -890,6 +893,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 
 $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h
 $(CLIENT_OBJS): $(wildcard src/client/efs_fuse/*.h) src/client/reply_buffers.h src/client/stop_control.h
+$(META_APPLY_SRCS:.c=.o): $(wildcard src/meta/meta_apply/*.h)
 src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
 
 tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/storage_roots.c src/server/server_internal.h src/bench/writer.o $(LIB)
@@ -1101,7 +1105,7 @@ tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/
 FAULT_SERVER_OBJS = $(patsubst src/server/%.c,tests/faults/server/%.o,$(SERVER_SRCS))
 FAULT_KV_OBJS = tests/faults/kv/kv_lsm.o tests/faults/kv/kv_compact.o
 FAULT_RAFT_OBJS = tests/faults/raft/raft_disk.o
-FAULT_META_OBJS = tests/faults/meta/meta_apply.o
+FAULT_META_OBJS = $(patsubst src/meta/%.c,tests/faults/meta/%.o,$(META_APPLY_SRCS))
 tests/faults/server/%.o: src/server/%.c src/server/server_internal.h $(wildcard src/server/*.h) $(wildcard include/efs/*.h) .build_id.stamp
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
@@ -1115,7 +1119,7 @@ tests/faults/kv/%.o: src/kv/%.c src/kv/kv_lsm_internal.h src/kv/kv_candidates.h 
 tests/faults/raft/%.o: src/raft/%.c src/raft/raft_disk_internal.h $(wildcard include/efs/*.h)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
-tests/faults/meta/meta_apply.o: src/meta/meta_apply.c $(wildcard include/efs/*.h) .build_id.stamp
+tests/faults/meta/%.o: src/meta/%.c $(wildcard src/meta/meta_apply/*.h) $(wildcard include/efs/*.h) .build_id.stamp
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
 
