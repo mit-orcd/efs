@@ -123,11 +123,13 @@ revoke_parallel|tests/test_session_revoke_parallel.py
 receipt_table|tests/test_w155_receipt_table.py
 put_ticket_batch|tests/test_put_ticket_batch.py
 # Daemons: K36 recovery thread, K37 segment rebuild and audit, and the
-# client read and write paths through efs-fuse under load (D4, short).
+# client read and write paths through efs-fuse under load (D4, short), and
+# the K38 swept-hint STALE replay through efs-fuse.
 k36_recovery|tests/test_k36_recovery.py
 k36_segment_recovery|tests/test_k36_segment_recovery.py
 k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
+k38_swept_hint_live|tests/test_k38_swept_hint_live.py
 # AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.
 pump_logging|tests/test_pump_logging.py
 # K79: SIGTERM with stderr a full pipe exits rc 0 within the stop bound.
