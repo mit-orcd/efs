@@ -62,6 +62,7 @@ MODULES = {
         'src/meta/meta_apply/lanes.c',
         'src/meta/meta_apply/mtime.c',
         'src/meta/meta_apply/sweep.c',
+        'src/meta/meta_apply/attr.c',
         'src/meta/meta_apply/append.c',
         'src/meta/meta_apply/chunk.c',
         'src/meta/meta_apply.c',
@@ -74,6 +75,7 @@ MODULES = {
         'src/meta/meta_apply/gc.h',
         'src/meta/meta_apply/lanes.h',
         'src/meta/meta_apply/sweep.h',
+        'src/meta/meta_apply/attr.h',
         'src/meta/meta_apply/append.h',
     ]),
 }

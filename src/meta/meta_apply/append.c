@@ -7,16 +7,7 @@
 #include "lookup.h"
 #include "init.h"
 #include "lanes.h"
-
-/* Defined in ../meta_apply.c until its area is carved out. */
-int lane_seq_get(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
-                 uint8_t lane, uint64_t *seq);
-int fence_lane_bits(struct efs_kv *kv, efs_ino_t ino, uint64_t generation,
-                    uint64_t bits,
-                    int (*upd)(struct lane_rec *ln, void *arg),
-                    void *arg, struct efs_kv_item *it, uint32_t *n,
-                    uint8_t k_ln[][EFS_KV_KEY_MAX],
-                    uint8_t v_ln[][LANE_VAL]);
+#include "attr.h"
 
 #define APPEND_CUR_VAL 24
 #define APPEND_RSV_VAL 48

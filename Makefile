@@ -73,6 +73,7 @@ META_APPLY_SRCS = src/meta/meta_apply/rows.c \
                   src/meta/meta_apply/lanes.c \
                   src/meta/meta_apply/mtime.c \
                   src/meta/meta_apply/sweep.c \
+                  src/meta/meta_apply/attr.c \
                   src/meta/meta_apply/append.c \
                   src/meta/meta_apply/chunk.c \
                   src/meta/meta_apply.c
