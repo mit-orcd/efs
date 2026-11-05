@@ -49,7 +49,7 @@
       "contract": "docs/backlog/work-items.md",
       "heading": "W125 \u2014 Small-file packing by default (background packer)",
       "production": {
-        "file": "src/meta/meta_apply.c",
+        "file": "src/meta/meta_apply/pack.c",
         "symbol": "efs_meta_apply_pack_switch"
       },
       "oracle": "tests/test_pack_switch.c",
