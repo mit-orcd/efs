@@ -71,6 +71,7 @@ META_APPLY_SRCS = src/meta/meta_apply/rows.c \
                   src/meta/meta_apply/reclaim.c \
                   src/meta/meta_apply/gc.c \
                   src/meta/meta_apply/publish.c \
+                  src/meta/meta_apply/pub_stage.c \
                   src/meta/meta_apply/lanes.c \
                   src/meta/meta_apply/mtime.c \
                   src/meta/meta_apply/sweep.c \

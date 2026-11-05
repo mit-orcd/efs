@@ -3,14 +3,12 @@
 
 #include "apply_internal.h"
 #include "rows.h"
+#include "pub_stage.h"
 
 /* All ordinary metadata mutations honor prepared EXCL images. REDUCEs
  * remain commutative. Chunk mutations share the lane's exclusion even when
  * a sweep deletes rows before writing/deleting the lane stamp. Checks and
  * the final write are serialized by the participant's Raft apply log. */
-int pub_stage_owner(struct efs_kv *kv, const uint8_t *chunk_key,
-                           uint32_t kl, struct efs_txid *t,
-                           struct efs_txn_parts *parts);
 
 /* `self` is the transaction whose own staged publication is being resolved:
  * its stage is the one exclusion that must not refuse the resolving batch. */
