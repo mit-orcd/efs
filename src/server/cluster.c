@@ -428,10 +428,12 @@ void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello 
     efs_node_id_t self = s->id;
     pthread_mutex_unlock(&s->lock);
 
+    struct efs_msg_hello relay = *h;
+    relay.flags |= EFS_HELLO_F_RELAY;
     for (uint32_t i = 0; i < node_count; i++) {
         if (nodes[i].id == self || nodes[i].id == h->node_id)
             continue;
-        gossip_hello_to(s, h, nodes[i].addr, nodes[i].port);
+        gossip_hello_to(s, &relay, nodes[i].addr, nodes[i].port);
     }
 }
 

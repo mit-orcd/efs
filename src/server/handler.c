@@ -439,7 +439,7 @@ void server_handle_conn(struct efs_conn *conn)
                 free(ack);
                 /* Converge the placement ring: relay this membership change to
                  * every other peer (HELLO only updates the contacted node). */
-                if (changed)
+                if (changed && !(h->flags & EFS_HELLO_F_RELAY))
                     server_gossip_membership(g_server, h);
             }
             break;
