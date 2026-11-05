@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `e939a016292ee0fb63ae8063d2ef00a79deb3cd5`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,895 nodes, 74,511 directed typed edges, 573 communities.
+Source base: `e0aa67254fc9d229b6d0cf05de2db74eb6a87023`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 17,905 nodes, 74,556 directed typed edges, 561 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,22 +19,22 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27425
+- `calls`: 27438
 - `case_of`: 118
-- `contains`: 26847
+- `contains`: 26862
 - `defines`: 1996
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7889
-- `imports_from`: 980
-- `indirect_call`: 747
+- `imports`: 7901
+- `imports_from`: 982
+- `indirect_call`: 748
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 2964
+- `mentions_symbol`: 2963
 - `method`: 644
-- `rationale_for`: 1385
+- `rationale_for`: 1387
 - `references`: 2159
-- `references_path`: 1211
+- `references_path`: 1212
 - `regression_for`: 8
 - `uses`: 96
 
@@ -46,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1765}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1769}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
