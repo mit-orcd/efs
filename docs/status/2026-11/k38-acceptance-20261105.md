@@ -6,7 +6,7 @@ Task DG, Nov 5 2026, node9900 and fstor007. Purpose: prove on real `efsd` daemon
 
 ## How the trigger is forced
 
-DE's six one-off attempts missed for three reasons, each confirmed by a trace on the pre-fix tree (`EFS_DCACHE_TRACE=1`):
+DE's six one-off attempts missed for three reasons. Reasons 2 and 3 are confirmed by traces on the pre-fix tree (`EFS_DCACHE_TRACE=1`); reason 1 follows from the code and DE's recorded waits (no sub-2-s wait was run here):
 
 1. **The sweep had not run.** A truncate's rows are removed by the GC thread only once the truncate is `TRUNC_SWEEP_MIN_AGE_NS` (2 s) old (`src/server/raft_host.c`). DE waited 0 or 1.5 s. Until the sweep, the row is still there and the hint matches it. The test waits until `efs-mgmt gc-status` shows `trunc_pending` above 0 and back to 0 on every node that saw it.
 2. **A full-chunk write never consults the hint.** Its slot base is `EFS_CHUNK_BASE_UNCOND` (aligned last-writer-wins) and `cbase_apply` only replaces base 0. Only a partial write, whose flush finds the swept row gone, gets base 0.
@@ -53,6 +53,7 @@ python3 tests/test_k38_swept_hint_live.py            # about 12 s; prints one li
 # each round shows image_base=8 publish_stalled=2 fsync=errno=5; about 42 s per run (the unmount waits on the held unit)
 # evidence loop: scripts/evidence/k38/swept_hint_arm.sh ARM TREE N   (N runs; summary.txt has rc and seconds per run)
 EFS_SAN_ONLY=k38_swept_hint_live make tsan-check
+rm -rf /tmp/efs-taskDG /tmp/efs-taskDG-tmp     # cleanup; a failed or K38_SWEPT_KEEP run leaves its efs-k38s-* fixture under TMPDIR
 ```
 
 `K38_SWEPT_ROUNDS` sets the rounds per run (default 2), `K38_SWEPT_KEEP=1` keeps the fixture, `EFS_DCACHE_TRACE=1` gives the client trace quoted above. A screen does not pass `LD_LIBRARY_PATH` (setgid): export it inside the screen's command or build with an rpath.
@@ -61,7 +62,8 @@ EFS_SAN_ONLY=k38_swept_hint_live make tsan-check
 
 - Loopback cluster on one host, RDMA on loopback; not orcd-mini, not a multi-host cluster. The orcd-mini `ior hard` and RDMA shared-chunk reruns are owed by the user and keep K38 OPEN.
 - The test forces one path to the trigger (a partial write in the same unit as an `authority` loser). `d4_plateau` reached it through its own load; this test does not show that no other path exists.
-- `cbase_slot` keeps one hint per inode (the shift drops the chunk index). That is why a sibling's commit hides the stall and why `d4_plateau` rarely trips it; it also means K88's hint helps only the last noted chunk of an inode. Recorded here, not changed: it is not a correctness defect (a lost hint falls back to base 0, the pre-K88 behaviour).
+- `cbase_slot` keeps one hint per inode (the shift drops the chunk index). That is why a sibling's commit hides the stall and why `d4_plateau` rarely trips it. It is not a correctness defect for the hint itself (a lost hint falls back to base 0, the pre-K88 behaviour), but it narrows K88: the committed image is the CAS base only for the last chunk a REPORT noted, so the other chunks of a multi-chunk slot-less (`efs-bench`) file still take the pre-K88 `report-stuck` path, and K88's "0 of 2960" covers less than its row says. Candidate follow-up for the K88 row or a new K row; not changed here.
+- The 15 s budget row is the task's formula on solo medians. About half the test's time is waiting for GC passes (the sweep), which stretch under an 8-job gate; the first gate shows whether the row holds.
 - `docs/status/README.md`: no change; its Current verdicts did not change (K38 stays OPEN).
 
 Raw output is outside Git: `~/efs-artifacts/taskDG-20261105/` (shared `erbmi1` home on node9900 and fstor007), `SHA256SUMS` sha256 `ec036b1a37be1fd8cd64c10d1c6da85d5b782ef5d7ffb2e98dc61ecf33ee1073`. It holds one tarball per arm and timing set (every run log, `summary.txt`, `hashes.txt`; the pre-fix arm also has its first run's daemon and mount logs), the build logs, the TSan output, the loop script as run (`arm.sh`, the committed script with `TMPDIR=/tmp/efs-taskDG-tmp`) and `tally.py` with its per-host output.
