@@ -1,5 +1,15 @@
 /* efs-fuse: low-level operation bodies (the *_run functions, read, readdir and friends). */
 #include "fuse_internal.h"
+#include "ll_run.h"
+#include "support.h"
+#include "getattr.h"
+#include "open.h"
+#include "append.h"
+#include "write.h"
+#include "namespace.h"
+#include "release.h"
+#include "plock_init.h"
+#include "lookup.h"
 #include "../reply_buffers.h"
 
 void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)

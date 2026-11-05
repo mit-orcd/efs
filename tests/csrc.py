@@ -36,6 +36,17 @@ MODULES = {
         'src/client/efs_fuse/ll_run.c',
         'src/client/efs_fuse/main.c',
         'src/client/efs_fuse/fuse_internal.h',
+        'src/client/efs_fuse/support.h',
+        'src/client/efs_fuse/getattr.h',
+        'src/client/efs_fuse/open.h',
+        'src/client/efs_fuse/writeback.h',
+        'src/client/efs_fuse/append.h',
+        'src/client/efs_fuse/write.h',
+        'src/client/efs_fuse/namespace.h',
+        'src/client/efs_fuse/release.h',
+        'src/client/efs_fuse/plock_init.h',
+        'src/client/efs_fuse/lookup.h',
+        'src/client/efs_fuse/ll_run.h',
     ]),
     'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),
 }
@@ -49,13 +60,14 @@ def module(name, env=None):
 
 
 def hblock(name, start, end='\n', env=None):
-    """Text from `start` through `end` in the module's shared header: a type a
-    splice needs when its slice used to contain that type's definition. Empty
-    when an override file replaces the module (it still holds the type inline)."""
+    """Text from `start` through `end` in the module's headers (the `.h` entries,
+    searched in order): a type a splice needs when its slice used to contain
+    that type's definition. Empty when an override file replaces the module (it
+    still holds the type inline)."""
     var, files = MODULES[name]
     if os.environ.get(env or var):
         return ''
-    h = (root / files[-1]).read_text()
+    h = ''.join((root / f).read_text() for f in files if f.endswith('.h'))
     a = h.index(start)
     return h[a:h.index(end, a) + len(end)]
 

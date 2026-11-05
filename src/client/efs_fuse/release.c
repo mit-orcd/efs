@@ -1,5 +1,9 @@
 /* efs-fuse: release, control drain, destroy, rename, lseek. */
 #include "fuse_internal.h"
+#include "release.h"
+#include "support.h"
+#include "open.h"
+#include "writeback.h"
 
 int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
 {
