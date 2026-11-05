@@ -326,7 +326,7 @@ outcomes. See the [response review](2026-10/devel-integration-review-20261022.md
 
 ### Stage 1 tally, end of Oct 22 (adjusted after the integration review)
 
-*Oct 30 note: this tally is historical. Current counts (48 FIXED / 35 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN, after Task DF: K90 FIXED) and the acceptance owed per row are in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md).*
+*Oct 30 note: this tally is historical. Current counts (48 FIXED / 35 VERIFY / 3 CLOSED / 3 DECIDED / 1 OPEN, after wave 57: K90 FIXED, K38 fixed for the image-base stall but still OPEN pending the real-host run) and the acceptance owed per row are in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md).*
 
 **Additional alpha blocker W153:** the unset/empty metadata count silently
 selects four nodes and can remove single-loss tolerance on three-node
