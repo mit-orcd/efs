@@ -60,6 +60,7 @@ MODULES = {
         'src/meta/meta_apply/reclaim.c',
         'src/meta/meta_apply/gc.c',
         'src/meta/meta_apply/lanes.c',
+        'src/meta/meta_apply/mtime.c',
         'src/meta/meta_apply.c',
         'src/meta/meta_apply/apply_internal.h',
         'src/meta/meta_apply/rows.h',
