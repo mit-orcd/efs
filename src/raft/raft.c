@@ -1952,6 +1952,7 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         }
         r->peer_ack_bits |= 1u << in->from;
         r->peer_ack_tick[in->from] = r->ticks;
+        uint64_t old_match = r->match_index[in->from];
         if (in->match_index > r->match_index[in->from])
             r->match_index[in->from] = in->match_index;
         /* K1/W145: a success proves the log through match_index and says
@@ -1982,6 +1983,19 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
             broadcast_ae(r);
             return EFS_OK;
         }
+        /* The second acker of an already committed entry: the push above
+         * went out when the first ack committed it, as a probe whose
+         * prev_index was this peer's match at the time, below the entry,
+         * so the follower capped its commit there (on_ae_req: never past
+         * this request's proof). Only the 50 ms heartbeat then carried
+         * the commit, and a forwarded command waiting on this follower's
+         * apply sat in apply-sleep for it: mkdir p50 220-520 ms with the
+         * two metadata leaders on different nodes, 7 ms with both on one
+         * (Nov 4, node9900). This probe's prev_index is the new match. A
+         * follower catching up through committed entries gets one empty
+         * frame per batch ack as well, beside the data-only send above. */
+        if (in->match_index > old_match && r->commit_index > old_match)
+            return send_commit_probe(r, in->from);
         return EFS_OK;
     }
     /* Rejection: the follower's reply carries match_index = its last log
@@ -2911,7 +2925,17 @@ int efs_raft_note_durable(struct efs_raft *r, uint64_t idx)
 int efs_raft_durable(struct efs_raft *r, uint64_t idx)
 {
     int rc=efs_raft_note_durable(r,idx);
-    return rc==EFS_OK ? try_commit(r) : rc;
+    if (rc!=EFS_OK) return rc;
+    uint64_t prev=r->commit_index;
+    rc=try_commit(r);
+    /* The leader's own fsync completing after a follower's ack is the
+     * commit; on_ae_rep is not involved, so without this the followers
+     * learned the new commit from the 50 ms heartbeat and every forwarded
+     * command waited it out on its follower (apply-sleep us=50000, mkdir
+     * p50 320-490 ms vs 7 ms with both leaders local, Nov 4). Same frames
+     * as on_ae_rep's push: an empty probe or heartbeat per peer. */
+    if (rc==EFS_OK && r->commit_index!=prev) rc=broadcast_ae(r);
+    return rc;
 }
 
 int efs_raft_change(struct efs_raft *r, uint32_t new_voters)

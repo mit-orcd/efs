@@ -20,6 +20,7 @@ import sys
 import termios
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = Path(__file__).resolve().parents[3]
 # efsd's SIGTERM budget: EFS_SHUTDOWN_TOTAL_MS 50 s + EFS_SHUTDOWN_REPORT_MS 5 s.
@@ -193,9 +194,13 @@ def run(a):
             d.mkdir()
             paths.append(d)
             for n in range(16):
-                p = d / str(n)
-                p.write_bytes(payload(w, 0))
-                expected[p] = payload(w, 0)
+                expected[d / str(n)] = payload(w, 0)
+        # The fsync interposer (one serialized 40 ms fsync per daemon) is
+        # already in place: the 32 seed files, written one by one, took
+        # 28 s on node9900 before the window even started. Written at
+        # once, their publications share the daemons' group commits.
+        with ThreadPoolExecutor(16) as pool:
+            list(pool.map(lambda item: item[0].write_bytes(item[1]), expected.items()))
         probe = fixture / 'probe'
         probe.write_bytes(b'probe')
         applied_before = {}
@@ -251,7 +256,7 @@ def run(a):
                 for task in Path('/proc/%d/task' % proc.pid).iterdir():
                     try:
                         sample['wchan'][i][task.name] = (task / 'wchan').read_text().strip()
-                    except FileNotFoundError:
+                    except OSError:   # the thread ended between the listing and the read
                         pass
             samples.append(sample)
             time.sleep(.5)
@@ -273,13 +278,19 @@ def run(a):
                 if actual != expected[p]:
                     errors.append(dict(kind='payload', path=str(p), size=len(actual),
                                        expected_prefix=expected[p][:32].hex(), prefix=actual[:32].hex()))
-        time.sleep(6)
+        # The applied prefix must advance on every member once the sink
+        # drains again: polled within the 6 s the fixed settle used to take.
         applied_after = {}
+        settle_end = time.monotonic() + 6
         for i in (1,2,3):
-            rc, info = k.mgmt(env, 'raft-status', c.ep(i))
+            while True:
+                rc, info = k.mgmt(env, 'raft-status', c.ep(i))
+                assert rc == 0, ('post-load status', i, rc)
+                applied_after[i] = sum(map(int, re.findall(r'applied=(\d+)', info)))
+                if applied_after[i] > applied_before[i] or time.monotonic() >= settle_end:
+                    break
+                time.sleep(.2)
             (a.output / ('raft-after-n%d.txt' % i)).write_text(info)
-            assert rc == 0, ('post-load status', i, rc)
-            applied_after[i] = sum(map(int, re.findall(r'applied=(\d+)', info)))
             assert applied_after[i] > applied_before[i], ('applied prefix did not advance', i)
             rc, info = k.mgmt(env, 'io-stats', c.ep(i))
             (a.output / ('io-n%d.txt' % i)).write_text(info)

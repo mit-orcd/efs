@@ -25,6 +25,7 @@ scripts/evidence/k22/k22_snapshot_import.sh for the coordinator.
    the readback manifest by construction and are reported as findings.
 """
 import hashlib, os, re, shutil, signal, subprocess, sys, tempfile, threading, time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import Cluster as _Cluster, EFSD, MGMT, FUSE, Mount, mgmt as _mgmt  # noqa: E402
@@ -318,16 +319,23 @@ try:
     mv = Mount(c, 3, 'mnt-verify')
     mounts.append(mv)
     bad = 0
-    for path, want in sorted(written.items()):
+
+    def readback(item):
+        path, want = item
         p = Path(path)
         if not p.exists():
-            print(f'[k22snap] MISSING {path}')
-            bad += 1
-            continue
-        got = hashlib.sha256(p.read_bytes()).hexdigest()
-        if got != want:
-            print(f'[k22snap] MISMATCH {path}')
-            bad += 1
+            return f'MISSING {path}'
+        if hashlib.sha256(p.read_bytes()).hexdigest() != want:
+            return f'MISMATCH {path}'
+        return None
+    # 800+ files, most of them 4 MiB, through one fresh mount: eight readers
+    # at once (the mount serves them concurrently; node9900 read them one
+    # by one in about 40 s, fstor007 in 8 s).
+    with ThreadPoolExecutor(8) as pool:
+        for fault in pool.map(readback, sorted(written.items())):
+            if fault:
+                print(f'[k22snap] {fault}')
+                bad += 1
     # recovered service: new writes through node 3 (the imported replica)
     # must succeed cleanly now that it has caught up
     late_errors = 0

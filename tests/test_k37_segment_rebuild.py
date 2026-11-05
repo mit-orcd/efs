@@ -73,6 +73,7 @@ flags.mkdir()
 hold = flags / 'hold'
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
 env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200',
+           EFS_PACK_FAIL_BACKOFF_MS='2000',   # not 30 s per degraded segment with node 3 down
            EFS_PACK_COMPACT_IDLE_S='1000000',
            # the daily compaction window (2 h) starts 12 h from now
            EFS_PACK_COMPACT_DAILY_START_MIN=str((time.gmtime().tm_hour * 60 + time.gmtime().tm_min

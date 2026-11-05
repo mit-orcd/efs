@@ -75,7 +75,7 @@
 #include <unistd.h>
 
 #define PK_SCAN_MAX 4096u
-#define PK_FAIL_BACKOFF_NS (30ull * 1000000000ull) /* after a failed admission or upload */
+#define PK_FAIL_BACKOFF_NS pk.fail_backoff_ns /* after a failed admission or upload: EFS_PACK_FAIL_BACKOFF_MS */
 /* A fragment PUT refused with a transient authority code is sent again,
  * PK_PUT_RETRY_US apart, until PK_PUT_RETRY_NS after the first round (one
  * deadline for the segment's fragments, the client's per-fragment bound)
@@ -93,6 +93,8 @@ static struct {
     double idle_rate, busy_rate, busy_commits;
     uint64_t unpacked_start; /* bytes per node */
     uint64_t compact_idle_ns, compact_cold_ns, compact_batch_budget_ns;
+    uint64_t fail_backoff_ns; /* per group after a failed or degraded upload (30 s): leaves a member
+                               * that just failed alone; tests that run with a member down shorten it */
     uint32_t compact_idle_segs, compact_daily_start, compact_daily_min; /* minutes, UTC */
     double space_start, space_full; /* quota fractions */
     uint32_t backfill_shards;
@@ -1623,6 +1625,7 @@ int server_packer_start(struct efsd_server *s)
     pk.s = s;
     pk.min_age_ns = env_u64("EFS_PACK_MIN_AGE_MS", 60000, 0) * 1000000ull;
     pk.interval_ms = env_u64("EFS_PACK_INTERVAL_MS", 1000, 1);
+    pk.fail_backoff_ns = env_u64("EFS_PACK_FAIL_BACKOFF_MS", 30000, 0) * 1000000ull;
     pk.segments_per_pass = (uint32_t)env_u64("EFS_PACK_SEGMENTS_PER_PASS", 8, 1);
     pk.idle_rate = (double)env_u64("EFS_PACK_FILES_PER_S", 5000, 1);
     pk.busy_rate = (double)env_u64("EFS_PACK_BUSY_FILES_PER_S", 50, 1);
