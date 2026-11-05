@@ -79,8 +79,8 @@ META_APPLY_SRCS = src/meta/meta_apply/rows.c \
                   src/meta/meta_apply/append.c \
                   src/meta/meta_apply/chunk.c \
                   src/meta/meta_apply/check.c \
-                  src/meta/meta_apply/tsweep.c \
-                  src/meta/meta_apply.c
+                  src/meta/meta_apply/pack.c \
+                  src/meta/meta_apply/tsweep.c
 
 COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/publication_ack.c \
               $(COMMON_DIR)/common.c $(COMMON_DIR)/frag_record.c $(COMMON_DIR)/packed_segment.c $(COMMON_DIR)/pack_ledger.c $(COMMON_DIR)/packed_reader.c \

@@ -1,17 +1,10 @@
-#include "meta_apply/apply_internal.h"
-#include "meta_apply/rows.h"
-#include "meta_apply/lookup.h"
-#include "meta_apply/init.h"
-#include "meta_apply/xattr.h"
-#include "meta_apply/namespace.h"
-#include "meta_apply/gc.h"
-#include "meta_apply/publish.h"
-#include "meta_apply/pub_stage.h"
-#include "meta_apply/lanes.h"
-#include "meta_apply/sweep.h"
-#include "meta_apply/attr.h"
-#include "meta_apply/append.h"
-#include "meta_apply/tsweep.h"
+/* meta_apply/pack.c: small-file packing: admit, cancel, switch, retire,
+ * candidate index and backfill. */
+
+#include "apply_internal.h"
+#include "rows.h"
+#include "gc.h"
+#include "tsweep.h"
 
 /* ---- W125 background packer: admit, switch, cancel ------------------- */
 
