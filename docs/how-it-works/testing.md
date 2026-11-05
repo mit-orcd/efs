@@ -129,6 +129,24 @@ binary and Python test, and that no command runs in both groups.
 sanitizers, benchmarks or build introspection still run one at a time,
 after the pool.
 
+Scratch goes through one helper (Task DI). C code in `src/` builds every
+scratch path with `efs_tmp_path()` from `include/efs/tmpdir.h` (`$TMPDIR`
+when set and nonempty, else `/tmp`). That covers perf and strace defaults
+and the efs-fuse stop-control endpoint `efs-control-<hash>.sock` with its
+`.stop` record. C tests use `efs_test_path()` and
+`efs_test_mkdtemp`/`efs_test_mkstemp`/`efs_test_own` from
+`tests/test_tmpdir.h`, which wrap the same helper and remove what they made
+when the test exits 0. Python uses `tempfile` without `dir='/tmp'`, and shell
+uses `${TMPDIR:-/tmp}`. `tests/test_tmpdir_hygiene.py` fails on a
+`"/tmp/efs..."` literal in any `src/` or `tests/` C file and on `dir='/tmp'`
+in any Python under `tests/` or `scripts/`. efs-fuse removes its `.stop`
+record at exit unless a stop tool sent DRAIN or FORCE and still waits for the
+verdict; `scripts/client_processes.py retire` then removes the record after
+reading it. A mount and the tool that stops it must therefore share `TMPDIR`;
+a mismatch fails closed with "no control endpoint". A `TMPDIR` longer than
+about 78 characters cannot hold the endpoint in `sun_path`, so efs-fuse
+refuses to mount.
+
 `tests/budgets.tsv` is also the test catalogue (W171): every `test` and
 `test-long` command has a row with its target, a subsystem (a source directory
 plus an optional component, such as `server/raft_host.read_index`) and a
