@@ -7309,6 +7309,18 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
 
 /* Stop diagnostics: count every unacknowledged body/object, not only
  * entries whose dirty bit survived the PUT snapshot. No I/O under locks. */
+static void dcache_log_discard(const struct dcache_ent *e, const char *cause)
+{
+    uint32_t ranges = e->nrange ? e->nrange : 1;
+    for (uint32_t k = 0; k < ranges; ++k) {
+        uint32_t off = e->nrange ? e->roff[k] : e->object_delta_off;
+        uint32_t len = e->nrange ? e->rlen[k] :
+            e->object_delta_len ? e->object_delta_len : data_chunk_size();
+        fprintf(stderr, "force-discard ino=%llu ci=%u off=%u len=%u cause=%s\n",
+                (unsigned long long)e->ino, e->ci, off, len, cause);
+    }
+}
+
 uint64_t efs_dcache_pending_records(const char *discard_cause)
 {
     uint64_t n = 0;
@@ -7321,14 +7333,7 @@ uint64_t efs_dcache_pending_records(const char *discard_cause)
             ++n;
             if (!discard_cause)
                 continue;
-            uint32_t ranges = e->nrange ? e->nrange : 1;
-            for (uint32_t k = 0; k < ranges; ++k) {
-                uint32_t off = e->nrange ? e->roff[k] : e->object_delta_off;
-                uint32_t len = e->nrange ? e->rlen[k] :
-                    e->object_delta_len ? e->object_delta_len : data_chunk_size();
-                fprintf(stderr, "force-discard ino=%llu ci=%u off=%u len=%u cause=%s\n",
-                        (unsigned long long)e->ino, e->ci, off, len, discard_cause);
-            }
+            dcache_log_discard(e, discard_cause);
         }
         pthread_mutex_unlock(dcache_mu(s));
     }
@@ -7580,6 +7585,8 @@ static int dcache_flush_all_slots(void)
     for (i = 0; i < DCACHE_SLOTS; i++) {
         int prc = dcache_flush_slot(i, 0, 0);
 
+        if (prc == EFS_ERR_QUOTA) /* K90: as efs_dcache_drain_pending */
+            return prc;
         if (prc != EFS_OK && rc == EFS_OK)
             rc = prc;
     }
@@ -7714,32 +7721,82 @@ int efs_dcache_flush_ino(efs_ino_t ino)
     return rc;
 }
 
+static int cmp_ino(const void *a, const void *b)
+{
+    efs_ino_t x = *(const efs_ino_t *)a, y = *(const efs_ino_t *)b;
+
+    return x < y ? -1 : x > y;
+}
+
 /* Explicit stop is different from pressure reclaim: it must flush new
  * partial chunks too. Reuse the per-inode close/fsync path, which owns merge
- * observations and waits for in-flight PUT windows. Snapshot a bounded page
- * without holding cache locks during network I/O; the control loop retries
- * after REPORT releases this page. Mutations are already quiesced. */
+ * observations and waits for in-flight PUT windows. One pass over every
+ * inode dirty now, without holding cache locks during network I/O; mutations
+ * are already quiesced, so a failed PUT's re-dirty is for the next pass.
+ * K90: QUOTA ends the pass: no placement is left (put_fragments already
+ * placed around every full member it could), so the next inode's PUT would
+ * only wait out the same refusal. */
 int efs_dcache_drain_pending(void)
 {
-    efs_ino_t inodes[64];unsigned count=0;
+    efs_ino_t *inodes=NULL;size_t count=0,cap=0;
     dcache_ensure();
-    for(uint32_t slot=0;slot<DCACHE_SLOTS && count<64;++slot) {
+    for(uint32_t slot=0;slot<DCACHE_SLOTS;++slot) {
         pthread_mutex_lock(dcache_mu(slot));
-        for(struct dcache_ent *e=&g_dcache.e[slot];e && count<64;e=e->next) {
+        for(struct dcache_ent *e=&g_dcache.e[slot];e;e=e->next) {
             if(!e->ino || !e->dirty || !e->data)continue;
-            unsigned i;
-            for(i=0;i<count;++i)if(inodes[i]==e->ino)break;
-            if(i==count)inodes[count++]=e->ino;
+            if(count==cap) {
+                size_t ncap=cap?cap*2:64;
+                efs_ino_t *grown=realloc(inodes,ncap*sizeof(*inodes));
+                if(!grown) {
+                    pthread_mutex_unlock(dcache_mu(slot));
+                    free(inodes);
+                    return EFS_ERR_NOMEM;
+                }
+                inodes=grown;cap=ncap;
+            }
+            inodes[count++]=e->ino;
         }
         pthread_mutex_unlock(dcache_mu(slot));
     }
+    if(count>1)qsort(inodes,count,sizeof(*inodes),cmp_ino);
     int rc=EFS_OK;
-    for(unsigned i=0;i<count;++i) {
-        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+    for(size_t i=0;i<count;++i) {
+        if(i && inodes[i]==inodes[i-1])continue;
+        if(efs_client_rpc_past_deadline()) {
+            rc=EFS_ERR_BUSY;
+            break;
+        }
         int one=efs_dcache_flush_ino(inodes[i]);
+        if(one==EFS_ERR_QUOTA) {
+            rc=one;
+            break;
+        }
         if(rc==EFS_OK && one!=EFS_OK)rc=one;
     }
+    free(inodes);
     return rc;
+}
+
+/* K90: the stop drain decided these chunks cannot land. Name each one and
+ * stop retrying it, so the REPORTs and the flush still ahead of the unmount
+ * spend no more PUT waits on them. The application saw the refusal at its
+ * fsync or close; this is the mount's own record of it. */
+void efs_dcache_discard_dirty(const char *cause)
+{
+    dcache_ensure();
+    for (uint32_t s = 0; s < DCACHE_SLOTS; ++s) {
+        pthread_mutex_lock(dcache_mu(s));
+        for (struct dcache_ent *e = &g_dcache.e[s]; e; e = e->next) {
+            if (!e->ino || !e->dirty)
+                continue;
+            dcache_log_discard(e, cause);
+            dcache_note_dirty_bytes(-(int64_t)e->len);
+            dcache_dirty_unlink(e, s);
+            e->dirty = 0;
+            dcache_pin_release(e);
+        }
+        pthread_mutex_unlock(dcache_mu(s));
+    }
 }
 
 int efs_dcache_flush_all(void)

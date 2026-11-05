@@ -17,10 +17,12 @@ typedef uint64_t efs_ino_t;
 #define EFS_OK 0
 #define EFS_ERR_BUSY -1
 #define EFS_ERR_IO -2
+#define EFS_ERR_QUOTA -3
+#define EFS_ERR_NOMEM -4
 struct dcache_ent {efs_ino_t ino;int dirty;void *data;struct dcache_ent *next;};
 static struct {struct dcache_ent e[DCACHE_SLOTS];} g_dcache;
 static struct dcache_ent entries[75];static pthread_mutex_t mutex[DCACHE_SLOTS];
-static unsigned calls,seen[100],expire_after;static efs_ino_t fail_ino;
+static unsigned calls,seen[100],expire_after;static efs_ino_t fail_ino;static int fail_rc;
 static void dcache_ensure(void) {}
 static pthread_mutex_t *dcache_mu(unsigned s) {return &mutex[s];}
 static int efs_client_rpc_past_deadline(void) {return expire_after && calls>=expire_after;}
@@ -32,11 +34,14 @@ static int efs_dcache_flush_ino(efs_ino_t ino) {
    if(e->ino==ino && ino!=fail_ino)e->dirty=0;
   pthread_mutex_unlock(&mutex[s]);
  }
- return ino==fail_ino?EFS_ERR_IO:EFS_OK;
+ return ino==fail_ino?fail_rc:EFS_OK;
+}
+static int cmp_ino(const void *a, const void *b) {
+ efs_ino_t x=*(const efs_ino_t *)a,y=*(const efs_ino_t *)b;return x<y?-1:x>y;
 }
 '''+function+r'''
 static void setup(void) {
- calls=0;fail_ino=0;expire_after=0;
+ calls=0;fail_ino=0;fail_rc=EFS_ERR_IO;expire_after=0;
  for(unsigned i=0;i<100;++i)seen[i]=0;
  for(unsigned s=0;s<DCACHE_SLOTS;++s)g_dcache.e[s]=(struct dcache_ent){0};
  for(unsigned i=0;i<75;++i) {
@@ -44,20 +49,21 @@ static void setup(void) {
   unsigned slot=i%DCACHE_SLOTS;
   entries[i].next=g_dcache.e[slot].next;g_dcache.e[slot].next=&entries[i];
  }
- /* Same inode in different slots must be flushed once per page. The
+ /* Same inode in different slots must be flushed once per pass. The
   * records represent new partial chunks; no published base is available. */
  entries[74].ino=1;entries[73].ino=1;
  entries[72].data=NULL;entries[71].dirty=0;
 }
 int main(void) {
  for(unsigned s=0;s<DCACHE_SLOTS;++s)assert(!pthread_mutex_init(&mutex[s],NULL));
- setup();assert(efs_dcache_drain_pending()==EFS_OK && calls==64);
- assert(efs_dcache_drain_pending()==EFS_OK && calls==71);
+ setup();assert(efs_dcache_drain_pending()==EFS_OK && calls==71); /* one pass: every dirty inode */
  for(unsigned i=1;i<=71;++i)assert(seen[i]==1);
  assert(efs_dcache_drain_pending()==EFS_OK && calls==71);
  setup();fail_ino=1;
- assert(efs_dcache_drain_pending()==EFS_ERR_IO && calls==64 && entries[0].dirty);
+ assert(efs_dcache_drain_pending()==EFS_ERR_IO && calls==71 && entries[0].dirty);
  assert(seen[2]+seen[3]+seen[4]>0); /* other files still progress */
+ setup();fail_ino=1;fail_rc=EFS_ERR_QUOTA; /* K90: a refusal decides the pass */
+ assert(efs_dcache_drain_pending()==EFS_ERR_QUOTA && calls==1 && entries[0].dirty);
  setup();expire_after=3;
  assert(efs_dcache_drain_pending()==EFS_ERR_BUSY && calls==3);
  for(unsigned s=0;s<DCACHE_SLOTS;++s)assert(!pthread_mutex_destroy(&mutex[s]));
@@ -68,7 +74,7 @@ with tempfile.TemporaryDirectory(prefix='efs-stop-dirty-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-pthread',str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True)
-print('stop dirty drain: partial bodies, bounded pages, duplicate inodes, unlocked I/O, failures and deadline PASS')
+print('stop dirty drain: partial bodies, whole pass, duplicate inodes, unlocked I/O, failures, quota and deadline PASS')
 
 # Compile the real stop loop too: an empty pending queue is insufficient
 # while a reporter still owns its detached in-flight page.

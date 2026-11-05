@@ -712,6 +712,7 @@ void efs_wb_description_close(struct efs_wb_description *d);
 int efs_wb_description_sync(struct efs_wb_description *d, int recovered_here);
 int efs_wb_inode_stalled(efs_ino_t ino);
 uint64_t efs_dcache_pending_records(const char *discard_cause);
+void efs_dcache_discard_dirty(const char *cause);
 
 int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *buf);
 

@@ -32,12 +32,10 @@ static void efs_fuse_destroy(void *userdata)
     efs_stop_phase("flushing", 0, 0);
     fuse_pressure_stop();
     int wrc = efs_wb_sync();
-    int drc = efs_dcache_flush_all();
-    if (wrc != EFS_OK || drc != EFS_OK) {
+    if (wrc != EFS_OK) {
         char why[96];
-        fprintf(stderr, "efs-fuse: unmount: data flush incomplete "
-                        "(writeback=%d dcache=%d)\n", wrc, drc);
-        snprintf(why, sizeof(why), "data flush writeback=%d dcache=%d", wrc, drc);
+        fprintf(stderr, "efs-fuse: unmount: data flush incomplete (writeback=%d)\n", wrc);
+        snprintf(why, sizeof(why), "data flush writeback=%d", wrc);
         unmount_unclean(why);
     }
     if (g_wb.ready) {
@@ -63,23 +61,40 @@ static void efs_fuse_destroy(void *userdata)
      *
      * The BUSY window is short (seconds) and self-healing, so retry until the
      * report succeeds. If it still will not drain, say so -- an unmount that
-     * silently discards acknowledged writes is worse than a noisy one. */
+     * silently discards acknowledged writes is worse than a noisy one.
+     *
+     * K90: every attempt first PUTs what is still dirty, new partial chunks
+     * included: a chunk of a W77 unit whose PUT was refused at fsync or close
+     * holds its whole unit, its writers are gone, and nothing else retries
+     * it (reclaim flushes skip chunks without a base). If the member has room
+     * again the chunk lands and the unit publishes. QUOTA is a decision, not
+     * a BUSY window: the chunks are named and given up, what is complete is
+     * reported once more, and the stop ends unclean without waiting. */
     {
         const long drain_s = 60;
         struct timespec t0, now;
-        int mrc;
+        int drc, mrc;
         clock_gettime(CLOCK_MONOTONIC, &t0);
         for (uint64_t attempt = 1;; attempt++) {
             efs_stop_phase("draining", attempt, 0);
+            efs_buf_drain_enter();
+            drc = efs_dcache_drain_pending();
+            efs_buf_drain_leave();
+            if (drc == EFS_ERR_QUOTA)
+                break;
             mrc = efs_client_note_meta_change(1);
-            if (mrc == EFS_OK)
+            if (mrc == EFS_ERR_QUOTA) {
+                drc = mrc;
+                break;
+            }
+            if (drc == EFS_OK && mrc == EFS_OK)
                 break;
             /* A fenced session can never publish again (K5/I23): waiting
              * would only delay the unmount. Report the loss once. */
             if (mrc == EFS_ERR_FENCED || efs_client_session_fenced()) {
                 fprintf(stderr, "efs-fuse: mount session fenced; writes that "
                                 "were never reported are discarded\n");
-                mrc = EFS_OK;
+                drc = mrc = EFS_OK;
                 break;
             }
             clock_gettime(CLOCK_MONOTONIC, &now);
@@ -87,12 +102,19 @@ static void efs_fuse_destroy(void *userdata)
                 break;
             usleep(200000);
         }
-        if (mrc != EFS_OK) {
+        if (drc == EFS_ERR_QUOTA) {
+            efs_dcache_discard_dirty("unmount-enospc");
+            (void)efs_client_note_meta_change(1);
+            (void)efs_dcache_pending_records("unmount-enospc");
+            fprintf(stderr, "efs-fuse: unmount: ENOSPC: a member is out of space; "
+                            "the chunks named by force-discard are gone\n");
+            unmount_unclean("ENOSPC: refused chunks given up");
+        } else if (drc != EFS_OK || mrc != EFS_OK) {
             char why[96];
-            fprintf(stderr, "efs-fuse: UNMOUNT DATA LOSS: metadata flush "
-                            "still failing (rc=%d) after %lds; writes that "
-                            "were never reported are gone\n", mrc, drain_s);
-            snprintf(why, sizeof(why), "metadata report rc=%d after %lds", mrc, drain_s);
+            fprintf(stderr, "efs-fuse: UNMOUNT DATA LOSS: flush still failing "
+                            "(data rc=%d, metadata rc=%d) after %lds; writes that "
+                            "were never reported are gone\n", drc, mrc, drain_s);
+            snprintf(why, sizeof(why), "data rc=%d metadata rc=%d after %lds", drc, mrc, drain_s);
             unmount_unclean(why);
         }
     }
