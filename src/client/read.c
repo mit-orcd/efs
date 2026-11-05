@@ -701,6 +701,18 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             }
         }
         if (a < 0 || b < 0 || missing < 0) {
+            /* Task DH: every fragment that failed answered NOT_FOUND. The
+             * nodes say this generation is gone (a fold or CAS superseded
+             * the map, the reaper removed it): the same map never succeeds,
+             * so return now (rc unchanged) for the caller's row pull, not
+             * after a 100 ms sleep per stale chunk (seconds per cold read
+             * of a shared file, K38 test). Stage 2 ran: good < 2 here. */
+            int gone = 0;
+            for (int i = 0; i < EFS_NUM_FRAGMENTS && gone >= 0; i++)
+                gone = jobs[i].rc == EFS_ERR_NOT_FOUND ? 1
+                     : jobs[i].rc == EFS_OK ? gone : -1;
+            if (gone > 0)
+                break; /* rc stays DECODE, as after the last attempt */
             /* Fewer than 2 good fragments: a member skipped by a stale
              * down-mark is read at once if it answers (K34); otherwise a
              * brief backoff before refetch. */
