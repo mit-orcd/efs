@@ -385,7 +385,7 @@ static int cmd_status(int argc, char **argv)
            down_nodes);
     /* Stripes acknowledged with two of three fragments, awaiting rebuild
      * when the missing node is reachable (W154). Unknown until both
-     * metadata groups' leaders have reported a pass. */
+     * metadata groups have a leader that counted them at this probe (DJ). */
     if (degraded_seen == 3u)
         printf("Degraded chunks: %llu (group 0: %llu, group 2: %llu); rebuilt=%llu "
                "retired=%llu failures=%llu\n",
@@ -404,7 +404,7 @@ static int cmd_status(int argc, char **argv)
     /* K37: packed segments (each one stripe holding many small files) with a
      * fragment missing, and those that lost two (unrecoverable, kept until
      * their files are rewritten or removed). Unknown until both metadata
-     * groups' leaders have reported a pass. */
+     * groups have a leader that counted them at this probe (DJ). */
     uint64_t seg_total = dsegs[0] + dsegs[1], seg_lost = lsegs[0] + lsegs[1];
     if (seg_seen == 3u)
         printf("Degraded segments: %llu (group 0: %llu, group 2: %llu); unrecoverable=%llu "
