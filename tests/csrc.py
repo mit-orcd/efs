@@ -67,6 +67,7 @@ MODULES = {
         'src/meta/meta_apply/attr.c',
         'src/meta/meta_apply/append.c',
         'src/meta/meta_apply/chunk.c',
+        'src/meta/meta_apply/check.c',
         'src/meta/meta_apply.c',
         'src/meta/meta_apply/apply_internal.h',
         'src/meta/meta_apply/rows.h',
