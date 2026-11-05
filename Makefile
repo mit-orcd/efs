@@ -61,7 +61,8 @@ BLAKE3_ARCH_SRCS =
 endif
 
 # src/meta/meta_apply/: one file per area (src/meta/meta_apply/README.md).
-META_APPLY_SRCS = src/meta/meta_apply.c
+META_APPLY_SRCS = src/meta/meta_apply/rows.c \
+                  src/meta/meta_apply.c
 
 COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/publication_ack.c \
               $(COMMON_DIR)/common.c $(COMMON_DIR)/frag_record.c $(COMMON_DIR)/packed_segment.c $(COMMON_DIR)/pack_ledger.c $(COMMON_DIR)/packed_reader.c \

@@ -50,7 +50,10 @@ MODULES = {
     ]),
     'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),
     'meta_apply': ('EFS_META_SOURCE', [
+        'src/meta/meta_apply/rows.c',
         'src/meta/meta_apply.c',
+        'src/meta/meta_apply/apply_internal.h',
+        'src/meta/meta_apply/rows.h',
     ]),
 }
 
