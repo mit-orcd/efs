@@ -356,6 +356,7 @@ python3 tests/test_report_span_base.py	30	1	fast suite, 30 s ceiling	test	client
 python3 tests/test_k38_stale_span_replay.py	30	1	fast suite, 30 s ceiling	test	client/write	K38/W161: a STALE span whose dcache body is gone must not be re-sent on its old base
 python3 tests/test_k38_report_bound.py	30	1	fast suite, 30 s ceiling	test	client/write	K38/W161 bound: a REPORT stops re-sending a record that lost twice unchanged
 python3 tests/test_k38_install_order.py	30	1	fast suite, 30 s ceiling	test	client/write	K38 loopback finding: an older snapshot's image must not erase newer body bytes
+python3 tests/test_k38_swept_hint_live.py	15	1	Task DG: slowest median 11.7 s (node9900) -> 15 s; three solo runs per host (node9900 11.7/11.6/13.6; fstor007 11.8/11.6/11.6; 1.25x rounded up to 5 s)	test	client/write	K38: a truncate-swept CAS hint is retired after one image-base round and the unit publishes, on real daemons through efs-fuse
 python3 tests/test_inode_pending_eof.py	30	1	fast suite, 30 s ceiling	test	client/ops	Actual inode adoption/lookup blocks retain EOF after an inode-only REPORT
 python3 tests/test_client_metadata_authority.py	30	1	fast suite, 30 s ceiling	test	client/ops	Production inode adoption keeps local EOF, never cached security/namespace
 python3 tests/test_report_session_apply.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.report	The production REPORT envelope rejects fenced/malformed batches before effects
