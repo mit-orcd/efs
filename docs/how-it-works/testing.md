@@ -288,7 +288,8 @@ the sanitized binaries. `make sanitize-check` runs both.
   `test_k36_recovery.py` (recovery thread), `test_k36_segment_recovery.py`,
   `test_k37_segment_rebuild.py` (audit and rebuild), a 60 s
   `test_d4_progress.py` (client read and write paths through efs-fuse) and
-  `test_k38_swept_hint_live.py` (the K38 STALE replay through efs-fuse).
+  `test_k38_swept_hint_live.py` (the K38 STALE replay through efs-fuse) and
+  `test_k88_chunk_hints_live.py` (per-chunk K88 CAS hints, library writer).
 - **asan list.** The four tests that always built an ASan binary, every
   harness with a sanitizer switch (`EFS_TEST_SANITIZE=1`, `EFS_SANITIZE=1`,
   `--sanitize`), the parsers and decoders (`membership`: K33 record and

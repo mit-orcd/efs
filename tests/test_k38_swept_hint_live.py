@@ -5,16 +5,15 @@ until `publish-stalled` and EIO; fixed by cbase_reconcile, 619eceb30).
 
 Three private efsd of the EFS_FAULTS build, mounts A (node 1) and B (node 2).
 For each of ROUNDS fresh files:
-1. A writes three full chunks and fsyncs; the REPORT notes the K88 CAS hint
-   (the last noted chunk, 2: cbase_slot drops the chunk index, so an inode
-   has one hint slot and any sibling's commit replaces it).
+1. A writes three full chunks and fsyncs; the REPORT notes a K88 CAS hint
+   for each chunk (one slot per inode and chunk since Task DK).
 2. B truncates to one chunk and fsyncs (A's view stays stale; the FileID is
    kept). Wait until the truncate sweep removed the rows: `gc-status`
    trunc_pending seen above 0 and back to 0 on every node that saw it (a
    sweep waits TRUNC_SWEEP_MIN_AGE_NS, 2 s).
 3. A writes chunk 1 whole plus PART bytes of chunk 2 in one request, so both
-   are one W77 unit (separate writes let chunk 1 commit alone and replace
-   chunk 2's hint), and fsyncs. A full chunk is an unconditional image that
+   are one W77 unit (before Task DK separate writes let chunk 1 commit alone
+   and replace chunk 2's hint), and fsyncs. A full chunk is an unconditional image that
    never consults the hint; the partial chunk 2 finds its row gone (base 0).
 Round 1 loses `why=authority` on chunk 1; the repull finds chunk 2 absent and
 replays it without a captured view; the rebuild's cbase_apply turns base 0
@@ -95,8 +94,8 @@ try:
             os.fsync(fb)
             os.close(fb)
             wait_swept()
-            # One write request: chunks 1 and 2 are one W77 unit, so chunk 1
-            # cannot commit alone and overwrite chunk 2's hint (one slot per inode).
+            # One write request: chunks 1 and 2 are one W77 unit (the shape the
+            # trigger was proven with while hints had one slot per inode).
             assert os.pwrite(fd, whole + second, CS) == CS + PART
             t = time.monotonic()
             try:

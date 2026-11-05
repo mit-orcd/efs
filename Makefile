@@ -144,6 +144,8 @@ TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
 TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c
 TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view
+TEST_SRCS += tests/test_k88_chunk_hints.c
+TEST_BINS += tests/test_k88_chunk_hints
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
@@ -369,6 +371,7 @@ test-wb-runtime:
 	python3 tests/test_k38_report_bound.py
 	python3 tests/test_k38_install_order.py
 	python3 tests/test_k38_swept_hint_live.py
+	python3 tests/test_k88_chunk_hints_live.py
 	python3 tests/test_inode_pending_eof.py
 	python3 tests/test_client_metadata_authority.py
 	python3 tests/test_report_session_apply.py
@@ -921,6 +924,10 @@ tests/test_writer_routing: tests/test_writer_routing.c src/server/writer.c src/s
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
 
 tests: $(TEST_BINS)
+
+# K88 Task DK: the slot-less library writer on real daemons (test_k88_chunk_hints_live.py).
+tests/test_k88_chunk_hints: tests/test_k88_chunk_hints.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/client -o $@ $< $(LIB) $(LDFLAGS)
 
 tests/test_telemetry: tests/test_telemetry.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)

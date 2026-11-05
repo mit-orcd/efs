@@ -95,6 +95,17 @@ static void cbase_check(void) {
     struct efs_chunk_rec o={.ino=ino,.chunk_index=3,.chunk_generation=30,.file_generation=22};
     cbase_note(&o);r.chunk_generation=11;cbase_apply(&r);assert(!r.base_gen);
     o.chunk_generation=31;cbase_apply(&o);assert(o.base_gen==30);
+    /* K88 Task DK: two chunks of one file committed in one REPORT keep their
+     * own hints (the old slot dropped the chunk index: the second note
+     * replaced the first), and a repull that disproves one retires only it. */
+    struct efs_chunk_rec c3={.ino=5,.chunk_index=3,.chunk_generation=40,.file_generation=22};
+    struct efs_chunk_rec c4={.ino=5,.chunk_index=4,.chunk_generation=50,.file_generation=22};
+    cbase_note(&c3);cbase_note(&c4);c3.chunk_generation=41;c4.chunk_generation=51;
+    cbase_apply(&c3);cbase_apply(&c4);assert(c3.base_gen==40&&c4.base_gen==50);
+    cbase_reconcile(&c3,0);c3.base_gen=c4.base_gen=0;
+    cbase_apply(&c3);cbase_apply(&c4);assert(!c3.base_gen&&c4.base_gen==50);
+    for(uint32_t ci=1;ci<CBASE_SLOTS;ci++)assert(cbase_slot(5,ci)!=cbase_slot(5,0));
+    memset(g_cbase,0,sizeof(g_cbase));
 }
 /* K38 (`pub-stale why=image-base`): the slot says base 0 but the K88 hint
  * names the image a truncate swept (same FileID). The host refuses any other
