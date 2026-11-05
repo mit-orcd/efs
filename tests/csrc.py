@@ -58,6 +58,7 @@ MODULES = {
         'src/meta/meta_apply/namespace.c',
         'src/meta/meta_apply/readdir.c',
         'src/meta/meta_apply/reclaim.c',
+        'src/meta/meta_apply/gc.c',
         'src/meta/meta_apply.c',
         'src/meta/meta_apply/apply_internal.h',
         'src/meta/meta_apply/rows.h',
@@ -65,6 +66,7 @@ MODULES = {
         'src/meta/meta_apply/init.h',
         'src/meta/meta_apply/xattr.h',
         'src/meta/meta_apply/namespace.h',
+        'src/meta/meta_apply/gc.h',
     ]),
 }
 
