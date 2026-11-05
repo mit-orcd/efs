@@ -18,7 +18,7 @@ int efs_peer_hello_decode(const void *bytes,uint32_t len,struct efs_msg_hello *o
     size_t n=strnlen(h.addr,sizeof(h.addr));
     if(h.version!=EFS_VERSION_PACK || strnlen(h.build_id,sizeof(h.build_id))==sizeof(h.build_id) ||
        strcmp(h.build_id,EFS_BUILD_ID) || n==sizeof(h.addr) || !printable(h.addr,n) ||
-       !h.port || !h.token || h.node_id>EFS_MAX_NODES || (h.flags&~EFS_HELLO_F_FORMED) ||
+       !h.port || !h.token || h.node_id>EFS_MAX_NODES || (h.flags&~(EFS_HELLO_F_FORMED|EFS_HELLO_F_RELAY)) ||
        ((h.flags&EFS_HELLO_F_FORMED) && (!h.node_id || !h.cluster)))return EFS_ERR_PROTO;
     *out=h;return EFS_OK;
 }

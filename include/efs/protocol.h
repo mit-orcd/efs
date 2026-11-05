@@ -764,6 +764,11 @@ struct efs_msg_hello {
 /* K33: the sender's store holds a committed membership record (formed);
  * without it a sender with a cluster is a seed or holds a promise. */
 #define EFS_HELLO_F_FORMED 1u
+/* Task DH: a member relayed this HELLO (server_gossip_membership); the
+ * receiver applies it and never relays it again. A handler re-relaying
+ * serially on its pooled connections waited on peers doing the same:
+ * 30 s stalls (the peer-pool receive timeout) under concurrent joins. */
+#define EFS_HELLO_F_RELAY 2u
 
 struct efs_msg_hello_ack {
     uint32_t epoch;
