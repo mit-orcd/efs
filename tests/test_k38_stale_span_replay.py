@@ -102,6 +102,7 @@ int efs_client_overlay_span(efs_ino_t ino,uint32_t ci,uint8_t *buf,uint32_t len,
  assert((uint64_t)d->off+d->len<=len);memset(buf+d->off,'A',d->len);return EFS_OK;}
 static int dcache_trace_on(void){return 0;}
 static void cbase_note(const struct efs_chunk_rec *r){(void)r;}
+static void cbase_reconcile(const struct efs_chunk_rec *r,uint64_t g){(void)r;(void)g;}
 static uint32_t data_chunk_size(void){return LEN;}
 static void dcache_install_image(struct dcache_ent *e,uint8_t *img,uint32_t len,uint64_t seq)
 {(void)e;(void)img;(void)len;(void)seq;}

@@ -68,7 +68,7 @@ static int replay_fan_run(struct stale_pair *rp,uint64_t n) {
 '''+put+r'''
 static struct put_id owner;
 static pthread_mutex_t g_putid_mu=PTHREAD_MUTEX_INITIALIZER;
-'''+cbase+'\n'+function('cbase_slot')+'\n'+function('cbase_note')+'\n'+function('cbase_apply')+r'''
+'''+cbase+'\n'+function('cbase_slot')+'\n'+function('cbase_note')+'\n'+function('cbase_apply')+'\n'+function('cbase_reconcile',current)+r'''
 static struct efs_msg_inode_writer_view_reply authority;
 static int attr_error;static unsigned attr_reads;
 static int ticket_live=1;static unsigned ticket_checks;
@@ -96,11 +96,53 @@ static void cbase_check(void) {
     cbase_note(&o);r.chunk_generation=11;cbase_apply(&r);assert(!r.base_gen);
     o.chunk_generation=31;cbase_apply(&o);assert(o.base_gen==30);
 }
+/* K38 (`pub-stale why=image-base`): the slot says base 0 but the K88 hint
+ * names the image a truncate swept (same FileID). The host refuses any other
+ * base on a row with no generation; eight unchanged rounds are publish-stalled.
+ * `no_row` picks the sweep's two forms: no row, or a row at generation 0. */
+static unsigned swept_rounds(struct dirty_snap *ds,int no_row) {
+    struct efs_chunk_rec img={.ino=1,.chunk_index=0,.chunk_generation=10,.file_generation=22};
+    for(unsigned round=1;round<=8;round++) {
+        img.base_gen=0;cbase_apply(&img);
+        if(!img.base_gen)return round;
+        sent[0]=img;reset();absent=no_row;map.generation=0;
+        ds->chunk_inos[0]=ds->chunk_inos[1]=1;
+        assert(!stale_repull_replay(ds,1,sent,sent_seq,nsent));
+        assert(replays==1&&!commits);
+    }
+    return 0;
+}
+static void swept_hint_check(struct dirty_snap *ds) {
+    struct efs_chunk_rec prior={.ino=1,.chunk_index=0,.chunk_generation=7,.file_generation=22};
+    struct efs_chunk_rec retry={.ino=1,.chunk_index=0,.chunk_generation=10,.file_generation=22};
+    const struct efs_chunk_rec clean=sent[0];
+    for(int no_row=0;no_row<2;no_row++) {
+        cbase_note(&prior);
+        assert(swept_rounds(ds,no_row)==2);
+    }
+    /* A failed pull proves nothing: the hint stays. */
+    cbase_note(&prior);sent[0]=retry;sent[0].base_gen=7;
+    reset();absent=1;pull_error=EFS_ERR_BUSY;
+    assert(stale_repull_replay(ds,1,sent,sent_seq,nsent)==EFS_ERR_BUSY);
+    retry.base_gen=0;cbase_apply(&retry);assert(retry.base_gen==7);
+    /* The row still holds the hint's image: the record lost for another reason. */
+    reset();map.generation=7;
+    assert(!stale_repull_replay(ds,1,sent,sent_seq,nsent));
+    retry.base_gen=0;cbase_apply(&retry);assert(retry.base_gen==7);
+    /* A newer commit noted after this record was built wins over the repull. */
+    prior.chunk_generation=8;cbase_note(&prior);reset();absent=1;
+    assert(!stale_repull_replay(ds,1,sent,sent_seq,nsent));
+    retry.base_gen=0;cbase_apply(&retry);assert(retry.base_gen==8);
+    memset(g_cbase,0,sizeof(g_cbase));sent[0]=clean;
+}
 int main(void) {
     cbase_check();
+    (void)cbase_reconcile; /* a baseline classifier control may not call it */
     (void)stale_retry_owned; /* baseline classifier may not call this helper */
     efs_ino_t inos[2]={1,1};uint32_t cis[2]={0,0};
     struct dirty_snap ds={2,inos,cis};
+    swept_hint_check(&ds);
+    inos[0]=inos[1]=1;
     reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,nsent));assert(verdicts==1&&replays==1&&!commits);
     reset();map.generation=10;pull_error=EFS_ERR_BUSY;
     assert(stale_repull_replay(&ds,1,sent,sent_seq,nsent)==EFS_ERR_BUSY);

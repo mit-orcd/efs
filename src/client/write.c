@@ -575,7 +575,9 @@ static int report_fill_owned(efs_ino_t ino, uint32_t ci,
  * writer was mid-chunk) and every retry is identical. Remember the full
  * image the host committed, per FileID, and use it as the CAS base of the
  * next base=0 record. Direct-mapped: a collision only forgets (the old
- * behaviour). A truncate or recreate changes the FileID and so ignores it. */
+ * behaviour). A recreate changes the FileID and so ignores it; a truncate
+ * keeps the FileID and its sweep removes the row, so a hint can outlive its
+ * base: cbase_reconcile retires it on the first STALE repull (K38). */
 #define CBASE_SLOTS 4096
 static struct { efs_ino_t ino; uint32_t ci; uint64_t gen, file_gen; }
     g_cbase[CBASE_SLOTS];
@@ -608,6 +610,20 @@ static void cbase_apply(struct efs_chunk_rec *r)
         g_cbase[s].file_gen == r->file_generation &&
         g_cbase[s].gen != r->chunk_generation)
         r->base_gen = g_cbase[s].gen;
+    pthread_mutex_unlock(&g_putid_mu);
+}
+
+/* K38 (`pub-stale why=image-base`): a successful repull disproved the base
+ * this sent record used. Forget only that exact hint: a newer commit noted
+ * meanwhile wins, and a failed pull proves nothing (the caller has none). */
+static void cbase_reconcile(const struct efs_chunk_rec *sent, uint64_t observed)
+{
+    uint32_t s = cbase_slot(sent->ino, sent->chunk_index);
+    pthread_mutex_lock(&g_putid_mu);
+    if (g_cbase[s].ino == sent->ino && g_cbase[s].ci == sent->chunk_index &&
+        g_cbase[s].file_gen == sent->file_generation &&
+        g_cbase[s].gen == sent->base_gen && g_cbase[s].gen != observed)
+        memset(&g_cbase[s], 0, sizeof(g_cbase[s]));
     pthread_mutex_unlock(&g_putid_mu);
 }
 
@@ -1800,6 +1816,7 @@ static int stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino,
          * A chunk the host has no row for is never done: the table's
          * generation there is our own unreported PUT. */
             obj = sent[was->idx];
+            cbase_reconcile(&obj, pp[i].absent ? 0 : ce.generation);
             object_seq = sent_seq ? sent_seq[was->idx] : 0;
             if (!pp[i].absent) {
                 uint32_t di;
