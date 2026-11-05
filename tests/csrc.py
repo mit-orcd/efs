@@ -68,6 +68,7 @@ MODULES = {
         'src/meta/meta_apply/append.c',
         'src/meta/meta_apply/chunk.c',
         'src/meta/meta_apply/check.c',
+        'src/meta/meta_apply/tsweep.c',
         'src/meta/meta_apply.c',
         'src/meta/meta_apply/apply_internal.h',
         'src/meta/meta_apply/rows.h',
@@ -82,6 +83,7 @@ MODULES = {
         'src/meta/meta_apply/sweep.h',
         'src/meta/meta_apply/attr.h',
         'src/meta/meta_apply/append.h',
+        'src/meta/meta_apply/tsweep.h',
     ]),
 }
 
