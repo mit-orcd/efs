@@ -67,7 +67,12 @@ and `test_meta_cmd_namespace.py` (command tags).
   stage and pin records directly.
 - Failure behaviour: a refusal (`EFS_ERR_STALE`, `EFS_ERR_BUSY`,
   `EFS_ERR_INVAL`, `EFS_ERR_PROTO`) returns before the batch; one batch is one
-  atomic `efs_kv_batch`, so a refused or failed mutation wrote nothing.
+  atomic `efs_kv_batch`, so a refused or failed mutation changed no inode,
+  lane, chunk, fence or dentry row. It is not free of durable side effects:
+  a publication with `durable_result` records its STALE or INVAL verdict as
+  a receipt before answering, so a retry gets the same answer, and a ticketed
+  publish records the ticket's rejection (`publish.c`, `efs_meta_apply_publish`
+  and `publish_ticketed`; `test_publication_receipt_stale_retire`).
   `EFS_ERR_NOT_FOUND` is only an absent row or name (I9).
 - Ownership smell: the write check in `rows.c` calls `pub_stage_owner`
   (`pub_stage.h`), the bottom layer reaching up, because a staged publication
@@ -90,8 +95,9 @@ and `test_meta_cmd_namespace.py` (command tags).
 ## Tests
 
 - `python3 scripts/tests_for.py meta/meta_apply` lists every row of the
-  module; the dotted forms in the table select one file's rows (add `--run`
-  after `make all`).
+  module; the dotted forms in the table select one file's rows, and a file
+  with a bare tag (`meta/meta_apply.publish`) gets the module's rows with a
+  note on stderr (add `--run` after `make all`).
 - `tests/test_meta_apply.c` compiles and links the real module through
   `efs/meta_apply.h`, as do the other C tests above; only
   `test_readdir_migration_race.py` and `test_retained_create_authority.py`

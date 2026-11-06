@@ -5,7 +5,9 @@ tests/budgets.tsv classifies every `make test` and `make test-long` command by
 subsystem (a source directory plus an optional component, for example
 server/raft_host or server/raft_host.read_index). SUBSYSTEM selects the rows
 whose subsystem equals it or starts with it followed by a dot, so
-server/raft_host includes server/raft_host.read_index. The commands print one
+server/raft_host includes server/raft_host.read_index; a component with no
+row of its own (server/raft_host.publish) gets its parent's rows, with a note
+on stderr. The commands print one
 per line in catalogue order; --run executes them from the repository root, in
 order, and stops with the first failing command's exit status. Build first
 (`make all`): the commands expect their binaries.
@@ -40,9 +42,16 @@ def main(argv):
     if len(args) != 1 or args[0].startswith('-'):
         sys.exit('usage: tests_for.py SUBSYSTEM [--run]')
     want = args[0]
-    rows = [(c, t) for c, t, s in catalogue() if s == want or s.startswith(want + '.')]
+    def select(sub):
+        return [(c, t) for c, t, s in catalogue() if s == sub or s.startswith(sub + '.')]
+    rows = select(want)
+    while not rows and '.' in want:  # a component with no row of its own: its parent's rows
+        want = want.rsplit('.', 1)[0]
+        rows = select(want)
     if not rows:
         sys.exit('tests_for: no catalogue row for subsystem %s (see tests/budgets.tsv)' % want)
+    if want != args[0]:
+        print('tests_for: no row of its own for %s; the rows of %s follow' % (args[0], want), file=sys.stderr)
     for cmd, target in rows:
         if '--run' not in argv:
             print(cmd)

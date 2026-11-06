@@ -153,8 +153,9 @@ endpoint in `sun_path`, so efs-fuse refuses to mount.
 plus an optional component, such as `server/raft_host.read_index`) and a
 purpose, and `tests/test_make_test_recipe.py` fails on a missing or
 inconsistent row. `python3 scripts/tests_for.py SUBSYSTEM` prints the commands
-of a subsystem and its dotted components; add `--run` to run them after
-`make all`.
+of a subsystem and its dotted components, and a component with no row of its
+own gets its parent's rows with a note on stderr; add `--run` to run them
+after `make all`.
 
 Every `test-long` command has a row in `tests/budgets.tsv` (W160): the
 seconds it may take at `EFS_TEST_JOBS=8` on an 8-CPU host, the pool slots
