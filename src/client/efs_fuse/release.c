@@ -68,14 +68,7 @@ int efs_control_drain(uint64_t deadline, int force)
     efs_client_rpc_set_deadline_ms(deadline);
     int result = -1;
     while (stats_now_ms() < deadline) {
-        int pending;
-        if (g_wb.ready) {
-            pthread_mutex_lock(&g_wb.mu);
-            pending = g_wb.count || g_wb.inflight;
-            pthread_mutex_unlock(&g_wb.mu);
-        } else
-            pending = 0;
-        if (pending) {
+        if (efs_wb_pending(0)) {
             usleep(10000);
             continue;
         }

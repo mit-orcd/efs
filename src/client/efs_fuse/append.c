@@ -41,21 +41,9 @@ pthread_mutex_t *append_mu(efs_ino_t ino)
  * that pins it (dirty, or clean-before-PUT inside a PUT window — the pin
  * is held until the slot is dropped). These are the three places
  * unpublished data lives (project-state "nothing to flush"). */
-static int efs_ino_has_queued_write(efs_ino_t ino)
-{
-    int pending = 0;
-
-    if (g_wb.ready) {
-        pthread_mutex_lock(&g_wb.mu);
-        pending = efs_wb_ino_pending_locked(ino);
-        pthread_mutex_unlock(&g_wb.mu);
-    }
-    return pending;
-}
-
 static int efs_ino_has_unpublished(efs_ino_t ino)
 {
-    return efs_ino_has_queued_write(ino) ||
+    return efs_wb_pending(ino) ||
            efs_client_ino_has_unpublished_data(ino);
 }
 

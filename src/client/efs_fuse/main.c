@@ -38,16 +38,7 @@ static void efs_fuse_destroy(void *userdata)
         snprintf(why, sizeof(why), "data flush writeback=%d", wrc);
         unmount_unclean(why);
     }
-    if (g_wb.ready) {
-        pthread_mutex_lock(&g_wb.mu);
-        g_wb.shutdown = 1;
-        pthread_cond_broadcast(&g_wb.not_empty);
-        pthread_mutex_unlock(&g_wb.mu);
-        for (int i = 0; i < g_wb.nworkers; i++)
-            pthread_join(g_wb.workers[i], NULL);
-        g_wb.ready = 0;
-        g_wb.shutdown = 0;
-    }
+    efs_wb_stop();
     /* Drain the dirty set before efs_client_shutdown frees the table.
      *
      * One forced report is not enough. efs_client_report_dirty gives up on a

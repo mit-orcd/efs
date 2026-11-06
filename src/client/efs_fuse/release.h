@@ -11,7 +11,7 @@
  * identity window is momentarily full it waits CLOSE_ADMIT_SPINS steps of
  * 1 ms for a position, then leaves the row retained for the retry thread.
  * efs_control_drain is the stop path: it waits for the write-back pool
- * to go idle (g_wb, writeback.h), runs the open retry pass, drains the
+ * to go idle (efs_wb_pending, writeback.h), runs the open retry pass, drains the
  * data cache and reports dirty metadata until all are clean or the
  * deadline passes.
  *
