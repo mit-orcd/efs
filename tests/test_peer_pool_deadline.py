@@ -49,12 +49,12 @@ int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  server_peer_conn_release("127.0.0.1",17432,&owners[0]);assert(!p->busy[0]);
  for(int i=1;i<EFS_PEER_CONNS_PER_NODE;i++)assert(p->busy[i] && p->conn[i]==&owners[i]);
  /* All ordinary slots can remain owned while two isolated reads progress. */
- assert(last_signal==&p->cv);p->busy[0]=1;
+ assert(last_signal==&p->cv[PEER_DATA]);p->busy[0]=1;
  p->busy[EFS_PEER_DATA_CONNS]=0;
  struct efs_conn *read=server_peer_read_conn_get("127.0.0.1",17432);
  assert(read==&owners[EFS_PEER_DATA_CONNS] && p->busy[EFS_PEER_DATA_CONNS]);
  server_peer_conn_release("127.0.0.1",17432,read);
- assert(last_signal==&p->read_cv && !p->busy[EFS_PEER_DATA_CONNS]);
+ assert(last_signal==&p->cv[PEER_READ] && !p->busy[EFS_PEER_DATA_CONNS]);
  int before=waits;assert(!server_peer_conn_get("127.0.0.1",17432) && waits==before+1);
  read=server_peer_read_conn_get("127.0.0.1",17432);assert(read==&owners[EFS_PEER_DATA_CONNS]);
  p->busy[EFS_PEER_DATA_CONNS+1]=0;
@@ -62,9 +62,28 @@ int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  before=waits;assert(!server_peer_read_conn_get("127.0.0.1",17432) && waits==before+1);
  remaining=0;assert(!server_peer_read_conn_get("127.0.0.1",17432) && waits==before+1);
  remaining=12;server_peer_conn_drop("127.0.0.1",17432,read);
- assert(destroys==1 && !p->conn[EFS_PEER_DATA_CONNS] && !p->busy[EFS_PEER_DATA_CONNS] && last_signal==&p->read_cv);
+ assert(destroys==1 && !p->conn[EFS_PEER_DATA_CONNS] && !p->busy[EFS_PEER_DATA_CONNS] && last_signal==&p->cv[PEER_READ]);
  assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==1 && !p->busy[EFS_PEER_DATA_CONNS]);
  for(int i=0;i<EFS_PEER_DATA_CONNS;i++)assert(p->busy[i] && p->conn[i]==&owners[i]);
+ /* DQ: forwarded STATUS has its own slots. With every STATUS and data slot
+  * held (each STATUS waiting on a leader that needs a session proof), the
+  * leaf proof still checks out; STATUS never takes a proof slot. */
+ int st=EFS_PEER_DATA_CONNS+EFS_PEER_READ_CONNS;
+ assert(EFS_PEER_CONNS_PER_NODE==st+EFS_PEER_STATUS_CONNS);
+ p->conn[EFS_PEER_DATA_CONNS]=&owners[EFS_PEER_DATA_CONNS];p->busy[EFS_PEER_DATA_CONNS+1]=0;
+ for(int i=0;i<EFS_PEER_STATUS_CONNS;i++){p->busy[st+i]=0;
+  assert(server_peer_status_conn_get("127.0.0.1",17432)==&owners[st+i]);}
+ before=waits;assert(!server_peer_status_conn_get("127.0.0.1",17432) && waits==before+1);
+ assert(!p->busy[EFS_PEER_DATA_CONNS] && !p->busy[EFS_PEER_DATA_CONNS+1]);
+ struct efs_conn *proof=server_peer_read_conn_get("127.0.0.1",17432);
+ assert(proof==&owners[EFS_PEER_DATA_CONNS]);
+ server_peer_conn_release("127.0.0.1",17432,&owners[st]);
+ assert(last_signal==&p->cv[PEER_STATUS] && !p->busy[st] && p->busy[EFS_PEER_DATA_CONNS]);
+ server_peer_conn_release("127.0.0.1",17432,proof);assert(last_signal==&p->cv[PEER_READ]);
+ p->busy[EFS_PEER_DATA_CONNS]=p->busy[EFS_PEER_DATA_CONNS+1]=1;
+ before=waits;assert(server_peer_status_conn_get("127.0.0.1",17432)==&owners[st] && waits==before);
+ before=waits;assert(!server_peer_read_conn_get("127.0.0.1",17432) && waits==before+1);
+ p->busy[EFS_PEER_DATA_CONNS]=0;p->conn[EFS_PEER_DATA_CONNS]=NULL;
  /* A peer in its connect cooldown is refused without a connect until the
   * heartbeat reaches it; server_peer_note_up then ends the cooldown. */
  p->fail_streak=EFS_PEER_DOWN_FAILS;p->down_until_ms=peer_now_ms()+EFS_PEER_DOWN_MS;
@@ -74,7 +93,7 @@ int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  server_peer_note_up("127.0.0.1",17432);assert(!p->down_until_ms && !p->fail_streak);
  assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+1);
  puts("peer pool: heartbeat ends a connect cooldown without creating slots PASS");
- puts("peer pool: scoped wait12ms, unchanged unscoped5s, expired refusal, retained slot ownership and live checkout/release, saturated mutation pool, two isolated proof slots and class wakes PASS");}
+ puts("peer pool: scoped wait12ms, unchanged unscoped5s, expired refusal, retained slot ownership and live checkout/release, saturated mutation pool, two isolated proof slots, STATUS slots apart from proofs (DQ) and class wakes PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-peer-deadline-') as t:
     p=Path(t);(p/'test.c').write_text(code)

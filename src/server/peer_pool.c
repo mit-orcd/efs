@@ -21,9 +21,17 @@
  * out, which is most of why flushing 62 tables still took ~65 ms. */
 #define EFS_PEER_DATA_CONNS 32
 /* At most one coalesced remote proof per hosted metadata group. Do not let
- * forwarded mutations consume the connections needed to finish those reads. */
+ * forwarded mutations consume the connections needed to finish those reads.
+ * Leaf proofs only (an empty ReadIndex the leader answers locally). */
 #define EFS_PEER_READ_CONNS 2
-#define EFS_PEER_CONNS_PER_NODE (EFS_PEER_DATA_CONNS + EFS_PEER_READ_CONNS)
+/* Forwarded ticket STATUS (W166: off the mutation pool). Its own class, not
+ * the proof slots: the lane leader serving it needs a session proof from the
+ * other group's leader, so STATUS forwards holding the proof slots in both
+ * directions deadlocked every PUT until the clients' 30 s budget ran out (DQ). */
+#define EFS_PEER_STATUS_CONNS 2
+#define EFS_PEER_CONNS_PER_NODE (EFS_PEER_DATA_CONNS + EFS_PEER_READ_CONNS + \
+                                 EFS_PEER_STATUS_CONNS)
+enum { PEER_DATA, PEER_READ, PEER_STATUS, PEER_CLASSES };
 /* After this many consecutive connect failures, stop reconnecting for the
  * cooldown window so a dead peer does not stall every caller on connect(). */
 #define EFS_PEER_DOWN_FAILS 3
@@ -39,9 +47,14 @@ struct peer_slot {
     uint64_t reaped_ms;     /* last idle scan (peer_reap_idle_locked) */
     uint32_t fail_streak;
     pthread_mutex_t lock;
-    pthread_cond_t cv;
-    pthread_cond_t read_cv;
+    pthread_cond_t cv[PEER_CLASSES];
 };
+
+static int peer_class_of(int s)
+{
+    return s < EFS_PEER_DATA_CONNS ? PEER_DATA :
+           s < EFS_PEER_DATA_CONNS + EFS_PEER_READ_CONNS ? PEER_READ : PEER_STATUS;
+}
 
 static uint64_t peer_now_ms(void)
 {
@@ -66,8 +79,8 @@ void server_peer_pool_init(void)
     for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
         memset(&g_peers[i], 0, sizeof(g_peers[i]));
         pthread_mutex_init(&g_peers[i].lock, NULL);
-        pthread_cond_init(&g_peers[i].cv, NULL);
-        pthread_cond_init(&g_peers[i].read_cv, NULL);
+        for (int k = 0; k < PEER_CLASSES; k++)
+            pthread_cond_init(&g_peers[i].cv[k], NULL);
     }
     __atomic_store_n(&g_peers_inited, 1, __ATOMIC_RELEASE);
     pthread_mutex_unlock(&g_peers_mu);
@@ -251,16 +264,19 @@ struct efs_conn *server_peer_conn_new(const char *host, uint16_t port)
     return peer_connect(host, port);
 }
 
-static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int read)
+static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int cls)
 {
     struct peer_slot *p = peer_slot_for(host, port);
     if (!p)
         return NULL;
 
     uint64_t now = peer_now_ms();
-    int begin = read ? EFS_PEER_DATA_CONNS : 0;
-    int end = read ? EFS_PEER_CONNS_PER_NODE : EFS_PEER_DATA_CONNS;
-    pthread_cond_t *cv = read ? &p->read_cv : &p->cv;
+    int begin = cls == PEER_DATA ? 0 : cls == PEER_READ ? EFS_PEER_DATA_CONNS :
+                EFS_PEER_DATA_CONNS + EFS_PEER_READ_CONNS;
+    int end = cls == PEER_DATA ? EFS_PEER_DATA_CONNS :
+              cls == PEER_READ ? EFS_PEER_DATA_CONNS + EFS_PEER_READ_CONNS :
+              EFS_PEER_CONNS_PER_NODE;
+    pthread_cond_t *cv = &p->cv[cls];
     pthread_mutex_lock(&p->lock);
     /* Down-cooldown: don't even try to connect to a peer that has failed
      * repeatedly; the caller treats NULL as "peer down" and skips it fast. */
@@ -341,12 +357,17 @@ static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int read)
 
 struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
 {
-    return peer_conn_get(host, port, 0);
+    return peer_conn_get(host, port, PEER_DATA);
 }
 
 struct efs_conn *server_peer_read_conn_get(const char *host, uint16_t port)
 {
-    return peer_conn_get(host, port, 1);
+    return peer_conn_get(host, port, PEER_READ);
+}
+
+struct efs_conn *server_peer_status_conn_get(const char *host, uint16_t port)
+{
+    return peer_conn_get(host, port, PEER_STATUS);
 }
 
 void server_peer_conn_release(const char *host, uint16_t port,
@@ -364,7 +385,7 @@ void server_peer_conn_release(const char *host, uint16_t port,
         if (p->conn[s] == c) {
             p->busy[s] = 0;
             peer_reap_idle_locked(p, peer_now_ms());
-            pthread_cond_signal(s >= EFS_PEER_DATA_CONNS ? &p->read_cv : &p->cv);
+            pthread_cond_signal(&p->cv[peer_class_of(s)]);
             pthread_mutex_unlock(&p->lock);
             return;
         }
@@ -387,7 +408,7 @@ void server_peer_conn_drop(const char *host, uint16_t port, struct efs_conn *c)
         if (p->conn[s] == c) {
             p->conn[s] = NULL;
             p->busy[s] = 0;
-            pthread_cond_signal(s >= EFS_PEER_DATA_CONNS ? &p->read_cv : &p->cv);
+            pthread_cond_signal(&p->cv[peer_class_of(s)]);
             pthread_mutex_unlock(&p->lock);
             efs_conn_destroy(c);
             return;

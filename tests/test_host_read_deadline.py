@@ -55,11 +55,12 @@ rpc=r'''
 #define HOST_CMD_MAX 512
 #define HOST_SUBMIT_FORWARDED 0x80u
 struct efs_raft_host {int raft_id;};
-static struct efs_conn peer;static int setters,drops,releases,sends,recvs,fail_send,fail_recv,bad_type,short_reply,expected_timeout,ordinary_gets,read_gets;
+static struct efs_conn peer;static int setters,drops,releases,sends,recvs,fail_send,fail_recv,bad_type,short_reply,expected_timeout,ordinary_gets,read_gets,status_gets;
 static int peer_addr(struct efs_raft_host *h,int rid,char *a,size_t n,uint16_t *port)
 {(void)h;assert(rid==2);snprintf(a,n,"peer");*port=17432;return 0;}
 struct efs_conn *server_peer_conn_get(const char *host,uint16_t port){assert(!strcmp(host,"peer") && port==17432);ordinary_gets++;return &peer;}
 struct efs_conn *server_peer_read_conn_get(const char *host,uint16_t port){assert(!strcmp(host,"peer") && port==17432);read_gets++;return &peer; }
+struct efs_conn *server_peer_status_conn_get(const char *host,uint16_t port){assert(!strcmp(host,"peer") && port==17432);status_gets++;return &peer; }
 void server_peer_conn_drop(const char *h,uint16_t port,struct efs_conn *c){(void)h;(void)port;assert(c==&peer);drops++;}
 void server_peer_conn_release(const char *h,uint16_t port,struct efs_conn *c){(void)h;(void)port;assert(c==&peer && c->recv_timeout_ms==17);releases++;}
 void efs_conn_set_recv_timeout(struct efs_conn *c,int value){assert(c==&peer);setters++;c->recv_timeout_ms=value;}
@@ -71,13 +72,13 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *n)
  *type=bad_type?0:EFS_MSG_RAFT_MKFS_REPLY;*n=sizeof(struct efs_msg_raft_mkfs_reply)-(short_reply?1:0);
  *out=calloc(1,sizeof(struct efs_msg_raft_mkfs_reply));return 0;}
 '''+function('host_submit_read_only')+function('host_rpc_submit')+r'''
-static void reset(int kind){peer=(struct efs_conn){.kind=kind,.fd=42,.recv_timeout_ms=17};setters=drops=releases=sends=recvs=fail_send=fail_recv=bad_type=short_reply=ordinary_gets=read_gets=0;expected_timeout=400;}
+static void reset(int kind){peer=(struct efs_conn){.kind=kind,.fd=42,.recv_timeout_ms=17};setters=drops=releases=sends=recvs=fail_send=fail_recv=bad_type=short_reply=ordinary_gets=read_gets=status_gets=0;expected_timeout=400;}
 int main(void){struct efs_raft_host h={.raft_id=0};struct efs_msg_raft_mkfs_reply reply;uint8_t body[900]={0};
  for(int kind=EFS_CONN_TCP;kind<=EFS_CONN_RDMA;kind++) {
-  reset(kind);assert(!host_rpc_submit(&h,2,2,NULL,0,&reply,400));assert(setters==2 && releases==1 && !drops && read_gets==1 && !ordinary_gets);
+  reset(kind);assert(!host_rpc_submit(&h,2,2,NULL,0,&reply,400));assert(setters==2 && releases==1 && !drops && read_gets==1 && !ordinary_gets && !status_gets);
   reset(kind);assert(!host_rpc_submit(&h,2,2,body,sizeof(body),&reply,400));assert(setters==2 && releases==1 && ordinary_gets==1 && !read_gets);
   reset(kind);body[0]=EFS_MD_REQ_PUT_TICKET_STATUS;
-  assert(!host_rpc_submit(&h,2,2,body,1,&reply,400));assert(setters==2 && releases==1 && read_gets==1 && !ordinary_gets);
+  assert(!host_rpc_submit(&h,2,2,body,1,&reply,400));assert(setters==2 && releases==1 && status_gets==1 && !read_gets && !ordinary_gets);
   body[0]=0;
   reset(kind);fail_send=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !recvs && !releases);
   reset(kind);fail_recv=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !releases);
@@ -85,7 +86,7 @@ int main(void){struct efs_raft_host h={.raft_id=0};struct efs_msg_raft_mkfs_repl
   reset(kind);short_reply=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !releases);
   reset(kind);assert(host_rpc_submit(&h,0,2,NULL,0,&reply,400)==EFS_ERR_INVAL && !setters && !sends);
  }
- puts("forwarded RPC: TCP/RDMA receive limits, previous timeout restoration, large-frame ownership, lost/short/wrong replies drop connections and refuse authority PASS");}
+ puts("forwarded RPC: proof/STATUS/mutation slot classes (DQ), TCP/RDMA receive limits, previous timeout restoration, large-frame ownership, lost/short/wrong replies drop connections and refuse authority PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-deadline-') as t:
     p=Path(t)
