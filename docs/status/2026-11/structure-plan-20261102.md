@@ -192,8 +192,8 @@ match the table. Done: adding a setting edits one file.
   unmount stop leave pool work or the sticky error behind) stopped at one
   guide, one interface, one implementation file and the routed tests plus
   14 caller lines: lines needed 691 to 593, opened 1,074 to 767, source
-  files 7 to 4, validation 306 to 361. First pilot in this plan to meet all
-  four target parts; next candidates are the other shared FUSE globals
+  files 7 to 4, validation 306 to 361. First pilot in this plan to meet the
+  four target parts, except 14 lines of the caller the question names; next candidates are the other shared FUSE globals
   (`g_open_mu` and the open-ref table, `g_find_res`).
 - Graph queries: a broad `graphify query` returns hundreds of nodes; agents
   need a small ranked starting set (the component README's symptom map is
