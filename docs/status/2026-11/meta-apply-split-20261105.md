@@ -64,7 +64,7 @@ Each file is a run of the original in original order, except three whole-block m
 - `test_mtime_capture_execute` (`mtime.c`): capture refusals, a changed plan prepares nothing, the first prepare refusal decides and resolves ABORT, otherwise COMMIT.
 - `test_pack_index_cursor` (`pack.c`): backfill cursor round trip, a refused INDEX writes nothing, a foreign group is refused, cancelling an unknown pack object is `EFS_ERR_NOT_FOUND`.
 
-`./tests/test_meta_apply` passes on node9900; `python3 scripts/tests_for.py meta/meta_apply --run` (12 rows) and the two splice tests pass.
+`./tests/test_meta_apply` passes on node9900 (1.0 s in the gate, budget 5 s); `python3 scripts/tests_for.py meta/meta_apply --run` (12 rows) and the two splice tests pass.
 
 ## Gate and TSan
 
