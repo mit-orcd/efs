@@ -102,16 +102,12 @@ struct efsd_server {
     uint64_t gc_trunc_seen[2]; /* D25 TRUNC_PENDING inodes at the last pass */
     uint64_t gc_reap_seen[2], gc_orphan_seen[2], gc_pending[2], gc_first_reap[2], gc_first_seen_us[2];
     uint64_t gc_missing_exports;
-    /* W154: degraded marks on the anchors this node leads (bit g of
-     * degraded_sampled_mask: groups[g] current) and rebuild totals. */
-    uint64_t degraded_chunks[2];
-    uint32_t degraded_sampled_mask;
+    /* W154 rebuild totals (the degraded counts are taken at each status
+     * reply: server_raft_host_degraded_now, server_segment_degraded_now). */
     uint64_t rebuilt_fragments, rebuild_failures, rebuild_retired;
-    /* K37: segment marks on the anchors this node leads (bit g of
-     * segment_sampled_mask: groups[g] current), totals, and (storage side)
-     * the groups whose leader completed an audit of this incarnation. */
-    uint64_t degraded_segments[2], unrecoverable_segments[2];
-    uint32_t segment_sampled_mask, segment_audited_mask;
+    /* K37: segment rebuild totals and (storage side) the groups whose
+     * leader completed an audit of this incarnation. */
+    uint32_t segment_audited_mask;
     uint64_t segments_rebuilt, segment_rebuild_failures, segment_marks_retired;
     uint64_t segment_audit_marked, segment_audit_checked;
     /* D31: orphan records on the anchors this node leads (bit g of
@@ -170,6 +166,7 @@ struct efs_meta_degraded;
 void server_degraded_mark_encode(uint8_t *q, const struct efs_meta_degraded *d);
 int server_degraded_mark_decode(const uint8_t *q, struct efs_meta_degraded *d);
 int server_raft_host_degraded_check(const uint8_t mark[EFS_REBUILD_MARK_LEN]);
+int server_raft_host_degraded_now(uint8_t group, uint64_t *chunks);
 /* D31: this member's durable storage session floor for uuid (0: none). */
 int server_put_session_floor(struct efsd_server *, const uint8_t uuid[16], uint32_t *floor);
 /* D31 + K13: EFS_MSG_PUT_ORPHAN_DELETE (src/server/put_orphan.c). */

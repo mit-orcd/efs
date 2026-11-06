@@ -25,7 +25,7 @@ One row per active effort; the linked page states the exact source, verdict, rem
 | Alpha 1.0 Stage 1 acceptance | Planning only; no PASS/FAIL recorded on the matrix | [Stage 1 matrix](stage1-acceptance-matrix-20261030.md) |
 | Alpha 1.0 known defects (section K) | OPEN; no release candidate or topology acceptance | [K register](alpha-1.0-2plus1-checklist.md) |
 | W123 crash recovery | Not accepted; correctness gates passed, formal performance FAIL, v3 wait capture pending | [W123 current state](w123-current.md) |
-| W171 less context per change | PROPOSED; phase 1a (this landing page) in progress | [Structure plan](2026-11/structure-plan-20261102.md) |
+| W171 less context per change | In progress; phase 3 splits of `efs_fuse.c` (Nov 4) and `meta_apply.c` (Nov 5) landed, measured reading sets not reduced | [Structure plan](2026-11/structure-plan-20261102.md) |
 
 ## Maintaining this index
 

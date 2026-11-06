@@ -159,7 +159,9 @@ answers `NOT_PRIMARY` right after the members join, repeat it.
   `rebuilt=`, `retired=`, `unrecoverable=` and audit counters;
 - `Protection:` `full`, `DEGRADED: N chunks and M packed segments on two of
   three fragments, no fault tolerance until rebuilt`, or `LOST: U packed
-  segments lost two or more fragments` (their files read `EIO`);
+  segments lost two or more fragments` (their files read `EIO`), or
+  `unknown` while a metadata group has no leader that answers; each group's
+  leader counts its marks at the call, after a ReadIndex;
 - `Abandoned uploads:` the collection counters of uploads whose client died;
 - `Versions:` the build identity of every member (`3/3 identical`, or
   `MISMATCH` with one line per node);

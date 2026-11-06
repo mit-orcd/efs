@@ -159,7 +159,29 @@ match the table. Done: adding a setting edits one file.
   recipe, each between waves with no branch on the file, and only once (d)
   shows the FUSE pilot reduced the reading set. **Condition not met** (Nov 5,
   [after-page](reading-set-after-20261104.md)): lines needed rose on both FUSE
-  fixes; going ahead anyway is the user's decision.
+  fixes; going ahead anyway is the user's decision. **Decided Nov 5: proceed**,
+  one file at a time while no branch touches it: `meta_apply.c` first (Task DL,
+  with a compiled-interface test and a before/after measurement of an
+  unfamiliar investigation), `raft_host.c` after Task DJ's branch merges and
+  the ReadIndex entry map exists (Task DO), `write.c` after Task DK's branch
+  merges. A Nov 5 review of `104eb5e10` reads the after-page as "splitting
+  and headers alone did not reduce understanding" and recommends ownership
+  boundaries instead: private state behind a small owner interface, tests
+  that compile the real module through it, multi-tag test coverage, the
+  component guides in the graph scope, and guides free of drifting counts.
+  Proposed as Task DM (write-back drain and shutdown ownership pilot) and
+  Task DN (navigation accuracy); the splits above carry the review's
+  measurement rule.
+  **`meta_apply.c` split landed Nov 5** (Task DL,
+  [evidence](meta-apply-split-20261105.md)): 20 files and 13 area headers
+  under `src/meta/meta_apply/` with a component guide, the instruction
+  stream unchanged with inlining off, four cases added to
+  `tests/test_meta_apply.c` through the public headers. Measured on one
+  unfamiliar cross-area investigation (degraded-mark count across a STALE
+  publish and a retire): lines needed 450 before, 461 after (not reduced),
+  lines opened 675 to 852, whole-file upper bound 12,516 to 1,704; the
+  investigation still reads two headers and two files, so the one-interface
+  and one-implementation parts of the target are not met.
 - Graph queries: a broad `graphify query` returns hundreds of nodes; agents
   need a small ranked starting set (the component README's symptom map is
   the interim answer).

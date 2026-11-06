@@ -13,7 +13,7 @@
 # Prints each failure with its offset from the restart, and the totals.
 set -u
 REL=$1; L=$2; PORT=${3:-22410}
-D=/tmp/efs-rejoin/$L
+D=${TMPDIR:-/tmp}/efs-rejoin/$L
 rm -rf "$D"; mkdir -p "$D"/{n1,n2,n3,n4,mnt,logs}
 FUSE_LIBDIR=${FUSE_LIBDIR:-/data1/efs/deps/libfuse/lib64}
 [ -d "$FUSE_LIBDIR" ] && export LD_LIBRARY_PATH=$FUSE_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}

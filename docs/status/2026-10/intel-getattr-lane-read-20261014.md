@@ -21,7 +21,7 @@ and corrects a fixture comment; production C behavior is the deployed commit.
   its base, plus OK/NOT_FOUND status. Full-value capacity remains mandatory;
   storage, authority, scan and short-buffer failures propagate. Existing
   reduction callers retain the old API through a wrapper.
-- [meta_apply.c](../../../src/meta/meta_apply.c): GETATTR uses this first lane
+- [meta_apply/attr.c](../../../src/meta/meta_apply/attr.c): GETATTR uses this first lane
   image for sequence/present/mtime-generation fields, removing the immediate
   duplicate transactional lane read. It still independently reads the lane
   sequence in its second collect, rereads the inode, and rechecks undecided

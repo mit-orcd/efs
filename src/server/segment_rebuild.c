@@ -691,9 +691,6 @@ void server_segment_rebuild_pass(struct efsd_server *s, uint8_t group)
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_DEGRADED};
     struct sr_count cnt = {0};
     if (efs_kv_scan_prefix(kv, prefix, sizeof(prefix), sr_count_cb, &cnt) < 0) return;
-    __atomic_store_n(&s->degraded_segments[gi], cnt.total, __ATOMIC_RELAXED);
-    __atomic_store_n(&s->unrecoverable_segments[gi], cnt.lost, __ATOMIC_RELAXED);
-    __atomic_fetch_or(&s->segment_sampled_mask, 1u << gi, __ATOMIC_RELAXED);
     if (!cnt.total) {
         sr[gi].mark_cursor_len = 0;
         return;
@@ -749,9 +746,4 @@ void server_segment_rebuild_pass(struct efsd_server *s, uint8_t group)
 out:
     free(c);
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) free(buf[i]);
-    cnt = (struct sr_count){0};
-    if (efs_kv_scan_prefix(kv, prefix, sizeof(prefix), sr_count_cb, &cnt) >= 0) {
-        __atomic_store_n(&s->degraded_segments[gi], cnt.total, __ATOMIC_RELAXED);
-        __atomic_store_n(&s->unrecoverable_segments[gi], cnt.lost, __ATOMIC_RELAXED);
-    }
 }

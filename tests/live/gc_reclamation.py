@@ -49,7 +49,7 @@ class PosixPhaseCollector:
     def __enter__(self):
         if not self.enabled:
             return self
-        self.directory = Path(tempfile.mkdtemp(prefix='efs-phase-', dir='/tmp'))
+        self.directory = Path(tempfile.mkdtemp(prefix='efs-phase-'))
         self.path = self.directory/'socket'
         self.receiver = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         try:

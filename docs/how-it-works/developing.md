@@ -64,7 +64,7 @@ raft/       the consensus core — a pure state machine, transport- and
 kv/         the ordered applied state — `kv_mem.c` for the simulator,
             `kv_lsm.c` + `kv_wal.c` + `kv_seg.c` + `kv_compact.c` +
             `kv_snap.c` on disk, behind `include/efs/kv.h`.
-meta/       the POSIX op state machine over kv/ and raft/ (`meta_apply.c`,
+meta/       the POSIX op state machine over kv/ and raft/ (`meta_apply/`,
             `txn.c`, `session.c`, `lock.c`, `dir_*.c`); no socket or FUSE
             calls inline. `metadata.c` is the client-side staging table.
 wire/       the protocol — versioned encode/decode, nothing else.

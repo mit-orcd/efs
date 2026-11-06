@@ -64,8 +64,11 @@ assert 'getenv' not in end, 'clean unmount revoke has no switch'
 assert 'return result;' in sd
 fz = csrc.module('efs_fuse')
 assert 'if (efs_client_shutdown() != EFS_OK)\n        unmount_unclean(efs_client_shutdown_reason());' in fz
-# A11 finding 1: the verdict reaches the stop record the stop tooling reads.
-assert 'efs_stop_status("failed", 0, 0, ret, why);' in fz and 'efs_stop_status("done", 0, 0, 0, NULL);' in fz
+# A11 finding 1: the verdict reaches the stop record the stop tooling reads
+# (DI: efs_stop_exit keeps it only while a stop tool awaits it).
+assert 'efs_stop_exit(ret, ret ? why : NULL);' in fz
+sc = (root / 'src/client/stop_control.h').read_text()
+assert 'efs_stop_status(rc ? "failed" : "done",0,0,rc,why);' in sc
 assert 'if (!ret && g_unmount_unclean) {' in fz and 'ret = 1;' in fz
 mg = (root / 'src/mgmt/efs_mgmt.c').read_text()
 assert 'efs_session_revoke(&rpc, uuid, &res)' in mg, 'efs-mgmt fence uses the same coordinator'

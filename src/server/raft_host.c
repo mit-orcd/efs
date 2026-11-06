@@ -12216,8 +12216,6 @@ static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t a
         efs_meta_degraded_count_derived(anchor, n);
         have = efs_meta_degraded_count_peek(anchor);
     }
-    __atomic_store_n(&h->s->degraded_chunks[gi], (uint64_t)(have > 0 ? have : 0), __ATOMIC_RELAXED);
-    __atomic_fetch_or(&h->s->degraded_sampled_mask, 1u << gi, __ATOMIC_RELAXED);
     if (have == 0) {
         g_dg_cur_len[gi] = 0;
         return;
@@ -12282,12 +12280,43 @@ static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t a
             break;
     }
 out:
-    have = efs_meta_degraded_count_peek(anchor);
-    __atomic_store_n(&h->s->degraded_chunks[gi], (uint64_t)(have > 0 ? have : 0), __ATOMIC_RELAXED);
     if (ex)
         server_export_put(h->s, ex);
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         free(buf[i]);
+}
+
+/* Task DJ: a status reply's W154 chunk-mark count for a group this node
+ * leads, after a ReadIndex (every committed mark applied here). It used to
+ * come from this node's first rebuild pass as leader, the last step of a
+ * GC loop that under load ran seconds after election, so a healthy cluster
+ * read "Protection: unknown". EFS_ERR_NOT_PRIMARY where this node does not
+ * lead the group. */
+int server_raft_host_degraded_now(uint8_t group, uint64_t *chunks)
+{
+    struct efs_raft_host *h = g_host;
+    uint32_t anchor = efs_pack_group_anchor(group), plen = 0;
+    uint8_t prefix[3];
+    uint64_t n = 0;
+    int64_t have;
+    int rc;
+
+    if (!h || !__atomic_load_n(&h->running, __ATOMIC_ACQUIRE) || !h->kv || !anchor ||
+        efs_kv_key_degraded_prefix(anchor, prefix, &plen) != EFS_OK)
+        return EFS_ERR_INVAL;
+    if (!host_leads(h, group))
+        return EFS_ERR_NOT_PRIMARY;
+    if ((rc = host_read_index(h, group, NULL)) != EFS_OK)
+        return rc;
+    have = efs_meta_degraded_count_peek(anchor);
+    if (have < 0) {
+        /* Not derived yet: count without deriving; the GC pass owns that. */
+        if (efs_kv_scan_prefix(h->kv, prefix, plen, dg_count_cb, &n) < 0)
+            return EFS_ERR_IO;
+        have = (int64_t)n;
+    }
+    *chunks = (uint64_t)have;
+    return EFS_OK;
 }
 
 /* ---- D31 abandoned-upload collection (K13) ----
@@ -12565,9 +12594,6 @@ static void *host_gc_thread(void *arg)
                 __atomic_fetch_and(&h->s->put_orphan_sampled_mask, ~(1u << gc_gi(h->g[g].group)),
                                    __ATOMIC_RELAXED);
                 __atomic_fetch_and(&h->s->gc_sampled_mask, ~(1u << g), __ATOMIC_RELAXED);
-                __atomic_fetch_and(&h->s->degraded_sampled_mask, ~(1u << g), __ATOMIC_RELAXED);
-                __atomic_fetch_and(&h->s->segment_sampled_mask, ~(1u << gc_gi(h->g[g].group)),
-                                   __ATOMIC_RELAXED);
                 server_segment_rebuild_reset(h->g[g].group);
                 continue;
             }

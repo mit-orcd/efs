@@ -60,6 +60,38 @@ int main(void)
     efs_stop_finish();
     assert(access(g_stop.path,F_OK)!=0);
     assert(efs_stop_client(mount,"DRAIN\n")==3);
+    /* DI: a stop tool asked (DRAIN above), so the verdict stays for it. */
+    char record[sizeof(g_stop.status)];strcpy(record,g_stop.status);
+    efs_stop_exit(0,NULL);
+    FILE *f=fopen(record,"r");assert(f);char line[256];assert(fgets(line,sizeof(line),f));fclose(f);
+    assert(strstr(line,"phase=done") && strstr(line,"rc=0"));
+    assert(!unlink(record));
+    /* Nobody asked (unmount or signal): .sock and .stop both go at exit. */
+    for(int rc=0;rc<2;rc++) {
+        assert(!efs_stop_start(mount,drain));
+        assert(!access(record,F_OK) && !access(g_stop.path,F_OK));
+        efs_stop_finish();
+        efs_stop_exit(rc,rc ? "unclean" : NULL);
+        assert(access(record,F_OK)!=0 && access(g_stop.path,F_OK)!=0);
+    }
     rmdir(mount);
-    puts("stop control: clean drain, refusal, live-job timeout, mutation gate, force and cleanup PASS");
+    /* Path derivation: $TMPDIR (trailing '/' dropped), else /tmp; an
+     * endpoint that does not fit sun_path is refused, never truncated. */
+    char path[108],want[160];
+    setenv("TMPDIR","/var/efs-di-tmp//",1);
+    assert(efs_tmp_path(path,sizeof(path),"x-%d",7)==(int)strlen("/var/efs-di-tmp/x-7"));
+    assert(!strcmp(path,"/var/efs-di-tmp/x-7"));
+    assert(!efs_stop_path("/mnt/efs",path,sizeof(path)));
+    assert(!strncmp(path,"/var/efs-di-tmp/efs-control-",28) && strstr(path,".sock"));
+    snprintf(want,sizeof(want),"%s",path);
+    for(int unset=0;unset<2;unset++) { /* empty, then unset: /tmp */
+        if(unset)unsetenv("TMPDIR"); else setenv("TMPDIR","",1);
+        assert(!strcmp(efs_tmpdir(),"/tmp"));
+        assert(!efs_stop_path("/mnt/efs",path,sizeof(path)));
+        assert(!strncmp(path,"/tmp/",5) && !strcmp(path+5,want+16));
+    }
+    char longdir[120];memset(longdir,'d',sizeof(longdir)-1);longdir[0]='/';longdir[sizeof(longdir)-1]=0;
+    setenv("TMPDIR",longdir,1);
+    assert(efs_stop_path("/mnt/efs",path,sizeof(path))==-1);
+    puts("stop control: clean drain, refusal, live-job timeout, mutation gate, force, cleanup, exit record and TMPDIR path PASS");
 }

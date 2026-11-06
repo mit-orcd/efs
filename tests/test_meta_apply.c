@@ -11,6 +11,7 @@
 #include "efs/session.h"
 #include "efs/common.h"
 #include "efs/kv_lsm.h"
+#include "efs/pack_mapping.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -6974,6 +6975,236 @@ static void test_trunc_sweep(void)
     efs_kv_mem_free(kv);
 }
 
+/* ---- Task DL: one case per area of src/meta/meta_apply/ that had none here,
+ * through the public headers (efs/meta_apply.h, efs/pack_mapping.h). ---- */
+
+/* publish.c: a durable receipt across a BASE_CAS STALE and the retires. A
+ * STALE writes its verdict and no mark; retiring a receipt touches no mark,
+ * so the degraded count still matches the marks (gc.c). */
+static struct efs_meta_pub dl_durable_pub(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                          uint64_t expect, uint8_t missing)
+{
+    struct efs_meta_pub p;
+    struct efs_meta_row r;
+
+    memset(&p, 0, sizeof(p));
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "receipt row");
+    p.ino = ino;
+    p.inode_gen = r.generation;
+    p.new_size = 4096;
+    p.expected_gen = expect;
+    p.candidate_gen = gen;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.content_epoch = r.content_epoch;
+    p.now = T0 + gen;
+    fill_ch(&p.ch);
+    p.missing_mask = missing;
+    p.durable_result = 1;
+    p.publication_id.client_uuid[0] = 7;
+    p.publication_id.session_epoch = 1;
+    p.publication_id.seq = gen;
+    p.receipt_locator = (struct efs_publication_locator){0, 100 + gen, 1};
+    return p;
+}
+
+static void test_publication_receipt_stale_retire(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    uint8_t uuid[EFS_OPID_UUID_LEN] = {7};
+    efs_ino_t ino = 0;
+    uint32_t anch, shard;
+    int v = -1;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "dl-receipt",
+                                     &ino) == EFS_OK && ino, "create");
+    shard = efs_kv_lane_shard(ino, 0);
+    CHECK(efs_session_create(kv, uuid, 1) == EFS_OK && efs_session_register(kv, uuid, 1, shard) ==
+              EFS_OK && efs_session_establish(kv, shard, uuid, 1) == EFS_OK, "session");
+    anch = efs_kv_anchor_shard(shard);
+    efs_meta_degraded_count_invalidate(anch);
+    efs_meta_degraded_count_derived(anch, 0);
+    struct efs_meta_pub first = dl_durable_pub(kv, ino, 0xB1, 0, 1);
+    struct efs_meta_pub stale = dl_durable_pub(kv, ino, 0xB2, 0xEE, 0);
+    CHECK(efs_meta_apply_publish(kv, &first) == EFS_OK, "degraded publish");
+    CHECK(dg_scan(kv, anch).n == 1 && efs_meta_degraded_count_peek(anch) == 1, "one mark");
+    CHECK(efs_meta_apply_publish(kv, &stale) == EFS_ERR_STALE &&
+              efs_meta_apply_publish_stale_why() == EFS_PUB_STALE_BASE_CAS, "image-base STALE");
+    CHECK(efs_meta_publication_result(kv, &stale, &v) == EFS_OK && v == EFS_ERR_STALE,
+          "the STALE verdict is durable");
+    CHECK(dg_scan(kv, anch).n == 1 && efs_meta_degraded_count_peek(anch) == 1,
+          "a STALE writes no mark and moves no count");
+    CHECK(efs_meta_apply_publication_retire(kv, &stale) == EFS_ERR_BUSY,
+          "the older receipt retires first");
+    CHECK(efs_meta_apply_publication_retire(kv, &first) == EFS_OK &&
+              efs_meta_apply_publication_retire(kv, &stale) == EFS_OK, "retire both");
+    CHECK(efs_meta_publication_result(kv, &stale, &v) == EFS_OK &&
+              v == EFS_META_PUBLICATION_RETIRED, "retired");
+    CHECK(dg_scan(kv, anch).n == 1 && efs_meta_degraded_count_peek(anch) == 1,
+          "a retire leaves the mark and its count");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
+/* pub_stage.c: the stage record codec and the empty-store queries. */
+static void test_pub_stage_record(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_pub p, back;
+    struct efs_opid session, got;
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+    uint8_t rec[EFS_PUB_STAGE_LEN];
+    efs_ino_t ino = 0;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "dl-stage",
+                                     &ino) == EFS_OK && ino, "create");
+    memset(&p, 0, sizeof(p));
+    memset(&session, 0, sizeof(session));
+    session.client_uuid[0] = 9;
+    session.session_epoch = 3;
+    p.ino = ino;
+    p.inode_gen = 5;
+    p.chunk_index = 2;
+    p.new_size = 3 * 4096;
+    p.candidate_gen = 0xC1;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.missing_mask = 2;
+    p.ticketed = 1;
+    p.fresh_object = 1;
+    p.put_id = session;
+    p.put_id.seq = 11;
+    fill_ch(&p.ch);
+    CHECK(efs_meta_pub_stage_encode(&p, &session, rec) == EFS_OK, "encode");
+    CHECK(efs_meta_pub_stage_decode(rec, sizeof(rec), &back, &got) == EFS_OK &&
+              back.ino == ino && back.inode_gen == 5 && back.chunk_index == 2 &&
+              back.candidate_gen == 0xC1 && back.missing_mask == 2 && back.ticketed &&
+              back.fresh_object && back.put_id.seq == 11 &&
+              !memcmp(back.ch.checksums, p.ch.checksums, sizeof(p.ch.checksums)) &&
+              got.session_epoch == 3 && got.client_uuid[0] == 9, "round trip");
+    CHECK(efs_meta_pub_stage_decode(rec, sizeof(rec) - 1, &back, &got) == EFS_ERR_PROTO,
+          "short record");
+    rec[0]++;
+    CHECK(efs_meta_pub_stage_decode(rec, sizeof(rec), &back, &got) == EFS_ERR_PROTO,
+          "unknown version");
+    p.durable_result = 1;
+    CHECK(efs_meta_pub_stage_encode(&p, &session, rec) == EFS_ERR_INVAL, "receipts are not staged");
+    p.durable_result = 0;
+    p.ticketed = 0;
+    CHECK(efs_meta_pub_stage_encode(&p, &session, rec) == EFS_ERR_INVAL, "a ticket is mandatory");
+    p.ticketed = 1;
+    session.session_epoch = 4;
+    CHECK(efs_meta_pub_stage_encode(&p, &session, rec) == EFS_ERR_INVAL,
+          "the ticket stream is the stage session's");
+    CHECK(efs_meta_pub_stage_peek(kv, ino, 5, 2, &t, &parts) == EFS_ERR_NOT_FOUND, "no stage");
+    CHECK(efs_meta_pub_pinned(kv, ino, 5) == EFS_OK, "no pin");
+    CHECK(efs_meta_pub_pinned(kv, 0, 5) == EFS_ERR_INVAL, "inode 0");
+    efs_kv_mem_free(kv);
+}
+
+/* mtime.c: capture freezes the inode and every active lane; execute
+ * validates the plan, prepares each image, aborts on the first refusal and
+ * commits otherwise. */
+struct dl_mtime_ops { uint32_t prepared, fail_at; int decided, resolved; };
+
+static int dl_mtime_prepare(void *ctx, const struct efs_txid *t, const struct efs_txn_parts *p,
+                            const struct efs_meta_mtime_image *image)
+{
+    struct dl_mtime_ops *o = ctx;
+
+    (void)t; (void)p; (void)image;
+    return ++o->prepared == o->fail_at ? EFS_ERR_BUSY : EFS_OK;
+}
+
+static int dl_mtime_decide(void *ctx, const struct efs_txid *t, const struct efs_txn_parts *p,
+                           int decision)
+{
+    (void)t; (void)p;
+    ((struct dl_mtime_ops *)ctx)->decided = decision;
+    return EFS_OK;
+}
+
+static int dl_mtime_resolve(void *ctx, const struct efs_txid *t, const struct efs_txn_parts *p,
+                            int decision)
+{
+    (void)t; (void)p;
+    ((struct dl_mtime_ops *)ctx)->resolved = decision;
+    return EFS_OK;
+}
+
+static void test_mtime_capture_execute(void)
+{
+    static const struct efs_meta_mtime_ops ops = {dl_mtime_prepare, dl_mtime_decide,
+                                                  dl_mtime_resolve};
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc;
+    struct efs_meta_mtime_plan plan, bad;
+    struct efs_txid t;
+    struct dl_mtime_ops o;
+    efs_ino_t ino = 0;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    memset(&t, 0, sizeof(t));
+    t.bytes[0] = 1;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "dl-mtime",
+                                     &ino) == EFS_OK && ino, "create");
+    CHECK(efs_meta_apply_activate_lanes(kv, ino, (1ull << 3) | (1ull << 9)) == EFS_OK, "lanes");
+    CHECK(efs_meta_capture_mtime(kv, ino, T0 + 5, EFS_META_SET_ATIME, 1, 1, coord_fn, &cc,
+                                 &plan) == EFS_ERR_INVAL, "mtime is mandatory");
+    CHECK(efs_meta_capture_mtime(kv, EFS_ROOT_INO, T0 + 5, EFS_META_SET_MTIME, 1, 0, coord_fn,
+                                 &cc, &plan) == EFS_ERR_INVAL, "directories have no barrier");
+    CHECK(efs_meta_capture_mtime(kv, ino, T0 + 5, EFS_META_SET_MTIME, T0 + 4, 0, coord_fn, &cc,
+                                 &plan) == EFS_OK && plan.count == 3, "inode plus two lanes");
+    bad = plan;
+    bad.images[0].value[0] ^= 1;
+    memset(&o, 0, sizeof(o));
+    CHECK(efs_meta_execute_mtime(&bad, &t, &ops, &o) == EFS_ERR_INVAL && !o.prepared,
+          "a changed plan prepares nothing");
+    memset(&o, 0, sizeof(o));
+    o.fail_at = 2;
+    CHECK(efs_meta_execute_mtime(&plan, &t, &ops, &o) == EFS_ERR_BUSY && o.prepared == 2 &&
+              o.decided == EFS_TXN_ABORT && o.resolved == EFS_TXN_ABORT, "refusal aborts");
+    memset(&o, 0, sizeof(o));
+    CHECK(efs_meta_execute_mtime(&plan, &t, &ops, &o) == EFS_OK && o.prepared == 3 &&
+              o.decided == EFS_TXN_COMMIT && o.resolved == EFS_TXN_COMMIT, "commit");
+    efs_kv_mem_free(kv);
+}
+
+/* pack.c: the backfill cursor and its refusals; a refused INDEX writes
+ * nothing, and cancelling an unknown object is NOT_FOUND. */
+static void test_pack_index_cursor(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_pack_index_item root = {1, EFS_ROOT_INO, 1};
+    uint32_t next = 9;
+    int done = 9;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_pack_backfill_cursor(kv, EFS_RAFT_GROUP_SHARD, &next, &done) == EFS_OK &&
+              !next && !done, "no cursor yet");
+    CHECK(efs_meta_apply_pack_index(kv, EFS_RAFT_GROUP_SHARD, 64, 0, NULL, 0) == EFS_OK &&
+              efs_meta_pack_backfill_cursor(kv, EFS_RAFT_GROUP_SHARD, &next, &done) == EFS_OK &&
+              next == 64 && !done, "cursor advances");
+    CHECK(efs_meta_apply_pack_index(kv, EFS_RAFT_GROUP_SHARD, 128, 0, &root, 1) == EFS_ERR_INVAL &&
+              efs_meta_pack_backfill_cursor(kv, EFS_RAFT_GROUP_SHARD, &next, &done) == EFS_OK &&
+              next == 64 && !done, "the root is never a candidate; nothing written");
+    CHECK(efs_meta_apply_pack_index(kv, 7, 1, 0, NULL, 0) == EFS_ERR_INVAL, "not a data group");
+    CHECK(efs_meta_apply_pack_index(kv, EFS_RAFT_GROUP_SHARD, 0, 1, NULL, 0) == EFS_OK &&
+              efs_meta_pack_backfill_cursor(kv, EFS_RAFT_GROUP_SHARD, &next, &done) == EFS_OK &&
+              done, "backfill done");
+    CHECK(efs_meta_apply_pack_cancel(kv, EFS_RAFT_GROUP_SHARD, 77, 1) == EFS_ERR_NOT_FOUND,
+          "unknown pack object");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_trunc_sweep();
@@ -7066,6 +7297,10 @@ int main(void)
     test_degraded_marks();
     test_recovery_marks();
     test_degraded_mark_after_publish();
+    test_publication_receipt_stale_retire();
+    test_pub_stage_record();
+    test_mtime_capture_execute();
+    test_pack_index_cursor();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);
         return 1;

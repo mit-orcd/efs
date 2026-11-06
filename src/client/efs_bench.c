@@ -1,6 +1,7 @@
 #include "../common/parse_host_port.h"
 #include "efs/cli_help.h"
 #include "client_internal.h"
+#include "efs/tmpdir.h"
 #include "../bench/bench_local.h"
 #include "../bench/blake3_bench.h"
 #include "../bench/io_bench.h"
@@ -539,7 +540,7 @@ static int run_data_bench(const char *seed, const char *export_name, int reading
     if (want_perf) {
         char path[512]; const char *p = getenv("EFS_PERF_PATH");
         if (p && *p) snprintf(path, sizeof(path), "%s", p);
-        else snprintf(path, sizeof(path), "/tmp/efs-bench-perf-%d/perf.data", (int)getpid());
+        else efs_tmp_path(path, sizeof(path), "efs-bench-perf-%d/perf.data", (int)getpid());
         g_perf_pid = efs_start_perf_recorder(getpid(), path);
         if (g_perf_pid < 0) rc = EFS_ERR_IO;
     }
@@ -1010,8 +1011,8 @@ static int run_meta_bench(const char *seed, const char *export_name,
         if (pp && *pp)
             snprintf(perf_path, sizeof(perf_path), "%s", pp);
         else
-            snprintf(perf_path, sizeof(perf_path),
-                     "/tmp/efs-bench-perf-%d/perf.data", (int)getpid());
+            efs_tmp_path(perf_path, sizeof(perf_path),
+                     "efs-bench-perf-%d/perf.data", (int)getpid());
         g_perf_pid = efs_start_perf_recorder(getpid(), perf_path);
         if (g_perf_pid < 0)
             fprintf(stderr, "Warning: could not start perf; continuing\n");
@@ -1334,7 +1335,7 @@ int main(int argc, char **argv)
         if (pp && *pp)
             snprintf(perf_path, sizeof(perf_path), "%s", pp);
         else
-            snprintf(perf_path, sizeof(perf_path), "/tmp/efs-bench-perf-%d/perf.data",
+            efs_tmp_path(perf_path, sizeof(perf_path), "efs-bench-perf-%d/perf.data",
                      (int)getpid());
         g_perf_pid = efs_start_perf_recorder(getpid(), perf_path);
         if (g_perf_pid < 0)

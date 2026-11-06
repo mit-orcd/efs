@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include "../test_tmpdir.h"
 
 static void key(unsigned i, unsigned kind, uint8_t k[5])
 { k[0]=1;k[1]=(uint8_t)(i>>8);k[2]=(uint8_t)i;k[3]=(uint8_t)kind;k[4]=0; }
@@ -43,7 +44,7 @@ static void add_seg(struct kv_lsm *l,int level,unsigned i,int tombstone)
 }
 int main(void)
 {
-    char dir[]="/tmp/efs-lsm-index-smoke-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-lsm-index-smoke-XXXXXX");assert(efs_test_mkdtemp(dir));
     struct efs_kv *kv=open_kv(dir);struct kv_lsm *l=kv->ctx;
     for(unsigned i=0;i<128;i++)add_seg(l,1,i,0);
     for(unsigned i=0;i<32;i++)add_seg(l,0,i,i==7);

@@ -22,7 +22,7 @@
 # hottest efs-fuse thread and the client's mutex-wait share.
 set -u
 DREL=$1; CREL=$2; L=$3; LOAD=${4:-60}; META=${META_MB:-16}; POP=${POP_FILES:-200000}
-AB=${AB_ROOT:-/tmp/efs-ab}/$L
+AB=${AB_ROOT:-${TMPDIR:-/tmp}/efs-ab}/$L
 rm -rf "$AB"; mkdir -p "$AB"/{n1,n2,n3,logs,mnt,perf}
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0
 for i in 1 2 3; do
