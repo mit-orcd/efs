@@ -987,7 +987,6 @@
     "tests/test_direct_read_fork_oracle.py": 2,
     "tests/test_directory_sync_group.c": 6,
     "tests/test_dirty_ranges.c": 5,
-    "tests/test_dq_status_slots_live.py": 2,
     "tests/test_efs_commands.py": 45,
     "tests/test_env_inventory.py": 2,
     "tests/test_env_removed.py": 2,
@@ -1082,6 +1081,7 @@
     "tests/test_k88_chunk_hints.c": 2,
     "tests/test_k88_chunk_hints_live.py": 1,
     "tests/test_k90_unmount_enospc.py": 5,
+    "tests/test_k96_status_slots_live.py": 2,
     "tests/test_k_register.py": 10,
     "tests/test_kv.c": 5,
     "tests/test_kv_block_hash.c": 7,
@@ -1472,7 +1472,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "3b4a0a010446283385d03eba5f023daa35a693b9c5f6aadbb6041ab1332b15a1",
+    "Makefile": "1a4ba4c10ed7da99f44c29d3c15f671262923f14db1d8b43fac43fe8209f8173",
     "README.md": "f646cf19b6605664ea80ee9a539ea8c7938be322ee12ba520447204095e3d216",
     "docs/backlog/crash-safe-durable-versions.md": "b57a8c2376ec9e85d9403196a237c57b69f7515a60e73ceb2ac997788016d6b3",
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
@@ -1496,7 +1496,7 @@
     "docs/status/2026-10/d39-consolidated-model-20261023.md": "68211f94877f2acbf05645ba2ef455c9f320cde460e821371b534451284f8bcc",
     "docs/status/2026-10/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
     "docs/status/2026-10/w100-eof-contract-20261013.md": "f8d0ef05a9b9d02a7118405d4bce0d6c4dbe4975b5138880b74a7cd995c2190c",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "957fed69f88b2025241a8501bdf347edda4b121d8c565413691a00a068814546",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "f28017199b1334d3405e506b69f397843a99ba6b4cfe46834754c8bbabe80a73",
     "docs/status/alpha-1.1-consolidation.md": "c24210e5af50ff0c1d9f0fea74efb982947486c547230718a00b59f6c6d106a2",
     "docs/status/decisions.md": "1217bfafdf7b349bf453ad7a646f524fc6fdceaefc036d5ce637117126069ff7",
     "docs/using/alpha-1.0-guide.md": "af171553530fdac62596e108d0accbd8e12824abbae1eab8af4355ce5ce1289f",
@@ -2494,7 +2494,6 @@
     "tests/test_direct_read_fork_oracle.py": "24fa6648f91c98f0f34135b33ceaf7103a051ed9a62597f8d50bd8dd796cef9b",
     "tests/test_directory_sync_group.c": "cc8314107b3ce335946300c826efd79f991f11d18be8ae08a746493140415934",
     "tests/test_dirty_ranges.c": "9a6750f6c7903e242a60a38a8587827052d36829cf0b707657615307014edeb7",
-    "tests/test_dq_status_slots_live.py": "a8f83dd49aca044caa1c493f96d448361113c7ddad4b91303d102296215b90e5",
     "tests/test_efs_commands.py": "04a76aa3220e233b208299668659179793fed848e2a932e5b8bdfa74a0143664",
     "tests/test_env_inventory.py": "833dbbb3e31a10c2c61d60a5fa5393f9d2b7c7b4798b2336c3e16d775368ca0d",
     "tests/test_env_removed.py": "8ae42284c23207b4897c3c3f5a189c465be99c6c55863a469d284cd1b010e1a3",
@@ -2589,6 +2588,7 @@
     "tests/test_k88_chunk_hints.c": "ea84624309d7beec0760f27f3584b97e419cd81703a63a80f55ed926ad96945e",
     "tests/test_k88_chunk_hints_live.py": "7f835588b0d61f39063771257ba66d94c13a66c22f6855134160a9e76ab2ca1f",
     "tests/test_k90_unmount_enospc.py": "e81e73ef3450d697e0cb85bd43e011f91a98d2f40749de69d6622a3539637257",
+    "tests/test_k96_status_slots_live.py": "420649e63b3f4bccd017c197f6a9bf9dbd20ab9bddbbdab26260376e41a06466",
     "tests/test_k_register.py": "58032f20244e1b52d7e9c7811fffdc3465707dd3eae63269e1f00ded457b14fe",
     "tests/test_kv.c": "369579ffc98da87b3cfd1657bcfd5ebd51d38f33e866f4e17bbfb46daf2a577d",
     "tests/test_kv_block_hash.c": "a1bf30fd1f615815b4a2e9293a0b9d4232a7521a8859dd1d17877812da18cb80",
@@ -2982,5 +2982,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "2744821f493eba5f698e22b932855ed25cde6e61"
+  "source_commit": "554f59c0867b6f3f4f6904eabaceb9e3cc2f05e2"
 }

@@ -1264,7 +1264,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k48_readdir.py
 	python3 tests/test_ao_readdir_live.py
 	python3 tests/test_w166_authority.py
-	python3 tests/test_dq_status_slots_live.py
+	python3 tests/test_k96_status_slots_live.py
 	./tests/test_kv_lsm
 	python3 tests/test_server_processes.py
 	python3 tests/test_w125_harness.py

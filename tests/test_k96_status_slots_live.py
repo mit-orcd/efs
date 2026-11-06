@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Task DQ on real daemons: forwarded ticket STATUS never holds the proof slots.
+"""K96 (Task DQ) on real daemons: forwarded ticket STATUS never holds the proof slots.
 
 Three private production efsd (TCP, free loopback ports). ROUNDS rounds of 24
 concurrent `efs-bench --size 8M --io-size 64K --workers 4`. Every fragment PUT
@@ -13,7 +13,7 @@ test moves g0's leader to node 1 and g2's to node 2 first: with both on one
 node there is no remote session proof and no cycle.
 
 Pass: every copy exits 0 and no worker reports `rc=-13`.
-DQ_ROUNDS sets the rounds (default 3); DQ_KEEP=1 keeps the cluster directory.
+K96_ROUNDS sets the rounds (default 3); K96_KEEP=1 keeps the cluster directory.
 """
 import os, re, subprocess, sys, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
@@ -22,12 +22,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import k33_daemons as k
 
 ROOT = Path(__file__).resolve().parents[1]
-PAR, ROUNDS = 24, int(os.environ.get('DQ_ROUNDS', '3'))
+PAR, ROUNDS = 24, int(os.environ.get('K96_ROUNDS', '3'))
 k.EFSD = ROOT / 'efsd'
 env = {key: value for key, value in os.environ.items() if not key.startswith('EFS_')}
 env['EFS_TRANSPORT'] = 'tcp'
-work = Path(tempfile.mkdtemp(prefix='efs-dq-', dir=os.environ.get('TMPDIR')))
-c = k.Cluster(work, 'dq', [1, 2, 3], env)
+work = Path(tempfile.mkdtemp(prefix='efs-k96-', dir=os.environ.get('TMPDIR')))
+c = k.Cluster(work, 'k96', [1, 2, 3], env)
 t0 = time.time()
 
 
@@ -55,16 +55,16 @@ try:
         for r in range(ROUNDS):
             rows = list(pool.map(lambda i: one(r, i), range(PAR)))
             bad = [x for x in rows if x[1] or x[2]]
-            print(f'DQ round={r} g0=node{placement[0]} g2=node{placement[2]} copies={PAR} failed={len(bad)} busy_workers={sum(x[2] for x in rows)} '
+            print(f'K96 round={r} g0=node{placement[0]} g2=node{placement[2]} copies={PAR} failed={len(bad)} busy_workers={sum(x[2] for x in rows)} '
                   f'max_s={max(x[3] for x in rows):.1f}', flush=True)
             fails += [f'round {r} copy {i}: rc={rc} busy_workers={b} {s:.1f} s\n{err[-1500:]}'
                       for i, rc, b, s, err in bad]
     assert not fails, '\n'.join(fails[:4])
-    print(f'DQ STATUS slots apart from proof slots: {ROUNDS} rounds x {PAR} writers, '
+    print(f'K96 STATUS slots apart from proof slots: {ROUNDS} rounds x {PAR} writers, '
           f'no BUSY stall: PASS ({time.time() - t0:.1f} s)')
 finally:
     c.stop_all()
-    if os.environ.get('DQ_KEEP') or sys.exc_info()[0] is not None:
+    if os.environ.get('K96_KEEP') or sys.exc_info()[0] is not None:
         print('kept', work)
     else:
         import shutil
