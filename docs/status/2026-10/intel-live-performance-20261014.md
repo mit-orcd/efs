@@ -125,7 +125,7 @@ This is a proposal, not a demonstrated speedup or proof of mutex wait causality.
 
 Source explains the CPU stacks:
 
-- [GETATTR](../../../src/meta/meta_apply.c) (`efs_meta_apply_getattr`) collects
+- [GETATTR](../../../src/meta/meta_apply/attr.c) (`efs_meta_apply_getattr`) collects
   the inode and active lanes, reads pending transaction reductions and verifies
   stability. `efs_txn_reduce_read_ex` in
   [txn.c](../../../src/meta/txn.c) reads the materialized lane and scans its

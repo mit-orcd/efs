@@ -5,9 +5,10 @@ from pathlib import Path
 import shlex
 import subprocess
 import tempfile
+import csrc
 
 root = Path(__file__).resolve().parents[1]
-source = Path(os.environ.get('EFS_META_SOURCE', root / 'src/meta/meta_apply.c')).read_text()
+source = csrc.module('meta_apply')
 start = source.index('#define DENTRY_KEY_PREFIX')
 end = source.index('\nstatic int dir_has_live(', start)
 code = r'''

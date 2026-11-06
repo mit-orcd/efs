@@ -130,7 +130,7 @@ Raft indices per hosted group; dual-group hosts fcstor004/005 show 256.
 Replica log rows must not be summed as unique cluster proposals. These are not
 repeated observations of one fixed apply index.
 
-[Batch application](../../../src/meta/meta_apply.c) deletes the selected chunk rows
+[Batch application](../../../src/meta/meta_apply/sweep.c) deletes the selected chunk rows
 and writes their GC references, then returns `EFS_ERR_BUSY` if more chunks
 remain. The [reaper](../../../src/server/raft_host.c) treats BUSY as partial
 progress, advances other lanes and retains the marker until every lane is done.
