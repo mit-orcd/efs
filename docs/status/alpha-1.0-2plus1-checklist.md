@@ -336,7 +336,7 @@ outcomes. See the [response review](2026-10/devel-integration-review-20261022.md
 
 ### Stage 1 tally, end of Oct 22 (adjusted after the integration review)
 
-*Oct 30 note: this tally is historical. Current counts (50 FIXED / 35 VERIFY / 3 CLOSED / 3 DECIDED / 3 OPEN, after wave 58: K91 and K92 FIXED, K93 and K94 OPEN, K38 fixed for the image-base stall and proven on real daemons by Task DG, still OPEN pending the orcd-mini `ior hard` and RDMA shared-chunk reruns) and the acceptance owed per row are in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md).*
+*Oct 30 note: this tally is historical. Current counts (51 FIXED / 35 VERIFY / 3 CLOSED / 3 DECIDED / 3 OPEN, after wave 59: K95 FIXED (status protection race, Task DJ), K88 hint kept per inode and chunk (Task DK), `meta_apply.c` split into `src/meta/meta_apply/` (Task DL); K93 and K94 OPEN, K38 fixed for the image-base stall and proven on real daemons by Task DG, still OPEN pending the orcd-mini `ior hard` and RDMA shared-chunk reruns) and the acceptance owed per row are in the [Stage 1 acceptance matrix](stage1-acceptance-matrix-20261030.md).*
 
 **Additional alpha blocker W153:** the unset/empty metadata count silently
 selects four nodes and can remove single-loss tolerance on three-node
