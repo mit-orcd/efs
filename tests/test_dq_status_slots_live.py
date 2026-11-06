@@ -8,7 +8,9 @@ ReadIndex from the other group's leader. Before Task DQ the STATUS forward and
 that ReadIndex shared the two peer proof slots, so with g0 and g2 led by
 different nodes the forwards held the slots in both directions, every PUT on
 the cluster answered BUSY after 400 ms, and the writers' BUSY retries kept the
-cycle closed until their 30 s budget failed every copy with `rc=-13`.
+cycle closed until their 30 s budget failed every copy with `rc=-13`. The
+test moves g0's leader to node 1 and g2's to node 2 first: with both on one
+node there is no remote session proof and no cycle.
 
 Pass: every copy exits 0 and no worker reports `rc=-13`.
 DQ_ROUNDS sets the rounds (default 3); DQ_KEEP=1 keeps the cluster directory.
@@ -43,12 +45,17 @@ try:
         c.start(i, join=None if i == 1 else 1, quota='4G')
     c.wait_members((1, 2, 3), 3)
     c.wait_voters((1, 2, 3), lambda n, v: k.voters_ok(n, v, 3))
+    # The cycle needs the two groups' leaders apart (one remote session proof).
+    k.place_leaders(c, 1, groups=(0,))
+    k.place_leaders(c, 2, groups=(2,))
+    placement = c.leader_placement(1)
+    assert placement[0] != placement[2], placement
     fails = []
     with ThreadPoolExecutor(PAR) as pool:
         for r in range(ROUNDS):
             rows = list(pool.map(lambda i: one(r, i), range(PAR)))
             bad = [x for x in rows if x[1] or x[2]]
-            print(f'DQ round={r} copies={PAR} failed={len(bad)} busy_workers={sum(x[2] for x in rows)} '
+            print(f'DQ round={r} g0=node{placement[0]} g2=node{placement[2]} copies={PAR} failed={len(bad)} busy_workers={sum(x[2] for x in rows)} '
                   f'max_s={max(x[3] for x in rows):.1f}', flush=True)
             fails += [f'round {r} copy {i}: rc={rc} busy_workers={b} {s:.1f} s\n{err[-1500:]}'
                       for i, rc, b, s, err in bad]
