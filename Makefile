@@ -144,8 +144,6 @@ TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
 TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c
 TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view
-TEST_SRCS += tests/test_k88_chunk_hints.c
-TEST_BINS += tests/test_k88_chunk_hints
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
@@ -400,7 +398,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 # helpers built with extra flags). They are real prerequisites of test and
 # test-long, never built inside a recipe, so test-long works on its own and a
 # parallel make cannot start a test before its binary exists.
-TEST_SPECIAL_BINS = tests/faults/efsd tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/test_data_commit_index tests/faults/test_kv_compact_crash tests/test_ba_delete_accounting tests/test_ba_upload_retire
+TEST_SPECIAL_BINS = tests/faults/efsd tests/test_k88_chunk_hints tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/test_data_commit_index tests/faults/test_kv_compact_crash tests/test_ba_delete_accounting tests/test_ba_upload_retire
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -999,7 +997,7 @@ clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
-	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_follower_bound tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
+	rm -f tests/test_k88_chunk_hints tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_follower_bound tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
 	rm -rf tests/faults/server tests/faults/kv
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
 	rm -f tests/test_ba_delete_accounting tests/test_ba_upload_retire
