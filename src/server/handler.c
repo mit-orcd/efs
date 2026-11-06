@@ -852,11 +852,6 @@ void server_handle_conn(struct efs_conn *conn)
                 g_server->storage_paths, g_server->storage_path_count,
                 reply.quota, reply.used, &reply.capacity_bytes,
                 &reply.available_bytes) == 0;
-            for (int g = 0; g < 2; g++)
-                reply.degraded_chunks[g] =
-                    __atomic_load_n(&g_server->degraded_chunks[g], __ATOMIC_RELAXED);
-            reply.degraded_sampled =
-                __atomic_load_n(&g_server->degraded_sampled_mask, __ATOMIC_RELAXED);
             reply.rebuilt_fragments =
                 __atomic_load_n(&g_server->rebuilt_fragments, __ATOMIC_RELAXED);
             reply.rebuild_failures =
@@ -874,34 +869,26 @@ void server_handle_conn(struct efs_conn *conn)
                 __atomic_load_n(&g_server->put_orphan_deleted, __ATOMIC_RELAXED);
             reply.put_orphan_failures =
                 __atomic_load_n(&g_server->put_orphan_failures, __ATOMIC_RELAXED);
-            for (int g = 0; g < 2; g++) {
-                reply.degraded_segments[g] =
-                    __atomic_load_n(&g_server->degraded_segments[g], __ATOMIC_RELAXED);
-                reply.unrecoverable_segments[g] =
-                    __atomic_load_n(&g_server->unrecoverable_segments[g], __ATOMIC_RELAXED);
-            }
-            reply.segment_sampled =
-                __atomic_load_n(&g_server->segment_sampled_mask, __ATOMIC_RELAXED);
-            /* K38: for the groups this node leads (the sampled bits), the
-             * degraded counts come from the local replica at this reply,
-             * not from the last rebuild pass: a stripe or segment marked
-             * degraded after the pass sampled was reported as "Protection:
-             * full" for up to a GC pass, and a member stopped on that word
-             * took the stripe's second fragment (test_k33_payload.py step 5
-             * read EIO). The chunk count is the apply-kept one (W154; it
-             * may overshoot, never undershoot); segments are counted now. */
+            /* K38/DJ: for each group this node leads, the degraded counts
+             * come from the local replica after a ReadIndex at this reply,
+             * not from a rebuild pass: a mark committed after the pass
+             * sampled read "Protection: full" for up to a pass (K38,
+             * test_k33_payload.py step 5 read EIO), and a leader whose
+             * first pass had not run yet read "Protection: unknown" on a
+             * healthy cluster (DJ, test_put_quota_reclaim.py under load).
+             * The chunk count is the apply-kept one (W154; it may
+             * overshoot, never undershoot); segments are counted now. */
             for (int g = 0; g < 2; g++) {
                 uint8_t group = g ? EFS_RAFT_GROUP_SHARD2 : EFS_RAFT_GROUP_SHARD;
-                if (reply.degraded_sampled & (1u << g)) {
-                    int64_t have = efs_meta_degraded_count_peek(g ? 2u : 1u);
-                    if (have >= 0)
-                        reply.degraded_chunks[g] = (uint64_t)have;
-                }
-                uint64_t total = 0, lost = 0;
-                if ((reply.segment_sampled & (1u << g)) &&
-                    server_segment_degraded_now(group, &total, &lost) == EFS_OK) {
+                uint64_t chunks = 0, total = 0, lost = 0;
+                if (server_raft_host_degraded_now(group, &chunks) != EFS_OK)
+                    continue;
+                reply.degraded_chunks[g] = chunks;
+                reply.degraded_sampled |= 1u << g;
+                if (server_segment_degraded_now(group, &total, &lost) == EFS_OK) {
                     reply.degraded_segments[g] = total;
                     reply.unrecoverable_segments[g] = lost;
+                    reply.segment_sampled |= 1u << g;
                 }
             }
             reply.segments_rebuilt =

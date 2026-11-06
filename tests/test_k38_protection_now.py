@@ -21,6 +21,11 @@ hooks, toggled by files in the work directory so each step is forced:
                                     DIR/refuse-N exists;
   EFS_FAULT_SEGMENT_PUT_STALE=DIR   the packer's next pooled connection to
                                     node N fails once (DIR/stale-N, consumed).
+ 0. A leader that never ran a rebuild pass (Task DJ): the passes are held
+    from the start. Once each group has a leader, every member's status
+    reads `Degraded chunks: 0`, `Degraded segments: 0`, `Protection: full`.
+    (Before: `Protection: unknown`, the counts came from the leader's first
+    pass, which under gate load ran seconds after election.)
  1. Stale pooled connection: stale-N for a member N that leads no group; a
     batch is packed. The fragment for N is sent again on a new connection
     (`sent on a new connection ... rc=0`), no segment is written degraded,
@@ -35,7 +40,7 @@ hooks, toggled by files in the work directory so each step is forced:
     at once: `Degraded chunks: >= 1`, `Protection: DEGRADED`. (Base: 0 and
     `Protection: full`.) N returns and the hold is released: rebuilt,
     `Protection: full`; a fresh mount reads every file exactly.
-EFS_K38_STEPS=2,3 runs only the listed steps. Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
+EFS_K38_STEPS=2,3 runs only the listed steps (step 0 always runs). Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, time
 from pathlib import Path
@@ -142,11 +147,20 @@ def non_leader(c):
 c = Cluster(work, 'k', [1, 2, 3], env)
 mounts = []
 try:
+    hold.touch()
     c.start(1)
     c.start(2, join=1)
     c.start(3, join=1)
     for i in (1, 2, 3):
         c.wait_log(i, r'raft-host: formed: 3 members')
+
+    # 0. Status from leaders that never ran a rebuild pass.
+    c.leader_placement(1)
+    for i in (1, 2, 3):
+        got = counts(status(c, i))
+        assert got == (0, 0, 'full'), f'node {i} status with no rebuild pass yet: {got}\n{status(c, i)}'
+    hold.unlink()
+    print('0. leaders that never ran a rebuild pass: every member reports full protection PASS')
     a = Mount(c, 1, 'mnt')
     mounts.append(a)
     base = packed_total(c)
