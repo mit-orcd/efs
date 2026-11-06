@@ -104,7 +104,7 @@ No, as FIXED. The defect itself would block alpha: with no node down and no elec
 - Loopback clusters on one host, TCP only; no RDMA, no orcd-mini or orcd-test run. The FUSE client takes the same PUT path; it was not measured under this load.
 - Larger clusters, where a leader may not host the session owner's group, take the session GET chain above; not measured.
 - K94 not re-measured.
-- Follow-up, not K96: the TSan race in the client's `rpc_resolve_ms` (see Checks). Once it is fixed, `k96_status_slots_live|K96_ROUNDS=1 tests/test_k96_status_slots_live.py` can join the TSan daemon list.
+- Follow-up, not K96: the TSan race in the client's `rpc_resolve_ms` (see Checks). Once it is fixed, `k96_status_slots_live|K96_ROUNDS=1 tests/test_k96_status_slots_live.py` can join the TSan daemon list. Done as [K97](k97-resolve-ms-race-20261106.md): fixed, and the entry is in the TSan list.
 - Both leaders on one node was not measured on the fixed tree (the election split them in the one attempt).
 - `docs/status/README.md`: no change; the K register row stays OPEN overall.
 
