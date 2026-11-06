@@ -391,6 +391,7 @@ test-wb-runtime:
 	python3 tests/test_k38_report_bound.py
 	python3 tests/test_k38_install_order.py
 	python3 tests/test_k38_swept_hint_live.py
+	python3 tests/test_k88_chunk_hints_live.py
 	python3 tests/test_inode_pending_eof.py
 	python3 tests/test_client_metadata_authority.py
 	python3 tests/test_report_session_apply.py
@@ -419,7 +420,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 # helpers built with extra flags). They are real prerequisites of test and
 # test-long, never built inside a recipe, so test-long works on its own and a
 # parallel make cannot start a test before its binary exists.
-TEST_SPECIAL_BINS = tests/faults/efsd tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/test_data_commit_index tests/faults/test_kv_compact_crash tests/test_ba_delete_accounting tests/test_ba_upload_retire
+TEST_SPECIAL_BINS = tests/faults/efsd tests/test_k88_chunk_hints tests/faults/test_follower_bound tests/nodirect_fs tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/test_data_commit_index tests/faults/test_kv_compact_crash tests/test_ba_delete_accounting tests/test_ba_upload_retire
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -945,6 +946,10 @@ tests/test_writer_routing: tests/test_writer_routing.c src/server/writer.c src/s
 
 tests: $(TEST_BINS)
 
+# K88 Task DK: the slot-less library writer on real daemons (test_k88_chunk_hints_live.py).
+tests/test_k88_chunk_hints: tests/test_k88_chunk_hints.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/client -o $@ $< $(LIB) $(LDFLAGS)
+
 tests/test_telemetry: tests/test_telemetry.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
 
@@ -1015,7 +1020,7 @@ clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
-	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_follower_bound tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
+	rm -f tests/test_k88_chunk_hints tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_follower_bound tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
 	rm -rf tests/faults/server tests/faults/kv
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
 	rm -f tests/test_ba_delete_accounting tests/test_ba_upload_retire

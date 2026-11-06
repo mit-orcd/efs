@@ -573,18 +573,25 @@ static int report_fill_owned(efs_ino_t ino, uint32_t ci,
  * next image of that chunk (same writer, a superset of the first) still
  * says base=0, loses to its own earlier REPORT (a background one while the
  * writer was mid-chunk) and every retry is identical. Remember the full
- * image the host committed, per FileID, and use it as the CAS base of the
- * next base=0 record. Direct-mapped: a collision only forgets (the old
- * behaviour). A recreate changes the FileID and so ignores it; a truncate
- * keeps the FileID and its sweep removes the row, so a hint can outlive its
- * base: cbase_reconcile retires it on the first STALE repull (K38). */
+ * image the host committed, per (inode, chunk) and FileID, and use it as the
+ * CAS base of the next base=0 record. One REPORT notes every chunk it
+ * committed, in dirty-table order, so each chunk needs its own slot (K88 Task
+ * DK: the old slot dropped the chunk index and a sibling's note replaced the
+ * hint). Bounded: 4096 slots of 32 bytes (128 KiB, as before), direct-mapped;
+ * a file's chunks take consecutive slots, so up to 4096 chunks of one file
+ * never evict each other, and a new note evicts the slot's older hint, which
+ * only forgets (the pre-K88 behaviour). A hint matters only between a commit
+ * and the writer's next REPORT of that chunk. A recreate changes the FileID
+ * and so ignores it; a truncate keeps the FileID and its sweep removes the
+ * row, so a hint can outlive its base: cbase_reconcile retires that chunk's
+ * hint on the first STALE repull that disproves it (K38). */
 #define CBASE_SLOTS 4096
 static struct { efs_ino_t ino; uint32_t ci; uint64_t gen, file_gen; }
     g_cbase[CBASE_SLOTS];
 
 static uint32_t cbase_slot(efs_ino_t ino, uint32_t ci)
 {
-    return (uint32_t)((ino * 0x9E3779B97F4A7C15ULL + ci) >> 40) % CBASE_SLOTS;
+    return (uint32_t)(((ino * 0x9E3779B97F4A7C15ULL) >> 40) + ci) % CBASE_SLOTS;
 }
 
 static void cbase_note(const struct efs_chunk_rec *r)
