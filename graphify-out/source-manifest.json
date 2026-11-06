@@ -134,6 +134,7 @@
     "scripts/evidence/dl/instruction_stream.sh": 2,
     "scripts/evidence/dl/objcmp.py": 2,
     "scripts/evidence/dl/verify_split.py": 1,
+    "scripts/evidence/dp/k38_loaded_loop.sh": 2,
     "scripts/evidence/fin/fin_accounting_audit.py": 1,
     "scripts/evidence/fin/fin_accounting_controls.py": 2,
     "scripts/evidence/fin/fin_accounting_gate.sh": 11,
@@ -1066,7 +1067,7 @@
     "tests/test_k37_events.py": 2,
     "tests/test_k37_segment_rebuild.py": 19,
     "tests/test_k38_install_order.py": 2,
-    "tests/test_k38_protection_now.py": 14,
+    "tests/test_k38_protection_now.py": 15,
     "tests/test_k38_report_bound.py": 2,
     "tests/test_k38_shared_chunk_pressure.py": 4,
     "tests/test_k38_stale_span_replay.py": 3,
@@ -1640,6 +1641,7 @@
     "scripts/evidence/dl/instruction_stream.sh": "b417a39c233b1b883d06f9d68f8ca9cdeef75ddcc818757b6cb60c343684f88a",
     "scripts/evidence/dl/objcmp.py": "44dd8d09c5c4a76dda723660f938149fb90bcd12736bfbf764bbf88ef9832b9a",
     "scripts/evidence/dl/verify_split.py": "6ca0fe08e6732ba7f85366f1c8d655bb31a0ab390888c80edb4e168174befc68",
+    "scripts/evidence/dp/k38_loaded_loop.sh": "93e7e99f86f8587cf5f252baffa533792b548854534b04ddb944b1f4f480bf92",
     "scripts/evidence/fin/fin_accounting_audit.py": "221499c149c00c7301fbc221d54b12a8e4daae5d30b34a1bbb175c9d85d86cf4",
     "scripts/evidence/fin/fin_accounting_controls.py": "266e49372c6cc9ad580915fbbf53c4462b33de06930fb85982e69f495f016706",
     "scripts/evidence/fin/fin_accounting_gate.sh": "f77641c01d76742a2e70a543fd6a80ad1d6922f73bd167309892ddb6e9f139d3",
@@ -2572,7 +2574,7 @@
     "tests/test_k37_events.py": "103ab79968529d788c3776cf42b6f4370f6099028b0fcfffcedecd9fab94c0d1",
     "tests/test_k37_segment_rebuild.py": "28c9d06fa42b20f82964d59f8c4e8356745bb8073f144b0e6792025e2d0bec82",
     "tests/test_k38_install_order.py": "6e30e47938c126d09ccf139c483c0178ff756b552aa07954909f01af9f40f431",
-    "tests/test_k38_protection_now.py": "609a5a1902dc4da7c21d903d2f20450ddc1694d9950b3d4ce1f4e7b6578cd12a",
+    "tests/test_k38_protection_now.py": "3f7ff706aa6b4038457c3de294f8e7d6b969ee935d63f8d345693e69400331de",
     "tests/test_k38_report_bound.py": "30936cdcdcdc69f8f1cbb1db62fd7c1f1ce804fd365be5d2b3901e2b9ae3febe",
     "tests/test_k38_shared_chunk_pressure.py": "707d17c16e9b978aa551774e7b7a5e57e32052aba7df797bfd8acae74f19e621",
     "tests/test_k38_stale_span_replay.py": "e48aa5fa0663f722722db20fbed1f8a526b5d9afd6ee1676103de3bb844abae3",
@@ -2975,10 +2977,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1775
+    "calls": 1777
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "d5fee2dd33c45b82d1a7b8bb8fbb6b1a4533d4b7"
+  "source_commit": "708bc5bfe6f18a3964e8eae6a3a2cbc82981dc1c"
 }
