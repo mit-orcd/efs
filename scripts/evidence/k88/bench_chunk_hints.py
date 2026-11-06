@@ -12,9 +12,10 @@ CAS hint is gone; that record then ends in `report-stuck` and `BENCH_FAIL`.
 Run from a built tree (efsd, efs-mgmt, efs-bench):
   python3 scripts/evidence/k88/bench_chunk_hints.py OUTDIR [PAR=24] [ROUNDS=20]
       [SIZE=4M] [IO=64K] [WORKERS=4]
-Output: OUTDIR/runs.tsv (round copy rc report_stuck secs), OUTDIR/summary.txt;
-the stderr of every run with a `report-stuck` or a failure is kept as
-OUTDIR/r<round>-<copy>.log. The cluster's work directory is removed at the end.
+Output: OUTDIR/runs.tsv (round copy rc report_stuck secs start_epoch),
+OUTDIR/summary.txt; the stderr of every run with a `report-stuck` or a failure
+is kept as OUTDIR/r<round>-<copy>.log and the daemons' logs as OUTDIR/n<i>.log.
+The cluster's work directory is removed at the end.
 """
 import os, re, shutil, subprocess, sys, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
@@ -35,14 +36,14 @@ c = k.Cluster(work, 'k88b', [1, 2, 3], env)
 
 
 def one(r, i):
-    t = time.monotonic()
+    t, start = time.monotonic(), time.time()
     p = subprocess.run([str(ROOT / 'efs-bench'), c.ep(1 + i % 3), '--size', size, '--io-size', io,
                         '--workers', workers, '--id', str(100000 + r * 1000 + i)],
                        env=env, text=True, capture_output=True, timeout=300)
     stuck = len(re.findall(r'^report-stuck ', p.stderr, re.M))
     if stuck or p.returncode:
         (out / f'r{r}-{i}.log').write_text(p.stdout + p.stderr)
-    return r, i, p.returncode, stuck, time.monotonic() - t
+    return r, i, p.returncode, stuck, time.monotonic() - t, start
 
 
 try:
@@ -55,7 +56,7 @@ try:
         for r in range(rounds):
             rows += list(pool.map(lambda i: one(r, i), range(par)))
     with open(out / 'runs.tsv', 'w') as f:
-        f.writelines(f'{r}\t{i}\t{rc}\t{s}\t{secs:.2f}\n' for r, i, rc, s, secs in rows)
+        f.writelines(f'{r}\t{i}\t{rc}\t{s}\t{secs:.2f}\t{t0:.3f}\n' for r, i, rc, s, secs, t0 in rows)
     text = (f'size {size} io {io} workers {workers} par {par} rounds {rounds}\n'
             f'runs {len(rows)} fail {sum(1 for x in rows if x[2])} '
             f'runs_with_report_stuck {sum(1 for x in rows if x[3])} '
@@ -64,4 +65,7 @@ try:
     print(text, end='')
 finally:
     c.stop_all()
+    for i in (1, 2, 3):
+        if (c.dir / f'n{i}.log').exists():
+            shutil.copy(c.dir / f'n{i}.log', out / f'n{i}.log')
     shutil.rmtree(work, ignore_errors=True)
