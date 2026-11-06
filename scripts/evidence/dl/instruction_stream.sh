@@ -10,7 +10,7 @@
 # that run shows whether any instruction changed apart from what the
 # compiler chose to inline.
 set -u
-B=$(cd "$1" && pwd); A=$(cd "$2" && pwd); O=$3; mkdir -p "$O/noinl/before" "$O/noinl/after"
+B=$(cd "$1" && pwd); A=$(cd "$2" && pwd); mkdir -p "$3/noinl/before" "$3/noinl/after"; O=$(cd "$3" && pwd)
 S=$(cd "$(dirname "$0")" && pwd)
 python3 "$S/objcmp.py" "$B/src/meta/meta_apply.o" "$A/src/meta/meta_apply" "$O/diffs" > "$O/objcmp.txt"
 X="-fno-inline -fno-inline-small-functions -fno-inline-functions-called-once -fno-partial-inlining
