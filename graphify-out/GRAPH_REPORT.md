@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `0c3e346181974e667517c37dc0327171ea4909d4`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 17,906 nodes, 74,566 directed typed edges, 581 communities.
+Source base: `4190db6ca07dc02d5d1542d13d29d179ab104d9c`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 18,008 nodes, 74,807 directed typed edges, 556 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,34 +19,34 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27440
+- `calls`: 27489
 - `case_of`: 118
-- `contains`: 26864
-- `defines`: 1996
+- `contains`: 26923
+- `defines`: 1997
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 7901
-- `imports_from`: 982
+- `imports`: 8011
+- `imports_from`: 983
 - `indirect_call`: 748
 - `inherits`: 17
 - `invokes`: 2
 - `mentions_symbol`: 2969
 - `method`: 644
-- `rationale_for`: 1387
-- `references`: 2159
-- `references_path`: 1212
+- `rationale_for`: 1389
+- `references`: 2160
+- `references_path`: 1230
 - `regression_for`: 8
 - `uses`: 96
 
 ## Extraction warnings
 
 - warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 331, 851 symbol(s) extracted)
-- warning: 63 code file(s) yielded no symbols (0.23 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+58 more)
+- warning: 76 code file(s) yielded no symbols (0.25 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+71 more)
 
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1769}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1771}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
