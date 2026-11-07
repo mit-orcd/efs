@@ -4843,9 +4843,12 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
         goto out;
     }
     /* A read proof must not queue behind mutation RPCs that themselves
-     * need metadata authority before they can finish. Budgets are unchanged. */
-    pc = host_submit_read_only(cmd,clen) ? server_peer_read_conn_get(host, port) :
-                                         server_peer_conn_get(host, port);
+     * need metadata authority before they can finish. Budgets are unchanged.
+     * STATUS is read-only but not a leaf: serving it needs a session proof,
+     * so it must not hold the proof slots that proof would use (DQ). */
+    pc = !clen ? server_peer_read_conn_get(host, port) :
+         host_submit_read_only(cmd,clen) ? server_peer_status_conn_get(host, port) :
+                                           server_peer_conn_get(host, port);
     if (!pc) {
         rc = EFS_ERR_BUSY;
         goto out;

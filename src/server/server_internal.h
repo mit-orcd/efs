@@ -24,6 +24,8 @@ struct efs_conn *server_peer_conn_get(const char *host, uint16_t port);
 /* Heartbeat success: end host:port's connect cooldown (peer_pool.c). */
 void server_peer_note_up(const char *host, uint16_t port);
 struct efs_conn *server_peer_read_conn_get(const char *host, uint16_t port);
+/* Forwarded ticket STATUS: its own slots, never the leaf proof slots (DQ). */
+struct efs_conn *server_peer_status_conn_get(const char *host, uint16_t port);
 /* Unpooled connection owned by the caller (destroy with efs_conn_destroy). */
 /* K41: 1 while the peer pool's connect cooldown refuses host:port. */
 int server_peer_is_down(const char *host, uint16_t port);
