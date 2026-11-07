@@ -12,12 +12,16 @@
  * drain, returned once by its own inode's drain and by the global drain;
  * pending per inode and overall with a blocked PUT, drains cut at the
  * caller's deadline that leave the work and the error where they were;
- * a drain waiting when the workers are stopped. */
+ * a drain waiting when the workers are stopped; Task DT: a worker start
+ * that fails with another writer queued behind it (built with
+ * -Wl,--wrap=pthread_create), and drains and pending racing start/stop
+ * cycles and a second stopper. */
 #include "efs_fuse/writeback.h"
 #include "efs_fuse/support.h"
 #include "efs_fuse/getattr.h"
 #include "efs_fuse/open.h"
 #include <assert.h>
+#include <errno.h>
 #include <sched.h>
 
 static __thread uint64_t t_deadline;
@@ -26,6 +30,25 @@ static pthread_cond_t gate_cv = PTHREAD_COND_INITIALIZER;
 static efs_ino_t block_ino, fail_ino;
 static int gate_open, gate_rc, entered;
 static unsigned put_calls, memo_begin, memo_end;
+
+/* Fail the pthread_create call numbered fail_at (1-based) once armed. */
+int __real_pthread_create(pthread_t *, const pthread_attr_t *,
+                          void *(*)(void *), void *);
+static int fail_at, create_calls;
+static pthread_t racer;
+static int racer_rc = -999;
+static void *racer_run(void *arg);
+int __wrap_pthread_create(pthread_t *t, const pthread_attr_t *a,
+                          void *(*fn)(void *), void *arg)
+{
+    if (!__atomic_load_n(&fail_at, __ATOMIC_ACQUIRE) ||
+        __atomic_add_fetch(&create_calls, 1, __ATOMIC_ACQ_REL) != fail_at)
+        return __real_pthread_create(t, a, fn, arg);
+    __atomic_store_n(&fail_at, 0, __ATOMIC_RELEASE);
+    /* A second writer arrives while this start is being undone. */
+    assert(!__real_pthread_create(&racer, NULL, racer_run, NULL));
+    return EAGAIN;
+}
 
 uint64_t stats_now_ms(void)
 {
@@ -88,6 +111,29 @@ static void *writer_run(void *arg)
 {
     struct writer *w = arg;
     w->rc = write_one(w->ino);
+    return NULL;
+}
+static void *racer_run(void *arg)
+{
+    (void)arg;
+    racer_rc = write_one(12);
+    return NULL;
+}
+static int cycles_done;
+static void *reader_run(void *arg)
+{
+    efs_ino_t ino = (efs_ino_t)(intptr_t)arg;
+    while (!__atomic_load_n(&cycles_done, __ATOMIC_ACQUIRE)) {
+        assert(efs_wb_pending(0) >= 0 && efs_wb_pending(ino) >= 0);
+        assert(efs_wb_sync_ino(ino) == EFS_OK && efs_wb_sync() == EFS_OK);
+    }
+    return NULL;
+}
+static void *stopper_run(void *arg)
+{
+    (void)arg;
+    while (!__atomic_load_n(&cycles_done, __ATOMIC_ACQUIRE))
+        efs_wb_stop();
     return NULL;
 }
 static void *sync_run(void *arg)
@@ -192,7 +238,42 @@ int main(void)
     assert(efs_wb_sync() == (sync_rc == EFS_OK ? EFS_ERR_IO : EFS_OK));
     efs_wb_stop();
 
+    /* Task DT: the second worker start fails; the first is joined, the
+     * writer gets NOMEM with its buffer released, and a writer racing the
+     * undo gets IO (pool stopping) or starts a fresh pool, never a pool
+     * whose workers[] is being joined. */
+    unsigned before_fail = put_calls;
+    __atomic_store_n(&create_calls, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&fail_at, 2, __ATOMIC_RELEASE);
+    assert(write_one(11) == EFS_ERR_NOMEM);
+    assert(!pthread_join(racer, NULL));
+    assert(racer_rc == EFS_OK || racer_rc == EFS_ERR_IO);
+    assert(put_calls == before_fail + (racer_rc == EFS_OK));
+    efs_wb_stop();
+    assert(efs_wb_pending(0) == 0 && efs_wb_sync() == EFS_OK);
+    assert(write_one(1) == EFS_OK);
+    efs_wb_stop();
+
+    /* Task DT: drains and pending race start/stop cycles and a second
+     * stopper; an enqueue racing a stop gets IO, otherwise its PUT rc. */
+    pthread_t readers[4], stopper;
+    for (int i = 0; i < 4; i++)
+        assert(!pthread_create(&readers[i], NULL, reader_run,
+                               (void *)(intptr_t)(3 + i)));
+    assert(!pthread_create(&stopper, NULL, stopper_run, NULL));
+    for (int round = 0; round < 50; round++) {
+        int rc = write_one(3 + round % 4);
+        assert(rc == EFS_OK || rc == EFS_ERR_IO);
+        efs_wb_stop();
+    }
+    __atomic_store_n(&cycles_done, 1, __ATOMIC_RELEASE);
+    for (int i = 0; i < 4; i++)
+        assert(!pthread_join(readers[i], NULL));
+    assert(!pthread_join(stopper, NULL));
+    efs_wb_stop();
+    assert(efs_wb_pending(0) == 0 && efs_wb_sync() == EFS_OK);
+
     assert(memo_begin == put_calls && memo_end == put_calls);
-    puts("wb interface: unstarted, start/stop/restart, sticky error, deadline drains, drain across stop PASS");
+    puts("wb interface: unstarted, start/stop/restart, sticky error, deadline drains, drain across stop, failed start, drains racing stop PASS");
     return 0;
 }

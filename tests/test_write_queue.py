@@ -22,7 +22,7 @@ static struct {
     pthread_mutex_t mu;
     pthread_cond_t not_full,not_empty;
     struct efs_wb_job q[EFS_WB_DEPTH];
-    int count,tail,head,shutdown;
+    int count,tail,head,ready,shutdown;
     uint64_t queued_bytes,inflight_bytes,admission_waits,admission_timeouts;
 } g_wb={.mu=PTHREAD_MUTEX_INITIALIZER,.not_full=PTHREAD_COND_INITIALIZER,
         .not_empty=PTHREAD_COND_INITIALIZER};
@@ -33,7 +33,7 @@ static uint64_t stats_now_ms(void) {
     return (uint64_t)ts.tv_sec*1000+ts.tv_nsec/1000000;
 }
 uint64_t efs_client_rpc_deadline_ms(void) { return deadline; }
-static int efs_wb_ensure(void) { return 0; }
+static int wb_start_locked(void) { g_wb.ready=1; return 0; }
 static void wb_job_release_buf(char *buf,char *base,size_t cap) {
     (void)base; (void)cap; ++freed; free(buf);
 }

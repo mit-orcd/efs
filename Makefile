@@ -951,8 +951,9 @@ tests: $(TEST_BINS)
 
 # Task DM: the real write-back pool through writeback.h; the test defines the
 # PUT path and the helpers writeback.c takes from other files, so no $(LIB).
+# --wrap=pthread_create lets it fail one worker start (Task DT).
 tests/test_wb_interface: tests/test_wb_interface.c src/client/efs_fuse/writeback.c $(wildcard src/client/efs_fuse/*.h) src/client/client_internal.h
-	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -Isrc/client -o $@ $< src/client/efs_fuse/writeback.c $(LDFLAGS)
+	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -Isrc/client -o $@ $< src/client/efs_fuse/writeback.c -Wl,--wrap=pthread_create $(LDFLAGS)
 
 # K88 Task DK: the slot-less library writer on real daemons (test_k88_chunk_hints_live.py).
 tests/test_k88_chunk_hints: tests/test_k88_chunk_hints.c $(LIB)

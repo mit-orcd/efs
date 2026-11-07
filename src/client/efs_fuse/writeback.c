@@ -31,8 +31,10 @@ struct efs_wb_job {
     pthread_cond_t *done_cv;
 };
 
-/* g_wb.mu covers every field; not_empty / not_full / idle are its
- * condition variables. */
+/* g_wb.mu covers every field, ready and shutdown included; not_empty /
+ * not_full / idle are its condition variables. workers[] and nworkers are
+ * written only by wb_start_locked with shutdown clear, so wb_join_locked
+ * may read them with the mutex dropped. */
 struct efs_wb_state {
     pthread_mutex_t mu;
     pthread_cond_t not_empty;
@@ -372,28 +374,40 @@ static int wb_worker_count(void)
     return (int)n;
 }
 
-static int efs_wb_ensure(void)
+/* Caller holds g_wb.mu. Workers need the mutex to finish their jobs and
+ * leave, so it is dropped for the join; shutdown stays set until the join
+ * is over, so enqueues get EFS_ERR_IO and another stop waits on idle
+ * instead of starting into or joining workers[] mid-join. Returns with
+ * the mutex released and the pool unstarted. */
+static void wb_join_locked(void)
 {
-    if (g_wb.ready)
-        return 0;
-    pthread_mutex_lock(&g_wb.mu);
-    if (!g_wb.ready) {
-        g_wb.nworkers = wb_worker_count();
-        for (int i = 0; i < g_wb.nworkers; i++) {
-            if (pthread_create(&g_wb.workers[i], NULL, efs_wb_thread,
-                               (void *)(intptr_t)i) != 0) {
-                g_wb.shutdown = 1;
-                pthread_cond_broadcast(&g_wb.not_empty);
-                pthread_mutex_unlock(&g_wb.mu);
-                for (int j = 0; j < i; j++)
-                    pthread_join(g_wb.workers[j], NULL);
-                g_wb.shutdown = 0;
-                return -1;
-            }
-        }
-        g_wb.ready = 1;
-    }
+    g_wb.shutdown = 1;
+    pthread_cond_broadcast(&g_wb.not_empty);
     pthread_mutex_unlock(&g_wb.mu);
+    for (int i = 0; i < g_wb.nworkers; i++)
+        pthread_join(g_wb.workers[i], NULL);
+    pthread_mutex_lock(&g_wb.mu);
+    g_wb.ready = 0;
+    g_wb.shutdown = 0;
+    pthread_cond_broadcast(&g_wb.idle);
+    pthread_mutex_unlock(&g_wb.mu);
+}
+
+/* Caller holds g_wb.mu, pool unstarted and not stopping. 0: started, the
+ * mutex still held. -1: a worker did not start; the ones that did are
+ * joined (wb_join_locked) and the mutex is released. */
+static int wb_start_locked(void)
+{
+    g_wb.nworkers = wb_worker_count();
+    for (int i = 0; i < g_wb.nworkers; i++) {
+        if (pthread_create(&g_wb.workers[i], NULL, efs_wb_thread,
+                           (void *)(intptr_t)i) != 0) {
+            g_wb.nworkers = i;
+            wb_join_locked();
+            return -1;
+        }
+    }
+    g_wb.ready = 1;
     return 0;
 }
 
@@ -406,7 +420,8 @@ static int efs_wb_ensure(void)
 int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
                                 char *copy, char *free_base, size_t buf_cap)
 {
-    if (efs_wb_ensure() != 0) {
+    pthread_mutex_lock(&g_wb.mu);
+    if (!g_wb.ready && !g_wb.shutdown && wb_start_locked() != 0) {
         wb_job_release_buf(copy, free_base, buf_cap);
         return EFS_ERR_NOMEM;
     }
@@ -414,7 +429,6 @@ int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
     int job_rc = EFS_ERR_IO;
     pthread_cond_t done_cv;
     pthread_cond_init(&done_cv, NULL);
-    pthread_mutex_lock(&g_wb.mu);
     /* Do not refuse new files because an earlier inode's PUT failed.
      * That sticky g_wb.err used to make every later write/close EIO
      * (including empty touch) after one quorum blip. */
@@ -489,11 +503,13 @@ int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
 
 int efs_wb_sync(void)
 {
-    if (!g_wb.ready)
-        return EFS_OK;
     int rc = wb_lock_budget(&g_wb.mu);
     if (rc != EFS_OK)
         return rc;
+    if (!g_wb.ready) {
+        pthread_mutex_unlock(&g_wb.mu);
+        return EFS_OK;
+    }
     while (g_wb.count > 0 || g_wb.inflight > 0) {
         rc = wb_wait_idle_budget();
         if (rc != EFS_OK) {
@@ -526,38 +542,36 @@ int efs_wb_pending(efs_ino_t ino)
 {
     int pending = 0;
 
-    if (g_wb.ready) {
-        pthread_mutex_lock(&g_wb.mu);
+    pthread_mutex_lock(&g_wb.mu);
+    if (g_wb.ready)
         pending = ino ? efs_wb_ino_pending_locked(ino)
                       : g_wb.count + g_wb.inflight;
-        pthread_mutex_unlock(&g_wb.mu);
-    }
+    pthread_mutex_unlock(&g_wb.mu);
     return pending;
 }
 
 void efs_wb_stop(void)
 {
-    if (g_wb.ready) {
-        pthread_mutex_lock(&g_wb.mu);
-        g_wb.shutdown = 1;
-        pthread_cond_broadcast(&g_wb.not_empty);
+    pthread_mutex_lock(&g_wb.mu);
+    while (g_wb.shutdown) /* another stop or a failed start is joining */
+        pthread_cond_wait(&g_wb.idle, &g_wb.mu);
+    if (g_wb.ready)
+        wb_join_locked();
+    else
         pthread_mutex_unlock(&g_wb.mu);
-        for (int i = 0; i < g_wb.nworkers; i++)
-            pthread_join(g_wb.workers[i], NULL);
-        g_wb.ready = 0;
-        g_wb.shutdown = 0;
-    }
 }
 
 /* Drain only this inode's writeback jobs so close/ecopy does not wait
  * for every other file in the pool. */
 int efs_wb_sync_ino(efs_ino_t ino)
 {
-    if (!g_wb.ready)
-        return EFS_OK;
     int rc = wb_lock_budget(&g_wb.mu);
     if (rc != EFS_OK)
         return rc;
+    if (!g_wb.ready) {
+        pthread_mutex_unlock(&g_wb.mu);
+        return EFS_OK;
+    }
     while (efs_wb_ino_pending_locked(ino)) {
         rc = wb_wait_idle_budget();
         if (rc != EFS_OK) {

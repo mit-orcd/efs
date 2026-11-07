@@ -11,7 +11,11 @@
  *   the pool or read its fields.
  * Lock: one private pool mutex; no operation below is called with it held
  *   and none returns with it held. Drains take it within the caller's RPC
- *   deadline (wb_lock_budget, open.h). Bounce buffers have their own lock.
+ *   deadline (wb_lock_budget, open.h). Every read and write of the
+ *   started and stopping flags is under it; a stop, and a start whose
+ *   worker failed to spawn, drop it only to join the workers (they need it
+ *   to leave) and keep the pool marked stopping until the join is over.
+ *   Bounce buffers have their own lock.
  * Lifetime: the workers start on the first efs_wb_enqueue_owned and run
  *   until efs_wb_stop (efs_fuse_destroy, main.c). A worker leaves only once
  *   the ring is empty, so every accepted job finishes; an in-flight PUT
@@ -26,7 +30,8 @@
  *   efs_wb_enqueue_owned  queue a PUT that owns its buffer and wait for it.
  *       EFS_ERR_NOMEM: the workers could not start. EFS_ERR_BUSY: the ring
  *       stayed full for 8 s or past the caller's deadline. EFS_ERR_IO: the
- *       pool is stopping. In those three the buffer is released and
+ *       pool is stopping (a stop, or a failed start being undone, is
+ *       joining the workers). In those three the buffer is released and
  *       nothing was queued. Otherwise the job's PUT rc.
  *   efs_wb_pending(ino)   ino 0: jobs queued plus in flight in the whole
  *       pool; otherwise 1 when a job for ino is queued or being run, else
@@ -42,7 +47,9 @@
  *       pending work and the sticky error stay where they were, and
  *       efs_wb_pending tells what was left.
  *   efs_wb_stop           stop and join the workers after they finish
- *       every queued job; enqueues racing it get EFS_ERR_IO. Does not
+ *       every queued job; enqueues racing it get EFS_ERR_IO, and a stop
+ *       racing it waits for that join, then stops whatever pool is
+ *       running (none, or one a later enqueue started). Does not
  *       consume the sticky error: drain with efs_wb_sync first.
  *   A second, per-inode error channel lives in ../write.c
  *   (efs_wb_inode_stalled), read by efs_file_sync_error (support.h) at
