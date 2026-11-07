@@ -7466,8 +7466,9 @@ static int host_export_salt(struct efs_raft_host *h, uint64_t *salt, int *hint)
     struct efs_raft *r;
     int rc;
 
-    if (h->export_salt_valid) {
-        *salt = h->export_salt;
+    /* Any mkdir worker may be first: publish and read atomically (K98, as K83). */
+    if (__atomic_load_n(&h->export_salt_valid, __ATOMIC_ACQUIRE)) {
+        *salt = __atomic_load_n(&h->export_salt, __ATOMIC_RELAXED);
         return EFS_OK;
     }
     pthread_mutex_lock(&h->mu);
@@ -7483,8 +7484,8 @@ static int host_export_salt(struct efs_raft_host *h, uint64_t *salt, int *hint)
     rc = efs_meta_apply_export_salt(h->kv, salt);
     if (rc != EFS_OK)
         return rc;
-    h->export_salt = *salt;
-    h->export_salt_valid = 1;
+    __atomic_store_n(&h->export_salt, *salt, __ATOMIC_RELAXED);
+    __atomic_store_n(&h->export_salt_valid, 1, __ATOMIC_RELEASE);
     return EFS_OK;
 }
 
