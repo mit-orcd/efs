@@ -256,7 +256,9 @@ and `shutdown` after the join without it; `efs_wb_ensure`'s start-failure
 path unlocks before joining with `ready == 0`, so a second starter could
 reuse `workers[]` mid-join. In production `efs_fuse_destroy` runs after the
 FUSE loop has ended, so only the control drain can overlap the stop. The
-fix is now confined to `writeback.c` (atomic `ready`, a start/stop lock).
+fix is now confined to `writeback.c` (atomic `ready`, a start/stop lock). Fixed Nov 7 by Task DT
+([write-back `ready` flag and start-failure join](writeback-ready-20261107.md)):
+both flags under the pool mutex, one join helper for stop and failed start.
 
 ## Proof
 
