@@ -64,7 +64,8 @@ timeout, budget or default changed.
   with one storage root each, 24 `efs-bench` copies of 4 writers, one round per
   run (`K96_ROUNDS=1`, as the TSan list runs it). The two series ran at the
   same time on the host, so both saw the same load.
-- Command, from each tree's root:
+- Command (the script is on the K99 branch, not on devel; it was copied to the
+  host beside the before tree), from each tree's root:
   `bash scripts/evidence/k99/k99_tsan_reps.sh <tree> <out> 110`. It builds a
   TSan tree once (`EFS_SAN_LOGDIR=<out>/build0 EFS_SAN_ONLY=k96_status_slots_live
   bash tests/sanitizer_check.sh tsan`), then runs 110 reps on that build with
@@ -110,6 +111,9 @@ traced here and is left for a follow-up.
 - The multi-root reader branch is not exercised by a TSan entry. It was checked
   by reading the code (above), not by a run.
 - Lock-order inversions are out of the gate's scope (`detect_deadlocks=0`).
+- The branch head (devel + K98 + K99) was not itself run under TSan. Each fix
+  was tested alone on devel, and they touch different files (`raft_host.c`,
+  `store.c`).
 - Numbering: K99 assumes K98 (branch `claude/keen-wu-2f4bf0`). The K99 branch
   merges that branch in after the tested code commit, so the register stays
   contiguous.
