@@ -1498,7 +1498,7 @@
     "docs/status/2026-10/d39-consolidated-model-20261023.md": "68211f94877f2acbf05645ba2ef455c9f320cde460e821371b534451284f8bcc",
     "docs/status/2026-10/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
     "docs/status/2026-10/w100-eof-contract-20261013.md": "f8d0ef05a9b9d02a7118405d4bce0d6c4dbe4975b5138880b74a7cd995c2190c",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "e4bd0df15797c0f0785ddbeb9e2c59fd7e88c8d5461264c11bb8fb7a4fa224aa",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "0a2fb9919228469191dc0bb62a6be6252232e940123ff4c949d912f770d8734a",
     "docs/status/alpha-1.1-consolidation.md": "c24210e5af50ff0c1d9f0fea74efb982947486c547230718a00b59f6c6d106a2",
     "docs/status/decisions.md": "1217bfafdf7b349bf453ad7a646f524fc6fdceaefc036d5ce637117126069ff7",
     "docs/using/alpha-1.0-guide.md": "af171553530fdac62596e108d0accbd8e12824abbae1eab8af4355ce5ce1289f",
@@ -2055,7 +2055,7 @@
     "src/server/put_upload.c": "a4f712443db5cb8263303c3caa657f8bf1ddec79aa2b0aad0bcb7831db29762b",
     "src/server/query_export_lease.h": "c1bf2e3bd646f19595ea7519057e1e04fbc4a402aa30445efe43aad198edcac4",
     "src/server/query_refresh.h": "e9508ec752fc826ed93079d1b9a9b12589631fe6eee9e5a81eef922f65ceff16",
-    "src/server/raft_host.c": "2394b80f427eb515a32ef52dcbb693bea9e518261aa990857e321f2713201bf4",
+    "src/server/raft_host.c": "9b6ed2eda78eba053d9318e64d1e01fc3940d251bbe0361846bc4c34dca652c8",
     "src/server/read_index_pair_remote.h": "1a0b0bb46af5847d2ee4e6acabc474d044c26e4ed1f0cddacd3d6ac863624d62",
     "src/server/reclaim.c": "954a9e1f426ff2bdda1640115f0d43dafca60808117e2287227191fbd9680258",
     "src/server/recovery.c": "cb4d2d4645cbae75ef63336ca37f1fa3405fe6e7e23e30354bb50ce82e38068a",
@@ -2986,5 +2986,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "266a26fee9b923b9eccfc82c8f7bf9c30f96bace"
+  "source_commit": "5acfb3a5173c927e3b40be0d3458b5b0163a07da"
 }
