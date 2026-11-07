@@ -302,7 +302,7 @@ the sanitized binaries. `make sanitize-check` runs both.
   `halt_on_error=1`.
 - **tsan list.** KV (`test_kv_lsm_concurrent 4`, `kv_lsm`, `kv_reader_gate`),
   `raft_store`, `reclaim`, `query_disk_io`, `query_delta`, the client data
-  commit, the member view, the W138 harnesses (`test_apply_ring.py`,
+  commit, the member view, the FUSE write-back pool (`test_wb_interface`), the W138 harnesses (`test_apply_ring.py`,
   `test_session_latch_tsan.py`), the E2 parallel revoke, the W155 receipt
   table and the K32 ticket batch on the TSan `libefs.a`, and the daemons:
   `test_k36_recovery.py` (recovery thread), `test_k36_segment_recovery.py`,

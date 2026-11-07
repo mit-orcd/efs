@@ -5,6 +5,53 @@
 #include "getattr.h"
 #include "open.h"
 
+/* Pool state: private to this file (contract in writeback.h). */
+#define EFS_WB_DEPTH        256
+
+#define EFS_WB_WORKERS_MAX  16
+
+#define EFS_WB_RESERVED     4
+
+struct efs_wb_job {
+    efs_ino_t ino;
+    uint64_t offset;
+    size_t size;
+    char *buf;
+    /* If set, this is the allocation that contains buf (stolen FUSE
+     * receive buffer). Free this instead of buf when the job completes. */
+    char *free_base;
+    /* Non-zero: buf/free_base came from the bounce pool (see bounce_release). */
+    size_t buf_cap;
+    uint64_t queued_ms;
+    uint64_t deadline;
+    /* Caller waits for PUT quorum. Worker writes rc and signals done_cv
+     * while holding g_wb.mu. */
+    int *done;
+    int *done_rc;
+    pthread_cond_t *done_cv;
+};
+
+/* g_wb.mu covers every field; not_empty / not_full / idle are its
+ * condition variables. */
+struct efs_wb_state {
+    pthread_mutex_t mu;
+    pthread_cond_t not_empty;
+    pthread_cond_t not_full;
+    pthread_cond_t idle;
+    struct efs_wb_job q[EFS_WB_DEPTH];
+    int head, tail, count, inflight;
+    uint64_t queued_bytes, inflight_bytes, admission_waits, admission_timeouts;
+    int err;
+    efs_ino_t err_ino; /* inode that set err; 0 = none / global */
+    int ready;
+    int shutdown;
+    pthread_t workers[EFS_WB_WORKERS_MAX];
+    efs_ino_t busy_ino[EFS_WB_WORKERS_MAX];
+    uint64_t busy_off[EFS_WB_WORKERS_MAX];
+    size_t busy_len[EFS_WB_WORKERS_MAX];
+    int nworkers;
+};
+
 /* Per-ino write serialization. WB workers run jobs concurrently, but two jobs
  * touching the same inode (overlapping partial chunks) must not RMW the same
  * chunk concurrently or they lose updates. Striped locks keep parallelism
@@ -23,7 +70,7 @@ static pthread_mutex_t *efs_wb_ino_lock(efs_ino_t ino)
     return &g_wb_ino_mu[efs_ino_lock_slot(ino, EFS_WB_INO_STRIPES)];
 }
 
-struct efs_wb_state g_wb = {
+static struct efs_wb_state g_wb = {
     .mu = PTHREAD_MUTEX_INITIALIZER,
     .not_empty = PTHREAD_COND_INITIALIZER,
     .not_full = PTHREAD_COND_INITIALIZER,
@@ -461,7 +508,7 @@ int efs_wb_sync(void)
     return err;
 }
 
-int efs_wb_ino_pending_locked(efs_ino_t ino)
+static int efs_wb_ino_pending_locked(efs_ino_t ino)
 {
     for (int i = 0; i < g_wb.count; i++) {
         int idx = (g_wb.head + i) % EFS_WB_DEPTH;
@@ -473,6 +520,33 @@ int efs_wb_ino_pending_locked(efs_ino_t ino)
             return 1;
     }
     return 0;
+}
+
+int efs_wb_pending(efs_ino_t ino)
+{
+    int pending = 0;
+
+    if (g_wb.ready) {
+        pthread_mutex_lock(&g_wb.mu);
+        pending = ino ? efs_wb_ino_pending_locked(ino)
+                      : g_wb.count + g_wb.inflight;
+        pthread_mutex_unlock(&g_wb.mu);
+    }
+    return pending;
+}
+
+void efs_wb_stop(void)
+{
+    if (g_wb.ready) {
+        pthread_mutex_lock(&g_wb.mu);
+        g_wb.shutdown = 1;
+        pthread_cond_broadcast(&g_wb.not_empty);
+        pthread_mutex_unlock(&g_wb.mu);
+        for (int i = 0; i < g_wb.nworkers; i++)
+            pthread_join(g_wb.workers[i], NULL);
+        g_wb.ready = 0;
+        g_wb.shutdown = 0;
+    }
 }
 
 /* Drain only this inode's writeback jobs so close/ecopy does not wait

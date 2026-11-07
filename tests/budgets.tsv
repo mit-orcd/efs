@@ -623,6 +623,7 @@ python3 tests/test_rename_budget.py	30	1	fast suite, 30 s ceiling	test	client/op
 ./tests/test_member_view	30	1	fast suite, 30 s ceiling	test	client/node_cache	K33 live client view (efs/member_view.h, src/client/node_cache.c): a mounted client installs a later
 ./tests/test_lock	30	1	fast suite, 30 s ceiling	test	meta/lock	Isolated POSIX lock SM. No sockets, no Raft
 ./tests/test_stage_evict	30	1	fast suite, 30 s ceiling	test	meta/metadata	Unit test for the client staging-table eviction primitives (client-cache design Part A):
+./tests/test_wb_interface	5	1	DM: three solo runs on node9900 0.04/0.04/0.04 s (load 0.2), 1.25x rounded up to 5 s	test	client/efs_fuse.writeback	Task DM: the real write-back pool through writeback.h: unstarted drains, start/stop/restart, sticky error, deadline-cut drains, a drain across a worker stop
 ./tests/test_hardlink_alias	30	1	fast suite, 30 s ceiling	test	meta/metadata	Hard-link alias index (Task AX): shared attributes must reach every alias row and only those, through
 ./tests/test_verification_matrix	30	1	fast suite, 30 s ceiling	test	server/storage_roots	AZ: one fixture matrix through every real verification wrapper
 ./tests/test_conn_fd	30	1	fast suite, 30 s ceiling	test	common/network	Pool fd-identity: a conn must not outlive the socket it wrapped

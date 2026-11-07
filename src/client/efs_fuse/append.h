@@ -16,7 +16,7 @@
  *   the pressure worker  fuse_pressure_kick starts it, fuse_pressure_stop
  *                      joins it at destroy; it publishes a fixed dirty
  *                      cohort per round and never consumes the foreground
- *                      write-back error (g_wb.err, writeback.h).
+ *                      write-back error (efs_wb_sync, writeback.h).
  *
  * Failure behaviour
  *   append_reserve_offset: the caller holds the stripe; success keeps it,

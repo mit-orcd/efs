@@ -182,6 +182,19 @@ match the table. Done: adding a setting edits one file.
   lines opened 675 to 852, whole-file upper bound 12,516 to 1,704; the
   investigation still reads two headers and two files, so the one-interface
   and one-implementation parts of the target are not met.
+- Ownership pilots (the Nov 5 review's recommendation): private state behind
+  a small owner interface, a test that compiles the real module through it,
+  and an unfamiliar investigation measured before and after. **Write-back
+  pool done Nov 6** (Task DM, [evidence](writeback-ownership-20261105.md),
+  unmerged): `g_wb` private to `writeback.c`, five operations in
+  `writeback.h` with the contract on top, callers off the pool's fields,
+  `tests/test_wb_interface.c` in `make test`. The investigation (can the
+  unmount stop leave pool work or the sticky error behind) stopped at one
+  guide, one interface, one implementation file and the routed tests plus
+  14 caller lines: lines needed 691 to 593, opened 1,074 to 767, source
+  files 7 to 4, validation 306 to 361. First pilot in this plan to meet the
+  four target parts, except 14 lines of the caller the question names; next candidates are the other shared FUSE globals
+  (`g_open_mu` and the open-ref table, `g_find_res`).
 - Graph queries: a broad `graphify query` returns hundreds of nodes; agents
   need a small ranked starting set (the component README's symptom map is
   the interim answer).

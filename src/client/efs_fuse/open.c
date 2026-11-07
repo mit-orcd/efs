@@ -819,9 +819,6 @@ int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     return rc;
 }
 
-void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
-                             uint64_t offset, size_t size, const char *path);
-int efs_wb_sync(void);
 
 int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offset,
                              struct fuse_file_info *fi)

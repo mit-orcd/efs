@@ -114,6 +114,8 @@ query_delta|EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_M
 # Client write path (data commit workers) and the member view readers.
 data_commit|tests/test_data_commit
 member_view|tests/test_member_view
+# Task DM: the real write-back pool (workers, drains, stop) through writeback.h.
+wb_interface|tests/test_wb_interface
 # Harnesses that build their own TSan binary (W138 rules: run or fail).
 apply_ring|tests/test_apply_ring.py
 session_latch|tests/test_session_latch_tsan.py
@@ -176,6 +178,8 @@ put_ticket_batch|tests/test_put_ticket_batch.py
 # and orphans, the client data commit, the retained-namespace audit, wire.
 membership|tests/test_membership
 member_view|tests/test_member_view
+# Task DM: the real write-back pool (workers, drains, stop) through writeback.h.
+wb_interface|tests/test_wb_interface
 frag_record|tests/test_frag_record
 small_segment|tests/test_small_segment
 packed_segment|tests/test_packed_segment

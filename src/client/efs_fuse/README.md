@@ -21,7 +21,7 @@ Symptom → file → tests (`python3 scripts/tests_for.py client/efs_fuse.<file>
 | Crash handler, stats text, feature flags, virtual inodes, `.efs` query results, invalidation thread, `find`, DAC and permission helpers | `support.c` | `support.h` | `t_req`, `g_fuse_se`, `g_find_res`/`g_find_res_mu` | `.support` (6) |
 | LOOKUP memo, GETATTR row cache, READDIR collection | `getattr.c` | `getattr.h` | `t_lookup_memo_serial`, `t_getattr_row`, `t_getattr_ino`, `struct efs_dirh` | `.getattr` (3) |
 | OPEN / CREATE references, lease acquire, retry fairness, BUSY, READ; retained last closes and their background drain | `open.c` | `open.h` | `g_open_mu`, the open-ref table (`struct efs_open_ref`), `struct efs_pending_create` | `.open` (6) |
-| Write-back pool, bounce buffers, drain budgets, the sticky PUT error | `writeback.c` | `writeback.h` | `g_wb` (`struct efs_wb_state`, `struct efs_wb_job`, `EFS_WB_*`) | `.writeback` (3) |
+| Write-back pool, bounce buffers, drain budgets, the sticky PUT error, worker stop | `writeback.c` | `writeback.h`: `efs_wb_enqueue_owned`, `efs_wb_pending`, `efs_wb_sync`, `efs_wb_sync_ino`, `efs_wb_stop` | the pool (`static g_wb`, private with its mutex) | `.writeback` (4; `tests/test_wb_interface.c` links the real `writeback.c`) |
 | Append reservation, publication, pressure flush and background worker | `append.c` | `append.h` | — | `.append` (5) |
 | WRITE admission, store, buffer, FSYNC, FLUSH | `write.c` | `write.h` | — | `.write` (2) |
 | CREATE, MKDIR, UNLINK, STATFS, chmod/chown, SYMLINK, LINK, utimens, TRUNCATE | `namespace.c` | `namespace.h` | — | `.namespace` (5) |
@@ -39,14 +39,16 @@ compile).
 ## Contract
 
 - Interface: one header per area, next to its owner, with the contract at
-  the top. The ten globals shared between files are declared in their
+  the top. The globals shared between files are declared in their
   owner's header with their lock and lifetime:
   [`support.h`](support.h) (`g_fuse_se`, `g_find_res` under
   `g_find_res_mu`), [`getattr.h`](getattr.h) (the three handler
   thread-locals), [`open.h`](open.h) (`g_open_mu` and the stripe order),
-  [`writeback.h`](writeback.h) (`g_wb` under `g_wb.mu`, the sticky `err` /
-  `err_ino` and the second, per-inode error channel in `../write.c`, reached
-  through `efs_file_sync_error`),
+  [`writeback.h`](writeback.h) (no global: the pool and its mutex are
+  private to `writeback.c`; the header states the five operations, what
+  each returns on BUSY, timeout and I/O failure, the sticky error and the
+  second, per-inode error channel in `../write.c`, reached through
+  `efs_file_sync_error`),
   [`plock_init.h`](plock_init.h) (`g_fuse_ready_wr`);
   [`fuse_internal.h`](fuse_internal.h) declares `t_req`. `g_mountpoint` is
   private to `main.c`. Nothing in this directory is declared twice.
