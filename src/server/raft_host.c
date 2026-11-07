@@ -935,6 +935,19 @@ static int membership_copy(struct efs_membership *out)
     return formed;
 }
 
+/* K93: the member store's token, cluster and formed state in one read under
+ * h->mu, the lock its writers hold (member_store.h). */
+uint64_t server_member_identity(uint64_t *cluster, int *formed)
+{
+    struct efs_raft_host *h = __atomic_load_n(&g_host, __ATOMIC_ACQUIRE);
+    if (h) pthread_mutex_lock(&h->mu);
+    uint64_t token = g_server->mstore.token;
+    *cluster = g_server->mstore.cluster;
+    *formed = g_server->mstore.state == EFS_MEMBER_FORMED;
+    if (h) pthread_mutex_unlock(&h->mu);
+    return token;
+}
+
 
 static int hosts_group(int raft_id, uint32_t voters)
 {

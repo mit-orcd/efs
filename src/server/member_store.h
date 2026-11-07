@@ -46,6 +46,8 @@
 #define EFS_IDENTITY_REC_AT 112u
 #define EFS_IDENTITY_FILE_LEN (EFS_IDENTITY_REC_AT + EFS_MEMBERSHIP_MAX_LEN + 32u)
 
+/* K93 lock rule: once the Raft host runs, the identity is written (ms_persist)
+ * and read only under the host's h->mu; other threads use server_member_identity. */
 struct member_store {
     char dir[4096];
     int lockfd;

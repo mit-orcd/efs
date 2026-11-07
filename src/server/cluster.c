@@ -38,14 +38,12 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         pthread_mutex_unlock(&s->lock);
         h.used = local ? used : server_compute_local_usage(s);
     }
-    /* K33 (M2): this store's token, its cluster and whether it is formed. */
-    h.token = s->mstore.token;
-    {
-        struct efs_membership m;
-        int formed = server_membership_get(&m);
-        h.cluster = formed ? m.cluster : s->mstore.cluster;
-        h.flags = formed ? EFS_HELLO_F_FORMED : 0;
-    }
+    /* K33 (M2): this store's token, its cluster and whether it is formed;
+     * K93: one read under the member store's lock, used below. */
+    int formed;
+    uint64_t token = server_member_identity(&h.cluster, &formed);
+    h.token = token;
+    h.flags = formed ? EFS_HELLO_F_FORMED : 0;
 
     if (efs_conn_send_msg(pc, EFS_MSG_HELLO, &h, sizeof(h)) != 0) {
         efs_telemetry_log(0, "Failed to send HELLO to peer %s:%u\n", peer_host, peer_port);
@@ -89,7 +87,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
                         "yet (%u committed members there); node %llu at %s:%u (store "
                         "%016llx) retrying\n", peer_host, peer_port, ack->node_count,
                         (unsigned long long)s->id, s->addr, s->port,
-                        (unsigned long long)s->mstore.token);
+                        (unsigned long long)token);
             }
             free(payload);
             server_peer_conn_release(peer_host, peer_port, pc);
@@ -102,7 +100,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
                     "endpoint belongs to another store, or this store belongs to another "
                     "cluster. A member keeps its node id, endpoint and store.\n",
                     peer_host, peer_port, (unsigned long long)s->id, s->addr, s->port,
-                    (unsigned long long)s->mstore.token, ack->node_count);
+                    (unsigned long long)token, ack->node_count);
             free(payload);
             server_peer_conn_drop(peer_host, peer_port, pc);
             return EFS_JOIN_REFUSED_FORMED;
@@ -173,7 +171,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         server_format_storage_paths(s, local->storage_path, sizeof(local->storage_path));
         local->quota = s->quota;
         local->used = keep_used;
-        local->token = s->mstore.token;
+        local->token = token;
     }
     server_dedupe_nodes_locked(s);
     server_heartbeat_apply_locked(s);

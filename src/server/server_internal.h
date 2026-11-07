@@ -482,6 +482,9 @@ int server_raft_host_active(void);
 int server_raft_host_formed(void);
 /* 1 and a copy of the committed membership this node learned, 0 unformed. */
 int server_membership_get(struct efs_membership *out);
+/* K93: this store's token (returned), cluster and whether it is formed,
+ * read together under the member store's lock. */
+uint64_t server_member_identity(uint64_t *cluster, int *formed);
 /* K33 discovery answer: this node's cluster, member count (or proposal
  * size, or 1 for a seed) and whether it is formed; -1 before the host runs
  * or while joining. */

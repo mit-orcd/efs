@@ -428,7 +428,8 @@ int member_store_boot(struct member_store *ms, uint64_t fresh, uint64_t *incarna
     return EFS_OK;
 }
 
-/* Write `next` as this store's identity, then adopt it. */
+/* Write `next` as this store's identity, then adopt it (under h->mu once the
+ * host runs: the K93 lock rule in member_store.h). */
 static int ms_persist(struct member_store *ms, const struct member_store *next, char *err,
                       size_t errlen)
 {

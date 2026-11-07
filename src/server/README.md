@@ -18,7 +18,7 @@
 
 - Interface: [`src/server/server_internal.h`](server_internal.h) (private to `server/`); public seams are `efs/store.h`, `efs/transport.h`, `efs/protocol.h`.
 - Invariants: I1–I4, I9, I10, I14, I16, I17, I20–I24 are enforced here per [architecture §4](../../docs/how-it-works/architecture.md#4-invariants) and §7.
-- Lock ownership: export lifetime is stated in `server_internal.h`; the host's lock order is not stated in one place.
+- Lock ownership: export lifetime is stated in `server_internal.h`; the member-store identity (`s->mstore`) is written and read under the host's `h->mu` once the host runs, other threads read it through `server_member_identity` (K93, `member_store.h`); the host's lock order is not stated in one place.
 - Split rules and the `raft_host.c` prefix map: [W171 plan](../../docs/status/2026-11/structure-plan-20261102.md).
 
 ## Calls

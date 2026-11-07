@@ -136,6 +136,9 @@ d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
 k38_swept_hint_live|tests/test_k38_swept_hint_live.py
 k88_chunk_hints_live|tests/test_k88_chunk_hints_live.py
 k96_status_slots_live|K96_ROUNDS=1 tests/test_k96_status_slots_live.py
+# K93: F14 (16 members, a refused 17th joiner): the rejoin thread's HELLO
+# reads the member-store identity while members learn new revisions.
+member_limit|tests/test_member_limit.py
 # AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.
 pump_logging|tests/test_pump_logging.py
 # K79: SIGTERM with stderr a full pipe exits rc 0 within the stop bound.
