@@ -48,7 +48,7 @@ an init at start would not do. No timeout, budget or default changed.
 | Tree | Runs of `k96_status_slots_live` | Runs reporting this race | Other races |
 | --- | --- | --- | --- |
 | before `7d5e56026` | 60 reps (20 + 40), plus 1 in the full list | 8 of 60 reps (2 reports each); 0 in the full list | 1 rep: `frag_loc_note` (below) |
-| after `d700c0ee1` | 60 reps, plus 1 in the full list | **0 of 61** | 1 rep: `frag_loc_note` (below) |
+| after `d700c0ee1` | 60 reps, plus 1 in the full list | **0 of 60 reps**; 0 in the full list | 1 rep: `frag_loc_note` (below) |
 
 Before, the race appeared in 8 of 60 reps. At that rate, the chance of 60 clean
 after-reps without a fix is about 0.02% ((52/60)^60).
@@ -68,8 +68,8 @@ In 1 of 60 reps on each tree, TSan reported writes racing in `frag_loc_note`
 `server_fragment_path`) filled the same hash slot at once. The fill drops
 `valid` first and raises it last with a release store, which guards against a
 racing *reader*. It does not stop a second *writer*: interleaved fills can leave
-a mixed entry with `valid = 1`, which a reader would trust. This is a real
-defect, separate from K98. It is left for a follow-up with its own K row.
+a mixed entry with `valid = 1`, which a reader would trust. This is likely a
+real defect, separate from K98, and untraced here. It is left for a follow-up with its own K row.
 
 ## Limitations
 
