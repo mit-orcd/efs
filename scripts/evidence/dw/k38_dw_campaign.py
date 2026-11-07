@@ -34,10 +34,11 @@ REMOUNT = ('fcstor010', 3)
 CLIENT_PAT = {'pressure': 'dcache-pressure ', 'stale_rounds': 'report-stale: chunks=',
               'superseded': ' superseded by seq=', 'report_stuck': 'report-stuck ',
               'span_lost': 'report-span-lost ', 'publish_stalled': 'publish-stalled',
-              'image_base': 'why=image-base', 'k94': 'segmented RDMA setup failed or incompatible peer'}
+              'image_base': 'why=image-base', 'k94': 'segmented RDMA setup failed or incompatible peer',
+              'rdma_up': 'RDMA transport up'}
 DAEMON_PAT = {'k94': 'segmented RDMA setup failed or incompatible peer',
               'image_base': 'why=image-base', 'pub_stale': 'pub-stale why=',
-              'publish_stalled': 'publish-stalled'}
+              'publish_stalled': 'publish-stalled', 'rdma_up': 'RDMA transport up'}
 
 
 def rsh(host, body, timeout=120):
@@ -84,8 +85,9 @@ echo $! > {RUNROOT}/run/efsd.pid''')
 
 
 def wait_grep(h, f, pat, secs):
-    return must(h, f'timeout {secs} bash -c \'until grep -q {shlex.quote(pat)} {f}; do sleep 0.2; done\' '
-                   f'|| {{ echo "{pat} not seen in {f}"; tail -20 {f}; exit 1; }}', timeout=secs + 30)
+    return must(h, f'timeout {secs} bash -c \'until grep -qF -- "$0" "$1"; do sleep 0.2; done\' '
+                   f'{shlex.quote(pat)} {f} || {{ echo "{pat} not seen in {f}"; tail -20 {f}; exit 1; }}',
+                timeout=secs + 30)
 
 
 def mount(h, node, name, arm):
