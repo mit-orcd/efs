@@ -189,6 +189,7 @@
     "scripts/evidence/k48/k48_attribution_loop.sh": 2,
     "scripts/evidence/k48/k48_store_scan.c": 3,
     "scripts/evidence/k88/bench_chunk_hints.py": 2,
+    "scripts/evidence/k99/k99_tsan_reps.sh": 3,
     "scripts/evidence/measurement/analyze_counter_profile.py": 3,
     "scripts/evidence/measurement/bench_published_par.sh": 1,
     "scripts/evidence/measurement/measure_cohort_durability.sh": 1,
@@ -1498,7 +1499,7 @@
     "docs/status/2026-10/d39-consolidated-model-20261023.md": "68211f94877f2acbf05645ba2ef455c9f320cde460e821371b534451284f8bcc",
     "docs/status/2026-10/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
     "docs/status/2026-10/w100-eof-contract-20261013.md": "f8d0ef05a9b9d02a7118405d4bce0d6c4dbe4975b5138880b74a7cd995c2190c",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "0a2fb9919228469191dc0bb62a6be6252232e940123ff4c949d912f770d8734a",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "a352337ce3374c4daeefae45c13db77e54a5aad2703c28940723052b38fed527",
     "docs/status/alpha-1.1-consolidation.md": "c24210e5af50ff0c1d9f0fea74efb982947486c547230718a00b59f6c6d106a2",
     "docs/status/decisions.md": "1217bfafdf7b349bf453ad7a646f524fc6fdceaefc036d5ce637117126069ff7",
     "docs/using/alpha-1.0-guide.md": "af171553530fdac62596e108d0accbd8e12824abbae1eab8af4355ce5ce1289f",
@@ -1698,6 +1699,7 @@
     "scripts/evidence/k48/k48_attribution_loop.sh": "460c884f2c57ca9f837c9a1f8934f141502ca5c2383fd60cc5ed367a19165034",
     "scripts/evidence/k48/k48_store_scan.c": "201dbabc28d66b2929db93f5665a3dae92c5e0f66ab827d40552f4797db8af8d",
     "scripts/evidence/k88/bench_chunk_hints.py": "4d104a2d3a4e8ccb6a131b88553ef257c1f968e94868978c7a5d890fcdcebb44",
+    "scripts/evidence/k99/k99_tsan_reps.sh": "599c5c5177583b61b9d19e337db7c217432e2d676e284e7fb1e932c3bc1d694a",
     "scripts/evidence/measurement/analyze_counter_profile.py": "59d5d426638755cbcafae0cfc90e5c61051b561d1465dbf391caaec75027b42b",
     "scripts/evidence/measurement/bench_published_par.sh": "50c6b24a5f1ced3c6c76dc345302b5adb6f3c85cb501f3f50ded0e7d37fc9255",
     "scripts/evidence/measurement/measure_cohort_durability.sh": "212237c2321fff00728174db8268d1fd3dfba4594abbfc1de9005ccb18fede78",
@@ -2064,7 +2066,7 @@
     "src/server/server_internal.h": "746bdc19d62bc587c07cce413ac2735478c5150d0587212549a8837b174e3673",
     "src/server/storage_roots.c": "edaeb53f3548f0a80288290be15f9bd6c32a49a1b53e1f308567d2b24042e875",
     "src/server/storage_roots.h": "5d6417f28f1bf6e0b23423607632fba6076a4a0457ba2202bbd5b35ac9dce774",
-    "src/server/store.c": "fb490a76f0814425f143a5c88f3ea2797c62da81c385bc4879ab099256f2fd88",
+    "src/server/store.c": "7b8975f368c7f95f2181908b4046e1bd1f3ac845628c2e6fff99e9883afb284e",
     "src/server/store_nvme.c": "a368af1975f41953d11ec8cc11186471ba36740919becc200d9fd3fc0ba58f75",
     "src/server/thread.c": "21a7dbc7cfa4a0991808b108247000218fc6e402bed5aac8663a3e016ca8f84d",
     "src/server/write_prof.h": "e720c6cc4b4acffe196115d5132e678de930ca56ff3c8e91aa0607dd745ad677",
@@ -2986,5 +2988,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "5acfb3a5173c927e3b40be0d3458b5b0163a07da"
+  "source_commit": "90703b75e4e41a3ea735068374eb31e3601ccead"
 }
