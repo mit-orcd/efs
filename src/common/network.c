@@ -21,10 +21,6 @@
 #include <time.h>
 #include <limits.h>
 
-/* Keep short: a missing peer must not stall small-file meta flushes for long.
- * Down-marked peers are skipped entirely for EFS_NODE_DOWN_MS after one fail. */
-#define EFS_CONNECT_TIMEOUT_SEC 2
-
 static __thread uint64_t net_deadline_ms;
 
 void efs_net_set_deadline_ms(uint64_t deadline)

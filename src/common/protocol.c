@@ -416,6 +416,10 @@ int efs_conn_send_msg_parts(struct efs_conn *c, uint8_t type,
         return EFS_ERR_PROTO;
     if (efs_wire_frame_size(n1 + n2, &frame_len) != EFS_OK)
         return EFS_ERR_PROTO;
+    /* A spent budget before any byte leaves the connection intact (as
+     * conn_rdma_frame does on receive); the caller may release it. */
+    if (efs_net_deadline_ms() && !efs_net_remaining_ms(INT_MAX))
+        return EFS_ERR_BUSY;
     if (conn_pick_send_chan(c, frame_len) == EFS_CONN_RDMA) {
         /* Recycled fd: this object still has dest_qpn for a QP the peer
          * already destroyed when the old TCP got FIN. */
@@ -423,9 +427,9 @@ int efs_conn_send_msg_parts(struct efs_conn *c, uint8_t type,
             return EFS_ERR_NET;
         /* No silent TCP fallback on send error: the QP is broken; the pool
          * drops and reconnects the conn. */
-        if (efs_rdma_send_frame(c->rc, type, part1, n1,
-                                part2, n2) != 0)
-            return EFS_ERR_NET;
+        int src = efs_rdma_send_frame(c->rc, type, part1, n1, part2, n2);
+        if (src != 0)
+            return src == EFS_ERR_BUSY ? EFS_ERR_BUSY : EFS_ERR_NET;
         c->recv_chan = EFS_CONN_RDMA;
         efs_conn_note_ok(c);
         return EFS_OK;

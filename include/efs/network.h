@@ -11,6 +11,10 @@ uint64_t efs_net_deadline_ms(void);
 /* Clamp a relative wait; negative cap means unlimited. Zero means expired. */
 int efs_net_remaining_ms(int cap_ms);
 
+/* Keep short: a missing peer must not stall small-file meta flushes for long.
+ * Down-marked peers are skipped entirely for EFS_NODE_DOWN_MS after one fail. */
+#define EFS_CONNECT_TIMEOUT_SEC 2
+
 /* Create a TCP connection to host:port. Returns fd or -1 on error. */
 int efs_connect_tcp(const char *host, uint16_t port);
 
