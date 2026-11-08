@@ -7,6 +7,7 @@ s=(root/'src/client/write.c').read_text();a=s.index('static int put_fragments_pa
 f=s[a:s.index('\n}',a)+2]
 a=s.index('static int put_recv_reply(');reply_fn=s[a:s.index('\n}',a)+2]
 a=s.index('static void put_drain_verdict(');drain_fn=s[a:s.index('\n}',a)+2]
+a=s.index('static int put_reply_pollfds(');pollfds_fn=s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/protocol.h"
 #include "efs/put_upload.h"
@@ -41,9 +42,13 @@ int efs_conn_put_reply_watch(struct efs_conn *c,int budget){(void)budget;return 
 static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
 static uint64_t noted;static uint64_t efs_client_commit_note(efs_node_id_t n){(void)n;return ++noted;}
 int efs_conn_recv_put_reply(struct efs_conn *c,uint8_t *t,uint8_t *status,uint8_t *path,uint64_t *epoch){(void)c;*epoch=123;*t=EFS_MSG_PUT_CHUNK_REPLY;*status=mode==11 && c==&conns[2]?EFS_PUT_CHUNK_QUOTA_EXCEEDED:(mode==8 && c==&conns[1]) || (mode==10 && c==&conns[2])?EFS_PUT_CHUNK_STALE:mode==6 && c==&conns[2]?EFS_PUT_CHUNK_BUSY:mode==7 && c!=&conns[0]?EFS_PUT_CHUNK_BUSY:mode==4?EFS_PUT_CHUNK_QUOTA_EXCEEDED:mode==5?EFS_PUT_CHUNK_BUSY:EFS_PUT_CHUNK_OK;*path=0xff;return 0;}
-'''+reply_fn+drain_fn+f+r'''
+'''+reply_fn+drain_fn+pollfds_fn+f+r'''
 int main(void){
  int pp[2];assert(!pipe(pp));
+ /* Task DZ: an RDMA conn's wait also polls its TCP socket, mapped to the same slot. */
+ {struct pollfd pf[6];int map[6];struct efs_conn r={(void *)1,7},t={0,8};
+  int n=put_reply_pollfds(&r,40,2,pf,map,0);n=put_reply_pollfds(&t,8,0,pf,map,n);
+  assert(n==3&&pf[0].fd==40&&pf[1].fd==7&&map[0]==2&&map[1]==2&&pf[2].fd==8&&map[2]==0);}
  for(unsigned i=0;i<3;i++){conns[i].rc=(void *)1;conns[i].fd=pp[0];}
  g_client.export_id=1;struct efs_put_ticket ticket={.ino=1,.ci=0,.nodes={1,2,3},.fragment_len=1};
  const uint8_t *fragments[3]={0};int failed[3];
@@ -110,4 +115,4 @@ with tempfile.TemporaryDirectory(prefix='efs-put-reply-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('parallel ticketed PUT: caller-bound quorum/drain, expired admission, one-ACK refusal, negative replies, terminal ticket refusal (also after the quorum), earlier acknowledgements not resent, a BUSY third member reported, full members named (also after the quorum), acknowledgement sequence and verifier per fragment, resend of the missing slot only (K35), an earlier acknowledgement counted once and a drain-time loss reported (K39) and no false peer failures PASS')
+print('parallel ticketed PUT: caller-bound quorum/drain, expired admission, one-ACK refusal, negative replies, terminal ticket refusal (also after the quorum), earlier acknowledgements not resent, a BUSY third member reported, full members named (also after the quorum), acknowledgement sequence and verifier per fragment, resend of the missing slot only (K35), an earlier acknowledgement counted once and a drain-time loss reported (K39), no false peer failures, and an RDMA conn wait that also polls its TCP socket (DZ) PASS')
