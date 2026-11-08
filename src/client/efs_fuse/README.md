@@ -20,7 +20,7 @@ Symptom → file → tests (`python3 scripts/tests_for.py client/efs_fuse.<file>
 |---|---|---|---|---|
 | Crash handler, stats text, feature flags, virtual inodes, `.efs` query results, invalidation thread, `find`, DAC and permission helpers | `support.c` | `support.h` | `t_req`, `g_fuse_se`, `g_find_res`/`g_find_res_mu` | `.support` (6) |
 | LOOKUP memo, GETATTR row cache, READDIR collection | `getattr.c` | `getattr.h` | `t_lookup_memo_serial`, `t_getattr_row`, `t_getattr_ino`, `struct efs_dirh` | `.getattr` (3) |
-| OPEN / CREATE references, lease acquire, retry fairness, BUSY, READ; retained last closes and their background drain | `open.c` | `open.h` | `g_open_mu`, the open-ref table (`struct efs_open_ref`), `struct efs_pending_create` | `.open` (6) |
+| OPEN / CREATE references, lease acquire, retry fairness, BUSY, READ; retained last closes and their background drain | `open.c` | `open.h`: `efs_open_acquire_*`, `efs_close_note`, `efs_open_release_pending`, `efs_open_retry_pass`, `efs_client_ino_is_open`, `efs_open_retained`, `efs_open_append_*` | the open-ref table (`static`, private with its mutex; rows are never handed out), `struct efs_pending_create` | `.open` (7; `tests/test_open_interface.c` links the real `open.c`) |
 | Write-back pool, bounce buffers, drain budgets, the sticky PUT error, worker stop | `writeback.c` | `writeback.h`: `efs_wb_enqueue_owned`, `efs_wb_pending`, `efs_wb_sync`, `efs_wb_sync_ino`, `efs_wb_stop` | the pool (`static g_wb`, private with its mutex) | `.writeback` (4; `tests/test_wb_interface.c` links the real `writeback.c`) |
 | Append reservation, publication, pressure flush and background worker | `append.c` | `append.h` | — | `.append` (5) |
 | WRITE admission, store, buffer, FSYNC, FLUSH | `write.c` | `write.h` | — | `.write` (2) |
@@ -43,7 +43,11 @@ compile).
   owner's header with their lock and lifetime:
   [`support.h`](support.h) (`g_fuse_se`, `g_find_res` under
   `g_find_res_mu`), [`getattr.h`](getattr.h) (the three handler
-  thread-locals), [`open.h`](open.h) (`g_open_mu` and the stripe order),
+  thread-locals), [`open.h`](open.h) (no global: the open-ref table and
+  its mutex are private to `open.c`; the header states the operations,
+  that a retained last close counts as open, and how `append.c` reaches a
+  row's burst state; the inode edge stripe `open_edge_mu` is public and is
+  taken first),
   [`writeback.h`](writeback.h) (no global: the pool and its mutex are
   private to `writeback.c`; the header states the five operations, what
   each returns on BUSY, timeout and I/O failure, the sticky error and the

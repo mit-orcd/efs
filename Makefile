@@ -165,8 +165,8 @@ TEST_BINS += tests/test_kv_reader_gate
 TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
 TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c
-TEST_SRCS += tests/test_wb_interface.c
-TEST_BINS += tests/test_wb_interface
+TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c
+TEST_BINS += tests/test_wb_interface tests/test_open_interface
 TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
@@ -846,6 +846,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_lock
 	./tests/test_stage_evict
 	./tests/test_wb_interface
+	./tests/test_open_interface
 	./tests/test_hardlink_alias
 	./tests/test_verification_matrix
 	./tests/test_conn_fd
@@ -954,6 +955,11 @@ tests: $(TEST_BINS)
 # --wrap=pthread_create lets it fail one worker start (Task DT).
 tests/test_wb_interface: tests/test_wb_interface.c src/client/efs_fuse/writeback.c $(wildcard src/client/efs_fuse/*.h) src/client/client_internal.h
 	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -Isrc/client -o $@ $< src/client/efs_fuse/writeback.c -Wl,--wrap=pthread_create $(LDFLAGS)
+
+# Task EB: the real open-reference table through open.h; the test defines the
+# lease edge RPCs and the helpers open.c takes from other files, so no $(LIB).
+tests/test_open_interface: tests/test_open_interface.c src/client/efs_fuse/open.c $(wildcard src/client/efs_fuse/*.h) src/client/client_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -Isrc/client -o $@ $< src/client/efs_fuse/open.c $(LDFLAGS)
 
 # K88 Task DK: the slot-less library writer on real daemons (test_k88_chunk_hints_live.py).
 tests/test_k88_chunk_hints: tests/test_k88_chunk_hints.c $(LIB)

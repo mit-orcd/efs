@@ -116,6 +116,8 @@ data_commit|tests/test_data_commit
 member_view|tests/test_member_view
 # Task DM: the real write-back pool (workers, drains, stop) through writeback.h.
 wb_interface|tests/test_wb_interface
+# Task EB: the real open-reference table (rows, retained closes, the retry pass) through open.h.
+open_interface|tests/test_open_interface
 # Harnesses that build their own TSan binary (W138 rules: run or fail).
 apply_ring|tests/test_apply_ring.py
 session_latch|tests/test_session_latch_tsan.py
@@ -185,6 +187,8 @@ membership|tests/test_membership
 member_view|tests/test_member_view
 # Task DM: the real write-back pool (workers, drains, stop) through writeback.h.
 wb_interface|tests/test_wb_interface
+# Task EB: the real open-reference table (rows, retained closes, the retry pass) through open.h.
+open_interface|tests/test_open_interface
 frag_record|tests/test_frag_record
 small_segment|tests/test_small_segment
 packed_segment|tests/test_packed_segment

@@ -5,10 +5,13 @@ import os, subprocess, tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
 source=csrc.module('efs_fuse')
-start=source.index('int append_publish_burst(')
-body=source[start:source.index('\n}',start)+2]
+def fn(name):
+    start=source.index(name+'(efs_ino_t ino')
+    return source[start:source.index('\n}',start)+2]
+# the row's burst bookkeeping (open.c) and the caller that publishes between its two halves (append.c)
+body=fn('int efs_open_append_burst_note')+'\n'+fn('void efs_open_append_burst_published')+'\n'+fn('int append_publish_burst')
 if os.environ.get('EFS_APPEND_BURST_OLD_TIMING')=='1':
-    body=body.replace('r->append_burst_ms=completed_ms;','')
+    body=body.replace('r->append_burst_ms=done_ms;','')
 code=r'''
 #include <stdint.h>
 #include <pthread.h>

@@ -7,12 +7,30 @@
 #include "release.h"
 #include "../commands/source.h"
 
+struct efs_open_ref {
+    efs_ino_t ino;
+    uint64_t n;
+    uint32_t append_burst;
+    uint64_t append_burst_ms;
+    uint64_t append_handoff_ms;
+    int append_publishing;
+    int leased; /* first open took HOLD; last close must release it */
+    int close_pending; /* retain ownership until release is confirmed */
+    uint64_t lease_generation;
+    uint64_t retry_order; /* published under g_open_mu; edge is stripe-owned */
+    uint64_t retry_turn; /* fair retry visits, protected by g_open_mu */
+    struct efs_client_lease_request edge; /* immutable OPEN or CLOSE identity */
+    struct efs_client_lease_request adoption; /* clear pending before CLOSE */
+    struct efs_open_ref *next, *prev; /* every row, for retry scans */
+    struct efs_open_ref *hnext; /* inode hash chain */
+};
+
 /* Per-ino open-description count. The sequenced server lease is an edge
  * trigger: acquired at this client's first open of the ino, released at the
  * last close (one lease per (session, inode)). The kernel never relays a
  * flock UNLOCK on close, so the last-close lease edge is also what drops
  * the inode's server-side locks. */
-pthread_mutex_t g_open_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_open_mu = PTHREAD_MUTEX_INITIALIZER;
 static struct efs_open_ref *g_open_refs;
 
 /* At most one row per inode. Rows retained for an unconfirmed last close
@@ -31,7 +49,7 @@ static uint32_t open_ref_bucket(efs_ino_t ino)
            (OPEN_REF_BUCKETS - 1);
 }
 
-struct efs_open_ref *open_ref_find(efs_ino_t ino)
+static struct efs_open_ref *open_ref_find(efs_ino_t ino)
 {
     for (struct efs_open_ref *r = g_open_hash[open_ref_bucket(ino)]; r; r = r->hnext)
         if (r->ino == ino)
@@ -678,6 +696,82 @@ int efs_client_ino_is_open(efs_ino_t ino)
     open = r != NULL;
     pthread_mutex_unlock(&g_open_mu);
     return open;
+}
+
+unsigned efs_open_retained(void)
+{
+    unsigned retained = 0;
+
+    pthread_mutex_lock(&g_open_mu);
+    for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
+        if (!r->n && r->close_pending)
+            retained++;
+    pthread_mutex_unlock(&g_open_mu);
+    return retained;
+}
+
+/* append.c's share of a row: the burst and handoff fields (open.h). */
+uint64_t efs_open_append_handoff(efs_ino_t ino, int *publishing)
+{
+    uint64_t until = 0;
+
+    *publishing = 0;
+    pthread_mutex_lock(&g_open_mu);
+    struct efs_open_ref *r = open_ref_find(ino);
+    if (r) {
+        *publishing = r->append_publishing;
+        until = r->append_handoff_ms;
+    }
+    pthread_mutex_unlock(&g_open_mu);
+    return until;
+}
+
+/* Bound unpublished append ownership even for an fd kept open indefinitely.
+ * Publishing at most 32 writes (or one second) amortizes PUT/REPORT while
+ * keeping reservation completion below the RPC budget and giving a peer
+ * an opportunity to acquire the append cursor. */
+int efs_open_append_burst_note(efs_ino_t ino, uint64_t now)
+{
+    int publish = 0;
+
+    pthread_mutex_lock(&g_open_mu);
+    struct efs_open_ref *r = open_ref_find(ino);
+    if (r && !r->append_publishing) {
+        if (!r->append_burst_ms)
+            r->append_burst_ms = now;
+        if (r->append_burst >= 32 || now - r->append_burst_ms >= 1000) {
+            publish = 1;
+            r->append_publishing = 1;
+            r->append_burst = 0;
+            r->append_burst_ms = now;
+        }
+        r->append_burst++;
+    }
+    pthread_mutex_unlock(&g_open_mu);
+    return publish;
+}
+
+void efs_open_append_burst_published(efs_ino_t ino, int rc, uint64_t done_ms)
+{
+    pthread_mutex_lock(&g_open_mu);
+    struct efs_open_ref *r = open_ref_find(ino);
+    if (r) {
+        r->append_publishing = 0;
+        /* BUSY backoff caps at 64 ms. Leave a 100 ms admission window
+         * after durable publication so a competing client can retry. */
+        if (rc == EFS_OK) {
+            /* Age measures unpublished ownership, not time spent completing
+             * the previous publication. A slow REPORT must not consume the
+             * next burst's entire age budget before its first write. */
+            r->append_burst_ms=done_ms;
+            r->append_handoff_ms = done_ms + 100;
+        } else {
+            /* The next write has not been accepted. Retry the outstanding
+             * publication before opening a fresh burst after a failed drain. */
+            r->append_burst = 32;
+        }
+    }
+    pthread_mutex_unlock(&g_open_mu);
 }
 
 /* Part D: kernel page cache is the coherence hole. FOPEN_DIRECT_IO on
