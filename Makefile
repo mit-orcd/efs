@@ -847,6 +847,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_stage_evict
 	./tests/test_wb_interface
 	./tests/test_open_interface
+	python3 tests/test_tests_for.py
 	./tests/test_hardlink_alias
 	./tests/test_verification_matrix
 	./tests/test_conn_fd

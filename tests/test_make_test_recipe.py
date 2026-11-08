@@ -102,6 +102,9 @@ for line in (root / 'tests/budgets.tsv').read_text().splitlines():
     assert cmd not in catalogue, 'tests/budgets.tsv: %s twice' % cmd
     assert target in ('test', 'test-long'), 'tests/budgets.tsv: target of %s is %r, want test or test-long' % (cmd, target)
     assert subsystem and purpose, 'tests/budgets.tsv: %s needs a subsystem and a purpose' % cmd
+    tags = subsystem.split(',')
+    assert all(tags) and len(set(tags)) == len(tags) and ' ' not in subsystem, \
+        'tests/budgets.tsv: %s: subsystem tags are comma-separated, no spaces, each once: %r' % (cmd, subsystem)
     assert budget > 0 and 1 <= slots <= JOBS, line
     assert budget <= COMMAND_BOUND_S or reason, \
         'tests/budgets.tsv: %s is budgeted %g s, above %d s, with no reason' % (cmd, budget, COMMAND_BOUND_S)
