@@ -2738,6 +2738,8 @@ struct frag_loc {
     uint8_t valid;
 };
 static struct frag_loc frag_loc_cache[FRAG_LOC_CACHE_SIZE];
+#define FRAG_LOC_SET(loc, f, v) __atomic_store_n(&(loc)->f, (v), __ATOMIC_RELAXED)
+#define FRAG_LOC_GET(loc, f) __atomic_load_n(&(loc)->f, __ATOMIC_RELAXED)
 
 static uint32_t frag_loc_slot(efs_export_id_t export_id, efs_ino_t ino,
                               uint32_t chunk_index, uint32_t fragment_index)
@@ -2760,17 +2762,18 @@ static void frag_loc_note(efs_export_id_t export_id, efs_ino_t ino,
 
     if (root > 0xff)
         return;
-    /* valid goes down first and up last so a reader racing this fill
-     * sees either the old entry or the new one, never a half-written
-     * one it would trust. */
-    loc->valid = 0;
-    loc->export_id = export_id;
-    loc->ino = ino;
-    loc->gen = gen;
-    loc->chunk_index = chunk_index;
-    loc->fragment_index = fragment_index;
-    loc->root = (uint8_t)root;
-    __atomic_store_n(&loc->valid, 1, __ATOMIC_RELEASE);
+    /* K99: fills and reads race (two writers, or a writer and a GET), so
+     * every field is a relaxed atomic. A mix of two fills is only a hint:
+     * the reader rechecks the key, a wrong root gets ENOENT and is
+     * reprobed, and the read is identity- and digest-verified. */
+    FRAG_LOC_SET(loc, valid, 0);
+    FRAG_LOC_SET(loc, export_id, export_id);
+    FRAG_LOC_SET(loc, ino, ino);
+    FRAG_LOC_SET(loc, gen, gen);
+    FRAG_LOC_SET(loc, chunk_index, chunk_index);
+    FRAG_LOC_SET(loc, fragment_index, fragment_index);
+    FRAG_LOC_SET(loc, root, (uint8_t)root);
+    FRAG_LOC_SET(loc, valid, 1);
 }
 
 /* Combined fragment+record read. Single probe pass per GET: the data
@@ -2801,18 +2804,20 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
         struct frag_loc *loc =
             &frag_loc_cache[frag_loc_slot(ex->id, ino, chunk_index,
                                           fragment_index)];
-        if (loc->valid && loc->export_id == ex->id && loc->ino == ino &&
-            loc->chunk_index == chunk_index &&
-            loc->fragment_index == fragment_index &&
-            loc->gen == efs_tls_chunk_gen &&
-            loc->root < n) {
-            fragment_path_at(s, loc->root, ex, ino, chunk_index,
+        uint32_t root = FRAG_LOC_GET(loc, root);
+        if (FRAG_LOC_GET(loc, valid) && FRAG_LOC_GET(loc, export_id) == ex->id &&
+            FRAG_LOC_GET(loc, ino) == ino &&
+            FRAG_LOC_GET(loc, chunk_index) == chunk_index &&
+            FRAG_LOC_GET(loc, fragment_index) == fragment_index &&
+            FRAG_LOC_GET(loc, gen) == efs_tls_chunk_gen &&
+            root < n) {
+            fragment_path_at(s, root, ex, ino, chunk_index,
                              fragment_index, path, sizeof(path));
             plen = (int)strlen(path);
             rc = read_file_bytes(path, data, want, &got, rec,
                                  rec_ok);
             if (rc == EFS_ERR_NOT_FOUND) {
-                loc->valid = 0;
+                FRAG_LOC_SET(loc, valid, 0);
                 rc = EFS_ERR_NOT_FOUND;
             } else if (rc != EFS_OK) {
                 return rc;
