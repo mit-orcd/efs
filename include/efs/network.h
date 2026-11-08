@@ -94,6 +94,10 @@ void efs_conn_set_recv_timeout(struct efs_conn *c, int ms);
 int efs_conn_fd_matches(const struct efs_conn *c);
 /* Point a pool conn at its slot generation. slot must outlive the conn. */
 void efs_conn_bind_gen(struct efs_conn *c, uint64_t *slot);
+/* 1 when a pooled conn is unusable: fd recycled, peer FIN (CLOSE-WAIT
+ * after a restart), socket error. A few syscalls: pools probe only a conn
+ * idle for over 1 s. */
+int efs_conn_peer_closed(const struct efs_conn *c);
 /* Successful send or recv. Checkouts skip the liveness probe for 1 s. */
 void efs_conn_note_ok(struct efs_conn *c);
 

@@ -38,6 +38,7 @@ int efs_set_recv_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
 int efs_set_send_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
 struct efs_conn *efs_conn_wrap_tcp(int fd,int server){(void)server;return fd<0?NULL:&live_conn;}
 void efs_conn_destroy(struct efs_conn *conn){(void)conn;destroys++;}
+int efs_conn_peer_closed(const struct efs_conn *conn){(void)conn;return 0;}
 int efs_rdma_available(void){return rdma_on;}
 int efs_rdma_client_upgrade(struct efs_conn *conn){(void)conn;return upgrade_rc;}
 int efs_conn_declare(struct efs_conn *c){(void)c;return 0;}

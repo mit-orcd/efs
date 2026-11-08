@@ -447,6 +447,48 @@ void efs_conn_bind_gen(struct efs_conn *c, uint64_t *slot)
     c->gen_seen = g;
 }
 
+/* Pool slots can sit in CLOSE-WAIT after the peer FINs (EMFILE, restart,
+ * idle timeout). Reusing them looks like a live checkout, then every PUT
+ * gets POLLHUP / recv 0 and we report no quorum while the servers are up. */
+int efs_conn_peer_closed(const struct efs_conn *c)
+{
+    if (!c || c->fd < 0)
+        return 1;
+    /* Recycled fd number: the new socket can be ESTABLISHED. */
+    if (!efs_conn_fd_matches(c))
+        return 1;
+    int fd = c->fd;
+#ifdef TCP_INFO
+    {
+        struct tcp_info ti;
+        socklen_t il = sizeof(ti);
+        if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &il) == 0 &&
+            ti.tcpi_state != TCP_ESTABLISHED)
+            return 1;
+    }
+#endif
+    struct pollfd p = { .fd = fd, .events = POLLIN };
+    int pr = poll(&p, 1, 0);
+    if (pr < 0)
+        return 1;
+    if (p.revents & (POLLERR | POLLHUP | POLLNVAL))
+        return 1;
+    /* Always peek: IPoIB CLOSE-WAIT sometimes reports no POLLIN/HUP. */
+    {
+        char b;
+        ssize_t n = recv(fd, &b, 1, MSG_PEEK | MSG_DONTWAIT);
+        if (n == 0)
+            return 1;
+        if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+            return 1;
+    }
+    int err = 0;
+    socklen_t el = sizeof(err);
+    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &el) == 0 && err != 0)
+        return 1;
+    return 0;
+}
+
 void efs_conn_note_ok(struct efs_conn *c)
 {
     struct timespec ts;

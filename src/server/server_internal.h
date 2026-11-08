@@ -685,6 +685,7 @@ int server_segment_recovery_scan(struct efsd_server *s, struct server_recovery_f
 /* Start once serving (raft host and packer up); no-op after a clean stop. */
 int server_recovery_start(struct efsd_server *s);
 void server_recovery_stop(void);
+void server_recovery_kick(void);
 void server_recovery_stats(struct efs_recovery_stats *out);
 /* EFS_FAULTS builds: EFS_FAULT_CRASH=<point>[:<n>] exits 137 at the nth
  * pass of that point (default the first); points put-acked,

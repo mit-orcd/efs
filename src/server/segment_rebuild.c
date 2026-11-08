@@ -37,7 +37,10 @@
  *      before the acknowledgement), read back and verified there by an
  *      audit of that one fragment, and only then is the mark cleared.
  * At most SR_REBUILD_PER_PASS rebuilds and SR_BUDGET_US per group per pass;
- * a node whose I/O failed is skipped for SR_NODE_BACKOFF_US. */
+ * a node whose I/O failed is skipped for twice what the failed call cost,
+ * at most SR_NODE_BACKOFF_US: a hung member's SR_IO_MS timeout buys the
+ * full skip, a refused connect or stale conn (a member restarting) costs
+ * milliseconds, so the next pass asks again. */
 #include "server_internal.h"
 #include "efs/checksum.h"
 #include "efs/erasure.h"
@@ -105,6 +108,18 @@ static const struct efs_node *sr_node(const struct efs_node *nodes, uint32_t cou
 }
 /* Available: known, not marked down by the heartbeat (this node always),
  * and not in a backoff after failed I/O. */
+/* Skip member id for twice the cost of the call that failed (started at
+ * t0), at most SR_NODE_BACKOFF_US. Logged: a skip delays its audit and every
+ * rebuild that names it. */
+static void sr_skip(uint32_t id, uint64_t t0, const char *why, int rc)
+{
+    uint64_t now = sr_now_us(), skip = 2 * (now - t0);
+    if (skip > SR_NODE_BACKOFF_US) skip = SR_NODE_BACKOFF_US;
+    sr_backoff_us[id] = now + skip;
+    efs_telemetry_log(0, "segment-rebuild: node %u skipped for %llu ms: %s (rc=%d)\n", id,
+            (unsigned long long)(skip / 1000u), why, rc);
+}
+
 static int sr_available(struct efsd_server *s, const struct efs_node *nodes, uint32_t count,
                         uint32_t id, uint64_t now)
 {
@@ -285,9 +300,10 @@ static void sr_audit_node(struct efsd_server *s, struct efs_kv *kv, uint8_t grou
         if (now < a->probe_us + SR_PROBE_US || now < a->retry_us) return;
         a->probe_us = now;
         memset(&rep, 0, sizeof(rep));
-        if (sr_audit_call(s, nodes, count, id, group, 0, 0, NULL, 0, &rep) != EFS_OK ||
-            rep.rc != EFS_OK) {
-            sr_backoff_us[id] = now + SR_NODE_BACKOFF_US;
+        uint64_t t0 = sr_now_us();
+        int prc = sr_audit_call(s, nodes, count, id, group, 0, 0, NULL, 0, &rep);
+        if (prc != EFS_OK || rep.rc != EFS_OK) {
+            sr_skip(id, t0, "audit probe failed", prc != EFS_OK ? prc : rep.rc);
             return;
         }
         if (!rep.settled || (rep.audited & bit)) return;
@@ -321,9 +337,10 @@ static void sr_audit_node(struct efsd_server *s, struct efs_kv *kv, uint8_t grou
     }
     if (c->n) {
         memset(&rep, 0, sizeof(rep));
+        uint64_t t0 = sr_now_us();
         int rc = sr_audit_call(s, nodes, count, id, group, 0, a->inc, items, c->n, &rep);
         if (rc != EFS_OK) {
-            sr_backoff_us[id] = now + SR_NODE_BACKOFF_US;
+            sr_skip(id, t0, "audit call failed", rc);
             goto out; /* the same window again after the backoff */
         }
         if (rep.rc == EFS_ERR_STALE || rep.rc == EFS_ERR_BUSY) {
@@ -332,7 +349,7 @@ static void sr_audit_node(struct efsd_server *s, struct efs_kv *kv, uint8_t grou
             goto out;
         }
         if (rep.rc != EFS_OK) {
-            sr_backoff_us[id] = now + SR_NODE_BACKOFF_US;
+            sr_skip(id, t0, "audit refused", rep.rc);
             goto out;
         }
         for (uint32_t i = 0; i < c->n; i++) {
@@ -538,6 +555,7 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
         goto out; /* still away: wait for the heartbeat to see it */
     uint32_t src[2] = {a, b};
     for (int k = 0; k < 2; k++) {
+        uint64_t t0 = sr_now_us();
         rc = sr_get_fragment(s, nodes, count, o, src[k], buf[k]);
         if (rc == EFS_OK) continue;
         if (rc != EFS_ERR_NET) {
@@ -551,7 +569,7 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
                 }
             }
         }
-        sr_backoff_us[o->nodes[src[k]]] = now + SR_NODE_BACKOFF_US;
+        sr_skip(o->nodes[src[k]], t0, "source fragment unavailable", rc);
         SR_ADD(segment_rebuild_failures, 1);
         efs_telemetry_log(0, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u: source fragment %u "
                 "on node %u unavailable (rc=%d); mark kept\n", group, (unsigned long long)id,
@@ -571,9 +589,10 @@ static int sr_one(struct efsd_server *s, struct efs_kv *kv, uint8_t group,
                 (unsigned long long)id, (unsigned long long)gen, fi, rc);
         goto out;
     }
+    uint64_t t0 = sr_now_us();
     rc = sr_put_rebuilt(s, nodes, count, o, fi, buf[2]);
     if (rc != EFS_OK) {
-        sr_backoff_us[o->nodes[fi]] = now + SR_NODE_BACKOFF_US;
+        sr_skip(o->nodes[fi], t0, "rebuilt PUT failed", rc);
         SR_ADD(segment_rebuild_failures, 1);
         efs_telemetry_log(0, "segment-rebuild: g%u id=%016llx gen=%llx fragment %u node %u: PUT failed "
                 "(rc=%d); mark kept\n", group, (unsigned long long)id, (unsigned long long)gen, fi,

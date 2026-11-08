@@ -77,6 +77,14 @@ SIZES = (1024 * 1024 + 3, 300000, 2 * 1024 * 1024 + 11, 70001)
 files = {}
 notes = []
 t0 = time.time()
+t_step = [t0]
+
+
+def step(msg):
+    """A step's PASS line with its own and the cumulative wall time."""
+    now = time.time()
+    print(f'{msg} [{now - t_step[0]:.1f} s, at {now - t0:.1f} s]', flush=True)
+    t_step[0] = now
 
 
 def put(m, name, size, sync=False):
@@ -260,8 +268,7 @@ try:
     for i in (1, 2, 3):
         st, out = status(c, i)
         assert st is None and 'recovery uncertain' not in out, out
-    print(f'1. formed, {len(files)} files fsynced, node 3 holds {len(before)} fragments PASS',
-          flush=True)
+    step(f'1. formed, {len(files)} files fsynced, node 3 holds {len(before)} fragments PASS')
 
     # 2. Crash during a PUT, then lose two acknowledged fragments.
     c.stop(3)
@@ -281,9 +288,8 @@ try:
     # F24), which is not "two peers hold it".
     synced = [f'A{k}' for k in range(len(SIZES))]
     verify(a, 'node 3 down, two of its fragments lost', synced)
-    print(f'2. node 3 killed after its 5th PUT acknowledgement; {torn.name} torn, '
-          f'{gone.name} deleted; {len(synced)} fsynced files exact from two peers PASS',
-          flush=True)
+    step(f'2. node 3 killed after its 5th PUT acknowledgement; {torn.name} torn, '
+          f'{gone.name} deleted; {len(synced)} fsynced files exact from two peers PASS')
 
     # 3. Crash during recovery: restart, exit at the first mark, restart again.
     c.restart(3, extra_env={'EFS_FAULT_CRASH': 'recovery-marked'})
@@ -291,7 +297,7 @@ try:
     run = c.last_run(3)
     assert 'recovery uncertain' in run and 'recovery: phase metadata' in run, run[-3000:]
     assert 'fault: injected crash at recovery-marked' in run, run[-3000:]
-    print('3. node 3 killed during recovery after its first degraded mark PASS', flush=True)
+    step('3. node 3 killed during recovery after its first degraded mark PASS')
 
     # 4. The fence holds until proven, then clears.
     hold = work / 'hold'
@@ -356,9 +362,9 @@ try:
                  ('checked', 'dropped', 'missing', 'marked', 'already_marked',
                   'rebuilt', 'superseded', 'unrecoverable', 'waiting')) +
                  f' rebuilt_before_fence={back}')
-    print('4. fence held until verified (data-commit EIO, fresh fsync only 2 of 3 durable), '
+    step('4. fence held until verified (data-commit EIO, fresh fsync only 2 of 3 durable), '
           'then cleared (data-commit OK, fresh fsync 3 of 3); crashed-run fragments stay lost; '
-          f'torn and missing fragments rebuilt ({notes[-1]}) PASS', flush=True)
+          f'torn and missing fragments rebuilt ({notes[-1]}) PASS')
 
     # 5. No acknowledged byte lost while two peers hold it.
     verify(b, 'all three up')
@@ -373,7 +379,7 @@ try:
     mounts.remove(d)
     c.restart(1)
     up(c, 1)
-    print(f'5. node 1 down: {len(files)} files exact from nodes 2 and 3 PASS', flush=True)
+    step(f'5. node 1 down: {len(files)} files exact from nodes 2 and 3 PASS')
 
     # 6. Crash during publication.
     b.close()
@@ -400,8 +406,8 @@ try:
     assert rc == 0, out
     verify(a, 'after publication crash')
     whole(c)
-    print('6. node 2 killed applying a publication; recovery verified, data-commit OK, '
-          'files exact PASS', flush=True)
+    step('6. node 2 killed applying a publication; recovery verified, data-commit OK, '
+          'files exact PASS')
 
     # 7. Crash during reclaim.
     c.stop(3)
@@ -423,8 +429,8 @@ try:
     c.wait_log(3, r'reclaim: journal epoch=\d+ segments=\d+ records=\d+ replayed', timeout=5)
     verify(a, 'after reclaim crash')
     whole(c)
-    print('7. node 3 killed after journaling a reclaim batch; journal replayed, recovery '
-          'verified PASS', flush=True)
+    step('7. node 3 killed after journaling a reclaim batch; journal replayed, recovery '
+          'verified PASS')
 
     # 8. Crash during KV compaction. The mount on node 2 comes first: a
     # mount started while node 1 is dying can time out. Node 1 comes back
@@ -462,8 +468,8 @@ try:
     verify(b, 'after compaction crash')
     whole(c)
     notes.append(f'compaction crash after {k} mkdir/rmdir pairs')
-    print(f'8. node 1 killed at its first KV compaction output ({k} mkdir/rmdir); recovery '
-          'verified PASS', flush=True)
+    step(f'8. node 1 killed at its first KV compaction output ({k} mkdir/rmdir); recovery '
+          'verified PASS')
 
     # 9. Verification itself fails: the store stays fenced with the reason.
     kill(c, 2)
@@ -484,8 +490,8 @@ try:
     up(c, 2)
     verified(c, 2)
     whole(c)
-    print('9. damaged certificate: recovery FAILED with the reason, store fenced; '
-          'restart without it verified PASS', flush=True)
+    step('9. damaged certificate: recovery FAILED with the reason, store fenced; '
+          'restart without it verified PASS')
 
     # 10. A group this node does not host: its inventory from a hosting member.
     c.start(4, join=2)
@@ -503,8 +509,8 @@ try:
     st = verified(c, 1)
     assert st['groups'] == (1, 2), st
     verify(b, 'after node 1 recovery at four members')
-    print(f'10. node 1 hosts group 0 only: recovery read group 2 from a member, groups '
-          f'proven={st["groups"][0]}/{st["groups"][1]}, verified PASS', flush=True)
+    step(f'10. node 1 hosts group 0 only: recovery read group 2 from a member, groups '
+          f'proven={st["groups"][0]}/{st["groups"][1]}, verified PASS')
 
     # 11. Packed segments: a referenced segment fragment lost.
     base = packed_total(c)
@@ -551,9 +557,9 @@ try:
     st = wait_status(c, holder, lambda s: re.search(r'segments .*? rebuilt=[1-9]\d* waiting=0;',
                                                      status(c, holder)[1]) is not None,
                      timeout=180)
-    print(f'11. node {holder}: a referenced segment fragment deleted; recovery found it '
+    step(f'11. node {holder}: a referenced segment fragment deleted; recovery found it '
           f'missing and marked it (segments checked={st["segments"][0]} '
-          f'missing={st["segments"][1]}), verified; rebuilt by K37; files exact PASS', flush=True)
+          f'missing={st["segments"][1]}), verified; rebuilt by K37; files exact PASS')
 finally:
     failed = sys.exc_info()[0] is not None
     segment_rebuild_hold.unlink(missing_ok=True)
