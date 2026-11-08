@@ -1500,7 +1500,7 @@
     "docs/status/2026-10/d39-consolidated-model-20261023.md": "68211f94877f2acbf05645ba2ef455c9f320cde460e821371b534451284f8bcc",
     "docs/status/2026-10/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
     "docs/status/2026-10/w100-eof-contract-20261013.md": "f8d0ef05a9b9d02a7118405d4bce0d6c4dbe4975b5138880b74a7cd995c2190c",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "076b47e60592accf47991b5aa974b92d4d4fac5f8ce353cd66b60bf819ad6a0e",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "896184a4206be5e4d6c088c412befcbe8b43a39b5c747984bd8f9e7b427aac89",
     "docs/status/alpha-1.1-consolidation.md": "c24210e5af50ff0c1d9f0fea74efb982947486c547230718a00b59f6c6d106a2",
     "docs/status/decisions.md": "1217bfafdf7b349bf453ad7a646f524fc6fdceaefc036d5ce637117126069ff7",
     "docs/using/alpha-1.0-guide.md": "af171553530fdac62596e108d0accbd8e12824abbae1eab8af4355ce5ce1289f",
@@ -1646,7 +1646,7 @@
     "scripts/evidence/dl/objcmp.py": "44dd8d09c5c4a76dda723660f938149fb90bcd12736bfbf764bbf88ef9832b9a",
     "scripts/evidence/dl/verify_split.py": "6ca0fe08e6732ba7f85366f1c8d655bb31a0ab390888c80edb4e168174befc68",
     "scripts/evidence/dp/k38_loaded_loop.sh": "93e7e99f86f8587cf5f252baffa533792b548854534b04ddb944b1f4f480bf92",
-    "scripts/evidence/dw/k38_dw_campaign.py": "9737b3571cca2b32d29dd349325eb7f96f358273e65c1e57a759114b3b50a2d5",
+    "scripts/evidence/dw/k38_dw_campaign.py": "5d3d66afe58cccb74691719cd74130b1020633cca3667216f0ebbaf013320616",
     "scripts/evidence/dw/k38_dw_client.py": "ce3ef9073fd71d525862cd95c48c2e77e99dde2a2dffd2b7fde7841ff58d9d5c",
     "scripts/evidence/fin/fin_accounting_audit.py": "221499c149c00c7301fbc221d54b12a8e4daae5d30b34a1bbb175c9d85d86cf4",
     "scripts/evidence/fin/fin_accounting_controls.py": "266e49372c6cc9ad580915fbbf53c4462b33de06930fb85982e69f495f016706",
@@ -2990,5 +2990,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "6fe31a0aa90f21f70eb25ccda1211f0790c2c329"
+  "source_commit": "1f7b22f3c2937019ffc4c04f2009899d9fc55b49"
 }

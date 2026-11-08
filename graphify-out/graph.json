@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "6fe31a0aa90f21f70eb25ccda1211f0790c2c329"
+      "source_commit": "1f7b22f3c2937019ffc4c04f2009899d9fc55b49"
     }
   },
   "links": [
@@ -179100,6 +179100,15 @@
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L42",
       "target": "src_kv_kv_key_start"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:343",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L345",
+      "target": "src_client_commands_command_run"
     },
     {
       "confidence": "EXTRACTED",
