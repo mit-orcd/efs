@@ -81,7 +81,7 @@ static struct {
     pthread_mutex_t mu;
     pthread_cond_t cv;
     pthread_t tid;
-    int started, stop;
+    int started, stop, kick;
     struct efsd_server *s;
     struct efs_recovery_stats st;   /* under mu, except the file counters */
     struct server_recovery_files files;
@@ -148,11 +148,22 @@ static int rv_wait(unsigned ms)
         until.tv_nsec -= 1000000000L;
     }
     pthread_mutex_lock(&rv.mu);
-    if (!rv.stop)
+    if (!rv.stop && !rv.kick)
         pthread_cond_timedwait(&rv.cv, &rv.mu, &until);
+    rv.kick = 0;
     int stop = rv.stop;
     pthread_mutex_unlock(&rv.mu);
     return stop;
+}
+
+/* A degraded mark was cleared here (W154 or K37 apply): the rebuild watch
+ * looks at once instead of at its next RV_WATCH_MS poll. */
+void server_recovery_kick(void)
+{
+    pthread_mutex_lock(&rv.mu);
+    rv.kick = 1;
+    pthread_cond_broadcast(&rv.cv);
+    pthread_mutex_unlock(&rv.mu);
 }
 
 static void rv_phase(uint32_t phase)

@@ -2253,6 +2253,8 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_meta_apply_pack_degraded(h->kv, decoded.group, decoded.op, decoded.id, decoded.generation,
                                           decoded.mask, decoded.reason, &changed);
         h->apply_extra = (uint64_t)changed;
+        if (rc == EFS_OK && changed && decoded.op != EFS_MD_PACK_DEGRADED_MARK)
+            server_recovery_kick();
     } else if (cmd[0] == EFS_MD_CMD_PACK_CANCEL) {
         if (clen != 18) return EFS_ERR_UNSUPPORTED;
         rc = efs_meta_apply_pack_cancel(h->kv, cmd[1], rd64be(cmd + 2), rd64be(cmd + 10));
@@ -2481,6 +2483,8 @@ static int apply_degraded_clear_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                 (unsigned long long)d.ino, d.chunk_index,
                 (unsigned long long)d.object_gen, __builtin_ctz(d.missing_mask));
     h->apply_extra = (uint64_t)outcome;
+    if (rc == EFS_OK)
+        server_recovery_kick();
     return rc;
 }
 
@@ -11912,7 +11916,13 @@ static struct trunc_pass_result host_gc_trunc_pass(struct efs_raft_host *h, uint
  *      with rebuilt=1. That apply rechecks the row: an object superseded
  *      meanwhile gets a one-fragment GC record, so the copy does not leak.
  * At most EFS_REBUILD_PER_PASS (default 256) rebuilds and 1 s per group per
- * pass; a node whose fetch or PUT failed is skipped for 10 s. */
+ * pass; a node whose fetch or PUT failed is skipped for twice what the
+ * failed call cost, at most 10 s: a hung peer's 5 s timeout buys the full
+ * skip, a refused connect or a stale pooled conn (the node restarting) costs
+ * milliseconds and the next pass tries again. A target that
+ * stored the fragment but refused the COMMIT is fenced (K36: recovery not
+ * yet verified), not failing: it is asked again with one empty COMMIT per
+ * pass and its marks go as soon as that succeeds, not after a fixed skip. */
 #define DG_SCAN_MAX 256
 #define DG_KEY_LEN 24u
 #define DG_BUDGET_US 1000000ull
@@ -11928,6 +11938,19 @@ struct dg_scan_ctx {
 static uint8_t g_dg_cur[HOST_NGROUPS][DG_KEY_LEN];
 static uint32_t g_dg_cur_len[HOST_NGROUPS];
 static uint64_t g_dg_node_backoff_us[EFS_MAX_NODES + 1];
+/* Fenced target: the pass number that last saw it refuse COMMIT (0 = not). */
+static uint64_t g_dg_pass, g_dg_node_fenced[EFS_MAX_NODES + 1];
+
+/* Skip node id for twice the cost of the call that failed (started at t0,
+ * at most DG_NODE_BACKOFF_US). Returns the skip in ms for the log. */
+static unsigned long long dg_skip(efs_node_id_t id, uint64_t t0)
+{
+    uint64_t now = now_us_(), skip = 2 * (now - t0);
+    if (skip > DG_NODE_BACKOFF_US)
+        skip = DG_NODE_BACKOFF_US;
+    g_dg_node_backoff_us[id] = now + skip;
+    return (unsigned long long)(skip / 1000u);
+}
 
 static int dg_scan_cb(void *user, const uint8_t *key, uint32_t klen,
                       const uint8_t *val, uint32_t vlen)
@@ -12067,7 +12090,9 @@ static int dg_put_fragment(struct efs_raft_host *h, struct efs_export *ex,
             return EFS_ERR_IO;
         /* PUT acknowledgement is asynchronous: the mark goes only after
          * the barrier made the rebuilt fragment durable. */
-        return server_put_sync_commit(h->s, &roots) == EFS_OK ? EFS_OK : EFS_ERR_IO;
+        if (server_put_sync_commit(h->s, &roots) == EFS_OK)
+            return EFS_OK;
+        return server_put_sync_settled() ? EFS_ERR_IO : EFS_ERR_FENCED;
     }
     const struct efs_node *n = dg_node(nodes, count, id);
     /* K13: no ticket authorizes a published object; the storage node checks
@@ -12111,10 +12136,35 @@ static int dg_put_fragment(struct efs_raft_host *h, struct efs_export *ex,
             return EFS_ERR_NET;
         }
         const struct efs_msg_data_commit_reply *cr = reply;
-        rc = type == EFS_MSG_DATA_COMMIT_REPLY && rlen == sizeof(*cr) &&
-             cr->rc == EFS_OK && cr->boot_epoch == epoch ? EFS_OK : EFS_ERR_IO;
+        rc = type != EFS_MSG_DATA_COMMIT_REPLY || rlen != sizeof(*cr) || cr->boot_epoch != epoch
+             ? EFS_ERR_IO : cr->rc == EFS_OK ? EFS_OK : EFS_ERR_FENCED;
         free(reply);
     }
+    dg_conn_release(n, pc);
+    return rc;
+}
+
+/* A fenced target answers an empty COMMIT at once; OK means its fence is
+ * cleared. EFS_ERR_NET when it did not answer. */
+static int dg_commit_probe(const struct efs_node *n)
+{
+    struct efs_conn *pc = dg_conn_get(n);
+    uint8_t type = 0;
+    void *reply = NULL;
+    uint32_t rlen = 0;
+
+    if (!pc)
+        return EFS_ERR_NET;
+    if (efs_conn_send_msg(pc, EFS_MSG_DATA_COMMIT, NULL, 0) ||
+        efs_conn_recv_msg(pc, &type, &reply, &rlen)) {
+        server_peer_conn_drop(n->addr, n->port, pc);
+        free(reply);
+        return EFS_ERR_NET;
+    }
+    const struct efs_msg_data_commit_reply *cr = reply;
+    int rc = type == EFS_MSG_DATA_COMMIT_REPLY && rlen == sizeof(*cr) && cr->rc == EFS_OK
+             ? EFS_OK : EFS_ERR_FENCED;
+    free(reply);
     dg_conn_release(n, pc);
     return rc;
 }
@@ -12165,6 +12215,23 @@ static int dg_one(struct efs_raft_host *h, uint8_t group, struct efs_export *ex,
     for (uint32_t k = 1; k < EFS_NUM_FRAGMENTS; k++)
         if (g_dg_node_backoff_us[d->nodes[(fi + k) % EFS_NUM_FRAGMENTS]] > now)
             return 0;
+    if (g_dg_node_fenced[t->id]) {
+        /* Once per pass: is the fence gone? Only then fetch and PUT. */
+        if (g_dg_node_fenced[t->id] == g_dg_pass)
+            return 0;
+        uint64_t t0 = now_us_();
+        rc = t->id == h->s->id ? (server_put_sync_settled() ? EFS_OK : EFS_ERR_FENCED)
+                               : dg_commit_probe(t);
+        if (rc == EFS_ERR_NET)
+            (void)dg_skip(t->id, t0);
+        if (rc != EFS_OK) {
+            g_dg_node_fenced[t->id] = g_dg_pass;
+            return 0;
+        }
+        g_dg_node_fenced[t->id] = 0;
+    }
+    uint64_t t0 = now_us_();
+    unsigned long long skip_ms = 0;
     rc = dg_get_fragment(h, ex, nodes, count, d, a, buf[0], &la);
     if (rc == EFS_OK)
         rc = dg_get_fragment(h, ex, nodes, count, d, b, buf[1], &lb);
@@ -12179,23 +12246,34 @@ static int dg_one(struct efs_raft_host *h, uint8_t group, struct efs_export *ex,
     }
     if (rc != EFS_OK) {
         if (rc == EFS_ERR_NET || rc == EFS_ERR_IO) {
-            g_dg_node_backoff_us[d->nodes[a]] = now + DG_NODE_BACKOFF_US;
-            g_dg_node_backoff_us[d->nodes[b]] = now + DG_NODE_BACKOFF_US;
+            skip_ms = dg_skip(d->nodes[a], t0);
+            (void)dg_skip(d->nodes[b], t0);
         }
         __atomic_fetch_add(&h->s->rebuild_failures, 1, __ATOMIC_RELAXED);
         efs_telemetry_log(0, "raft-host: rebuild ino=%llu ci=%u gen=%llx fragment=%u: %s "
-                "(rc=%d); mark kept\n", (unsigned long long)d->ino, d->chunk_index,
-                (unsigned long long)d->object_gen, fi,
-                rc == EFS_ERR_CHECKSUM ? "checksum mismatch" : "source fragments unavailable", rc);
+                "(rc=%d); mark kept, sources skipped %llu ms\n", (unsigned long long)d->ino,
+                d->chunk_index, (unsigned long long)d->object_gen, fi,
+                rc == EFS_ERR_CHECKSUM ? "checksum mismatch" : "source fragments unavailable", rc,
+                skip_ms);
         return 0;
     }
+    t0 = now_us_();
     rc = dg_put_fragment(h, ex, nodes, count, d, fi, buf[2], la);
+    if (rc == EFS_ERR_FENCED) {
+        /* Stored, not yet durable there: the mark waits for the fence. */
+        g_dg_node_fenced[d->nodes[fi]] = g_dg_pass;
+        efs_telemetry_log(0, "raft-host: rebuild ino=%llu ci=%u gen=%llx fragment=%u node=%u: "
+                "COMMIT refused (store fenced); mark kept until it commits\n",
+                (unsigned long long)d->ino, d->chunk_index, (unsigned long long)d->object_gen,
+                fi, d->nodes[fi]);
+        return 0;
+    }
     if (rc != EFS_OK) {
-        g_dg_node_backoff_us[d->nodes[fi]] = now + DG_NODE_BACKOFF_US;
+        skip_ms = dg_skip(d->nodes[fi], t0);
         __atomic_fetch_add(&h->s->rebuild_failures, 1, __ATOMIC_RELAXED);
         efs_telemetry_log(0, "raft-host: rebuild ino=%llu ci=%u gen=%llx fragment=%u node=%u: "
-                "PUT failed (rc=%d); mark kept\n", (unsigned long long)d->ino, d->chunk_index,
-                (unsigned long long)d->object_gen, fi, d->nodes[fi], rc);
+                "PUT failed (rc=%d); mark kept, node skipped %llu ms\n", (unsigned long long)d->ino,
+                d->chunk_index, (unsigned long long)d->object_gen, fi, d->nodes[fi], rc, skip_ms);
         return 0;
     }
     rc = dg_propose_clear(h, group, d, 1);
@@ -12241,6 +12319,7 @@ static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t a
         g_dg_cur_len[gi] = 0;
         return;
     }
+    g_dg_pass++; /* one fence probe per target per pass */
     pthread_mutex_lock(&h->s->lock);
     count = h->s->node_count > EFS_MAX_NODES ? EFS_MAX_NODES : h->s->node_count;
     memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
