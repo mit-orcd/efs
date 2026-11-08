@@ -1704,6 +1704,17 @@ static int message_progress(struct efs_rdma_conn *rc,unsigned frames)
 fail:
     rc->broken=1;return -1;
 }
+/* After the upgrade the control socket carries nothing: TCP app bytes and
+ * EOF both retire the conn. An idle QP never errors when its peer dies, so
+ * this is how a reply wait learns of it. */
+static int tcp_retired(struct efs_rdma_conn *rc)
+{
+    if (rc->tcp_fd<0) return 0;
+    char byte;ssize_t got=recv(rc->tcp_fd,&byte,1,MSG_PEEK|MSG_DONTWAIT);
+    if (got<0 && (errno==EAGAIN || errno==EWOULDBLOCK || errno==EINTR)) return 0;
+    if (got>0) rc->tcp_app_rx++;
+    rc->broken=1;return 1;
+}
 static int message_pause(struct efs_rdma_conn *rc,int64_t end)
 {
     if (rc->broken || now_us()>=end) {rc->broken=1;return -1;}
@@ -1711,13 +1722,7 @@ static int message_pause(struct efs_rdma_conn *rc,int64_t end)
     efd_arm(rc);
     int n=poll(pf,rc->tcp_fd>=0?2:1,1);efd_disarm(rc);
     if (n<0 && errno!=EINTR) {rc->broken=1;return -1;}
-    if (rc->tcp_fd>=0 && pf[1].revents) {
-        char byte;ssize_t got=recv(rc->tcp_fd,&byte,1,MSG_PEEK|MSG_DONTWAIT);
-        if (got>=0 || (errno!=EAGAIN && errno!=EWOULDBLOCK && errno!=EINTR)) {
-            if (got>0) rc->tcp_app_rx++;
-            rc->broken=1;return -1; /* TCP app bytes and EOF both retire */
-        }
-    }
+    if (rc->tcp_fd>=0 && pf[1].revents && tcp_retired(rc)) return -1;
     if (__atomic_load_n(&rc->pr_head,__ATOMIC_ACQUIRE)==rc->pr_tail) pend_drain_efd(rc);
     return 0;
 }
@@ -1730,7 +1735,11 @@ int efs_rdma_message_ready(struct efs_rdma_conn *rc)
      * concurrent push racing this drain is still observed without a lost wake. */
     if (__atomic_load_n(&rc->pr_head,__ATOMIC_ACQUIRE)==rc->pr_tail)
         pend_drain_efd(rc);
-    return rc->broken ? -1 : efs_rmsg_rx_peek(&rc->messages)!=NULL;
+    if (rc->broken) return -1;
+    if (efs_rmsg_rx_peek(&rc->messages)) return 1;
+    /* Nothing to read: a caller polling efd with the TCP socket (a PUT's
+     * reply wait) must see a dead peer here, not at its deadline. */
+    return tcp_retired(rc) ? -1 : 0;
 }
 int efs_rdma_message_wait(struct efs_rdma_conn *rc,int timeout_ms)
 {
