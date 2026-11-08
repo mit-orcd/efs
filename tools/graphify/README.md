@@ -55,6 +55,21 @@ graphify query host_apply --seed host_apply --context calls --budget 1500
 graphify explain W145-snapshot-unproven-tail
 ```
 
+For a component, start from its catalogue tag (the `scripts/tests_for.py`
+subsystem): the component node names the guide, the contract header, the
+implementation and the catalogued tests in one neighbourhood, nothing else:
+
+```sh
+graphify explain client/efs_fuse.writeback
+```
+
+Component nodes (Task EB) come from the source layout (`src/<dir>/<name>.c`
+and `.h` in a directory with a `README.md`, the guide) and from the literal
+rows of `tests/budgets.tsv` (`tested_by`, one edge per tag of a row). A
+`tested_by` edge is a catalogue route, not measured coverage. The component
+guides (`src/**/README.md`) are indexed as documents: headings become sections
+and literal symbol mentions link to their one implementation.
+
 `contains`, `calls`, `imports`, `indirect_call` and other AST relationships retain
 the extractor's confidence labels. Exact C include paths resolve to selected
 headers. Unresolved imports have explicitly labelled boundary nodes: they may be

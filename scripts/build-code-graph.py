@@ -50,6 +50,45 @@ def file_id(name):
     return "efs:file:" + name
 
 
+def component_tag(path):
+    """src/client/efs_fuse/open.c -> client/efs_fuse.open; src/client/write.c -> client/write."""
+    parts = Path(path).with_suffix("").parts[1:]
+    return "/".join(parts[:-1]) + ("." if len(parts) > 2 else "/") + parts[-1] if len(parts) > 1 else parts[0]
+
+
+def components(root, config, code, docs):
+    """Component nodes (Task EB): one per catalogue tag and per source file in a
+    guided directory (one with a README). Each names its guide, contract (.h),
+    implementation (.c) and the catalogued test files, by layout and by the
+    catalogue's literal rows; nothing is inferred from source text."""
+    out = {}
+    def entry(tag):
+        if tag not in out:
+            base = "src/" + tag.replace(".", "/")
+            d = base if base in dirs else str(Path(base).parent)
+            while d != "src" and d + "/README.md" not in docs:
+                d = str(Path(d).parent)
+            out[tag] = {"guide": d + "/README.md" if d != "src" else None,
+                        "contract": base + ".h" if base + ".h" in code else None,
+                        "impl": base + ".c" if base + ".c" in code else None, "tests": []}
+        return out[tag]
+    dirs = {str(Path(p).parent) for p in code}
+    for path in code:
+        if path.startswith("src/") and path.endswith(".c") and str(Path(path).parent) + "/README.md" in docs:
+            entry(component_tag(path))
+    for line, text in enumerate((root / config["catalogue"]).read_text().splitlines(), 1):
+        f = text.split("\t")
+        if len(f) < 7 or text.startswith("#") or f[0] == "command":
+            continue
+        tests = []
+        for name in re.findall(r"(?:tests|scripts)/[\w./-]+", f[0]):
+            tests += [name] if name in code else [name + ext for ext in config["code_suffixes"] if name + ext in code]
+        for tag in f[5].split(","):
+            e = entry(tag)
+            e["tests"] += [(t, line) for t in tests if (t, line) not in e["tests"]]
+    return out
+
+
 def section_id(name, line):
     return f"efs:section:{name}:{line}"
 
@@ -129,7 +168,7 @@ def build(root, out):
     if version != config["graphify_version"]:
         raise ValueError(f"expected graphifyy {config['graphify_version']}, got {version}; revalidate before upgrading")
     code, docs = select_files(root, config)
-    inputs = sorted(set(code + docs + config["build_files"] + [
+    inputs = sorted(set(code + docs + config["build_files"] + [config["catalogue"],
         "tools/graphify/scope.json", "tools/graphify/known-bugs.json", "scripts/build-code-graph.py", "scripts/graph-community-labels.py"]))
     before = {p: digest(root / p) for p in inputs}
     print(f"Scope: {len(code)} code, {len(docs)} documents, {len(config['build_files'])} build files", flush=True)
@@ -201,6 +240,20 @@ def build(root, out):
                 candidates = [name] if name in code else [name + ext for ext in config["code_suffixes"] if name + ext in code]
                 for dest in candidates:
                     edge(file_id(p), file_id(dest), "references_path", p, line)
+    # Component nodes (Task EB): guide, contract, implementation and the
+    # catalogued tests of one component, so `graphify explain <tag>` is the
+    # compact starting set. Layout and catalogue rows only, no inference.
+    for tag, c in sorted(components(root, config, code, docs).items()):
+        cid = "efs:component:" + tag
+        node(cid, tag, c["impl"] or c["guide"] or config["catalogue"], 1, "component")
+        if c["guide"]:
+            edge(cid, file_id(c["guide"]), "guided_by", c["guide"], method="source-layout")
+        if c["contract"]:
+            edge(cid, file_id(c["contract"]), "contract", c["contract"], method="source-layout")
+        if c["impl"]:
+            edge(cid, file_id(c["impl"]), "implemented_by", c["impl"], method="source-layout")
+        for test, line in c["tests"]:
+            edge(cid, file_id(test), "tested_by", config["catalogue"], line, method="test-catalogue")
     # Resolve quoted C includes by exact path, not matching a basename to a
     # possibly unrelated file. Unresolved imports remain labelled boundaries.
     for e in edges:
@@ -291,6 +344,7 @@ def build(root, out):
     report += ["", "## Extraction warnings", ""] + ["- " + warning for warning in extraction_warnings]
     report += ["", "## Limits", "", f"Health warning: {self_calls} self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.", f"Unresolved edges omitted: {dict(omitted)}. These are extraction gaps, not absent dependencies.",
                "Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.",
+               "Component nodes come from the source layout and the test catalogue's rows (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage.",
                "No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.",
                "Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.",
                "External library internals are excluded. Function pointers, macros and embedded C/shell may be unresolved."]
@@ -308,8 +362,8 @@ def main():
         manifest = json.loads((args.out / "source-manifest.json").read_text())
         config = json.loads((ROOT / "tools/graphify/scope.json").read_text())
         code, docs = select_files(ROOT, config)
-        expected = set(code + docs + config["build_files"] + [
-            "tools/graphify/scope.json", "tools/graphify/known-bugs.json", "scripts/build-code-graph.py"])
+        expected = set(code + docs + config["build_files"] + [config["catalogue"],
+            "tools/graphify/scope.json", "tools/graphify/known-bugs.json", "scripts/build-code-graph.py", "scripts/graph-community-labels.py"])
         if expected != set(manifest["input_sha256"]) or any(
                 digest(ROOT / p) != h for p, h in manifest["input_sha256"].items()):
             raise ValueError("graph is stale: source inputs differ; rebuild required")

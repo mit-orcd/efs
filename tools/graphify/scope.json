@@ -15,7 +15,8 @@
   ],
   "document_roots": [
     "docs/how-it-works",
-    "docs/using"
+    "docs/using",
+    "src"
   ],
   "documents": [
     "README.md",
@@ -39,5 +40,6 @@
   "exclude": [
     "docs/how-it-works/architecture-full.md"
   ],
-  "notes": "All first-party test/operational source is retained, including fault models and live oracles. Documents are an explicit contract/navigation selection; inclusion does not make a proposal accepted. Generated duplicates, results, archives and vendored internals are excluded."
+  "notes": "All first-party test/operational source is retained, including fault models and live oracles. Documents are an explicit contract/navigation selection; inclusion does not make a proposal accepted. Generated duplicates, results, archives and vendored internals are excluded. src/**/README.md are the component guides (Task EB); tests/budgets.tsv supplies the tested_by routes of the component nodes.",
+  "catalogue": "tests/budgets.tsv"
 }

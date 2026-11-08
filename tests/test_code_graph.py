@@ -109,6 +109,32 @@ class GraphChecks(unittest.TestCase):
             self.assertEqual(hook.read_bytes(), wrapper)
             self.assertEqual((root / ".git/hooks/post-commit.before-efs-code-graph").read_text(), original)
 
+    def test_component_nodes_name_guide_contract_implementation_tests(self):
+        # Task EB: one node per component; its edges are the compact starting set.
+        nodes = {n['id']: n for n in self.graph['nodes']}
+        def targets(tag, relation):
+            cid = 'efs:component:' + tag
+            self.assertIn(cid, nodes)
+            self.assertEqual(nodes[cid]['label'], tag)
+            return sorted(e['target'] for e in self.graph['links'] if e['source'] == cid and e['relation'] == relation)
+        self.assertEqual(targets('client/efs_fuse.writeback', 'guided_by'), ['efs:file:src/client/efs_fuse/README.md'])
+        self.assertEqual(targets('client/efs_fuse.writeback', 'contract'), ['efs:file:src/client/efs_fuse/writeback.h'])
+        self.assertEqual(targets('client/efs_fuse.writeback', 'implemented_by'), ['efs:file:src/client/efs_fuse/writeback.c'])
+        self.assertIn('efs:file:tests/test_wb_interface.c', targets('client/efs_fuse.writeback', 'tested_by'))
+        # a second catalogue tag routes a test to its other component too
+        self.assertIn('efs:file:tests/test_open_lease.py', targets('client/efs_fuse.open', 'tested_by'))
+        self.assertIn('efs:file:tests/test_open_interface.c', targets('client/efs_fuse.open', 'tested_by'))
+        # a tag-only component (no file of its own) still has its guide and tests
+        self.assertEqual(targets('server/raft_host.read_index', 'guided_by'), ['efs:file:src/server/README.md'])
+        self.assertTrue(targets('server/raft_host.read_index', 'tested_by'))
+        self.assertEqual(targets('server/raft_host.read_index', 'implemented_by'), [])
+        # the guides are documents: sections and literal symbol mentions
+        self.assertTrue(any(n.get('source_file') == 'src/client/efs_fuse/README.md' and n.get('kind') == 'document_section'
+                            for n in self.graph['nodes']))
+        self.assertEqual(m.component_tag('src/client/efs_fuse/open.c'), 'client/efs_fuse.open')
+        self.assertEqual(m.component_tag('src/client/write.c'), 'client/write')
+        self.assertEqual(m.component_tag('src/meta/meta_apply/publish.c'), 'meta/meta_apply.publish')
+
     def test_scope_retains_models_excludes_history(self):
         # select_files lists tracked files; the gate runs from a git archive.
         if subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=ROOT,
@@ -121,6 +147,8 @@ class GraphChecks(unittest.TestCase):
         self.assertIn('scripts/evidence/w127/w127_incompatible_entry.sh', code)
         self.assertIn('tests/live/raft_read_freshness.py', code)
         self.assertIn('docs/status/decisions.md', docs)
+        self.assertIn('src/client/efs_fuse/README.md', docs)
+        self.assertNotIn('src/client/efs_fuse/README.md', code)
         self.assertNotIn('docs/how-it-works/architecture-full.md', docs)
         self.assertFalse(any(p.startswith(('results/', 'deps/', 'docs/archive/')) for p in code + docs))
 
