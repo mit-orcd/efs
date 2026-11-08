@@ -1,6 +1,6 @@
 # EFS defect-navigation graph
 
-Source base: `fa86c3d686108075302e881273fd1cecc9c3f8dd`; exact inputs: `source-manifest.json`.
+Source base: `f380177cf641b21f43240e9562db1d3cf1502dbd`; exact inputs: `source-manifest.json`.
 Graphify 0.9.97; 18,117 nodes, 75,262 directed typed edges, 576 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
