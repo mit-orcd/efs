@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `f380177cf641b21f43240e9562db1d3cf1502dbd`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 18,117 nodes, 75,262 directed typed edges, 576 communities.
+Source base: `7144110e815b145b971ba0e915145a34c58ac508`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 18,138 nodes, 75,322 directed typed edges, 590 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,21 +19,21 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27604
+- `calls`: 27624
 - `case_of`: 118
-- `contains`: 27080
+- `contains`: 27108
 - `defines`: 1996
 - `documents_finding`: 8
 - `exercises`: 7
-- `imports`: 8088
-- `imports_from`: 991
-- `indirect_call`: 750
+- `imports`: 8095
+- `imports_from`: 993
+- `indirect_call`: 751
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 3036
+- `mentions_symbol`: 3034
 - `method`: 644
-- `rationale_for`: 1398
-- `references`: 2168
+- `rationale_for`: 1401
+- `references`: 2169
 - `references_path`: 1243
 - `regression_for`: 8
 - `uses`: 96
@@ -46,7 +46,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1793}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1798}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
