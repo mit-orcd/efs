@@ -15,7 +15,8 @@ code=r'''
 void efs_telemetry_log(int critical, const char *format, ...) {
     (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
 }
-static int remaining=-1,waits,connects,destroys;
+static int remaining=-1,waits,connects,destroys,live_fd=-1,rdma_on,upgrade_rc=-1;
+static struct efs_conn live_conn;
 static pthread_cond_t *last_signal;
 static int watch_signal(pthread_cond_t *cv){last_signal=cv;return 0;}
 int efs_net_remaining_ms(int cap){return remaining<0?cap:remaining<cap?remaining:cap;}
@@ -32,15 +33,15 @@ static int controlled_wait(pthread_cond_t *cv,pthread_mutex_t *mu,const struct t
 #include "peer_pool.c"
 #undef pthread_cond_timedwait
 #undef pthread_cond_signal
-int efs_connect_tcp(const char *host,uint16_t port){(void)host;(void)port;connects++;connect_dl=dl;return -1;}
+int efs_connect_tcp(const char *host,uint16_t port){(void)host;(void)port;connects++;connect_dl=dl;return live_fd;}
 int efs_set_recv_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
 int efs_set_send_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
-struct efs_conn *efs_conn_wrap_tcp(int fd,int server){(void)fd;(void)server;return NULL;}
+struct efs_conn *efs_conn_wrap_tcp(int fd,int server){(void)server;return fd<0?NULL:&live_conn;}
 void efs_conn_destroy(struct efs_conn *conn){(void)conn;destroys++;}
-int efs_rdma_available(void){return 0;}
-int efs_rdma_client_upgrade(struct efs_conn *conn){(void)conn;return -1;}
+int efs_rdma_available(void){return rdma_on;}
+int efs_rdma_client_upgrade(struct efs_conn *conn){(void)conn;return upgrade_rc;}
 int efs_conn_declare(struct efs_conn *c){(void)c;return 0;}
-int efs_rdma_transport(void){return EFS_TRANSPORT_TCP;}
+int efs_rdma_transport(void){return EFS_TRANSPORT_AUTO;}
 int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  struct peer_slot *p=peer_slot_for("127.0.0.1",17432);assert(p);
  for(int i=0;i<EFS_PEER_CONNS_PER_NODE;i++){p->conn[i]=&owners[i];p->busy[i]=1;}
@@ -102,6 +103,14 @@ int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  dl=0;assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+2 && !connect_dl);
  dl=peer_now_ms()+10000;uint64_t longer=dl;  /* a longer caller budget is never shortened */
  assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+3 && connect_dl==longer && dl==longer);dl=0;
+ /* K100: in auto mode only an upgrade that failed before its request went
+  * out (or that the peer refused) stays TCP; one that broke after the send
+  * may have left the peer on RDMA, so the connection is destroyed. */
+ live_fd=3;rdma_on=1;upgrade_rc=-1;before=destroys;
+ assert(server_peer_conn_new("127.0.0.1",17432)==&live_conn && destroys==before);
+ upgrade_rc=EFS_RDMA_UPGRADE_BROKEN;
+ assert(!server_peer_conn_new("127.0.0.1",17432) && destroys==before+1);
+ puts("peer pool: auto-mode upgrade broken after its send destroys the connection, an unsent or refused one stays tcp (K100) PASS");
  puts("peer pool: heartbeat ends a connect cooldown without creating slots PASS");
  puts("peer pool: pooled setup on at least the connect bound, a longer caller budget kept, caller deadline restored (K94) PASS");
  puts("peer pool: scoped wait12ms, unchanged unscoped5s, expired refusal, retained slot ownership and live checkout/release, saturated mutation pool, two isolated proof slots, STATUS slots apart from proofs (DQ) and class wakes PASS");}

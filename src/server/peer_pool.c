@@ -234,8 +234,9 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
         efs_conn_destroy(nc);
         return NULL;
     }
-    if (efs_rdma_available() && efs_rdma_client_upgrade(nc) != 0) {
-        if (efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
+    int urc;
+    if (efs_rdma_available() && (urc = efs_rdma_client_upgrade(nc)) != 0) {
+        if (urc == EFS_RDMA_UPGRADE_BROKEN || efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
             efs_conn_destroy(nc);
             return NULL;
         }

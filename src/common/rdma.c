@@ -1230,15 +1230,17 @@ int efs_rdma_client_upgrade(struct efs_conn *c)
     struct efs_rmsg_setup local,peer; uint8_t req[EFS_RMSG_SETUP_BYTES],type=0;
     void *payload=NULL; uint32_t len=0;
     setup_local(rc,&local);
-    int ok=!efs_rmsg_setup_encode(req,&local) &&
-        !efs_send_msg(c->fd,EFS_MSG_RDMA_SETUP,req,sizeof(req)) &&
-        !efs_recv_msg(c->fd,&type,&payload,&len) &&
-        type==EFS_MSG_RDMA_SETUP_REPLY && !efs_rmsg_setup_decode(&peer,payload,len) &&
-        !setup_peer(rc,&peer);
+    if (efs_rmsg_setup_encode(req,&local)) { efs_rdma_conn_destroy(rc); return -1; }
+    /* K100: once the request may have reached the peer, only its explicit
+     * refusal proves it stayed on TCP; any other failure is fail-closed. */
+    int ok=!efs_send_msg(c->fd,EFS_MSG_RDMA_SETUP,req,sizeof(req)) &&
+        !efs_recv_msg(c->fd,&type,&payload,&len) && type==EFS_MSG_RDMA_SETUP_REPLY;
+    int declined=ok && len==1 && ((uint8_t *)payload)[0]==EFS_RDMA_STATUS_UNSUPPORTED;
+    ok=ok && !declined && !efs_rmsg_setup_decode(&peer,payload,len) && !setup_peer(rc,&peer);
     free(payload);
     if (!ok) {
         efs_telemetry_log(0,"efs: segmented RDMA setup failed or incompatible peer\n");
-        efs_rdma_conn_destroy(rc); return -1;
+        efs_rdma_conn_destroy(rc); return declined?-1:EFS_RDMA_UPGRADE_BROKEN;
     }
     setup_publish(c,rc); return 0;
 }

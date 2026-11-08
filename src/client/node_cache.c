@@ -820,10 +820,12 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                         nc = NULL;
                     }
                 }
+                int urc;
                 if (nc && efs_rdma_available() &&
-                    efs_rdma_client_upgrade(nc) != 0) {
-                    if (efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
-                        /* Strict mode: no silent TCP fallback. */
+                    (urc = efs_rdma_client_upgrade(nc)) != 0) {
+                    if (urc == EFS_RDMA_UPGRADE_BROKEN ||
+                        efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
+                        /* Strict mode, or a half-done upgrade: no TCP fallback. */
                         efs_conn_destroy(nc);
                         nc = NULL;
                     } else {

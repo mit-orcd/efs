@@ -37,7 +37,10 @@ int efs_rdma_numa_node_for_host(const char *host, uint16_t port,
                                 char *devname, size_t devlen);
 
 /* Client: upgrade a fresh TCP conn to RDMA (SETUP handshake over TCP).
- * Returns 0 with conn->rc live, or -1 (conn stays usable as TCP). */
+ * Returns 0 with conn->rc live, -1 when the request was never sent or the
+ * peer refused it (conn stays usable as TCP), or EFS_RDMA_UPGRADE_BROKEN
+ * when it failed after the send: the peer may be on RDMA, destroy conn. */
+#define EFS_RDMA_UPGRADE_BROKEN (-2)
 int efs_rdma_client_upgrade(struct efs_conn *c);
 
 /* Server: handle an EFS_MSG_RDMA_SETUP payload received on conn. Fills
