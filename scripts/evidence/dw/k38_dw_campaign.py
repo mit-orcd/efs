@@ -156,7 +156,7 @@ def wipe(run):
     for h in hosts():
         must(h, f'''for m in {RUNROOT}/run/mnt-*; do test -e "$m" || continue
   mountpoint -q "$m" && {{ echo "$m still mounted"; exit 1; }}; done
-rm -rf {RUNROOT}/run {STOREROOT}/{run}; echo wiped''')
+for d in {RUNROOT}/run {STOREROOT}/{run}; do test -d $d && ~/bin/edelete --force --delete $d >/dev/null; done; echo wiped''')
 
 
 def one(arm, n):
