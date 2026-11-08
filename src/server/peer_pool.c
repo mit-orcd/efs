@@ -322,7 +322,17 @@ static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int cls)
             p->busy[free_s] = 1;
             pthread_mutex_unlock(&p->lock);
 
+            /* K94: a pooled connection outlives its first caller, so its
+             * setup is bounded by the connect bound, never by what is left
+             * of that caller's budget (a nearly spent read proof failed the
+             * RDMA upgrade mid-handshake). A caller left spent fails on its
+             * own (host_rpc_submit) and returns the connection to the pool. */
+            uint64_t caller_dl = efs_net_deadline_ms();
+            uint64_t setup_dl = peer_now_ms() + EFS_CONNECT_TIMEOUT_SEC * 1000;
+            if (caller_dl && caller_dl < setup_dl)
+                efs_net_set_deadline_ms(setup_dl);
             struct efs_conn *nc = peer_connect(h, pt);
+            efs_net_set_deadline_ms(caller_dl);
             if (!nc) {
                 pthread_mutex_lock(&p->lock);
                 p->busy[free_s] = 0;

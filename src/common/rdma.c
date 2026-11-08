@@ -1604,6 +1604,7 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
     uint32_t total=5+l1+l2;uint8_t header[5];
     if (efs_wire_frame_header(type,l1+l2,header)) goto fail;
     int ms=efs_net_remaining_ms(EFS_RDMA_SEND_WAIT_US/1000);
+    if (!ms) return EFS_ERR_NET; /* spent budget, nothing posted: the QP stays healthy (K94) */
     int64_t end=now_us()+(int64_t)ms*1000;
     uint64_t id=++rc->tx_id;
     for (uint32_t off=0;off<total;) {

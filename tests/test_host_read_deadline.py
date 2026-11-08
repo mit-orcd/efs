@@ -71,8 +71,10 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *n)
 {assert(c==&peer && c->recv_timeout_ms==expected_timeout);recvs++;if(fail_recv)return -1;
  *type=bad_type?0:EFS_MSG_RAFT_MKFS_REPLY;*n=sizeof(struct efs_msg_raft_mkfs_reply)-(short_reply?1:0);
  *out=calloc(1,sizeof(struct efs_msg_raft_mkfs_reply));return 0;}
+static int rpc_spent;
+int efs_net_remaining_ms(int cap){return rpc_spent?0:cap;}
 '''+function('host_submit_read_only')+function('host_rpc_submit')+r'''
-static void reset(int kind){peer=(struct efs_conn){.kind=kind,.fd=42,.recv_timeout_ms=17};setters=drops=releases=sends=recvs=fail_send=fail_recv=bad_type=short_reply=ordinary_gets=read_gets=status_gets=0;expected_timeout=400;}
+static void reset(int kind){peer=(struct efs_conn){.kind=kind,.fd=42,.recv_timeout_ms=17};setters=drops=releases=sends=recvs=fail_send=fail_recv=bad_type=short_reply=ordinary_gets=read_gets=status_gets=rpc_spent=0;expected_timeout=400;}
 int main(void){struct efs_raft_host h={.raft_id=0};struct efs_msg_raft_mkfs_reply reply;uint8_t body[900]={0};
  for(int kind=EFS_CONN_TCP;kind<=EFS_CONN_RDMA;kind++) {
   reset(kind);assert(!host_rpc_submit(&h,2,2,NULL,0,&reply,400));assert(setters==2 && releases==1 && !drops && read_gets==1 && !ordinary_gets && !status_gets);
@@ -85,8 +87,10 @@ int main(void){struct efs_raft_host h={.raft_id=0};struct efs_msg_raft_mkfs_repl
   reset(kind);bad_type=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !releases);
   reset(kind);short_reply=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !releases);
   reset(kind);assert(host_rpc_submit(&h,0,2,NULL,0,&reply,400)==EFS_ERR_INVAL && !setters && !sends);
+  /* K94: a budget spent in pool admission or setup returns the connection unsent. */
+  reset(kind);rpc_spent=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_BUSY && releases==1 && !sends && !drops && !setters);
  }
- puts("forwarded RPC: proof/STATUS/mutation slot classes (DQ), TCP/RDMA receive limits, previous timeout restoration, large-frame ownership, lost/short/wrong replies drop connections and refuse authority PASS");}
+ puts("forwarded RPC: proof/STATUS/mutation slot classes (DQ), TCP/RDMA receive limits, previous timeout restoration, large-frame ownership, lost/short/wrong replies drop connections and refuse authority, a spent budget releases the connection unsent (K94) PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-deadline-') as t:
     p=Path(t)

@@ -19,6 +19,9 @@ static int remaining=-1,waits,connects,destroys;
 static pthread_cond_t *last_signal;
 static int watch_signal(pthread_cond_t *cv){last_signal=cv;return 0;}
 int efs_net_remaining_ms(int cap){return remaining<0?cap:remaining<cap?remaining:cap;}
+static uint64_t dl,connect_dl;
+uint64_t efs_net_deadline_ms(void){return dl;}
+void efs_net_set_deadline_ms(uint64_t d){dl=d;}
 static int controlled_wait(pthread_cond_t *cv,pthread_mutex_t *mu,const struct timespec *end){
  (void)cv;(void)mu;struct timespec now;clock_gettime(CLOCK_REALTIME,&now);
  long long delta=(end->tv_sec-now.tv_sec)*1000000000LL+end->tv_nsec-now.tv_nsec;
@@ -29,7 +32,7 @@ static int controlled_wait(pthread_cond_t *cv,pthread_mutex_t *mu,const struct t
 #include "peer_pool.c"
 #undef pthread_cond_timedwait
 #undef pthread_cond_signal
-int efs_connect_tcp(const char *host,uint16_t port){(void)host;(void)port;connects++;return -1;}
+int efs_connect_tcp(const char *host,uint16_t port){(void)host;(void)port;connects++;connect_dl=dl;return -1;}
 int efs_set_recv_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
 int efs_set_send_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
 struct efs_conn *efs_conn_wrap_tcp(int fd,int server){(void)fd;(void)server;return NULL;}
@@ -92,7 +95,15 @@ int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  for(int i=0;i<EFS_MAX_NODES;i++)assert(!(g_peers[i].in_use && g_peers[i].port==17433));
  server_peer_note_up("127.0.0.1",17432);assert(!p->down_until_ms && !p->fail_streak);
  assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+1);
+ /* K94: a pooled setup runs on the connect bound, not on what is left of
+  * the caller's budget, and the caller's deadline is restored after it. */
+ p->fail_streak=0;p->down_until_ms=0;dl=7;before=connects;assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+1);
+ assert(connect_dl+100>=peer_now_ms()+EFS_CONNECT_TIMEOUT_SEC*1000 && dl==7);
+ dl=0;assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+2 && !connect_dl);
+ dl=peer_now_ms()+10000;uint64_t longer=dl;  /* a longer caller budget is never shortened */
+ assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+3 && connect_dl==longer && dl==longer);dl=0;
  puts("peer pool: heartbeat ends a connect cooldown without creating slots PASS");
+ puts("peer pool: pooled setup on at least the connect bound, a longer caller budget kept, caller deadline restored (K94) PASS");
  puts("peer pool: scoped wait12ms, unchanged unscoped5s, expired refusal, retained slot ownership and live checkout/release, saturated mutation pool, two isolated proof slots, STATUS slots apart from proofs (DQ) and class wakes PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-peer-deadline-') as t:
