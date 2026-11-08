@@ -328,8 +328,9 @@ static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int cls)
              * RDMA upgrade mid-handshake). A caller left spent fails on its
              * own (host_rpc_submit) and returns the connection to the pool. */
             uint64_t caller_dl = efs_net_deadline_ms();
-            if (caller_dl)
-                efs_net_set_deadline_ms(peer_now_ms() + EFS_CONNECT_TIMEOUT_SEC * 1000);
+            uint64_t setup_dl = peer_now_ms() + EFS_CONNECT_TIMEOUT_SEC * 1000;
+            if (caller_dl && caller_dl < setup_dl)
+                efs_net_set_deadline_ms(setup_dl);
             struct efs_conn *nc = peer_connect(h, pt);
             efs_net_set_deadline_ms(caller_dl);
             if (!nc) {

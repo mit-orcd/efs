@@ -97,11 +97,13 @@ int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+1);
  /* K94: a pooled setup runs on the connect bound, not on what is left of
   * the caller's budget, and the caller's deadline is restored after it. */
- dl=7;before=connects;assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+1);
+ p->fail_streak=0;p->down_until_ms=0;dl=7;before=connects;assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+1);
  assert(connect_dl+100>=peer_now_ms()+EFS_CONNECT_TIMEOUT_SEC*1000 && dl==7);
  dl=0;assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+2 && !connect_dl);
+ dl=peer_now_ms()+10000;uint64_t longer=dl;  /* a longer caller budget is never shortened */
+ assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+3 && connect_dl==longer && dl==longer);dl=0;
  puts("peer pool: heartbeat ends a connect cooldown without creating slots PASS");
- puts("peer pool: pooled setup on its own connect bound, caller deadline restored (K94) PASS");
+ puts("peer pool: pooled setup on at least the connect bound, a longer caller budget kept, caller deadline restored (K94) PASS");
  puts("peer pool: scoped wait12ms, unchanged unscoped5s, expired refusal, retained slot ownership and live checkout/release, saturated mutation pool, two isolated proof slots, STATUS slots apart from proofs (DQ) and class wakes PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-peer-deadline-') as t:
