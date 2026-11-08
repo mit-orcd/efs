@@ -35,7 +35,9 @@ Change (`e7b0fcb28`, 33 lines added, 13 removed over 7 files):
 - `cluster.c` `server_join_cluster`: takes that snapshot once before the HELLO
   is built and uses it for `h.token`, `h.cluster`, `h.flags`, the two log lines
   and `local->token`; the `server_membership_get` call there is gone
-  (`mstore.cluster` equals the committed record's cluster once learned).
+  (`mstore.cluster` equals the committed record's cluster once learned, and
+  the `formed` flag is unchanged: every `mview_publish` site in `raft_host.c`
+  follows a successful `member_store_learn`, or derives from a formed store).
 - `server_internal.h` declaration, `member_store.h`/`.c` rule comments,
   `src/server/README.md` lock line.
 - `tests/sanitizer_check.sh`: `member_limit|tests/test_member_limit.py` in the
