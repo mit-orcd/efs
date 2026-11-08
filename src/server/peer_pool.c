@@ -325,8 +325,8 @@ static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int cls)
             /* K94: a pooled connection outlives its first caller, so its
              * setup is bounded by the connect bound, never by what is left
              * of that caller's budget (a nearly spent read proof failed the
-             * RDMA upgrade mid-handshake). The caller's own send then fails
-             * BUSY on its spent budget and leaves the connection usable. */
+             * RDMA upgrade mid-handshake). A caller left spent fails on its
+             * own (host_rpc_submit) and returns the connection to the pool. */
             uint64_t caller_dl = efs_net_deadline_ms();
             if (caller_dl)
                 efs_net_set_deadline_ms(peer_now_ms() + EFS_CONNECT_TIMEOUT_SEC * 1000);

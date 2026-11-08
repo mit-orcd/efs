@@ -4853,22 +4853,19 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
         rc = EFS_ERR_BUSY;
         goto out;
     }
+    /* K94: a budget spent in pool admission or connection setup fails this
+     * call before any byte; the healthy connection goes back to the pool. */
+    if (!efs_net_remaining_ms(1)) {
+        server_peer_conn_release(host, port, pc);
+        rc = EFS_ERR_BUSY;
+        goto out;
+    }
     if (io_ms > 0) {
         old_recv_ms=pc->recv_timeout_ms;
         efs_conn_set_recv_timeout(pc,io_ms);
         if(pc->fd>=0)efs_set_send_timeout(pc->fd,io_ms);
     }
-    rc = efs_conn_send_msg(pc, EFS_MSG_RAFT_MKFS, payload, plen);
-    if (rc == EFS_ERR_BUSY) {
-        /* Spent budget, nothing sent: the connection stays pooled (K94). */
-        if (io_ms > 0) {
-            efs_conn_set_recv_timeout(pc,old_recv_ms);
-            if(pc->fd>=0)efs_set_send_timeout(pc->fd,EFS_IO_TIMEOUT_MS);
-        }
-        server_peer_conn_release(host, port, pc);
-        goto out;
-    }
-    if (rc != EFS_OK) {
+    if (efs_conn_send_msg(pc, EFS_MSG_RAFT_MKFS, payload, plen) != 0) {
         server_peer_conn_drop(host, port, pc);
         rc = EFS_ERR_IO;
         goto out;
