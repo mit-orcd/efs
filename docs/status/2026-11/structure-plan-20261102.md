@@ -2,6 +2,15 @@
 
 **Status: PROPOSED Nov 2 (devel `7b983fbb6`); no code changed.** Reviews an
 external structure proposal against devel and turns it into gated tasks.
+
+> **Current status (Nov 8, Task EB):** the write-back pool ownership pilot
+> (Task DM, called "unmerged" in the Nov 6 bullet below) merged into devel
+> in wave 60, and its open `ready` race was fixed by Task DT ([write-back
+> `ready` flag and start-failure join](writeback-ready-20261107.md)) and
+> merged in wave 61 ([ledger](ledger.md)). The open-reference table named
+> as the next candidate followed in Task EB
+> ([evidence](taskEB-review-followup-20261108.md)). The text below is the
+> plan as written on Nov 2 with its dated additions, left as it was.
 Goal, as [developing.md](../../how-it-works/developing.md) already states it:
 a change to one module is decidable from that module's source, its interface
 and its tests. The measure is how few files an agent must read for one
