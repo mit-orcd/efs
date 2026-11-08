@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """K96 (Task DQ) on real daemons: forwarded ticket STATUS never holds the proof slots.
 
-Three private production efsd (TCP, free loopback ports). ROUNDS rounds of 24
+Three private production efsd (TCP, free loopback ports). One round of 24
 concurrent `efs-bench --size 8M --io-size 64K --workers 4`. Every fragment PUT
 asks the ticket's lane leader for STATUS; the leader serving it needs a session
 ReadIndex from the other group's leader. Before Task DQ the STATUS forward and
@@ -13,7 +13,10 @@ test moves g0's leader to node 1 and g2's to node 2 first: with both on one
 node there is no remote session proof and no cycle.
 
 Pass: every copy exits 0 and no worker reports `rc=-13`.
-K96_ROUNDS sets the rounds (default 3); K96_KEEP=1 keeps the cluster directory.
+K96_ROUNDS sets the rounds (default 1; Task EA: a round is the replica bytes over
+the store disk's synchronous write bandwidth, 2.5 s on fstor007 against 0.9 s on
+node9900, and three rounds put the test over its 10 s row there; one round failed
+24 of 24 copies on the unfixed tree); K96_KEEP=1 keeps the cluster directory.
 """
 import os, re, subprocess, sys, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
@@ -22,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import k33_daemons as k
 
 ROOT = Path(__file__).resolve().parents[1]
-PAR, ROUNDS = 24, int(os.environ.get('K96_ROUNDS', '3'))
+PAR, ROUNDS = 24, int(os.environ.get('K96_ROUNDS', '1'))
 k.EFSD = ROOT / 'efsd'
 env = {key: value for key, value in os.environ.items() if not key.startswith('EFS_')}
 env['EFS_TRANSPORT'] = 'tcp'

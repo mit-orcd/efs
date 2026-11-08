@@ -44,7 +44,7 @@ K94 (forwarded read proofs reaching `peer_connect` with their 400 ms spent) may 
 
 - `tests/test_host_read_deadline.py` (fast suite): the real `host_rpc_submit` sends an empty proof on a proof slot, STATUS on a STATUS slot, a mutation on a mutation slot. On the unfixed source the STATUS case aborts (`status_gets==1 && !read_gets`).
 - `tests/test_peer_pool_deadline.py` (fast suite, the real `peer_pool.c`): with every mutation and STATUS slot held, a proof still checks out; a STATUS checkout never takes a proof slot; releases wake only their class. The unfixed source does not compile against it (no slot classes).
-- `tests/test_k96_status_slots_live.py` (`test-long`): three private production `efsd`, TCP, 3 rounds of 24 concurrent `efs-bench --size 8M --io-size 64K --workers 4`; pass when every copy exits 0 and no worker reports `rc=-13`. Before (unfixed tree): 24 of 24 copies failed in each of the 3 rounds, slowest copy 42.5 to 89.7 s, 199 s in all. After: 0 of 72, slowest copy 0.8 to 1.0 s, 5.9 s in the test (7 s wall). The test places the leaders itself (`place_leaders`: g0 on node 1, g2 on node 2).
+- `tests/test_k96_status_slots_live.py` (`test-long`): three private production `efsd`, TCP, 3 rounds of 24 concurrent `efs-bench --size 8M --io-size 64K --workers 4`; pass when every copy exits 0 and no worker reports `rc=-13`. Before (unfixed tree): 24 of 24 copies failed in each of the 3 rounds, slowest copy 42.5 to 89.7 s, 199 s in all. After: 0 of 72, slowest copy 0.8 to 1.0 s, 5.9 s in the test (7 s wall). The test places the leaders itself (`place_leaders`: g0 on node 1, g2 on node 2). Since Task EA ([Nov 8](k96-test-rounds-20261108.md)) the test runs one round by default: the three rounds put it over its 10 s row on fstor007, whose store disk writes synchronously at a third of node9900's bandwidth.
 
 ## Before and after (`efs-bench`, same script)
 
@@ -85,7 +85,7 @@ Merged branch (devel `f94d64e60` + this task), built on node9900 with `make -j48
 export TMPDIR=/tmp/efs-taskDQ/tmp; mkdir -p "$TMPDIR"
 make -j32 efsd efs-mgmt efs-bench
 python3 tests/test_host_read_deadline.py && python3 tests/test_peer_pool_deadline.py
-python3 tests/test_k96_status_slots_live.py                         # 3 rounds x 24 writers
+K96_ROUNDS=3 python3 tests/test_k96_status_slots_live.py            # 3 rounds x 24 writers (one round by default since Task EA)
 python3 scripts/evidence/k88/bench_chunk_hints.py OUT 8 120 8M 64K 4 split    # OUT/summary.txt, runs.tsv, n1-n3.log
 python3 scripts/evidence/k88/bench_chunk_hints.py OUT24 24 10 8M 64K 4 split
 # before: build d8331e756^ (or src/server/{peer_pool.c,raft_host.c,server_internal.h} from 3fadcdb7c)
