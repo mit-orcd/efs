@@ -221,6 +221,21 @@ void efs_meta_degraded_count_derived(uint32_t anchor, uint64_t n)
     pthread_mutex_unlock(&dg_wm_mu);
 }
 
+/* Call just before the derive scan. Inserts noted while unknown are rows the
+ * scan counts itself; only those applied during the scan are kept, so the
+ * derived count overshoots by at most the scan's window. A follower never
+ * derives, so a leader elected later added every mark it ever applied
+ * (k37 step 3: `Degraded chunks: 8` with all 8 marks retired). */
+void efs_meta_degraded_count_begin(uint32_t anchor)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return;
+    pthread_mutex_lock(&dg_wm_mu);
+    if (!dg_wm_known[anchor])
+        dg_wm_pos[anchor] = 0;
+    pthread_mutex_unlock(&dg_wm_mu);
+}
+
 void efs_meta_degraded_count_invalidate(uint32_t anchor)
 {
     if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)

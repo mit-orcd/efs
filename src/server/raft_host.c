@@ -12330,6 +12330,7 @@ static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t a
     have = efs_meta_degraded_count_peek(anchor);
     if (have < 0) {
         uint64_t n = 0;
+        efs_meta_degraded_count_begin(anchor);
         if (efs_kv_scan_prefix(h->kv, prefix, plen, dg_count_cb, &n) < 0)
             return;
         efs_meta_degraded_count_derived(anchor, n);
