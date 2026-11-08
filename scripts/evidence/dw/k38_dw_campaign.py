@@ -127,7 +127,7 @@ rm -f $f; echo stopped''', timeout=120)
 def counts(h, files, pats):
     script = ''.join(f'echo "{f} {k} $(grep -cF -- {shlex.quote(v)} {RUNROOT}/run/{f} 2>/dev/null || true)"\n'
                      for f in files for k, v in pats.items())
-    script += ''.join(f'echo "{f} transport $(grep -m1 -o \'transport [a-z]*: .*\' {RUNROOT}/run/{f} | tr " " _)"\n'
+    script += ''.join(f'echo "{f} transport $(grep -m1 -o \'transport [a-z]*[:(].*\' {RUNROOT}/run/{f} | tr " " _)"\n'
                       for f in files)
     out = {}
     for line in must(h, script).splitlines():
