@@ -552,7 +552,7 @@
     "src/server/put_upload.c": 10,
     "src/server/query_export_lease.h": 2,
     "src/server/query_refresh.h": 11,
-    "src/server/raft_host.c": 640,
+    "src/server/raft_host.c": 641,
     "src/server/read_index_pair_remote.h": 4,
     "src/server/reclaim.c": 47,
     "src/server/recovery.c": 38,
@@ -1653,7 +1653,7 @@
     "scripts/evidence/dw/k38_dw_campaign.py": "5d3d66afe58cccb74691719cd74130b1020633cca3667216f0ebbaf013320616",
     "scripts/evidence/dw/k38_dw_client.py": "ce3ef9073fd71d525862cd95c48c2e77e99dde2a2dffd2b7fde7841ff58d9d5c",
     "scripts/evidence/dy/k36_loop.sh": "515a9e9cf4591da7952c938a2bf20739cb0395e6800ba5071de07a41baf4544a",
-    "scripts/evidence/dy/k36_summary.py": "93dfc50a005b9bc95c3dcca2a9e1f8ddfd2b481b22baa028fae4a1da58235198",
+    "scripts/evidence/dy/k36_summary.py": "23a8823e7dfddaa26e46fa700ac6fcdebfedc824e9e4ce1f04513e654e4f6547",
     "scripts/evidence/dy/k36_trace.py": "0df3c8027c83702cb61f58b7a9890fe444debe7bc3049ce7ac54b5839f1ca08f",
     "scripts/evidence/fin/fin_accounting_audit.py": "221499c149c00c7301fbc221d54b12a8e4daae5d30b34a1bbb175c9d85d86cf4",
     "scripts/evidence/fin/fin_accounting_controls.py": "266e49372c6cc9ad580915fbbf53c4462b33de06930fb85982e69f495f016706",
@@ -2067,7 +2067,7 @@
     "src/server/put_upload.c": "a4f712443db5cb8263303c3caa657f8bf1ddec79aa2b0aad0bcb7831db29762b",
     "src/server/query_export_lease.h": "c1bf2e3bd646f19595ea7519057e1e04fbc4a402aa30445efe43aad198edcac4",
     "src/server/query_refresh.h": "e9508ec752fc826ed93079d1b9a9b12589631fe6eee9e5a81eef922f65ceff16",
-    "src/server/raft_host.c": "a43bcd71d0e1a6d766d934911283433f022f405043d92ab506bc40f8593f254e",
+    "src/server/raft_host.c": "6a718f41f88824b2511e00c14b2bf3002fbd2be644d042dbf485e416e4451948",
     "src/server/read_index_pair_remote.h": "1a0b0bb46af5847d2ee4e6acabc474d044c26e4ed1f0cddacd3d6ac863624d62",
     "src/server/reclaim.c": "954a9e1f426ff2bdda1640115f0d43dafca60808117e2287227191fbd9680258",
     "src/server/recovery.c": "ec6b46594926fdf54914fa8b7914d7c9d0f6989d8a4f7754662b092d28c31f91",
@@ -2998,5 +2998,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "7144110e815b145b971ba0e915145a34c58ac508"
+  "source_commit": "43eec09bcb902945728fb43e45610db8ce7f5ced"
 }
