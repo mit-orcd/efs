@@ -61,7 +61,7 @@ Log counts over the same runs: before, 4 W154 `PUT failed (rc=-1)` and 3 `(rc=-6
 - One host. fstor007 (historically about 10 % slower on this test) and distinct-host clusters were not run; the row should be refit from three gates per host at the next wave.
 - A member that stays down is retried about once a pass until the heartbeat marks it down (three missed heartbeats, about 6 s); for W154 each retry fetches the two source fragments first. That is the price of not waiting 10 s for a restart; a hung member still gets the full skip.
 - The pool's dead-connection check covers a peer that closed its socket. A host that vanished without a FIN still costs one bounded timeout, as before.
-- The client wait above (8 s put-window bound, then BUSY retries to the 30 s REPORT deadline after a member dies with a PUT in flight) is not fixed here.
+- The client wait above (8 s put-window bound, then BUSY retries to the 30 s REPORT deadline after a member dies with a PUT in flight) is not fixed here. Task DZ found its cause (an RDMA reply wait that never saw the crashed member's TCP close) and fixed it: [RDMA reply waits miss a dead peer](rdma-reply-wait-peer-exit-20261108.md).
 - Step 6's median (4.7 s) is the step's own work (restart, six writes, a crash, recovery) and did not change.
 
 ## Raw data
