@@ -1907,7 +1907,7 @@
     "src/client/commands/source.h": "bc3906cf9a34b633296df88a44cfce37fa63d21d9eb371fb35d64b6f6b6db2a4",
     "src/client/data_commit.c": "f3c525150a87d5478144362b6953c27e98360e2a92bb555b9bd1ce085deefe56",
     "src/client/efs_bench.c": "e38489e479ef90276fce08dbd75c215c188ef8a1f204beea7d62a56bbdef617a",
-    "src/client/efs_fuse/README.md": "02556d018a1bef109b8f4954a4d2afd2abd3bcd5a5f990a4fa91c8ff3f50e4b9",
+    "src/client/efs_fuse/README.md": "83e4182beab1c25123d5032cd25024839e6f0172ef54e0bb7741c77c48c1a345",
     "src/client/efs_fuse/append.c": "97993e14d06370959076961e6536236fcb3b7d8b8da18acdef0075515c10654e",
     "src/client/efs_fuse/append.h": "78830a1fabb8a6158f1edf46e19d90053829450e27dd0a5469a0d73952279a15",
     "src/client/efs_fuse/fuse_internal.h": "716046fbbbdcf4d9ec413eb8e3ebe8d73d84c5ca2f4a43ff1dcf30a06d0737f4",
@@ -3016,5 +3016,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "b0d7eaff72265f6e0bf981f1aac14d3056c4330f"
+  "source_commit": "b341e57538880f91425093918370d3bd476cc823"
 }
