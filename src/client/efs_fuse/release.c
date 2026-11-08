@@ -92,7 +92,8 @@ int efs_control_drain(uint64_t deadline, int force)
         usleep(10000);
     }
     if (result)
-        fprintf(stderr, "stop-refused: unresolved writes or lease releases remain; mount retained\n");
+        fprintf(stderr, "stop-refused: unresolved writes or lease releases remain; mount retained "
+                "(retained-releases=%u wb-pending=%d)\n", efs_open_retained(), efs_wb_pending(0));
     efs_client_rpc_set_deadline_ms(previous);
     return result;
 }

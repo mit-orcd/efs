@@ -93,6 +93,7 @@ code=r'''
 #define EFS_ERR_AGAIN -18
 struct efs_report_pressure {uint64_t pending_records,inflight_records,reserved_records;};
 static int efs_wb_pending(uint64_t ino) {(void)ino;return 0;}
+static unsigned efs_open_retained(void) {return 0;}
 static uint64_t now,deadline;static unsigned rounds,flight_rounds;static int body_pending,lease_pending;
 static uint64_t stats_now_ms(void) {return now;}
 static uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
