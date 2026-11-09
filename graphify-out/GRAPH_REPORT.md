@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `efec02c367d279fb95602c6458009afb35c6869e`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 18,482 nodes, 76,688 directed typed edges, 597 communities.
+Source base: `3aa28f3afd97eae26227b9f406dc93edd91d044f`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 18,529 nodes, 76,858 directed typed edges, 589 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,33 +19,33 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27669
+- `calls`: 27722
 - `case_of`: 118
-- `contains`: 27335
-- `contract`: 43
+- `contains`: 27398
+- `contract`: 44
 - `defines`: 1999
 - `documents_finding`: 8
 - `exercises`: 7
-- `guided_by`: 165
-- `implemented_by`: 137
-- `imports`: 8108
+- `guided_by`: 166
+- `implemented_by`: 138
+- `imports`: 8123
 - `imports_from`: 994
 - `indirect_call`: 752
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 3115
+- `mentions_symbol`: 3127
 - `method`: 645
 - `rationale_for`: 1408
-- `references`: 2204
-- `references_path`: 1251
+- `references`: 2219
+- `references_path`: 1259
 - `regression_for`: 8
-- `tested_by`: 599
+- `tested_by`: 600
 - `uses`: 96
 
 ## Extraction warnings
 
 - warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 331, 851 symbol(s) extracted)
-- warning: 75 code file(s) yielded no symbols (0.24 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+70 more)
+- warning: 76 code file(s) yielded no symbols (0.25 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+71 more)
 
 ## Limits
 
