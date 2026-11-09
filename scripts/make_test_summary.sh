@@ -10,11 +10,17 @@
 #   1  a command failed or timed out, or the build failed or ran nothing;
 #   2  usage error (no Makefile);
 #   3  INCOMPLETE: every command passed but at least one printed a NOTRUN or
-#      SKIP line (no RDMA device, no valgrind, no fuse3; W139).
-# summary.txt line 1: `TOTAL n FAIL f NOTRUN k STATUS PASS|FAIL|INCOMPLETE (Ns)`.
+#      SKIP line (no RDMA device, no valgrind, no fuse3; W139) that is not a
+#      known host limit (HOST_LIMITS below), or a command ran OVERBUDGET while
+#      a NOTRUN was listed. COMPLETE (exit 0): every NOTRUN is a host limit and
+#      nothing ran over budget (OVERBUDGET alone still leaves PASS as PASS).
+# summary.txt line 1: `TOTAL n FAIL f NOTRUN k STATUS PASS|FAIL|INCOMPLETE|COMPLETE (Ns)`;
+# NOTRUN k counts every NOTRUN row, `HOSTLIMIT h` after the time those of k
+# with a fifth column `host limit`.
 # Then one line per failure: index, exit status (124 = timeout), command,
 # last output line and tmp/fail-<index>.log, which keeps the command's full
-# output; then `NOTRUN index command first-mark` lines.
+# output; then `NOTRUN index command first-mark` lines
+# (a fifth column `host limit` for a known host limit).
 # EFS_TEST_CMD_TIMEOUT (seconds, default 900) bounds each command.
 # EFS_TEST_TARGET picks the make target (default test-all, the full code gate;
 # test is the fast unit subset, test-long the slow one).
@@ -66,6 +72,11 @@ python3 - <<"EOP"
 # slowest first) and tmp/fail-<index>.log. tests/test_make_test_summary_runner.py
 # runs this block on its own.
 import os, re, signal, subprocess, sys, time
+# Known host limits: a NOTRUN whose first mark matches gets a fifth column
+# `host limit` and is counted `HOSTLIMIT n` on line 1. These are the
+# tests' own reason texts. A new entry needs the ledger's standing note first.
+HOST_LIMITS=re.compile(r"valgrind is not installed|valgrind/memcheck\.h is not installed|valgrind missing|"
+                       r"RDMA hardware runs NOTRUN here|is absent \(EFS_CLUSTER_SCRIPTS\)")
 lines=open("cmds.txt").read().split("\n"); cmds=[]; cur=""
 for l in lines:
     cur=cur+("\n" if cur else "")+l
@@ -175,11 +186,14 @@ with open("timings.tsv","w") as f:
     for i,sec,rc,head in sorted(times,key=lambda t:-t[1]):
         b=budget(cmds[i])[0]
         f.write("%d\t%.1f\t%d\t%s\t%s\n"%(i,sec,rc,head,"%g"%b if b is not None else ""))
-status,code=("FAIL",1) if fails or not cmds else ("INCOMPLETE",3) if notrun else ("PASS",0)
+hostlimit=[n for n in notrun if HOST_LIMITS.search(n[2])]
+status,code=(("FAIL",1) if fails or not cmds else ("PASS",0) if not notrun
+             else ("COMPLETE",0) if len(hostlimit)==len(notrun) and not over else ("INCOMPLETE",3))
 build=os.environ.get("EFS_BUILD_SECONDS")
-open("summary.txt","w").write("TOTAL %d FAIL %d NOTRUN %d STATUS %s (%.0fs)%s%s\n"%(len(cmds),len(fails),len(notrun),status,time.time()-t0,
-    " OVERBUDGET %d"%len(over) if over else "", " BUILD %ss"%build if build else "")
-    +"".join("%d\t%d\t%s\t%s\t%s\n"%f for f in fails)+"".join("NOTRUN\t%d\t%s\t%s\n"%n for n in notrun)
+open("summary.txt","w").write("TOTAL %d FAIL %d NOTRUN %d STATUS %s (%.0fs)%s%s%s\n"%(len(cmds),len(fails),len(notrun),status,time.time()-t0,
+    " OVERBUDGET %d"%len(over) if over else "", " HOSTLIMIT %d"%len(hostlimit) if hostlimit else "", " BUILD %ss"%build if build else "")
+    +"".join("%d\t%d\t%s\t%s\t%s\n"%f for f in fails)
+    +"".join("NOTRUN\t%d\t%s\t%s%s\n"%(n+("\thost limit" if n in hostlimit else "",)) for n in notrun)
     +"".join("OVERBUDGET\t%d\t%.1f\t%g\t%s\n"%o for o in over))
 sys.exit(code)
 EOP

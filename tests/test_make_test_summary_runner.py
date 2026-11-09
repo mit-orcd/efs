@@ -96,6 +96,17 @@ try:
     head(s[0], 2, 0, 1, 'INCOMPLETE')
     assert s[1] == "NOTRUN\t1\techo 'NOTRUN: no RDMA device'\tNOTRUN: no RDMA device", s
 
+    # Only known host limits: COMPLETE, exit 0, counted HOSTLIMIT, marked in a fifth column.
+    rc, s, d = run("true\necho 'NOTRUN: valgrind missing'\n"); dirs.append(d)
+    assert rc == 0, rc
+    head(s[0], 2, 0, 1, 'COMPLETE')
+    assert ' HOSTLIMIT 1' in s[0], s
+    assert s[1] == "NOTRUN\t1\techo 'NOTRUN: valgrind missing'\tNOTRUN: valgrind missing\thost limit", s
+    # A host limit beside an unknown NOTRUN stays INCOMPLETE.
+    rc, s, d = run("echo 'NOTRUN: valgrind missing'\necho 'NOTRUN: no RDMA device'\n"); dirs.append(d)
+    assert rc == 3, rc
+    head(s[0], 2, 0, 2, 'INCOMPLETE')
+
     # Successful mocked prerequisite-refusal controls must not label the
     # containing live sanitizer command unexecuted. Real missing-prerequisite
     # output above still produces INCOMPLETE; the runner rule is unchanged.
