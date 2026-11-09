@@ -1,0 +1,64 @@
+{
+ "name": "fcstor-4x1-tcp",
+ "candidate": "9bb50fe7932d2b487d0d5eed1294b003cb735497",
+ "ssh": "scripts/evidence/task-ey/task_ey_ssh.sh",
+ "source": "/home/erbmi1/work/efs-taskEY-fcstor012/src",
+ "seed": "172.16.223.66:18432",
+ "nodes": [
+  {
+   "addr": "172.16.223.66:18432",
+   "host": "fcstor012",
+   "store": "/tmp/efs-taskEY/cluster/n1"
+  },
+  {
+   "addr": "172.16.223.67:18432",
+   "host": "fcstor013",
+   "store": "/tmp/efs-taskEY/cluster/n2"
+  },
+  {
+   "addr": "172.16.223.68:18432",
+   "host": "fcstor014",
+   "store": "/tmp/efs-taskEY/cluster/n3"
+  },
+  {
+   "addr": "172.16.223.65:18432",
+   "host": "fcstor011",
+   "store": "/tmp/efs-taskEY/cluster/n4"
+  }
+ ],
+ "mounts": [
+  {
+   "path": "/tmp/efs-taskEY/cluster/mnt",
+   "host": "fcstor010"
+  },
+  {
+   "path": "/tmp/efs-taskEY/cluster/mnt",
+   "host": "fcstor011"
+  }
+ ],
+ "transport": "tcp",
+ "features": {
+  "packing": "built in (background packer)",
+  "efs_commands": "cluster commands-policy (default enabled)",
+  "expiry": "off by default; d5-expiry turns it on and off",
+  "containers": "off"
+ },
+ "quota": "4G per member",
+ "hardware": "fcstor010-014: AMD EPYC 7402P (24 CPUs), 250 GB, RHEL 9 (5.14.0-687.39.1.el9_8); IPoIB ibs1f0 172.16.223.64-68 on mlx5_2 (InfiniBand); stores on local /tmp (md0)",
+ "mgmt_host": "fcstor012",
+ "private": {
+  "host": "fcstor012",
+  "root": "/tmp/efs-taskEY/live",
+  "port_base": 19400
+ },
+ "private_cluster": {
+  "root": "/tmp/efs-taskEY/cluster",
+  "quota": "4G",
+  "ready_timeout_s": 300
+ },
+ "fixture": {
+  "posix_timeout_s": 150,
+  "remote_tmp": "/tmp/efs-taskEY/tmp"
+ },
+ "notes": "Task EY batch D: 4 efsd on 4 distinct hosts, clients on fcstor010 and fcstor011 (co-located with members); driver-owned, fresh stores every run"
+}
