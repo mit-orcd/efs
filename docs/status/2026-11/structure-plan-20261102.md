@@ -11,6 +11,12 @@ external structure proposal against devel and turns it into gated tasks.
 > as the next candidate followed in Task EB
 > ([evidence](taskEB-review-followup-20261108.md)). The text below is the
 > plan as written on Nov 2 with its dated additions, left as it was.
+>
+> **Nov 9 (Task EC):** the third candidate, `g_find_res`, is private to
+> `find_res.c` behind `find_res.h` with a compiled test; the reading set
+> fell from 542 to 428 lines needed and 7 to 3 source files, and the
+> before-reading found K101 (fixed on the same branch, blocks alpha: no)
+> ([evidence](find-res-ownership-20261108.md), unmerged).
 Goal, as [developing.md](../../how-it-works/developing.md) already states it:
 a change to one module is decidable from that module's source, its interface
 and its tests. The measure is how few files an agent must read for one
@@ -203,7 +209,9 @@ match the table. Done: adding a setting edits one file.
   14 caller lines: lines needed 691 to 593, opened 1,074 to 767, source
   files 7 to 4, validation 306 to 361. First pilot in this plan to meet the
   four target parts, except 14 lines of the caller the question names; next candidates are the other shared FUSE globals
-  (`g_open_mu` and the open-ref table, `g_find_res`).
+  (`g_open_mu` and the open-ref table, `g_find_res`). Status Nov 9: both
+  done ([Task EB](taskEB-review-followup-20261108.md),
+  [Task EC](find-res-ownership-20261108.md)).
 - Graph queries: a broad `graphify query` returns hundreds of nodes; agents
   need a small ranked starting set (the component README's symptom map is
   the interim answer).

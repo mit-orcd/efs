@@ -1,9 +1,18 @@
 # `.find` result cache ownership pilot (Task EC)
 
-**Verdict: IN PROGRESS. Before-half recorded (Nov 9) on devel `df7d11371`
-(wave 64), committed before any source change.** The after-half, the code
-change, the compiled test and the proof follow in later commits of this
-branch.
+**Verdict: PASS (Nov 9), with one defect found and fixed (K101, blocks
+alpha: no).** The `.find` result table, its mutex and its byte count are
+private to a new `find_res.c` behind `find_res.h` with a compiled
+interface test. The same unfamiliar question read on the ownership tree
+needs 542 to 428 lines (−114), opens 852 to 445, 7 source files to 3, and
+stops at one guide, one interface, one implementation file and the routed
+tests. The before-reading found K101: an `.efs/find` operation could be
+served a result fetched for another supplementary group set (F1), and a
+replaced or evicted slot turned GETATTR into `EPERM` (F2); each operation
+now reads the slot its own fetch filled before the mutex is released
+(negative control: 3 of 3 runs fail before, pass after). node9900:
+`make test` rc 0 on both trees, `tests_for.py client/efs_fuse --run` 56 commands rc 0, TSan and ASan `find_res_interface` PASS. Branch `claude/frosty-bartik-e0be55` on devel `df7d11371`
+(wave 64). Not merged, not pushed.
 
 - Purpose: the next ownership pilot of the
   [structure plan](structure-plan-20261102.md) (phase 3, ownership-pilots
@@ -13,6 +22,16 @@ branch.
   question read before and after the table, its mutex and its byte count
   become private to one owner, measured by the reading-set method of
   [the baseline](reading-set-baseline-20261104.md).
+- Source: devel `df7d11371`; before-half `ba72a20a4` (committed before
+  any source change), ownership `111594fb4` (behaviour unchanged), K101
+  fix `2b86f47e1`, then this page, the ledger and the graph. The node9900
+  trees are `git archive` of `111594fb4` and `2b86f47e1` (`EFS_GIT_ID`
+  unknown in an archive).
+- Environment: node9900 (192 cpus, gcc,
+  `PKG_CONFIG_PATH=/data1/efs/deps/libfuse/lib64/pkgconfig`, builds in
+  `/tmp/efs-taskEC-own` and `/tmp/efs-taskEC-fix`,
+  `TMPDIR=/tmp/efs-taskEC-tmp`), load 0.0–1.2; the Mac for the splice
+  tests, the doc checks and the graph rebuild.
 - Measurement: by the implementing agent, not a blind reader. A line is
   "needed" when the answer depends on it, "opened" when it was printed into
   the agent's context; ranges were located by the README, one grep or a
@@ -25,7 +44,7 @@ or (b) after its slot was reused for another term, or evicted, between the
 caller's fetch and its use?" Not one of the Task DB baseline fixes, not
 Task DM's or Task EB's question.
 
-## Before (devel `df7d11371`)
+## Before (devel `df7d11371`, recorded in `ba72a20a4`)
 
 Answer found by the before-reading:
 
@@ -122,3 +141,184 @@ tests that touch the table and none exercises the real one.
 - `find_query_read` is reached only with a NULL file handle (not by
   libfuse); `efs_fuse_destroy` frees the slots but leaves
   `g_find_res_bytes` (harmless at unmount).
+
+## The interface (`src/client/efs_fuse/find_res.h`, 56 lines; 58 after the fix)
+
+`struct efs_find_res`, `EFS_FIND_RES_N`, the table, `g_find_res_mu`,
+`g_find_res_bytes`, the fetch counter, `find_res_caller` and
+`find_query_ensure` are `static` in `find_res.c` (moved from `support.c`
+L848–1009 and L1026–1046, and from `support.h`). The header opens with
+owner, lock (taken before `vq_*`'s and `virtual_file_open`'s own
+mutexes, never across an RPC), the fetch-then-use rule, lifetime and each
+operation's answer:
+
+| Operation | Caller | Was |
+|---|---|---|
+| `find_res_intern(dir, query, term, &q)` | LOOKUP (`lookup.c`) | `find_query_ensure`, then its own match and `vq_intern` under `g_find_res_mu` |
+| `find_res_open(fi, ino, dir, query, term)` | OPEN (`open.c`) | `find_query_ensure`, then its own match, `vq_version_matches`, `virtual_file_open` under the mutex |
+| `find_query_fill_stat`, `find_query_read` | GETATTR (`getattr.c`), READ without a handle (`open.c`) | unchanged names, moved |
+| `find_res_clear()` | `efs_fuse_destroy` (`main.c`) | its own loop over the slots under the mutex |
+
+`query_credentials` stays in `support.c` (stats uses it) and is now
+declared in `support.h`. In `111594fb4` the bodies moved verbatim: the
+same critical sections, the same answers (`-EAGAIN` on a LOOKUP or OPEN
+miss, `-1` from GETATTR's), no reordering; the header stated the miss.
+Callers outside `find_res.c` hold no lock and read no slot: `git grep
+'g_find_res\|find_res_caller' -- src ':!src/client/efs_fuse/find_res.c'`
+is empty.
+
+Compiled test `tests/test_find_res_interface.c` (337 lines; 379 with the
+K101 case) links the real `find_res.c`; the query RPC (text naming the
+caller it was fetched for), the caller context and credentials, `vq_*`,
+`virtual_file_open` and the stat helper are link-time definitions. Cases:
+LOOKUP, OPEN, GETATTR and the fd-less READ serve the caller's fresh result;
+`-ESTALE` when the version changed; fetch errors pass through and a failed
+fetch never serves the table's bytes; another uid gets its own result and
+no hint from the other's slot; 40 terms through 16 slots; the 64 MiB
+budget evicts the oldest and refuses a larger result; a third concurrent
+fetch is `-EBUSY` without an RPC; `find_res_clear` frees every slot (the
+ASan leak check); four threads with distinct uids on shared and private
+terms are served only their own result (the TSan entry). In `make test`
+after `test_open_interface`; `tests/budgets.tsv` row 5 s,
+`client/efs_fuse.find_res` (solo 0.02/0.02/0.02 s on node9900, 1.25×
+rounded up to 5 s as the two earlier interface tests); the TSan and ASan
+lists of `tests/sanitizer_check.sh`; `docs/how-it-works/testing.md`.
+
+Tests re-pointed: `test_query_callback_affinity.py` slices the private
+table from `find_res.c` instead of taking the struct from the header
+(tag `.support` to `.find_res`); `test_lookup_errno.py`,
+`test_attribute_authority_errno.py` and `test_open_interface.c` stub
+`find_res_intern` / `find_res_open` instead of declaring a table;
+`test_read_errno.py` unchanged. `tests/csrc.py` lists `find_res.c` and
+`find_res.h`; `Makefile` `CLIENT_SRCS`.
+
+## After (ownership tree `111594fb4`), same scenario, same counting
+
+Answer from the header: (a) the fetch is reauthorized with uid, gid and
+supplementary groups, the later match uses uid and gid only, and "between
+the two the slot may have been replaced ... a miss": a result fetched for
+another group set can be matched; (b) the operation reads the bytes it
+matched under the mutex, an open file owns a copy, and a miss answers
+`-EAGAIN` from LOOKUP and OPEN but `-1` from `find_query_fill_stat`
+(`EPERM` to the application). `find_res.c` confirms both: the slot is
+reused by directory and term for any caller, and the three match loops.
+
+| File | Lines | Category | Needed |
+|---|---|---|---|
+| `src/client/efs_fuse/README.md` | 1–101 | guide: the `find_res.c` row and the Contract bullet | yes |
+| `src/client/efs_fuse/find_res.h` | 1–56 | interface: owner, lock, fetch then match, the miss, answers per operation | yes |
+| `src/client/efs_fuse/find_res.c` | 1–230 | private: struct, table, counter, `find_res_caller`, `find_query_ensure` (slot reuse), `find_query_len`, `find_query_read`, `find_res_intern`, `find_res_open`, `find_res_clear` | yes |
+| `src/client/efs_fuse/find_res.c` | 231–242 | `find_query_ino` | no (12) |
+| `src/client/efs_fuse/find_res.c` | 243–263 | `find_query_fill_stat` returns the length's `-1` | yes |
+| `src/client/efs_fuse/getattr.c` | 247–251 | GETATTR returns it unchanged | opened to confirm the header; not needed (5) |
+| grep the five operations outside `find_res.c` | 6 hit lines | navigation: one call site per caller | yes |
+| grep `g_find_res\|find_res_caller` outside `find_res.c` | 0 hits | navigation | yes (one step, no lines) |
+| `graphify explain client/efs_fuse.find_res` | 14 lines | navigation: guide, contract, implementation, 2 tests | yes |
+
+Understand: opened 445 (was 852), needed 428 (was
+542). Categories (needed): guide 101 (was 98), interface 56 (was 77),
+implementation 251 (was 217: the moved operations), callers 0 (was 104),
+navigation 20 (was 46). Source files opened: 3 (was 7);
+`support.c`, `lookup.c`, `open.c`, `main.c` and `ll_run.c` are no longer
+opened: the header states the copy rule, the fd-less READ and each
+operation's miss answer.
+
+Validate:
+
+| File | Lines | Category | Needed |
+|---|---|---|---|
+| `tests_for.py client/efs_fuse.find_res` output, the two `budgets.tsv` rows | 4 | routing | yes |
+| `tests/test_find_res_interface.c` | 1–337 | `.find_res`; the real `find_res.c`: per-caller results, errors, slots, budget, fetch limit, clear, concurrent callers | yes |
+| `tests/test_query_callback_affinity.py` | 1–51 | `.find_res`; the publisher hint per caller and term, reauthorization | yes |
+| grep `find_res` over `tests/` | 4 files, 3 stub lines outside the route | navigation: the stubs no longer hold a table | yes (3) |
+
+Validate: opened 395 (was 120), needed 395 (was 120). Routed: 2 of 2
+tests that touch the cache (was 1 of 5); one compiles the module. The rise
+is the 337-line compiled test, as in Tasks DM and EB.
+
+Dead ends: 0 (was 3).
+
+Could the investigation stop at one guide, one interface, one
+implementation file and the routed tests? **Yes.** No caller line is
+needed; the 5 GETATTR lines were opened to confirm what the header states.
+
+## K101 fix (`2b86f47e1`)
+
+`find_query_ensure` returns with the cache mutex held and the slot it
+stored; each operation reads that slot and ends with `find_res_done()`
+(unlock, release the fetch counter). The second match is gone, so no
+operation can be served a slot another caller's fetch replaced, and there
+is no miss: LOOKUP, OPEN and GETATTR no longer answer `EAGAIN` or `EPERM`
+for a concurrent fetch or an eviction. `find_res_caller` remains for the
+publisher hint only. Lock order and the "never across an RPC" rule are
+unchanged (the RPC precedes the insert; `vq_intern`,
+`vq_version_matches` and `virtual_file_open` were already called under
+the mutex); the fetch counter is now released after the copy instead of
+before it.
+
+Negative control, `same_term_pairs` (two threads, 3,000 OPEN plus 3,000
+GETATTR each; same uid and gid with 1 and 2 supplementary groups, then two
+uids, one term):
+
+| Tree | Other group set's result served (per thread) | Misses (per thread) |
+|---|---|---|
+| `111594fb4` (3 runs) | 517/552, 617/639, 572/669 | 991/1066, 1092/1001, 1121/1106 |
+| `2b86f47e1` (3 runs) | 0/0, 0/0, 0/0 | 0/0, 0/0, 0/0 |
+
+Answer to the scenario after the fix, from the header: (a) never, (b)
+never; an evicted slot cannot be observed by the operation that fetched.
+
+Blocks alpha: no. Same uid, a race window between two critical sections,
+virtual query files only, and fixed on this branch; no incident traced.
+
+## Proof
+
+| Check | Result |
+|---|---|
+| node9900 `make test`, ownership tree `111594fb4` | rc 0, 152 s (`own-make-test.log`) |
+| node9900 `make test`, fix tree `2b86f47e1` | rc 0, 151 s (`fix-make-test.log`) |
+| node9900 `python3 scripts/tests_for.py client/efs_fuse --run` (fix tree, after `make test`) | rc 0, 56 commands, 79 s (`fix-tests-for-fuse.log`) |
+| node9900 `EFS_SAN_ONLY=find_res_interface bash tests/sanitizer_check.sh tsan` | PASS (1 run, 0 failed; `fix-tsan.log`) |
+| node9900 `EFS_SAN_ONLY=find_res_interface bash tests/sanitizer_check.sh asan` | PASS (1 run, 0 failed; ASan + UBSan, leak check; `fix-asan.log`) |
+| node9900 `./tests/test_find_res_interface` solo, fix tree | 0.02 / 0.02 / 0.02 s (`fix-find-res-solo.txt`) |
+| node9900 negative control: fixed test against `111594fb4`'s `find_res.c` | aborts in `same_term_pairs` 3 of 3 (`negative-control-own-tree.txt`) |
+| Mac: the four adjusted splice tests, `test_make_test_recipe.py`, `test_tests_for.py`, `check_k_register.py` | PASS (101 rows, 59 FIXED) |
+| Mac: `sh scripts/rebuild-code-graph.sh`, `python3 tests/test_code_graph.py` | 18,529 nodes; 10 tests OK; `graphify explain client/efs_fuse.find_res` degree 5 (guide, contract, implementation, 2 tests) |
+| Mac: `make docs-check`, `check_doc_links.py`, `status_layout.py` | pass (after regenerating `architecture-full.md` for the testing.md line), 0 dangling, nothing to move |
+
+## Reproduce
+
+```sh
+# Mac or Linux, from the branch
+python3 tests/test_query_callback_affinity.py && python3 tests/test_lookup_errno.py
+python3 tests/test_attribute_authority_errno.py && python3 tests/test_read_errno.py
+python3 scripts/tests_for.py client/efs_fuse.find_res
+sh scripts/rebuild-code-graph.sh && python3 tests/test_code_graph.py && graphify explain client/efs_fuse.find_res
+# node9900 (libfuse in /data1/efs/deps/libfuse)
+export PKG_CONFIG_PATH=/data1/efs/deps/libfuse/lib64/pkgconfig LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64
+make -j48 all && make tests/test_find_res_interface && ./tests/test_find_res_interface
+make test
+python3 scripts/tests_for.py client/efs_fuse --run      # after make test (needs the test-long fault binaries)
+EFS_SAN_ONLY=find_res_interface bash tests/sanitizer_check.sh tsan
+EFS_SAN_ONLY=find_res_interface bash tests/sanitizer_check.sh asan
+# negative control: the fixed test against the ownership tree's find_res.c
+git show 2b86f47e1:tests/test_find_res_interface.c > /tmp/t.c && git checkout 111594fb4 -- src/client/efs_fuse/find_res.c
+gcc -O3 -std=c99 -D_GNU_SOURCE -Iinclude -Isrc/common -Ideps/blake3 $(pkg-config --cflags fuse3) -Isrc/client \
+    -o /tmp/t /tmp/t.c src/client/efs_fuse/find_res.c -lpthread && stdbuf -oL /tmp/t   # aborts in same_term_pairs
+```
+
+Raw output: node9900 `~erbmi1/efs-artifacts/taskEC-20261108/` (16 files: make, make test, tests_for and sanitizer logs, solo timings, the negative control),
+`SHA256SUMS` sha256 `16652e55dae16c3a2146c1050a42f802473fee81907d9d6c7044e829655447d9`. `/tmp/efs-taskEC*` and the uploaded tars
+removed.
+
+## Not done
+
+- One host (node9900); no full `make test-all` gate (the merge's job).
+- The after-reader was the implementing agent, who wrote `find_res.h`; the
+  before-half was committed before any source change.
+- `find_query_read` is reached only with a NULL file handle, which libfuse
+  never passes; it was moved, not removed.
+- `efs_fuse_destroy` (now `find_res_clear`) still leaves the byte count
+  as it was (harmless at unmount, kept verbatim).
+- The K counts line of the alpha checklist (58 FIXED after wave 64) is
+  left for the merge; `check_k_register.py` passes with K101 (59 FIXED).
