@@ -5,7 +5,7 @@ import re,subprocess,tempfile
 import csrc
 root=Path(__file__).resolve().parents[1];s=csrc.module('efs_fuse')
 def fn(name):
- m=re.search(r'^(?:static )?int '+name+r'\([^;]+?\)\n\{',s,re.M)
+ m=re.search(r'^(?:static )?(?:int|void|uint64_t) '+name+r'\([^;]+?\)\n\{',s,re.M)
  return s[m.start():s.index('\n}',m.end())+2]
 code=r'''
 #include <assert.h>
@@ -80,7 +80,7 @@ static void efs_client_unlock_dir(efs_ino_t ino) {(void)ino;}
 static int efs_export_get_inode(struct test_export *e,efs_ino_t ino,struct efs_inode *row) {(void)e;(void)ino;row->size=cached_size;return 0;}
 static void efs_export_set_size(struct test_export *e,efs_ino_t ino,uint64_t size) {(void)e;(void)ino;cached_size=size;}
 static int efs_append_flush_report(void *fi,efs_ino_t ino) {(void)fi;(void)ino;flush_calls++;assert(open_ref.append_publishing);assert(!pthread_mutex_trylock(&stripe));pthread_mutex_unlock(&stripe);return flush_rc;}
-'''+fn('wb_lock_budget')+fn('append_retry_wait')+fn('append_publication_wait')+fn('append_identity_begin')+fn('append_reserve_offset')+fn('append_publish_burst')+r'''
+'''+fn('efs_open_append_handoff')+fn('efs_open_append_burst_note')+fn('efs_open_append_burst_published')+fn('wb_lock_budget')+fn('append_retry_wait')+fn('append_publication_wait')+fn('append_identity_begin')+fn('append_reserve_offset')+fn('append_publish_burst')+r'''
 static void reset(void) {
  now=1000;deadline=1100;calls=begins=ends=sleeps=last_sleep=0;
  accept_after=rpc_expires=contend=begin_failure=begin_release_after=extent_failure=other_held=0;

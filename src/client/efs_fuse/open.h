@@ -3,62 +3,85 @@
 
 #include "fuse_internal.h"
 
-/* open.c: open references, lease acquire and retry, OPEN and READ.
+/* open.c: the open-reference table, lease acquire and retry, OPEN and READ.
  *
- * Owns
- *   struct efs_open_ref    one row per inode (hash, never a table walk):
- *                      open count, append burst state, the lease edge and
- *                      its adoption request. A row lives from the first
- *                      open until the last close is confirmed; a row whose
- *                      last close could not be confirmed stays with
- *                      close_pending set until the retry thread or the next
- *                      RELEASE proves the CLOSE edge.
- *   struct efs_pending_create
- *                      an abandoned CREATE whose cleanup is still owed;
- *                      queued by namespace.c, drained by the retry pass.
- *   efs_open_retry_*   the background retry thread: drains retained
- *                      releases and pending CREATEs oldest first, bounded
- *                      per pass; started at FUSE_INIT, joined at destroy.
+ * Owner: open.c alone. The table (one struct efs_open_ref row per inode,
+ *   a hash and a list, the row counts and flags, the retry keys and the
+ *   append burst fields) and its mutex are private to it; callers use only
+ *   the operations below and never lock the table or read a row.
+ * Lock: one private table mutex, never held across an RPC and never held
+ *   when an operation below returns. Each operation takes it once. The
+ *   inode edge stripe (open_edge_mu, OPEN_EDGE_SHARDS) is public: it
+ *   serializes one inode's lease edge (first OPEN, last RELEASE, the retry
+ *   pass) and may be held across the lease RPC; a caller that holds both
+ *   takes the stripe first. Operations that prove an edge
+ *   (efs_open_acquire_*, efs_open_release_pending, efs_open_close_unadmitted)
+ *   are called with the inode's stripe held; the table operations
+ *   (efs_close_note, efs_client_ino_is_open, efs_open_retained, the
+ *   efs_open_append_* three) need no lock of the caller.
+ * Lifetime: a row is created by the first open of an inode and freed once
+ *   its last close is confirmed. A last close whose CLOSE edge could not be
+ *   confirmed leaves the row retained (count 0, close pending) until the
+ *   retry thread (efs_open_retry_start at FUSE_INIT, efs_open_retry_stop at
+ *   destroy, one bounded pass per 100 ms), the next RELEASE or the next
+ *   OPEN of that inode proves the edge (the OPEN waits for an unanswered
+ *   CLOSE within its deadline and fails with the edge's error otherwise,
+ *   then opens afresh). A retained row counts as open: the
+ *   inode stays pinned in the cache evictor and GETATTR keeps its open-fd
+ *   path until the CLOSE is proven. An abandoned CREATE whose cleanup is
+ *   still owed is a struct efs_pending_create, queued by namespace.c and
+ *   drained by the retry pass oldest first.
  *
- * Locks (take the stripe first, then g_open_mu; never the reverse)
- *   open_edge_mu(ino)  one of OPEN_EDGE_SHARDS stripes; serializes the
- *                      lease edge of one inode (first OPEN, last RELEASE,
- *                      the retry pass) and owns the row's edge and
- *                      adoption bodies. May be held across the lease RPC.
- *   g_open_mu          the table and hash, n, close_pending, retry_order
- *                      and retry_turn of every row. Table operations only,
- *                      never across an RPC (client rule,
- *                      ../client_internal.h). append.c takes it to read and
- *                      update a row's append fields.
- *
- * Failure behaviour
- *   EFS_ERR_BUSY: the identity window or the owner's admission is full,
- *   or the caller's deadline has passed; the row is retained and the
- *   caller may retry on its own budget (OPEN waits for a position, RELEASE
- *   spins CLOSE_ADMIT_SPINS times, release.h). Any other EFS_ERR_* is the
- *   lease RPC's own error and the open fails with efs_rc_to_errno of it.
+ * Operations and their answers
+ *   efs_open_acquire_fileid(ino, gen)   take this descriptor's open: the
+ *       first open of the inode takes the HOLD lease and fetches the
+ *       FileID when gen is 0. EFS_ERR_BUSY: the identity window or the
+ *       owner's admission is full, or the caller's deadline passed; the
+ *       row is retained and the caller may retry on its own budget.
+ *       Any other EFS_ERR_* is the lease RPC's error (the open fails with
+ *       efs_rc_to_errno of it) or EFS_ERR_NOMEM when no row could be made.
+ *   efs_open_acquire_created(ino, gen, token, *handed_off)
+ *       the CREATE variant: adopts the pending token into the lease edge;
+ *       handed_off says the token was consumed. EFS_ERR_INVAL without
+ *       gen or token; otherwise as above.
+ *   efs_close_note(ino, *leased)   drop one open; 1 when it was the last
+ *       (then *leased says the HOLD must be released and the row is kept
+ *       pending that CLOSE), 0 otherwise and for an unknown inode.
+ *   efs_open_release_pending(ino)   prove the retained CLOSE (or the
+ *       adoption before it) and free the row: EFS_OK when nothing is
+ *       pending or the row is gone; EFS_ERR_BUSY while the edge has no
+ *       answer yet (the row stays retained, its retry key is published);
+ *       any other EFS_ERR_* is the lease RPC's.
+ *   efs_open_close_unadmitted(ino)   1 while the retained CLOSE has no
+ *       identity position yet (a full window, worth a short wait), else 0.
+ *   efs_open_retry_pass(deadline)   one bounded background pass: retained
+ *       releases oldest first, then pending CREATEs, within the caller's
+ *       deadline. EFS_OK when nothing is retained or pending, EFS_ERR_BUSY
+ *       when something is (also when the deadline is already past), any
+ *       other EFS_ERR_* from the last edge proven.
+ *   efs_client_ino_is_open(ino)   1 while a row exists for ino, retained
+ *       rows included (client_internal.h; the evictor's pin test).
+ *   efs_open_retained()   rows waiting for a confirmed last close (count
+ *       0, close pending); 0 when none. Walks the table under its mutex:
+ *       for the stop path and diagnostics, not per operation.
+ *   efs_open_append_handoff(ino, *publishing)   append.c's publication
+ *       gate: the row's handoff time (0 when none or no row) and whether
+ *       a publication is running.
+ *   efs_open_append_burst_note(ino, now)   count one append write on
+ *       the row: 1 when this write must publish first (32 writes or one
+ *       second of unpublished ownership; the row is marked publishing and
+ *       its burst restarted), 0 otherwise, also when a publication is
+ *       already running or the inode has no row.
+ *   efs_open_append_burst_published(ino, rc, done_ms)   end that
+ *       publication: on EFS_OK the burst age restarts at done_ms and a
+ *       100 ms handoff window opens for a competing client; on failure
+ *       the burst is left full so the next write publishes again.
+ *   wb_lock_budget(mu)   lock mu within the caller's RPC deadline:
+ *       EFS_ERR_BUSY past it, EFS_ERR_IO on a lock error.
  *   efs_fuse_open_ino and efs_fuse_read_ino return a negative errno:
  *   EAGAIN when a virtual result was evicted between ensure and pin,
  *   ESTALE when it no longer matches the opened version, EIO for a failed
  *   read. */
-
-struct efs_open_ref {
-    efs_ino_t ino;
-    uint64_t n;
-    uint32_t append_burst;
-    uint64_t append_burst_ms;
-    uint64_t append_handoff_ms;
-    int append_publishing;
-    int leased; /* first open took HOLD; last close must release it */
-    int close_pending; /* retain ownership until release is confirmed */
-    uint64_t lease_generation;
-    uint64_t retry_order; /* published under g_open_mu; edge is stripe-owned */
-    uint64_t retry_turn; /* fair retry visits, protected by g_open_mu */
-    struct efs_client_lease_request edge; /* immutable OPEN or CLOSE identity */
-    struct efs_client_lease_request adoption; /* clear pending before CLOSE */
-    struct efs_open_ref *next, *prev; /* every row, for retry scans */
-    struct efs_open_ref *hnext; /* inode hash chain */
-};
 
 struct efs_pending_create {
     struct efs_client_create_request request;
@@ -66,12 +89,14 @@ struct efs_pending_create {
     struct efs_pending_create *next;
 };
 
-extern pthread_mutex_t g_open_mu;
-struct efs_open_ref *open_ref_find(efs_ino_t ino);
 pthread_mutex_t *open_edge_mu(efs_ino_t ino);
 int efs_close_note(efs_ino_t ino, int *leased);
 int efs_open_release_pending(efs_ino_t ino);
 int efs_open_close_unadmitted(efs_ino_t ino);
+unsigned efs_open_retained(void);
+uint64_t efs_open_append_handoff(efs_ino_t ino, int *publishing);
+int efs_open_append_burst_note(efs_ino_t ino, uint64_t now);
+void efs_open_append_burst_published(efs_ino_t ino, int rc, uint64_t done_ms);
 int wb_lock_budget(pthread_mutex_t *mu);
 int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation);
 int efs_open_acquire_created(efs_ino_t ino, uint64_t generation,

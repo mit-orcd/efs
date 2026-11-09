@@ -152,10 +152,13 @@ endpoint in `sun_path`, so efs-fuse refuses to mount.
 `test-long` command has a row with its target, a subsystem (a source directory
 plus an optional component, such as `server/raft_host.read_index`) and a
 purpose, and `tests/test_make_test_recipe.py` fails on a missing or
-inconsistent row. `python3 scripts/tests_for.py SUBSYSTEM` prints the commands
-of a subsystem and its dotted components, and a component with no row of its
-own gets its parent's rows with a note on stderr; add `--run` to run them
-after `make all`.
+inconsistent row. A test that reads or links more than one component carries
+every tag, comma-separated (`client/write,client/efs_fuse.release`).
+`python3 scripts/tests_for.py SUBSYSTEM` prints the commands of a subsystem
+and its dotted components, each once; a real component (a `src/` file or
+directory) with no row of its own gets its parent's rows with a note on
+stderr, and a name that is neither a tag nor a source file is refused (exit
+2); add `--run` to run them after `make all`.
 
 Every `test-long` command has a row in `tests/budgets.tsv` (W160): the
 seconds it may take at `EFS_TEST_JOBS=8` on an 8-CPU host, the pool slots
@@ -302,7 +305,7 @@ the sanitized binaries. `make sanitize-check` runs both.
   `halt_on_error=1`.
 - **tsan list.** KV (`test_kv_lsm_concurrent 4`, `kv_lsm`, `kv_reader_gate`),
   `raft_store`, `reclaim`, `query_disk_io`, `query_delta`, the client data
-  commit, the member view, the FUSE write-back pool (`test_wb_interface`), the W138 harnesses (`test_apply_ring.py`,
+  commit, the member view, the FUSE write-back pool (`test_wb_interface`) and open-reference table (`test_open_interface`), the W138 harnesses (`test_apply_ring.py`,
   `test_session_latch_tsan.py`), the E2 parallel revoke, the W155 receipt
   table and the K32 ticket batch on the TSan `libefs.a`, and the daemons:
   `test_k36_recovery.py` (recovery thread), `test_k36_segment_recovery.py`,

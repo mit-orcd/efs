@@ -11,6 +11,12 @@ validate rose 306 to 361 (the new compiled test).** `g_wb` is private to
 OVERBUDGET; TSan FUSE lane 3 of 3 PASS. No K row, blocks alpha: no. Not
 merged, not pushed.
 
+> **Current status (Nov 8, Task EB):** merged into devel in wave 60
+> ([ledger](ledger.md)). The `ready` / start-failure finding left open at
+> the end of this page was fixed by Task DT ([write-back `ready` flag and
+> start-failure join](writeback-ready-20261107.md)) and merged in wave 61.
+> The text below is the Nov 6 record, left as it was.
+
 - Purpose: W171 phase 3 ownership pilot ([structure plan](structure-plan-20261102.md)):
   make the FUSE write-back pool own its state behind a small interface, prove
   it with a test that compiles the real module, and measure whether an

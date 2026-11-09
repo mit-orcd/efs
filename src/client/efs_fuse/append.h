@@ -10,9 +10,9 @@
  *                      writes with close/fsync flush and the REPORT that
  *                      publishes it; private, initialized once.
  *   reservation        append_reserve_offset asks the metadata owner for
- *                      the region (never a local end); the row's
- *                      append_burst* fields in struct efs_open_ref (open.h)
- *                      are read and updated under g_open_mu.
+ *                      the region (never a local end); the burst and
+ *                      handoff state of an inode lives in its open row and
+ *                      is reached only through efs_open_append_* (open.h).
  *   the pressure worker  fuse_pressure_kick starts it, fuse_pressure_stop
  *                      joins it at destroy; it publishes a fixed dirty
  *                      cohort per round and never consumes the foreground
