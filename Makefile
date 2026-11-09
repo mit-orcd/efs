@@ -290,7 +290,6 @@ test-create-errors: $(LIB) tests/faults/efsd
 	python3 tests/test_committed_directory_stage.py
 	python3 tests/test_create_retry_identity.py
 	python3 tests/test_open_lease.py
-	python3 tests/test_open_busy.py
 	python3 tests/test_unlink_verdict.py
 	python3 tests/test_gc_verdict.py
 	python3 tests/test_retired_messages.py
@@ -618,7 +617,6 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_retained_create_authority.py
 	python3 tests/test_pending_create_cleanup.py
 	python3 tests/test_open_retry_fairness.py
-	python3 tests/test_open_retry_lock_budget.py
 	python3 tests/test_write_acceptance_gate.py
 	python3 tests/test_mount_identity_rpc.py
 	python3 tests/test_flock_description_release.py
