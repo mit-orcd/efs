@@ -160,6 +160,15 @@ directory) with no row of its own gets its parent's rows with a note on
 stderr, and a name that is neither a tag nor a source file is refused (exit
 2); add `--run` to run them after `make all`.
 
+The catalogue row is the whole binary. Inside the large sequence binaries
+(`test_meta_apply`, `test_raft`, `test_sim`, `test_kv_lsm`, `test_session`,
+`test_txn`, `test_raft_store`) `--list` prints the case names, one per line,
+and arguments select cases: with none every case runs, otherwise a case runs
+when some argument is a substring of its name, in the file's order
+(`./tests/test_meta_apply test_publish` runs `test_publish` and
+`test_publish_stale_then_retry`). An argument that matches no case exits 2,
+so a misspelling is not a silent pass.
+
 Every `test-long` command has a row in `tests/budgets.tsv` (W160): the
 seconds it may take at `EFS_TEST_JOBS=8` on an 8-CPU host, the pool slots
 it occupies and, above the per-command bound, why. Slots weigh disk use,
