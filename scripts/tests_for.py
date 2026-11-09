@@ -10,8 +10,11 @@ match. SUBSYSTEM selects the rows with a tag equal to it or starting with it
 followed by a dot, so server/raft_host includes server/raft_host.read_index.
 A component with no row of its own gets its parent's rows with a note on
 stderr, but only when the component exists: src/<dir>/<component>.c or .h,
-or a src/<dir>/<component>/ directory (meta/meta_apply.publish). A name that
-matches neither a tag nor a source file is refused (exit 2) so that a
+or a src/<dir>/<component>/ directory (meta/meta_apply.publish). A function
+prefix the catalogue's "# prefixes" header line declares
+(server/raft_host.publish) is a component of its own: with no rows it lists
+nothing (exit 1), never the parent's rows. A name that matches neither a tag,
+a declared prefix nor a source file is refused (exit 2) so that a
 misspelling is not answered with the parent's tests. The commands print one
 per line in catalogue order; --run executes them from the repository root, in
 order, and stops with the first failing command's exit status. Build first
@@ -41,6 +44,17 @@ def select(rows, want):
     return out
 
 
+def prefix_tags(path=None):
+    """The function-prefix tags the catalogue header declares:
+    `# prefixes server/raft_host: publish=host_pub_,host_publish_ ...`."""
+    out = set()
+    for line in (path or root / 'tests/budgets.tsv').read_text().splitlines():
+        if line.startswith('# prefixes '):
+            parent, names = line[len('# prefixes '):].split(':', 1)
+            out |= {parent + '.' + n.split('=')[0] for n in names.split()}
+    return out
+
+
 def component_exists(sub, src=None):
     """src/<dir>/<component>.c, .h or /: the component is real, if untested."""
     src = src or root / 'src'
@@ -48,11 +62,14 @@ def component_exists(sub, src=None):
     return any(p.exists() for p in (path.with_suffix('.c'), path.with_suffix('.h'), path))
 
 
-def resolve(rows, want, src=None):
+def resolve(rows, want, src=None, prefixes=None):
     """(rows, subsystem answered) for `want`; LookupError when nothing fits:
     'unknown component' for a misspelling (exit 2), 'no catalogue row' else."""
     selected = select(rows, want)
     sub = want
+    if not selected and want in (prefix_tags() if prefixes is None else prefixes):
+        raise LookupError('tests_for: no catalogue row for function-prefix component %s '
+                          '(declared in tests/budgets.tsv "# prefixes")' % want)
     while not selected and '.' in sub:
         if not component_exists(sub, src):
             raise LookupError('tests_for: unknown component %s: no catalogue row and no '

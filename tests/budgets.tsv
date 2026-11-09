@@ -31,6 +31,12 @@
 #              A test that reads or links more than one component carries every
 #              tag, comma-separated, no spaces (client/write,client/efs_fuse.release).
 #              scripts/tests_for.py SUBSYSTEM [--run] selects by it, each command once.
+#              A dotted tag may name a function prefix inside one file rather than a
+#              file (W171 structure plan); the "# prefixes" line below declares the
+#              known ones (tag=C prefixes), so tests_for.py answers one with no rows
+#              by listing nothing (exit 1) and still refuses a misspelling (exit 2),
+#              and the code graph has a component node for each.
+# prefixes server/raft_host: append=host_append_ command=host_command_ dir=host_dir_ expiry=host_expiry_ fwd=host_fwd_ gc=host_gc_ kv=host_kv_ lane=host_bootstrap_lane,apply_activate_lane,apply_bootstrap_lane,apply_lane_ member=host_member_ namespace=host_namespace_ prep=host_prep_ publish=host_pub_,host_publish_ query=host_query_ read_index=host_read_ report=host_report_ session=host_session_ snap=host_snap_ txn=host_txn_ unpack=host_unpack_ wait=host_wait_
 #   purpose    one short clause: what the test pins down.
 # The runner (scripts/make_test_summary.sh) reads the first three columns of every row,
 # `test` rows included, so those carry budget 30 and slots 1: far above any fast command
@@ -79,13 +85,13 @@ python3 tests/test_k36_recovery.py	35	1	DZ: RDMA reply waits poll the TCP socket
 python3 tests/test_expiry_policy_live.py	40	1	BN: slowest median 31.0 s (amd) -> 40 s; amd 31.0, node9900 29.1, intel2 30.6 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 40 s	test-long	meta/expiry	D43: the cluster expiry policy is the only expiry control
 python3 tests/posix/posix_expiry.py --private	185	3	BN: slowest median 146.7 s (prior:xorinox) -> 185 s; amd 122.3, node9900 115.1, intel2 126.8 (2 gates), prior:xorinox 146.7; three passing runs/host (1.25x rounded up to 5 s); previous 185 s; the four-member expiry fixture and its fsynced create bursts (135 s alone, 133-262 s in the pool depending on its neighbours): three slots and a budget below D4's, so it never runs beside the report step-down or D4 in the first wave	test-long	meta/expiry	Expiry lifecycle suite using an owned four-node TCP/direct-I/O fixture
 python3 tests/test_k36_segment_recovery.py	100	1	BN: slowest median 77.2 s (intel2) -> 100 s; amd 61.5, node9900 36.4, intel2 77.2 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 155 s	test-long	server/packer	K36 + K37: a packed-segment fragment dropped by verified recovery is marked before the fence clears and
-./tests/test_reclaim	20	1	BN: slowest median 14.5 s (intel2) -> 20 s; amd 12.8, node9900 13.1, intel2 14.5 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 20 s	test-long	server/store	W124 node reclaim journal: acceptance, fences, quota credit and settle, replay after a crash, torn tails,
-./tests/test_ba_delete_accounting	5	1	BN: slowest median 0.0 s (amd) -> 5 s; amd 0.0, node9900 0.0, intel2 0.0 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s; BA unlink ownership and recovery idempotence	test-long	server/store	BA: actual production recovery/delete/settlement code
-./tests/test_ba_upload_retire put	5	1	BN: slowest median 0.1 s (amd) -> 5 s; amd 0.1, node9900 0.1, intel2 0.1 (1 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s; K61 delayed ordinary PUT against superseded delete	test-long	server/put_fence	Actual ordinary PUT/rebuild, durable session guard, physical store and superseded deletion [put]
-./tests/test_ba_upload_retire rebuild	5	1	BN: slowest median 0.1 s (amd) -> 5 s; amd 0.1, node9900 0.1, intel2 0.1 (1 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s; K61 delayed rebuild PUT against superseded delete	test-long	server/put_fence	Actual ordinary PUT/rebuild, durable session guard, physical store and superseded deletion [rebuild]
-python3 tests/test_opid_admission.py	25	1	BN: slowest median 16.9 s (intel2) -> 25 s; amd 16.9, node9900 16.9, intel2 16.9 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 15 s	test-long	client/inode_rpc	Saturate real namespace mutation admission
+./tests/test_reclaim	20	1	BN: slowest median 14.5 s (intel2) -> 20 s; amd 12.8, node9900 13.1, intel2 14.5 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 20 s	test-long	server/store,server/reclaim,server/segment_store	W124 node reclaim journal: acceptance, fences, quota credit and settle, replay after a crash, torn tails,
+./tests/test_ba_delete_accounting	5	1	BN: slowest median 0.0 s (amd) -> 5 s; amd 0.0, node9900 0.0, intel2 0.0 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s; BA unlink ownership and recovery idempotence	test-long	server/store,server/reclaim,server/segment_store	BA: actual production recovery/delete/settlement code
+./tests/test_ba_upload_retire put	5	1	BN: slowest median 0.1 s (amd) -> 5 s; amd 0.1, node9900 0.1, intel2 0.1 (1 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s; K61 delayed ordinary PUT against superseded delete	test-long	server/put_fence,server/put_upload,server/reclaim,server/segment_store,server/store,server/store_nvme,server/thread	Actual ordinary PUT/rebuild, durable session guard, physical store and superseded deletion [put]
+./tests/test_ba_upload_retire rebuild	5	1	BN: slowest median 0.1 s (amd) -> 5 s; amd 0.1, node9900 0.1, intel2 0.1 (1 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s; K61 delayed rebuild PUT against superseded delete	test-long	server/put_fence,server/put_upload,server/reclaim,server/segment_store,server/store,server/store_nvme,server/thread	Actual ordinary PUT/rebuild, durable session guard, physical store and superseded deletion [rebuild]
+python3 tests/test_opid_admission.py	25	1	BN: slowest median 16.9 s (intel2) -> 25 s; amd 16.9, node9900 16.9, intel2 16.9 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 15 s	test-long	client/inode_rpc,client/ops,sim	Saturate real namespace mutation admission
 EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta	35	1	BN: slowest median 25.4 s (prior:xorinox) -> 35 s; amd 1.8, node9900 1.9, intel2 4.0 (2 gates), prior:xorinox 25.4; three passing runs/host (1.25x rounded up to 5 s); previous 35 s	test-long	meta/query_catalog	Production disk builder: changes beyond the former in-memory ID limit must retain incremental work and agree [EFS_QUERY_DELTA_DIRS=1]
-python3 tests/test_raft_ack_window.py	15	1	BN: slowest median 9.3 s (prior:fstor007) -> 15 s; amd 7.0, node9900 8.4, intel2 8.9 (2 gates), prior:fstor007 9.3; three passing runs/host (1.25x rounded up to 5 s); previous 15 s	test-long	raft	Real Raft invariants with and without ACK-window protection, sanitizers and old-window negative
+python3 tests/test_raft_ack_window.py	15	1	BN: slowest median 9.3 s (prior:fstor007) -> 15 s; amd 7.0, node9900 8.4, intel2 8.9 (2 gates), prior:fstor007 9.3; three passing runs/host (1.25x rounded up to 5 s); previous 15 s	test-long	raft,common/batch_obs,common/log_ts,common/telemetry,server/raft_host	Real Raft invariants with and without ACK-window protection, sanitizers and old-window negative
 ./tests/test_kv_lsm	25	1	BN: slowest median 19.1 s (prior:xorinox) -> 25 s; amd 2.2, node9900 1.9, intel2 6.2 (2 gates), prior:xorinox 19.1; three passing runs/host (1.25x rounded up to 5 s); previous 25 s	test-long	kv	Durable ordered-KV tests, no sockets
 python3 tests/test_server_processes.py	10	1	BN: slowest median 5.7 s (intel2) -> 10 s; amd 5.5, node9900 5.3, intel2 5.7 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 10 s	test-long	harness	Private wrapper process fixtures: no operator processes or storage
 python3 tests/test_w125_harness.py	15	1	BN: slowest median 11.0 s (node9900) -> 15 s; amd 10.2, node9900 11.0, intel2 10.0 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 15 s	test-long	harness	W125 modify-under-load harness self-tests: the failure paths of scripts/evidence/w125/w125_p0_cluster.sh,
@@ -102,13 +108,13 @@ python3 tests/test_bench_profile.py	5	1	BN: slowest median 2.8 s (node9900) -> 5
 python3 tests/test_query_subtree_negative.py	15	1	BN: slowest median 8.4 s (prior:xorinox) -> 15 s; amd 2.0, node9900 2.2, intel2 2.5 (2 gates), prior:xorinox 8.4; three passing runs/host (1.25x rounded up to 5 s); previous 15 s	test-long	meta/query_disk	Bounded subtree completion must fail when the global-only path is restored
 python3 tests/test_query_sort_peak_negative.py	15	1	BN: slowest median 8.7 s (prior:xorinox) -> 15 s; amd 2.2, node9900 2.3, intel2 2.9 (2 gates), prior:xorinox 8.7; three passing runs/host (1.25x rounded up to 5 s); previous 15 s	test-long	meta/query_disk	The measured file-byte oracle must reject missing sort scratch accounting
 EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 ./tests/test_query_delta	15	1	BN: slowest median 9.0 s (amd) -> 15 s; amd 9.0, node9900 1.7, intel2 2.9 (2 gates), prior:xorinox 7.3; three passing runs/host (1.25x rounded up to 5 s); previous 10 s	test-long	meta/query_catalog	Production disk builder: changes beyond the former in-memory ID limit must retain incremental work and agree [EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1]
-python3 tests/test_raft_rotate_stall.py	5	1	BN: slowest median 2.9 s (intel2) -> 5 s; amd 2.5, node9900 2.8, intel2 2.9 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	raft	Raft log rotation must not hold the disk lock for the bulk rewrite
+python3 tests/test_raft_rotate_stall.py	5	1	BN: slowest median 2.9 s (intel2) -> 5 s; amd 2.5, node9900 2.8, intel2 2.9 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	raft,common/batch_obs,common/checksum,common/log_ts,common/telemetry	Raft log rotation must not hold the disk lock for the bulk rewrite
 python3 tests/test_leak_gate.py	5	1	BN: slowest median 2.1 s (amd) -> 5 s; amd 2.1, node9900 0.1, intel2 1.6 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	harness	Self-test for `make leak-check` (tests/leak_check.sh, K26)
 python3 tests/test_append_sequence.py	5	1	BN: slowest median 3.0 s (node9900) -> 5 s; amd 1.9, node9900 3.0, intel2 2.4 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	client/inode_rpc	Actual append identity lifecycle and shared contiguous acknowledgement
-./tests/test_store_durability	5	1	BN: slowest median 2.5 s (intel2) -> 5 s; amd 1.0, node9900 2.0, intel2 2.5 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	server/storage_roots	Real production shard finalization: every path fences data and names
+./tests/test_store_durability	5	1	BN: slowest median 2.5 s (intel2) -> 5 s; amd 1.0, node9900 2.0, intel2 2.5 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	server/storage_roots,server/reclaim,server/segment_store,server/store	Real production shard finalization: every path fences data and names
 python3 tests/test_storage_root_inventory.py	5	1	BN: slowest median 2.2 s (intel2) -> 5 s; amd 2.2, node9900 2.2, intel2 2.2 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	server/store	Production root inventories overlap with bounded helpers and fail closed
 python3 tests/test_efs_commands.py	5	1	BN: slowest median 2.5 s (intel2) -> 5 s; amd 2.2, node9900 2.2, intel2 2.5 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	harness	Command bytes, path protocol, scope and malformed-result gates
-python3 tests/test_client_memory.py	5	1	BN: slowest median 2.3 s (intel2) -> 5 s; amd 2.1, node9900 2.1, intel2 2.3 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	common	Run actual cache ownership functions with filesystem/RPC stubs
+python3 tests/test_client_memory.py	5	1	BN: slowest median 2.3 s (intel2) -> 5 s; amd 2.1, node9900 2.1, intel2 2.3 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	common,client/read,client/write,kv,meta/put_ticket,sim	Run actual cache ownership functions with filesystem/RPC stubs
 python3 tests/test_storage_principles.py	5	1	BN: slowest median 1.9 s (intel2) -> 5 s; amd 0.6, node9900 0.7, intel2 1.9 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	harness	Linux smoke/contract tests for independent EFS-shaped I/O experiments
 python3 tests/test_session_latch_tsan.py	5	1	BN: slowest median 1.3 s (intel2) -> 5 s; amd 0.7, node9900 0.8, intel2 1.3 (2 gates); three passing runs/host (1.25x rounded up to 5 s); previous 5 s	test-long	client/inode_rpc	K5 review finding S3: the client's mount-session latches (session_started, session_fenced) are read without
 ./tests/test_kv_insertion_buffer	10	1	BN: slowest median 4.7 s (prior:xorinox) -> 10 s; amd 0.3, node9900 0.2, intel2 1.2 (2 gates), prior:xorinox 4.7; three passing runs/host (1.25x rounded up to 5 s); previous 10 s	test-long	kv	Exercise buffered/main overlap through real get, ordered scan, snapshot, flush/WAL reset and cold replay
@@ -174,10 +180,10 @@ python3 tests/faults/test_append_cleanup_retry.py	30	1	fast suite, 30 s ceiling	
 python3 tests/test_storage_fence_members.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Execute all-storage acknowledgements, including offline and changing rosters
 python3 tests/test_pack_object_remote.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	K28/W151 (D38): a segment node that hosts no replica of the segment's group reads the pack object from a voter
 python3 tests/test_storage_fence_retry.py	30	1	fast suite, 30 s ceiling	test	common/session_revoke	Run the production idempotent barrier retry with a deterministic I/O clock
-python3 tests/test_session_finish_retry.py	30	1	fast suite, 30 s ceiling	test	common/session_revoke	Execute the shared fence coordinator: FINISH keeps its epoch while certificates are BUSY
+python3 tests/test_session_finish_retry.py	30	1	fast suite, 30 s ceiling	test	common/session_revoke,server/raft_host	Execute the shared fence coordinator: FINISH keeps its epoch while certificates are BUSY
 python3 tests/test_session_revoke_parallel.py	30	1	fast suite, 30 s ceiling	test	common/session_revoke	A11 finding 1: the revoke coordinator runs per-shard steps in parallel
-./tests/test_put_upload_server	30	1	fast suite, 30 s ceiling	test	server/put_fence	Actual wire decoder, checksums and durable fence
-./tests/test_put_orphan_server	30	1	fast suite, 30 s ceiling	test	server/put_fence	D31 member side: actual frame decoder, durable storage session floor and delete order of
+./tests/test_put_upload_server	30	1	fast suite, 30 s ceiling	test	server/put_fence,server/put_upload	Actual wire decoder, checksums and durable fence
+./tests/test_put_orphan_server	30	1	fast suite, 30 s ceiling	test	server/put_fence,server/put_orphan	D31 member side: actual frame decoder, durable storage session floor and delete order of
 ./tests/test_data_commit	30	1	fast suite, 30 s ceiling	test	client/data_commit	K35 (D42): fsync proves each stripe the file's writes touched
 ./tests/test_data_commit_index	30	1	fast suite, 30 s ceiling	test	client/data_commit	An 8 GiB/128 KiB file must not walk all earlier chunks at every PUT or again at fsync
 python3 tests/test_orcd_dd_profile.py	30	1	fast suite, 30 s ceiling	test	harness	A labelled profile must not silently sample a different product snapshot
@@ -192,7 +198,7 @@ python3 tests/test_permission_groups.py	30	1	fast suite, 30 s ceiling	test	clien
 python3 tests/test_chown_permissions.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.support	Execute the FUSE ownership-change authorization helper with actual identities
 python3 tests/test_readdir_collection.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.getattr	Execute real FUSE listing collection: shard duplicates, cost and allocation failures
 python3 tests/test_readdir_source_cursor.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Execute the production server callback across empty-name source boundaries
-python3 tests/test_readdir_migration_race.py	30	1	fast suite, 30 s ceiling	test	meta/meta_apply.readdir	Execute production READDIR with migration scheduled at KV read boundaries
+python3 tests/test_readdir_migration_race.py	30	1	fast suite, 30 s ceiling	test	meta/meta_apply.readdir,kv	Execute production READDIR with migration scheduled at KV read boundaries
 python3 tests/test_dir_migrate_visibility.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Cross-group migration keeps every directory name during partial RESOLVE
 python3 tests/test_recovery_pin_owner.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Execute production recovery scheduling: retained pins keep their decision owner
 python3 tests/test_dir_migrate_route.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Run the actual migration router through a single-group/dual-group boundary
@@ -212,8 +218,8 @@ python3 tests/test_create_admission_wait.py	30	1	fast suite, 30 s ceiling	test	c
 python3 tests/test_lookup_replacement.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	A captured dentry followed by a missing inode must not become name absence
 python3 tests/test_lookup_read_group.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	A LOOKUP reuses only the same request's already-read parent group
 python3 tests/test_readindex_operation.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index	An RPC may share its own authority fences, never another RPC's fences
-python3 tests/test_readindex_completion.py	30	1	fast suite, 30 s ceiling	test	raft	A superseded quorum completes admitted waiters, never post-send arrivals
-python3 tests/test_readindex_publish.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index	Exercise actual coherent host publication
+python3 tests/test_readindex_completion.py	30	1	fast suite, 30 s ceiling	test	raft,server/raft_host	A superseded quorum completes admitted waiters, never post-send arrivals
+python3 tests/test_readindex_publish.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index,raft	Exercise actual coherent host publication
 python3 tests/test_readindex_pair.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index	Two fresh admissions precede either send
 python3 tests/test_readindex_tickets.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index	Lock-free ReadIndex admission: ri_begun precedes probes, pump starts requests
 python3 tests/test_readindex_admission.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index	Actual scalar admission: start once, never cover post-send arrivals
@@ -249,34 +255,34 @@ python3 tests/test_gc_status_expiry.py ./efs-mgmt	30	1	fast suite, 30 s ceiling	
 python3 tests/test_mgmt_expiry_lookup.py	30	1	fast suite, 30 s ceiling	test	mgmt/efs_mgmt	expiry show's path lookup follows the namespace leader's NOT_PRIMARY hint
 python3 tests/test_expiry_cli.py ./efs-mgmt	30	1	fast suite, 30 s ceiling	test	mgmt/efs_mgmt	Named expiry durations serialize to the exact policy payload
 ./tests/test_expiry	30	1	fast suite, 30 s ceiling	test	meta/expiry	Expiry policy encoding and evaluation
-python3 tests/test_session_admission.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.session	Production ESTABLISH registration/barrier admission, local and remote owners
+python3 tests/test_session_admission.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.session,kv	Production ESTABLISH registration/barrier admission, local and remote owners
 python3 tests/test_close_effects.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Production last-close deferral: BUSY cannot strand a later RESOLVE entry
-python3 tests/test_session_cleanup_cli.py	30	1	fast suite, 30 s ceiling	test	common/session_revoke	Exercise the actual management cleanup loop with definite/ambiguous results
+python3 tests/test_session_cleanup_cli.py	30	1	fast suite, 30 s ceiling	test	common/session_revoke,server/raft_host	Exercise the actual management cleanup loop with definite/ambiguous results
 python3 tests/test_session_fence_finish.py	30	1	fast suite, 30 s ceiling	test	common/session_revoke	The shared fence coordinator keeps its captured epoch through both storage barriers
-python3 tests/test_publication_host.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn	Run the real host adapter with lost apply verdicts and delayed outcomes
+python3 tests/test_publication_host.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn,common/publication,kv	Run the real host adapter with lost apply verdicts and delayed outcomes
 python3 tests/test_txn_read_authority.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn	A coordinator lookup cannot interpret failed fresh authority as absence
 python3 tests/test_txn_read_reuse.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn	Production transaction reads reuse authority, never decisions or absence
-python3 tests/test_publication_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Execute the production publication RPC recovery boundary with faulted replies
-python3 tests/test_publication_session_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Run production mount-session start and per-shard admission (K5) with ambiguity and fencing: the mount creates
+python3 tests/test_publication_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,common/checksum,common/publication,kv	Execute the production publication RPC recovery boundary with faulted replies
+python3 tests/test_publication_session_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,sim	Run production mount-session start and per-shard admission (K5) with ambiguity and fencing: the mount creates
 python3 tests/test_publication_session_reuse.py	30	1	fast suite, 30 s ceiling	test	meta/session	Production fresh owner/floor proof before reusing durable establishment
-python3 tests/test_lease_edge_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Actual immutable deferred lease transport with known/unknown reply proof
-python3 tests/test_lease_submission_proof.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn	A settled deferred edge owns atomic proof
-python3 tests/test_lease_request.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Retained exact lease ownership pins shared ACK slots across ambiguity
+python3 tests/test_lease_edge_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,kv,sim	Actual immutable deferred lease transport with known/unknown reply proof
+python3 tests/test_lease_submission_proof.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn,kv	A settled deferred edge owns atomic proof
+python3 tests/test_lease_request.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,sim	Retained exact lease ownership pins shared ACK slots across ambiguity
 python3 tests/test_lease_admission_lock.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Reproduce shared receipt-window admission while the old owner needs our lock
-python3 tests/test_identity_revocation.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Execute authoritative revocation proof validation, including negative evidence
-python3 tests/test_put_ticket_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Execute immutable ticket transport
+python3 tests/test_identity_revocation.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,kv	Execute authoritative revocation proof validation, including negative evidence
+python3 tests/test_put_ticket_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,kv	Execute immutable ticket transport
 python3 tests/test_forward_once.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	A command a member forwarded is never forwarded again (flake sweep, Oct 25)
 python3 tests/test_k33_setup.py	30	1	fast suite, 30 s ceiling	test	harness	Execute the private-cluster setup helper: catch-up BUSY is bounded, unknown management errors fail, and no
-python3 tests/test_put_ticket_owner.py	30	1	fast suite, 30 s ceiling	test	meta/put_ticket	Execute the K13 mount ticket ledger: admission before PUT, ambiguity retention, FileID binding, sweep of
+python3 tests/test_put_ticket_owner.py	30	1	fast suite, 30 s ceiling	test	meta/put_ticket,client/stop_phase,common/checksum,common/publication,kv,sim	Execute the K13 mount ticket ledger: admission before PUT, ambiguity retention, FileID binding, sweep of
 python3 tests/test_put_ticket_batch.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	K32: production ADMIT_BATCH / SETTLE_BATCH (src/server/raft_host.c) on a real in-memory KV with the real
-python3 tests/test_put_drain.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	D31 revoked-stream drain (K13): dead and departing clients' tickets
-python3 tests/test_k32_entry_count.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	K32: Raft entries per 1 MiB multi-chunk write, before and after
-python3 tests/test_faults_env_ignored.py	30	1	fast suite, 30 s ceiling	test	kv	W149: a build without EFS_FAULTS has no fault hooks
+python3 tests/test_put_drain.py	30	1	fast suite, 30 s ceiling	test	server/raft_host,client/inode_rpc,client/node_cache,mgmt/efs_mgmt	D31 revoked-stream drain (K13): dead and departing clients' tickets
+python3 tests/test_k32_entry_count.py	30	1	fast suite, 30 s ceiling	test	server/raft_host,client/put_ticket_owner	K32: Raft entries per 1 MiB multi-chunk write, before and after
+python3 tests/test_faults_env_ignored.py	30	1	fast suite, 30 s ceiling	test	kv,server/efsd	W149: a build without EFS_FAULTS has no fault hooks
 python3 tests/test_live_ticket_retry.py	30	1	fast suite, 30 s ceiling	test	harness	W137: the live ticket probe's retry path against the real PUT reply shape
 python3 tests/test_put_submission_proof.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Actual ticket result proof: exact settlement, fresh queries and local fences
 python3 tests/test_put_identity.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Production PUT allocator: mount-wide unique identities under concurrency
-python3 tests/test_create_request.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Execute retained CREATE across admission/reply ambiguity and route changes
-python3 tests/test_retained_create_authority.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Retained CREATE proof uses fresh quorum or its own settled exact entry
+python3 tests/test_create_request.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,sim	Execute retained CREATE across admission/reply ambiguity and route changes
+python3 tests/test_retained_create_authority.py	30	1	fast suite, 30 s ceiling	test	server/raft_host,kv,meta/meta_apply	Retained CREATE proof uses fresh quorum or its own settled exact entry
 python3 tests/test_pending_create_cleanup.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.open	Execute FUSE abandoned CREATE cleanup with ambiguous proof and lease edges
 python3 tests/test_open_retry_fairness.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.open	A blocked lease admission must leave time for the CREATE owning its slot
 python3 tests/test_open_retry_lock_budget.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.open	A busy inode stripe cannot steal the budget reserved for another queue
@@ -284,7 +290,7 @@ python3 tests/test_write_acceptance_gate.py	30	1	fast suite, 30 s ceiling	test	c
 python3 tests/test_mount_identity_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Actual HOLD/lock RPCs share a full UUID and admit the session (K5)
 python3 tests/test_flock_description_release.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.release	Actual FUSE callbacks: flock follows the kernel open-description release
 python3 tests/test_readdir_permission_authority.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.getattr	Production listing checks fresh permissions before any enumeration RPC
-python3 tests/test_pending_create_command.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Daemon pending CREATE encoding/apply preserves identity and rejects malformed input
+python3 tests/test_pending_create_command.py	30	1	fast suite, 30 s ceiling	test	server/raft_host,sim	Daemon pending CREATE encoding/apply preserves identity and rejects malformed input
 python3 tests/test_lock_apply_verdict.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Actual lock apply verdict and Raft advancement/retry classification
 python3 tests/test_applied_cursor.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Run actual restart cursor decoding with KV and legacy checkpoint fault inputs
 python3 tests/test_tiny_fragment_audit.py	30	1	fast suite, 30 s ceiling	test	harness	Tiny-fragment audit script classification
@@ -300,7 +306,7 @@ python3 tests/test_b_geometry_status.py	30	1	fast suite, 30 s ceiling	test	harne
 python3 tests/test_task_i_alloc_probe.py	30	1	fast suite, 30 s ceiling	test	harness	Diagnostic observer preserves mmap contents/lifetime and captures ownership
 python3 tests/test_mount_idle.py	30	1	fast suite, 30 s ceiling	test	harness	A fixture precondition waits for references
 python3 tests/test_k42_fixture_cleanup.py	30	1	fast suite, 30 s ceiling	test	harness	A failed K42 unmount remains failed and closes only its synthetic peer
-python3 tests/test_read_recorded_nodes.py	30	1	fast suite, 30 s ceiling	test	client/read	B1: the client reader takes fragment nodes only from the chunk row (or the pack object) and never recomputes
+python3 tests/test_read_recorded_nodes.py	30	1	fast suite, 30 s ceiling	test	client/read,common/packed_reader	B1: the client reader takes fragment nodes only from the chunk row (or the pack object) and never recomputes
 python3 tests/test_tmpdir_hygiene.py	30	1	fast suite, 30 s ceiling	test	harness	K25: `make test` scratch honours TMPDIR and is removed on success
 python3 tests/test_pressure_cohort.py	30	1	fast suite, 30 s ceiling	test	client/write	Execute pressure -> real REPORT completion, including held-unit handling
 python3 tests/test_alloc_value_guard.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Execute the host allocator guard with equal values/different sidecars and races
@@ -325,11 +331,11 @@ python3 tests/test_qualify_standalone.py	30	1	fast suite, 30 s ceiling	test	harn
 python3 tests/test_qualify_rdma_live.py	30	1	fast suite, 30 s ceiling	test	harness	Live qualification gates select RDMA from the cluster description (Task BS)
 python3 tests/test_refit_test_budgets.py	30	1	fast suite, 30 s ceiling	test	harness	Calibration uses the maximum host median, preserves scope and rejects bad data
 python3 tests/test_soak_driver.py	30	1	fast suite, 30 s ceiling	test	harness	Task D pure scheduling/health and exact acknowledgement regressions
-python3 tests/test_fence_read.py	30	1	fast suite, 30 s ceiling	test	client/read	Exercise production captured-view reads with deterministic object/GC stubs
+python3 tests/test_fence_read.py	30	1	fast suite, 30 s ceiling	test	client/read,common/common	Exercise production captured-view reads with deterministic object/GC stubs
 python3 tests/test_read_cache_reuse.py	30	1	fast suite, 30 s ceiling	test	client/ops	Production mapping equality: unchanged views reuse, every byte identity change evicts
 ./tests/test_fence_view	30	1	fast suite, 30 s ceiling	test	harness	Fence view capture and comparison
 set -e; ranges_test=$(mktemp "${TMPDIR:-/tmp}/efs-test-dirty-ranges.XXXXXX"); \	30	1	fast suite, 30 s ceiling	test	client/write	Dirty-range tracker, compiled standalone
-set -e; writer_test=$(mktemp "${TMPDIR:-/tmp}/efs-test-writer-ranges.XXXXXX"); \	30	1	fast suite, 30 s ceiling	test	client/write	Writer range coalescing, compiled standalone
+set -e; writer_test=$(mktemp "${TMPDIR:-/tmp}/efs-test-writer-ranges.XXXXXX"); \	30	1	fast suite, 30 s ceiling	test	client/write,common/common	Writer range coalescing, compiled standalone
 set -e; wb_test=$(mktemp "${TMPDIR:-/tmp}/efs-test-wb-recovery.XXXXXX"); \	30	1	fast suite, 30 s ceiling	test	client/write	Write-back recovery, compiled standalone
 python3 tests/test_wb_runtime.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.write,client/write	Run production D27 registry, cycle verdict and file-handle helpers
 python3 tests/test_wb_fault.py	30	1	fast suite, 30 s ceiling	test	client/write	WITHHOLD must filter the outgoing records, never send a fabricated failure
@@ -340,13 +346,13 @@ python3 tests/test_pull_group_boundary.py	30	1	fast suite, 30 s ceiling	test	cli
 python3 tests/test_pull_absent_drop.py	30	1	fast suite, 30 s ceiling	test	client/ops	A successful GETCHUNKS is authority for the chunks it covered and did not return: their local entries are
 python3 tests/test_map_fresh_open.py	30	1	fast suite, 30 s ceiling	test	client/ops	Read-mapping TTL: fresh within the TTL, stale after it, and close-to-open: an open() makes every mapping
 python3 tests/test_read_ahead_boundary.py	30	1	fast suite, 30 s ceiling	test	client/ops	Layout lookahead must pull the final representable range, never a wrapped hole
-python3 tests/test_getchunks_budget.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Production GETCHUNKS retries retain outputs and release all reply ownership
+python3 tests/test_getchunks_budget.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,kv	Production GETCHUNKS retries retain outputs and release all reply ownership
 python3 tests/test_mgmt_resync_busy.py	30	1	fast suite, 30 s ceiling	test	mgmt/efs_mgmt	Run the real CLI command over scripted pre-acceptance BUSY replies
-python3 tests/test_getchunks_collect_retry.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	A GETCHUNKS retry must not inherit fields from the previous collect
+python3 tests/test_getchunks_collect_retry.py	30	1	fast suite, 30 s ceiling	test	server/raft_host,kv	A GETCHUNKS retry must not inherit fields from the previous collect
 python3 tests/test_dcache_lock_distribution.py	30	1	fast suite, 30 s ceiling	test	client/write	Allocated files sharing a metadata shard must not share all cache I/O locks
 python3 tests/test_metadata_retry_budget.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Both production metadata retry loops bound backoff and reclaim failed replies
 python3 tests/test_inode_writer_view_budget.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Actual inode writer-view RPC bounds retries and refuses expired authority
-python3 tests/test_readdir_reply_boundary.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Actual readdir RPC rejects over-counts, broken cursors and late replies
+python3 tests/test_readdir_reply_boundary.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,server/raft_host	Actual readdir RPC rejects over-counts, broken cursors and late replies
 python3 tests/test_report_frame_boundary.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Production REPORT rejects impossible wire counts before allocation/array walks
 python3 tests/test_pub_units.py	30	1	fast suite, 30 s ceiling	test	client/write	W77 client publication units: the production unit tracker and REPORT shaping (src/client/write.c) compiled
 python3 tests/test_report_forward.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.report	Exercise production REPORT forwarding with unequal delta chains
@@ -354,15 +360,15 @@ python3 tests/test_report_zero_eof.py	30	1	fast suite, 30 s ceiling	test	server/
 python3 tests/test_report_retry_eof.py	30	1	fast suite, 30 s ceiling	test	client/write	Two REPORT/fsync attempts must not adopt an unvalidated committed EOF
 python3 tests/test_w155_receipt_table.py	30	1	fast suite, 30 s ceiling	test	common/request_receipt	W155 receipt table (src/common/request_receipt.c): replay, join, re-run, eviction
 python3 tests/test_receipt_pending_pressure.py	30	1	fast suite, 30 s ceiling	test	common/request_receipt	A full pending probe window refuses new work without losing its owners
-python3 tests/test_w155_report_resolve.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	W155: a sync REPORT whose reply was lost resolves against its receipt
-python3 tests/test_w155_identified_resolve.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	W155: an identified directory op whose reply was lost resolves by identity
+python3 tests/test_w155_report_resolve.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,client/write,common/request_receipt,server/raft_host	W155: a sync REPORT whose reply was lost resolves against its receipt
+python3 tests/test_w155_identified_resolve.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,sim	W155: an identified directory op whose reply was lost resolves by identity
 python3 tests/test_report_span_base.py	30	1	fast suite, 30 s ceiling	test	client/write	An owned span must not borrow the CAS base of a newer dirty overwrite
 python3 tests/test_k38_stale_span_replay.py	30	1	fast suite, 30 s ceiling	test	client/write	K38/W161: a STALE span whose dcache body is gone must not be re-sent on its old base
 python3 tests/test_k38_report_bound.py	30	1	fast suite, 30 s ceiling	test	client/write	K38/W161 bound: a REPORT stops re-sending a record that lost twice unchanged
 python3 tests/test_k38_install_order.py	30	1	fast suite, 30 s ceiling	test	client/write	K38 loopback finding: an older snapshot's image must not erase newer body bytes
 python3 tests/test_k38_swept_hint_live.py	15	1	Task DG: slowest median 11.7 s (node9900) -> 15 s; three solo runs per host (node9900 11.7/11.6/13.6; fstor007 11.8/11.6/11.6; 1.25x rounded up to 5 s)	test	client/write	K38: a truncate-swept CAS hint is retired after one image-base round and the unit publishes, on real daemons through efs-fuse
 python3 tests/test_k88_chunk_hints_live.py	10	1	Task DK: slowest median 4.1 s (node9900) -> 10 s; three solo runs per host at load < 2 (node9900 4.1/5.4/3.6; fstor007 4.2/3.4/3.6; 1.25x rounded up to 5 s)	test	client/write	K88: two chunks of one file committed in one REPORT keep their own CAS hints and both publish, on real daemons through the library writer
-python3 tests/test_inode_pending_eof.py	30	1	fast suite, 30 s ceiling	test	client/ops	Actual inode adoption/lookup blocks retain EOF after an inode-only REPORT
+python3 tests/test_inode_pending_eof.py	30	1	fast suite, 30 s ceiling	test	client/ops,client/write	Actual inode adoption/lookup blocks retain EOF after an inode-only REPORT
 python3 tests/test_client_metadata_authority.py	30	1	fast suite, 30 s ceiling	test	client/ops	Production inode adoption keeps local EOF, never cached security/namespace
 python3 tests/test_report_session_apply.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.report	The production REPORT envelope rejects fenced/malformed batches before effects
 python3 tests/test_report_activation.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.report	Delayed REPORT activation must honor the inode session floor at apply
@@ -382,14 +388,14 @@ python3 tests/test_load_merge_race.py	30	1	fast suite, 30 s ceiling	test	client/
 python3 tests/test_partial_uncond.py	30	1	fast suite, 30 s ceiling	test	client/write	A partial load never inherits a slot's UNCOND base
 python3 tests/test_writer_fence_merge.py	30	1	fast suite, 30 s ceiling	test	client/write	Exercise both production flush paths against unchanged-object fences
 python3 tests/test_writer_view_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Exercise the production D25 RPC retry and reply-validation boundary
-python3 tests/test_lane_writer_view_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Exercise the production D25 RPC retry and reply-validation boundary
-python3 tests/test_lane_writer_host.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.lane	Execute the production lane read adapter on a host owning only that group
-python3 tests/test_lane_bootstrap_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Exercise the production D25 RPC retry and reply-validation boundary
-python3 tests/test_lane_bootstrap_host.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.lane	Cold authority adoption validates export geometry before any transaction
+python3 tests/test_lane_writer_view_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,kv	Exercise the production D25 RPC retry and reply-validation boundary
+python3 tests/test_lane_writer_host.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.lane,kv	Execute the production lane read adapter on a host owning only that group
+python3 tests/test_lane_bootstrap_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc,kv	Exercise the production D25 RPC retry and reply-validation boundary
+python3 tests/test_lane_bootstrap_host.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.lane,kv	Cold authority adoption validates export geometry before any transaction
 python3 tests/test_writer_admission_rpc.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Warm admission never consults inode authority
 python3 tests/test_writer_deadline.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Production retry pause consumes the inherited deadline without extending it
 python3 tests/test_truncate_admission.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.namespace	Exercise production FUSE truncate with failed flush and nested deadlines
-python3 tests/test_truncate_read_reuse.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Run the production truncate handler
+python3 tests/test_truncate_read_reuse.py	30	1	fast suite, 30 s ceiling	test	server/raft_host,sim	Run the production truncate handler
 python3 tests/test_truncate_prefix.py	30	1	fast suite, 30 s ceiling	test	client/ops	#include "client_internal.h" #include <assert.h> #include <stdlib.h> #include <string.h> struct efs_client
 python3 tests/test_span_selection.py	30	1	fast suite, 30 s ceiling	test	client/write	A partial overwrite must never publish only its uncovered suffix
 python3 tests/test_kv_wal_faults.py	30	1	fast suite, 30 s ceiling	test	common/checksum	Production WAL: failed writes/syncs cannot ACK later bytes behind damage
@@ -402,7 +408,7 @@ python3 tests/test_unlink_verdict.py	30	1	fast suite, 30 s ceiling	test	server/r
 python3 tests/test_gc_verdict.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.gc	Exercise production GC command decoders, local and forwarded verdicts
 python3 tests/test_retired_messages.py	30	1	fast suite, 30 s ceiling	test	server/handler	Retired message IDs have no handler and are refused before dispatch
 python3 tests/test_node_left_refused.py	30	1	fast suite, 30 s ceiling	test	server/handler	W132 / K3: a NODE_LEFT frame (retired ID 24) is refused fail-closed
-python3 tests/test_shutdown_bounded.py	30	1	fast suite, 30 s ceiling	test	server/handler	K1/W145 part 4: an efsd stop is bounded
+python3 tests/test_shutdown_bounded.py	30	1	fast suite, 30 s ceiling	test	server/handler,raft,server/cluster,server/efsd,server/raft_host	K1/W145 part 4: an efsd stop is bounded
 python3 tests/test_apply_unsupported.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	W127-W131: an unsupported or malformed entry is never applied as success
 python3 tests/test_report_pressure.py	30	1	fast suite, 30 s ceiling	test	client/write	Exercise production REPORT admission/accounting with deterministic drain outcomes
 python3 tests/test_report_resolved_retry.py	30	1	fast suite, 30 s ceiling	test	client/write	K38/K45: execute the publisher after a PARTIAL receipt, within one budget
@@ -414,14 +420,14 @@ python3 tests/test_conn_checkout_budget.py	30	1	fast suite, 30 s ceiling	test	cl
 python3 tests/test_node_reprobe.py	30	1	fast suite, 30 s ceiling	test	client/node_cache	A peer in client cooldown is reprobed in the background, never by the caller
 python3 tests/test_pack_budget.py	30	1	fast suite, 30 s ceiling	test	server/packer	Packer busy rate: the floor until space pressure (unpacked bytes or quota usage), then linear to the idle rate
 python3 tests/test_pack_compact_schedule.py	30	1	fast suite, 30 s ceiling	test	server/packer	Compaction is scheduled maintenance: idle batches and a daily window, never while busy
-python3 tests/test_pack_base_reads.py	30	1	fast suite, 30 s ceiling	test	server/packer	Packed bases are read a segment at a time: files whose base records share a segment cost one segment read and
-python3 tests/test_net_receive_deadline.py	30	1	fast suite, 30 s ceiling	test	common/network	Actual network receive stops slow-drip/idle peers at the absolute RPC budget
+python3 tests/test_pack_base_reads.py	30	1	fast suite, 30 s ceiling	test	server/packer,common/checksum,common/pack_ledger,common/packed_segment,data	Packed bases are read a segment at a time: files whose base records share a segment cost one segment read and
+python3 tests/test_net_receive_deadline.py	30	1	fast suite, 30 s ceiling	test	common/network,client/inode_rpc	Actual network receive stops slow-drip/idle peers at the absolute RPC budget
 python3 tests/test_fragment_attempt.py	30	1	fast suite, 30 s ceiling	test	client/read	Exercise the production span/parity fragment deadline scope
 python3 tests/test_small_frame_receive.py	30	1	fast suite, 30 s ceiling	test	common/protocol	Actual framed receiver: small control reads, bulk path and broken framing
-python3 tests/test_net_send_deadline.py	30	1	fast suite, 30 s ceiling	test	common/network	Production TCP frame sender bounds blocked and partial sends by the RPC deadline
+python3 tests/test_net_send_deadline.py	30	1	fast suite, 30 s ceiling	test	common/network,common/protocol,wire	Production TCP frame sender bounds blocked and partial sends by the RPC deadline
 python3 tests/test_connect_deadline.py	30	1	fast suite, 30 s ceiling	test	common/network	Production connect uses one budget across interrupts and preserves failures
-python3 tests/test_resolver_deadline.py	30	1	fast suite, 30 s ceiling	test	common/network	Actual resolver ownership under hung NSS, bounded admission and late completion
-python3 tests/test_rdma_reply_budget.py	30	1	fast suite, 30 s ceiling	test	common/protocol	Production RDMA reply wrapper respects TCP-shared budget and pool ownership
+python3 tests/test_resolver_deadline.py	30	1	fast suite, 30 s ceiling	test	common/network,client/node_cache	Actual resolver ownership under hung NSS, bounded admission and late completion
+python3 tests/test_rdma_reply_budget.py	30	1	fast suite, 30 s ceiling	test	common/protocol,common/rdma,wire	Production RDMA reply wrapper respects TCP-shared budget and pool ownership
 python3 tests/test_rdma_progress_ready.py	30	1	fast suite, 30 s ceiling	test	common/rdma	Progress that satisfies a wait must not poll again
 python3 tests/test_rdma_arena.py	30	1	fast suite, 30 s ceiling	test	common/rdma	Registered transport buffers must release mappings on connection teardown
 python3 tests/test_rdma_gid.py	30	1	fast suite, 30 s ceiling	test	common/rdma	Default RoCE address selection avoids the observed RXE link-local trap
@@ -429,7 +435,7 @@ python3 tests/test_rdma_setup_reentry.py	30	1	fast suite, 30 s ceiling	test	serv
 python3 tests/test_rdma_handler_alignment.py	30	1	fast suite, 30 s ceiling	test	server/handler	RDMA dispatch must align typed requests without dropping assembly ownership
 python3 tests/test_rdma_handoff.py	30	1	fast suite, 30 s ceiling	test	common/rdma	Production receive repost and provider CQ copy share one handoff lock
 python3 tests/test_rdma_registry_probe.py	30	1	fast suite, 30 s ceiling	test	common/rdma	Task AI RDMA registry collector guardrails
-python3 tests/test_heartbeat_shutdown.py	30	1	fast suite, 30 s ceiling	test	server/cluster	Interrupt the real heartbeat wait, but join in-flight work before host free
+python3 tests/test_heartbeat_shutdown.py	30	1	fast suite, 30 s ceiling	test	server/cluster,server/efsd	Interrupt the real heartbeat wait, but join in-flight work before host free
 python3 tests/test_wb_worker_budget.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.writeback	Production WB worker must inherit budgets and finish ownership on expiry
 python3 tests/test_wb_drain_budget.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.writeback	Production global/per-inode drains retain errors and pending ownership on expiry
 python3 tests/test_append_flush_budget.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.append	Actual append flush refuses expired work even when its stripe is free
@@ -444,7 +450,7 @@ python3 tests/test_read_peer_order.py	30	1	fast suite, 30 s ceiling	test	client/
 python3 tests/test_get_pair_budget.py	30	1	fast suite, 30 s ceiling	test	client/read	GET-pair wrapper carries and restores one budget through blocking I/O
 python3 tests/test_get_pair_readiness.py	30	1	fast suite, 30 s ceiling	test	client/read	A control-only wake must not block a healthy parallel fragment reply
 python3 tests/test_put_reply_deadline.py	30	1	fast suite, 30 s ceiling	test	client/write	Actual parallel PUT reply/drain path with stalled descriptors and caller budget
-python3 tests/test_k35_placement.py	30	1	fast suite, 30 s ceiling	test	client/write	K35 (D42): on four or more members, writes place all three fragments on available members, so a member that
+python3 tests/test_k35_placement.py	30	1	fast suite, 30 s ceiling	test	client/write,common/placement	K35 (D42): on four or more members, writes place all three fragments on available members, so a member that
 python3 tests/test_put_tcp_frame.py	30	1	fast suite, 30 s ceiling	test	common/protocol	Production TCP PUT frame watcher with real fragmented socket delivery
 python3 tests/test_put_window_deadline.py	30	1	fast suite, 30 s ceiling	test	client/write	Actual read/PUT window wait honors caller deadline and releases its mutex
 python3 tests/test_write_budget.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.write	Both production FUSE write entry points scope one inherited call budget
@@ -456,15 +462,15 @@ python3 tests/test_append_reservation_reply.py	30	1	fast suite, 30 s ceiling	tes
 python3 tests/test_report_orphan.py	30	1	fast suite, 30 s ceiling	test	client/write	Discard only phantom span-only report marks, retaining real local ownership
 ./tests/test_reply_buffers	30	1	fast suite, 30 s ceiling	test	client/reply_buffers	Standalone pthread lifetime and failure tests for the production helper
 ./tests/test_reply_buffers key-failure	30	1	fast suite, 30 s ceiling	test	client/reply_buffers	Standalone pthread lifetime and failure tests for the production helper [key-failure]
-./tests/test_bufpool	30	1	fast suite, 30 s ceiling	test	client/bufpool	Standalone: cc -Iinclude -Isrc/common -pthread tests/test_bufpool.c -o /tmp/test_bufpool
+./tests/test_bufpool	30	1	fast suite, 30 s ceiling	test	client/bufpool,client/publication_ack_owner,client/writer_state,common/common,common/settings,common/version	Standalone: cc -Iinclude -Isrc/common -pthread tests/test_bufpool.c -o /tmp/test_bufpool
 python3 tests/test_read_admission.py	30	1	fast suite, 30 s ceiling	test	client/read	Exercise the production demand scratch recovery boundary without cache locks
 python3 tests/test_rdcache_steal.py	30	1	fast suite, 30 s ceiling	test	client/read	Read cache keeps admitting chunks once its bodies fill the speculative budget
 python3 tests/test_read_failure_admission.py	30	1	fast suite, 30 s ceiling	test	client/read	Production read admission must not turn metadata/PUT-wait failures into EOF
 python3 tests/test_read_refs_window.py	30	1	fast suite, 30 s ceiling	test	client/read	Actual zero-copy read cannot expose cached bytes after a failed PUT-window wait
 python3 tests/test_query_capacity_mount.py	30	1	fast suite, 30 s ceiling	test	harness	The live direct-I/O oracle validates its actual mount without forking readers
 python3 tests/test_rollup_allocation_failure.py	30	1	fast suite, 30 s ceiling	test	meta/metadata	Fault the actual rollup queue growth
-python3 tests/test_rollup_budget.py	30	1	fast suite, 30 s ceiling	test	common	Exercise actual rollup accounting/admission at synthetic budget boundaries
-python3 tests/test_recorder_stop.py	30	1	fast suite, 30 s ceiling	test	bench/bench_local	Run actual recorder stop wrappers with stubbed process syscalls
+python3 tests/test_rollup_budget.py	30	1	fast suite, 30 s ceiling	test	common,data	Exercise actual rollup accounting/admission at synthetic budget boundaries
+python3 tests/test_recorder_stop.py	30	1	fast suite, 30 s ceiling	test	bench/bench_local,client/efs_bench,server/efsd	Run actual recorder stop wrappers with stubbed process syscalls
 python3 tests/test_recorder_start.py	30	1	fast suite, 30 s ceiling	test	common/recorder_start	Exercise real fork/exec launches with fake perf/strace executables
 python3 tests/test_address_parser.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.main	Exercise all five actual CLI/bootstrap parser wrappers without networking
 python3 tests/test_publication_writeback.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Actual retained writeback driver under lost-reply/pending/ACK faults
@@ -472,7 +478,7 @@ python3 tests/test_lane_bootstrap_export.py	30	1	fast suite, 30 s ceiling	test	s
 ./tests/test_wire	30	1	fast suite, 30 s ceiling	test	wire	Isolated pack/unpack + frame codec tests for src/wire
 ./tests/test_tcp_counts	30	1	fast suite, 30 s ceiling	test	common/tcp_counts	Real Linux sockets, actual production accounting helper
 ./tests/test_declaration_gate	30	1	fast suite, 30 s ceiling	test	common/protocol	W133 (K4): the client protocol declaration gate is fail-closed
-python3 tests/test_declaration_gate_handler.py	30	1	fast suite, 30 s ceiling	test	server/handler	W133 (K4): the handler runs every frame through the declaration gate before dispatch, and every program that
+python3 tests/test_declaration_gate_handler.py	30	1	fast suite, 30 s ceiling	test	server/handler,client/node_cache,mgmt/efs_mgmt,server/peer_pool	W133 (K4): the handler runs every frame through the declaration gate before dispatch, and every program that
 python3 tests/test_rdma_fork_poller.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.main	K31: the mount session must start after the daemon fork, and an RDMA device must refuse use from a process
 python3 tests/test_kv_kind_unique.py	30	1	fast suite, 30 s ceiling	test	kv	Every EFS_KV_KIND_* number is distinct (outside the reserved range markers)
 python3 tests/test_live_protocol_version.py	30	1	fast suite, 30 s ceiling	test	harness	Every live harness and script that hand-builds a CLIENT_HELLO declares EFS_PROTOCOL_VERSION and expects it
@@ -496,8 +502,8 @@ python3 tests/test_host_pending_entries.py	30	1	fast suite, 30 s ceiling	test	se
 python3 tests/test_raft_slow_sync.py	30	1	fast suite, 30 s ceiling	test	harness	Verify the test interposer delays only the selected real barrier and preserves errors
 python3 tests/test_host_inbox.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Compile the actual bounded inbox slicing and pump wake checks
 python3 tests/test_host_batch_handoff.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Execute production inbox drain/handoff with a real waiting mutex owner
-python3 tests/test_receive_persist.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Real Raft core plus actual host barrier handoff: no early authority, other-group progress
-python3 tests/test_raft_sync_rotation.py	30	1	fast suite, 30 s ceiling	test	raft	Real disk store: a stalled fdatasync pins rotation and its durable watermark
+python3 tests/test_receive_persist.py	30	1	fast suite, 30 s ceiling	test	server/raft_host,common/batch_obs,common/log_ts,common/telemetry,raft	Real Raft core plus actual host barrier handoff: no early authority, other-group progress
+python3 tests/test_raft_sync_rotation.py	30	1	fast suite, 30 s ceiling	test	raft,common/batch_obs,common/checksum,common/log_ts,common/telemetry	Real disk store: a stalled fdatasync pins rotation and its durable watermark
 python3 tests/test_host_checkpoint.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Verify the actual pump/shutdown helper cannot save past failed KV sync
 python3 tests/test_checkpoint_worker.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Production marker worker: one slot, durable-prefix ownership and drain
 python3 tests/test_kv_prefix_worker.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Captured production WAL worker: overlap, exact proof and drain
@@ -511,14 +517,14 @@ python3 tests/test_kv_mtab_batch.py	30	1	fast suite, 30 s ceiling	test	kv	Commit
 ./tests/test_query_refresh	30	1	fast suite, 30 s ceiling	test	server/query_refresh	Query refresh and export lease
 ./tests/test_name_index	30	1	fast suite, 30 s ceiling	test	meta/name_index	Name index lookup and update
 ./tests/test_bench_latency	30	1	fast suite, 30 s ceiling	test	bench/latency	Benchmark latency recorder
-./tests/test_store_overwrite	30	1	fast suite, 30 s ceiling	test	server/store	Actual shard I/O, with syscall failure injection at the final length fence
+./tests/test_store_overwrite	30	1	fast suite, 30 s ceiling	test	server/store,server/reclaim,server/segment_store	Actual shard I/O, with syscall failure injection at the final length fence
 ./tests/test_directory_sync_group	30	1	fast suite, 30 s ceiling	test	server/directory_sync_group	Actual queue, deterministic blocked barriers: never acknowledge arrivals during an earlier barrier, never
-python3 tests/test_meta_flush_batch.py && python3 tests/test_kv_flush_finish.py	30	1	fast suite, 30 s ceiling	test	client/write	Execute production background queue/worker with controlled dispatch timing
+python3 tests/test_meta_flush_batch.py && python3 tests/test_kv_flush_finish.py	30	1	fast suite, 30 s ceiling	test	client/write,kv	Execute production background queue/worker with controlled dispatch timing
 ./tests/test_put_ticket	30	1	fast suite, 30 s ceiling	test	meta/put_ticket	Mount ticket ledger admission and settlement
 ./tests/test_put_orphan	30	1	fast suite, 30 s ceiling	test	server/put_orphan	D31 (K13) collection of abandoned ticketed uploads, in process: the real ticket ledger, session state machine
-./tests/test_store_gc	30	1	fast suite, 30 s ceiling	test	server/store	Real fragment files, two roots, stored-format changes and syscall failures
-./tests/test_store_gc unlimited	30	1	fast suite, 30 s ceiling	test	server/store	Real fragment files, two roots, stored-format changes and syscall failures [unlimited]
-./tests/test_iostats_snapshot	30	1	fast suite, 30 s ceiling	test	server/server_internal	Exercise the real routine/full snapshot split without an RDMA device
+./tests/test_store_gc	30	1	fast suite, 30 s ceiling	test	server/store,server/reclaim,server/segment_store	Real fragment files, two roots, stored-format changes and syscall failures
+./tests/test_store_gc unlimited	30	1	fast suite, 30 s ceiling	test	server/store,server/reclaim,server/segment_store	Real fragment files, two roots, stored-format changes and syscall failures [unlimited]
+./tests/test_iostats_snapshot	30	1	fast suite, 30 s ceiling	test	server/server_internal,server/iostats	Exercise the real routine/full snapshot split without an RDMA device
 ./tests/test_writer_routing	30	1	fast suite, 30 s ceiling	test	server/writer	Exercise the actual writer implementation with an in-memory disk boundary
 ./tests/test_kv_snapshot_tail	30	1	fast suite, 30 s ceiling	test	kv	Whole-source query tail filtering: fixed scratch, no shared-cache promotion
 ./tests/test_kv_seg_index	30	1	fast suite, 30 s ceiling	test	kv	Cached sorted-record index: ordering, tombstones, eviction and corruption
@@ -563,10 +569,10 @@ python3 tests/test_query_root_refusals.py	30	1	fast suite, 30 s ceiling	test	ser
 python3 tests/test_query_capture_retry.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.query	Execute production cut capture: bounded recapture never reuses a failed pin
 python3 tests/test_query_page_barriers.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.query	Execute actual v4 page dispatch: one fresh cut, fresh continuations, refusal
 python3 tests/test_query_stats_snapshot.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.query	Compile production stats serialization for legacy and retained snapshots
-python3 tests/test_query_retained_orphan.py	30	1	fast suite, 30 s ceiling	test	meta/query_disk	Execute retained orphan preflight without changing installed metadata
+python3 tests/test_query_retained_orphan.py	30	1	fast suite, 30 s ceiling	test	meta/query_disk,kv	Execute retained orphan preflight without changing installed metadata
 python3 tests/test_query_callback_affinity.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.find_res	Actual FUSE query callback retains publisher hints while reauthorizing every RPC
 python3 tests/test_feature_poll_deadline.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.support	Execute the actual advisory feature-poll wrapper's shared deadline scope
-python3 tests/test_feature_discovery_status.py	30	1	fast suite, 30 s ceiling	test	server/handler	Actual feature reply distinguishes unavailable authority from disabled policy
+python3 tests/test_feature_discovery_status.py	30	1	fast suite, 30 s ceiling	test	server/handler,server/raft_host	Actual feature reply distinguishes unavailable authority from disabled policy
 python3 tests/test_close_inspector_scope.py	30	1	fast suite, 30 s ceiling	test	harness	Execute the real offline inspector callback with owned and unrelated keys
 python3 tests/test_close_retire_fastpath.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.gc	Actual GC close pass: atomic empty retirement, bounded busy cleanup and errors
 python3 tests/test_close_retire_batch.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.gc	Actual close-retirement coordinator preserves each independent verdict
@@ -597,9 +603,9 @@ python3 tests/test_command_policy_mount.py	30	1	fast suite, 30 s ceiling	test	cl
 python3 tests/test_query_rpc_retry.py	30	1	fast suite, 30 s ceiling	test	harness	Positive raw-page oracles retain one deadline and exact hard refusals
 python3 tests/test_query_target_route.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.query	Actual query redirect prefers a proven dual leader
 python3 tests/test_posix_query_budget.py	30	1	fast suite, 30 s ceiling	test	harness	A stale query polls within the configured case budget
-python3 tests/test_namespace_bounds.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.session	Production ancestry walk: exact shared-shard guards and bounded rejection
+python3 tests/test_namespace_bounds.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.session,client/inode_rpc	Production ancestry walk: exact shared-shard guards and bounded rejection
 python3 tests/test_namespace_fixture.py	30	1	fast suite, 30 s ceiling	test	harness	Salted production placement must build the exact live namespace envelope
-python3 tests/test_namespace_envelope_fixture.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.session	Separate the actual namespace participant and ancestry fixture envelopes
+python3 tests/test_namespace_envelope_fixture.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.session,kv	Separate the actual namespace participant and ancestry fixture envelopes
 python3 tests/test_deepsteps_transparent.py	30	1	fast suite, 30 s ceiling	test	harness	Actual diagnostic wrappers preserve descriptor arguments/results/exceptions
 python3 tests/test_query_work_trace.py	30	1	fast suite, 30 s ceiling	test	common/query_stage_trace	Actual numeric diagnostic sender: quiet, capped, nonblocking and balanced descriptors
 python3 tests/test_gc_fixture_drain.py	30	1	fast suite, 30 s ceiling	test	harness	A stale zero GC sample cannot certify physical fixture reclamation
@@ -623,7 +629,7 @@ python3 tests/test_rename_budget.py	30	1	fast suite, 30 s ceiling	test	client/op
 ./tests/test_kv_reader_gate	30	1	fast suite, 30 s ceiling	test	kv	A KVLSM2 MANIFEST carries reader requirements
 ./tests/test_placement	30	1	fast suite, 30 s ceiling	test	common/placement	Fragment placement across members
 ./tests/test_b_geometry	30	1	fast suite, 30 s ceiling	test	server/member_store	Alpha 1.0 checklist B1-B5 (docs/status/alpha-1.0-2plus1-checklist.md), the deterministic part: geometry,
-./tests/test_membership	30	1	fast suite, 30 s ceiling	test	server/member_store	W153/K33: the committed membership (efs/membership.h) and the member store (src/server/member_store.c):
+./tests/test_membership	30	1	fast suite, 30 s ceiling	test	server/member_store,server/discovery	W153/K33: the committed membership (efs/membership.h) and the member store (src/server/member_store.c):
 ./tests/test_member_view	30	1	fast suite, 30 s ceiling	test	client/node_cache	K33 live client view (efs/member_view.h, src/client/node_cache.c): a mounted client installs a later
 ./tests/test_lock	30	1	fast suite, 30 s ceiling	test	meta/lock	Isolated POSIX lock SM. No sockets, no Raft
 ./tests/test_stage_evict	30	1	fast suite, 30 s ceiling	test	meta/metadata	Unit test for the client staging-table eviction primitives (client-cache design Part A):
@@ -631,6 +637,6 @@ python3 tests/test_rename_budget.py	30	1	fast suite, 30 s ceiling	test	client/op
 ./tests/test_open_interface	5	1	EB: three solo runs on node9900 0.02/0.02/0.02 s (load 0.5), 1.25x rounded up to 5 s	test	client/efs_fuse.open	Task EB: the real open-reference table through open.h: no row, two opens and the last close, a retained CLOSE counted as open and drained by the retry pass, the append burst bookkeeping, 3000 retained rows, concurrent churn
 ./tests/test_find_res_interface	5	1	EC: three solo runs on node9900 0.02/0.02/0.02 s (load 1.2), 1.25x rounded up to 5 s as test_wb_interface and test_open_interface	test	client/efs_fuse.find_res	Task EC: the real .find result cache through find_res.h: each caller's fresh result on LOOKUP/OPEN/GETATTR/READ, ESTALE, errors never serve cached bytes, per-uid results and publisher hints, 16 slots, the 64 MiB budget, the fetch limit, unmount clear, concurrent callers
 ./tests/test_hardlink_alias	30	1	fast suite, 30 s ceiling	test	meta/metadata	Hard-link alias index (Task AX): shared attributes must reach every alias row and only those, through
-./tests/test_verification_matrix	30	1	fast suite, 30 s ceiling	test	server/storage_roots	AZ: one fixture matrix through every real verification wrapper
+./tests/test_verification_matrix	30	1	fast suite, 30 s ceiling	test	server/storage_roots,server/reclaim,server/segment_store,server/store	AZ: one fixture matrix through every real verification wrapper
 ./tests/test_conn_fd	30	1	fast suite, 30 s ceiling	test	common/network	Pool fd-identity: a conn must not outlive the socket it wrapped
 python3 tests/csrc.py	30	1	fast suite, 30 s ceiling	test	harness	W171 2a: csrc.module() equals the source files it names and the per-module override is honoured

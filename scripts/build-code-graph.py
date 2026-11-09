@@ -77,6 +77,10 @@ def components(root, config, code, docs):
         if path.startswith("src/") and path.endswith(".c") and str(Path(path).parent) + "/README.md" in docs:
             entry(component_tag(path))
     for line, text in enumerate((root / config["catalogue"]).read_text().splitlines(), 1):
+        if text.startswith("# prefixes "):  # declared function-prefix tags, rows or not
+            parent, names = text[len("# prefixes "):].split(":", 1)
+            for n in names.split():
+                entry(parent + "." + n.split("=")[0])
         f = text.split("\t")
         if len(f) < 7 or text.startswith("#") or f[0] == "command":
             continue

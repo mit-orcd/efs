@@ -130,6 +130,9 @@ class GraphChecks(unittest.TestCase):
         self.assertEqual(targets('server/raft_host.read_index', 'guided_by'), ['efs:file:src/server/README.md'])
         self.assertTrue(targets('server/raft_host.read_index', 'tested_by'))
         self.assertEqual(targets('server/raft_host.read_index', 'implemented_by'), [])
+        # a declared function prefix with no rows still has its node (Task ED)
+        self.assertEqual(targets('server/raft_host.publish', 'guided_by'), ['efs:file:src/server/README.md'])
+        self.assertEqual(targets('server/raft_host.publish', 'tested_by'), [])
         # the guides are documents: sections and literal symbol mentions
         self.assertTrue(any(n.get('source_file') == 'src/client/efs_fuse/README.md' and n.get('kind') == 'document_section'
                             for n in self.graph['nodes']))
