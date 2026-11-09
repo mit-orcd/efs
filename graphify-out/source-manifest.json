@@ -70,7 +70,7 @@
     "scripts/b_checks.py": 59,
     "scripts/batch_f.sh": 2,
     "scripts/bench_profile.py": 21,
-    "scripts/build-code-graph.py": 18,
+    "scripts/build-code-graph.py": 21,
     "scripts/calibrate_test_budgets.sh": 7,
     "scripts/check_doc_links.py": 4,
     "scripts/check_guide_counts.py": 3,
@@ -963,7 +963,7 @@
     "tests/test_close_retire_batch.py": 1,
     "tests/test_close_retire_fastpath.py": 1,
     "tests/test_cluster_stop.py": 2,
-    "tests/test_code_graph.py": 14,
+    "tests/test_code_graph.py": 15,
     "tests/test_command_policy_mount.py": 1,
     "tests/test_commands_load_payloads.py": 2,
     "tests/test_committed_directory_stage.py": 2,
@@ -1593,7 +1593,7 @@
     "scripts/b_checks.py": "5e2366aaf81e76b5ff2eea2c2867e7e45bea4697926757911b2ea24881cea4e4",
     "scripts/batch_f.sh": "a6fef37a3dfbcb984ed775c406dc3ae980e0e5dd28303ac1e12af2860c349830",
     "scripts/bench_profile.py": "73de02e1fed4f1d2d19a260d73299ea98370c9f0d18c22d33489ef8a1d38dab8",
-    "scripts/build-code-graph.py": "e2d809755ee1a6a88f2d40b7fcc09410d9aa5397832014ebf1b5fe3b01fc2274",
+    "scripts/build-code-graph.py": "9fc67ce1e5866dd68709caec57766474a012b203116738c0e48126008d6e1b38",
     "scripts/calibrate_test_budgets.sh": "26d0675574f0749aeb33127f7c390bdcbb7d2beee6b6adbb48dae840972bd51d",
     "scripts/check_doc_links.py": "dbd7b5abe619a8c68699ee13d93893115361670dac45266c59952c5337ade6b3",
     "scripts/check_guide_counts.py": "04b83f8b942d8623da091ce4385a4d08ff3d57b11e610945c1b6288574b71d4c",
@@ -2500,7 +2500,7 @@
     "tests/test_close_retire_batch.py": "07b5cebd47d5d88366cf7b97a8a14aead8b2cd44ea0ad5a8cc73c99d7a40f3aa",
     "tests/test_close_retire_fastpath.py": "9c83dc948aaf63c4c2d9b713cd6f553dd5ee84d08847a4268fa69ae8c9543ee3",
     "tests/test_cluster_stop.py": "a85c5e962a4603496020f7284068ada2c4d2b71934c5555516e90784ecc5b5f1",
-    "tests/test_code_graph.py": "2b5e26090e703f25cea0878bec47f9cf92e91430149407c8cf4ef50befcea891",
+    "tests/test_code_graph.py": "83acaa31c4652db9a113f32be15171f3fc6d3fa7384ae7e53e2101f83ddbf0c0",
     "tests/test_command_policy_mount.py": "7f814c36d19a6494f13a9e480e0749e670e0a48da22f9e2997583062fa4cff20",
     "tests/test_commands_load_payloads.py": "0c61cddf4c6b0315756cb25956806ac403cee2123be968d7140a3c5b632315fc",
     "tests/test_committed_directory_stage.py": "e31cf7024c437b5ad084d6603e5da6d4abb9c8286d784fe76385ed26ea6c0c01",
@@ -3017,7 +3017,7 @@
     "tests/tools/reap_dup.py": "f234dfe82d00665b183f3e9b4445492f022f85c09e1e9bb81fa2cfb60ce807b6",
     "tests/valgrind_leaks.sh": "7fbda7a9d6d55de805c21904096579ddeb0ce8222b34ab2a495770aba4173cbf",
     "tests/wipe_cluster.sh": "84c22d5dc42f3450603b956f81a965a699943591abbcb2a135a26d99b6277627",
-    "tools/graphify/README.md": "a727d39f563d849d1e561e62ae7925ea8e21362dc65b37f8e119d4495bc6c104",
+    "tools/graphify/README.md": "ee63cfaded58677067ed107b65db9b84af6220820564e09a1ffc71ddd4e1250f",
     "tools/graphify/known-bugs.json": "445cc560c697f28faee31a17da2f111db104a4a975501bbb1d020a6d99926088",
     "tools/graphify/scope.json": "b929a090439e74ae5ca60a2bef7f00015245420189cc0b27c005d938ad4f74f9"
   },
@@ -3028,5 +3028,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "df4eb8853ee6b341b00e8fd8062ac284c11296bf"
+  "source_commit": "def2269966d61d631adee703fa1de13ef9620c84"
 }

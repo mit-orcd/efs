@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `df4eb8853ee6b341b00e8fd8062ac284c11296bf`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 18,584 nodes, 76,842 directed typed edges, 580 communities.
+Source base: `def2269966d61d631adee703fa1de13ef9620c84`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 18,588 nodes, 77,219 directed typed edges, 598 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,9 +19,9 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27463
+- `calls`: 27466
 - `case_of`: 118
-- `contains`: 27467
+- `contains`: 27474
 - `contract`: 44
 - `defines`: 1999
 - `documents_finding`: 8
@@ -29,17 +29,17 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 - `guided_by`: 178
 - `implemented_by`: 138
 - `imports`: 8135
-- `imports_from`: 997
-- `indirect_call`: 753
+- `imports_from`: 998
+- `indirect_call`: 752
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 3130
+- `mentions_symbol`: 3131
 - `method`: 645
-- `rationale_for`: 1414
+- `rationale_for`: 1415
 - `references`: 2219
 - `references_path`: 1261
 - `regression_for`: 8
-- `tested_by`: 735
+- `tested_by`: 1100
 - `uses`: 96
 
 ## Extraction warnings
@@ -52,7 +52,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
 Unresolved edges omitted: {'calls': 1801}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
-Component nodes come from the source layout and the test catalogue's rows (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage.
+Component nodes come from the source layout and scripts/tests_for.py's answer over the test catalogue (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage; a route inherited from the parent tag is INFERRED with evidence_method inherited:<parent>.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
 Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.
 External library internals are excluded. Function pointers, macros and embedded C/shell may be unresolved.
