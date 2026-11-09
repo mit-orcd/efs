@@ -1488,7 +1488,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "4ae4b362e99aaebe7df7281509c8ad789af1e25900f334055057e87777dc2c3e",
+    "Makefile": "ee2e571bd966e7633df3776a1115e8dd6fcdc0cde9c33e9183a88e5a9c53cff7",
     "README.md": "f646cf19b6605664ea80ee9a539ea8c7938be322ee12ba520447204095e3d216",
     "docs/backlog/crash-safe-durable-versions.md": "b57a8c2376ec9e85d9403196a237c57b69f7515a60e73ceb2ac997788016d6b3",
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
@@ -3028,5 +3028,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "df4eb8853ee6b341b00e8fd8062ac284c11296bf"
+  "source_commit": "af3ba7002b3e1438eaf9af0a38663cc10538a4c8"
 }
