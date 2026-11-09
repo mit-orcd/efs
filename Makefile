@@ -221,8 +221,18 @@ MGMT_OBJ = $(MGMT_SRC:.c=.o)
 
 
 # System fuse3 (>= 3.12, bounded active-worker API). pkg-config supplies -I and -lfuse3.
-FUSE_CFLAGS := $(shell pkg-config --cflags fuse3 2>/dev/null)
-FUSE_LIBS := $(shell pkg-config --libs fuse3 2>/dev/null)
+# EFS_FUSE_PREFIX=<dir> takes fuse3 from <dir>/lib64 or <dir>/lib first and links an rpath
+# to it. Make < 4.4 does not export to $(shell), so the path is passed there inline.
+# LD_LIBRARY_PATH reaches recipes for tests that build their own fuse3 binary.
+ifneq ($(EFS_FUSE_PREFIX),)
+export PKG_CONFIG_PATH := $(EFS_FUSE_PREFIX)/lib64/pkgconfig:$(EFS_FUSE_PREFIX)/lib/pkgconfig$(if $(PKG_CONFIG_PATH),:$(PKG_CONFIG_PATH))
+export LD_LIBRARY_PATH := $(EFS_FUSE_PREFIX)/lib64:$(EFS_FUSE_PREFIX)/lib$(if $(LD_LIBRARY_PATH),:$(LD_LIBRARY_PATH))
+endif
+FUSE_CFLAGS := $(shell PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' pkg-config --cflags fuse3 2>/dev/null)
+FUSE_LIBS := $(shell PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' pkg-config --libs fuse3 2>/dev/null)
+ifneq ($(EFS_FUSE_PREFIX),)
+FUSE_LIBS += -Wl,-rpath,$(EFS_FUSE_PREFIX)/lib64 -Wl,-rpath,$(EFS_FUSE_PREFIX)/lib
+endif
 
 BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
               $(BLAKE3_DIR)/blake3_portable.o \
