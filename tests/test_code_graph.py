@@ -124,6 +124,8 @@ class GraphChecks(unittest.TestCase):
         # a second catalogue tag routes a test to its other component too
         self.assertIn('efs:file:tests/test_open_lease.py', targets('client/efs_fuse.open', 'tested_by'))
         self.assertIn('efs:file:tests/test_open_interface.c', targets('client/efs_fuse.open', 'tested_by'))
+        self.assertEqual(targets('client/efs_fuse.find_res', 'contract'), ['efs:file:src/client/efs_fuse/find_res.h'])
+        self.assertIn('efs:file:tests/test_find_res_interface.c', targets('client/efs_fuse.find_res', 'tested_by'))
         # a tag-only component (no file of its own) still has its guide and tests
         self.assertEqual(targets('server/raft_host.read_index', 'guided_by'), ['efs:file:src/server/README.md'])
         self.assertTrue(targets('server/raft_host.read_index', 'tested_by'))
