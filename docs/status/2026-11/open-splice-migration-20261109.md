@@ -13,8 +13,7 @@ private-field write). Two are kept unchanged because their subject is
 `open.h` alone. Seven deliberate breaks of `open.c`, one or more per case
 class, each fail the binary (six assertion aborts and one hang killed by
 `timeout`); the restored tree passes.** node9900: `make test` rc 0 (127 s), `tests_for.py client/efs_fuse.open --run` (8 rows) rc 0, ASan and TSan `open_interface` PASS. Branch
-`claude/great-kilby-1755e2` on devel `33cd0a839` (wave 65). Not merged, not
-pushed.
+`claude/great-kilby-1755e2` on devel `33cd0a839` (wave 65). Merged into devel in wave 67 (Nov 9).
 
 - Purpose: the [structure plan](structure-plan-20261102.md) says splice
   tests move to compiling the real module through its interface once one

@@ -10,8 +10,7 @@ marks, using the apply-start hook Task EI added for the GC watermark
 (`946095b28`, `gc.c` plus a header comment and the test). node9900:
 `make test` rc 0, `tests_for.py meta/meta_apply --run` rc 0,
 `./tests/test_meta_apply degraded` rc 0 and rc 1 with the old rule. No K
-row (found by reading, not observed); blocks alpha: no. Not merged, not
-pushed.**
+row (found by reading, not observed); blocks alpha: no. Merged into devel in wave 67 (Nov 9).**
 
 - Purpose: the candidate recorded under Findings on the
   [blind reader page](blind-reader-20261109.md). Task EI's question 2
@@ -21,7 +20,7 @@ pushed.**
   count (W154, the k37 fix of
   [Task DY](k37-degraded-count-overshoot-20261108.md)) has the same shape.
 - Source: branch `claude/task-ek-degraded-begin-race`, cut from the Task EI
-  branch tip `860b51ba8` (EI is not merged; this change reuses its
+  branch tip `860b51ba8` (EI merged in wave 66; this change reuses its
   `efs_meta_gc_pending_apply_start` hook). Fix `946095b28`.
 - Environment: node9900 (192 cpus, gcc, libfuse from
   `/data1/efs/deps/libfuse`), `git archive` of `946095b28` (tar sha256

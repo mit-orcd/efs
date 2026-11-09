@@ -1,6 +1,6 @@
 # Stop-file hygiene (Task EP)
 
-**Verdict: PASS; no new code change needed** (Nov 9, 2026). Purpose: stop the test harness from leaving `efs-control-*.stop` files in `/tmp` on fstor007. Not a K row; blocks alpha: no.
+**Verdict: PASS; no new code change needed** (Nov 9, 2026; merged into devel in wave 67). Purpose: stop the test harness from leaving `efs-control-*.stop` files in `/tmp` on fstor007. Not a K row; blocks alpha: no.
 
 Task DI's change ([tmp hygiene](tmp-hygiene-20261105.md), commit `cac172b6b`, merged into devel in wave 58 on Nov 5 at 18:58) already makes the creator remove its file. The 2,858 files on fstor007 are all older: the newest is from Nov 5 at 19:57. A full `make test-all` and a plain `make test` on devel `33cd0a839` left **0** `efs-control-*` files. The user still has to decide what to do with the existing files; this task deleted none.
 

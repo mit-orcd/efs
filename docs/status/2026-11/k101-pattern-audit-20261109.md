@@ -14,8 +14,7 @@ fixed, and `.stats`, which keeps no cache. Every other table holds data
 the server sends the same way whoever asks. Each is keyed by inode,
 open description or lock owner, and permission is checked on the
 client, per request, against a fresh row. Branch
-`claude/optimistic-murdock-ac0414` on devel `33cd0a839`. Not merged, not
-pushed.
+`claude/optimistic-murdock-ac0414` on devel `33cd0a839`. Merged into devel in wave 67 (Nov 9).
 
 - Purpose: the follow-up K101 left open: does any other per-caller cache
   in the FUSE client have the K101 shape? The K101 row is in

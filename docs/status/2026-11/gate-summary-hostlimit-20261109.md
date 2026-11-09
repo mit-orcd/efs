@@ -6,8 +6,7 @@ and says `STATUS COMPLETE` (exit 0) when FAIL is 0, nothing ran over budget
 and every NOTRUN is a host limit.** Replayed over three real gate summaries:
 both wave 64 gates now read COMPLETE with HOSTLIMIT 3 and 4, the wave 65
 node9900 gate-1 output still reads FAIL with the k54 row, and an added NOTRUN
-with an unknown reason reads INCOMPLETE. No K row, blocks alpha: no. Not
-merged, not pushed.
+with an unknown reason reads INCOMPLETE. No K row, blocks alpha: no. Merged into devel in wave 67 (Nov 9).
 
 - Purpose: the wave ledger notes each wave that the gates' NOTRUN rows are
   standing host limits, and STATUS read INCOMPLETE on every gate because of

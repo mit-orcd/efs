@@ -11,8 +11,7 @@ byte-identical to devel.** Mac `make all` fails, identically on devel
 `33cd0a839`, in `src/common/log_ts.c` (`fopencookie` is glibc-only): a
 pre-existing break outside this task, not caused or fixed here. No K row;
 blocks alpha: no. Branch `claude/awesome-rosalind-fe20a6` on devel
-`33cd0a839` (wave 65), Makefile commits `b57b527f2` and `41a04a9d4`. Not
-merged, not pushed.
+`33cd0a839` (wave 65), Makefile commits `b57b527f2` and `41a04a9d4`. Merged into devel in wave 67 (Nov 9).
 
 - Purpose: close the gap Task ED recorded
   ([navigation leftovers](navigation-leftovers-20261108.md), Environment):

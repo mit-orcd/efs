@@ -1,7 +1,7 @@
 # Budget refit of the rows citing withdrawn hosts (Task EN)
 
 Task EN, Nov 9 2026, devel `33cd0a839` (wave 65), budgets commit
-`c25975a36`. Purpose: since Nov 3 the project has only fstor007 and
+`c25975a36`; merged into devel in wave 67 (Nov 9). Purpose: since Nov 3 the project has only fstor007 and
 node9900, yet 102 rows of `tests/budgets.tsv` still justified their budget
 with measurements from amd, intel1, intel2, xorinox or nuc. This page refits
 those rows from the 14 merge gates of waves 60 to 65 (`make test-all`,

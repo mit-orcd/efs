@@ -1,6 +1,6 @@
 # The seven sequence test binaries on the sanitizer lists (Task EM)
 
-Task EM, Nov 9 2026, node9900, devel `33cd0a839` (wave 65). Purpose: Task EE
+Task EM, Nov 9 2026, node9900, devel `33cd0a839` (wave 65); merged into devel in wave 67 (Nov 9). Purpose: Task EE
 ([review of the Nov 9 feedback](review-feedback-nov9-20261109.md)) noted that
 the seven sequence binaries that Task EG gave a case filter
 ([case filter](test-case-filter-20261109.md)) were not on the ASan or TSan
