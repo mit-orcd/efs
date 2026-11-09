@@ -73,7 +73,7 @@
     "scripts/build-code-graph.py": 21,
     "scripts/calibrate_test_budgets.sh": 7,
     "scripts/check_doc_links.py": 6,
-    "scripts/check_guide_counts.py": 3,
+    "scripts/check_guide_counts.py": 6,
     "scripts/check_include_boundary.py": 5,
     "scripts/check_k_register.py": 4,
     "scripts/client.sh": 14,
@@ -1584,7 +1584,7 @@
     "scripts/build-code-graph.py": "9fc67ce1e5866dd68709caec57766474a012b203116738c0e48126008d6e1b38",
     "scripts/calibrate_test_budgets.sh": "26d0675574f0749aeb33127f7c390bdcbb7d2beee6b6adbb48dae840972bd51d",
     "scripts/check_doc_links.py": "3cc40133ba30aef5ac48df7e9adbdcb7c6a32d5c9385b24acbba0b3d5c18e37d",
-    "scripts/check_guide_counts.py": "04b83f8b942d8623da091ce4385a4d08ff3d57b11e610945c1b6288574b71d4c",
+    "scripts/check_guide_counts.py": "95a7927177d14e79669e363441f80da78d87db40c5fce762d4cf42cea64c5bf9",
     "scripts/check_include_boundary.py": "138b840b33146e7c9c8d08d46d01a6f14d3926da23a95b7e07b8eebf70f54e83",
     "scripts/check_k_register.py": "bee7eea3696a7bd0559b00545e8c87e3223b12d9a1c6b272cc324c4936ee4391",
     "scripts/client.sh": "155b5db39a1e7e0375c38421748753eb8cce5b2ccadba0484ccea6937b24998a",
@@ -1894,7 +1894,7 @@
     "src/client/commands/source.h": "bc3906cf9a34b633296df88a44cfce37fa63d21d9eb371fb35d64b6f6b6db2a4",
     "src/client/data_commit.c": "f3c525150a87d5478144362b6953c27e98360e2a92bb555b9bd1ce085deefe56",
     "src/client/efs_bench.c": "e38489e479ef90276fce08dbd75c215c188ef8a1f204beea7d62a56bbdef617a",
-    "src/client/efs_fuse/README.md": "dd29ba463ebb0b7574ce967460141f29be8a3bb57636c5fa45c609c2efcda4f9",
+    "src/client/efs_fuse/README.md": "0c6a619207b69fc26fe9188d6eb5b6a6185b8144bf04a75e1b93e937d7e608ac",
     "src/client/efs_fuse/append.c": "97993e14d06370959076961e6536236fcb3b7d8b8da18acdef0075515c10654e",
     "src/client/efs_fuse/append.h": "78830a1fabb8a6158f1edf46e19d90053829450e27dd0a5469a0d73952279a15",
     "src/client/efs_fuse/find_res.c": "743e3ae0cbe76c8558f379e311b877bf65e509490519df2a5c5f0a9dbbdab96f",
@@ -1990,7 +1990,7 @@
     "src/meta/dir_spread.c": "00d269227fc1245845be38762208b0fbb2c17ebd6a10a83939085ccc33b3cd9f",
     "src/meta/expiry.c": "cad7f4708247f4521cc2d0e15a4129260d2392acb38e50871dfa0806ec570941",
     "src/meta/lock.c": "6ff545baf1fb74ff42f5fb9743b6a6f6dfc900a27c8c5fe5f1f167099690dfe0",
-    "src/meta/meta_apply/README.md": "07343efecd96c75bde76553f02358ef9bf5537a758973c6673b3a7adcb1db7ca",
+    "src/meta/meta_apply/README.md": "ab94541ae067762f100bf003d486fe2f8bf71dd0243441c89d4681f049bb82e7",
     "src/meta/meta_apply/append.c": "189c553354f5852cf1b8077bdb51e6aa8fee89a7b049ceb2c15699dd6f3c9170",
     "src/meta/meta_apply/append.h": "fd850b4eebfcb6b42c4491b1fa772faba6ef560d56b2646ea9c6882e1a6f3c7e",
     "src/meta/meta_apply/apply_internal.h": "ac96d09fd74f49177accd3f61ad1d60ff60cf7e42cf1fab2aeefe473e0a28b12",
@@ -2999,10 +2999,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1793
+    "calls": 1795
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "0c454bf5ff07fc07b4b803981be40620a15a7c0a"
+  "source_commit": "a077ef6391285fe321795a44dffb2cf46982306d"
 }

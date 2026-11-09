@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `0c454bf5ff07fc07b4b803981be40620a15a7c0a`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 18,546 nodes, 77,249 directed typed edges, 605 communities.
+Source base: `a077ef6391285fe321795a44dffb2cf46982306d`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 18,549 nodes, 77,444 directed typed edges, 601 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,23 +19,23 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27579
+- `calls`: 27582
 - `case_of`: 118
-- `contains`: 27451
+- `contains`: 27456
 - `contract`: 44
 - `defines`: 1979
 - `documents_finding`: 8
 - `exercises`: 7
 - `guided_by`: 178
 - `implemented_by`: 138
-- `imports`: 8109
+- `imports`: 8110
 - `imports_from`: 995
-- `indirect_call`: 752
+- `indirect_call`: 753
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 3132
+- `mentions_symbol`: 3316
 - `method`: 645
-- `rationale_for`: 1410
+- `rationale_for`: 1411
 - `references`: 2220
 - `references_path`: 1259
 - `regression_for`: 8
@@ -50,7 +50,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1793}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1795}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 Component nodes come from the source layout and scripts/tests_for.py's answer over the test catalogue (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage; a route inherited from the parent tag is INFERRED with evidence_method inherited:<parent>.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
