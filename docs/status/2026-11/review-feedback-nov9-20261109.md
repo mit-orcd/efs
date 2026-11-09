@@ -272,8 +272,10 @@ wall time next to a bare run), `./tests/test_meta_apply --list` prints 95
 names, `./tests/test_meta_apply publsh` exits 2; the same three checks on
 each of the other six binaries; a bare run of every changed binary passes
 unchanged; fstor007 `make test` rc 0 and `python3 scripts/tests_for.py
-meta/meta_apply --run` rc 0 after `make all`; `tests/sanitizer_check.sh`'s
-TSan entry for `test_meta_apply` passes; `testing.md` gets one paragraph
+meta/meta_apply --run` rc 0 after `make all` and the `TEST_SPECIAL_BINS`
+of `make test-long` (Task EB's note: `--run` fails on the first test-long
+row without them); `test_meta_apply` is on no `tests/sanitizer_check.sh`
+list, so no sanitizer run is owed; `testing.md` gets one paragraph
 under the catalogue text: how to list and run the cases of one binary, and
 that the catalogue row is the whole binary. Record on the page the line
 count of `test_publish` plus `test_publish_stale_then_retry` against the
@@ -355,7 +357,11 @@ reader's decision matches the reference, the diff is in `main.c` only, and
 the named test passes on node9900. A case added to
 `tests/test_open_interface.c` would be the wrong place (that is the owner's
 test of `open.h`, not of the unmount path); the recorder notes which test
-the reader chose and whether it had to be pointed elsewhere.
+the reader chose and whether it had to be pointed elsewhere. If the
+reference answer is that neither the pass nor the report is owed, question
+1 becomes the report line alone (unmount names `retained-releases` and
+`wb-pending` as the stop path does), the page says this is a diagnostic
+like EB's item 5, and question 2 is the measured real fix.
 
 Question 2, the cross-component investigation: "After a leader change the
 GC reaper's pending watermark for an anchor exceeds the number of live GC
@@ -372,8 +378,8 @@ before the scan, called from the reaper, and a case that shows the count
 without the call and with it. Correctness: the reader names both files and
 the derive line, the fix is upward-only safe (no record missed), the case
 fails without the call and passes with it, `./tests/test_meta_apply
-gc_pending` (EG's filter) and `make test` pass on node9900, TSan
-`test_meta_apply` passes.
+gc_pending` (EG's filter) and `make test` pass on node9900
+(`test_meta_apply` is on no sanitizer list; none is owed).
 
 Record per question: lines opened and needed by category (guide, interface,
 implementation, callers, tests, navigation) as the EB page counts them;
