@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `df4eb8853ee6b341b00e8fd8062ac284c11296bf`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 18,584 nodes, 76,842 directed typed edges, 580 communities.
+Source base: `dcc9743489b87669cced020199f79a0ecfbbfae5`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 18,595 nodes, 76,970 directed typed edges, 581 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,27 +19,27 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27463
+- `calls`: 27580
 - `case_of`: 118
-- `contains`: 27467
+- `contains`: 27497
 - `contract`: 44
 - `defines`: 1999
 - `documents_finding`: 8
 - `exercises`: 7
 - `guided_by`: 178
 - `implemented_by`: 138
-- `imports`: 8135
-- `imports_from`: 997
+- `imports`: 8123
+- `imports_from`: 995
 - `indirect_call`: 753
 - `inherits`: 17
 - `invokes`: 2
 - `mentions_symbol`: 3130
 - `method`: 645
-- `rationale_for`: 1414
-- `references`: 2219
-- `references_path`: 1261
+- `rationale_for`: 1412
+- `references`: 2220
+- `references_path`: 1259
 - `regression_for`: 8
-- `tested_by`: 735
+- `tested_by`: 733
 - `uses`: 96
 
 ## Extraction warnings
@@ -50,7 +50,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1801}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1800}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 Component nodes come from the source layout and the test catalogue's rows (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
