@@ -20,13 +20,15 @@ publication stage (`pub_stage.c`, `efs_meta_pub_stage_visible` in
 | State | Meaning | Who can read it |
 |---|---|---|
 | **staged** | Written into the apply thread's scope, not yet in the committed table | Only the applying thread (`apply_scope` is `__thread`; `lookup`/`merge_scan` in `kv_lsm.c` read `apply_scope.mt` while `apply_staging(l)` holds) |
-| **committed** | `efs_kv_lsm_apply_end` wrote the scope's items plus the apply cursor as one atomic WAL record (`lsm_batch`) and released the writers lock | Every reader, including a table scan on another thread (`lsm_scan_from` takes `lsm_rlock`, not the writers lock, and so sees "the old committed table" until then: `kv_lsm.h`) |
+| **committed** | `efs_kv_lsm_apply_end` wrote the scope's items plus the apply cursor as one atomic WAL record (`lsm_batch`) and released the writers lock | Every reader, including a table scan on another thread (`lsm_scan_from` takes `lsm_rlock`, a read hold on `l->view_rw` in `kv_lsm_internal.h`, not `l->writers`, and so sees "the old committed table" until then: `kv_lsm.h`) |
 | **visible** (to a derived counter) | The counter's delta was noted (`efs_meta_gc_pending_note`, `degraded_note`, both in `gc.c`) | Any thread at once, through `efs_meta_gc_pending_peek` / `efs_meta_degraded_count_peek`, under the counter's leaf mutex |
 
-The note is not tied to the commit. Every note runs on the apply thread
-inside the scope, so a counter can show a row that is still only staged,
-and an aborted scope (`efs_kv_lsm_apply_end` with a NULL cursor) discards
-the rows but not the note.
+The note is not tied to the commit. In efsd every note runs on the apply
+thread inside the scope: each noting function (step 4 below) is reached
+only from an `apply_*_cmd` that `host_apply_dispatch` calls (grep of
+`src/` callers; `src/sim/` calls them on its own). So a counter can show a
+row that is still only staged, and an aborted scope (`efs_kv_lsm_apply_end`
+with a NULL cursor) discards the rows but not the note.
 
 ## The sequence of one apply
 
@@ -51,18 +53,21 @@ at a time.
      (its comment: "at queue time, not batch commit");
      `efs_meta_apply_degraded_clear` notes `+1` for a new GC record before
      its `meta_write_batch`.
-   - GC retire: `sweep.c` notes `-1` after its `meta_write_batch`.
+   - GC retire: `gc_ack_apply` (`sweep.c`) notes `-1` after its `meta_write_batch`.
    - Degraded mark: `degraded_note(+1)` after `meta_write_batch` in
      `efs_meta_apply_degraded_mark` and `efs_meta_apply_recovery_mark`;
-     `-1` after `efs_meta_apply_degraded_clear`'s batch when the mark was found; the publish path (`publish.c`) notes the
-     net after `meta_write_batch_as`, skipped for a dry PREPARE.
+     `-1` after `efs_meta_apply_degraded_clear`'s batch when the mark was found; `publish_inner_as` (`publish.c`) notes the
+     net after `meta_write_batch_as`, skipped for a dry PREPARE (its
+     `gc_queue` GC note has no dry check).
    Known count: the delta is applied (clamped at 0). Unknown count: a
    positive delta is added to both `*_pos` and `*_cur`; a negative one is
    dropped (`efs_meta_gc_pending_note`, `degraded_note`).
 5. **Commit or abort.** `host_apply` calls `efs_kv_lsm_apply_end` with the
    apply cursor when the verdict is `EFS_OK`, else with NULL. With a cursor
    it commits every staged item plus the cursor in one `lsm_batch` call
-   (one WAL record); with NULL nothing staged escapes. It then clears the
+   (one WAL record); with NULL nothing staged escapes. Committed means
+   readable, not yet fsynced: per `kv_lsm.h`, under a sync hold the WAL
+   write is not fsynced until the last `efs_kv_lsm_sync_release`. It then clears the
    scope and releases `l->writers`. Only after this do scans on other
    threads see the rows.
 
@@ -98,8 +103,10 @@ the live ones. So `begin` keeps only the latest apply's notes (`*_cur`,
 maybe still staged) and the notes made during the scan; derive adds them
 to the committed scan. The result may overshoot by those notes (a row the
 latest apply committed before the scan read it, or an aborted apply's
-note), never miss a row. An overshoot costs bounded extra scans
-(`gc.c` comments); it is the only accepted drift.
+note), never miss a row inserted while unknown. An overshoot costs
+bounded extra scans (`gc.c` comments); it is the only accepted drift.
+Not covered: a lower noted while the count is known, in an apply that
+then aborts (the note stays, the row stays).
 
 ## Worked example 1: the follower tenure counted twice
 
