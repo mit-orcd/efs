@@ -52,7 +52,8 @@ row, blocks alpha: no** (Nov 9, branch `claude/eager-sammet-10c74c` on devel
 | `make docs-check` | rc 0 |
 | `python3 scripts/check_doc_links.py` | 0 dangling, 0 orphan |
 | `python3 scripts/check_guide_counts.py` | 13 guides match |
-| `python3 tests/test_code_graph.py` | see the graph commit; rc 0 |
+| `sh scripts/rebuild-code-graph.sh`, `python3 tests/test_code_graph.py` | rc 0; PASS, 10 tests OK |
+| `graphify explain server/raft_host --all` and the `host_apply`, `efs_meta_gc_pending_begin`, `efs_meta_degraded_count_begin` symbols | the page's sections appear as `mentions_symbol` on the symbols; `graphify query "apply visibility staged committed visible"` finds the page |
 | `make all` | fails on Mac before this change's files: `src/common/log_ts.c` (`fopencookie`) and `raft_host.c` (`sys/eventfd.h`) are Linux-only |
 | `make src/meta/meta_apply/gc.o` (includes the edited header) | rc 0 |
 | `python3 tests/csrc.py` | `csrc self-check ok` |
@@ -61,6 +62,7 @@ Reproduce: check out the branch and run the commands above.
 
 ## Not done
 
+- `graphify explain meta/meta_apply` and `graphify explain server/raft_host` do not list the page. `guided_by` is made only from the component's own `README.md` (`scripts/build-code-graph.py`, the component loop), and a Markdown link in that README makes no edge; listing the page needs a builder change, which this docs-only task did not make.
 - No Linux build of `raft_host.c`; the change there is a comment.
 - Not examined: whether a negative note in an apply that then aborts
   (`efs_kv_lsm_apply_end` with NULL) can lower a known count below the
