@@ -157,7 +157,9 @@ every tag, comma-separated (`client/write,client/efs_fuse.release`).
 `python3 scripts/tests_for.py SUBSYSTEM` prints the commands of a subsystem
 and its dotted components, each once; a real component (a `src/` file or
 directory) with no row of its own gets its parent's rows with a note on
-stderr, and a name that is neither a tag nor a source file is refused (exit
+stderr, a function prefix that the catalogue's `# prefixes` line declares
+(`server/raft_host.publish`) with no rows lists nothing (exit 1), and a name
+that is neither a tag, a declared prefix nor a source file is refused (exit
 2); add `--run` to run them after `make all`.
 
 Every `test-long` command has a row in `tests/budgets.tsv` (W160): the

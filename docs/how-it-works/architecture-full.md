@@ -12752,7 +12752,8 @@ Each `src/<dir>/` has a `README.md` that is the component's entry point: read
 it before the source. It holds exactly five sections, at most 80 lines, linking
 to contracts rather than restating them: Files, Contract, Calls, Tests (the
 `scripts/tests_for.py` commands) and Open findings. `make docs-check` fails when
-a directory lacks the file or a heading.
+a directory lacks the file or a heading, and when a count or command a guide
+states disagrees with `tests_for.py` (`scripts/check_guide_counts.py`).
 
 **Rules that enforce it:**
 

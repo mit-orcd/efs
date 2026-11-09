@@ -436,6 +436,7 @@ docs-check:
 	python3 docs/check-architecture.py
 	python3 scripts/check_include_boundary.py
 	python3 scripts/check_doc_links.py
+	python3 scripts/check_guide_counts.py
 
 # Developer navigation validation needs the pinned graphify environment and a
 # real Git index, unlike archived Linux code-gate trees. Keep it explicit.
