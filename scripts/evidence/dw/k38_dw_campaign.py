@@ -25,7 +25,10 @@ from concurrent.futures import ThreadPoolExecutor
 SSH = os.environ.get('DW_SSH', 'ssh')
 BIN = os.environ.get('DW_BIN', '/home/erbmi1/efs-taskDW/bin')
 ART = os.environ.get('DW_ART', '/home/erbmi1/efs-artifacts/taskDW-20261107')
-RUNROOT, STOREROOT, TMP = '/tmp/efs-taskDW', '/data1/01/erbmi1/efs-taskDW', '/tmp/efs-taskDW-tmp'
+# DW_RUNROOT, DW_STOREROOT and DW_TMP move the per-host trees (Task EY keeps stores off /data1).
+RUNROOT = os.environ.get('DW_RUNROOT', '/tmp/efs-taskDW')
+STOREROOT = os.environ.get('DW_STOREROOT', '/data1/01/erbmi1/efs-taskDW')
+TMP = os.environ.get('DW_TMP', '/tmp/efs-taskDW-tmp')
 PORT = 18432
 SERVERS = {1: ('fcstor012', '172.16.223.66'), 2: ('fcstor013', '172.16.223.67'),
            3: ('fcstor014', '172.16.223.68')}
