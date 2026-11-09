@@ -2120,7 +2120,7 @@
     "src/wire/README.md": "26ee1152e7099e9c2979aa7c9c7c8ba541cc7b5f11dec76317d99a7196825baf",
     "src/wire/wire.c": "1ec4eae9cc90ae4b4f9ce1668f478f2710b36a5391e8cf4b09b8a839f6ddd626",
     "tests/b6_full_oracle.py": "21603c554fb69fca8728a13dddde8fb9d4b24874f27bfe58ed9b09e87ca6d9a3",
-    "tests/budgets.tsv": "df6e8594cae7eddfb69bb385f8618c996af02696346fd5eb650ecce072142445",
+    "tests/budgets.tsv": "50b21c5f8e79664ac78777fdbe94e85b6b2ba6b98813614f2b3a1519c2ec68fc",
     "tests/clean_cluster.sh": "46985882b3a9503f3a3da4cd138dda21ea4cacc04211fbb1d9d312f54280b2ed",
     "tests/cluster.sh": "606f5dba9552323a0b0d0bad91e40d6e74a98f55a8c4dbcfa3253f60468d3304",
     "tests/csrc.py": "f8b9332fc08de3b3317969c3f6c6c74717d191ed71dfa3629f4add4af3457934",
@@ -3028,5 +3028,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "df4eb8853ee6b341b00e8fd8062ac284c11296bf"
+  "source_commit": "a0cb7494b177b1f20534436980340e1bffae18a7"
 }
