@@ -7238,102 +7238,152 @@ static void test_pack_index_cursor(void)
     efs_kv_mem_free(kv);
 }
 
-int main(void)
+/* Case filter: with no argument every case runs; otherwise a case runs when
+ * some argument is a substring of its name.  --list prints the case names and
+ * exits 0; an argument that matches no case exits 2, so a misspelling is not
+ * a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
 {
-    test_trunc_sweep();
-    test_truncate_lazy();
-    test_lane_adoption();
-    test_reaped_sweep_no_gc();
-    test_reap_cleanup_deferred();
-    test_create_negative_replay();
-    test_gc_last_close_before_resolve();
-    test_orphan_unlink();
-    test_create_initial_lease_atomic();
-    test_stored_decode_owner();
-    test_create_lookup_unlink();
-    test_xattr();
-    test_mkdir();
-    test_mkdir_group_affinity();
-    test_create_remote_parent();
-    test_create_log_at_matches();
-    test_alloc_skips_live();
-    test_alloc_skips_retired_version();
-    test_mkdir_log_at_matches();
-    test_create_log_at_dup_hint();
-    test_alloc_vs_txn_intent();
-    test_log_delete_busy_under_intent();
-    test_i9();
-    test_batch_fail();
-    test_i16_durable();
-    test_publish();
-    test_cas_i20_i21();
-    test_publish_stale_then_retry();
-    test_chunk_deltas();
-    test_epoch_i22();
-    test_evidence();
-    test_i8_spread();
-    test_row_attrs();
-    test_readdir_local();
-    test_readdir_tombstone_budget();
-    test_readdir_spread();
-    test_readdir_lane0();
-    test_readdir_concurrent_split();
-    test_readdir_intra_page_split();
-    test_setattr_mode_owner();
-    test_stat_collect();
-    test_stat_committed_unresolved_row();
-    test_lookup_committed_unresolved_dentry();
-    test_readdir_intent_frontier();
-    test_readdir_migration_participant_cuts();
-    test_stat_fence_and_gen();
-    test_stat_dir_hashed();
-    test_utimens_fence();
-    test_writer_authority_view();
-    test_writer_lane_authority();
-    test_lane_local_writer_views();
-    test_lane_sweep_bounded();
-    test_sparse_grow_tail_epoch();
-    test_truncate_range_del();
-    test_cross_group_lane();
-    test_lane_epoch_never_lags();
-    test_append_reserve();
-    test_truncate_append_cursor();
-    test_link_nlink();
-    test_rmdir_rename();
-    test_export_salt();
-    test_export_salt_anchor();
-    test_symlink();
-    test_dir_rename();
-    test_rename_cross_dir();
-    test_rename_hashed();
-    test_unlink_hashed();
-    test_rmdir_hashed();
-    test_link_hashed();
-    test_link_splitting();
-    test_rename_splitting();
-    test_lookup_path();
-    test_gc_reap();
-    test_reap_bounded_exact_keys();
-    test_gc_fold_live_alias();
-    test_content_fence_prepared_writers();
-    test_w36_split_source_snapshots();
-    test_reserved_prepare_kind();
-    test_w36_unlink_before_rename_prepare();
-    test_content_fence_reductions_commute();
-    test_content_fence_history();
-    test_content_fence_sweep_cas();
-    test_writer_authority_race();
-    test_content_fence_view_race();
-    test_gc_delta_batch_boundary();
-    test_gc_tail_alias();
-    test_gc_watermark();
-    test_degraded_marks();
-    test_recovery_marks();
-    test_degraded_mark_after_publish();
-    test_publication_receipt_stale_retire();
-    test_pub_stage_record();
-    test_mtime_capture_execute();
-    test_pack_index_cursor();
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
+    }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
+    RUN(test_trunc_sweep);
+    RUN(test_truncate_lazy);
+    RUN(test_lane_adoption);
+    RUN(test_reaped_sweep_no_gc);
+    RUN(test_reap_cleanup_deferred);
+    RUN(test_create_negative_replay);
+    RUN(test_gc_last_close_before_resolve);
+    RUN(test_orphan_unlink);
+    RUN(test_create_initial_lease_atomic);
+    RUN(test_stored_decode_owner);
+    RUN(test_create_lookup_unlink);
+    RUN(test_xattr);
+    RUN(test_mkdir);
+    RUN(test_mkdir_group_affinity);
+    RUN(test_create_remote_parent);
+    RUN(test_create_log_at_matches);
+    RUN(test_alloc_skips_live);
+    RUN(test_alloc_skips_retired_version);
+    RUN(test_mkdir_log_at_matches);
+    RUN(test_create_log_at_dup_hint);
+    RUN(test_alloc_vs_txn_intent);
+    RUN(test_log_delete_busy_under_intent);
+    RUN(test_i9);
+    RUN(test_batch_fail);
+    RUN(test_i16_durable);
+    RUN(test_publish);
+    RUN(test_cas_i20_i21);
+    RUN(test_publish_stale_then_retry);
+    RUN(test_chunk_deltas);
+    RUN(test_epoch_i22);
+    RUN(test_evidence);
+    RUN(test_i8_spread);
+    RUN(test_row_attrs);
+    RUN(test_readdir_local);
+    RUN(test_readdir_tombstone_budget);
+    RUN(test_readdir_spread);
+    RUN(test_readdir_lane0);
+    RUN(test_readdir_concurrent_split);
+    RUN(test_readdir_intra_page_split);
+    RUN(test_setattr_mode_owner);
+    RUN(test_stat_collect);
+    RUN(test_stat_committed_unresolved_row);
+    RUN(test_lookup_committed_unresolved_dentry);
+    RUN(test_readdir_intent_frontier);
+    RUN(test_readdir_migration_participant_cuts);
+    RUN(test_stat_fence_and_gen);
+    RUN(test_stat_dir_hashed);
+    RUN(test_utimens_fence);
+    RUN(test_writer_authority_view);
+    RUN(test_writer_lane_authority);
+    RUN(test_lane_local_writer_views);
+    RUN(test_lane_sweep_bounded);
+    RUN(test_sparse_grow_tail_epoch);
+    RUN(test_truncate_range_del);
+    RUN(test_cross_group_lane);
+    RUN(test_lane_epoch_never_lags);
+    RUN(test_append_reserve);
+    RUN(test_truncate_append_cursor);
+    RUN(test_link_nlink);
+    RUN(test_rmdir_rename);
+    RUN(test_export_salt);
+    RUN(test_export_salt_anchor);
+    RUN(test_symlink);
+    RUN(test_dir_rename);
+    RUN(test_rename_cross_dir);
+    RUN(test_rename_hashed);
+    RUN(test_unlink_hashed);
+    RUN(test_rmdir_hashed);
+    RUN(test_link_hashed);
+    RUN(test_link_splitting);
+    RUN(test_rename_splitting);
+    RUN(test_lookup_path);
+    RUN(test_gc_reap);
+    RUN(test_reap_bounded_exact_keys);
+    RUN(test_gc_fold_live_alias);
+    RUN(test_content_fence_prepared_writers);
+    RUN(test_w36_split_source_snapshots);
+    RUN(test_reserved_prepare_kind);
+    RUN(test_w36_unlink_before_rename_prepare);
+    RUN(test_content_fence_reductions_commute);
+    RUN(test_content_fence_history);
+    RUN(test_content_fence_sweep_cas);
+    RUN(test_writer_authority_race);
+    RUN(test_content_fence_view_race);
+    RUN(test_gc_delta_batch_boundary);
+    RUN(test_gc_tail_alias);
+    RUN(test_gc_watermark);
+    RUN(test_degraded_marks);
+    RUN(test_recovery_marks);
+    RUN(test_degraded_mark_after_publish);
+    RUN(test_publication_receipt_stale_retire);
+    RUN(test_pub_stage_record);
+    RUN(test_mtime_capture_execute);
+    RUN(test_pack_index_cursor);
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);
         return 1;

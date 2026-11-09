@@ -1344,31 +1344,81 @@ static void test_apply_allocator_reservation(void)
     efs_kv_mem_free(kv);
 }
 
-int main(void)
+/* Case filter: with no argument every case runs; otherwise a case runs when
+ * some argument is a substring of its name.  --list prints the case names and
+ * exits 0; an argument that matches no case exits 2, so a misspelling is not
+ * a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
 {
-    test_apply_allocator_reservation();
-    test_atomic_prepare_pair();
-    test_atomic_prepare_triple_bounds();
-    test_full_fence_transaction();
-    test_exact_value_prepare();
-    test_exact_prepare_bounds();
-    test_extended_guard_reduce_envelopes();
-    test_opid_reduce();
-    test_opid_pending_bounds();
-    test_committed_pending_receipt();
-    test_scan_pending();
-    test_excl_conflict_i16();
-    test_i17_visible_at_decision();
-    test_i9();
-    test_reduce_no_block();
-    test_pending_recheck();
-    test_guard_vs_excl();
-    test_cas_unversioned();
-    test_abort_old_value();
-    test_ino_delta_commutes();
-    test_ino_delta_vs_excl_guard();
-    test_lane_fold_preserves_tail();
-    test_apply_prepare_wire();
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
+    }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
+    RUN(test_apply_allocator_reservation);
+    RUN(test_atomic_prepare_pair);
+    RUN(test_atomic_prepare_triple_bounds);
+    RUN(test_full_fence_transaction);
+    RUN(test_exact_value_prepare);
+    RUN(test_exact_prepare_bounds);
+    RUN(test_extended_guard_reduce_envelopes);
+    RUN(test_opid_reduce);
+    RUN(test_opid_pending_bounds);
+    RUN(test_committed_pending_receipt);
+    RUN(test_scan_pending);
+    RUN(test_excl_conflict_i16);
+    RUN(test_i17_visible_at_decision);
+    RUN(test_i9);
+    RUN(test_reduce_no_block);
+    RUN(test_pending_recheck);
+    RUN(test_guard_vs_excl);
+    RUN(test_cas_unversioned);
+    RUN(test_abort_old_value);
+    RUN(test_ino_delta_commutes);
+    RUN(test_ino_delta_vs_excl_guard);
+    RUN(test_lane_fold_preserves_tail);
+    RUN(test_apply_prepare_wire);
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     if (failures) {
         fprintf(stderr, "test_txn: %d failure(s)\n", failures);
         return 1;

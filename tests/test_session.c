@@ -1432,36 +1432,86 @@ static void test_epoch_bound_finish(void)
     efs_kv_mem_free(kv);
 }
 
-int main(void)
+/* Case filter: with no argument every case runs; otherwise a case runs when
+ * some argument is a substring of its name.  --list prints the case names and
+ * exits 0; an argument that matches no case exits 2, so a misspelling is not
+ * a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
 {
-    test_epoch_bound_finish();
-    test_legacy_sequenced_handoff();
-    test_accept_refusals();
-    test_legacy_lease_prepared();
-    test_guarded_retire_cold();
-    test_deferred_close_empty_proof();
-    test_deferred_close_identity();
-    test_deferred_adoption_no_cleanup();
-    test_bounded_session_cleanup();
-    test_pending_create_session_fence();
-    test_prepared_owner_fence();
-    test_prepared_owner_cold();
-    test_pending_adoption_permutations();
-    test_guarded_edge_permutations();
-    test_guarded_malformed_ownership();
-    test_guarded_lease_edges();
-    test_guarded_pending_and_fence();
-    test_guarded_retire_missing_authority();
-    test_guarded_window_bound();
-    test_negative_create_cold();
-    test_pending_cold_edges();
-    test_pending_create_ownership();
-    test_register_and_fence();
-    test_registered_before_establish_fence();
-    test_register_establish();
-    test_i19_lease();
-    test_unlink_no_lease();
-    test_fence_drops_opid();
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
+    }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
+    RUN(test_epoch_bound_finish);
+    RUN(test_legacy_sequenced_handoff);
+    RUN(test_accept_refusals);
+    RUN(test_legacy_lease_prepared);
+    RUN(test_guarded_retire_cold);
+    RUN(test_deferred_close_empty_proof);
+    RUN(test_deferred_close_identity);
+    RUN(test_deferred_adoption_no_cleanup);
+    RUN(test_bounded_session_cleanup);
+    RUN(test_pending_create_session_fence);
+    RUN(test_prepared_owner_fence);
+    RUN(test_prepared_owner_cold);
+    RUN(test_pending_adoption_permutations);
+    RUN(test_guarded_edge_permutations);
+    RUN(test_guarded_malformed_ownership);
+    RUN(test_guarded_lease_edges);
+    RUN(test_guarded_pending_and_fence);
+    RUN(test_guarded_retire_missing_authority);
+    RUN(test_guarded_window_bound);
+    RUN(test_negative_create_cold);
+    RUN(test_pending_cold_edges);
+    RUN(test_pending_create_ownership);
+    RUN(test_register_and_fence);
+    RUN(test_registered_before_establish_fence);
+    RUN(test_register_establish);
+    RUN(test_i19_lease);
+    RUN(test_unlink_no_lease);
+    RUN(test_fence_drops_opid);
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     if (failures) {
         fprintf(stderr, "test_session: %d failure(s)\n", failures);
         return 1;

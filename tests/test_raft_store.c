@@ -1082,30 +1082,81 @@ static void test_index64_bounds(void)
     rmtree(dir);
 }
 
-int main(void)
+/* Case filter: with no argument every case runs; otherwise a case runs when
+ * some argument is a substring of its name.  --list prints the case names and
+ * exits 0; an argument that matches no case exits 2, so a misspelling is not
+ * a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
 {
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
+    }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
     efs_test_own(efs_test_path(g_dir,sizeof(g_dir),"efs-raftstore-test-%d",(int)getpid()));
     rmtree(g_dir);
 
-    test_index64_bounds();
-    test_index_reserve_failure();
-    test_bounded_history_cache();
-    test_four_voter_permanent_loss();
-    for(int mode=0;mode<3;mode++){test_recv_batch_crash(0,mode);test_recv_batch_crash(1,mode);}
-    test_hard_state_foreign_hold();
-    test_matches_mem();
-    test_hold_covers_batch();
-    test_nested_hold_wait();
-    test_reopen();
-    test_truncate_persists();
-    test_torn_tail();
-    test_crash_durability();
-    test_reserved_tail();
-    test_rotation();
-    test_rotation_mixed_record_sizes();
-    test_raft_on_disk_store();
+    RUN(test_index64_bounds);
+    RUN(test_index_reserve_failure);
+    RUN(test_bounded_history_cache);
+    RUN(test_four_voter_permanent_loss);
+    if(run_case("test_recv_batch_crash"))
+        for(int mode=0;mode<3;mode++){test_recv_batch_crash(0,mode);test_recv_batch_crash(1,mode);}
+    RUN(test_hard_state_foreign_hold);
+    RUN(test_matches_mem);
+    RUN(test_hold_covers_batch);
+    RUN(test_nested_hold_wait);
+    RUN(test_reopen);
+    RUN(test_truncate_persists);
+    RUN(test_torn_tail);
+    RUN(test_crash_durability);
+    RUN(test_reserved_tail);
+    RUN(test_rotation);
+    RUN(test_rotation_mixed_record_sizes);
+    RUN(test_raft_on_disk_store);
 
     rmtree(g_dir);
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     if (failures) {
         fprintf(stderr, "test_raft_store: %d FAILURES\n", failures);
         return 1;
