@@ -1250,6 +1250,7 @@ void efs_meta_gc_pending_invalidate(uint32_t anchor);
 int64_t efs_meta_degraded_count_peek(uint32_t anchor);
 void efs_meta_degraded_count_derived(uint32_t anchor, uint64_t n);
 void efs_meta_degraded_count_invalidate(uint32_t anchor);
+void efs_meta_degraded_count_begin(uint32_t anchor);
 int efs_meta_degraded_count_zero_if(uint32_t anchor, int64_t expect);
 /* Clamp an upward drift: the GC thread calls this after a pass scanned
  * the anchor's whole prefix and found nothing. Fails (returns 0) if a

@@ -5657,6 +5657,7 @@ static void test_degraded_marks(void)
     CHECK(efs_meta_apply_degraded_clear(kv, &d, 1, &out) == EFS_OK &&
               out == EFS_META_DEGRADED_ABSENT, "clear replay is a no-op");
 
+
     /* A clear decided for other content never deletes a newer mark. */
     CHECK(dg_pub(kv, ino, 0xE5, 0xD4, 1, 0, 0, 0, 0, 5) == EFS_OK, "degraded E5");
     dg_from(kv, ino, 0xE5, 1, 6, &d); /* wrong checksum tag */
@@ -5725,6 +5726,38 @@ static void test_degraded_marks(void)
         key[19] = 1;
         CHECK(efs_meta_unpack_degraded(key, kl, val, sizeof(val), &d) == EFS_ERR_PROTO,
               "lane that does not match the chunk refused");
+    }
+    /* A mark applied while the count is unknown (a follower, before any
+     * pass) is in the rows the derive scan counts: it must not count twice,
+     * or the leader reports marks that are gone (k37 step 3, `Degraded
+     * chunks: 8` with every mark retired). An insert during the scan may
+     * still overshoot, never undershoot. */
+    {
+        efs_ino_t ino3 = 0;
+        uint32_t a3;
+        int64_t rows;
+
+        CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                         "dg-unknown", &ino3) == EFS_OK && ino3, "create 3");
+        a3 = efs_kv_anchor_shard(efs_kv_lane_shard(ino3, 0));
+        efs_meta_degraded_count_invalidate(a3);
+        CHECK(dg_pub(kv, ino3, 0x1E5, 0, 4, 0, 0, 0, 0, 7) == EFS_OK, "mark while unknown");
+        CHECK(efs_meta_degraded_count_peek(a3) == -1, "count unknown");
+        efs_meta_degraded_count_begin(a3);
+        rows = (int64_t)dg_scan(kv, a3).n;
+        efs_meta_degraded_count_derived(a3, (uint64_t)rows);
+        CHECK(rows >= 1 && efs_meta_degraded_count_peek(a3) == rows, "derived once, not twice");
+        dg_from(kv, ino3, 0x1E5, 4, 7, &d);
+        CHECK(efs_meta_apply_degraded_clear(kv, &d, 1, &out) == EFS_OK &&
+                  out == EFS_META_DEGRADED_CLEARED, "clear the unknown-time mark");
+        CHECK(efs_meta_degraded_count_peek(a3) == (int64_t)dg_scan(kv, a3).n,
+              "count follows the rows");
+        efs_meta_degraded_count_invalidate(a3);
+        efs_meta_degraded_count_begin(a3);
+        rows = (int64_t)dg_scan(kv, a3).n;
+        CHECK(dg_pub(kv, ino3, 0x1F6, 0x1E5, 4, 0, 0, 0, 0, 8) == EFS_OK, "mark during the scan");
+        efs_meta_degraded_count_derived(a3, (uint64_t)rows); /* the scan missed it */
+        CHECK(efs_meta_degraded_count_peek(a3) == rows + 1, "an insert during the scan is kept");
     }
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
