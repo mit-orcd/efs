@@ -74,7 +74,9 @@ def fence(cluster, ticket, via):
 
 
 def stored(work, nodes):
-    return sorted(str(p) for i in nodes for p in (work / f'n{i+1}').glob('data/exports/1/**/*') if p.is_file())
+    # os.walk skips a directory the orphan collector removes mid-walk; glob raised.
+    return sorted(os.path.join(d, f) for i in nodes
+                  for d, _, files in os.walk(work / f'n{i+1}/data/exports/1') for f in files)
 
 
 def main():
@@ -103,7 +105,9 @@ def main():
 
             # 1. control
             t = admit('control')
+            pre = set(stored(work, range(4)))
             assert put_status(cluster, t, 0) == ticket_put.OK
+            control_files = set(stored(work, range(4))) - pre  # the revoked fragment the collector may delete
             rc, out = fence(cluster, t, 1)
             assert rc == 0, out
             late_all_stale(t, 'control')
@@ -150,9 +154,14 @@ def main():
             while not cert.is_file() and time.monotonic() < end:
                 time.sleep(.05)
             assert cert.is_file(), 'the returned member did not seal the epoch it learned'
-            after = stored(work, [victim])
-            assert after == before, ('the returned member stored a revoked-epoch fragment (or its stored set changed)',
-                                     'added', sorted(set(after) - set(before)), 'removed', sorted(set(before) - set(after)))
+            after = set(stored(work, [victim]))
+            added, removed = sorted(after - set(before)), sorted(set(before) - after)
+            assert not added, ('the returned member stored a revoked-epoch fragment', added)
+            # Abandoned-upload collection (host_put_orphan_pass, D31) may delete the
+            # control's revoked fragment here once its holder is back; nothing else.
+            assert set(removed) <= control_files, ('a file other than the revoked control fragment was removed',
+                                                   removed, sorted(control_files))
+            print(f'(ii) stored set: added 0, removed {len(removed)} (revoked control fragment)', flush=True)
             print('(ii) member stopped cleanly: revoke rc=0; replay before any resync wait is STALE, certificate sealed, nothing stored PASS', flush=True)
 
             # 4. (iii) two members down, then (iv) resume
