@@ -747,15 +747,13 @@ selector are as on devel `33cd0a839` (no `tested_by` edge for
   before `efs_kv_lsm_apply_end` commits. A mark of the apply in flight can
   then be in neither the derive scan nor the count: an under-count by at
   most one apply's marks until the next derive, during which the rebuild
-  reaper may treat the anchor as clean. Not reproduced; no K row until it
-  is shown reachable (a follow-up should pin it with a case like
-  `test_gc_pending_follower_derive`'s in-flight check, and fix it with the
-  same `apply_start` mark).
+  reaper may treat the anchor as clean. Fixed on the follow-up branch, see
+  [degraded-count begin race](degraded-count-begin-race-20261109.md).
 
 ## Not done
 
 - No live cluster, no `make test-all`; TSan not run (none owed).
-- The degraded-count candidate above is recorded, not fixed or reproduced.
+- The degraded-count candidate above is fixed on a follow-up branch, not on this one.
 - Question 1's line is proved by no test: no harness drives a failed CLOSE
   edge into `efs_fuse_destroy`, and adding one was outside the main.c-only
   rule.
