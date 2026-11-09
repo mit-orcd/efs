@@ -1,6 +1,6 @@
 # W171 · Structure plan: less context per change
 
-**Status (Nov 9, Task EH): in progress; phases 1 and 2 landed except 2b,
+**Status (Nov 9, Task EV): in progress; phases 1 and 2 landed except 2b,
 four phase 3 pilots merged.** Source: devel `33cd0a839` (wave 65 merged
 Nov 9). Merge state: 1a, 1b and 2a merged in wave 53 (Nov 3), 1c and 2c in
 wave 54 (Nov 3); in phase 3 the `efs_fuse.c` split merged in wave 55 and
@@ -11,7 +11,15 @@ open-reference table (Task EB) in wave 64 (Nov 8), the `.find` result
 cache (Task EC, K101 fixed), the navigation leftovers (Task ED) and the
 ReadIndex entry map (Task DO) in wave 65 (Nov 9). Verdict: the two splits
 did not reduce the lines an agent must read; the three ownership pilots
-did (691 to 593, 640 to 543, 542 to 428 lines needed). Remaining
+reduced understanding lines needed (write-back 691 to 593, open table 640
+to 543, `.find` 542 to 428) while validation lines needed rose (306 to
+361, 178 to 427, 120 to 395), so total needed went 997 to 954, 818 to 970
+and 662 to 823, and lines opened 1,380 to 1,172, 1,856 to 1,586 and 972 to
+840. The numbers establish that the implementer needed less to understand
+a single-owner question once the state had one owner; they do not
+establish less total reading (the compiled interface tests add
+validation), nor that a cross-owner question stops at one owner, which the
+[blind reader](blind-reader-20261109.md) showed it does not. Remaining
 failures: none open; 2b, the `raft_host.c` split, waits on the
 `devel-w123-recovery` merge, which is the user's decision. Wave 66 (Nov 9)
 merged Tasks EF (graph and selector share one resolver), EH (this block),
@@ -224,7 +232,9 @@ match the table. Done: adding a setting edits one file.
   guide, one interface, one implementation file and the routed tests plus
   14 caller lines: lines needed 691 to 593, opened 1,074 to 767, source
   files 7 to 4, validation 306 to 361. First pilot in this plan to meet the
-  four target parts, except 14 lines of the caller the question names; next candidates are the other shared FUSE globals
+  four target parts (the target for a single-owner question; a
+  cross-owner question is measured by the
+  [reading-set measures](reading-set-baseline-20261104.md#measures-task-ev-nov-9)), except 14 lines of the caller the question names; next candidates are the other shared FUSE globals
   (`g_open_mu` and the open-ref table, `g_find_res`). Status Nov 9: both
   done ([Task EB](taskEB-review-followup-20261108.md),
   [Task EC](find-res-ownership-20261108.md)).
