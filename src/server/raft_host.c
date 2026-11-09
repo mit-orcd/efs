@@ -3598,6 +3598,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     int scope_rc=efs_kv_lsm_apply_begin(h->kv);
     if (scope_rc!=EFS_OK) rc=scope_rc;
     else {
+    efs_meta_gc_pending_apply_start(); /* D26: under the writers lock */
 #if EFS_FAULTS
     if ((cmd[0]==EFS_MD_CMD_APPEND_CATCHUP || cmd[0]==EFS_MD_CMD_PREPARE || cmd[0]==EFS_MD_CMD_DECIDE ||
          cmd[0]==EFS_MD_CMD_RESOLVE || cmd[0]==EFS_MD_CMD_DROP || cmd[0]==EFS_MD_CMD_TXN_BATCH) &&
@@ -11141,6 +11142,7 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     if (pend < 0) {
         uint64_t n = 0;
 
+        efs_meta_gc_pending_begin(anchor);
         src = efs_kv_scan_prefix(h->kv, prefix, plen, gc_count_cb, &n);
         if (src < 0) {
             __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);

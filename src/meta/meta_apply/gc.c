@@ -60,12 +60,15 @@ int efs_meta_unpack_reap(const uint8_t *p, uint32_t n, uint64_t *generation,
  * import); while unknown, inserts accumulate in gc_wm_pos and lowers are
  * dropped — the derive recounts live keys, so a dropped lower lands in
  * the count or not at all, never twice, and a folded insert may double
- * (upward only: an extra bounded scan, never a missed record). */
+ * (upward only: an extra bounded scan, never a missed record).
+ * gc_wm_cur holds the inserts noted since the latest apply began: the
+ * bump precedes its batch's commit, so begin keeps those, not zero. */
 #define GC_WM_ANCHOR_MAX 2
 
 static pthread_mutex_t gc_wm_mu = PTHREAD_MUTEX_INITIALIZER;
 static int64_t gc_wm_pending[GC_WM_ANCHOR_MAX + 1];
 static int64_t gc_wm_pos[GC_WM_ANCHOR_MAX + 1];
+static int64_t gc_wm_cur[GC_WM_ANCHOR_MAX + 1];
 static int gc_wm_known[GC_WM_ANCHOR_MAX + 1];
 
 void efs_meta_gc_pending_note(uint32_t anchor, int delta)
@@ -79,7 +82,33 @@ void efs_meta_gc_pending_note(uint32_t anchor, int delta)
             gc_wm_pending[anchor] = 0;
     } else if (delta > 0) {
         gc_wm_pos[anchor] += delta;
+        gc_wm_cur[anchor] += delta;
     }
+    pthread_mutex_unlock(&gc_wm_mu);
+}
+
+/* host_apply calls this once the apply scope holds the KV writers lock:
+ * applies are serialized there, so every insert noted earlier belongs to
+ * an apply that already committed. */
+void efs_meta_gc_pending_apply_start(void)
+{
+    pthread_mutex_lock(&gc_wm_mu);
+    memset(gc_wm_cur, 0, sizeof(gc_wm_cur));
+    pthread_mutex_unlock(&gc_wm_mu);
+}
+
+/* Call just before the derive scan. An insert noted before the latest
+ * apply began is committed, so the scan counts it if it is still live;
+ * only the latest apply's inserts (maybe not committed yet) and those
+ * noted during the scan are folded on top. A follower never derives, so
+ * without this a leader elected later added every record it ever applied. */
+void efs_meta_gc_pending_begin(uint32_t anchor)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return;
+    pthread_mutex_lock(&gc_wm_mu);
+    if (!gc_wm_known[anchor])
+        gc_wm_pos[anchor] = gc_wm_cur[anchor];
     pthread_mutex_unlock(&gc_wm_mu);
 }
 

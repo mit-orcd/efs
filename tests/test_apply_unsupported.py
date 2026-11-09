@@ -73,6 +73,7 @@ static void efs_raft_step_down(struct efs_raft *r){r->stepped++;}
 static void wr64be(uint8_t *p,uint64_t v){for(int i=7;i>=0;i--){p[i]=(uint8_t)v;v>>=8;}}
 static void host_mark_incomplete(struct host_group *g){g->kv_incomplete=1;}
 static void host_clear_incomplete(struct host_group *g){g->kv_incomplete=0;}
+static void efs_meta_gc_pending_apply_start(void){}
 static int verdict,dispatched;
 static int host_apply_dispatch(struct efs_raft_host *h,uint64_t index,uint64_t term,uint8_t group,
                                const uint8_t *cmd,uint32_t clen){
