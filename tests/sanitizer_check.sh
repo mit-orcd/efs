@@ -108,6 +108,9 @@ kv_lsm_concurrent|tests/test_kv_lsm_concurrent 4
 kv_lsm|tests/test_kv_lsm
 kv_reader_gate|tests/test_kv_reader_gate
 raft_store|tests/test_raft_store
+# Task EM: sequence binaries whose stores start KV compactor threads.
+meta_apply|tests/test_meta_apply
+session|tests/test_session
 reclaim|tests/test_reclaim
 query_disk_io|tests/test_query_disk_io
 query_delta|EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 tests/test_query_delta
@@ -208,6 +211,13 @@ retained_namespace_audit|tests/test_retained_namespace_audit
 wire|tests/test_wire
 kv_lsm|tests/test_kv_lsm
 raft|tests/test_raft
+# Task EM: the other sequence binaries (EG case filter; raft, sim and txn
+# start no thread, so they are on this list only).
+raft_store|tests/test_raft_store
+meta_apply|tests/test_meta_apply
+sim|tests/test_sim
+txn|tests/test_txn
+session|tests/test_session
 # Daemons: the removed-settings refusal (A6), K36 recovery scan pages, the
 # K37 segment audit and rebuild, and the D4 load (efsd and efs-fuse; LSan
 # at their clean exits).
