@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "df4eb8853ee6b341b00e8fd8062ac284c11296bf"
+      "source_commit": "c5f5e341ceb81d14135d98c790fe55e4380cbc3e"
     }
   },
   "links": [
@@ -662716,7 +662716,7 @@
       "relation": "defines",
       "source": "tests_sanitizer_check",
       "source_file": "tests/sanitizer_check.sh",
-      "source_location": "L260",
+      "source_location": "L270",
       "target": "tests_sanitizer_check_classify",
       "weight": 1.0
     },
@@ -662727,7 +662727,7 @@
       "relation": "defines",
       "source": "tests_sanitizer_check",
       "source_file": "tests/sanitizer_check.sh",
-      "source_location": "L153",
+      "source_location": "L156",
       "target": "tests_sanitizer_check_default_list_asan",
       "weight": 1.0
     },
@@ -662760,7 +662760,7 @@
       "relation": "defines",
       "source": "tests_sanitizer_check",
       "source_file": "tests/sanitizer_check.sh",
-      "source_location": "L283",
+      "source_location": "L293",
       "target": "tests_sanitizer_check_show_first",
       "weight": 1.0
     },
@@ -662772,7 +662772,7 @@
       "relation": "calls",
       "source": "tests_sanitizer_check_sh__entry",
       "source_file": "tests/sanitizer_check.sh",
-      "source_location": "L333",
+      "source_location": "L343",
       "target": "tests_sanitizer_check_classify",
       "weight": 1.0
     },
@@ -662784,7 +662784,7 @@
       "relation": "calls",
       "source": "tests_sanitizer_check_sh__entry",
       "source_file": "tests/sanitizer_check.sh",
-      "source_location": "L340",
+      "source_location": "L350",
       "target": "tests_sanitizer_check_show_first",
       "weight": 1.0
     },
@@ -1037860,7 +1037860,7 @@
         "language": "bash"
       },
       "source_file": "tests/sanitizer_check.sh",
-      "source_location": "L260"
+      "source_location": "L270"
     },
     {
       "_origin": "ast",
@@ -1037875,7 +1037875,7 @@
         "language": "bash"
       },
       "source_file": "tests/sanitizer_check.sh",
-      "source_location": "L153"
+      "source_location": "L156"
     },
     {
       "_origin": "ast",
@@ -1037920,7 +1037920,7 @@
         "language": "bash"
       },
       "source_file": "tests/sanitizer_check.sh",
-      "source_location": "L283"
+      "source_location": "L293"
     },
     {
       "_origin": "ast",
