@@ -2141,11 +2141,57 @@ static void test_tombstone_work_pages(void)
     efs_kv_lsm_close(kv);rmtree(g_dir);
 }
 
-int main(void)
+/* Case filter: with no argument every case runs; otherwise a case runs when
+ * some argument is a substring of its name.  --list prints the case names and
+ * exits 0; an argument that matches no case exits 2, so a misspelling is not
+ * a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
 {
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
+    }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
     efs_test_own(efs_test_path(g_dir,sizeof(g_dir),"efs-kvlsm-%d",(int)getpid()));
     rmtree(g_dir);
-    test_tombstone_work_pages();
+    RUN(test_tombstone_work_pages);
     if (getenv("EFS_TEST_KV_WORK_ONLY")) goto report;
     if (getenv("EFS_TEST_KV_APPLY_ONLY")) {test_apply_scope();goto report;}
     if (getenv("EFS_TEST_KV_SNAPSHOT_ONLY")) {
@@ -2159,40 +2205,44 @@ int main(void)
         goto report;
     }
 
-    test_decode_owner();
-    test_apply_scope();
+    RUN(test_decode_owner);
+    RUN(test_apply_scope);
     rmtree(g_dir);
-    test_semantics();
-    test_reopen_wal();
-    test_flush_and_levels();
-    test_scan_across_levels();
-    test_scan_from();
-    test_torn_tail();
-    test_crash_durability();
-    test_bulk_auto_compact();
-    test_kv_group_snap();
-    test_compact_full_l0();
-    test_l1_grows();
-    test_flush_nowait();
-    test_pinned_view();
-    test_peek_beside_reader();
-    test_peeks_during_flush();
-    test_peeks_during_compaction();
-    test_snapshot_scan_bounds();
-    test_full_snapshot();
-    test_snapshot_batch_cut();
-    test_metadata_dirty_hints();
-    test_cleanup_scope_hints();
-    test_cleanup_scope_apply();
-    test_durable_query_hints();
-    test_compact_lost_unlink();
-    test_sync_hold();
-    test_partitioned_flush();
-    test_view_export_overlap();
-    test_flush_with_unapplied_wal();
+    RUN(test_semantics);
+    RUN(test_reopen_wal);
+    RUN(test_flush_and_levels);
+    RUN(test_scan_across_levels);
+    RUN(test_scan_from);
+    RUN(test_torn_tail);
+    RUN(test_crash_durability);
+    RUN(test_bulk_auto_compact);
+    RUN(test_kv_group_snap);
+    RUN(test_compact_full_l0);
+    RUN(test_l1_grows);
+    RUN(test_flush_nowait);
+    RUN(test_pinned_view);
+    RUN(test_peek_beside_reader);
+    RUN(test_peeks_during_flush);
+    RUN(test_peeks_during_compaction);
+    RUN(test_snapshot_scan_bounds);
+    RUN(test_full_snapshot);
+    RUN(test_snapshot_batch_cut);
+    RUN(test_metadata_dirty_hints);
+    RUN(test_cleanup_scope_hints);
+    RUN(test_cleanup_scope_apply);
+    RUN(test_durable_query_hints);
+    RUN(test_compact_lost_unlink);
+    RUN(test_sync_hold);
+    RUN(test_partitioned_flush);
+    RUN(test_view_export_overlap);
+    RUN(test_flush_with_unapplied_wal);
 
 report:
     rmtree(g_dir);
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     if (failures) {
         fprintf(stderr, "test_kv_lsm: %d failure(s)\n", failures);
         return 1;

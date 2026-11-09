@@ -3626,60 +3626,110 @@ static void test_wall_heartbeat_coarse_pump(void)
     }
 }
 
-int main(void)
+/* Case filter: with no argument every case runs; otherwise a case runs when
+ * some argument is a substring of its name.  --list prints the case names and
+ * exits 0; an argument that matches no case exits 2, so a misspelling is not
+ * a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
 {
-    for (ack_window_fixture_mode=0;ack_window_fixture_mode<2;ack_window_fixture_mode++) {
-        test_wall_heartbeat_coarse_pump();
-        test_note_durable_without_apply();
-        test_second_ack_commit_probe();
-        test_readindex_control();
-        test_read_quorum_before_apply();
-        test_read_applied_floor();
-        test_follower_apply_retry();
-        test_recv_batch();
-        test_recv_batch_noop();
-        test_recv_batch_overlap();
-        test_election_i1();
-        test_ae_duplicate_ack_preserves_newer_window();
-        test_ae_full_window_not_resent_per_propose();
-        test_commit_probe_overtakes_batch();
-        test_step_down_no_campaign();
-        test_replicate_and_readindex();
-        test_readindex_outstanding_batch();
-        test_read_probe_committed_prefix();
-        test_read_context_epoch();
-        test_read_before_uncommitted_suffix();
-        test_transport_pressure_zero_probe();
-        test_i3_i4_and_restart();
-        test_snapshot();
-        test_grow_3_to_5();
-        test_four_voters();
-        test_membership_persistence();
-        test_leadership_transfer();
-        test_resync_fences_elections();
-        test_snapshot_rejects_delayed_compacted_prefix();
-        test_grow_3_to_4();
-        test_solo_durable_cap_then_grow();
-        test_i18_joint_quorum();
-        test_stale_boot_id();
-        test_ae_reply_match_stops_at_prev();
-        test_snapshot_commit_stops_at_snapshot();
-        test_resync_replaces_diverged_follower();
-        test_resync_new_leader_without_match();
-        test_probe_ack_keeps_next_index();
-        test_conflict_hint_skips_term_run();
-        test_restart_elections_bounded();
-        test_prevote_does_not_disturb();
-        test_noop_over_stale_tail();
-        test_ae_batch_catchup();
-        test_ae_catchup_flow_control();
-        test_snapshot_busy_survives_delayed_append();
-        test_install_snapshot();
-        test_install_snapshot_needs_blob();
-        test_install_snapshot_restarted_leader();
-        test_snap_chunks();
-        test_snap_transfer_survives_commits();
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
     }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
+    for (ack_window_fixture_mode=0;ack_window_fixture_mode<(g_list?1:2);ack_window_fixture_mode++) {
+        RUN(test_wall_heartbeat_coarse_pump);
+        RUN(test_note_durable_without_apply);
+        RUN(test_second_ack_commit_probe);
+        RUN(test_readindex_control);
+        RUN(test_read_quorum_before_apply);
+        RUN(test_read_applied_floor);
+        RUN(test_follower_apply_retry);
+        RUN(test_recv_batch);
+        RUN(test_recv_batch_noop);
+        RUN(test_recv_batch_overlap);
+        RUN(test_election_i1);
+        RUN(test_ae_duplicate_ack_preserves_newer_window);
+        RUN(test_ae_full_window_not_resent_per_propose);
+        RUN(test_commit_probe_overtakes_batch);
+        RUN(test_step_down_no_campaign);
+        RUN(test_replicate_and_readindex);
+        RUN(test_readindex_outstanding_batch);
+        RUN(test_read_probe_committed_prefix);
+        RUN(test_read_context_epoch);
+        RUN(test_read_before_uncommitted_suffix);
+        RUN(test_transport_pressure_zero_probe);
+        RUN(test_i3_i4_and_restart);
+        RUN(test_snapshot);
+        RUN(test_grow_3_to_5);
+        RUN(test_four_voters);
+        RUN(test_membership_persistence);
+        RUN(test_leadership_transfer);
+        RUN(test_resync_fences_elections);
+        RUN(test_snapshot_rejects_delayed_compacted_prefix);
+        RUN(test_grow_3_to_4);
+        RUN(test_solo_durable_cap_then_grow);
+        RUN(test_i18_joint_quorum);
+        RUN(test_stale_boot_id);
+        RUN(test_ae_reply_match_stops_at_prev);
+        RUN(test_snapshot_commit_stops_at_snapshot);
+        RUN(test_resync_replaces_diverged_follower);
+        RUN(test_resync_new_leader_without_match);
+        RUN(test_probe_ack_keeps_next_index);
+        RUN(test_conflict_hint_skips_term_run);
+        RUN(test_restart_elections_bounded);
+        RUN(test_prevote_does_not_disturb);
+        RUN(test_noop_over_stale_tail);
+        RUN(test_ae_batch_catchup);
+        RUN(test_ae_catchup_flow_control);
+        RUN(test_snapshot_busy_survives_delayed_append);
+        RUN(test_install_snapshot);
+        RUN(test_install_snapshot_needs_blob);
+        RUN(test_install_snapshot_restarted_leader);
+        RUN(test_snap_chunks);
+        RUN(test_snap_transfer_survives_commits);
+    }
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     if (failures) {
         fprintf(stderr, "test_raft: %d failure(s)\n", failures);
         return 1;

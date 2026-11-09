@@ -1799,55 +1799,105 @@ static void test_dir_rename(void)
     efs_sim_free(s);
 }
 
-int main(void)
+/* Case filter: with no argument every case runs; otherwise a case runs when
+ * some argument is a substring of its name.  --list prints the case names and
+ * exits 0; an argument that matches no case exits 2, so a misspelling is not
+ * a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
 {
-    test_replay();
-    test_table();
-    test_export_mkfs();
-    test_export_salt();
-    test_restart();
-    test_publish_roundtrip();
-    test_orphan();
-    test_i14();
-    test_i25();
-    test_faults();
-    test_opid_window();
-    test_i16();
-    test_i1_one_leader();
-    test_i3_term_fence();
-    test_i4_no_quorum_commit();
-    test_readindex();
-    test_l8_desired_placement();
-    test_mkdir_i17();
-    test_mkdir_crash_after_prepare();
-    test_mkdir_visible_at_decision();
-    test_link_i17();
-    test_rmdir_rename();
-    test_dir_rename();
-    test_i23_session_fence();
-    test_i19_open_unlinked();
-    test_i23_barrier_holds_leases();
-    test_i20_cas();
-    test_i13_fileid();
-    test_i22_epoch();
-    test_i8_spread();
-    test_i8_unlink_rmdir();
-    test_hashed_dir_stat();
-    test_rename_hashed();
-    test_unlink_rmdir_hashed();
-    test_link_hashed();
-    test_link_splitting();
-    test_rename_splitting();
-    test_mkdir_splitting();
-    test_migrate_populated();
-    test_auto_spread();
-    test_rename_hashed_dir_overwrite();
-    test_single_shard_ops();
-    test_utimens_fence();
-    test_truncate_range_del();
-    test_append_reserve();
-    test_lock_conflict_fence();
-    test_lock_deadlock();
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
+    }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
+    RUN(test_replay);
+    RUN(test_table);
+    RUN(test_export_mkfs);
+    RUN(test_export_salt);
+    RUN(test_restart);
+    RUN(test_publish_roundtrip);
+    RUN(test_orphan);
+    RUN(test_i14);
+    RUN(test_i25);
+    RUN(test_faults);
+    RUN(test_opid_window);
+    RUN(test_i16);
+    RUN(test_i1_one_leader);
+    RUN(test_i3_term_fence);
+    RUN(test_i4_no_quorum_commit);
+    RUN(test_readindex);
+    RUN(test_l8_desired_placement);
+    RUN(test_mkdir_i17);
+    RUN(test_mkdir_crash_after_prepare);
+    RUN(test_mkdir_visible_at_decision);
+    RUN(test_link_i17);
+    RUN(test_rmdir_rename);
+    RUN(test_dir_rename);
+    RUN(test_i23_session_fence);
+    RUN(test_i19_open_unlinked);
+    RUN(test_i23_barrier_holds_leases);
+    RUN(test_i20_cas);
+    RUN(test_i13_fileid);
+    RUN(test_i22_epoch);
+    RUN(test_i8_spread);
+    RUN(test_i8_unlink_rmdir);
+    RUN(test_hashed_dir_stat);
+    RUN(test_rename_hashed);
+    RUN(test_unlink_rmdir_hashed);
+    RUN(test_link_hashed);
+    RUN(test_link_splitting);
+    RUN(test_rename_splitting);
+    RUN(test_mkdir_splitting);
+    RUN(test_migrate_populated);
+    RUN(test_auto_spread);
+    RUN(test_rename_hashed_dir_overwrite);
+    RUN(test_single_shard_ops);
+    RUN(test_utimens_fence);
+    RUN(test_truncate_range_del);
+    RUN(test_append_reserve);
+    RUN(test_lock_conflict_fence);
+    RUN(test_lock_deadlock);
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     if (failures) {
         fprintf(stderr, "test_sim: %d failure(s)\n", failures);
         return 1;
