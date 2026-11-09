@@ -1880,7 +1880,7 @@
     "scripts/graph-community-labels.py": "f06ed2e51fe653159b5fe9625e6731e2b86ffca1ef761fd4bfafee86f9021dd6",
     "scripts/install-code-graph-hooks.py": "76963083b38e009a044c6daf69fdc8d7e5af5c343a6cc927d8048515d62fe6f8",
     "scripts/leader_placement.py": "84cf85b8e84990501916d59e9e8ed4073cf3450ace524c1dfd3e3577bb73d503",
-    "scripts/make_test_summary.sh": "a5977e4c3301c621bd506c6c4739efce2213ff2b52b45836d6c4976306461f89",
+    "scripts/make_test_summary.sh": "58eb25189db33ddb2668705282b5b629bed797c497edd40d9ef05b8d55da51d9",
     "scripts/qualify.py": "d0861269b5937b5ff234e9b116b0b5eac21446f8dc0f70e3618843a85c161820",
     "scripts/rebuild-code-graph.sh": "9fb94cc1b977a0315416fbb9d582ac52e43056bd90cdef7ad7ffd3280e4b8d1f",
     "scripts/refit_test_budgets.py": "372d45d49cf6d9284ecb021305ebd43e51683e210fa3d927838e085555865343",
@@ -2676,7 +2676,7 @@
     "tests/test_lookup_read_group.py": "c4f82cedc293ee09c4e80f9323055845e91c1f7f0624a04cd6b8b5aa15f1289e",
     "tests/test_lookup_replacement.py": "a0efa9232098bf3a259187488f321fe737611832e7ea9a86b8614bca7bb0f472",
     "tests/test_make_test_recipe.py": "d9b4858cc3deb9b377d4ac748099575720badd25ce0f8d974daa7fc9cd5159a9",
-    "tests/test_make_test_summary_runner.py": "65fa5394fdc192838404120001267f4859b97699c88ff42df48aba44b709ecbb",
+    "tests/test_make_test_summary_runner.py": "d4b0cc848d593c1429d18545a79858c508590ab143a7cbad9afff34366de89a7",
     "tests/test_map_fresh_open.py": "c5ec8db87e79ef87f7f953a994de79b95af501e8bebf198e53b15a924135c6e8",
     "tests/test_member_limit.py": "ef9dac9f73620e46edf000a752917216bb80ec913f79c897048fce526f008d9b",
     "tests/test_member_view.c": "f48b00671bcec3306fe459cedb05c02e8a1ad0108d9852e4119a9d789b60ad9c",
@@ -3028,5 +3028,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "df4eb8853ee6b341b00e8fd8062ac284c11296bf"
+  "source_commit": "8d10f494eba44b4e91e7713775bd3d1d3970af96"
 }

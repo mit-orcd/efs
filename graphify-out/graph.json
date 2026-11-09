@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "df4eb8853ee6b341b00e8fd8062ac284c11296bf"
+      "source_commit": "8d10f494eba44b4e91e7713775bd3d1d3970af96"
     }
   },
   "links": [
@@ -268265,7 +268265,7 @@
       "relation": "defines",
       "source": "scripts_make_test_summary",
       "source_file": "scripts/make_test_summary.sh",
-      "source_location": "L51",
+      "source_location": "L57",
       "target": "scripts_make_test_summary_efs_build_seconds",
       "weight": 1.0
     },
@@ -268287,7 +268287,7 @@
       "relation": "defines",
       "source": "scripts_make_test_summary",
       "source_file": "scripts/make_test_summary.sh",
-      "source_location": "L38",
+      "source_location": "L44",
       "target": "scripts_make_test_summary_tmpdir",
       "weight": 1.0
     },
@@ -268298,7 +268298,7 @@
       "relation": "defines",
       "source": "scripts_make_test_summary",
       "source_file": "scripts/make_test_summary.sh",
-      "source_location": "L40",
+      "source_location": "L46",
       "target": "scripts_make_test_summary_tmpdir",
       "weight": 1.0
     },
@@ -929993,7 +929993,7 @@
         "language": "bash"
       },
       "source_file": "scripts/make_test_summary.sh",
-      "source_location": "L51"
+      "source_location": "L57"
     },
     {
       "_origin": "ast",
@@ -930023,7 +930023,7 @@
         "language": "bash"
       },
       "source_file": "scripts/make_test_summary.sh",
-      "source_location": "L38"
+      "source_location": "L44"
     },
     {
       "_origin": "ast",
