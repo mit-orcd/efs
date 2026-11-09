@@ -1,6 +1,6 @@
 # EFS defect-navigation graph
 
-Source base: `df4eb8853ee6b341b00e8fd8062ac284c11296bf`; exact inputs: `source-manifest.json`.
+Source base: `1164c6409ac39d0ca9db8b27a3cf3dec06a18682`; exact inputs: `source-manifest.json`.
 Graphify 0.9.97; 18,584 nodes, 76,842 directed typed edges, 580 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
@@ -50,7 +50,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1801}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1802}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 Component nodes come from the source layout and the test catalogue's rows (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.

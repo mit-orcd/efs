@@ -10,12 +10,12 @@
       "graphify_version": "0.9.97",
       "input_tokens": 0,
       "omitted_unresolved_edges": {
-        "calls": 1801
+        "calls": 1802
       },
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "df4eb8853ee6b341b00e8fd8062ac284c11296bf"
+      "source_commit": "1164c6409ac39d0ca9db8b27a3cf3dec06a18682"
     }
   },
   "links": [
@@ -723720,7 +723720,7 @@
       "relation": "contains",
       "source": "tests_test_k54_member_down_fence",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L80",
+      "source_location": "L82",
       "target": "tests_test_k54_member_down_fence_main",
       "weight": 1.0
     },
@@ -723766,7 +723766,7 @@
       "relation": "indirect_call",
       "source": "tests_test_k54_member_down_fence_main",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L83",
+      "source_location": "L85",
       "target": "tests_posix_posix_suite_root",
       "weight": 1.0
     },
@@ -723778,7 +723778,7 @@
       "relation": "calls",
       "source": "tests_test_k54_member_down_fence_main",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L127",
+      "source_location": "L131",
       "target": "tests_test_k54_member_down_fence_exact",
       "weight": 1.0
     },
@@ -723790,7 +723790,7 @@
       "relation": "calls",
       "source": "tests_test_k54_member_down_fence_main",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L107",
+      "source_location": "L111",
       "target": "tests_test_k54_member_down_fence_fence",
       "weight": 1.0
     },
@@ -723802,7 +723802,7 @@
       "relation": "calls",
       "source": "tests_test_k54_member_down_fence_main",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L105",
+      "source_location": "L107",
       "target": "tests_test_k54_member_down_fence_main_admit",
       "weight": 1.0
     },
@@ -723813,8 +723813,54 @@
       "relation": "contains",
       "source": "tests_test_k54_member_down_fence_main",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L89",
+      "source_location": "L91",
       "target": "tests_test_k54_member_down_fence_main_admit",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "tests_test_k54_member_down_fence_main",
+      "source_file": "tests/test_k54_member_down_fence.py",
+      "source_location": "L113",
+      "target": "tests_test_k54_member_down_fence_main_late_all_stale",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "evidence_method": "graphify-ast",
+      "relation": "contains",
+      "source": "tests_test_k54_member_down_fence_main",
+      "source_file": "tests/test_k54_member_down_fence.py",
+      "source_location": "L102",
+      "target": "tests_test_k54_member_down_fence_main_late_all_stale",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "context": "call",
+      "evidence_method": "graphify-ast",
+      "relation": "calls",
+      "source": "tests_test_k54_member_down_fence_main",
+      "source_file": "tests/test_k54_member_down_fence.py",
+      "source_location": "L119",
+      "target": "tests_test_k54_member_down_fence_main_stop",
+      "weight": 1.0
+    },
+    {
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "evidence_method": "graphify-ast",
+      "relation": "contains",
+      "source": "tests_test_k54_member_down_fence_main",
+      "source_file": "tests/test_k54_member_down_fence.py",
+      "source_location": "L97",
+      "target": "tests_test_k54_member_down_fence_main_stop",
       "weight": 1.0
     },
     {
@@ -723826,52 +723872,6 @@
       "source": "tests_test_k54_member_down_fence_main",
       "source_file": "tests/test_k54_member_down_fence.py",
       "source_location": "L109",
-      "target": "tests_test_k54_member_down_fence_main_late_all_stale",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "evidence_method": "graphify-ast",
-      "relation": "contains",
-      "source": "tests_test_k54_member_down_fence_main",
-      "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L100",
-      "target": "tests_test_k54_member_down_fence_main_late_all_stale",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "tests_test_k54_member_down_fence_main",
-      "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L115",
-      "target": "tests_test_k54_member_down_fence_main_stop",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "evidence_method": "graphify-ast",
-      "relation": "contains",
-      "source": "tests_test_k54_member_down_fence_main",
-      "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L95",
-      "target": "tests_test_k54_member_down_fence_main_stop",
-      "weight": 1.0
-    },
-    {
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "context": "call",
-      "evidence_method": "graphify-ast",
-      "relation": "calls",
-      "source": "tests_test_k54_member_down_fence_main",
-      "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L106",
       "target": "tests_test_k54_member_down_fence_put_status",
       "weight": 1.0
     },
@@ -723883,7 +723883,7 @@
       "relation": "calls",
       "source": "tests_test_k54_member_down_fence_main",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L140",
+      "source_location": "L108",
       "target": "tests_test_k54_member_down_fence_stored",
       "weight": 1.0
     },
@@ -723896,7 +723896,7 @@
       "relation": "indirect_call",
       "source": "tests_test_k54_member_down_fence_main_admit",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L90",
+      "source_location": "L92",
       "target": "tests_test_qualify_driver_helper",
       "weight": 1.0
     },
@@ -723908,7 +723908,7 @@
       "relation": "calls",
       "source": "tests_test_k54_member_down_fence_main_late_all_stale",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L101",
+      "source_location": "L103",
       "target": "tests_test_k54_member_down_fence_put_status",
       "weight": 1.0
     },
@@ -1055534,7 +1055534,7 @@
       "id": "tests_test_k54_member_down_fence_main",
       "label": "main()",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L80"
+      "source_location": "L82"
     },
     {
       "_callable": true,
@@ -1055546,7 +1055546,7 @@
       "id": "tests_test_k54_member_down_fence_main_admit",
       "label": "admit()",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L89"
+      "source_location": "L91"
     },
     {
       "_callable": true,
@@ -1055558,7 +1055558,7 @@
       "id": "tests_test_k54_member_down_fence_main_late_all_stale",
       "label": "late_all_stale()",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L100"
+      "source_location": "L102"
     },
     {
       "_callable": true,
@@ -1055570,7 +1055570,7 @@
       "id": "tests_test_k54_member_down_fence_main_stop",
       "label": "stop()",
       "source_file": "tests/test_k54_member_down_fence.py",
-      "source_location": "L95"
+      "source_location": "L97"
     },
     {
       "_callable": true,

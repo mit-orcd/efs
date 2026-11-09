@@ -2627,7 +2627,7 @@
     "tests/test_k43_coordinator_kill.py": "8dbe8c8edee723c27cc2b2d1e6543a72efc6d2be5643fd4f71e6816b75005ba9",
     "tests/test_k48_readdir.py": "9d202e766d16aa95f32ad30fa87556ce0c69fec76ed0191815b36feac960694a",
     "tests/test_k54_member2_unmount.py": "6896d881fff8bef0308e5ab66810b3afa09fdcdb2953e70161fde4adcb759c43",
-    "tests/test_k54_member_down_fence.py": "90424a4fbd2e1fa28d63f0800953d3630459f1e9b50fe92e402b0994a76522ef",
+    "tests/test_k54_member_down_fence.py": "f3059d7bfa76467fd63e948acb90035a8c0d2aa318b94ec9b0a21fdf770f919f",
     "tests/test_k88_chunk_hints.c": "ea84624309d7beec0760f27f3584b97e419cd81703a63a80f55ed926ad96945e",
     "tests/test_k88_chunk_hints_live.py": "7f835588b0d61f39063771257ba66d94c13a66c22f6855134160a9e76ab2ca1f",
     "tests/test_k90_unmount_enospc.py": "e81e73ef3450d697e0cb85bd43e011f91a98d2f40749de69d6622a3539637257",
@@ -3023,10 +3023,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1801
+    "calls": 1802
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "df4eb8853ee6b341b00e8fd8062ac284c11296bf"
+  "source_commit": "1164c6409ac39d0ca9db8b27a3cf3dec06a18682"
 }
