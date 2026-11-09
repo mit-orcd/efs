@@ -5493,6 +5493,64 @@ static void test_gc_watermark(void)
     efs_kv_mem_free(kv);
 }
 
+/* D26: a follower applies GC records for a whole tenure while its
+ * watermark is unknown (it never derives). The derive on election must
+ * not add those inserts on top of a scan that already counts them: only
+ * the latest apply's inserts (perhaps uncommitted) are folded in. */
+static void test_gc_pending_follower_derive(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_chunk newc;
+    efs_ino_t ino = 0;
+    uint32_t anch;
+    int i, f;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "gcp", &ino) == EFS_OK && ino, "create");
+    anch = efs_kv_anchor_shard(efs_kv_lane_shard(ino, 0));
+    efs_meta_gc_pending_invalidate(anch);
+
+    /* Follower tenure: three superseding publishes queue three records;
+     * the first is retired (its acks' lowers are dropped while unknown). */
+    efs_meta_gc_pending_apply_start();
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xA1, 0, T0 + 1, "gcp0");
+    for (i = 0; i < 3; i++) {
+        efs_meta_gc_pending_apply_start();
+        fill_ch(&newc);
+        for (f = 0; f < EFS_NUM_FRAGMENTS; f++)
+            newc.checksums[f][0] = (uint8_t)(0x80 + 0x10 * i + f);
+        pub_ch(kv, ino, 0, EFS_MIN_CHUNK_SIZE, (uint64_t)0xA2 + i,
+               (uint64_t)0xA1 + i, T0 + 2 + i, &newc, "gcp re-pub");
+    }
+    efs_meta_gc_pending_apply_start();
+    gc_ack_all(kv, ino, 0xA1, 0, 0, "gcp ack");
+    CHECK(wm_count_anchor(kv, anch) == 2, "two records live");
+
+    /* Elected: begin, scan, derive. All inserts were before the latest
+     * apply began, so the scan's count stands (was 2 + 3 = 5). */
+    efs_meta_gc_pending_begin(anch);
+    efs_meta_gc_pending_derived(anch, wm_count_anchor(kv, anch));
+    CHECK(efs_meta_gc_pending_peek(anch) == 2, "derive equals live records");
+
+    /* An insert in the latest apply may be uncommitted at scan time:
+     * begin keeps it (upward only), never drops it. */
+    efs_meta_gc_pending_invalidate(anch);
+    efs_meta_gc_pending_apply_start();
+    fill_ch(&newc);
+    for (f = 0; f < EFS_NUM_FRAGMENTS; f++)
+        newc.checksums[f][0] = (uint8_t)(0xE0 + f);
+    pub_ch(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xA5, 0xA4, T0 + 9, &newc,
+           "gcp in-flight");
+    efs_meta_gc_pending_begin(anch);
+    efs_meta_gc_pending_derived(anch, 2); /* scan missed the new record */
+    CHECK(efs_meta_gc_pending_peek(anch) == 3, "in-flight insert kept");
+
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 /* ---- W154 degraded marks ---- */
 struct dg_collect {
     uint64_t n;
@@ -7373,6 +7431,7 @@ int main(int argc, char **argv)
     RUN(test_gc_delta_batch_boundary);
     RUN(test_gc_tail_alias);
     RUN(test_gc_watermark);
+    RUN(test_gc_pending_follower_derive);
     RUN(test_degraded_marks);
     RUN(test_recovery_marks);
     RUN(test_degraded_mark_after_publish);

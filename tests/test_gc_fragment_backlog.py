@@ -39,6 +39,7 @@ static int gc_gi(uint8_t group){return group==0?0:1;}
 static int efs_kv_key_gc_prefix(uint32_t anchor,uint8_t *out,uint32_t *n){(void)out;*n=3;return anchor?0:EFS_ERR_INVAL;}
 static int64_t efs_meta_gc_pending_peek(uint32_t a){(void)a;return pending;}
 static void efs_meta_gc_pending_derived(uint32_t a,uint64_t n){(void)a;pending=n;}
+static void efs_meta_gc_pending_begin(uint32_t a){(void)a;}
 static int efs_meta_gc_pending_zero_if(uint32_t a,int64_t n){(void)a;if(pending==n){pending=0;return 1;}return 0;}
 static int gc_count_cb(void *ctx,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t vn){(void)ctx;(void)k;(void)kn;(void)v;(void)vn;return 0;}
 static int gc_scan_cb(void *ctx,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t vn){(void)ctx;(void)k;(void)kn;(void)v;(void)vn;return 0;}

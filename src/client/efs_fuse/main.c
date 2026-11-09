@@ -39,6 +39,8 @@ static void efs_fuse_destroy(void *userdata)
         snprintf(why, sizeof(why), "data flush writeback=%d", wrc);
         unmount_unclean(why);
     }
+    /* Counted before the stop: after it the pool says 0 (writeback.h). */
+    int wb_left = efs_wb_pending(0);
     efs_wb_stop();
     /* Drain the dirty set before efs_client_shutdown frees the table.
      *
@@ -112,6 +114,14 @@ static void efs_fuse_destroy(void *userdata)
     }
     find_res_clear();
     efs_open_retry_stop();
+    /* Diagnostic only, not unclean: efs_wb_stop finished those jobs (their
+     * failures are the sticky error above) and the session revoke in
+     * efs_client_shutdown deletes this mount's leases, retained CLOSEs
+     * included; its rc decides the stop. Same counts as stop-refused. */
+    unsigned retained = efs_open_retained();
+    if (retained || wb_left)
+        fprintf(stderr, "efs-fuse: unmount: left to the stop (retained-releases=%u "
+                "wb-pending=%d)\n", retained, wb_left);
     efs_client_view_stop();
     if (efs_client_shutdown() != EFS_OK)
         unmount_unclean(efs_client_shutdown_reason());

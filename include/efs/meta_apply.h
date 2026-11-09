@@ -1245,6 +1245,11 @@ void efs_meta_gc_pending_note(uint32_t anchor, int delta);
 int64_t efs_meta_gc_pending_peek(uint32_t anchor);
 void efs_meta_gc_pending_derived(uint32_t anchor, uint64_t n);
 void efs_meta_gc_pending_invalidate(uint32_t anchor);
+/* begin: just before the derive scan, drop inserts the scan counts itself
+ * (all but the latest apply's). apply_start: each apply, under the KV
+ * writers lock. */
+void efs_meta_gc_pending_begin(uint32_t anchor);
+void efs_meta_gc_pending_apply_start(void);
 /* W154: degraded-mark count per anchor, same rules as the GC watermark
  * (-1 unknown; overshoots only; zero_if clamps after an empty scan). */
 int64_t efs_meta_degraded_count_peek(uint32_t anchor);
