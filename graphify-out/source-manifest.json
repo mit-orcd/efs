@@ -490,7 +490,7 @@
     "src/meta/meta_apply/check.c": 2,
     "src/meta/meta_apply/chunk.c": 11,
     "src/meta/meta_apply/create.c": 15,
-    "src/meta/meta_apply/gc.c": 30,
+    "src/meta/meta_apply/gc.c": 31,
     "src/meta/meta_apply/gc.h": 0,
     "src/meta/meta_apply/init.c": 21,
     "src/meta/meta_apply/init.h": 0,
@@ -1545,7 +1545,7 @@
     "include/efs/log_ts.h": "e53cc69934746af14ff77b11bd23dd7be08d89cc54d2b48a8dd185704a40be2d",
     "include/efs/member_view.h": "52f2f3f09c22eb750187a4cb09f4246e7ff59fbfbdc6d6626f986896ed19a4b5",
     "include/efs/membership.h": "5cf528af6130f54e2f43e5a369acd0c3f8d7e6ae1d3655977c7579adce36aab6",
-    "include/efs/meta_apply.h": "920d7f4ae81f93e7bf2cc47cabad02888a2cfd91c25bb5ea29f88c9088d1d05d",
+    "include/efs/meta_apply.h": "6c41abb8771264348f67af0492f46d543abe57b215058f92f53a0ccf2894161a",
     "include/efs/meta_cmd.h": "7f1549e2bbd7ca627baac6dbfc4dd7ab146b55f63eb3eda57becdd01f3baa91b",
     "include/efs/meta_setattr_command.h": "13070a128c6e3417f4722fccb5e44462db9b2344848ed1941db6a963362cb95c",
     "include/efs/metadata.h": "ee567540beab69f1ca04873f7ab6b210eee9c2244102917e8adba2b643bed92b",
@@ -2021,7 +2021,7 @@
     "src/meta/meta_apply/check.c": "67b6008d1d677fb6cfa75539ee62771b85c98ff15dfc2b1fe5c2bdf53bc59af8",
     "src/meta/meta_apply/chunk.c": "b7e56c487f9d351940ecd23ef11e93a58aad533232966f43333d03f37f169f56",
     "src/meta/meta_apply/create.c": "e00b7ba4f96dfcda06b876741d7065ff1848db68cce6ccc565db89f248c1247f",
-    "src/meta/meta_apply/gc.c": "ad4393b4508536d457d66c78a8ffcda785eb42beb18a4570ef7a5a59c86f07d9",
+    "src/meta/meta_apply/gc.c": "5ef58ba554043a4dabc1ef754e36f45b390f961120925c0ed62a656ff23f407b",
     "src/meta/meta_apply/gc.h": "7ea0e688d3141c04b646601159a3d2adabf112dfb11193838b72db69dee37432",
     "src/meta/meta_apply/init.c": "2a24e58127f99d6ddc96823a08d35d5992070fc92363532aa2fc3db4ce57dadb",
     "src/meta/meta_apply/init.h": "3271b3cba5639deacb40bf3f79d7146256bb9c8372eac6b5e676914f3f3e0bc9",
@@ -2681,7 +2681,7 @@
     "tests/test_member_limit.py": "ef9dac9f73620e46edf000a752917216bb80ec913f79c897048fce526f008d9b",
     "tests/test_member_view.c": "f48b00671bcec3306fe459cedb05c02e8a1ad0108d9852e4119a9d789b60ad9c",
     "tests/test_membership.c": "baa26ace0ff158bb2f6830c2b616a0cfa10e039344c9ab0695389e5a11f77966",
-    "tests/test_meta_apply.c": "a91454decc68c2b950d3ebb12bc067340e8e52869d6a9b8eea52a85ee9b85ddc",
+    "tests/test_meta_apply.c": "bc1c88aaca9c090ead24291caf332276b1f80421dbb31a2ea8ebad249f8487fc",
     "tests/test_meta_cmd_namespace.py": "c11883d0bafc5cab0c8fd451024e082bc1b6c737c1d0a643d5ae2c5b5872e67d",
     "tests/test_meta_flush_batch.py": "d61ff601e129b4869301e827ea527718e460049a4b996dd47c450143072dc01c",
     "tests/test_metadata_read_route.py": "dc5c930de438c004ff72085b5a356cf0a7ba81c46a59ed6bfad0866556d72bcf",
@@ -3028,5 +3028,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "0d44404eda7e92207f09e7d2f1f5d6827f5e0a12"
+  "source_commit": "01b446c6e025e6a13769f67289033bd42287ebf2"
 }
