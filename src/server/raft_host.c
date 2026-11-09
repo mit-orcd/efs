@@ -3595,6 +3595,9 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     if (raft_obs_on())
         a0 = now_us_();
     h->apply_extra = 0;
+    /* Batches are staged in this scope, committed at efs_kv_lsm_apply_end,
+     * and counter notes are visible before that commit; see
+     * docs/how-it-works/apply-visibility.md. */
     int scope_rc=efs_kv_lsm_apply_begin(h->kv);
     if (scope_rc!=EFS_OK) rc=scope_rc;
     else {
