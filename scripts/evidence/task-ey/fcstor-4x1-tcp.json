@@ -60,5 +60,16 @@
   "posix_timeout_s": 150,
   "remote_tmp": "/tmp/efs-taskEY/tmp"
  },
- "notes": "Task EY batch D: 4 efsd on 4 distinct hosts, clients on fcstor010 and fcstor011 (co-located with members); driver-owned, fresh stores every run"
+ "notes": "Task EY batch D: 4 efsd on 4 distinct hosts, clients on fcstor010 and fcstor011 (co-located with members); driver-owned, fresh stores every run",
+ "plugins": {
+  "d4-progress": {
+   "command": "cd {source} && python3 scripts/d4_progress.py --cluster {cluster} --out {gate_dir}",
+   "host": "fcstor010",
+   "requires": "{source}/scripts/d4_progress.py",
+   "items": "D4",
+   "ledger": "Scale/progress evidence (E4, D4)",
+   "deadline_s": 7200,
+   "doc": "D4 bounded progress under packing, indexing and KV compaction (run on the fcstor010 client; the driver host has no mount)"
+  }
+ }
 }
