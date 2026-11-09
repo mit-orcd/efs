@@ -204,6 +204,7 @@ snapshot, Linux perf/sysstat and mounted RDMA export. Scripts committed here:
 ```sh
 python3 scripts/evidence/orcd/orcd_dd_profile.py --label UNIQUE --seconds 120 \
   --source 3769f44bb2ada18aa6959a4dc66d110a661bd1de
+# (process sampler: scripts/evidence/orcd/orcd_dd_capture.py)
 make -j8 tests/test_data_commit tests/test_data_commit_index
 ./tests/test_data_commit
 ./tests/test_data_commit_index

@@ -212,7 +212,7 @@ which ran with one client's workload; this run had two.
 Raw captures (outside Git): node9901 `/data1/efs/prof/wl-4aff-r{1,2,3}/`
 (`dwarf-n*.data`, `cs-all.data`, `oncpu-n*.data`, `rs*.txt`) and node9900
 `/data1/efs/orcd-mini-client/prof/`. Reproduce on node9901 while the workload
-runs: `scripts/evidence/orcd-mini/orcd_mini_lockprof.sh <dir>` (needs `cs_lock.py` and
+runs: `scripts/evidence/orcd-mini/orcd_mini_lockprof.sh <dir>` (needs `scripts/evidence/orcd-mini/cs_lock.py` and
 `cs_dwarf_locks.py` next to it, `perf_event_paranoid <= 1`). Run the
 200-file probe on the node9900 mount at the same time.
 

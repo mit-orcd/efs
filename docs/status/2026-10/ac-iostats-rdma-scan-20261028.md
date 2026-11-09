@@ -33,7 +33,8 @@ These captures **are not quiet-host measurements**. Interference can widen
 spread; no extrapolated isolated performance improvement will be claimed.
 
 Exact exports: original base `1d2852da4`, clean candidate `5f9ddae71`.
-`ac_instrument.py` creates separate measurement-only overlays for base/split;
+`scripts/evidence/ac/ac_instrument.py` (with `scripts/evidence/ac/ac_probe.h`; `scripts/evidence/ac/ac_measure.py` drives each
+run) creates separate measurement-only overlays for base/split;
 identical bounded atomic histograms and clocks are used in both. No new EFS
 setting or production probe is introduced. SIGUSR2 is sent only to the exact
 new private instrumented daemon PIDs to delimit the load window. The overlay

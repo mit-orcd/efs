@@ -60,8 +60,8 @@ the writable local NVMe /data1/01/efs/evidence; scratch clusters are under /tmp.
 Two all-account quiet checks twenty seconds apart precede each controller;
 ten-second ownership sampling continues. No existing-client exemption.
 
-The committed tools are scripts/evidence/an/an_put_probe.py, an_put_measure.py,
-an_stat_client.c, an_host_run.py and an_base_control.py. Export a committed
+The committed tools are `scripts/evidence/an/an_put_probe.py`, `scripts/evidence/an/an_put_measure.py`,
+`scripts/evidence/an/an_stat_client.c`, `scripts/evidence/an/an_host_run.py` and `scripts/evidence/an/an_base_control.py`. Export a committed
 tree first; the probe refuses a Git checkout and records before/after hashes.
 It adds temporary cumulative relaxed-atomic counters to two exported C files,
 with a five-second dump through existing EFS_RAFT_OBS. Product decisions are
@@ -400,7 +400,7 @@ correctness evidence, not a live/full-gate or performance verdict.
 Private matching libtsan 11.5.0-14.el9 and valgrind-devel 3.26.0-5.el9 RPMs
 were downloaded from the configured MIT RHEL mirror, signature/digest checked
 and extracted under `/tmp/efs-taskAN-deps/tools`; no system install. Script
-`an_private_tools.sh` records package/runtime/wrapper hashes. The GCC wrapper
+`scripts/evidence/an/an_private_tools.sh` records package/runtime/wrapper hashes. The GCC wrapper
 adds the private library path only for thread-sanitizer builds; normal EFS
 builds still execute system GCC unchanged. Minimal TSan loader smoke exit 0
 is not sanitizer qualification. No suppression or race-report waiver is used.

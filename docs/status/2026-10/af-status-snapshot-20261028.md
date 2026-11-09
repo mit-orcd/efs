@@ -60,7 +60,8 @@ python3 scripts/evidence/af/af_summarize.py CAPTURE
 
 Clean xorinox: `efsd f570fb0cd`, branch agent/devel-task-af, built
 2026-10-28T23:19:57Z. Its instrumented export reports "no git metadata", build
-23:09:12Z; exact source f570fb0cd plus af_instrument.py/af_probe.h, compiler
+23:09:12Z; exact source f570fb0cd plus `scripts/evidence/af/af_instrument.py`/`scripts/evidence/af/af_probe.h` (runs driven by
+`scripts/evidence/af/af_measure.py`), compiler
 flags, source hashes and binary hashes identify it. This overlay is never
 used by the clean gate. The strict supplement reuses those binaries with
 only its driver changed. Untouched base: `efsd 486aa3a46`, branch label

@@ -5,8 +5,14 @@ Checks `[text](path)` and `[text](path#anchor)` (file existence only; anchors
 are not verified). http(s)/mailto/other-scheme links and anchor-only links are
 ignored, as are fenced code blocks and inline code spans. Exit 1 lists each
 dangling link as file:line.
+
+Evidence scripts: every tracked file under scripts/evidence/ must be named by
+its full repo path (a link or a backticked path, fenced blocks included) in at
+least one tracked docs/ page; a bare basename does not count, so an inventory
+page listing basenames cites nothing. Exit 1 lists each orphan script.
 """
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -48,12 +54,28 @@ def dangling(path):
                 yield n, t
 
 
+def git_files(*spec):
+    out = subprocess.run(["git", "ls-files", "-z", "--", *spec], cwd=ROOT,
+                         capture_output=True, text=True, check=True).stdout
+    return [f for f in out.split("\0") if f]
+
+
+def orphan_scripts():
+    cited = set()
+    for page in git_files("docs/*.md"):
+        cited.update(re.findall(r"scripts/evidence/[\w./+-]+", (ROOT / page).read_text(errors="replace")))
+    return [f for f in git_files("scripts/evidence") if f not in cited]
+
+
 def main():
     bad = [(p, n, t) for p in md_files() for n, t in dangling(p)]
     for p, n, t in bad:
         print(f"{p.relative_to(ROOT)}:{n}: dangling link {t}")
-    print(f"check_doc_links: {len(bad)} dangling link(s)")
-    return 1 if bad else 0
+    orphans = orphan_scripts()
+    for f in orphans:
+        print(f"{f}: orphan script (no docs/ page names it)")
+    print(f"check_doc_links: {len(bad)} dangling link(s), {len(orphans)} orphan script(s)")
+    return 1 if bad or orphans else 0
 
 
 if __name__ == "__main__":
