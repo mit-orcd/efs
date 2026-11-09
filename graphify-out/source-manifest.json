@@ -1482,7 +1482,7 @@
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
     "docs/backlog/small-file-packing-default.md": "daf8e4c042ba39c747341507291293a927f8fdb44cf267d1306a3178b9781c20",
     "docs/backlog/work-items.md": "1b832070f5dd1b71a31269ddad65ddc7499663dbb311ae1bd69a5761aa7cbb74",
-    "docs/how-it-works/apply-visibility.md": "cfbd8a1be5f2089a1520124f40eee2bb33d520caf871fe6c80471bfdf9765bdb",
+    "docs/how-it-works/apply-visibility.md": "f74520a6ac04ae4d305500c02b4c01b0692c1513849276ce45be8e9a052ccfde",
     "docs/how-it-works/architecture.md": "d9112ac49ca0745c009d6ae08f858fae3b126dd6075db0a205802fdd8a734b6e",
     "docs/how-it-works/design-rationale.md": "839a9fd92895b7f84e13b761e5bc48473f3ea35e37c364cee372a39e177db55f",
     "docs/how-it-works/developing.md": "4d7a35ffea3289d2db685957366736d2acdee7b01f6ae7701532ec3b2e35b154",
@@ -3005,5 +3005,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "cede968fa501cb08eb07dc053c8a26f98c36199d"
+  "source_commit": "eeee16158d3fa740262b444a1c77bcc084b29751"
 }

@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "cede968fa501cb08eb07dc053c8a26f98c36199d"
+      "source_commit": "eeee16158d3fa740262b444a1c77bcc084b29751"
     }
   },
   "links": [
@@ -26116,8 +26116,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/apply-visibility.md",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L104",
-      "target": "efs:section:docs/how-it-works/apply-visibility.md:104"
+      "source_location": "L111",
+      "target": "efs:section:docs/how-it-works/apply-visibility.md:111"
     },
     {
       "confidence": "EXTRACTED",
@@ -26125,8 +26125,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/apply-visibility.md",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L117",
-      "target": "efs:section:docs/how-it-works/apply-visibility.md:117"
+      "source_location": "L124",
+      "target": "efs:section:docs/how-it-works/apply-visibility.md:124"
     },
     {
       "confidence": "EXTRACTED",
@@ -26134,8 +26134,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/apply-visibility.md",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L132",
-      "target": "efs:section:docs/how-it-works/apply-visibility.md:132"
+      "source_location": "L139",
+      "target": "efs:section:docs/how-it-works/apply-visibility.md:139"
     },
     {
       "confidence": "EXTRACTED",
@@ -26152,8 +26152,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/apply-visibility.md",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L31",
-      "target": "efs:section:docs/how-it-works/apply-visibility.md:31"
+      "source_location": "L33",
+      "target": "efs:section:docs/how-it-works/apply-visibility.md:33"
     },
     {
       "confidence": "EXTRACTED",
@@ -26161,8 +26161,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/apply-visibility.md",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L69",
-      "target": "efs:section:docs/how-it-works/apply-visibility.md:69"
+      "source_location": "L74",
+      "target": "efs:section:docs/how-it-works/apply-visibility.md:74"
     },
     {
       "confidence": "EXTRACTED",
@@ -26170,8 +26170,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/apply-visibility.md",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L90",
-      "target": "efs:section:docs/how-it-works/apply-visibility.md:90"
+      "source_location": "L95",
+      "target": "efs:section:docs/how-it-works/apply-visibility.md:95"
     },
     {
       "confidence": "EXTRACTED",
@@ -184055,54 +184055,54 @@
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:104",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:111",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L112",
+      "source_location": "L119",
       "target": "src_meta_meta_apply_gc_efs_meta_degraded_count_begin"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:104",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:111",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L114",
+      "source_location": "L121",
       "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_begin"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:117",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:124",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L124",
+      "source_location": "L131",
       "target": "src_kv_kv_key_start"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:132",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:139",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L138",
+      "source_location": "L145",
       "target": "src_common_settings_note"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:132",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:139",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L135",
+      "source_location": "L142",
       "target": "src_meta_meta_apply_gc_degraded_apply_start"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:132",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:139",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L135",
+      "source_location": "L142",
       "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_apply_start"
     },
     {
@@ -184120,7 +184120,7 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/how-it-works/apply-visibility.md:18",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L29",
+      "source_location": "L31",
       "target": "src_common_settings_note"
     },
     {
@@ -184147,7 +184147,7 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/how-it-works/apply-visibility.md:18",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L28",
+      "source_location": "L30",
       "target": "src_kv_kv_lsm_efs_kv_lsm_apply_end"
     },
     {
@@ -184235,450 +184235,513 @@
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:18",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L45",
-      "target": "include_efs_kv_efs_kv_batch"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L40",
-      "target": "src_kv_kv_key_start"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L46",
-      "target": "src_kv_kv_lsm_apply_staging"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L37",
-      "target": "src_kv_kv_lsm_efs_kv_lsm_apply_begin"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L62",
-      "target": "src_kv_kv_lsm_efs_kv_lsm_apply_end"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L46",
-      "target": "src_kv_kv_lsm_lsm_batch"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L64",
-      "target": "src_kv_kv_lsm_lsm_batch"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L42",
-      "target": "src_meta_meta_apply_gc_degraded_apply_start"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L55",
-      "target": "src_meta_meta_apply_gc_degraded_note"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L61",
-      "target": "src_meta_meta_apply_gc_degraded_note"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L52",
-      "target": "src_meta_meta_apply_gc_efs_meta_apply_degraded_clear"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L57",
-      "target": "src_meta_meta_apply_gc_efs_meta_apply_degraded_clear"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L56",
-      "target": "src_meta_meta_apply_gc_efs_meta_apply_degraded_mark"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L56",
-      "target": "src_meta_meta_apply_gc_efs_meta_apply_recovery_mark"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L41",
-      "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_apply_start"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L49",
-      "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_note"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L61",
-      "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_note"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L49",
-      "target": "src_meta_meta_apply_gc_gc_queue"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L45",
-      "target": "src_meta_meta_apply_rows_meta_write_batch"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L53",
-      "target": "src_meta_meta_apply_rows_meta_write_batch"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L54",
-      "target": "src_meta_meta_apply_rows_meta_write_batch"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L55",
-      "target": "src_meta_meta_apply_rows_meta_write_batch"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L45",
-      "target": "src_meta_meta_apply_rows_meta_write_batch_as"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L58",
-      "target": "src_meta_meta_apply_rows_meta_write_batch_as"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L34",
-      "target": "src_server_raft_host_attach_replica"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L34",
-      "target": "src_server_raft_host_host_apply"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L37",
-      "target": "src_server_raft_host_host_apply"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L40",
-      "target": "src_server_raft_host_host_apply"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L62",
-      "target": "src_server_raft_host_host_apply"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L44",
+      "source_location": "L28",
       "target": "src_server_raft_host_host_apply_dispatch"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:31",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L33",
-      "target": "src_server_raft_host_host_pump"
+      "source_location": "L47",
+      "target": "include_efs_kv_efs_kv_batch"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L81",
-      "target": "include_efs_kv_efs_kv_scan_prefix"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
-      "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L87",
+      "source_location": "L61",
       "target": "src_common_settings_note"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L75",
+      "source_location": "L42",
       "target": "src_kv_kv_key_start"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L79",
+      "source_location": "L48",
+      "target": "src_kv_kv_lsm_apply_staging"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L39",
+      "target": "src_kv_kv_lsm_efs_kv_lsm_apply_begin"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L65",
+      "target": "src_kv_kv_lsm_efs_kv_lsm_apply_end"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L70",
+      "target": "src_kv_kv_lsm_efs_kv_lsm_sync_release"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L48",
+      "target": "src_kv_kv_lsm_lsm_batch"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L67",
+      "target": "src_kv_kv_lsm_lsm_batch"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L44",
+      "target": "src_meta_meta_apply_gc_degraded_apply_start"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L57",
+      "target": "src_meta_meta_apply_gc_degraded_note"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L64",
+      "target": "src_meta_meta_apply_gc_degraded_note"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L54",
+      "target": "src_meta_meta_apply_gc_efs_meta_apply_degraded_clear"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L59",
+      "target": "src_meta_meta_apply_gc_efs_meta_apply_degraded_clear"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L58",
+      "target": "src_meta_meta_apply_gc_efs_meta_apply_degraded_mark"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L58",
+      "target": "src_meta_meta_apply_gc_efs_meta_apply_recovery_mark"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L43",
+      "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_apply_start"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L51",
+      "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_note"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L64",
+      "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_note"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L51",
+      "target": "src_meta_meta_apply_gc_gc_queue"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L61",
+      "target": "src_meta_meta_apply_gc_gc_queue"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L59",
+      "target": "src_meta_meta_apply_publish_publish_inner_as"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L47",
+      "target": "src_meta_meta_apply_rows_meta_write_batch"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L55",
+      "target": "src_meta_meta_apply_rows_meta_write_batch"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L56",
+      "target": "src_meta_meta_apply_rows_meta_write_batch"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L57",
+      "target": "src_meta_meta_apply_rows_meta_write_batch"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L47",
+      "target": "src_meta_meta_apply_rows_meta_write_batch_as"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L60",
+      "target": "src_meta_meta_apply_rows_meta_write_batch_as"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L56",
+      "target": "src_meta_meta_apply_sweep_gc_ack_apply"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L36",
+      "target": "src_server_raft_host_attach_replica"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L36",
+      "target": "src_server_raft_host_host_apply"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L39",
+      "target": "src_server_raft_host_host_apply"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L42",
+      "target": "src_server_raft_host_host_apply"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L65",
+      "target": "src_server_raft_host_host_apply"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L46",
+      "target": "src_server_raft_host_host_apply_dispatch"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:33",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L35",
+      "target": "src_server_raft_host_host_pump"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L86",
+      "target": "include_efs_kv_efs_kv_scan_prefix"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L92",
+      "target": "src_common_settings_note"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L80",
+      "target": "src_kv_kv_key_start"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L84",
       "target": "src_meta_meta_apply_gc_efs_meta_degraded_count_begin"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L84",
+      "source_location": "L89",
       "target": "src_meta_meta_apply_gc_efs_meta_degraded_count_derived"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L76",
+      "source_location": "L81",
       "target": "src_meta_meta_apply_gc_efs_meta_degraded_count_invalidate"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L79",
+      "source_location": "L84",
       "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_begin"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L84",
+      "source_location": "L89",
       "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_derived"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L76",
+      "source_location": "L81",
       "target": "src_meta_meta_apply_gc_efs_meta_gc_pending_invalidate"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L72",
+      "source_location": "L77",
       "target": "src_raft_raft_efs_raft_role"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L82",
+      "source_location": "L87",
       "target": "src_server_raft_host_dg_count_cb"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L82",
+      "source_location": "L87",
       "target": "src_server_raft_host_gc_count_cb"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L73",
+      "source_location": "L78",
       "target": "src_server_raft_host_host_gc_frag_pass"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L71",
+      "source_location": "L76",
       "target": "src_server_raft_host_host_gc_thread"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L73",
+      "source_location": "L78",
       "target": "src_server_raft_host_host_rebuild_pass"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L77",
+      "source_location": "L82",
       "target": "src_server_raft_host_snap_import_cancel"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:90",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:95",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L101",
+      "source_location": "L106",
       "target": "src_common_settings_note"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:90",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:95",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L94",
+      "source_location": "L109",
       "target": "src_common_settings_note"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/apply-visibility.md:90",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:95",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L95",
+      "source_location": "L99",
+      "target": "src_common_settings_note"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/apply-visibility.md:95",
+      "source_file": "docs/how-it-works/apply-visibility.md",
+      "source_location": "L100",
       "target": "src_kv_kv_lsm_efs_kv_lsm_apply_end"
     },
     {
@@ -867777,7 +867840,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "extraction": "deterministic-source-index",
@@ -867801,7 +867864,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -868125,7 +868188,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -869001,7 +869064,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "extraction": "deterministic-source-index",
@@ -872301,7 +872364,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "extraction": "deterministic-source-index",
@@ -873561,7 +873624,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -873993,7 +874056,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "extraction": "deterministic-source-index",
@@ -878841,7 +878904,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "extraction": "deterministic-source-index",
@@ -879561,7 +879624,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "extraction": "deterministic-source-index",
@@ -881313,7 +881376,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "extraction": "deterministic-source-index",
@@ -887863,7 +887926,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -887899,7 +887962,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -887971,7 +888034,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -887983,7 +888046,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -888187,7 +888250,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -888715,7 +888778,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -888727,7 +888790,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -888787,7 +888850,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -888835,7 +888898,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -888907,7 +888970,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889051,7 +889114,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889339,7 +889402,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889447,39 +889510,39 @@
     },
     {
       "_origin": "semantic",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/apply-visibility.md:104",
+      "id": "efs:section:docs/how-it-works/apply-visibility.md:111",
       "kind": "document_section",
       "label": "Worked example 1: the follower tenure counted twice",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L104"
+      "source_location": "L111"
     },
     {
       "_origin": "semantic",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/apply-visibility.md:117",
+      "id": "efs:section:docs/how-it-works/apply-visibility.md:124",
       "kind": "document_section",
       "label": "Worked example 2: the apply in flight counted by neither",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L117"
+      "source_location": "L124"
     },
     {
       "_origin": "semantic",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/apply-visibility.md:132",
+      "id": "efs:section:docs/how-it-works/apply-visibility.md:139",
       "kind": "document_section",
       "label": "For a new derived counter",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L132"
+      "source_location": "L139"
     },
     {
       "_origin": "semantic",
@@ -889495,15 +889558,15 @@
     },
     {
       "_origin": "semantic",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/apply-visibility.md:31",
+      "id": "efs:section:docs/how-it-works/apply-visibility.md:33",
       "kind": "document_section",
       "label": "The sequence of one apply",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L31"
+      "source_location": "L33"
     },
     {
       "_origin": "semantic",
@@ -889511,23 +889574,23 @@
       "community_label_version": 1,
       "community_name": "Server \u00b7 Raft host \u00b7 wr32be()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/apply-visibility.md:69",
+      "id": "efs:section:docs/how-it-works/apply-visibility.md:74",
       "kind": "document_section",
       "label": "How a derived counter is derived",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L69"
+      "source_location": "L74"
     },
     {
       "_origin": "semantic",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/apply-visibility.md:90",
+      "id": "efs:section:docs/how-it-works/apply-visibility.md:95",
       "kind": "document_section",
       "label": "The rule: each row counted once across a leader change",
       "source_file": "docs/how-it-works/apply-visibility.md",
-      "source_location": "L90"
+      "source_location": "L95"
     },
     {
       "_origin": "semantic",
@@ -889795,7 +889858,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889807,7 +889870,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889819,7 +889882,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889831,7 +889894,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889843,7 +889906,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889855,7 +889918,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889867,7 +889930,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -889879,7 +889942,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -892807,7 +892870,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -892819,7 +892882,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -892831,7 +892894,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -892843,7 +892906,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -892855,7 +892918,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -892867,7 +892930,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -892999,7 +893062,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -893443,7 +893506,7 @@
     },
     {
       "_origin": "semantic",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "extraction": "deterministic-source-index",
@@ -895815,7 +895878,7 @@
     },
     {
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -899933,7 +899996,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -912911,7 +912974,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -912923,7 +912986,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -912935,7 +912998,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -912947,7 +913010,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -912959,7 +913022,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -912971,7 +913034,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -912982,7 +913045,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "rationale",
@@ -934023,7 +934086,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -934038,7 +934101,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -934053,7 +934116,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -934068,7 +934131,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -960383,7 +960446,7 @@
     },
     {
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -960395,7 +960458,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -960407,7 +960470,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -960419,7 +960482,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -960443,7 +960506,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -960455,7 +960518,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -960467,7 +960530,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -960479,7 +960542,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -960491,7 +960554,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -960503,7 +960566,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 133,
+      "community": 134,
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 find()",
       "file_type": "code",
@@ -967575,7 +967638,7 @@
     },
     {
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967586,7 +967649,7 @@
     },
     {
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967597,7 +967660,7 @@
     },
     {
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967609,7 +967672,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967621,7 +967684,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967633,7 +967696,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967645,7 +967708,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967657,7 +967720,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967669,7 +967732,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967681,7 +967744,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967693,7 +967756,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967705,7 +967768,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967717,7 +967780,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967729,7 +967792,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967765,7 +967828,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967777,7 +967840,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967789,7 +967852,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967801,7 +967864,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967813,7 +967876,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967825,7 +967888,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967849,7 +967912,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967861,7 +967924,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967873,7 +967936,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967885,7 +967948,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967897,7 +967960,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967909,7 +967972,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967921,7 +967984,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967933,7 +967996,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967945,7 +968008,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967957,7 +968020,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -967969,7 +968032,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 135,
+      "community": 133,
       "community_label_version": 1,
       "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
@@ -970434,9 +970497,9 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 7,
       "community_label_version": 1,
-      "community_name": "Metadata \u00b7 Rows",
+      "community_name": "Tests \u00b7 Test meta apply",
       "file_type": "code",
       "id": "src_meta_meta_apply_sweep_efs_meta_apply_gc_ack",
       "label": "efs_meta_apply_gc_ack()",
@@ -970530,9 +970593,9 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 12,
+      "community": 133,
       "community_label_version": 1,
-      "community_name": "Metadata \u00b7 Rows",
+      "community_name": "Metadata \u00b7 Gc",
       "file_type": "code",
       "id": "src_meta_meta_apply_sweep_gc_ack_apply",
       "label": "gc_ack_apply()",
@@ -1041926,7 +1041989,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1041941,7 +1042004,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1041956,7 +1042019,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1041971,7 +1042034,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1041986,7 +1042049,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1042001,7 +1042064,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1047655,7 +1047718,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1047667,7 +1047730,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1047679,7 +1047742,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1047691,7 +1047754,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1047703,7 +1047766,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1047715,7 +1047778,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1047727,7 +1047790,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1047738,7 +1047801,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "rationale",
@@ -1047749,7 +1047812,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "rationale",
@@ -1059919,7 +1059982,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1059930,7 +1059993,7 @@
     },
     {
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "rationale",
@@ -1059943,7 +1060006,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1059958,7 +1060021,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1059970,7 +1060033,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1059982,7 +1060045,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1059994,7 +1060057,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1060006,7 +1060069,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1060018,7 +1060081,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
@@ -1060030,7 +1060093,7 @@
     {
       "_callable": true,
       "_origin": "ast",
-      "community": 134,
+      "community": 135,
       "community_label_version": 1,
       "community_name": "Tests \u00b7 Test k register",
       "file_type": "code",
