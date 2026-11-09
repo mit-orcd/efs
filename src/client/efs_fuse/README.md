@@ -21,7 +21,7 @@ Symptom → file → tests (`python3 scripts/tests_for.py client/efs_fuse.<file>
 | Crash handler, stats text, feature flags, virtual inodes, invalidation thread, the `.find` directory, query credentials, DAC and permission helpers | `support.c` | `support.h` | `t_req`, `g_fuse_se` | `.support` (5) |
 | `.find/<term>` query results: fetch, per-caller match, LOOKUP intern, OPEN copy, GETATTR size, slots, the 64 MiB budget, the fetch limit, unmount clear | `find_res.c` | `find_res.h`: `find_res_intern`, `find_res_open`, `find_query_fill_stat`, `find_query_read`, `find_res_clear` | the result table (`static`, private with its mutex and byte count; slots are never handed out) | `.find_res` (2; `tests/test_find_res_interface.c` links the real `find_res.c`) |
 | LOOKUP memo, GETATTR row cache, READDIR collection | `getattr.c` | `getattr.h` | `t_lookup_memo_serial`, `t_getattr_row`, `t_getattr_ino`, `struct efs_dirh` | `.getattr` (3) |
-| OPEN / CREATE references, lease acquire, retry fairness, BUSY, READ; retained last closes and their background drain | `open.c` | `open.h`: `efs_open_acquire_*`, `efs_close_note`, `efs_open_release_pending`, `efs_open_retry_pass`, `efs_client_ino_is_open`, `efs_open_retained`, `efs_open_append_*` | the open-ref table (`static`, private with its mutex; rows are never handed out), `struct efs_pending_create` | `.open` (10; `tests/test_open_interface.c` links the real `open.c`) |
+| OPEN / CREATE references, lease acquire, retry fairness, BUSY, READ; retained last closes and their background drain | `open.c` | `open.h`: `efs_open_acquire_*`, `efs_close_note`, `efs_open_release_pending`, `efs_open_retry_pass`, `efs_client_ino_is_open`, `efs_open_retained`, `efs_open_append_*` | the open-ref table (`static`, private with its mutex; rows are never handed out), `struct efs_pending_create` | `.open` (8; `tests/test_open_interface.c` links the real `open.c`) |
 | Write-back pool, bounce buffers, drain budgets, the sticky PUT error, worker stop | `writeback.c` | `writeback.h`: `efs_wb_enqueue_owned`, `efs_wb_pending`, `efs_wb_sync`, `efs_wb_sync_ino`, `efs_wb_stop` | the pool (`static g_wb`, private with its mutex) | `.writeback` (4; `tests/test_wb_interface.c` links the real `writeback.c`) |
 | Append reservation, publication, pressure flush and background worker | `append.c` | `append.h` | — | `.append` (5) |
 | WRITE admission, store, buffer, FSYNC, FLUSH | `write.c` | `write.h` | — | `.write` (2) |
@@ -86,7 +86,7 @@ compile).
 
 ## Tests
 
-- `python3 scripts/tests_for.py client/efs_fuse` lists all 56 rows; the dotted
+- `python3 scripts/tests_for.py client/efs_fuse` lists all 54 rows; the dotted
   forms above select one file's rows (add `--run` after `make all`).
 - Gate evidence for the split:
   [efs-fuse-split-20261104](../../../docs/status/2026-11/efs-fuse-split-20261104.md);

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Exercise the production inode lease edges, including failed and overlapping opens."""
+"""release.c's last close over the real lease edges: a virtual inode releases
+without a lease edge, and a momentarily full identity window is waited out at
+release. The open.c edges this test used to prove are cases of
+tests/test_open_interface.c (Task ER); these two are release.c's and open.h
+does not expose them."""
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
 import csrc
@@ -72,58 +76,15 @@ int efs_client_rpc_flock(efs_export_id_t ex, efs_ino_t ino, uint32_t op, uint64_
 }
 """ + csrc.hblock('efs_fuse','#define CLOSE_ADMIT_SPINS') + refs + '\n'.join(function(n) for n in ['efs_open_note', 'efs_open_set_leased', 'efs_open_retry_order', 'efs_close_note', 'efs_open_release_pending_run', 'efs_open_release_pending', 'efs_open_close_unadmitted', 'wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire', 'efs_fuse_release_ino']) + r"""
 static void release(void) { struct fuse_file_info fi = {.fh = 42}; assert(!efs_fuse_release_ino(42, &fi)); }
-static void *opener(void *arg) { (void)arg; assert(efs_open_acquire(42) == EFS_OK); return NULL; }
-static void *closer(void *arg) { (void)arg; release(); return NULL; }
-static void wait_entered(void) {
-    pthread_mutex_lock(&gate);
-    while (!entered) pthread_cond_wait(&cv, &gate);
-    pthread_mutex_unlock(&gate);
-}
-static void resume(void) {
-    pthread_mutex_lock(&gate); unblock = 1; pthread_cond_broadcast(&cv); pthread_mutex_unlock(&gate);
-}
-static int efs_client_ino_is_open_test(efs_ino_t ino){pthread_mutex_lock(&g_open_mu);int r=open_ref_find(ino)!=NULL;pthread_mutex_unlock(&g_open_mu);return r;}
 int main(void) {
     struct fuse_file_info query = {.fh = 1ULL << 60};
     assert(!efs_fuse_release_ino(query.fh, &query));
     assert(!query.fh && !holds && !drops && !g_open_refs);
-    assert(efs_open_acquire(42) == EFS_OK);
-    assert(efs_open_acquire(42) == EFS_OK && holds == 1);
-    release(); assert(drops == 0); release(); assert(drops == 1 && !g_open_refs);
-    fail = 1; assert(efs_open_acquire(42) == EFS_ERR_IO && g_open_refs && !g_open_refs->n && g_open_refs->close_pending); fail = 0;
-    pthread_t a, b;
-    block = 1; entered = unblock = 0;
-    assert(!pthread_create(&a, NULL, opener, NULL)); wait_entered();
-    assert(pthread_mutex_trylock(open_edge_mu(42)) != 0);
-    assert(!pthread_create(&b, NULL, opener, NULL)); resume();
-    pthread_join(a, NULL); pthread_join(b, NULL);
-    assert(g_open_refs->n == 2 && g_open_refs->leased);
-    block = 0; release();
-    block = 2; entered = unblock = 0;
-    assert(!pthread_create(&a, NULL, closer, NULL)); wait_entered();
-    assert(pthread_mutex_trylock(open_edge_mu(42)) != 0);
-    assert(!pthread_create(&b, NULL, opener, NULL)); resume();
-    pthread_join(a, NULL); pthread_join(b, NULL);
-    assert(g_open_refs->n == 1 && g_open_refs->leased);
-    block = 0; release(); assert(!g_open_refs);
-    int fetched=fileid_calls;
-    assert(!efs_open_acquire_fileid(42,99));
-    assert(fileid_calls==fetched && g_open_refs->leased);
-    release(); assert(!g_open_refs);
     /* A momentarily full identity window on the last close is waited out
      * at release (not left to the 10/s background drain). */
     assert(!efs_open_acquire(42)); close_busy = 3; int before_drops = drops;
     release(); assert(!close_busy && drops == before_drops + 1 && !g_open_refs);
-    /* Many inodes, colliding hash buckets: every row found, all removed. */
-    for (efs_ino_t i = 1; i <= 20000; i++) assert(!efs_open_acquire(i * 4096));
-    for (efs_ino_t i = 1; i <= 20000; i++) assert(efs_client_ino_is_open_test(i * 4096));
-    for (efs_ino_t i = 1; i <= 20000; i++) {
-        struct fuse_file_info fi = {.fh = i * 4096};
-        assert(!efs_fuse_release_ino(fi.fh, &fi));
-    }
-    assert(!g_open_refs);
-    for (unsigned b = 0; b < OPEN_REF_BUCKETS; b++) assert(!g_open_hash[b]);
-    puts("open leases: shared opens, failed HOLD, acquire/release serialization, CLOSE admission wait, hashed table PASS");
+    puts("release: virtual inode, CLOSE admission wait PASS");
 }
 """
 with tempfile.TemporaryDirectory(prefix='efs-open-lease-') as directory:
