@@ -1,28 +1,33 @@
 # W171 · Structure plan: less context per change
 
-**Status: PROPOSED Nov 2 (devel `7b983fbb6`); no code changed.** Reviews an
-external structure proposal against devel and turns it into gated tasks.
+**Status (Nov 9, Task EH): in progress; phases 1 and 2 landed except 2b,
+four phase 3 pilots merged.** Source: devel `33cd0a839` (wave 65 merged
+Nov 9). Merge state: 1a, 1b and 2a merged in wave 53 (Nov 3), 1c and 2c in
+wave 54 (Nov 3); in phase 3 the `efs_fuse.c` split merged in wave 55 and
+its interfaces in wave 56 (Nov 4), the `meta_apply.c` split (Task DL) in
+wave 59 (Nov 6), the write-back pool ownership pilot (Task DM) in wave 60
+(Nov 7) with its `ready` race fixed by Task DT in wave 61 (Nov 7), the
+open-reference table (Task EB) in wave 64 (Nov 8), the `.find` result
+cache (Task EC, K101 fixed), the navigation leftovers (Task ED) and the
+ReadIndex entry map (Task DO) in wave 65 (Nov 9). Verdict: the two splits
+did not reduce the lines an agent must read; the three ownership pilots
+did (691 to 593, 640 to 543, 542 to 428 lines needed). Remaining
+failures: none open; 2b, the `raft_host.c` split, waits on the
+`devel-w123-recovery` merge, which is the user's decision. Active run:
+wave 66 Tasks EF (graph and selector), EH (this block), EI (blind reader)
+and EJ (K54 fence test) on their own branches, not yet merged. Next
+action: merge wave 66; start 2b after W123 recovery merges. Rule: at each
+wave merge the coordinator sets the status line of every merged task page
+(merged in wave N on date), with the ledger entry and the W171 row.
 
-> **Current status (Nov 8, Task EB):** the write-back pool ownership pilot
-> (Task DM, called "unmerged" in the Nov 6 bullet below) merged into devel
-> in wave 60, and its open `ready` race was fixed by Task DT ([write-back
-> `ready` flag and start-failure join](writeback-ready-20261107.md)) and
-> merged in wave 61 ([ledger](ledger.md)). The open-reference table named
-> as the next candidate followed in Task EB
-> ([evidence](taskEB-review-followup-20261108.md)). The text below is the
-> plan as written on Nov 2 with its dated additions, left as it was.
->
-> **Nov 9 (Task EC):** the third candidate, `g_find_res`, is private to
-> `find_res.c` behind `find_res.h` with a compiled test; the reading set
-> fell from 542 to 428 lines needed and 7 to 3 source files, and the
-> before-reading found K101 (fixed on the same branch, blocks alpha: no)
-> ([evidence](find-res-ownership-20261108.md), unmerged).
+Reviews an external structure proposal against devel and turns it into
+gated tasks. Dated status pointers and the Nov 2 state are under
+[History](#history).
+
 Goal, as [developing.md](../../how-it-works/developing.md) already states it:
 a change to one module is decidable from that module's source, its interface
 and its tests. The measure is how few files an agent must read for one
 behaviour change, not lines removed.
-
-**Current state (Nov 2):** source devel `7b983fbb6`, no code changed; verdict PROPOSED (nothing qualified). Remaining failures: none recorded, phases not started. Active run: none; phase 1a (status landing page) is in progress on its own branch. Next action: merge phase 1 (1a status page, 1b test catalogue, 1c component READMEs) and 2a/2c as one wave; the `raft_host.c` split waits for W123.
 
 ## Measured on devel
 
@@ -209,7 +214,7 @@ match the table. Done: adding a setting edits one file.
   a small owner interface, a test that compiles the real module through it,
   and an unfamiliar investigation measured before and after. **Write-back
   pool done Nov 6** (Task DM, [evidence](writeback-ownership-20261105.md),
-  unmerged): `g_wb` private to `writeback.c`, five operations in
+  merged in wave 60): `g_wb` private to `writeback.c`, five operations in
   `writeback.h` with the contract on top, callers off the pool's fields,
   `tests/test_wb_interface.c` in `make test`. The investigation (can the
   unmount stop leave pool work or the sticky error behind) stopped at one
@@ -249,3 +254,32 @@ match the table. Done: adding a setting edits one file.
   from outside the repository break (none are known).
 - Nothing here changes product behaviour. Any phase whose gate shows a
   difference stops and is reported, not patched forward.
+
+## History
+
+Status lines as they stood before Task EH (Nov 9) replaced them with the
+block at the top; the text is unchanged. The opening line, Nov 2:
+
+**Status: PROPOSED Nov 2 (devel `7b983fbb6`); no code changed.** Reviews an
+external structure proposal against devel and turns it into gated tasks.
+
+Status pointers added Nov 8 (Task EB) and Nov 9 (Task EC) above the goal:
+
+> **Current status (Nov 8, Task EB):** the write-back pool ownership pilot
+> (Task DM, called "unmerged" in the Nov 6 bullet below) merged into devel
+> in wave 60, and its open `ready` race was fixed by Task DT ([write-back
+> `ready` flag and start-failure join](writeback-ready-20261107.md)) and
+> merged in wave 61 ([ledger](ledger.md)). The open-reference table named
+> as the next candidate followed in Task EB
+> ([evidence](taskEB-review-followup-20261108.md)). The text below is the
+> plan as written on Nov 2 with its dated additions, left as it was.
+>
+> **Nov 9 (Task EC):** the third candidate, `g_find_res`, is private to
+> `find_res.c` behind `find_res.h` with a compiled test; the reading set
+> fell from 542 to 428 lines needed and 7 to 3 source files, and the
+> before-reading found K101 (fixed on the same branch, blocks alpha: no)
+> ([evidence](find-res-ownership-20261108.md), unmerged).
+
+The current-state paragraph, Nov 2:
+
+**Current state (Nov 2):** source devel `7b983fbb6`, no code changed; verdict PROPOSED (nothing qualified). Remaining failures: none recorded, phases not started. Active run: none; phase 1a (status landing page) is in progress on its own branch. Next action: merge phase 1 (1a status page, 1b test catalogue, 1c component READMEs) and 2a/2c as one wave; the `raft_host.c` split waits for W123.

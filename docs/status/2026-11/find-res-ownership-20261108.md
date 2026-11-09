@@ -12,7 +12,7 @@ replaced or evicted slot turned GETATTR into `EPERM` (F2); each operation
 now reads the slot its own fetch filled before the mutex is released
 (negative control: 3 of 3 runs fail before, pass after). node9900:
 `make test` rc 0 on both trees, `tests_for.py client/efs_fuse --run` 56 commands rc 0, TSan and ASan `find_res_interface` PASS. Branch `claude/frosty-bartik-e0be55` on devel `df7d11371`
-(wave 64). Not merged, not pushed.
+(wave 64). Merged into devel in wave 65 (Nov 9), K101 FIXED. Status Nov 9: remaining failures none; active run none; next action none on this page, W171 continues on the [structure plan](structure-plan-20261102.md).
 
 - Purpose: the next ownership pilot of the
   [structure plan](structure-plan-20261102.md) (phase 3, ownership-pilots

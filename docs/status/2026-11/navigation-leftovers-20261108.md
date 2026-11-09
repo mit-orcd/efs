@@ -16,7 +16,7 @@ server/raft_host.publish` lists nothing (exit 1), `server/raft_host.publsh`
 is refused (exit 2), and the graph has a `server/raft_host.publish`
 component node.** fstor007 `make test` rc 0 (175 s with `make all`). No K row;
 blocks alpha: no. Branch `claude/xenodochial-jepsen-f0bc41` on devel
-`df7d11371` (wave 64). Not merged, not pushed.
+`df7d11371` (wave 64). Merged into devel in wave 65 (Nov 9); the merge-time commit `3edd95ae1` refreshed the `.open` cell, so `make docs-check` passes on devel. Status Nov 9: remaining failures none; active run none; next action none on this page, W171 continues on the [structure plan](structure-plan-20261102.md).
 
 - Purpose: finish the four pieces Task EB left
   ([EB page](taskEB-review-followup-20261108.md), item 2's limit and "Not
