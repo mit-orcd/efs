@@ -8,7 +8,7 @@ name (below, reverted).
 
 Task EU, Nov 9 2026, Mac only (no host, no build). Source: branch
 `claude/nervous-heisenberg-b36971` on devel `9bb50fe79` (wave 67). The
-change is commit `2f662a8be`; it is not merged and not pushed. Purpose: the
+change is commits `2f662a8be` and `032181404` (review fixes); neither is merged or pushed. Purpose: the
 Nov 9 outside review noted that agents could not tell which named case proves
 a given operation or invariant. It asked for a small map from contract or
 operation to named cases and commands, with the inherited whole-module tests
@@ -26,8 +26,12 @@ as the fallback.
   Tests section only: one table over the operations that
   `include/efs/meta_apply.h` declares and `src/meta/meta_apply/*.c` defines.
   They are grouped by area, with up to three `RUN` cases per row, and a row
-  for each invariant the Contract section states (batch atomicity, I8, I9,
-  I16, the BUSY write check). The command is
+  for batch atomicity, the BUSY write check and the invariants with a case
+  named after them (I7, I8, I9, I16, worded as in
+  [architecture §4](../../how-it-works/architecture.md#4-invariants)).
+  The other invariants the Contract section lists are I5, I6, I17, I18,
+  I19, I23 and I24. They share one "none" row, because no case of
+  `tests/test_meta_apply.c` names them. The command is
   `./tests/test_meta_apply <case...>` (Task EG's substring filter).
 - An operation with no case gets "none; whole-module fallback" and
   `python3 scripts/tests_for.py <tag>`, so the gap is visible.
@@ -53,12 +57,17 @@ No test source, `tests/budgets.tsv` or `scripts/tests_for.py` changed.
 
 ## How a case was chosen
 
-A case is listed when it asserts on the operation's answer, not merely when
-it calls it. For high-fanout operations, the listed cases are the ones that
-assert on the result: `efs_meta_apply_init` is called by 92 cases,
-`create_file` by 77 and `get_inode` by 71. The call matrix (which `RUN` case
-reaches which public function, directly or through a test helper) came from a
-scratch script that is not committed. A helper such as
+For meta_apply, a case is listed when it calls the operation, directly or
+through a test helper. The call matrix (which `RUN` case reaches which public
+function) came from a scratch script that is not committed. For high-fanout
+operations, the cases named after the operation were picked:
+`efs_meta_apply_init` is called by 92 cases, `create_file` by 77 and
+`get_inode` by 71. Not every case body was read, so "proves" means "calls and
+is named after it", not "asserts on every answer". A reverse check confirmed
+that every operation in a row is called by at least one of the row's listed
+cases. It found one row where none did (`efs_meta_get_chunk_view_tx`), fixed
+in `032181404`. For the three interface tests, every listed case body was
+read. A helper such as
 `test_create_lease_apply` (`static int`, no `RUN` line) is not a case. Its
 operations are attributed to the `RUN` cases that call it.
 
@@ -79,7 +88,7 @@ cases).
 
 | Owner | Operations | Named case | Only an inline block of `main` | None (fallback) |
 |---|---|---|---|---|
-| `open.h` (21 declared + `efs_client_ino_is_open`, stated there) | 22 | 11 | 3 (`efs_open_append_handoff`, `_burst_note`, `_burst_published`) | 8 (`efs_pending_create_alloc`, `_free`, `_queue`; `wb_lock_budget`; `efs_fuse_open_ino`, `efs_fuse_read_ino`, `fuse_fi_direct_io`, `fuse_odirect_unaligned`) |
+| `open.h` (21 declared + `efs_client_ino_is_open`, stated there) | 22 | 11 | 3 (`efs_open_append_handoff`, `efs_open_append_burst_note`, `efs_open_append_burst_published`) | 8 (`efs_pending_create_alloc`, `efs_pending_create_free`, `efs_pending_create_queue`; `wb_lock_budget`; `efs_fuse_open_ino`, `efs_fuse_read_ino`, `fuse_fi_direct_io`, `fuse_odirect_unaligned`) |
 | `writeback.h` | 8 | 0 | 5 (the five pool operations) | 3 (`bounce_alloc`, `bounce_release`, `efs_fuse_log_err`) |
 | `find_res.h` | 5 | 4 | 1 (`find_res_clear`) | 0 |
 | `meta/meta_apply` (`efs/meta_apply.h`, defined in this directory) | 152 | 119 | 0 | 33 |
@@ -110,7 +119,7 @@ those owners and not counted.
 Every one of the 152 operations was confirmed to appear in exactly one class
 of row, by a scratch cross-check of the header against the table.
 
-## Checks (Mac, on `2f662a8be` plus this page)
+## Checks (Mac, on `032181404` plus this page)
 
 ```bash
 python3 scripts/check_guide_counts.py    # guide counts: 13 guides match the catalogue
@@ -123,8 +132,8 @@ graphify explain client/efs_fuse.open    # still lists src/client/efs_fuse/READM
 
 ## Deliberate failure (reverted)
 
-Four rows were edited in place with `sed`, the check was run, and both guides
-were restored from copies:
+Five rows were edited in place with `sed` on `032181404`, the check was run,
+and both guides were restored from copies:
 
 1. A misspelled `RUN` case: `test_xattr` became `test_xatr` in the case and
    the command.
@@ -133,12 +142,15 @@ were restored from copies:
 3. A binary that does not exist: `test_find_res_iface`.
 4. A command that does not select its case: `test_utimens_fence` with the
    argument `test_stat_collect`.
+5. A "none" row whose command is not a fallback: the I7 row.
 
 ```
 src/client/efs_fuse/README.md:107: open_busy_admision is not a function in tests/test_open_interface.c
 src/client/efs_fuse/README.md:148: byte_budget: tests/test_find_res_iface.c is not a tracked file
-src/meta/meta_apply/README.md:142: test_xatr is not a RUN case of tests/test_meta_apply.c
-src/meta/meta_apply/README.md:171: test_utimens_fence is not selected by the command in tests/test_meta_apply.c
+src/meta/meta_apply/README.md:125: a "none" row names a case or runs no tests_for.py fallback
+src/meta/meta_apply/README.md:145: argument test_xatr matches no RUN case of tests/test_meta_apply.c
+src/meta/meta_apply/README.md:145: test_xatr is not a RUN case of tests/test_meta_apply.c
+src/meta/meta_apply/README.md:174: test_utimens_fence is not selected by the command in tests/test_meta_apply.c
 rc=1
 ```
 
@@ -154,4 +166,9 @@ catalogue` with rc 0.
   binaries need a Linux build with fuse3 headers.
 - Interface-test blocks inline in `main` have no case name of their own.
   Naming them needs test-source changes, which this task excludes.
+- For a `main` entry, the check confirms only that `main` exists, not the
+  quoted comment. The writeback table is therefore checked only for its
+  binary.
+- The map check has no case in `tests/test_tests_for.py`, the existing
+  self-test of `check()`. It was shown failing only by the probes above.
 - Only these four owners have a map. Other guides keep their file tables.
