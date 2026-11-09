@@ -87,14 +87,17 @@ void efs_meta_gc_pending_note(uint32_t anchor, int delta)
     pthread_mutex_unlock(&gc_wm_mu);
 }
 
+static void degraded_apply_start(void);
+
 /* host_apply calls this once the apply scope holds the KV writers lock:
  * applies are serialized there, so every insert noted earlier belongs to
- * an apply that already committed. */
+ * an apply that already committed. Covers both counts. */
 void efs_meta_gc_pending_apply_start(void)
 {
     pthread_mutex_lock(&gc_wm_mu);
     memset(gc_wm_cur, 0, sizeof(gc_wm_cur));
     pthread_mutex_unlock(&gc_wm_mu);
+    degraded_apply_start();
 }
 
 /* Call just before the derive scan. An insert noted before the latest
@@ -210,7 +213,15 @@ int gc_queue(struct efs_kv_item *it, uint32_t *n, uint32_t cap,
 static pthread_mutex_t dg_wm_mu = PTHREAD_MUTEX_INITIALIZER;
 static int64_t dg_wm_count[GC_WM_ANCHOR_MAX + 1];
 static int64_t dg_wm_pos[GC_WM_ANCHOR_MAX + 1];
+static int64_t dg_wm_cur[GC_WM_ANCHOR_MAX + 1]; /* marks of the latest apply */
 static int dg_wm_known[GC_WM_ANCHOR_MAX + 1];
+
+static void degraded_apply_start(void)
+{
+    pthread_mutex_lock(&dg_wm_mu);
+    memset(dg_wm_cur, 0, sizeof(dg_wm_cur));
+    pthread_mutex_unlock(&dg_wm_mu);
+}
 
 void degraded_note(uint32_t anchor, int delta)
 {
@@ -223,6 +234,7 @@ void degraded_note(uint32_t anchor, int delta)
             dg_wm_count[anchor] = 0;
     } else if (delta > 0) {
         dg_wm_pos[anchor] += delta;
+        dg_wm_cur[anchor] += delta;
     }
     pthread_mutex_unlock(&dg_wm_mu);
 }
@@ -250,18 +262,20 @@ void efs_meta_degraded_count_derived(uint32_t anchor, uint64_t n)
     pthread_mutex_unlock(&dg_wm_mu);
 }
 
-/* Call just before the derive scan. Inserts noted while unknown are rows the
- * scan counts itself; only those applied during the scan are kept, so the
- * derived count overshoots by at most the scan's window. A follower never
- * derives, so a leader elected later added every mark it ever applied
- * (k37 step 3: `Degraded chunks: 8` with all 8 marks retired). */
+/* Call just before the derive scan. Marks noted while unknown before the
+ * latest apply began are committed rows the scan counts itself; the latest
+ * apply's marks (noted before its scope commits, so maybe invisible to the
+ * scan) and those noted during the scan are kept: an overshoot, never a
+ * missed mark. A follower never derives, so a leader elected later added
+ * every mark it ever applied (k37 step 3: `Degraded chunks: 8` with all 8
+ * marks retired). */
 void efs_meta_degraded_count_begin(uint32_t anchor)
 {
     if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
         return;
     pthread_mutex_lock(&dg_wm_mu);
     if (!dg_wm_known[anchor])
-        dg_wm_pos[anchor] = 0;
+        dg_wm_pos[anchor] = dg_wm_cur[anchor];
     pthread_mutex_unlock(&dg_wm_mu);
 }
 

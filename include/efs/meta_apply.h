@@ -1247,7 +1247,7 @@ void efs_meta_gc_pending_derived(uint32_t anchor, uint64_t n);
 void efs_meta_gc_pending_invalidate(uint32_t anchor);
 /* begin: just before the derive scan, drop inserts the scan counts itself
  * (all but the latest apply's). apply_start: each apply, under the KV
- * writers lock. */
+ * writers lock; it also marks the apply for the degraded count's begin. */
 void efs_meta_gc_pending_begin(uint32_t anchor);
 void efs_meta_gc_pending_apply_start(void);
 /* W154: degraded-mark count per anchor, same rules as the GC watermark

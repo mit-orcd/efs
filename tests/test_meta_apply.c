@@ -5801,6 +5801,7 @@ static void test_degraded_marks(void)
         efs_meta_degraded_count_invalidate(a3);
         CHECK(dg_pub(kv, ino3, 0x1E5, 0, 4, 0, 0, 0, 0, 7) == EFS_OK, "mark while unknown");
         CHECK(efs_meta_degraded_count_peek(a3) == -1, "count unknown");
+        efs_meta_gc_pending_apply_start(); /* a later apply began: the mark is committed */
         efs_meta_degraded_count_begin(a3);
         rows = (int64_t)dg_scan(kv, a3).n;
         efs_meta_degraded_count_derived(a3, (uint64_t)rows);
@@ -5816,6 +5817,28 @@ static void test_degraded_marks(void)
         CHECK(dg_pub(kv, ino3, 0x1F6, 0x1E5, 4, 0, 0, 0, 0, 8) == EFS_OK, "mark during the scan");
         efs_meta_degraded_count_derived(a3, (uint64_t)rows); /* the scan missed it */
         CHECK(efs_meta_degraded_count_peek(a3) == rows + 1, "an insert during the scan is kept");
+    }
+    /* A mark is noted after its batch is staged but before the apply scope
+     * commits (efs_kv_lsm_apply_end), and the derive scan reads the committed
+     * table: begin must keep the latest apply's mark, or the count misses it
+     * and the rebuild pass may treat the anchor as clean. */
+    {
+        efs_ino_t ino4 = 0;
+        uint32_t a4;
+        int64_t rows;
+
+        CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                         "dg-inflight", &ino4) == EFS_OK && ino4, "create 4");
+        a4 = efs_kv_anchor_shard(efs_kv_lane_shard(ino4, 0));
+        efs_meta_degraded_count_invalidate(a4);
+        rows = (int64_t)dg_scan(kv, a4).n; /* the committed table, before the apply */
+        efs_meta_gc_pending_apply_start();
+        CHECK(dg_pub(kv, ino4, 0x2A1, 0, 4, 0, 0, 0, 0, 9) == EFS_OK, "mark in the latest apply");
+        efs_meta_degraded_count_begin(a4);
+        efs_meta_degraded_count_derived(a4, (uint64_t)rows); /* the scan missed it */
+        CHECK(efs_meta_degraded_count_peek(a4) == rows + 1, "the in-flight mark is kept");
+        CHECK(efs_meta_degraded_count_peek(a4) == (int64_t)dg_scan(kv, a4).n,
+              "count equals the rows once committed");
     }
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
