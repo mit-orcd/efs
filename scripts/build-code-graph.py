@@ -56,11 +56,27 @@ def component_tag(path):
     return "/".join(parts[:-1]) + ("." if len(parts) > 2 else "/") + parts[-1] if len(parts) > 1 else parts[0]
 
 
+def tests_for_module(root):
+    spec = importlib.util.spec_from_file_location("tests_for", root / "scripts/tests_for.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_files(command, code, config):
+    """The tracked test files a catalogue command names."""
+    out = []
+    for name in re.findall(r"(?:tests|scripts)/[\w./-]+", command):
+        out += [name] if name in code else [name + ext for ext in config["code_suffixes"] if name + ext in code]
+    return out
+
+
 def components(root, config, code, docs):
-    """Component nodes (Task EB): one per catalogue tag and per source file in a
-    guided directory (one with a README). Each names its guide, contract (.h),
-    implementation (.c) and the catalogued test files, by layout and by the
-    catalogue's literal rows; nothing is inferred from source text."""
+    """Component nodes (Task EB): one per catalogue tag, declared prefix tag and
+    source file in a guided directory (one with a README). Each names its guide,
+    contract (.h), implementation (.c) and the test files scripts/tests_for.py
+    selects for the tag (Task EF): its own rows EXTRACTED, a parent's rows
+    INFERRED and labelled with the parent, none where tests_for refuses."""
     out = {}
     def entry(tag):
         if tag not in out:
@@ -76,20 +92,27 @@ def components(root, config, code, docs):
     for path in code:
         if path.startswith("src/") and path.endswith(".c") and str(Path(path).parent) + "/README.md" in docs:
             entry(component_tag(path))
-    for line, text in enumerate((root / config["catalogue"]).read_text().splitlines(), 1):
-        if text.startswith("# prefixes "):  # declared function-prefix tags, rows or not
-            parent, names = text[len("# prefixes "):].split(":", 1)
-            for n in names.split():
-                entry(parent + "." + n.split("=")[0])
-        f = text.split("\t")
-        if len(f) < 7 or text.startswith("#") or f[0] == "command":
+    tf = tests_for_module(root)
+    catalogue = root / config["catalogue"]
+    rows = list(tf.catalogue(catalogue))
+    prefixes = tf.prefix_tags(catalogue)
+    for tag in prefixes | {t for _, _, tags in rows for t in tags}:
+        entry(tag)
+    line_of = {}  # the catalogue line a command's row starts on, for the edge location
+    for line, text in enumerate(catalogue.read_text().splitlines(), 1):
+        line_of.setdefault(text.split("\t", 1)[0], line)
+    for tag, e in out.items():
+        try:
+            selected, answered = tf.resolve(rows, tag, src=root / "src", prefixes=prefixes)
+        except LookupError:
             continue
-        tests = []
-        for name in re.findall(r"(?:tests|scripts)/[\w./-]+", f[0]):
-            tests += [name] if name in code else [name + ext for ext in config["code_suffixes"] if name + ext in code]
-        for tag in f[5].split(","):
-            e = entry(tag)
-            e["tests"] += [(t, line) for t in tests if (t, line) not in e["tests"]]
+        method, confidence = ("test-catalogue", "EXTRACTED") if answered == tag else ("inherited:" + answered, "INFERRED")
+        seen = set()
+        for cmd, _ in selected:
+            for t in test_files(cmd, code, config):
+                if t not in seen:
+                    seen.add(t)
+                    e["tests"].append((t, line_of[cmd], method, confidence))
     return out
 
 
@@ -246,7 +269,8 @@ def build(root, out):
                     edge(file_id(p), file_id(dest), "references_path", p, line)
     # Component nodes (Task EB): guide, contract, implementation and the
     # catalogued tests of one component, so `graphify explain <tag>` is the
-    # compact starting set. Layout and catalogue rows only, no inference.
+    # compact starting set. Layout and tests_for.py's answer; a parent's rows
+    # are INFERRED and carry the parent tag.
     for tag, c in sorted(components(root, config, code, docs).items()):
         cid = "efs:component:" + tag
         node(cid, tag, c["impl"] or c["guide"] or config["catalogue"], 1, "component")
@@ -256,8 +280,8 @@ def build(root, out):
             edge(cid, file_id(c["contract"]), "contract", c["contract"], method="source-layout")
         if c["impl"]:
             edge(cid, file_id(c["impl"]), "implemented_by", c["impl"], method="source-layout")
-        for test, line in c["tests"]:
-            edge(cid, file_id(test), "tested_by", config["catalogue"], line, method="test-catalogue")
+        for test, line, method, confidence in c["tests"]:
+            edge(cid, file_id(test), "tested_by", config["catalogue"], line, method, confidence)
     # Resolve quoted C includes by exact path, not matching a basename to a
     # possibly unrelated file. Unresolved imports remain labelled boundaries.
     for e in edges:
@@ -348,7 +372,7 @@ def build(root, out):
     report += ["", "## Extraction warnings", ""] + ["- " + warning for warning in extraction_warnings]
     report += ["", "## Limits", "", f"Health warning: {self_calls} self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.", f"Unresolved edges omitted: {dict(omitted)}. These are extraction gaps, not absent dependencies.",
                "Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.",
-               "Component nodes come from the source layout and the test catalogue's rows (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage.",
+               "Component nodes come from the source layout and scripts/tests_for.py's answer over the test catalogue (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage; a route inherited from the parent tag is INFERRED with evidence_method inherited:<parent>.",
                "No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.",
                "Known-bug checks validate navigation, not a rerun of product acceptance or independent rediscovery of the bug.",
                "External library internals are excluded. Function pointers, macros and embedded C/shell may be unresolved."]

@@ -48,24 +48,27 @@ not; compare the manifest's per-file hashes as well as the base commit.
 
 ## How to query
 
-Use an exact seed and a relationship filter for code paths:
+Component known: start with `graphify explain <tag>` (the catalogue tag, the
+`scripts/tests_for.py` subsystem). Owner unknown: `graphify query` to locate it,
+then `graphify explain` on what it finds. Both come before the first grep or
+source read.
 
 ```sh
+graphify explain client/efs_fuse.writeback
 graphify query host_apply --seed host_apply --context calls --budget 1500
 graphify explain W145-snapshot-unproven-tail
 ```
 
-For a component, start from its catalogue tag (the `scripts/tests_for.py`
-subsystem): the component node names the guide, the contract header, the
-implementation and the catalogued tests in one neighbourhood, nothing else:
-
-```sh
-graphify explain client/efs_fuse.writeback
-```
+The component node names the guide, the contract header, the implementation
+and the catalogued tests in one neighbourhood, nothing else.
 
 Component nodes (Task EB) come from the source layout (`src/<dir>/<name>.c`
-and `.h` in a directory with a `README.md`, the guide) and from the literal
-rows of `tests/budgets.tsv` (`tested_by`, one edge per tag of a row). A
+and `.h` in a directory with a `README.md`, the guide), from the tags and
+declared prefixes of `tests/budgets.tsv`, and their `tested_by` edges are what
+`scripts/tests_for.py` answers for the tag (Task EF), one edge per test file:
+the tag's own rows, children included, are EXTRACTED (`test-catalogue`); a
+real component with no row of its own inherits its parent's rows as INFERRED,
+labelled `inherited:<parent tag>`; a declared prefix with no rows has none. A
 `tested_by` edge is a catalogue route, not measured coverage. The component
 guides (`src/**/README.md`) are indexed as documents: headings become sections
 and literal symbol mentions link to their one implementation.

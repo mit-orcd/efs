@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validate real graph traces; missing/reversed edges must not pass by curation."""
 import copy
+from collections import defaultdict
 import importlib.util
 import json
 import os
@@ -133,6 +134,35 @@ class GraphChecks(unittest.TestCase):
         # a declared function prefix with no rows still has its node (Task ED)
         self.assertEqual(targets('server/raft_host.publish', 'guided_by'), ['efs:file:src/server/README.md'])
         self.assertEqual(targets('server/raft_host.publish', 'tested_by'), [])
+        # Task EF: every component's tested_by set is what tests_for.py answers
+        tf = m.tests_for_module(ROOT)
+        rows = list(tf.catalogue())
+        code = {n['source_file'] for n in self.graph['nodes'] if n['id'] == 'efs:file:' + n.get('source_file', '')}
+        config = json.loads((ROOT / 'tools/graphify/scope.json').read_text())
+        tested = defaultdict(list)
+        for e in self.graph['links']:
+            if e['relation'] == 'tested_by' and e['source'].startswith('efs:component:'):
+                tested[e['source']].append(e)
+        def expected(tag):
+            try:
+                selected, answered = tf.resolve(rows, tag)
+            except LookupError:
+                return set(), None
+            return {'efs:file:' + t for cmd, _ in selected for t in m.test_files(cmd, code, config)}, answered
+        components = [n['label'] for n in self.graph['nodes'] if n['id'].startswith('efs:component:')]
+        self.assertGreater(len(components), 100)
+        for tag in components:
+            want, answered = expected(tag)
+            got = tested['efs:component:' + tag]
+            self.assertEqual({e['target'] for e in got}, want, tag)
+            self.assertEqual(len(got), len(want), tag)  # one edge per file
+            label = {('EXTRACTED', 'test-catalogue')} if answered == tag else {('INFERRED', 'inherited:%s' % answered)}
+            self.assertTrue(not got or {(e['confidence'], e['evidence_method']) for e in got} == label, tag)
+        publish = tested['efs:component:meta/meta_apply.publish']
+        self.assertEqual({e['target'] for e in publish}, expected('meta/meta_apply')[0])
+        self.assertEqual({e['confidence'] for e in publish}, {'INFERRED'})
+        raft_files = {'efs:file:' + t for cmd, _ in tf.select(rows, 'server/raft_host') for t in m.test_files(cmd, code, config)}
+        self.assertEqual(len(tested['efs:component:server/raft_host']), len(raft_files))
         # the guides are documents: sections and literal symbol mentions
         self.assertTrue(any(n.get('source_file') == 'src/client/efs_fuse/README.md' and n.get('kind') == 'document_section'
                             for n in self.graph['nodes']))

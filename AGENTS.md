@@ -63,3 +63,8 @@ See `tools/graphify/README.md` for directed relationship semantics, known-bug
 validation and local hook installation. Run `python3 tests/test_code_graph.py`
 after rebuilding. Treat missing edges and parser warnings as coverage gaps;
 curated test links and literal document mentions are not runtime proof.
+Component known: start with `graphify explain <tag>`. Owner unknown:
+`graphify query` to locate it, then `graphify explain`, both before the first
+grep or source read. A `tested_by` edge is the test selector's catalogue
+route, not coverage; one inherited from the parent tag is INFERRED and labelled
+with the parent.
