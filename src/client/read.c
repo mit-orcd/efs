@@ -229,7 +229,7 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
         if (parent && parent < (uint64_t)deadline)
             deadline = (int64_t)parent;
         while (pending[0] || pending[1]) {
-            struct pollfd pfds[2];
+            struct pollfd pfds[4];
             int np = 0;
             int64_t now, left;
             int pr;
@@ -259,10 +259,10 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
                     pending[i] = 0;
                     continue;
                 }
-                pfds[np].fd = w;
-                pfds[np].events = POLLIN;
-                pfds[np].revents = 0;
-                np++;
+                pfds[np++] = (struct pollfd){ .fd = w, .events = POLLIN };
+                /* An RDMA peer's exit closes only its TCP socket (Task DZ). */
+                if (conns[i]->rc && conns[i]->fd >= 0 && conns[i]->fd != w)
+                    pfds[np++] = (struct pollfd){ .fd = conns[i]->fd, .events = POLLIN };
             }
             if (!pending[0] && !pending[1])
                 break;

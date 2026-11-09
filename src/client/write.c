@@ -3241,6 +3241,22 @@ static void put_drain_verdict(int r, int i, int failed_out[EFS_NUM_FRAGMENTS],
         failed_out[i] = 1;
 }
 
+/* A reply wait on an RDMA conn polls its TCP socket too: the peer's exit
+ * closes it, while the idle QP never errors. Without it the 2 s drain and
+ * a short-of-quorum wait ran to their bounds on a crashed member (Task DZ:
+ * every k36 crash paid the 2 s drain, 1 in 10 the 30 s operation budget). */
+static int put_reply_pollfds(const struct efs_conn *c, int w, int i,
+                             struct pollfd *pfds, int *map, int npoll)
+{
+    pfds[npoll] = (struct pollfd){ .fd = w, .events = POLLIN };
+    map[npoll++] = i;
+    if (c->rc && c->fd >= 0 && c->fd != w) {
+        pfds[npoll] = (struct pollfd){ .fd = c->fd, .events = POLLIN };
+        map[npoll++] = i;
+    }
+    return npoll;
+}
+
 /* failed_out[i]=1 marks placement slots that need invalidate/retry, 2 a
  * slot this attempt could not send or finish (budget, backpressure, a
  * terminal ticket refusal), 3 a member that answered BUSY: alive, its
@@ -3483,8 +3499,8 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
         if (acks >= 2)
             break;
 
-        struct pollfd pfds[EFS_NUM_FRAGMENTS];
-        int map[EFS_NUM_FRAGMENTS];
+        struct pollfd pfds[2 * EFS_NUM_FRAGMENTS];
+        int map[2 * EFS_NUM_FRAGMENTS];
         int npoll = 0;
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             if (!pending[i] || !conns[i])
@@ -3521,11 +3537,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 pending[i] = 0;
                 continue;
             }
-            pfds[npoll].fd = w;
-            pfds[npoll].events = POLLIN;
-            pfds[npoll].revents = 0;
-            map[npoll] = i;
-            npoll++;
+            npoll = put_reply_pollfds(conns[i], w, i, pfds, map, npoll);
         }
         if (acks >= 2)
             break;
@@ -3610,8 +3622,8 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
             left = 2000;
         int64_t drain_end = now_ms + (left > 0 ? left : 0);
         while (now_ms < drain_end) {
-            struct pollfd pfds[EFS_NUM_FRAGMENTS];
-            int map[EFS_NUM_FRAGMENTS];
+            struct pollfd pfds[2 * EFS_NUM_FRAGMENTS];
+            int map[2 * EFS_NUM_FRAGMENTS];
             int npoll = 0;
             for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
                 if (!conns[i])
@@ -3635,11 +3647,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                     pending[i] = 0;
                     continue;
                 }
-                pfds[npoll].fd = w;
-                pfds[npoll].events = POLLIN;
-                pfds[npoll].revents = 0;
-                map[npoll] = i;
-                npoll++;
+                npoll = put_reply_pollfds(conns[i], w, i, pfds, map, npoll);
             }
             if (npoll == 0)
                 break;
