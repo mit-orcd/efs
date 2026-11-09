@@ -3,7 +3,7 @@
 ## Files
 
 - `efsd.c` — daemon entry, startup/stop; `cluster.c` — cluster formation and membership wiring; `discovery.c/.h` — local-subnet discovery (never defines membership).
-- `raft_host.c` — the production Raft host (hosted groups, apply pump, ReadIndex, publication, GC, sessions, transactions); owns every hosted group's state. **The file the [W171 plan](../../docs/status/2026-11/structure-plan-20261102.md) splits next** (26,112 lines; the split waits for W123).
+- `raft_host.c` — the production Raft host (hosted groups, apply pump, ReadIndex, publication, GC, sessions, transactions); owns every hosted group's state. **The file the [W171 plan](../../docs/status/2026-11/structure-plan-20261102.md) splits next** (the split waits for W123). ReadIndex code (`host_read_*`, `host_wait_*`, the view, the waiter slots, the follower RPC): [entry map](../../docs/status/2026-11/readindex-entry-map-20261108.md#entry-map), checked by `make docs-check`.
 - `handler.c` — request dispatch per connection; `thread.c` — conn/writer thread stacks; `writer.c` — writer pool; `peer_pool.c` — persistent server→server connections.
 - `server_internal.h` — shared `g_server`-style state, export lifetime (use-count guarded by `s->lock`); the anti-example in developing.md.
 - `member_store.c/.h` — durable boot counter, member identity and committed membership under `<meta root>/mdraft`.
@@ -42,6 +42,7 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 - `python3 scripts/tests_for.py server/put_upload`
 - `python3 scripts/tests_for.py server/query_refresh`
 - `python3 scripts/tests_for.py server/raft_host`
+- `python3 scripts/tests_for.py server/raft_host.read_index`
 - `python3 scripts/tests_for.py server/reclaim`
 - `python3 scripts/tests_for.py server/server_internal`
 - `python3 scripts/tests_for.py server/storage_roots`

@@ -135,6 +135,14 @@ changes alter inlining. Done for the pilot: an agent changing ReadIndex
 reads `src/server/README.md`, `host_internal.h`, `read_index.c` and the
 `tests_for.py raft_host.read_index` output, under 3,000 lines against 26,112
 today, with zero test edits beyond 2a.
+**Status (Nov 9, Task DO):** the ReadIndex entry map and the
+before-measurement exist ([evidence](readindex-entry-map-20261108.md)): 28
+`host_read_*`/`host_wait_*` definitions in `raft_host.c` plus 4 in
+`read_index_pair_remote.h`; of the 28, 17 are the round, the pair path and the
+apply wait, the other 11 share the prefix only, so the cut follows the
+map's Concern column, not the prefix. One unfamiliar investigation (a read
+after a leader change) needed 1,200 lines before the split. The split still
+waits on the `devel-w123-recovery` merge (the user's decision).
 
 **2c ∥ Settings single source.** The inventory table moves from the dated A6
 page to `docs/how-it-works/settings.md`; the 23 `R()` rows and the header
@@ -178,7 +186,7 @@ match the table. Done: adding a setting edits one file.
   one file at a time while no branch touches it: `meta_apply.c` first (Task DL,
   with a compiled-interface test and a before/after measurement of an
   unfamiliar investigation), `raft_host.c` after Task DJ's branch merges and
-  the ReadIndex entry map exists (Task DO), `write.c` after Task DK's branch
+  the ReadIndex entry map exists (Task DO, done Nov 9), `write.c` after Task DK's branch
   merges. A Nov 5 review of `104eb5e10` reads the after-page as "splitting
   and headers alone did not reduce understanding" and recommends ownership
   boundaries instead: private state behind a small owner interface, tests
