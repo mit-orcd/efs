@@ -74,7 +74,9 @@ def fence(cluster, ticket, via):
 
 
 def stored(work, nodes):
-    return sorted(str(p) for i in nodes for p in (work / f'n{i+1}').glob('data/exports/1/**/*') if p.is_file())
+    # os.walk skips a directory the orphan collector removes mid-walk; glob raised.
+    return sorted(os.path.join(d, f) for i in nodes
+                  for d, _, files in os.walk(work / f'n{i+1}/data/exports/1') for f in files)
 
 
 def main():
