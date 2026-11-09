@@ -24,6 +24,7 @@ MODULES = {
     'raft_host': ('EFS_RAFT_HOST_SOURCE', ['src/server/raft_host.c']),
     'efs_fuse': ('EFS_FUSE_SOURCE', [
         'src/client/efs_fuse/support.c',
+        'src/client/efs_fuse/find_res.c',
         'src/client/efs_fuse/getattr.c',
         'src/client/efs_fuse/open.c',
         'src/client/efs_fuse/writeback.c',
@@ -37,6 +38,7 @@ MODULES = {
         'src/client/efs_fuse/main.c',
         'src/client/efs_fuse/fuse_internal.h',
         'src/client/efs_fuse/support.h',
+        'src/client/efs_fuse/find_res.h',
         'src/client/efs_fuse/getattr.h',
         'src/client/efs_fuse/open.h',
         'src/client/efs_fuse/writeback.h',

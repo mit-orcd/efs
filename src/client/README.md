@@ -2,7 +2,7 @@
 
 ## Files
 
-- `efs_fuse/` — the FUSE adapter, one file per area with its interface and contract in `<area>.h` next to it (read `efs_fuse/README.md`, then the area's header; `fuse_internal.h` is the 80-line shared core; the concatenation order is `MODULES["efs_fuse"]` in `tests/csrc.py`): `support.c` crash handlers, stats, features, virtual inodes, invalidation, find, access checks; `getattr.c` lookup memo, getattr, readdir; `open.c` open references, leases, open, read; `writeback.c` write-back pool; `append.c` append and pressure flush; `write.c` write admission, store, fsync, flush; `namespace.c` create, mkdir, unlink, attributes, link, truncate; `release.c` release, drain, rename, lseek; `plock_init.c` POSIX locks and `FUSE_INIT`; `lookup.c` lookup and setattr; `ll_run.c` operation bodies; `main.c` destroy, gated wrappers, op table, `main`. `client.c` — client setup, connection pool and mount state; `client.c` — client setup, connection pool and mount state; `efs_bench.c` — benchmark driver.
+- `efs_fuse/` — the FUSE adapter, one file per area with its interface and contract in `<area>.h` next to it (read `efs_fuse/README.md`, then the area's header; `fuse_internal.h` is the 80-line shared core; the concatenation order is `MODULES["efs_fuse"]` in `tests/csrc.py`): `support.c` crash handlers, stats, features, virtual inodes, invalidation, find, access checks; `find_res.c` the `.find` result cache; `getattr.c` lookup memo, getattr, readdir; `open.c` open references, leases, open, read; `writeback.c` write-back pool; `append.c` append and pressure flush; `write.c` write admission, store, fsync, flush; `namespace.c` create, mkdir, unlink, attributes, link, truncate; `release.c` release, drain, rename, lseek; `plock_init.c` POSIX locks and `FUSE_INIT`; `lookup.c` lookup and setattr; `ll_run.c` operation bodies; `main.c` destroy, gated wrappers, op table, `main`. `client.c` — client setup, connection pool and mount state; `client.c` — client setup, connection pool and mount state; `efs_bench.c` — benchmark driver.
 - `ops.c`, `read.c`, `write.c`, `inode_rpc.c` — path logic, reads, writes and inode RPCs; `write.c` owns the dirty cache.
 - `writer_state.c` — per-file writer state; `data_commit.c` — per-stripe fsync commit record (K35).
 - `stage_evict.c` — staging-table evictor; `bufpool.c` — shared body/scratch budget; `node_cache.c` — peer up/down marks.
@@ -29,7 +29,7 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 - `python3 scripts/tests_for.py client/client_internal`
 - `python3 scripts/tests_for.py client/data_commit`
 - `python3 scripts/tests_for.py client/efs_fuse` (all 50; one file at a time: `client/efs_fuse.open`, `.append`, `.writeback`, `.write`,
-  `.namespace`, `.release`, `.getattr`, `.lookup`, `.ll_run`, `.plock_init`, `.support`, `.main`; see [`efs_fuse/README.md`](efs_fuse/README.md))
+  `.namespace`, `.release`, `.getattr`, `.lookup`, `.ll_run`, `.plock_init`, `.support`, `.find_res`, `.main`; see [`efs_fuse/README.md`](efs_fuse/README.md))
 - `python3 scripts/tests_for.py client/inode_rpc`
 - `python3 scripts/tests_for.py client/node_cache`
 - `python3 scripts/tests_for.py client/ops`

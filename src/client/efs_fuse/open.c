@@ -2,6 +2,7 @@
 #include "fuse_internal.h"
 #include "open.h"
 #include "support.h"
+#include "find_res.h"
 #include "writeback.h"
 #include "namespace.h"
 #include "release.h"
@@ -835,19 +836,7 @@ static int efs_fuse_open_ino_run(fuse_ino_t ino, struct fuse_file_info *fi)
             return rc;
         }
         snprintf(query_path,sizeof(query_path),"/%s/%s",EFS_FIND_NAME,term);
-        int rc = find_query_ensure(dir_ino, query_path, term);
-        if (rc) return rc;
-        rc = -EAGAIN; /* Eviction between ensure and pin must not look empty. */
-        pthread_mutex_lock(&g_find_res_mu);
-        for (int i = 0; i < EFS_FIND_RES_N; i++) {
-            if (g_find_res[i].valid && find_res_caller(i) && g_find_res[i].dir_ino == dir_ino &&
-                strcmp(g_find_res[i].term, term) == 0) {
-                rc = vq_version_matches(ino, g_find_res[i].text, g_find_res[i].len) ?
-                    virtual_file_open(fi, ino, g_find_res[i].text, g_find_res[i].len) : -ESTALE;
-                break;
-            }
-        }
-        pthread_mutex_unlock(&g_find_res_mu);
+        int rc = find_res_open(fi, ino, dir_ino, query_path, term);
         if (rc) return rc;
         fuse_fi_direct_io(fi);
         return 0;

@@ -48,12 +48,7 @@ static int vq_lookup(uint64_t ino,uint64_t *dir,char *term,size_t size){(void)in
 static int command_script(const char *term){(void)term;return 0;}
 static const char efs_command_source[]="fixture";
 #define EFS_FIND_NAME ".find"
-#define EFS_FIND_RES_N 1
-static pthread_mutex_t g_find_res_mu=PTHREAD_MUTEX_INITIALIZER;
-static struct {int valid;uint64_t dir_ino;char term[256];char *text;size_t len;} g_find_res[EFS_FIND_RES_N];
-static int find_query_ensure(uint64_t ino,const char *path,const char *term){(void)ino;(void)path;(void)term;return -EIO;}
-static int find_res_caller(int i){(void)i;return 0;}
-static int vq_version_matches(uint64_t ino,const char *text,size_t len){(void)ino;(void)text;(void)len;return 0;}
+static int find_res_open(struct fuse_file_info *fi,uint64_t ino,uint64_t dir,const char *path,const char *term){(void)fi;(void)ino;(void)dir;(void)path;(void)term;return -EIO;}
 static int check_access(const struct efs_inode *row,uid_t uid,gid_t gid,int mask){(void)row;(void)uid;(void)gid;(void)mask;eviction_boundary();return permission_rc;}
 static int efs_fuse_truncate_ino(uint64_t ino,off_t size,struct fuse_file_info *fi){(void)ino;(void)size;(void)fi;mutations++;return 0;}
 static int file_opens,lease_opens,file_closes,lease_rc;

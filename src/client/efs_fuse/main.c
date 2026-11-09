@@ -1,6 +1,7 @@
 /* efs-fuse: mutation-gated operation wrappers, the operation table, destroy, startup and main. */
 #include "fuse_internal.h"
 #include "support.h"
+#include "find_res.h"
 #include "open.h"
 #include "writeback.h"
 #include "append.h"
@@ -109,14 +110,7 @@ static void efs_fuse_destroy(void *userdata)
             unmount_unclean(why);
         }
     }
-    /* Free cached .find query results. */
-    pthread_mutex_lock(&g_find_res_mu);
-    for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        free(g_find_res[i].text);
-        g_find_res[i].text = NULL;
-        g_find_res[i].valid = 0;
-    }
-    pthread_mutex_unlock(&g_find_res_mu);
+    find_res_clear();
     efs_open_retry_stop();
     efs_client_view_stop();
     if (efs_client_shutdown() != EFS_OK)

@@ -15,6 +15,7 @@
  * opening and closing distinct inodes while another counts (TSan entry). */
 #include "efs_fuse/open.h"
 #include "efs_fuse/support.h"
+#include "efs_fuse/find_res.h"
 #include "efs_fuse/getattr.h"
 #include "efs_fuse/release.h"
 #include "efs_fuse/writeback.h"
@@ -90,8 +91,6 @@ void efs_client_stage_pin(efs_ino_t ino) { (void)ino; }
 void efs_client_stage_unpin(efs_ino_t ino) { (void)ino; }
 int efs_client_stat_refresh(efs_ino_t ino, struct efs_inode *out) { (void)ino; (void)out; return EFS_OK; }
 struct efs_client g_client;
-struct efs_find_res g_find_res[EFS_FIND_RES_N];
-pthread_mutex_t g_find_res_mu = PTHREAD_MUTEX_INITIALIZER;
 const struct fuse_ctx *ll_ctx(void) { return NULL; }
 int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid, int mask) { (void)ino; (void)uid; (void)gid; (void)mask; return 0; }
 int command_script(const char *term) { (void)term; return 0; }
@@ -104,9 +103,8 @@ void efs_fuse_log_err(const char *w, int rc, efs_ino_t ino, uint64_t off, size_t
 int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size, struct fuse_file_info *fi) { (void)ino; (void)size; (void)fi; return 0; }
 int efs_rc_to_errno(int rc) { return rc ? EIO : 0; }
 int feature_enabled(uint32_t bit) { (void)bit; return 0; }
-int find_query_ensure(efs_ino_t d, const char *q, const char *p) { (void)d; (void)q; (void)p; return 0; }
+int find_res_open(struct fuse_file_info *fi, fuse_ino_t ino, efs_ino_t d, const char *q, const char *p) { (void)fi; (void)ino; (void)d; (void)q; (void)p; return 0; }
 int find_query_read(efs_ino_t d, const char *q, const char *p, char *b, size_t s, off_t o) { (void)d; (void)q; (void)p; (void)b; (void)s; (void)o; return 0; }
-int find_res_caller(int i) { (void)i; return 0; }
 int fuse_stat_errno(int rc) { return rc ? EIO : 0; }
 int stats_snapshot(efs_ino_t d, struct stats_ent *out) { (void)d; (void)out; return 0; }
 int virt_kind(fuse_ino_t ino) { (void)ino; return 0; }

@@ -2,6 +2,7 @@
 #include "fuse_internal.h"
 #include "lookup.h"
 #include "support.h"
+#include "find_res.h"
 #include "getattr.h"
 #include "namespace.h"
 #include "../commands/source.h"
@@ -130,21 +131,8 @@ int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
         char query[EFS_MAX_PATH];
         int n=snprintf(query,sizeof(query),"/%s/%s",EFS_FIND_NAME,name);
         if (n<0 || (size_t)n>=sizeof(query)) return -ENAMETOOLONG;
-        int qr=find_query_ensure(dir,query,name);
+        int qr=find_res_intern(dir,query,name,&q);
         if (qr) return qr;
-        q=0;
-        int present=0;
-        pthread_mutex_lock(&g_find_res_mu);
-        for (int i=0;i<EFS_FIND_RES_N;i++) if (g_find_res[i].valid &&
-            find_res_caller(i) && g_find_res[i].dir_ino==dir &&
-            strcmp(g_find_res[i].term,name)==0) {
-            present=1;
-            q=vq_intern(dir,name,virtual_version(g_find_res[i].text,g_find_res[i].len),
-                        g_find_res[i].len);
-            break;
-        }
-        pthread_mutex_unlock(&g_find_res_mu);
-        if (!q) return present ? -ENOMEM : -EAGAIN;
         qr=lookup_fill(q,e,NULL);vq_unreserve(q);return qr;
     }
     if (virt_kind(parent))

@@ -165,8 +165,8 @@ TEST_BINS += tests/test_kv_reader_gate
 TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
 TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c
-TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c
-TEST_BINS += tests/test_wb_interface tests/test_open_interface
+TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c
+TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface
 TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
@@ -180,6 +180,7 @@ SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orph
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse/support.c \
+              src/client/efs_fuse/find_res.c \
               src/client/efs_fuse/getattr.c \
               src/client/efs_fuse/open.c \
               src/client/efs_fuse/writeback.c \
@@ -847,6 +848,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_stage_evict
 	./tests/test_wb_interface
 	./tests/test_open_interface
+	./tests/test_find_res_interface
 	python3 tests/test_tests_for.py
 	./tests/test_hardlink_alias
 	./tests/test_verification_matrix
@@ -961,6 +963,11 @@ tests/test_wb_interface: tests/test_wb_interface.c src/client/efs_fuse/writeback
 # lease edge RPCs and the helpers open.c takes from other files, so no $(LIB).
 tests/test_open_interface: tests/test_open_interface.c src/client/efs_fuse/open.c $(wildcard src/client/efs_fuse/*.h) src/client/client_internal.h
 	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -Isrc/client -o $@ $< src/client/efs_fuse/open.c $(LDFLAGS)
+
+# Task EC: the real .find result cache through find_res.h; the test defines
+# the query RPC, the caller context and the virtual-inode helpers, so no $(LIB).
+tests/test_find_res_interface: tests/test_find_res_interface.c src/client/efs_fuse/find_res.c $(wildcard src/client/efs_fuse/*.h) src/client/client_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -Isrc/client -o $@ $< src/client/efs_fuse/find_res.c $(LDFLAGS)
 
 # K88 Task DK: the slot-less library writer on real daemons (test_k88_chunk_hints_live.py).
 tests/test_k88_chunk_hints: tests/test_k88_chunk_hints.c $(LIB)

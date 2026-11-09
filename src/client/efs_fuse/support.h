@@ -4,7 +4,8 @@
 #include "fuse_internal.h"
 
 /* support.c: process-wide helpers (crash handlers, .stats text, feature
- * bits, file handles, virtual inodes, invalidation, .find results, DAC).
+ * bits, file handles, virtual inodes, invalidation, DAC). The .find result
+ * cache is find_res.c behind find_res.h.
  *
  * Owns
  *   struct stats_ent   one directory's rendered .stats text; filled by
@@ -21,8 +22,6 @@
  *                      kernel's nlookup (vq_nlookup_*), private mutex.
  *   ll_inval_*         the invalidation thread; notify_inval_* is queued by
  *                      the ll_* wrapper after fuse_reply_*, never run inline.
- *   g_find_res[]       EFS_FIND_RES_N .find results (struct efs_find_res),
- *                      64 MiB in all, oldest evicted.
  *   check_*, fill_stat_from_inode, efs_create_credentials
  *                      DAC and stat rendering, pure functions of the row
  *                      and the caller context (ll_ctx reads t_req).
@@ -31,19 +30,14 @@
  *   g_fuse_se          written by main() before fuse_session_loop_mt and
  *                      after it returns; the invalidation thread reads it
  *                      only between ll_inval_start and ll_inval_stop. No lock.
- *   g_find_res, g_find_res_mu
- *                      every field of every slot under g_find_res_mu; a
- *                      slot's text belongs to the slot until it is evicted
- *                      here or freed by efs_fuse_destroy (main.c). lookup.c
- *                      and open.c take the mutex to match a term; the
- *                      mutex is never held across an RPC.
  *
  * Failure behaviour
  *   Helpers return a negative errno ready for fuse_reply_err. A server rc
  *   is mapped by fuse_stat_errno / efs_rc_to_errno (fuse_internal.h): BUSY
  *   and a passed deadline stay EBUSY/EAGAIN, an I/O failure is EIO, and
- *   ENOENT is only ever an absent name (I9). find_query_ensure returns
- *   -ENOMEM when the result budget cannot be met. efs_file_sync_error
+ *   ENOENT is only ever an absent name (I9). query_credentials fills a
+ *   query's uid, gid and supplementary groups (EFS_ERR_OVERFLOW past
+ *   EFS_QUERY_GROUPS). efs_file_sync_error
  *   folds two error channels for FSYNC/FLUSH: the per-description error
  *   retained since the failed PUT (h->errors) and a still-stalled inode
  *   (efs_wb_inode_stalled, ../write.c); either is EFS_ERR_IO. */
@@ -58,23 +52,6 @@ struct stats_ent {
     uint64_t mtime, atime, ctime;
     int len;
     char text[EFS_STATS_TEXT];
-};
-
-/* Rendered bytes shared by lookup/getattr/open while immutable per-open
- * descriptions own their copies. Every ensure revalidates on the server. */
-#define EFS_FIND_RES_N 16
-
-struct efs_find_res {
-    int valid;
-    efs_node_id_t owner;
-    efs_ino_t dir_ino;
-    char term[EFS_MAX_NAME]; /* raw pattern, e.g. "*report*" */
-    uint64_t ms;
-    uid_t uid;
-    gid_t gid;
-    int len;
-    size_t allocated;
-    char *text;
 };
 
 void efs_fuse_install_crash_handlers(void);
@@ -114,18 +91,8 @@ void ll_inval_inode(fuse_ino_t ino, off_t off, off_t len);
 int ll_inval_start(void);
 void ll_inval_stop(void);
 int virtual_access(efs_ino_t ino);
-extern struct efs_find_res g_find_res[EFS_FIND_RES_N];
-extern pthread_mutex_t g_find_res_mu;
-int find_res_caller(int i);
-int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
-                             const char *pattern);
-int find_query_read(efs_ino_t dir_ino, const char *query_path,
-                           const char *pattern,
-                           char *buf, size_t size, off_t offset);
+int query_credentials(struct efs_msg_query_snapshot *q);
 int find_dir_fill_stat(const struct efs_inode *parent, struct stat *stbuf);
-int find_query_fill_stat(const struct efs_inode *parent,
-                                const char *query_path, const char *pattern,
-                                struct stat *stbuf);
 int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid,
                         int mask);
 int check_dir_wx(const struct efs_inode *dir);

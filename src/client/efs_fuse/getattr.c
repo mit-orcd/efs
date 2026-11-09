@@ -2,6 +2,7 @@
 #include "fuse_internal.h"
 #include "getattr.h"
 #include "support.h"
+#include "find_res.h"
 #include "namespace.h"
 #include "release.h"
 #include "../commands/source.h"
