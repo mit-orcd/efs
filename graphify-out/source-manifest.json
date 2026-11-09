@@ -134,6 +134,7 @@
     "scripts/evidence/dl/instruction_stream.sh": 2,
     "scripts/evidence/dl/objcmp.py": 2,
     "scripts/evidence/dl/verify_split.py": 1,
+    "scripts/evidence/do/check_entry_map.py": 3,
     "scripts/evidence/dp/k38_loaded_loop.sh": 2,
     "scripts/evidence/dw/k38_dw_campaign.py": 18,
     "scripts/evidence/dw/k38_dw_client.py": 6,
@@ -1482,7 +1483,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "bcdba9c9c9c501669ff78afe87bc552a20248bb0a9bcc4b801a13a832562ed82",
+    "Makefile": "f4fad849619d1e1365ebacc99d1ce2c4f56ef60bc401d7d9e2051bb288d14cae",
     "README.md": "f646cf19b6605664ea80ee9a539ea8c7938be322ee12ba520447204095e3d216",
     "docs/backlog/crash-safe-durable-versions.md": "b57a8c2376ec9e85d9403196a237c57b69f7515a60e73ceb2ac997788016d6b3",
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
@@ -1651,6 +1652,7 @@
     "scripts/evidence/dl/instruction_stream.sh": "b417a39c233b1b883d06f9d68f8ca9cdeef75ddcc818757b6cb60c343684f88a",
     "scripts/evidence/dl/objcmp.py": "44dd8d09c5c4a76dda723660f938149fb90bcd12736bfbf764bbf88ef9832b9a",
     "scripts/evidence/dl/verify_split.py": "6ca0fe08e6732ba7f85366f1c8d655bb31a0ab390888c80edb4e168174befc68",
+    "scripts/evidence/do/check_entry_map.py": "0ed7fb555d206afc1fab51f2cc3ec133cbfc80a288b9b2fd6c075889652bb475",
     "scripts/evidence/dp/k38_loaded_loop.sh": "93e7e99f86f8587cf5f252baffa533792b548854534b04ddb944b1f4f480bf92",
     "scripts/evidence/dw/k38_dw_campaign.py": "5d3d66afe58cccb74691719cd74130b1020633cca3667216f0ebbaf013320616",
     "scripts/evidence/dw/k38_dw_client.py": "ce3ef9073fd71d525862cd95c48c2e77e99dde2a2dffd2b7fde7841ff58d9d5c",
@@ -2059,7 +2061,7 @@
     "src/raft/raft_disk_internal.h": "9ff9eec41773a463fff79b35deac363bf60d7666f0fee4461f0485a4e21176e3",
     "src/raft/raft_log.c": "c2cd52a95d2619276efe12490c94396187cadb614ca7a198fabdaa3d4c771650",
     "src/raft/raft_mem.c": "b7ce9d87e2f93f351720b9429ed452a5d7db8a83f93d48a44697a447150a2a5f",
-    "src/server/README.md": "eaaa69378552bf7316349a11ddc633919c5cc0613aa0d465a84b193a50dc2c84",
+    "src/server/README.md": "f73aa9f88606b08b7851224494eac002f8b6603133564a06a775bf81392c2798",
     "src/server/apply_ring.h": "7b175de09f252077997ce4adc242cd3fea5f2d4256c95cb41801133ddcb86e8c",
     "src/server/apply_wait.h": "08e73413201fb19a9de7c50985945bd2f0d477c7253db993f94b5b0fc900b183",
     "src/server/cluster.c": "57765a7208592c76e95e0b42161356e2259fa8035aaaee84fdee7bf927fa83f3",
@@ -3011,10 +3013,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1799
+    "calls": 1800
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "efec02c367d279fb95602c6458009afb35c6869e"
+  "source_commit": "895daf9a67469a80119a3228c6586574197c71f8"
 }
