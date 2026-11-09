@@ -24,7 +24,7 @@ fix reverted in either direction; `tests_for.py meta/meta_apply --run`,
 over-count; blocks alpha: no). The same race in the k37 twin
 (`efs_meta_degraded_count_begin`) is a candidate, not fixed here (see
 Findings). Branch `claude/task-ei-blind-reader-7195d0` on devel
-`33cd0a839`. Not merged, not pushed.
+`33cd0a839`. Merged into devel in wave 66 (Nov 9).
 
 - Purpose: [Task EE item 4](review-feedback-nov9-20261109.md#4-unfamiliar-reader)
   and its brief EI. Every reading set so far (Tasks

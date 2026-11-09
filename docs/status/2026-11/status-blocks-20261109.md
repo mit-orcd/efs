@@ -5,8 +5,8 @@ blocks alpha: no.** Each of the six W171 pages below now opens with one
 block that states source, verdict, remaining failures, active run, next
 action and merge state, and the W171 row of the [status index](../README.md)
 says "merged" with one clause per wave 65 task. Branch
-`claude/task-eh-status-blocks-248e6a` on devel `33cd0a839` (wave 65), not
-yet merged.
+`claude/task-eh-status-blocks-248e6a` on devel `33cd0a839` (wave 65), merged
+into devel in wave 66 (Nov 9).
 
 - Purpose: brief EH of the [Nov 9 review](review-feedback-nov9-20261109.md)
   (item 5): active pages kept historical status above the current one (the

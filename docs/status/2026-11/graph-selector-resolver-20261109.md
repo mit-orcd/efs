@@ -18,7 +18,7 @@ component nodes. The brief's figures (12 and 135 commands) were measured at
 
 ## The change
 
-Commit `9de9d051b` on branch `claude/task-ef-graph-selector-715eab`:
+Commit `9de9d051b` on branch `claude/task-ef-graph-selector-715eab` (merged into devel in wave 66, Nov 9):
 
 - `scripts/build-code-graph.py`: `components()` no longer reads
   `tests/budgets.tsv` rows itself. It loads `scripts/tests_for.py` by path

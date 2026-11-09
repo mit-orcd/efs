@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `def2269966d61d631adee703fa1de13ef9620c84`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 18,588 nodes, 77,219 directed typed edges, 598 communities.
+Source base: `10a09905bac917fb740b867fea8b11179635b503`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 18,591 nodes, 77,247 directed typed edges, 582 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,9 +19,9 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27466
+- `calls`: 27487
 - `case_of`: 118
-- `contains`: 27474
+- `contains`: 27480
 - `contract`: 44
 - `defines`: 1999
 - `documents_finding`: 8
@@ -33,7 +33,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 - `indirect_call`: 752
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 3131
+- `mentions_symbol`: 3132
 - `method`: 645
 - `rationale_for`: 1415
 - `references`: 2219
@@ -50,7 +50,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1801}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1802}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 Component nodes come from the source layout and scripts/tests_for.py's answer over the test catalogue (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage; a route inherited from the parent tag is INFERRED with evidence_method inherited:<parent>.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.

@@ -13,10 +13,10 @@ ReadIndex entry map (Task DO) in wave 65 (Nov 9). Verdict: the two splits
 did not reduce the lines an agent must read; the three ownership pilots
 did (691 to 593, 640 to 543, 542 to 428 lines needed). Remaining
 failures: none open; 2b, the `raft_host.c` split, waits on the
-`devel-w123-recovery` merge, which is the user's decision. Active run:
-wave 66 Tasks EF (graph and selector), EH (this block), EI (blind reader)
-and EJ (K54 fence test) on their own branches, not yet merged. Next
-action: merge wave 66; start 2b after W123 recovery merges. Rule: at each
+`devel-w123-recovery` merge, which is the user's decision. Wave 66 (Nov 9)
+merged Tasks EF (graph and selector share one resolver), EH (this block),
+EI (two changes by blind readers) and EJ (K54 fence test). Active run:
+none. Next action: start 2b after W123 recovery merges. Rule: at each
 wave merge the coordinator sets the status line of every merged task page
 (merged in wave N on date), with the ledger entry and the W171 row.
 
