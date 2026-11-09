@@ -138,7 +138,7 @@ watermark, while healthy voters applied. The forensic ticket for inode 237763,
 sequence 229, object `0x759a0134f4ab0209` sent fragments 0/1 once each to healthy
 nodes and fragment 2 **66 times** to node 1. The node refused each STATUS with
 NOT_PRIMARY; the data reply became BUSY and discarded the hint. Median resend
-gap was 452.55 ms. CLOSE-PROF: PUT 30,001 ms, REPORT 0 ms. The separate inode
+gap was 452.55 ms (per-ticket counts from `scripts/evidence/w166/w166_trace_summary.py`). CLOSE-PROF: PUT 30,001 ms, REPORT 0 ms. The separate inode
 122898 had PUT 379 ms, REPORT/resolution 16,000 ms, unknown receipt outcome.
 Absent receipts are not abort proofs. The client's old `published degraded
 for rebuild` trace was local bookkeeping before publication, not durability

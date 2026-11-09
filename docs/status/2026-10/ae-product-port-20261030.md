@@ -16,7 +16,7 @@ box is ticked.
   `efs_iostats_dump` and `efs_batch_obs_dump` became `*_to(FILE *, …)`.
 - **K73 (was K56)** — `rj.recovered` increment/status/final-log now atomic
   (diagnostic race only; no durability claim).
-- Measurement scripts (`scripts/pump_logging_*.py`, `pump_logging_fullfs.sh`) and
+- Measurement scripts (`scripts/pump_logging_*.py`, `scripts/evidence/pump-logging/pump_logging_fullfs.sh`) and
   the evidence pages [AE](ae-pump-logging-20261028.md) / [AB](ab-obs-dump-20261028.md),
   with a port note and renumbered K rows. K72/K73 skip K66–K71, which the eio-port
   session registered; the register checker passes once those rows are merged.

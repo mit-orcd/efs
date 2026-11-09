@@ -67,6 +67,8 @@ source; run `make -j8 test` under the four disabled feature variables.
 Driver:
 `python3 scripts/evidence/intel/intel_package3_tests.py core --output OUT --run-id UNIQUE`.
 Repeat with `extras`, `runtime`, `concurrent`, `latency --seconds 600`.
+The driver copies `scripts/evidence/intel/deepsteps_sitecustomize.py` as the phase-socket
+diagnostic's `sitecustomize.py`.
 Concurrent creates five temporary clients in addition to the two real mounts,
 uses4+3 clients/jobs16, then cleanly drains only those temporary mounts.
 Core/extras use existing30s case budgets and16 jobs on both real mounts
@@ -145,7 +147,8 @@ production helper fails intended file_ticket==4 assertion with the new fixture.
 `test_readindex_pair.py` (including existing sanitizer/negative controls) and
 `test_readindex_result.py` PASS. Both-host full native, affected fault/sanitizer,
 new-source deployment and loaded requalification are NOTRUN for this candidate.
-Baseline600s normal snapshot-pressure/foreground/resource gate is running on
+Baseline600s normal snapshot-pressure/foreground/resource gate
+(`scripts/evidence/intel/intel_package3_pressure.py`) is running on
 unchanged deployed1a737143. Complete it before native builds or redeployment.
 
 ## Baseline pressure and candidate prerequisite correction

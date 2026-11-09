@@ -207,7 +207,7 @@ behavioral assertions. The old resync diagnostic and driver inventory are fixed.
 | `7e4ddcb5e` | One-loss TCP/RDMA sweeps FAIL NET after restart; seven focused K33 PASS. Gate `TOTAL 508 FAIL 10 NOTRUN 14 STATUS FAIL (574s) OVERBUDGET 1 BUILD 0s`. Its one-loss base control fails NET too and is not the original BUSY negative control. |
 | `7029a6266` | Three core sweeps and seven focused K33 PASS. Gate `TOTAL 508 FAIL 8 NOTRUN 14 STATUS FAIL (749s) BUILD 0s`: four LSan, two management extractors, stop-progress, reclaim fixture. |
 | `6850b3d90` | Seven focused K33 PASS; gate `TOTAL 508 FAIL 5 NOTRUN 14 STATUS FAIL (761s) BUILD 0s`: four LSan plus reclaim fixture. Raw-read redirect assumption fails healthy TCP/RDMA sweeps; joint PASS. |
-| `surface-00d426006` | FAIL: expiry/refusal oracle and nonexistent POSIX root; no POSIX cases ran. Corrected supplemental run is reported above. |
+| `surface-00d426006` (`scripts/evidence/task-k/task_k_surface.py`) | FAIL: expiry/refusal oracle and nonexistent POSIX root; no POSIX cases ran. Corrected supplemental run is reported above. |
 | Early shutdown diagnostic `2fee7e4fb` | Syntax error in the new diagnostic; supplies no base-race proof. Corrected `d5fe5dca4` supplies that proof. |
 | Waiting dispatches `ae0262306`, `afc6d1466`, `6cd513dc7`, `fcc8533d8`, first `00e85a299` controller | Canceled before build/test; reason receipts retained. No interrupted test is called PASS. |
 
@@ -252,7 +252,7 @@ one online addition. O_DIRECT fragment I/O only. TCP loopback; RDMA
 
 Raw evidence is on node9900:
 `/home/erbmi1/efs-artifacts/taskK-20261026/`. No raw capture/store is committed
-or copied to the Mac. The final `SHA256SUMS` contains 2,655 closed retained files and was verified
+or copied to the Mac. The final `SHA256SUMS` (closed by `scripts/evidence/orcd-mini/task_k_mini_finalize.sh`) contains 2,655 closed retained files and was verified
 with `sha256sum -c`; its own SHA256 is:
 
 `e8c821bec6f7bd1f0736b5b5c5f10d486a2b84426ff52a0f954150f7ab961fd5`.
@@ -367,11 +367,11 @@ only its named stores and must not be run as an unattended regression:
      --mount /data1/efs/orcd-mini-mnt --out NEW_EVIDENCE/stable-queries
    ```
 
-   These are the committed `task_k_mini_sweep.py` and
-   `task_k_mini_queries.py` copied outside the product tree. Output paths
+   These are the committed `scripts/evidence/orcd-mini/task_k_mini_sweep.py` and
+   `scripts/evidence/orcd-mini/task_k_mini_queries.py` copied outside the product tree. Output paths
    must not exist. The query fixture is separate and remains quiescent.
 6. From the driver, run `scripts/evidence/orcd-mini/task_k_mini_two_clients.py NEW_RESULT.tsv`;
-   it uses `task_k_mini_ssh.sh` without BatchMode, the unchanged POSIX
+   it uses `scripts/evidence/orcd-mini/task_k_mini_ssh.sh` without BatchMode, the unchanged POSIX
    two-client cases and the existing orcd-mini 120 s remote-step bound.
 7. Run the same sweep on node9901 with `--source /data1/efs/src
    --mount /data1/efs/mnt --verify-only --out NEW_EVIDENCE/peer-full-read`.

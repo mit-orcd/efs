@@ -181,6 +181,7 @@ or redirected:
 
 ```sh
 python3 scripts/evidence/task-n/task_n_append_gates.py --work WORK --out EVIDENCE --source COMMIT
+python3 scripts/evidence/task-n/task_n_append_summary.py EVIDENCE   # summary of the retained results
 ```
 
 It builds normal/fault binaries independently with eight jobs, then runs

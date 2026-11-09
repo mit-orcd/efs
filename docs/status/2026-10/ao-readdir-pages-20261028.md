@@ -390,7 +390,7 @@ D44's 1,100 s target. This is **not an overall make-test PASS**. Final-source ov
 - **Receipt-window admission BUSY: pre-existing defect, addressed and qualifying.**
   The original uninstrumented RDMA log has `03:01:41.980Z opid-admission: BUSY
   oldest=5027 next=5043 live=4 window=16` in the failure interval. The base
-  diagnostic identifies admission for unlink `f0085`, oldest 4630/next 4646/
+  diagnostic (`scripts/evidence/ao/ao_busy_probe.py`) identifies admission for unlink `f0085`, oldest 4630/next 4646/
   live 3. Reviewed F12–F16 typed committed-row/receipt, proof-lock and session
   bootstrap repairs are imported with their original source references.
   `6c8bdc72b` also makes public UNLINK/RMDIR/LINK scope admission and RPC to
@@ -462,7 +462,8 @@ TMPDIR=PRIVATE/tmp EFS_GIT_ID=2fb508759 EFS_GIT_BRANCH=agent/devel-task-ao \
  EFS_BUILD_JOBS=8 scripts/make_test_summary.sh
 ```
 
-For each measurement, instrument a **different archived copy**, then build and
+For each measurement, instrument a **different archived copy** with
+`scripts/evidence/ao/ao_instrument.py`, then build and
 run `scripts/evidence/ao/ao_readdir.py --work NEW_FIXTURE --output NEW_EVIDENCE`.
 Defaults cover all four sizes and three repetitions of getdents/`ls -ln`.
 Use `scripts/evidence/ao/ao_summary.py EVIDENCE` for aggregates. Linux pidfd, FUSE,

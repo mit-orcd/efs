@@ -53,8 +53,8 @@ Set aside (not W125): network-interruption bounds on branch
 | --- | --- | --- | --- | --- |
 | C0 | 2 h big mixed test with the read-buffer fix | orcd-mini, both clients | `orcd_mini_big.sh arm` (exists) | 0 mismatches, 0 errors, dd/md5/.efs clean |
 | C1 | Modify under load: overwrite, append, truncate of packed files while readers verify and the packer repacks | orcd-mini, both clients, 1 h | `w125_concurrent.py --modifiers` | readers only ever see a committed version; all versions verify at the end |
-| C2 | Namespace on packed files: rename within/across dirs, hard links, delete one link, chmod/utimes | node9901 private, then orcd-mini | `w125_packed_namespace.py` | data reachable by every name, reclaim only after the last link |
-| C3 | Size and read edges: 0/1/16383/16384/16385 B, grow past 16 KiB after packing, sparse small files, partial and past-EOF reads, O_DIRECT, many readers of one segment | node9901 private | `w125_packed_edges.py` | byte-exact, sizes right, no errors |
+| C2 | Namespace on packed files: rename within/across dirs, hard links, delete one link, chmod/utimes | node9901 private, then orcd-mini | `scripts/evidence/w125/w125_packed_namespace.py` | data reachable by every name, reclaim only after the last link |
+| C3 | Size and read edges: 0/1/16383/16384/16385 B, grow past 16 KiB after packing, sparse small files, partial and past-EOF reads, O_DIRECT, many readers of one segment | node9901 private | `scripts/evidence/w125/w125_packed_edges.py` | byte-exact, sizes right, no errors |
 | C4 | Space accounting: `efs-mgmt status`, quota and `df` against on-disk fragments+segments through pack, compact, delete | orcd-mini | `w125_space_accounting.sh` | within one segment per node of the physical count at each step |
 | C5 | Unattended compaction: churn, then idle and read-only; daily window set near now | orcd-mini | `w125_compact_unattended.sh` | holes converge to 0 without `pack-compact`; no compaction while busy |
 | C6 | Backfill on upgrade: write with `archive/unpacked-small-files-20261019`, upgrade to devel | orcd-mini (wipe) | `w125_backfill_upgrade.sh` | every old small file packed and verified |

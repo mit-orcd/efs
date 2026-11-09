@@ -87,7 +87,7 @@ bash scripts/evidence/fin/fin_accounting_gate.sh /tmp/efs-k35-slow-fin38f/src \
 
 The hardware driver reruns eight native RDMA modes including intentional
 one-byte TCP violation, B6 slow and K35 over both TCP/RDMA, then declaration
-TCP/RDMA and `fin_accounting_audit.py`. The strict audit requires **every**
+TCP/RDMA and `scripts/evidence/fin/fin_accounting_audit.py`. The strict audit requires **every**
 production RDMA receipt measured, positive application RDMA totals, zero
 post-setup TCP tx/rx and zero violations. Missing fields/measurements fail;
 no receive-delta exception. Intentional native TCP-violation evidence is
