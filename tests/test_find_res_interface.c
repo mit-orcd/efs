@@ -293,6 +293,47 @@ static void third_fetch_is_busy(void)
     assert(stat_size(300, name, &size) == 0);
 }
 
+/* F1, F2 (Task EC): two callers fetch the same directory and term at once.
+ * Same uid and gid with other supplementary groups: each must be served
+ * the result fetched with its own groups. Two uids: neither may see a miss
+ * (GETATTR answered -1, EPERM, OPEN -EAGAIN) because the other's fetch
+ * replaced the slot. Two threads stay under the fetch limit. */
+struct pair_arg { uid_t uid; uint32_t ngroups; unsigned served_other, missed; };
+
+static void *pair_churn(void *p)
+{
+    struct pair_arg *a = p;
+    as_caller(a->uid, 4000, a->ngroups);
+    char want[32], name[300];
+    snprintf(want, sizeof(want), "u%u g4000 n%u ", a->uid, a->ngroups);
+    term_name(name, sizeof(name), "pair");
+    for (int i = 0; i < 3000; i++) {
+        char *copy;
+        off_t size;
+        int rc = open_copy(600, name, &copy);
+        if (rc) { assert(rc == -EAGAIN); a->missed++; }
+        else { if (strncmp(copy, want, strlen(want))) a->served_other++; free(copy); }
+        rc = stat_size(600, name, &size);
+        if (rc) { assert(rc == -1); a->missed++; }
+    }
+    return NULL;
+}
+
+static void same_term_pairs(void)
+{
+    struct pair_arg groups[2] = {{.uid = 4001, .ngroups = 1}, {.uid = 4001, .ngroups = 2}};
+    struct pair_arg uids[2] = {{.uid = 4002}, {.uid = 4003}};
+    pthread_t t[2];
+    for (int i = 0; i < 2; i++) assert(!pthread_create(&t[i], NULL, pair_churn, &groups[i]));
+    for (int i = 0; i < 2; i++) assert(!pthread_join(t[i], NULL));
+    for (int i = 0; i < 2; i++) assert(!pthread_create(&t[i], NULL, pair_churn, &uids[i]));
+    for (int i = 0; i < 2; i++) assert(!pthread_join(t[i], NULL));
+    printf("same-term pairs: other groups' result served %u/%u, misses %u/%u (uids)\n",
+           groups[0].served_other, groups[1].served_other, uids[0].missed, uids[1].missed);
+    assert(!groups[0].served_other && !groups[1].served_other); /* F1 */
+    assert(!groups[0].missed && !groups[1].missed && !uids[0].missed && !uids[1].missed); /* F2 */
+}
+
 static void *churn(void *arg)
 {
     unsigned id = (unsigned)(uintptr_t)arg;
@@ -307,13 +348,13 @@ static void *churn(void *arg)
         fuse_ino_t q;
         off_t size;
         int rc = open_copy(500, (i & 1) ? own : shared, &copy);
-        if (rc == -EBUSY || rc == -EAGAIN) continue; /* fetch limit, or the slot went between fetch and match */
+        if (rc == -EBUSY) continue; /* fetch limit */
         assert(rc == 0 && !strncmp(copy, prefix, strlen(prefix)));
         free(copy);
         rc = find_res_intern(500, "/.find/x", shared, &q);
-        assert(rc == 0 || rc == -EBUSY || rc == -EAGAIN);
+        assert(rc == 0 || rc == -EBUSY);
         rc = stat_size(500, own, &size);
-        assert(rc == 0 || rc == -EBUSY || rc == -1);
+        assert(rc == 0 || rc == -EBUSY);
     }
     return NULL;
 }
@@ -326,6 +367,7 @@ int main(void)
     many_terms_through_sixteen_slots();
     byte_budget();
     third_fetch_is_busy();
+    same_term_pairs();
     pthread_t t[4];
     for (uintptr_t i = 0; i < 4; i++) assert(!pthread_create(&t[i], NULL, churn, (void *)i));
     for (int i = 0; i < 4; i++) assert(!pthread_join(t[i], NULL));

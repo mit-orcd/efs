@@ -30,7 +30,13 @@ static void find_work_release(void)
 {
     pthread_mutex_lock(&g_find_work_mu);g_find_work--;pthread_mutex_unlock(&g_find_work_mu);
 }
+/* Ends an operation whose find_query_ensure succeeded. */
+static void find_res_done(void)
+{
+    pthread_mutex_unlock(&g_find_res_mu);find_work_release();
+}
 
+/* The publisher hint only: no bytes are served by this match. */
 static int find_res_caller(int i)
 {
     const struct fuse_ctx *ctx = ll_ctx();
@@ -39,9 +45,12 @@ static int find_res_caller(int i)
 }
 
 /* Fetch an authorized server result and retain rendered bytes for virtual
- * inode versioning. Only the mount prefix is rendered locally. */
+ * inode versioning. Only the mount prefix is rendered locally. On success
+ * the table mutex stays held and *slot_out is this caller's fresh result:
+ * the caller uses that slot, never a later match (F1, F2), and ends with
+ * find_res_done(). */
 static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
-                             const char *pattern)
+                             const char *pattern, int *slot_out)
 {
     struct efs_msg_query_snapshot_v4 command;
     if (efs_command_path_parse_v4(pattern,&command)) return -EINVAL;
@@ -122,26 +131,19 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
     g_find_res[slot].gid = ctx ? ctx->gid : 0;
     g_find_res[slot].text = text; /* takes ownership */
     g_find_res[slot].len = len;g_find_res[slot].allocated=allocated;g_find_res_bytes+=allocated;
-    pthread_mutex_unlock(&g_find_res_mu);find_work_release();
+    *slot_out = slot;
     return 0;
 }
 
-/* Result length for (dir, pattern), or -1 on invalid term / error. */
+/* Result length for (dir, pattern), or the fetch's negative errno. */
 static int find_query_len(efs_ino_t dir_ino, const char *query_path,
                            const char *pattern)
 {
-    int rc = find_query_ensure(dir_ino, query_path, pattern);
+    int slot;
+    int rc = find_query_ensure(dir_ino, query_path, pattern, &slot);
     if (rc != 0) return rc;
-    pthread_mutex_lock(&g_find_res_mu);
-    int len = -1;
-    for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        if (g_find_res[i].valid && find_res_caller(i) && g_find_res[i].dir_ino == dir_ino &&
-            strcmp(g_find_res[i].term, pattern) == 0) {
-            len = g_find_res[i].len;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&g_find_res_mu);
+    int len = g_find_res[slot].len;
+    find_res_done();
     return len;
 }
 
@@ -151,24 +153,18 @@ int find_query_read(efs_ino_t dir_ino, const char *query_path,
                            const char *pattern,
                            char *buf, size_t size, off_t offset)
 {
-    int rc = find_query_ensure(dir_ino, query_path, pattern);
+    int slot;
+    int rc = find_query_ensure(dir_ino, query_path, pattern, &slot);
     if (rc != 0) return rc;
-    pthread_mutex_lock(&g_find_res_mu);
     int n = 0;
-    for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        if (!g_find_res[i].valid || !find_res_caller(i) || g_find_res[i].dir_ino != dir_ino ||
-            strcmp(g_find_res[i].term, pattern) != 0)
-            continue;
-        if (offset < g_find_res[i].len) {
-            size_t avail = (size_t)g_find_res[i].len - (size_t)offset;
-            if (avail > size)
-                avail = size;
-            memcpy(buf, g_find_res[i].text + offset, avail);
-            n = (int)avail;
-        }
-        break;
+    if (offset < g_find_res[slot].len) {
+        size_t avail = (size_t)g_find_res[slot].len - (size_t)offset;
+        if (avail > size)
+            avail = size;
+        memcpy(buf, g_find_res[slot].text + offset, avail);
+        n = (int)avail;
     }
-    pthread_mutex_unlock(&g_find_res_mu);
+    find_res_done();
     return n;
 }
 
@@ -177,21 +173,13 @@ int find_query_read(efs_ino_t dir_ino, const char *query_path,
 int find_res_intern(efs_ino_t dir, const char *query, const char *name,
                     fuse_ino_t *qp)
 {
-    int qr=find_query_ensure(dir,query,name);
+    int slot;
+    int qr=find_query_ensure(dir,query,name,&slot);
     if (qr) return qr;
-    fuse_ino_t q=0;
-    int present=0;
-    pthread_mutex_lock(&g_find_res_mu);
-    for (int i=0;i<EFS_FIND_RES_N;i++) if (g_find_res[i].valid &&
-        find_res_caller(i) && g_find_res[i].dir_ino==dir &&
-        strcmp(g_find_res[i].term,name)==0) {
-        present=1;
-        q=vq_intern(dir,name,virtual_version(g_find_res[i].text,g_find_res[i].len),
-                    g_find_res[i].len);
-        break;
-    }
-    pthread_mutex_unlock(&g_find_res_mu);
-    if (!q) return present ? -ENOMEM : -EAGAIN;
+    fuse_ino_t q=vq_intern(dir,name,virtual_version(g_find_res[slot].text,g_find_res[slot].len),
+                           g_find_res[slot].len);
+    find_res_done();
+    if (!q) return -ENOMEM;
     *qp=q;
     return 0;
 }
@@ -200,19 +188,12 @@ int find_res_intern(efs_ino_t dir, const char *query, const char *name,
 int find_res_open(struct fuse_file_info *fi, fuse_ino_t ino, efs_ino_t dir_ino,
                   const char *query_path, const char *term)
 {
-    int rc = find_query_ensure(dir_ino, query_path, term);
+    int slot;
+    int rc = find_query_ensure(dir_ino, query_path, term, &slot);
     if (rc) return rc;
-    rc = -EAGAIN; /* Eviction between ensure and pin must not look empty. */
-    pthread_mutex_lock(&g_find_res_mu);
-    for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        if (g_find_res[i].valid && find_res_caller(i) && g_find_res[i].dir_ino == dir_ino &&
-            strcmp(g_find_res[i].term, term) == 0) {
-            rc = vq_version_matches(ino, g_find_res[i].text, g_find_res[i].len) ?
-                virtual_file_open(fi, ino, g_find_res[i].text, g_find_res[i].len) : -ESTALE;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&g_find_res_mu);
+    rc = vq_version_matches(ino, g_find_res[slot].text, g_find_res[slot].len) ?
+        virtual_file_open(fi, ino, g_find_res[slot].text, g_find_res[slot].len) : -ESTALE;
+    find_res_done();
     return rc;
 }
 

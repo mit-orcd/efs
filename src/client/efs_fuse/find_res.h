@@ -16,26 +16,28 @@
  *   own mutexes: the table mutex is taken first. At most two fetches run
  *   at once (a second private counter); a third answers -EBUSY.
  * Every operation fetches first: the server result is reauthorized with
- *   the caller's uid, gid and supplementary groups on every call (no
- *   bytes are served from the table without that fetch), stored in the
- *   slot of its directory and term, then looked up again under the mutex
- *   by directory, term and the caller's uid and gid. Between the two the
- *   slot may have been replaced or evicted by another fetch: a miss.
+ *   the caller's uid, gid and supplementary groups on every call, stored
+ *   in the slot of its directory and term, and the operation reads that
+ *   slot before the mutex is released. A caller is served only the bytes
+ *   its own fetch returned, never a slot another caller's fetch replaced
+ *   (no miss, no other group set: Task EC F1, F2). The table keeps the
+ *   publisher of a caller's last page (matched by directory, term, uid
+ *   and gid) as the next fetch's hint, and the bytes for the copy.
  * Lifetime: a slot's bytes belong to the slot until a fetch replaces or
  *   evicts it or find_res_clear frees it at unmount. An open query file
  *   owns a copy (virtual_file_open); READ serves only that copy.
  * Answers (negative errno for fuse_reply_err):
  *   find_res_intern     0 and *q = the interned query node (reserved: the
  *                       caller vq_unreserve()s it); the fetch's error;
- *                       -EAGAIN on a miss; -ENOMEM when no node is free.
+ *                       -ENOMEM when no node is free.
  *   find_res_open       0 with fi holding a copy of the bytes; the fetch's
- *                       error; -EAGAIN on a miss; -ESTALE when the bytes no
- *                       longer match the version LOOKUP interned;
- *                       -ENOMEM from virtual_file_open.
- *   find_query_fill_stat 0 with the result's length as the size; the
- *                       fetch's error; -1 on a miss.
- *   find_query_read     bytes copied, 0 at EOF or on a miss, or the fetch's
- *                       error. Reached only without a file handle.
+ *                       error; -ESTALE when the bytes no longer match the
+ *                       version LOOKUP interned; -ENOMEM from
+ *                       virtual_file_open.
+ *   find_query_fill_stat 0 with the result's length as the size, or the
+ *                       fetch's error.
+ *   find_query_read     bytes copied, 0 at EOF, or the fetch's error.
+ *                       Reached only without a file handle.
  *   find_res_clear      frees every slot (efs_fuse_destroy).
  *   Fetch errors: the server rc through efs_rc_to_errno (BUSY stays EBUSY,
  *   an I/O failure EIO, a refusal EACCES), -EINVAL for an unparsable term,

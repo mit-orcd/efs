@@ -34,13 +34,14 @@ static int fake_rpc(efs_node_id_t hint,struct efs_msg_query_snapshot_reply*r,cha
 static int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4*q,efs_node_id_t hint,struct efs_msg_query_snapshot_reply*r,char**t){(void)q;return fake_rpc(hint,r,t);}
 '''+state+function+r'''
 int main(void){
- assert(!find_query_ensure(42,"unused","request-nonce-1"));
- assert(!find_query_ensure(42,"unused","request-nonce-1"));
+ int slot;
+ assert(!find_query_ensure(42,"unused","request-nonce-1",&slot));find_res_done();
+ assert(!find_query_ensure(42,"unused","request-nonce-1",&slot));find_res_done();
  assert(calls==2 && hints[0]==0 && hints[1]==3 && credentials==2);
  assert(!strcmp(g_find_res[0].text,"owner-three"));
- assert(!find_query_ensure(42,"unused","request-nonce-2"));assert(hints[2]==0);
- caller.uid=1002;assert(!find_query_ensure(42,"unused","request-nonce-1"));assert(hints[3]==0);
- denied=1;assert(find_query_ensure(42,"unused","request-nonce-1")==EFS_ERR_ACCES);
+ assert(!find_query_ensure(42,"unused","request-nonce-2",&slot));find_res_done();assert(hints[2]==0);
+ caller.uid=1002;assert(!find_query_ensure(42,"unused","request-nonce-1",&slot));find_res_done();assert(hints[3]==0);
+ denied=1;assert(find_query_ensure(42,"unused","request-nonce-1",&slot)==EFS_ERR_ACCES);
  assert(calls==4 && credentials==5 && g_find_work==0); /* no bytes-cache authorization bypass */
  puts("query callback affinity: same nonce keeps owner, new nonce/caller starts independently, every callback reauthorizes PASS");
 }
