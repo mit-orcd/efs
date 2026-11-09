@@ -16,7 +16,7 @@ documents in the graph and a component node per catalogue tag answers
 `make test` rc 0, `tests_for.py client/efs_fuse --run` (55 rows) rc 0,
 TSan `open_interface` PASS; `python3 tests/test_code_graph.py` 10 OK. No K
 row; blocks alpha: no. Branch `claude/task-eb-review-feedback-eba909` on
-devel `3f9110d52` (wave 63). Not merged, not pushed.
+devel `3f9110d52` (wave 63). Merged into devel in wave 64 (Nov 8). Status Nov 9: remaining failures none; active run none; next action none on this page, W171 continues on the [structure plan](structure-plan-20261102.md).
 
 - Purpose: act on the five suggestions of the Nov 8 external review of devel
   against its Nov 6 review (`cb51d1cd6`), which found the write-back

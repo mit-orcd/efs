@@ -8,8 +8,8 @@ validate rose 306 to 361 (the new compiled test).** `g_wb` is private to
 `writeback.c`; `main.c`, `release.c` and `append.c` call `efs_wb_stop` and
 `efs_wb_pending` instead of locking the pool. node9900 gate `TOTAL 592 FAIL
 0 NOTRUN 4 STATUS INCOMPLETE (644s)` (the four expected NOTRUN), no
-OVERBUDGET; TSan FUSE lane 3 of 3 PASS. No K row, blocks alpha: no. Not
-merged, not pushed.
+OVERBUDGET; TSan FUSE lane 3 of 3 PASS. No K row, blocks alpha: no.
+Merged into devel in wave 60 (Nov 7); its `ready` race was fixed by Task DT and merged in wave 61 (Nov 7). Status Nov 9: remaining failures none; active run none; next action none on this page, W171 continues on the [structure plan](structure-plan-20261102.md).
 
 > **Current status (Nov 8, Task EB):** merged into devel in wave 60
 > ([ledger](ledger.md)). The `ready` / start-failure finding left open at
