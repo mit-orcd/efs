@@ -88,6 +88,70 @@ compile).
 
 - `python3 scripts/tests_for.py client/efs_fuse` lists all 54 rows; the dotted
   forms above select one file's rows (add `--run` after `make all`).
+- Contract → case maps (Task EU): one row per operation or invariant the
+  owner's header states, the case that proves it and the command that runs
+  it. The three interface binaries take no case filter: build and run the
+  whole binary, then read the named function. A `main` entry names the
+  inline block in `main` by its opening comment; such operations have no
+  case function of their own. "none" means no case in the interface binary
+  proves it: the whole-module fallback command lists the file's catalogue
+  rows. `scripts/check_guide_counts.py` checks that every case named here is
+  a function of the test file the command names.
+
+  `open.h` ([`tests/test_open_interface.c`](../../../tests/test_open_interface.c)):
+
+  | Operation or invariant | Cases | Command |
+  |---|---|---|
+  | No row: `efs_close_note` 0, the `efs_open_append_*` three answer nothing, `efs_open_release_pending` `EFS_OK`, `efs_open_close_unadmitted` 0, no row created | `main` ("No row") | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_acquire_fileid`: the first open takes one HOLD and fetches the FileID when gen is 0; shared opens add no HOLD | `open_lease_shared_and_failed_hold`, `main` ("Two opens") | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_acquire_fileid` `EFS_ERR_BUSY`: admission full (retried outside the stripe), an unknown OPEN past the caller's deadline (retained), a contender on a held stripe | `open_busy_admission`, `open_busy_verdicts`, `open_busy_deadline` | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_acquire_fileid` other errors are the lease RPC's; a failed HOLD retains the row; a reopen of a retained row fails with the edge's error, then opens afresh | `open_lease_shared_and_failed_hold`, `fuse_lease_retention_close_verdicts` | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_acquire_created`: adopts the token, `handed_off`, `EFS_ERR_INVAL` without gen or token, STALE as a completed revocation | `fuse_lease_retention_combined`, `fuse_lease_retention_adoption` | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_close_note`: 1 on the last close with `*leased`, row kept pending the CLOSE | `open_busy_admission`, `main` ("Two opens") | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_release_pending`: `EFS_OK` and the row freed, `EFS_ERR_BUSY` while unanswered, the RPC's error otherwise | `fuse_lease_retention_close_verdicts`, `open_retry_lock_budget` | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_close_unadmitted`: 1 only while the retained CLOSE has no identity | `open_retry_lock_budget` | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_retry_pass`: oldest first, every identity gets a turn, `EFS_ERR_BUSY` past the deadline or on a held stripe | `fuse_lease_retention_retry_order`, `fuse_lease_retention_retry_turns`, `open_retry_lock_budget` | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_retry_start`, `efs_open_retry_stop`: the retry thread drains a retained CLOSE and stops on request | `fuse_lease_retention_retry_thread` | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_client_ino_is_open`: a retained row counts as open | `fuse_lease_retention_close_verdicts`, `main` ("A CLOSE edge that fails") | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_retained`: counts rows waiting for a confirmed last close, across colliding buckets | `open_lease_hashed_rows`, `main` ("3,000 retained rows") | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `efs_open_append_handoff`, `efs_open_append_burst_note`, `efs_open_append_burst_published`: 32 writes or one second publish, the 100 ms handoff, a failed publication publishes again | `main` ("Append bookkeeping") | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | `open_edge_mu`: the inode stripe serializes the lease edges and is taken before the table mutex | `open_lease_edge_serialization`, `open_busy_deadline` | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | Lock: the table mutex is never held across an RPC; concurrent opens and closes on distinct inodes (TSan entry) | `churn`, `counter` | `make tests/test_open_interface && ./tests/test_open_interface` |
+  | Pending CREATEs: `efs_pending_create_alloc`, `efs_pending_create_free`, `efs_pending_create_queue`, drained by the retry pass | none; whole-module fallback | `python3 scripts/tests_for.py client/efs_fuse.open` |
+  | `wb_lock_budget` (`test_wb_interface.c` defines its own) | none; whole-module fallback | `python3 scripts/tests_for.py client/efs_fuse.open` |
+  | `efs_fuse_open_ino`, `efs_fuse_read_ino` errno answers; `fuse_fi_direct_io`, `fuse_odirect_unaligned` | none; whole-module fallback | `python3 scripts/tests_for.py client/efs_fuse.open` |
+
+  `writeback.h` ([`tests/test_wb_interface.c`](../../../tests/test_wb_interface.c);
+  every case is an inline block of `main`):
+
+  | Operation or invariant | Cases | Command |
+  |---|---|---|
+  | Before the pool starts: `efs_wb_pending` 0, both drains `EFS_OK`, `efs_wb_stop` a no-op | `main` ("Unstarted pool") | `make tests/test_wb_interface && ./tests/test_wb_interface` |
+  | `efs_wb_enqueue_owned` starts the workers on the first enqueue and returns the job's PUT rc; a stopped pool restarts fresh | `main` ("Start on first enqueue") | `make tests/test_wb_interface && ./tests/test_wb_interface` |
+  | `efs_wb_enqueue_owned` `EFS_ERR_NOMEM` when a worker start fails, buffer released; a writer racing the undo gets `EFS_ERR_IO` | `main` ("Task DT: the second worker start fails") | `make tests/test_wb_interface && ./tests/test_wb_interface` |
+  | `efs_wb_enqueue_owned` `EFS_ERR_BUSY` when the ring stays full for 8 s | none; whole-module fallback | `python3 scripts/tests_for.py client/efs_fuse.writeback` |
+  | `efs_wb_pending`: per inode and for the whole pool, with a PUT in flight | `main` ("Pending and drains bounded") | `make tests/test_wb_interface && ./tests/test_wb_interface` |
+  | `efs_wb_sync`, `efs_wb_sync_ino`: the sticky error is returned once, by its own inode's drain or the global drain; another inode is never refused | `main` ("Sticky error") | `make tests/test_wb_interface && ./tests/test_wb_interface` |
+  | Both drains `EFS_ERR_BUSY` at the caller's deadline; the pending work and the sticky error stay | `main` ("Pending and drains bounded") | `make tests/test_wb_interface && ./tests/test_wb_interface` |
+  | `efs_wb_stop`: joins after the in-flight PUT, does not consume the sticky error, races enqueues, drains and a second stopper | `main` ("A drain waiting when the workers are stopped"), `main` ("Task DT: drains and pending race") | `make tests/test_wb_interface && ./tests/test_wb_interface` |
+  | `bounce_alloc`, `bounce_release`, `efs_fuse_log_err` | none; whole-module fallback | `python3 scripts/tests_for.py client/efs_fuse.writeback` |
+
+  `find_res.h` ([`tests/test_find_res_interface.c`](../../../tests/test_find_res_interface.c)):
+
+  | Operation or invariant | Cases | Command |
+  |---|---|---|
+  | `find_res_intern`, `find_res_open`, `find_query_fill_stat`, `find_query_read`: each fetches first and serves the caller's fresh result; READ at EOF and at an offset | `serve_own_result` | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | `find_res_open` `-ESTALE` when the bytes no longer match the interned version | `serve_own_result` | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | Fetch errors pass through (`EACCES`, `EBUSY`, `-EINVAL` for an unparsable term); a failed fetch never serves the table's bytes | `errors_never_serve_cached_bytes` | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | Another uid or gid gets its own result; the publisher hint is kept per caller and term | `other_uid_gets_its_own`, `serve_own_result` | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | Slots: 40 terms through the 16 slots | `many_terms_through_sixteen_slots` | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | The 64 MiB byte budget evicts the oldest; a larger result answers `-ENOMEM` | `byte_budget` | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | A third concurrent fetch answers `-EBUSY` without an RPC | `third_fetch_is_busy` | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | Task EC F1, F2: same term at once, each caller served its own groups' result, never a miss | `same_term_pairs` | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | Four callers with distinct uids on shared and private terms (TSan entry) | `churn` | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | `find_res_clear` frees every slot (ASan leak check) | `main` (`find_res_clear()` at the end) | `make tests/test_find_res_interface && ./tests/test_find_res_interface` |
+  | `find_res_intern` `-ENOMEM` with no free node; `-EOVERFLOW`, `-ENAMETOOLONG`, `-EILSEQ` | none; whole-module fallback | `python3 scripts/tests_for.py client/efs_fuse.find_res` |
+
 - Gate evidence for the split:
   [efs-fuse-split-20261104](../../../docs/status/2026-11/efs-fuse-split-20261104.md);
   for the per-area headers:
