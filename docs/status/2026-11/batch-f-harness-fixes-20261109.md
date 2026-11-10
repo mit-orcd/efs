@@ -2,12 +2,12 @@
 
 Task FB, Nov 9 to 10 2026, fstor007, branch `claude/blissful-chaum-051bdb` from devel `2dd280cee`. Code commits `ab88399e9` (both fixes) and `24b6807e7` (io window behind the last worker start), instrumentation `28bbc0c52`, measured tree `28bbc0c52`. Purpose: the two harness defects that Task EX's batch F run found on devel `9bb50fe79` (page `docs/status/2026-11/batch-f-candidate-20261109.md` on branch `claude/hungry-liskov-47e4f2`, commit `9dbec51fd`, not merged at writing): F4 run 1 (the `gc-reclamation` gate crashed in its own helper) and F1 run 2 (`test_bench_cli.py`, 4 of 256 `efs-bench` workers did no I/O). Release gate: alpha 1.0 Stage 1 batch F ([acceptance matrix](../stage1-acceptance-matrix-20261030.md)).
 
-**Verdict: PASS on both fixes, harness and bench-tool change only, no K row, blocks alpha: no.**
+**Verdict: PASS on all three fixes, harness and bench-tool change only, no K row, blocks alpha: no.**
 
 - **GC helper race:** reproduced on the old code and gone on the new.
 - **io bench:** the old build failed 6 of 6 pinned idle runs and 5 of 40 pinned runs beside the gate. The new build had no failure in the 75 runs of the same case, from 1 CPU to all 96.
 - **fstor007 `make test`:** rc 0.
-- **8-job gate:** `TOTAL 595 FAIL 1 NOTRUN 3 STATUS FAIL (662s)`. The one FAIL is `test_k41_packer_placement.py`, a packer-placement daemon test that never runs `efs-bench` or the GC helper. It could not be rerun solo because the host was then reserved for a merge gate, so the gate on the final code is not yet a clean pass (see Remaining).
+- **8-job gate:** `TOTAL 595 FAIL 1 NOTRUN 3 STATUS FAIL (662s)`. The one FAIL is `test_k41_packer_placement.py`. It is a third harness defect, a chance assertion in the test, now fixed in `fd50deb31` and proven (section 3). There is no full gate after that fix: the host went to merge gates, and the branch is gated again when it merges.
 
 No timeout, budget, `--time` value or sleep was changed.
 
@@ -67,6 +67,27 @@ Even unpinned on an idle 96-CPU host, the serial loop takes up to 0.2 s of the 1
 
 Beside the gate (6 runs, all BENCH_OK), `0-3` gave a max of 45 to 210 ms and unpinned 13 to 102 ms. On one CPU, 256 runnable threads take seconds to all reach a CPU. The old build failed those runs; the new build waits for them. Unpinned on an idle host the latest start is about the same for both builds (new 148 to 449 ms, old 370 to 410 ms), so on 96 CPUs the gain is that no start ramp can empty a worker's window, not a faster start.
 
+## 3. `tests/test_k41_packer_placement.py` step 2
+
+**Defect:** step 2 asserts `refused >= 1`: node 6 must refuse at least one segment PUT. The test assumes node 6 is a destination. The packer picks each segment's three destinations by its time-based id (`efs_pack_destinations`, `place_wide` in `src/common/placement.c`):
+
+- With six ring members (node 4 back) the stride is 2, so a segment lands on {1, 3, 5} or {2, 4, 6} and misses node 6 with probability 1/2.
+- With five members (node 4 not yet back) the pick is three consecutive members, which misses node 6 with probability 2/5.
+
+A 60-file batch packs about five segments (every run here logged 5), so one batch misses node 6 entirely with probability 1/2^5 ≈ 3 % or (2/5)^5 ≈ 1 %. The Task EY reading, that node 6's step-1 down mark races step 2, does not apply here: `EFS_FAULT_PACK_PLACE_DOWN=6` clears that mark in the packer (`src/server/packer.c`, near line 1296), so node 6 stays on the ring.
+
+**Fix** (`fd50deb31`): step 2 packs further batches, at most four, until node 6 has refused once; every batch is checked as before. A failure now reports node 6's probe failures: 0 means placement never chose node 6, non-zero means node 6 was chosen but failed its probe. No sleep or timeout was changed. A second batch costs another 20 s pack age, so the run can exceed its 65 s budget row. That shows as OVERBUDGET, which leaves a passing gate PASS. It is expected in about 1 to 3 % of runs (one batch missing node 6). It did not happen in this task's three solo runs or in round 3's gate.
+
+**Proof**, fstor007, tree `735cf229a`, sequential solo clusters after three quiet checks 20 s apart:
+
+| run | result |
+| --- | --- |
+| committed test x3 | PASS 3/3, 48 to 50 s, 1 batch each, 1 to 3 refusals |
+| forced miss, pre-fix single batch (`scripts/evidence/fb/k41_forced_miss.py TREE 10 1`, a 10-file step-2 batch, one segment) | FAIL 4/8, each with node 6 probe failures 0; predicted miss rate 1/2 |
+| forced miss with the fix (`... 10 4`) | PASS 8/8; batches used 1, 1, 2, 4, 4, 1, 1, 3 (48 to 112 s) |
+
+With one-segment batches the fix can still miss four times running (1/16). That applies only to this forcing variant: with the real five-segment batches, four misses in a row have a probability of about 10⁻⁶. Artifacts: fstor007 `~/efs-artifacts/taskFB-20261110-k41/` (per-run logs, `results.txt`), `SHA256SUMS` sha256 `b081ca86527c436e0ed785f991c64bd3730456204a5abd461f47c107a6e7a154`. Scratch tree `/tmp/efs-taskFB4` removed.
+
 ## Runs and environment
 
 fstor007 (96 CPUs, RHEL 9.7, kernel 5.14.0-687.36.1, gcc 11.5.0, Python 3.9.25), `EFS_FUSE_PREFIX` shim to the private libfuse 3.16.2, TCP loopback plus RDMA on mlx5_0 for the RDMA tests. Before each round no other gate's screen was running; round 1 started at load about 6 and round 3 at 1.1 after a `ps -u erbmi1` check.
@@ -102,6 +123,6 @@ The `--storage` root must be absent or empty, and the bench removes its files. D
 
 ## Remaining
 
-- `test_k41_packer_placement.py` failed once in round 3, beside this task's pinned benches (which held CPUs 0 to 3 only). It passed in round 1's gate and in both of Task EX's gates. The same test failed on both candidate and base in the Oct 25 Task D nuc gate ([October ledger](../2026-10/ledger.md)), which does not explain this failure. Owed: three solo runs on the final tree once the merge coordinator frees the host, and on `2dd280cee` too if any of them fails. Until then the gate on the final code is not a clean pass.
+- No full 8-job gate has run since `fd50deb31`; the branch's merge-wave gate is the next one. The Oct 25 Task D nuc gate's k41 failures on candidate and base ([October ledger](../2026-10/ledger.md)) may be this same chance miss; they were not re-examined.
 - `src/bench/bench_local.c` (start gate near line 545) and `src/bench/storage_principles.c` (shared `go_cv`) keep the shape this task removed from `io_bench.c`: the deadline is fixed first and the workers released after. They are not changed here, and neither failed in batch F.
 - F1 still needs a clean gate on the batch F candidate. This task's gates ran on its own branch.
