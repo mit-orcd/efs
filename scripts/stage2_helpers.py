@@ -254,15 +254,20 @@ def wire_node(ep, nodes, timeout):
     s.close()
     for group in GROUPS:
         for name, tag in (('unknown', UNKNOWN_TAG), ('reserved', RESERVED_TAG)):
-            # A follower names the leader (NOT_PRIMARY): follow the hint, bounded.
+            # A follower answers NOT_PRIMARY with the leader's raft id, which
+            # is the join order, not the order of `nodes`: try the hinted
+            # node first, then every member not yet asked, each once.
             target, hops, got = ep, [], None
-            for _ in range(len(nodes) + 1):
+            for _ in range(len(nodes)):
                 got = submit(target, bytes([group, tag]), timeout)
                 hops.append(target)
-                if isinstance(got, tuple) and got[0] == ERR_NOT_PRIMARY and 0 <= got[1] < len(nodes):
-                    target = nodes[got[1]]
-                    continue
-                break
+                if not (isinstance(got, tuple) and got[0] == ERR_NOT_PRIMARY):
+                    break
+                left = [n for n in nodes if n not in hops]
+                if not left:
+                    break
+                hinted = nodes[got[1]] if 0 <= got[1] < len(nodes) else None
+                target = hinted if hinted in left else left[0]
             rc = got[0] if isinstance(got, tuple) else got
             out.append(dict(check=f'{name}-tag-{tag}-group-{group}-refused', ok=rc == ERR_PROTO,
                             got=repr(got), want=repr(ERR_PROTO), via=hops))
