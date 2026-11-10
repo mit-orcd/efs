@@ -1507,7 +1507,7 @@
     "docs/how-it-works/apply-visibility.md": "f74520a6ac04ae4d305500c02b4c01b0692c1513849276ce45be8e9a052ccfde",
     "docs/how-it-works/architecture.md": "2198f920d518d1e44bcdf275ef44db294d04db83ae24d1ff3792791e361ca01a",
     "docs/how-it-works/design-rationale.md": "839a9fd92895b7f84e13b761e5bc48473f3ea35e37c364cee372a39e177db55f",
-    "docs/how-it-works/developing.md": "4d7a35ffea3289d2db685957366736d2acdee7b01f6ae7701532ec3b2e35b154",
+    "docs/how-it-works/developing.md": "e916e77d094c84c7df43967a25d83de1e20684837350ee2d50c060c6eb00700d",
     "docs/how-it-works/failure-tolerance.md": "4d2adb1e3c21f81b5fe4b6391fc701f49ee5f8260e0788f7a6a2a48c36df89ed",
     "docs/how-it-works/naming.md": "e71f66d282fe0ee6ee9f8fae4e37c6eeafa2d1948b10de267ad2586721ce8a3c",
     "docs/how-it-works/performance.md": "c07edeefa36188ec7aeb7f063b5f8ada4e239c80027580f3aa2d015fa9939d2d",
@@ -3049,5 +3049,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "9553902fee634d57f044a539c3cc223470c80a33"
+  "source_commit": "89849c730f622ded6e6cb8e686f1ec76a564a4bf"
 }
