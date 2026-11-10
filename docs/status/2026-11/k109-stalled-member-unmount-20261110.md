@@ -465,7 +465,10 @@ rule (tests/budgets.tsv header: the median of the host's three clean 8-job gates
 the slowest of the three gates, 165.5 s, is inside it. The first gate ran the interim 160 s row
 and one gate (165.5 s) went over it, which is why the interim row was replaced. The three gates also report
 `NOTRUN 11` (host limits: no cluster scripts, no RDMA hardware, no valgrind), so their status is INCOMPLETE as on
-the earlier xorinox gates, and `OVERBUDGET 23 to 25` rows that are not this task's; K109's row is not among them at 200 s.
+the earlier xorinox gates, and `OVERBUDGET 23 to 25` rows, listed in the gate summaries. None is K109's at 200 s. One is a stop-path test,
+`test_stop_progress.py` (94 to 130 s against its 20 s row in the gates), so it was run solo twice on each of the devel tip and
+this branch: 66 and 51 s on devel, 57 and 50 s here; the stop change adds no wait to it, and the rest of the rows are disk-bound
+tests the change does not touch.
 
 The wrapper no longer passes `timeout=900` to `subprocess.run`: a second limit besides the
 row's budget, which the gate enforces. The drivers wait on log lines (`Cluster.wait_log`, the
@@ -499,7 +502,7 @@ tests/faults/efsd`, TMPDIR under `~/efs-taskFO/tmp`, build id `unknown`; a secon
 `git archive cff8eb424` for the devel measurements (plus the fault hook for the silent-members stop), and
 `src-nowake`, this tree with only the `server_raft_host_fence_wake()` call in `server_handlers_begin_stop`
 removed. The commits after `adb479839` change this page, `tests/budgets.tsv` (the budget text and number) and the graph only. Logs in
-`~maik/efs-artifacts/taskFO-round3-20261110/` (35 files, `SHA256SUMS` beside it).
+`~maik/efs-artifacts/taskFO-round3-20261110/` (46 files, `SHA256SUMS` beside it).
 
 | Check | Result |
 | --- | --- |
@@ -617,5 +620,5 @@ files); sha256 of that `SHA256SUMS`:
 Round 3 raw output (the healthy-path batches on both trees, the three `--silent2` runs, `--park` and
 `--sigstop`, the solo wrapper runs, `make test`, `tests_for`, the ASan and TSan lanes, the three 8-job gates with their
 summaries and timings, the build logs and the orchestration scripts) is in
-`~maik/efs-artifacts/taskFO-round3-20261110/`, `SHA256SUMS` beside it (35 files); sha256 of that `SHA256SUMS`:
-`a246e98a8482ed358d44e314b374d41556716834dbfd754f0c0b85fe3eaadf53`.
+`~maik/efs-artifacts/taskFO-round3-20261110/`, `SHA256SUMS` beside it (46 files); sha256 of that `SHA256SUMS`:
+`f7df039ca488f01e3607633a4845df74d52c7217be2d29ea1ca505baf39d3230`.
