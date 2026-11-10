@@ -15354,9 +15354,10 @@ static void host_fence_resume(void)
  * else BUSY. No server lock is held over network/disk I/O.
  *
  * A remote answer is awaited by a detached worker that owns a copy of the
- * endpoint and shares only the refcounted round, so the caller can return,
- * and the host can stop, while a slow member's worker still waits. That
- * member's late seal is harmless: its certificate only moves up. */
+ * endpoint and shares only the refcounted round, so the caller can return
+ * while a slow member's worker still waits; the host stop wakes and joins
+ * the workers first (host_fence_drain). That member's late seal is harmless:
+ * its certificate only moves up. */
 enum {FENCE_PENDING,FENCE_SEALED,FENCE_UNREACHED,FENCE_NOT_SEALED,FENCE_REFUSED};
 struct host_fence_round;
 struct host_fence_member {

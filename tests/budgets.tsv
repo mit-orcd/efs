@@ -178,7 +178,7 @@ python3 tests/faults/test_create_retry_fault.py	30	1	fast suite, 30 s ceiling	te
 python3 tests/faults/test_create_retry_integrated.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Run actual shared CREATE fault hook and retained caller together
 python3 tests/faults/test_append_cleanup_retry.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.append	Actual APPEND cleanup step certifies only definite no-op BUSY refusals: read-only selection, and (K42) a step
 ./tests/test_put_storage_fence	30	1	fast suite, 30 s ceiling	test	server/put_fence	Actual certificates and guarded writes
-python3 tests/test_storage_fence_members.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Execute the storage-revocation counting rule (K54, K109): sealed, unreached, did-not-seal and refusing members, 3 to 5, with slow and changing rosters
+python3 tests/test_storage_fence_members.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Execute the storage-revocation counting rule (K54, K109): sealed, unreached, did-not-seal and refusing members, 3 to 5, with slow, late-refusing and changing rosters, with a thread per member and with thread creation failing
 python3 tests/test_pack_object_remote.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	K28/W151 (D38): a segment node that hosts no replica of the segment's group reads the pack object from a voter
 python3 tests/test_storage_fence_retry.py	30	1	fast suite, 30 s ceiling	test	common/session_revoke	Run the production idempotent barrier retry with a deterministic I/O clock
 python3 tests/test_session_finish_retry.py	30	1	fast suite, 30 s ceiling	test	common/session_revoke,server/raft_host	Execute the shared fence coordinator: FINISH keeps its epoch while certificates are BUSY

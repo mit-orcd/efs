@@ -73,9 +73,11 @@ to detach unresolved writes. If stop fails, keep the servers available and
 resolve the failure. The session revoke seals a strict majority of the
 configured storage members, so one member that is down or stalled does not stop
 it; with fewer than a majority sealed it fails closed at
-`phase=storage-fence` with the code of the first member that answered without
-sealing, else `rc=-13` (the client repeats only BUSY and NOT_PRIMARY for 15 s;
-IO and NOT_FOUND end it at once), and the stop exits 1 with
+`phase=storage-fence`: the servers answer with the code of the first member
+that answered without sealing, else BUSY; the client repeats only BUSY and
+NOT_PRIMARY for 15 s and then reports the call its deadline cut (`rc=-6` seen
+with two members answering `-15`), while IO and NOT_FOUND end it at once with
+their own code; the stop exits 1 with
 the mount already detached; see the
 [alpha guide](../using/alpha-1.0-guide.md#mount-and-unmount-a-client). `--force-discard` explicitly permits loss and lazy detach;
 see the [controlled-stop contract](#scripts). Signals and

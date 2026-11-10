@@ -236,12 +236,13 @@ its status check before the revoke began, can still store that fragment after
 the revoke returned; the upload cannot be settled and stays an unsettled
 ticket in the orphan ledger, whose collection of it stays blocked until that
 member holds the sealed epoch. With fewer than a majority
-sealed the stop fails closed at `phase=storage-fence` with the code of the
-first member, in member order, that answered without sealing, else
-`rc=-13` (BUSY: nobody answered). The client repeats the fence for 15 s only
-on BUSY (`-13`) or NOT_PRIMARY (`-15`); any other code, such as IO or
-NOT_FOUND, ends it at once. The client logs `unmount not
-clean: flush rc=0 settle rc=0 revoke rc=-13` (the code differs), `client.sh stop` exits 1, the
+sealed the stop fails closed at `phase=storage-fence`. The servers answer with
+the code of the first member, in member order, that answered without sealing
+(else BUSY `-13`: nobody answered). The client repeats the fence for 15 s only
+on BUSY or NOT_PRIMARY (`-15`) and then reports the call its deadline cut
+(`rc=-6`, seen with two members answering `-15`); any other code, such as IO or
+NOT_FOUND, ends it at once and is reported as it is. The client logs `unmount not
+clean: flush rc=0 settle rc=0 revoke rc=-6` (the code differs), `client.sh stop` exits 1, the
 mount is gone and the mount session's leases and locks stay unrevoked until
 enough members are back and `efs-mgmt raft-session fence` or the next session
 cleanup retires them. A refusal (the session moved to another epoch) that
