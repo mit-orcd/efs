@@ -3874,6 +3874,18 @@ static void snap_import_cancel(struct efs_raft_host *h, struct host_group *g)
     pthread_mutex_unlock(&h->snap_mu);
 }
 
+/* 1 while an import is queued, running, or being applied. snap_mu. */
+static int snap_import_active(struct efs_raft_host *h, struct host_group *g)
+{
+    int st;
+
+    pthread_mutex_lock(&h->snap_mu);
+    st = g->import_state;
+    pthread_mutex_unlock(&h->snap_mu);
+    return st == SNAP_IMP_QUEUED || st == SNAP_IMP_RUN ||
+           st == SNAP_IMP_DONE || st == SNAP_IMP_APPLY;
+}
+
 /* 1 if this incl already has an import queued, running, or finished.
  * *rc is BUSY, OK, or the import error. */
 static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
@@ -4014,6 +4026,11 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
      * in the .part; the GC thread is diffing them into the KV. */
     if (done && snap_import_poll(h, g, incl, incl_term, &rc))
         return rc;
+    if (offset == 0 && snap_import_active(h, g))
+        /* An image is being imported: a chunk of any snapshot at offset 0
+         * would throw that work away. Refuse it (the leader retries) until
+         * the import is installed; no byte of the newer image is kept. */
+        return EFS_ERR_BUSY;
     if (offset == 0) {
         snap_import_cancel(h, g);
         if (g->part_fd >= 0) {
@@ -4066,6 +4083,35 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
     g->import_state = SNAP_IMP_QUEUED;
     pthread_mutex_unlock(&h->snap_mu);
     return EFS_ERR_BUSY;
+}
+
+/* Pump, h->mu held: one bounded import step per group per cycle, whether or
+ * not the leader still asks for that image. A finished import is installed in
+ * the Raft core here (the leader may have moved on to a newer image that
+ * host_snap_chunk refuses until this one is in). */
+static void host_snap_import_pump(struct efs_raft_host *h)
+{
+    for (int gi = 0; gi < HOST_NGROUPS; gi++) {
+        struct host_group *g = &h->g[gi];
+        uint64_t incl, term;
+        int st, rc = EFS_OK;
+
+        if (!g->r)
+            continue;
+        pthread_mutex_lock(&h->snap_mu);
+        st = g->import_state;
+        incl = g->import_incl;
+        term = g->import_term;
+        pthread_mutex_unlock(&h->snap_mu);
+        if (st != SNAP_IMP_DONE || !snap_import_poll(h, g, incl, term, &rc) ||
+            rc != EFS_OK)
+            continue;
+        rc = efs_raft_snap_imported(g->r, incl, term);
+        efs_telemetry_log(0, "raft-snap: import installed group=%u incl=%llu "
+                "rc=%d\n", g->group, (unsigned long long)incl, rc);
+        if (rc != EFS_OK)
+            (void)efs_raft_request_resync(g->r); /* KV is at incl, Raft is not */
+    }
 }
 
 static uint64_t host_snap_window_bytes(void)
@@ -7812,6 +7858,8 @@ static int host_pump_poll_timeout(struct efs_raft_host *h)
     pthread_mutex_lock(&h->inbox_mu);
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
+    for (int i = 0; !pending && i < HOST_NGROUPS; i++)
+        pending = __atomic_load_n(&h->g[i].import_state, __ATOMIC_RELAXED) == SNAP_IMP_DONE;
     return pending ? 0 : HOST_TICK_US/1000;
 }
 
@@ -8926,6 +8974,7 @@ static void *host_pump(void *arg)
         (void)efs_kv_lsm_sync_hold(h->kv);
         if (batch_obs) phase_us = efs_batch_obs_now_us();
         drain_inbox(h);
+        host_snap_import_pump(h);
         /* In-flight membership/apply work may have changed policy or role. */
         host_stop_leading(h, h->s && server_stop_requested());
         /* Network trylocks can fail while this bounded drain holds h->mu.

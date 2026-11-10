@@ -147,6 +147,13 @@ struct efs_raft {
     uint64_t rx_off;
     uint32_t rx_old;
     uint32_t rx_new;
+    /* The image whose closing chunk the host answered BUSY (its import is
+     * running): a newer image's chunk 0 overwrites rx_*, this copy lets the
+     * host install it later (efs_raft_snap_imported). */
+    uint64_t imp_incl;
+    uint64_t imp_term;
+    uint32_t imp_old;
+    uint32_t imp_new;
     int allow_campaign; /* 0 = do not start elections (hollow KV) */
     /* send_idx may go out in AppendEntries before the leader fsync.
      * durable_idx is what this leader has fsynced; try_commit must not
@@ -2246,6 +2253,12 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
         /* Chunk is on disk; the KV diff is still running off this thread.
          * Ack this same offset so the leader retries it. snap_reject would
          * clear rx_off and the next chunk would restart from byte 0. */
+        if (done && incl == r->rx_incl && incl_t == r->rx_term) {
+            r->imp_incl = incl;
+            r->imp_term = incl_t;
+            r->imp_old = r->rx_old;
+            r->imp_new = r->rx_new;
+        }
         m.success = 1;
         m.vote_granted = 0;
         m.prev_index = offset;
@@ -2266,6 +2279,26 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
         return send_msg(r, &m);
     }
     return snap_installed(r, &m, incl, incl_t, r->rx_old, r->rx_new, 1);
+}
+
+/* The host finished importing the image whose closing chunk it answered BUSY,
+ * after the leader stopped retrying that chunk (it moved on to a newer image
+ * the host refused meanwhile). Installing an older complete image is valid:
+ * the member's state becomes exactly the state at incl, and the log after it
+ * (or a newer snapshot) follows. Applies were blocked during the import, so
+ * last_applied is still below incl. The ack goes to the current leader. */
+int efs_raft_snap_imported(struct efs_raft *r, uint64_t incl, uint64_t term)
+{
+    struct efs_raft_msg m;
+
+    if (!r || incl == 0 || incl != r->imp_incl || term != r->imp_term ||
+        incl <= r->last_applied || incl < r->snap_idx)
+        return EFS_ERR_INVAL;
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_SNAP_REP;
+    m.to = r->leader >= 0 ? r->leader : 0;
+    r->imp_incl = 0;
+    return snap_installed(r, &m, incl, term, r->imp_old, r->imp_new, 1);
 }
 
 static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)

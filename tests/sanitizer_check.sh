@@ -219,6 +219,7 @@ wire|tests/test_wire
 kv_lsm|tests/test_kv_lsm
 kv_snap_import|tests/test_kv_snap_import
 snap_import_host|tests/test_snap_import_host
+snap_import_pump|tests/test_snap_import_pump
 raft|tests/test_raft
 # Task EM: the other sequence binaries (EG case filter; raft, sim and txn
 # start no thread, so they are on this list only).
