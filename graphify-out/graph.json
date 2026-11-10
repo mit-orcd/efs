@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "ffd5565f280c4fbb05bfe0a05fa7ce2db624ffa3"
+      "source_commit": "e304f0c9ef98b0b24272c2add6efdd132b9a260f"
     }
   },
   "links": [
@@ -26629,8 +26629,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/performance.md",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L467",
-      "target": "efs:section:docs/how-it-works/performance.md:467"
+      "source_location": "L468",
+      "target": "efs:section:docs/how-it-works/performance.md:468"
     },
     {
       "confidence": "EXTRACTED",
@@ -26638,8 +26638,8 @@
       "relation": "contains",
       "source": "efs:file:docs/how-it-works/performance.md",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L525",
-      "target": "efs:section:docs/how-it-works/performance.md:525"
+      "source_location": "L526",
+      "target": "efs:section:docs/how-it-works/performance.md:526"
     },
     {
       "confidence": "EXTRACTED",
@@ -186046,7 +186046,7 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/how-it-works/performance.md:439",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L462",
+      "source_location": "L463",
       "target": "src_client_commands_command_run"
     },
     {
@@ -186055,8 +186055,8 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/how-it-works/performance.md:439",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L446",
-      "target": "src_common_telemetry_report"
+      "source_location": "L448",
+      "target": "src_client_ops_now"
     },
     {
       "confidence": "EXTRACTED",
@@ -186064,7 +186064,7 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/how-it-works/performance.md:439",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L448",
+      "source_location": "L449",
       "target": "src_common_telemetry_report"
     },
     {
@@ -186089,34 +186089,25 @@
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/performance.md:467",
+      "source": "efs:section:docs/how-it-works/performance.md:468",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L473",
+      "source_location": "L474",
       "target": "src_common_telemetry_report"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/performance.md:467",
+      "source": "efs:section:docs/how-it-works/performance.md:468",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L489",
+      "source_location": "L490",
       "target": "src_kv_kv_compact_overlaps"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/performance.md:467",
-      "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L485",
-      "target": "src_meta_pack_mapping_slot"
-    },
-    {
-      "confidence": "EXTRACTED",
-      "evidence_method": "literal",
-      "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/performance.md:467",
+      "source": "efs:section:docs/how-it-works/performance.md:468",
       "source_file": "docs/how-it-works/performance.md",
       "source_location": "L486",
       "target": "src_meta_pack_mapping_slot"
@@ -186125,25 +186116,25 @@
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/performance.md:467",
+      "source": "efs:section:docs/how-it-works/performance.md:468",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L488",
+      "source_location": "L487",
       "target": "src_meta_pack_mapping_slot"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/performance.md:467",
+      "source": "efs:section:docs/how-it-works/performance.md:468",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L490",
+      "source_location": "L489",
       "target": "src_meta_pack_mapping_slot"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/performance.md:467",
+      "source": "efs:section:docs/how-it-works/performance.md:468",
       "source_file": "docs/how-it-works/performance.md",
       "source_location": "L491",
       "target": "src_meta_pack_mapping_slot"
@@ -186152,18 +186143,27 @@
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/performance.md:525",
+      "source": "efs:section:docs/how-it-works/performance.md:468",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L528",
+      "source_location": "L492",
+      "target": "src_meta_pack_mapping_slot"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/how-it-works/performance.md:526",
+      "source_file": "docs/how-it-works/performance.md",
+      "source_location": "L529",
       "target": "src_client_commands_command_run"
     },
     {
       "confidence": "EXTRACTED",
       "evidence_method": "literal",
       "relation": "mentions_symbol",
-      "source": "efs:section:docs/how-it-works/performance.md:525",
+      "source": "efs:section:docs/how-it-works/performance.md:526",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L535",
+      "source_location": "L536",
       "target": "src_common_settings_note"
     },
     {
@@ -890062,11 +890062,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/performance.md:467",
+      "id": "efs:section:docs/how-it-works/performance.md:468",
       "kind": "document_section",
       "label": "Isolated writer investigation",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L467"
+      "source_location": "L468"
     },
     {
       "_origin": "semantic",
@@ -890074,11 +890074,11 @@
       "community_label_version": 1,
       "community_name": "Documentation \u00b7 Work items \u00b7 run()",
       "extraction": "deterministic-source-index",
-      "id": "efs:section:docs/how-it-works/performance.md:525",
+      "id": "efs:section:docs/how-it-works/performance.md:526",
       "kind": "document_section",
       "label": "Latency-study qualification",
       "source_file": "docs/how-it-works/performance.md",
-      "source_location": "L525"
+      "source_location": "L526"
     },
     {
       "_origin": "semantic",

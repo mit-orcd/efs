@@ -1491,7 +1491,7 @@
     "docs/how-it-works/developing.md": "4d7a35ffea3289d2db685957366736d2acdee7b01f6ae7701532ec3b2e35b154",
     "docs/how-it-works/failure-tolerance.md": "4d2adb1e3c21f81b5fe4b6391fc701f49ee5f8260e0788f7a6a2a48c36df89ed",
     "docs/how-it-works/naming.md": "e71f66d282fe0ee6ee9f8fae4e37c6eeafa2d1948b10de267ad2586721ce8a3c",
-    "docs/how-it-works/performance.md": "ce97db01e595e29bab1a83040c91ff0057046179ca77812e21a0ffd1cc02ba2a",
+    "docs/how-it-works/performance.md": "c07edeefa36188ec7aeb7f063b5f8ada4e239c80027580f3aa2d015fa9939d2d",
     "docs/how-it-works/protocols/data.md": "ec925c086cdea4293a24f485a1194f19e1e77d7622ecc1f1be4d3d4a5486e908",
     "docs/how-it-works/protocols/directory.md": "2e9f346007213ba7e1d23c8d79969f7cf5c9d59426b5d0f951c86ed53f6296be",
     "docs/how-it-works/protocols/sessions.md": "97134e8eb13cdf3f47c9247391c8f3ca663d78b9f91996a3c55bb7a15aaa368a",
@@ -3012,5 +3012,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "ffd5565f280c4fbb05bfe0a05fa7ce2db624ffa3"
+  "source_commit": "e304f0c9ef98b0b24272c2add6efdd132b9a260f"
 }
