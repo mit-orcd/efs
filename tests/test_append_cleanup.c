@@ -323,10 +323,14 @@ static void floor_split(void)
 {
  efs_ino_t ino;uint64_t gen;struct efs_kv *kv=fixture(&ino,&gen);
  uint32_t shard=efs_kv_inode_shard(ino),open;uint64_t size;unsigned progress=9;int idle=7;
- struct efs_opid_req a1=identity(42,1,0),a3=identity(42,2,0),b=identity(43,1,0);
+ struct efs_opid_req a1=identity(42,1,0),b=identity(43,1,0);
  uint64_t o1=grant(kv,ino,&a1);assert(o1==200);assert(complete(kv,ino,o1,&a1)==EFS_OK);
  uint64_t ob=grant(kv,ino,&b);assert(ob==208);
- uint64_t o3=grant(kv,ino,&a3);assert(o3==216);assert(complete(kv,ino,o3,&a3)==EFS_OK);
+ /* A second session cannot reserve while B is OPEN, so A's row above the
+  * frontier is built by copying its DONE row to offset 216. */
+ uint8_t key[EFS_KV_KEY_MAX],val[48];uint32_t kl,vl=sizeof(val);
+ assert(efs_kv_key_append_rsv(shard,ino,gen,o1,key,&kl)==EFS_OK && efs_kv_get(kv,key,kl,val,&vl)==EFS_OK && vl==48);
+ val[7]=216;assert(efs_kv_key_append_rsv(shard,ino,gen,216,key,&kl)==EFS_OK && efs_kv_put(kv,key,kl,val,vl)==EFS_OK);
  assert(efs_session_fence_local(kv,shard,a1.id.client_uuid,2)==EFS_OK);
  struct efs_txid t=next_tx();append_wait=99;
  assert(efs_meta_retire_append_session(kv,shard,a1.id.client_uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_OK);
