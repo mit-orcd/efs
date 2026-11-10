@@ -64,6 +64,8 @@ def main():
     ap.add_argument('--stop-deadline', type=int, default=1500)
     ap.add_argument('--memtable-bytes', type=int, default=0,
                     help='EFS_FAULT_MEMTABLE_BYTES for every member: shrinks the memtable so its fill (bounded by the 128 MiB budget in production) does not hide what the importer holds')
+    ap.add_argument('--kill-delay-s', type=float, default=3.0,
+                    help='with --kill-mid-import: seconds after the first import open before the SIGKILL (the apply of ~180 k keys takes ~10 s)')
     ap.add_argument('--kill-mid-import', action='store_true',
                     help='SIGKILL member 3 as soon as its first import is open, restart it, and require the install to repeat and member 3 to catch up')
     a = ap.parse_args()
@@ -155,10 +157,14 @@ def main():
             end = time.time() + 120
             while time.time() < end and not re.search(r'raft-snap: import open|raft-snap: import diff', logs[3].read_text(errors='replace')):
                 time.sleep(0.01)
+            time.sleep(a.kill_delay_s)   # let batches land: the open itself writes nothing
             os.kill(pid3, signal.SIGKILL)
             procs[3].wait()
             res['killed_after_s'] = round(time.time() - t_rel, 2)
-            res['kill_snap_lines'] = [l for l in logs[3].read_text(errors='replace').splitlines() if 'raft-snap: import' in l][-6:]
+            before = logs[3].read_text(errors='replace')
+            res['kill_snap_lines'] = [l for l in before.splitlines() if 'raft-snap: import' in l][-6:]
+            res['applied_before_kill'] = re.findall(r'import applied group=(\d+) ', before)
+            pre_open = {g: (int(ni), int(nl)) for g, ni, nl in re.findall(r'import open group=(\d+) rc=0 n_in=(\d+) n_local=(\d+)', before)}
             start(3)
             pid3 = procs[3].pid
             end = time.time() + 600
@@ -168,6 +174,13 @@ def main():
                     break
                 time.sleep(0.2)
             res['restart_installed'] = len(re.findall(r'on_snap_req .*INSTALLED', last))
+            post_open = {g: (int(ni), int(nl)) for g, ni, nl in re.findall(r'import open group=(\d+) rc=0 n_in=(\d+) n_local=(\d+)', last)}
+            res['open_before_kill'] = pre_open
+            res['open_after_restart'] = post_open
+            # a batch landed before the kill iff the restart's local export is no longer the one the first import saw
+            res['partial_state_seen'] = [g for g in pre_open if g in post_open and post_open[g][1] != pre_open[g][1]]
+            pre_install = last.split('INSTALLED', 1)[0]
+            res['restart_applies_before_first_install'] = len(re.findall(r'raft-host: applied |INCOMPATIBLE|KV incomplete', pre_install))
             for _ in range(120):   # caught up: node 3 applied == the leader's commit, per group
                 caught = {}
                 for i in (1, 2):
