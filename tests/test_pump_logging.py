@@ -2,7 +2,11 @@
 """AE: real proposals progress with every daemon's stderr pipe blocked.
 
 Fresh TCP/O_DIRECT three-member cluster; two fixed-rate rewriting writers,
-10 Hz stat probe, 35 s blocked window, exact retained payload readback. The existing W159
+10 Hz stat probe, a 10 s drained phase then a 25 s blocked window on the same
+cluster, exact retained payload readback. The blocked phase must write at
+least half the drained phase's rate: both phases pay the same injected fsync
+and the same host load, so the ratio measures K72, not the host (Task FD: an
+absolute count of 50 is only 7 below what an idle host gives). The existing W159
 40 ms serialized fsync interposer forces >20 ms waits, exercising the
 read/apply wait diagnostics that formerly logged while holding cv_mu, and
 makes every REPORT take >=100 ms so it reaches its slow-report line: K81, a
@@ -29,9 +33,11 @@ base = Path(tempfile.mkdtemp(prefix='efs-pump-logging-'))
 print('pump logging fixture:', base, flush=True)
 profile.require_reporter_startup_failure(profile.k.EFSD, base/'unsupported-stderr', base/'startup-refusal.log')
 a = argparse.Namespace(work=base/'work', output=base/'out', sink='blocked', obs=1,
-                       seconds=35, threads=2, rate=2, slow_fsync_us=40000, versioned=True, require_progress=True)
+                       seconds=25, drain_seconds=10, threads=2, rate=2, slow_fsync_us=40000, versioned=True, require_progress=True)
 r = profile.run(a)
-assert r['verdict'] == 'PASS' and r['writes'] >= 50, r
+assert r['verdict'] == 'PASS', r
+drained, blocked = r['phases']['drained'], r['phases']['controlled']
+assert drained['writes'] > 0 and blocked['ops_s'] >= 0.5 * drained['ops_s'], ('blocked rate fell below half the drained rate', drained, blocked)
 for n in (1, 2, 3):
     text = (a.output / ('n%d.log' % n)).read_text()
     values = re.findall(r'telemetry: overflow=(\d+)', text)
