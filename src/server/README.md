@@ -21,23 +21,25 @@ Section names of [raft-host-map.md](../../docs/how-it-works/raft-host-map.md); l
 
 | Symptom | Concern |
 | --- | --- |
-| `raft-host: apply ...` line, an `incompatible` or `kv_incomplete` group (`host_mark_incompatible`, `host_mark_incomplete`) | Apply: core, then the Apply handler section of that command |
-| `txn-fault` | Apply: core; Transaction coordination |
+| `raft-host: applied ...` / `raft-host: apply ...` line for a command | Apply: core, then the Apply section of that command |
+| a group stuck below a committed entry (incompatible) or missing a row (`kv_incomplete`) | Apply: core |
+| `txn-fault`, `raft-host: decide-lost fault` | Transaction coordination |
+| `raft-host: txn-recover`, `raft-host: txn-finish`, `raft-host: txn-commit` | Transaction recovery and finisher; Transaction coordination |
 | `append-abandon`, append reservation or catch-up refusal | Append |
-| `namespace-prof`, `EXIST`/`NOT_FOUND` on create, mkdir, rmdir, unlink, link, rename | Namespace operations |
+| `namespace-prof`, `raft-host: opid-replay`, `raft-host: rmdir`, `raft-host: unlink-txn` | Namespace operations |
 | `query-catchup`, `query-config`, `query-publish`, `query-recovery`, `query-refresh`, `query-restore`, `query-revisions` | Query service |
-| `raft-snap`, snapshot import BUSY, group apply BUSY during an import | Snapshots |
-| `read-prof` | Encoding helpers and diagnostic switches; ReadIndex round |
-| read returns BUSY or NOT_PRIMARY, `wait_applied` timeout, stale follower read | ReadIndex round; Group view, waiters and leader state |
-| `report-receipt`, `report-split`, REPORT STALE or BUSY, publication unit refused | Publication and REPORT |
-| `storage-fence`, session UNREGISTERED or FENCED, lock waiter never granted | Sessions, leases and lock waits |
-| `raft-host: form`, `auto_form`, `mkfs`, HELLO refused, member add FENCED | Formation and member join |
-| `host_cfg`, retired replica campaigns, learner not caught up | Membership view and group configuration |
-| GC backlog, reap, fragment delete, GC ack | Reclaim and GC thread |
-| `dg_one`, rebuild pass, degraded mark not cleared | Degraded-fragment rebuild |
-| stranded transaction, `host_fin_one`, `host_txn_recover_one` | Transaction recovery and finisher |
-| pump stall, inbox full, heartbeat late, `host_stop_leading` | Pump, inbox and applied checkpoint; Outbox and sender threads |
-| `server_raft_host_status` field wrong or missing | Observability and status |
+| `raft-snap`, snapshot import BUSY, apply BUSY during an import | Snapshots |
+| `read-prof`, `raft-host: read-sleep` | Encoding helpers and diagnostic switches; ReadIndex round |
+| read returns BUSY or NOT_PRIMARY, applied-wait timeout, stale follower read | ReadIndex round; Group view, waiters and leader state |
+| `report-receipt`, `report-split`, `raft-host: pub-reject`, `raft-host: report pub` | Publication and REPORT |
+| `storage-fence`, `raft-host: session cleanup batch`, session UNREGISTERED or FENCED, lock waiter never granted | Sessions, leases and lock waits |
+| `raft-host: formed`, `raft-host: raft-mkfs`, `raft-host: membership notice`, HELLO refused | Formation and member join; Membership view and group configuration |
+| `raft-host: gc reap`, `raft-host: gc watermark`, fragment delete or reclaim stalls | Reclaim and GC thread |
+| `raft-host: rebuild`, `raft-host: rebuilt`, degraded mark not cleared | Degraded-fragment rebuild |
+| `raft-host: put-orphan`, `raft-host: put-ticket drain` | Put-orphan and put-drain passes |
+| `raft-host: recovery-mark`, recovery scan or resync refused | Recovery scan and resync |
+| pump stall, inbox full, late heartbeat, `raft-host: shutdown durability failed` | Pump, inbox and applied checkpoint; Outbox and sender threads |
+| `status` field wrong or missing | Observability and status |
 
 ## Contract
 

@@ -1,6 +1,6 @@
 # Raft host map: `src/server/raft_host.c`
 
-Concern map of `src/server/raft_host.c` (26,277 lines at the time of writing; 655 definition lines matched by the checker, 641 distinct names, because 14 names also have a forward declaration line). Each function of the file is listed under exactly one concern; `scripts/check_concern_map.py` (run by `make docs-check`) fails when a function is missing, unknown or in two concerns. There are no line numbers here: find a function with `grep -n "^static.* <name>(" src/server/raft_host.c`. For a defect, read the Logs line first (log keys come from [diagnostics](diagnostics.md)), then open the concern. Functions are grouped by what they do, not by name prefix: the ReadIndex round, the pair path and the apply wait are one concern; the other `host_read_*`/`host_wait_*` functions sit with the concern they serve (see the [ReadIndex entry map](../status/2026-11/readindex-entry-map-20261108.md)). Apply visibility (staged, committed, visible) is in [apply-visibility.md](apply-visibility.md). Header-only helpers included mid-file (`read_index_pair_remote.h`, `publication_session_fast.h`, `query_refresh.h`, `apply_ring.h`, `apply_wait.h`) are not checked here; the includer's concern owns their state. Entry points listed first are the non-static functions (called from other files); "In file" names the static functions other concerns call.
+Concern map of `src/server/raft_host.c` (26,277 lines at the time of writing; 655 definition lines matched by the checker, 641 distinct names, because 14 names also have a forward declaration line). Each function of the file is listed under exactly one concern; `scripts/check_concern_map.py` (run by `make docs-check`) fails when a function is missing, unknown or in two concerns. There are no line numbers here: find a function with `grep -n "^static.* <name>(" src/server/raft_host.c`. For a defect, read the Logs line first (log keys come from [diagnostics](diagnostics.md)), then open the concern. Functions are grouped by what they do, not by name prefix: the ReadIndex round, the pair path and the apply wait are one concern; the other `host_read_*`/`host_wait_*` functions sit with the concern they serve (see the [ReadIndex entry map](../status/2026-11/readindex-entry-map-20261108.md)). Apply visibility (staged, committed, visible) is in [apply-visibility.md](apply-visibility.md). Header-only helpers are not checked here: `apply_ring.h`, `apply_wait.h` and `write_prof.h` are included at the top, `read_index_pair_remote.h` (ReadIndex round), `query_refresh.h` and `query_export_lease.h` (Query service) and `publication_session_fast.h` (Sessions, leases and lock waits; it defines `host_session_establish_reuse`) mid-file, and the concern of the includer owns their state. Entry points listed first are the non-static functions (called from other files); "In file" names the static functions other concerns call.
 
 Structs and the host mutexes are declared at the top of the file (`struct efs_raft_host`, `struct host_group`, `struct host_outbox`). Mutexes: `h->mu` (the raft cores, apply, the KV writer scope; held by the pump), `h->view_mu` (leaf, only the atomic stores of `host_publish_view`), `h->cv_mu` (waiter slots, `applied_cv`), `h->snap_mu` (snapshot files and import state), `h->outbox_mu` (all `tx[]` queues), `h->inbox_mu` (inbox FIFO), `h->mb_mu` (membership thread state), `h->wait_mu` (lock wait queue), `h->rec_mu` (stranded-transaction marks), `h->fin_mu` (finisher ring), `h->query_lock` (rwlock, published query view), `h->s->lock` (server node table), `mview_mu` (global membership view), `query_page_mu`, `host_report_session_parallel`, `host_append_locks[]`, `g_ri_coal[].mu`, and the worker mutexes `w->mu` of the KV and checkpoint workers. The order is in the last section.
 
@@ -8,7 +8,7 @@ Structs and the host mutexes are declared at the top of the file (`struct efs_ra
 
 Does: Big-endian read and write helpers for packed commands, the wall and monotonic clocks, the salt generator, and the environment switches that gate diagnostics (`EFS_RAFT_DBG`, `EFS_RAFT_OBS`, write and read profiling) so success-path logging costs nothing on the pump thread. `dirop_fail_on` decides which directory-operation errors are worth a log line.
 
-State: none of its own beyond environment reads cached in function-local statics; the read-profile accumulator `g_read_prof` is updated with relaxed atomics (no mutex).
+State: `g_read_prof` (`struct read_prof_acc` counters, updated with relaxed atomics in `read_prof_add`, no mutex); `g_wprof[]` and `g_wprof_ticks` (histograms updated through `efs_wprof_add` in `write_prof.h`; their atomicity is not determined here). The environment switches hold no state of their own that this page determined.
 
 Entry points: none public.
 
@@ -22,7 +22,7 @@ Tests: `tests/test_lookup_replacement.py` `tests/test_readindex_result.py` `test
 
 Does: Holds the process-wide published membership (`mview`, a copy of the newest committed revision) and turns it into per-group configuration: which voters each group has at the committed count, the boot voters of a replica, attach of a replica or group, the persisted operator-desired configuration, the retire check that stops a no-longer-voting replica from campaigning, and the learning and reconciling of a later committed revision from the node's own KV.
 
-State: `mview`, `mview_formed`, `mview_state`, `mview_cluster`, `mview_prop` under `mview_mu`; `h->members` (newest committed revision, under `h->mu`); `host_group.retired`, `voters`, `hosted` (under `h->mu`); `g_host` (set once at start).
+State: `mview`, `mview_formed`, `mview_state`, `mview_cluster`, `mview_prop` under `mview_mu`; `h->members` (newest committed revision, under `h->mu`); `host_group.retired` (under `h->mu`, per its field comment); `host_group.voters` (stored and loaded with acquire/release atomics, read by `host_route_voters`); `host_group.hosted` (set at attach; lock not determined); `g_host` (stored with release at start in `server_raft_host_start`, loaded with acquire by `server_member_identity`, `membership_copy` and the query/publication handlers).
 
 Entry points: `server_member_identity` `server_membership_get` `server_member_view`
 
@@ -68,7 +68,7 @@ State: `h->inbox` and counters under `h->inbox_mu`; `pump_efd` (eventfd, no lock
 
 Entry points: `server_raft_host_inbox` In file: `host_pump_kick` (any thread, never blocks), `host_stored_decode_error` (KV scan callbacks).
 
-Functions: `host_inbox_take` `host_pump_poll_timeout` `host_receive_persist` `host_inbox_batch_handoff` `drain_inbox` `applied_path` `host_applied_interval` `host_capture_cursor` `host_publish_cursor` `persist_applied` `host_save_applied` `host_persist_durable_tail` `load_applied` `host_pump_kick` `host_pending_reads` `host_stored_decode_error` `host_stop_leading` `host_heartbeat_due` `host_pump` `host_read_control` `server_raft_host_inbox`
+Functions: `host_inbox_take` `host_pump_poll_timeout` `host_note_queued_reads` `host_receive_persist` `host_inbox_batch_handoff` `drain_inbox` `applied_path` `host_applied_interval` `host_capture_cursor` `host_publish_cursor` `persist_applied` `host_save_applied` `host_persist_durable_tail` `load_applied` `host_pump_kick` `host_pending_reads` `host_stored_decode_error` `host_stop_leading` `host_heartbeat_due` `host_pump` `host_read_control` `server_raft_host_inbox`
 
 Logs: `raft-host` lines from `host_stop_leading`, `host_pump`, `server_raft_host_inbox`
 
@@ -78,7 +78,7 @@ Tests: `tests/test_host_batch_handoff.py` `tests/test_applied_interval.py` `test
 
 Does: Off-pump workers that finish what the pump started under its WAL hold: the KV worker runs the durable barrier for a pump cycle and signals readers waiting on the accepted data cursor; the checkpoint worker writes the restart marker after a proven release. Each has a dispatch, a stop and a start.
 
-State: `struct host_kv_worker` and `struct host_checkpoint_worker` (queue, flags, condition) under their own `w->mu`; the hold buffers are owned by the dispatching pump cycle.
+State: `struct host_kv_worker` and `struct host_checkpoint_worker` (queue, flags, condition) under their own `w->mu`; `host_kv_signal_data` is called from `host_kv_dispatch` with `w->mu` held and takes no host lock. The hold buffers are owned by the dispatching pump cycle.
 
 Entry points: none from other files. In file: `host_kv_dispatch`, `host_checkpoint_dispatch` (pump, called off `h->mu` with the cycle's WAL hold still owned).
 
@@ -96,7 +96,7 @@ State: `host_group.v_*` and `v_seq` (written by `host_publish_view` under `h->mu
 
 Entry points: `server_raft_host_active` `server_raft_host_formed` `server_raft_host_unresponsive_voters` `server_raft_host_group_commit` In file: `host_view_get`, `host_waiter_sleep`, `host_waiters_wake` (declared for the ReadIndex round and the apply wait).
 
-Functions: `group_raft` `group_slot` `host_publish_view` `host_publish_group` `host_view_get` `host_halted_hint` `host_view_covers` `host_view_quorum_index` `host_view_wait_apply` `host_waiter_sleep` `host_waiters_wake` `host_local_leader` `host_local_view` `host_note_queued_reads` `server_raft_host_active` `server_raft_host_formed` `server_raft_host_unresponsive_voters` `server_raft_host_group_commit` `host_is_leader` `host_leader_hint`
+Functions: `group_raft` `group_slot` `host_publish_view` `host_publish_group` `host_view_get` `host_halted_hint` `host_view_covers` `host_view_quorum_index` `host_view_wait_apply` `host_waiter_sleep` `host_waiters_wake` `host_local_leader` `host_local_view` `server_raft_host_active` `server_raft_host_formed` `server_raft_host_unresponsive_voters` `server_raft_host_group_commit` `host_is_leader` `host_leader_hint`
 
 Logs: no keyed lines in [diagnostics](diagnostics.md).
 
@@ -120,7 +120,7 @@ Tests: `tests/test_readindex_result.py` `tests/test_raft_read_admission.py` `tes
 
 Does: Picks where an operation runs and forwards it: the hosted groups of a node, a peer that hosts every needed group, the leader of a single group, with the read-only deadline scope for proofs. `host_rpc_submit` and `host_remote_cmd` carry a member-forwarded submit; each `host_fwd_*` re-encodes one handler's request (keeping the client's op-id suffix) for the peer that finally runs it.
 
-State: `g_fwd_leader[]` (leader hint, relaxed atomics); `host_serving_forward` (thread-local); routing reads the published view and `host_group.voters` without `h->mu`; peer addresses under `h->s->lock`.
+State: `g_fwd_leader[]` (leader hint, relaxed atomic store in `host_fwd_leader_note`); `host_serving_forward` (thread-local); routing reads the published view and `host_group.voters` (acquire load) without `h->mu`; peer addresses are read in `peer_addr` under `h->s->lock`, and its callers (sender thread, `host_rpc_submit`, `host_inode_rpc_peer`, `host_recovery_scan_remote`) hold no other host lock that this page determined.
 
 Entry points: none public. In file: `host_remote_cmd`, `host_inode_forward`, `host_pick_peer`, `host_leader_cover_pick` (every handler's forward path).
 
@@ -134,11 +134,11 @@ Tests: `tests/test_read_retry_budget.py` `tests/test_remote_cmd_halted_peer.py` 
 
 Does: Takes a command from a handler into the raft log and waits for what the apply decided. `host_admit` refuses before the hard bounds (BUSY at the watermark), `host_propose_impl` appends under `h->mu` and publishes the view, and the verdict is read from the apply-result ring by (index, term) so a truncated tail is never mistaken for success. Durable-sync coverage and the REPORT/cohort hold keep an append from being advertised before the shared log covers it.
 
-State: `host_group.arc[]` (apply-result ring, seqlock slots written by `host_apply` under `h->mu`, read lock-free); `propose_q` (atomic); `h->admit_busy`, `obs_arc_*` (atomics); durable-synced offsets under `h->mu`.
+State: `host_group.arc[]` (apply-result ring, seqlock slots written by `host_apply` under `h->mu`, read lock-free; `host_arc_read` falls back to `h->mu`); `propose_q` (file-scope counter, atomic add/sub in `propose_q_add`/`propose_q_sub`); `h->admit_busy` and `obs_arc_*` counters (lock not determined); durable-synced offsets: `host_durable_synced_mode` and `host_mark_durable_covered` are called with `h->mu` held, per their comments.
 
-Entry points: none public. In file: `host_propose`, `host_propose_wait`, `host_wait_verdict`, `host_wait_settled`, `host_wait_refs` (every writing handler), `host_bg_propose` (GC and background passes).
+Entry points: none public. In file: `host_propose`, `host_propose_wait`, `host_wait_verdict`, `host_wait_settled`, `host_wait_refs` (called by the writing handlers), `host_bg_propose` (GC and background passes).
 
-Functions: `propose_q_add` `propose_q_sub` `propose_q_busy` `host_durable_synced_mode` `host_durable_synced` `host_note_durable_synced` `host_mark_durable_covered` `host_tag_refused` `host_kv_pressure` `host_admit` `host_submit_serves_forward` `host_dir_migrate_request_decode` `host_forward_refused` `host_propose_impl` `host_arc_read` `host_arc_verdict` `host_apply_rc` `host_arc_apply_us` `host_wait_verdict` `host_wait_settled` `host_propose_mode` `host_propose` `host_propose_wait_idx_impl` `host_propose_wait_idx` `host_propose_wait` `host_bg_propose` `host_wait_refs` `host_wait_refs_each`
+Functions: `propose_q_add` `propose_q_sub` `propose_q_busy` `host_durable_synced_mode` `host_durable_synced` `host_note_durable_synced` `host_mark_durable_covered` `host_tag_refused` `host_kv_pressure` `host_admit` `host_submit_serves_forward` `host_forward_refused` `host_propose_impl` `host_arc_read` `host_arc_verdict` `host_apply_rc` `host_arc_apply_us` `host_wait_verdict` `host_wait_settled` `host_propose_mode` `host_propose` `host_propose_wait_idx_impl` `host_propose_wait_idx` `host_propose_wait` `host_bg_propose` `host_wait_refs` `host_wait_refs_each`
 
 Logs: `raft-host` lines from `host_tag_refused`, `host_admit`
 
@@ -232,11 +232,11 @@ Tests: `tests/test_session_admission.py` `tests/test_namespace_admission_rounds.
 
 Does: Builds and drives cross-shard transactions: PREPARE, DECIDE and RESOLVE proposals (`host_prep*`), the participant set and ancestry guards, allocation and resize decisions, the batched PREPARE/RESOLVE path (`host_txn_batch_*`), the command cohort that proposes independent commands together, and the fault barriers tests use to stop a transaction before or after its decision.
 
-State: `host_command_capture` (thread-local) and the cohort buffers are per call; `host_pub_unit_active` is thread-local; the proposals go through the proposal concern (`h->mu`).
+State: `host_command_capture` (thread-local pointer to the active `struct host_command_cohort`; `host_command_cohort_flush` takes `c->host->mu` to propose the cohort); `struct host_txn_batch` and `struct host_resize_ctx` are per call. Other proposals go through the proposal concern (`h->mu`).
 
 Entry points: none public. In file: `host_txn_commit`, `host_txn_batch_submit`, `host_prep` (every multi-shard handler).
 
-Functions: `host_txn_coord` `host_txn_read_coord` `host_parts_add` `host_pver_guard_chain` `host_command_cohort_flush` `host_command_cohort_add` `host_command_cohort_begin` `host_command_cohort_end` `host_txn_fault_barrier` `host_decide_lost_fault` `host_txn_batch_init` `host_txn_batch_drop` `host_txn_batch_submit` `host_txn_batch_close` `host_txn_batch_add` `host_txn_batch_flush` `host_txn_commit` `host_prep` `host_prep_async` `host_prep_raw_pack` `host_prep_raw` `host_prep_value` `host_alloc_capture` `host_prep_alloc_value` `host_mkdir_alloc_reserve` `host_prep_ino_delta` `host_prep_dseq_bump` `host_has_opid` `host_prep_opid` `host_prep_lane_stamp` `host_drop_parts` `host_resize_decide` `host_resize_resolve` `host_mtime_prepare` `host_regular_mtime`
+Functions: `host_txn_coord` `host_txn_read_coord` `host_parts_add` `host_pver_guard_chain` `host_command_cohort_flush` `host_command_cohort_add` `host_command_cohort_begin` `host_command_cohort_end` `host_txn_fault_barrier` `host_decide_lost_fault` `host_txn_batch_init` `host_txn_batch_drop` `host_txn_batch_submit` `host_txn_batch_close` `host_txn_batch_add` `host_txn_batch_flush` `host_txn_commit` `host_prep` `host_prep_async` `host_prep_raw_pack` `host_prep_raw` `host_prep_value` `host_alloc_capture` `host_prep_alloc_value` `host_mkdir_alloc_reserve` `host_prep_ino_delta` `host_prep_dseq_bump` `host_has_opid` `host_prep_opid` `host_prep_lane_stamp` `host_drop_parts` `host_resize_decide` `host_resize_resolve` `host_mtime_prepare`
 
 Logs: `raft-host` lines from `host_decide_lost_fault`, `host_txn_commit`, `host_drop_parts`, `host_resize_decide`
 
@@ -260,11 +260,11 @@ Tests: `tests/test_txn_recovery_priority.py` `tests/test_txn_decision_sweep.py` 
 
 Does: The server side of the directory and inode mutations: create (also hashed and retained create), mkdir, rmdir, unlink, link, rename, setattr, xattr, utimens, lazy truncate and expire. Each probes the op-id window, reads under ReadIndex, builds a single-group command or a transaction, and replies with the recorded verdict; `host_create_ex` is the shared create path.
 
-State: no file-scope state beyond thread-locals; per-inode serialisation uses `host_append_locks[]` only in the append concern; proposals go through `h->mu` in the proposal concern.
+State: no file-scope state of its own; per-call structs only. Proposals go through `h->mu` in the proposal concern.
 
-Entry points: `server_raft_host_create` `server_raft_host_create_retained` `server_raft_host_lane_bootstrap` `server_raft_host_mkdir` `server_raft_host_rmdir` `server_raft_host_unlink` `server_raft_host_setattr` `server_raft_host_xattr` `server_raft_host_link` `server_raft_host_rename_at` In file: `host_create`, `host_unlink_txn`, `host_truncate_lazy`, `host_utimens` (called across handlers).
+Entry points: `server_raft_host_create` `server_raft_host_create_retained` `server_raft_host_mkdir` `server_raft_host_rmdir` `server_raft_host_unlink` `server_raft_host_setattr` `server_raft_host_xattr` `server_raft_host_link` `server_raft_host_rename_at` In file: `host_create`, `host_unlink_txn`, `host_truncate_lazy`, `host_utimens` (called across handlers).
 
-Functions: `host_bootstrap_lane` `host_read_leader_hint` `host_hashed_create_txn` `host_opid_replay` `host_opid_reply_ino` `host_test_dir_serve_read` `host_create_ex` `host_create` `server_raft_host_create` `host_retained_create_forward` `host_retained_create_proof` `server_raft_host_create_retained` `host_namespace_capacity` `server_raft_host_lane_bootstrap` `host_namespace_leader_hint` `server_raft_host_mkdir` `host_test_rmdir_busy` `server_raft_host_rmdir` `host_unlink_txn` `server_raft_host_unlink` `host_utimens` `host_truncate_lazy` `server_raft_host_setattr` `server_raft_host_xattr` `server_raft_host_link` `server_raft_host_rename_at`
+Functions: `host_read_leader_hint` `host_hashed_create_txn` `host_opid_replay` `host_opid_reply_ino` `host_test_dir_serve_read` `host_create_ex` `host_create` `server_raft_host_create` `host_retained_create_forward` `host_retained_create_proof` `server_raft_host_create_retained` `host_namespace_capacity` `host_regular_mtime` `host_dent_drop_prep` `host_namespace_leader_hint` `server_raft_host_mkdir` `host_test_rmdir_busy` `server_raft_host_rmdir` `host_unlink_txn` `server_raft_host_unlink` `host_utimens` `host_truncate_lazy` `server_raft_host_setattr` `server_raft_host_xattr` `server_raft_host_link` `server_raft_host_rename_at`
 
 Logs: `namespace-prof` (server_raft_host_mkdir); `raft-host` lines from `host_opid_reply_ino`, `host_test_dir_serve_read`, `host_create_ex`, `host_namespace_capacity`, `server_raft_host_mkdir`, `host_test_rmdir_busy` and 4 more
 
@@ -272,13 +272,13 @@ Tests: `tests/test_retained_create_authority.py` `tests/test_namespace_receipt_p
 
 ## Directory migration and spread
 
-Does: Moves a LOCAL directory to HASHED placement and spreads it across groups: a planning request, a transaction for leftovers whose shard is on the other group, and the spread pass that decides when. The same-group migrate stays inside the apply (`apply_dir_cmd`, Apply: namespace).
+Does: Moves a LOCAL directory to HASHED placement and spreads it across groups: the decoder for a planning request (`host_dir_migrate_request_decode`, called from `server_raft_host_submit`), a transaction for leftovers whose shard is on the other group, and the spread pass that decides when. The same-group migrate stays inside the apply (`apply_dir_cmd`, Apply: namespace; `host_dir_migrate_local`).
 
 State: no file-scope state; the planner reads rows under ReadIndex.
 
 Entry points: none public. In file: `host_dir_migrate` (the submit path), `host_dir_spread_pass` (the GC thread).
 
-Functions: `host_dir_migrate` `host_dir_migrate_txn` `host_dir_spread_pass` `host_dent_drop_prep`
+Functions: `host_dir_migrate_request_decode` `host_dir_migrate` `host_dir_migrate_txn` `host_dir_spread_pass`
 
 Logs: `raft-host` lines from `host_dir_spread_pass`
 
@@ -288,11 +288,11 @@ Tests: `tests/test_dir_migrate_route.py` `tests/test_dir_migrate_visibility.py`
 
 Does: The O_APPEND write path: reserve and prepare, decide, resolve, the atomic single-shard form, the batched form for a session's close-step, the transaction form and the abandon. `server_raft_host_append` serialises appenders per inode with a lock stripe and chooses between the forms.
 
-State: `host_append_locks[]` (a stripe of mutexes, initialised once under `host_append_once`); `host_append_ops` and `host_append_reserve_ops` are const tables; the rest is per call.
+State: `host_append_locks[]` (a stripe of mutexes, initialised once under `host_append_once`; `server_raft_host_append` takes one per inode with `pthread_mutex_trylock` and answers BUSY when taken, then runs `host_append_owner` with it held); `host_append_ops` and `host_append_reserve_ops` are const tables; the rest is per call.
 
 Entry points: `server_raft_host_append`
 
-Functions: `host_append_close_batched` `host_close_append_step` `host_session_append_step` `host_append_session_admit_covered` `host_append_prepare_ref` `host_append_prepare_pack` `host_append_prepare` `host_append_reserve_prepare` `host_append_reserve_decide` `host_append_reserve_resolve` `host_append_authority` `host_append_execute_atomic` `host_append_atomic_eligible` `host_append_batch_prepare` `host_append_batch_decide` `host_append_batch_resolve` `host_append_execute_batched` `host_append_prune_batched` `host_append_close_prepare` `host_append_transaction` `host_append_abandon` `host_append_primary` `host_append_init` `host_append_owner` `server_raft_host_append` `host_complete_single_append` `host_fault_append_hold` `host_resolve_caught_up`
+Functions: `host_append_close_batched` `host_close_append_step` `host_session_append_step` `host_append_session_admit_covered` `host_append_prepare_ref` `host_append_prepare_pack` `host_append_prepare` `host_append_reserve_prepare` `host_append_reserve_decide` `host_append_reserve_resolve` `host_append_authority` `host_append_execute_atomic` `host_append_atomic_eligible` `host_append_batch_prepare` `host_append_batch_decide` `host_append_batch_resolve` `host_append_execute_batched` `host_append_prune_batched` `host_append_close_prepare` `host_append_transaction` `host_append_abandon` `host_append_primary` `host_append_init` `host_append_owner` `server_raft_host_append` `host_complete_single_append` `host_fault_append_hold`
 
 Logs: `append-abandon` (host_append_abandon); `raft-host` lines from `host_session_append_step`, `host_fault_append_hold`
 
@@ -302,11 +302,11 @@ Tests: `tests/test_append_prepare_batch.py` `tests/test_append_cohort.py` `tests
 
 Does: Turns a client's REPORT into published file content: per-unit transactions (`host_pub_unit_*`), packed batches proposed and waited together (`host_pub_batch_*`), the atomic publication units of W77 (units valid, set length, stale note), the K32 transaction sets and their republish, and the REPORT receipt table that answers a retry from the recorded outcome.
 
-State: `g_report_receipts` (with `g_report_receipts_once`, `g_report_receipts_ok`, `g_report_receipt_trace`: set up once, then the table's own locking); `struct host_pub_batch` and `host_pub_unit` are per call; `host_pub_unit_active` thread-local.
+State: `g_report_receipts` (a `struct efs_receipt_table` from `efs/request_receipt.h`, set up once under `g_report_receipts_once`, flag `g_report_receipts_ok`, trace switch `g_report_receipt_trace`; whether the table locks internally is not determined here); `struct host_pub_batch` and `host_pub_unit` are per call; `host_pub_unit_active` (thread-local, set around `host_pub_unit_commit` and read by `host_pub_fault`).
 
 Entry points: `server_raft_host_report` `server_raft_host_report_receipted` `server_raft_host_report_receipt` `server_raft_host_publication`
 
-Functions: `host_pub_fault` `host_holds_chunks` `host_pub_candidate_gen` `host_pub_stale_note` `host_pub_pack_inner` `host_report_ticket` `host_pub_pack` `host_pub_batch_reset` `host_pub_batch_propose` `host_pub_batch_push` `host_report_release` `host_pub_batch_finish` `host_pub_batch_wait` `host_pub_set_len` `host_pub_units_valid` `host_pub_unit_txn` `host_pub_unit_abort` `host_pub_unit_commit` `host_pub_units_publish` `host_report_stale_verdict` `server_raft_host_report` `host_report_receipts_init` `host_report_receipt_key` `host_report_status_rc` `host_report_exec` `host_receipt_how_name` `server_raft_host_report_receipted` `server_raft_host_report_receipt` `host_publication_committed` `server_raft_host_publication`
+Functions: `host_bootstrap_lane` `host_pub_fault` `host_resolve_caught_up` `host_holds_chunks` `host_pub_candidate_gen` `host_pub_stale_note` `host_pub_pack_inner` `host_report_ticket` `host_pub_pack` `host_pub_batch_reset` `host_pub_batch_propose` `host_pub_batch_push` `host_report_release` `host_pub_batch_finish` `host_pub_batch_wait` `host_pub_set_len` `host_pub_units_valid` `host_pub_unit_txn` `host_pub_unit_abort` `host_pub_unit_commit` `host_pub_units_publish` `host_report_stale_verdict` `server_raft_host_report` `host_report_receipts_init` `host_report_receipt_key` `host_report_status_rc` `host_report_exec` `host_receipt_how_name` `server_raft_host_report_receipted` `server_raft_host_report_receipt` `host_publication_committed` `server_raft_host_publication`
 
 Logs: `report-split` (server_raft_host_report); `report-receipt` (host_report_receipts_init, server_raft_host_report_receipted, server_raft_host_report_receipt); `raft-host` lines from `host_pub_fault`, `host_pub_stale_note`, `host_pub_pack_inner`, `host_pub_pack`, `host_pub_unit_txn`, `host_pub_unit_commit` and 2 more
 
@@ -314,17 +314,31 @@ Tests: `tests/test_w155_report_resolve.py` `tests/test_k32_entry_count.py` `test
 
 ## Read handlers
 
-Does: The read-side RPCs: getattr, lookup, lookup by path, readdir, getchunks, and the writer view and lane bootstrap endpoints. Each admits through ReadIndex, reads the local replica after authority is proven, and returns the stat or rows with the content epoch.
+Does: The read-side RPCs: getattr, lookup, lookup by path, readdir and getchunks. Each admits through ReadIndex, reads the local replica after authority is proven, and returns the stat or rows with the content epoch, or forwards when the lanes are not hosted here.
 
 State: none of its own; per-call reads of `h->kv` after `host_read_index`.
 
-Entry points: `server_raft_host_getattr` `server_raft_host_lookup` `server_raft_host_lane_bootstrap_rpc` `server_raft_host_lane_writer_view` `server_raft_host_writer_view_reuse` `server_raft_host_writer_view` `server_raft_host_getchunks` `server_raft_host_readdir` `server_raft_host_lookup_path`
+Entry points: `server_raft_host_getattr` `server_raft_host_lookup` `server_raft_host_getchunks` `server_raft_host_readdir` `server_raft_host_lookup_path`
 
-Functions: `server_raft_host_getattr` `host_lookup_plan_group` `server_raft_host_lookup` `server_raft_host_lane_bootstrap_rpc` `server_raft_host_lane_writer_view` `server_raft_host_writer_view_reuse` `server_raft_host_writer_view` `host_getchunks_collect` `server_raft_host_getchunks` `server_raft_host_readdir` `server_raft_host_lookup_path`
+Functions: `server_raft_host_getattr` `host_lookup_plan_group` `server_raft_host_lookup` `host_getchunks_collect` `server_raft_host_getchunks` `server_raft_host_readdir` `server_raft_host_lookup_path`
 
 Logs: `raft-host` lines from `server_raft_host_getchunks`
 
-Tests: `tests/test_lookup_replacement.py` `tests/test_lane_bootstrap_host.py` `tests/test_lookup_group_plan.py` `tests/test_getchunks_collect_retry.py` `tests/test_lane_writer_host.py`
+Tests: `tests/test_lookup_replacement.py` `tests/test_lookup_group_plan.py` `tests/test_getchunks_collect_retry.py` `tests/test_lookup_path_authority.py` `tests/test_k48_readdir.py`
+
+## Writer view and lane bootstrap
+
+Does: The endpoints a writing client uses before it publishes: the writer's view of an inode's lanes (`server_raft_host_writer_view` and its reuse and lane variants) and the lane bootstrap, which stamps a lane on the inode group (`server_raft_host_lane_bootstrap`, called per item by `server_raft_host_lane_bootstrap_rpc` as a bounded cohort). The publication path calls `host_bootstrap_lane` (listed with Publication and REPORT).
+
+State: none of its own; `server_raft_host_lane_bootstrap_rpc` reads the node table under `h->s->lock`.
+
+Entry points: `server_raft_host_lane_bootstrap` `server_raft_host_lane_bootstrap_rpc` `server_raft_host_lane_writer_view` `server_raft_host_writer_view_reuse` `server_raft_host_writer_view`
+
+Functions: `server_raft_host_lane_bootstrap` `server_raft_host_lane_bootstrap_rpc` `server_raft_host_lane_writer_view` `server_raft_host_writer_view_reuse` `server_raft_host_writer_view`
+
+Logs: no keyed lines in [diagnostics](diagnostics.md).
+
+Tests: `tests/test_lane_bootstrap_host.py` `tests/test_lane_bootstrap_export.py` `tests/test_lane_writer_host.py`
 
 ## Inode replies and lane reads
 
@@ -428,7 +442,7 @@ Tests: `tests/test_k22_snapshot_import.py` `tests/test_query_snapshot_failover.p
 
 Does: The catalog query RPCs: a published two-generation view of the namespace refreshed by `host_query_thread` from a pinned source after an authority and fence check, paged streams (`query_page_*`) held under `query_page_mu`, and the request path that enforces fresh permissions and ancestry before returning bytes.
 
-State: `query_page_mu`/`query_page_cv` with the `query_page_session` table and `query_page_serial`; `h->query_lock` (rwlock: readers share the view, publish drains them); `query_reply_bytes`, `query_requests` and `host_query_interval_ms` (atomics/config); `query_export_once`.
+State: `query_page_mu`/`query_page_cv` with the `query_page_session` table and `query_page_serial`; `h->query_lock` (rwlock: readers share the view, publish drains them); `query_reply_bytes`, `query_requests` and `host_query_interval_ms` (relaxed atomics in `server_raft_host_query_snapshot` and `host_query_thread`); `query_export_once` (`pthread_once`).
 
 Entry points: `server_raft_host_query_read` `server_raft_host_query_reply_free` `server_raft_host_query_features_checked` `server_raft_host_query_snapshot` `server_raft_host_query_page`
 
@@ -470,7 +484,7 @@ Tests: `tests/test_pack_object_remote.py` `tests/test_pack_base_reads.py` `tests
 
 Does: `server_raft_host_status` and `server_raft_host_expiry_status` build the status page from the cores and counters; the observation helpers render pump phase maxima, role events and KV table activity off the pump from a bounded numeric snapshot (`host_periodic_capture`); `wprof_*` record write-phase profile histograms.
 
-State: `g_wprof[]`, `g_wprof_ticks` (relaxed atomics); `host_periodic` and `host_tx_obs` mailbox structs; `h->mu` for the status snapshot, `h->outbox_mu` for the outbox counters copied by the capture.
+State: `host_periodic`, `host_tx_obs` and `host_role_ev` mailbox structs (the profile histograms `g_wprof[]` are in the first concern); `h->mu` for the status snapshot, `h->outbox_mu` for the outbox counters copied by the capture.
 
 Entry points: `server_raft_host_expiry_status` `server_raft_host_status`
 
@@ -484,7 +498,7 @@ Tests: `tests/test_k96_status_slots_live.py` `tests/test_b_geometry_status.py` `
 
 Does: Starts and stops the host (threads, replicas, senders, workers, GC, query), steps a leader down or transfers leadership, and is the single `submit` entry: `server_raft_host_submit` decodes the message tag, forwards or serves it, and calls the handler. The PUT ticket batch submit and the KV accessor live here.
 
-State: `g_host` (the singleton, set at start and cleared at stop); the thread ids `tid`, `query_tid`, `gc_tid`, `fin_tid`, `mb_tid`; the stop path takes `h->fin_mu`, `h->inbox_mu`, `h->mb_mu`, `h->mu`, `h->query_lock` and `h->wait_mu` in turn (not nested).
+State: `g_host` (the singleton: release-stored at start, set to NULL on a failed start and at stop); the thread ids `tid`, `query_tid`, `gc_tid`, `fin_tid`, `mb_tid`; the stop path takes `h->fin_mu`, `h->inbox_mu`, `h->mb_mu`, `h->mu`, `h->query_lock` and `h->wait_mu` in turn (not nested).
 
 Entry points: `server_raft_host_start` `server_raft_host_stop` `server_raft_host_submit` `server_raft_host_step_down` `server_raft_host_gc_running` `server_raft_host_kv`
 
@@ -496,15 +510,16 @@ Tests: `tests/test_shutdown_bounded.py` `tests/test_forward_once.py` `tests/test
 
 ## Lock order
 
-Two locks are held at once in these orders. Locks not listed are leaves: taken alone, or never held while another host lock is taken.
+Orders below were read from the code: an order is listed only when one function takes both locks, or when the inner lock's function is called with the outer held (named in the line). Everything else is "not determined"; this page does not prove that no other nesting exists, and the file states its order in no one place.
 
-- `h->mu` then `h->snap_mu`: `host_query_source_once` and `host_query_thread` (the pump may hold both; the GC thread never takes `h->mu` under `h->snap_mu`, per the field comment on `snap_mu`).
+- `h->mu` then `h->snap_mu`: `host_query_source_once` and `host_query_thread` (the field comment says the pump may hold `h->mu` then `snap_mu`, and that the GC thread never takes `h->mu` under `snap_mu`).
 - `h->mu` then `h->inbox_mu`: `host_read_control` (a trylock on `h->mu` first, then the inbox).
-- `h->mu` then `h->view_mu`: `host_publish_view` (called with `h->mu` held; `view_mu` guards only the atomic stores).
-- `h->mu` then `h->cv_mu`: `host_pump` (calls `host_waiters_wake` with `h->mu` held; `host_read_index_admitted` takes the two separately, never nested).
-- `h->mu` then `h->outbox_mu`: `host_send` (queues under the pump's `h->mu`; the sender threads take `h->outbox_mu` alone).
-- `h->mu` then `h->rec_mu`: `host_rec_mark` (called from the apply path under `h->mu`; `host_txn_recover_pass` takes `h->rec_mu` alone on the GC thread).
-- `h->mb_mu` and `h->mu`: `host_seed_propose` takes them one after the other, not nested.
-- `h->mu` then `mview_mu`: not nested; `membership_copy` takes `mview_mu`, releases it, then takes `h->mu`.
-- `h->cv_mu` and `h->s->lock`: `host_gc_metadata_waiting` takes them one after the other, not nested.
+- `h->mu` then `h->view_mu`: `host_publish_view` (comment: `h->mu` held; `view_mu` guards only the atomic stores).
+- `h->mu` then `h->cv_mu`: `host_pump` calls `host_waiters_wake` with `h->mu` held; `host_read_index_admitted` takes the two separately, never nested.
+- `h->mu` then `h->outbox_mu`: `host_send` (queues under the pump's `h->mu`, per the field comment); the sender threads take `h->outbox_mu` alone.
+- `h->mu` then `h->rec_mu`: `host_rec_mark` is set from the apply path under `h->mu` (field comment); `host_txn_recover_pass` takes `h->rec_mu` alone on the GC thread.
 - `h->mu` then `h->wait_mu`: `apply_session_cmd` and `host_lease_close_effects` (apply handlers run under `h->mu`); `host_lock_wait` and `host_lock_wait_drop_session` take `h->wait_mu` alone.
+- `h->mu` then `mview_mu`: `host_learn_membership` and `host_seed_propose` call `mview_publish`/`mview_publish_store` with `h->mu` held. The reverse is not taken: `membership_copy` releases `mview_mu` before it takes `h->mu`.
+- `host_append_locks[i]` then `h->mu`: `server_raft_host_append` holds a stripe (trylock) across `host_append_owner`, which calls `host_append_abandon` or `host_append_transaction` (the prepare, decide and resolve proposals); `h->mu` is taken inside those proposals (`host_propose_impl` locks it). `host_append_primary` runs before the stripe is taken.
+- `c->mu` (`g_ri_coal`) is dropped before `host_remote_cmd` is called in `host_remote_read_index`; `h->mb_mu` is dropped before the calls in `host_member_thread`; `host_gc_metadata_waiting` takes `h->cv_mu` and `h->s->lock` one after the other.
+- Not determined: the locks held by the callers of `host_fin_add` (it takes `h->fin_mu`), of `peer_addr` (`h->s->lock`), and of `host_report_session_parallel` (a trylock in `host_report_session_admit`).
