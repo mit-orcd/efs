@@ -241,6 +241,11 @@ match the table. Done: adding a setting edits one file.
   (`g_open_mu` and the open-ref table, `g_find_res`). Status Nov 9: both
   done ([Task EB](taskEB-review-followup-20261108.md),
   [Task EC](find-res-ownership-20261108.md)).
+- Next steps measured Nov 10: [structure review](structure-review-20261110.md)
+  with nine prepared [task briefs](structure-review-tasks-20261110.md) (K register
+  and ledger per file, concern maps of `write.c` and `raft_host.c`, a
+  diagnostics index, host and gate recipes, named interface cases, a test
+  recipe; PUT-window ownership deferred).
 - Graph queries: a broad `graphify query` returns hundreds of nodes; agents
   need a small ranked starting set (the component README's symptom map is
   the interim answer).
