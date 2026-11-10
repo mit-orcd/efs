@@ -250,7 +250,7 @@ State: the finisher ring under `h->fin_mu` with `fin_cv`; `h->rec_mark[]` under 
 
 Entry points: none public.
 
-Functions: `host_fin_add` `host_txn_retire` `host_fin_one` `host_fin_thread` `host_rec_mark` `host_rec_mark_all` `txid_ns` `host_leads` `host_txn_recover_one` `host_txn_decision_sweep` `host_txn_recover_pass`
+Functions: `host_fin_add` `host_txn_retire` `host_fin_one` `host_fin_thread` `host_rec_mark` `host_rec_mark_all` `txid_ns` `host_leads` `host_txn_recover_one` `host_txn_decision_sweep` `host_txn_recover_pass` `host_recover_thread`
 
 Logs: `raft-host` lines from `host_fin_one`, `host_txn_recover_one`
 

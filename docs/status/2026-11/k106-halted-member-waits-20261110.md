@@ -1,5 +1,7 @@
 # K106: the waits one halted member causes (Task FL)
 
+**Merge state (Nov 10):** merged into devel in wave 75 after a review round; K106 stays OPEN for part (a) only, parts (b) and (c) are fixed.
+
 **Status (Nov 10):** on branch `claude/stoic-feynman-fae89a` (devel `cff8eb424`), not merged. K106 stays OPEN in both
 tables of [the checklist](../alpha-1.0-2plus1-checklist.md); the coordinator rules at the merge.
 
