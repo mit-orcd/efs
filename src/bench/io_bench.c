@@ -27,11 +27,14 @@ struct io_start {
     /* Held for writing until release: one unlock wakes every worker at once.
      * A per-worker release loop made the main thread wait for a CPU slice
      * per wakeup behind running workers (0.8-1.0 s for 256 workers on 1-4
-     * CPUs); readers then acquire without a shared-mutex convoy. The common
-     * deadline still includes each worker's scheduling delay after release. */
+     * CPUs); readers then acquire without a shared-mutex convoy. The last
+     * worker to get a CPU publishes the deadline, so the window closes
+     * --time after every worker is running; the others keep working and read
+     * it without blocking. wall_s spans release to the last exit. */
     pthread_rwlock_t go;
     int abort;
-    uint64_t deadline_ns, release_ns;
+    unsigned started, workers;
+    uint64_t deadline_ns, release_ns, duration_ns;
 };
 struct io_worker {
     int fd, reading, hashing, sync_writes;
@@ -69,7 +72,6 @@ static void *io_worker_run(void *arg)
     pthread_cond_signal(&gate->ready_cv);
     pthread_mutex_unlock(&gate->mu);
     pthread_rwlock_rdlock(&gate->go);
-    uint64_t deadline = gate->deadline_ns;
     int abort = gate->abort;
     pthread_rwlock_unlock(&gate->go);
     if (abort) return NULL;
@@ -80,9 +82,11 @@ static void *io_worker_run(void *arg)
     /* One integer clock read per operation replaces three reads and floating
      * point deadline division. Latency covers the complete worker operation
      * cycle, including its loop bookkeeping, rather than syscall time alone. */
-    uint64_t start = now_ns();
+    uint64_t start = now_ns(), deadline;
     w->start_delay_ns = start - gate->release_ns;
-    while (start < deadline) {
+    if (__atomic_add_fetch(&gate->started, 1, __ATOMIC_ACQ_REL) == gate->workers)
+        __atomic_store_n(&gate->deadline_ns, start + gate->duration_ns, __ATOMIC_RELEASE);
+    while (!(deadline = __atomic_load_n(&gate->deadline_ns, __ATOMIC_ACQUIRE)) || start < deadline) {
         off_t off = (off_t)block * size;
         uint8_t hash[EFS_HASH_SIZE];
         if (w->hashing && !w->reading) efs_hash(w->buf, size, hash);
@@ -226,7 +230,8 @@ int efs_bench_io_main(int argc, char **argv)
     if (perf_command("enable\n")) { saved_error = errno; goto stop; }
     uint64_t start = now_ns();
     gate.release_ns = start;
-    gate.deadline_ns = start + (uint64_t)(duration * 1e9);
+    gate.workers = (unsigned)qd;
+    gate.duration_ns = (uint64_t)(duration * 1e9);
     pthread_rwlock_unlock(&gate.go);
     for (int i = 0; i < created; i++) pthread_join(threads[i], NULL);
     created = 0;
