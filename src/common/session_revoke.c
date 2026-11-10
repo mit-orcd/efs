@@ -335,8 +335,10 @@ int efs_session_revoke(const struct efs_session_rpc *rpc,
         goto out;
     }
     old_epoch = epoch - 1;
-    /* Seal every storage member before acknowledging metadata shards. A
-     * non-hosting member cannot be inferred from the metadata Raft quorum. */
+    /* Seal a strict majority of the configured storage members before
+     * acknowledging metadata shards (K54, K109). A non-hosting member cannot
+     * be inferred from the metadata Raft quorum; a member that is down or
+     * answers that it did not seal is not counted and does not fail the revoke. */
     memset(payload,0,sizeof(payload));
     sess_pack_hdr(payload,efs_raft_shard_group(ssh),EFS_MD_SESS_STORAGE_FENCE,uuid);
     wr32be_sess(payload+3+EFS_OPID_UUID_LEN,epoch);

@@ -51,7 +51,7 @@ print('readdir reply: count/cursor limits, output retention, late admission and 
 
 # Execute the real peer forwarding receive boundary too. A malformed frame
 # must not be zero-extended/copied into output or returned to the peer pool.
-host=csrc.module('raft_host');a=host.index('static int host_inode_rpc_peer(');b=host.index('\n}',a)+2
+host=csrc.module('raft_host');a=host.index('static int host_inode_rpc_addr(');b=host.index('\n}',host.index('static int host_inode_rpc_peer('))+2
 forward=r'''
 #include "efs/protocol.h"
 #include <assert.h>
