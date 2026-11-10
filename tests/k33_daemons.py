@@ -460,6 +460,24 @@ class Mount:
         self.log.close()
 
 
+def give_up_held(m):
+    """Unmount `m` while its member is still full and prove it held nothing.
+
+    K90: a write refused with ENOSPC leaves its chunk dirty in the mount, and
+    the mount PUTs it again the moment room appears, ahead of any new write
+    (tests/test_k90_unmount_enospc.py, mount B). A test that frees room for
+    one new write must first end that hold. The unmount does: a fresh ENOSPC
+    gives the chunks up, names them (`force-discard ... cause=unmount-enospc`)
+    and exits 1; exit 0 means none was held. Anything else is a failed stop.
+    Returns (exit status, number of chunks named)."""
+    m.close()
+    rc, text = m.p.returncode, m.text()
+    named = len(re.findall(r'force-discard ino=\d+ ci=\d+ .* cause=unmount-enospc', text))
+    assert (rc == 0 and not named) or (rc == 1 and named), \
+        f'{m.path.name}: exit {rc}, {named} chunks named\n{text[-3000:]}'
+    return rc, named
+
+
 def payload(name, size):
     """`size` bytes that depend on every byte of `name`: SHAKE-256 of the
     name, one C call (about 2 ms per MiB). The sha256-per-32-bytes Python
