@@ -15280,23 +15280,27 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
  * connect to the end of the exchange (the handshake with a stalled member waits
  * too); server_raft_host_stop calls host_fence_drain first, which refuses new
  * exchanges, shuts the listed sockets down (a TCP wait returns at once) and waits
- * until no worker is left. Two waits are not woken and end at their own bounds:
- * the connect itself (a member that does not answer SYN) and, on RDMA, an
- * exchange (it waits on the completion queue, not the socket). */
+ * until no worker is left. The handler drain wakes them first
+ * (server_raft_host_fence_wake, from server_handlers_begin_stop), because an
+ * unmount handler waits for its workers and the drain waits for the handler.
+ * On RDMA the sends, credit waits and receives of the exchange poll the control
+ * socket (message_pause in rdma.c), so the same shutdown wakes them. The connect
+ * itself (a member that does not answer SYN) is not woken and ends at its own
+ * bound. */
 /* The socket is listed from before the handshake until the exchange ends; both
  * run with the lock, so a listed fd is open. Refused once the stop began. */
-struct host_fence_conn{int fd;struct host_fence_conn *next;};
+struct host_fence_conn{int fd;int woken;struct host_fence_conn *next;};
 static pthread_mutex_t g_fence_mu=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_fence_cv=PTHREAD_COND_INITIALIZER;
 static struct host_fence_conn *g_fence_conns;
-static unsigned g_fence_active;
+static unsigned g_fence_active,g_fence_woken;
 static int g_fence_stopping;
 
 static int host_fence_arm(int fd,void *ctx)
 {
     struct host_fence_conn *reg=ctx;int rc=-1;
     pthread_mutex_lock(&g_fence_mu);
-    if(!g_fence_stopping){reg->fd=fd;reg->next=g_fence_conns;g_fence_conns=reg;rc=0;}
+    if(!g_fence_stopping){reg->fd=fd;reg->woken=0;reg->next=g_fence_conns;g_fence_conns=reg;rc=0;}
     pthread_mutex_unlock(&g_fence_mu);
     return rc;
 }
@@ -15313,7 +15317,7 @@ static void host_fence_disarm(void *ctx)
 
 static int host_fence_rpc(const char *host,uint16_t port,const void *req,uint32_t reqlen,void *out,uint32_t outlen)
 {
-    struct host_fence_conn reg={-1,NULL};
+    struct host_fence_conn reg={-1,0,NULL};
     const struct server_peer_arm ar={host_fence_arm,host_fence_disarm,&reg};
     uint8_t rtype=0;void *reply=NULL;uint32_t rlen=0;int rc=-1;
     pthread_mutex_lock(&g_fence_mu);
@@ -15338,24 +15342,33 @@ static int host_fence_rpc(const char *host,uint16_t port,const void *req,uint32_
     return rc;
 }
 
-static void host_fence_drain(void)
+/* Refuses new exchanges and shuts down the sockets of the workers now waiting
+ * on a member; does not wait for them. The handler drain calls it first
+ * (server_handlers_begin_stop): an unmount handler waits for its workers, and
+ * the stop would wait for that handler. */
+void server_raft_host_fence_wake(void)
 {
-    unsigned parked=0;
     pthread_mutex_lock(&g_fence_mu);
     g_fence_stopping=1;
-    for(struct host_fence_conn *x=g_fence_conns;x;x=x->next){
-        parked++;
-        shutdown(x->fd,SHUT_RDWR);
-    }
-    while(g_fence_active)pthread_cond_wait(&g_fence_cv,&g_fence_mu);
+    for(struct host_fence_conn *x=g_fence_conns;x;x=x->next)
+        if(!x->woken){x->woken=1;g_fence_woken++;shutdown(x->fd,SHUT_RDWR);}
     pthread_mutex_unlock(&g_fence_mu);
-    if(parked)efs_telemetry_log(0,"storage-fence: stop woke %u worker(s) waiting on a member\n",parked);
+}
+
+static void host_fence_drain(void)
+{
+    server_raft_host_fence_wake();
+    pthread_mutex_lock(&g_fence_mu);
+    while(g_fence_active)pthread_cond_wait(&g_fence_cv,&g_fence_mu);
+    unsigned woken=g_fence_woken;
+    pthread_mutex_unlock(&g_fence_mu);
+    if(woken)efs_telemetry_log(0,"storage-fence: stop woke %u worker(s) waiting on a member\n",woken);
 }
 
 /* A host started again after a stop (test harnesses) asks members again. */
 static void host_fence_resume(void)
 {
-    pthread_mutex_lock(&g_fence_mu);g_fence_stopping=0;pthread_mutex_unlock(&g_fence_mu);
+    pthread_mutex_lock(&g_fence_mu);g_fence_stopping=0;g_fence_woken=0;pthread_mutex_unlock(&g_fence_mu);
 }
 
 /* A metadata quorum is not a storage-member acknowledgement. Every
@@ -15384,8 +15397,35 @@ static void host_fence_resume(void)
  * endpoint and shares only the refcounted round, so the caller can return
  * while a slow member's worker still waits; the host stop wakes and joins
  * the workers first (host_fence_drain). That member's late seal is harmless:
- * its certificate only moves up. */
+ * its certificate only moves up. A member that already has
+ * HOST_FENCE_MAX_INFLIGHT exchanges waiting is not asked again: it counts as
+ * unreached at once. */
 enum {FENCE_PENDING,FENCE_SEALED,FENCE_UNREACHED,FENCE_NOT_SEALED,FENCE_REFUSED};
+/* How an exchange ended (host_fence_record): answered, failed on the wire, or never started. */
+enum {FENCE_ANSWERED,FENCE_TRANSPORT,FENCE_CAPPED};
+/* Private connections have no pool to cap them, so the exchanges waiting on one
+ * member are capped here, at the peer pool's size per member (EFS_PEER_DATA_CONNS).
+ * At the cap a round counts that member unreached at once and starts no worker: a
+ * member that never answers holds at most this many threads and sockets however
+ * many unmounts arrive. It is more than one because concurrent unmounts each ask
+ * the same healthy member, and one exchange at a time would count that member
+ * unreached for all but one of them. A slot is held from before the worker starts
+ * until its exchange ended. */
+#define HOST_FENCE_MAX_INFLIGHT 32
+static pthread_mutex_t g_fence_slots_mu=PTHREAD_MUTEX_INITIALIZER;
+static unsigned g_fence_slots[EFS_MAX_NODES+1];
+static int host_fence_claim(uint32_t id)
+{
+    pthread_mutex_lock(&g_fence_slots_mu);
+    int ok=g_fence_slots[id]<HOST_FENCE_MAX_INFLIGHT;
+    if(ok)g_fence_slots[id]++;
+    pthread_mutex_unlock(&g_fence_slots_mu);
+    return ok;
+}
+static void host_fence_release(uint32_t id)
+{
+    pthread_mutex_lock(&g_fence_slots_mu);g_fence_slots[id]--;pthread_mutex_unlock(&g_fence_slots_mu);
+}
 struct host_fence_round;
 struct host_fence_member {
     struct host_fence_round *round;
@@ -15399,7 +15439,7 @@ struct host_fence_round {
     struct host_fence_member m[EFS_MAX_NODES];
 };
 
-/* How one member's answer counts; `transport` is a failed exchange. */
+/* How one member's answer counts; `transport` is a failed or skipped exchange (FENCE_TRANSPORT, FENCE_CAPPED). */
 static int host_fence_class(int transport,const struct efs_msg_storage_session_fence *q,
     const struct efs_msg_storage_session_fence_reply *p,int *rc)
 {
@@ -15431,7 +15471,12 @@ static void host_fence_record(struct host_fence_member *m,int transport,
     if(state==FENCE_REFUSED)r->refused=1;
     pthread_cond_broadcast(&r->cv);
     if(drop_ref)host_fence_unref(r);else pthread_mutex_unlock(&r->mu);
-    if(transport)efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d transport unavailable\n",id,floor,check);
+    if(transport==FENCE_CAPPED){ /* bounded: a flood of rounds against one parked member logs its first ten and every thousandth */
+        static unsigned capped;unsigned n=__atomic_add_fetch(&capped,1,__ATOMIC_RELAXED);
+        if(n<=10 || !(n%1000))efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d not asked: %d exchanges already wait on it (%u so far)\n",
+                id,floor,check,HOST_FENCE_MAX_INFLIGHT,n);
+    }
+    else if(transport)efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d transport unavailable\n",id,floor,check);
     else if(rc!=EFS_OK)efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d rc=%d\n",id,floor,check,rc);
 }
 
@@ -15440,7 +15485,8 @@ static void *host_fence_worker(void *arg)
     struct host_fence_member *m=arg;
     struct efs_msg_storage_session_fence_reply reply={0};
     int failed=host_fence_rpc(m->host,m->port,&m->request,sizeof(m->request),&reply,sizeof(reply));
-    host_fence_record(m,failed!=0,&reply,1);
+    host_fence_release(m->id);
+    host_fence_record(m,failed!=0?FENCE_TRANSPORT:FENCE_ANSWERED,&reply,1);
     return NULL;
 }
 
@@ -15467,6 +15513,11 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
         m->round=r;m->id=members[i].id;
         m->request.floor=floor;m->request.check_only=(uint32_t)check_only;memcpy(m->request.uuid,uuid,16);
         if(members[i].id==h->s->id){own=m;continue;}
+        if(!host_fence_claim(m->id)){
+            struct efs_msg_storage_session_fence_reply none={0};
+            host_fence_record(m,FENCE_CAPPED,&none,0);
+            continue;
+        }
         snprintf(m->host,sizeof(m->host),"%s",members[i].addr);m->port=members[i].port;
         pthread_mutex_lock(&r->mu);r->refs++;pthread_mutex_unlock(&r->mu);
         pthread_t tid;
@@ -15476,7 +15527,7 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
     if(own){
         struct efs_msg_storage_session_fence_reply reply={0};
         server_raft_host_storage_session_fence(&own->request,&reply);
-        host_fence_record(own,0,&reply,0);
+        host_fence_record(own,FENCE_ANSWERED,&reply,0);
     }
     pthread_mutex_lock(&r->mu);
     while(!r->refused && r->sealed*2<=count && r->pending)pthread_cond_wait(&r->cv,&r->mu);
@@ -16295,7 +16346,10 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
 #if EFS_FAULTS
     /* Test-only (K109): EFS_FAULT_FENCE_PARK=1 never answers a storage fence, as a member whose handler hangs
      * while the node stays reachable for everything else. */
-    if(getenv("EFS_FAULT_FENCE_PARK"))for(;;)sleep(60); /* sync: test-only fault hook */
+    if(getenv("EFS_FAULT_FENCE_PARK")){
+        efs_telemetry_log(0,"storage-fence: parked by EFS_FAULT_FENCE_PARK floor=%u check=%d\n",request->floor,(int)request->check_only);
+        for(;;)sleep(60); /* sync: test-only fault hook */
+    }
 #endif
     /* A host that is not (or no longer) running has not sealed: BUSY, not a refusal (K109). */
     if(!g_host || !__atomic_load_n(&g_host->running, __ATOMIC_ACQUIRE)){out->rc=EFS_ERR_BUSY;return;}

@@ -435,6 +435,7 @@ void server_heartbeat_apply_locked(struct efsd_server *s);
  * safe if never started. */
 int server_raft_host_start(struct efsd_server *s);
 void server_raft_host_stop(void);
+void server_raft_host_fence_wake(void);   /* stop: shut down the storage-fence workers waiting on a member */
 /* K1/W145: handlers close their connection before the next request. */
 void server_handlers_begin_stop(void);
 int server_handlers_stopping(void);

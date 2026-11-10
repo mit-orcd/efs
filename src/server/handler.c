@@ -121,6 +121,9 @@ static uint64_t g_handler_stop_closes;
 void server_handlers_begin_stop(void)
 {
     __atomic_store_n(&g_handlers_stopping, 1, __ATOMIC_RELEASE);
+    /* An unmount handler waits for its fence workers, which wait on a stalled
+     * member for up to the receive bound; the drain below waits for the handler. */
+    server_raft_host_fence_wake();
 }
 
 int server_handlers_stopping(void)
