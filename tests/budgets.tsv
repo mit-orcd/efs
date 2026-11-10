@@ -608,6 +608,7 @@ python3 tests/test_namespace_envelope_fixture.py	30	1	fast suite, 30 s ceiling	t
 python3 tests/test_deepsteps_transparent.py	30	1	fast suite, 30 s ceiling	test	harness	Actual diagnostic wrappers preserve descriptor arguments/results/exceptions
 python3 tests/test_query_work_trace.py	30	1	fast suite, 30 s ceiling	test	common/query_stage_trace	Actual numeric diagnostic sender: quiet, capped, nonblocking and balanced descriptors
 python3 tests/test_gc_fixture_drain.py	30	1	fast suite, 30 s ceiling	test	harness	A stale zero GC sample cannot certify physical fixture reclamation
+python3 tests/test_gc_files_vanish.py	30	1	fast suite, 30 s ceiling	test	harness	A GC fixture scan treats an export directory removed by reclaim as empty
 python3 tests/test_rename_budget.py	30	1	fast suite, 30 s ceiling	test	client/ops	Execute production nested rename retries under one monotonic deadline
 ./tests/test_namespace_session	30	1	fast suite, 30 s ceiling	test	meta/meta_apply	Namespace session apply over the meta state machine
 ./tests/test_session	30	1	fast suite, 30 s ceiling	test	meta/session	Isolated session + open-lease SM

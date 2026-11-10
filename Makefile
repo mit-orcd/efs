@@ -833,6 +833,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_deepsteps_transparent.py
 	python3 tests/test_query_work_trace.py
 	python3 tests/test_gc_fixture_drain.py
+	python3 tests/test_gc_files_vanish.py
 	python3 tests/test_rename_budget.py
 	./tests/test_namespace_session
 	./tests/test_session

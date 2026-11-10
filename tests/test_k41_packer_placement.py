@@ -26,9 +26,10 @@ below are in place). Fault hooks:
     the packer's placement probe and was replaced by a spare, no segment was
     written degraded, `Degraded segments: 0`.
  2. Refusal at write time: node 6 resumes and refuses segment PUTs, node 4
-    returns. A batch is packed: the packer cancels each admission whose
-    fragment node 6 refused and places the files again on live spares; every
-    new segment has three fragments, none on node 6, nothing degraded.
+    returns. Batches are packed until placement chose node 6 at least once
+    (at most four): the packer cancels each admission whose fragment node 6
+    refused and places the files again on live spares; every new segment has
+    three fragments, none on node 6, nothing degraded.
  3. Any single loss: with every member back, a holder of a step-1 segment
     stops and a fresh mount reads every file exactly.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
@@ -241,23 +242,38 @@ try:
           f'({time.time() - t0:.0f} s)')
 
     # 2. A destination refusing at write time; node 4 returns meanwhile.
+    # Each segment's three destinations are a pseudo-random pick of the ring
+    # keyed by its time-based id, and a batch packs about five segments, so
+    # one batch can miss node 6 entirely: pack batches
+    # until node 6 was a destination and refused. Every batch is checked.
     s3 = packer_stats(c)
-    before = segments(c)
-    refused0 = count(c, r'fragment \d for node 6 not acknowledged \(rc=-\d+\); cancelled, placed again on live spares')
-    names3 = batch(a, 'refuse')
-    c.restart(4)
-    wait_packed(c, s3['files_packed'], BATCH, 'node 6 refusing')
+    refused_pat = r'fragment \d for node 6 not acknowledged \(rc=-\d+\); cancelled, placed again on live spares'
+    refused0 = count(c, refused_pat)
+    probe_pat = r'fragment \d: node 6 failed the placement probe'
+    probe0 = count(c, probe_pat)
+    names3, new3, rounds = [], {}, 0
+    while True:
+        rounds += 1
+        before, base3 = segments(c), packer_stats(c)['files_packed']
+        names3 += batch(a, f'refuse{rounds}')
+        if rounds == 1:
+            c.restart(4)
+        wait_packed(c, base3, BATCH, f'node 6 refusing, batch {rounds}')
+        new3.update(check_new(c, before, (1, 2, 3, 4, 5), f'node 6 refusing, batch {rounds}'))
+        refused = count(c, refused_pat) - refused0
+        if refused or rounds == 4:
+            break
     (flags / 'refuse-6').unlink()
-    new3 = check_new(c, before, (1, 2, 3, 4, 5), 'node 6 refusing')
     s4 = packer_stats(c)
-    refused = count(c, r'fragment \d for node 6 not acknowledged \(rc=-\d+\); cancelled, placed again '
-                       r'on live spares') - refused0
-    assert refused >= 1, logs(c, (1, 2, 3))[-4000:]
+    # Zero probe failures: placement never chose node 6. Non-zero: node 6 was chosen but failed its probe.
+    assert refused >= 1, f'no refusal from node 6 in {rounds} batches, node 6 probe failures ' \
+        f'{count(c, probe_pat) - probe0}\n' + logs(c, (1, 2, 3))[-4000:]
     assert s4['spares'] >= s3['spares'] + refused, (s3, s4)
     assert not degraded_lines(c) and s4['degraded'] == s3['degraded'], degraded_lines(c)
     assert degraded_status(c, 1) == 0, status(c, 1)
     print(f'2. node 6 refused segment PUTs: {refused} admissions cancelled and placed again on '
-          f'spares, {len(new3)} segments with three fragments, none on node 6, nothing degraded PASS '
+          f'spares, {len(new3)} segments in {rounds} batches with three fragments, none on node 6, '
+          f'nothing degraded PASS '
           f'({time.time() - t0:.0f} s)')
 
     # 3. Any single loss after the faults.
