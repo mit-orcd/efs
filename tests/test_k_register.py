@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Negative controls for K-register structure and canonical states."""
+"""Negative controls for the generated K register: gaps, duplicates, bad states, stale table."""
 import importlib.util
 from pathlib import Path
 import subprocess
@@ -8,70 +8,81 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('check_k_register', ROOT / 'scripts/check_k_register.py')
+SCRIPT = ROOT / 'scripts/check_k_register.py'
+spec = importlib.util.spec_from_file_location('check_k_register', SCRIPT)
 checker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checker)
 
 
-def document(rows=((1, 'FIXED'), (2, 'OPEN'))):
-    a = '| ID | Item | Kind | Disposition |\n| --- | --- | --- | --- |\n'
-    b = '\n### Recheck\n\n| Row | Finding on devel |\n| --- | --- |\n'
-    for number, state in rows:
-        a += f'| K{number} | item | kind | {state}, scoped; history **OPEN** |\n'
-        b += f'| K{number} | {state}, history FIX: old request |\n'
-    return a + b
+def row(n, state='FIXED', title='item'):
+    return f'# K{n}: {title}\n\n- State: {state}\n- Blocks alpha: no\n- Kind: kind\n\n## Item\n\nx\n'
+
+
+def run(path, *args):
+    return subprocess.run([sys.executable, str(SCRIPT), str(path), *args], capture_output=True, text=True)
 
 
 class RegisterTests(unittest.TestCase):
-    def test_all_canonical_states_and_history(self):
-        text = document(tuple(enumerate(checker.STATES, 1)))
-        errors, tables = checker.check(text)
-        self.assertEqual(errors, [])
-        self.assertEqual(len(tables['register']), len(checker.STATES))
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix='efs-k-register-')
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
 
-    def test_bad_prefix_does_not_hide_behind_later_state(self):
-        for state in ('FIX', 'Fixed', '**FIXED**', 'FIXEDISH', 'PASS', 'OPENING'):
+    def tree(self, rows=((1, 'FIXED'), (2, 'OPEN'))):
+        """Write row files and a checklist whose generated block is current."""
+        (self.tmp / 'k').mkdir(exist_ok=True)
+        for n, state in rows:
+            (self.tmp / 'k' / f'K{n:03d}.md').write_text(row(n, state))
+        path = self.tmp / 'checklist.md'
+        path.write_text(f'intro\n{checker.BEGIN}\n{checker.END}\n')
+        run(path, '--write')  # fails for broken trees; the test then checks the diagnostics
+        return path
+
+    def test_pass_and_counts(self):
+        path = self.tree(tuple(enumerate(checker.STATES, 1)))
+        p = run(path)
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.assertIn('PASS K register: 6 rows', p.stdout)
+        self.assertIn('Current counts: 1 FIXED / 1 VERIFIED / 1 VERIFY / 1 CLOSED / 1 DECIDED / 1 OPEN (6 rows).',
+                      path.read_text())
+
+    def test_missing_number(self):
+        p = run(self.tree(((1, 'FIXED'), (3, 'OPEN'))))
+        self.assertEqual(p.returncode, 1)
+        self.assertIn('missing K2', p.stdout)
+
+    def test_duplicate_number(self):
+        path = self.tree()
+        (self.tmp / 'k/K0002.md').write_text(row(2))
+        p = run(path)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn('K<NNN>.md', p.stdout)
+
+    def test_bad_state(self):
+        path = self.tree()
+        for state in ('FIX', 'Fixed', '**FIXED**', 'FIXEDISH', ''):
             with self.subTest(state=state):
-                errors, _ = checker.check(document(((1, state),)))
-                self.assertTrue(any('canonical word' in e for e in errors))
+                (self.tmp / 'k/K001.md').write_text(row(1, state))
+                p = run(path)
+                self.assertEqual(p.returncode, 1)
+                self.assertIn('State must be one of', p.stdout)
 
-    def test_duplicate_in_either_table(self):
-        for row in ('| K1 | duplicate | kind | FIXED |', '| K1 | FIXED |'):
-            text = document()
-            if 'kind' in row:
-                text = text.replace('\n\n### Recheck', '\n' + row + '\n\n### Recheck')
-            else:
-                text += row + '\n'
-            errors, _ = checker.check(text)
-            self.assertTrue(any('duplicate K1' in e for e in errors), errors)
+    def test_stale_table_and_write(self):
+        path = self.tree()
+        (self.tmp / 'k/K002.md').write_text(row(2, 'VERIFY'))
+        p = run(path)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn('stale', p.stdout)
+        self.assertEqual(run(path, '--write').returncode, 0)
+        self.assertEqual(run(path).returncode, 0)
 
-    def test_missing_in_one_or_both_tables(self):
-        for text in (document().replace('| K2 | OPEN, history FIX: old request |\n', ''),
-                     document(((1, 'FIXED'), (3, 'VERIFY')))):
-            errors, _ = checker.check(text)
-            self.assertTrue(any('missing K2' in e for e in errors), errors)
+    def test_pipe_in_title_stays_one_cell(self):
+        self.assertEqual(checker.generate({1: ('a|b', 'k|k', 'OPEN', 'no')}).splitlines()[2].count('|'), 7)
 
-    def test_missing_table_and_grouped_id(self):
-        errors, _ = checker.check(document().split('### Recheck')[0])
-        self.assertTrue(any('empty recheck' in e for e in errors))
-        errors, _ = checker.check(document().replace('| K2 | OPEN', '| K2, K3 | OPEN'))
-        self.assertTrue(any('one K number' in e for e in errors))
-
-    def test_disagreement(self):
-        errors, _ = checker.check(document().replace('| K2 | OPEN', '| K2 | VERIFY'))
-        self.assertTrue(any('states disagree' in e for e in errors))
-
-    def test_cli_exit_and_json(self):
-        with tempfile.TemporaryDirectory(prefix='efs-k-register-') as tmp:
-            path = Path(tmp) / 'checklist.md'
-            path.write_text(document())
-            p = subprocess.run([sys.executable, str(ROOT / 'scripts/check_k_register.py'), str(path), '--json'], capture_output=True, text=True)
-            self.assertEqual(p.returncode, 0, p.stderr)
-            self.assertIn('"OPEN": 1', p.stdout)
-            path.write_text(document(((1, 'PASS'),)))
-            p = subprocess.run([sys.executable, str(ROOT / 'scripts/check_k_register.py'), str(path)], capture_output=True, text=True)
-            self.assertEqual(p.returncode, 1)
-            self.assertIn('canonical word', p.stdout)
+    def test_json(self):
+        p = run(self.tree(), '--json')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn('"OPEN": 1', p.stdout)
 
 
 if __name__ == '__main__':
