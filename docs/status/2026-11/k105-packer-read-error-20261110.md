@@ -145,6 +145,88 @@ For each case:
 - Not proven: no log line names the unlink (above). If a later occurrence shows `candidate-read` without
   `candidate-gone`, the file was live and unchanged, and that is a different defect (A or B) that still fails D4.
 
+## Second sighting: the wave 73 TSan lane on amd (Nov 10)
+
+**It fits case C, with a wider window than the first sighting, and it adds no evidence that distinguishes C from a
+transient I/O error on the members.** Data read-only from the coordinator's capture; nothing was rerun.
+
+- Source: host `amd`, `~maik/efs-artifacts/merge-wave73-20261110-amd-d4-k105/` (`d4-fixture-logs.tgz` sha256
+  `78799b9a8bce2d80...`, `d4_progress.out`, the K36 outputs; its `SHA256SUMS` begins `6e8cf7541d0c89da`, and
+  `sha256sum -c` was OK on all four files). Tree `596d6118d` (devel after wave 73, without this fix), the TSan lane's
+  `tests/test_d4_progress.py` (driver fixture: 60 s load, 4 writer threads, `d4_working_set` 0, so as in the first
+  sighting only creates and unlinks, nothing overwritten or truncated). The stores were not kept. Raw logs stay on amd
+  and are not copied into Git.
+- Counts (`d4-result.json`): `load_created` 8,263, `load_unlinked` 1,023, `load_live_files` 7,240, `files_packed` 7,603,
+  `put_errors` 0, `read_errors` 1, `verify_bad` `[]`, driver verdict PASS (the assertion that failed is the packer-error
+  one in the test script). Same pattern as the first sighting: every live file read back exact, one packer read error.
+- The three lines, all on n2 (the packer of group 0): fragment 0 is on node 3 and fragment 1 on node 1; fragment 2 is
+  not read once fragment 1 fails, and the log does not say which node holds it. Timeline:
+
+| Time (UTC) | Event |
+|---|---|
+| 17:28:13.475 | n2 `opid-receipt: replay ... ino=1735713` (0x1a7c21): the first line that names the inode, about 14 s before the read; the file is not "young" relative to the 1 s minimum age. |
+| about 17:28:27.495 to .591 | the packer pass's metadata scan (`scan_ms=96` in the pass line logged at 27.623, whose `pass_ms=32` puts the fragment reads at 27.591). 96 ms against 13 ms in the first sighting: TSan slows the scan about seven times. |
+| 27.544 to 27.555 | n2's GC pass (`gc-pass ms=87`, logged at 27.631, so started about 27.544): `orphan=0 reap=11 reap_sweep=3 reap_fence=3 reap_done=3`; the reap stage runs first. The REAP batch is accepted by every member, which wakes their deleter pools. |
+| 27.596 | `fragment-read source=remote ... fi=0 node=3 rc=-1 want=65536 got=1 status=1 reply_type=5` and the same for `fi=1 node=1`, then 27.598 `candidate-read g0 ... rc=-1 failure=1`. |
+
+- **What the reply is.** `reply_type=5` is `EFS_MSG_GET_CHUNK_REPLY` (`include/efs/protocol.h:49`). `got=1` is the reply
+  length: a one-byte body, which is a bare status with no checksum and no data. `status=1` is `EFS_GET_CHUNK_NOT_FOUND`
+  (`protocol.h:829`). Not INTEGRITY (3), which would show a refused-fragment log line on the member (none: no `refus*` in
+  any of the three daemon logs). See "A remote `status=1` is weaker" above: it is "absent" or a transient I/O or
+  allocation failure on that member.
+- **Why two members at the same moment.** Under C both members lose a dead inode's fragments in the same reclaim: the
+  unlink commits, the GC pass puts the inode in a REAP batch, every member accepts it, and each member's deleter removes the
+  fragment files. Two members answering NOT_FOUND within one millisecond for the same inode and generation is what that
+  produces, and a coincidence of two independent I/O errors is not. The remaining alternative is a cause shared by both
+  daemons (same host, 3 daemons under TSan), such as file descriptor or memory exhaustion hitting both at once; no
+  daemon log has a trace of one (`EMFILE`, `ENOMEM`, out of memory: none), but the members do not log such a read failure
+  either, so this is argued, not excluded.
+- **Timing.** The unlink must commit after the packer scan read the inode (27.495 to 27.544) and before the GC scan
+  (27.544); reap ends at 27.555 and the reads fail 41 ms later. That window is about 50 ms against about 10 ms in the first
+  sighting, which is why a TSan run meets it more easily. The 41 ms from reap to the failed read is deleter latency under
+  TSan, not measured. All times are emission times, good to a few milliseconds.
+- Only an unlink can remove the fragments in this fixture (nothing is overwritten, truncated or rewritten with
+  `d4_working_set` 0), which excludes the republish branch of the fix here; `efs_meta_pack_candidate` reports a deleted
+  inode record, a deleted chunk row or a changed generation as `STALE` (`pack.c:386,388,409`) and the new helper maps
+  `nlink == 0` or a changed source digest to `STALE` too, so this exact case is skipped as `candidate-gone` after the fix
+  whether reclaim has already removed the inode record or only dropped its link.
+- Merged tree: devel (wave 73, `596d6118d`) was merged into the branch (`85be04b40`); on a `git archive` of `6fc41d6dd` on
+  node9900 `make -j16 test` ended rc 0 and ran `test_pack_candidate_alive` (`pack candidate alive: OK`); `make docs-check`
+  (now with the concern-map and diagnostics checks), the graph rebuild and `tests/test_code_graph.py` pass. The sanitizer
+  lanes and the loaded D4 loops were not rerun on the merged tree. Log: `~erbmi1/efs-artifacts/taskFK-20261110/merged-6fc41d6dd-make-test.log`,
+  sha256 `ba6c707f33c6188d...` (in `SHA256SUMS-merge` there).
+- Not shown: no log names the unlink of 1735713, and no store was kept. Both sightings are consistent with C and neither
+  proves it. The only decisive evidence will be a `candidate-gone` line on a tree with the fix (and its absence
+  with `candidate-read` as the signal of a live unreadable file).
+
+### Coordinator's three questions on the amd capture (logs only, Nov 10)
+
+Unpacked from `d4-fixture-logs.tgz` into a scratch directory on amd (removed afterwards); the five logs `n1.log`, `n2.log`,
+`n3.log`, `mnt-l.log`, `mnt-f.log` and `d4-result.json` were searched; no run, no code change.
+
+1. **Is the file's unlink, removal or republish visible within seconds before 17:28:27.6? No.** The inode (hex `1a7c21`,
+   decimal 1735713) appears only in `n2.log`: the `opid-receipt: replay` at 17:28:13.475 and the three failure lines at
+   27.596 to 27.598. Nothing names it in `n1.log`, `n3.log` or the two mount logs. In 17:28:20 to 27.7 those four logs
+   hold no line with reclaim, delete, unlink, reap or remove wording, no `opid-receipt` at all on n1 and n3, and the mount
+   logs hold only RDMA counter lines. The members and the driver log no per-inode event: the driver's delete phase
+   (every eighth create unlinks a random older file) leaves only its count (1,023). What the logs do show is indirect: n2's
+   GC passes before and at the failure ran the reap stage with work (`reap=12` ms at 26.543 and `reap=11` ms, sweep, fence
+   and done 3 ms each, at 27.631), which proves reclaim was active, not that it reclaimed this inode. One more trace:
+   each member's `iostats: get` error counter went from 0 to 1 once in the run, n1 between 18.673 and 28.673 and n3 between
+   25.696 and 30.696, never again to the end. That counter counts every non-OK `GET_CHUNK` reply (`handler.c`,
+   `reply[0] != EFS_GET_CHUNK_OK`), so each of nodes 1 and 3 answered exactly one failed GET in the whole run, matching the
+   two replies, but it does not give the status.
+2. **What the reply means.** `reply_type=5` is `EFS_MSG_GET_CHUNK_REPLY` (`protocol.h:49`); `got=1` of `want=65536` is a
+   one-byte body, a bare status; `status=1` is `EFS_GET_CHUNK_NOT_FOUND` (`protocol.h:829`; 0 OK, 2 ERROR, 3 INTEGRITY).
+   **Yes, it is the reply a member gives for a reclaimed fragment:** the deleter removes the fragment file, the next
+   `GET_CHUNK` finds no file (`ENOENT`, `EFS_ERR_NOT_FOUND`, `store.c:1400`) and the handler answers status 1. It is not
+   exclusively that reply: the handler's last branch gives status 1 to any other store failure too (`EFS_ERR_IO`,
+   `EFS_ERR_NOMEM`), so the status alone does not prove absence.
+3. **Verdict: it leaves case C open, consistent with it and not contradicting it.** The timing against the reap stage,
+   the same-millisecond NOT_FOUND from two members, the one failed GET per member in the whole run, the create-and-unlink-only
+   load and the fully verified end state all fit an unlink under the pass; no line in the capture shows the unlink or a
+   fragment removal, so it is not proven.
+
 ## The change
 
 `efs_meta_pack_candidate_alive(kv, seen)` re-reads the candidate (`efs_meta_pack_candidate`) and returns `EFS_ERR_STALE`
