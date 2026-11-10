@@ -4924,6 +4924,15 @@ static int host_local_leader(struct efs_raft_host *h, uint8_t group)
     return v.has && !host_group_retired(h, group) ? v.leader : -1;
 }
 
+/* 1 when a non-retired local replica of the group publishes a view. */
+static int host_local_view(struct efs_raft_host *h, uint8_t group)
+{
+    struct host_view v;
+
+    host_view_get(h, group, &v);
+    return v.has && !host_group_retired(h, group);
+}
+
 static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen,
                            struct efs_msg_raft_mkfs_reply *rep, int prefer_rid)
@@ -4944,9 +4953,15 @@ static int host_remote_cmd_impl(struct efs_raft_host *h, uint8_t group,
         rid = prefer_rid;
         if (rid < 0 || rid == h->raft_id || rid == skip)
             rid = host_local_leader(h, group);
-        if (rid < 0 || rid == h->raft_id || rid == skip)
+        /* A live local replica learns the leader from Raft itself; during
+         * an election wait for that instead of guessing a peer. A guessed
+         * peer that is halted (SIGSTOP, hung host: TCP open, no answer)
+         * held a deposed coordinator's finisher DECIDE ABORT for the 30 s
+         * mutation wait, past HOST_FIN_MAX_NS, so the stranded PREPAREs
+         * made the client's unlink BUSY for its whole budget (Task FF). */
+        if ((rid < 0 || rid == h->raft_id || rid == skip) && !host_local_view(h, group))
             rid = host_pick_peer(h, &group, 1, skip);
-        if (rid < 0 || rid == h->raft_id) {
+        if (rid < 0 || rid == h->raft_id || rid == skip) {
             if (host_past_deadline(&end))
                 return EFS_ERR_NOT_PRIMARY;
             usleep(HOST_TICK_US);

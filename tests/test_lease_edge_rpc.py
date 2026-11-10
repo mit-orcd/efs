@@ -37,6 +37,7 @@ static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;
 static int rpc_writer_retry_pause(unsigned n){(void)n;if(deadline){clock_ms+=10;if(clock_ms>deadline)clock_ms=deadline;}return efs_client_rpc_past_deadline()?EFS_ERR_BUSY:EFS_OK;}
 static unsigned leader_notes;static efs_node_id_t noted_leader;
 static void rpc_note_leader(uint8_t g,efs_node_id_t n){assert(g==0 || g==2);leader_notes++;noted_leader=n;}
+static void rpc_forget_leader(uint8_t g,efs_node_id_t n,efs_node_id_t h){(void)g;(void)n;(void)h;}
 static uint64_t number(const uint8_t *b,unsigned n){uint64_t v=0;while(n--)v=v<<8|*b++;return v;}
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *data,uint32_t n)
 {

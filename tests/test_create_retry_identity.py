@@ -52,7 +52,6 @@ static uint64_t efs_client_rpc_deadline_ms(void){return 0;}
 static int rpc_writer_retry_pause(unsigned n){(void)n;pauses++;return EFS_OK;}
 static void efs_client_node_note_fail(efs_node_id_t n){(void)n;}
 static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
-static unsigned rpc_leader_of(unsigned g){return g_group_leader[g>>1];}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n==2);return &connection;}
 static struct efs_conn *raft_voter_conn_skip(uint32_t sh,efs_node_id_t *n,efs_node_id_t skip){(void)sh;(void)skip;*n=1;return &connection;}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;assert(c==&connection);}
@@ -81,7 +80,7 @@ code += r'''
 static __thread uint64_t rpc_tl_sent;static __thread unsigned rpc_tl_lost; /* W155 */
 static void efs_client_rpc_set_deadline_ms(uint64_t d){(void)d;}
 '''
-code += '\n'.join(function(n) for n in ['rpc_status_to_efs','stale_retryable','opid_suffix','rpc_retry_peer','rpc_type_mutates','rpc_identified','rpc_req_ident','rpc_resolve_ms','rpc_send_recv_shard_once'])
+code += '\n'.join(function(n) for n in ['rpc_status_to_efs','stale_retryable','opid_suffix','rpc_forget_leader','rpc_retry_peer','rpc_type_mutates','rpc_identified','rpc_req_ident','rpc_resolve_ms','rpc_send_recv_shard_once'])
 code += r'''
 static int rpc_send_recv_dual_once(uint8_t type,const void *req,uint32_t len,uint8_t expect,void *reply,uint32_t size,int unused){(void)unused;return rpc_send_recv_shard_once(1,type,req,len,expect,reply,size,0,NULL);}
 '''

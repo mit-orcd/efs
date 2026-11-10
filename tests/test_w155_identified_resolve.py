@@ -33,7 +33,7 @@ def fn(prefix, nth=1):
 
 
 client = ''.join([
-    fn('static int rpc_writer_retry_pause(', 2), fn('static void rpc_retry_peer('),
+    fn('static int rpc_writer_retry_pause(', 2), fn('static void rpc_forget_leader(')+fn('static void rpc_retry_peer('),
     fn('static int rpc_type_mutates('), fn('static int rpc_identified('),
     fn('static const char *rpc_req_ident('), fn('static uint64_t rpc_resolve_ms(').replace('return 8000;', 'return %d;' % int(os.environ.get('W155_RESOLVE_MS', '8000'))),
     fn('static int rpc_send_recv_shard_once('), fn('static int rpc_resolve_identified('),

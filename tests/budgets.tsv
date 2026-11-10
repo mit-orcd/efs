@@ -557,6 +557,8 @@ EFS_TEST_EARLY_READ_ACK=1 ./tests/test_raft	30	1	fast suite, 30 s ceiling	test	r
 ./tests/test_txn_resolve_faults	30	1	fast suite, 30 s ceiling	test	meta/txn	Failed version reads must preserve both mutation and session guards
 python3 tests/test_txn_decision_sweep.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn	K7/R2: the host decision sweeper reaches every live decision
 python3 tests/test_txn_recovery_priority.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn	Execute the real bounded recovery scheduler: known intents precede cold discovery
+python3 tests/test_remote_cmd_halted_peer.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	Task FF: a hosting replica forwards to its own leader view, never a guessed halted peer
+python3 tests/test_client_leader_forget.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	K104: a refusal after a leader transfer forgets the old leader note and read routes
 python3 tests/test_txn_apply_exact.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn	K7/R3: DECIDE and TXN_RETIRE log entries decode exactly or halt the group
 ./tests/test_shared_primitives	30	1	fast suite, 30 s ceiling	test	client/client_internal	Golden bytes, unaligned input and exact-size refusal for shared codecs
 python3 tests/test_txn_apply_retry.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.txn	Exercise the host's actual apply-return policy, including business verdicts
