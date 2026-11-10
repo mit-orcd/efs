@@ -13,12 +13,13 @@ of [batch O](orcd-mini-batch-o-20261109.md).
 ## Finding
 
 On one host, with the same ior command and fresh stores, `ior easy` write
-fell from about 1,140–1,270 MiB/s (base `08cc16af4`) to about 515–525 MiB/s
-(devel `1b355826b`), a ratio of 2.2 to 2.4. The loss is four steps, each a
+fell from about 1,140–1,270 MiB/s (base `08cc16af4`) to about 505–525 MiB/s
+(devel `9403d0666`, the wave 70 tip; devel has since moved on by 84 commits and was not re-measured), a ratio of 2.2 to 2.4. The loss is four steps, each a
 different commit range: K14's per-write cross-group transaction (about
 1,100 to 610 MiB/s, the largest), K13's tickets (about 610 to 520), the
 K29–K33 range (about 520 to 440, from small steps), and K35's stripe table
-(about 440 to 305), which `e6443fd7a` recovered to about 518. The number of
+(about 440 to 305), of which about 70 MiB/s came back by `028b00d31` without a
+named cause and `e6443fd7a` took the rest to about 518. The number of
 Raft entries per MiB fell from 28.7 to 8.6 across K29/K32 with no gain in
 throughput, so the numbers favour P3-G (serial dependent rounds per write)
 over P3-J (entry count) as the lever; neither was tested directly.
@@ -73,73 +74,80 @@ over P3-J (entry count) as the lever; neither was tested directly.
   `efsd`, `efs-fuse`, `ior`, `mpirun`, `perf`, `efs-bench` or test process of
   another task. It does not look at the load average and cannot see a process
   that starts mid-run.
-* **Clean and not clean.** *Gated* means the run passed the quiet gate. Runs
-  of sets ab1–ab8 and ab10 (06:39–06:47 host time and earlier) predate the
-  gate and are marked `p`: not clean. Runs with the two leaders on different
-  daemons, or leaders not recorded, are marked `s`: not clean. **No run
+* **Clean and not clean.** *Gated* means the run passed the quiet gate. A
+  *clean* run is gated, has both leaders on one daemon and is not `h`. Runs
+  of sets ab1–ab8 and ab10 (06:47 host time and earlier) predate the gate and
+  are marked `p`: not clean. Runs with the two leaders on different daemons,
+  or leaders not recorded, are marked `s`: not clean. Gated runs whose mean
+  1-minute load average over the write window was 8 or more are marked `h`:
+  not clean (`08cc16af4` 1141, `f47a32754` 939, `d2369a49d` 590 and
+  `e34cba345` 483, which also ran at 20 busy cores while another task's
+  clusters were on the host; `1cd2092a4` 426 at 7.9 is kept). The 8 is a
+  judgement, not a measured limit. **No run
   overlapped the wave 72 gate (07:04–07:15 host time):** ab10 ended at 06:47
   and ab12 run 01 started at 07:15:44 behind a passed quiet gate. A run that
   passes the gate can still share the host with the user's screens; every run
-  is therefore a lower bound on what the host could do, and run-to-run spread
-  of the same build is large (`1cd2092a4`: 426, 457, 292, 278; `b9dfff609`:
-  386, 287, 246).
+  is therefore a lower bound on what the host could do. Run-to-run spread of
+  the same build with co-led leaders is large: `f47a32754` 1265 and 939
+  (the 939 under a mean load of 8.1), base 1141 (9.6) and 1273.
 
 ## Every measured build
 
-Write MiB/s per run, in history order (`git rev-list --topo-order
-08cc16af4..devel`). `p` pre-gate, `s` leaders split or unknown. Raft entries
+Write MiB/s per run, with the mean 1-minute load average over the write
+window in brackets (`b`: only the load before the run is known), in history
+order (`git rev-list --topo-order 08cc16af4..devel`). Flags: `p` pre-gate, `s`
+leaders split or unknown, `h` mean load 8 or more. Raft entries
 per MiB are the committed entries of groups 0 and 2 added together, taken from
 `rs-before` and `rs-after`, per MiB written (median over the build's runs). The
-load column is the 1-minute average before each run, lowest to highest.
 Builds with no run are listed below the table.
 
-| Build | What it is | Gated, co-led runs (MiB/s) | Other runs (MiB/s) | Raft entries per MiB | 1-min load before |
-|---|---|---|---|---|---|
-| `08cc16af4` | the base (dead-code cleanup merge) | 1141 | 1158 p, 1162 p, 1202 p, 1273 s | 0.2 | 0.6–9.6 |
-| `24e58fb1d` | K31 mount session after fork | – | 1180 p | n/a | 7.4–7.4 |
-| `f47a32754` | W154 merge, last build before K14 | 1265, 939 | 1047 p, 1085 p s, 1038 p, 1216 p, 1098 p | 0.2 | 2.9–8.1 |
-| `d2369a49d` | K14 atomic multi-chunk publication (merge) | 638, 590 | 591 p, 519 p s, 651 p, 589 p, 629 p, 610 p | 19.9 | 1.0–9.4 |
-| `bd2cb0d5a` | K14 follow-up: PUB_STAGE kind | – | 627 p, 687 p, 643 p | 19.9 | 4.7–7.0 |
-| `1f3b25997` | K13 ticketed PUT/REPORT (merge) | – | 518 p, 527 p, 521 p | 28.7 | 7.6–8.4 |
-| `6b621993d` | K29 TXN_BATCH (merge) | – | 491 p | 21.8 | 8.0–8.0 |
-| `a23d45540` | reverted D39 tree (docs commit) | – | 498 p | 21.8 | 0.1–0.1 |
-| `33c68a465` | W158 (merge) | – | 467 p | 21.8 | 5.5–5.5 |
-| `1cd2092a4` | K32 batch K14 publication and K13 tickets (merge) | 426 | 278 s, 292 p s, 457 p | 7.8 | 3.0–7.9 |
-| `2d03d9837` | K33/W157 formation inc. 1 | 415 | – | 8.2 | 5.1–5.1 |
-| `60f91b0d3` | K33 inc. 2 | 433 | – | 7.9 | 5.9–5.9 |
-| `f00cfdd75` | K33 client view | 452 | – | 7.9 | 6.8–6.8 |
-| `e6a21692d` | D31 drain | 431 | 265 p s | 7.6 | 0.2–5.1 |
-| `5a09fd938` | B geometry | 443 | 274 p s | 7.6 | 5.0–6.6 |
-| `55ad94072` | D42 direct I/O only (docs) | 388 | – | 8.0 | 4.3–4.3 |
-| `e8d25cc22` | K36 verified recovery | 421 | 292 p s | 7.6 | 5.3–6.0 |
-| `ae3e7ab75` | READ_VERIFY (merge) | 458 | – | 7.9 | 4.5–4.5 |
-| `fc5c1d64e` | K34 (merge) | 432 | – | 8.0 | 3.9–3.9 |
-| `6069ada62` | A7 D42 removals (merge) | 457, 431, 421 | – | 7.9 | 0.2–5.5 |
-| `376369aa8` | K35 fsync succeeds degraded, stripe table (merge) | 311, 300, 306 | – | 8.2 | 3.2–6.0 |
-| `9fa0079c7` | merge-wave5 into K36 | 308, 316 | 239 p s | 8.2 | 3.0–6.1 |
-| `87034b518` | K36 on merged tree | 304 | 299 p s | 8.3 | 5.2–7.2 |
-| `403bc788a` | READ_VERIFY, K34, A7, K35, K36 docs | 307 | 228 s, 258 p s | 8.2 | 2.7–6.4 |
-| `1fee9bb04` | report step-down | – | 242 p s | 7.9 | 4.3–4.3 |
-| `5a7463440` | F1 gates docs | – | 256 p | n/a | 0.5–0.5 |
-| `b9dfff609` | Task V read-back evidence | 386 | 287 s, 246 p s | 6.8 | 5.4–6.3 |
-| `d951ca293` | merge-wave28 (Task S) | 364 | 244 s | 7.7 | 1.9–2.6 |
-| `028b00d31` | merge-wave30, devel in | 375 | 255 s | 7.9 | 2.9–7.3 |
-| `e6443fd7a` | merge-wave30: exact stripe-identity hash (orcd-dd-profile) | 518 | 330 s | 7.4 | 4.5–6.5 |
-| `833f25fe8` | merge-wave30 (Task AA) | 538 | 290 s | 7.2 | 3.3–4.6 |
-| `e34cba345` | merge-wave31 (Task I) | 483 | 317 s | 7.2 | 4.8–6.5 |
-| `d891c106e` | merge-wave31 devel merge | – | 224 s | 5.8 | 5.5–5.5 |
-| `199ad2afd` | bound sweep metadata RPCs | 521 | – | 8.7 | 5.8–5.8 |
-| `4fdf8ddd2` | merge-wave36 (K56) | 502 | – | 8.7 | 3.3–3.3 |
-| `c887132c5` | revert of a PUT-proof drain | 518 | – | 8.6 | 5.0–5.0 |
-| `68303f40f` | K72, K73 (merge) | 516 | 282 p s | 7.2 | 3.1–5.5 |
-| `264cb48d9` | lock BUSY split | 506 | 515 p | 8.6 | 3.6–3.6 |
-| `3d5bc3fcb` | K48 (merge) | 508 | 306 p s | 7.4 | 6.0–6.2 |
-| `909a07d71` | wave 45 docs | – | 299 p s | 5.6 | 4.8–4.8 |
-| `ff6aca40b` | K84 (merge) | 511 | 277 p s | 7.1 | 2.9–5.8 |
-| `718372cfc` | wave 54 | 518 | 250 s, 509 p | 8.7 | 1.8–5.4 |
-| `79bc63a6a` | wave 60 | – | 521 p | 8.7 | 5.1–5.1 |
-| `2b86f47e1` | K101 | – | 584 p s | 6.6 | 5.8–5.8 |
-| `devel` | devel 1b355826b (this task's tip, wave 72) | 525, 515, 505 | 534 p, 561 p s, 600 p, 608 p, 589 p | 8.6 | 0.6–8.8 |
+| Build | What it is | Clean runs: MiB/s (load) | Not clean runs: MiB/s (load) and flags | Raft entries per MiB |
+|---|---|---|---|---|
+| `08cc16af4` | the base (dead-code cleanup merge) | – | 1158 (0.58b) p, 1162 (13.73) p, 1202 (3.1) p, 1273 (3.4) s, 1141 (9.6) h | 0.2 |
+| `24e58fb1d` | K31 mount session after fork | – | 1180 (8.67) p | n/a |
+| `f47a32754` | W154 merge, last build before K14 | 1265 (5.08) | 1047 (10.03) p, 1085 (12.49) p s, 939 (8.06) h, 1038 (6.13) p, 1216 (11.11) p, 1098 (10.07) p | 0.2 |
+| `d2369a49d` | K14 atomic multi-chunk publication (merge) | 638 (6.99) | 591 (11.95) p, 519 (10.75) p s, 590 (9.05) h, 651 (4.68) p, 589 (9.64) p, 629 (6.0) p, 610 (12.17) p | 19.9 |
+| `bd2cb0d5a` | K14 follow-up: PUB_STAGE kind | – | 627 (7.25) p, 687 (6.35) p, 643 (9.77) p | 19.9 |
+| `1f3b25997` | K13 ticketed PUT/REPORT (merge) | – | 518 (9.51) p, 527 (10.92) p, 521 (9.87) p | 28.7 |
+| `6b621993d` | K29 TXN_BATCH (merge) | – | 491 (8.89) p | 21.8 |
+| `a23d45540` | reverted D39 tree (docs commit) | – | 498 (2.88) p | 21.8 |
+| `33c68a465` | W158 (merge) | – | 467 (7.8) p | 21.8 |
+| `1cd2092a4` | K32 batch K14 publication and K13 tickets (merge) | 426 (7.93) | 278 (4.57) s, 292 (7.44) p s, 457 (3.81) p | 7.8 |
+| `2d03d9837` | K33/W157 formation inc. 1 | 415 (6.59) | – | 8.2 |
+| `60f91b0d3` | K33 inc. 2 | 433 (4.54) | – | 7.9 |
+| `f00cfdd75` | K33 client view | 452 (4.78) | – | 7.9 |
+| `e6a21692d` | D31 drain | 431 (3.84) | 265 (2.35) p s | 7.6 |
+| `5a09fd938` | B geometry | 443 (4.44) | 274 (3.51) p s | 7.6 |
+| `55ad94072` | D42 direct I/O only (docs) | 388 (2.47) | – | 8.0 |
+| `e8d25cc22` | K36 verified recovery | 421 (4.1) | 292 (3.85) p s | 7.6 |
+| `ae3e7ab75` | READ_VERIFY (merge) | 458 (3.45) | – | 7.9 |
+| `fc5c1d64e` | K34 (merge) | 432 (4.05) | – | 8.0 |
+| `6069ada62` | A7 D42 removals (merge) | 457 (4.16), 431 (3.4), 421 (4.78) | – | 7.9 |
+| `376369aa8` | K35 fsync succeeds degraded, stripe table (merge) | 311 (4.02), 300 (3.34), 306 (4.37) | – | 8.2 |
+| `9fa0079c7` | merge-wave5 into K36 | 308 (4.76), 316 (4.23) | 239 (6.15) p s | 8.2 |
+| `87034b518` | K36 on merged tree | 304 (5.71) | 299 (5.76) p s | 8.3 |
+| `403bc788a` | READ_VERIFY, K34, A7, K35, K36 docs | 307 (4.25) | 228 (2.84) s, 258 (3.81) p s | 8.2 |
+| `1fee9bb04` | report step-down | – | 242 (8.84) p s | 7.9 |
+| `5a7463440` | F1 gates docs | – | 256 (3.44) p | n/a |
+| `b9dfff609` | Task V read-back evidence | 386 (4.77) | 287 (4.13) s, 246 (2.91) p s | 6.8 |
+| `d951ca293` | merge-wave28 (Task S) | 364 (4.17) | 244 (4.4) s | 7.7 |
+| `028b00d31` | merge-wave30, devel in | 375 (6.63) | 255 (4.06) s | 7.9 |
+| `e6443fd7a` | merge-wave30: exact stripe-identity hash (orcd-dd-profile) | 518 (5.75) | 330 (2.2) s | 7.4 |
+| `833f25fe8` | merge-wave30 (Task AA) | 538 (4.63) | 290 (4.24) s | 7.2 |
+| `e34cba345` | merge-wave31 (Task I) | – | 317 (2.91) s, 483 (14.42) h | 7.2 |
+| `d891c106e` | merge-wave31 devel merge | – | 224 (4.55) s | 5.8 |
+| `199ad2afd` | bound sweep metadata RPCs | 521 (5.09) | – | 8.7 |
+| `4fdf8ddd2` | merge-wave36 (K56) | 502 (4.34) | – | 8.7 |
+| `c887132c5` | revert of a PUT-proof drain | 518 (4.1) | – | 8.6 |
+| `68303f40f` | K72, K73 (merge) | 516 (4.89) | 282 (4.97) p s | 7.2 |
+| `264cb48d9` | lock BUSY split | 506 (4.59) | 515 (4.44) p | 8.6 |
+| `3d5bc3fcb` | K48 (merge) | 508 (5.51) | 306 (2.86) p s | 7.4 |
+| `909a07d71` | wave 45 docs | – | 299 (2.92) p s | 5.6 |
+| `ff6aca40b` | K84 (merge) | 511 (3.72) | 277 (2.63) p s | 7.1 |
+| `718372cfc` | wave 54 | 518 (4.45) | 250 (5.11) s, 509 (2.75) p | 8.7 |
+| `79bc63a6a` | wave 60 | – | 521 (4.26) p | 8.7 |
+| `2b86f47e1` | K101 | – | 584 (5.27) p s | 6.6 |
+| `devel` | devel `9403d0666` (wave 70 tip; all devel runs use this build) | 525 (3.98), 515 (4.75), 505 (4.41) | 534 (2.92) p, 561 (4.69) p s, 600 (0.64b) p, 608 (4.15) p, 589 (4.34) p | 8.6 |
 
 No usable run: `cb970ca7c` (docs only, not run), `246bae7cf` (D39 admission,
 later reverted: the cluster did not start), `4026e254d` (W153: ior aborted,
@@ -154,17 +162,18 @@ repeated; set ab12 has one at 2:2 (505).
 
 ## Which commit ranges move throughput
 
-Medians of the gated, co-led runs where there are any, otherwise of the `p`
-co-led runs, stated as such. Single gated runs vary by about ±15 %.
+Clean runs where there are any, otherwise the `p` co-led runs, stated as
+such. Single clean runs vary by about ±15 %.
 
 | Step | Before | After | Change | Entries per MiB | Evidence |
 |---|---|---|---|---|---|
-| K14 (`d2369a49d`) | `f47a32754`: 939–1,265 (gated), 1,038–1,216 (p) | 590–638 (gated), 519–651 (p) | about −45 % | 0.2 to 19.9 | 2 gated + 6 p runs after, 2 gated + 5 p before |
+| K14 (`d2369a49d`) | `f47a32754`: 1,265 (clean), 1,038–1,216 (p), 939 (h) | 638 (clean), 519–651 (p), 590 (h) | about −45 % (medians 1,100 and 610) | 0.2 to 19.9 | 1 clean + 1 h + 5 p runs before; 1 clean + 1 h + 5 p after |
 | K13 (`1f3b25997`) | `bd2cb0d5a`: 627–687 (p) | 518–527 (p) | about −20 % | 19.9 to 28.7 | 3 + 3 p runs |
-| K29 to K33 (`6b621993d` to `f00cfdd75`) | 518–527 (p) | 491, 498, 467 (p); 426 (gated, K32); 415, 433, 452 (gated, K33) | about −15 % in small steps, none above the spread | 28.7 to 7.8 | one to three runs each |
-| K35 (`376369aa8`) | `6069ada62`: 457, 431, 421 (gated) | 311, 300, 306 (gated) | −32 % | 7.9 to 8.2 | 3 + 3 gated runs |
-| Recovery (`e6443fd7a`) | `028b00d31`: 375 (gated) | 518 (gated) | +38 % | 7.9 to 7.4 | 1 + 1 gated runs; 483–538 on every later gated build |
-| Remaining devel | 483–538 on the 11 gated builds after `e6443fd7a` | 505, 515, 525 (devel, gated) | none | 8.6 | 11 builds + devel |
+| K29 to K33 (`6b621993d` to `f00cfdd75`) | 518–527 (p) | 491, 498, 467 (p); 426 (clean, K32); 415, 433, 452 (clean, K33) | about −15 % in small steps, none above the spread | 28.7 to 7.8 | one to three runs each |
+| K35 (`376369aa8`) | `6069ada62`: 457, 431, 421 (clean) | 311, 300, 306 (clean) | about −30 % (medians 431 and 306) | 7.9 to 8.2 | 3 + 3 clean runs |
+| Partial recovery before the hash fix | 304–316 (clean, `376369aa8` to `403bc788a`) | 386 (`b9dfff609`), 364 (`d951ca293`), 375 (`028b00d31`), one clean run each | about +60–80, no named cause | 8.2 to 7.7 | not attributed |
+| Recovery (`e6443fd7a`) | `028b00d31`: 375 (clean) | 518 (clean) | +38 % | 7.9 to 7.4 | 1 + 1 clean runs; 502–538 on every later clean build |
+| Remaining devel | 502–538 on the 10 clean builds after `e6443fd7a` (483 once under mean load 14, `h`) | 505, 515, 525 (devel, clean) | none | 8.6 | 10 builds + devel |
 
 Two further facts. The K35 range also raised `close()` time from 16–22 s to
 29–33 s (the fsync share of the write line) and the recovery brought it to
@@ -186,13 +195,14 @@ inode chain in constant time. The code comment says so. What the
 runs show agrees: the K35 range and `d951ca293`/`028b00d31` (364, 375 MiB/s)
 have long `close()` times (11–33 s) and `e6443fd7a` does not (5 s). It is an
 inference from the diff, the comment and the timing: no profile of
-`stripe_find` was taken, and the recovery is one gated run before and after.
+`stripe_find` was taken, and the recovery is one clean run before and after.
 
 ## What could and could not be attributed
 
 * **Attributed (measured as commit ranges):** the base-to-devel gap
-  reproduces (ratio 1.9 to 2.4 across all pairs, 2.2 to 2.4 with gated runs); K14 is the
-  largest step; K13 a second; K35 cost 32 % until `e6443fd7a`.
+  reproduces (ratio 1.9 to 2.4 across all pairs, 2.2 to 2.4 with clean runs); K14 is the
+  largest step; K13 a second; K35 cost about 30 %, of which about 60–80 MiB/s came back before `e6443fd7a`
+  by an unnamed change and `e6443fd7a` took it from 375 to 518.
 * **Mechanism known from code and timing, not profiled:** K14's step is a
   cross-group transaction per multi-chunk write (PREPARE, DECIDE, RESOLVE,
   RETIRE; `00c14c355`); K35's step is the stripe-table lookup described above.
@@ -202,7 +212,7 @@ inference from the diff, the comment and the timing: no profile of
   traced. The cost split between consensus latency, thread handoffs and
   `fdatasync` was not measured: no `perf` profile and no round-latency
   measurement was taken.
-* **CPU shape** (gated runs, write window): base `efsd` 1.8–2.0 cores each and
+* **CPU shape** (clean and `h` runs, write window): base `efsd` 1.8–2.0 cores each and
   `efs-fuse` 2.0–2.3; devel `efsd` leader 4.6–4.8 and the other two 2.4, fuse
   1.2; host busy 10.3 cores against 12.6–13.0; `md0` writes 1,902–2,151 MiB/s
   against 1,095–1,131. The write phase takes 12.9–14.4 s on base and 31–32 s on
@@ -239,11 +249,11 @@ combining) was not run.
   is three daemons on one host with loopback RDMA, orcd-mini's members are on
   separate hosts.
 * Most steps rest on one to three runs per build with a spread of about ±15 %
-  and an unquiet host; only K35 (3 + 3 gated runs) and K14 are repeated enough
-  to rely on. The K13 and K29–K33 figures use `p` runs.
+  and an unquiet host; only K35 (3 + 3 clean runs) is repeated enough
+  to rely on (K14 has one clean pair). The K13 and K29–K33 figures use `p` runs.
 * Only the 1 MiB `ior easy` write was run, at 8 ranks; no other workload.
 * The recovery commit is identified by bisection to one merge, with one
-  gated run on each side; its mechanism is read from the diff, not profiled.
+  clean run on each side; its mechanism is read from the diff, not profiled.
 * Leader placement as a cause: runs with split leaders lose a median of 36 % in
   the intermediate builds; why was not investigated. Natural placement mixed both
   states in early sets, so those numbers are `s`.
