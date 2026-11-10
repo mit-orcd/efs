@@ -103,8 +103,9 @@ static int efs_client_rpc_past_deadline(void) {return deadline && now>=deadline;
 static void usleep(unsigned micros) {now+=(micros+999)/1000;}
 static void efs_buf_drain_enter(void) {}
 static void efs_buf_drain_leave(void) {}
-static int efs_dcache_drain_pending(void) {rounds++;return EFS_OK;}
-static int efs_client_report_dirty(int sync) {assert(sync);return EFS_OK;}
+static int drain_rc,report_rc;
+static int efs_dcache_drain_pending(void) {rounds++;return drain_rc;}
+static int efs_client_report_dirty(int sync) {assert(sync);return report_rc;}
 static int create_pending;
 static int efs_pending_create_drain(void){return create_pending?-13:EFS_OK;}
 static int efs_open_drain_pending(void) {return lease_pending?-16:EFS_OK;}
@@ -126,11 +127,20 @@ int main(void) {
  assert(efs_control_drain(25,0)==-1&&rounds==3&&deadline==777);
  create_pending=0;rounds=0;now=0;assert(!efs_control_drain(25,0) && rounds==1);
  rounds=0;assert(!efs_control_drain(25,1) && !rounds && deadline==777);
+ /* K102: a refusal names the return codes and counters that caused it. */
+ fprintf(stderr,"REFUSAL-A\n");
+ drain_rc=-3;report_rc=-13;rounds=0;now=0;assert(efs_control_drain(25,0)==-1);
+ fprintf(stderr,"REFUSAL-B\n");
+ drain_rc=report_rc=0;body_pending=2;rounds=0;now=0;assert(efs_control_drain(25,0)==-1);
  return 0;
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-stop-flight-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-pthread',str(p),'-o',str(p.with_suffix(''))],check=True)
- subprocess.run([str(p.with_suffix(''))],check=True)
-print('stop drain: detached REPORT ownership, unresolved body refusal and deadline restoration PASS')
+ r=subprocess.run([str(p.with_suffix(''))],check=True,capture_output=True,text=True)
+refusals=r.stderr.split('REFUSAL-A\n')[1].split('REFUSAL-B\n')
+a,b=(x.strip().splitlines()[-1] for x in refusals)
+assert 'ownership-rc=0 data-rc=-3 report-rc=-13 report-pending=0 report-reserved=0 report-inflight=0 dcache-pending=0)' in a,a
+assert 'passes=3 ' in a and 'ownership-rc=0 data-rc=0 report-rc=0 report-pending=0 report-reserved=0 report-inflight=0 dcache-pending=2)' in b,b
+print('stop drain: detached REPORT ownership, unresolved body refusal, deadline restoration and the named refusal PASS')

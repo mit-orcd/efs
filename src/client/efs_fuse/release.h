@@ -20,7 +20,12 @@
  * release stays BUSY: the row is retained and the retry thread or the
  * drain proves it later. efs_control_drain returns 0 when
  * everything is published and -1 when unresolved writes or releases
- * remain, in which case the mount is retained. RENAME and LSEEK reply a
+ * remain, in which case the mount is retained and the stop-refused line
+ * prints every condition the loop tests: the open-retry, data and report
+ * return codes of the last pass, the REPORT pressure counters and the
+ * dcache's pending records, beside the retained-release and write-back
+ * counts. Write-back state of an inode the server reports removed is
+ * retired by write.c (K102), so it does not hold the stop. RENAME and LSEEK reply a
  * positive errno through efs_rc_to_errno; RENAME never silently drops a
  * flag it does not implement (EINVAL). */
 
