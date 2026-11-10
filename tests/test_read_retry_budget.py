@@ -26,6 +26,7 @@ int efs_net_remaining_ms(int cap){return !deadline?cap:now_ms>=deadline?0:(deadl
 static void host_deadline_us(struct timespec *end,long us){uint64_t ms=now_ms+us/1000;end->tv_sec=ms/1000;end->tv_nsec=(ms%1000)*1000000;}
 static int host_past_deadline(const struct timespec *end){return now_ms>=(uint64_t)end->tv_sec*1000+end->tv_nsec/1000000;}
 static int host_local_leader(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return no_peer?-1:1;}
+static int host_local_view(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return 0;} /* no local replica: peer routing */
 static int host_pick_peer(struct efs_raft_host *h,const uint8_t *g,int n,int skip){(void)h;(void)g;(void)n;return no_peer?-1:skip==1?2:1;}
 static int host_rpc_submit(struct efs_raft_host *h,int rid,uint8_t g,const uint8_t *cmd,uint32_t n,struct efs_msg_raft_mkfs_reply *rep,int timeout){(void)h;(void)rid;(void)g;(void)cmd;(void)n;(void)rep;(void)timeout;calls++;if(!efs_net_remaining_ms(1))expired_calls++;if(succeed){rep->rc=EFS_OK;rep->leader_hint=-1;return EFS_OK;}return EFS_ERR_IO;}
 static int controlled_sleep(unsigned us){now_ms+=us/1000;return 0;}
