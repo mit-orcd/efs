@@ -4,6 +4,8 @@
 
 ## Recent evidence and remaining acceptance
 
+[Test hosts page and wave gate script (Task T6)](test-hosts-wave-gate-20261110.md): **PASS, no K row, blocks alpha: no** (Nov 10, branch `claude/gracious-lovelace-65be40`; not merged). `docs/how-it-works/test-hosts.md` and `scripts/wave_gate.sh` written; trial gate on fstor007 `FAIL 0 NOTRUN 3 COMPLETE`, quiet wait and `--clean` shown; node9900 untested.
+
 [Diagnostics index](diagnostics-index-20261110.md): **PASS, no K row, blocks alpha: no** (Nov 10, branch `claude/wonderful-brahmagupta-c95440`; not merged). `scripts/gen_diagnostics.py` writes `docs/how-it-works/diagnostics.md` (102 log keys, 29 error codes, 25 KB) and `--check` runs in `docs-check`; two runs hash equal.
 
 [Concern map of `src/client/write.c`](write-path-map-20261110.md): **PASS, no K row, blocks alpha: no** (Nov 10, branch `claude/modest-cray-29bc32`, unmerged). New `docs/how-it-works/write-path-map.md` assigns every function of `write.c` to one of 20 concerns with state, mutex, logs, tests and lock order; `scripts/check_concern_map.py` in `make docs-check` fails on a missing, unknown or duplicated function. For the close()-EIO question the map points at 1,101 of 9,812 lines.
