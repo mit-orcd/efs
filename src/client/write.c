@@ -947,8 +947,9 @@ _Static_assert(sizeof(struct efs_chunk_rec) + sizeof(struct efs_ino_size_rec) +
                sizeof(uint64_t) <= REPORT_PRESSURE_RECORD_BYTES,
                "REPORT admission byte charge must cover a chunk and inode");
 static uint64_t report_reserved, report_waits, report_timeouts;
-static uint64_t report_limit_records, report_limit_bytes, report_admit_ms;
-static pthread_once_t report_config_once = PTHREAD_ONCE_INIT;
+/* Built in (A8): 8192 records, 16 MiB, 8000 ms admission wait; the unit
+ * test (test_report_pressure.py) sets these statics. */
+static uint64_t report_limit_records = 8192, report_limit_bytes = 16ull << 20, report_admit_ms = 8000;
 static __thread uint64_t report_request_records;
 static void meta_flush_enqueue(efs_ino_t ino);
 
@@ -957,31 +958,6 @@ static uint64_t report_clock_ms(void)
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
-static uint64_t report_env(const char *name, uint64_t fallback)
-{
-    const char *value = getenv(name);
-    char *end = NULL;
-    unsigned long long n = fallback;
-    if (value && *value && *value != '-') {
-        errno = 0;
-        n = strtoull(value, &end, 10);
-        if (errno || *end || !n)
-            n = fallback;
-    }
-    efs_setting_u64(name, n);
-    return n;
-}
-
-static void report_config(void)
-{
-    report_limit_records = report_env("EFS_REPORT_MAX_RECORDS", 8192);
-    report_limit_bytes = report_env("EFS_REPORT_MAX_BYTES", 16ull << 20);
-    report_admit_ms = report_env("EFS_REPORT_ADMIT_MS", 8000);
-    if (report_admit_ms > 60000)
-        report_admit_ms = 60000;
-    efs_setting_u64("EFS_REPORT_ADMIT_MS", report_admit_ms);
 }
 
 /* dirty_mu held. Detached snapshots remain charged until release. */
@@ -1024,7 +1000,6 @@ int efs_client_report_admit(uint64_t records)
         return EFS_OK;
     if (report_request_records)
         return EFS_ERR_INVAL; /* caller must finish its previous reservation */
-    pthread_once(&report_config_once, report_config);
     uint64_t limit = report_limit_records;
     if (limit > report_limit_bytes / REPORT_PRESSURE_RECORD_BYTES)
         limit = report_limit_bytes / REPORT_PRESSURE_RECORD_BYTES;

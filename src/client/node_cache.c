@@ -86,22 +86,15 @@ static int pool_size(void)
 
 void efs_client_conn_init(void)
 {
-    const char *env = getenv("EFS_CLIENT_CONNS_PER_NODE");
-    /* Default 64. It was 16 when EFS_SERVER_MAX_CONNS was 512 (9 clients
+    /* 64, built in (A8; was EFS_CLIENT_CONNS_PER_NODE): a test that needs
+     * another pool sets g_client.conn_pool_size after this call. It was 16 when EFS_SERVER_MAX_CONNS was 512 (9 clients
      * × 256 × 4 nodes overflowed accept()); the server cap is 4096 now,
      * and 13 clients × 64 is 832 conns per server. Every checkout holds
      * one conn for the whole RPC, a PUT holds three, so 400 ecopy
      * threads on 16 conns queued metadata RPCs behind chunk PUTs for the
      * full 5 s checkout timeout (Sep 30 2026). Slots connect lazily; one
      * RDMA conn pins 4 × 88 KiB + 32 × 84 KiB ≈ 3.0 MB on each end. */
-    int n = 64;
-    if (env && *env) {
-        int v = atoi(env);
-        if (v >= 1 && v <= EFS_CLIENT_CONNS_PER_NODE)
-            n = v;
-    }
-    g_client.conn_pool_size = n;
-    efs_setting_u64("EFS_CLIENT_CONNS_PER_NODE", (unsigned)n);
+    g_client.conn_pool_size = 64;
 
     for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
         for (int s = 0; s < EFS_CLIENT_CONNS_PER_NODE; s++) {
@@ -184,7 +177,9 @@ static int node_index_for_id(efs_node_id_t node_id)
  * wrote on an added member) wakes it and waits up to EFS_VIEW_AWAIT_MS for
  * a round that asks every member. Peer connections to added members then
  * open on demand through the ordinary pool (TCP, RDMA upgrade). */
-#define EFS_VIEW_POLL_MS   1000 /* EFS_CLIENT_VIEW_POLL_MS overrides (50..60000) */
+#define EFS_VIEW_POLL_MS   1000 /* built in (A8); test hook below */
+/* Test hook (A8): tests/test_member_view.c polls every 100 ms. */
+unsigned efs_client_view_poll_ms = EFS_VIEW_POLL_MS;
 #define EFS_VIEW_AWAIT_MS  2000
 #define EFS_VIEW_MISS_MS   1000
 #define EFS_VIEW_REFUSE_LOG_MS 30000
@@ -440,11 +435,7 @@ int efs_client_view_start(void)
         return g_view.have ? EFS_OK : EFS_ERR_INVAL;
     }
     g_view.stop = 0;
-    g_view.poll_ms = EFS_VIEW_POLL_MS;
-    const char *pe = getenv("EFS_CLIENT_VIEW_POLL_MS");
-    if (pe && atoi(pe) >= 50 && atoi(pe) <= 60000)
-        g_view.poll_ms = atoi(pe);
-    efs_setting_u64("EFS_CLIENT_VIEW_POLL_MS", g_view.poll_ms);
+    g_view.poll_ms = efs_client_view_poll_ms;
     if (pthread_create(&g_view.th, NULL, view_thread, NULL) != 0) {
         pthread_mutex_unlock(&g_view.mu);
         fprintf(stderr, "membership view: refresh thread not started; members added after "
@@ -726,8 +717,7 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                 if (k < 10 || (k % 100) == 0)
                     fprintf(stderr,
                             "efs: conn pool node=%u checkout deadline reached "
-                            "(pool=%d per node, EFS_CLIENT_CONNS_PER_NODE; "
-                            "timeout #%d)\n",
+                            "(pool=%d per node; timeout #%d)\n",
                             (unsigned)node_id, n, k + 1);
                 return NULL;
             }

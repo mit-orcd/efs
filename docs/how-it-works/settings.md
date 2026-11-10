@@ -32,9 +32,7 @@ kind (deployment inputs first) then name; `--writers` comes last.
 | Setting | Default | Role |
 | --- | --- | --- |
 | `--writers` | `8` | daemon |
-| `EFS_CLIENT_CONNS_PER_NODE` | `64` | client |
 | `EFS_CLIENT_META_MB` | `256` | client |
-| `EFS_CLIENT_VIEW_POLL_MS` | `1000` | client |
 | `EFS_DCACHE_BYTES` | `134217728` | client |
 | `EFS_DCACHE_DRAIN_BYTES` | `67108864` | client |
 | `EFS_DCACHE_HARD_BYTES` | `268435456` | client |
@@ -46,14 +44,9 @@ kind (deployment inputs first) then name; `--writers` comes last.
 | `EFS_QUERY_EXPORT_MAX_MS` | `3600000` | daemon |
 | `EFS_QUERY_REFRESH_MS` | `60000` | daemon |
 | `EFS_RAFT_APPLIED_INTERVAL_MS` | `100` | daemon |
-| `EFS_RDMA_BUFS` | `6` | both |
 | `EFS_RDMA_DEV` | `auto` | both |
 | `EFS_RDMA_GID_INDEX` | `auto` | both |
 | `EFS_RDMA_PORT` | `1` | both |
-| `EFS_REPORT_ADMIT_MS` | `8000` | client |
-| `EFS_REPORT_MAX_BYTES` | `16777216` | client |
-| `EFS_REPORT_MAX_RECORDS` | `8192` | client |
-| `EFS_REPORT_RECEIPT_JOIN_MS` | `5000` | daemon |
 | `EFS_TRANSPORT` | `auto` | both |
 
 ## Inventory: environment variables read by the product
@@ -78,7 +71,6 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
 | `EFS_NUMA_NODE` | `client/efs_fuse/` (numa_pin_startup) | pin to the HCA's NUMA node; `none`/`-1` disables, `N` forces node N | deployment input | portal (observed only) | — | Keep: host topology input |
-| `EFS_RDMA_BUFS` | `common/rdma.c:145` (nrecv_bufs) | 6 posted receive buffers per QP (2..64) | numeric tunable | portal (observed only) | `README.md`, `run_xprt.sh` +2 | Keep until A8: set by `test_rdma_segmented.c` and the xprt bench; qualify the built-in value |
 | `EFS_RDMA_DEV` | `common/rdma.c:462` (dev_for_fd) +1 | device chosen from the route to the peer; names a verbs device | deployment input | cluster:orcd-test.py, devops:amd.env, devops:env.sh, devops:orcd-mini.env +1; portal (observed only) | `harness.py`, `rdma_pinned_probe.cpp` +7; `client.sh`, `scripts/evidence/k08/k08_two_client.sh` +15; `rdma_pingpong.c` | Keep: hardware input |
 | `EFS_RDMA_GID_INDEX` | `common/rdma.c:287` (dev_open) | first nonzero GID on RoCE; pins a GID index | deployment input | devops:amd.env, devops:env.sh, devops:start.sh; portal (observed only) | `rdma_async_commit.py`, `rdma_four_node_qualification.sh` | Keep: hardware input |
 | `EFS_RDMA_PORT` | `common/rdma.c:246` (rdma_port_no) | port 1; selects the HCA port | deployment input | portal (observed only) | — | Keep: hardware input (multi-port HCAs) |
@@ -88,16 +80,11 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| `EFS_CLIENT_CONNS_PER_NODE` | `client/node_cache.c:88` (efs_client_conn_init) | 64 pooled connections per server (1..cap) | numeric tunable | portal (observed only) | `get_pair_deadline.py` | Keep until A8: set by `get_pair_deadline.py` |
 | `EFS_CLIENT_META_MB` | `common/stage_limit.h:9` (efs_stage_cap_bytes) | 256 MiB staging-table cap (16..1 Mi MiB) | numeric tunable | portal (observed only) | `test_rollup_budget.py`; `orcd_mini_stage_evict_ab.sh`, `w125_evict_rmw.py` | Keep until A8: set by tests and W125 scripts; client memory sizing |
-| `EFS_CLIENT_VIEW_POLL_MS` | `client/node_cache.c:416` (efs_client_view_start) | 1000 ms membership view poll (50..60000) | numeric tunable | — | `test_member_view.c` | Keep until A8: set by `test_member_view.c` |
 | `EFS_DCACHE_BYTES` | `client/write.c:7788` (dcache_reclaim_limit) | 128 MiB soft dirty-body reclaim target (1 MiB..4 GiB) | numeric tunable | portal (observed only) | `gate_k9_append_load.sh`, `gc_reclamation.py` | Keep until A8: client memory sizing, set by live tests |
 | `EFS_DCACHE_DRAIN_BYTES` | `client/bufpool.c:56` (buf_init) via `budget_env` | 64 MiB drain reserve | numeric tunable | — | `gc_reclamation.py`, `test_bufpool.c` +1; `scripts/evidence/w125/w125_read_pressure.sh` | Keep until A8: client memory sizing, set by tests |
 | `EFS_DCACHE_HARD_BYTES` | `client/bufpool.c:54` (buf_init) via `budget_env` | 256 MiB body-admission budget | numeric tunable | — | `gc_reclamation.py`, `test_bufpool.c` +1; `scripts/evidence/w125/w125_read_pressure.sh` | Keep until A8: client memory sizing, set by tests |
 | `EFS_DCACHE_READ_BYTES` | `client/bufpool.c:63` (buf_init) via `budget_env` | 64 MiB read headroom | numeric tunable | — | `test_bufpool.c` | Keep until A8: set by `test_bufpool.c` |
-| `EFS_REPORT_ADMIT_MS` | `client/write.c:893` (report_config) via `report_env` | 8000 ms REPORT admission wait (≤ 60000) | numeric tunable | — | `test_report_pressure.py` | Keep until A8: set by `test_report_pressure.py` |
-| `EFS_REPORT_MAX_BYTES` | `client/write.c:892` (report_config) via `report_env` | 16 MiB per REPORT | numeric tunable | — | `test_report_pressure.py` | Keep until A8: set by `test_report_pressure.py` |
-| `EFS_REPORT_MAX_RECORDS` | `client/write.c:891` (report_config) via `report_env` | 8192 records per REPORT | numeric tunable | — | `test_report_pressure.py` | Keep until A8: set by `test_report_pressure.py` |
 
 ### Server data path, GC, rebuild and packing (efsd)
 
@@ -114,7 +101,6 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 | `EFS_QUERY_EXPORT_MAX_MS` | `server/raft_host.c:11947` (query_export_configure) | 3600000 ms total paged-export lifetime (60000..604800000) | deployment input | portal (observed only) | — | Keep: documented operator need (long exports, power-user.md); never set in a test or launch |
 | `EFS_QUERY_REFRESH_MS` | `server/raft_host.c:12225` (host_query_thread) | 60000 ms query refresh, 200..3600000 (invalid keeps the default and logs `query-config`) | numeric tunable | — | `efs_commands.py`, `gc_reclamation.py` +2 | Justified (A8): the catalog's freshness against full-shard rebuild cost; an operator with a large namespace lengthens the interval, the query gates shorten it. Bounded 200..3600000 ms; `test_query_refresh.c` (make test) checks the parser over the range, `tests/live/gc_reclamation.py` (30 harness uses, product build) and the D4 tests run 2000 ms, `test_query_first_catalog.py` the default |
 | `EFS_RAFT_APPLIED_INTERVAL_MS` | `server/raft_host.c:12943` (server_raft_host_start) | 100 ms applied-index checkpoint (10..1000); bad values refuse startup | numeric tunable | cluster:cluster.sh, devops:intel.env, devops:start.sh, devops:test_start_mode.py; portal (observed only) | `applied_checkpoint_replay.py`, `runner.py` +14 | Keep until A8: set by devops `start.sh` (default 1000 there) and live tests; launch and code disagree |
-| `EFS_REPORT_RECEIPT_JOIN_MS` | `server/raft_host.c:22877` (host_report_receipts_init) | 5000 ms REPORT receipt join wait | numeric tunable | — | `test_w155_report_resolve.py` | Keep until A8: set by `test_w155_report_resolve.py` |
 
 ### Observability and trace (efsd, efs-fuse)
 
@@ -311,6 +297,13 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_PACK_COMPACT_IDLE_S` | `server/packer.c`, A8 | `EFS_FAULT_PACK_COMPACT_IDLE_S`; product: 60 s | K36, K37, K41 tests (renamed) |
 | `EFS_PACK_COMPACT_DAILY_START_MIN` | `server/packer.c`, A8 | `EFS_FAULT_PACK_COMPACT_DAILY_START_MIN`; product: 03:00 UTC | K36, K37, K41 tests (renamed) |
 | `EFS_DIR_SPREAD_MIN` | `meta/dir_layout.c` (efs_dir_spread_min), A8 | `EFS_FAULT_DIR_SPREAD_MIN`; product: 65536 entries | `test_sim.c`, W130 and K48 tests, `qualify_ao_readdir.py` (renamed); portal observes |
+| `EFS_REPORT_MAX_RECORDS` | `client/write.c` (report_config), A8 | built in: 8192; test hook: `test_report_pressure.py` sets the static `report_limit_records` | `test_report_pressure.py` (updated) |
+| `EFS_REPORT_MAX_BYTES` | `client/write.c` (report_config), A8 | built in: 16 MiB; test hook: the static `report_limit_bytes` | as above |
+| `EFS_REPORT_ADMIT_MS` | `client/write.c` (report_config), A8 | built in: 8000 ms; test hook: the static `report_admit_ms` | as above |
+| `EFS_REPORT_RECEIPT_JOIN_MS` | `server/raft_host.c` (host_report_receipts_init), A8 | built in: 5000 ms; test hook: the static `g_report_receipt_join_ms` | `test_w155_report_resolve.py` (updated) |
+| `EFS_CLIENT_VIEW_POLL_MS` | `client/node_cache.c` (efs_client_view_start), A8 | built in: 1000 ms; test hook: `efs_client_view_poll_ms` | `test_member_view.c` (updated) |
+| `EFS_CLIENT_CONNS_PER_NODE` | `client/node_cache.c` (efs_client_conn_init), A8 | built in: 64; test hook: `g_client.conn_pool_size` after init | `get_pair_deadline.py` (updated); portal observes |
+| `EFS_RDMA_BUFS` | `common/rdma.c` (nrecv_bufs), A8 | built in: 6; test hook: `efs_rdma_test_nrecv` (2..64, outside refuses the connection) | `test_rdma_segmented.c`, the xprt bench (its own `EFS_RDMA_BUFS` sets the hook; updated); portal observes |
 
 ## Compile-time modes
 

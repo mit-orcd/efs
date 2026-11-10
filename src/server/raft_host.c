@@ -25076,15 +25076,11 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
 static struct efs_receipt_table g_report_receipts;
 static pthread_once_t g_report_receipts_once = PTHREAD_ONCE_INIT;
 static int g_report_receipts_ok;
-static unsigned g_report_receipt_join_ms = 5000;
+static unsigned g_report_receipt_join_ms = 5000; /* built in (A8); the W155 test sets it */
 static int g_report_receipt_trace;
 
 static void host_report_receipts_init(void)
 {
-    const char *join = getenv("EFS_REPORT_RECEIPT_JOIN_MS");
-    if (join && *join)
-        g_report_receipt_join_ms = (unsigned)strtoul(join, NULL, 10);
-    efs_setting_u64("EFS_REPORT_RECEIPT_JOIN_MS", g_report_receipt_join_ms);
     g_report_receipt_trace = getenv("EFS_RECEIPT_TRACE") != NULL;
     g_report_receipts_ok = efs_receipt_table_init(&g_report_receipts, 4096u) == EFS_OK;
     if (!g_report_receipts_ok)

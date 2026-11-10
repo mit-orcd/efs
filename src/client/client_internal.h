@@ -137,7 +137,7 @@ struct efs_client {
     uint64_t conn_gen[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
     pthread_mutex_t conn_lock[EFS_MAX_NODES];
     pthread_cond_t conn_cv[EFS_MAX_NODES];
-    int conn_pool_size; /* 1..EFS_CLIENT_CONNS_PER_NODE, from env or default */
+    int conn_pool_size; /* 64 (A8: built in); a test may lower it after efs_client_conn_init */
 
     /* Soft down-mark: after consecutive failures, skip connect attempts for a
      * cooldown so one dead peer cannot stall every chunk PUT (2+1 quorum). */
@@ -892,5 +892,8 @@ void efs_client_prefetch_open(efs_ino_t ino, uint64_t size);
 int efs_client_map_snapshot(efs_ino_t ino, uint32_t ci0, uint32_t ci1, uint64_t *keys);
 int efs_client_map_snapshot_same(efs_ino_t ino, uint32_t ci0, uint32_t ci1,
                                  const uint64_t *keys);
+
+/* Test hook (A8, node_cache.c): the membership view poll, 1000 ms built in. */
+extern unsigned efs_client_view_poll_ms;
 
 #endif

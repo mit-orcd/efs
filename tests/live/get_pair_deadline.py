@@ -41,8 +41,8 @@ static void *serve(void *arg){
  close(fd);return NULL;
 }
 int main(void){
- assert(!setenv("EFS_TRANSPORT","tcp",1));assert(!setenv("EFS_CLIENT_CONNS_PER_NODE","1",1));
- g_client.node_count=2;g_client.export_id=1;efs_client_conn_init();
+ assert(!setenv("EFS_TRANSPORT","tcp",1));
+ g_client.node_count=2;g_client.export_id=1;efs_client_conn_init();g_client.conn_pool_size=1; /* A8: test hook */
  uint8_t bytes[2][65536];struct frag_get_job jobs[2];
  for(unsigned mode=0;mode<2;mode++){
   struct peer peers[2];pthread_t threads[2];

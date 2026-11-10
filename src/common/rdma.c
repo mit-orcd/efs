@@ -136,18 +136,17 @@ static void cq_unmoderate(struct ibv_cq *cq)
     }
 }
 
+/* A8: 6 posted receives per QP, built in. The RDMA unit test and the xprt
+ * bench set efs_rdma_test_nrecv (2..64) before their first connection;
+ * a value outside that range refuses the connection, as the old
+ * EFS_RDMA_BUFS did. */
+int efs_rdma_test_nrecv;
 static int nrecv_bufs(void)
 {
-    static int v_s=-1; /* any thread may be first: atomic, local copy (TSan) */
-    int v=__atomic_load_n(&v_s,__ATOMIC_ACQUIRE);
-    if (v<0) {
-        const char *e=getenv("EFS_RDMA_BUFS"); char *end=NULL;
-        long n=(e&&*e)?strtol(e,&end,10):EFS_RDMA_NRECV_DEFAULT;
-        v=(n<2 || n>64 || (end&&*end))?0:(int)n;
-        efs_setting_u64("EFS_RDMA_BUFS", v ? (unsigned)v : EFS_RDMA_NRECV_DEFAULT);
-        __atomic_store_n(&v_s,v,__ATOMIC_RELEASE);
-    }
-    return v;
+    int n = __atomic_load_n(&efs_rdma_test_nrecv, __ATOMIC_ACQUIRE);
+    if (!n)
+        return EFS_RDMA_NRECV_DEFAULT;
+    return n >= 2 && n <= 64 ? n : 0;
 }
 
 /* ---------------- device / PD cache ---------------- */

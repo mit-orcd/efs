@@ -51,7 +51,7 @@ static int reconnect_churn(void)
     enum { N=16 };int sockets[N][2];
     for(int i=0;i<N;i++) OK(!socketpair(AF_UNIX,SOCK_STREAM,0,sockets[i]));
     pid_t pid=fork();OK(pid>=0);int server=pid==0;
-    setenv("EFS_RDMA_BUFS",server?"2":"7",1);
+    efs_rdma_test_nrecv=server?2:7;
     if (!efs_rdma_available()) {
         if (!server) {int st;waitpid(pid,&st,0);puts("NOTRUN: test_rdma_segmented churn: no usable RDMA device (EFS_TRANSPORT/EFS_RDMA_DEV)");}
         return 0;
@@ -85,8 +85,8 @@ int main(int argc,char **argv)
     pid_t pid=fork();OK(pid>=0);int server=pid==0;
     /* burst-asym: the sender has the small pool, so the peer's CREDIT
      * frames for our DATA land in two receives. */
-    if (!strcmp(mode,"burst-asym")) setenv("EFS_RDMA_BUFS",server?"7":"2",1);
-    else if (strcmp(mode,"burst")) setenv("EFS_RDMA_BUFS",server?"2":"7",1);
+    if (!strcmp(mode,"burst-asym")) efs_rdma_test_nrecv=server?7:2;
+    else if (strcmp(mode,"burst")) efs_rdma_test_nrecv=server?2:7;
     if (!efs_rdma_available()) {
         if (!server) { int st;waitpid(pid,&st,0);printf("NOTRUN: test_rdma_segmented %s: no usable RDMA device (EFS_TRANSPORT/EFS_RDMA_DEV)\n",mode); }
         return 0;

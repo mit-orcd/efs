@@ -176,6 +176,14 @@ static const struct { const char *name, *why; } removed_env[] = {
     { "EFS_PACK_COMPACT_DAILY_START_MIN", "A8): test hook; EFS_FAULT_PACK_COMPACT_DAILY_START_MIN "
       "in EFS_FAULTS builds" },
     { "EFS_DIR_SPREAD_MIN", "A8): test hook; EFS_FAULT_DIR_SPREAD_MIN in EFS_FAULTS builds" },
+    /* A8: set only by unit tests, which now set the variable directly. */
+    { "EFS_REPORT_MAX_RECORDS", "A8): a REPORT holds at most 8192 records" },
+    { "EFS_REPORT_MAX_BYTES", "A8): a REPORT holds at most 16 MiB" },
+    { "EFS_REPORT_ADMIT_MS", "A8): REPORT admission waits at most 8000 ms" },
+    { "EFS_REPORT_RECEIPT_JOIN_MS", "A8): a REPORT receipt join waits at most 5000 ms" },
+    { "EFS_CLIENT_VIEW_POLL_MS", "A8): the client polls the membership view every 1000 ms" },
+    { "EFS_CLIENT_CONNS_PER_NODE", "A8): the client pools 64 connections per server" },
+    { "EFS_RDMA_BUFS", "A8): each RDMA queue pair posts 6 receive buffers" },
 };
 
 /* D42: EFS_RDMA_TRACE=1 prints RDMA and connection diagnostics on stderr.

@@ -267,6 +267,7 @@ static void recs2(struct efs_chunk_rec *r){
   r[i].nodes[0]=1;r[i].nodes[1]=2;r[i].nodes[2]=3;}
 }
 int main(void){
+ g_report_receipt_join_ms_n1=g_report_receipt_join_ms_n2=g_report_receipt_join_ms_n3=50; /* A8: test hook, built in 5000 */
  struct efs_chunk_rec r[2];int rc;
  pid.mint_ns=1700000000000000000ull;pid.seq=0;
  /* A: applied, reply lost, the 8 s budget spent in the 30 s receive. */
@@ -335,7 +336,7 @@ with tempfile.TemporaryDirectory(prefix='efs-w155-report-') as d:
                          '-o', str(p.with_suffix(''))], check=True)
     out = subprocess.run([str(p.with_suffix(''))], check=False, timeout=60,
                          capture_output=True, text=True,
-                         env=dict(os.environ, EFS_REPORT_RECEIPT_JOIN_MS='50'))
+                         env=os.environ)
     if out.returncode:
         # The failing native assertion used to disappear inside
         # CalledProcessError, then TemporaryDirectory deleted its program.

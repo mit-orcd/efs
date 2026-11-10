@@ -950,10 +950,6 @@ static int run_meta_bench(const char *seed, const char *export_name,
         nworkers = 1;
     if (nworkers > 64)
         nworkers = 64;
-    if (nworkers > g_client.conn_pool_size)
-        fprintf(stderr,
-                "note: workers=%d > conn_pool=%d; raise EFS_CLIENT_CONNS_PER_NODE\n",
-                nworkers, g_client.conn_pool_size);
 
     int need_files = (phases & (META_PHASE_CREATE | META_PHASE_STAT |
                                 META_PHASE_GETATTR | META_PHASE_READDIR |

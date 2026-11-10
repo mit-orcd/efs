@@ -13,7 +13,7 @@ a=w.index('#define REPORT_PRESSURE_RECORD_BYTES')
 b=w.index('\nint efs_client_ino_is_dirty(',a)
 source=r'''
 #include "client_internal.h"
-static void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
+static __attribute__((unused)) void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -88,9 +88,7 @@ static void *request(void *arg) {
 }
 int main(void) {
     assert(!pthread_mutex_init(&g_client.dirty_mu,NULL));
-    setenv("EFS_REPORT_MAX_RECORDS","8",1);
-    setenv("EFS_REPORT_MAX_BYTES","16384",1);
-    setenv("EFS_REPORT_ADMIT_MS","40",1);
+    report_limit_records=8; report_limit_bytes=16384; report_admit_ms=40; /* A8: test hook, built in 8192/16 MiB/8000 */
     g_client.meta_batch=1;
     assert(efs_client_report_admit(9)==EFS_ERR_BUSY);
     assert(!report_reserved);
