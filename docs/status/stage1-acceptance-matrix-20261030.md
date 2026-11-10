@@ -129,7 +129,7 @@
 | H13 | D distinct-host | TCP + RDMA | 60 | K72 real-HCA TCP/RDMA repeats and the literal matched D4 kit on an exclusive host |
 | H14 | D distinct-host | TCP + RDMA | 45 | session fence gate `scripts/evidence/k05/k05_session_fence_gate.sh`, partitioned-client and leader-change barrier |
 | H15 | D distinct-host | TCP + RDMA | 90 | K22 snapshot import into a stalled follower (1 GiB log lag, `scripts/evidence/k22/k22_snapshot_import.sh`) and live leader admission at 3/4 |
-| S1 | S soak | - | 270 | four-hour soak on the four-host shape (E4/D4 with K43) plus 30 min setup/verify |
+| S1 | S soak | - | 270 | four-hour soak on the four-host shape (E4/D4 with K43) plus 30 min setup/verify. **Nov 10: PASS on candidate `9bb50fe79`**, fcstor003-006 TCP, 4 h, 27 member kills (4 SIGKILLs of the group-0 leader), every acknowledged version and append exact ([batch S](2026-11/batch-s-soak-20261109.md)) |
 | S2 | S soak | - | 420 | K22 production-scale follower plateau (about 6 h measured on xorinox) plus verify |
 | T1 | N 13-node | - | 90 | 13-node qualify gates: identity, topology, b-checks, posix-core, posix-2client, e1-manifest, c5, e4-scale (storage/client split undecided, D46 item 2) |
 | T2 | N 13-node | - | 60 | 13-node: >4-node ring/placement (K28), capacity/protection debt (K20), fold/GC at scale (K18) |
