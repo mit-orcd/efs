@@ -14,6 +14,20 @@ now reads the slot its own fetch filled before the mutex is released
 `make test` rc 0 on both trees, `tests_for.py client/efs_fuse --run` 56 commands rc 0, TSan and ASan `find_res_interface` PASS. Branch `claude/frosty-bartik-e0be55` on devel `df7d11371`
 (wave 64). Merged into devel in wave 65 (Nov 9), K101 FIXED. Status Nov 9: remaining failures none; active run none; next action none on this page, W171 continues on the [structure plan](structure-plan-20261102.md).
 
+**Headline by the [reading-set measures](reading-set-baseline-20261104.md#measures-task-ev-nov-9)** (Task EV, Nov 9; numbers from the sections below, before → after):
+
+| Measure | Before | After |
+|---|---|---|
+| Understanding lines needed | 542 | 428 |
+| Validation lines needed | 120 | 395 |
+| Total needed | 662 | 823 |
+| Lines opened (understanding / validation / total) | 852 / 120 / 972 | 445 / 395 / 840 |
+| Irrelevant reading (opened − total needed) | 310 | 17 |
+| Dead ends | 3 | 0 |
+| Source files opened | 7 | 3 |
+
+Missed dependencies, correctness and necessary expansion cannot be derived: the reading was the implementer's own, with no reference answer to compare against.
+
 - Purpose: the next ownership pilot of the
   [structure plan](structure-plan-20261102.md) (phase 3, ownership-pilots
   bullet: `g_find_res`), repeating the recipe of

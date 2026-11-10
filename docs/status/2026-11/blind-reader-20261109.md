@@ -26,6 +26,26 @@ over-count; blocks alpha: no). The same race in the k37 twin
 Findings). Branch `claude/task-ei-blind-reader-7195d0` on devel
 `33cd0a839`. Merged into devel in wave 66 (Nov 9).
 
+**Headline by the [reading-set measures](reading-set-baseline-20261104.md#measures-task-ev-nov-9)**
+(Task EV, Nov 9; numbers from the reading logs and the tables under
+[Reading numbers and comparison](#reading-numbers-and-comparison) and
+[Correctness against the references](#correctness-against-the-references)):
+
+| Measure | Question 1 (unmount report) | Question 2 (GC pending watermark) |
+|---|---|---|
+| Understanding lines needed | 754 | 952 |
+| Validation lines needed | 63 | 449 |
+| Total needed | 817 | 1,401 |
+| Lines opened (understanding / validation / total) | 781 / 107 / 888 | 1,178 / 449 / 1,627 |
+| Irrelevant reading (opened − total needed) | 71; dead ends 6 (docs grep, two lease greps in `inode_rpc.c`, two `csrc.py` reads, a revoke grep) | 226; dead ends 9 (import invalidations 121 lines, the empty-batch barrier idea 55 lines, two apply-lock greps, the gc.c includes) |
+| Missed dependencies | none found at review (recorder had to fix nothing); of the reference's read list the log does not show `src/meta/session.c` (`cleanup_key`, `efs_session_cleanup_select`): the reader cited the revoke's cleanup from `src/common/session_revoke.c` instead | none found at review (recorder had to fix nothing); of the reference's read list the log does not show the degraded case in `tests/test_meta_apply.c` 5730–5762; the reference itself missed the KV apply scope, which the reader opened |
+| Correctness | matches the reference (neither owed; diagnostic report; both counts placed where meaningful) | better than the reference: the reference's expected fix (the twin's rule) drops an in-flight insert; evidence: the twin variant fails at `test_meta_apply.c:5548` (`in-flight insert kept`), the fix passes |
+| Necessary expansion (beyond the named component) | `client/efs_fuse.main` named; the decision needed the session revoke (`node_cache.c`, `client_internal.h`, `inode_rpc.c`, `session_revoke.c`) and the sibling owners' contracts (`open.h`, `release.h`/`release.c`, `writeback.h`): real, counted as success | `meta/meta_apply.gc` named; the fix needed the reaper and `host_apply` in `raft_host.c`, the KV apply scope (`kv_lsm.c`, `kv_lsm.h`) and the harnesses that splice the changed code: real (the race rests on the apply scope), counted as success |
+| Source files opened | 10 | 8 |
+
+The logs record files, not owners by component tag, so necessary expansion
+is listed by file; no owner count is derived.
+
 - Purpose: [Task EE item 4](review-feedback-nov9-20261109.md#4-unfamiliar-reader)
   and its brief EI. Every reading set so far (Tasks
   [EB](taskEB-review-followup-20261108.md), [EC](find-res-ownership-20261108.md))

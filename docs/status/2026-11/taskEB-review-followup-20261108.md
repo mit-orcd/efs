@@ -18,6 +18,20 @@ TSan `open_interface` PASS; `python3 tests/test_code_graph.py` 10 OK. No K
 row; blocks alpha: no. Branch `claude/task-eb-review-feedback-eba909` on
 devel `3f9110d52` (wave 63). Merged into devel in wave 64 (Nov 8). Status Nov 9: remaining failures none; active run none; next action none on this page, W171 continues on the [structure plan](structure-plan-20261102.md).
 
+**Headline by the [reading-set measures](reading-set-baseline-20261104.md#measures-task-ev-nov-9)** (Task EV, Nov 9; numbers from the sections below, before → after):
+
+| Measure | Before | After |
+|---|---|---|
+| Understanding lines needed | 640 | 543 |
+| Validation lines needed | 178 | 427 |
+| Total needed | 818 | 970 |
+| Lines opened (understanding / validation / total) | 1,202 / 654 / 1,856 | 683 / 903 / 1,586 |
+| Irrelevant reading (opened − total needed) | 1,038 | 616 |
+| Dead ends | 3 | 2 |
+| Source files opened | 9 | 4 |
+
+Item 5 (the caller-side change) opened and needed 29 lines in all, not split into understanding and validation on this page. Missed dependencies, correctness and necessary expansion cannot be derived: the reading was the implementer's own, with no reference answer to compare against.
+
 - Purpose: act on the five suggestions of the Nov 8 external review of devel
   against its Nov 6 review (`cb51d1cd6`), which found the write-back
   ownership pilot ([Task DM](writeback-ownership-20261105.md), the `ready`
