@@ -26,7 +26,7 @@ Symptom → file → tests (`python3 scripts/tests_for.py client/efs_fuse.<file>
 | Append reservation, publication, pressure flush and background worker | `append.c` | `append.h` | — | `.append` (5) |
 | WRITE admission, store, buffer, FSYNC, FLUSH | `write.c` | `write.h` | — | `.write` (2) |
 | CREATE, MKDIR, UNLINK, STATFS, chmod/chown, SYMLINK, LINK, utimens, TRUNCATE | `namespace.c` | `namespace.h` | — | `.namespace` (5) |
-| RELEASE (last-close lease edge, `CLOSE_ADMIT_SPINS`), control drain, RENAME, LSEEK | `release.c` | `release.h` | — | `.release` (4); the retained-release table and its drain are `open.c`, `.open` |
+| RELEASE (last-close lease edge, `CLOSE_ADMIT_SPINS`), control drain, RENAME, LSEEK | `release.c` | `release.h` | — | `.release` (5); the retained-release table and its drain are `open.c`, `.open` |
 | POSIX locks, flock, `FUSE_INIT`, readiness pipe | `plock_init.c` | `plock_init.h` | `g_fuse_ready_wr` | none routed; the flock release test is under `.release` |
 | LOOKUP, SETATTR, deep-callback sampling | `lookup.c` | `lookup.h` | — | `.lookup` (1) |
 | The `ll_*_run` operation bodies (xattr, opendir, read/readdir dispatch) | `ll_run.c` | `ll_run.h` | — | `.ll_run` (2) |
@@ -86,7 +86,7 @@ compile).
 
 ## Tests
 
-- `python3 scripts/tests_for.py client/efs_fuse` lists all 54 rows; the dotted
+- `python3 scripts/tests_for.py client/efs_fuse` lists all 55 rows; the dotted
   forms above select one file's rows (add `--run` after `make all`).
 - Gate evidence for the split:
   [efs-fuse-split-20261104](../../../docs/status/2026-11/efs-fuse-split-20261104.md);
