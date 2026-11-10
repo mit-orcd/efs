@@ -278,7 +278,8 @@ static void test_drain_across_stop(void)
     /* A drain waiting when the workers are stopped: the in-flight PUT ends,
      * the stop joins after it, the drain returns its error, the pool is
      * unstarted again. */
-    pthread_t ts, tstop;
+    pthread_t t, ts, tstop;
+    struct writer w;
     int sync_rc = -999;
     block_put(&t, &w, 9);
     assert(!pthread_create(&ts, NULL, sync_run, &sync_rc));
