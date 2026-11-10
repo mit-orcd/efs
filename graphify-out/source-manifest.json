@@ -151,6 +151,13 @@
     "scripts/evidence/ff/forced_loop.sh": 2,
     "scripts/evidence/ff/halted_strand.py": 2,
     "scripts/evidence/ff/port_range.py": 2,
+    "scripts/evidence/fi/fi_ab.sh": 1,
+    "scripts/evidence/fi/fi_build.sh": 5,
+    "scripts/evidence/fi/fi_cluster.sh": 4,
+    "scripts/evidence/fi/fi_quiet.sh": 2,
+    "scripts/evidence/fi/fi_run.sh": 3,
+    "scripts/evidence/fi/fi_sample.py": 6,
+    "scripts/evidence/fi/fi_summarize.py": 5,
     "scripts/evidence/fin/fin_accounting_audit.py": 1,
     "scripts/evidence/fin/fin_accounting_controls.py": 2,
     "scripts/evidence/fin/fin_accounting_gate.sh": 11,
@@ -1685,6 +1692,13 @@
     "scripts/evidence/ff/forced_loop.sh": "e1aef55dd3ece45edf72ef390af8afb08eee2778e11fb4fb3ba3d1d3296e9d9a",
     "scripts/evidence/ff/halted_strand.py": "064ea9b3a0e2feb861c69c15c6d3dda4319e7ad1a326697b9a68a2aaca0d9480",
     "scripts/evidence/ff/port_range.py": "55d3e6f3f2809961a63a9f606d5f74520cccdfcfa7289fd38e7c2681b9096b7c",
+    "scripts/evidence/fi/fi_ab.sh": "cdae18e9347c5521b31b1cf90bd3cf8a4065f85475e37318c0fb119fdff05d29",
+    "scripts/evidence/fi/fi_build.sh": "f96bf7e3a3803a956a12eabda4266f5104538fe512031f4345e9cf1294895ec3",
+    "scripts/evidence/fi/fi_cluster.sh": "1b5b210ac55e6c22b35afcf960d0dc8612f6a81b767219f170086ecda499a190",
+    "scripts/evidence/fi/fi_quiet.sh": "44405fc7ee5239a8bcc07a3734d915329e07653b62d19c4bee539c8a5dad9bc6",
+    "scripts/evidence/fi/fi_run.sh": "faadfb13b21fb3fdbd72b3f775bba5157778f68dae91022820f2c80ddfbbdc53",
+    "scripts/evidence/fi/fi_sample.py": "bdfa406d6794c29c110b1ff502472d7b2a303ccb9eb9e5a47f2b11920cf4bf24",
+    "scripts/evidence/fi/fi_summarize.py": "b2aa81a4b1fdd69bb44b83a5d77f9c6f60ab98786e605a01f4517318eb305b4b",
     "scripts/evidence/fin/fin_accounting_audit.py": "221499c149c00c7301fbc221d54b12a8e4daae5d30b34a1bbb175c9d85d86cf4",
     "scripts/evidence/fin/fin_accounting_controls.py": "266e49372c6cc9ad580915fbbf53c4462b33de06930fb85982e69f495f016706",
     "scripts/evidence/fin/fin_accounting_gate.sh": "f77641c01d76742a2e70a543fd6a80ad1d6922f73bd167309892ddb6e9f139d3",
@@ -3044,10 +3058,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1812
+    "calls": 1816
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "3faf596e70b6f805f44d8f0c2ade5d47c0f0b740"
+  "source_commit": "c6f97e67035e221368a79c524f8c99a0108d0928"
 }
