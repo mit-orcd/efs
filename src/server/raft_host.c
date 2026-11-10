@@ -92,6 +92,7 @@ _Static_assert(EFS_RAFT_STATUS_PEERS == EFS_RAFT_MAX_PEERS,
 #define HOST_NGROUPS       2
 /* High bit of a member-forwarded submit's group byte (host_rpc_submit). */
 #define HOST_SUBMIT_FORWARDED 0x80u
+#define HOST_VIEW_TRIES    64 /* odd v_seq loads before a reader waits on view_mu */
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
 /* W159: the whole applied-wait for an own entry, however much the apply
  * progresses (apply_wait.h): five grants. It must end well inside the
@@ -435,6 +436,10 @@ struct efs_raft_host {
     char mdraft[EFS_MAX_PATH];
     struct host_group g[HOST_NGROUPS];
     pthread_mutex_t mu;
+    /* Leaf lock held by host_publish_view across its atomic stores only,
+     * never across the getters; a reader that keeps finding v_seq odd waits
+     * on it instead of spinning. */
+    pthread_mutex_t view_mu;
     pthread_mutex_t snap_mu; /* snapshot file/view; never taken under h->mu
                               * from the GC thread. The pump may hold h->mu
                               * then snap_mu. */
@@ -4320,6 +4325,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     int role, leader, rpend, rdone, proven_done, changed;
 
     if (!r) {
+        pthread_mutex_lock(&h->view_mu);
         __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_SEQ_CST);
         if (V_LOAD(g->v_has))
             V_STORE(g->v_stamp, V_LOAD(g->v_stamp) + 1);
@@ -4330,6 +4336,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
         V_STORE(g->v_proven_index, 0);
         V_STORE(g->v_read_context, 0);
         __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_RELEASE);
+        pthread_mutex_unlock(&h->view_mu);
         return;
     }
     commit = efs_raft_commit(r);
@@ -4360,6 +4367,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
      * neither a sequence write nor cache-line invalidation. */
     if (!changed)
         return;
+    pthread_mutex_lock(&h->view_mu);
     __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_SEQ_CST);
     V_STORE(g->v_read_context, read_context);
     V_STORE(g->v_commit, commit);
@@ -4380,6 +4388,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     if (changed)
         V_STORE(g->v_stamp, V_LOAD(g->v_stamp) + 1);
     __atomic_add_fetch(&g->v_seq, 1, __ATOMIC_RELEASE);
+    pthread_mutex_unlock(&h->view_mu);
 }
 
 static void host_publish_group(struct efs_raft_host *h, uint8_t group)
@@ -4390,7 +4399,14 @@ static void host_publish_group(struct efs_raft_host *h, uint8_t group)
             host_publish_view(h, i);
 }
 
-/* Coherent snapshot: round, term and completion must come from one publish. */
+/* Coherent snapshot: round, term and completion must come from one publish.
+ * host_view_get returns fields of exactly one host_publish_view. After
+ * HOST_VIEW_TRIES odd v_seq loads in a row (a publisher is inside its
+ * window) the reader waits on view_mu, which the publisher holds only for
+ * that window, so a preempted publisher is never starved by readers (K107:
+ * under TSan 20 to 66 spinning readers kept the publisher's second v_seq
+ * increment waiting on the sanitizer's lock for that word) and the wait ends
+ * when the publisher finishes. The uncontended read takes no lock. */
 struct host_view {
     int has, role, leader, read_pending, read_done, proven_done;
     uint32_t voters;
@@ -4405,10 +4421,17 @@ static void host_view_get(struct efs_raft_host *h, uint8_t group,
     struct host_group *g = group_slot(h, group);
 
     uint64_t seq;
+    unsigned odd = 0;
 retry:
     seq = g ? __atomic_load_n(&g->v_seq, __ATOMIC_ACQUIRE) : 0;
-    if (seq & 1)
+    if (seq & 1) {
+        if (++odd >= HOST_VIEW_TRIES) {
+            pthread_mutex_lock(&h->view_mu);
+            pthread_mutex_unlock(&h->view_mu);
+            odd = 0;
+        }
         goto retry;
+    }
     memset(v, 0, sizeof(*v));
     v->leader = -1;
     if (!g)
@@ -13907,6 +13930,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->boot_id = s->incarnation;
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
+    pthread_mutex_init(&h->view_mu, NULL);
     pthread_mutex_init(&h->snap_mu, NULL);
     pthread_mutex_init(&h->mb_mu, NULL);
     pthread_cond_init(&h->mb_cv, NULL);
@@ -14189,6 +14213,7 @@ void server_raft_host_stop(void)
     efs_raft_disk_close(h->disk);
     efs_kv_lsm_close(h->kv);
     pthread_mutex_destroy(&h->mu);
+    pthread_mutex_destroy(&h->view_mu);
     pthread_mutex_destroy(&h->snap_mu);
     pthread_mutex_destroy(&h->wait_mu);
     pthread_mutex_destroy(&h->inbox_mu);
