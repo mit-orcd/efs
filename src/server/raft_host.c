@@ -19637,10 +19637,11 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
         rc=efs_meta_finish_append_fenced(h->kv,ino,generation,offset,cmd+1,
                                         rd32be(cmd+17),&tx,&host_append_ops,&ctx,&wait);
     }
-    /* A dead inode still owes REAP_MULTI; absence is never empty-phase proof.
+    /* NOT_FOUND is never empty-phase proof. A dead inode's rows of this
+     * session are deleted by the step itself (K42: no wait for REAP_MULTI).
      * K42: a step that committed nothing names why (foreign OPEN append,
-     * frontier, aborted PREPARE, REAP owed), so the coordinator may repeat
-     * it; an uncertain transaction keeps a bare BUSY. */
+     * frontier, aborted PREPARE), so the coordinator may repeat it; an
+     * uncertain transaction keeps a bare BUSY. */
     if(rc==EFS_ERR_NOT_FOUND)rc=EFS_ERR_BUSY;
     if(rc==EFS_ERR_BUSY && wait!=EFS_META_APPEND_WAIT_NONE)
         *empty=EFS_MD_SESSION_APPEND_RETRY_SALT+wait;

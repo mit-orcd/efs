@@ -434,6 +434,61 @@ int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
 }
 
 
+/* K42: the inode is gone, so REAP_MULTI owes the rows of every session on
+ * it, but its only driver is the group leader's GC pass, one queue for every
+ * dead inode of the cluster: a revoke that waited for it spent its whole
+ * budget behind that queue. This session's own rows (its receipt and its
+ * reservations, one transaction of at most APPEND_DEAD_PAGE) need no reaper:
+ * delete them here, guarded by the inode's absence. REAP_MULTI deletes the
+ * same keys from its list later; a key that is already gone is not an error
+ * there. Other sessions' rows stay with the reaper. Rows the reaper took
+ * first are progress too: no transaction when none is left. */
+#define APPEND_DEAD_PAGE 11 /* + the inode image: the 12 images one shard takes */
+struct dead_scan {struct finish_capture *capture;const uint8_t *uuid;uint32_t epoch,count;int rc;};
+static int dead_row(void *user,const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl)
+{
+    struct dead_scan *s=user;uint32_t epoch=0,slot;const uint8_t *owner;
+    if(key[2]==EFS_KV_KIND_APPEND_RSV) {
+        if(kl!=27 || vl!=48 || val[44]>1){s->rc=EFS_ERR_PROTO;return 1;}
+        owner=val+16;for(unsigned i=32;i<36;i++)epoch=epoch<<8|val[i];
+    } else {
+        if(kl!=31 || !vl || vl>EFS_OPID_VAL_MAX){s->rc=EFS_ERR_PROTO;return 1;}
+        owner=key+11;for(unsigned i=27;i<31;i++)epoch=epoch<<8|key[i];
+    }
+    if(memcmp(owner,s->uuid,16) || epoch!=s->epoch)return 0;
+    s->rc=finish_record(s->capture,key,kl,val,vl,&slot);
+    if(s->rc!=EFS_OK)return 1;
+    s->capture->images[slot].op=EFS_TXN_DEL;s->capture->images[slot].new_len=0;
+    return ++s->count==APPEND_DEAD_PAGE;
+}
+static int retire_dead(struct finish_capture *c,efs_ino_t ino,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,const struct efs_txid *tx,
+    const struct efs_meta_append_ops *ops,void *ctx,unsigned *progress,unsigned *wait)
+{
+    const struct efs_kv_ops capture_ops={.get=finish_get};
+    struct efs_kv capture={.ops=&capture_ops,.ctx=c};
+    struct efs_meta_row row;
+    *progress=0;efs_meta_append_cleanup_why="dead-capture";
+    /* First read: finish_execute freezes the (absent) inode as image 0. */
+    int rc=efs_meta_apply_get_inode(&capture,ino,&row);
+    if(rc==EFS_OK)return EFS_ERR_BUSY; /* re-created: not a certified no-op */
+    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    struct dead_scan scan={.capture=c,.uuid=uuid,.epoch=epoch};
+    uint8_t prefix[EFS_KV_KEY_MAX];uint32_t plen;
+    rc=efs_kv_key_inode(efs_kv_inode_shard(ino),ino,prefix,&plen);
+    static const uint8_t kinds[2]={EFS_KV_KIND_APPEND_RSV,EFS_KV_KIND_APPEND_RECEIPT};
+    for(unsigned k=0;k<2 && rc==EFS_OK && scan.count<APPEND_DEAD_PAGE;k++) {
+        prefix[2]=kinds[k]; /* all generations: the inode row is gone */
+        rc=efs_kv_scan_prefix(c->base,prefix,plen,dead_row,&scan);
+        if(rc==1)rc=EFS_OK;
+        if(rc==EFS_OK)rc=scan.rc;
+    }
+    if(rc==EFS_OK && !scan.count){*progress=1;return EFS_OK;} /* the reaper took them */
+    if(rc==EFS_OK)rc=finish_refusal(c,finish_execute(c,tx,ops,ctx),wait);
+    if(rc==EFS_OK)*progress=scan.count;
+    return rc;
+}
+
 int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t generation,
     uint64_t offset,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
     const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx,
@@ -450,7 +505,11 @@ int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t gener
     struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
     struct efs_meta_row row;
     rc=efs_meta_apply_get_inode(&capture,ino,&row);
-    if(rc==EFS_ERR_NOT_FOUND)*wait=EFS_META_APPEND_WAIT_GONE;
+    if(rc==EFS_ERR_NOT_FOUND) {
+        unsigned progress;
+        rc=retire_dead(&c,ino,uuid,epoch,t,ops,ctx,&progress,wait);
+        finish_free(&c);return rc;
+    }
     if(rc==EFS_OK && row.generation!=generation)rc=EFS_ERR_STALE;
     uint8_t key[EFS_KV_KEY_MAX],value[48];uint32_t kl=0,vl=sizeof(value);
     if(rc==EFS_OK)rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,generation,offset,key,&kl);
@@ -684,7 +743,11 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     efs_ino_t ino=0;for(unsigned i=3;i<11;i++)ino=ino<<8|selected.key[i];
     uint64_t watermark=0;uint32_t open=0;
     rc=efs_meta_apply_append_state(kv,ino,&watermark,NULL,&open);
-    if(rc==EFS_ERR_NOT_FOUND)*wait=EFS_META_APPEND_WAIT_GONE;
+    if(rc==EFS_ERR_NOT_FOUND) {
+        struct finish_capture c={.base=kv};
+        rc=retire_dead(&c,ino,uuid,epoch,tx,ops,ctx,progress,wait);
+        finish_free(&c);return rc;
+    }
     if(rc!=EFS_OK)return rc;
     if(watermark && !open) {
         /* Interrupted REPORT completed its inode rows but still owes lane

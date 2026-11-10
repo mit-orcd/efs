@@ -1261,6 +1261,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_bookkeeping.py
 	python3 tests/test_k34_stop_put.py
 	python3 tests/test_k42_peer_stop_open.py
+	python3 tests/test_k42_reap_owed.py
 	python3 tests/test_k54_member_down_fence.py
 	python3 tests/test_k54_member2_unmount.py
 	python3 tests/test_k38_shared_chunk_pressure.py

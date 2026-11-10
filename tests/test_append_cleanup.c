@@ -305,6 +305,97 @@ static void foreign_open_wait(void)
  efs_kv_mem_free(kv);
 }
 
+/* K42 (reopened Nov 10): the inode is gone and REAP_MULTI still owes its rows.
+ * The revoke's own session must not wait for that reaper (one queue for all
+ * dead inodes of the cluster): one cleanup step deletes all of that session's
+ * rows of the dead inode (receipt and reservations) in one transaction, the
+ * shard becomes idle, and the other session's rows stay for the reaper, which
+ * still completes the inode (also from a list built before the step, and
+ * when it runs between the step's PREPARE and its decision). */
+static unsigned dead_rows(struct efs_kv *kv,efs_ino_t ino,uint64_t gen)
+{
+ struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX];uint32_t n=0;
+ assert(efs_meta_reap_select(kv,ino,gen,keys,&n)==EFS_OK);return n;
+}
+static efs_ino_t reap_ino;static uint64_t reap_gen;static uint32_t reap_n;
+static struct efs_meta_reap_key reap_list[EFS_META_REAP_BATCH_MAX];static int reap_rc=-99;
+static int decide_reaping(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
+{reap_rc=efs_meta_apply_reap_batch(ctx,reap_ino,reap_gen,reap_list,reap_n);return decide(ctx,t,p,d);}
+static const struct efs_meta_append_ops reaping={prepare,decide_reaping,resolve};
+/* Two appends of session 42 and two of 43 on one file, 42 fenced, file unlinked. */
+static struct efs_kv *dead_fixture(efs_ino_t *ino,uint64_t *gen,uint64_t *first)
+{
+ struct efs_kv *kv=fixture(ino,gen);uint32_t shard=efs_kv_inode_shard(*ino);
+ struct efs_opid_req a=identity(42,1,0),a2=identity(42,2,1),b=identity(43,1,0),b2=identity(43,2,1);
+ *first=grant(kv,*ino,&a);assert(complete(kv,*ino,*first,&a)==EFS_OK);
+ uint64_t o=grant(kv,*ino,&a2);assert(complete(kv,*ino,o,&a2)==EFS_OK);
+ o=grant(kv,*ino,&b);assert(complete(kv,*ino,o,&b)==EFS_OK);
+ o=grant(kv,*ino,&b2);assert(complete(kv,*ino,o,&b2)==EFS_OK);
+ reap_ino=*ino;reap_gen=*gen;reap_n=0;
+ assert(efs_meta_reap_select(kv,*ino,*gen,reap_list,&reap_n)==EFS_OK && reap_n>=6);
+ assert(efs_session_fence_local(kv,shard,a.id.client_uuid,2)==EFS_OK);
+ assert(efs_meta_apply_unlink(kv,EFS_ROOT_INO,"file",3)==EFS_OK);
+ struct efs_meta_row row;
+ assert(efs_meta_apply_get_inode(kv,*ino,&row)==EFS_ERR_NOT_FOUND);
+ return kv;
+}
+static void dead_inode_retired(void)
+{
+ efs_ino_t ino;uint64_t gen,off;struct efs_kv *kv=dead_fixture(&ino,&gen,&off);
+ uint32_t shard=efs_kv_inode_shard(ino);unsigned progress=9;int idle=7;
+ uint8_t uuid[16]={42};
+ assert(efs_meta_append_session_idle(kv,shard,uuid,1,&idle)==EFS_OK && !idle);
+ /* One step: all of session 42's rows of the inode (2 reservations, receipt). */
+ struct efs_txid t=next_tx();append_wait=99;
+ assert(efs_meta_retire_append_session(kv,shard,uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_OK);
+ assert(append_wait==EFS_META_APPEND_WAIT_NONE && progress==3);
+ assert(efs_meta_append_session_idle(kv,shard,uuid,1,&idle)==EFS_OK && idle);
+ t=next_tx();
+ assert(efs_meta_retire_append_session(kv,shard,uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_OK && !progress);
+ /* Session 43's rows stay for the reaper; its list, built before the step,
+  * still completes the inode. */
+ assert(dead_rows(kv,ino,gen)==reap_n-3);
+ assert(efs_meta_apply_reap_batch(kv,ino,gen,reap_list,reap_n)==EFS_OK);
+ assert(!dead_rows(kv,ino,gen));
+ /* Nothing left (the reaper was first): a fenced step on the gone row is OK. */
+ t=next_tx();append_wait=99;
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,off,uuid,1,&t,&ops,kv,&append_wait)==EFS_OK);
+ assert(append_wait==EFS_META_APPEND_WAIT_NONE && efs_meta_apply_check(kv)==EFS_OK);
+ efs_kv_mem_free(kv);
+
+ /* The reaper applies between PREPARE and the decision. */
+ kv=dead_fixture(&ino,&gen,&off);reap_rc=-99;
+ t=next_tx();append_wait=99;
+ int rc=efs_meta_retire_append_session(kv,shard,uuid,1,&t,&reaping,kv,&progress,&append_wait);
+ /* The prepared intents hold the keys: the reaper is refused (it keeps its marker). */
+ assert(rc==EFS_OK && progress==3 && reap_rc==EFS_ERR_BUSY);
+ for(unsigned i=0;i<4 && !(efs_meta_append_session_idle(kv,shard,uuid,1,&idle)==EFS_OK && idle);i++) {
+  t=next_tx();
+  assert(efs_meta_retire_append_session(kv,shard,uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_OK);
+ }
+ assert(efs_meta_append_session_idle(kv,shard,uuid,1,&idle)==EFS_OK && idle);
+ assert(efs_meta_apply_reap_batch(kv,ino,gen,reap_list,reap_n)==EFS_OK);
+ assert(!dead_rows(kv,ino,gen) && efs_meta_apply_check(kv)==EFS_OK);
+ efs_kv_mem_free(kv);
+
+ /* An OPEN reservation of the revoked session on a dead inode. */
+ kv=fixture(&ino,&gen);shard=efs_kv_inode_shard(ino);
+ struct efs_opid_req a=identity(42,1,0);
+ off=grant(kv,ino,&a);
+ assert(efs_session_fence_local(kv,shard,uuid,2)==EFS_OK);
+ assert(efs_meta_apply_unlink(kv,EFS_ROOT_INO,"file",3)==EFS_OK);
+ struct efs_meta_row row;assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_ERR_NOT_FOUND);
+ efs_ino_t sel;uint64_t sgen,soff;unsigned found=0;
+ assert(efs_meta_append_session_next(kv,shard,uuid,1,&sel,&sgen,&soff,&found)==EFS_OK &&
+        found && sel==ino && sgen==gen && soff==off);
+ t=next_tx();append_wait=99;
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,off,uuid,1,&t,&ops,kv,&append_wait)==EFS_OK);
+ assert(append_wait==EFS_META_APPEND_WAIT_NONE);
+ assert(efs_meta_append_session_idle(kv,shard,uuid,1,&idle)==EFS_OK && idle);
+ assert(!dead_rows(kv,ino,gen));
+ efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
  fenced_lost_reply();
@@ -312,7 +403,9 @@ int main(void)
  completed_then_cleanup();
  live_owner_untouched();
  foreign_open_wait();
+ dead_inode_retired();
  puts("append cleanup (K15/W64): lost reply retired by fence or abandon, frontier advances, late completion/replay refused, completion never overtaken, live owner untouched PASS");
+ puts("append cleanup (K42 reopened): a dead inode's rows of the revoked session are deleted by the step itself, not left to the reaper; the other session's rows and the reap completion stay PASS");
  puts("append cleanup (K42): revoked receipt waits on a foreign OPEN (named), aborted PREPARE named (also with a failed ABORT decide), retired after the foreign REPORT PASS");
  return 0;
 }
