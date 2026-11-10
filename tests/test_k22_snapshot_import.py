@@ -38,6 +38,8 @@ SNAP_BYTES = int(os.environ.get('K22_SNAP_BYTES', str(1 << 20)))  # fault knob, 
 STOP_DEADLINE = int(os.environ.get('K22_STOP_DEADLINE', '900'))
 CATCH_BOUND = int(os.environ.get('K22_CATCH_BOUND', '300'))
 DRAIN_BOUND = int(os.environ.get('K22_DRAIN_BOUND', '600'))
+BIG_RING = int(os.environ.get('K22_BIG_RING', '32'))  # files each 4 MiB writer keeps: 2 x 32 x 4 MiB, far below the quota
+QUOTA = os.environ.get('K22_QUOTA', '1G')            # per member; a small one checks the ring in a short run
 RSS_FACTOR = float(os.environ.get('K22_RSS_FACTOR', '3'))       # peak <= factor * warm max
 RSS_SLACK = int(os.environ.get('K22_RSS_SLACK', str(512 << 20)))  # + absolute slack
 WRITE_BYTES = 2048
@@ -129,13 +131,27 @@ stop_load = threading.Event()
 write_errors = []
 
 
-def writer(mnt, tag, fsize=WRITE_BYTES, cap=800):
+def writer(mnt, tag, fsize=WRITE_BYTES, cap=800, ring=0):
+    """ring > 0 keeps only the last `ring` files: the stall must outlast
+    several snapshot windows, so a writer that kept every file would fill
+    the store quota long before (batch D H15, ENOSPC at 5,618 s)."""
     n = 0
     base = Path(mnt.path) / f'w-{tag}'
     base.mkdir()
     while not stop_load.is_set() and n < cap:
         n += 1
         name = base / f'f{n:06d}'
+        if ring and n > ring:
+            old = base / f'f{n - ring:06d}'
+            with wlock:
+                written.pop(str(old), None)
+            try:
+                os.unlink(old)
+            except FileNotFoundError:
+                pass                # its write failed, nothing was kept
+            except OSError as e:
+                with wlock:
+                    write_errors.append(f'{tag}/{n - ring}: unlink: {e} at t={time.time()-t0:.0f}s')
         body = payload(str(name), fsize)
         op = 'open'
         fd = None
@@ -192,7 +208,7 @@ try:
     assert fuse_ok(), 'NOTRUN: no FUSE (/dev/fuse, fusermount3 or efs-fuse missing)'
     c = Cluster('snapimp', [1, 2, 3])
     for i in (1, 2, 3):
-        c.start(i, join=1 if i > 1 else None)
+        c.start(i, join=1 if i > 1 else None, quota=QUOTA)
     for i in (1, 2, 3):
         c.wait_log(i, r'raft-host: formed: 3 members', timeout=120)
     c.wait_voters([1, 2, 3], lambda i, v: v == {0: (1, 7), 2: (1, 7)})
@@ -200,7 +216,7 @@ try:
     m = Mount(c, 1, 'mnt-a')
     mounts.append(m)
     threads = [threading.Thread(target=writer, args=(m, 'payload'), kwargs={'fsize': WRITE_BYTES, 'cap': 800}, daemon=True)]
-    threads += [threading.Thread(target=writer, args=(m, f'big{k}'), kwargs={'fsize': 4 << 20, 'cap': 100000}, daemon=True)
+    threads += [threading.Thread(target=writer, args=(m, f'big{k}'), kwargs={'fsize': 4 << 20, 'cap': 100000, 'ring': BIG_RING}, daemon=True)
                 for k in range(2)]
     threads += [threading.Thread(target=bench_loop, args=(c, k), daemon=True)
                 for k in range(4)]
