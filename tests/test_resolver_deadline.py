@@ -79,7 +79,7 @@ int main(void)
 # Include the actual pool checkout against the actual resolver/connection code:
 # a hung NSS call must inherit checkout's local limit even without a parent RPC.
 node=(root/'src/client/node_cache.c').read_text();a=node.index('struct efs_conn *efs_client_conn_get(')
-checkout=node[a:node.index('\n}',a)+2].replace('+ 5000','+ 50')
+checkout=node[a:node.index('\n}',a)+2].replace('+ EFS_NODE_ADMISSION_MS','+ 50')
 stubs=r'''
 struct efs_client g_client;
 static int64_t monotonic_ms(void) {return (int64_t)resolver_now_ms();}
