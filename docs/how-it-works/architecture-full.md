@@ -12579,9 +12579,14 @@ experiment whose benefit must be measured against these ceilings.
 
 #### October 7 benchmark review
 
-Raw I/O workers wait on private release gates after a shared readiness barrier.
-This avoids a shared-mutex release convoy at QD256. Results retain the idle-worker
-failure gate and report `max_start_us`, the largest release-to-work delay.
+Raw I/O workers wait on one write-held rwlock after a shared readiness barrier,
+and a single unlock releases them all, without a shared-mutex release convoy at
+QD256 (Task FB, Nov 9: the private per-worker release gates used before then made
+the main thread take a CPU slice per wakeup). The timed window closes `--time`
+after the last worker starts, so `wall_s` includes the start ramp and every
+worker completes at least one operation; slow scheduling shows in `wall_s` and
+`max_start_us`, the largest release-to-work delay, instead of as idle workers.
+`idle_workers` now counts only workers whose first operation failed.
 Initially empty windows report `allocation=allocate_then_overwrite`, with
 `allocation_ops` and `overwrite_ops`; most long buffered runs reuse warm pages.
 Their throughput is page-cache acceptance, not a sustained physical-media ceiling.

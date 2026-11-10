@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `fbf5d59664291f9cb6d8d19fd41a2cab49d71731`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 18,576 nodes, 77,721 directed typed edges, 553 communities.
+Source base: `08c1b03d49a5099a37e5a2110c0723bc5298e2af`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 18,596 nodes, 77,766 directed typed edges, 570 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,27 +19,27 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27585
+- `calls`: 27586
 - `case_of`: 118
-- `contains`: 27481
+- `contains`: 27503
 - `contract`: 44
 - `defines`: 1984
 - `documents_finding`: 8
 - `exercises`: 7
 - `guided_by`: 178
 - `implemented_by`: 138
-- `imports`: 8121
-- `imports_from`: 997
-- `indirect_call`: 752
+- `imports`: 8135
+- `imports_from`: 1001
+- `indirect_call`: 750
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 3538
+- `mentions_symbol`: 3539
 - `method`: 645
-- `rationale_for`: 1414
+- `rationale_for`: 1417
 - `references`: 2221
-- `references_path`: 1261
+- `references_path`: 1262
 - `regression_for`: 8
-- `tested_by`: 1098
+- `tested_by`: 1099
 - `uses`: 96
 
 ## Extraction warnings
