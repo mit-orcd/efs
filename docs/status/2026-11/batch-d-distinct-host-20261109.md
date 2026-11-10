@@ -41,7 +41,7 @@ Hosts: fcstor010-014, AMD EPYC 7402P (24 CPUs), 250 GB, RHEL 9 (5.14.0-687.39.1.
 
 ## Candidate status
 
-`9bb50fe79` is no longer the release candidate: K38 recurred on orcd-mini, K102 is new and K32 may reopen (batch O, Task EW). Every PASS here is "on candidate `9bb50fe79`". No K row becomes VERIFIED from this batch (the starting session's rule, Nov 10): a row whose D acceptance these runs meet keeps its status and gains a dated clause "batch D on 9bb50fe79 (Nov 9/10): <cell or run> <transport> <result>; VERIFIED on the final candidate's batch D". The final candidate's batch D reruns the cells and own runs.
+`9bb50fe79` is no longer the release candidate: K38 recurred on orcd-mini, K102 is new and K32 may reopen (batch O, Task EW). Every PASS here is "on candidate `9bb50fe79`". K rows (the coordinator's rule, Nov 10): a row whose whole stated acceptance these runs meet becomes VERIFIED "on candidate `9bb50fe79`"; a row with acceptance still owed (another batch, or a part these runs did not cover) keeps its status and gains a dated clause naming what batch D proved; a product failure gets a new row in K110-K119. The cells and own runs that the candidate's fixes touch rerun on the fixed candidate.
 
 ## Results: TCP
 
