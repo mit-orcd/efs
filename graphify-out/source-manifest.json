@@ -380,6 +380,7 @@
     "scripts/task_i_host_sample.py": 6,
     "scripts/tests_for.py": 14,
     "scripts/unread_fields.py": 1,
+    "scripts/wave_gate.sh": 3,
     "src/bench/bench_local.c": 27,
     "src/bench/bench_local.h": 0,
     "src/bench/blake3_bench.c": 10,
@@ -1516,7 +1517,8 @@
     "docs/how-it-works/protocols/sessions.md": "ee8ad4fe9b5b66a970ad41ce6cc0806a0050bb96eefc2548dbc3c97c276f68c4",
     "docs/how-it-works/protocols/transactions.md": "5e1989bad26f62d59d69d697a83ace63716ff8d13d7b992d63cdab1be1011077",
     "docs/how-it-works/settings.md": "9d5c617b7caa40ff7efb6381817d37efe820528e637382e3354c7e1a82176048",
-    "docs/how-it-works/testing.md": "1a9b15c138ad86fa23863909b71f36139829b7fa0992db80fab99c03ae7630ef",
+    "docs/how-it-works/test-hosts.md": "547f6ac6907173e8e1f0d6cd7f875bd156615030bc11882d9cce1f167bb74821",
+    "docs/how-it-works/testing.md": "a5b306a3e030938bfc7ca3b6091d901194ae8eff4824f1b46f9f30e5af01ba67",
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
     "docs/status/2026-10/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
@@ -1914,6 +1916,7 @@
     "scripts/task_i_host_sample.py": "9036b4ca526097659cc6f5da69585cdd338bc67a99c942ae48c0df95c88df8a7",
     "scripts/tests_for.py": "6079dcde376ff1ca7f49d966a716844a34d2a19252dca8d0364871ffc48e3aa2",
     "scripts/unread_fields.py": "dcf83d2632b8c2bb4d37145a139d8551592b5fcc086082608f982cb977c1a387",
+    "scripts/wave_gate.sh": "4642adc2dc8da1575a793a35653f80518e6298b61ba8363c211d873a62e7916b",
     "src/bench/README.md": "a8e7b52e689451863d21864524d322d1e7dbcb4c81ffcdd3ce056de974544ed4",
     "src/bench/bench_local.c": "6d65c40916be1abf3f060a7a4f0c87837c0de4b64cb5c911cb64c82acee5624c",
     "src/bench/bench_local.h": "bd4897d31dc49a670592d995ac0704915fdb87c29aae185f9895aafc7f8d99ad",
@@ -3049,5 +3052,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "9553902fee634d57f044a539c3cc223470c80a33"
+  "source_commit": "85f24a4e89bade53898e893c5995b1b8f4635faf"
 }
