@@ -1678,6 +1678,18 @@ static int follower_busy(struct efs_raft *r)
     return unapplied_at(r, last_i) + EFS_RAFT_AE_MAX > r->max_unapplied;
 }
 
+/* K103: the zero-prefix leadership contact broadcast_read_probe sends: marked
+ * vote_granted, no entries, no prefix, no commit. It proves only that the
+ * sender leads this term and names no log position, so a snapshot cannot make
+ * its prefix stale and it never asks for a rebase. The read-round context in
+ * last_log_index is not part of the test: the leader stamps none once the
+ * round has its quorum, and the follower's answer is the same either way. */
+static int is_read_probe(const struct efs_raft_msg *in)
+{
+    return in->vote_granted == 1 && !in->nentries && !in->prev_index &&
+           !in->prev_term && !in->leader_commit;
+}
+
 static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
 {
     struct efs_raft_msg m;
@@ -1718,8 +1730,10 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
      * already be compacted. Appending that missing prefix would fail the
      * store's index check and permanently fence an otherwise healthy
      * replica. Ask the leader to rebase at the committed snapshot boundary;
-     * do not import, append, truncate or apply anything from this request. */
-    if (in->prev_index < r->snap_idx) {
+     * do not import, append, truncate or apply anything from this request.
+     * A zero-prefix read probe carries no entries and no commit (K103): there
+     * is nothing to rebase, so it takes the success path below. */
+    if (in->prev_index < r->snap_idx && !is_read_probe(in)) {
         m.success = 0;
         m.match_index = r->snap_idx;
         ae_reject_note(r, in, last_i, "prev-compacted");
@@ -1970,8 +1984,12 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         /* Queue the next batch before apply. The sender thread writes
          * it while apply still holds the lock, so the round trip
          * overlaps the apply. send_ae will not start a second batch
-         * while this one is in flight. */
-        if (r->next_index[in->from] <= r->match_index[r->id])
+         * while this one is in flight. A probe ack that proves nothing new
+         * (K103: every read round's contact, which is a vote_granted echo
+         * with no progress) ships nothing: batches go out on the replies,
+         * proposals and heartbeats that own them. */
+        if (!(in->vote_granted && in->match_index <= old_match) &&
+            r->next_index[in->from] <= r->match_index[r->id])
             (void)send_ae(r, in->from, 1);
         try_commit(r);
         apply_committed(r);
@@ -2049,8 +2067,11 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
          * stranded a resync forever after an election. A valid image is
          * suitable for both cases. Request export outside the byte cadence
          * and send an available image; unavailable exports retain the
-         * normal retry/log path. Success/read probes and capacity BUSY
-         * returned above and never trigger this branch. */
+         * normal retry/log path. Success replies and capacity BUSY returned
+         * above and never trigger this branch. A zero-prefix read probe is
+         * answered with a success even by a compacted follower (K103), so
+         * its reply never reaches here either; a commit probe with a
+         * compacted prefix still can and still rebases the leader. */
         if (ni <= 1) {
             if (r->snap_idx < r->last_applied)
                 r->snap_want = 1;
