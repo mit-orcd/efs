@@ -471,6 +471,9 @@ struct efs_raft_host {
     pthread_t gc_tid;    /* background GC reaper (spec L7) */
     int gc_running;
     int gc_started;
+    pthread_t rec_tid;   /* stranded-txn recovery: own thread, see host_recover_thread */
+    pthread_cond_t rec_cv; /* with rec_mu: cadence wait, woken at shutdown */
+    int rec_started;
     /* Stranded-txn recovery (L5). rec_mark[shard] is the time of the first
      * PREPARE applied on that shard since it was last scanned clean (0 =
      * nothing pending was ever written there). The GC pass scans only
@@ -483,7 +486,7 @@ struct efs_raft_host {
     uint64_t rec_mark[EFS_KV_SHARD_MASK + 1];
     uint64_t rec_generation[EFS_KV_SHARD_MASK + 1];
     uint8_t rec_observed[EFS_KV_SHARD_MASK + 1];
-    uint32_t rec_hot_next, rec_cold_next; /* GC thread owns scan cursors. */
+    uint32_t rec_hot_next, rec_cold_next; /* The recovery thread owns scan cursors. */
     uint64_t rec_found, rec_aborted, rec_resolved, rec_fail, rec_scans;
     /* W83 decision retirement: RETIREs proposed OK / failed, live
      * decisions re-driven by the sweeper, sweeps with a failed RESOLVE. */
@@ -12662,6 +12665,30 @@ static void host_put_drain_pass(struct efs_raft_host *h, uint8_t group, uint32_t
     free(scan);
 }
 
+/* Stranded-transaction recovery runs on its own thread. It used to end every
+ * GC pass, behind the reclaim step whose acceptance waits for every member's
+ * reply, so one halted member (the kernel accepts, nothing answers) delayed a
+ * recovery by the whole step: 29 to 30 s instead of the 5 s record age (K106). */
+static void *host_recover_thread(void *arg)
+{
+    struct efs_raft_host *h = arg;
+
+    while (__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE)) {
+        struct timespec ts;
+
+        host_txn_recover_pass(h);
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_nsec += (long)GC_LOOP_MS * 1000000L;
+        ts.tv_sec += ts.tv_nsec / 1000000000L;
+        ts.tv_nsec %= 1000000000L;
+        pthread_mutex_lock(&h->rec_mu);
+        if (__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
+            pthread_cond_timedwait(&h->rec_cv, &h->rec_mu, &ts);
+        pthread_mutex_unlock(&h->rec_mu);
+    }
+    return NULL;
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -12670,7 +12697,7 @@ static void *host_gc_thread(void *arg)
 
     while (__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE)) {
         int maintenance = efs_iostats_now_us() >= maintenance_at;
-        uint64_t t0, t_orphan = 0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
+        uint64_t t0, t_orphan = 0, t_reap = 0, t_frag = 0, t_spread, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
         struct reap_times reap_times = {0};
         /* Progress: fragments this node removed, plus W124 reap completions
@@ -12761,13 +12788,8 @@ static void *host_gc_thread(void *arg)
         __atomic_store_n(&h->s->gc_stage, 5, __ATOMIC_RELAXED);
         if (maintenance) host_dir_spread_pass(h);
         t_spread = now_us_() - t_spread;
-        t_rec = now_us_();
-        __atomic_store_n(&h->s->gc_stage, 6, __ATOMIC_RELAXED);
-        if (maintenance) {
-            host_txn_recover_pass(h);
+        if (maintenance)
             maintenance_at = efs_iostats_now_us() + (uint64_t)GC_LOOP_MS * 1000;
-        }
-        t_rec = now_us_() - t_rec;
         t_all = now_us_() - t0;
         efs_kv_lsm_scan_stats(&sc_all, 1);
         /* A pass that holds the KV for a while is a periodic stall on
@@ -12781,7 +12803,7 @@ static void *host_gc_thread(void *arg)
          * prefix. `EFS_GC_DBG` prints the line on every pass. */
         if (t_all > 5000 || env_on("EFS_GC_DBG"))
             efs_telemetry_log(0, "raft-host: gc-pass ms=%llu orphan=%llu reap=%llu frag=%llu "
-                    "spread=%llu recover=%llu fscans=%llu fsegs=%llu "
+                    "spread=%llu fscans=%llu fsegs=%llu "
                     "fkeys=%llu femit=%llu ftomb=%llu scans=%llu segs=%llu "
                     "keys=%llu emit=%llu tomb=%llu reap_scan=%llu "
                     "reap_sweep=%llu reap_fence=%llu reap_done=%llu\n",
@@ -12790,7 +12812,6 @@ static void *host_gc_thread(void *arg)
                     (unsigned long long)(t_reap / 1000),
                     (unsigned long long)(t_frag / 1000),
                     (unsigned long long)(t_spread / 1000),
-                    (unsigned long long)(t_rec / 1000),
                     (unsigned long long)sc_frag.scans,
                     (unsigned long long)sc_frag.segs,
                     (unsigned long long)sc_frag.keys,
@@ -13923,6 +13944,7 @@ int server_raft_host_start(struct efsd_server *s)
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
     pthread_mutex_init(&h->rec_mu, NULL);
+    pthread_cond_init(&h->rec_cv, NULL);
     pthread_mutex_init(&h->fin_mu, NULL);
     pthread_cond_init(&h->fin_cv, NULL);
     h->fin = calloc(HOST_FIN_MAX, sizeof(*h->fin));
@@ -14053,6 +14075,11 @@ int server_raft_host_start(struct efsd_server *s)
         __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
     } else {
         h->gc_started = 1;
+        if (efsd_pthread_create(&h->rec_tid, host_recover_thread, h) != 0)
+            efs_telemetry_log(0, "raft-host: txn recovery thread failed; "
+                    "stranded transactions stay pending\n");
+        else
+            h->rec_started = 1;
     }
     /* K33 membership thread: automatic formation, additions, the notice
      * pump, the group-2 copy and the voter reconciler. Without it a node
@@ -14133,8 +14160,13 @@ void server_raft_host_stop(void)
     if (h->mb_started)
         pthread_join(h->mb_tid, NULL);
     __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
+    pthread_mutex_lock(&h->rec_mu);
+    pthread_cond_broadcast(&h->rec_cv);
+    pthread_mutex_unlock(&h->rec_mu);
     if (h->gc_started)
         pthread_join(h->gc_tid, NULL);
+    if (h->rec_started)
+        pthread_join(h->rec_tid, NULL);
     pthread_mutex_lock(&h->fin_mu);
     h->fin_running = 0;
     pthread_cond_broadcast(&h->fin_cv);
@@ -14194,6 +14226,7 @@ void server_raft_host_stop(void)
     pthread_mutex_destroy(&h->inbox_mu);
     pthread_mutex_destroy(&h->outbox_mu);
     pthread_mutex_destroy(&h->rec_mu);
+    pthread_cond_destroy(&h->rec_cv);
     pthread_cond_destroy(&h->applied_cv);
     {
         uint32_t k;

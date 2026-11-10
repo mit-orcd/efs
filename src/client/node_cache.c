@@ -29,12 +29,15 @@
  * meta flushes are not stalled every few seconds by re-probes. */
 #define EFS_NODE_DOWN_MS    30000
 /* While a peer is in that cooldown, one detached thread per peer retries a
- * plain TCP connect at most this often and ends the cooldown when it
- * succeeds. Callers never wait on it, so a blackholed peer still costs no
+ * real exchange (connect and an answered protocol declaration) at most this
+ * often and ends the cooldown when it succeeds. Callers never wait on it, so a blackholed peer still costs no
  * foreground connect timeout, but a restarted peer is used again within
  * about a second instead of after the rest of the 30 s (a create's fsync
  * returned EIO for that remainder whenever placement included the peer). */
 #define EFS_NODE_PROBE_MS   1000
+/* Bound of one checkout's connect + protocol declaration; a probe's real
+ * exchange gets the same. */
+#define EFS_NODE_ADMISSION_MS 5000
 
 static int64_t monotonic_ms(void)
 {
@@ -111,11 +114,13 @@ void efs_client_conn_init(void)
         }
         g_client.node_fail_streak[i] = 0;
         g_client.node_down_until_ms[i] = 0;
+        g_client.node_probe_fd[i] = -1;
         if (!conn_pool_inited) {
             pthread_mutex_init(&g_client.conn_lock[i], NULL);
             pthread_cond_init(&g_client.conn_cv[i], NULL);
         }
     }
+    __atomic_store_n(&g_client.node_probe_stop, 0, __ATOMIC_SEQ_CST);
     conn_pool_inited = 1;
 }
 
@@ -538,30 +543,6 @@ int efs_client_node_is_down(efs_node_id_t node_id)
     return down;
 }
 
-int efs_client_node_reprobe(efs_node_id_t node_id)
-{
-    int idx = node_index_for_id(node_id);
-    if (idx < 0)
-        return 0;
-    char host[64] = {0};
-    pthread_mutex_lock(&g_client.conn_lock[idx]);
-    int down = g_client.node_down_until_ms[idx] > monotonic_ms();
-    uint16_t port = g_client.nodes[idx].port;
-    strncpy(host, g_client.nodes[idx].addr, sizeof(host) - 1);
-    pthread_mutex_unlock(&g_client.conn_lock[idx]);
-    if (!down)
-        return 1;
-    int fd = efs_connect_tcp(host, port);
-    if (fd < 0)
-        return 0;
-    close(fd);
-    pthread_mutex_lock(&g_client.conn_lock[idx]);
-    g_client.node_down_until_ms[idx] = 0;
-    g_client.node_fail_streak[idx] = 0;
-    pthread_mutex_unlock(&g_client.conn_lock[idx]);
-    return 1;
-}
-
 void efs_client_nodes_force_reprobe(void)
 {
     for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
@@ -600,6 +581,89 @@ void efs_client_node_note_fail(efs_node_id_t node_id)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
+/* One real exchange with a peer: connect and have the protocol declaration
+ * answered, the proof a checkout needs. A stopped process's kernel accepts
+ * TCP and answers nothing, so a bare connect proves nothing. Bounded by the
+ * caller's deadline and EFS_NODE_ADMISSION_MS. bg (the probe thread) also
+ * registers the descriptor so shutdown can cut the wait short. A peer that
+ * accepted and did not answer is noted mute until it answers. */
+static int node_exchange_ok(const char *host, uint16_t port, int idx, int bg)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t end = (uint64_t)monotonic_ms() + EFS_NODE_ADMISSION_MS;
+    if (previous && previous < end)
+        end = previous;
+    efs_client_rpc_set_deadline_ms(end);
+    int ok = 0, connected = 0;
+    int fd = efs_connect_tcp(host, port);
+    if (fd >= 0) {
+        efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+        efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+        struct efs_conn *nc = efs_conn_wrap_tcp(fd, 0);
+        if (!nc) {
+            close(fd);
+        } else {
+            int stopped = bg && __atomic_load_n(&g_client.node_probe_stop, __ATOMIC_SEQ_CST);
+            if (bg && !stopped) {
+                pthread_mutex_lock(&g_client.conn_lock[idx]);
+                g_client.node_probe_fd[idx] = fd;
+                pthread_mutex_unlock(&g_client.conn_lock[idx]);
+                /* shutdown sets the flag before it walks the registrations */
+                stopped = __atomic_load_n(&g_client.node_probe_stop, __ATOMIC_SEQ_CST);
+            }
+            if (!stopped) {
+                connected = 1;
+                ok = efs_conn_declare(nc) == EFS_OK;
+            }
+            if (bg) {
+                pthread_mutex_lock(&g_client.conn_lock[idx]);
+                g_client.node_probe_fd[idx] = -1;
+                pthread_mutex_unlock(&g_client.conn_lock[idx]);
+            }
+            efs_conn_destroy(nc);
+        }
+    }
+    efs_client_rpc_set_deadline_ms(previous);
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    if (connected || fd < 0)
+        g_client.node_mute[idx] = connected && !ok;
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+    return ok;
+}
+
+/* A marked peer is probed here, by the caller, only when it was not last
+ * seen mute: one that refuses or answers does so in milliseconds, and a
+ * restart inside the cooldown must be used at once (K35, K39). A mute one
+ * (SIGSTOP, a hung host) would cost every caller the whole declaration
+ * wait, which is what the mark exists to avoid; the background probe, started
+ * here, clears its mark when the declaration is answered and holds it while
+ * it is not. */
+int efs_client_node_reprobe(efs_node_id_t node_id)
+{
+    int idx = node_index_for_id(node_id);
+    if (idx < 0)
+        return 0;
+    char host[64] = {0};
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    int64_t now = monotonic_ms();
+    int down = g_client.node_down_until_ms[idx] > now;
+    int mute = g_client.node_mute[idx];
+    uint16_t port = g_client.nodes[idx].port;
+    strncpy(host, g_client.nodes[idx].addr, sizeof(host) - 1);
+    if (down && mute)
+        node_probe_maybe_start(idx, now);
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+    if (!down)
+        return 1;
+    if (mute || !node_exchange_ok(host, port, idx, 0))
+        return 0;
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    g_client.node_down_until_ms[idx] = 0;
+    g_client.node_fail_streak[idx] = 0;
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+    return 1;
+}
+
 struct node_probe {
     int idx;
     char host[64];
@@ -609,16 +673,19 @@ struct node_probe {
 static void *node_probe_run(void *arg)
 {
     struct node_probe *p = arg;
-    int fd = efs_connect_tcp(p->host, p->port);
-    if (fd >= 0)
-        close(fd);
+    int ok = node_exchange_ok(p->host, p->port, p->idx, 1);
     pthread_mutex_lock(&g_client.conn_lock[p->idx]);
-    if (fd >= 0 && g_client.node_down_until_ms[p->idx] > 0) {
-        /* Listening again: let the next checkout make a real connection.
-         * A peer that accepts but cannot serve fails that checkout and
-         * re-enters the cooldown through the usual failure streak. */
+    if (ok && g_client.node_down_until_ms[p->idx] > 0) {
+        /* The declaration was answered: let the next checkout make a real
+         * connection. */
         g_client.node_down_until_ms[p->idx] = 0;
         g_client.node_fail_streak[p->idx] = 0;
+    } else if (!ok && !__atomic_load_n(&g_client.node_probe_stop, __ATOMIC_SEQ_CST) &&
+               g_client.node_down_until_ms[p->idx] > 0) {
+        /* Accepts TCP, answers nothing (SIGSTOP, a hung host): still down.
+         * Without this the mark expires and the next four checkouts each
+         * wait out the declaration again. */
+        g_client.node_down_until_ms[p->idx] = monotonic_ms() + EFS_NODE_DOWN_MS;
     }
     g_client.node_probe_inflight[p->idx] = 0;
     pthread_cond_broadcast(&g_client.conn_cv[p->idx]);
@@ -627,11 +694,27 @@ static void *node_probe_run(void *arg)
     return NULL;
 }
 
+/* Shutdown: no probe starts again, a running one is cut short and waited
+ * for, so none touches the locks destroyed after this. */
+static void node_probes_stop(void)
+{
+    __atomic_store_n(&g_client.node_probe_stop, 1, __ATOMIC_SEQ_CST);
+    for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
+        pthread_mutex_lock(&g_client.conn_lock[i]);
+        if (g_client.node_probe_fd[i] >= 0)
+            shutdown(g_client.node_probe_fd[i], SHUT_RDWR);
+        while (g_client.node_probe_inflight[i])
+            pthread_cond_wait(&g_client.conn_cv[i], &g_client.conn_lock[i]);
+        pthread_mutex_unlock(&g_client.conn_lock[i]);
+    }
+}
+
 /* conn_lock[idx] held, peer in cooldown: start at most one background
  * reprobe per EFS_NODE_PROBE_MS. Best effort; a failed start just waits. */
 static void node_probe_maybe_start(int idx, int64_t now)
 {
     if (g_client.node_probe_inflight[idx] ||
+        __atomic_load_n(&g_client.node_probe_stop, __ATOMIC_SEQ_CST) ||
         now < g_client.node_probe_after_ms[idx])
         return;
     struct node_probe *p = calloc(1, sizeof(*p));
@@ -662,10 +745,12 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
         return NULL;
     int n = pool_size();
 
-    int64_t admission_end = monotonic_ms() + 5000;
+    int64_t admission_end = monotonic_ms() + EFS_NODE_ADMISSION_MS;
     uint64_t outer = efs_client_rpc_deadline_ms();
-    if (outer && outer < (uint64_t)admission_end)
+    int caller_bound = outer && outer < (uint64_t)admission_end;
+    if (caller_bound)
         admission_end = (int64_t)outer;
+    int silent = 0; /* TCP accepted, declaration unanswered for the whole local bound */
     pthread_mutex_lock(&g_client.conn_lock[idx]);
     int64_t now = monotonic_ms();
     if (g_client.node_down_until_ms[idx] > now) {
@@ -759,6 +844,7 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                 if (nc) {
                     int drc = efs_conn_declare(nc);
                     if (drc != EFS_OK) {
+                        silent = !caller_bound;
                         static int warned;
                         if (__sync_fetch_and_add(&warned, 1) < 5)
                             fprintf(stderr, "efs-fuse: node %u refused or did not answer the "
@@ -791,8 +877,13 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                 g_client.conn_busy[idx][free_slot] = 0;
                 now = monotonic_ms();
                 /* Caller or local checkout expiry is cancellation, not a
-                 * peer-health verdict. Count genuine failures within budget. */
-                if (!local_failure && now < admission_end) {
+                 * peer-health verdict. Count genuine failures within budget,
+                 * and a peer that accepts TCP and leaves the declaration
+                 * unanswered for the whole local bound (a stopped process:
+                 * its kernel accepts) - that expiry is the peer's. */
+                if (silent)
+                    g_client.node_mute[idx] = 1;
+                if (!local_failure && (now < admission_end || silent)) {
                     if (g_client.node_fail_streak[idx] < 1000)
                         g_client.node_fail_streak[idx]++;
                     if (g_client.node_fail_streak[idx] >= EFS_NODE_DOWN_FAILS &&
@@ -816,6 +907,7 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                 return NULL;
             }
             g_client.conn[idx][free_slot] = nc;
+            g_client.node_mute[idx] = 0;
             g_client.node_fail_streak[idx] = 0;
             g_client.node_down_until_ms[idx] = 0;
             efs_conn_bind_gen(nc, &g_client.conn_gen[idx][free_slot]);
@@ -959,6 +1051,7 @@ int efs_client_shutdown(void)
     efs_client_read_pools_stop();
 
     if (conn_pool_inited) {
+        node_probes_stop();
         for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
             pthread_mutex_lock(&g_client.conn_lock[i]);
             for (int s = 0; s < EFS_CLIENT_CONNS_PER_NODE; s++) {

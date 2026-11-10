@@ -456,9 +456,10 @@ static int packed_short(efs_ino_t ino, const struct efs_chunk_entry *ce,
 
 /* K34: a read that found fewer than two fragments may have skipped a member
  * only by this client's down-mark (a 30 s cooldown from an earlier stop),
- * although the member is back. Probe each down-marked placement member (a
- * TCP connect clears the mark when it answers); 1 when one came back, so the
- * caller reads again instead of failing on a single live fragment. */
+ * although the member is back. Ask for each down-marked placement member's
+ * background probe (an answered protocol declaration clears the mark); 1 when
+ * one came back, so the caller reads again instead of failing on a single
+ * live fragment. */
 static int read_reprobe_down(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
 {
     int back = 0;

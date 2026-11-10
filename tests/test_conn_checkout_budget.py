@@ -34,7 +34,8 @@ int efs_set_send_timeout(int fd,int ms) {(void)fd;(void)ms;return 0;}
 struct efs_conn *efs_conn_wrap_tcp(int fd,int server) {(void)fd;(void)server;return wrap_failure?NULL:&connection;}
 int efs_rdma_available(void) {return 0;}
 int efs_rdma_client_upgrade(struct efs_conn *c) {(void)c;return 0;}
-int efs_conn_declare(struct efs_conn *c){(void)c;return 0;}
+static int declare_rc;static int64_t declare_advance;
+int efs_conn_declare(struct efs_conn *c){(void)c;__atomic_fetch_add(&advance,declare_advance,__ATOMIC_RELAXED);return declare_rc;}
 int efs_rdma_transport(void) {return EFS_TRANSPORT_TCP;}
 void efs_conn_destroy(struct efs_conn *c) {assert(c==&connection);destroyed++;}
 void efs_conn_bind_gen(struct efs_conn *c,uint64_t *p) {(void)c;(void)p;}
@@ -43,6 +44,7 @@ static int fake_close(int fd) {assert(fd==42);closed++;return 0;}
 #define close fake_close
 #define EFS_NODE_DOWN_FAILS 4
 #define EFS_NODE_DOWN_MS 30000
+#define EFS_NODE_ADMISSION_MS 5000
 static int probes;
 /* Background reprobe (tests/test_node_reprobe.py): never in the caller. */
 static void node_probe_maybe_start(int idx,int64_t now) {(void)now;assert(idx==0);probes++;}
@@ -82,6 +84,15 @@ int main(void) {
   assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS-1&&!g_client.node_down_until_ms[0]);
  }
  connect_errno=0;
+ /* K106: TCP accepted and the declaration unanswered for the whole local bound (a stopped member)
+  * is the peer's silence and counts; the same wait cut short by the caller's deadline does not. */
+ declare_rc=EFS_ERR_NET;declare_advance=5000;late=5;advance=0;deadline=monotonic_ms()+1000;
+ assert(!efs_client_conn_get(1)&&!g_client.conn_busy[0][0]);
+ assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS-1&&!g_client.node_down_until_ms[0]);
+ deadline=0;advance=0;
+ assert(!efs_client_conn_get(1)&&!g_client.conn_busy[0][0]);
+ assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS&&g_client.node_down_until_ms[0]>monotonic_ms()&&g_client.node_mute[0]);
+ g_client.node_down_until_ms[0]=0;g_client.node_fail_streak[0]=EFS_NODE_DOWN_FAILS-1;g_client.node_mute[0]=0;declare_rc=0;declare_advance=0;late=3;
  deadline=monotonic_ms();efs_client_node_note_fail(1);
  assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS-1&&!g_client.node_down_until_ms[0]);
  deadline=monotonic_ms()+1000;efs_client_node_note_fail(1);

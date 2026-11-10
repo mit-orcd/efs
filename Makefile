@@ -251,6 +251,7 @@ test-report-pressure:
 	python3 tests/test_write_queue.py
 	python3 tests/test_conn_checkout_budget.py
 	python3 tests/test_node_reprobe.py
+	python3 tests/test_node_probe_exchange.py
 	python3 tests/test_pack_budget.py
 	python3 tests/test_pack_compact_schedule.py
 	python3 tests/test_pack_base_reads.py
@@ -782,6 +783,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_txn_resolve_faults
 	python3 tests/test_txn_decision_sweep.py
 	python3 tests/test_txn_recovery_priority.py
+	python3 tests/test_txn_recover_thread.py
 	python3 tests/test_remote_cmd_halted_peer.py
 	python3 tests/test_client_leader_forget.py
 	python3 tests/test_txn_apply_exact.py
