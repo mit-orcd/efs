@@ -138,6 +138,7 @@ put_ticket_batch|tests/test_put_ticket_batch.py
 # under 24 concurrent library writers.
 k36_recovery|tests/test_k36_recovery.py
 k36_segment_recovery|tests/test_k36_segment_recovery.py
+k110_barrier_history|tests/test_k110_barrier_history.py
 k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
 k38_swept_hint_live|tests/test_k38_swept_hint_live.py
@@ -224,6 +225,7 @@ session|tests/test_session
 env_removed|tests/test_env_removed.py
 k36_recovery|tests/test_k36_recovery.py
 k36_segment_recovery|tests/test_k36_segment_recovery.py
+k110_barrier_history|tests/test_k110_barrier_history.py
 k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
 # AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.

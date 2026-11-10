@@ -289,7 +289,8 @@ this list, before it ships.
   every configured root has a checksummed clean record agreeing on the
   verifier and root count. Other restarts rotate it: a fragment acknowledged
   under a verifier that changed before its COMMIT is lost (never resent,
-  because the client may no longer retain the bytes), so its stripe is
+  because the client may no longer retain the bytes) unless the restarted
+  member's COMMIT reply carries a barrier history covering it (K110, below), so its stripe is
   marked degraded or, when that fragment is needed, fails EIO for good.
   COMMIT retries a failed transport once within its original deadline.
   An unclean storage-root restart fences COMMIT even for a fresh client,
@@ -300,7 +301,9 @@ this list, before it ships.
   cannot prove is dropped and its stripe marked degraded for rebuild; then
   the fence clears. An earlier ambiguous write is not thereby proven: the
   verifier changed, so a fragment the crashed run acknowledged stays lost
-  to its client's `fsync`. See
+  to its client's `fsync`, except one acknowledged at or before that run's
+  last completed barrier, which the barrier history proves (K110, D42 F23
+  as amended). See
   [verified recovery](protocols/data.md#verified-recovery-k36) and
   [AMD durability fixes](../status/2026-10/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
@@ -1939,6 +1942,22 @@ product" (A7 compiled expiry out behind `EFS_BUILD_EXPIRY`). Binding:
 | F23: store after an unclean stop | **Verified recovery.** A crash must not disable a recoverable store for good. "Verified" means recovery establishes the required consistency of log, metadata, fragments and journal before the uncertainty fence clears; a restart, a sampled check or a forced sync is not enough. Two outcomes stay distinct: a recovered store may serve again; an earlier ambiguous write is not thereby proven, and its error never turns into success. Crash-recovery implementation and tests are in alpha; full power-loss qualification remains a separate scope decision. |
 | A9 `EFS_METADATA_BALANCE` | **Elections only for alpha.** Remove the co-location pump and its variable; an unqualified tiny-file speedup does not justify another production mode. Elections alone do not guarantee distributed leaders: measure and report actual leader placement, and keep the metadata-distribution roadmap. This does not complete the "nothing concentrated on one node" goal. |
 | Buffered and direct fragment I/O | **Direct I/O only** (user, Oct 24; replaces the earlier "both, qualified"). Remove the `--direct-io`/`--no-direct-io` flag and the buffered path. Storage that cannot meet `O_DIRECT` requirements is refused with a clear error, never a silent fallback. Small and unaligned operations stay correct internally, and explicit durability barriers stay: `O_DIRECT` alone does not make a write durable. Qualify the retained path for reads, writes, packing, `fsync` and recovery. |
+
+**F23 amended Nov 10 (K110, user: "Barrier proof").** F23 said an earlier
+ambiguous write is not thereby proven. That stays true for a write the
+restarted member cannot show was made durable, and no longer for one it can:
+a fragment acknowledged by incarnation V at or before V's last *completed*
+durability barrier (`syncfs` of the root, then the fdatasynced durability
+record) is durable once the successor's verified recovery (K36) has dropped no
+file that barrier covers. The successor reports its predecessors' last
+barriers in its COMMIT reply (up to 7 per root, newest first), and the client
+counts such a fragment durable instead of lost. A fragment acknowledged after
+that barrier, one on a root whose history recovery could not validate, and
+any reply without a history stay lost, and `fsync` stays `EIO` when the stripe
+needs them. The cross-incarnation rule fails closed everywhere else. Scope:
+the same process-kill and OS-crash assumptions as the asynchronous
+acknowledgement; full power-loss qualification stays a separate scope decision.
+Design and evidence: [K110](../status/2026-11/k110-fsync-after-sigkill-20261110.md).
 
 A6 read-path selectors ([table](../status/2026-10/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)), user Oct 24:
 
@@ -11213,7 +11232,9 @@ sync never clears the fence. The phases, each shown in
    places a fragment here is checked the same way; one not proven is dropped
    and counted `segments missing`: its two peers still serve it, and W154 has
    no segment rebuild.
-8. **fence**: every root's fence clears and COMMIT works again.
+8. **fence**: every root's fence clears and COMMIT works again. Each root's
+   barrier history (below) is first made valid or forgotten and its record
+   rewritten durably.
 
 After the fence the thread waits for each remembered ticket to leave
 ADMITTED (a published one is marked as in 7) and counts the marked fragments
@@ -11221,8 +11242,33 @@ the group leaders rebuild here (`rebuilt`, `rebuild_waiting`). Nothing a
 client was promised depends on that tail: the PUT verifier changed with the
 unclean boot, so a fragment the previous boot acknowledged and did not
 COMMIT stays lost in its client's `fsync` (K35: proven on the other two with
-a degraded mark, or `EIO`), never durable, and a crash before the tail
-finishes is caught by the next recovery's inventory.
+a degraded mark, or `EIO`) unless the barrier history below covers it, and a
+crash before the tail finishes is caught by the next recovery's inventory.
+
+**Barrier history (K110, D42 F23 as amended).** Every PUT reply carries an
+*ack* after the verifier: the storage root's index in the top byte and, in the
+low 56 bits, the root's open barrier epoch (`efs_put_pos`: boot counter 16
+bits, sequence 40). The epoch is read after the fragment is stored, so it is
+never earlier than the epoch the fragment joined. The root's durability record
+(`.efs-durable-epoch`, v3) names the last barrier that completed (`syncfs`,
+then the fdatasynced record) and, since a new boot rewrites it, a ring of up to
+seven predecessors: for each earlier incarnation (its verifier) the position of
+its last completed barrier. A boot that follows an unclean stop adds the
+predecessor it found and keeps the predecessor's own ring only if that ring was
+validated. A ring is validated when verified recovery finished without
+dropping any file whose modification time is not after the predecessor's last
+record (such a file may be one a barrier covered); recovery then rewrites the
+record with the verdict before it clears the fence, and forgets the ring if it
+dropped such a file. A COMMIT reply (`efs_msg_data_commit_reply`) lists the
+validated entries as `{verifier, position, root}` after its header. The client
+(`data_commit.c`) records each fragment's verifier and ack; when a restarted
+member answers with another verifier, the fragment is durable if an entry has
+that verifier, that root and a position at or after the ack, and lost
+otherwise. Boot counters of one root never decrease and an incarnation can
+only have been followed by a clean stop, a kill or a crash, so comparing the
+positions numerically is sound. A boot counter above 65535 or a sequence above
+2^40 gives no ack (fail closed). Assumption: the wall clock does not step back
+across a restart by more than the file times it compares.
 
 A transient obstacle (no leader yet, a peer unreachable) is retried and shown
 as the reason. A failed verification (an unreadable certificate, a fragment

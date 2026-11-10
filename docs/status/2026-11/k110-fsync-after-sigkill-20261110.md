@@ -1,25 +1,157 @@
 # K110 · the final fsync returns EIO after sequential SIGKILLs (Task FH, Nov 10 2026)
 
-**Verdict: reproduced 14 of 14 private runs; class B (persistent). No product
-code changed. K110 stays OPEN; the contract and the proof model need a
-decision from the coordinator and the user.** Branch
-`claude/determined-mclean-7c3b6f` on devel `9403d0666`, not merged, not
-pushed. The only repository changes are the observation-only `--post-fsync`
-option of `tests/live/append_failover.py` (Task EY's `8a34adbe5`,
-cherry-picked), three scripts under `scripts/evidence/k110/` and this page.
+**Verdict: FIXED on branch `claude/determined-mclean-7c3b6f` (barrier proof,
+user decision "Barrier proof" = option 2 below; D42 F23 amended). Not merged,
+not pushed; VERIFIED waits for the coordinator's merge gates.** Before the fix
+the final `fsync` failed in 14 of 14 private runs and was permanent (class B).
+After it, in 28 kill-mode runs with the final `fsync` taken once the failover
+controller has stopped and every restarted member has finished verified
+recovery, all four writers' final `fsync`, both post fsyncs and the integrity
+check passed in 28 of 28; 25 of the 28 runs PASS, and the other 3 fail only on
+a REPORT latency criterion that fails in 3 of 14 pre-fix runs too (see "Other
+kill-gate failures").
 
-Two sentences for the K110 row. The final `fsync` fails because a stripe's
+Two sentences for the K110 row. The final `fsync` failed because a stripe's
 fragments were acknowledged by member incarnations that were SIGKILLed before
-any COMMIT, and the client, by the rule of
-[K35](../2026-10/k35-fsync-degraded-20261024.md) and
-[K36](../2026-10/k36-verified-recovery-20261024.md) ("never counts it
-durable"), proves a fragment only through a COMMIT answered by the
-incarnation that acknowledged it. The record of such a fragment (`L`) can
-never become durable again, the client no longer holds the bytes to re-send,
-and so every later `fsync` of the file fails until the client unmounts, while
-every byte reads back exact.
+any COMMIT, and the client proved a fragment only through a COMMIT answered by
+the incarnation that acknowledged it, so such a fragment was lost forever
+although the dead incarnation's own durability barrier had covered it. Each PUT
+reply now carries the acknowledgement's barrier position, a restarted member
+reports its predecessors' last completed barriers in its COMMIT reply (only
+when verified recovery dropped no file those barriers cover), and the client
+counts a fragment durable when a reported barrier is at or after its position.
 
-## Class (step 4)
+## Resolution (the fix)
+
+Decision: user, Nov 10, "Barrier proof" (option 2 of the options below). It
+amends the sentences "an earlier ambiguous write is not thereby proven" in
+[D42](../decisions.md) F23 and "never counts it durable" in
+[K36](../2026-10/k36-verified-recovery-20261024.md) and
+[K35](../2026-10/k35-fsync-degraded-20261024.md); the amended text is in those
+pages. Mechanism, as built (the protocol page
+[data.md](../../how-it-works/protocols/data.md#verified-recovery-k36) has the long form):
+
+- **PUT reply** (18 bytes after the status, was 10): the verifier and an *ack*,
+  the storage root's index (top byte) and the root's open barrier position
+  (boot counter 16 bits, sequence 40 bits), read after the fragment is stored.
+  A boot counter above 65535 or a sequence above 2^40 gives no ack.
+- **Durability record** `.efs-durable-epoch` v3 (`EFSDUR03`, CRC): the last
+  completed barrier plus a ring of up to seven predecessors (verifier, position
+  of that incarnation's last completed barrier). A boot after an unclean stop
+  adds the predecessor and keeps the predecessor's own ring only if it was
+  validated. Verified recovery validates the ring when it dropped no file whose
+  modification time is not after the predecessor's last record (such a file
+  might be one a barrier covered), and rewrites the record durably before the
+  fence clears; otherwise the ring is forgotten.
+- **COMMIT reply**: a variable-length list of `{verifier, position, root}`
+  entries after its header (`efs_data_commit_reply_ok()` checks the length).
+- **Client fold** (`data_commit.c`): a fragment whose incarnation differs from
+  the answering one turns `L` into `D` if an entry has the fragment's verifier,
+  its root and a position at or after the fragment's ack; otherwise it stays
+  `L`. The log line `fsync: restarted members: N fragments proven by their
+  barrier history, M lost` counts both.
+
+Fails closed (stays `L`, `fsync` stays `EIO` when the stripe needs it): a
+fragment acknowledged after its incarnation's last completed barrier, a missing
+or unvalidated history, a root or position mismatch, an incarnation that fell out
+of the ring (more than seven restarts without a clean stop in between), a reply without a history, and
+any ack the server could not form. Assumption that cannot be checked from the
+data: the wall clock does not step back across a restart by more than the file
+times the validity rule compares. No backward compatibility was built (new
+wire and record; a freshly formatted cluster).
+
+## Results after the fix
+
+Build: source `8082fc2d2` (no `src/` or `include/` change since; the harness
+option `--settle-before-fsync` and the test files are those of `f57c8fca3`),
+copied with `git archive`, built on node9900
+(Linux 5.14.0-687.39.1.el9_8, gcc 11.5.0) with `make -j8
+EFS_FUSE_PREFIX=/data1/efs/deps/libfuse efsd efs-fuse efs-mgmt`; binaries
+report `build=unknown`. Same environment as the diagnosis runs below (three
+loopback members, TCP, direct I/O, 4 writers, 8,000 records, leader kills about
+every 12 s, down 5 s, quota 8 G, private ports 38101 to 38103 and 38401 to
+38403, two series in parallel on a shared host).
+
+| Series | Runs | Final `fsync` 0 for all four writers | Post fsyncs 0 | Integrity (8,000 of 8,000, three views identical) | Verdict PASS |
+| --- | --- | --- | --- | --- | --- |
+| Before the fix (diagnosis, `a`, `b`) | 14 | 0 of 14 | 0 of 14 | 14 of 14 | 0 of 14 |
+| After, final `fsync` concurrent with the failover (`fa`, `fb`) | 28 | 18 of 28 | 28 of 28 | 28 of 28 | 17 of 28 |
+| After, `--settle-before-fsync` (`sa`, `sb`) | 28 | **28 of 28** | **28 of 28** | **28 of 28** | 25 of 28 |
+
+- The fragments the barrier history proved: 21,598 (`fa`, `fb`) and 23,254
+  (`sa`, `sb`); fragments counted lost: 532 and 703 (acknowledged after their
+  incarnation's last barrier or not covered). In the settled series all 703
+  were marked degraded for rebuild (`K`) with the other two members durable, so
+  `fsync` returned 0 with a visible degraded mark, as K35 prescribes, and no
+  lost fragment was counted durable.
+- Verified recovery dropped no file in 55 of the 56 runs and one 0-byte file in
+  `sb-11` (a PUT file still in flight when the member was killed, modified
+  after the predecessor's last record; the proof counts of that run
+  (861 proven, 38 lost) are the same as its neighbours', so the ring stayed
+  valid; no log line states the ring verdict, which is a gap).
+- Why two series after the fix. In the unsettled `fa`/`fb` series 10 runs failed
+  `final_fsync_zero` with `EIO` on all or some writers while both post fsyncs
+  returned 0: the harness takes the final `fsync` while its failover controller
+  is still killing and restarting members, and an `fsync` that lands in the 5 s
+  down window or inside a restarted member's recovery fence (about 0.2 to 1 s,
+  K36) has two of its three members unavailable (stripes `PMD`, `DPM`, `MDP`:
+  one durable, one missing, one pending) and fails closed. Checked on `fa-5`
+  (last kill 4.6 s before the writers ended, the node restarting during the
+  fsync) and `fb-1` (the fsync at 08:20:12.77 inside node 1's recovery, which
+  verified at 08:20:12.888); the other transient runs were not timed
+  individually. That is class A (transient, correct by D42). The new
+  `append_failover.py --settle-before-fsync` makes every writer wait for its
+  final `fsync` until the controller has stopped and every restarted member
+  logged `recovery: verified`; the gate then tests what K110 is about (the
+  `fsync` after the kills), not an `fsync` taken during an outage.
+  Unchanged default: without the flag the harness behaves as before.
+- Whether COMMIT should wait out the recovery fence instead of answering `EIO`
+  (so the unsettled `fsync` also succeeds) is a product decision and is not
+  made here; K36 chose the `EIO` on purpose.
+
+### Other kill-gate failures (not K110)
+
+Five of the 56 runs (`fa-5`, `fa-8`, `sa-1`, `sa-11`, `sb-14`) fail a REPORT
+criterion of the same harness: a type-67 REPORT waited the 30 s receive bound
+(`report_recv_timeouts`, 4 runs) or took 4.8 s across one leader change
+(bound 3 s per change, `sa-1`). The pre-fix series has the same failures in 3 of
+14 runs (`b-9` recv timeout, `b-3` and `b-11` over the latency bound with 6.4 s),
+so the change did not introduce them; they belong to the leader-failover latency
+family tracked as K104 (Task FF). Data and `fsync` are exact in all five runs
+(integrity PASS, post fsyncs 0). They keep the kill gate from passing every run
+and need their own fix.
+
+### Tests
+
+- `tests/test_k110_barrier_history.py` (new, `make test-long`; budget 10 s):
+  three members and one mount, a 3 MiB file written without `fsync`, every
+  node's barrier covers it, node 3 then node 2 SIGKILLed and restarted, then
+  `fsync` must return 0 with the client's line `restarted members: N fragments
+  proven by their barrier history, 0 lost` (N at least 2) and no degraded mark.
+  **Fails on the pre-fix tree** (`4a24916a1`, built on node9900): `OSError:
+  [Errno 5] Input/output error` at the `fsync`. **Passes on the fix**
+  (5.5 s and 7 s, node9900).
+- `tests/test_data_commit.c` (client fold: two restarted members covered by
+  their history; one restarted member whose fragment was acknowledged past the
+  barrier, on another root, without a position, by another incarnation, or
+  whose history is for another root: lost, the mark covers it),
+  `tests/test_store_durability.c` (ring across unclean boots, validation by a
+  verified recovery without a covered drop, forgetting after a covered drop,
+  a boot killed before its recovery finished, clean stop, the drop rule and the
+  position encoding),
+  and the arity updates in `test_put_retry_budget.py`,
+  `test_put_reply_deadline.py`, `test_put_tcp_frame.py` and the live drivers.
+- `tests/test_k36_recovery.py` (its step 4 still asserts the fragments written
+  after the last barrier are lost) and `tests/test_k35_fsync_degraded.py` pass
+  on the fix (24 s and 129 s).
+- The full gate: see "Gate" below.
+
+## Diagnosis before the fix
+
+The sections up to "Options" are the diagnosis made on devel `9403d0666`
+before any change; their present tense describes that tree, not the fixed one.
+
+### Class (step 4)
 
 | Class | Verdict | Evidence |
 | --- | --- | --- |
@@ -36,7 +168,7 @@ fsync and both post fsyncs returning 0 during and after the same kills. So
 D40/D42 availability with one member down holds; the failing case is a
 stripe that stays unproven across the unclean restart of its members.
 
-## Source and environment
+### Source and environment
 
 - Source: devel `9403d0666` plus the cherry-pick of `8a34adbe5` (branch head
   `983d70659`, the test option only; no C or header change). The tree was
@@ -63,7 +195,7 @@ stripe that stays unproven across the unclean restart of its members.
   stopped by hand during its third run (`a-3`, to keep the run stores) and is
   not counted.
 
-## The letters (step 1)
+### The letters (step 1)
 
 The per-stripe record is `struct stripe` in `src/client/data_commit.c:33`;
 the log line is `stripe_log()` (`:341`), the letters `frag_letter()` (`:335`).
@@ -97,7 +229,7 @@ barrier seq (`put_sync_record_write()` `:1675`); a COMMIT waits for it
 fragment whole and checks its digest, then clears the fence; it does not
 tell any client which acknowledged fragments it holds.
 
-## Runs (step 2)
+### Runs (step 2)
 
 Per run: the final `fsync` of all four writers returned `EIO` (`-5`) in
 every run; integrity was exact in every run (8,000 of 8,000, no duplicate,
@@ -160,7 +292,7 @@ the second after the warm reads).
   mid-run fsyncs OK while a member was down (`fe-1` logged 30 "marked degraded for
   rebuild" lines, `K`).
 
-## Trace of one refused stripe (step 3)
+### Trace of one refused stripe (step 3)
 
 Run `b-1`, chunk 187, object `2c5fded8eb66ce47`, `nodes=3,1,2` (fragment 0
 on n3, 1 on n1, 2 on n2). Times are UTC from `fuse-mnt.log` and the
@@ -217,7 +349,7 @@ possible from the client's own state; it would have to read the chunk back (a
 new object, a new REPORT, racing the other writers' appends) or keep every
 unproven body (up to `2^18` records of 128 KiB, 32 GiB).
 
-## Why this is not simply a bug
+### Why this is not simply a bug
 
 The written rules produce this result. D42 F22 asks for proof per stripe
 that includes "no unresolved publication or storage-incarnation ambiguity";
@@ -230,7 +362,11 @@ In the failing runs every member was killed at least once and a stripe written
 early has been through three; a single member's crash is tolerated (`DDL`
 passes with a mark), two are not.
 
-## Options (step 5: none is unambiguous, so no code was changed)
+## Options (step 5; the user chose option 2)
+
+At diagnosis time none was unambiguous, so no code was changed; on Nov 10 the
+user answered "Barrier proof", which is option 2. Options 1, 3, 4 and 5 were not
+built; option 4 (counting a rebuilt `M` slot) stays a possible refinement.
 
 1. **Contract and test criterion (no code).** State that `fsync` can fail
    permanently for stripes whose members restarted uncleanly between the
@@ -282,68 +418,111 @@ bytes are gone).
 Register row, `Item | Kind | Disposition`:
 
 ````text
-Task EY (batch D H1, candidate `9bb50fe79`, Nov 10), diagnosed by Task FH ([evidence](2026-11/k110-fsync-after-sigkill-20261110.md)): `tests/live/append_failover.py --failover kill` (three loopback members, four writers on one shared file, the current leader SIGKILLed about every 12 s and restarted after 5 s, one `fsync` at the end) fails its final `fsync` with `EIO` in 14 of 14 private runs (3 of 4 on Task EY's). Not a transient: a second `fsync` after every member is back fails too (2.6 to 6.4 s and 14 to 30 s after the last restart), and so does every later one until the client unmounts. Every byte reads back exact. Cause: a fragment acknowledged by an incarnation that was SIGKILLed before any COMMIT (`L`) is never counted (K35/K36 rule), the client no longer holds the bytes, and the server publishes no per-fragment barrier record; 70 to 72 % of the refused stripes have no durable fragment at all. A control with `--fsync-every 100` passes 3 of 3 | durability proof / fsync availability across member restarts, alpha blocker | OPEN, **blocks alpha: yes**: decision owed (user): option 2 (cross-incarnation barrier proof, amends D42 F23) or option 1 (documented limit and a periodic-fsync test); the H1 kill modes rerun on the outcome (TCP and RDMA).
+Task EY (batch D H1, candidate `9bb50fe79`, Nov 10), diagnosed by Task FH ([evidence](2026-11/k110-fsync-after-sigkill-20261110.md)): `tests/live/append_failover.py --failover kill` failed its final `fsync` with `EIO` in 14 of 14 private runs, permanently (a second `fsync` after every member was back failed too), with every byte reading back exact. Cause: a fragment acknowledged by an incarnation that was SIGKILLed before any COMMIT was counted lost forever (K35/K36 rule), although that incarnation's own durability barrier had covered it | durability proof / fsync availability across member restarts | FIXED on branch `claude/determined-mclean-7c3b6f` (Task FH, not merged): the user chose the cross-incarnation barrier proof ("Barrier proof", amends D42 F23). The PUT reply carries the acknowledgement's barrier position, the durability record v3 keeps a ring of predecessors' last completed barriers (valid only after a verified recovery that dropped no covered file), the COMMIT reply returns it, and the client counts a covered fragment durable. After the fix 28 of 28 kill-mode runs with the final `fsync` taken after the failover controller stopped and the members' recovery verified have every final `fsync`, both post fsyncs and the integrity check pass (25 of 28 runs PASS; the other 3 fail only the REPORT latency criterion that fails in 3 of 14 pre-fix runs too); an `fsync` landing inside a member's outage or recovery fence still returns `EIO` by design (28 unsettled runs: 10 transient). New `tests/test_k110_barrier_history.py` fails before and passes after. VERIFIED on the merge gates; not covered: RDMA, power loss, `tests/live/rdma_async_commit.py` still expects the old `EIO` after a restart
 ````
 
 Status row:
 
 ````text
-OPEN, **blocks alpha: yes** (Nov 10, Task FH): kill-mode final `fsync` `EIO` is permanent after two members of a stripe restart uncleanly between its write and the `fsync`; data exact, no code defect found in the fold, proof model/contract decision owed; periodic-fsync control 3 of 3 PASS ([evidence](2026-11/k110-fsync-after-sigkill-20261110.md)).
+FIXED, **blocks alpha: no** (Nov 10, Task FH): barrier-proof `fsync` after sequential SIGKILLs, 28 of 28 settled kill-mode runs with every final `fsync` 0 and data exact, new regression test fails before and passes after; VERIFIED awaits merge gates; the kill gate's remaining failures are REPORT latency (3 of 28 after, 3 of 14 before; K104 family), and `fsync` during a member outage or recovery fence is `EIO` by design ([evidence](2026-11/k110-fsync-after-sigkill-20261110.md)).
 ````
 
-Reason for `yes`: as the code stands an application that sees two different
-members crash, one after the other, between a write and its `fsync` gets `EIO`
-from every later `fsync` of that file with all data intact and no remedy
-except rewriting, and the project's own kill gate cannot pass. If the user
-picks option 1, the row becomes a documented limitation and `blocks alpha: no`.
+`blocks alpha: no`: the persistent loss of an `fsync` after two members of a
+stripe restarted is gone; what remains is an `EIO` while a member is down or
+recovering, which D42 F22 and K36 allow and the application can retry. It turns
+to `yes` if the merge gate shows a persistent `fsync` failure after the fix, or
+if the user wants `fsync` to wait out the recovery fence (a separate change).
 
 ## Reproduction
 
 Prerequisites: a Linux host with the fuse prefix, a tree built with
-`make EFS_FUSE_PREFIX=<prefix> efsd efs-fuse efs-mgmt`, free ports 38101 to
-38103, Python 3. From the tree root (`WORK` defaults to `/tmp/efs-k110`):
+`make EFS_FUSE_PREFIX=<prefix> efsd efs-fuse efs-mgmt tests/faults/efsd`
+(the last for the unit and live tests), free ports 38101 to 38103, Python 3.
+From the tree root (`WORK` defaults to `/tmp/efs-k110`):
 
 ```bash
-WORK=/tmp/efs-k110 scripts/evidence/k110/run_series.sh 1 12 b "$PWD"
+WORK=/tmp/efs-k110 scripts/evidence/k110/run_series.sh 1 14 sa "$PWD" --settle-before-fsync
 ```
 
 ```bash
-python3 scripts/evidence/k110/analyze_runs.py /tmp/efs-k110/out
+python3 scripts/evidence/k110/summarize_fix.py /tmp/efs-k110/out
 ```
 
-Control: `scripts/evidence/k110/run_series.sh 1 3 fe "$PWD" --fsync-every 100`.
-Full stripe histogram: build `efs-fuse` with the two `< 8` caps in
-`stripe_prove()` raised, run `run_series.sh 1 2 obs <that tree>` and
+Expected on the fix: `final_fsync_errnos 0000`, `post_fsync_errnos 00`,
+`recovery_dropped` 0 or a single 0-byte file, a positive `proven_by_history`
+column; a run may still fail a REPORT criterion (see above). Without
+`--settle-before-fsync` the final `fsync` may land in an outage and return
+`EIO` while both post fsyncs return 0. On the pre-fix tree (`4a24916a1`)
+`python3 scripts/evidence/k110/analyze_runs.py /tmp/efs-k110/out` shows the
+permanent failure; control: `run_series.sh 1 3 fe "$PWD" --fsync-every 100`.
+Regression test: `python3 tests/test_k110_barrier_history.py` (needs
+`/dev/fuse` and `tests/faults/efsd`; about 6 s). Full stripe histogram of the
+diagnosis: build `efs-fuse` with the two `< 8` caps in `stripe_prove()` raised,
+run `run_series.sh 1 2 obs <that tree>` and
 `python3 scripts/evidence/k110/stripe_histogram.py /tmp/efs-k110/out obs-1 obs-2`.
-Each run takes about two minutes and keeps a 1 GB store under
-`$WORK/runs`; delete the tree when done. Expected: `rc=1` in the summary,
-`final_fsync_zero` false, `post_recovery_fsync` errno 5 twice; with
-`--fsync-every 100`, `rc=0`.
+Each run takes about two minutes and keeps a 1 GB store under `$WORK/runs`;
+delete the tree when done (`~/bin/edelete --force --delete`).
+
+## Gate
+
+Run on node9900 from `git archive` of `f57c8fca3` (the code of `8082fc2d2`),
+three quiet checks 20 s apart first, other tasks' work not running:
+
+- `EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh` (the `make test-all`
+  gate): `TOTAL 595 FAIL 0 NOTRUN 4 STATUS COMPLETE (620s) HOSTLIMIT 4 BUILD
+  14s`. The four NOTRUN are host limits (no `EFS_CLUSTER_SCRIPTS`, no
+  valgrind, no RDMA hardware). The K110 test took 7.7 s in the pool
+  (budget 10 s), `test_k36_recovery.py` 22.2 s, `test_k35_fsync_degraded.py`
+  129.6 s, `test_data_commit` 4.6 s, `test_store_durability` 1.5 s.
+- `bash tests/sanitizer_check.sh tsan` (after adding the K110 test to both
+  lists): `VERDICT: PASS (32 run, 0 failed, 628s)`, including
+  `k110_barrier_history`.
+- `bash tests/sanitizer_check.sh asan`: `VERDICT: PASS (60 run, 0 failed,
+  370s)`, including `k110_barrier_history` (LeakSanitizer ran only where
+  ptrace allows it; the gate prints which).
+- `make docs-check` and `python3 scripts/check_doc_links.py` pass.
 
 ## Not checked
 
-- RDMA, distinct hosts and the combined faults of Task EY's `combined-2k`
-  (its one pass of two was not repeated); one host, loopback only.
-- Power loss (K23/W71 stay deferred); no run tests what an application
-  can do after the failure beyond the post fsyncs.
-- The fragments' digests on disk were not recomputed for the refused stripes;
-  readability was shown by the cold read of all 8,000 records.
-- A `fsync` from a freshly mounted client (it finds an empty table and
-  returns 0 without proof, by the existing design) was not run.
-- None of the options was implemented or sized beyond the description above,
-  so their effect on the kill gate (for example the unbarriered tail window)
-  is predicted, not measured.
-- `make test`, the sanitizer lanes and the K35/K36 tests were not run: no
-  product code changed.
-- The node was shared; run durations (93 to 138 s) vary with its load.
+- RDMA (the PUT and COMMIT reply changes are in the RDMA path and the buffered
+  path too, built and exercised only through the TCP tests), distinct hosts and
+  the combined faults of Task EY's `combined-2k`; one host, loopback only.
+- `tests/live/rdma_async_commit.py` needs an RDMA device and was not run. It
+  asserts `EIO` for a node killed right after a write; with the barrier proof a
+  write older than the 200 ms barrier window now fsyncs 0 after the kill, so
+  its expectation (and the magic `EFSDUR03`, already updated) must be revisited
+  by whoever runs it.
+- Power loss (K23/W71 stay deferred): the proof is the same kind as a normal
+  COMMIT, `syncfs` plus an fdatasynced record, and says nothing beyond it.
+- The wall-clock assumption of the validity rule (a restart does not step the
+  clock back past file modification times) is not checked at run time.
+- No log line states whether a ring was kept or forgotten at a recovery
+  (inferred from the proof counts in `sb-11`).
+- The 10 transient final-fsync failures of the unsettled series were timed
+  against the failover events for `fa-5` and `fb-1` only.
+- Whether COMMIT should wait out the recovery fence instead of `EIO` was not
+  decided or built; the REPORT failures of the kill gate (K104 family) were not
+  investigated here.
+- A `fsync` from a freshly mounted client (empty table, returns 0 by design)
+  was not run.
+- The node was shared; run durations (74 to 138 s) vary with its load.
 
 ## Raw captures
 
-Outside Git on node9900: `~erbmi1/efs-artifacts/taskFH-20261110/out/` (per
-run `*.out`, `*.report.json`, `*.logs/` with `fuse-mnt.log` and
-`efsd-n*.log`; `b-1.traced-fragments.txt`; `host-and-binaries.txt`; the three
-series scripts and the build logs) with
-`~erbmi1/efs-artifacts/taskFH-20261110/SHA256SUMS` (182 files; SHA256 of the
-manifest `c68cfb866781800af0fc64ac17646bd16527a62450c099059cf16b7217317020`).
-The run stores (28 GB) and `/tmp/efs-taskFH*` were deleted after the logs were
-copied; they are recreated by the commands above.
+Outside Git on node9900:
+`~erbmi1/efs-artifacts/taskFH-barrier-20261110/` (per series directory
+`series-unsettled-fa`, `-fb`, `series-settled-sa`, `-sb`: each run's `*.out`,
+`*.report.json`, `*.logs/` with `fuse-mnt.log` and `efsd-n*.log`; `tests/` with
+the test outputs, the pre-fix K110 test failure `base-k110.out`, build logs and
+the driver scripts; `gate/` with `summary.txt` and `timings.tsv`; `sanitizers/`;
+`host-and-binaries.txt`) with `SHA256SUMS` (532 files; SHA256 of the manifest
+`887d7d88cb5c447e26afdc8adecd29d0a7dabd67d8a746aa84f7dc11e6ed009d`). Binary
+SHA256 of the tested tree: `efsd`
+`f16934e90c697b29249a18685c071a13ce889800d2e3b8c173b16a530c9ecdc5`, `efs-fuse`
+`2c475bb73008a9453a513bc5693be4f8f8bd6ea8befa704b808451a4b63fe101`, `efs-mgmt`
+`a37cd448a95243702bf21aa3d8508804e34c5c46c958f2736e42afcd1cad9e09`; the pre-fix
+tree's `efsd` is `0e551f316ca4dc733b87a97de45c1b3e5e7fafb6950420ed554b88164e9a66aa`.
+The diagnosis captures remain in `~erbmi1/efs-artifacts/taskFH-20261110/`
+(manifest `c68cfb866781800af0fc64ac17646bd16527a62450c099059cf16b7217317020`).
+The run stores and every `/tmp/efs-taskFH*` tree were deleted after the logs were
+copied; the commands above recreate them.
