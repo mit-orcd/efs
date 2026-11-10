@@ -5,6 +5,8 @@
 
 ## Linux build prerequisites
 
+Test hosts, the shipped-tree workflow and the wave gate: [Test hosts and the wave gate](test-hosts.md).
+
 Use a C compiler, GNU make, pkg-config, libibverbs development headers/library,
 and **libfuse3 development headers/library at version 3.12 or newer**.
 Before building, check `pkg-config --modversion fuse3` and
