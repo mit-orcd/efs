@@ -1498,7 +1498,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "51bd66b581af375c353c4c2bd732c071b1b13fe9a9a2c782411fb62995075353",
+    "Makefile": "f8abb15c955995f4a1f639a9884604669887d152891c0e46ab93d661ce219100",
     "README.md": "f646cf19b6605664ea80ee9a539ea8c7938be322ee12ba520447204095e3d216",
     "docs/backlog/crash-safe-durable-versions.md": "b57a8c2376ec9e85d9403196a237c57b69f7515a60e73ceb2ac997788016d6b3",
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
@@ -2109,7 +2109,7 @@
     "src/server/put_upload.c": "a4f712443db5cb8263303c3caa657f8bf1ddec79aa2b0aad0bcb7831db29762b",
     "src/server/query_export_lease.h": "c1bf2e3bd646f19595ea7519057e1e04fbc4a402aa30445efe43aad198edcac4",
     "src/server/query_refresh.h": "e9508ec752fc826ed93079d1b9a9b12589631fe6eee9e5a81eef922f65ceff16",
-    "src/server/raft_host.c": "268ce1f286beaf3447879a9c187f16997ee9cfab77e97ce36af6db6680c0d020",
+    "src/server/raft_host.c": "8868b59dd75db3e586d5305e65b5af76090c1c36d6b2db020e2d209bbd5840b6",
     "src/server/read_index_pair_remote.h": "1a0b0bb46af5847d2ee4e6acabc474d044c26e4ed1f0cddacd3d6ac863624d62",
     "src/server/reclaim.c": "954a9e1f426ff2bdda1640115f0d43dafca60808117e2287227191fbd9680258",
     "src/server/recovery.c": "ec6b46594926fdf54914fa8b7914d7c9d0f6989d8a4f7754662b092d28c31f91",
@@ -2138,7 +2138,7 @@
     "src/wire/README.md": "26ee1152e7099e9c2979aa7c9c7c8ba541cc7b5f11dec76317d99a7196825baf",
     "src/wire/wire.c": "1ec4eae9cc90ae4b4f9ce1668f478f2710b36a5391e8cf4b09b8a839f6ddd626",
     "tests/b6_full_oracle.py": "21603c554fb69fca8728a13dddde8fb9d4b24874f27bfe58ed9b09e87ca6d9a3",
-    "tests/budgets.tsv": "e31b265ee848dc79f86ca25befca9f07355ace333cb943a292cd37533bc1442d",
+    "tests/budgets.tsv": "02657f8cfa29a33a48251415a758c6e753d02082d6f0be658cc7184c80c49f86",
     "tests/clean_cluster.sh": "46985882b3a9503f3a3da4cd138dda21ea4cacc04211fbb1d9d312f54280b2ed",
     "tests/cluster.sh": "606f5dba9552323a0b0d0bad91e40d6e74a98f55a8c4dbcfa3253f60468d3304",
     "tests/csrc.py": "f8b9332fc08de3b3317969c3f6c6c74717d191ed71dfa3629f4add4af3457934",
@@ -2883,7 +2883,7 @@
     "tests/test_readindex_completion.py": "492aa9ce249fc025213b445e672d87b821a968153d70989a5f03bb378025b1e4",
     "tests/test_readindex_operation.py": "f21973d6d093c39988df705679affbdb14aada4a8c856e12763e2f71dd90ccbb",
     "tests/test_readindex_pair.py": "949b73fabfea626bf5dd270e9dd64eea730904104f466f137f5fa9a21f1b0ce2",
-    "tests/test_readindex_publish.py": "6ef8506a1d2db834077d357fce7da42f7c91cfd7bf2cef2df6aa311c972fc598",
+    "tests/test_readindex_publish.py": "232d43791eff96942abe8bb2410bdbd96520a568c58bf80a59ee6903d16bc910",
     "tests/test_readindex_remote_pair.py": "bd5e79d8e912fc1c863ce4fcee1100711257ad379a19e6687828f34259cfa2e5",
     "tests/test_readindex_result.py": "e9a49b4724d2ed961f07b8d94e37cc4ac029576ebf4ce4716f8bcb32607cd07c",
     "tests/test_readindex_tickets.py": "c31ae1cc2d862ec8a76cb672f2966c716eb72cbf552822c3c10478fd6ef996cb",
@@ -3049,5 +3049,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "6caafd2ecf2d5bf056fe868744f9fe7c2b621638"
+  "source_commit": "cff8eb424a5c958988926b6a70ac93e7ff9c780c"
 }
