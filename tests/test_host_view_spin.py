@@ -63,7 +63,7 @@ static int counted_lock(pthread_mutex_t *m) {
 #define pthread_mutex_lock counted_lock
 #define __atomic_load_n(p, m) ({ if ((const void *)(p) == (const void *)&host.g[0].v_seq) { \
     __atomic_add_fetch(&seq_loads, 1, __ATOMIC_RELAXED); } __atomic_load_n(p, m); })
-/* The hook holds the publisher between its third and fourth field store. */
+/* The hook holds the publisher after its second field store (v_read_context, v_commit), before v_applied. */
 static pthread_mutex_t hold_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t hold_cv = PTHREAD_COND_INITIALIZER;
 static int armed, in_window, released;
