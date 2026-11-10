@@ -13855,14 +13855,6 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     return EFS_OK;
 }
 
-/* Storage-fence workers' private connections; see host_fence_rpc. */
-struct host_fence_conn{int fd;struct host_fence_conn *next;};
-static pthread_mutex_t g_fence_mu=PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_fence_cv=PTHREAD_COND_INITIALIZER;
-static struct host_fence_conn *g_fence_conns;
-static unsigned g_fence_active;
-static int g_fence_stopping;
-
 int server_raft_host_start(struct efsd_server *s)
 {
     struct efs_raft_host *h;
@@ -13875,7 +13867,6 @@ int server_raft_host_start(struct efsd_server *s)
      * starts — there is no env gate. */
     if (!s || g_host)
         return EFS_ERR_INVAL;
-    pthread_mutex_lock(&g_fence_mu);g_fence_stopping=0;pthread_mutex_unlock(&g_fence_mu);
     uint64_t applied_interval;
     if (host_applied_interval(getenv("EFS_RAFT_APPLIED_INTERVAL_MS"),&applied_interval)!=EFS_OK) {
         /* sync: startup, before the reporter exists */
@@ -14117,6 +14108,7 @@ static void host_stop_senders(struct efs_raft_host *h)
 }
 
 static void host_fence_drain(void);
+static void host_fence_resume(void);
 
 void server_raft_host_stop(void)
 {
@@ -14219,6 +14211,7 @@ void server_raft_host_stop(void)
         close(h->pump_efd);
     __atomic_store_n(&g_host, NULL, __ATOMIC_RELEASE);
     free(h);
+    host_fence_resume();
 }
 
 /* The pump's off-lock durability tail need not park a fresh quorum ACK.
@@ -15265,6 +15258,13 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
  * exchange (it waits on the completion queue, not the socket). */
 /* The socket is listed from before the handshake until the exchange ends; both
  * run with the lock, so a listed fd is open. Refused once the stop began. */
+struct host_fence_conn{int fd;struct host_fence_conn *next;};
+static pthread_mutex_t g_fence_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_fence_cv=PTHREAD_COND_INITIALIZER;
+static struct host_fence_conn *g_fence_conns;
+static unsigned g_fence_active;
+static int g_fence_stopping;
+
 static int host_fence_arm(int fd,void *ctx)
 {
     struct host_fence_conn *reg=ctx;int rc=-1;
@@ -15323,6 +15323,12 @@ static void host_fence_drain(void)
     while(g_fence_active)pthread_cond_wait(&g_fence_cv,&g_fence_mu);
     pthread_mutex_unlock(&g_fence_mu);
     if(parked)efs_telemetry_log(0,"storage-fence: stop woke %u worker(s) waiting on a member\n",parked);
+}
+
+/* A host started again after a stop (test harnesses) asks members again. */
+static void host_fence_resume(void)
+{
+    pthread_mutex_lock(&g_fence_mu);g_fence_stopping=0;pthread_mutex_unlock(&g_fence_mu);
 }
 
 /* A metadata quorum is not a storage-member acknowledgement. Every
