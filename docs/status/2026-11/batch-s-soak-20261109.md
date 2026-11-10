@@ -420,6 +420,7 @@ was killed.
   sending prev-0 AppendEntries to a follower that is current, and whether
   that let node 2's election timer expire, is not established.
 - This is recorded as an open observation on K22, not as a K row.
+- Likely match, not proven: wave 72 carries the K103 fix (compacted followers refused read probes as prev-compacted; Task FG, `docs/status/2026-11/k103-read-probe-20261110.md` once merged), which candidate `9bb50fe79` did not have; these logs have no `vote_granted=1` probe lines to confirm it.
 
 **Host load during S2** (the same `ez-load` sampler; load1 at
 06:21Z / 08:51Z / 11:16Z):
@@ -450,10 +451,7 @@ K22's status is unchanged, with a dated clause.
   no live process.
 - The node 1 and node 2 stores (34 GiB each) and the work tree were removed
   with `edelete --force --delete`.
-- **Kept for the open K120 and K121 investigation:** node 3's store,
-  `fcstor005:/tmp/efs-taskEZ/stores-s2/s2/n3` (20 GiB, with `KEPT.txt`).
-  Delete it with `edelete` once the coordinator settles K120 and K121.
-  The method above recreates it.
+- Node 3's store (`fcstor005:/tmp/efs-taskEZ/stores-s2`, 20 GiB) was deleted with `edelete --force --delete` on Nov 10 at the coordinator's ruling: one caught-up member without its peers reproduces neither row, and the fix tasks rerun the harness in `scripts/evidence/ez/`.
 
 **Raw output:** `~erbmi1/efs-artifacts/taskEZ-20261109/s2/` (524 MiB):
 
