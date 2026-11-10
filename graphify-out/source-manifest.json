@@ -1509,9 +1509,9 @@
     "docs/status/2026-10/d39-consolidated-model-20261023.md": "68211f94877f2acbf05645ba2ef455c9f320cde460e821371b534451284f8bcc",
     "docs/status/2026-10/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
     "docs/status/2026-10/w100-eof-contract-20261013.md": "f8d0ef05a9b9d02a7118405d4bce0d6c4dbe4975b5138880b74a7cd995c2190c",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "50ea6c371c0d3e70c1411890294a8b3013786dbec4aec2d7a5c443e1e02a73b1",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "4a17211f39abd80a5d737ccb8766800d3f1db8fcd272e0c036bf4159b65f7359",
     "docs/status/alpha-1.1-consolidation.md": "c24210e5af50ff0c1d9f0fea74efb982947486c547230718a00b59f6c6d106a2",
-    "docs/status/decisions.md": "b85718c55ada23fc13070383b3e871c0308bae41be52a30bd75cbaf72c9a1187",
+    "docs/status/decisions.md": "0fad91d23c5949cbc0baa431a67d7faa6fa6d350b890492c9aaf4d19db57c75c",
     "docs/using/alpha-1.0-guide.md": "af171553530fdac62596e108d0accbd8e12824abbae1eab8af4355ce5ce1289f",
     "docs/using/alpha-1.0-posix.md": "5f63ca8d0009e06bf10adb1f86bc9d7f077e5f87372e45319f4ae50813af1646",
     "docs/using/alpha-1.0-surface.md": "6899e5dbc2b8244bd5fc12c28d298e722179b7a42fd0440ea94b80f1d1645aa9",
@@ -3021,5 +3021,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "08c1b03d49a5099a37e5a2110c0723bc5298e2af"
+  "source_commit": "22d58755a127a339ba86a59f9d334ad5bfadbaeb"
 }
