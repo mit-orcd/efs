@@ -96,6 +96,13 @@ commit `900b22b90` printed `candidate-state ... alive_rc=` for the same moment.
   the `EFS_MSG_GET_CHUNK` case) answers `EFS_GET_CHUNK_NOT_FOUND` (1, `include/efs/protocol.h:820`) with a one-byte body
   whenever `efs_store_get` fails for any reason other than integrity (format, identity or checksum fail with status 3).
   So node 2 had no readable fragment 1 for that generation, exactly as node 1 had no fragment 0.
+- **What makes a member's store read return NOT_FOUND** (`nvme_get`, `src/server/store_nvme.c`, then `read_fragment_verified`
+  and `read_fragment_impl`, `src/server/store.c`): only `read_file_bytes` failing with `ENOENT` on the fragment path
+  (tried first at the cached storage root, then at every root). There is no fence check on a read (the dead-inode fence in
+  `reclaim.c` refuses PUTs, not GETs), no sync window and no generation in the path. A file that exists but holds another
+  generation, a wrong identity or a bad hash gives `EFS_ERR_FRAG_IDENTITY` or `EFS_ERR_CHECKSUM`, and a short file gives
+  `EFS_ERR_CHECKSUM`; the handler reports those as INTEGRITY (status 3) and the local path returns them as `rc`, never -3.
+  `rc=-3` with status 1 therefore means the fragment file was absent on both members at that instant.
 - After a failed read (`:1451`, "a file that cannot be read stays a candidate"): `pk_read_failure` logs `candidate-read`
   (its `generation=` is the *base* generation, 0 for a freshly written file whose bytes are in the delta), `read_errors`
   is incremented once, the file's buffer is freed, and the candidate key stays in the index, so the next pass reads its
@@ -113,14 +120,26 @@ For each case:
 - **B (fragments present, read at a moment or in a way that fails): no mechanism found, improbable.** For B the
   fragment would have to be absent on two members at once, `NOT_FOUND` from both stores, and present again within seconds
   (the file would have been read on the next pass, 200 ms later, and was not counted again). The packer only considers a
-  file 1 s after its mtime. The wave 69 packer changes are not implicated by the code: `7553a4124` replaced nine
-  environment reads by constants and `b4066cf4c` renamed the remaining wait variables to `EFS_FAULT_PACK_*` behind
-  `EFS_FAULTS`; neither touches a read path.
-- **C: consistent with every line.** The window is real in the code: metadata is read at scan time, fragments some
-  milliseconds later; the unlink commit and the reclaim of a dead inode's fragment directories (`reclaim.c`: the dead
-  inode is fenced, then the deleter pool removes the directories on every member) are not ordered against a packer pass;
-  the load unlinks 4,479 files, 1,735 of them before they were packed; both fragments read were `NOT_FOUND`, which is what
-  reclaim leaves behind on every member; and the read error did not repeat, which is what a dropped candidate does.
+  file 1 s after its mtime. The wave 69 changes are not implicated by the code: `7553a4124` replaced nine packer
+  environment reads by constants, removed the `EFS_PUT_SYNC_MS` read in `store.c` (the 200 ms window is unchanged) and
+  made the GC backlog idle of 20 ms a constant in `raft_host.c` (it was already the default); `b4066cf4c` renamed the
+  remaining packer wait variables to `EFS_FAULT_PACK_*` behind `EFS_FAULTS`. None changes a read or the reap order.
+- **C: consistent with every line, including the timing.** Metadata is read at scan time and fragments some
+  milliseconds later; the load unlinks 4,479 files, 1,735 of them before they were packed; both fragments read were
+  `NOT_FOUND`, which is what reclaim leaves behind on every member; and the read error did not repeat, which is what a
+  dropped candidate does. The timing is the question, because a dead inode's fragments must be gone within about 18 ms of
+  the snapshot. The pass summary lines give the packer's phases: the failing pass logged at 07:24:55.259 had
+  `pass_ms=55` after a scan of `scan_ms=13`, so its scan ran about 55.191 to 55.204 and its fragment reads (`read_ms=7`)
+  from 55.204; the failure lines at 55.209 lie in that read phase. GC passes on node 1 start about 1.1 s apart; the one
+  logged at 55.353 with `ms=152` started about 55.201, three milliseconds before the reads, and its reap stage is the
+  first after the expiry and maintenance steps (`host_gc_reap_pass`, `raft_host.c:12736`): it scans the REAP markers,
+  sweeps the lanes (`reap_sweep=3` ms), has every member accept the batch (journal fsync, fence, `reap_fence=2` ms;
+  `host_gc_inode_nodes_batch`), and `reclaim.c` wakes its deleter pool on acceptance (`pthread_cond_broadcast`, `:599`) to
+  remove the fragment directories. So an inode whose unlink applied after the packer's snapshot of it and before 55.201
+  could lose its fragments on both members by about 55.207, which is just before the packer's read. The window needed is
+  narrow (the unlink must land in the last ten milliseconds of the packer's scan, on a file that this pass then reads),
+  which is consistent with a failure seen once in four gate runs. Log timestamps are emission times, so the order is
+  inferred to a few milliseconds, not measured.
 - Not proven: no log line names the unlink (above). If a later occurrence shows `candidate-read` without
   `candidate-gone`, the file was live and unchanged, and that is a different defect (A or B) that still fails D4.
 
@@ -138,9 +157,12 @@ means the failure was real and is counted. An out-of-memory result is never trea
 
 `tests/test_pack_candidate_alive.c` (in `make test`, mem KV, about 2 ms, `tests/budgets.tsv` row 30 s ceiling like its
 neighbours): a live file read by a pass is alive; the same inode republished with a new generation is `STALE`; a
-hard-linked file with one name unlinked is still alive; a file unlinked after the read is `STALE`. It cannot build without
-the function, so it fails before the change. It tests the decision, not the call in `pk_group` (the daemon path needs the
-race, which no hook controls without a sleep); the wiring is the loop below plus the code reading.
+hard-linked file with one name unlinked is still alive; a file unlinked after the read is `STALE`. Limits, stated plainly:
+the function arrived in the diagnostic commit `900b22b90`, so the test also passes on the fix's parent; it "fails before"
+only in the sense that it cannot build on devel, which has no such function. It tests the decision, not the call in
+`pk_group`: the new skip branch has not executed in any run I kept (no `candidate-gone` line appears in any retained
+log), because the race needs an unlink inside a window of milliseconds that no hook controls without a sleep. The wiring
+rests on the code reading.
 
 ## Runs
 
@@ -200,8 +222,7 @@ begins `285f98960203`): `runs-diag.tsv`, `runs-fixa.tsv`, `runs-fixb.tsv`, `load
 - Only the packer's candidate read (`pk_group`) is changed. The same race can count a `segment-read` failure in
   `pk_compact` (`read_errors` at `:1089`) for a segment retired meanwhile; not seen, not changed.
 - No live-cluster run, no RDMA-specific arm beyond what the fixture's transport used.
-- A planned extra set (12 runs per stream keeping every packer `candidate-*` line, to count how often a pass meets a gone
-  candidate) was started by mistake while another task's merge gate (`/tmp/efs-merge73*`) was running on node9900, and
+- A planned extra set (12 runs per stream, to count how often a pass meets a gone candidate) was started by mistake while another task's merge gate (`/tmp/efs-merge73*`) was running on node9900, and
   stopped within about two minutes by pid; no result from it is used, and it was not rerun. The rate of the window is
   therefore not measured.
 
