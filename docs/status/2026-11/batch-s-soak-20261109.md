@@ -1,7 +1,9 @@
 # Stage 1 batch S: four-host soak and K22 follower plateau (Task EZ)
 
+**Status (Nov 10):** merged into devel in wave 73; the two failures entered the register as K108 and K109 (drafted as K120 and K121), both OPEN, blocks alpha: yes (coordinator's ruling).
+
 **Verdict (Nov 10, on candidate `9bb50fe79`): S1 PASS. S2: the plateau
-PASSED, and two new product failures were found (K120 and K121, both FAIL).**
+PASSED, and two new product failures were found (K108 and K109, both FAIL).**
 
 - **S1:** four hours, four production members on four hosts, TCP, the E4/D4
   workload and the K43 kill schedule.
@@ -14,15 +16,15 @@ PASSED, and two new product failures were found (K120 and K121, both FAIL).**
 - **S2 plateau:** node 3's compactor was parked for 4 h at production caps.
   The K22 bound held for a 14,397 s plateau, and node 3's RSS stayed flat at
   0.92-0.95 GiB.
-- **K120 (S2, FAIL):** after release, node 3 rejoined through snapshot
+- **K108 (S2, FAIL):** after release, node 3 rejoined through snapshot
   import. The import holds each whole key diff in memory (up to 31.3M keys),
   and RSS peaked at 13.41 GiB, 105 times the 128 MiB budget.
-- **K121 (S2, FAIL):** while node 3 was stalled but reachable, its
+- **K109 (S2, FAIL):** while node 3 was stalled but reachable, its
   storage-fence error failed 6,832 clean client unmounts, despite K54's
   majority rule.
 - **Not seen:** no data error, and no failed mkdir or create.
 - **K rows:** K43, K29 and K22 keep their status, each with a dated clause.
-  K120 and K121 are drafted below for the coordinator; they are not in the
+  K108 and K109 are drafted below for the coordinator; they are not in the
   register, because its numbering must stay contiguous.
 - **Merge state:** not merged, not pushed.
 
@@ -344,7 +346,7 @@ stayed at or within one batch or flush of each limit:
   "about 6 h" plateau that xorinox would have needed. At fcstor commit rates,
   the caps were reached in 29 min.
 
-**Catch-up after release: FAIL, K120.** Node 3's RSS rose from about 0.35 GiB
+**Catch-up after release: FAIL, K108.** Node 3's RSS rose from about 0.35 GiB
 to a peak of 13.41 GiB (14,063,204 KiB). That is 105 times the 128 MiB
 budget and 118 times the warm peak of 119,292 KiB. It held at 12.6-12.8 GiB
 for about 26 minutes, until it caught up at 11:18:51, then fell to 0.33 GiB.
@@ -369,7 +371,7 @@ for about 26 minutes, until it caught up at 11:18:51, then fell to 0.33 GiB.
 - The earlier Task B import, about 2.1 times the warm RSS, ran at a much
   smaller lag.
 
-**Unmount fence with a stalled member: FAIL, K121.** All 17,391 bench rounds
+**Unmount fence with a stalled member: FAIL, K109.** All 17,391 bench rounds
 report `fail=0`: every mkdir and create succeeded. However, 6,832 of the
 rounds that ended in the stall and release phases failed their clean unmount
 after 15 s:
@@ -387,7 +389,7 @@ after 15 s:
 - The 1,859 rounds that passed came from the warm phase and the first
   minutes of the stall.
 
-**Side effects of K121 on the load:**
+**Side effects of K109 on the load:**
 
 - The driver counts a round as created files only if it exits 0. The files
   counter therefore froze at 9,295,000 from about 06:38.
@@ -440,7 +442,7 @@ distort the plateau.
   `9bb50fe79`.
 - **Snapshot import into a stalled follower at 1 GiB lag (matrix H15):**
   this run went far past that lag, and the import's memory is unbounded
-  (K120).
+  (K108).
 - **Multi-host and RDMA runs:** RDMA was not run.
 
 K22's status is unchanged, with a dated clause.
@@ -464,23 +466,21 @@ K22's status is unchanged, with a dated clause.
 
 ## New K rows (drafted for the coordinator)
 
-The register checker requires contiguous numbers. K102-K119 belong to other
-branches (EW, EY), so K120 and K121 are not inserted into the register on
-this branch. Their text for both tables is below. In the checklist, the evidence link becomes `2026-11/batch-s-soak-20261109.md#s2-k22-follower-plateau-at-production-caps`.
+Numbered at the wave 73 merge: these two rows were drafted on the branch as K120 and K121 (the range reserved for Task EZ) and entered the register as K108 and K109, the next free numbers; every mention on this page was renumbered. The drafted text for both tables is below. In the checklist, the evidence link becomes `2026-11/batch-s-soak-20261109.md#s2-k22-follower-plateau-at-production-caps`.
 
-**K120:**
+**K108:**
 
 | ID | Item | Kind | Disposition |
 | --- | --- | --- | --- |
-| K120 | Task EZ batch S2 (fcstor003-005, TCP, candidate `9bb50fe79`, production caps): a follower stalled for 4 h, then released, rejoined through snapshot import. `efs_kv_group_import_prepare` builds the whole key diff as one in-memory `efs_kv_item` array, held in `import_diff` until applied (`host_snap_import_pass`, `src/server/raft_host.c`). Diffs of 20.7M, 31.1M and 31.3M keys took node 3's RSS from 0.35 GiB to a 13.41 GiB peak (105 times the 128 MiB budget), held for about 26 min until catch-up. Rejoin memory scales with the lag, outside K22's bound. | server / resource bound | OPEN, blocks alpha: yes (default; the coordinator decides); import the diff in bounded batches, or stream it, so rejoin memory stays within the KV budget; gate: the S2 method with the RSS bound checked through drain ([evidence](#s2-k22-follower-plateau-at-production-caps)) |
+| K108 | Task EZ batch S2 (fcstor003-005, TCP, candidate `9bb50fe79`, production caps): a follower stalled for 4 h, then released, rejoined through snapshot import. `efs_kv_group_import_prepare` builds the whole key diff as one in-memory `efs_kv_item` array, held in `import_diff` until applied (`host_snap_import_pass`, `src/server/raft_host.c`). Diffs of 20.7M, 31.1M and 31.3M keys took node 3's RSS from 0.35 GiB to a 13.41 GiB peak (105 times the 128 MiB budget), held for about 26 min until catch-up. Rejoin memory scales with the lag, outside K22's bound. | server / resource bound | OPEN, blocks alpha: yes (default; the coordinator decides); import the diff in bounded batches, or stream it, so rejoin memory stays within the KV budget; gate: the S2 method with the RSS bound checked through drain ([evidence](#s2-k22-follower-plateau-at-production-caps)) |
 
 Recheck-table text: `OPEN, blocks alpha: yes (default); snapshot-import diff held whole in memory, 13.41 GiB peak on rejoin after a 4 h stall`, then the same evidence link
 
-**K121:**
+**K109:**
 
 | ID | Item | Kind | Disposition |
 | --- | --- | --- | --- |
-| K121 | Task EZ batch S2: with one of three members alive but its apply stalled, 6,832 clean client unmounts failed their session revoke after 15 s (`rc=-6` 4,629 times, `rc=-15` 2,203 times, `phase=storage-fence`; leaders logged `storage-fence: member=3 floor=2 check=0 rc=-15`), although the other two members sealed. `host_storage_fence_members` tolerates an unreachable member under K54's majority rule, but returns the first error reply from a reachable one. Every mkdir and create succeeded (`fail=0` in all 17,391 rounds). | server, client / clean stop with one member slow | OPEN, blocks alpha: yes (default; the coordinator decides); count an error reply like an unreached member toward the K54 majority, or bound it, so that one slow member cannot fail a clean unmount; gate: the S2 method with clean unmounts during the stall ([evidence](#s2-k22-follower-plateau-at-production-caps)) |
+| K109 | Task EZ batch S2: with one of three members alive but its apply stalled, 6,832 clean client unmounts failed their session revoke after 15 s (`rc=-6` 4,629 times, `rc=-15` 2,203 times, `phase=storage-fence`; leaders logged `storage-fence: member=3 floor=2 check=0 rc=-15`), although the other two members sealed. `host_storage_fence_members` tolerates an unreachable member under K54's majority rule, but returns the first error reply from a reachable one. Every mkdir and create succeeded (`fail=0` in all 17,391 rounds). | server, client / clean stop with one member slow | OPEN, blocks alpha: yes (default; the coordinator decides); count an error reply like an unreached member toward the K54 majority, or bound it, so that one slow member cannot fail a clean unmount; gate: the S2 method with clean unmounts during the stall ([evidence](#s2-k22-follower-plateau-at-production-caps)) |
 
 Recheck-table text: `OPEN, blocks alpha: yes (default); a reachable but stalled member's fence error fails every clean unmount, despite K54's majority rule`, then the same evidence link
 
@@ -496,7 +496,7 @@ Recheck-table text: `OPEN, blocks alpha: yes (default); a reachable but stalled 
   batch S, so none becomes VERIFIED.
 - **S2's leader change:** the group-0 leader change at 10:08:10 has no
   established cause.
-- **S2 load:** the bench load was throttled by K121's 15 s unmount waits from
+- **S2 load:** the bench load was throttled by K109's 15 s unmount waits from
   about 06:38, so S2's stall-phase commit rate says nothing about quorum
   throughput.
 - **S2 RSS:** node 3's RSS peak during the stall phase (2.04 GiB) came before
