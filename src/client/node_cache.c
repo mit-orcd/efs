@@ -1032,54 +1032,71 @@ void efs_client_conn_await_reply(efs_node_id_t node_id, struct efs_conn *conn)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
     if (slot < 0)
         return;
-    int64_t last = monotonic_ms();
+    /* No operation deadline: the conn's recv timeout bounded this wait before
+     * and bounds it still; at that bound the conn is shut down so the recv
+     * fails at once instead of waiting a second time. */
+    int unbounded = efs_net_deadline_ms() == 0;
+    int bound = conn->recv_timeout_ms ? conn->recv_timeout_ms : EFS_IO_TIMEOUT_MS;
+    int64_t start = monotonic_ms(), last = start;
     for (;;) {
         int remaining = efs_net_remaining_ms(INT_MAX);
         int64_t now = monotonic_ms();
-        pthread_mutex_lock(&g_client.conn_lock[idx]);
-        int64_t from = g_client.node_exch_end_ms[idx] > last ? g_client.node_exch_end_ms[idx] : last;
-        int run = remaining && now - from >= EFS_NODE_PROBE_MS && !g_client.node_exch_busy[idx];
-        char host[64] = {0};
-        uint16_t port = g_client.nodes[idx].port;
-        if (run) {
-            g_client.node_exch_busy[idx] = 1;
-            strncpy(host, g_client.nodes[idx].addr, sizeof(host) - 1);
+        if (unbounded && now - start >= bound) {
+            shutdown(conn->fd, SHUT_RDWR);
+            break;
         }
-        pthread_mutex_unlock(&g_client.conn_lock[idx]);
-        if (!run && remaining && now - from >= EFS_NODE_PROBE_MS)
-            last = now; /* another waiter runs the exchange: wait for its verdict */
-        if (run) {
-            int verdict = node_exchange(host, port, idx, 0);
-            now = monotonic_ms();
-            int cut = 0;
-            pthread_mutex_lock(&g_client.conn_lock[idx]);
-            g_client.node_exch_busy[idx] = 0;
-            g_client.node_exch_end_ms[idx] = now;
-            if (verdict == NODE_EX_SILENT) {
-                g_client.node_fail_streak[idx] = EFS_NODE_DOWN_FAILS;
-                g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
-                int n = pool_size();
-                for (int s = 0; s < n; s++) {
-                    if (g_client.conn_wait[idx][s] && g_client.conn[idx][s]) {
-                        shutdown(g_client.conn[idx][s]->fd, SHUT_RDWR);
-                        cut++;
-                    }
-                }
-            }
-            pthread_mutex_unlock(&g_client.conn_lock[idx]);
-            if (cut)
-                fprintf(stderr, "node-waiter-cut: node=%u conns=%d silent for the whole exchange bound\n",
-                        (unsigned)node_id, cut);
-            last = now;
-        }
-        remaining = efs_net_remaining_ms(INT_MAX);
         if (!remaining)
             break;
+        if (now - last >= EFS_NODE_PROBE_MS) {
+            char host[64] = {0};
+            uint16_t port;
+            pthread_mutex_lock(&g_client.conn_lock[idx]);
+            int64_t from = g_client.node_exch_end_ms[idx] > last ? g_client.node_exch_end_ms[idx] : last;
+            int run = now - from >= EFS_NODE_PROBE_MS && !g_client.node_exch_busy[idx];
+            port = g_client.nodes[idx].port;
+            if (run) {
+                g_client.node_exch_busy[idx] = 1;
+                strncpy(host, g_client.nodes[idx].addr, sizeof(host) - 1);
+            }
+            pthread_mutex_unlock(&g_client.conn_lock[idx]);
+            last = now; /* not run: another waiter's exchange is the verdict to wait for */
+            if (run) {
+                int verdict = node_exchange(host, port, idx, 0);
+                now = monotonic_ms();
+                int cut = 0;
+                pthread_mutex_lock(&g_client.conn_lock[idx]);
+                g_client.node_exch_busy[idx] = 0;
+                g_client.node_exch_end_ms[idx] = now;
+                if (verdict == NODE_EX_SILENT) {
+                    g_client.node_fail_streak[idx] = EFS_NODE_DOWN_FAILS;
+                    g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
+                    int n = pool_size();
+                    for (int s = 0; s < n; s++) {
+                        if (g_client.conn_wait[idx][s] && g_client.conn[idx][s]) {
+                            shutdown(g_client.conn[idx][s]->fd, SHUT_RDWR);
+                            cut++;
+                        }
+                    }
+                }
+                pthread_mutex_unlock(&g_client.conn_lock[idx]);
+                if (cut)
+                    fprintf(stderr, "node-waiter-cut: node=%u conns=%d silent for the whole exchange bound\n",
+                            (unsigned)node_id, cut);
+                last = now;
+            }
+            remaining = efs_net_remaining_ms(INT_MAX);
+            if (!remaining)
+                break;
+        }
         int64_t wait = last + EFS_NODE_PROBE_MS - monotonic_ms();
         if (wait < 1)
             wait = 1;
         if (wait > remaining)
             wait = remaining;
+        if (unbounded && wait > start + bound - now)
+            wait = start + bound - now;
+        if (wait < 1)
+            wait = 1;
         struct pollfd pfd = {.fd = conn->fd, .events = POLLIN};
         int ready = poll(&pfd, 1, (int)wait);
         if (ready > 0 || (ready < 0 && errno != EINTR))
