@@ -315,7 +315,7 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 ## Compile-time modes
 
 Oct 28: the durability-index regression adds one compile-only counting seam
-(16 names in the current checker). It is not read from the environment and
+(13 names in the current checker since A8 made `EFS_APPEND_ABANDON_MS`, `EFS_DEFAULT_SHARD_BITS` and `EFS_KV_WAL_RESERVE_BYTES` plain constants). It is not read from the environment and
 does not add an operational setting or an alternative product strategy. The
 before/after counts earlier on this page describe the original Oct 24 audit.
 
@@ -332,12 +332,9 @@ before/after counts earlier on this page describe the original Oct 24 audit.
 | `EFS_BUILD_TIME` | `common/version.c`; `Makefile` | build time in `--version` | build identity | Keep |
 | `EFS_PUT_ADMIT_LINGER_US` | `client/client_internal.h` (1000 µs) | PUT admission linger; tests that count admissions build with 20 s | test override | Keep: `#ifndef` seam for exact-count tests (K32) |
 | `EFS_FAULT_FILE` | `client/write.c` (`/tmp/efs/fault`) | REPORT withhold control file path (`EFS_FAULTS`) | test override | Keep: `test_wb_fault.py` |
-| `EFS_APPEND_ABANDON_MS` | `client/efs_fuse/` (10000) | APPEND abandon bound | overridable constant | No override anywhere; A8 may make it a plain constant |
-| `EFS_DEFAULT_SHARD_BITS` | `include/efs/common.h` (3) | default KV shard bits | overridable constant | No override anywhere; A8 may make it a plain constant |
-| `EFS_KV_WAL_RESERVE_BYTES` | `kv/kv_wal.c` (1 MiB) | WAL reserve | overridable constant | No override anywhere; A8 may make it a plain constant |
 | `EFS_SEGMENT_TEST_AUTHORITY` | `server/segment_store.c` | a test that includes the file supplies its own pack-object oracle | test seam | Keep |
 | `EFS_SEGMENT_TEST_PACK_STATE` | `server/segment_store.c` | a test that includes the file supplies its own pack-object-and-mark oracle (K37 rebuild PUT) | test seam | Keep |
-| `EFS_STOP_MS` | `client/stop_control.h` (60000) | client stop drain bound | overridable constant | No override anywhere; A8 may make it a plain constant |
+| `EFS_STOP_MS` | `client/stop_control.h` (60000) | client stop drain bound | test override | Keep (A8): `#ifndef` seam, `tests/test_stop_control.c` builds with 100 ms; no product build overrides it |
 
 ## CLI options and runtime management settings
 

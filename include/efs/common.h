@@ -100,9 +100,7 @@ _Static_assert(EFS_MAX_NODES >= EFS_NUM_FRAGMENTS && EFS_MAX_NODES < 32,
  * Raise this only after the flush is shard-lock-aware (snapshot under the
  * shard lock, pack small tables per page); the per-op CREATE/APPEND path
  * does benefit from more shards. bits=0 is not a product mode. */
-#ifndef EFS_DEFAULT_SHARD_BITS
 #define EFS_DEFAULT_SHARD_BITS  3
-#endif
 /* Metadata pages are 128 KiB (EFS_META_PAGE_SIZE); the inode staging table
  * still slabs rows at that granularity. */
 /* On-disk inode directory sharding: five base-10000 groups (0000-9999)

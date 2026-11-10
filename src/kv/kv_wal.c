@@ -11,9 +11,7 @@
 #include <linux/falloc.h>
 #endif
 
-#ifndef EFS_KV_WAL_RESERVE_BYTES
 #define EFS_KV_WAL_RESERVE_BYTES (1024ull * 1024ull)
-#endif
 
 int kv_buf_set(struct kv_buf *b, const uint8_t *src, uint32_t n)
 {
