@@ -566,6 +566,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_readindex_operation.py
 	python3 tests/test_readindex_completion.py
 	python3 tests/test_readindex_publish.py
+	python3 tests/test_host_view_spin.py
 	python3 tests/test_readindex_pair.py
 	python3 tests/test_readindex_tickets.py
 	python3 tests/test_readindex_admission.py

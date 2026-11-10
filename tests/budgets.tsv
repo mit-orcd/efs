@@ -221,6 +221,7 @@ python3 tests/test_lookup_read_group.py	30	1	fast suite, 30 s ceiling	test	serve
 python3 tests/test_readindex_operation.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index	An RPC may share its own authority fences, never another RPC's fences
 python3 tests/test_readindex_completion.py	30	1	fast suite, 30 s ceiling	test	raft,server/raft_host	A superseded quorum completes admitted waiters, never post-send arrivals
 python3 tests/test_readindex_publish.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index,raft	Exercise actual coherent host publication
+python3 tests/test_host_view_spin.py	30	1	fast suite, 30 s ceiling	test	server/raft_host	K107: host_view_get waits on view_mu after HOST_VIEW_TRIES odd v_seq loads instead of spinning; no torn view
 python3 tests/test_readindex_pair.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index	Two fresh admissions precede either send
 python3 tests/test_readindex_tickets.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index	Lock-free ReadIndex admission: ri_begun precedes probes, pump starts requests
 python3 tests/test_readindex_admission.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.read_index	Actual scalar admission: start once, never cover post-send arrivals
