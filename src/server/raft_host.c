@@ -284,15 +284,13 @@ struct host_group {
     uint64_t import_incl;
     uint64_t import_term;
     char import_path[EFS_MAX_PATH];
-    /* Prepared diff. Key pointers live in the two hold buffers. The pump
-     * batches this in the same call that acknowledges the snapshot, so a
-     * newer snapshot can still discard it without writing the KV. */
-    struct efs_kv_item *import_diff;
-    uint32_t import_ni;
-    uint32_t import_at;      /* keys already batched; slice cursor */
-    int import_applying;     /* pump holds the diff; cancel must not free */
-    uint8_t *import_hold_a;
-    uint8_t *import_hold_b;
+    /* K108: the validated incoming and local images, merged and applied a
+     * bounded batch per pump call (efs_kv_import_step); nothing but two read
+     * windows and one batch is resident. The pump writes in the same call that
+     * acknowledges the snapshot, so a newer snapshot can still discard it
+     * before the first batch lands. */
+    struct efs_kv_import *import_im;
+    int import_applying;     /* pump holds the importer; cancel must not free */
     uint64_t import_retry_us;
     int kv_incomplete;  /* apply missed a committed row; do not lead */
     /* W127: a committed entry this build cannot apply. Sticky until restart
@@ -3831,21 +3829,13 @@ static void host_snap_close(void *handle)
 #define SNAP_IMP_DONE   3
 #define SNAP_IMP_FAIL   4
 #define SNAP_IMP_APPLY  5
-/* Keys of an import diff the pump writes per cycle, then returns so
- * the same cycle can answer AppendEntries. A fixed count, not a knob:
- * one tick is 5 ms and a point put is well under that at this size. */
-#define HOST_SNAP_SLICE 1024
-
+/* One efs_kv_import_step per pump cycle (at most 1024 keys written, 16384
+ * records merged), then back to the pump so the same cycle can answer
+ * AppendEntries. Fixed counts in kv_snap.c, not knobs. */
 static void snap_import_free_diff(struct host_group *g)
 {
-    free(g->import_diff);
-    free(g->import_hold_a);
-    free(g->import_hold_b);
-    g->import_diff = NULL;
-    g->import_hold_a = NULL;
-    g->import_hold_b = NULL;
-    g->import_ni = 0;
-    g->import_at = 0;
+    efs_kv_import_close(g->import_im);
+    g->import_im = NULL;
 }
 
 /* Drop a queued import, or invalidate one the GC thread is already
@@ -3893,22 +3883,18 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
         return 1;
     }
     if (st == SNAP_IMP_DONE) {
-        struct efs_kv_item *diff = g->import_diff;
-        uint32_t at = g->import_at;
-        uint32_t ni = g->import_ni;
-        uint32_t n;
+        struct efs_kv_import *im = g->import_im;
+        int done = 0;
 
-        n = (at < ni) ? ni - at : 0;
-        if (n > HOST_SNAP_SLICE)
-            n = HOST_SNAP_SLICE;
         g->import_applying = 1;
         g->import_state = SNAP_IMP_APPLY;
         pthread_mutex_unlock(&h->snap_mu);
-        /* One slice, then back to the pump so heartbeats go out before
+        /* One batch, then back to the pump so heartbeats go out before
          * the leader retries this chunk. The ack (OK) waits until the
-         * cursor reaches ni; until then the retry gets BUSY. */
+         * importer has merged both images to the end; until then the
+         * retry gets BUSY. */
         __atomic_store_n(&h->snap_batch, 1, __ATOMIC_RELEASE);
-        *rc = n ? efs_kv_batch(h->kv, diff + at, n) : EFS_OK;
+        *rc = efs_kv_import_step(im, &done);
         __atomic_store_n(&h->snap_batch, 0, __ATOMIC_RELEASE);
         pthread_mutex_lock(&h->snap_mu);
         g->import_applying = 0;
@@ -3924,8 +3910,7 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
             pthread_mutex_unlock(&h->snap_mu);
             return 1;
         }
-        g->import_at = at + n;
-        if (g->import_at < g->import_ni) {
+        if (!done) {
             g->import_state = SNAP_IMP_DONE;
             pthread_mutex_unlock(&h->snap_mu);
             *rc = EFS_ERR_BUSY;
@@ -3933,6 +3918,15 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
         }
         g->part_off = 0;
         g->import_state = SNAP_IMP_IDLE;
+        {
+            uint64_t peak = 0, nd = 0;
+
+            efs_kv_import_stat(im, NULL, NULL, &peak, &nd);
+            efs_telemetry_log(0, "raft-snap: import applied group=%u "
+                    "incl=%llu diff_keys=%llu buf_peak=%llu\n", g->group,
+                    (unsigned long long)g->import_incl,
+                    (unsigned long long)nd, (unsigned long long)peak);
+        }
         snap_import_free_diff(g);
         /* The diff replaced this group's keyspace — the pending-GC
          * watermark is re-derived on the next pass (D26). */
@@ -11468,36 +11462,31 @@ static void host_snap_import_pass(struct efs_raft_host *h)
         efs_telemetry_log(0, "raft-snap: import export group=%u rc=%d ms=%llu\n",
                 group, rc, (unsigned long long)((now_us_() - t0) / 1000));
         if (rc == EFS_OK) {
-            struct efs_kv_item *diff = NULL;
-            uint8_t *ha = NULL, *hb = NULL;
-            uint32_t ni = 0;
+            struct efs_kv_import *im = NULL;
+            uint32_t n_in = 0, n_loc = 0;
+            uint64_t peak = 0;
 
-            rc = efs_kv_group_import_prepare(h->kv, group, path, local,
-                                             &diff, &ni, &ha, &hb);
-            efs_telemetry_log(0, "raft-snap: import diff group=%u rc=%d n=%u "
-                    "ms=%llu\n", group, rc, ni,
+            /* Reads and validates both images; writes nothing. The local
+             * image is read through the open fd from here on. */
+            rc = efs_kv_import_open(h->kv, group, path, local, &im);
+            unlink(local);
+            efs_kv_import_stat(im, &n_in, &n_loc, &peak, NULL);
+            efs_telemetry_log(0, "raft-snap: import open group=%u rc=%d "
+                    "n_in=%u n_local=%u buf_peak=%llu ms=%llu\n", group, rc,
+                    n_in, n_loc, (unsigned long long)peak,
                     (unsigned long long)((now_us_() - t0) / 1000));
             if (rc == EFS_OK) {
                 pthread_mutex_lock(&h->snap_mu);
                 if (h->g[gi].import_gen == gen &&
                     h->g[gi].import_state == SNAP_IMP_RUN) {
                     snap_import_free_diff(&h->g[gi]);
-                    h->g[gi].import_diff = diff;
-                    h->g[gi].import_ni = ni;
-                    h->g[gi].import_at = 0;
-                    h->g[gi].import_hold_a = ha;
-                    h->g[gi].import_hold_b = hb;
+                    h->g[gi].import_im = im;
                     h->g[gi].import_rc = EFS_OK;
                     h->g[gi].import_state = SNAP_IMP_DONE;
-                    diff = NULL;
-                    ha = NULL;
-                    hb = NULL;
+                    im = NULL;
                 }
                 pthread_mutex_unlock(&h->snap_mu);
-                free(diff);
-                free(ha);
-                free(hb);
-                unlink(local);
+                efs_kv_import_close(im);
                 continue;
             }
         }

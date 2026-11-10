@@ -210,6 +210,7 @@ data_commit|tests/test_data_commit
 retained_namespace_audit|tests/test_retained_namespace_audit
 wire|tests/test_wire
 kv_lsm|tests/test_kv_lsm
+kv_snap_import|tests/test_kv_snap_import
 raft|tests/test_raft
 # Task EM: the other sequence binaries (EG case filter; raft, sim and txn
 # start no thread, so they are on this list only).

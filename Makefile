@@ -164,10 +164,10 @@ TEST_BINS += tests/test_retained_namespace_audit
 TEST_BINS += tests/test_kv_reader_gate
 TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
-TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c
+TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c tests/test_kv_snap_import.c
 TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c
 TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface
-TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view
+TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view tests/test_kv_snap_import
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
@@ -852,6 +852,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_child_vec_index
 	./tests/test_crc32
 	./tests/test_kv_seg_stdio
+	./tests/test_kv_snap_import
 	./tests/test_kv_compact_manifest_view
 	./tests/test_pack_validate_once
 	./tests/test_kv_reader_gate
@@ -1374,6 +1375,7 @@ tests/test_b_geometry tests/test_frag_record tests/test_packed_segment tests/tes
 
 tests/test_child_vec_index: override LDFLAGS += -Wl,--wrap=realloc -Wl,--wrap=calloc
 tests/test_kv_seg_stdio: override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=setvbuf -Wl,--wrap=fsync
+tests/test_kv_snap_import: override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=free
 tests/test_kv_compact_manifest_view: override LDFLAGS += -Wl,--wrap=fsync
 
 tests/test_directory_sync_group: tests/test_directory_sync_group.c src/server/directory_sync_group.h

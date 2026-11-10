@@ -627,6 +627,7 @@ python3 tests/test_rename_budget.py	30	1	fast suite, 30 s ceiling	test	client/op
 ./tests/test_child_vec_index	30	1	fast suite, 30 s ceiling	test	meta/metadata	AW: reverse slot -> position index invariants
 ./tests/test_crc32	1	1	fast suite, 1 s ceiling (new; to be re-fitted from gate timings)	test	common	CRC32 slicing-by-eight equals the byte-table result on unaligned lengths and offsets
 ./tests/test_kv_seg_stdio	1	1	fast suite, 1 s ceiling (new; to be re-fitted from gate timings)	test	kv	SST writer owns its 1 MiB stdio buffer: capacity, readback and failure cleanup
+./tests/test_kv_snap_import	30	1	fast suite, 30 s ceiling (new, Task FN; to be re-fitted from gate timings)	test	kv/kv_snap	K108: snapshot import heap stays under 2 MiB for a 7000-key diff; interrupted import converges; failed batch retried; malformed image refused before any write
 ./tests/test_kv_compact_manifest_view	1	1	fast suite, 1 s ceiling (new; to be re-fitted from gate timings)	test	kv	Compaction yields the LSM reader view across the MANIFEST write: a reader proceeds during the fsync
 ./tests/test_pack_validate_once	30	1	fast suite, 30 s ceiling	test	meta/pack_mapping	A packed segment is validated once per image (ledger init, compaction enumeration, packed-base reads), and
 ./tests/test_kv_reader_gate	30	1	fast suite, 30 s ceiling	test	kv	A KVLSM2 MANIFEST carries reader requirements
