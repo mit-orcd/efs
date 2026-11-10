@@ -11,11 +11,14 @@
  *
  * Every acknowledged fragment of every PUT object is recorded here with the
  * node's acknowledgement sequence and the PUT verifier (boot epoch) of the
- * incarnation that acknowledged it. fsync COMMITs only the nodes holding
- * the file's unproven fragments; a fragment is durable when a COMMIT sent
- * after its acknowledgement succeeds with the same verifier. A verifier
- * that changed before the COMMIT is a lost fragment (the payload may have
- * been released already: never resent, never forgotten).
+ * incarnation that acknowledged it, and the root and barrier position it
+ * was acknowledged at (K110). fsync COMMITs only the nodes holding the
+ * file's unproven fragments; a fragment is durable when a COMMIT sent after
+ * its acknowledgement succeeds with the same verifier. A verifier that
+ * changed before the COMMIT is a lost fragment (the payload may have been
+ * released already: never resent, never forgotten) unless the node's COMMIT
+ * history proves that incarnation's last completed barrier covered the
+ * fragment's position on its root. A lost fragment stays lost.
  *
  * A stripe is proven when two or three fragments are durable and a third
  * that is not is covered by a durable degraded mark: the one its
@@ -38,7 +41,7 @@ struct stripe {
     uint32_t prev; /* previous inode-bucket entry, 0 at head */
     uint32_t hash_next; /* exact (ino, ci, object) lookup chain */
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
-    uint64_t seq[EFS_NUM_FRAGMENTS], epoch[EFS_NUM_FRAGMENTS];
+    uint64_t seq[EFS_NUM_FRAGMENTS], epoch[EFS_NUM_FRAGMENTS], ack[EFS_NUM_FRAGMENTS];
     uint8_t state[EFS_NUM_FRAGMENTS];
     uint8_t published; /* this object had a successful REPORT/receipt */
     uint8_t closed; /* durable ticket settlement forbids any later publication */
@@ -173,7 +176,8 @@ static int stripe_insert(const struct stripe *s)
 
 static int stripe_note_locked(const struct efs_put_ticket *t,
                               const uint64_t seq[EFS_NUM_FRAGMENTS],
-                              const uint64_t epoch[EFS_NUM_FRAGMENTS])
+                              const uint64_t epoch[EFS_NUM_FRAGMENTS],
+                              const uint64_t ack[EFS_NUM_FRAGMENTS])
 {
     struct stripe *p = stripe_find(t->ino, t->ci, t->object);
     if (p) {
@@ -185,6 +189,7 @@ static int stripe_note_locked(const struct efs_put_ticket *t,
                 p->state[i] = FRAG_PENDING;
                 p->seq[i] = seq[i];
                 p->epoch[i] = epoch[i];
+                p->ack[i] = ack[i];
             }
         return EFS_OK;
     }
@@ -198,6 +203,7 @@ static int stripe_note_locked(const struct efs_put_ticket *t,
         s.nodes[i] = t->nodes[i];
         s.seq[i] = seq[i];
         s.epoch[i] = epoch[i];
+        s.ack[i] = ack[i];
         s.state[i] = seq[i] ? FRAG_PENDING : FRAG_MISSING;
     }
     return stripe_insert(&s);
@@ -207,7 +213,8 @@ static int stripe_prove(efs_ino_t ino, int all);
 
 int efs_client_stripe_note(const struct efs_put_ticket *t,
                            const uint64_t seq[EFS_NUM_FRAGMENTS],
-                           const uint64_t epoch[EFS_NUM_FRAGMENTS])
+                           const uint64_t epoch[EFS_NUM_FRAGMENTS],
+                           const uint64_t ack[EFS_NUM_FRAGMENTS])
 {
     int acked = 0;
     if (!t || !t->ino || !t->object || !t->inode_gen)
@@ -220,7 +227,7 @@ int efs_client_stripe_note(const struct efs_put_ticket *t,
     if (acked < 2)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&commit_mu);
-    int rc = stripe_note_locked(t, seq, epoch);
+    int rc = stripe_note_locked(t, seq, epoch, ack);
     pthread_mutex_unlock(&commit_mu);
     if (rc != EFS_ERR_NOMEM)
         return rc;
@@ -228,12 +235,12 @@ int efs_client_stripe_note(const struct efs_put_ticket *t,
      * table that stays full refuses the PUT rather than forget a record. */
     pthread_mutex_lock(&sweep_mu);
     pthread_mutex_lock(&commit_mu);
-    rc = stripe_note_locked(t, seq, epoch);
+    rc = stripe_note_locked(t, seq, epoch, ack);
     pthread_mutex_unlock(&commit_mu);
     if (rc == EFS_ERR_NOMEM) {
         (void)stripe_prove(0, 1);
         pthread_mutex_lock(&commit_mu);
-        rc = stripe_note_locked(t, seq, epoch);
+        rc = stripe_note_locked(t, seq, epoch, ack);
         pthread_mutex_unlock(&commit_mu);
     }
     pthread_mutex_unlock(&sweep_mu);
@@ -282,7 +289,23 @@ struct commit_job {
     uint64_t target, epoch, deadline;
     int rc, done; /* published under group->mu */
     struct commit_group *group;
+    struct efs_data_commit_history *hist; /* the node's barrier history (K110) */
+    uint32_t nhist;
 };
+
+/* Did the node's earlier incarnation `epoch` complete a barrier covering a
+ * fragment acknowledged at `ack` (root in the top byte, then the position)? */
+static int history_covers(const struct commit_job *j, uint64_t epoch, uint64_t ack)
+{
+    uint64_t pos = ack & EFS_PUT_POS_MASK;
+    if (!pos)
+        return 0;
+    for (uint32_t k = 0; k < j->nhist; k++)
+        if (j->hist[k].verifier == epoch && j->hist[k].root == (ack >> 56) &&
+            pos <= j->hist[k].position)
+            return 1;
+    return 0;
+}
 
 /* One COMMIT. rc OK with the reply's verifier in epoch, or the failure. */
 static void *commit_one(void *arg)
@@ -303,9 +326,16 @@ static void *commit_one(void *arg)
                 efs_client_conn_drop(j->node, conn);
             } else {
                 efs_client_conn_release(j->node, conn);
-                if (type == EFS_MSG_DATA_COMMIT_REPLY &&
-                    bytes == sizeof(struct efs_msg_data_commit_reply)) {
+                if (type == EFS_MSG_DATA_COMMIT_REPLY && efs_data_commit_reply_ok(reply, bytes)) {
                     const struct efs_msg_data_commit_reply *r = reply;
+                    free(j->hist);
+                    j->hist = NULL;
+                    j->nhist = 0;
+                    if (r->rc == EFS_OK && r->history &&
+                        (j->hist = malloc(r->history * sizeof(*j->hist)))) {
+                        memcpy(j->hist, r + 1, r->history * sizeof(*j->hist));
+                        j->nhist = r->history;
+                    }
                     /* A refusal (failed barrier, uncertain recovery) proves
                      * nothing on this node. */
                     j->rc = r->rc == EFS_OK && r->boot_epoch ? EFS_OK : EFS_ERR_IO;
@@ -471,7 +501,7 @@ static int stripe_prove(efs_ino_t ino, int all)
     pthread_mutex_unlock(&group.mu);
 
     int rc = EFS_OK, expired_logged = 0;
-    unsigned logged = 0, marked = 0, remaining = ns;
+    unsigned logged = 0, marked = 0, remaining = ns, by_history = 0, lost_frags = 0;
     const char *what = all ? "data-commit sweep" : "fsync";
     efs_client_rpc_set_deadline_ms(deadline);
     for (int pass = 0; pass < 2; pass++) {
@@ -502,10 +532,18 @@ static int stripe_prove(efs_ino_t ino, int all)
             }
             for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
                 int s = slot[p->nodes[i]];
-                if (p->state[i] != FRAG_PENDING || s < 0 || !finished[s] || jobs[s].rc != EFS_OK ||
-                    p->seq[i] > jobs[s].target)
+                if (p->state[i] != FRAG_PENDING || s < 0 || !finished[s] ||
+                    jobs[s].rc != EFS_OK || p->seq[i] > jobs[s].target)
                     continue;
-                p->state[i] = p->epoch[i] == jobs[s].epoch ? FRAG_DURABLE : FRAG_LOST;
+                if (p->epoch[i] == jobs[s].epoch) {
+                    p->state[i] = FRAG_DURABLE;
+                } else if (history_covers(&jobs[s], p->epoch[i], p->ack[i])) {
+                    p->state[i] = FRAG_DURABLE;
+                    by_history++;
+                } else {
+                    p->state[i] = FRAG_LOST;
+                    lost_frags++;
+                }
             }
             snap[k] = *p;
         }
@@ -595,6 +633,11 @@ static int stripe_prove(efs_ino_t ino, int all)
             }
         }
     }
+    if (by_history || lost_frags)
+        fprintf(stderr, "%s: restarted members: %u fragments proven by their barrier history, "
+                "%u lost\n", what, by_history, lost_frags);
+    for (int i = 0; i < n; i++)
+        free(jobs[i].hist);
     pthread_cond_destroy(&group.cv);
     pthread_mutex_destroy(&group.mu);
     if (marked > 8)

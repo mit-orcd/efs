@@ -58,7 +58,7 @@ int efs_recv_msg(int fd,uint8_t *type,void **reply,uint32_t *bytes){
   uint8_t *p=calloc(1,5);assert(p);efs_put_upload_wr32(p,(uint32_t)rc);*reply=p;*bytes=5;return 0;
  }
  uint8_t *p=calloc(1,EFS_PUT_REPLY_LEN);assert(p);
- efs_put_reply_encode(rc,rc==EFS_OK?2:0xff,123,p);
+ efs_put_reply_encode(rc,rc==EFS_OK?2:0xff,123,0,p);
  *reply=p;*bytes=EFS_PUT_REPLY_LEN;return 0;
 }
 static int fake_close(int fd){assert(fd==100+(int)fi);if(mode==6&&calls[fi]==1)lost[fi]++;return 0;}

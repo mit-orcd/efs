@@ -145,7 +145,11 @@ int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status)
     return EFS_OK;
 }
 
-int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path, uint64_t *epoch)
+_Static_assert(sizeof(((struct efs_conn *)0)->put_reply) == 4 + 1 + EFS_PUT_REPLY_LEN,
+               "put_reply buffer holds one PUT reply frame");
+
+int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path, uint64_t *epoch,
+                       uint64_t *ack)
 {
     uint32_t be;
     uint32_t nlen;
@@ -166,6 +170,7 @@ int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path, ui
     if (path)
         *path = raw[2];
     if (epoch) *epoch = efs_put_epoch_read(raw + 3);
+    if (ack) *ack = efs_put_epoch_read(raw + 11);
     return EFS_OK;
 }
 
@@ -673,7 +678,7 @@ int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status)
 }
 
 int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
-                            uint8_t *path, uint64_t *epoch)
+                            uint8_t *path, uint64_t *epoch, uint64_t *ack)
 {
     if (path)
         *path = 0xff;
@@ -693,11 +698,12 @@ int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
             if (path)
                 *path = c->put_reply[6];
             if (epoch) *epoch = efs_put_epoch_read(c->put_reply + 7);
+            if (ack) *ack = efs_put_epoch_read(c->put_reply + 15);
             c->put_reply_used = 0;
             efs_conn_note_ok(c);
             return EFS_OK;
         }
-        return efs_recv_put_reply(c->fd, type, status, path, epoch);
+        return efs_recv_put_reply(c->fd, type, status, path, epoch, ack);
     }
 
     const uint8_t *pl = NULL;
@@ -715,6 +721,7 @@ int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
     if (path)
         *path = pl[1];
     if (epoch) *epoch = efs_put_epoch_read(pl + 2);
+    if (ack) *ack = efs_put_epoch_read(pl + 10);
     efs_rdma_message_release(c->rc);
     return EFS_OK;
 }

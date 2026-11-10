@@ -1588,7 +1588,7 @@ static int fragment_root_lookup(struct efsd_server *s, const char *path,
  * (recovery.c) proves the store and calls server_put_sync_recovered.
  * Metadata-table fragments keep their per-file barriers. */
 #define PUT_SYNC_RECORD ".efs-durable-epoch"
-#define PUT_SYNC_RECORD_LEN 192
+#define PUT_SYNC_RECORD_LEN 200
 #define PUT_SYNC_BACKOFF_MIN_NS 50000000ull
 #define PUT_SYNC_BACKOFF_MAX_NS 2000000000ull
 #define PUT_SYNC_FAIL_LOG_NS 60000000000ull
@@ -1599,7 +1599,7 @@ struct put_sync_root {
     pthread_cond_t cv;
     pthread_t thread;
     int thread_started;
-    uint32_t boot, root_count;
+    uint32_t boot, root_count, index; /* index: this root's place in the storage list */
     uint64_t verifier; /* retained only across a proven all-root clean stop */
     uint64_t seq, durable_seq;            /* open epoch, last durable epoch */
     uint64_t cur_bytes, cur_frags, cur_first_ns;
@@ -1616,7 +1616,21 @@ struct put_sync_root {
      * before this boot could acknowledge any PUT (see put_sync_abandon). */
     uint8_t prev_record[PUT_SYNC_RECORD_LEN];
     int prev_existed, prev_record_ok;
+    /* K110 barrier history: for each earlier incarnation (verifier) of this
+     * root, the position its last completed barrier covered. Written at
+     * attach, trusted (ring_ok) only once verified recovery has dropped no
+     * fragment it covers; ring[0] is the newest predecessor. */
+    struct put_sync_ring { uint64_t verifier, position; } ring[EFS_DATA_COMMIT_RING];
+    uint32_t ring_n;
+    int ring_ok;                 /* atomic: the record carries it */
+    uint64_t covered_until_ns;   /* a dropped file this old is covered */
+    uint64_t covered_drops;      /* atomic: recovery drops of covered files */
+    pthread_mutex_t rec_mu;      /* one writer of the record at a time; also
+                                  * guards ring_n/ring_ok (written together) and rec_seq */
+    uint64_t rec_seq;            /* the seq the record file names (under rec_mu) */
+    int void_logged;             /* under mu: a forced void was logged once */
 };
+#define PUT_SYNC_KEEP_SEQ UINT64_MAX /* rewrite the record naming the seq it has */
 static struct put_sync_root put_sync_roots[EFS_MAX_STORAGE_PATHS];
 static int put_sync_state[EFS_MAX_STORAGE_PATHS]; /* 0 unset, 1 async, -1 not async */
 static int put_sync_serving, put_sync_stopped; /* under put_sync_mu */
@@ -1637,12 +1651,17 @@ static uint64_t put_sync_wall_ns(void)
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
-/* V2 is a fixed, checksummed record. Clean-restart reuse must not trust a
- * torn combination of old clean state and a new verifier. A malformed record
- * fails closed; the v1 reader is migration-only and cannot authorize reuse. */
+/* V3 is a fixed, checksummed record: the barrier state plus the barrier
+ * history ring (K110). Clean-restart reuse must not trust a torn
+ * combination of old clean state and a new verifier. A malformed record, or
+ * an older version (v1 text, EFSDUR02: no migration), fails closed.
+ *   0 magic  8 boot  16 clean  24 seq  32 time_ns  40 verifier  48 roots
+ *   56 ring_ok  64 ring_n  72+16*i {verifier, position}  184 root index
+ *   192 crc32 of bytes 0..191 */
 struct put_sync_record {
-    uint32_t boot, clean, roots;
+    uint32_t boot, clean, roots, index, ring_ok, ring_n;
     uint64_t seq, time_ns, verifier;
+    struct { uint64_t verifier, position; } ring[EFS_DATA_COMMIT_RING];
 };
 static int put_sync_record_read(int fd, struct put_sync_record *out)
 {
@@ -1651,48 +1670,67 @@ static int put_sync_record_read(int fd, struct put_sync_record *out)
     do { n=pread(fd,rec,PUT_SYNC_RECORD_LEN+1,0); } while(n<0 && errno==EINTR);
     if(n!=PUT_SYNC_RECORD_LEN)return EFS_ERR_IO;
     memset(out,0,sizeof(*out));
-    if(!memcmp(rec,"EFSDUR02",8)) {
-        if(efs_put_epoch_read(rec+184)!=efs_crc32(rec,184))return EFS_ERR_IO;
-        uint64_t boot=efs_put_epoch_read(rec+8),clean=efs_put_epoch_read(rec+16);
-        uint64_t roots=efs_put_epoch_read(rec+48);
-        if(!boot || boot>=UINT32_MAX || clean>1 || !roots || roots>EFS_MAX_STORAGE_PATHS ||
-           !efs_put_epoch_read(rec+40))return EFS_ERR_IO;
-        out->boot=(uint32_t)boot;out->clean=(uint32_t)clean;out->roots=(uint32_t)roots;
-        out->seq=efs_put_epoch_read(rec+24);out->time_ns=efs_put_epoch_read(rec+32);
-        out->verifier=efs_put_epoch_read(rec+40);
-        return EFS_OK;
-    }
-    unsigned boot=0,clean=0;unsigned long long seq=0,ns=0;int used=0;
-    if(sscanf((char *)rec,"efs-durable-epoch v1 boot=%u seq=%llu time_ns=%llu clean=%u%n",
-              &boot,&seq,&ns,&clean,&used)!=4 || !boot || boot>=UINT32_MAX || clean>1)
+    if(memcmp(rec,"EFSDUR03",8))return EFS_ERR_IO;
+    if(efs_put_epoch_read(rec+192)!=efs_crc32(rec,192))return EFS_ERR_IO;
+    uint64_t boot=efs_put_epoch_read(rec+8),clean=efs_put_epoch_read(rec+16);
+    uint64_t roots=efs_put_epoch_read(rec+48),index=efs_put_epoch_read(rec+184);
+    uint64_t ok=efs_put_epoch_read(rec+56),rn=efs_put_epoch_read(rec+64);
+    if(!boot || boot>=UINT32_MAX || clean>1 || !roots || roots>EFS_MAX_STORAGE_PATHS ||
+       index>=roots || !efs_put_epoch_read(rec+40) || ok>1 || rn>EFS_DATA_COMMIT_RING)
         return EFS_ERR_IO;
-    for(int i=used;i<PUT_SYNC_RECORD_LEN;i++)
-        if(rec[i]!=' ' && rec[i]!='\n')return EFS_ERR_IO;
-    out->boot=boot;out->clean=clean;out->seq=seq;out->time_ns=ns;
+    out->boot=(uint32_t)boot;out->clean=(uint32_t)clean;out->roots=(uint32_t)roots;
+    out->index=(uint32_t)index;out->ring_ok=(uint32_t)ok;out->ring_n=(uint32_t)rn;
+    out->seq=efs_put_epoch_read(rec+24);out->time_ns=efs_put_epoch_read(rec+32);
+    out->verifier=efs_put_epoch_read(rec+40);
+    for(uint32_t i=0;i<rn;i++) {
+        out->ring[i].verifier=efs_put_epoch_read(rec+72+16*i);
+        out->ring[i].position=efs_put_epoch_read(rec+80+16*i);
+        if(!out->ring[i].verifier || !out->ring[i].position)return EFS_ERR_IO;
+    }
     return EFS_OK;
+}
+
+/* Write the whole record; `sync` makes it durable. A barrier whose record
+ * sync failed rewrites the previous durable seq without a sync (best
+ * effort), so the file never names a barrier that was reported failed. */
+static int put_sync_record_put(struct put_sync_root *r, uint64_t seq, int clean, int sync)
+{
+    uint8_t rec[PUT_SYNC_RECORD_LEN]={0};
+    if(!r->verifier || !r->root_count)return EFS_ERR_IO;
+    memcpy(rec,"EFSDUR03",8);
+    efs_put_epoch_write(rec+8,r->boot);efs_put_epoch_write(rec+16,clean);
+    efs_put_epoch_write(rec+32,put_sync_wall_ns());
+    efs_put_epoch_write(rec+40,r->verifier);efs_put_epoch_write(rec+48,r->root_count);
+    pthread_mutex_lock(&r->rec_mu);
+    /* ring_n and ring_ok change together under rec_mu (recovered, void), so
+     * a record never pairs a voided ring with ring_ok=1. Entries never change. */
+    if(seq==PUT_SYNC_KEEP_SEQ)seq=r->rec_seq;
+    efs_put_epoch_write(rec+24,seq);
+    uint32_t n=r->ring_n;
+    efs_put_epoch_write(rec+56,(uint64_t)r->ring_ok);
+    efs_put_epoch_write(rec+64,n);
+    for(uint32_t i=0;i<n;i++) {
+        efs_put_epoch_write(rec+72+16*i,r->ring[i].verifier);
+        efs_put_epoch_write(rec+80+16*i,r->ring[i].position);
+    }
+    efs_put_epoch_write(rec+184,r->index);
+    efs_put_epoch_write(rec+192,efs_crc32(rec,192));
+    ssize_t w;
+    do { w = pwrite(r->record_fd, rec, sizeof(rec), 0); } while (w < 0 && errno == EINTR);
+    int rc = w != (ssize_t)sizeof(rec);
+    if (!rc)
+        r->rec_seq = seq;
+    if (!rc && sync)
+        do { rc = fdatasync(r->record_fd); } while (rc < 0 && errno == EINTR);
+    pthread_mutex_unlock(&r->rec_mu);
+    return rc ? EFS_ERR_IO : EFS_OK;
 }
 
 static int put_sync_record_write(struct put_sync_root *r, uint64_t seq, int clean)
 {
-    uint8_t rec[PUT_SYNC_RECORD_LEN]={0};
-    if(!r->verifier || !r->root_count)return EFS_ERR_IO;
-    memcpy(rec,"EFSDUR02",8);
-    efs_put_epoch_write(rec+8,r->boot);efs_put_epoch_write(rec+16,clean);
-    efs_put_epoch_write(rec+24,seq);efs_put_epoch_write(rec+32,put_sync_wall_ns());
-    efs_put_epoch_write(rec+40,r->verifier);efs_put_epoch_write(rec+48,r->root_count);
-    efs_put_epoch_write(rec+184,efs_crc32(rec,184));
-    ssize_t w;
-    do { w = pwrite(r->record_fd, rec, sizeof(rec), 0); } while (w < 0 && errno == EINTR);
-    if (w != (ssize_t)sizeof(rec)) return EFS_ERR_IO;
-    int rc;
-    do { rc = fdatasync(r->record_fd); } while (rc < 0 && errno == EINTR);
-    return rc ? EFS_ERR_IO : EFS_OK;
+    return put_sync_record_put(r, seq, clean, 1);
 }
 
-/* Inspect ALL roots before marking any of them running. Reuse is safe only
- * when every previous root was clean, agrees on the verifier, and the root
- * count is unchanged. Missing/replaced/removed/legacy/unclean roots rotate it.
- * No retained process verifier is a claim that uncertain recovery succeeded. */
 static int put_sync_reuse_epoch(struct efsd_server *s,uint64_t *epoch)
 {
     uint64_t saved=0;int reusable=s->storage_path_count>0;
@@ -1718,6 +1756,10 @@ static int put_sync_reuse_epoch(struct efsd_server *s,uint64_t *epoch)
 static void put_sync_barrier_locked(struct put_sync_root *r)
 {
     uint64_t target = r->seq;
+    /* K110: after a failed barrier in this boot nothing later may be named.
+     * Linux reports a writeback error once, so a later syncfs can succeed
+     * although pages of the failed one were dropped. */
+    int tainted = r->error;
     r->inflight_bytes = r->cur_bytes;
     r->inflight_frags = r->cur_frags;
     r->inflight_first_ns = r->cur_first_ns;
@@ -1727,15 +1769,19 @@ static void put_sync_barrier_locked(struct put_sync_root *r)
     pthread_mutex_unlock(&r->mu);
     uint64_t t0 = put_sync_now_ns();
     int rc = syncfs(r->fd) == 0 ? EFS_OK : EFS_ERR_IO;
-    if (rc == EFS_OK)
+    if (rc == EFS_OK && !tainted) {
         rc = put_sync_record_write(r, target, 0);
+        if (rc != EFS_OK) /* the record must not name a barrier that failed */
+            (void)put_sync_record_put(r, r->durable_seq, 0, 0);
+    }
     uint64_t t1 = put_sync_now_ns();
     pthread_mutex_lock(&r->mu);
     r->barriers++;
     r->last_barrier_ns = t1;
     r->last_barrier_us = (t1 - t0) / 1000;
     if (rc == EFS_OK) {
-        r->durable_seq = target;
+        if (!tainted)
+            r->durable_seq = target;
         r->synced_bytes += r->inflight_bytes;
         r->retry_delay_ns = r->retry_at_ns = 0;
     } else {
@@ -1843,10 +1889,11 @@ static int put_sync_commit_root(struct put_sync_root *r)
 /* Attach one root. Reads the previous record and starts a new boot; an
  * unclean previous stop leaves the root fenced until verified recovery. */
 static void put_sync_attach(struct put_sync_root *r, const char *root,
-                            uint64_t verifier, uint32_t roots)
+                            uint64_t verifier, uint32_t roots, uint32_t index)
 {
     snprintf(r->root, sizeof(r->root), "%s", root);
     pthread_mutex_init(&r->mu, NULL);
+    pthread_mutex_init(&r->rec_mu, NULL);
     pthread_cond_init(&r->cv, NULL);
     r->fd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     struct statfs fs;
@@ -1881,7 +1928,33 @@ static void put_sync_attach(struct put_sync_root *r, const char *root,
     /* Keep clean=0 until verified recovery, including across later orderly
      * shutdowns: only recovery can prove what an unclean stop lost. */
     r->boot = previous.boot + 1;
-    r->verifier=verifier;r->root_count=roots;
+    r->verifier=verifier;r->root_count=roots;r->index=index;
+    /* K110: the previous incarnation's last completed barrier, newest
+     * first, then what it already held if its own recovery validated it. A
+     * retained verifier (clean stop) inherits the ring unchanged. */
+    r->ring_ok = 1;
+    /* A history belongs to the store layout that wrote it: another root count
+     * or position in the storage list could attribute a barrier to a root it
+     * never covered, so it is not inherited. */
+    int same_layout = existed && previous.roots == roots && previous.index == index;
+    if (same_layout && (!previous.clean || previous.verifier != verifier)) {
+        uint64_t pos = efs_put_pos(previous.boot, previous.seq);
+        if (previous.verifier && pos) {
+            r->ring[0].verifier = previous.verifier;
+            r->ring[0].position = pos;
+            r->ring_n = 1;
+        }
+        for (uint32_t i = 0; previous.ring_ok && i < previous.ring_n &&
+                             r->ring_n < EFS_DATA_COMMIT_RING; i++)
+            r->ring[r->ring_n++] = (struct put_sync_ring){previous.ring[i].verifier,
+                                                          previous.ring[i].position};
+        r->ring_ok = previous.clean;
+        r->covered_until_ns = previous.time_ns;
+    } else if (same_layout && previous.ring_ok) {
+        for (uint32_t i = 0; i < previous.ring_n; i++)
+            r->ring[r->ring_n++] = (struct put_sync_ring){previous.ring[i].verifier,
+                                                          previous.ring[i].position};
+    }
     r->seq = 1;
     r->durable_seq = 0;
     if (put_sync_record_write(r, 0, 0) != EFS_OK) {
@@ -1926,7 +1999,7 @@ static struct put_sync_root *put_sync_root_for(struct efsd_server *s, const char
         return NULL;
     pthread_mutex_lock(&put_sync_mu);
     if (!put_sync_state[idx]) {
-        put_sync_attach(&put_sync_roots[idx], root, s->put_boot_epoch, s->storage_path_count);
+        put_sync_attach(&put_sync_roots[idx], root, s->put_boot_epoch, s->storage_path_count, (uint32_t)idx);
         put_sync_state[idx] = put_sync_roots[idx].fd >= 0 ? 1 : -1;
         if (put_sync_state[idx] < 0)
             /* sync: startup, before the reporter exists */
@@ -1981,6 +2054,47 @@ int server_put_sync_commit(struct efsd_server *s, uint32_t *roots)
     if (roots)
         *roots = n;
     return rc;
+}
+
+/* K110: the position a fragment just stored on `root` is acknowledged at:
+ * this boot and the root's open epoch, which is not earlier than the epoch
+ * the fragment joined. 0 when the root has no barrier (fail closed). */
+uint64_t server_put_sync_position(struct efsd_server *s, uint8_t root)
+{
+    if (!s || root >= s->storage_path_count || root >= EFS_MAX_STORAGE_PATHS)
+        return 0;
+    pthread_mutex_lock(&put_sync_mu);
+    int on = put_sync_state[root] > 0;
+    pthread_mutex_unlock(&put_sync_mu);
+    if (!on)
+        return 0;
+    struct put_sync_root *r = &put_sync_roots[root];
+    pthread_mutex_lock(&r->mu);
+    uint64_t pos = efs_put_pos(r->boot, r->seq);
+    pthread_mutex_unlock(&r->mu);
+    return efs_put_ack_make(root, pos);
+}
+
+/* K110: every validated predecessor barrier, for the COMMIT reply. A root
+ * still fenced or whose history recovery could not validate adds nothing. */
+uint32_t server_put_sync_history(struct efs_data_commit_history *out)
+{
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        pthread_mutex_lock(&put_sync_mu);
+        int on = put_sync_state[i] > 0;
+        pthread_mutex_unlock(&put_sync_mu);
+        if (!on)
+            continue;
+        struct put_sync_root *r = &put_sync_roots[i];
+        pthread_mutex_lock(&r->mu);
+        if (r->ring_ok && !r->recovery_uncertain && !r->error)
+            for (uint32_t k = 0; k < r->ring_n; k++)
+                out[n++] = (struct efs_data_commit_history){
+                    .verifier = r->ring[k].verifier, .position = r->ring[k].position, .root = i};
+        pthread_mutex_unlock(&r->mu);
+    }
+    return n;
 }
 
 /* K37: a member whose recovery after an unclean stop is uncertain gives no
@@ -2198,8 +2312,48 @@ int server_put_sync_identity(struct efsd_server *s, char *why, size_t n)
     return EFS_OK;
 }
 
+/* K110: a file the history covered is gone or unprovable, so the root's
+ * predecessor barriers prove nothing about it: forget the ring now, in
+ * memory and (best effort; every later barrier writes the same) on disk.
+ * Also after the fence cleared. */
+static void put_sync_void(struct put_sync_root *r, const char *why, int always)
+{
+    pthread_mutex_lock(&r->mu);
+    pthread_mutex_lock(&r->rec_mu);
+    uint32_t had = r->ring_n;
+    r->ring_n = 0;
+    pthread_mutex_unlock(&r->rec_mu);
+    int say = had || (always && !r->void_logged);
+    if (always)
+        r->void_logged = 1;
+    pthread_mutex_unlock(&r->mu);
+    if (say)
+        efs_telemetry_log(0, "store: put sync root=%s barrier history forgotten (%u entries): %s\n",
+                r->root, had, why);
+    if (had && r->record_fd >= 0)
+        (void)put_sync_record_put(r, PUT_SYNC_KEEP_SEQ, 0, 1);
+}
+
+/* A covered file whose root cannot be told, or a published fragment lost
+ * that no mark explains: every root forgets its history. */
+void server_put_sync_void_all(const char *why)
+{
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        pthread_mutex_lock(&put_sync_mu);
+        int on = put_sync_state[i] > 0;
+        pthread_mutex_unlock(&put_sync_mu);
+        if (on)
+            put_sync_void(&put_sync_roots[i], why, 1);
+    }
+}
+
 /* Verified: clear every root's fence. The record stays clean=0 until an
- * orderly stop proves its final barrier, as for any running boot. */
+ * orderly stop proves its final barrier, as for any running boot.
+ * K110: the predecessor barrier history is validated only when recovery
+ * dropped no file the earlier barriers covered; otherwise it is forgotten
+ * (a client then keeps those fragments lost). The verdict is recorded
+ * durably before the fence clears, so a kill right after cannot make a
+ * later boot trust an unvalidated ring. */
 void server_put_sync_recovered(void)
 {
     for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
@@ -2208,9 +2362,21 @@ void server_put_sync_recovered(void)
         pthread_mutex_unlock(&put_sync_mu);
         if (!on)
             continue;
-        pthread_mutex_lock(&put_sync_roots[i].mu);
-        put_sync_roots[i].recovery_uncertain = 0;
-        pthread_mutex_unlock(&put_sync_roots[i].mu);
+        struct put_sync_root *r = &put_sync_roots[i];
+        /* A drop of a covered file voided the ring already (put_sync_void);
+         * what is left is validated. Lock order: mu, then rec_mu. */
+        pthread_mutex_lock(&r->mu);
+        pthread_mutex_lock(&r->rec_mu);
+        r->ring_ok = 1;
+        pthread_mutex_unlock(&r->rec_mu);
+        pthread_mutex_unlock(&r->mu);
+        /* Best effort: an unwritten verdict leaves ring_ok=0 on disk, which
+         * a later boot discards. KEEP_SEQ: a barrier may have written a
+         * higher seq since; the verdict must not lower it. */
+        (void)put_sync_record_put(r, PUT_SYNC_KEEP_SEQ, 0, 1);
+        pthread_mutex_lock(&r->mu);
+        r->recovery_uncertain = 0;
+        pthread_mutex_unlock(&r->mu);
     }
 }
 
@@ -2220,6 +2386,23 @@ void server_put_sync_recovered(void)
 int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes, int charged,
                          struct server_recovery_files *c)
 {
+    /* K110: a file written before the predecessor's last barrier record is
+     * one that barrier may have covered; dropping it voids the history, at
+     * once, whether or not the fence has cleared. An unreadable time or an
+     * unknown root counts as covered (every root forgets). */
+    struct stat st;
+    char root[EFS_MAX_PATH];
+    int idx = s ? fragment_root_lookup(s, path, root) : -1;
+    if (idx >= 0 && idx < EFS_MAX_STORAGE_PATHS) {
+        struct put_sync_root *r = &put_sync_roots[idx];
+        uint64_t mtime = stat(path, &st) ? 0 :
+            (uint64_t)st.st_mtim.tv_sec * 1000000000ull + (uint64_t)st.st_mtim.tv_nsec;
+        if (!mtime || mtime <= r->covered_until_ns) {
+            __atomic_fetch_add(&r->covered_drops, 1, __ATOMIC_RELAXED);
+            put_sync_void(r, "recovery dropped a file it covered", 0);
+        }
+    } else
+        server_put_sync_void_all("recovery dropped a file under an unknown root");
     int removed_here = !unlink(path);
     if (!removed_here && errno != ENOENT)
         return EFS_ERR_IO;

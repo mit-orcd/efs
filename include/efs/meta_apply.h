@@ -1322,7 +1322,10 @@ int efs_meta_append_session_idle(struct efs_kv *, uint32_t shard,
  * ABORTED   a PREPARE lost its lock/guard to a concurrent append, so COMMIT
  *           was never proposed (nothing applies, even when the
  *           coordinator's own DECIDE ABORT failed and a finisher decides);
- * GONE      the inode is gone and REAP_MULTI still owes its rows.
+ * GONE      retired: the inode is gone and REAP_MULTI still owes its rows. The
+ *           steps no longer wait for the reaper (one queue for every dead
+ *           inode; they delete this session's rows themselves), so nothing
+ *           produces it; the client still recognises the certificate.
  * NONE with BUSY is not definite (e.g. an unacknowledged COMMIT). */
 enum {
     EFS_META_APPEND_WAIT_NONE = 0,

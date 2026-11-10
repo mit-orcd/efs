@@ -449,7 +449,9 @@ docs-check:
 	python3 scripts/check_include_boundary.py
 	python3 scripts/check_doc_links.py
 	python3 scripts/check_guide_counts.py
+	python3 scripts/check_concern_map.py docs/how-it-works/write-path-map.md src/client/write.c
 	python3 scripts/evidence/do/check_entry_map.py
+	python3 scripts/gen_diagnostics.py --check
 
 # Developer navigation validation needs the pinned graphify environment and a
 # real Git index, unlike archived Linux code-gate trees. Keep it explicit.
@@ -564,6 +566,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_readindex_operation.py
 	python3 tests/test_readindex_completion.py
 	python3 tests/test_readindex_publish.py
+	python3 tests/test_host_view_spin.py
 	python3 tests/test_readindex_pair.py
 	python3 tests/test_readindex_tickets.py
 	python3 tests/test_readindex_admission.py
@@ -1261,6 +1264,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_bookkeeping.py
 	python3 tests/test_k34_stop_put.py
 	python3 tests/test_k42_peer_stop_open.py
+	python3 tests/test_k42_reap_owed.py
 	python3 tests/test_k54_member_down_fence.py
 	python3 tests/test_k54_member2_unmount.py
 	python3 tests/test_k109_stalled_member_unmount.py
@@ -1287,6 +1291,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	python3 tests/test_k36_recovery.py
+	python3 tests/test_k110_barrier_history.py
 	python3 tests/test_expiry_policy_live.py
 	python3 tests/test_settings_listing.py
 	python3 tests/posix/posix_expiry.py --private

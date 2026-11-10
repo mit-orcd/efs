@@ -23,14 +23,14 @@ static uint8_t rdma_payload[EFS_PUT_REPLY_LEN];static uint32_t rdma_len=EFS_PUT_
 void efs_conn_note_ok(struct efs_conn *c){(void)c;noted++;}
 int efs_conn_reply_watch_quick(struct efs_conn *c){assert(c->rc);quick++;return EFS_CONN_REPLY_READY;}
 int efs_conn_reply_watch_us(struct efs_conn *c,int b){assert(c->rc && b==24);spin++;return EFS_CONN_REPLY_READY;}
-int efs_recv_put_reply(int fd,uint8_t *t,uint8_t *s,uint8_t *p,uint64_t *epoch){(void)epoch;(void)fd;(void)t;(void)s;(void)p;assert(0);return -1;}
+int efs_recv_put_reply(int fd,uint8_t *t,uint8_t *s,uint8_t *p,uint64_t *epoch,uint64_t *ack){(void)ack;(void)epoch;(void)fd;(void)t;(void)s;(void)p;assert(0);return -1;}
 static int conn_rdma_frame(struct efs_conn *c,uint8_t *t,const uint8_t **p,uint32_t *n){(void)c;*t=EFS_MSG_PUT_CHUNK_REPLY;*p=rdma_payload;*n=rdma_len;return 0;}
 void efs_rdma_message_release(struct efs_rdma_conn *c){(void)c;released++;}
 '''+function('efs_conn_recv_put_reply')+function('efs_conn_put_reply_watch')+r'''
 int main(void){
  int fd[2];assert(!socketpair(AF_UNIX,SOCK_STREAM,0,fd));struct efs_conn c={.fd=fd[0]};
- for(unsigned size=11;size<=11;size++){
-  uint8_t frame[15]={0};uint32_t be=htonl(size);memcpy(frame,&be,4);frame[4]=EFS_MSG_PUT_CHUNK_REPLY;frame[5]=EFS_PUT_CHUNK_OK;frame[6]=7;efs_put_epoch_write(frame+7,0x0123456789abcdefULL);
+ for(unsigned size=1+EFS_PUT_REPLY_LEN;size<=1+EFS_PUT_REPLY_LEN;size++){
+  uint8_t frame[4+1+EFS_PUT_REPLY_LEN]={0};uint32_t be=htonl(size);memcpy(frame,&be,4);frame[4]=EFS_MSG_PUT_CHUNK_REPLY;frame[5]=EFS_PUT_CHUNK_OK;frame[6]=7;efs_put_epoch_write(frame+7,0x0123456789abcdefULL);efs_put_epoch_write(frame+15,0x0700000000010002ULL);
   assert(efs_conn_put_reply_watch(&c,0)==fd[0]);
   for(unsigned i=0;i<4+size;i++){
    assert(write(fd[1],frame+i,1)==1);
@@ -38,13 +38,13 @@ int main(void){
    assert(w==(i+1==4+size?EFS_CONN_REPLY_READY:fd[0]));
   }
   assert(efs_conn_put_reply_watch(&c,0)==EFS_CONN_REPLY_READY);
-  uint8_t type=0,status=1,path=0;uint64_t epoch=0;
-  assert(!efs_conn_recv_put_reply(&c,&type,&status,&path,&epoch));
-  assert(type==EFS_MSG_PUT_CHUNK_REPLY&&status==EFS_PUT_CHUNK_OK&&path==7&&epoch==0x0123456789abcdefULL&&!c.put_reply_used);
+  uint8_t type=0,status=1,path=0;uint64_t epoch=0,ack=0;
+  assert(!efs_conn_recv_put_reply(&c,&type,&status,&path,&epoch,&ack));
+  assert(type==EFS_MSG_PUT_CHUNK_REPLY&&status==EFS_PUT_CHUNK_OK&&path==7&&epoch==0x0123456789abcdefULL&&ack==0x0700000000010002ULL&&!c.put_reply_used);
  }
  assert(noted==1);
- for(unsigned len=0;len<=12;len++){
-  if(len==11)continue;
+ for(unsigned len=0;len<=1+EFS_PUT_REPLY_LEN+1;len++){
+  if(len==1+EFS_PUT_REPLY_LEN)continue;
   uint32_t be=htonl(len);assert(write(fd[1],&be,4)==4);
   assert(efs_conn_put_reply_watch(&c,0)==-1);c.put_reply_used=0;
  }
@@ -56,11 +56,11 @@ int main(void){
  c.rc=(void *)1;c.recv_chan=EFS_CONN_RDMA;c.put_reply_used=0;
  assert(efs_conn_put_reply_watch(&c,0)==EFS_CONN_REPLY_READY && quick==1 && !spin);
  assert(efs_conn_put_reply_watch(&c,24)==EFS_CONN_REPLY_READY && quick==1 && spin==1 && !c.put_reply_used);
- uint8_t type=0,status=1,path=0;uint64_t epoch=0;
- rdma_payload[0]=EFS_PUT_CHUNK_OK;rdma_payload[1]=3;efs_put_epoch_write(rdma_payload+2,99);
- assert(!efs_conn_recv_put_reply(&c,&type,&status,&path,&epoch));
- assert(epoch==99 && path==3 && status==EFS_PUT_CHUNK_OK && released==1);
- rdma_len=2;assert(efs_conn_recv_put_reply(&c,&type,&status,&path,&epoch)==EFS_ERR_PROTO && released==2);
+ uint8_t type=0,status=1,path=0;uint64_t epoch=0,ack=0;
+ rdma_payload[0]=EFS_PUT_CHUNK_OK;rdma_payload[1]=3;efs_put_epoch_write(rdma_payload+2,99);efs_put_epoch_write(rdma_payload+10,0x0300000000010005ULL);
+ assert(!efs_conn_recv_put_reply(&c,&type,&status,&path,&epoch,&ack));
+ assert(epoch==99 && ack==0x0300000000010005ULL && path==3 && status==EFS_PUT_CHUNK_OK && released==1);
+ rdma_len=2;assert(efs_conn_recv_put_reply(&c,&type,&status,&path,&epoch,&ack)==EFS_ERR_PROTO && released==2);
  puts("PUT TCP frames: bytewise header/body, mandatory verifier, legacy rejection, reuse, malformed length, partial EOF and RDMA delegation PASS");return 0;
 }
 '''

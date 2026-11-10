@@ -4,6 +4,23 @@
 
 - `efs_fuse/` — the FUSE adapter, one file per area with its interface and contract in `<area>.h` next to it (read `efs_fuse/README.md`, then the area's header; `fuse_internal.h` is the 80-line shared core; the concatenation order is `MODULES["efs_fuse"]` in `tests/csrc.py`): `support.c` crash handlers, stats, features, virtual inodes, invalidation, find, access checks; `find_res.c` the `.find` result cache; `getattr.c` lookup memo, getattr, readdir; `open.c` open references, leases, open, read; `writeback.c` write-back pool; `append.c` append and pressure flush; `write.c` write admission, store, fsync, flush; `namespace.c` create, mkdir, unlink, attributes, link, truncate; `release.c` release, drain, rename, lseek; `plock_init.c` POSIX locks and `FUSE_INIT`; `lookup.c` lookup and setattr; `ll_run.c` operation bodies; `main.c` destroy, gated wrappers, op table, `main`. `client.c` — client setup, connection pool and mount state; `client.c` — client setup, connection pool and mount state; `efs_bench.c` — benchmark driver.
 - `ops.c`, `read.c`, `write.c`, `inode_rpc.c` — path logic, reads, writes and inode RPCs; `write.c` owns the dirty cache.
+- Map of `write.c` by concern (state, mutexes, entry points, logs, tests, lock order): [write-path-map.md](../../docs/how-it-works/write-path-map.md); `make docs-check` keeps it complete. Where to start:
+
+  | Symptom | Concern |
+  | --- | --- |
+  | `dcache-flush-fail stage=put` or `stage=put-window` | Flush pipeline, PUT window |
+  | `dcache-inode-gone`, `force-discard` | Flush pipeline, Write-back error state |
+  | `put_fragments ... only N/M peers live`, `... placing again`, `put quota backpressure` | Fragment PUT send, Node notes and rerouting |
+  | `put_fragments ... degraded acknowledgement`, `put-reply fault` | PUT replies and degraded acknowledgements |
+  | `report-stuck`, `report-loop`, `report-sync-fail stage=`, `report-slot-timeout` | REPORT driver |
+  | `report-pressure`, `report-admission timeout` | REPORT admission and publication slots |
+  | `report-stale`, `report-replay`, `report-span-lost` | Stale replay |
+  | `publish-contention`, `publish-stalled` | Publication units |
+  | `efs: putid table NOMEM`, `rejected unowned staging observation` | PUT ids and ticket ledger |
+  | `mtime-pin: table full` | Dirty sets and mtime pins |
+  | `close()` or `fsync()` returns EIO | Write-back error state, then the concern of the log line before it |
+  | dirty bytes high, reclaim threads busy | Reclaim |
+  | write blocks or fails before any PUT | PUT pool and write entry, Dcache store and read |
 - `writer_state.c` — per-file writer state; `data_commit.c` — per-stripe fsync commit record (K35).
 - `stage_evict.c` — staging-table evictor; `bufpool.c` — shared body/scratch budget; `node_cache.c` — peer up/down marks.
 - `publication_ack_owner.c`, `publication_writeback.c`, `put_ticket_owner.c` — queues owning publication ACKs, writeback intents and the PUT ticket ledger.

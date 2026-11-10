@@ -65,6 +65,8 @@ after rebuilding. Treat missing edges and parser warnings as coverage gaps;
 curated test links and literal document mentions are not runtime proof.
 Component known: start with `graphify explain <tag>`. Owner unknown:
 `graphify query` to locate it, then `graphify explain`, both before the first
-grep or source read. A `tested_by` edge is the test selector's catalogue
+grep or source read. A literal log line or error code: look the key up in
+`docs/how-it-works/diagnostics.md` (or `grep -rn '<key>' src`), then
+`graphify explain` the component it names. A `tested_by` edge is the test selector's catalogue
 route, not coverage; one inherited from the parent tag is INFERRED and labelled
 with the parent.

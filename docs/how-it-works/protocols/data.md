@@ -1324,7 +1324,9 @@ sync never clears the fence. The phases, each shown in
    places a fragment here is checked the same way; one not proven is dropped
    and counted `segments missing`: its two peers still serve it, and W154 has
    no segment rebuild.
-8. **fence**: every root's fence clears and COMMIT works again.
+8. **fence**: every root's fence clears and COMMIT works again. Each root's
+   barrier history (below) is first made valid or forgotten and its record
+   rewritten durably.
 
 After the fence the thread waits for each remembered ticket to leave
 ADMITTED (a published one is marked as in 7) and counts the marked fragments
@@ -1332,8 +1334,45 @@ the group leaders rebuild here (`rebuilt`, `rebuild_waiting`). Nothing a
 client was promised depends on that tail: the PUT verifier changed with the
 unclean boot, so a fragment the previous boot acknowledged and did not
 COMMIT stays lost in its client's `fsync` (K35: proven on the other two with
-a degraded mark, or `EIO`), never durable, and a crash before the tail
-finishes is caught by the next recovery's inventory.
+a degraded mark, or `EIO`) unless the barrier history below covers it, and a
+crash before the tail finishes is caught by the next recovery's inventory.
+
+**Barrier history (K110, D42 F23 as amended).** Every PUT reply (18 bytes) carries
+an *ack* after the verifier: the storage root's index in the top byte and, in
+the low 56 bits, the root's open barrier epoch (`efs_put_pos`: boot counter 16
+bits, sequence 40). It is read under the root's lock after the fragment is
+stored, and a barrier increments the open epoch under that lock before its
+`syncfs`, so the barrier the ack names has not started when the write is
+complete. The root's durability record (`<root>/.efs-durable-epoch`, 200
+bytes, magic `EFSDUR03`, CRC-32 over the first 192 bytes, any other version or
+a failed CRC refuses startup) names the last barrier that completed (`syncfs`,
+then the fdatasynced record; a failed record sync rewrites the previous
+durable seq; after a barrier failed in a boot no later barrier of that boot
+is ever named, because a later `syncfs` can succeed although the pages of the
+failed one were dropped), the root count and index, and a ring of up to seven
+predecessors: for each earlier incarnation (its verifier) the position of its
+last completed barrier. A boot that follows an unclean stop (or another
+verifier) adds the predecessor it found, and keeps the predecessor's own ring
+only if that ring was validated and the root count and index are unchanged.
+A ring is validated when verified recovery finished without dropping any file
+whose modification time is not after the predecessor's last record (such a
+file may be one a barrier covered) and without finding a published fragment
+missing that no mark explains; the ring is forgotten, durably, at the moment
+either happens (also after the fence cleared, and for a file under no known
+root on every root), before the mark for a missing fragment is written.
+Recovery then rewrites the record with the verdict, keeping the seq the record
+names, before it clears the fence. A COMMIT reply (`efs_msg_data_commit_reply`, a length that is not header
+plus 24 bytes per entry is refused) lists the validated entries as
+`{verifier, position, root}` after its header (a reply with a zero verifier, a
+position above 56 bits or a root out of range is refused whole); a root still fenced or in a
+barrier error adds none. The client (`data_commit.c`) records each fragment's
+verifier and ack; when a restarted member answers with another verifier, the
+fragment is durable if an entry has that verifier, that root and a position at
+or after the ack, and lost otherwise. Boot counters of one root never
+decrease, so comparing the positions numerically is sound. A boot counter
+above 65535 or a sequence above 2^40 gives no ack (fail closed). Assumption:
+the wall clock does not step back across a restart by more than the file times
+it compares.
 
 A transient obstacle (no leader yet, a peer unreachable) is retried and shown
 as the reason. A failed verification (an unreadable certificate, a fragment

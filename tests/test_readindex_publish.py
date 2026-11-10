@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise actual coherent host publication; historical proof is not raw quorum."""
 from pathlib import Path
-import subprocess,tempfile
+import re,subprocess,tempfile
 import csrc
 root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host');r=(root/'src/raft/raft.c').read_text()
 def func(src,name):
@@ -10,6 +10,7 @@ a=s.index('    uint64_t v_seq;');b=s.index('\n};',a)
 group=s[a:b]
 a=s.index('struct host_view {');b=s.index('\n};',a)+3
 view=s[a:b]
+tries=re.search(r'#define HOST_VIEW_TRIES[^\n]*',s).group(0)
 pub=s[s.index('static int host_publication_committed('):s.index('\n}',s.index('static int host_publication_committed('))]
 condition=pub[pub.index('if (v.read_done'):pub.index(') break;',pub.index('if (v.read_done'))][4:]
 code=r'''
@@ -19,6 +20,7 @@ code=r'''
 #include <assert.h>
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
+'''+tries+r'''
 struct efs_raft {int recv_persisting,role,storage_failed,quorum,leader,pending;uint64_t recv_stable_commit,commit,applied,current_term,read_round,read_index;
  uint64_t read_epoch,read_proven_round,read_proven_index,read_proven_term;uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;
  uint64_t read_applied_round,read_applied_index,read_applied_term;
@@ -43,14 +45,14 @@ static int efs_raft_read_quorum(const struct efs_raft*r){
 }
 ''' +func(r,'efs_raft_read_context')+func(r,'efs_raft_read_proven')+'\nstruct host_group {struct efs_raft*r;\n'+group+r'''
 };
-struct efs_raft_host {struct host_group g[1];};
+struct efs_raft_host {struct host_group g[1];pthread_mutex_t view_mu;};
 static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){assert(!g);return h->g;}
 #define V_LOAD(p) __atomic_load_n(&(p), __ATOMIC_ACQUIRE)
 #define V_STORE(p,v) __atomic_store_n(&(p),(v),__ATOMIC_RELEASE)
 ''' +view+'\n'+func(s,'host_publish_view')+'\n'+func(s,'host_view_get')+'\n'+func(s,'host_view_covers')+'\n'+r'''
 static int publication_ready(struct host_view v,uint64_t round,uint64_t want){return '''+condition+r''';}
 static struct efs_raft core;
-static struct efs_raft_host host;
+static struct efs_raft_host host = {.view_mu = PTHREAD_MUTEX_INITIALIZER};
 static int done;
 static void set_view(int ready){
  core=(struct efs_raft){.role=2,.leader=0,.quorum=ready,.pending=!ready,

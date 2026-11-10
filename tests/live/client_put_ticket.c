@@ -71,7 +71,7 @@ static void fragment_probe(unsigned port,const struct efs_put_ticket *ticket,
    uint8_t type;void *reply=NULL;uint32_t bytes;
    assert(!efs_recv_msg(fd,&type,&reply,&bytes));close(fd);
    uint8_t path;uint64_t boot;
-   rc=efs_put_reply_decode(type,reply,bytes,&path,&boot);free(reply);
+   rc=efs_put_reply_decode(type,reply,bytes,&path,&boot,NULL);free(reply);
    assert(rc!=EFS_ERR_PROTO);
    if(rc!=EFS_ERR_BUSY)break;
    assert(!clock_gettime(CLOCK_MONOTONIC,&now));
@@ -193,7 +193,7 @@ int main(int argc,char **argv)
           uint8_t h[EFS_PUT_UPLOAD_HEADER_LEN];assert(!efs_put_upload_header(&t,1,0,h));
           assert(!efs_send_msg_parts(fd,EFS_MSG_PUT_CHUNK,h,sizeof(h),frags[0],FRAG));
           uint8_t type;void *reply=NULL;uint32_t bytes;assert(!efs_recv_msg(fd,&type,&reply,&bytes));close(fd);
-          assert(efs_put_reply_decode(type,reply,bytes,NULL,NULL)==EFS_ERR_IO);free(reply); }
+          assert(efs_put_reply_decode(type,reply,bytes,NULL,NULL,NULL)==EFS_ERR_IO);free(reply); }
         frags[0][0]^=1;
         /* Lost PUT reply on every member, then the exact retry. */
         fragment_probe(port,&t,frags,0,1,EFS_OK);

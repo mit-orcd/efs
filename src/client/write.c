@@ -3003,12 +3003,12 @@ static int put_reply_fault(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
  * conn was dropped. */
 static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
                           efs_ino_t ino, uint32_t ci, uint8_t fi,
-                          uint64_t *seq_out, uint64_t *epoch_out)
+                          uint64_t *seq_out, uint64_t *epoch_out, uint64_t *ack_out)
 {
     uint8_t reply_type = 0, status = 0, path = 0xff;
-    uint64_t epoch = 0;
+    uint64_t epoch = 0, ack = 0;
     (void)ino; (void)ci; (void)fi;
-    if (efs_conn_recv_put_reply(conn, &reply_type, &status, &path, &epoch) != 0 ||
+    if (efs_conn_recv_put_reply(conn, &reply_type, &status, &path, &epoch, &ack) != 0 ||
         reply_type != EFS_MSG_PUT_CHUNK_REPLY || !epoch) {
         efs_client_conn_drop(nid, conn);
         efs_client_node_note_fail(nid);
@@ -3034,6 +3034,8 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
             *seq_out = seq;
         if (epoch_out)
             *epoch_out = epoch;
+        if (ack_out)
+            *ack_out = ack;
         return 1;
     }
     if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED) {
@@ -3264,8 +3266,9 @@ static int put_reply_pollfds(const struct efs_conn *c, int w, int i,
  * fragment not stored (K34). acked_out[i]=1 (when given) marks the slots
  * acknowledged; a slot already set on entry was acknowledged by an earlier
  * attempt of the same object, is not resent and counts toward the two.
- * ack_seq/ack_epoch[i] then hold that acknowledgement's sequence and the
- * acknowledging incarnation's PUT verifier (K35); a slot acknowledged by an
+ * ack_seq/ack_epoch/ack_pos[i] then hold that acknowledgement's sequence, the
+ * acknowledging incarnation's PUT verifier (K35) and its root/barrier
+ * position (K110); a slot acknowledged by an
  * earlier attempt keeps the values that attempt stored.
  * quota_out[i]=1 (when given) marks the slots whose member refused the
  * fragment as full (QUOTA), also when the refusal arrives after the
@@ -3277,7 +3280,8 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                                       int acked_out[EFS_NUM_FRAGMENTS],
                                       int quota_out[EFS_NUM_FRAGMENTS],
                                       uint64_t ack_seq[EFS_NUM_FRAGMENTS],
-                                      uint64_t ack_epoch[EFS_NUM_FRAGMENTS])
+                                      uint64_t ack_epoch[EFS_NUM_FRAGMENTS],
+                                      uint64_t ack_pos[EFS_NUM_FRAGMENTS])
 {
     efs_ino_t ino = ticket->ino;
     uint32_t chunk_index = ticket->ci;
@@ -3428,7 +3432,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
             int w = efs_conn_put_reply_watch(conns[i], 0);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
-                                       &ack_seq[i], &ack_epoch[i]);
+                                       &ack_seq[i], &ack_epoch[i], &ack_pos[i]);
                 if (r > 0) {
                     acks++;
                     if (acked_out) acked_out[i] = 1;
@@ -3468,7 +3472,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
             int w = efs_conn_put_reply_watch(conns[i], 24);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
-                                       &ack_seq[i], &ack_epoch[i]);
+                                       &ack_seq[i], &ack_epoch[i], &ack_pos[i]);
                 if (r > 0) {
                     acks++;
                     if (acked_out) acked_out[i] = 1;
@@ -3509,7 +3513,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
             int w = efs_conn_put_reply_watch(conns[i], 0);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
-                                       &ack_seq[i], &ack_epoch[i]);
+                                       &ack_seq[i], &ack_epoch[i], &ack_pos[i]);
                 if (r > 0) {
                     acks++;
                     if (acked_out) acked_out[i] = 1;
@@ -3582,7 +3586,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
             int r;
             if (watch == EFS_CONN_REPLY_READY)
                 r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
-                                   &ack_seq[i], &ack_epoch[i]);
+                                   &ack_seq[i], &ack_epoch[i], &ack_pos[i]);
             else {
                 efs_client_conn_drop(nodes[i], conns[i]);
                 efs_client_node_note_fail(nodes[i]);
@@ -3632,7 +3636,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 int w = efs_conn_put_reply_watch(conns[i], 0);
                 if (w == EFS_CONN_REPLY_READY) {
                     int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
-                                           &ack_seq[i], &ack_epoch[i]);
+                                           &ack_seq[i], &ack_epoch[i], &ack_pos[i]);
                     put_drain_verdict(r, i, failed_out, acked_out, quota_out, &stale_errors);
                     conns[i] = NULL;
                     pending[i] = 0;
@@ -3668,7 +3672,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 if (watch >= 0) continue;
                 if (watch == EFS_CONN_REPLY_READY) {
                     int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
-                                           &ack_seq[i], &ack_epoch[i]);
+                                           &ack_seq[i], &ack_epoch[i], &ack_pos[i]);
                     put_drain_verdict(r, i, failed_out, acked_out, quota_out, &stale_errors);
                 } else {
                     efs_client_conn_drop(nodes[i], conns[i]);
@@ -3931,6 +3935,7 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
                                       uint32_t *quota_mask,
                                       uint64_t seq[EFS_NUM_FRAGMENTS],
                                       uint64_t epoch[EFS_NUM_FRAGMENTS],
+                                      uint64_t pos[EFS_NUM_FRAGMENTS],
                                       uint32_t *unreachable_mask)
 {
     efs_ino_t ino = ticket->ino;
@@ -3947,12 +3952,12 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
     *quota_mask = 0;
     *unreachable_mask = 0;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        seq[i] = epoch[i] = 0;
+        seq[i] = epoch[i] = pos[i] = 0;
     int reprobed = 0, quota_waited = 0;
     for (int attempt = 1; attempt <= 128; attempt++) {
         memset(quota, 0, sizeof(quota));
         *quota_mask = 0;
-        rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota, seq, epoch);
+        rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota, seq, epoch, pos);
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             if (acked[i])
                 node_note_back(nodes[i]);
@@ -3972,7 +3977,7 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
             for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
                 if (!acked[i]) {
                     missing |= 1u << i;
-                    seq[i] = epoch[i] = 0;
+                    seq[i] = epoch[i] = pos[i] = 0;
                     if (failed[i] == 1)
                         *unreachable_mask |= 1u << i;
                 }
@@ -4149,13 +4154,14 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
      * ENOSPC, never a two-fragment acknowledgement. */
     for (int placement = 0; rc == EFS_OK; placement++) {
         uint32_t quota_mask = 0, away_mask = 0;
-        uint64_t ack_seq[EFS_NUM_FRAGMENTS], ack_epoch[EFS_NUM_FRAGMENTS];
+        uint64_t ack_seq[EFS_NUM_FRAGMENTS], ack_epoch[EFS_NUM_FRAGMENTS],
+            ack_pos[EFS_NUM_FRAGMENTS];
         rc = efs_client_put_admit(ino, chunk_index, nodes, checksums, frag_len,
                                   delta_off, delta_len, ticket);
         if (rc != EFS_OK)
             break;
         rc = put_fragments_parallel_run(ticket, fragments, &quota_mask, ack_seq, ack_epoch,
-                                        &away_mask);
+                                        ack_pos, &away_mask);
         if (rc == EFS_OK && away_mask && placement < EFS_NUM_FRAGMENTS - 1 &&
             !efs_client_rpc_past_deadline()) {
             /* K35: a member failed hard and the stripe was acknowledged on
@@ -4190,7 +4196,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
             rc = degraded_record(ino, chunk_index, ticket->object, ticket->nodes, away_mask, -1);
         if (rc == EFS_OK) {
             /* K35: fsync proves this object from its acknowledgements. */
-            rc = efs_client_stripe_note(ticket, ack_seq, ack_epoch);
+            rc = efs_client_stripe_note(ticket, ack_seq, ack_epoch, ack_pos);
             if (rc == EFS_OK)
                 break;
             efs_client_degraded_drop(ino, chunk_index, ticket->object);

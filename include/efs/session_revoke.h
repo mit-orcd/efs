@@ -44,7 +44,8 @@ static inline int efs_session_busy_retry_ok(const uint8_t *payload, uint32_t ple
  * index/term): LEASE_LOCK_NEXT's refused selection or (K42) its batch
  * applied with BUSY and no effect, or SESSION_APPEND_NEXT's refused
  * selection and K42 waits (another session's OPEN append on the inode, the
- * frontier, an aborted PREPARE, REAP owed). Any other BUSY may follow a
+ * frontier, an aborted PREPARE; "REAP owed" is retired, see
+ * EFS_META_APPEND_WAIT_GONE). Any other BUSY may follow a
  * submitted transaction and stays the step's one result. */
 static inline int efs_session_cleanup_retry_ok(const struct efs_msg_raft_mkfs_reply *r,
                                                int appends)

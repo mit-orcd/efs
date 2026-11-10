@@ -78,7 +78,7 @@ struct efs_conn {
     int last_recv_chan;
     /* Exclusive PUT checkout: incremental TCP reply, never wait on a partial
      * frame while other fragment ACKs may already form a quorum. */
-    uint8_t put_reply[4 + 1 + 10];
+    uint8_t put_reply[4 + 1 + 18]; /* 18 == EFS_PUT_REPLY_LEN (static_assert in protocol.c) */
     uint8_t put_reply_used;
 };
 

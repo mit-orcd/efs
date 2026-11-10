@@ -5,6 +5,8 @@
 
 ## Linux build prerequisites
 
+Test hosts, the shipped-tree workflow and the wave gate: [Test hosts and the wave gate](test-hosts.md).
+
 Use a C compiler, GNU make, pkg-config, libibverbs development headers/library,
 and **libfuse3 development headers/library at version 3.12 or newer**.
 Before building, check `pkg-config --modversion fuse3` and
@@ -320,6 +322,7 @@ the sanitized binaries. `make sanitize-check` runs both.
   `test_session_latch_tsan.py`), the E2 parallel revoke, the W155 receipt
   table and the K32 ticket batch on the TSan `libefs.a`, and the daemons:
   `test_k36_recovery.py` (recovery thread), `test_k36_segment_recovery.py`,
+  `test_k110_barrier_history.py` (barrier history across SIGKILL restarts),
   `test_k37_segment_rebuild.py` (audit and rebuild), a 60 s
   `test_d4_progress.py` (client read and write paths through efs-fuse) and
   `test_k38_swept_hint_live.py` (the K38 STALE replay through efs-fuse) and
