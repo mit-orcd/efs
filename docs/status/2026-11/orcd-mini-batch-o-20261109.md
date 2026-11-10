@@ -9,6 +9,8 @@ K54 (O5), K8 (O6), K49, K51 (O8), K26 (O9) of the
 and the restarts on Nov 9, and the force-discard of the stuck node9900 mount
 ("Yes, discard", relayed by the coordinator).
 
+**Status (Nov 10):** merged into devel in wave 70. At the merge K26 and K51 became VERIFIED on `9bb50fe79` (O9 and O8 here plus F3 and F2 of [batch F](batch-f-candidate-20261109.md)); the K38 fix ([Task FB](k38-recurrence-20261110.md)) merged in the same wave; the K102 fix (Task FC) is on a branch, not merged.
+
 **Verdict: FAIL for O1; K32 reopened (OPEN); new OPEN row K102.**
 
 * **O1 FAIL.** `ior hard` failed 2 of 8 runs with `write()` `EIO` and the K38

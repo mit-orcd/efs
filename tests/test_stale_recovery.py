@@ -77,7 +77,7 @@ int efs_client_put_retry_admitted(efs_ino_t ino,uint32_t ci,uint64_t object,uint
 static struct put_id *putid_find(efs_ino_t ino,uint32_t ci) {return owner.ino==ino&&owner.ci==ci?&owner:NULL;}
 static int efs_client_rpc_writer_view(efs_ino_t ino,uint64_t gen,uint32_t ci,struct efs_msg_inode_writer_view_reply *out)
 {assert(ino==1&&gen==22&&ci==0);attr_reads++;*out=authority;return attr_error;}
-'''+function('stale_retry_owned',current)+'\n'+function('stale_pair_cmp')+'\n'+function('stale_sent_cmp')+'\n'+function('stale_repull_replay')+r'''
+'''+(function('span_refused',current)+'\n' if 'static int span_refused(' in current else '')+function('stale_retry_owned',current)+'\n'+function('stale_pair_cmp')+'\n'+function('stale_sent_cmp')+'\n'+function('stale_repull_replay')+r'''
 static void reset(void) {
     memset(&map,0,sizeof(map));map.generation=7;
     verdicts=replays=commits=pulls=0;pull_error=absent=verdict_error=replay_error=fail_bits=0;
@@ -215,6 +215,34 @@ int main(void) {
     owner.span_base_gen=8;reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1);
     owner.span_base_gen=7;owner.delta_off=8;reset();assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1);
     owner.delta_off=7;reset();map.generation=8;assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1);
+    /* K38 recurrence (Nov 9, ior hard): the span's view matches the host (base
+     * 7, one live span, seq 4) but the host refuses it by rule: it overlaps
+     * a live span of another object, or the chain is full. The same record
+     * can never win, so it takes the rebase (a fold), not the retained
+     * retry. A disjoint span stays retained; the record's own landed span is
+     * done. */
+    owner.delta_base_n=sent[0].delta_base_n=1;owner.delta_base_seq=sent[0].delta_base_seq=4;
+    for(unsigned c=0;c<5;c++){
+        static const uint32_t off[5]={40,10,7,100,0};
+        static const uint32_t len[5]={8,8,16,8,0};
+        static const uint64_t gen[5]={99,99,10,99,0};
+        owner.stale_retry=0;inos[0]=inos[1]=1;reset();
+        map.delta_seq=4;map.ndelta=1;
+        map.deltas[0]=(struct efs_chunk_delta){.off=off[c],.len=len[c],.generation=gen[c],.seq=4};
+        if(c==3){map.ndelta=EFS_CHUNK_DELTA_MAX;
+            for(unsigned i=1;i<EFS_CHUNK_DELTA_MAX;i++)
+                map.deltas[i]=(struct efs_chunk_delta){.off=200+20*i,.len=8,.generation=50+i,.seq=4};
+            owner.delta_base_n=sent[0].delta_base_n=EFS_CHUNK_DELTA_MAX;}
+        if(c==4){ /* a tombstone (len 0) is no live span */
+            map.deltas[0].off=10;map.deltas[0].len=0;}
+        assert(!stale_repull_replay(&ds,1,sent,sent_seq,1));
+        if(c==1||c==3){assert(replays==1&&!commits&&inos[0]);} /* overlap, full chain: rebase */
+        else if(c==2){assert(!replays&&commits==1&&!inos[0]);} /* its own landed span: done */
+        else {assert(!replays&&!commits&&inos[0]&&owner.stale_retry);} /* disjoint, tombstone: retained */
+        owner.delta_base_n=sent[0].delta_base_n=1;
+    }
+    owner.delta_base_n=sent[0].delta_base_n=0;owner.delta_base_seq=sent[0].delta_base_seq=0;
+    inos[0]=inos[1]=1;
     owner.delta_off=owner.delta_len=0;sent[0].delta_off=sent[0].delta_len=0;
     owner.stale_retry=0;authority.authority_epoch=4;reset();
     assert(!stale_repull_replay(&ds,1,sent,sent_seq,1)&&replays==1&&!owner.stale_retry);
