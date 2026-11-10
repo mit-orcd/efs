@@ -824,7 +824,7 @@ class Qualify:
         self.torn_down = True
         g = GateRun(self, Gate('_teardown', None, '', ''), 1800)
         rc, reason = (0, 'kept by request') if self.args.keep_work else (self.control.owned_teardown(g) or (0, ''))
-        record = dict(g.record, commands=g.commands, end=now(), raw=g.raw,
+        record = dict(g.record, commands=g.commands, end=now(), raw=g.raw, destructive_steps=g.steps,
                       verdict=FAIL if rc else (NOTRUN if self.plan else PASS), reason=reason,
                       kept=bool(self.args.keep_work), seconds=round(time.monotonic() - g.start, 3))
         (g.dir / 'result.json').write_text(json.dumps(record) + '\n')
