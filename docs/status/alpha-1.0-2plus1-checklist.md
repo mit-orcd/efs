@@ -1321,6 +1321,25 @@ in-scope defect cannot be deferred merely by calling it architectural debt.
 
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 
+**Review Nov 9 (devel `7526fd4c7`; corrections dated Nov 9 below).**
+Stage 2 has not started: K38 is OPEN and recurred on candidate `9bb50fe79`
+in the orcd-mini batch, so the candidate will change (A1). The matrix
+`scripts/qualify_matrix.json` cannot run the cells D46 requires: seven of
+its ten topologies name the withdrawn lab hosts (amd, intel1, intel2,
+xorinox, nuc; the three `bare-metal-*` ones are BLOCKED), `fcstor-4x1-tcp`
+uses fcstor012–015 where fcstor015 refuses the test account's key, and
+`orcd-mini-rdma` still describes three daemons where the cluster runs four.
+It has no 3-host or 5-host fcstor topology, no distinct-host RDMA topology
+and no 13-node topology. **Open for the user:** D46 names fcstor007–011 with
+storage under `/data1/01`; those hosts carry another campaign since Nov 9
+and agents treat `/data1` as read-only, and D46 item 2 leaves the 13-node
+storage/client split and transports open. Until that is ruled, A3, A4, A5,
+A11 and every per-topology item below have no topology to run on. Every
+PASS recorded in sections A13, B, C, D and E is from one host or loopback
+on October builds and withdrawn hosts; none can be repeated as recorded.
+The distinct-host cells of the Stage 1 campaign (Task EY, fcstor010–014)
+serve K rows on `9bb50fe79` and are rerun on the frozen candidate.
+
 - [ ] **A1** Choose one devel candidate commit and identify all daemon/client
   binaries and test-harness revisions. Test fixes belong in the candidate;
   do not qualify an undocumented mixture of binaries and scripts.
@@ -1422,8 +1441,10 @@ alternatives reduces both product complexity and the supported test matrix.
   the cluster expiry policy (`efs-mgmt expiry-policy NODE:PORT cluster`,
   versioned, off by default) is its only control; its tests are back in
   `make test-all` and the `d5-expiry` qualify gate
-  ([evidence](2026-10/d43-expiry-20261025.md)). A/B selectors 15 → 1: `EFS_READ_VERIFY` waits on its
-  GET-path audit. Live qualification of the retained paths stays open (A11).
+  ([evidence](2026-10/d43-expiry-20261025.md)). A/B selectors 15 → 0 (Nov 9 correction: this line said 15 → 1 with
+  `EFS_READ_VERIFY` waiting on its audit; the audit and removal above were
+  done Oct 24, and A12 counts 0). Live qualification of the retained paths
+  stays open (A11).
 - [ ] **A8 — Keep only justified configuration.** Retain deployment inputs such as
   nodes, disks, addresses and quotas. Prefer built-in or automatically derived
   internal batching/concurrency/maintenance settings; justify any remaining
@@ -1451,7 +1472,7 @@ alternatives reduces both product complexity and the supported test matrix.
   leaders; `efs-mgmt status` reports actual placement per group and node
   (`raft-status` per node). Placement is not yet measured under A11 load.**
   **Oct 25 ([A6–A12 hygiene](2026-10/a12-hygiene-20261025.md#a9-leader-placement-item-2),
-  branch `claude/fervent-wilson-67282f`, not merged):** `scripts/leader_placement.py`
+  on devel since `2e8a09de5`, Oct 25; Nov 9 correction of "not merged"):** `scripts/leader_placement.py`
   records who leads each metadata group over a run, through forced
   step-downs and leader restarts. It reports each group's distribution and
   the share of time both leaders sat on one node; `make test` checks its
@@ -1469,6 +1490,10 @@ alternatives reduces both product complexity and the supported test matrix.
   gateway changes outside the repository are listed with file and line in the
   [A7 evidence](2026-10/a7-removals-20261024.md#for-the-parent-changes-outside-this-repository-a10);
   not yet applied.**
+  **Nov 9 (read-only check):** `~/git/devops/nuc-efs` at `8bc872e` (Oct 24)
+  no longer sets or forwards any removed setting; the names remain only in
+  `test_start_mode.py`'s list of removed keys. Portal and gateway settings
+  were not checked.
 - [ ] **A11 — Reduced qualification matrix.** Publish the remaining supported
   configuration dimensions and rationale. Qualify the selected paths under the
   topology/profile gates below, including automatic-policy boundaries, load
@@ -1497,8 +1522,8 @@ alternatives reduces both product complexity and the supported test matrix.
   dimension under A8. No unexplained experimental, legacy or correctness-policy
   toggle remains in the alpha product. Record failures and gate results for the
   integrated candidate; flag removal alone is not correctness evidence.
-  **Oct 25 ([closure](2026-10/a12-closure-20261025.md), branch
-  `claude/fervent-wilson-67282f`, not merged):** every A6 selector is listed
+  **Oct 25 ([closure](2026-10/a12-closure-20261025.md), on devel; Nov 9
+  correction of "not merged"):** every A6 selector is listed
   with its disposition. All 15 are removed and refused, and `EFS_TRANSPORT`
   is a justified A8 support dimension. A/B selectors 15 → 0; reachable A/B
   combinations 32,768 → 1; variables a normal build reads 105 → 77. Every
@@ -1573,7 +1598,11 @@ facts for A6, not decisions.
   user. **Scope change Oct 25 (D43, user):** expiry and `.efs` ship in
   alpha 1.0; the surface list, guide, POSIX page and release notes say so.
   At `ec3e09306` expiry is still compiled out of the product build and
-  being re-enabled (audit finding U19).
+  being re-enabled (audit finding U19). **Nov 9 correction:** expiry is
+  in every build since D43 (no `EFS_BUILD_EXPIRY` in the Makefile). Seven
+  rows are still *proposed* on the surface page (`--writers`, `sync-status`,
+  `pack-compact`, `raft-resync`, `shrink-quota`, `raft-step-down`,
+  `data-commit`); D46 item 8 left them with the user.
 - [ ] **S2 — POSIX subset.** Publish the supported operations and every known
   gap (for example, mmap is skipped in the extras suite). Each gap is either
   fixed or justified as a limitation (F4). No gap counts as PASS.
@@ -1630,6 +1659,9 @@ facts for A6, not decisions.
   `power-user.md`, `quickstart.md`, `efs-commands.md` and the README no
   longer describe buffered I/O, `EFS_COMMANDS`, splice or `add-storage` as
   current; `v030-candidate.md` is marked historical.
+  **Nov 9:** S2, S3 and S5 were last audited against `ec3e09306` (Oct 25);
+  `tests/test_cli_docs.py` guards command and option names only. A re-audit
+  on the frozen candidate is owed for all three.
 
 ## B. Verify geometry, placement and usable capacity
 
@@ -1685,8 +1717,8 @@ facts for A6, not decisions.
   bounded controlled test. Reads reconstruct or fail explicitly; writes must
   never report success without their documented durable publication requirement.
   Verify the result after orderly restore/restart, without claiming repair.
-  **Oct 24: loopback PASS, not merged (branch `claude/devel-b6-d4-4f65ac`,
-  `834f0b7ec`). `tests/test_b6_unavailable.py`: node 3 of three down,
+  **Oct 24: loopback PASS (on devel since `74e03592a`, Oct 24; Nov 9
+  correction of "not merged"). `tests/test_b6_unavailable.py`: node 3 of three down,
   refusing (new `EFS_FAULT_DEST_FILE`), slow past every client deadline
   (8 s; COMMIT 65 s; GETs 45 s) and full (16 MiB quota), for ordinary and
   packed files during write (one in flight), fsync and read: every read
@@ -1703,15 +1735,24 @@ facts for A6, not decisions.
 
 - [ ] **C1** Core mounted POSIX, extras and two-client suites pass on each
   topology. Unsupported cases have explicit scope and SKIP/NOTRUN, not PASS.
+  **Nov 9:** gates `posix-core`, `posix-extras`, `posix-2client`; one-host
+  PASS in the `loopback-3-full` run at `babc80ced`
+  ([Stage 2 gates](2026-10/stage2-gates-20261024.md)); real hosts NOTRUN.
 - [ ] **C2** Verify create/write/fsync/close/reopen; random and sequential I/O;
   overwrite, sparse holes, append, truncate, rename, hard links, unlink/open
   handles and session fencing with exact expected contents and metadata.
+  **Nov 9:** gates `posix-core`, `posix-durability`; one-host PASS in the
+  same run; real hosts NOTRUN.
 - [ ] **C3** Exercise concurrent readers/writers on same and separate files,
   independent directories and large hot directories. No unexplained EIO,
   stale payloads, lost names or indefinite EBUSY; legitimate refusals stay visible.
+  **Nov 9:** gates `posix-2client`, `posix-core`, `append-failover`;
+  one-host PASS in the same run; real hosts NOTRUN.
 - [ ] **C4** Qualify publication receipts, retries and lost replies on the current
   path. A successful acknowledgement must not outrun durable payload/mapping
   ownership; a retry must not repeat a completed mutation incorrectly.
+  **Nov 9:** gates `append-failover`, `k14-torn-read`, `k13-tickets`;
+  one-host PASS in the same run; real hosts NOTRUN.
 - [ ] **C5** Run the current apply/protocol/session correctness gates associated
   with W127–W134/W72 and D25 where applicable. Carry forward scoped PASS evidence,
   but verify the integrated candidate and retain remaining limitations.
@@ -1735,6 +1776,9 @@ facts for A6, not decisions.
   requests compaction on every topology ([Stage 2 gates](2026-10/stage2-gates-20261024.md),
   loopback PASS); `gc-reclamation` FAILs on `merge-wave6` and its base
   (`fsync acknowledged after unclean stop`).**
+  **Nov 9 correction:** the driver's `gc-reclamation` (now `--posix` plus
+  `gc-put-barrier`) PASSes since Task CG, Oct 31
+  ([page](2026-10/k11-put-barrier-case-20261031.md)); real hosts NOTRUN.
 - [ ] **D3** Run `.efs` commands/options and concurrent query suites while ordinary
   I/O continues. Check result correctness, authorization, freshness and bounded
   refusal/retry behavior, including initial catalog creation and restart.
@@ -1746,8 +1790,8 @@ facts for A6, not decisions.
   work progresses. Diagnose repeated stalls, rather than relaxing tests to pass.
   CPU optimizations are required here only when needed to meet these gates;
   broader optimization remains later roadmap work.
-  **Oct 24: loopback PASS, not merged (branch `claude/devel-b6-d4-4f65ac`,
-  `834f0b7ec`). `scripts/d4_progress.py` (qualify plugin `d4-progress`) and
+  **Oct 24: loopback PASS (on devel since `74e03592a`, Oct 24; Nov 9
+  correction of "not merged"). `scripts/d4_progress.py` (qualify plugin `d4-progress`) and
   `tests/test_d4_progress.py`: small-file load with packing, `.efs` index
   refresh and KV flush/compaction active (counted from new raft-status
   `kv_flushes`/`kv_compactions` and the new pack-compact backlog line);
@@ -1789,7 +1833,9 @@ facts for A6, not decisions.
   unconditional tail image against the client's stale span list. Fixed:
   stored data stays at 118–278 MiB per node over 60 minutes, and the D4
   driver bounds abandoned uploads and stored data. Open: about 3.5 % of
-  `O_TRUNC` overwrites still abandon an upload.
+  `O_TRUNC` overwrites still abandon an upload. **Nov 9 correction:** the
+  [same page](2026-10/d4-reclaim-20261026.md) records that residual FIXED
+  (`acb8a7318`, narrowed in `988efba3e`).
   **Oct 26 (Task D soak, loopback, member churn,
   [evidence](2026-10/task-d-20261025.md#soak-tables-attempt-3-nuc-b2fc06ba5)):** for
   7,195 s with 11 clean returns, a daemon SIGKILL, a client SIGKILL and a
@@ -1799,11 +1845,19 @@ facts for A6, not decisions.
   window (5 windows, 37 process rows) stayed within 5 % last-third growth;
   role coverage NOTRUN (the run stopped on K43 first). Not a D4 PASS.
 
+- [ ] **D5** Expiry under the cluster expiry policy (D43): qualified with the
+  policy off and on (A2). **Added Nov 9:** the matrix has carried this item
+  and its gate `d5-expiry` (`tests/posix/posix_expiry.py`, `make test-long`)
+  since Oct 25 ([evidence](2026-10/d43-expiry-20261025.md)); the checklist had
+  no checkbox for it. Loopback fixture only; real hosts NOTRUN.
+
 ## E. Full verification and orderly lifecycle
 
 - [ ] **E1** Record an exact manifest of successfully acknowledged files and
   expected contents. Verify every payload and its relevant metadata after the
   mixed workload on each topology; sampled checks cannot close this gate.
+  **Nov 9:** gate `e1-manifest`; one-host PASS in the `loopback-3-full` run
+  at `babc80ced` and on `nuc-private-3` (E2 note); real hosts NOTRUN.
 - [ ] **E2** Cleanly stop clients and unmount without force or lost pending writes;
   drain and stop daemons, restart the same-format stores, establish readiness,
   remount and repeat full verification. Record all stop/readiness deadlines.
@@ -1818,6 +1872,9 @@ facts for A6, not decisions.
 - [ ] **E3** Exercise orderly leader turnover and client reconnect, including
   catch-up of returning members. No stuck stale leader, missing committed state
   or spurious readiness. This is not sudden-power-loss qualification.
+  **Nov 9:** gate `e3-turnover`; one-host PASS in the `loopback-3-full` run;
+  member catch-up needs per-node stops, which the orcd-mini topology cannot
+  do; real hosts NOTRUN.
 - [ ] **E4** Run small-file scale and large-file fixtures with declared counts,
   quotas and concurrency; report actual completed versus target counts. Include
   cold reads, concurrent query load and delete/reclaim checks.
