@@ -1730,7 +1730,9 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
      * already be compacted. Appending that missing prefix would fail the
      * store's index check and permanently fence an otherwise healthy
      * replica. Ask the leader to rebase at the committed snapshot boundary;
-     * do not import, append, truncate or apply anything from this request. */
+     * do not import, append, truncate or apply anything from this request.
+     * A zero-prefix read probe carries no entries and no commit (K103): there
+     * is nothing to rebase, so it takes the success path below. */
     if (in->prev_index < r->snap_idx && !is_read_probe(in)) {
         m.success = 0;
         m.match_index = r->snap_idx;
