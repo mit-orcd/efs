@@ -622,6 +622,7 @@ python3 tests/test_rename_budget.py	30	1	fast suite, 30 s ceiling	test	client/op
 ./tests/test_pack_ledger	30	1	fast suite, 30 s ceiling	test	common/pack_ledger	Pack ledger records
 ./tests/test_pack_ledger_recovery	30	1	fast suite, 30 s ceiling	test	common/pack_ledger	Real durable KV batches, abrupt process exit and cold segment/WAL recovery
 ./tests/test_pack_switch	30	1	fast suite, 30 s ceiling	test	meta/pack_mapping	W125 packer metadata over a mem KV: admit a segment, switch staged files into it with the exact-source CAS,
+./tests/test_pack_candidate_alive	30	1	fast suite, 30 s ceiling; K105: 20 runs in 0.03 s on node9900, about 2 ms each	test	server/packer,meta/pack_mapping	K105: efs_meta_pack_candidate_alive tells a live unchanged candidate from one unlinked or republished after the pass read it, over a mem KV
 ./tests/test_packed_reader	30	1	fast suite, 30 s ceiling	test	common/packed_reader	Packed segment reader
 ./tests/test_segment_reply	30	1	fast suite, 30 s ceiling	test	common/network	AK: GET_SEGMENT reply receive contract (efs_conn_recv_segment_reply)
 ./tests/test_child_vec_index	30	1	fast suite, 30 s ceiling	test	meta/metadata	AW: reverse slot -> position index invariants

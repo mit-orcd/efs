@@ -115,6 +115,7 @@ tests/test_packed_segment
 tests/test_pack_ledger
 tests/test_pack_ledger_recovery
 tests/test_pack_switch
+tests/test_pack_candidate_alive
 tests/test_packed_reader
 tests/test_pack_validate_once
 tests/test_directory_sync_group
