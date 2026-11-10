@@ -275,14 +275,6 @@ static void foreign_open_wait(void)
  uint64_t off2=grant(kv,ino,&b);assert(off2==208);
  assert(efs_session_fence_local(kv,shard,a.id.client_uuid,2)==EFS_OK);
  assert(efs_meta_append_session_idle(kv,shard,a.id.client_uuid,1,&idle)==EFS_OK && !idle);
- for(unsigned i=0;i<3;i++) {
-  struct efs_txid t=next_tx();append_wait=99;
-  assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_ERR_BUSY);
-  assert(!progress && append_wait==EFS_META_APPEND_WAIT_OPEN);
- }
- state(kv,ino,&open,&size);assert(open==1 && size==208);
- assert(complete(kv,ino,off2,&b)==EFS_OK);
- state(kv,ino,&open,&size);assert(!open && size==216);
  /* A PREPARE refused by a held lock aborts: BUSY, ABORTED, nothing applied. */
  struct efs_txid t=next_tx();append_wait=99;
  assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&locked,kv,&progress,&append_wait)==EFS_ERR_BUSY);
@@ -293,6 +285,8 @@ static void foreign_open_wait(void)
  assert(efs_meta_retire_append_session(kv,shard,a.id.client_uuid,1,&t,&locked_lost,kv,&progress,&append_wait)==EFS_ERR_BUSY);
  assert(!progress && append_wait==EFS_META_APPEND_WAIT_ABORTED);
  assert(efs_meta_append_session_idle(kv,shard,a.id.client_uuid,1,&idle)==EFS_OK && !idle);
+ /* K112: A's DONE row lies below min(base_size, frontier) = 208, so B's OPEN
+  * reservation no longer holds the retirement up. */
  unsigned steps=0;
  do {
   t=next_tx();append_wait=99;
@@ -301,7 +295,55 @@ static void foreign_open_wait(void)
  } while(progress);
  assert(steps>=2);
  assert(efs_meta_append_session_idle(kv,shard,a.id.client_uuid,1,&idle)==EFS_OK && idle);
+ state(kv,ino,&open,&size);assert(open==1 && size==208);
+ assert(complete(kv,ino,off2,&b)==EFS_OK);
  state(kv,ino,&open,&size);assert(!open && size==216);
+ efs_kv_mem_free(kv);
+}
+
+/* K112 pin: R2 completed before R1 sits at/above the frontier and must stay
+ * while R1 is OPEN, else R1's completion would stop the scan at 208. */
+static void hole_row_kept(void)
+{
+ efs_ino_t ino;uint64_t gen;struct efs_kv *kv=fixture(&ino,&gen);
+ uint32_t open;uint64_t size;unsigned removed=9;
+ struct efs_opid_req a=identity(42,1,0),a2=identity(42,2,0);
+ uint64_t r1=grant(kv,ino,&a),r2=grant(kv,ino,&a2);assert(r1==200 && r2==208);
+ assert(complete(kv,ino,r2,&a2)==EFS_OK);
+ struct efs_txid t=next_tx();
+ assert(efs_meta_prune_append(kv,ino,&t,&ops,kv,&removed)==EFS_OK && removed==0);
+ assert(efs_meta_append_prune_due(kv,ino)==0);
+ assert(complete(kv,ino,r1,&a)==EFS_OK);
+ state(kv,ino,&open,&size);assert(!open && size==216);
+ efs_kv_mem_free(kv);
+}
+/* K112 floor: A's row below the frontier goes, A's row above it (B's earlier
+ * reservation is still OPEN) stays and answers WAIT_OPEN until B completes. */
+static void floor_split(void)
+{
+ efs_ino_t ino;uint64_t gen;struct efs_kv *kv=fixture(&ino,&gen);
+ uint32_t shard=efs_kv_inode_shard(ino),open;uint64_t size;unsigned progress=9;int idle=7;
+ struct efs_opid_req a1=identity(42,1,0),a3=identity(42,2,0),b=identity(43,1,0);
+ uint64_t o1=grant(kv,ino,&a1);assert(o1==200);assert(complete(kv,ino,o1,&a1)==EFS_OK);
+ uint64_t ob=grant(kv,ino,&b);assert(ob==208);
+ uint64_t o3=grant(kv,ino,&a3);assert(o3==216);assert(complete(kv,ino,o3,&a3)==EFS_OK);
+ assert(efs_session_fence_local(kv,shard,a1.id.client_uuid,2)==EFS_OK);
+ struct efs_txid t=next_tx();append_wait=99;
+ assert(efs_meta_retire_append_session(kv,shard,a1.id.client_uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_OK);
+ assert(progress==1 && append_wait==EFS_META_APPEND_WAIT_NONE);
+ t=next_tx();append_wait=99;
+ assert(efs_meta_retire_append_session(kv,shard,a1.id.client_uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_ERR_BUSY);
+ assert(!progress && append_wait==EFS_META_APPEND_WAIT_OPEN);
+ assert(efs_meta_append_session_idle(kv,shard,a1.id.client_uuid,1,&idle)==EFS_OK && !idle);
+ assert(complete(kv,ino,ob,&b)==EFS_OK);
+ state(kv,ino,&open,&size);assert(!open && size==224);
+ unsigned steps=0;
+ do {
+  t=next_tx();append_wait=99;
+  assert(efs_meta_retire_append_session(kv,shard,a1.id.client_uuid,1,&t,&ops,kv,&progress,&append_wait)==EFS_OK && ++steps<16);
+ } while(progress);
+ assert(efs_meta_append_session_idle(kv,shard,a1.id.client_uuid,1,&idle)==EFS_OK && idle);
+ state(kv,ino,&open,&size);assert(!open && size==224);
  efs_kv_mem_free(kv);
 }
 
@@ -403,6 +445,8 @@ int main(void)
  completed_then_cleanup();
  live_owner_untouched();
  foreign_open_wait();
+ hole_row_kept();
+ floor_split();
  dead_inode_retired();
  puts("append cleanup (K15/W64): lost reply retired by fence or abandon, frontier advances, late completion/replay refused, completion never overtaken, live owner untouched PASS");
  puts("append cleanup (K42 reopened): a dead inode's rows of the revoked session are deleted by the step itself, not left to the reaper; the other session's rows and the reap completion stay PASS");
