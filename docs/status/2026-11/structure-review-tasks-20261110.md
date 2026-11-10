@@ -1,6 +1,6 @@
 # Structure review task briefs (Nov 10)
 
-**Status (Nov 10): nine briefs prepared; T3, T5, T6, T7 and T8 started Nov 10 as one session each (Sonnet 5.5, medium effort, the user's instruction), with coordinator additions given in each session's prompt (T6: `edelete` for trees, a quiet-host wait and an artifacts directory that is never overwritten; T5: byte-identical output on macOS and Linux; T7: wait for a running merge gate on node9900). T4 starts after T3 is merged; T1 and T2 start after wave 73 is in devel, when the coordinator can convert the open branches; T9 stays deferred. T3, T5, T6 and T8 were merged into devel in wave 73 (Nov 10); T7 was merged in wave 74 (Nov 10) and T4 was merged in wave 75 (Nov 10). T1 and T2 were started Nov 10; T9 stays deferred.** Source: devel
+**Status (Nov 10): nine briefs prepared; T3, T5, T6, T7 and T8 started Nov 10 as one session each (Sonnet 5.5, medium effort, the user's instruction), with coordinator additions given in each session's prompt (T6: `edelete` for trees, a quiet-host wait and an artifacts directory that is never overwritten; T5: byte-identical output on macOS and Linux; T7: wait for a running merge gate on node9900). T4 starts after T3 is merged; T1 and T2 start after wave 73 is in devel, when the coordinator can convert the open branches; T9 stays deferred. T3, T5, T6 and T8 were merged into devel in wave 73 (Nov 10); T7 was merged in wave 74 (Nov 10) and T4 was merged in wave 75 (Nov 10). T1 and T2 were merged in wave 76 (Nov 10); T9 stays deferred.** Source: devel
 `cff8eb424`. Findings and order: [structure review](structure-review-20261110.md).
 To start a task, give a session the section "Common rules" and the one task
 section, verbatim. Each brief is written so that an agent that has not seen
@@ -68,17 +68,15 @@ change, the steps in order, and the checks that prove it is done.
    block (source commit, verdict, remaining failures, active run, next
    action, merge state: your branch name and "unmerged"), then purpose,
    what changed, commands run with results, limitations. Add one ledger
-   paragraph: in `docs/status/2026-11/ledger.md`, directly under the line
-   `## Recent evidence and remaining acceptance`, as the first entry, in
-   this form:
+   entry: create `docs/status/2026-11/ledger/<yyyymmdd>-<nnn>-<slug>.md`
+   (`nnn` is the next free number of that day; see `ledger/README.md`) with
+   a `# Title` line, a blank line and one paragraph in this form, then run
+   `python3 scripts/gen_ledger.py --write`:
 
    ```text
-   [Title](<name>-<yyyymmdd>.md): **verdict, no K row, blocks alpha: no** (date, branch). One or two sentences.
+   [Title](../<name>-<yyyymmdd>.md): **verdict, no K row, blocks alpha: no** (date, branch). One or two sentences.
    ```
 
-   (If Task T2 has
-   merged, add a file under `docs/status/2026-11/ledger/` instead, as its
-   README says.)
 8. **Check before you commit.** Run and make pass:
    `python3 scripts/check_doc_links.py`, `python3 scripts/status_layout.py`,
    `make docs-check`, `python3 scripts/check_k_register.py`. Then rebuild
