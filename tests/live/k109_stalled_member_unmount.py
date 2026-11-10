@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """K109: a clean unmount while storage members are alive but stalled.
 
-Usage: python3 tests/live/k109_stalled_member_unmount.py [--runs N] [--refused M] [--park|--sigstop|--silent2]
+Usage: python3 tests/live/k109_stalled_member_unmount.py [--runs N] [--refused M] [--park|--sigstop|--silent2|--healthy]
            [--report-only] [--port-base N] [--keep]
 
 Run from the root of a built tree (make, make tests/faults/efsd). Three private
@@ -24,6 +24,8 @@ EZ's batch S2). The load then stops.
            for both fence workers; node 1 is then stopped (SIGTERM) while that handler waits. The stop must wake
            the workers before it waits for the handler: orderly exit, in far less than the 30 s receive bound
            the workers would otherwise wait out. The unmount fails closed.
+  --healthy: no stall at all. N clean unmounts on a healthy cluster; prints the median and maximum of fence_ms
+           (the fence phase the client reports), to compare trees.
   phase 2: node 2 stalled as well (two of three members). M times the same
            unmount must fail closed at phase=storage-fence (no strict majority sealed).
 
@@ -148,6 +150,7 @@ def main():
     ap.add_argument('--sigstop', action='store_true', help='phase 1 stalls node 3 with SIGSTOP instead of the parked compactor')
     ap.add_argument('--park', action='store_true', help='phase 1: node 3 never answers a fence but stays reachable (EFS_FAULT_FENCE_PARK); then node 1 is stopped')
     ap.add_argument('--silent2', action='store_true', help='nodes 2 and 3 park every fence; node 1 is stopped while an unmount handler waits for both')
+    ap.add_argument('--healthy', action='store_true', help='no stall: measure fence_ms of clean unmounts on a healthy cluster')
     ap.add_argument('--client-node', type=int, default=1, help='node the client mounts (2 with --split)')
     ap.add_argument('--split', action='store_true', help='group 0 leader on node 1, group 2 leader on node 2')
     ap.add_argument('--fill-deadline', type=int, default=900)
@@ -165,7 +168,9 @@ def main():
         c.held = []
         c.ports = {i: a.port_base + i for i in ids}
     stop_node1 = a.sigstop or a.park or a.silent2
+    stall_node = not (stop_node1 or a.healthy)
     bad = total = 0
+    fences = []
 
     def phase(n, victims, want_clean):
         nonlocal bad, total
@@ -180,6 +185,7 @@ def main():
                                    (not clean and 'phase=storage-fence' in line))
             bad += not ok
             total += 1
+            fences.append(int((re.search(r'\bfence_ms=(\d+)', line) or [0, 0])[1]))
             print(f'stalled={len(victims)} run={run} stop_rc={stop_rc} exit={rc} unmount_s={secs:.1f} clean={int(clean)} '
                   f'ok={int(ok)}\n  {line}', flush=True)
 
@@ -190,7 +196,7 @@ def main():
             stall = dict(EFS_FAULT_COMPACT_STALL='1', EFS_FAULT_COMPACT_FILE=str(work / f'fault-{i}'),
                          EFS_FAULT_L0_BYTES=L0_BYTES, EFS_FAULT_MEMTABLE_BYTES=MEMTABLE_BYTES)
             parked = (a.park and i == 3) or (a.silent2 and i in (2, 3))
-            c.start(i, join=1, extra_env=dict(EFS_FAULT_FENCE_PARK='1') if parked else stall)
+            c.start(i, join=1, extra_env=None if a.healthy else dict(EFS_FAULT_FENCE_PARK='1') if parked else stall)
         for i in ids:
             c.wait_log(i, r'raft-host: formed: 3 members', timeout=120)
         if a.split:
@@ -198,7 +204,7 @@ def main():
             place_leaders(c, 2, groups=(2,))
         else:
             place_leaders(c, 1)
-        if not stop_node1:
+        if stall_node:
             (work / 'fault-3').touch()
             fill(c, [3], a.fill_deadline)
         if a.silent2:
@@ -206,7 +212,10 @@ def main():
             total += 1
         else:
             phase(a.runs, [3], True)
-            if not stop_node1:   # the leader asked node 3 and was told it did not seal
+            if a.healthy:
+                f = sorted(fences)
+                print(f'healthy: {len(f)} clean unmounts, fence_ms median {f[len(f) // 2]} max {f[-1]} min {f[0]} all {fences}', flush=True)
+            if stall_node:   # the leader asked node 3 and was told it did not seal
                 logs = ''.join(c.log(i) for i in (1, 2))
                 assert re.search(r'storage-fence: member=3 floor=\d+ check=0 rc=-', logs), 'node 3 never answered a fence with an error'
             if stop_node1:
