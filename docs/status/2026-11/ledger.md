@@ -4,6 +4,8 @@
 
 ## Recent evidence and remaining acceptance
 
+[Test recipe and component routing](test-recipe-20261110.md): **PASS (docs), no K row, blocks alpha: no** (Nov 10, branch `claude/confident-grothendieck-b05988`). `tests/README.md` says which kind of test to write, how to register it and run it; the developer guide's routing table now carries a Component tag per row, and two stale statements are fixed.
+
 [Test hosts page and wave gate script (Task T6)](test-hosts-wave-gate-20261110.md): **PASS, no K row, blocks alpha: no** (Nov 10, branch `claude/gracious-lovelace-65be40`; not merged). `docs/how-it-works/test-hosts.md` and `scripts/wave_gate.sh` written; trial gate on fstor007 `FAIL 0 NOTRUN 3 COMPLETE`, quiet wait and `--clean` shown; node9900 untested.
 
 [Diagnostics index](diagnostics-index-20261110.md): **PASS, no K row, blocks alpha: no** (Nov 10, branch `claude/wonderful-brahmagupta-c95440`; not merged). `scripts/gen_diagnostics.py` writes `docs/how-it-works/diagnostics.md` (102 log keys, 29 error codes, 25 KB) and `--check` runs in `docs-check`; two runs hash equal.

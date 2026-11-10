@@ -167,25 +167,26 @@ fast as the system grows. If they are built as another 6000-line
 
 Read the row's **Read** column and nothing else first. The **Governs** column
 is what your change must not break; the **Gate** column is what proves it.
+Start with `graphify explain <Component>`; the Read column is what to read next.
 
-| You are changing | Read | Governs | Gate |
-| --- | --- | --- | --- |
-| Any wire message | [architecture.md §7](architecture.md) op matrix, `include/efs/protocol.h` | build-ID compat; restart all servers together | `make test`, solo posix |
-| Path lookup / dentries | [protocols/directory.md](protocols/directory.md) | I5–I8 | posix, posix2 |
-| create / unlink / rename / link | [protocols/directory.md](protocols/directory.md), [protocols/transactions.md](protocols/transactions.md) | I5–I9, I16, I17 | posix, posix2, posixstress |
-| Anything about file size, mtime, ctime | [protocols/data.md](protocols/data.md) "lanes"/"times" | I21, I22 | posix (size-visibility tests), posix2 |
-| Chunk write / publish / truncate / append | [protocols/data.md](protocols/data.md) | I11–I15, I20–I22, I24, I25 | posix, posixpersist, fio honest matrix |
-| The read path, or read prefetch/caching | [protocols/data.md](protocols/data.md) "validated collect" | I24, I13 | posix, posix2 (cross-client visibility) |
-| Client reconnect, leases, locks, open-unlinked | [protocols/sessions.md](protocols/sessions.md) | I19, I23, I16 | posix2, posixstress |
-| Cross-shard anything | [protocols/transactions.md](protocols/transactions.md) | I16, I17, I9 | posix2, posixstress |
-| Raft, KV, replication, membership | [architecture.md §7.1/§7.8](architecture.md), [failure-tolerance.md](failure-tolerance.md) | I1–I4, I10, I18 | `tests/test_sim`, leaks |
-| Production Raft host | `src/server/raft_host.c`, [architecture.md §10](architecture.md) 10.5 | I1–I4, I16; never `efs_raft_snapshot()` until KV flush-through-applied; SNAP blob is the existing WAL item payload | `tests/test_kv_lsm`, `tests/test_wire`, `tests/stress/raft_host_smoke.sh` (scratch cluster; not live `efs-test`) |
-| Simulator / applied KV SM | [verification.md](verification.md), `include/efs/sim.h`, `include/efs/meta_apply.h`, `include/efs/raft.h` | I1–I4, I9, I10, I13–I16, I20–I23, I25 | `tests/test_sim`, `tests/test_meta_apply`, `tests/test_raft` |
-| Op-ID / idempotency window | [architecture.md §7.9](architecture.md), `include/efs/opid.h` | I16 | `tests/test_sim` |
-| A hot path, for speed | [performance.md](performance.md) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column |
-| FUSE client behavior | [architecture.md §7.7](architecture.md) | I24, kernel-cache rules | posix, posix2 |
-| Module structure / file layout | [development.md](developing.md) | ~1000-line file cap; header-only deps | `make test` + the suite for whatever moved |
-| The spec itself | [development.md](developing.md) "machine gate" | one home per normative table | regenerate `architecture-full.md`; links + `I1..I25` resolve |
+| You are changing | Read | Governs | Gate | Component |
+| --- | --- | --- | --- | --- |
+| Any wire message | [architecture.md §7](architecture.md) op matrix, `include/efs/protocol.h` | build-ID compat; restart all servers together | `make test`, solo posix | `wire`, `common/protocol` |
+| Path lookup / dentries | [protocols/directory.md](protocols/directory.md) | I5–I8 | posix, posix2 | `meta/name_index`, `client/efs_fuse.lookup` |
+| create / unlink / rename / link | [protocols/directory.md](protocols/directory.md), [protocols/transactions.md](protocols/transactions.md) | I5–I9, I16, I17 | posix, posix2, posixstress | `meta/txn`, `client/efs_fuse.namespace` |
+| Anything about file size, mtime, ctime | [protocols/data.md](protocols/data.md) "lanes"/"times" | I21, I22 | posix (size-visibility tests), posix2 | `meta/meta_apply.mtime`, `meta/meta_apply.lanes` |
+| Chunk write / publish / truncate / append | [protocols/data.md](protocols/data.md) | I11–I15, I20–I22, I24, I25 | posix, posixpersist, fio honest matrix | `client/write`, `meta/meta_apply.append` |
+| The read path, or read prefetch/caching | [protocols/data.md](protocols/data.md) "validated collect" | I24, I13 | posix, posix2 (cross-client visibility) | `client/read`, `client/efs_fuse.getattr` |
+| Client reconnect, leases, locks, open-unlinked | [protocols/sessions.md](protocols/sessions.md) | I19, I23, I16 | posix2, posixstress | `meta/session`, `meta/lock`, `client/efs_fuse.open` |
+| Cross-shard anything | [protocols/transactions.md](protocols/transactions.md) | I16, I17, I9 | posix2, posixstress | `meta/txn` |
+| Raft, KV, replication, membership | [architecture.md §7.1/§7.8](architecture.md), [failure-tolerance.md](failure-tolerance.md) | I1–I4, I10, I18 | `tests/test_sim`, leaks | `raft`, `kv`, `server/cluster` |
+| Production Raft host | `src/server/raft_host.c`, [architecture.md §10](architecture.md) 10.5 | I1–I4, I16; never `efs_raft_snapshot()` until KV flush-through-applied; SNAP blob is the existing WAL item payload | `tests/test_kv_lsm`, `tests/test_wire`, `tests/stress/raft_host_smoke.sh` (scratch cluster; not live `efs-test`) | `server/raft_host` |
+| Simulator / applied KV SM | [verification.md](verification.md), `include/efs/sim.h`, `include/efs/meta_apply.h`, `include/efs/raft.h` | I1–I4, I9, I10, I13–I16, I20–I23, I25 | `tests/test_sim`, `tests/test_meta_apply`, `tests/test_raft` | `sim`, `meta/meta_apply` |
+| Op-ID / idempotency window | [architecture.md §7.9](architecture.md), `include/efs/opid.h` | I16 | `tests/test_sim` | `common/request_receipt` |
+| A hot path, for speed | [performance.md](performance.md) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column | none |
+| FUSE client behavior | [architecture.md §7.7](architecture.md) | I24, kernel-cache rules | posix, posix2 | `client/efs_fuse` |
+| Module structure / file layout | [development.md](developing.md) | owner interfaces: private state behind a small header ([structure plan](../status/2026-11/structure-plan-20261102.md)) | `make test` + the suite for whatever moved | none |
+| The spec itself | [development.md](developing.md) "machine gate" | one home per normative table | regenerate `architecture-full.md`; links + `I1..I25` resolve | `docs` |
 
 Invariant texts live in [architecture.md](architecture.md) §4. Where state
 lives and which shards an operation touches live in §5 and §6 — those two
@@ -256,7 +257,8 @@ budget or added sleep to make a test pass (fix the cause instead); if anything s
 need a design decision the spec does not contain, STOP and report —
 do not decide.
 Done means: builds on a test node (never in $HOME), make test-all passes,
-the routing row's gate passes via tests/run_tests.sh, and you record
+the routing row's gate passes (a posix or fio gate via tests/run_tests.sh <suite>;
+a tests/test_* or script gate by running it), and you record
 the result directory. A timeout is a failure. Verify the mount with
 findmnt before trusting any suite result.
 ```
