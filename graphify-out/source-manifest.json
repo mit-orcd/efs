@@ -394,6 +394,7 @@
     "scripts/evidence/w166/w166_trace_summary.py": 1,
     "scripts/evidence/w166/w166_verify_retained.py": 3,
     "scripts/gen_diagnostics.py": 11,
+    "scripts/gen_ledger.py": 15,
     "scripts/gen_settings.py": 7,
     "scripts/graph-community-labels.py": 4,
     "scripts/install-code-graph-hooks.py": 1,
@@ -1539,7 +1540,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "febef11afb4595c0ddf8bb6a85f488dd67a663a1cfc5eb76b62a120bc83667f8",
+    "Makefile": "2a0cf0b56d9cdc200e61549beb4774e386db7e0a4f02361ab78e8de20b54760f",
     "README.md": "f646cf19b6605664ea80ee9a539ea8c7938be322ee12ba520447204095e3d216",
     "docs/backlog/crash-safe-durable-versions.md": "b57a8c2376ec9e85d9403196a237c57b69f7515a60e73ceb2ac997788016d6b3",
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
@@ -1972,6 +1973,7 @@
     "scripts/evidence/w166/w166_trace_summary.py": "c2679e7afb8c34b30815c450b7023b655bef5ba8636543360eec6a668b1cf91d",
     "scripts/evidence/w166/w166_verify_retained.py": "ee7564175cb51282ce515a9db31597665852a1cba06af2f8705ea6b66cc9bfe6",
     "scripts/gen_diagnostics.py": "b8d6157bdd86f4785a42ca4a0570952d591f71a8a5e7cf5c3fe90a9e2787ab84",
+    "scripts/gen_ledger.py": "59e12cc28ecb4a145a6c590eec7168e97fa6ced8fea9bd3bc844c93e19ccf3c9",
     "scripts/gen_settings.py": "fa6bc15427c87bbc76fe67e71610321e6602db8a0b65fe5f5929eb8a11a14232",
     "scripts/graph-community-labels.py": "f06ed2e51fe653159b5fe9625e6731e2b86ffca1ef761fd4bfafee86f9021dd6",
     "scripts/install-code-graph-hooks.py": "76963083b38e009a044c6daf69fdc8d7e5af5c343a6cc927d8048515d62fe6f8",
@@ -3129,10 +3131,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1844
+    "calls": 1856
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "471dfe6bf2e1716fcdc5037ae4eba66490b178e3"
+  "source_commit": "5c66698177c7bee5fb5c7fbebc03d5b83aba3178"
 }
