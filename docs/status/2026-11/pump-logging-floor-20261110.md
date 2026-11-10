@@ -46,3 +46,61 @@ Required (invariant I10, [architecture §4](../../how-it-works/architecture.md#4
 ## Decision
 
 Case B. Every second of a write is the 40 ms fsync slots of dependent Raft proposals; scheduling noise is amplified by the 120 ms rotation; no back-off, retry sleep or queue is present. The floor of 50 therefore measures the host's scheduling against a hard-coded rotation, not K72. The test changes; the product does not.
+
+## The change
+
+`tests/test_pump_logging.py`: the blocked phase runs after a drained phase on the same cluster (`drain_seconds=10`, `seconds=25`; the total stays 35 s, so the 95 s `tests/budgets.tsv` row is untouched), and the absolute `r['writes'] >= 50` is replaced by `blocked ops_s >= 0.5 * drained ops_s` with `drained writes > 0`. Both phases pay the same 40 ms fsync rotation and the same host load, so load cancels; the progress windows (`require_progress`, after t = 10 s, that is exactly the blocked phase), the zero-error and no-write-over-10-s verdict, the exact payload readback, the overflow accounting, the role events and the 10 s unmount phase (`writes >= 20` with no fsync delay) are unchanged. No floor lowered, no budget raised, no sleep or timeout added, no product code touched.
+
+## It still catches K72
+
+Parent of the K72 fix: `git log -1 68303f40f^1` is `db4e74cd0` ("Merge eio-port: ORCD EIO stress repairs K66-K71"). Built separately on xorinox (`~/efs-taskFD/unfixed`, `efsd` fault build sha256 `50832dfa1ff3eec0…`, no `.git`), with the new test and `scripts/evidence/pump-logging/` copied in:
+
+| Run on the unfixed tree | Result |
+| --- | --- |
+| the new test, 3 runs | FAIL 3 of 3 in 10 s: `daemon served without its required telemetry reporter` (the startup-refusal step, which the unfixed daemon lacks) |
+| the same test with that one step skipped (`--skip-startup-refusal`), 3 runs | FAIL 3 of 3 (about 73 s), foreground failures: 0, 4 and 2 failed writes, late writes (over 10 s): 2, 2 and 1 |
+| the drained and blocked phases of those three runs | drained 16, 14, 16 writes (1.6, 1.4, 1.6 per s); blocked 6, 4, 1 writes (0.24, 0.16, 0.04 per s); ratios 0.15, 0.11, 0.03, far below the 0.5 the new assertion requires |
+
+So the unfixed daemons fail the verdict and the progress windows as before, and the new ratio assertion alone would also fail them by a factor of 3 to 12. The new test needs the startup-refusal step to pass first on a fixed tree, as the old one did.
+
+## Results after
+
+Fixed tree `9bb50fe79` plus the new test, xorinox (16 CPUs), 20 runs beside the 8-job full gate loop (`EFS_TEST_JOBS=8`, `test-all`, about 15 min per pass; of the two passes that ran beside these runs one printed `TOTAL 594 FAIL 1` and the failing test was not retained, see Not done), host load 4 to 26 at the end of each run:
+
+- **20 of 20 PASS.** `writes` 45 to 62; blocked/drained rate ratio 0.89 to 1.32 (median 1.1); p50 write 1.12 to 1.52 s.
+- **Run 6 counted 45 writes** (p50 1.52 s, load 8, drained 10 writes at 1.0 per s, blocked 33 at 1.32 per s, ratio 1.32): the old floor would have failed it; the new test passed it, because the drained phase of the same run was slow as well.
+- Wall time 85.4 to 96.0 s per run including the startup-refusal step; two runs (96.0 s, 95.9 s, both beside the 8-job gate on 16 CPUs) ran past the 95 s row. The old test ran 88.5 to 94.3 s on the same host in the same conditions (x-heavy and x-hog rows above), and 84 to 89 s on fstor007; the row stays (rule: budgets only move down).
+- `make test` rc 0 (xorinox 2 min 10 s, fstor007 2 min 24 s).
+- Two further full 8-job gate passes of the changed tree on xorinox with nothing beside them (`gate-xorinox/` in the raw output): `TOTAL 594 FAIL 0 NOTRUN 11 STATUS INCOMPLETE (967s)` and `(899s)`; `test_pump_logging.py` PASS in both (90.9 s and 93.1 s of the 95 s row).
+- `bash tests/sanitizer_check.sh tsan`: fstor007 (the reference host, tree `9bb50fe79` plus the new test, nothing else running): `VERDICT: PASS (31 run, 0 failed, 620s)`, rc 0, `PASS pump_logging (94s)`, `make test` rc 0 there too. On xorinox the same lane ended `FAIL (31 run, 1 failed, 1189s)`: `k96_status_slots_live` reported 6 ThreadSanitizer reports (660 s) on that host (gcc 14.3.1, kernel 6.12); `pump_logging` PASS (98 s) and `stop_blocked_stderr` PASS. The k96 test and its code are untouched here and the fstor007 lane passes it; the xorinox reports were not investigated (the log is kept; the host was removed from use afterwards).
+
+## Reproduce
+
+```sh
+# on a Linux build host, tree of 9bb50fe79 (git archive) extracted, TMPDIR on a disk with headroom, make -j16 && make tests/faults/efsd
+python3 scripts/evidence/pump-logging/pump_logging_floor_runs.py --runs 20 --tag new --out DIR   # runs tests/test_pump_logging.py N times, one FDRUN line each
+bash scripts/evidence/pump-logging/pump_logging_fsync_breakdown.sh TAG DIR                        # strace the three daemons for 20 s in a 35 s blocked run
+python3 scripts/evidence/pump-logging/pump_logging_slots.py DIR/TAG                               # slots, calls and slots per write
+# load: EFS_TEST_JOBS=8 EFS_TEST_TARGET=test-all bash scripts/make_test_summary.sh   (in a second copy of the tree, in a loop)
+# unfixed tree: git archive $(git rev-parse 68303f40f^1), add the new test and scripts/evidence/pump-logging/, build, run with --skip-startup-refusal
+```
+
+Cleanup: stop the load loop by pid (the loop's process group and every process whose working directory is the load tree), unmount stale `efs-fuse` mounts with `fusermount3 -uz`, remove the work trees.
+
+## Raw output
+
+Outside Git, on two hosts: fstor007 `~erbmi1/efs-artifacts/taskFD-20261110/` (solo, fast-suite-loop and strace-breakdown runs of the unchanged test, the fstor007 TSan and `make test` logs), `SHA256SUMS` sha256 `f8ddd2b5468061743332c01436903a597f41cffb0a5a10153e7c02f0bc1e126b (61 files)`; xorinox `~maik/efs-artifacts/taskFD-20261110/` (the xorinox series, the unfixed-tree runs, the 20 runs of the new test, the gate-loop logs, `make test` and the xorinox TSan lane), `SHA256SUMS` sha256 `6c279d7bff412ecf59ee5199763eff708d6c10f8b4a4c06e9ac0e6deef50b463 (56 files)`. Other tasks' fixtures cited: `~erbmi1/efs-artifacts/taskEX-20261109/f1-run1/pump-logging-fixture/`, `~erbmi1/efs-artifacts/merge-wave68-20261110-fstor007-b-gate1/fail-525.log`, `~erbmi1/efs-artifacts/taskFC-20261110/merged2/tsan-1-pump_logging.out`.
+
+Builds: `9bb50fe79` from `git archive` (tar sha256 `618aa538…` uncompressed stream, `4e191134…` gzip -n used on fstor007); fstor007 gcc 11.5.0, Python 3.9.25, kernel 5.14.0-687.36.1, private libfuse 3, `efsd` fault build sha256 `e4c38e41…`; xorinox (Rocky 10.2, 16 CPUs, 60 GB, kernel 6.12.0-211.67.1, gcc 14.3.1, Python 3.12.15, system fuse3), fault build sha256 `cd5d7937…`. Binaries carry no git metadata. The test chooses kernel-assigned ephemeral ports (32768 to 60999), not 18000 to 19999 or 19000 to 19199; no port of the live clusters is in that range.
+
+## Proposed K72 clause
+
+For the coordinator to apply to the K72 row (not edited here): "Nov 10: `tests/test_pump_logging.py` no longer asserts an absolute write count; it requires the blocked phase to write at least half the drained phase's rate on the same cluster (Task FD, `docs/status/2026-11/pump-logging-floor-20261110.md`: the old floor of 50 sat 7 below the healthy count and failed on load at 48, 44 and 44; the new check fails the unfixed tree at ratios 0.03 to 0.15)."
+
+## Not done
+
+- The shortfall (a count under 50) was **not reproduced on demand**: 34 runs of the unchanged test at load up to 50 never counted fewer than 52. The attribution rests on the strace breakdown (the slot rotation and its amplification) and on the three kept failures; the loads that produced them (46 to 200 on 96 CPUs, a TSan lane) were not recreated.
+- Which of the 5 leader log syncs per write could be removed is **not established** (see "Which syncs the durability contract requires"); no product change was made or attempted. A per-proposal trace of one write is the next measurement if that optimisation is wanted.
+- Remaining gates are unchanged: this page closes no K row; `tests/budgets.tsv` is untouched (the 95 s row, two runs past it on a 16-CPU host under the gate).
+- One of the two gate passes that ran beside the 20 runs ended `FAIL 1`; its summary was overwritten by the next pass, so the failing test is unknown (the 20 direct runs and the two later passes all passed `test_pump_logging.py`). Not run on fstor007: the full `test-all` gate with the change (the wave gates do that).
+- The xorinox TSan lane failed `k96_status_slots_live` (6 reports); not investigated, the fstor007 lane is the one that counts for the gate.
