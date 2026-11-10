@@ -133,9 +133,10 @@
 | H15 | D distinct-host | TCP + RDMA | 90 | K22 snapshot import into a stalled follower (1 GiB log lag, `scripts/evidence/k22/k22_snapshot_import.sh`) and live leader admission at 3/4 |
 | S1 | S soak | - | 270 | four-hour soak on the four-host shape (E4/D4 with K43) plus 30 min setup/verify |
 | S2 | S soak | - | 420 | K22 production-scale follower plateau (about 6 h measured on xorinox) plus verify |
-| T1 | N 13-node | - | 90 | 13-node qualify gates: identity, topology, b-checks, posix-core, posix-2client, e1-manifest, c5, e4-scale (storage/client split undecided, D46 item 2) |
-| T2 | N 13-node | - | 60 | 13-node: >4-node ring/placement (K28), capacity/protection debt (K20), fold/GC at scale (K18) |
-| T3 | N 13-node | - | 45 | 13-node: member stop/return and clean stop with one member down |
+| T1 | N 6- and 9-member (D48, was 13-node) | - | 90 | qualify gates on the 6- and 9-member shapes: identity, topology, b-checks, posix-core, posix-2client, e1-manifest, c5, e4-scale (storage/client split undecided, D46 item 2) |
+| T2 | N 6- and 9-member (D48, was 13-node) | - | 60 | >4-node ring/placement (K28), capacity/protection debt (K20), fold/GC at scale (K18) |
+| T3 | N 6- and 9-member (D48, was 13-node) | - | 45 | member stop/return and clean stop with one member down |
+| T4 | N 3-, 6- and 9-member (D48) | TCP + RDMA | 180 | ior scaling ([D48](decisions.md)): the same ior easy and hard workload with the same client load on 3, 6 and 9 members; write and read throughput of both must rise with the member count (median of at least three runs per point); a category that does not rise gets a K row. Time is an estimate |
 
 ## Batches by host class
 
@@ -148,7 +149,7 @@ Batches are ordered as D45 item 5 and D46 set the campaign: orcd-mini RDMA rerun
 | D-TCP | fcstor007-011 TCP: three cells (210 min: 60 + 60 + 90) plus own runs H (TCP column, 780 min) | cells + H1-H10, H12-H15 | 16 h 30 min | 2 h 15 min | 18 h 45 min | K5, K6, K12, K13, K14, K15, K18, K22, K28, K29, K33, K34, K35, K36, K37, K39, K41, K42, K43, K44, K50, K54, K66, K69, K70, K45, K46, K47, K72, K74, K75 |
 | D-RDMA | fcstor007-011 RDMA: three cells (210 min: 60 + 60 + 90) plus own runs H (RDMA column, 900 min, includes H12) | cells + H1-H10, H12-H15 | 18 h 30 min | 2 h 15 min | 20 h 45 min | K5, K6, K12, K13, K14, K15, K18, K21, K22, K28, K29, K33, K34, K35, K36, K37, K38, K39, K40, K41, K42, K43, K44, K50, K54, K66, K69, K70, K45, K46, K47, K72, K74, K75 |
 | S | four-host shape, soak | S1, S2 | 11 h 30 min | 0 h 45 min | 12 h 15 min | K43, K29, K22 |
-| N | fcstor003-015, 13 nodes | T1-T3 | 3 h 15 min | 0 h 45 min | 4 h 00 min | K28, K20, K18 |
+| N | fcstor003-015, clusters of 3, 6 and 9 members ([D48](decisions.md)) | T1-T4 | 3 h 15 min | 0 h 45 min | 4 h 00 min | K28, K20, K18 |
 
 **Sequential total: 65 h 55 min** (3955 min, Task BT: O3 +40, O7 -30, F5 +135), about 2.7 days of wall time if every batch runs one after another and every own run is done once per transport on the 4-host shape. Hosts are shared between batches D-TCP, D-RDMA, S and N (fcstor007-011 are inside fcstor003-015), so they cannot overlap; F and O can run alongside any fcstor batch. Own runs in D and the 3-, 4- and 5-host shapes: only H10 needs the 5-host shape; every other H run is counted once on the 4-host shape, so a decision to repeat them on the 3- and 5-host shapes adds their TCP and RDMA columns again (780 + 900 min per extra shape).
 

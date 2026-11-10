@@ -24,7 +24,17 @@ struct io_start {
     pthread_mutex_t mu;
     pthread_cond_t ready_cv;
     unsigned ready;
-    uint64_t deadline_ns, release_ns;
+    /* Held for writing until release: one unlock wakes every worker at once.
+     * A per-worker release loop made the main thread wait for a CPU slice
+     * per wakeup behind running workers (0.8-1.0 s for 256 workers on 1-4
+     * CPUs); readers then acquire without a shared-mutex convoy. The last
+     * worker to get a CPU publishes the deadline, so the window closes
+     * --time after every worker is running; the others keep working and read
+     * it without blocking. wall_s spans release to the last exit. */
+    pthread_rwlock_t go;
+    int abort;
+    unsigned started, workers;
+    uint64_t deadline_ns, release_ns, duration_ns;
 };
 struct io_worker {
     int fd, reading, hashing, sync_writes;
@@ -32,11 +42,6 @@ struct io_worker {
     unsigned char pattern;
     uint8_t *buf, sum[EFS_HASH_SIZE];
     struct io_start *start;
-    /* Independent release gates avoid a 256-worker mutex convoy while early
-     * workers saturate the CPU. The common deadline still includes launch. */
-    pthread_mutex_t go_mu;
-    pthread_cond_t go_cv;
-    int released, abort;
     uint64_t start_delay_ns;
     int error_no;
     uint64_t ops, errors, latency_ns, max_ns;
@@ -62,16 +67,13 @@ static void *io_worker_run(void *arg)
 {
     struct io_worker *w = arg;
     struct io_start *gate = w->start;
-    pthread_mutex_lock(&w->go_mu);
     pthread_mutex_lock(&gate->mu);
     ++gate->ready;
     pthread_cond_signal(&gate->ready_cv);
     pthread_mutex_unlock(&gate->mu);
-    while (!w->released)
-        pthread_cond_wait(&w->go_cv, &w->go_mu);
-    uint64_t deadline = gate->deadline_ns;
-    int abort = w->abort;
-    pthread_mutex_unlock(&w->go_mu);
+    pthread_rwlock_rdlock(&gate->go);
+    int abort = gate->abort;
+    pthread_rwlock_unlock(&gate->go);
     if (abort) return NULL;
 
     uint64_t ops = 0, errors = 0, latency_ns = 0, max_ns = 0;
@@ -80,9 +82,11 @@ static void *io_worker_run(void *arg)
     /* One integer clock read per operation replaces three reads and floating
      * point deadline division. Latency covers the complete worker operation
      * cycle, including its loop bookkeeping, rather than syscall time alone. */
-    uint64_t start = now_ns();
+    uint64_t start = now_ns(), deadline;
     w->start_delay_ns = start - gate->release_ns;
-    while (start < deadline) {
+    if (__atomic_add_fetch(&gate->started, 1, __ATOMIC_ACQ_REL) == gate->workers)
+        __atomic_store_n(&gate->deadline_ns, start + gate->duration_ns, __ATOMIC_RELEASE);
+    while (!(deadline = __atomic_load_n(&gate->deadline_ns, __ATOMIC_ACQUIRE)) || start < deadline) {
         off_t off = (off_t)block * size;
         uint8_t hash[EFS_HASH_SIZE];
         if (w->hashing && !w->reading) efs_hash(w->buf, size, hash);
@@ -173,10 +177,10 @@ int efs_bench_io_main(int argc, char **argv)
     pthread_t *threads = calloc((size_t)qd, sizeof(*threads));
     char (*paths)[4096] = calloc((size_t)qd, sizeof(*paths));
     if (!w || !threads || !paths) { free(w); free(threads); free(paths); return 1; }
-    int created = 0, initialized = 0, rc = 1, saved_error = 0;
+    int created = 0, rc = 1, saved_error = 0;
     const char *phase = "scratch creation";
     struct io_start gate = {.mu = PTHREAD_MUTEX_INITIALIZER,
-        .ready_cv = PTHREAD_COND_INITIALIZER};
+        .ready_cv = PTHREAD_COND_INITIALIZER, .go = PTHREAD_RWLOCK_INITIALIZER};
     for (int i = 0; i < qd; i++) w[i].fd = -1;
     for (int i = 0; i < nroots; i++) if (mkdir(roots[i], 0755) && errno != EEXIST) {
         saved_error = errno; goto done;
@@ -211,13 +215,8 @@ int efs_bench_io_main(int argc, char **argv)
         }
     }
     phase = "worker gate initialization";
-    for (int i = 0; i < qd; ++i) {
-        int grc = pthread_mutex_init(&w[i].go_mu, NULL);
-        if (grc) { saved_error = grc; goto done; }
-        grc = pthread_cond_init(&w[i].go_cv, NULL);
-        if (grc) { pthread_mutex_destroy(&w[i].go_mu); saved_error = grc; goto done; }
-        ++initialized;
-    }
+    int grc = pthread_rwlock_wrlock(&gate.go);
+    if (grc) { saved_error = grc; goto done; }
     for (int i = 0; i < qd; i++) {
         int thread_rc = pthread_create(&threads[i], NULL, io_worker_run, &w[i]);
         if (thread_rc) { phase = "thread creation"; saved_error = thread_rc; goto stop; }
@@ -231,13 +230,9 @@ int efs_bench_io_main(int argc, char **argv)
     if (perf_command("enable\n")) { saved_error = errno; goto stop; }
     uint64_t start = now_ns();
     gate.release_ns = start;
-    gate.deadline_ns = start + (uint64_t)(duration * 1e9);
-    for (int i = 0; i < created; ++i) {
-        pthread_mutex_lock(&w[i].go_mu);
-        w[i].released = 1;
-        pthread_cond_signal(&w[i].go_cv);
-        pthread_mutex_unlock(&w[i].go_mu);
-    }
+    gate.workers = (unsigned)qd;
+    gate.duration_ns = (uint64_t)(duration * 1e9);
+    pthread_rwlock_unlock(&gate.go);
     for (int i = 0; i < created; i++) pthread_join(threads[i], NULL);
     created = 0;
     uint64_t end = now_ns();
@@ -280,12 +275,8 @@ int efs_bench_io_main(int argc, char **argv)
     goto done;
 stop:
     /* Partial creation/perf failure wakes every owned thread for cleanup. */
-    for (int i = 0; i < created; ++i) {
-        pthread_mutex_lock(&w[i].go_mu);
-        w[i].abort = 1; w[i].released = 1;
-        pthread_cond_signal(&w[i].go_cv);
-        pthread_mutex_unlock(&w[i].go_mu);
-    }
+    gate.abort = 1;
+    pthread_rwlock_unlock(&gate.go);
     for (int i = 0; i < created; i++) pthread_join(threads[i], NULL);
 done:
     if (rc) fprintf(stderr, "io bench failed during %s%s%s\n", phase,
@@ -294,9 +285,7 @@ done:
         if (w[i].fd >= 0) { close(w[i].fd); unlink(paths[i]); }
         free(w[i].buf);
     }
-    for (int i = 0; i < initialized; ++i) {
-        pthread_cond_destroy(&w[i].go_cv); pthread_mutex_destroy(&w[i].go_mu);
-    }
+    pthread_rwlock_destroy(&gate.go);
     pthread_cond_destroy(&gate.ready_cv);
     pthread_mutex_destroy(&gate.mu);
     free(w); free(threads); free(paths); return rc;

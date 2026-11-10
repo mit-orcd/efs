@@ -1,4 +1,4 @@
-# Decisions — taken and pending (register D1–D46)
+# Decisions — taken and pending (register D1–D49)
 
 **October 15 reconciliation:** [Review of stale claims and remaining gates](2026-10/open-item-reconciliation-20261015.md). Read these annotations before treating dated implementation descriptions as current tasks. No new global acceptance or deployment is implied.
 
@@ -11,7 +11,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-#### Decisions — taken and pending (register D1–D46)
+#### Decisions — taken and pending (register D1–D49)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -28,6 +28,24 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](2026-10/v030-release-scope-20261012.md). Execution stays stopped.
+
+## D49 — K110: build the cross-incarnation durability proof (user, Nov 10)
+
+Asked "For K110, build the durable-proof fix or accept it as a documented alpha limit?", the user answered "Build the fix". K110 (batch D H1, diagnosed by Task FH; its page `2026-11/k110-fsync-after-sigkill-20261110.md` arrives with its branch): when the members holding a stripe each restart uncleanly between a write and its `fsync`, the client can never prove the stripe durable and every later `fsync` of the file fails until unmount, although every byte reads back exact. The fix is that page's option 2: each member keeps a bounded durable history of (incarnation, last barrier seq it made durable) per root, the PUT and COMMIT replies carry what the client needs, and the client counts a fragment acknowledged by an earlier incarnation as durable only when that history proves its barrier completed. This amends the sentence of D42 F23 and of the K36 page that such a fragment is never counted durable; the amended wording is applied when the fix merges. Everything else in D42 stands: no `fsync` returns 0 without two proven fragments per stripe, and power-loss scope is unchanged. Not chosen: documenting the case as an alpha limitation.
+
+## D48 — alpha 1.0 cluster sizes 3, 6 and 9; ior throughput must rise with the member count (user, Nov 10)
+
+The user's words: "for alpha 1.0 we can reduce to 3, 6 and 9 node cluster. i want to see that increasing the node count actually helps beyond just volume, i want to see io goes up also in all categories of ior". Coordinator's reading, to be corrected by the user if wrong:
+
+1. **Supersedes D46 item 2** (all 13 fcstor nodes): the large-cluster qualification of alpha 1.0 runs on clusters of **3, 6 and 9 distinct storage hosts** instead of one 13-node cluster. Batch N of the Stage 1 matrix (T1 to T3) runs its gates on the 6- and 9-member shapes; the 3-member shape is already covered by batch D.
+2. **New acceptance (T4):** the same ior workload, with the same client load, on 3, 6 and 9 members must show throughput that rises with the member count in every ior category: easy write, easy read, hard write and hard read. More members must buy I/O, not only capacity. A category that does not rise is a finding with its own K row, not a waived result.
+3. **Unchanged:** D46 item 1 (2+1 on 3, 4 and 5 hosts over TCP and RDMA, batch D) stands, since those cells have mostly run; D47 applies (any `/data1/NN`, cleaned up). Transports for T4: TCP and RDMA. Client hosts: the fcstor hosts that are not members of the cell.
+
+Not decided by the user and set by the coordinator as defaults: the client load is fixed across the three sizes and large enough that the 3-member cluster, not the clients, is the limit; "rises" means the median of at least three runs is higher at each step by more than the run-to-run spread.
+
+## D47 — test storage on the fcstor hosts: any `/data1/NN`, cleaned up (user, Nov 10)
+
+The user's words: "instead of /data1/01 other /data1/NN directories can be used, as long as you clean up". This widens D46 item 1's "test storage under `/data1/01`": a qualification run may put its test stores under any `/data1/NN` directory of a participating fcstor host, in an owned run directory, and removes everything it created there when it ends. The rest of D46 item 1 stands (verify ownership, leave other agents' clusters and stores alone, co-located daemons never stand in for failure domains). It removes the storage-directory question from D46 item 2 (all 13 fcstor nodes); that run's storage/client split and transports are still not set.
 
 ## D46 — Task Z decisions, item by item (user, Oct 28)
 

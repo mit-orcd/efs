@@ -49,6 +49,7 @@ held=1;return -18;
 static void dcache_ensure(void){}
 static int dcache_dirty_cis_of(efs_ino_t ino,uint32_t **out){assert(ino==42);*out=malloc(100*sizeof(**out));assert(*out);for(int i=0;i<100;i++)(*out)[i]=i;return 100;}
 static void flush_pipe_init(struct flush_pipe*p){p->rc=0;}
+static int dcache_retire_gone(efs_ino_t ino,uint32_t ci,int rc){(void)ino;(void)ci;(void)rc;return 0;}
 static int dcache_steal_dirty(efs_ino_t ino,uint32_t ci,uint8_t **b,uint32_t*l,uint64_t*bg,uint64_t*seq,uint32_t*off,uint32_t*len,struct efs_chunk_entry*obs,int*have){
 (void)ino;(void)ci;(void)l;(void)bg;(void)seq;(void)off;(void)len;(void)obs;(void)have;
 stolen++;if(fail_at==stolen)return EFS_ERR_IO;*b=malloc(1);assert(*b);return 1;}

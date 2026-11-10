@@ -1,0 +1,130 @@
+# Batch F harness fixes: GC fixture scan race and io bench start (Task FB)
+
+Task FB, Nov 9 to 10 2026, fstor007, branch `claude/blissful-chaum-051bdb` from devel `2dd280cee`. Code commits `ab88399e9` (both fixes) and `24b6807e7` (io window behind the last worker start), instrumentation `28bbc0c52`, measured tree `28bbc0c52`. Purpose: the two harness defects that Task EX's batch F run found on devel `9bb50fe79` (page `docs/status/2026-11/batch-f-candidate-20261109.md` on branch `claude/hungry-liskov-47e4f2`, commit `9dbec51fd`, not merged at writing): F4 run 1 (the `gc-reclamation` gate crashed in its own helper) and F1 run 2 (`test_bench_cli.py`, 4 of 256 `efs-bench` workers did no I/O). Release gate: alpha 1.0 Stage 1 batch F ([acceptance matrix](../stage1-acceptance-matrix-20261030.md)).
+
+**Status (Nov 10):** merged into devel in wave 71. "Task FB" on this page is the batch F harness-fix session started by Task EX; it is not the Task FB of the [K38 recurrence](k38-recurrence-20261110.md).
+
+**Verdict: PASS on all three fixes, harness and bench-tool change only, no K row, blocks alpha: no.**
+
+- **GC helper race:** reproduced on the old code and gone on the new.
+- **io bench:** the old build failed 6 of 6 pinned idle runs and 5 of 40 pinned runs beside the gate. The new build had no failure in the 75 runs of the same case, from 1 CPU to all 96.
+- **fstor007 `make test`:** rc 0.
+- **8-job gate:** `TOTAL 595 FAIL 1 NOTRUN 3 STATUS FAIL (662s)`. The one FAIL is `test_k41_packer_placement.py`. It is a third harness defect, a chance assertion in the test, now fixed in `fd50deb31` and proven (section 3). There is no full gate after that fix: the host went to merge gates, and the branch is gated again when it merges.
+
+No timeout, budget, `--time` value or sleep was changed.
+
+## 1. `tests/live/gc_reclamation.py` `files()`
+
+**Defect:** `files(ino)` listed `folder.glob('*/*')` under the inode's export directory. Physical reclaim removes those directories. In the F4 run one vanished between pathlib's listing and its `scandir`, which raised `FileNotFoundError` inside `wait(lambda: not files(tail_ino), 'span-only truncate then physical reclaim')`. The helper raced the very deletion it waits for. On Python 3.9 (fstor007), pathlib's glob catches only `PermissionError` during a scan.
+
+**Fix:** a new `export_entries(folder)` scans one directory with `os.scandir`, skips dot names as glob did, and returns `[]` only on `FileNotFoundError`. `files()` calls it for the inode directory and again for each subdirectory, so a vanished subdirectory drops only itself and its siblings' fragments still count. Any other `OSError` still raises. The 45 `files()` callers are unchanged: they get the same list of fragment paths.
+
+**Regression check:** `tests/test_gc_files_vanish.py` (in `make test`, budget row 30 s) compiles the real `export_entries`/`files` from the fixture source and injects `os.scandir`. It checks four cases: the resident fragments with `.sum` excluded; a subdirectory removed at its scan, where the sibling is kept; the inode directory removed, or absent, which reads as empty; and a `PermissionError`, which still raises. It fails on the old source, which has no `export_entries`.
+
+**Race reproduction** (`scripts/evidence/fb/gc_files_race.py OLD NEW`): each version's `files()` scans for 5 s while a thread keeps creating eight subdirectories and removing the tree. fstor007, Python 3.9.25, two separate runs. Run 1's counts were read from the terminal and are not in an artifacts directory; run 3's are in `gc-files-race.txt` (below):
+
+| source | run 1: scans, `FileNotFoundError` | run 3: scans, `FileNotFoundError` |
+| --- | --- | --- |
+| devel `2dd280cee` (glob) | 278,071, 82 | 295,824, 17 |
+| this branch | 125,894, 0 | 62,133, 0 |
+
+## 2. `efs-bench --bench io` worker start
+
+**Which side was at fault:** the bench tool. The test's many-workers case (`--qd 256 --window 1 --time 1`, `idle_workers == '0'`) asks for what the tool promises: every worker takes part in the window. Before this task the tool fixed the deadline at release and then woke the workers one by one from the main thread, each through its own mutex and condition variable (`802a615fe`, Oct 6). That gave two ways for a worker to lose its whole share of a 1 s window: the release loop itself, and a released worker the scheduler had not yet run.
+
+**Old release loop, measured** (`scripts/evidence/fb/io_start_diag.py release-loop` on `2dd280cee`; it records when the main thread signalled each worker; three runs per row):
+
+| condition | release loop | latest start | verdict |
+| --- | --- | --- | --- |
+| idle host (load 1 to 4), `taskset -c 0` | 1,003 ms | 1,003 to 1,010 ms | FAIL 3/3, 75 to 117 idle workers |
+| idle host, `taskset -c 0-3` | 1,003 ms | 1,003 to 1,013 ms | FAIL 3/3, 145 to 147 idle |
+| idle host, unpinned (96 CPUs) | 148 to 202 ms | 370 to 410 ms | OK 3/3 |
+| beside this task's gate (load 163 to 172), `0-3` | 80 to 219 ms | 80 to 220 ms | OK 3/3 |
+| same, unpinned | 12 to 57 ms | 57 to 84 ms | OK 3/3 |
+
+Even unpinned on an idle 96-CPU host, the serial loop takes up to 0.2 s of the 1 s window, and the latest start reaches 0.4 s. On 1 to 4 CPUs the loop alone uses the whole window. F1's `max_start_us=1000757` comes from one sample with no instrumentation, so this page does not say which of the two ways caused it; the fix removes both.
+
+**Fix** (`src/bench/io_bench.c`):
+
+1. **One release.** The main thread write-locks one `pthread_rwlock_t` before creating the workers. Each worker marks itself ready and blocks in `rdlock`. When all are ready, one `unlock` releases them: glibc wakes every waiting reader with a single futex wake, and the readers acquire without the shared-mutex convoy that `802a615fe` removed (`ab88399e9`).
+2. **Window behind the last start.** The last worker to start publishes the deadline, its own start plus `--time`, with one atomic store. The others keep working and read the deadline with one atomic load per operation: no spin, no second wake (`24b6807e7`). Every worker therefore runs for at least `--time` after all are running.
+
+`wall_s` spans release to the last exit, so `GiB_s` counts every op inside its own wall time. `wall_s` can now exceed `--time` by the start ramp. No caller derives a timeout from `--time`: `scripts/bench_profile.py` uses a fixed 600 s per subprocess. One behaviour changes. Every worker now completes at least one operation by construction, so a host that is slow to schedule the workers no longer gives `BENCH_FAIL` through `idle_workers`. It shows instead as a longer `wall_s` and `max_start_us`. `idle_workers` still counts a worker whose first operation failed, and the I/O and verification errors still fail closed. The abort path sets `gate.abort` before the same unlock. `docs/how-it-works/performance.md` describes the new start gate.
+
+**Old and new interleaved** (`scripts/evidence/fb/io_start_compare.sh OLD NEW 10 CPUS`, beside this task's 8-job gate, two sets about four minutes apart, load 6 to 200):
+
+| CPUs | old: FAIL / runs, worst start | new: FAIL / runs, worst start |
+| --- | --- | --- |
+| `0-1` | 4/20, 1,001 ms | 0/20, 2,001 ms |
+| `0-3` | 1/20, 1,001 ms | 0/20, 1,549 ms |
+| all 96 | 0/20, 212 ms | 0/20, 219 ms |
+
+**New build start spread** (`io_start_diag.py spread`, 9 runs on the otherwise idle host, all BENCH_OK). The load average climbed from 24 to 104 during these runs. That is the bench's own 256 threads: they ran pinned first, and a load average counts runnable threads. The unpinned rows ran last and are the idle-host comparison with the old build's 370 to 410 ms latest start.
+
+| CPUs | p50 | max |
+| --- | --- | --- |
+| `0` | 512 ms | 3.9 s |
+| `0-3` | 125 to 136 ms | 2.1 s |
+| unpinned | 29 to 108 ms | 0.45 s |
+
+Beside the gate (6 runs, all BENCH_OK), `0-3` gave a max of 45 to 210 ms and unpinned 13 to 102 ms. On one CPU, 256 runnable threads take seconds to all reach a CPU. The old build failed those runs; the new build waits for them. Unpinned on an idle host the latest start is about the same for both builds (new 148 to 449 ms, old 370 to 410 ms), so on 96 CPUs the gain is that no start ramp can empty a worker's window, not a faster start.
+
+## 3. `tests/test_k41_packer_placement.py` step 2
+
+**Defect:** step 2 asserts `refused >= 1`: node 6 must refuse at least one segment PUT. The test assumes node 6 is a destination. The packer picks each segment's three destinations by its time-based id (`efs_pack_destinations`, `place_wide` in `src/common/placement.c`):
+
+- With six ring members (node 4 back) the stride is 2, so a segment lands on {1, 3, 5} or {2, 4, 6} and misses node 6 with probability 1/2.
+- With five members (node 4 not yet back) the pick is three consecutive members, which misses node 6 with probability 2/5.
+
+A 60-file batch packs about five segments (every run here logged 5), so one batch misses node 6 entirely with probability 1/2^5 ≈ 3 % or (2/5)^5 ≈ 1 %. The Task EY reading, that node 6's step-1 down mark races step 2, does not apply here: `EFS_FAULT_PACK_PLACE_DOWN=6` clears that mark in the packer (`src/server/packer.c`, near line 1296), so node 6 stays on the ring.
+
+**Fix** (`fd50deb31`): step 2 packs further batches, at most four, until node 6 has refused once; every batch is checked as before. A failure now reports node 6's probe failures: 0 means placement never chose node 6, non-zero means node 6 was chosen but failed its probe. No sleep or timeout was changed. A second batch costs another 20 s pack age, so the run can exceed its 65 s budget row. That shows as OVERBUDGET, which leaves a passing gate PASS. It is expected in about 1 to 3 % of runs (one batch missing node 6). It did not happen in this task's three solo runs or in round 3's gate.
+
+**Proof**, fstor007, tree `735cf229a`, sequential solo clusters after three quiet checks 20 s apart:
+
+| run | result |
+| --- | --- |
+| committed test x3 | PASS 3/3, 48 to 50 s, 1 batch each, 1 to 3 refusals |
+| forced miss, pre-fix single batch (`scripts/evidence/fb/k41_forced_miss.py TREE 10 1`, a 10-file step-2 batch, one segment) | FAIL 4/8, each with node 6 probe failures 0; predicted miss rate 1/2 |
+| forced miss with the fix (`... 10 4`) | PASS 8/8; batches used 1, 1, 2, 4, 4, 1, 1, 3 (48 to 112 s) |
+
+With one-segment batches the fix can still miss four times running (1/16). That applies only to this forcing variant: with the real five-segment batches, four misses in a row have a probability of about 10⁻⁶. Artifacts: fstor007 `~/efs-artifacts/taskFB-20261110-k41/` (per-run logs, `results.txt`), `SHA256SUMS` sha256 `b081ca86527c436e0ed785f991c64bd3730456204a5abd461f47c107a6e7a154`. Scratch tree `/tmp/efs-taskFB4` removed.
+
+## Runs and environment
+
+fstor007 (96 CPUs, RHEL 9.7, kernel 5.14.0-687.36.1, gcc 11.5.0, Python 3.9.25), `EFS_FUSE_PREFIX` shim to the private libfuse 3.16.2, TCP loopback plus RDMA on mlx5_0 for the RDMA tests. Before each round no other gate's screen was running; round 1 started at load about 6 and round 3 at 1.1 after a `ps -u erbmi1` check.
+
+- **Round 1**, Nov 9, `ab88399e9`, `git archive` tar.gz sha256 `ad5f6be40e263026a615350999e50f3935b5ae58866db7d28a20a78595541cf1`. `make test` rc 0; 8-job gate `TOTAL 595 FAIL 0 NOTRUN 3 STATUS COMPLETE (664s)`. That build still had the deadline fixed at release. Artifacts: fstor007 `~/efs-artifacts/taskFB-20261109/`, `SHA256SUMS` sha256 `b07f8f961c99796048acd70fc7ca22cfff9c47e6705e43cc6b7a84d0c5c02cd2`.
+- **Round 2** was stopped at the merge coordinator's request because a merge gate ran at the same time. Its partial output is a note in the shared session notes, not evidence.
+- **Round 3**, Nov 10 05:17 to 05:31 UTC. New tree `28bbc0c52` (`git archive` tar sha256 `088380c03a5e7195dcb52cfd9e159d3b3fd50f9f4f385c7777c48b884fa9726c`) and old tree `2dd280cee` (tar sha256 `c918d8cf1fce6751483e2fd94a83ed15d192a1e6e59bd0d44ce5d1da2c09c429`). `efs-bench` sha256: old `34a29489…`, new `3ba683d2…`. Steps in order:
+  1. The diag runs.
+  2. The race reproduction.
+  3. `make -j32 test`: rc 0.
+  4. `python3 tests/test_gc_files_vanish.py`: PASS.
+  5. `EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh`, with the comparison sets alongside it, starting 60 s in: `TOTAL 595 FAIL 1 NOTRUN 3 STATUS FAIL (662s) HOSTLIMIT 3`. The FAIL was `test_k41_packer_placement.py` line 255, `assert refused >= 1`, during part 1b of that test. `test_bench_cli.py` took 3.1 s and `test_gc_files_vanish.py` 0.1 s. The 3 NOTRUN are the usual host limits: cluster scripts absent, `valgrind/memcheck.h`, RDMA live.
+
+  Artifacts: fstor007 `~/efs-artifacts/taskFB-20261109-r3/` (gate log, summary, timings, `fail-506.log`, diag and comparison outputs, race counts), `SHA256SUMS` sha256 `9e8dc3005a6b19ea02065ef289a04b105eb6c7df232807abfdbaf198b2580d67`.
+
+Scratch trees `/tmp/efs-taskFB*` were removed after each round.
+
+## Reproduction
+
+```bash
+git archive --prefix=new/ 28bbc0c52 > new.tar; git archive --prefix=old/ 2dd280cee > old.tar   # ship, check sha256
+tar xf new.tar; tar xf old.tar; export EFS_FUSE_PREFIX=<shim: lib64 and include -> private libfuse>
+(cd old && make efs-bench); cd new && make efs-bench
+cp -a ../old ../old-diag && python3 scripts/evidence/fb/io_start_diag.py release-loop ../old-diag && (cd ../old-diag && make efs-bench)
+taskset -c 0-3 ../old-diag/efs-bench --bench io --storage /tmp/s --rw write --io-size 4K --qd 256 --window 1 --time 1
+python3 scripts/evidence/fb/gc_files_race.py ../old/tests/live/gc_reclamation.py tests/live/gc_reclamation.py
+make -j32 test && python3 tests/test_gc_files_vanish.py
+EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh &
+scripts/evidence/fb/io_start_compare.sh ../old/efs-bench ./efs-bench 10 0-1 /tmp; wait
+```
+
+The `--storage` root must be absent or empty, and the bench removes its files. Delete the trees when done. Check that the host is quiet first, because these runs load it.
+
+## Remaining
+
+- No full 8-job gate has run since `fd50deb31`; the branch's merge-wave gate is the next one. The Oct 25 Task D nuc gate's k41 failures on candidate and base ([October ledger](../2026-10/ledger.md)) may be this same chance miss; they were not re-examined.
+- `src/bench/bench_local.c` (start gate near line 545) and `src/bench/storage_principles.c` (shared `go_cv`) keep the shape this task removed from `io_bench.c`: the deadline is fixed first and the workers released after. They are not changed here, and neither failed in batch F.
+- F1 still needs a clean gate on the batch F candidate. This task's gates ran on its own branch.

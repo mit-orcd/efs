@@ -549,6 +549,12 @@ def crash_unmount():
     run(['fusermount3','-uz',mount])
     print('owned fixture client SIGKILL/detach at offline-member crash boundary',flush=True)
 
+def export_entries(folder):
+    # Physical reclaim removes export directories while files() scans them; a vanished one holds nothing.
+    try:
+        with os.scandir(folder) as scan:return [Path(e.path) for e in scan if not e.name.startswith('.')]
+    except FileNotFoundError:return []
+
 def files(ino):
     seg=[]
     for _ in range(5):seg.append(f'{ino%10000:04d}');ino//=10000
@@ -556,7 +562,8 @@ def files(ino):
     for root in data_roots:
         folder=root/'data/exports/1'
         for part in reversed(seg):folder/=part
-        found += [x for x in folder.glob('*/*') if x.is_file() and '.sum' not in x.name]
+        for sub in export_entries(folder):
+            if sub.is_dir():found += [x for x in export_entries(sub) if x.is_file() and '.sum' not in x.name]
     return found
 
 def recv_exact(sock,n):

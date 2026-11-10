@@ -28,7 +28,7 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 - `python3 scripts/tests_for.py client/bufpool`
 - `python3 scripts/tests_for.py client/client_internal`
 - `python3 scripts/tests_for.py client/data_commit`
-- `python3 scripts/tests_for.py client/efs_fuse` (all 54; one file at a time: `client/efs_fuse.open`, `.append`, `.writeback`, `.write`,
+- `python3 scripts/tests_for.py client/efs_fuse` (all 55; one file at a time: `client/efs_fuse.open`, `.append`, `.writeback`, `.write`,
   `.namespace`, `.release`, `.getattr`, `.lookup`, `.ll_run`, `.plock_init`, `.support`, `.find_res`, `.main`; see [`efs_fuse/README.md`](efs_fuse/README.md))
 - `python3 scripts/tests_for.py client/inode_rpc`
 - `python3 scripts/tests_for.py client/node_cache`
