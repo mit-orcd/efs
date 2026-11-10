@@ -1519,7 +1519,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "bae982de1ab62570c47f63a5cb3e0203b61b51728535c00ee6ef5a01a33c9d82",
+    "Makefile": "343f5eaa139fd2356823b20f5d6110dbe7dfd762ea7b3d72c3ae162d26d2e607",
     "README.md": "f646cf19b6605664ea80ee9a539ea8c7938be322ee12ba520447204095e3d216",
     "docs/backlog/crash-safe-durable-versions.md": "b57a8c2376ec9e85d9403196a237c57b69f7515a60e73ceb2ac997788016d6b3",
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
@@ -1537,6 +1537,7 @@
     "docs/how-it-works/protocols/directory.md": "a0bba45f04d10357aba799829e4c811aa281d97df024503f8f391449e5cc94b8",
     "docs/how-it-works/protocols/sessions.md": "ee8ad4fe9b5b66a970ad41ce6cc0806a0050bb96eefc2548dbc3c97c276f68c4",
     "docs/how-it-works/protocols/transactions.md": "5e1989bad26f62d59d69d697a83ace63716ff8d13d7b992d63cdab1be1011077",
+    "docs/how-it-works/raft-host-map.md": "a05baa44b9e4f1c2f68587c001abdfffa7184864ac42e89ea6269f2d4a7e32eb",
     "docs/how-it-works/settings.md": "9d5c617b7caa40ff7efb6381817d37efe820528e637382e3354c7e1a82176048",
     "docs/how-it-works/test-hosts.md": "547f6ac6907173e8e1f0d6cd7f875bd156615030bc11882d9cce1f167bb74821",
     "docs/how-it-works/testing.md": "c8a335de9e8dd0d7879b715f0a2ab74bd120e7333b1b1b6c4455a33506477122",
@@ -2130,7 +2131,7 @@
     "src/raft/raft_disk_internal.h": "9ff9eec41773a463fff79b35deac363bf60d7666f0fee4461f0485a4e21176e3",
     "src/raft/raft_log.c": "c2cd52a95d2619276efe12490c94396187cadb614ca7a198fabdaa3d4c771650",
     "src/raft/raft_mem.c": "b7ce9d87e2f93f351720b9429ed452a5d7db8a83f93d48a44697a447150a2a5f",
-    "src/server/README.md": "83f978a5047a2ba13829a78699a994d94252084fb7da0c2aa603a942087f7c4f",
+    "src/server/README.md": "e4aab3b2858fb3b5326fd14bf067835c550092ba04efe2998a41072e16052e1f",
     "src/server/apply_ring.h": "7b175de09f252077997ce4adc242cd3fea5f2d4256c95cb41801133ddcb86e8c",
     "src/server/apply_wait.h": "08e73413201fb19a9de7c50985945bd2f0d477c7253db993f94b5b0fc900b183",
     "src/server/cluster.c": "57765a7208592c76e95e0b42161356e2259fa8035aaaee84fdee7bf927fa83f3",
@@ -3094,5 +3095,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "a077de6257cf438e28f704818057d304b371ac62"
+  "source_commit": "215b2d1fac63de45dbc0a8dc586eaee93d935463"
 }
