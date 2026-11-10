@@ -259,6 +259,7 @@ static void world_make(struct world *w, int fail_at)
 static void world_free(struct world *w)
 {
     efs_kv_destroy(w->mem);
+    free(w->mem);   /* efs_kv_destroy frees the store, not the handle */
 }
 
 struct chk {
