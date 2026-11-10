@@ -1,0 +1,3 @@
+# Task BQ — orcd-mini K54 stage and batch O rehearsal
+
+[Task BQ — orcd-mini K54 stage and batch O rehearsal](../../2026-10/orcd-mini-k54-batch-o-20261031.md): rehearsal on devel `909a07d71`, not the acceptance verdict. **K54 real-host stage PASS 24/24** (TCP and RDMA, member rotating); batch O: O3, O5, O6, O9 PASS, O8 PASS after a solo rerun of two timing-sensitive TSan entries, **O1 FAIL** (`ior hard` EIO 2 of 8), **O2 FAIL** (write about 4.5x below the baseline, 4 vs 3 members), **O7 FAIL** on one message check, O4 NOTRUN (unapplied devops patch); stale `w125_p0_cluster.sh` breaks O6/O7 case 3 on devel; batch O costs about 3.5 h wall on the candidate.
