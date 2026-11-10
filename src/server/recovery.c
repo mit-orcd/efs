@@ -40,8 +40,12 @@
  *
  * What recovery cannot prove is dropped, never served. It does not prove
  * an earlier ambiguous write: the PUT verifier changed with this boot, so
- * a fragment the previous boot acknowledged stays lost to its client's
- * fsync (client data_commit.c, K35), and an error a client saw stays one.
+ * the client counts a fragment the previous boot acknowledged lost, unless
+ * this boot's COMMIT reply carries that boot's barrier history and the
+ * fragment lies at or before its last barrier (client data_commit.c, K110).
+ * The history is offered only while recovery has dropped, or found missing
+ * without a degraded mark, no file it covered (server_recovery_drop,
+ * server_put_sync_void_all); an error a client saw stays one.
  * A transient obstacle (no leader yet, a peer unreachable) is retried and
  * shown as the reason; a failed verification leaves the store fenced with
  * that reason until restart. Every step is idempotent, so a crash during
@@ -451,7 +455,7 @@ static int rv_note_mark(const struct efs_meta_degraded *d)
 
 /* The stripe of a fragment this store does not hold: an identical mark
  * already there, or write one. Retries a transient verdict. */
-static int rv_mark(const struct efs_meta_degraded *d)
+static int rv_mark(const struct efs_meta_degraded *d, int void_history)
 {
     uint8_t mark[EFS_REBUILD_MARK_LEN];
     server_degraded_mark_encode(mark, d);
@@ -461,8 +465,17 @@ static int rv_mark(const struct efs_meta_degraded *d)
             RV_ADD(already_marked, 1);
             return rv_note_mark(d) ? rv_fail("out of memory") : 0;
         }
-        if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
+        if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE) {
+            /* K110: no mark yet, so the stripe was published whole and this
+             * file is gone: a predecessor barrier may have covered it, so no
+             * root's barrier history may vouch for it. Forgotten durably
+             * before the mark, so a crash right after cannot keep it. A slot
+             * marked at publication (never acknowledged here) is no loss and
+             * took the branch above. */
+            if (void_history)
+                server_put_sync_void_all("a published fragment is missing without a mark");
             rc = server_raft_host_recovery_mark(d);
+        }
         if (rc == EFS_OK) {
             RV_ADD(marked, 1);
             server_fault_crash_point("recovery-marked");
@@ -522,7 +535,7 @@ static int rv_chunk_ref(const uint8_t *rec)
     if (have)
         return 0;
     RV_ADD(refs_missing, 1);
-    return rv_mark(&d);
+    return rv_mark(&d, 1);
 }
 
 static uint32_t rv_rd32(const uint8_t *p)
@@ -711,8 +724,8 @@ static int rv_same_ticket(const struct efs_put_ticket *a, const struct efs_put_t
 /* One pass over the remembered tickets: one that left ADMITTED (published,
  * rejected or drained) or whose fragment arrived is done; a published
  * object gets its mark. Runs after the fence cleared: no promise depends
- * on it (the PUT verifier changed, so the client that held the old boot's
- * acknowledgement fails its fsync), only the stripe's redundancy does, and
+ * on it (the client's fsync is decided by the barrier history, which the
+ * drops above already voided or kept), only the stripe's redundancy does, and
  * a crash before it finishes is caught by the next recovery's inventory. */
 static int rv_settle_pass(void)
 {
@@ -729,7 +742,7 @@ static int rv_settle_pass(void)
             live = rv_same_ticket(&t, &rv_live[k]);
         rv_ticket_mark(&t, &d);
         int have = rv_have(&d);
-        if (have < 0 || (!have && !live && (rc = rv_mark(&d)) != 0)) {
+        if (have < 0 || (!have && !live && (rc = rv_mark(&d, 0)) != 0)) {
             /* Keep this and the unvisited ones for the next pass. */
             for (uint32_t j = i; j < rv.nwaiting; j++)
                 rv.waiting[keep++] = rv.waiting[j];

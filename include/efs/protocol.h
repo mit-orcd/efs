@@ -923,12 +923,21 @@ struct efs_data_commit_history {
 };
 #define EFS_DATA_COMMIT_RING 7u
 #define EFS_DATA_COMMIT_HISTORY_MAX (EFS_MAX_STORAGE_PATHS * EFS_DATA_COMMIT_RING)
-/* A well-formed reply: the header and exactly `history` entries after it. */
+/* A well-formed reply: the header and exactly `history` entries after it,
+ * each with a nonzero verifier, a position that fits the 56 bits an ack can
+ * hold and a root the storage list can have (anything else is refused whole). */
 static inline int efs_data_commit_reply_ok(const void *reply, uint32_t len)
 {
     const struct efs_msg_data_commit_reply *r = reply;
-    return r && len >= sizeof(*r) && r->history <= EFS_DATA_COMMIT_HISTORY_MAX &&
-           len == sizeof(*r) + r->history * sizeof(struct efs_data_commit_history);
+    if (!r || len < sizeof(*r) || r->history > EFS_DATA_COMMIT_HISTORY_MAX ||
+        len != sizeof(*r) + r->history * sizeof(struct efs_data_commit_history))
+        return 0;
+    const struct efs_data_commit_history *h = (const void *)(r + 1);
+    for (uint32_t i = 0; i < r->history; i++)
+        if (!h[i].verifier || (h[i].position & ~EFS_PUT_POS_MASK) ||
+            h[i].root >= EFS_MAX_STORAGE_PATHS)
+            return 0;
+    return 1;
 }
 
 /* SYNC_STATS: per storage root durability state. Empty request.

@@ -1347,18 +1347,24 @@ complete. The root's durability record (`<root>/.efs-durable-epoch`, 200
 bytes, magic `EFSDUR03`, CRC-32 over the first 192 bytes, any other version or
 a failed CRC refuses startup) names the last barrier that completed (`syncfs`,
 then the fdatasynced record; a failed record sync rewrites the previous
-durable seq), the root count and index, and a ring of up to seven
+durable seq; after a barrier failed in a boot no later barrier of that boot
+is ever named, because a later `syncfs` can succeed although the pages of the
+failed one were dropped), the root count and index, and a ring of up to seven
 predecessors: for each earlier incarnation (its verifier) the position of its
 last completed barrier. A boot that follows an unclean stop (or another
 verifier) adds the predecessor it found, and keeps the predecessor's own ring
 only if that ring was validated and the root count and index are unchanged.
 A ring is validated when verified recovery finished without dropping any file
 whose modification time is not after the predecessor's last record (such a
-file may be one a barrier covered); recovery then rewrites the record with the
-verdict before it clears the fence, and forgets the ring if it dropped such a
-file. A COMMIT reply (`efs_msg_data_commit_reply`, a length that is not header
+file may be one a barrier covered) and without finding a published fragment
+missing that no mark explains; the ring is forgotten, durably, at the moment
+either happens (also after the fence cleared, and for a file under no known
+root on every root), before the mark for a missing fragment is written.
+Recovery then rewrites the record with the verdict, keeping the seq the record
+names, before it clears the fence. A COMMIT reply (`efs_msg_data_commit_reply`, a length that is not header
 plus 24 bytes per entry is refused) lists the validated entries as
-`{verifier, position, root}` after its header; a root still fenced or in a
+`{verifier, position, root}` after its header (a reply with a zero verifier, a
+position above 56 bits or a root out of range is refused whole); a root still fenced or in a
 barrier error adds none. The client (`data_commit.c`) records each fragment's
 verifier and ack; when a restarted member answers with another verifier, the
 fragment is durable if an entry has that verifier, that root and a position at

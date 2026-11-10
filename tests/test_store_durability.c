@@ -222,13 +222,16 @@ static void test_barrier_backoff(void)
     /* A tight loop would reach 3 failures at once; back-off needs >= 20 ms window + 50 + 100 ms (load only delays). */
     assert(t1-t0>=150000000ull);
     r->fd=fd;pthread_mutex_unlock(&r->mu);
-    for(int i=0;i<100;i++){pthread_mutex_lock(&r->mu);int d=r->durable_seq;pthread_mutex_unlock(&r->mu);if(d)break;usleep(100000);}
+    /* The retry's success is noticed (accounting, back-off reset) but, once a barrier failed in this
+     * boot, never names a later seq (K110): durable_seq and the record stay where they were. */
+    for(int i=0;i<100;i++){pthread_mutex_lock(&r->mu);uint64_t d=r->synced_bytes;pthread_mutex_unlock(&r->mu);if(d)break;usleep(100000);}
     pthread_mutex_lock(&r->mu);
-    assert(r->durable_seq>=1 && r->error && !r->retry_delay_ns);
+    assert(r->synced_bytes && r->error && !r->retry_delay_ns && !r->durable_seq);
     pthread_mutex_unlock(&r->mu);
+    {struct put_sync_record rr;int rfd=open(rec,O_RDONLY);assert(rfd>=0 && !put_sync_record_read(rfd,&rr));close(rfd);assert(!rr.seq);}
     server_put_sync_stop(NULL);abandon_reset();
     assert(!unlink(rec));assert(!rmdir(root));
-    puts("store durability: failed syncfs retries with back-off, success is noticed, error stays sticky PASS");
+    puts("store durability: failed syncfs retries with back-off, success is noticed, error stays sticky, record never raised PASS");
 }
 
 static int test_async_durability(uint8_t *data)
@@ -374,7 +377,7 @@ static void test_barrier_history(void)
     assert(r->ring_n==2 && r->ring[0].verifier==22 && r->ring[0].position==efs_put_pos(2,7) &&
            r->ring[1].verifier==11 && r->ring[1].position==efs_put_pos(1,5) && !r->ring_ok);
     /* Recovery that dropped a file the barriers cover forgets the history. */
-    r->covered_drops=1;server_put_sync_recovered();
+    put_sync_void(r,"test",0);server_put_sync_recovered();
     assert(!server_put_sync_history(out));history_record(r,&rec);assert(!rec.ring_n && rec.ring_ok);
     /* Boot 3 killed before its recovery finished: boot 4 trusts only boot 3. */
     history_attach(r,root,33);assert(!put_sync_record_write(r,2,0));
@@ -401,14 +404,29 @@ static void test_barrier_history(void)
     {int fd=open(file,O_CREAT|O_WRONLY,0644);assert(fd>=0);close(fd);}
     struct timespec before[2]={{.tv_sec=(time_t)(r->covered_until_ns/1000000000ull)-5},{.tv_sec=(time_t)(r->covered_until_ns/1000000000ull)-5}};
     assert(!utimensat(AT_FDCWD,file,before,0));
-    booting=1;assert(!server_recovery_drop(s,file,0,0,&c));booting=0;
-    assert(r->covered_drops==1);
+    /* A newer file is not covered: the ring stays. */
+    char old[1200];snprintf(old,sizeof(old),"%s",file);
     snprintf(file,sizeof(file),"%s/new",root);
     {int fd=open(file,O_CREAT|O_WRONLY,0644);assert(fd>=0);close(fd);}
     struct timespec later[2]={{.tv_sec=(time_t)(r->covered_until_ns/1000000000ull)+5},{.tv_sec=(time_t)(r->covered_until_ns/1000000000ull)+5}};
     assert(!utimensat(AT_FDCWD,file,later,0));
+    assert(r->ring_ok && r->ring_n>0 && server_put_sync_history(out)>0);
     booting=1;assert(!server_recovery_drop(s,file,0,0,&c));booting=0;
-    assert(r->covered_drops==1);
+    assert(r->covered_drops==0 && r->ring_n>0);
+    /* A covered file dropped after the fence cleared (ring_ok already set, no
+     * recovered() to follow) forgets the history at once, in memory and on disk. */
+    booting=1;assert(!server_recovery_drop(s,old,0,0,&c));booting=0;
+    assert(r->covered_drops==1 && !r->ring_n && !server_put_sync_history(out));
+    history_record(r,&rec);assert(!rec.ring_n);
+    /* A file under no known root cannot be attributed: every root forgets. */
+    server_put_sync_stop(NULL);history_attach(r,root,67);assert(r->ring_n>0 && r->ring_ok);
+    char stray[1200];snprintf(stray,sizeof(stray),"%s.stray",root);
+    {int fd=open(stray,O_CREAT|O_WRONLY,0644);assert(fd>=0);close(fd);}
+    booting=1;assert(!server_recovery_drop(s,stray,0,0,&c));booting=0;
+    assert(!r->ring_n && !server_put_sync_history(out));history_record(r,&rec);assert(!rec.ring_n);
+    /* A published fragment lost without a mark (recovery.c) voids through the same call. */
+    server_put_sync_stop(NULL);history_attach(r,root,68);assert(r->ring_n>0);
+    server_put_sync_void_all("test");assert(!r->ring_n);history_record(r,&rec);assert(!rec.ring_n);
     /* Positions: the ack names the root and the open epoch of this boot. */
     assert(server_put_sync_position(s,0)==efs_put_ack_make(0,efs_put_pos(r->boot,r->seq)));
     assert(!server_put_sync_position(s,1) && !server_put_sync_position(s,0xff));
@@ -417,6 +435,107 @@ static void test_barrier_history(void)
     snprintf(file,sizeof(file),"%s/%s",root,PUT_SYNC_RECORD);assert(!unlink(file));
     assert(!rmdir(root));
     puts("store durability: barrier history chain, validation by verified recovery, covered-drop rule, ack positions PASS");
+}
+
+/* K110: once a barrier failed in this boot, no later barrier may be named, in
+ * the record or in durable_seq. Linux reports a writeback error once, so the
+ * next syncfs can return 0 although pages of the failed one were dropped; a
+ * successor that offered (V, pos(boot, later seq)) would have the client count
+ * fragments of the failed barrier durable. */
+static void test_failed_barrier_not_named(void)
+{
+    char root[1024];
+    efs_test_path(root,sizeof(root),"efs-hfail-XXXXXX");assert(efs_test_mkdtemp(root));
+    struct put_sync_root *r=&put_sync_roots[0];struct put_sync_record rec;
+    struct efs_data_commit_history out[EFS_DATA_COMMIT_HISTORY_MAX];
+    memset(r,0,sizeof(*r));put_sync_window_ms=20;
+    history_attach(r,root,201);
+    put_sync_note(r,4096);assert(put_sync_commit_root(r)==EFS_OK);       /* barrier 1 completes */
+    uint64_t good=r->durable_seq;assert(good>=1);
+    history_record(r,&rec);assert(rec.seq==good);
+    /* The next barrier's syncfs fails (EBADF); a later one succeeds. */
+    pthread_mutex_lock(&r->mu);int fd=r->fd;r->fd=-1;pthread_mutex_unlock(&r->mu);
+    put_sync_note(r,4096);assert(put_sync_commit_root(r)==EFS_ERR_IO);
+    pthread_mutex_lock(&r->mu);assert(r->error && r->durable_seq==good);
+    uint64_t bytes=r->synced_bytes;r->fd=fd;pthread_mutex_unlock(&r->mu);
+    for(int i=0;i<200;i++){pthread_mutex_lock(&r->mu);uint64_t b=r->synced_bytes;pthread_mutex_unlock(&r->mu);if(b>bytes)break;usleep(50000);}
+    pthread_mutex_lock(&r->mu);
+    assert(r->synced_bytes>bytes && !r->retry_delay_ns);                 /* the successful retry ran */
+    assert(r->durable_seq==good && r->error);                            /* ...and named nothing */
+    pthread_mutex_unlock(&r->mu);
+    history_record(r,&rec);assert(rec.seq==good);
+    /* Killed here (no clean stop): the successor offers the last good barrier, nothing later. */
+    history_attach(r,root,202);server_put_sync_recovered();
+    assert(server_put_sync_history(out)==1 && out[0].verifier==201 &&
+           out[0].position==efs_put_pos(1,good));
+    server_put_sync_stop(NULL);quiesce(r);close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    char f[1200];snprintf(f,sizeof(f),"%s/%s",root,PUT_SYNC_RECORD);assert(!unlink(f));assert(!rmdir(root));
+    put_sync_window_ms=200;
+    puts("store durability: K110 a failed barrier is never followed by a named one (record, durable_seq, successor) PASS");
+}
+
+/* K110: recovered() writes the verdict without lowering the seq a barrier
+ * wrote since (it keeps the seq the record names, not a snapshot of durable_seq). */
+static void test_recovered_keeps_record_seq(void)
+{
+    char root[1024];
+    efs_test_path(root,sizeof(root),"efs-hkeep-XXXXXX");assert(efs_test_mkdtemp(root));
+    struct put_sync_root *r=&put_sync_roots[0];struct put_sync_record rec;
+    memset(r,0,sizeof(*r));
+    history_attach(r,root,211);assert(!put_sync_record_write(r,3,0));
+    history_attach(r,root,212);
+    /* A barrier wrote seq 9 to the record; durable_seq (under mu) has not caught up yet. */
+    assert(!put_sync_record_put(r,9,0,0));assert(r->durable_seq==0);
+    server_put_sync_recovered();
+    history_record(r,&rec);assert(rec.seq==9 && rec.ring_ok);
+    server_put_sync_stop(NULL);quiesce(r);close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    char f[1200];snprintf(f,sizeof(f),"%s/%s",root,PUT_SYNC_RECORD);assert(!unlink(f));assert(!rmdir(root));
+    puts("store durability: K110 verdict write keeps the record's seq PASS");
+}
+
+/* K110: a record never pairs a voided ring with ring_ok=1. The ring and its
+ * flag change together under rec_mu and the writer reads both under rec_mu;
+ * a barrier racing the verdict could otherwise write the voided entries as
+ * validated. Stress form (the interleaving is not made deterministic): a
+ * writer thread rewrites the record continuously while the main thread
+ * re-arms an unvalidated ring, voids it and validates, and a reader checks
+ * that no record on disk says validated with entries. */
+static struct put_sync_root *stress_root;
+static volatile int stress_stop;
+static void *stress_writer(void *arg)
+{
+    (void)arg;
+    while(!stress_stop)(void)put_sync_record_put(stress_root,PUT_SYNC_KEEP_SEQ,0,0);
+    return NULL;
+}
+static void test_record_ring_pair(void)
+{
+    char root[1024];
+    efs_test_path(root,sizeof(root),"efs-hpair-XXXXXX");assert(efs_test_mkdtemp(root));
+    struct put_sync_root *r=&put_sync_roots[0];
+    memset(r,0,sizeof(*r));
+    history_attach(r,root,221);assert(!put_sync_record_write(r,4,0));
+    history_attach(r,root,222);assert(r->ring_n==1);
+    stress_root=r;stress_stop=0;
+    pthread_t t;assert(!pthread_create(&t,NULL,stress_writer,NULL));
+    char f[1200];snprintf(f,sizeof(f),"%s/%s",root,PUT_SYNC_RECORD);
+    int fd=open(f,O_RDONLY);assert(fd>=0);
+    for(int i=0;i<100;i++){
+        pthread_mutex_lock(&r->mu);pthread_mutex_lock(&r->rec_mu);   /* re-arm: an unvalidated ring, as attach leaves it */
+        r->ring[0].verifier=221;r->ring[0].position=efs_put_pos(1,4);r->ring_n=1;r->ring_ok=0;
+        r->recovery_uncertain=1;
+        pthread_mutex_unlock(&r->rec_mu);pthread_mutex_unlock(&r->mu);
+        put_sync_void(r,"test",0);                                   /* a covered file dropped */
+        server_put_sync_recovered();                                 /* the verdict */
+        for(int k=0;k<10;k++){
+            struct put_sync_record rec;
+            if(!put_sync_record_read(fd,&rec))assert(!(rec.ring_ok && rec.ring_n));
+        }
+    }
+    stress_stop=1;pthread_join(t,NULL);close(fd);
+    server_put_sync_stop(NULL);quiesce(r);close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    assert(!unlink(f));assert(!rmdir(root));
+    puts("store durability: K110 record ring/flag pair PASS");
 }
 
 /* K110 fail closed: a record that cannot be trusted is refused or forgotten,
@@ -793,6 +912,9 @@ int main(void)
     test_barrier_backoff();
     test_barrier_history();
     test_barrier_history_fail_closed();
+    test_failed_barrier_not_named();
+    test_recovered_keeps_record_seq();
+    test_record_ring_pair();
     test_recovery_local(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
     free(data);

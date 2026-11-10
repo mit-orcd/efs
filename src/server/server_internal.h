@@ -664,6 +664,7 @@ int server_put_sync_uncertain(void);
 int server_put_sync_identity(struct efsd_server *s, char *why, size_t n);
 /* Recovery verified: clear every root's fence (COMMIT allowed again). */
 void server_put_sync_recovered(void);
+void server_put_sync_void_all(const char *why); /* K110: forget every root's predecessor barrier history */
 /* Prove one fragment file: OK, NOT_FOUND (absent) or the refusal. */
 int server_recovery_unprovable(int rc);
 int server_recovery_prove_file(const char *path, struct efs_frag_ident *want,
