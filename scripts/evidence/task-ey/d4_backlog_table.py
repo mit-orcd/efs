@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""d4_backlog_table.py GATE_DIR... : pack backlog every 60 s, create and pack rates, drain.
+"""d4_backlog_table.py GATE_DIR... : pack backlog every 60 s with the create and pack rate of each minute, and the drain.
 
 Reads the d4-samples.json that scripts/d4_progress.py writes in each d4-progress gate
 directory (one sample per poll: t, phase, created, pack.backlog per group,
@@ -19,12 +19,18 @@ def summarize(gate_dir):
     secs = b['t'] - a['t']
     created = b.get('created', 0) - a.get('created', 0)
     packed = (b['pack'].get('files_packed') or 0) - (a['pack'].get('files_packed') or 0)
-    series, nxt = [], a['t']
+    marks, nxt = [], a['t']
     for x in load:
         if x['t'] >= nxt:
-            series.append((round(x['t'] - a['t']), backlog(x)))
+            marks.append(x)
             nxt += 60
-    series.append((round(b['t'] - a['t']), backlog(b)))
+    if marks[-1] is not b:
+        marks.append(b)
+    # (seconds into the load, backlog, creates/s and packs/s since the previous mark)
+    series = [(round(m['t'] - a['t']), backlog(m),
+               round((m.get('created', 0) - p.get('created', 0)) / (m['t'] - p['t'])) if p else None,
+               round(((m['pack'].get('files_packed') or 0) - (p['pack'].get('files_packed') or 0)) / (m['t'] - p['t'])) if p else None)
+              for p, m in zip([None] + marks[:-1], marks)]
     after = [x for x in s if x['t'] > b['t']]
     drained = next((x['t'] - b['t'] for x in after if backlog(x) == 0), None)
     return dict(load_s=round(secs), creates_per_s=round(created / secs), packs_per_s=round(packed / secs),
@@ -36,7 +42,9 @@ def main(dirs):
     for d in dirs:
         r = summarize(d)
         print(f'| {d} | {r["load_s"]} | {r["creates_per_s"]} | {r["packs_per_s"]} | {r["peak"]} | {r["drain_s"]} |')
-        print('  backlog every 60 s: ' + ', '.join(f'{t} s {v}' for t, v in r['series']))
+        print('  | s into load | backlog | creates/s | packs/s |')
+        for t, v, c, k in r['series']:
+            print(f'  | {t} | {v} | {c if c is not None else "-"} | {k if k is not None else "-"} |')
 
 
 if __name__ == '__main__':
@@ -50,7 +58,7 @@ if __name__ == '__main__':
             Path(t, 'd4-samples.json').write_text(json.dumps(rows))
             r = summarize(t)
             assert r['creates_per_s'] == 10 and r['packs_per_s'] == 5 and r['peak'] == 600, r
-            assert r['series'][:3] == [(0, 0), (60, 300), (120, 600)] and r['drain_s'] == 10, r
+            assert r['series'][:3] == [(0, 0, None, None), (60, 300, 10, 5), (120, 600, 10, 5)] and r['drain_s'] == 10, r
         print('self-test ok')
     else:
         main(sys.argv[1:])
