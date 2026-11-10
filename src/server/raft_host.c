@@ -508,7 +508,6 @@ struct efs_raft_host {
     int inbox_n;
     uint64_t inbox_bytes, inbox_bytes_hi;
     uint64_t applied_persist_us; /* pump-only bounded checkpoint cadence */
-    unsigned gc_backlog_idle_ms; /* opt-in; preserve default 1s idle */
     /* Event-driven pump: pump_efd wakes the pump (inbox/propose/stop) between
      * its 5 ms timer ticks. It is an eventfd, NOT a condvar on h->mu, on
      * purpose: h->mu serializes ALL raft core work (tick/propose/recv, incl.
@@ -11504,25 +11503,10 @@ static void host_snap_import_pass(struct efs_raft_host *h)
 }
 
 
-/* W124: a capped pass that made progress runs again after this idle by
- * default (EFS_GC_BACKLOG_IDLE_MS overrides, 20..1000); an idle or blocked
- * pass still waits GC_LOOP_MS. */
-#define GC_BACKLOG_IDLE_DEFAULT_MS 20u
-static int host_gc_backlog_config(const char *value, unsigned *ms)
-{
-    *ms = GC_BACKLOG_IDLE_DEFAULT_MS;
-    if (!value) return EFS_OK;
-    if (!*value) return EFS_ERR_INVAL;
-    for (const char *p = value; *p; p++)
-        if (*p < '0' || *p > '9') return EFS_ERR_INVAL;
-    char *end;
-    errno = 0;
-    unsigned long n = strtoul(value, &end, 10);
-    if (errno || *end || n < 20 || n > GC_LOOP_MS) return EFS_ERR_INVAL;
-    *ms = (unsigned)n;
-    return EFS_OK;
-}
-
+/* W124: a capped pass that made progress runs again after 20 ms (built in
+ * since A8; was EFS_GC_BACKLOG_IDLE_MS, which no launch set); an idle or
+ * blocked pass still waits GC_LOOP_MS. */
+#define GC_BACKLOG_IDLE_MS 20u
 static unsigned host_gc_backlog_idle(unsigned configured, int capped,
                                      uint64_t removed_before, uint64_t removed_after)
 {
@@ -11917,7 +11901,7 @@ static struct trunc_pass_result host_gc_trunc_pass(struct efs_raft_host *h, uint
  *      fragment_nodes[i], same object generation) and the mark is retired
  *      with rebuilt=1. That apply rechecks the row: an object superseded
  *      meanwhile gets a one-fragment GC record, so the copy does not leak.
- * At most EFS_REBUILD_PER_PASS (default 256) rebuilds and 1 s per group per
+ * At most HOST_REBUILD_PER_PASS (256, built in since A8) rebuilds and 1 s per group per
  * pass; a node whose fetch or PUT failed is skipped for twice what the
  * failed call cost, at most 10 s: a hung peer's 5 s timeout buys the full
  * skip, a refused connect or a stale pooled conn (the node restarting) costs
@@ -12308,10 +12292,11 @@ static int dg_one(struct efs_raft_host *h, uint8_t group, struct efs_export *ex,
     return 1;
 }
 
+#define HOST_REBUILD_PER_PASS 256u
 static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
 {
     static struct dg_scan_ctx c; /* one GC thread */
-    static uint64_t per_pass;
+    const uint64_t per_pass = HOST_REBUILD_PER_PASS;
     EFS_NODE_TABLE(nodes);
     struct efs_export *ex = NULL;
     uint8_t prefix[3], *buf[EFS_NUM_FRAGMENTS] = {0};
@@ -12320,12 +12305,6 @@ static void host_rebuild_pass(struct efs_raft_host *h, uint8_t group, uint32_t a
     uint64_t t0 = now_us_();
     int64_t have;
 
-    if (!per_pass) {
-        const char *e = getenv("EFS_REBUILD_PER_PASS");
-        long v = e ? strtol(e, NULL, 10) : 0;
-        per_pass = v > 0 && v <= 65536 ? (uint64_t)v : 256;
-        efs_setting_u64("EFS_REBUILD_PER_PASS", per_pass);
-    }
     if (!nodes || efs_kv_key_degraded_prefix(anchor, prefix, &plen) != EFS_OK ||
         server_test_rebuild_sample_held())
         return;
@@ -12814,12 +12793,12 @@ static void *host_gc_thread(void *arg)
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
         uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED) +
                                  host_reap_completed;
-        unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
+        unsigned idle_ms = host_gc_backlog_idle(GC_BACKLOG_IDLE_MS, backlog_capped, removed_before, removed_after);
         /* Truncate work used to be invisible here: once fragment deletion
          * drained, a progressing capped sweep slept the full idle second.
          * Reuse the existing progress-only retry, then the ordinary metadata
          * fairness floor; every loop still services fragments and snapshots. */
-        unsigned trunc_idle=host_gc_backlog_idle(h->gc_backlog_idle_ms,trunc_capped,0,trunc_progress);
+        unsigned trunc_idle=host_gc_backlog_idle(GC_BACKLOG_IDLE_MS,trunc_capped,0,trunc_progress);
         if(trunc_idle<idle_ms)idle_ms=trunc_idle;
         idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress);
         /* W124: capped reclaim reruns after a short idle. When foreground
@@ -13870,13 +13849,6 @@ int server_raft_host_start(struct efsd_server *s)
      * starts — there is no env gate. */
     if (!s || g_host)
         return EFS_ERR_INVAL;
-    unsigned gc_backlog_idle_ms;
-    if (host_gc_backlog_config(getenv("EFS_GC_BACKLOG_IDLE_MS"), &gc_backlog_idle_ms) != EFS_OK) {
-        /* sync: startup, before the reporter exists */
-        fprintf(stderr, "raft-host: EFS_GC_BACKLOG_IDLE_MS must be 20..1000\n");
-        return EFS_ERR_INVAL;
-    }
-    efs_setting_u64("EFS_GC_BACKLOG_IDLE_MS", gc_backlog_idle_ms);
     uint64_t applied_interval;
     if (host_applied_interval(getenv("EFS_RAFT_APPLIED_INTERVAL_MS"),&applied_interval)!=EFS_OK) {
         /* sync: startup, before the reporter exists */
@@ -13901,7 +13873,6 @@ int server_raft_host_start(struct efsd_server *s)
     if (!h)
         return EFS_ERR_NOMEM;
     h->applied_persist_us=applied_interval;
-    h->gc_backlog_idle_ms = gc_backlog_idle_ms;
     h->s = s;
     /* D43: off until the cluster expiry policy says on (GC refresh/apply). */
     h->expiry_enabled=0;h->expiry_folders=0;h->expiry_peer_skip=-1;

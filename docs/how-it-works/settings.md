@@ -40,23 +40,12 @@ kind (deployment inputs first) then name; `--writers` comes last.
 | `EFS_DCACHE_HARD_BYTES` | `268435456` | client |
 | `EFS_DCACHE_READ_BYTES` | `67108864` | client |
 | `EFS_DIR_SPREAD_MIN` | `65536` | both |
-| `EFS_GC_BACKLOG_IDLE_MS` | `20` | daemon |
 | `EFS_NUMA_NODE` | `auto` | client |
-| `EFS_PACK_BACKFILL_SHARDS` | `64` | daemon |
-| `EFS_PACK_BUSY_COMMITS_PER_S` | `100` | daemon |
-| `EFS_PACK_BUSY_FILES_PER_S` | `50` | daemon |
 | `EFS_PACK_COMPACT_DAILY_START_MIN` | `180` | daemon |
 | `EFS_PACK_COMPACT_IDLE_S` | `60` | daemon |
-| `EFS_PACK_COMPACT_IDLE_SEGS` | `256` | daemon |
-| `EFS_PACK_FILES_PER_S` | `5000` | daemon |
 | `EFS_PACK_FAIL_BACKOFF_MS` | `30000` | daemon |
 | `EFS_PACK_INTERVAL_MS` | `1000` | daemon |
 | `EFS_PACK_MIN_AGE_MS` | `60000` | daemon |
-| `EFS_PACK_SEGMENTS_PER_PASS` | `8` | daemon |
-| `EFS_PACK_SPACE_FULL_PCT` | `80` | daemon |
-| `EFS_PACK_SPACE_START_PCT` | `50` | daemon |
-| `EFS_PACK_UNPACKED_GIB` | `64` | daemon |
-| `EFS_PUT_SYNC_MS` | `200` | daemon |
 | `EFS_QUERY_DISK_MAX_MIB` | `16384` | daemon |
 | `EFS_QUERY_DISK_RESERVE_MIB` | `64` | daemon |
 | `EFS_QUERY_DISK_TOTAL_MIB` | `32768` | daemon |
@@ -67,7 +56,6 @@ kind (deployment inputs first) then name; `--writers` comes last.
 | `EFS_RDMA_DEV` | `auto` | both |
 | `EFS_RDMA_GID_INDEX` | `auto` | both |
 | `EFS_RDMA_PORT` | `1` | both |
-| `EFS_REBUILD_PER_PASS` | `256` | daemon |
 | `EFS_REPORT_ADMIT_MS` | `8000` | client |
 | `EFS_REPORT_MAX_BYTES` | `16777216` | client |
 | `EFS_REPORT_MAX_RECORDS` | `8192` | client |
@@ -121,23 +109,11 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| `EFS_GC_BACKLOG_IDLE_MS` | `server/raft_host.c:12932` (server_raft_host_start) | 20 ms GC idle wait with backlog (20..GC loop); bad values refuse startup | numeric tunable | portal (observed only) | `rdma_async_commit.py`, `rdma_four_node_qualification.sh` +1 | Keep until A8: set by live and measure tests |
-| `EFS_PACK_BACKFILL_SHARDS` | `server/packer.c:1333` (server_packer_start) via `env_u64` | 64 shards per backfill pass | numeric tunable | — | `w125_p6_landing.sh` | Keep until A8: set by `w125_p6_landing.sh` |
-| `EFS_PACK_BUSY_COMMITS_PER_S` | `server/packer.c:1319` (server_packer_start) via `env_u64` | 100 commits/s busy threshold | numeric tunable | — | `scripts/evidence/w125/w125_mac_churn.sh` (on `scripts/evidence/w125/w125_mac_cluster.sh`), `w125_p6_landing.sh` | Keep until A8: set by W125 scripts |
-| `EFS_PACK_BUSY_FILES_PER_S` | `server/packer.c:1318` (server_packer_start) via `env_u64` | 50 files/s busy pack rate | numeric tunable | — | `scripts/evidence/w125/w125_mac_pressure.sh`, `w125_p6_landing.sh` | Keep until A8: set by W125 scripts |
 | `EFS_PACK_COMPACT_DAILY_START_MIN` | `server/packer.c:1330` (server_packer_start) via `env_u64` | 03:00 UTC daily compaction start | numeric tunable | — | `scripts/evidence/w125/w125_mac_churn.sh` | Keep until A8: set by `scripts/evidence/w125/w125_mac_churn.sh` |
 | `EFS_PACK_COMPACT_IDLE_S` | `server/packer.c:1323` (server_packer_start) via `env_u64` | 60 s idle before compaction | numeric tunable | — | `d25_step4_gates.sh`, `scripts/evidence/w125/w125_mac_churn.sh` | Keep until A8: set by D25/W125 scripts |
-| `EFS_PACK_COMPACT_IDLE_SEGS` | `server/packer.c:1328` (server_packer_start) via `env_u64` | 256 segments per idle batch | numeric tunable | — | `test_pack_compact_schedule.py` | Keep until A8: set by `test_pack_compact_schedule.py` |
-| `EFS_PACK_FILES_PER_S` | `server/packer.c:1317` (server_packer_start) via `env_u64` | 5000 files/s idle pack rate | numeric tunable | — | `w125_p6_landing.sh` | Keep until A8: set by `w125_p6_landing.sh` |
 | `EFS_PACK_FAIL_BACKOFF_MS` | `server/packer.c:1316` (server_packer_start) via `env_u64` | 30000 ms packer pause per group after a failed or degraded segment upload | numeric tunable | — | `test_b6_unavailable.py`, `test_k37_segment_rebuild.py` | Keep until A8: set by the member-down tests (Task DA) |
 | `EFS_PACK_INTERVAL_MS` | `server/packer.c:1315` (server_packer_start) via `env_u64` | 1000 ms packer pass interval | numeric tunable | — | `test_k33_payload.py`; `w125_p6_landing.sh` | Keep until A8: set by `test_k33_payload.py`, W125 scripts |
 | `EFS_PACK_MIN_AGE_MS` | `server/packer.c:1314` (server_packer_start) via `env_u64` | 60000 ms before a file is packed | numeric tunable | — | `gate_k28_five_node.sh`, `reclaim_crash.py` +3; `bigdir_readdir_repro.sh`, `d25_step4_gates.sh` +19 | Keep until A8: set by many packing scripts and K33 tests |
-| `EFS_PACK_SEGMENTS_PER_PASS` | `server/packer.c:1316` (server_packer_start) via `env_u64` | 8 segments per pass | numeric tunable | — | `w125_p6_landing.sh` | Keep until A8: set by `w125_p6_landing.sh` |
-| `EFS_PACK_SPACE_FULL_PCT` | `server/packer.c:1322` (server_packer_start) via `env_u64` | 80 % fill is full pressure | numeric tunable | — | `d25_step4_gates.sh`, `scripts/evidence/w125/w125_mac_pressure.sh` | Keep until A8: set by D25/W125 scripts |
-| `EFS_PACK_SPACE_START_PCT` | `server/packer.c:1321` (server_packer_start) via `env_u64` | 50 % fill starts space-driven packing | numeric tunable | — | `d25_step4_gates.sh`, `scripts/evidence/w125/w125_mac_pressure.sh` | Keep until A8: set by D25/W125 scripts |
-| `EFS_PACK_UNPACKED_GIB` | `server/packer.c:1320` (server_packer_start) via `env_u64` | 64 GiB unpacked before space pressure | numeric tunable | — | `w125_budget_ab.sh`, `scripts/evidence/w125/w125_mac_pressure.sh` | Keep until A8: set by W125 scripts |
-| `EFS_PUT_SYNC_MS` | `server/store.c:1546` (put_sync_config) | 200 ms PUT sync window (1..10000) | numeric tunable | portal (observed only) | `rdma_async_commit.py` | Keep until A8: set by `rdma_async_commit.py` |
-| `EFS_REBUILD_PER_PASS` | `server/raft_host.c:11429` (host_rebuild_pass) | 256 degraded stripes per rebuild pass (≤ 65536) | numeric tunable | — | `w154_rebuild_on_return.py` | Keep until A8: set by `w154_rebuild_on_return.py` |
 
 ### Metadata, Raft and query service (efsd)
 
@@ -323,6 +299,18 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_PUT_AWAY_MARK_MS` | none since K39 (the reader became `EFS_FAULT_AWAY_MARK_MS`), A8 | built in: 10000 ms (`PUT_AWAY_MARK_MS`, `client/write.c`); the dead `EFS_FAULT_AWAY_MARK_MS` hook is gone too (efs-fuse is never built with `EFS_FAULTS`) | none; `test_k35_fsync_degraded.py` comment |
 | `EFS_READ_MAP_TTL_MS` | `client/ops.c` (map_fresh_init), A8 | built in: 200 ms read-mapping freshness | none set it; portal observes |
 | `EFS_RESOLVE_MS` | `client/inode_rpc.c` (rpc_resolve_ms), A8 | built in: 8000 ms | the W155 tests passed the default; their `W155_RESOLVE_MS` negative control now edits the extracted source |
+| `EFS_GC_BACKLOG_IDLE_MS` | `server/raft_host.c` (server_raft_host_start), A8 | built in: 20 ms (`GC_BACKLOG_IDLE_MS`); `test_gc_backlog_idle.py` keeps the backoff policy | `rdma_async_commit.py`, `rdma_four_node_qualification.sh`, `amd_query_authority_loss.py` set the default 20 and cannot start a cluster at HEAD (`--node-id`, removed names); portal observes |
+| `EFS_PUT_SYNC_MS` | `server/store.c` (put_sync_config), A8 | built in: 200 ms (the unit test still sets the static) | `rdma_async_commit.py` only (cannot run at HEAD); portal observes |
+| `EFS_REBUILD_PER_PASS` | `server/raft_host.c` (host_rebuild_pass), A8 | built in: 256 (`HOST_REBUILD_PER_PASS`) | `w154_rebuild_on_return.py` only (cannot run at HEAD: `--node-id`) |
+| `EFS_PACK_SEGMENTS_PER_PASS` | `server/packer.c` (server_packer_start), A8 | built in: 8 | W125 evidence scripts only (cannot start a cluster at HEAD: `w125_mac_cluster.sh` uses `--node-id`) |
+| `EFS_PACK_FILES_PER_S` | `server/packer.c`, A8 | built in: 5000 files/s | as above |
+| `EFS_PACK_BUSY_FILES_PER_S` | `server/packer.c`, A8 | built in: 50 files/s | as above |
+| `EFS_PACK_BUSY_COMMITS_PER_S` | `server/packer.c`, A8 | built in: 100 commits/s | as above |
+| `EFS_PACK_UNPACKED_GIB` | `server/packer.c`, A8 | built in: 64 GiB | as above |
+| `EFS_PACK_SPACE_START_PCT` | `server/packer.c`, A8 | built in: 50 % | W125 and D25 step 4 evidence scripts only (cannot run at HEAD: `--node-id`) |
+| `EFS_PACK_SPACE_FULL_PCT` | `server/packer.c`, A8 | built in: 80 % | as above |
+| `EFS_PACK_COMPACT_IDLE_SEGS` | `server/packer.c`, A8 | built in: 256 segments | none; `test_pack_compact_schedule.py` checks the constant |
+| `EFS_PACK_BACKFILL_SHARDS` | `server/packer.c`, A8 | built in: 64 inode shards | `w125_p6_landing.sh` only (cannot run at HEAD) |
 
 ## Compile-time modes
 

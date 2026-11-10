@@ -5,7 +5,7 @@ import os,shlex,subprocess,tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
 s=csrc.module('raft_host')
-a=s.index('static int host_gc_backlog_config(')
+a=s.index('static unsigned host_gc_backlog_idle(')
 b=s.index('/* D43: the cluster expiry policy decides',a)
 code='''#include "efs/common.h"
 #include <assert.h>
@@ -14,23 +14,17 @@ code='''#include "efs/common.h"
 #include <stdint.h>
 #include <stdio.h>
 #define GC_LOOP_MS 1000
-#define GC_BACKLOG_IDLE_DEFAULT_MS 20u
+#define GC_BACKLOG_IDLE_MS 20u
 '''+s[a:b]+'''
 int main(void) {
- unsigned ms;
- assert(host_gc_backlog_config(NULL,&ms)==EFS_OK && ms==20); /* W124: capped progress reruns fast */
- const char *invalid[]={"", "0", "19", "1001", "-100", "+100", " 100", "100x", "999999999999999999999999"};
- for(unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);i++)
-  assert(host_gc_backlog_config(invalid[i],&ms)==EFS_ERR_INVAL);
- for(unsigned configured=20;configured<=1000;configured+=20) {
-  char value[16];snprintf(value,sizeof(value),"%u",configured);
-  assert(host_gc_backlog_config(value,&ms)==EFS_OK && ms==configured);
+ /* W124: capped progress reruns after the built-in 20 ms (A8: no override). */
+ for(unsigned ms=GC_BACKLOG_IDLE_MS;ms<=GC_LOOP_MS;ms+=20) {
   assert(host_gc_backlog_idle(ms,0,1,2)==1000);
   assert(host_gc_backlog_idle(ms,1,1,1)==1000);
   assert(host_gc_backlog_idle(ms,1,2,1)==1000);
   assert(host_gc_backlog_idle(ms,1,1,2)==ms);
  }
- puts("GC backlog idle: strict config, default/idle/blocked/reset backoff and bounded progress PASS");
+ puts("GC backlog idle: built-in 20 ms, idle/blocked/reset backoff and bounded progress PASS");
 }
 '''
 # Integration must keep both groups and snapshot-responsive shutdown slices.
@@ -51,7 +45,7 @@ assert 'if (maintenance) host_dir_spread_pass(h)' in thread
 assert 'attempts<2 && h->gc_running' in s
 assert 'expiry_at = efs_iostats_now_us() +\n                            20000' in thread
 assert 'trunc_progress+=trunc.progress;trunc_capped|=trunc.capped;' in thread
-assert 'host_gc_backlog_idle(h->gc_backlog_idle_ms,trunc_capped,0,trunc_progress)' in thread
+assert 'host_gc_backlog_idle(GC_BACKLOG_IDLE_MS,trunc_capped,0,trunc_progress)' in thread
 assert thread.index('if(trunc_idle<idle_ms)') < thread.index('host_gc_metadata_waiting(h)')
 assert 'removed_before' in thread and 'removed_after' in thread
 assert thread.count('host_reap_completed')==2 # reap completions count as progress
