@@ -1,5 +1,7 @@
 # K112: clean client stop refused for the whole cleanup budget (Task FQ)
 
+**Merge state (Nov 10):** merged into devel in wave 76 as a diagnosis; K112 stays OPEN. An independent analysis for the coordinator found the safe form of the proposal (only the stop's own retirement, only the revoked session's completed rows at or below the smaller of the file size and the frontier); the fix is a task of its own.
+
 **Status**
 - Source commit: devel `06bfdb393` (no code change on this branch).
 - Verdict: **DIAGNOSIS PARTIAL, NO FIX.** The failing state is reproduced as slowness, the cause is narrowed to the append-row retirement of the stop, and no change was made because the safe change needs a protocol decision (below).

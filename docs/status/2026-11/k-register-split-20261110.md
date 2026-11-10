@@ -1,5 +1,7 @@
 # K register split into one file per row (Task T1)
 
+**Merge state (Nov 10):** merged into devel in wave 76. The merge regenerated the 112 row files from the register as it stood then (after the K109 and K112 edits) with this task's splitter; the 170 KB size target was missed by 6 KB and is accepted (the checklist was 428 KB before).
+
 - Source commit: `06bfdb393` (devel, wave 74 ledger entry); branch `claude/charming-williamson-a34687`, the commit that adds this page.
 - Verdict: **PASS for the split and the generated table; one done check FAILS: the checklist is 176425 bytes, not under 170 KB** (see Limitations).
 - Remaining failures: the 170 KB target (not reachable inside the allowed edits).

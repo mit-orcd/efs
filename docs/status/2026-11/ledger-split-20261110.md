@@ -1,5 +1,7 @@
 # Ledger split into one file per entry (Task T2)
 
+**Merge state (Nov 10):** merged into devel in wave 76. The merge regenerated the entry files from the ledger as it stood then (124 entries) with `gen_ledger.py --split` and added this task's own entry with `--add-line`; `docs/status/README.md` now points to `ledger/README.md`.
+
 **Status.** Source commit `06bfdb393` (devel, wave 74). Verdict: PASS, no K row, blocks alpha: no. Remaining failures: none. Active run: none. Next action: coordinator converts open branches with `--split`/`--add-line` and updates the places listed under "Outside my file list". Merge state: branch `claude/focused-nobel-e2ee65`, unmerged.
 
 ## Purpose
