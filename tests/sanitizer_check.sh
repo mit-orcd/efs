@@ -131,6 +131,8 @@ heartbeat_shutdown|tests/test_heartbeat_shutdown.py
 revoke_parallel|tests/test_session_revoke_parallel.py
 receipt_table|tests/test_w155_receipt_table.py
 put_ticket_batch|tests/test_put_ticket_batch.py
+# K109: the storage fence's detached per-member workers (counting rule, slow member).
+storage_fence_members|tests/test_storage_fence_members.py
 # Daemons: K36 recovery thread, K37 segment rebuild and audit, and the
 # client read and write paths through efs-fuse under load (D4, short), and
 # the K38 swept-hint STALE replay through efs-fuse, and the K88 per-chunk
@@ -144,6 +146,8 @@ d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
 k38_swept_hint_live|tests/test_k38_swept_hint_live.py
 k88_chunk_hints_live|tests/test_k88_chunk_hints_live.py
 k96_status_slots_live|K96_ROUNDS=1 tests/test_k96_status_slots_live.py
+# K109: a clean unmount past a stalled member (detached fence workers in a live daemon).
+k109_stalled_member|tests/test_k109_stalled_member_unmount.py
 # K93: F14 (16 members, a refused 17th joiner): the rejoin thread's HELLO
 # reads the member-store identity while members learn new revisions.
 member_limit|tests/test_member_limit.py
@@ -185,6 +189,8 @@ identified_resolve|tests/test_w155_identified_resolve.py
 report_resolve|tests/test_w155_report_resolve.py
 revoke_parallel|tests/test_session_revoke_parallel.py
 put_ticket_batch|tests/test_put_ticket_batch.py
+# K109: the storage fence's detached per-member workers (counting rule, slow member).
+storage_fence_members|tests/test_storage_fence_members.py
 # New parsers and decoders: the K33 membership record and discovery
 # datagrams, the member view, the fragment record, small and packed
 # segments and their reader, the pack ledger, append receipts, put tickets
@@ -232,6 +238,8 @@ k37_segment_rebuild|tests/test_k37_segment_rebuild.py
 d4_progress|EFS_D4_LOAD_S=60 EFS_D4_THREADS=4 tests/test_d4_progress.py
 # AB/AE: pump diagnostics through the reporter, blocked sink, role events, unmount.
 pump_logging|tests/test_pump_logging.py
+# K109: a clean unmount past a stalled member (detached fence workers in a live daemon).
+k109_stalled_member|tests/test_k109_stalled_member_unmount.py
 # K79: SIGTERM with stderr a full pipe exits rc 0 within the stop bound.
 stop_blocked_stderr|tests/test_stop_blocked_stderr.py
 LEOF

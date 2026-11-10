@@ -213,25 +213,40 @@ stall, or a failed flush, settle or revoke, is reported with its reason
 record's `failed` reason) and the client is not killed. K42 retries only
 server-certified no-op cleanup waits within 20 s per shard, retaining the
 same session identity; an uncertified or exhausted wait remains a failure
-with `shard=N reason=...`. This does not bypass the all-member storage fence
+with `shard=N reason=...`. This does not bypass the storage fence
 below. A failed revoke is resumed by `efs-mgmt raft-session fence`. `client.sh stop --force-discard
 /mnt/efs` (or `efs-fuse --stop /mnt/efs --force-discard`) detaches and
 **loses** the unresolved writes; use it only when that loss is accepted.
 Signals and a plain `umount` bypass the drain.
 
-**With a member down, a clean stop does not finish.** The session revoke
-must seal every configured member, so it fails after 15 s with
-`revoke rc=-13 phase=storage-fence` (the client logs `unmount not clean:
-flush rc=0 settle rc=0 revoke rc=-13`; the member that ran the fence logs
-`storage-fence: member=N … transport unavailable`), `client.sh stop`
-prints `ERROR: client stop for /mnt/efs failed: revoke rc=-13 …` and exits
-1. In the October 25 run, writes were flushed and settled first; verify those
-results for the actual stop. The mount is gone and the
-client has exited; only the mount session's leases and locks stay
-unrevoked until the member is back and `efs-mgmt raft-session fence` or
-the next session cleanup retires them. Whether alpha keeps this as a
-limitation or changes it is an open user decision
-([audit finding U4](../status/2026-10/docs-audit-20261025.md)).
+**With a member down or stalled, a clean stop still finishes (K54, K109).**
+The session revoke seals the revoked epoch on a strict majority of the
+configured storage members (2 of 3, 3 of 4 or 5); it does not need every
+member. A member that cannot be reached, or that answers that it did not
+seal (its apply is stalled, its disk fails), counts as not sealed and does
+not fail the stop while a majority sealed. The stop does not wait for a
+slow remote member once a majority sealed; it does wait for the member on
+the node that runs the fence (asked inline), and for every remote member too
+when that node cannot start a thread to ask them in parallel.
+The epoch is committed in the session shard log, so a returning member
+refuses the revoked epoch before it could seal: every storage admission on a
+member first needs a fresh proof from the lane leader. One window remains
+(K54): a live member that the leader cannot reach, with an upload that passed
+its status check before the revoke began, can still store that fragment after
+the revoke returned; the upload cannot be settled and stays an unsettled
+ticket in the orphan ledger, whose collection of it stays blocked until that
+member holds the sealed epoch. With fewer than a majority
+sealed the stop fails closed at `phase=storage-fence`. The servers answer with
+the code of the first member, in member order, that answered without sealing
+(else BUSY `-13`: nobody answered). The client repeats the fence for 15 s only
+on BUSY or NOT_PRIMARY (`-15`) and then reports the call its deadline cut
+(`rc=-6`, seen with two members answering `-15`); any other code, such as IO or
+NOT_FOUND, ends it at once and is reported as it is. The client logs `unmount not
+clean: flush rc=0 settle rc=0 revoke rc=-6` (the code differs), `client.sh stop` exits 1, the
+mount is gone and the mount session's leases and locks stay unrevoked until
+enough members are back and `efs-mgmt raft-session fence` or the next session
+cleanup retires them. A refusal (the session moved to another epoch) that
+arrives before a majority sealed fails the stop.
 
 ### `df`
 
