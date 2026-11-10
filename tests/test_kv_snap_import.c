@@ -154,7 +154,8 @@ static int dump_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v,
     d->k[d->n] = malloc(kl);
     d->v[d->n] = malloc(vl ? vl : 1);
     memcpy(d->k[d->n], k, kl);
-    memcpy(d->v[d->n], v, vl);
+    if (vl)     /* a zero-length value comes with a NULL pointer */
+        memcpy(d->v[d->n], v, vl);
     d->kl[d->n] = kl;
     d->vl[d->n] = vl;
     d->n++;
