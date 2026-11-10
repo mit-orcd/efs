@@ -781,6 +781,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_txn_decision_sweep.py
 	python3 tests/test_txn_recovery_priority.py
 	python3 tests/test_remote_cmd_halted_peer.py
+	python3 tests/test_client_leader_forget.py
 	python3 tests/test_txn_apply_exact.py
 	./tests/test_shared_primitives
 	python3 tests/test_txn_apply_retry.py

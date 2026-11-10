@@ -34,6 +34,7 @@ static struct efs_conn *raft_voter_conn_skip(uint32_t shard,efs_node_id_t *nid,e
  assert(shard==1);*nid=skip==1?2:1;connection.node=*nid;if(no_conn){no_conn--;return NULL;}return &connection;}
 static void rpc_retry_peer(uint32_t shard,efs_node_id_t nid,efs_node_id_t *target,efs_node_id_t *skip,int failed){
  (void)shard;(void)failed;*target=0;*skip=nid;repicks++;}
+static void rpc_forget_leader(uint8_t g,efs_node_id_t n,efs_node_id_t h){(void)g;(void)n;(void)h;}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;}
 static int rpc_writer_retry_pause(unsigned n){(void)n;if(deadline){clock_ms+=10;if(clock_ms>deadline)clock_ms=deadline;}return efs_client_rpc_past_deadline()?EFS_ERR_BUSY:EFS_OK;}

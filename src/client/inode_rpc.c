@@ -636,6 +636,31 @@ static efs_node_id_t rpc_leader_of(uint8_t group)
     return __atomic_load_n(&g_group_leader[gi], __ATOMIC_RELAXED);
 }
 
+/* `nid` refused a request of `group` (NOT_PRIMARY, naming `hint` when it
+ * knows the leader, else 0) or failed it: leadership moved or that member is
+ * unwell. Drop every read route (they name the member that served a key, and
+ * a route outlives the leadership it was learned under) and forget the noted
+ * leader when it is `nid` or disagrees with the hint. Before, only a no-hint
+ * refusal by the noted leader cleared the note and routes were reset only
+ * when a read reply noted a new leader: after a transfer every request of
+ * the group still went to the old leader first, and once that member stopped
+ * answering (SIGSTOP, hung host: TCP open, no reply) the next request waited
+ * the 30 s transport timeout on it instead of asking the live members: EBUSY
+ * on create, a 30 s readdir (K104, Task FF). A newer note learned
+ * concurrently by another worker is never erased by a stale refusal. */
+static void rpc_forget_leader(uint8_t group, efs_node_id_t nid, efs_node_id_t hint)
+{
+    unsigned gi = group >> 1;
+
+    efs_meta_read_route_reset(&g_read_routes);
+    if (gi >= 2)
+        return;
+    efs_node_id_t cur = __atomic_load_n(&g_group_leader[gi], __ATOMIC_RELAXED);
+    if (cur && (cur == nid || (hint && cur != hint)))
+        __atomic_compare_exchange_n(&g_group_leader[gi], &cur, 0, 0,
+                                    __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+}
+
 /* The last OK LOOKUP/GETATTR reply's leader note, keyed by the group of
  * the inode the reply describes (a LOOKUP's hint is the child's group,
  * host_read_inode_lanes sets it last). */
@@ -829,16 +854,11 @@ static int rpc_fault_create_reply(uint8_t type, const void *req, uint32_t len,
 static void rpc_retry_peer(uint32_t shard, efs_node_id_t nid,
                             efs_node_id_t *target, efs_node_id_t *skip, int failed)
 {
-    unsigned group = efs_raft_shard_group(shard) >> 1;
     *target = 0;
     *skip = nid;
     if (!nid) return;
     if (failed) efs_client_node_note_fail(nid);
-    if (group < 2) {
-        efs_node_id_t expected = nid;
-        __atomic_compare_exchange_n(&g_group_leader[group], &expected, 0,
-                                    0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-    }
+    rpc_forget_leader(efs_raft_shard_group(shard), nid, 0);
 }
 
 /* 1 when this request changes session-owned metadata (K5 coverage table in
@@ -1083,9 +1103,7 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
             skip = nid;
             /* The noted leader no longer is one: forget it so the
              * re-pick does not land here again. */
-            if (rpc_leader_of(efs_raft_shard_group(shard)) == nid)
-                __atomic_store_n(&g_group_leader[efs_raft_shard_group(shard) >> 1],
-                                 0, __ATOMIC_RELAXED);
+            rpc_forget_leader(efs_raft_shard_group(shard), nid, 0);
             fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=no-hint from=%u\n",
                     type, attempt, nid);
             if ((!deadline_bounded && attempt == 15) || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
@@ -1109,6 +1127,7 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
             bypass_read_cache = 1;
             continue;
         }
+        rpc_forget_leader(efs_raft_shard_group(shard), nid, r->primary_id);
         target = r->primary_id;
     }
 exhausted:
@@ -1802,6 +1821,7 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
         }
         if (reply.rc==EFS_ERR_NOT_PRIMARY) {
             if (reply.leader_hint < -1 || reply.leader_hint >= EFS_MAX_NODES) return EFS_ERR_PROTO;
+            rpc_forget_leader(body[0],nid,reply.leader_hint>=0?(efs_node_id_t)(reply.leader_hint+1):0);
             target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid ?
                 (efs_node_id_t)(reply.leader_hint+1):0;
         } else if (reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM) {
@@ -2279,6 +2299,7 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,uint32_t n,int pro
         if(reply.salt)return EFS_ERR_PROTO;
         if(reply.rc==EFS_ERR_NOT_PRIMARY) {
             if(reply.leader_hint< -1 || reply.leader_hint>=EFS_MAX_NODES)return EFS_ERR_PROTO;
+            rpc_forget_leader(body[0],nid,reply.leader_hint>=0?(efs_node_id_t)(reply.leader_hint+1):0);
             target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid?
                 (efs_node_id_t)(reply.leader_hint+1):0;
         } else if(reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM) {
@@ -2362,6 +2383,7 @@ int efs_client_rpc_degraded_mark(efs_ino_t ino,uint64_t inode_gen,uint64_t objec
         struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,bytes);free(payload);
         if(reply.rc==EFS_ERR_NOT_PRIMARY) {
             if(reply.leader_hint< -1 || reply.leader_hint>=EFS_MAX_NODES)return EFS_ERR_PROTO;
+            rpc_forget_leader(body[0],nid,reply.leader_hint>=0?(efs_node_id_t)(reply.leader_hint+1):0);
             target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid?
                 (efs_node_id_t)(reply.leader_hint+1):0;
         } else if(reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM) {
