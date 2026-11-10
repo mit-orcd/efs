@@ -9140,10 +9140,14 @@ static void dcache_kick_complete(void)
 void efs_dcache_maybe_reclaim(void)
 {
     /* getenv per write walks environ on the hot path; the limit is fixed
-     * for the process, so read it once (idempotent benign race). */
-    static uint64_t lim;
-    if (!lim)
+     * for the process, so it is cached atomically (every thread computes
+     * the same value). */
+    static uint64_t lim_cache;
+    uint64_t lim = __atomic_load_n(&lim_cache, __ATOMIC_RELAXED);
+    if (!lim) {
         lim = dcache_reclaim_limit();
+        __atomic_store_n(&lim_cache, lim, __ATOMIC_RELAXED);
+    }
     uint64_t dirty =
         __atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED);
     if (dirty <= lim)
