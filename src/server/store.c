@@ -1670,15 +1670,15 @@ static int put_sync_record_read(int fd, struct put_sync_record *out)
     if(efs_put_epoch_read(rec+192)!=efs_crc32(rec,192))return EFS_ERR_IO;
     uint64_t boot=efs_put_epoch_read(rec+8),clean=efs_put_epoch_read(rec+16);
     uint64_t roots=efs_put_epoch_read(rec+48),index=efs_put_epoch_read(rec+184);
-    uint64_t ok=efs_put_epoch_read(rec+56),n=efs_put_epoch_read(rec+64);
+    uint64_t ok=efs_put_epoch_read(rec+56),rn=efs_put_epoch_read(rec+64);
     if(!boot || boot>=UINT32_MAX || clean>1 || !roots || roots>EFS_MAX_STORAGE_PATHS ||
-       index>=roots || !efs_put_epoch_read(rec+40) || ok>1 || n>EFS_DATA_COMMIT_RING)
+       index>=roots || !efs_put_epoch_read(rec+40) || ok>1 || rn>EFS_DATA_COMMIT_RING)
         return EFS_ERR_IO;
     out->boot=(uint32_t)boot;out->clean=(uint32_t)clean;out->roots=(uint32_t)roots;
-    out->index=(uint32_t)index;out->ring_ok=(uint32_t)ok;out->ring_n=(uint32_t)n;
+    out->index=(uint32_t)index;out->ring_ok=(uint32_t)ok;out->ring_n=(uint32_t)rn;
     out->seq=efs_put_epoch_read(rec+24);out->time_ns=efs_put_epoch_read(rec+32);
     out->verifier=efs_put_epoch_read(rec+40);
-    for(uint32_t i=0;i<n;i++) {
+    for(uint32_t i=0;i<rn;i++) {
         out->ring[i].verifier=efs_put_epoch_read(rec+72+16*i);
         out->ring[i].position=efs_put_epoch_read(rec+80+16*i);
         if(!out->ring[i].verifier || !out->ring[i].position)return EFS_ERR_IO;
