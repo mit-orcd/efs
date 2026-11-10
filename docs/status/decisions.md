@@ -1,4 +1,4 @@
-# Decisions — taken and pending (register D1–D49)
+# Decisions — taken and pending (register D1–D50)
 
 **October 15 reconciliation:** [Review of stale claims and remaining gates](2026-10/open-item-reconciliation-20261015.md). Read these annotations before treating dated implementation descriptions as current tasks. No new global acceptance or deployment is implied.
 
@@ -11,7 +11,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-#### Decisions — taken and pending (register D1–D49)
+#### Decisions — taken and pending (register D1–D50)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -28,6 +28,10 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](2026-10/v030-release-scope-20261012.md). Execution stays stopped.
+
+## D50 — K32 moves to Stage 3 (user, Nov 10)
+
+The user's words: "k32 appears to be a performance task for stage 3.0"; asked "Move K32 to Stage 3 and have Task FI write up what it has and stop?", the user answered "Move to Stage 3". K32 is the `ior easy` write throughput regression (about 1.3 GiB/s before the fourth wave, 0.36 to 0.6 GiB/s since; reads unchanged, no correctness failure). It leaves the Stage 1 blocker list and becomes an input to Stage 3 ([section P](alpha-1.0-2plus1-checklist.md#p-stage-3-performance)), where the theories P3-G and P3-J already name candidate causes. Consequences, the coordinator's reading: the K32 row is DECIDED and blocks alpha: no; gate O2 (the `ior easy` write A/B on orcd-mini) leaves batch O and is rerun as part of the Stage 3 baseline P1; Task FI commits its measurements as Stage 3 input and stops, and no K32 fix is built in Stage 1. Not decided here: T4, the ior scaling run of [D48](#d48--alpha-10-cluster-sizes-3-6-and-9-ior-throughput-must-rise-with-the-member-count-user-nov-10), stays in Stage 1 batch N until the user says otherwise. The stage rule that performance changes never relax a correctness or durability check is unchanged.
 
 ## D49 — K110: build the cross-incarnation durability proof (user, Nov 10)
 
