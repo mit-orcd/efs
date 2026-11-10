@@ -289,7 +289,8 @@ this list, before it ships.
   every configured root has a checksummed clean record agreeing on the
   verifier and root count. Other restarts rotate it: a fragment acknowledged
   under a verifier that changed before its COMMIT is lost (never resent,
-  because the client may no longer retain the bytes), so its stripe is
+  because the client may no longer retain the bytes) unless the restarted
+  member's COMMIT reply carries a barrier history covering it (K110, below), so its stripe is
   marked degraded or, when that fragment is needed, fails EIO for good.
   COMMIT retries a failed transport once within its original deadline.
   An unclean storage-root restart fences COMMIT even for a fresh client,
@@ -300,7 +301,9 @@ this list, before it ships.
   cannot prove is dropped and its stripe marked degraded for rebuild; then
   the fence clears. An earlier ambiguous write is not thereby proven: the
   verifier changed, so a fragment the crashed run acknowledged stays lost
-  to its client's `fsync`. See
+  to its client's `fsync`, except one acknowledged at or before that run's
+  last completed barrier, which the barrier history proves (K110, D42 F23
+  as amended). See
   [verified recovery](protocols/data.md#verified-recovery-k36) and
   [AMD durability fixes](../status/2026-10/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
@@ -1647,7 +1650,7 @@ One row per active effort; the linked page states the exact source, verdict, rem
 
 | Effort | Verdict | State page |
 | --- | --- | --- |
-| Alpha 1.0 Stage 1 acceptance | Batch F on candidate `9bb50fe79` (Nov 9): F1 0 FAIL on a third gate run, F2 to F5 PASS; 18 K rows VERIFIED on `9bb50fe79` ([batch F](../status/2026-11/batch-f-candidate-20261109.md)). Batch O on the same candidate (Nov 9–10, [Task EW](../status/2026-11/orcd-mini-batch-o-20261109.md)): O1 FAIL (K38), K32 reopened, K102 new; O5/O6/O8/O9 PASS, O3 one criterion not met, O4 NOTRUN; K8, K26 and K51 VERIFIED on it. K38 fix merged in wave 70 ([Task FB](../status/2026-11/k38-recurrence-20261110.md)); K102 fix merged in wave 71 ([Task FC](../status/2026-11/k102-stuck-client-20261110.md)); K103 and K104 fixes merged in wave 72 ([Task FG](../status/2026-11/k103-read-probe-20261110.md), [Task FF](../status/2026-11/ao-halted-replica-stall-20261110.md)), K106 new and OPEN (waits a halted member still causes); K107 new and OPEN (group-view readers starve the publisher under TSan, blocks alpha: no); `9bb50fe79` is no longer the release candidate, batches F and O rerun on the fixed one; batches D and S in progress | [Stage 1 matrix](../status/stage1-acceptance-matrix-20261030.md) |
+| Alpha 1.0 Stage 1 acceptance | Batch F on candidate `9bb50fe79` (Nov 9): F1 0 FAIL on a third gate run, F2 to F5 PASS; 18 K rows VERIFIED on `9bb50fe79` ([batch F](../status/2026-11/batch-f-candidate-20261109.md)). Batch O on the same candidate (Nov 9–10, [Task EW](../status/2026-11/orcd-mini-batch-o-20261109.md)): O1 FAIL (K38), K32 reopened (moved to Stage 3 by D50, Nov 10), K102 new; O5/O6/O8/O9 PASS, O3 one criterion not met, O4 NOTRUN; K8, K26 and K51 VERIFIED on it. K38 fix merged in wave 70 ([Task FB](../status/2026-11/k38-recurrence-20261110.md)); K102 fix merged in wave 71 ([Task FC](../status/2026-11/k102-stuck-client-20261110.md)); K103 and K104 fixes merged in wave 72 ([Task FG](../status/2026-11/k103-read-probe-20261110.md), [Task FF](../status/2026-11/ao-halted-replica-stall-20261110.md)), K106 new and OPEN (waits a halted member still causes); K107 new and OPEN (group-view readers starve the publisher under TSan, blocks alpha: no); wave 73 (Nov 10): batch S soaks S1 and S2 PASS on `9bb50fe79` with K108 and K109 new and OPEN (rejoin memory, stalled-member unmounts; both block alpha), the K110 barrier proof merged (VERIFY, distinct-host kill rerun owed) and K111 new and OPEN (its residual stripe, blocks alpha: no), K107 FIXED (bounded reader retries) and K42 VERIFY again (the revoke retires a dead inode's append rows itself; RDMA rerun owed); `9bb50fe79` is no longer the release candidate, batches F and O rerun on the fixed one; batches D and S in progress | [Stage 1 matrix](../status/stage1-acceptance-matrix-20261030.md) |
 | Alpha 1.0 known defects (section K) | OPEN; no release candidate or topology acceptance | [K register](../status/alpha-1.0-2plus1-checklist.md) |
 | W123 crash recovery | Not accepted; correctness gates passed, formal performance FAIL, v3 wait capture pending | [W123 current state](../status/w123-current.md) |
 | W171 less context per change | In progress; phase 3 splits of `efs_fuse.c` (Nov 4) and `meta_apply.c` (Nov 5) landed, measured reading sets not reduced; write-back ownership pilot (Task DM, Nov 6, merged in wave 60; its `ready` race fixed by Task DT, wave 61) cut lines needed 691 to 593 and stopped at the boundary; Task EB (merged in wave 64, Nov 8) repeated it on the open-reference table (640 to 543), added multi-tag test routes that refuse misspellings, and put the component guides and per-component nodes in the code graph; wave 65 (Nov 9) merged Task EC, which made the `.find` result cache private to `find_res.c` (542 to 428 lines needed) and fixed K101, Task ED, which checks guide counts in `make docs-check`, audited every catalogue tag and declared the `raft_host.c` prefix tags, Task DO, the `raft_host.c` ReadIndex entry map and before-measurement ([evidence](../status/2026-11/readindex-entry-map-20261108.md)), and Task EE, the review of the Nov 9 feedback into briefs EF to EI ([review](../status/2026-11/review-feedback-nov9-20261109.md)); wave 66 (Nov 9) merged Task EF, the graph's `tested_by` edges from `tests_for.py`'s resolver ([evidence](../status/2026-11/graph-selector-resolver-20261109.md)), Task EH, one current-status block per active page, Task EI, two changes made by blind readers, the unmount report and the GC watermark double count, read with 8 to 10 source files against the implementers' 3 to 4 ([evidence](../status/2026-11/blind-reader-20261109.md)), and Task EJ, the K54 fence test asserting what K54 forbids; wave 67 (Nov 9) merged Task EK (the k37 degraded-count `begin` keeps the latest apply's marks) and the eight small tasks EL to ES (`EFS_FUSE_PREFIX` alone drives the fuse3 build, the sequence binaries on the sanitizer lists, 40 budget rows refit down, the K101 pattern audit found no second case, stop files already cleaned by Task DI, every evidence script cited, two open.c splice tests migrated onto the interface test, host-limit NOTRUN rows marked in the gate summary); wave 68 (Nov 10) merged Task ET, the apply visibility contract between owners ([page](apply-visibility.md)), Task EU, contract-to-case maps in the owner guides checked statically, and Task EV, the reading-set method reporting understanding, validation and total apart with necessary cross-owner reading counted as success; the split still waits on the W123 recovery merge | [Structure plan](../status/2026-11/structure-plan-20261102.md), [Task ED](../status/2026-11/navigation-leftovers-20261108.md) |
@@ -1862,7 +1865,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-##### Decisions — taken and pending (register D1–D49)
+##### Decisions — taken and pending (register D1–D50)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -1879,6 +1882,10 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/2026-10/v030-release-scope-20261012.md). Execution stays stopped.
+
+### D50 — K32 moves to Stage 3 (user, Nov 10)
+
+The user's words: "k32 appears to be a performance task for stage 3.0"; asked "Move K32 to Stage 3 and have Task FI write up what it has and stop?", the user answered "Move to Stage 3". K32 is the `ior easy` write throughput regression (about 1.3 GiB/s before the fourth wave, 0.36 to 0.6 GiB/s since; reads unchanged, no correctness failure). It leaves the Stage 1 blocker list and becomes an input to Stage 3 ([section P](../status/alpha-1.0-2plus1-checklist.md#p-stage-3-performance)), where the theories P3-G and P3-J already name candidate causes. Consequences, the coordinator's reading: the K32 row is DECIDED and blocks alpha: no; gate O2 (the `ior easy` write A/B on orcd-mini) leaves batch O and is rerun as part of the Stage 3 baseline P1; Task FI commits its measurements as Stage 3 input and stops, and no K32 fix is built in Stage 1. Not decided here: T4, the ior scaling run of [D48](#d48--alpha-10-cluster-sizes-3-6-and-9-ior-throughput-must-rise-with-the-member-count-user-nov-10), stays in Stage 1 batch N until the user says otherwise. The stage rule that performance changes never relax a correctness or durability check is unchanged.
 
 ### D49 — K110: build the cross-incarnation durability proof (user, Nov 10)
 
@@ -1957,6 +1964,8 @@ product" (A7 compiled expiry out behind `EFS_BUILD_EXPIRY`). Binding:
 | F23: store after an unclean stop | **Verified recovery.** A crash must not disable a recoverable store for good. "Verified" means recovery establishes the required consistency of log, metadata, fragments and journal before the uncertainty fence clears; a restart, a sampled check or a forced sync is not enough. Two outcomes stay distinct: a recovered store may serve again; an earlier ambiguous write is not thereby proven, and its error never turns into success. Crash-recovery implementation and tests are in alpha; full power-loss qualification remains a separate scope decision. |
 | A9 `EFS_METADATA_BALANCE` | **Elections only for alpha.** Remove the co-location pump and its variable; an unqualified tiny-file speedup does not justify another production mode. Elections alone do not guarantee distributed leaders: measure and report actual leader placement, and keep the metadata-distribution roadmap. This does not complete the "nothing concentrated on one node" goal. |
 | Buffered and direct fragment I/O | **Direct I/O only** (user, Oct 24; replaces the earlier "both, qualified"). Remove the `--direct-io`/`--no-direct-io` flag and the buffered path. Storage that cannot meet `O_DIRECT` requirements is refused with a clear error, never a silent fallback. Small and unaligned operations stay correct internally, and explicit durability barriers stay: `O_DIRECT` alone does not make a write durable. Qualify the retained path for reads, writes, packing, `fsync` and recovery. |
+
+**F23 amended Nov 10 (K110, user: "Build the fix", D49).** F23 said an earlier ambiguous write is not thereby proven. That stays true for a write the restarted member cannot show was made durable, and no longer for one it can: a fragment acknowledged by incarnation V at a position at or before V's last *completed* durability barrier (`syncfs` of the root, then the fdatasynced durability record) is durable once the successor's verified recovery (K36) dropped no file that barrier could cover. The successor reports its predecessors' last barriers in its COMMIT reply (the 7 newest per root, newest first) and the client counts such a fragment durable instead of lost. A fragment acknowledged after that barrier, one on a root whose history recovery could not validate or whose layout (root count or place in the list) changed, one from a wiped or replaced store, one older than the 7 newest predecessors, and any reply without or with a malformed history stay lost, and `fsync` stays `EIO` when the stripe needs them. Scope: the same process-kill and OS-crash assumptions as the asynchronous acknowledgement; full power-loss qualification stays a separate scope decision. Design, proof and evidence: [K110](../status/2026-11/k110-fsync-after-sigkill-20261110.md).
 
 A6 read-path selectors ([table](../status/2026-10/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)), user Oct 24:
 
@@ -11231,7 +11240,9 @@ sync never clears the fence. The phases, each shown in
    places a fragment here is checked the same way; one not proven is dropped
    and counted `segments missing`: its two peers still serve it, and W154 has
    no segment rebuild.
-8. **fence**: every root's fence clears and COMMIT works again.
+8. **fence**: every root's fence clears and COMMIT works again. Each root's
+   barrier history (below) is first made valid or forgotten and its record
+   rewritten durably.
 
 After the fence the thread waits for each remembered ticket to leave
 ADMITTED (a published one is marked as in 7) and counts the marked fragments
@@ -11239,8 +11250,45 @@ the group leaders rebuild here (`rebuilt`, `rebuild_waiting`). Nothing a
 client was promised depends on that tail: the PUT verifier changed with the
 unclean boot, so a fragment the previous boot acknowledged and did not
 COMMIT stays lost in its client's `fsync` (K35: proven on the other two with
-a degraded mark, or `EIO`), never durable, and a crash before the tail
-finishes is caught by the next recovery's inventory.
+a degraded mark, or `EIO`) unless the barrier history below covers it, and a
+crash before the tail finishes is caught by the next recovery's inventory.
+
+**Barrier history (K110, D42 F23 as amended).** Every PUT reply (18 bytes) carries
+an *ack* after the verifier: the storage root's index in the top byte and, in
+the low 56 bits, the root's open barrier epoch (`efs_put_pos`: boot counter 16
+bits, sequence 40). It is read under the root's lock after the fragment is
+stored, and a barrier increments the open epoch under that lock before its
+`syncfs`, so the barrier the ack names has not started when the write is
+complete. The root's durability record (`<root>/.efs-durable-epoch`, 200
+bytes, magic `EFSDUR03`, CRC-32 over the first 192 bytes, any other version or
+a failed CRC refuses startup) names the last barrier that completed (`syncfs`,
+then the fdatasynced record; a failed record sync rewrites the previous
+durable seq; after a barrier failed in a boot no later barrier of that boot
+is ever named, because a later `syncfs` can succeed although the pages of the
+failed one were dropped), the root count and index, and a ring of up to seven
+predecessors: for each earlier incarnation (its verifier) the position of its
+last completed barrier. A boot that follows an unclean stop (or another
+verifier) adds the predecessor it found, and keeps the predecessor's own ring
+only if that ring was validated and the root count and index are unchanged.
+A ring is validated when verified recovery finished without dropping any file
+whose modification time is not after the predecessor's last record (such a
+file may be one a barrier covered) and without finding a published fragment
+missing that no mark explains; the ring is forgotten, durably, at the moment
+either happens (also after the fence cleared, and for a file under no known
+root on every root), before the mark for a missing fragment is written.
+Recovery then rewrites the record with the verdict, keeping the seq the record
+names, before it clears the fence. A COMMIT reply (`efs_msg_data_commit_reply`, a length that is not header
+plus 24 bytes per entry is refused) lists the validated entries as
+`{verifier, position, root}` after its header (a reply with a zero verifier, a
+position above 56 bits or a root out of range is refused whole); a root still fenced or in a
+barrier error adds none. The client (`data_commit.c`) records each fragment's
+verifier and ack; when a restarted member answers with another verifier, the
+fragment is durable if an entry has that verifier, that root and a position at
+or after the ack, and lost otherwise. Boot counters of one root never
+decrease, so comparing the positions numerically is sound. A boot counter
+above 65535 or a sequence above 2^40 gives no ack (fail closed). Assumption:
+the wall clock does not step back across a restart by more than the file times
+it compares.
 
 A transient obstacle (no leader yet, a peer unreachable) is retried and shown
 as the reason. A failed verification (an unreadable certificate, a fragment
@@ -12862,25 +12910,26 @@ fast as the system grows. If they are built as another 6000-line
 
 Read the row's **Read** column and nothing else first. The **Governs** column
 is what your change must not break; the **Gate** column is what proves it.
+Start with `graphify explain <Component>`; the Read column is what to read next.
 
-| You are changing | Read | Governs | Gate |
-| --- | --- | --- | --- |
-| Any wire message | [architecture.md §7](#architecture) op matrix, `include/efs/protocol.h` | build-ID compat; restart all servers together | `make test`, solo posix |
-| Path lookup / dentries | [protocols/directory.md](#appendix-11--protocol--directory-placement--spreading) | I5–I8 | posix, posix2 |
-| create / unlink / rename / link | [protocols/directory.md](#appendix-11--protocol--directory-placement--spreading), [protocols/transactions.md](#appendix-9--protocol--cross-shard-transactions) | I5–I9, I16, I17 | posix, posix2, posixstress |
-| Anything about file size, mtime, ctime | [protocols/data.md](#appendix-10--protocol--data-plane) "lanes"/"times" | I21, I22 | posix (size-visibility tests), posix2 |
-| Chunk write / publish / truncate / append | [protocols/data.md](#appendix-10--protocol--data-plane) | I11–I15, I20–I22, I24, I25 | posix, posixpersist, fio honest matrix |
-| The read path, or read prefetch/caching | [protocols/data.md](#appendix-10--protocol--data-plane) "validated collect" | I24, I13 | posix, posix2 (cross-client visibility) |
-| Client reconnect, leases, locks, open-unlinked | [protocols/sessions.md](#appendix-12--protocol--sessions-open-unlinked-locking) | I19, I23, I16 | posix2, posixstress |
-| Cross-shard anything | [protocols/transactions.md](#appendix-9--protocol--cross-shard-transactions) | I16, I17, I9 | posix2, posixstress |
-| Raft, KV, replication, membership | [architecture.md §7.1/§7.8](#architecture), [failure-tolerance.md](#appendix-8--failure-tolerance--derivation) | I1–I4, I10, I18 | `tests/test_sim`, leaks |
-| Production Raft host | `src/server/raft_host.c`, [architecture.md §10](#architecture) 10.5 | I1–I4, I16; never `efs_raft_snapshot()` until KV flush-through-applied; SNAP blob is the existing WAL item payload | `tests/test_kv_lsm`, `tests/test_wire`, `tests/stress/raft_host_smoke.sh` (scratch cluster; not live `efs-test`) |
-| Simulator / applied KV SM | [verification.md](#appendix-15--verification--simulator--codesignal-cycle), `include/efs/sim.h`, `include/efs/meta_apply.h`, `include/efs/raft.h` | I1–I4, I9, I10, I13–I16, I20–I23, I25 | `tests/test_sim`, `tests/test_meta_apply`, `tests/test_raft` |
-| Op-ID / idempotency window | [architecture.md §7.9](#architecture), `include/efs/opid.h` | I16 | `tests/test_sim` |
-| A hot path, for speed | [performance.md](#appendix-13--performance--multi-raft-runtime--hot-path-contract) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column |
-| FUSE client behavior | [architecture.md §7.7](#architecture) | I24, kernel-cache rules | posix, posix2 |
-| Module structure / file layout | [development.md](#appendix-14--development--modularity-constraint) | ~1000-line file cap; header-only deps | `make test` + the suite for whatever moved |
-| The spec itself | [development.md](#appendix-14--development--modularity-constraint) "machine gate" | one home per normative table | regenerate `architecture-full.md`; links + `I1..I25` resolve |
+| You are changing | Read | Governs | Gate | Component |
+| --- | --- | --- | --- | --- |
+| Any wire message | [architecture.md §7](#architecture) op matrix, `include/efs/protocol.h` | build-ID compat; restart all servers together | `make test`, solo posix | `wire`, `common/protocol` |
+| Path lookup / dentries | [protocols/directory.md](#appendix-11--protocol--directory-placement--spreading) | I5–I8 | posix, posix2 | `meta/name_index`, `client/efs_fuse.lookup` |
+| create / unlink / rename / link | [protocols/directory.md](#appendix-11--protocol--directory-placement--spreading), [protocols/transactions.md](#appendix-9--protocol--cross-shard-transactions) | I5–I9, I16, I17 | posix, posix2, posixstress | `meta/txn`, `client/efs_fuse.namespace` |
+| Anything about file size, mtime, ctime | [protocols/data.md](#appendix-10--protocol--data-plane) "lanes"/"times" | I21, I22 | posix (size-visibility tests), posix2 | `meta/meta_apply.mtime`, `meta/meta_apply.lanes` |
+| Chunk write / publish / truncate / append | [protocols/data.md](#appendix-10--protocol--data-plane) | I11–I15, I20–I22, I24, I25 | posix, posixpersist, fio honest matrix | `client/write`, `meta/meta_apply.append` |
+| The read path, or read prefetch/caching | [protocols/data.md](#appendix-10--protocol--data-plane) "validated collect" | I24, I13 | posix, posix2 (cross-client visibility) | `client/read`, `client/efs_fuse.getattr` |
+| Client reconnect, leases, locks, open-unlinked | [protocols/sessions.md](#appendix-12--protocol--sessions-open-unlinked-locking) | I19, I23, I16 | posix2, posixstress | `meta/session`, `meta/lock`, `client/efs_fuse.open` |
+| Cross-shard anything | [protocols/transactions.md](#appendix-9--protocol--cross-shard-transactions) | I16, I17, I9 | posix2, posixstress | `meta/txn` |
+| Raft, KV, replication, membership | [architecture.md §7.1/§7.8](#architecture), [failure-tolerance.md](#appendix-8--failure-tolerance--derivation) | I1–I4, I10, I18 | `tests/test_sim`, leaks | `raft`, `kv`, `server/cluster` |
+| Production Raft host | `src/server/raft_host.c`, [architecture.md §10](#architecture) 10.5 | I1–I4, I16; never `efs_raft_snapshot()` until KV flush-through-applied; SNAP blob is the existing WAL item payload | `tests/test_kv_lsm`, `tests/test_wire`, `tests/stress/raft_host_smoke.sh` (scratch cluster; not live `efs-test`) | `server/raft_host` |
+| Simulator / applied KV SM | [verification.md](#appendix-15--verification--simulator--codesignal-cycle), `include/efs/sim.h`, `include/efs/meta_apply.h`, `include/efs/raft.h` | I1–I4, I9, I10, I13–I16, I20–I23, I25 | `tests/test_sim`, `tests/test_meta_apply`, `tests/test_raft` | `sim`, `meta/meta_apply` |
+| Op-ID / idempotency window | [architecture.md §7.9](#architecture), `include/efs/opid.h` | I16 | `tests/test_sim` | `common/request_receipt` |
+| A hot path, for speed | [performance.md](#appendix-13--performance--multi-raft-runtime--hot-path-contract) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column | none |
+| FUSE client behavior | [architecture.md §7.7](#architecture) | I24, kernel-cache rules | posix, posix2 | `client/efs_fuse` |
+| Module structure / file layout | [development.md](#appendix-14--development--modularity-constraint) | owner interfaces: private state behind a small header ([structure plan](../status/2026-11/structure-plan-20261102.md)) | `make test` + the suite for whatever moved | none |
+| The spec itself | [development.md](#appendix-14--development--modularity-constraint) "machine gate" | one home per normative table | regenerate `architecture-full.md`; links + `I1..I25` resolve | `docs` |
 
 Invariant texts live in [architecture.md](#architecture) §4. Where state
 lives and which shards an operation touches live in §5 and §6 — those two
@@ -12951,7 +13000,8 @@ budget or added sleep to make a test pass (fix the cause instead); if anything s
 need a design decision the spec does not contain, STOP and report —
 do not decide.
 Done means: builds on a test node (never in $HOME), make test-all passes,
-the routing row's gate passes via tests/run_tests.sh, and you record
+the routing row's gate passes (a posix or fio gate via tests/run_tests.sh <suite>;
+a tests/test_* or script gate by running it), and you record
 the result directory. A timeout is a failure. Verify the mount with
 findmnt before trusting any suite result.
 ```

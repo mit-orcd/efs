@@ -1,5 +1,7 @@
 # K42 reopened: a clean unmount refused for the whole budget with `append-reap-owed` (Task FP)
 
+**Merge state (Nov 10):** merged into devel in wave 73; K42 from OPEN to VERIFY at the merge, the 4-member RDMA clean-stop rerun owed. The merge set the new test's budget to 10 s by the budget file's rule (the branch had 15 s).
+
 **Verdict (Nov 10): cause found and reproduced, fix and regression tests committed; PASS on a private 4-member TCP cluster with the reaper stopped, 20 of 20 clean stops. The RDMA multi-host gate that failed (Task EY, `rdma-4x1`) is still owed. K42 stays OPEN until the coordinator rules; this page does not edit the K42 row or the counts line.** Branch `claude/kind-agnesi-20633e` on devel `7cd0a2637`, code commit `ce2c61998` (`84284911c` only rebuilds the code graph); not merged, not pushed.
 
 ## Step 1: the code path

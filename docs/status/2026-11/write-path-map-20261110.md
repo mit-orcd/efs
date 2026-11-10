@@ -1,5 +1,7 @@
 # Concern map of `src/client/write.c` (Task T3)
 
+**Merge state (Nov 10):** merged into devel in wave 73; `scripts/check_concern_map.py` is part of `make docs-check` from here on.
+
 **Status (Nov 10, 2026):** source commit devel `862a78945` (the `write.c` of that commit: 9,812 lines). Verdict: **PASS**, docs and one checker only. Remaining failures: none. Active run: none. Next action: the merging session updates the map for functions added to `write.c` after that commit; `make docs-check` names them. Merge state: branch `claude/modest-cray-29bc32`, unmerged.
 
 ## Purpose

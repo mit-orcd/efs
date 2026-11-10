@@ -1,5 +1,7 @@
 # Diagnostics index (T5)
 
+**Merge state (Nov 10):** merged into devel in wave 73; the page was regenerated at the merge for the keys the other branches of the wave added, and `gen_diagnostics.py --check` is part of `make docs-check` from here on.
+
 **Status:** source commit `862a78945` plus this branch's commits; verdict
 **PASS** (macOS host only; Linux hash not run, see limitations); remaining
 failures: none; active run: none; next action: the merging session reruns

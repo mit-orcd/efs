@@ -52,7 +52,7 @@ static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){assert(!g
 ''' +view+'\n'+func(s,'host_publish_view')+'\n'+func(s,'host_view_get')+'\n'+func(s,'host_view_covers')+'\n'+r'''
 static int publication_ready(struct host_view v,uint64_t round,uint64_t want){return '''+condition+r''';}
 static struct efs_raft core;
-static struct efs_raft_host host;
+static struct efs_raft_host host = {.view_mu = PTHREAD_MUTEX_INITIALIZER};
 static int done;
 static void set_view(int ready){
  core=(struct efs_raft){.role=2,.leader=0,.quorum=ready,.pending=!ready,

@@ -1,5 +1,7 @@
 # K110 · the final fsync returns EIO after sequential SIGKILLs (Task FH, Nov 10 2026)
 
+**Status (Nov 10):** merged into devel in wave 73; K110 entered the register as VERIFY (blocks alpha until the distinct-host H1 kill rerun passes), the residual stripe of answer (b) as K111 (OPEN, blocks alpha: no), and the D42 F23, K35 and K36 texts below were applied at the merge.
+
 **Verdict: FIXED on branch `claude/determined-mclean-7c3b6f` (barrier proof, user:
 "Build the fix", option 2; D42 F23 amended in "Text to apply at merge"). Not
 merged, not pushed; the live distinct-host H1 kill rerun is owed and VERIFIED

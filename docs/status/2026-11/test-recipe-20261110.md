@@ -1,5 +1,7 @@
 # Test recipe and component routing (Task T8)
 
+**Merge state (Nov 10):** merged into devel in wave 73.
+
 **Status.** Source commit: `89849c730` (devel) plus this branch's commit. Verdict: PASS for the docs checks; the Linux-only commands are NOTRUN here. Remaining failures: none. Active run: none. Next action: the merger reads `tests/README.md` once and merges. Merge state: branch `claude/confident-grothendieck-b05988`, unmerged.
 
 ## Purpose

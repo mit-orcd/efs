@@ -1,5 +1,7 @@
 # Test hosts page and wave gate script (Task T6, Nov 10)
 
+**Merge state (Nov 10):** merged into devel in wave 73.
+
 **Status (Nov 10): PASS.** Source commit `696dbad58` (devel `862a78945` plus the
 page, script and pointer line). The trial gate on fstor007 ended
 `TOTAL 599 FAIL 0 NOTRUN 3 STATUS COMPLETE (617s) HOSTLIMIT 3 BUILD 13s`.
