@@ -19,7 +19,7 @@ Not checked: whether a named case proves its row (a reader's job), numbers in ot
 whether the tags themselves are right (that is the tag audit's job).
 Prints file:line stated/actual for each drift; exit 1 on any, 0 otherwise.
 """
-import re, subprocess, sys
+import os, re, subprocess, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -33,9 +33,14 @@ MAP_HEAD = '| Operation or invariant | Cases | Command |'
 
 
 def tracked():
-    out = subprocess.run(['git', 'ls-files', '-z', '--', 'tests'], cwd=root,
-                         capture_output=True, check=True).stdout
-    return set(out.decode().split('\0'))
+    """Paths under tests/: git's list, or every file there in a shipped tree without .git."""
+    try:
+        out = subprocess.run(['git', 'ls-files', '-z', '--', 'tests'], cwd=root,
+                             capture_output=True, check=True).stdout
+        return set(out.decode().split('\0'))
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return {os.path.relpath(os.path.join(d, f), root)
+                for d, _, fs in os.walk(os.path.join(root, 'tests')) for f in fs}
 
 
 def check_map_row(where, cells, files):
