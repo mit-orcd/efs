@@ -1,5 +1,7 @@
 # Named cases and a case filter in the interface tests (Task T7)
 
+**Merge state (Nov 10):** merged into devel in wave 74.
+
 - **Source commit:** `7e6902d12` on `claude/competent-hermann-01b16e` (on devel `862a78945`).
 - **Verdict:** PASS. Test and documentation change only.
 - **Remaining failures:** none.

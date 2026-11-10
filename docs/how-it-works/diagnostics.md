@@ -5,7 +5,7 @@ Generated page: any source change that adds, renames or moves a diagnostic key m
 
 Look a log key or `rc` up here, then `graphify explain <Component>`. Scanned: every `.c` and `.h` under `src/` and `include/`; the calls `fprintf(stderr, "...")` and `efs_telemetry_log(level, "...")` (the other `*log*` functions take no literal key or are not diagnostics). A key is the leading `word-word` token of the literal, followed by a space or `:`.
 
-Found: 102 diagnostic keys in 258 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
+Found: 102 diagnostic keys in 259 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
 
 ## Error codes
 
@@ -95,7 +95,7 @@ Found: 102 diagnostic keys in 258 (key, function) rows, 29 error codes; 371 `fpr
 | `kv-flush-prof` | `src/kv/kv_compact.c` | `kv_maybe_flush_locked` | `kv/kv_compact` |
 | `kv-lsm` | `src/kv/kv_lsm.c` | `manifest_load` | `kv/kv_lsm` |
 | `kv-lsm` | `src/kv/kv_lsm_internal.h` | `lsm_lock` | `kv/kv_lsm_internal` |
-| `kv-snap` | `src/kv/kv_snap.c` | `import_reader_barrier` | `kv/kv_snap` |
+| `kv-snap` | `src/kv/kv_snap.c` | `import_barrier_item` | `kv/kv_snap` |
 | `lookup-reply` | `src/client/efs_fuse/lookup.c` | `lookup_reply_barrier` | `client/efs_fuse.lookup` |
 | `mtime-pin` | `src/client/write.c` | `efs_client_mtime_pin` | `client/write` |
 | `namespace-prof` | `src/server/raft_host.c` | `server_raft_host_mkdir` | `server/raft_host` |
@@ -255,6 +255,7 @@ Found: 102 diagnostic keys in 258 (key, function) rows, 29 error codes; 371 `fpr
 | `raft-snap` | `src/server/raft_host.c` | `host_snap_export_pass` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `host_snap_import_pass` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `host_snap_open` | `server/raft_host` |
+| `raft-snap` | `src/server/raft_host.c` | `snap_import_poll` | `server/raft_host` |
 | `raft-status` | `src/mgmt/efs_mgmt.c` | `cmd_raft_status` | `mgmt/efs_mgmt` |
 | `raft-step-down` | `src/mgmt/efs_mgmt.c` | `cmd_raft_step_down` | `mgmt/efs_mgmt` |
 | `rdma-trace` | `src/common/network.c` | `efs_conn_destroy` | `common/network` |

@@ -1,5 +1,7 @@
 # K105: the packer counted a read error on a file unlinked under it (Task FK)
 
+**Merge state (Nov 10):** merged into devel in wave 74; K105 from OPEN to VERIFY, blocks alpha: no, at the merge.
+
 **Status (Nov 10):** fix committed on branch `claude/wizardly-lehmann-3525bb`, not merged.
 
 **Verdict: PASS for the fix, case C by inference, not reproduced. A packer pass reads a candidate's metadata, then its

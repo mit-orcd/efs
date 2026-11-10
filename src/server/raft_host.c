@@ -12751,7 +12751,7 @@ static void *host_gc_thread(void *arg)
             int lead = 0;
             uint64_t ta;
 
-            if (!h->g[g].hosted)
+            if (!__atomic_load_n(&h->g[g].hosted, __ATOMIC_ACQUIRE))
                 continue;
             pthread_mutex_lock(&h->mu);
             if (h->g[g].r && efs_raft_role(h->g[g].r) == EFS_RAFT_LEADER)

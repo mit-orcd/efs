@@ -1,5 +1,7 @@
 # K108: snapshot import memory (Task FN)
 
+**Merge state (Nov 10):** merged into devel in wave 74; K108 from OPEN to VERIFY at the merge, the production-scale S2 recheck owed, still blocks alpha.
+
 **Verdict: PASS at small scale, production-scale check owed.** Branch `claude/sleepy-solomon-4b29a7` (task FN), on devel `cff8eb424`, code commits `a7ff25741` (streaming import) and, after the coordinator's review of `2dde38d18`, `7c74a50e9` and `21d0b5b96` (see "Review follow-up"); not merged, not pushed. Linked item: K108 (Task EZ's batch S2, drafted there as K120), blocks alpha: yes. This page changes no K row and not the counts line; the coordinator rules at the merge.
 
 ## Purpose
