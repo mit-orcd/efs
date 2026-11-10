@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/node_cache.c').read_text()
-a=s.index('/* One real exchange');b=s.index('struct efs_conn *efs_client_conn_get(')
+a=s.index('enum { NODE_EX_FAILED');b=s.index('struct efs_conn *efs_client_conn_get(')
 probe=s[a:b]
 assert 'node_probe_maybe_start(idx, now);' in s[b:s.index('\n}',b)], 'cooldown checkout must request a reprobe'
 code=r'''
