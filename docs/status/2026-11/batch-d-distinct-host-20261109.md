@@ -196,7 +196,13 @@ Raw logs: `~/efs-artifacts/taskEY-20261109/tcp-h01/{sigkill-8k-1,sigkill-8k-2,co
 
 ## Results: RDMA
 
-(not started)
+Transport check: in every RDMA run, every daemon and client log has `transport rdma: rdma on mlx5_2 (TCP carries setup)`, and no daemon log has a TCP transport line (`rdma-3x1`: 18 daemon and 10 client lines).
+
+### Cells
+
+| Run | Window | Gates | Result |
+| --- | --- | --- | --- |
+| `rdma-3x1` | 13:26-14:12 | full list less `d5-expiry` | 16 PASS (identity, topology, b-checks, posix-core/extras/2client/durability, e1, e2, b6 (22 writes marked degraded, W154 cleared in 9.7 s), e3, a13, c5 33/33, d1, d3 (22,376 queries, p99 0.071 s), e4 15,000 + 6 × 256 MiB). d4 FAIL on server RSS only: **NOTRUN (harness, server memory)**; backlog peak 154,835, within the bound (600 s load, 1,006 creates/s, 745 packs/s, drained in 62.7 s) |
 
 ## Limitations
 
