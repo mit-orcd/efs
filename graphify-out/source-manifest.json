@@ -143,6 +143,8 @@
     "scripts/evidence/dy/k36_summary.py": 3,
     "scripts/evidence/dy/k36_trace.py": 4,
     "scripts/evidence/ed/tag_audit.py": 7,
+    "scripts/evidence/ff/forced_election.py": 1,
+    "scripts/evidence/ff/forced_loop.sh": 2,
     "scripts/evidence/ff/halted_strand.py": 2,
     "scripts/evidence/ff/port_range.py": 2,
     "scripts/evidence/fin/fin_accounting_audit.py": 1,
@@ -1661,6 +1663,8 @@
     "scripts/evidence/dy/k36_summary.py": "23a8823e7dfddaa26e46fa700ac6fcdebfedc824e9e4ce1f04513e654e4f6547",
     "scripts/evidence/dy/k36_trace.py": "0df3c8027c83702cb61f58b7a9890fe444debe7bc3049ce7ac54b5839f1ca08f",
     "scripts/evidence/ed/tag_audit.py": "8249d0920d1703c51dbcac46c6306dc324f7aacc3c48f5c7f9e365483f71f6aa",
+    "scripts/evidence/ff/forced_election.py": "0de212bb14270ac0aeb8f52e46f48f03ef727bcccd7097050ad7b55d4024d59a",
+    "scripts/evidence/ff/forced_loop.sh": "e1aef55dd3ece45edf72ef390af8afb08eee2778e11fb4fb3ba3d1d3296e9d9a",
     "scripts/evidence/ff/halted_strand.py": "064ea9b3a0e2feb861c69c15c6d3dda4319e7ad1a326697b9a68a2aaca0d9480",
     "scripts/evidence/ff/port_range.py": "55d3e6f3f2809961a63a9f606d5f74520cccdfcfa7289fd38e7c2681b9096b7c",
     "scripts/evidence/fin/fin_accounting_audit.py": "221499c149c00c7301fbc221d54b12a8e4daae5d30b34a1bbb175c9d85d86cf4",
@@ -3017,5 +3021,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "7bcc44bf33bfa7578b23642ba8225b0bc5d3789e"
+  "source_commit": "0bcd4270a13915937d6dc2c782802a1c56daec71"
 }
