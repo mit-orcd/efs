@@ -473,7 +473,7 @@ int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
  * not known (reply lost, or the budget ran out after a send). sent: the
  * nodes the REPORT reached (bit nid-1). EFS_OK when a receipt or a re-send
  * proves it applied; a definite verdict (e.g. STALE) as answered;
- * EFS_ERR_IO when the outcome is still unknown after EFS_RESOLVE_MS. */
+ * EFS_ERR_IO when the outcome is still unknown after 8000 ms (rpc_resolve_ms). */
 int efs_client_rpc_report_resolve(efs_export_id_t export_id,
                                   const struct efs_chunk_rec *recs, uint32_t count,
                                   const struct efs_ino_size_rec *irecs,
@@ -877,7 +877,7 @@ int efs_client_rpc_object_live(efs_ino_t ino, uint64_t generation, uint32_t ci,
 int efs_client_rpc_degraded_mark(efs_ino_t ino, uint64_t inode_gen, uint64_t object,
                                  uint32_t ci, uint32_t fi, efs_node_id_t node);
 
-/* Read-mapping freshness (ops.c, EFS_READ_MAP_TTL_MS). */
+/* Read-mapping freshness (ops.c, 200 ms). */
 int efs_client_map_fresh(efs_ino_t ino, uint32_t ci0, uint32_t ci1);
 void efs_client_map_opened(efs_ino_t ino);
 uint64_t efs_client_map_clock(void);

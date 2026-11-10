@@ -152,6 +152,10 @@ static const struct { const char *name, *why; } removed_env[] = {
       "at runtime with efs-mgmt expiry-policy NODE:PORT cluster set on|off VERSION" },
     { "EFS_FUSE_EXPORT", "D42): NFS re-export of a mount is not supported" },
     { "EFS_RDMA_FIRST", "D42): renamed EFS_RDMA_TRACE=1, diagnostics only" },
+    /* A8 (D46 item 7): numeric tunables no test or launch sets. */
+    { "EFS_PUT_AWAY_MARK_MS", "A8): a member that failed a PUT hard is a spare of last resort for 10000 ms" },
+    { "EFS_READ_MAP_TTL_MS", "A8): a pulled chunk mapping is trusted for 200 ms" },
+    { "EFS_RESOLVE_MS", "A8): a request whose reply was lost resolves for at most 8000 ms" },
 };
 
 /* D42: EFS_RDMA_TRACE=1 prints RDMA and connection diagnostics on stderr.

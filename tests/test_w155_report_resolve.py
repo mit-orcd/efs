@@ -51,7 +51,7 @@ client = ''.join([
     fn(cli, 'static int rpc_status_to_efs('),
     fn(cli, 'static int rpc_identified('),
     fn(cli, 'static const char *rpc_req_ident('),
-    fn(cli, 'static uint64_t rpc_resolve_ms('),
+    fn(cli, 'static uint64_t rpc_resolve_ms(').replace('return 8000;', 'return %d;' % int(os.environ.get('W155_RESOLVE_MS', '8000'))),
     fn(cli, 'static int rpc_writer_retry_pause(', 2),
     fn(cli, 'static int rpc_type_mutates('),
     fn(cli, 'static int rpc_resolve_identified('),
@@ -335,7 +335,7 @@ with tempfile.TemporaryDirectory(prefix='efs-w155-report-') as d:
                          '-o', str(p.with_suffix(''))], check=True)
     out = subprocess.run([str(p.with_suffix(''))], check=False, timeout=60,
                          capture_output=True, text=True,
-                         env=dict(os.environ, EFS_RESOLVE_MS=os.environ.get('W155_RESOLVE_MS', '8000'), EFS_REPORT_RECEIPT_JOIN_MS='50'))
+                         env=dict(os.environ, EFS_REPORT_RECEIPT_JOIN_MS='50'))
     if out.returncode:
         # The failing native assertion used to disappear inside
         # CalledProcessError, then TemporaryDirectory deleted its program.

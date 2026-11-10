@@ -56,7 +56,6 @@ kind (deployment inputs first) then name; `--writers` comes last.
 | `EFS_PACK_SPACE_FULL_PCT` | `80` | daemon |
 | `EFS_PACK_SPACE_START_PCT` | `50` | daemon |
 | `EFS_PACK_UNPACKED_GIB` | `64` | daemon |
-| `EFS_PUT_AWAY_MARK_MS` | `10000` | client |
 | `EFS_PUT_SYNC_MS` | `200` | daemon |
 | `EFS_QUERY_DISK_MAX_MIB` | `16384` | daemon |
 | `EFS_QUERY_DISK_RESERVE_MIB` | `64` | daemon |
@@ -68,13 +67,11 @@ kind (deployment inputs first) then name; `--writers` comes last.
 | `EFS_RDMA_DEV` | `auto` | both |
 | `EFS_RDMA_GID_INDEX` | `auto` | both |
 | `EFS_RDMA_PORT` | `1` | both |
-| `EFS_READ_MAP_TTL_MS` | `200` | client |
 | `EFS_REBUILD_PER_PASS` | `256` | daemon |
 | `EFS_REPORT_ADMIT_MS` | `8000` | client |
 | `EFS_REPORT_MAX_BYTES` | `16777216` | client |
 | `EFS_REPORT_MAX_RECORDS` | `8192` | client |
 | `EFS_REPORT_RECEIPT_JOIN_MS` | `5000` | daemon |
-| `EFS_RESOLVE_MS` | `8000` | client |
 | `EFS_TRANSPORT` | `auto` | both |
 
 ## Inventory: environment variables read by the product
@@ -109,7 +106,6 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| `EFS_FAULT_AWAY_MARK_MS` | `client/write.c` (put_away_mark_ms) | 10000 ms: a member that failed a PUT hard takes no new placement while another spare exists. No test sets it since K39 (Oct 25): efs-fuse is never built with `EFS_FAULTS`, so the hook is absent from every mount and `test_k35_fsync_degraded.py` case 7 runs at the 10 s default (its old 600000 setting was a no-op) | fault/test hook | — | — | Unused: candidate for removal (follow-up) |
 | `EFS_CLIENT_CONNS_PER_NODE` | `client/node_cache.c:88` (efs_client_conn_init) | 64 pooled connections per server (1..cap) | numeric tunable | portal (observed only) | `get_pair_deadline.py` | Keep until A8: set by `get_pair_deadline.py` |
 | `EFS_CLIENT_META_MB` | `common/stage_limit.h:9` (efs_stage_cap_bytes) | 256 MiB staging-table cap (16..1 Mi MiB) | numeric tunable | portal (observed only) | `test_rollup_budget.py`; `orcd_mini_stage_evict_ab.sh`, `w125_evict_rmw.py` | Keep until A8: set by tests and W125 scripts; client memory sizing |
 | `EFS_CLIENT_VIEW_POLL_MS` | `client/node_cache.c:416` (efs_client_view_start) | 1000 ms membership view poll (50..60000) | numeric tunable | — | `test_member_view.c` | Keep until A8: set by `test_member_view.c` |
@@ -117,12 +113,9 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 | `EFS_DCACHE_DRAIN_BYTES` | `client/bufpool.c:56` (buf_init) via `budget_env` | 64 MiB drain reserve | numeric tunable | — | `gc_reclamation.py`, `test_bufpool.c` +1; `scripts/evidence/w125/w125_read_pressure.sh` | Keep until A8: client memory sizing, set by tests |
 | `EFS_DCACHE_HARD_BYTES` | `client/bufpool.c:54` (buf_init) via `budget_env` | 256 MiB body-admission budget | numeric tunable | — | `gc_reclamation.py`, `test_bufpool.c` +1; `scripts/evidence/w125/w125_read_pressure.sh` | Keep until A8: client memory sizing, set by tests |
 | `EFS_DCACHE_READ_BYTES` | `client/bufpool.c:63` (buf_init) via `budget_env` | 64 MiB read headroom | numeric tunable | — | `test_bufpool.c` | Keep until A8: set by `test_bufpool.c` |
-| `EFS_PUT_AWAY_MARK_MS` | `client/write.c:3305` (put_away_mark_ms) | 10000 ms a member that failed a PUT hard is a spare of last resort | numeric tunable | — | `test_k35_fsync_degraded.py` | Keep until A8: set by `test_k35_fsync_degraded.py` case 7 |
-| `EFS_READ_MAP_TTL_MS` | `client/ops.c:466` (map_fresh_init) | 200 ms chunk-map freshness (≤ 10000) | numeric tunable | portal (observed only) | `test_read_refs_window.py`; `d25_step2_gates.sh` | Keep until A8: set by D25 gates and `test_read_refs_window.py` |
 | `EFS_REPORT_ADMIT_MS` | `client/write.c:893` (report_config) via `report_env` | 8000 ms REPORT admission wait (≤ 60000) | numeric tunable | — | `test_report_pressure.py` | Keep until A8: set by `test_report_pressure.py` |
 | `EFS_REPORT_MAX_BYTES` | `client/write.c:892` (report_config) via `report_env` | 16 MiB per REPORT | numeric tunable | — | `test_report_pressure.py` | Keep until A8: set by `test_report_pressure.py` |
 | `EFS_REPORT_MAX_RECORDS` | `client/write.c:891` (report_config) via `report_env` | 8192 records per REPORT | numeric tunable | — | `test_report_pressure.py` | Keep until A8: set by `test_report_pressure.py` |
-| `EFS_RESOLVE_MS` | `client/inode_rpc.c:141` (rpc_resolve_ms) | 8000 ms identified-resolve budget | numeric tunable | — | `test_w155_identified_resolve.py`, `test_w155_report_resolve.py` | Keep until A8: set by W155 tests |
 
 ### Server data path, GC, rebuild and packing (efsd)
 
@@ -327,6 +320,9 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_EXPIRY` | `server/raft_host.c` (server_raft_host_start), A7 | none: the cluster expiry policy, off by default (D43; until Oct 25 compiled out behind `EFS_BUILD_EXPIRY`) | launch env files, expiry tests |
 | `EFS_FUSE_EXPORT` | `client/efs_fuse/` (efs_fuse_init), A7 | none: no NFS re-export | cluster `ct-up.sh`, `gw-up.sh` |
 | `EFS_RDMA_FIRST` | `common/network.c` +5, A7 | `EFS_RDMA_TRACE=1` | `clean_cluster.sh`, `rdma_first_inode.sh` (updated) |
+| `EFS_PUT_AWAY_MARK_MS` | none since K39 (the reader became `EFS_FAULT_AWAY_MARK_MS`), A8 | built in: 10000 ms (`PUT_AWAY_MARK_MS`, `client/write.c`); the dead `EFS_FAULT_AWAY_MARK_MS` hook is gone too (efs-fuse is never built with `EFS_FAULTS`) | none; `test_k35_fsync_degraded.py` comment |
+| `EFS_READ_MAP_TTL_MS` | `client/ops.c` (map_fresh_init), A8 | built in: 200 ms read-mapping freshness | none set it; portal observes |
+| `EFS_RESOLVE_MS` | `client/inode_rpc.c` (rpc_resolve_ms), A8 | built in: 8000 ms | the W155 tests passed the default; their `W155_RESOLVE_MS` negative control now edits the extracted source |
 
 ## Compile-time modes
 

@@ -3738,33 +3738,15 @@ static int node_is_full(efs_node_id_t id)
  * two fragments. Found by tests/test_k35_fsync_degraded.py case 7: node 3
  * marked away by a write during its restart kept a 4-member cluster from
  * placing around node 4, stopped a few seconds later, so every stripe
- * touching node 4 was acknowledged degraded. EFS_FAULT_AWAY_MARK_MS
- * (milliseconds) overrides the window; tests make it long so the
- * interleaving is forced, not timed. */
+ * touching node 4 was acknowledged degraded. A8: the window is built in
+ * (no fault hook; efs-fuse is never built with EFS_FAULTS). */
 #define PUT_AWAY_MARK_MS 10000u
 static uint64_t g_node_away_until_ms[EFS_MAX_NODES + 1];
-
-static uint64_t put_away_mark_ms(void)
-{
-#if EFS_FAULTS
-    /* Fault builds only (A6): tests make the window outlast the test so the
-     * away-member interleaving is forced, not timed. */
-    static uint64_t ms;
-    if (!ms) {
-        const char *v = getenv("EFS_FAULT_AWAY_MARK_MS");
-        unsigned long long n = v && *v ? strtoull(v, NULL, 10) : 0;
-        ms = n ? (uint64_t)n : PUT_AWAY_MARK_MS;
-    }
-    return ms;
-#else
-    return PUT_AWAY_MARK_MS;
-#endif
-}
 
 static void node_note_away(efs_node_id_t id)
 {
     if (id && id <= EFS_MAX_NODES)
-        __atomic_store_n(&g_node_away_until_ms[id], report_clock_ms() + put_away_mark_ms(),
+        __atomic_store_n(&g_node_away_until_ms[id], report_clock_ms() + PUT_AWAY_MARK_MS,
                          __ATOMIC_RELAXED);
 }
 

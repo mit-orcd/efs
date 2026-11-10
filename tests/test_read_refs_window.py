@@ -39,7 +39,7 @@ int main(void){struct efs_read_ref refs[2];pthread_mutex_init(&g_client.idx_mu,N
  window_rc=EFS_ERR_BUSY;assert(efs_client_read_refs(42,0,131072,refs,2)==EFS_ERR_BUSY&&!pins&&!memcmp(saved,refs,sizeof(refs)));
  window_rc=EFS_ERR_IO;assert(efs_client_read_refs(42,0,131072,refs,2)==EFS_ERR_IO&&!pins);
  window_rc=1;assert(efs_client_read_refs(42,0,262144,refs,2)==2&&pins==2&&!unpins&&refs[0].data==data&&refs[1].len==131072);for(int i=0;i<2;i++)efs_rdcache_unpin(refs[i].pin);assert(unpins==2);
- /* A mapping pulled within EFS_READ_MAP_TTL_MS needs no refresh. */
+ /* A mapping pulled within the 200 ms freshness window needs no refresh. */
  int before=pulls;fresh=1;assert(efs_client_read_refs(42,0,262144,refs,2)==2&&pulls==before);for(int i=0;i<2;i++)efs_rdcache_unpin(refs[i].pin);
  fresh=0;assert(efs_client_read_refs(42,0,262144,refs,2)==2&&pulls==before+1);for(int i=0;i<2;i++)efs_rdcache_unpin(refs[i].pin);
  /* W77: no snapshot, no refs; a snapshot that moved under the pins releases them. */
