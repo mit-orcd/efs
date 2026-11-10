@@ -82,8 +82,8 @@ def run(args):
     work.mkdir(parents=True);out.mkdir(parents=True)
     env={key:val for key,val in os.environ.items() if not key.startswith('EFS_')}
     assert args.observer == '1' or args.counterless_control, 'counter snapshots require observation'
-    env.update(EFS_TRANSPORT=args.transport,EFS_RAFT_OBS=args.observer,EFS_PACK_MIN_AGE_MS='1000',
-               EFS_PACK_INTERVAL_MS='200',EFS_QUERY_REFRESH_MS='2000',
+    env.update(EFS_TRANSPORT=args.transport,EFS_RAFT_OBS=args.observer,EFS_FAULT_PACK_MIN_AGE_MS='1000',
+               EFS_FAULT_PACK_INTERVAL_MS='200',EFS_QUERY_REFRESH_MS='2000',
                EFS_FAULT_MEMTABLE_BYTES=str(256*1024))
     if args.device:env['EFS_RDMA_DEV']=args.device
     if args.diagnostic:env.update(EFS_PUT_TICKET_DBG='1',EFS_RPC_PROF='1')

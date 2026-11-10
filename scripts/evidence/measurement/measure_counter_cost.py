@@ -72,7 +72,7 @@ def main():
     env = {key: value for key, value in os.environ.items()
            if not key.startswith(('EFS_', 'TMPDIR'))}
     env.update(EFS_TRANSPORT=a.transport, EFS_RDMA_DEV='mlx5_0', EFS_RAFT_OBS='1',
-               EFS_PACK_MIN_AGE_MS='1000', EFS_PACK_INTERVAL_MS='200',
+               EFS_FAULT_PACK_MIN_AGE_MS='1000', EFS_FAULT_PACK_INTERVAL_MS='200',
                EFS_QUERY_REFRESH_MS='2000', EFS_FAULT_MEMTABLE_BYTES='262144',
                TMPDIR=str(a.scratch))
     c = k.Cluster(a.scratch, 'cluster', [1, 2, 3], env,

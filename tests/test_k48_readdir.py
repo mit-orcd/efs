@@ -17,7 +17,7 @@ def lane(name):
 work=Path(tempfile.mkdtemp(prefix='efs-k48-',dir=os.environ.get('TMPDIR')))
 hold=work/'hold';hold.touch()
 pause=work/'pause'
-env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_DIR_SPREAD_MIN='64')
+env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_FAULT_DIR_SPREAD_MIN='64')
 c=Cluster(work,'k48',[1,2,3],env);mount=c.dir/'mnt-a';mount.mkdir()
 fp=None;log=None;passed=False;cleanup_error=None
 try:

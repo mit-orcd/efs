@@ -48,10 +48,10 @@ work = Path(tempfile.mkdtemp(prefix='efs-k41-', dir=os.environ.get('TMPDIR')))
 flags = work / 'flags'
 flags.mkdir()
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS='20000', EFS_PACK_INTERVAL_MS='200',
-           EFS_PACK_COMPACT_IDLE_S='1000000',
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='20000', EFS_FAULT_PACK_INTERVAL_MS='200',
+           EFS_FAULT_PACK_COMPACT_IDLE_S='1000000',
            # the daily compaction window (2 h) starts 12 h from now
-           EFS_PACK_COMPACT_DAILY_START_MIN=str((time.gmtime().tm_hour * 60 + time.gmtime().tm_min
+           EFS_FAULT_PACK_COMPACT_DAILY_START_MIN=str((time.gmtime().tm_hour * 60 + time.gmtime().tm_min
                                                  + 720) % 1440),
            EFS_FAULT_PACK_PLACE_DOWN='6', EFS_FAULT_SEGMENT_PUT_REFUSE=str(flags))
 SIZES = (300, 4096, 9000, 12000, 16384)

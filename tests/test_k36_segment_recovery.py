@@ -57,10 +57,10 @@ flags.mkdir()
 rb_hold = flags / 'rebuild-hold'
 fence_hold = flags / 'fence-hold'
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200',
-           EFS_PACK_COMPACT_IDLE_S='1000000',
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='500', EFS_FAULT_PACK_INTERVAL_MS='200',
+           EFS_FAULT_PACK_COMPACT_IDLE_S='1000000',
            # the daily compaction window (2 h) starts 12 h from now
-           EFS_PACK_COMPACT_DAILY_START_MIN=str((time.gmtime().tm_hour * 60 + time.gmtime().tm_min
+           EFS_FAULT_PACK_COMPACT_DAILY_START_MIN=str((time.gmtime().tm_hour * 60 + time.gmtime().tm_min
                                                  + 720) % 1440),
            EFS_FAULT_SEGMENT_REBUILD_HOLD=str(rb_hold))
 SIZES = (1, 300, 512, 4096, 5000, 9000, 12000, 16384)

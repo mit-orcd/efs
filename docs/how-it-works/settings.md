@@ -39,13 +39,7 @@ kind (deployment inputs first) then name; `--writers` comes last.
 | `EFS_DCACHE_DRAIN_BYTES` | `67108864` | client |
 | `EFS_DCACHE_HARD_BYTES` | `268435456` | client |
 | `EFS_DCACHE_READ_BYTES` | `67108864` | client |
-| `EFS_DIR_SPREAD_MIN` | `65536` | both |
 | `EFS_NUMA_NODE` | `auto` | client |
-| `EFS_PACK_COMPACT_DAILY_START_MIN` | `180` | daemon |
-| `EFS_PACK_COMPACT_IDLE_S` | `60` | daemon |
-| `EFS_PACK_FAIL_BACKOFF_MS` | `30000` | daemon |
-| `EFS_PACK_INTERVAL_MS` | `1000` | daemon |
-| `EFS_PACK_MIN_AGE_MS` | `60000` | daemon |
 | `EFS_QUERY_DISK_MAX_MIB` | `16384` | daemon |
 | `EFS_QUERY_DISK_RESERVE_MIB` | `64` | daemon |
 | `EFS_QUERY_DISK_TOTAL_MIB` | `32768` | daemon |
@@ -109,22 +103,16 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| `EFS_PACK_COMPACT_DAILY_START_MIN` | `server/packer.c:1330` (server_packer_start) via `env_u64` | 03:00 UTC daily compaction start | numeric tunable | — | `scripts/evidence/w125/w125_mac_churn.sh` | Keep until A8: set by `scripts/evidence/w125/w125_mac_churn.sh` |
-| `EFS_PACK_COMPACT_IDLE_S` | `server/packer.c:1323` (server_packer_start) via `env_u64` | 60 s idle before compaction | numeric tunable | — | `d25_step4_gates.sh`, `scripts/evidence/w125/w125_mac_churn.sh` | Keep until A8: set by D25/W125 scripts |
-| `EFS_PACK_FAIL_BACKOFF_MS` | `server/packer.c:1316` (server_packer_start) via `env_u64` | 30000 ms packer pause per group after a failed or degraded segment upload | numeric tunable | — | `test_b6_unavailable.py`, `test_k37_segment_rebuild.py` | Keep until A8: set by the member-down tests (Task DA) |
-| `EFS_PACK_INTERVAL_MS` | `server/packer.c:1315` (server_packer_start) via `env_u64` | 1000 ms packer pass interval | numeric tunable | — | `test_k33_payload.py`; `w125_p6_landing.sh` | Keep until A8: set by `test_k33_payload.py`, W125 scripts |
-| `EFS_PACK_MIN_AGE_MS` | `server/packer.c:1314` (server_packer_start) via `env_u64` | 60000 ms before a file is packed | numeric tunable | — | `gate_k28_five_node.sh`, `reclaim_crash.py` +3; `bigdir_readdir_repro.sh`, `d25_step4_gates.sh` +19 | Keep until A8: set by many packing scripts and K33 tests |
 
 ### Metadata, Raft and query service (efsd)
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| `EFS_DIR_SPREAD_MIN` | `meta/dir_layout.c:11` (efs_dir_spread_min) | 65536 entries before a directory spreads | numeric tunable | portal (observed only) | `w8_root_stats.sh`, `test_sim.c` | Keep until A8: set by `test_sim.c` and a measure script |
 | `EFS_QUERY_DISK_MAX_MIB` | `meta/query_disk.c:134` (configure_reserve) | 16384 MiB per query generation | deployment input | portal (observed only) | `amd_query_cache_transition.py` | Keep: documented cache capacity input (power-user.md) |
 | `EFS_QUERY_DISK_RESERVE_MIB` | `meta/query_disk.c:129` (configure_reserve) | 64 MiB free-space guard | deployment input | portal (observed only) | — | Keep: documented cache capacity input; never set in a test or launch, A8 may fold it |
 | `EFS_QUERY_DISK_TOTAL_MIB` | `meta/query_disk.c:139` (configure_reserve) | 32768 MiB all query generations | deployment input | portal (observed only) | `amd_query_cache_transition.py` | Keep: documented cache capacity input |
 | `EFS_QUERY_EXPORT_MAX_MS` | `server/raft_host.c:11947` (query_export_configure) | 3600000 ms total paged-export lifetime (60000..604800000) | deployment input | portal (observed only) | — | Keep: documented operator need (long exports, power-user.md); never set in a test or launch |
-| `EFS_QUERY_REFRESH_MS` | `server/raft_host.c:12225` (host_query_thread) | 60000 ms query refresh (bounded) | numeric tunable | — | `efs_commands.py`, `gc_reclamation.py` +2 | Keep until A8: set by query tests |
+| `EFS_QUERY_REFRESH_MS` | `server/raft_host.c:12225` (host_query_thread) | 60000 ms query refresh, 200..3600000 (invalid keeps the default and logs `query-config`) | numeric tunable | — | `efs_commands.py`, `gc_reclamation.py` +2 | Justified (A8): the catalog's freshness against full-shard rebuild cost; an operator with a large namespace lengthens the interval, the query gates shorten it. Bounded 200..3600000 ms; `test_query_refresh.c` (make test) checks the parser over the range, `tests/live/gc_reclamation.py` (30 harness uses, product build) and the D4 tests run 2000 ms, `test_query_first_catalog.py` the default |
 | `EFS_RAFT_APPLIED_INTERVAL_MS` | `server/raft_host.c:12943` (server_raft_host_start) | 100 ms applied-index checkpoint (10..1000); bad values refuse startup | numeric tunable | cluster:cluster.sh, devops:intel.env, devops:start.sh, devops:test_start_mode.py; portal (observed only) | `applied_checkpoint_replay.py`, `runner.py` +14 | Keep until A8: set by devops `start.sh` (default 1000 there) and live tests; launch and code disagree |
 | `EFS_REPORT_RECEIPT_JOIN_MS` | `server/raft_host.c:22877` (host_report_receipts_init) | 5000 ms REPORT receipt join wait | numeric tunable | — | `test_w155_report_resolve.py` | Keep until A8: set by `test_w155_report_resolve.py` |
 
@@ -232,6 +220,12 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_TXN_APPLY_FILE` | `server/raft_host.c:3386` (host_apply) +1 | off; refuse a transaction apply (marker) | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_TXN_BARRIER` | `server/raft_host.c:17033` (host_txn_fault_barrier) | off; park a transaction at a barrier | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_WITHHOLD` | `client/write.c:1696` (report_fault_withhold) | off; omit one REPORT record `<ino>:<ci>` | fault/test hook | — | `test_wb_fault.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_PACK_MIN_AGE_MS` | `server/packer.c` (server_packer_start) via `env_u64` | off: 60000 ms before a small file is packed; tests shorten it (500..20000) or hold packing off (3600000) (A8, was `EFS_PACK_MIN_AGE_MS`) | fault/test hook | — | `test_k33_payload.py`, `test_b6_unavailable.py` +15 | Keep in `EFS_FAULTS` builds (A8) |
+| `EFS_FAULT_PACK_INTERVAL_MS` | `server/packer.c` (server_packer_start) via `env_u64` | off: 1000 ms between packer passes; tests use 200 (A8, was `EFS_PACK_INTERVAL_MS`) | fault/test hook | — | `test_k33_payload.py`, `test_k37_segment_rebuild.py` +12 | Keep in `EFS_FAULTS` builds (A8) |
+| `EFS_FAULT_PACK_FAIL_BACKOFF_MS` | `server/packer.c` (server_packer_start) via `env_u64` | off: 30000 ms group pause after a failed or degraded segment upload; member-down tests use 2000 (A8, was `EFS_PACK_FAIL_BACKOFF_MS`) | fault/test hook | — | `test_b6_unavailable.py`, `test_k37_segment_rebuild.py`, `test_k38_protection_now.py` | Keep in `EFS_FAULTS` builds (A8) |
+| `EFS_FAULT_PACK_COMPACT_IDLE_S` | `server/packer.c` (server_packer_start) via `env_u64` | off: 60 s idle before a compaction batch; K36/K37/K41 hold compaction off (A8, was `EFS_PACK_COMPACT_IDLE_S`) | fault/test hook | — | `test_k36_recovery.py`, `test_k37_segment_rebuild.py` +2 | Keep in `EFS_FAULTS` builds (A8) |
+| `EFS_FAULT_PACK_COMPACT_DAILY_START_MIN` | `server/packer.c` (server_packer_start) via `env_u64` | off: daily compaction window at 03:00 UTC; K36/K37/K41 move it away from the test (A8, was `EFS_PACK_COMPACT_DAILY_START_MIN`) | fault/test hook | — | `test_k36_recovery.py`, `test_k37_segment_rebuild.py` +2 | Keep in `EFS_FAULTS` builds (A8) |
+| `EFS_FAULT_DIR_SPREAD_MIN` | `meta/dir_layout.c` (efs_dir_spread_min), linked fault-built into `tests/faults/efsd` and `test_sim` | off: a directory spreads above 65536 entries; tests use 3 or 64 (A8, was `EFS_DIR_SPREAD_MIN`) | fault/test hook | — | `test_sim.c`, `test_w130_dir_fault.py`, `test_k48_readdir.py` | Keep in `EFS_FAULTS` builds (A8) |
 
 ### Tools and test library (efs-mgmt, efs-bench, `src/sim`)
 
@@ -311,6 +305,12 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_PACK_SPACE_FULL_PCT` | `server/packer.c`, A8 | built in: 80 % | as above |
 | `EFS_PACK_COMPACT_IDLE_SEGS` | `server/packer.c`, A8 | built in: 256 segments | none; `test_pack_compact_schedule.py` checks the constant |
 | `EFS_PACK_BACKFILL_SHARDS` | `server/packer.c`, A8 | built in: 64 inode shards | `w125_p6_landing.sh` only (cannot run at HEAD) |
+| `EFS_PACK_MIN_AGE_MS` | `server/packer.c` (server_packer_start), A8 | `EFS_FAULT_PACK_MIN_AGE_MS`, `EFS_FAULTS` builds; product: 60000 ms | 17 daemon tests and the fault-build evidence scripts (renamed); `ak_measure.py` (product build) and stale live scripts left on the old name |
+| `EFS_PACK_INTERVAL_MS` | `server/packer.c`, A8 | `EFS_FAULT_PACK_INTERVAL_MS`; product: 1000 ms | daemon tests and fault-build evidence scripts (renamed) |
+| `EFS_PACK_FAIL_BACKOFF_MS` | `server/packer.c`, A8 | `EFS_FAULT_PACK_FAIL_BACKOFF_MS`; product: 30000 ms | the B6, K37 and K38 member-down tests (renamed) |
+| `EFS_PACK_COMPACT_IDLE_S` | `server/packer.c`, A8 | `EFS_FAULT_PACK_COMPACT_IDLE_S`; product: 60 s | K36, K37, K41 tests (renamed) |
+| `EFS_PACK_COMPACT_DAILY_START_MIN` | `server/packer.c`, A8 | `EFS_FAULT_PACK_COMPACT_DAILY_START_MIN`; product: 03:00 UTC | K36, K37, K41 tests (renamed) |
+| `EFS_DIR_SPREAD_MIN` | `meta/dir_layout.c` (efs_dir_spread_min), A8 | `EFS_FAULT_DIR_SPREAD_MIN`; product: 65536 entries | `test_sim.c`, W130 and K48 tests, `qualify_ao_readdir.py` (renamed); portal observes |
 
 ## Compile-time modes
 

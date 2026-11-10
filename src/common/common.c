@@ -168,6 +168,14 @@ static const struct { const char *name, *why; } removed_env[] = {
     { "EFS_PACK_SPACE_FULL_PCT", "A8): space pressure is full at 80 % quota use" },
     { "EFS_PACK_COMPACT_IDLE_SEGS", "A8): an idle compaction batch takes 256 segments" },
     { "EFS_PACK_BACKFILL_SHARDS", "A8): a backfill pass scans 64 inode shards" },
+    /* A8: test-only waits, EFS_FAULT_* in EFS_FAULTS builds. */
+    { "EFS_PACK_MIN_AGE_MS", "A8): test hook; EFS_FAULT_PACK_MIN_AGE_MS in EFS_FAULTS builds" },
+    { "EFS_PACK_INTERVAL_MS", "A8): test hook; EFS_FAULT_PACK_INTERVAL_MS in EFS_FAULTS builds" },
+    { "EFS_PACK_FAIL_BACKOFF_MS", "A8): test hook; EFS_FAULT_PACK_FAIL_BACKOFF_MS in EFS_FAULTS builds" },
+    { "EFS_PACK_COMPACT_IDLE_S", "A8): test hook; EFS_FAULT_PACK_COMPACT_IDLE_S in EFS_FAULTS builds" },
+    { "EFS_PACK_COMPACT_DAILY_START_MIN", "A8): test hook; EFS_FAULT_PACK_COMPACT_DAILY_START_MIN "
+      "in EFS_FAULTS builds" },
+    { "EFS_DIR_SPREAD_MIN", "A8): test hook; EFS_FAULT_DIR_SPREAD_MIN in EFS_FAULTS builds" },
 };
 
 /* D42: EFS_RDMA_TRACE=1 prints RDMA and connection diagnostics on stderr.

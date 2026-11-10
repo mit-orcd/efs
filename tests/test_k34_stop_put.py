@@ -45,7 +45,7 @@ if not fuse_ok():
     sys.exit(0)
 work = Path(tempfile.mkdtemp(prefix='efs-k34-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_TEST_')}
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200')
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='500', EFS_FAULT_PACK_INTERVAL_MS='200')
 env.pop('EFS_GC_DISABLE', None)
 busy = work / 'node3-busy'
 SIZE = 8 * 1024 * 1024 + 5

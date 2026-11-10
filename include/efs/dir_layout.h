@@ -7,7 +7,7 @@
 
 /* Directory layout-epoch SM (architecture.md §7.4 / §10 step 10).
  * LOCAL → SPLITTING(e) → HASHED(e). Size trigger: a LOCAL dir's nents
- * crossing EFS_DIR_SPREAD_MIN (overridable via the env of the same name)
+ * crossing EFS_DIR_SPREAD_MIN (EFS_FAULT_DIR_SPREAD_MIN in EFS_FAULTS builds)
  * commits SPLITTING on that parent-row PUT. Pressure-triggered spread
  * has no numeric bound in the spec and is not invented here. */
 

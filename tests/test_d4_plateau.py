@@ -78,7 +78,7 @@ out = Path(os.environ['EFS_D4_ARTIFACTS']) if os.environ.get('EFS_D4_ARTIFACTS')
 env = {k: v for k, v in os.environ.items()
        if not k.startswith('EFS_FAULT_') and not k.startswith('EFS_TEST_')}
 REFRESH_MS = os.environ.get('EFS_D4_REFRESH_MS', '2000')
-env.update(EFS_PACK_MIN_AGE_MS='1000', EFS_PACK_INTERVAL_MS='200', EFS_QUERY_REFRESH_MS=REFRESH_MS,
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='1000', EFS_FAULT_PACK_INTERVAL_MS='200', EFS_QUERY_REFRESH_MS=REFRESH_MS,
            EFS_FAULT_MEMTABLE_BYTES=str(256 * 1024))
 env.pop('EFS_GC_DISABLE', None)
 t0 = time.time()

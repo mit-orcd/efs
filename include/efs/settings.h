@@ -9,7 +9,7 @@
 /* Counts of the kinds the listing does not carry (settings inventory;
  * scripts/gen_settings.py keeps them equal to it). */
 #define EFS_SETTINGS_OBSERVABILITY 35
-#define EFS_SETTINGS_FAULT_HOOKS 61
+#define EFS_SETTINGS_FAULT_HOOKS 67
 
 /* Start the table for this process: rows for `role` take the environment
  * text (or the default) until their reader notes the effective value. */

@@ -46,7 +46,7 @@ def run(a):
     k.EFSD = ROOT / 'tests/faults/efsd'
     env = {key: value for key, value in os.environ.items() if not key.startswith('EFS_')}
     env.update(EFS_TRANSPORT='tcp', EFS_RAFT_OBS=str(a.obs), EFS_BATCH_OBS='1',
-               EFS_PACK_MIN_AGE_MS='1000', EFS_PACK_INTERVAL_MS='200',
+               EFS_FAULT_PACK_MIN_AGE_MS='1000', EFS_FAULT_PACK_INTERVAL_MS='200',
                EFS_QUERY_REFRESH_MS='2000', EFS_FAULT_MEMTABLE_BYTES='65536')
     c = SinkCluster(a.work, 'cluster', (1, 2, 3), env)
     mount = None
