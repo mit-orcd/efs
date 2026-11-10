@@ -1,4 +1,4 @@
-# Decisions — taken and pending (register D1–D46)
+# Decisions — taken and pending (register D1–D47)
 
 **October 15 reconciliation:** [Review of stale claims and remaining gates](2026-10/open-item-reconciliation-20261015.md). Read these annotations before treating dated implementation descriptions as current tasks. No new global acceptance or deployment is implied.
 
@@ -11,7 +11,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-#### Decisions — taken and pending (register D1–D46)
+#### Decisions — taken and pending (register D1–D47)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -28,6 +28,10 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](2026-10/v030-release-scope-20261012.md). Execution stays stopped.
+
+## D47 — test storage on the fcstor hosts: any `/data1/NN`, cleaned up (user, Nov 10)
+
+The user's words: "instead of /data1/01 other /data1/NN directories can be used, as long as you clean up". This widens D46 item 1's "test storage under `/data1/01`": a qualification run may put its test stores under any `/data1/NN` directory of a participating fcstor host, in an owned run directory, and removes everything it created there when it ends. The rest of D46 item 1 stands (verify ownership, leave other agents' clusters and stores alone, co-located daemons never stand in for failure domains). It removes the storage-directory question from D46 item 2 (all 13 fcstor nodes); that run's storage/client split and transports are still not set.
 
 ## D46 — Task Z decisions, item by item (user, Oct 28)
 
