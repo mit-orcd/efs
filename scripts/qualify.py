@@ -2823,8 +2823,13 @@ def write_summary(q, run, results, sums):
 # --------------------------------------------------------------------------
 # Helpers run on mount hosts (python3 SRC/scripts/qualify.py _NAME ...).
 
+PAYLOAD_PIECE = 32 << 20
+
+
 def payload(seed, name, size):
-    return random.Random(f'{seed}/{name}').randbytes(size)
+    # 32 MiB pieces: Python 3.9 randbytes(n) is getrandbits(8n), which overflows at 256 MiB.
+    r = random.Random(f'{seed}/{name}')
+    return b''.join(r.randbytes(min(PAYLOAD_PIECE, size - off)) for off in range(0, size, PAYLOAD_PIECE))
 
 
 def h_manifest_write(args):

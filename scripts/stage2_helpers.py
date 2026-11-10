@@ -46,9 +46,14 @@ def now():
     return time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()) + f'.{int(time.time() * 1000) % 1000:03d}Z'
 
 
+PAYLOAD_PIECE = 32 << 20
+
+
 def payload(seed, name, size):
     """Same bytes as qualify.py payload()."""
-    return random.Random(f'{seed}/{name}').randbytes(size)
+    # 32 MiB pieces: Python 3.9 randbytes(n) is getrandbits(8n), which overflows at 256 MiB.
+    r = random.Random(f'{seed}/{name}')
+    return b''.join(r.randbytes(min(PAYLOAD_PIECE, size - off)) for off in range(0, size, PAYLOAD_PIECE))
 
 
 def emit(doc, ok):
