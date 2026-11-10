@@ -146,6 +146,7 @@
     "scripts/evidence/fb/gc_files_race.py": 2,
     "scripts/evidence/fb/io_start_compare.sh": 1,
     "scripts/evidence/fb/io_start_diag.py": 2,
+    "scripts/evidence/fb/k41_forced_miss.py": 2,
     "scripts/evidence/fin/fin_accounting_audit.py": 1,
     "scripts/evidence/fin/fin_accounting_controls.py": 2,
     "scripts/evidence/fin/fin_accounting_gate.sh": 11,
@@ -1661,6 +1662,7 @@
     "scripts/evidence/fb/gc_files_race.py": "199c0d770109b53e86f122e992fc323813994ba41e95ca88034c2ed0fd2457f8",
     "scripts/evidence/fb/io_start_compare.sh": "cdef5b94f0d23bb3c124a716c38ce9fefb3141c6d7e8b43426d89fa8a6629238",
     "scripts/evidence/fb/io_start_diag.py": "75b454e190482fe22ee974a3217646112c7ab580b0676c4aa4e6779cd7ba04e5",
+    "scripts/evidence/fb/k41_forced_miss.py": "3e014540e5ca0fff4c4755031d3f3477d0561b4bb957ffc183c3910b27e23313",
     "scripts/evidence/fin/fin_accounting_audit.py": "221499c149c00c7301fbc221d54b12a8e4daae5d30b34a1bbb175c9d85d86cf4",
     "scripts/evidence/fin/fin_accounting_controls.py": "266e49372c6cc9ad580915fbbf53c4462b33de06930fb85982e69f495f016706",
     "scripts/evidence/fin/fin_accounting_gate.sh": "f77641c01d76742a2e70a543fd6a80ad1d6922f73bd167309892ddb6e9f139d3",
@@ -2607,7 +2609,7 @@
     "tests/test_k38_shared_chunk_pressure.py": "707d17c16e9b978aa551774e7b7a5e57e32052aba7df797bfd8acae74f19e621",
     "tests/test_k38_stale_span_replay.py": "e48aa5fa0663f722722db20fbed1f8a526b5d9afd6ee1676103de3bb844abae3",
     "tests/test_k38_swept_hint_live.py": "0df9ec35f5c7fb662ca988c7d464cbafa4b02aeb2d34e9d28c1864414ac4965f",
-    "tests/test_k41_packer_placement.py": "99ca2253f0ffa0f15cfafa60769a87bb21ed1db05bc45edc3f4a5f63b0b3ab36",
+    "tests/test_k41_packer_placement.py": "f9b7016e18056d70237bbafb09f1c9ef102837743fa1e16f452c579dc099ad71",
     "tests/test_k42_fixture_cleanup.py": "710aadc5b4a62912b87eec77c37f250cdf34c9615d35831a7b52011482b3a682",
     "tests/test_k42_peer_stop_open.py": "f99b2d0da096ee45225870715c72b89ff023433b21970bebeb9fb70d9f3ad73c",
     "tests/test_k43_coordinator_kill.py": "8dbe8c8edee723c27cc2b2d1e6543a72efc6d2be5643fd4f71e6816b75005ba9",
@@ -3012,5 +3014,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "e304f0c9ef98b0b24272c2add6efdd132b9a260f"
+  "source_commit": "ccbf0cd94180d23a593dd1e564931a8b2bd8a3e8"
 }
