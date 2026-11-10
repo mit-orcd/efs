@@ -221,6 +221,15 @@ a clock, and the cap already bounds the cost): a member that refuses connections
 connect per round (a TCP refusal is immediate; a black-holed address is bounded at 2 s by
 `EFS_CONNECT_TIMEOUT_SEC`, inside a worker, never inside the caller once a majority sealed).
 
+**Past the cap on a healthy cluster.** When more than 32 rounds are waiting on the same healthy member at once, a
+round that finds both remote members at the cap returns BUSY (only this node sealed); one at the cap is
+covered by the other remote member. `efs_session_storage_barrier` (`session_revoke.c:29`) repeats the exact
+request on BUSY and NOT_PRIMARY every 100 ms for up to 15 s, and both client calls that make the server run the fence use it:
+STORAGE_FENCE (`session_revoke.c:346`) and FINISH (`:388`, the `check_only=1` round; the server runs the fence only for these two,
+`raft_host.c:15884`). A burst
+therefore waits for slots, bounded by the 15 s, rather than failing at once. A round that finds one member at the cap still
+succeeds through the other. The burst case itself (more than 32 concurrent unmounts on one node) was not run.
+
 **Unit tests** (`tests/test_storage_fence_members.py`, both programs run in `make test`):
 
 * 100 rounds against a member that never answers: every round returns OK (this node and member 2),
@@ -278,12 +287,14 @@ is now refused too (the node is stopping); the client retries it against the new
 Limits, stated plainly: (a) the socket is not listed during `connect()` itself, so a member
 that does not answer SYN holds the drain for the connect's own bound (`EFS_CONNECT_TIMEOUT_SEC`, 2 s);
 (b) RDMA: round 2 said an RDMA exchange waits on the completion queue and `shutdown(fd)`
-does not wake it. That was wrong. Every wait of an RDMA exchange (the send's completion and credit
-waits, `send_credit` at `rdma.c:1594` and `1618`, and the receive at `1748`) goes through
-`message_pause` (`rdma.c:1717`), which polls the control socket (`rc->tcp_fd`, the same fd the
-registry lists) every millisecond, and `tcp_retired` (`rdma.c:1708`) marks the connection broken on a zero
-peek, which is what a shut-down socket returns. So the stop wakes an RDMA exchange the same way; read
-from the code, **not run** (every run here uses TCP); (c) a fence the stopping node itself issues during the drain is refused
+does not wake it. That was wrong for the exchange. Its three waits are `efs_rdma_send_quiesce` (`rdma.c:1594`), the credit
+stall in `efs_rdma_send_frame` (`rdma.c:1618`) and the receive wait `efs_rdma_message_wait` (`rdma.c:1748`, called by
+`efs_conn_recv_msg`, `protocol.c:461`); each pauses in `message_pause` (`rdma.c:1717`), which polls the control socket
+(`rc->tcp_fd`, the same fd the registry lists) every millisecond, and `tcp_retired` (`rdma.c:1709`) marks the connection
+broken on a zero peek, which is what a shut-down socket returns. `send_credit` (`rdma.c:1564`) only spins for
+`EFS_RDMA_CREDIT_SPIN_US`. So the stop wakes an RDMA exchange the way it wakes a TCP one. This is read from the code and
+**not run** (every run here uses TCP); the RDMA upgrade's own waits (`efs_rdma_client_upgrade`, `rdma.c:1222`, inside
+the armed window) were not read; (c) a fence the stopping node itself issues during the drain is refused
 (`transport unavailable`, counted as unreached), which is what a stopping node should do.
 The first design (list only the established connection) was tried on xorinox and was
 wrong: with the member frozen the worker waits in the declare handshake, the drain waited
@@ -303,8 +314,9 @@ kill). It is listed under "Not verified".
 
 Round 2's worker connects, declares (and on RDMA upgrades) per remote member per round, inside the
 majority wait; the pooled path had these done. Measured with `--healthy --runs 20` (three private
-members, no stall, TCP over loopback on xorinox, four alternating batches of 20 clean
-unmounts, both trees built the same way): the client has no separate timer for the storage-fence
+members, no stall, TCP over loopback on xorinox, batches of 20 clean unmounts alternated between the
+trees, all built the same way; devel is measured at its branch point `cff8eb424` and again at its tip `bbe93d148`, which
+differs from this branch only by this task's change): the client has no separate timer for the storage-fence
 barrier, so the table gives the whole revoke (`ms=`: BEGIN, the barrier, the bitmap reads, the shard
 fence, cleanup and FINISH with its second barrier) and `fence_ms=` (the shard-fence stage only; it does not
 contain the barrier).
@@ -313,13 +325,18 @@ contain the barrier).
 | --- | --- | ---: | ---: | ---: | ---: |
 | devel `cff8eb424` | 1 | 62 | 80 | 4.5 | 9 |
 | devel `cff8eb424` | 2 | 61 | 99 | 4.5 | 7 |
+| devel tip `bbe93d148` | 1 | 63 | 72 | 5.0 | 12 |
+| devel tip `bbe93d148` | 2 | 60 | 78 | 5.0 | 8 |
 | this branch | 1 | **44** | 53 | 5.0 | 8 |
 | this branch | 2 | **44** | 55 | 5.0 | 7 |
+| this branch (rerun with the devel-tip batches) | 3 | **43** | 57 | 4.0 | 14 |
+| this branch (rerun with the devel-tip batches) | 4 | **42.5** | 48 | 5.0 | 10 |
 
-The whole revoke is 17 to 18 ms faster at the median: devel walks the members one after another in
-both barriers, this branch asks them at once, and the private handshake (loopback: connect and declare
-in well under a millisecond) is far smaller than what the concurrent ask saves. The shard-fence stage is unchanged,
-as it should be. **Limits:** loopback has no network round trip; on a real network the connect and declare
+The whole revoke is 17 to 20 ms faster at the median, against the branch point and against the devel tip alike, and the
+shard-fence stage is unchanged. The difference between the two trees is this task's change, so the gain is the change's; the
+mechanism was not isolated here (the likely cause is that devel asks the members one after another in both barriers
+and this branch asks them at once, which more than pays for the private handshake on loopback). **Limits:** loopback
+cannot show the handshake cost the review asked about, because it has no network round trip; on a real network the connect and declare
 add about two round trips per remote member per round, inside the majority wait (the first remote answer
 decides, so the slower of the two members does not add), and on RDMA the upgrade adds more. That was
 not measured here. **Choice:** each exchange opens its own connection and no persistent fence connection is kept. A
@@ -552,7 +569,7 @@ and the live test ran on the final build of round 1.
 * The stop drain is checked for TCP with a member that never answers a fence (`--park`), with
   one frozen by `SIGSTOP` (a worker waiting in the declare handshake) and with two silent members
   and an unmount handler waiting (`--silent2`). Not run: the RDMA stop (by reading of
-  `message_pause`, the exchange is woken like a TCP one; see above), and a stop
+  `message_pause`, the exchange is woken like a TCP one; the upgrade's own waits were not read; see above), and a stop
   while a worker is in `connect()` to an address that does not answer SYN (the connect's own
   2 s bound). The `--sigstop` stop takes 35 s in total, of which 5 s is the parked exit record: about 30 s are
   spent in the raft-host phase on the frozen member elsewhere than the fence workers (45.5 s on devel);
