@@ -1,6 +1,6 @@
 # Stage 1 batch D on fcstor010-014 (Task EY)
 
-**Verdict: IN PROGRESS (Nov 9-10).** This page is filled in as the campaign runs; the verdict, the per-run tables and the K-row consequences are final only when this line says so.
+**Verdict: FAIL (Nov 9-10, final).** Two product failures, both owned by the coordinator: K42 recurred on RDMA (clean stops refused in `rdma-4x1` and in one of three peer-stop loops, 20 of 20 stops), and the H1 kill modes end in a final-fsync `EIO` on both transports (K110, number assigned at merge). H15 failed on its fixture and is owed. Every other cell gate and own run that ran passed, apart from harness NOTRUNs. Per-row consequences are in the dated batch D clauses in the [checklist](../alpha-1.0-2plus1-checklist.md).
 
 - Purpose: [Stage 1 acceptance matrix](../stage1-acceptance-matrix-20261030.md) batch D (D-TCP then D-RDMA): the D46 cell gates on distinct hosts and the own runs H1-H10, H12-H15, for the K rows the matrix lists against batch D in the [checklist](../alpha-1.0-2plus1-checklist.md).
 - Candidate: devel `9bb50fe79` (wave 67), built from `git archive 9bb50fe79`.
@@ -37,8 +37,10 @@ Hosts: fcstor010-014, AMD EPYC 7402P (24 CPUs), 250 GB, RHEL 9 (5.14.0-687.39.1.
 - **`rdma_dev` is `mlx5_2`, not `mlx5_0`:** on fcstor010-014 `mlx5_0` is an Ethernet port (10.1.223.x); `mlx5_2` is the InfiniBand HCA under the IPoIB endpoints 172.16.223.64-68 (as Task DW found).
 - **libfuse is a binary-patched copy, not Task DW's:** Task DW used `~/orcd/scratch/efs/orcd-test/deps/libfuse`, which no longer exists (the scratch automount holds no `efs` tree on these hosts). The only libfuse 3.16.2 on the shared home is another session's `~/w123-deps-20261108-v2/libfuse`. It was copied, and the copy is used unmodified apart from two edits: the `fuse3.pc` prefix, and the compiled-in `FUSERMOUNT_DIR` path in `libfuse3.so.3.16.2`. That path points at the original tree's own `fusermount3`, which is not setuid; libfuse executes it first, so every mount failed with `Operation not permitted` (shakedown run, kept as `shakedown-tcp-3x1-fusermount`). The string was overwritten with a same-length non-existent path, so libfuse falls back to the system's setuid `/usr/bin/fusermount3` (3.10.2; the mount protocol is the same). Patched library sha256 `0c75ffe4265ff3edbe6bc0704897d97d3b30016b1d1cd8f1fb56977dc8c2ed03`. Every mount in this campaign runs on this patched library.
 - **Controller on the ORCD login node, using the Mac's forwarded ssh agent:** the fcstor hosts cannot ssh to each other and the login node holds no usable key for them, so the driver and the run queue sit in `screen` sessions on the login node (login007). Their ssh to fcstor010-014 authenticates through the agent that the Mac forwards over its one multiplexed ssh connection to orcd-login. The agent socket exists only on the login node, under the per-connection `/tmp/ssh-*` directory sshd creates, for as long as that Mac connection lives; it disappears when the connection closes. No key was created or copied. No key material and no agent socket path is written into any artifact or log (checked with `grep -rlE` over `~/efs-artifacts/taskEY-20261109` and the controller directory). The controller directory `~/work/efs-taskEY-login` is removed at the end. If the Mac's connection is replaced (other sessions share the same multiplexed connection), it can land on another login node and the old node's agent socket disappears. That happened twice: at 23:08 (3-member TCP follow-up run) and 01:46 UTC (4-member TCP cell, e4-scale), the screens on login007 lost the agent. Their ssh failed on every host at once (`kex_exchange_identification: Connection closed by remote host` or `Permission denied (publickey)`), and the driver's own teardown could not run; both clusters were torn down by hand (`manual-teardown/` in each run directory). From 01:50 UTC the wrapper keeps one persistent master connection per host (ControlPersist 12 h, sockets in a mode-700 directory in the controller's local `/tmp`), so an authenticated master outlives the agent. The queue ran on login006 from then on. At 01:56 UTC the connection moved again (to login010) and the fcstor010 master on login006 was gone (cause not found; the other four masters were alive). login006 could no longer open a connection without the agent, so the 5-member TCP cell's d4-progress ended with ssh's exit 255 while `d4_progress.py` kept running on fcstor010. The cell was stopped by pid (driver tree on login006, the orphaned d4 process on fcstor010), torn down from login010 and rerun in full as `tcp-5x1b`. The login006 masters were closed (`ssh -O exit`) and its socket directory removed. From 02:06 UTC the queue checks before every run that a live master exists for each of the five hosts, opening a missing one. If that fails it stops with a `NO-MASTER` line instead of starting a run, and the queue is restarted on the login node the Mac's connection then reaches. By 12:26 UTC on Nov 10 the Mac's connection reached login007 again; the queue kept running on login010 on its existing masters, and it was followed through its files in the shared home directory, with no new connection to the fcstor hosts from login007.
-- **Persistent per-host ssh connections from the login node (from 01:50 UTC, Nov 10):** one master connection per fcstor host, opened by the wrapper on login006, with its control socket in `/tmp/efs-taskEY-mux-erbmi1/<host>` on login006 (mode 700). They are kept open for up to 12 h idle and by design outlive the forwarded agent that authenticated them. At the end of the campaign each one is closed with `ssh -O exit` per host, and the end of this page records that no control socket and no ssh process of `erbmi1` from this campaign remains on the login node. They are closed at once if the user asks. The Mac's own shared connection to the login node is never created or re-created by this task; if it is gone, the campaign stops and reports.
-- **Harness fixes made during the run** (scripts only; product binaries unchanged): the ssh wrapper drops the two `cargo/env: No such file or directory` lines the account's `~/.bashrc` prints on every ssh; d4-progress runs on fcstor010 (the driver host has no mount); 16G member quota so the E4 fixture fits; `payload()` in `scripts/qualify.py` and `scripts/stage2_helpers.py` generates in 32 MiB pieces (`6ed972e3a`; Python 3.9 `randbytes` overflows at 256 MiB). A failed teardown's record carries `destructive_steps`, so the run summary no longer stops with a KeyError (`ec0f87b13`). The C5 wire probe follows a `NOT_PRIMARY` leader hint by member rather than by list position (`6de76273c`, from the 5-member rerun on): the hint is a raft id, which follows join order, and the 5-member cell's members joined out of description order. The tree's patched scripts: `qualify.py` sha256 `8fa89e5b9af29e6d7a0f071dd7c6a4e55ef8d7e58c9521e761e57b4deb9479ea`, `stage2_helpers.py` `743dc61d1ca457d2948bcfd8652ae8756572a1d505f3c5b97bbd6e8211ff9ae1` (before `6de76273c`: `58f335dbc8ad95e7bf1860cebeeb4736c6fa94c20625327d1a24bd6c47237e52`).
+- **Persistent per-host ssh connections from the login node (from 01:50 UTC, Nov 10):** one master connection per fcstor host, opened by the wrapper on login006, with its control socket in `/tmp/efs-taskEY-mux-erbmi1/<host>` on login006 (mode 700). They are kept open for up to 12 h idle and by design outlive the forwarded agent that authenticated them. At the end (17:32 UTC, Nov 10) the queue's last line, `final_cleanup.sh`, removed `/tmp/efs-taskEY` on all five hosts and the candidate tree, then closed each master with `ssh -O exit` ("Exit request sent" for all five). The socket directory is gone: 0 control sockets. The same script, right after the exits, still listed four `ssh` processes of `erbmi1` on login010 (pids 2306498, 2309118, 2312785, 2311522; bare `ssh`, no arguments shown). The masters may still have been exiting, or these may be other ssh clients of the account; this was not checked afterwards, because login010 was reachable only through those masters. The controller directory was then removed through the shared home. They are closed at once if the user asks. The Mac's own shared connection to the login node is never created or re-created by this task; if it is gone, the campaign stops and reports.
+- **A `pkill -f` on the Mac (Nov 10):** to stop a broken background watcher of this session (a local polling loop, whose zsh word splitting never matched), `pkill -f "end rdma-h14"` was run on the Mac, against the campaign's "never `pkill -f`" rule. It touched no host and no cluster process; the watcher was this session's own background shell.
+- **Branch rebased onto devel (Nov 10):** to write the checklist clauses against the current register, this branch was rebased onto devel, local only. Commit hashes on this page are the rebased ones. The pre-rebase branch is kept as `backup/kind-darwin-pre-rebase`; devel's K42 row cites its `239b201b1` and `dda2ca748` (now `49a54fbb7` and `75f21fe10`).
+- **Harness fixes made during the run** (scripts only; product binaries unchanged): the ssh wrapper drops the two `cargo/env: No such file or directory` lines the account's `~/.bashrc` prints on every ssh; d4-progress runs on fcstor010 (the driver host has no mount); 16G member quota so the E4 fixture fits; `payload()` in `scripts/qualify.py` and `scripts/stage2_helpers.py` generates in 32 MiB pieces (`30d322189`; Python 3.9 `randbytes` overflows at 256 MiB). A failed teardown's record carries `destructive_steps`, so the run summary no longer stops with a KeyError (`cdfc7963c`). The C5 wire probe follows a `NOT_PRIMARY` leader hint by member rather than by list position (`02741aec6`, from the 5-member rerun on): the hint is a raft id, which follows join order, and the 5-member cell's members joined out of description order. The tree's patched scripts: `qualify.py` sha256 `8fa89e5b9af29e6d7a0f071dd7c6a4e55ef8d7e58c9521e761e57b4deb9479ea`, `stage2_helpers.py` `743dc61d1ca457d2948bcfd8652ae8756572a1d505f3c5b97bbd6e8211ff9ae1` (before `02741aec6`: `58f335dbc8ad95e7bf1860cebeeb4736c6fa94c20625327d1a24bd6c47237e52`).
 
 ## Candidate status
 
@@ -54,13 +56,13 @@ Every run below is on candidate `9bb50fe79`. Times are UTC, Nov 9-10. Raw output
 | --- | --- | --- | --- |
 | `tcp-3x1` | 22:24-22:47 | full list | 15 PASS (topology, b-checks, posix-core/extras/2client/durability, d5, e1, e2, b6, e3, a13, c5 33/33, d1, d3). identity FAIL on the account's `.bashrc` noise (fixed in the wrapper, PASS on every later run). d4 NOTRUN (no mount on the driver host, fixed with the plugin host). e4 NOTRUN (4G quota too small, fixed with 16G) |
 | `tcp-3x1-id-d4` | 22:48-23:08 | identity, topology, d4 | identity, topology PASS. d4 FAIL at the 4G quota (ENOSPC, foreground ops over 10 s); superseded by the next run. The controller lost its agent at 23:08 and the cluster was torn down by hand |
-| `tcp-3x1-d4e4` | 00:30-00:57 | identity, topology, d4, e4 | d4 FAIL on server RSS only: **NOTRUN (harness, server memory)**; backlog peak 151,868, within the bound. e4 FAIL on the harness (`randbytes` overflow, fixed in `6ed972e3a`); rerun `tcp-3x1-e4b` PASS |
+| `tcp-3x1-d4e4` | 00:30-00:57 | identity, topology, d4, e4 | d4 FAIL on server RSS only: **NOTRUN (harness, server memory)**; backlog peak 151,868, within the bound. e4 FAIL on the harness (`randbytes` overflow, fixed in `30d322189`); rerun `tcp-3x1-e4b` PASS |
 | `tcp-4x1` | 00:57-01:46 | full list | 16 PASS (as `tcp-3x1` plus identity; c5 44/44). d4 **FAIL (peak 203,822 against the 200,000 bound, then declining) plus NOTRUN (harness, server memory)**. e4 FAIL when the controller lost its agent at 01:46 (ssh `kex_exchange_identification`); torn down by hand |
 | `tcp-4x1-e4` | 01:50-01:53 | identity, topology, e4 | PASS (20,000/20,000 small + 8/8 × 256 MiB exact on a cold reader, p99 0.061 s) |
 | `tcp-5x1` | 01:53-01:59 | full list | interrupted: d4 ended with ssh exit 255 when the fcstor010 master on login006 died; stopped by pid, torn down, rerun in full |
-| `tcp-5x1b` | 02:06-02:58 | full list | 15 PASS (identity, topology, b-checks, posix ×4, d5, e1, e2, b6, e3, a13, d1, d3, e4 25,000 + 10 × 256 MiB). d4 **FAIL (peak 256,641 against the 200,000 bound, then declining) plus NOTRUN (harness, server memory)**. c5 **FAIL (harness)**: 53/55. On `.67` and `.65`, `unknown-tag-254` on group 2 got `NOT_PRIMARY` with hint 1, and the probe read the hint as a position in the description, so it asked `.67` again six times. The members joined out of description order (`efs-mgmt status`: node 2 is `.64`, the group-2 leader; `.67` is node 4), so hint 1 named `.64`. Asked directly, `.64` refused the tag with `-7`, as the gate wants. Fixed in `6de76273c`; C5-only rerun `tcp-5x1-c5` queued |
+| `tcp-5x1b` | 02:06-02:58 | full list | 15 PASS (identity, topology, b-checks, posix ×4, d5, e1, e2, b6, e3, a13, d1, d3, e4 25,000 + 10 × 256 MiB). d4 **FAIL (peak 256,641 against the 200,000 bound, then declining) plus NOTRUN (harness, server memory)**. c5 **FAIL (harness)**: 53/55. On `.67` and `.65`, `unknown-tag-254` on group 2 got `NOT_PRIMARY` with hint 1, and the probe read the hint as a position in the description, so it asked `.67` again six times. The members joined out of description order (`efs-mgmt status`: node 2 is `.64`, the group-2 leader; `.67` is node 4), so hint 1 named `.64`. Asked directly, `.64` refused the tag with `-7`, as the gate wants. Fixed in `02741aec6`; C5-only rerun `tcp-5x1-c5` queued |
 | `tcp-3x1-e4b` | 12:25-12:27 | identity, topology, e4 | PASS (15,000/15,000 small + 6/6 × 256 MiB exact on a cold reader under 281 queries, p99 0.061 s; catalog exact; 7,506 deleted and reclaimed, the rest exact) |
-| `tcp-5x1-c5` | 12:27-12:28 | identity, topology, c5 | PASS (wire 55/55 on 5 members with the `wire_node()` hint fix `6de76273c`; removed settings refused on 5 hosts; fence in 1 attempt, mutations `EIO`, peer unaffected; clean unmount revoked its session in 0.567 s) |
+| `tcp-5x1-c5` | 12:27-12:28 | identity, topology, c5 | PASS (wire 55/55 on 5 members with the `wire_node()` hint fix `02741aec6`; removed settings refused on 5 hosts; fence in 1 attempt, mutations `EIO`, peer unaffected; clean unmount revoked its session in 0.567 s) |
 
 ### Pack backlog (D4) and the create rate
 
@@ -113,8 +115,8 @@ The busiest single efsd thread used 35% of one CPU (fcstor010), and no other use
 | H8 `tcp-h08` (AO, dir ops) | 03:58-04:00 | ao readdir `--posix`, dir-ops busy (3), dir-ops core, ao readdir live | 6/6 PASS |
 | H9 `tcp-h09` | 04:00 | h09 extend-EOF, h09 exclusive create on the 3-member cluster mount | PASS |
 | H13 `tcp-h13` (pump, D4 kit) | 04:00-04:10 | pump file (3), pump blocked (3), pump test, d4 kit obs0 (3), obs1 (3) | 13/13 PASS |
-| H14 `tcp-h14` (K5) | 04:10-04:20 | k05 session fence gate (2) | **NOTRUN (harness)**. `scripts/evidence/k05/k05_session_fence_gate.sh` starts efsd with `--node-id`, `--addr`, `--port` and `--storage`, which K33 removed, so no daemon started. Every later CHECK line ran against an unmounted directory: posix-core "216/218" there is the local `/tmp` file system. **Every H14 result this script produced after K33 is noise.** It was ported in `a22d93ccd`, on the coordinator's ruling: the seed starts on its endpoint, members `--join` it, the script waits for `formed: 3 members` instead of running `raft-mkfs`, and it drops the removed `--no-direct-io`. `EFS_TRANSPORT` and `K05_ADDR` select an RDMA run. There is no path back to the removed flags. The rerun is `tcp-h14b`, then `rdma-h14` |
-| H14b `tcp-h14b` (K5) | 12:30-12:33 | k05 session fence gate (2), ported script `a22d93ccd` | **2/2 PASS**, 25/25 checks each: the cluster formed (`formed: 3 members`); POSIX core 218/218 on the mounted cluster; every fenced mutation (chmod, utime, truncate, setxattr, flock, write+fsync, open with a new lease) `EIO`; metadata reads and the open fd's read still served; fence latched in the client log; peer B mutates normally; session A at epoch 2 |
+| H14 `tcp-h14` (K5) | 04:10-04:20 | k05 session fence gate (2) | **NOTRUN (harness)**. `scripts/evidence/k05/k05_session_fence_gate.sh` starts efsd with `--node-id`, `--addr`, `--port` and `--storage`, which K33 removed, so no daemon started. Every later CHECK line ran against an unmounted directory: posix-core "216/218" there is the local `/tmp` file system. **Every H14 result this script produced after K33 is noise.** It was ported in `9aaef59f4`, on the coordinator's ruling: the seed starts on its endpoint, members `--join` it, the script waits for `formed: 3 members` instead of running `raft-mkfs`, and it drops the removed `--no-direct-io`. `EFS_TRANSPORT` and `K05_ADDR` select an RDMA run. There is no path back to the removed flags. The rerun is `tcp-h14b`, then `rdma-h14` |
+| H14b `tcp-h14b` (K5) | 12:30-12:33 | k05 session fence gate (2), ported script `9aaef59f4` | **2/2 PASS**, 25/25 checks each: the cluster formed (`formed: 3 members`); POSIX core 218/218 on the mounted cluster; every fenced mutation (chmod, utime, truncate, setxattr, flock, write+fsync, open with a new lease) `EIO`; metadata reads and the open fd's read still served; fence latched in the client log; peer B mutates normally; session A at epoch 2 |
 | H15 `tcp-h15` (K22) | 04:20-12:25 | k22 leader admission (3), k22 snapshot import (1 GiB, `scripts/evidence/k22/k22_snapshot_import.sh`) | leader admission 3/3 PASS. **Snapshot import: H15 FAIL at the 28,800 s deadline (not widened). The fixture's store quota filled at 5,618 s because the two 4 MiB writers never delete their files, so the log stopped growing fast enough for a fourth snapshot and the snapshot import was never reached. This says nothing about K22's import path.** No K row; K22 unchanged. With node 3 SIGSTOPped, each group's leader snapshotted past node 3's frozen match three times (group 0 at about 1,540, 4,560 and 24,290 s; group 2 at 1,560, 4,450 and 22,850 s). The log advanced about 5.5M entries per 3,000 s until about 5,600 s, then about 5M in the next 18,000 s. The writers logged 804 errors: 26 `ENOSPC` on close (from 5,618 s), 745 `EAGAIN` on write (from 6,564 s) and 32 `EIO` on close, plus one entry the log interleaved with the driver's trailer. **Ten of the `EIO`s come before the first `ENOSPC` and are not tied to the quota** (see below). The driver's `== rc=1` trailer was interleaved into the error output (`b== rc=1`), so `results.tsv` says `ssh-fail`; the exit status was 1. fcstor012 was clean in the next preflight. **Owed:** the full H15 rerun waits for the K22 snapshot-import memory fix: Task EZ's S2 soak imported a snapshot after a 4 h stall and found the importer holds the whole key diff in memory (13.4 GiB against 128 MiB; a K row at EZ's merge). The import code changes with that fix, so H15 reruns after it, on the fixed fixture (below) |
 
 ### H15: close `EIO` before the quota filled (open product question)
@@ -213,13 +215,13 @@ Fragment states (`frag_letter()` in `src/client/data_commit.c`):
 - **What refused the fsync:** every refused stripe held exactly one proven fragment. A second one was on the member that was down, and the third was `L` (a restarted member's earlier incarnation) or `M`. The client asked for two (`1 of 3 durable; need 2 (a member of another incarnation lost a fragment)`, `need 2` for the `M` stripes), refused 4-6 stripes by name, and logged "319 more stripes without proof" (run 1). Over the same window, stripes with two fragments proven passed as degraded (`2 of 3 durable; marked degraded for rebuild on return (rc=0)`), with the matching member lines `raft-host: degraded mark ... COMMIT did not prove it durable; rebuild on return`.
 - **The data:** every acknowledged record read back exact in all three views: the warm primary, the warm peer, and a cold mount after every daemon and client restarted. So the bytes of the refused stripes survived; it was their durability proof that was refused.
 - **Re-sending:** after the `EIO` the client logged no further `put_fragments` for a refused chunk. Mount A then unmounted cleanly at 03:10:11 (run 1: `put tickets outstanding at unmount: 0`, session revoked rc 0). The logs do not show whether the client still held the unsynced bodies.
-- **A second fsync:** the logs have none after the member returned. One sigkill-8k rerun with an observation-only `--post-fsync` (`8a34adbe5`: one fsync of the shared file after the last failover and one after the warm reads, recorded in `report.json`, outside the verdict) is queued as `tcp-h01-k110`.
+- **A second fsync:** the logs have none after the member returned. One sigkill-8k rerun with an observation-only `--post-fsync` (`a058b4987`: one fsync of the shared file after the last failover and one after the warm reads, recorded in `report.json`, outside the verdict) is queued as `tcp-h01-k110`.
 
 Raw logs: `~/efs-artifacts/taskEY-20261109/tcp-h01/{sigkill-8k-1,sigkill-8k-2,combined-2k-1}.tmplogs/run/logs/` (`fuse-mnt.log`, `efsd-n{1,2,3}.log`, `report.json`).
 
 ## Results: RDMA
 
-Transport check: in every RDMA run, every daemon and client log has `transport rdma: rdma on mlx5_2 (TCP carries setup)`, and no daemon log has a TCP transport line (`rdma-3x1`: 18 daemon and 10 client lines).
+Transport check: in every RDMA cell, every daemon and client log has `transport rdma: rdma on mlx5_2 (TCP carries setup)`, and no daemon log has a TCP transport line (`rdma-3x1`: 18 daemon and 10 client lines). For the own runs, see the note above their table: some harnesses delete their logs on success, so their transport is set, not shown.
 
 ### Cells
 
@@ -245,12 +247,27 @@ Transport check: in every RDMA run, every daemon and client log has `transport r
 | H9 `rdma-h09` | 16:29 | h09 extend-EOF, h09 exclusive create, 3-member RDMA cluster | **PASS** (5/5 gates) |
 | H12 `rdma-h12` (RDMA only) | 16:29-16:30 | h12 posix-all a and b, 3-member RDMA cluster | **PASS** (5/5 gates) |
 | H13 `rdma-h13` (pump) | 16:30-16:34 | pump file (3), pump blocked (3) | **6/6 PASS** (8 RDMA lines each) |
-| H14 `rdma-h14` (K5) | 16:34-16:37 | k05 session fence gate (2), ported script `a22d93ccd`, `K05_ADDR=172.16.223.66` | **2/2 PASS** (RDMA lines: none kept) |
+| H14 `rdma-h14` (K5) | 16:34-16:37 | k05 session fence gate (2), ported script `9aaef59f4`, `K05_ADDR=172.16.223.66` | **2/2 PASS** (RDMA lines: none kept) |
 | H1 kill modes `rdma-h01-kill` (transport comparison) | 17:11-17:16 | sigkill-8k (2), combined-2k (2) | sigkill-8k **0/2: FAIL on the final fsync only** (`final_fsync_zero` false, integrity PASS, final fsync at most 0.084 s), the same signature as TCP's (K110, number assigned at merge). combined-2k **2/2 PASS**. 6 RDMA lines each |
 
 ## Limitations
 
-(filled in at the end)
+- **Single-host own runs.** `run_h.sh` runs each harness as a loopback private cluster on fcstor012. Only the cells, H7 (members on fcstor012-014), H9 and H12 (3-member cluster descriptions) used distinct member hosts. The other own-run results are single-host evidence on these hosts, not the distinct-host shape the matrix asks for.
+- **RDMA transport not shown for H4, H5 and H14.** `EFS_TRANSPORT=rdma` and `EFS_RDMA_DEV=mlx5_2` are set for every command, and the daemons read them from the environment (`src/common/rdma.c`). These harnesses delete their logs on success, though, so no kept log shows the transport.
+- **Not run on RDMA:** H3 (W130), H15, `k13-tickets`, `fragment-integrity`, `test_k43_coordinator_kill.py`, the dir-ops scripts (busy, core), `test_ao_readdir_live.py`, `test_pump_logging.py` and the D4 kit (obs 0 and 1). They ran on TCP only. They were left out when the RDMA queue was built, and no reason was recorded, so they are NOTRUN and owed on RDMA. The RDMA H1 kill modes ran last, for the transport comparison only.
+- **H10** had no own run. The cells' `a13-node-addition` covers a clean addition (3 to 4 to 5 members with the seed down); no loaded variant exists, and cross-subnet cannot be covered on these hosts (one subnet).
+- **H15 owed:** the snapshot import was never reached (fixture); the rerun waits for the snapshot-import memory fix, on the ring fixture.
+- **d4 RSS** is NOTRUN (harness) in every cell (see Follow-ups). The 200,000 backlog bound is the user's open decision; the peaks are recorded as measured.
+- **e2 peer-stop loop** (`tests/live/e2_peer_stop_loop.py`) runs its cluster on loopback on fcstor012 only.
+- **This candidate is no longer the release candidate.** The cells and own runs touched by its fixes (K38 wave 70, K42, K110) rerun on the fixed candidate.
+
+## K-row consequences
+
+Every row the matrix lists for batch D got a dated clause in both checklist tables naming what these runs proved and what is still owed. No status changed on this branch: no row's whole stated acceptance was met by these runs (the own runs are single-host, and the RDMA columns are incomplete), so there are no proposed VERIFIED rows. Rows without a clause: K42 (the coordinator's row, reopened in devel; the rate above goes to the coordinator), K46 and K47 (no gate named for them ran separately), and the K110 row (added at merge).
+
+## Matrix
+
+A batch D note under the matrix's batch table records the hosts, the single-host own runs, what was not run on RDMA, and H15.
 
 ## Follow-ups
 
@@ -260,4 +277,60 @@ Transport check: in every RDMA run, every daemon and client log has `transport r
 
 ## Reproduction
 
-(filled in at the end)
+Prerequisites: the five fcstor hosts, a login node that can reach them (the controller cannot run on the fcstor hosts), the candidate built as in Deploy, and the patched libfuse. The controller sits in `~/work/efs-taskEY-login` on the login node; its scripts are committed here.
+
+- **Cells:** `scripts/qualify.py run --cluster <description> --gates <list> --allow restart,turnover,remount --out ~/efs-artifacts/taskEY-20261109/<run>` (as in Method), run through `run_cell.sh`. Gate lists: `scripts/evidence/task-ey/controller/gates-tcp.txt` and the queue file.
+- **Queue:** `scripts/evidence/task-ey/controller/run_queue.sh` in a `screen` session on the login node, reading `scripts/evidence/task-ey/controller/queue.txt` (one line per run, in run order). Each line runs either `run_cell.sh` with a description and gates, or an `sh:` script. It does a preflight and postflight on all five hosts, and stops on a dirty host or a missing master connection.
+- **Own runs:** `scripts/evidence/task-ey/controller/run_h.sh NAME HOST TRANSPORT CMDFILE`. Each command file line is `label<TAB>reps<TAB>command`; the run writes `results.tsv` and one log per rep. H7 uses `scripts/evidence/task-ey/controller/run_dw.sh` (Task DW's `scripts/evidence/dw/k38_dw_campaign.py`).
+- **Teardown and cleanup:** `scripts/evidence/task-ey/controller/teardown.sh` (by pid, never `pkill`) and, at the end, `scripts/evidence/task-ey/controller/final_cleanup.sh`.
+- **Analysis:** `scripts/evidence/task-ey/d4_backlog_table.py GATE_DIR...` (D4 backlog table; `--self-test`).
+
+Committed files:
+
+- `scripts/evidence/task-ey/d4_backlog_table.py`
+- `scripts/evidence/task-ey/dw_ssh.sh`
+- `scripts/evidence/task-ey/fcstor-3x1-rdma.json`
+- `scripts/evidence/task-ey/fcstor-3x1-tcp.json`
+- `scripts/evidence/task-ey/fcstor-4x1-rdma.json`
+- `scripts/evidence/task-ey/fcstor-4x1-tcp.json`
+- `scripts/evidence/task-ey/fcstor-5x1-rdma.json`
+- `scripts/evidence/task-ey/fcstor-5x1-tcp.json`
+- `scripts/evidence/task-ey/task_ey_ssh.sh`
+- `scripts/evidence/task-ey/controller/d4_cpu_sidecar.sh`
+- `scripts/evidence/task-ey/controller/final_cleanup.sh`
+- `scripts/evidence/task-ey/controller/gates-tcp.txt`
+- `scripts/evidence/task-ey/controller/h/rdma-h01-kill.cmds`
+- `scripts/evidence/task-ey/controller/h/rdma-h01.cmds`
+- `scripts/evidence/task-ey/controller/h/rdma-h02.cmds`
+- `scripts/evidence/task-ey/controller/h/rdma-h04.cmds`
+- `scripts/evidence/task-ey/controller/h/rdma-h05.cmds`
+- `scripts/evidence/task-ey/controller/h/rdma-h06.cmds`
+- `scripts/evidence/task-ey/controller/h/rdma-h08.cmds`
+- `scripts/evidence/task-ey/controller/h/rdma-h13.cmds`
+- `scripts/evidence/task-ey/controller/h/rdma-h14.cmds`
+- `scripts/evidence/task-ey/controller/h/rdma-k42-e2.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h01-k110.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h01.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h02.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h03.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h04-k41.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h04.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h05.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h06.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h08.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h13.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h14.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h14b.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-h15.cmds`
+- `scripts/evidence/task-ey/controller/h/tcp-k22-ring.cmds`
+- `scripts/evidence/task-ey/controller/queue.txt`
+- `scripts/evidence/task-ey/controller/run_cell.sh`
+- `scripts/evidence/task-ey/controller/run_dw.sh`
+- `scripts/evidence/task-ey/controller/run_h.sh`
+- `scripts/evidence/task-ey/controller/run_queue.sh`
+- `scripts/evidence/task-ey/controller/task-ey/h09-rdma.json`
+- `scripts/evidence/task-ey/controller/task-ey/h09-tcp.json`
+- `scripts/evidence/task-ey/controller/task-ey/h12-rdma.json`
+- `scripts/evidence/task-ey/controller/teardown.sh`
+
+Raw output: `~/efs-artifacts/taskEY-20261109/<run>/` on the ORCD shared home, each directory with `SHA256SUMS`. `PRUNED.txt` at its top lists the copied Raft WAL files removed on Nov 10, with their sha256. Two are kept for the open K42 investigation: `rdma-k42-e2/keep-e2-peer-stop-loop-keep-3/efs-e2-peer-uzxx9lq7/c/n{4,5}/mdraft/log/raft.log`. The end-of-campaign cleanup record is `ops/final-cleanup.txt`.
