@@ -53,7 +53,7 @@ def put_status(cluster, ticket, fi):
     end = time.monotonic() + 30
     while True:
         reply = put_reply(cluster.base + ticket.nodes[fi] - 1, ticket.body(fi))
-        assert len(reply) == 11 and reply[0] == 7, reply
+        assert len(reply) == 19 and reply[0] == 7, reply
         if reply[1] != ticket_put.BUSY or time.monotonic() > end:
             return reply[1]
         time.sleep(.1)

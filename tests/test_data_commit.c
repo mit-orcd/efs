@@ -37,6 +37,9 @@ static int down[NN];          /* in cooldown and not listening */
 static uint64_t epochs[NN];
 static uint64_t reply_at[NN], commit_deadlines[NN], mark_at;
 static int expire_commit[NN];
+static struct efs_data_commit_history hist[NN][2]; /* a restarted node's barrier history (K110) */
+static uint32_t hist_n[NN];
+static int bad_len[NN];       /* reply length not header plus entries (truncated or padded) */
 static uint64_t mono_ms(void)
 {
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -68,11 +71,15 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **p, uint32_t *n)
         down[id] = 1;
         return -1;
     }
-    struct efs_msg_data_commit_reply *r = calloc(1, sizeof(*r));
+    uint32_t nh = hist_n[id];
+    struct efs_msg_data_commit_reply *r = calloc(1, sizeof(*r) + nh * sizeof(hist[id][0]));
     r->rc = __atomic_load_n(&fail_io[id], __ATOMIC_ACQUIRE) ? EFS_ERR_IO : EFS_OK;
     r->roots = 1;
     r->boot_epoch = epochs[id];
-    *type = EFS_MSG_DATA_COMMIT_REPLY; *p = r; *n = sizeof(*r);
+    r->history = nh;
+    memcpy(r + 1, hist[id], nh * sizeof(hist[id][0]));
+    *type = EFS_MSG_DATA_COMMIT_REPLY; *p = r;
+    *n = (uint32_t)(sizeof(*r) + nh * sizeof(hist[id][0])) - (bad_len[id] == 1 ? 8u : 0u) + (bad_len[id] == 2 ? 8u : 0u);
     return 0;
 }
 static int terminal_rc = EFS_ERR_BUSY, terminal_calls;
@@ -120,19 +127,33 @@ static void heal(void)
     memset(fail_io, 0, sizeof(fail_io)); memset(fail_net, 0, sizeof(fail_net));
     memset(die_in_commit, 0, sizeof(die_in_commit)); memset(down, 0, sizeof(down));
     memset(reply_at, 0, sizeof(reply_at)); memset(expire_commit, 0, sizeof(expire_commit));
+    memset(hist_n, 0, sizeof(hist_n)); memset(bad_len, 0, sizeof(bad_len));
 }
 /* One acknowledged PUT object: ack bit i set = fragment i acknowledged. */
 static int put_unpublished(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs_node_id_t c,
                unsigned ack)
 {
     struct efs_put_ticket t;
-    uint64_t seq[3] = {0}, ep[3] = {0};
+    uint64_t seq[3] = {0}, ep[3] = {0}, pos[3] = {0};
     memset(&t, 0, sizeof(t));
     t.ino = ino; t.ci = ci; t.inode_gen = 5; t.object = ino * 1000 + ci;
     t.nodes[0] = a; t.nodes[1] = b; t.nodes[2] = c;
     for (int i = 0; i < 3; i++)
         if (ack & (1u << i)) { seq[i] = efs_client_commit_note(t.nodes[i]); ep[i] = epochs[t.nodes[i]]; }
-    return efs_client_stripe_note(&t, seq, ep);
+    return efs_client_stripe_note(&t, seq, ep, pos);
+}
+/* An object acknowledged by nodes 1, 2, 3 at the given ack positions. */
+static int put_acked(efs_ino_t ino, const uint64_t ack[3])
+{
+    struct efs_put_ticket t;
+    uint64_t seq[3], ep[3];
+    memset(&t, 0, sizeof(t));
+    t.ino = ino; t.inode_gen = 5; t.object = ino * 1000;
+    for (int i = 0; i < 3; i++) {
+        t.nodes[i] = (efs_node_id_t)(i + 1);
+        seq[i] = efs_client_commit_note(t.nodes[i]); ep[i] = epochs[t.nodes[i]];
+    }
+    return efs_client_stripe_note(&t, seq, ep, ack);
 }
 /* Existing cases model an acknowledged REPORT before their fsync. */
 static int put(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs_node_id_t c,
@@ -269,6 +290,90 @@ static void test_retired_objects(void)
     terminal_rc=EFS_ERR_BUSY; object_rc=EFS_ERR_NET; object_live=1; heal();
 }
 
+/* K110 table: every combination (54 of 64: a record needs two acknowledged
+ * fragments) of a fragment's four possible fates over the three nodes. F: acknowledged by the incarnation that answers the COMMIT.
+ * C: acknowledged by an incarnation that was replaced and whose barrier
+ * covers it. N: replaced and acknowledged after its last barrier. U: never
+ * acknowledged (published degraded, the publication carries the mark).
+ * Durable = F or C. A stripe needs two durable; the third is marked now (N) or
+ * already covered (U); fewer than two is EIO and nothing is marked. Before
+ * K110 a C behaved as an N. Runs last: failed stripes stay in the table. */
+static void test_history_table(void)
+{
+    const char fate[4] = {'F', 'C', 'N', 'U'};
+    const uint64_t p100 = efs_put_ack_make(0, 100), p101 = efs_put_ack_make(0, 101);
+    efs_ino_t ino = 2000;
+    heal();
+    /* hist_on = 0 is the behaviour before K110 (no history in the replies): a
+     * covered fragment is lost like any other of a replaced incarnation. */
+    for (int hist_on = 1; hist_on >= 0; hist_on--)
+    for (unsigned code = 0; code < 64; code++) {
+        char st[3] = {fate[code & 3], fate[(code >> 2) & 3], fate[(code >> 4) & 3]};
+        if ((st[0] == 'U') + (st[1] == 'U') + (st[2] == 'U') > 1)
+            continue; /* a record needs two acknowledged fragments */
+        struct efs_put_ticket t; uint64_t seq[3] = {0}, ep[3] = {0}, ack[3] = {0};
+        memset(&t, 0, sizeof(t)); ino++;
+        t.ino = ino; t.inode_gen = 5; t.object = ino * 1000;
+        int durable = 0, lost_n = 0;
+        for (int i = 0; i < 3; i++) {
+            t.nodes[i] = (efs_node_id_t)(i + 1);
+            epochs[i + 1] = (st[i] == 'C' || st[i] == 'N') ? 300 : 500;
+            if (st[i] != 'U') {
+                seq[i] = efs_client_commit_note(t.nodes[i]); ep[i] = epochs[i + 1];
+                ack[i] = st[i] == 'N' ? p101 : p100;
+            }
+            durable += st[i] == 'F' || (st[i] == 'C' && hist_on);
+            lost_n += st[i] == 'N' || (st[i] == 'C' && !hist_on);
+        }
+        assert(efs_client_stripe_note(&t, seq, ep, ack) == EFS_OK);
+        struct efs_chunk_rec rec = {.ino=ino, .chunk_index=0, .chunk_generation=ino*1000, .file_generation=5};
+        efs_client_stripes_published(&rec, 1);
+        const int before = live();
+        for (int i = 0; i < 3; i++) {
+            epochs[i + 1] = (st[i] == 'F' || st[i] == 'U') ? 500 : 501;
+            if (hist_on && (st[i] == 'C' || st[i] == 'N')) {
+                hist[i + 1][0] = (struct efs_data_commit_history){.verifier = 300, .position = 100};
+                hist_n[i + 1] = 1;
+            }
+        }
+        reset();
+        int rc = efs_client_data_commit(ino);
+        if (durable >= 3 || durable == 2) {
+            assert(rc == EFS_OK && live() == before - 1);
+            assert(marks == (lost_n == 1 ? 1 : 0));
+        } else {
+            assert(rc == EFS_ERR_IO && !marks && live() == before);
+            /* Retire it (the object is gone) so the table does not fill. */
+            object_rc = EFS_OK; object_live = 0; reset();
+            assert(efs_client_data_commit(ino) == EFS_OK && live() == before - 1 && !marks);
+            object_rc = EFS_ERR_NET; object_live = 1;
+        }
+        heal();
+    }
+    /* A reply whose length is not header plus its entries (truncated or
+     * padded) is no proof: a covered fragment on that node stays unproven and
+     * is marked, the other two being durable. */
+    for (int mode = 1; mode <= 2; mode++) {
+        ino++;
+        struct efs_put_ticket t; uint64_t seq[3], ep[3], ack[3] = {p100, p100, p100};
+        memset(&t, 0, sizeof(t)); t.ino = ino; t.inode_gen = 5; t.object = ino * 1000;
+        epochs[1] = epochs[2] = 500; epochs[3] = 300;
+        for (int i = 0; i < 3; i++) {
+            t.nodes[i] = (efs_node_id_t)(i + 1);
+            seq[i] = efs_client_commit_note(t.nodes[i]); ep[i] = epochs[i + 1];
+        }
+        assert(efs_client_stripe_note(&t, seq, ep, ack) == EFS_OK);
+        struct efs_chunk_rec rec = {.ino=ino, .chunk_index=0, .chunk_generation=ino*1000, .file_generation=5};
+        efs_client_stripes_published(&rec, 1);
+        epochs[3] = 501;
+        hist[3][0] = (struct efs_data_commit_history){.verifier = 300, .position = 100};
+        hist_n[3] = 1; bad_len[3] = mode;
+        reset();
+        assert(efs_client_data_commit(ino) == EFS_OK && marks == 1 && mark_fi == 2);
+        heal();
+    }
+}
+
 int main(int argc, char **argv)
 {
     assert(argc == 1 || (argc == 2 &&
@@ -382,6 +487,43 @@ int main(int argc, char **argv)
     reset(); assert(efs_client_data_commit(18) == EFS_ERR_IO && !marks);
     reset(); assert(efs_client_data_commit(18) == EFS_ERR_IO && !marks && live() == 1);
     const int lost = live(); /* ino 18 stays: its proof can never come */
+    /* K110: members killed and restarted before the COMMIT. The restarted
+     * member's history says its old incarnation (300) completed a barrier
+     * covering root 0 up to position 100: a fragment acknowledged at or
+     * before that is durable, anything else stays lost. */
+    {
+        const uint64_t p100 = efs_put_ack_make(0, 100), p101 = efs_put_ack_make(0, 101);
+        epochs[1] = epochs[2] = epochs[3] = 300;
+        const uint64_t covered[3] = {p100, p100, p100};
+        assert(put_acked(60, covered) == EFS_OK);
+        epochs[2] = 301; epochs[3] = 302;
+        hist[2][0] = hist[3][0] = (struct efs_data_commit_history){.verifier = 300, .position = 100};
+        hist_n[2] = hist_n[3] = 1;
+        reset(); assert(efs_client_data_commit(60) == EFS_OK && !marks && live() == lost);
+        heal();
+        /* Node 3 alone restarted and its fragment is not covered: a lost
+         * fragment, the other two durable, so the mark covers it. */
+        const struct { uint64_t ack, verifier, position; uint32_t root; } no[] = {
+            {p101, 300, 100, 0},                   /* acknowledged past the barrier */
+            {efs_put_ack_make(1, 100), 300, 100, 0}, /* another root */
+            {0, 300, 100, 0},                      /* no position */
+            {p100, 299, 100, 0},                   /* another incarnation */
+            {p100, 300, 100, 1},                   /* history of another root */
+        };
+        for (unsigned k = 0; k < sizeof(no) / sizeof(no[0]); k++) {
+            epochs[1] = epochs[2] = epochs[3] = 300;
+            const uint64_t ack[3] = {p100, p100, no[k].ack};
+            assert(put_acked(70 + k, ack) == EFS_OK);
+            epochs[3] = 302;
+            hist[3][0] = (struct efs_data_commit_history){.verifier = no[k].verifier,
+                .position = no[k].position, .root = no[k].root};
+            hist_n[3] = 1;
+            reset();
+            assert(efs_client_data_commit(70 + k) == EFS_OK && marks == 1 && mark_fi == 2 &&
+                   live() == lost);
+            heal();
+        }
+    }
     /* Acknowledgements from the new incarnations are proven as usual. */
     for (int i = 1; i < NN; i++) epochs[i] = 104;
     assert(put(19, 0, 1, 2, 3, 7) == EFS_OK);
@@ -465,11 +607,11 @@ int main(int argc, char **argv)
     /* Malformed records are refused, never stored. */
     {
         struct efs_put_ticket t = {.ino = 1, .inode_gen = 5, .object = 1, .nodes = {1, 2, 3}};
-        uint64_t one[3] = {1, 0, 0}, two[3] = {1, 2, 0}, ep[3] = {101, 101, 0}, bad[3] = {101, 0, 0};
-        assert(efs_client_stripe_note(&t, one, ep) == EFS_ERR_INVAL);
-        assert(efs_client_stripe_note(&t, two, bad) == EFS_ERR_INVAL);
+        uint64_t one[3] = {1, 0, 0}, two[3] = {1, 2, 0}, ep[3] = {101, 101, 0}, bad[3] = {101, 0, 0}, ack[3] = {0};
+        assert(efs_client_stripe_note(&t, one, ep, ack) == EFS_ERR_INVAL);
+        assert(efs_client_stripe_note(&t, two, bad, ack) == EFS_ERR_INVAL);
         t.nodes[2] = 0;
-        assert(efs_client_stripe_note(&t, two, ep) == EFS_ERR_INVAL && live() == lost);
+        assert(efs_client_stripe_note(&t, two, ep, ack) == EFS_ERR_INVAL && live() == lost);
     }
     /* A full table is swept (every record proven) before a new record; a
      * table full of unprovable records refuses the PUT. */
@@ -485,10 +627,11 @@ int main(int argc, char **argv)
     heal();
     assert(put(43, 0, 1, 2, 3, 7) == EFS_OK && live() == lost + 1);
     assert(efs_client_data_commit(43) == EFS_OK && live() == lost);
+    test_history_table();
     puts("data commit (K35): per-stripe proof, COMMIT only on the file's nodes; member down "
          "before/after the write and dying in COMMIT marked degraded; unrelated member "
          "ignored; two down, uncertain or re-incarnated needed fragments and unwritten marks "
          "EIO; superseded objects, packed small files, concurrent fsyncs, late "
-         "acknowledgements and the full-table sweep PASS");
+         "acknowledgements and the full-table sweep, and the K110 barrier-history table (fate combinations of three nodes, malformed replies) PASS");
     return 0;
 }

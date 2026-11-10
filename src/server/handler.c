@@ -544,7 +544,10 @@ void server_handle_conn(struct efs_conn *conn)
             uint64_t start=efs_iostats_now_us();
             uint8_t reply[EFS_PUT_REPLY_LEN],path=0xff;
             int result=server_put_upload(g_server,payload,payload_len,&path);
-            efs_put_reply_encode(result,path,g_server->put_boot_epoch,reply);
+            /* Read after the store: the open epoch is never earlier than the
+             * fragment's own, so the position can only over-state it. */
+            efs_put_reply_encode(result,path,g_server->put_boot_epoch,
+                                 result==EFS_OK?server_put_sync_position(g_server,path):0,reply);
             efs_conn_send_msg(conn,EFS_MSG_PUT_CHUNK_REPLY,reply,sizeof(reply));
             efs_iostats_add(EFS_IOSTAT_PUT,result==EFS_OK?payload_len-EFS_PUT_UPLOAD_HEADER_LEN:0,
                 efs_iostats_now_us()-start,result!=EFS_OK);
@@ -557,7 +560,7 @@ void server_handle_conn(struct efs_conn *conn)
             uint8_t reply[EFS_PUT_REPLY_LEN],path=0xff;
             int result=server_test_dest_fault("rebuild");
             if(result==EFS_OK)result=server_rebuild_put(g_server,payload,payload_len,&path);
-            efs_put_reply_encode(result,path,g_server->put_boot_epoch,reply);
+            efs_put_reply_encode(result,path,g_server->put_boot_epoch,0,reply);
             efs_conn_send_msg(conn,EFS_MSG_REBUILD_PUT_REPLY,reply,sizeof(reply));
             break;
         }
@@ -907,15 +910,23 @@ void server_handle_conn(struct efs_conn *conn)
         case EFS_MSG_DATA_COMMIT: {
             /* NFS COMMIT: everything this server acknowledged before the
              * request is durable when the reply is OK. */
-            struct efs_msg_data_commit_reply reply;
-            memset(&reply, 0, sizeof(reply));
+            struct {
+                struct efs_msg_data_commit_reply head;
+                struct efs_data_commit_history hist[EFS_DATA_COMMIT_HISTORY_MAX];
+            } reply;
+            memset(&reply.head, 0, sizeof(reply.head));
             /* K35 test hook: a member that dies during a client's COMMIT. */
             server_test_member_exit("data-commit");
-            reply.rc = server_test_dest_fault("commit");
-            if (reply.rc == EFS_OK)
-                reply.rc = server_put_sync_commit(g_server, &reply.roots);
-            reply.boot_epoch = g_server->put_boot_epoch;
-            efs_conn_send_msg(conn, EFS_MSG_DATA_COMMIT_REPLY, &reply, sizeof(reply));
+            reply.head.rc = server_test_dest_fault("commit");
+            if (reply.head.rc == EFS_OK)
+                reply.head.rc = server_put_sync_commit(g_server, &reply.head.roots);
+            reply.head.boot_epoch = g_server->put_boot_epoch;
+            /* K110: what an earlier incarnation's last barrier covered. */
+            if (reply.head.rc == EFS_OK)
+                reply.head.history = server_put_sync_history(reply.hist);
+            efs_conn_send_msg(conn, EFS_MSG_DATA_COMMIT_REPLY, &reply,
+                              (uint32_t)(sizeof(reply.head) +
+                                         reply.head.history * sizeof(reply.hist[0])));
             break;
         }
         case EFS_MSG_SYNC_STATS: {

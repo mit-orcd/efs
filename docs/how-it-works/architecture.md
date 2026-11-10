@@ -259,7 +259,8 @@ this list, before it ships.
   every configured root has a checksummed clean record agreeing on the
   verifier and root count. Other restarts rotate it: a fragment acknowledged
   under a verifier that changed before its COMMIT is lost (never resent,
-  because the client may no longer retain the bytes), so its stripe is
+  because the client may no longer retain the bytes) unless the restarted
+  member's COMMIT reply carries a barrier history covering it (K110, below), so its stripe is
   marked degraded or, when that fragment is needed, fails EIO for good.
   COMMIT retries a failed transport once within its original deadline.
   An unclean storage-root restart fences COMMIT even for a fresh client,
@@ -270,7 +271,9 @@ this list, before it ships.
   cannot prove is dropped and its stripe marked degraded for rebuild; then
   the fence clears. An earlier ambiguous write is not thereby proven: the
   verifier changed, so a fragment the crashed run acknowledged stays lost
-  to its client's `fsync`. See
+  to its client's `fsync`, except one acknowledged at or before that run's
+  last completed barrier, which the barrier history proves (K110, D42 F23
+  as amended). See
   [verified recovery](protocols/data.md#verified-recovery-k36) and
   [AMD durability fixes](../status/2026-10/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the

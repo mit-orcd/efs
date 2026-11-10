@@ -159,6 +159,10 @@ int server_raft_host_storage_session_learn(const uint8_t uuid[16], uint32_t belo
 void server_raft_host_storage_session_fence(const struct efs_msg_storage_session_fence *,
     struct efs_msg_storage_session_fence_reply *);
 int server_put_upload(struct efsd_server *,const uint8_t *,uint32_t,uint8_t *);
+/* K110: the root's open durability epoch as an ack position (0: none). */
+uint64_t server_put_sync_position(struct efsd_server *,uint8_t root);
+/* K110: the proven predecessor barriers (up to EFS_DATA_COMMIT_HISTORY_MAX). */
+uint32_t server_put_sync_history(struct efs_data_commit_history *out);
 /* K13 + W154: EFS_MSG_REBUILD_PUT. Stores the one missing fragment of a
  * degraded stripe only when the mark's group holds exactly that mark. */
 int server_rebuild_put(struct efsd_server *,const uint8_t *,uint32_t,uint8_t *);

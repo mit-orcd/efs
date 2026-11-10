@@ -30,11 +30,11 @@ int main(void)
     /* Force an exact-index collision between versions of the same chunk. */
     while (identity_bucket(ino, 3, t.object) != identity_bucket(ino, 3, ino*1000+3))
         t.object++;
-    uint64_t seq[3], ep[3] = {101, 101, 101};
+    uint64_t seq[3], ep[3] = {101, 101, 101}, ack[3] = {0};
     for (int i = 0; i < 3; i++) seq[i] = efs_client_commit_note(i+1);
-    assert(efs_client_stripe_note(&t, seq, ep) == EFS_OK);
+    assert(efs_client_stripe_note(&t, seq, ep, ack) == EFS_OK);
     for (int i = 0; i < 3; i++) seq[i] = efs_client_commit_note(i+1);
-    assert(efs_client_stripe_note(&t, seq, ep) == EFS_OK);
+    assert(efs_client_stripe_note(&t, seq, ep, ack) == EFS_OK);
     assert(live() == NCHUNKS+1);
     assert(stripe_find(ino, 3, t.object)->seq[0] == seq[0]);
     assert(stripe_find(ino, 3, ino*1000+3));

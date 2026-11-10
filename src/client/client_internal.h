@@ -860,7 +860,8 @@ struct efs_put_ticket;
 uint64_t efs_client_commit_note(efs_node_id_t node);
 int efs_client_stripe_note(const struct efs_put_ticket *t,
                            const uint64_t seq[EFS_NUM_FRAGMENTS],
-                           const uint64_t epoch[EFS_NUM_FRAGMENTS]);
+                           const uint64_t epoch[EFS_NUM_FRAGMENTS],
+                           const uint64_t ack[EFS_NUM_FRAGMENTS]);
 void efs_client_stripes_published(const struct efs_chunk_rec *recs, uint32_t count);
 /* Terminal ticket proof must precede a fresh absence check; never drops bytes. */
 void efs_client_stripe_closed(const struct efs_put_ticket *ticket);
