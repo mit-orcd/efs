@@ -353,7 +353,7 @@ static void test_history_table(void)
     /* A reply whose length is not header plus its entries (truncated or
      * padded) is no proof: a covered fragment on that node stays unproven and
      * is marked, the other two being durable. */
-    for (int mode = 1; mode <= 2; mode++) {
+    for (int mode = 1; mode <= 5; mode++) {   /* 1,2 length; 3 zero verifier; 4 position over 56 bits; 5 root out of range */
         ino++;
         struct efs_put_ticket t; uint64_t seq[3], ep[3], ack[3] = {p100, p100, p100};
         memset(&t, 0, sizeof(t)); t.ino = ino; t.inode_gen = 5; t.object = ino * 1000;
@@ -367,7 +367,15 @@ static void test_history_table(void)
         efs_client_stripes_published(&rec, 1);
         epochs[3] = 501;
         hist[3][0] = (struct efs_data_commit_history){.verifier = 300, .position = 100};
-        hist_n[3] = 1; bad_len[3] = mode;
+        hist_n[3] = 1;
+        if (mode >= 3) {   /* a valid, covering entry plus one bad entry: the whole reply is refused */
+            hist[3][1] = hist[3][0];
+            if (mode == 3) hist[3][1].verifier = 0;
+            if (mode == 4) hist[3][1].position |= 1ull << 56;
+            if (mode == 5) hist[3][1].root = EFS_MAX_STORAGE_PATHS;
+            hist_n[3] = 2;
+        }
+        bad_len[3] = mode <= 2 ? mode : 0;
         reset();
         assert(efs_client_data_commit(ino) == EFS_OK && marks == 1 && mark_fi == 2);
         heal();

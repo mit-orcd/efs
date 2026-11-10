@@ -297,6 +297,11 @@ try:
     run = c.last_run(3)
     assert 'recovery uncertain' in run and 'recovery: phase metadata' in run, run[-3000:]
     assert 'fault: injected crash at recovery-marked' in run, run[-3000:]
+    # K110: the torn file recovery dropped was one the earlier barrier covered, and
+    # the deleted one is a published fragment with no mark: the barrier history is
+    # forgotten (before the mark, so this crash cannot keep it), each for its reason.
+    assert 'barrier history forgotten' in run and 'recovery dropped a file it covered' in run, run[-3000:]
+    assert 'a published fragment is missing without a mark' in run, run[-3000:]
     step('3. node 3 killed during recovery after its first degraded mark PASS')
 
     # 4. The fence holds until proven, then clears.

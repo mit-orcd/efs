@@ -1625,8 +1625,12 @@ struct put_sync_root {
     int ring_ok;                 /* atomic: the record carries it */
     uint64_t covered_until_ns;   /* a dropped file this old is covered */
     uint64_t covered_drops;      /* atomic: recovery drops of covered files */
-    pthread_mutex_t rec_mu;      /* one writer of the record at a time */
+    pthread_mutex_t rec_mu;      /* one writer of the record at a time; also
+                                  * guards ring_n/ring_ok (written together) and rec_seq */
+    uint64_t rec_seq;            /* the seq the record file names (under rec_mu) */
+    int void_logged;             /* under mu: a forced void was logged once */
 };
+#define PUT_SYNC_KEEP_SEQ UINT64_MAX /* rewrite the record naming the seq it has */
 static struct put_sync_root put_sync_roots[EFS_MAX_STORAGE_PATHS];
 static int put_sync_state[EFS_MAX_STORAGE_PATHS]; /* 0 unset, 1 async, -1 not async */
 static int put_sync_serving, put_sync_stopped; /* under put_sync_mu */
@@ -1695,12 +1699,15 @@ static int put_sync_record_put(struct put_sync_root *r, uint64_t seq, int clean,
     if(!r->verifier || !r->root_count)return EFS_ERR_IO;
     memcpy(rec,"EFSDUR03",8);
     efs_put_epoch_write(rec+8,r->boot);efs_put_epoch_write(rec+16,clean);
-    efs_put_epoch_write(rec+24,seq);efs_put_epoch_write(rec+32,put_sync_wall_ns());
+    efs_put_epoch_write(rec+32,put_sync_wall_ns());
     efs_put_epoch_write(rec+40,r->verifier);efs_put_epoch_write(rec+48,r->root_count);
     pthread_mutex_lock(&r->rec_mu);
-    /* ring_n only shrinks, under mu (recovered); entries never change. */
-    uint32_t n=__atomic_load_n(&r->ring_n,__ATOMIC_ACQUIRE);
-    efs_put_epoch_write(rec+56,__atomic_load_n(&r->ring_ok,__ATOMIC_ACQUIRE));
+    /* ring_n and ring_ok change together under rec_mu (recovered, void), so
+     * a record never pairs a voided ring with ring_ok=1. Entries never change. */
+    if(seq==PUT_SYNC_KEEP_SEQ)seq=r->rec_seq;
+    efs_put_epoch_write(rec+24,seq);
+    uint32_t n=r->ring_n;
+    efs_put_epoch_write(rec+56,(uint64_t)r->ring_ok);
     efs_put_epoch_write(rec+64,n);
     for(uint32_t i=0;i<n;i++) {
         efs_put_epoch_write(rec+72+16*i,r->ring[i].verifier);
@@ -1711,6 +1718,8 @@ static int put_sync_record_put(struct put_sync_root *r, uint64_t seq, int clean,
     ssize_t w;
     do { w = pwrite(r->record_fd, rec, sizeof(rec), 0); } while (w < 0 && errno == EINTR);
     int rc = w != (ssize_t)sizeof(rec);
+    if (!rc)
+        r->rec_seq = seq;
     if (!rc && sync)
         do { rc = fdatasync(r->record_fd); } while (rc < 0 && errno == EINTR);
     pthread_mutex_unlock(&r->rec_mu);
@@ -1747,6 +1756,10 @@ static int put_sync_reuse_epoch(struct efsd_server *s,uint64_t *epoch)
 static void put_sync_barrier_locked(struct put_sync_root *r)
 {
     uint64_t target = r->seq;
+    /* K110: after a failed barrier in this boot nothing later may be named.
+     * Linux reports a writeback error once, so a later syncfs can succeed
+     * although pages of the failed one were dropped. */
+    int tainted = r->error;
     r->inflight_bytes = r->cur_bytes;
     r->inflight_frags = r->cur_frags;
     r->inflight_first_ns = r->cur_first_ns;
@@ -1756,7 +1769,7 @@ static void put_sync_barrier_locked(struct put_sync_root *r)
     pthread_mutex_unlock(&r->mu);
     uint64_t t0 = put_sync_now_ns();
     int rc = syncfs(r->fd) == 0 ? EFS_OK : EFS_ERR_IO;
-    if (rc == EFS_OK) {
+    if (rc == EFS_OK && !tainted) {
         rc = put_sync_record_write(r, target, 0);
         if (rc != EFS_OK) /* the record must not name a barrier that failed */
             (void)put_sync_record_put(r, r->durable_seq, 0, 0);
@@ -1767,7 +1780,8 @@ static void put_sync_barrier_locked(struct put_sync_root *r)
     r->last_barrier_ns = t1;
     r->last_barrier_us = (t1 - t0) / 1000;
     if (rc == EFS_OK) {
-        r->durable_seq = target;
+        if (!tainted)
+            r->durable_seq = target;
         r->synced_bytes += r->inflight_bytes;
         r->retry_delay_ns = r->retry_at_ns = 0;
     } else {
@@ -2298,6 +2312,41 @@ int server_put_sync_identity(struct efsd_server *s, char *why, size_t n)
     return EFS_OK;
 }
 
+/* K110: a file the history covered is gone or unprovable, so the root's
+ * predecessor barriers prove nothing about it: forget the ring now, in
+ * memory and (best effort; every later barrier writes the same) on disk.
+ * Also after the fence cleared. */
+static void put_sync_void(struct put_sync_root *r, const char *why, int always)
+{
+    pthread_mutex_lock(&r->mu);
+    pthread_mutex_lock(&r->rec_mu);
+    uint32_t had = r->ring_n;
+    r->ring_n = 0;
+    pthread_mutex_unlock(&r->rec_mu);
+    int say = had || (always && !r->void_logged);
+    if (always)
+        r->void_logged = 1;
+    pthread_mutex_unlock(&r->mu);
+    if (say)
+        efs_telemetry_log(0, "store: put sync root=%s barrier history forgotten (%u entries): %s\n",
+                r->root, had, why);
+    if (had && r->record_fd >= 0)
+        (void)put_sync_record_put(r, PUT_SYNC_KEEP_SEQ, 0, 1);
+}
+
+/* A covered file whose root cannot be told, or a published fragment lost
+ * that no mark explains: every root forgets its history. */
+void server_put_sync_void_all(const char *why)
+{
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        pthread_mutex_lock(&put_sync_mu);
+        int on = put_sync_state[i] > 0;
+        pthread_mutex_unlock(&put_sync_mu);
+        if (on)
+            put_sync_void(&put_sync_roots[i], why, 1);
+    }
+}
+
 /* Verified: clear every root's fence. The record stays clean=0 until an
  * orderly stop proves its final barrier, as for any running boot.
  * K110: the predecessor barrier history is validated only when recovery
@@ -2314,15 +2363,17 @@ void server_put_sync_recovered(void)
         if (!on)
             continue;
         struct put_sync_root *r = &put_sync_roots[i];
+        /* A drop of a covered file voided the ring already (put_sync_void);
+         * what is left is validated. Lock order: mu, then rec_mu. */
         pthread_mutex_lock(&r->mu);
-        if (__atomic_load_n(&r->covered_drops, __ATOMIC_ACQUIRE))
-            __atomic_store_n(&r->ring_n, 0, __ATOMIC_RELEASE);
-        __atomic_store_n(&r->ring_ok, 1, __ATOMIC_RELEASE);
-        uint64_t seq = r->durable_seq;
+        pthread_mutex_lock(&r->rec_mu);
+        r->ring_ok = 1;
+        pthread_mutex_unlock(&r->rec_mu);
         pthread_mutex_unlock(&r->mu);
         /* Best effort: an unwritten verdict leaves ring_ok=0 on disk, which
-         * a later boot discards. */
-        (void)put_sync_record_write(r, seq, 0);
+         * a later boot discards. KEEP_SEQ: a barrier may have written a
+         * higher seq since; the verdict must not lower it. */
+        (void)put_sync_record_put(r, PUT_SYNC_KEEP_SEQ, 0, 1);
         pthread_mutex_lock(&r->mu);
         r->recovery_uncertain = 0;
         pthread_mutex_unlock(&r->mu);
@@ -2336,8 +2387,9 @@ int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes
                          struct server_recovery_files *c)
 {
     /* K110: a file written before the predecessor's last barrier record is
-     * one that barrier may have covered; dropping it voids the history. An
-     * unreadable time or unknown root counts as covered. */
+     * one that barrier may have covered; dropping it voids the history, at
+     * once, whether or not the fence has cleared. An unreadable time or an
+     * unknown root counts as covered (every root forgets). */
     struct stat st;
     char root[EFS_MAX_PATH];
     int idx = s ? fragment_root_lookup(s, path, root) : -1;
@@ -2345,9 +2397,12 @@ int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes
         struct put_sync_root *r = &put_sync_roots[idx];
         uint64_t mtime = stat(path, &st) ? 0 :
             (uint64_t)st.st_mtim.tv_sec * 1000000000ull + (uint64_t)st.st_mtim.tv_nsec;
-        if (!mtime || mtime <= r->covered_until_ns)
+        if (!mtime || mtime <= r->covered_until_ns) {
             __atomic_fetch_add(&r->covered_drops, 1, __ATOMIC_RELAXED);
-    }
+            put_sync_void(r, "recovery dropped a file it covered", 0);
+        }
+    } else
+        server_put_sync_void_all("recovery dropped a file under an unknown root");
     int removed_here = !unlink(path);
     if (!removed_here && errno != ENOENT)
         return EFS_ERR_IO;
