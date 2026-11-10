@@ -326,6 +326,94 @@ static int test_async_durability(uint8_t *data)
     assert(!unlink(rec));assert(!rmdir(root));
     return 1;
 }
+/* K110: the barrier history across unclean restarts. A kill leaves the
+ * predecessor's last completed barrier in the next boot's record; it is
+ * served only after verified recovery that dropped no file it covers, is
+ * forgotten otherwise, and is not trusted by a boot that follows an
+ * unvalidated one. */
+static void history_attach(struct put_sync_root *r,const char *root,uint64_t verifier)
+{
+    quiesce(r);if(r->fd>0){close(r->fd);close(r->record_fd);}
+    memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    booting=1;put_sync_attach(r,root,verifier,1);booting=0;assert(r->fd>=0);put_sync_state[0]=1;
+}
+static void history_record(struct put_sync_root *r,struct put_sync_record *out)
+{
+    int fd=open(r->root,O_RDONLY);(void)fd;
+    char rec[1100];snprintf(rec,sizeof(rec),"%s/%s",r->root,PUT_SYNC_RECORD);
+    fd=open(rec,O_RDONLY);assert(fd>=0 && !put_sync_record_read(fd,out));close(fd);
+}
+static void test_barrier_history(void)
+{
+    char root[1024],file[1200];
+    efs_test_path(root,sizeof(root),"efs-history-XXXXXX");assert(efs_test_mkdtemp(root));
+    struct put_sync_root *r=&put_sync_roots[0];struct put_sync_record rec;
+    struct efs_data_commit_history out[EFS_DATA_COMMIT_HISTORY_MAX];
+    memset(r,0,sizeof(*r));
+    /* Boot 1 completes a barrier at seq 5, then is killed (record unclean). */
+    history_attach(r,root,11);assert(r->boot==1 && !r->ring_n && r->ring_ok);
+    assert(!put_sync_record_write(r,5,0));
+    /* Boot 2: the predecessor is named, unvalidated and not served. */
+    history_attach(r,root,22);
+    assert(r->boot==2 && r->recovery_uncertain && r->ring_n==1 && !r->ring_ok &&
+           r->ring[0].verifier==11 && r->ring[0].position==efs_put_pos(1,5));
+    history_record(r,&rec);assert(rec.ring_n==1 && !rec.ring_ok);
+    assert(!server_put_sync_history(out));
+    /* Verified recovery with no covered drop validates it, durably. */
+    server_put_sync_recovered();
+    assert(server_put_sync_history(out)==1 && out[0].verifier==11 && out[0].root==0 &&
+           out[0].position==efs_put_pos(1,5));
+    history_record(r,&rec);assert(rec.ring_n==1 && rec.ring_ok);
+    /* Boot 2 completes a barrier at 7 and is killed: boot 3 holds both. */
+    assert(!put_sync_record_write(r,7,0));
+    history_attach(r,root,33);
+    assert(r->ring_n==2 && r->ring[0].verifier==22 && r->ring[0].position==efs_put_pos(2,7) &&
+           r->ring[1].verifier==11 && r->ring[1].position==efs_put_pos(1,5) && !r->ring_ok);
+    /* Recovery that dropped a file the barriers cover forgets the history. */
+    r->covered_drops=1;server_put_sync_recovered();
+    assert(!server_put_sync_history(out));history_record(r,&rec);assert(!rec.ring_n && rec.ring_ok);
+    /* Boot 3 killed before its recovery finished: boot 4 trusts only boot 3. */
+    history_attach(r,root,33);assert(!put_sync_record_write(r,2,0));
+    history_attach(r,root,44);
+    assert(r->ring_n==1 && r->ring[0].verifier==33);
+    assert(!put_sync_record_write(r,3,0));
+    history_attach(r,root,55);assert(r->ring_n==1 && r->ring[0].verifier==44 && !r->ring_ok);
+    server_put_sync_recovered();assert(server_put_sync_history(out)==1);
+    /* A clean stop keeps the validated history for the retained verifier. */
+    server_put_sync_stop(NULL);history_record(r,&rec);assert(rec.clean && rec.ring_n==1);
+    history_attach(r,root,55);
+    assert(r->prev_clean && r->ring_n==1 && r->ring[0].verifier==44 && r->ring_ok);
+    server_put_sync_stop(NULL);
+    /* The drop rule: a file written before the predecessor's last record is
+     * covered by it, a newer one is not (r->covered_until_ns). */
+    history_attach(r,root,66);assert(r->covered_until_ns && !r->covered_drops);
+    struct efsd_server *s=calloc(1,sizeof(*s));assert(s);
+    assert(!pthread_mutex_init(&s->lock,NULL));
+    s->storage_path_count=1;strcpy(s->storage_paths[0],root);
+    s->node_count=1;s->nodes[0].id=s->id=1;
+    struct target attached={0};s->storage_roots[0]=&attached;
+    struct server_recovery_files c={0};
+    snprintf(file,sizeof(file),"%s/old",root);
+    {int fd=open(file,O_CREAT|O_WRONLY,0644);assert(fd>=0);close(fd);}
+    struct timespec before[2]={{.tv_sec=(time_t)(r->covered_until_ns/1000000000ull)-5},{.tv_sec=(time_t)(r->covered_until_ns/1000000000ull)-5}};
+    assert(!utimensat(AT_FDCWD,file,before,0));
+    booting=1;assert(!server_recovery_drop(s,file,0,0,&c));booting=0;
+    assert(r->covered_drops==1);
+    snprintf(file,sizeof(file),"%s/new",root);
+    {int fd=open(file,O_CREAT|O_WRONLY,0644);assert(fd>=0);close(fd);}
+    struct timespec later[2]={{.tv_sec=(time_t)(r->covered_until_ns/1000000000ull)+5},{.tv_sec=(time_t)(r->covered_until_ns/1000000000ull)+5}};
+    assert(!utimensat(AT_FDCWD,file,later,0));
+    booting=1;assert(!server_recovery_drop(s,file,0,0,&c));booting=0;
+    assert(r->covered_drops==1);
+    /* Positions: the ack names the root and the open epoch of this boot. */
+    assert(server_put_sync_position(s,0)==efs_put_ack_make(0,efs_put_pos(r->boot,r->seq)));
+    assert(!server_put_sync_position(s,1) && !server_put_sync_position(s,0xff));
+    free(s);
+    server_put_sync_stop(NULL);quiesce(r);close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    snprintf(file,sizeof(file),"%s/%s",root,PUT_SYNC_RECORD);assert(!unlink(file));
+    assert(!rmdir(root));
+    puts("store durability: barrier history chain, validation by verified recovery, covered-drop rule, ack positions PASS");
+}
 /* K36: the local half of verified recovery. Real fragment names under a
  * root: a valid file is kept, a torn one (truncated), one whose record names
  * another object, one with a flipped payload byte and one whose digest
@@ -595,6 +683,7 @@ int main(void)
     int async_ran=test_async_durability(data);
     test_startup_abandon(data);
     test_barrier_backoff();
+    test_barrier_history();
     test_recovery_local(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
     free(data);

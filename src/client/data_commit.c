@@ -18,8 +18,7 @@
  * changed before the COMMIT is a lost fragment (the payload may have been
  * released already: never resent, never forgotten) unless the node's COMMIT
  * history proves that incarnation's last completed barrier covered the
- * fragment's position on its root; a lost fragment is asked again at every
- * later fsync.
+ * fragment's position on its root. A lost fragment stays lost.
  *
  * A stripe is proven when two or three fragments are durable and a third
  * that is not is covered by a durable degraded mark: the one its
@@ -470,7 +469,7 @@ static int stripe_prove(efs_ino_t ino, int all)
     uint64_t need = 0;
     for (uint32_t k = 0; k < ns; k++)
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
-            if (snap[k].state[i] == FRAG_PENDING || snap[k].state[i] == FRAG_LOST)
+            if (snap[k].state[i] == FRAG_PENDING)
                 need |= 1ull << snap[k].nodes[i];
     for (efs_node_id_t node = 0; node < COMMIT_NODES; node++) {
         slot[node] = -1;
@@ -533,8 +532,8 @@ static int stripe_prove(efs_ino_t ino, int all)
             }
             for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
                 int s = slot[p->nodes[i]];
-                if ((p->state[i] != FRAG_PENDING && p->state[i] != FRAG_LOST) || s < 0 ||
-                    !finished[s] || jobs[s].rc != EFS_OK || p->seq[i] > jobs[s].target)
+                if (p->state[i] != FRAG_PENDING || s < 0 || !finished[s] ||
+                    jobs[s].rc != EFS_OK || p->seq[i] > jobs[s].target)
                     continue;
                 p->state[i] = p->epoch[i] == jobs[s].epoch ||
                               history_covers(&jobs[s], p->epoch[i], p->ack[i])

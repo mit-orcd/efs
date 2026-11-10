@@ -37,6 +37,8 @@ static int down[NN];          /* in cooldown and not listening */
 static uint64_t epochs[NN];
 static uint64_t reply_at[NN], commit_deadlines[NN], mark_at;
 static int expire_commit[NN];
+static struct efs_data_commit_history hist[NN][2]; /* a restarted node's barrier history (K110) */
+static uint32_t hist_n[NN];
 static uint64_t mono_ms(void)
 {
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -68,11 +70,14 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **p, uint32_t *n)
         down[id] = 1;
         return -1;
     }
-    struct efs_msg_data_commit_reply *r = calloc(1, sizeof(*r));
+    uint32_t nh = hist_n[id];
+    struct efs_msg_data_commit_reply *r = calloc(1, sizeof(*r) + nh * sizeof(hist[id][0]));
     r->rc = __atomic_load_n(&fail_io[id], __ATOMIC_ACQUIRE) ? EFS_ERR_IO : EFS_OK;
     r->roots = 1;
     r->boot_epoch = epochs[id];
-    *type = EFS_MSG_DATA_COMMIT_REPLY; *p = r; *n = sizeof(*r);
+    r->history = nh;
+    memcpy(r + 1, hist[id], nh * sizeof(hist[id][0]));
+    *type = EFS_MSG_DATA_COMMIT_REPLY; *p = r; *n = (uint32_t)(sizeof(*r) + nh * sizeof(hist[id][0]));
     return 0;
 }
 static int terminal_rc = EFS_ERR_BUSY, terminal_calls;
@@ -120,6 +125,7 @@ static void heal(void)
     memset(fail_io, 0, sizeof(fail_io)); memset(fail_net, 0, sizeof(fail_net));
     memset(die_in_commit, 0, sizeof(die_in_commit)); memset(down, 0, sizeof(down));
     memset(reply_at, 0, sizeof(reply_at)); memset(expire_commit, 0, sizeof(expire_commit));
+    memset(hist_n, 0, sizeof(hist_n));
 }
 /* One acknowledged PUT object: ack bit i set = fragment i acknowledged. */
 static int put_unpublished(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs_node_id_t c,
@@ -133,6 +139,19 @@ static int put_unpublished(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node
     for (int i = 0; i < 3; i++)
         if (ack & (1u << i)) { seq[i] = efs_client_commit_note(t.nodes[i]); ep[i] = epochs[t.nodes[i]]; }
     return efs_client_stripe_note(&t, seq, ep, pos);
+}
+/* An object acknowledged by nodes 1, 2, 3 at the given ack positions. */
+static int put_acked(efs_ino_t ino, const uint64_t ack[3])
+{
+    struct efs_put_ticket t;
+    uint64_t seq[3], ep[3];
+    memset(&t, 0, sizeof(t));
+    t.ino = ino; t.inode_gen = 5; t.object = ino * 1000;
+    for (int i = 0; i < 3; i++) {
+        t.nodes[i] = (efs_node_id_t)(i + 1);
+        seq[i] = efs_client_commit_note(t.nodes[i]); ep[i] = epochs[t.nodes[i]];
+    }
+    return efs_client_stripe_note(&t, seq, ep, ack);
 }
 /* Existing cases model an acknowledged REPORT before their fsync. */
 static int put(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs_node_id_t c,
@@ -382,6 +401,43 @@ int main(int argc, char **argv)
     reset(); assert(efs_client_data_commit(18) == EFS_ERR_IO && !marks);
     reset(); assert(efs_client_data_commit(18) == EFS_ERR_IO && !marks && live() == 1);
     const int lost = live(); /* ino 18 stays: its proof can never come */
+    /* K110: members killed and restarted before the COMMIT. The restarted
+     * member's history says its old incarnation (300) completed a barrier
+     * covering root 0 up to position 100: a fragment acknowledged at or
+     * before that is durable, anything else stays lost. */
+    {
+        const uint64_t p100 = efs_put_ack_make(0, 100), p101 = efs_put_ack_make(0, 101);
+        epochs[1] = epochs[2] = epochs[3] = 300;
+        const uint64_t covered[3] = {p100, p100, p100};
+        assert(put_acked(60, covered) == EFS_OK);
+        epochs[2] = 301; epochs[3] = 302;
+        hist[2][0] = hist[3][0] = (struct efs_data_commit_history){.verifier = 300, .position = 100};
+        hist_n[2] = hist_n[3] = 1;
+        reset(); assert(efs_client_data_commit(60) == EFS_OK && !marks && live() == lost);
+        heal();
+        /* Node 3 alone restarted and its fragment is not covered: a lost
+         * fragment, the other two durable, so the mark covers it. */
+        const struct { uint64_t ack, verifier, position; uint32_t root; } no[] = {
+            {p101, 300, 100, 0},                   /* acknowledged past the barrier */
+            {efs_put_ack_make(1, 100), 300, 100, 0}, /* another root */
+            {0, 300, 100, 0},                      /* no position */
+            {p100, 299, 100, 0},                   /* another incarnation */
+            {p100, 300, 100, 1},                   /* history of another root */
+        };
+        for (unsigned k = 0; k < sizeof(no) / sizeof(no[0]); k++) {
+            epochs[1] = epochs[2] = epochs[3] = 300;
+            const uint64_t ack[3] = {p100, p100, no[k].ack};
+            assert(put_acked(70 + k, ack) == EFS_OK);
+            epochs[3] = 302;
+            hist[3][0] = (struct efs_data_commit_history){.verifier = no[k].verifier,
+                .position = no[k].position, .root = no[k].root};
+            hist_n[3] = 1;
+            reset();
+            assert(efs_client_data_commit(70 + k) == EFS_OK && marks == 1 && mark_fi == 2 &&
+                   live() == lost);
+            heal();
+        }
+    }
     /* Acknowledgements from the new incarnations are proven as usual. */
     for (int i = 1; i < NN; i++) epochs[i] = 104;
     assert(put(19, 0, 1, 2, 3, 7) == EFS_OK);
