@@ -5,9 +5,9 @@ Task FB, Nov 9 to 10 2026, fstor007, branch `claude/blissful-chaum-051bdb` from 
 **Verdict: PASS on both fixes, harness and bench-tool change only, no K row, blocks alpha: no.**
 
 - **GC helper race:** reproduced on the old code and gone on the new.
-- **io bench:** the old build failed 6 of 6 pinned idle runs and 5 of 40 pinned runs beside the gate. The new build passed 0-fail on all 78 runs of the same case, from 1 CPU to all 96.
+- **io bench:** the old build failed 6 of 6 pinned idle runs and 5 of 40 pinned runs beside the gate. The new build had no failure in the 75 runs of the same case, from 1 CPU to all 96.
 - **fstor007 `make test`:** rc 0.
-- **8-job gate:** `TOTAL 595 FAIL 1 NOTRUN 3 STATUS FAIL (662s)`. The one FAIL, `test_k41_packer_placement.py`, is a packer-placement daemon test that this change does not touch. It ran while this task's pinned benches drove the load to about 200 on 96 CPUs, and it could not be rerun solo because the host was then reserved for a merge gate (see Remaining).
+- **8-job gate:** `TOTAL 595 FAIL 1 NOTRUN 3 STATUS FAIL (662s)`. The one FAIL is `test_k41_packer_placement.py`, a packer-placement daemon test that never runs `efs-bench` or the GC helper. It could not be rerun solo because the host was then reserved for a merge gate, so the gate on the final code is not yet a clean pass (see Remaining).
 
 No timeout, budget, `--time` value or sleep was changed.
 
@@ -19,7 +19,7 @@ No timeout, budget, `--time` value or sleep was changed.
 
 **Regression check:** `tests/test_gc_files_vanish.py` (in `make test`, budget row 30 s) compiles the real `export_entries`/`files` from the fixture source and injects `os.scandir`. It checks four cases: the resident fragments with `.sum` excluded; a subdirectory removed at its scan, where the sibling is kept; the inode directory removed, or absent, which reads as empty; and a `PermissionError`, which still raises. It fails on the old source, which has no `export_entries`.
 
-**Race reproduction** (`scripts/evidence/fb/gc_files_race.py OLD NEW`): each version's `files()` scans for 5 s while a thread keeps creating eight subdirectories and removing the tree. fstor007, Python 3.9.25, two separate runs:
+**Race reproduction** (`scripts/evidence/fb/gc_files_race.py OLD NEW`): each version's `files()` scans for 5 s while a thread keeps creating eight subdirectories and removing the tree. fstor007, Python 3.9.25, two separate runs. Run 1's counts were read from the terminal and are not in an artifacts directory; run 3's are in `gc-files-race.txt` (below):
 
 | source | run 1: scans, `FileNotFoundError` | run 3: scans, `FileNotFoundError` |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ Even unpinned on an idle 96-CPU host, the serial loop takes up to 0.2 s of the 1
 1. **One release.** The main thread write-locks one `pthread_rwlock_t` before creating the workers. Each worker marks itself ready and blocks in `rdlock`. When all are ready, one `unlock` releases them: glibc wakes every waiting reader with a single futex wake, and the readers acquire without the shared-mutex convoy that `802a615fe` removed (`ab88399e9`).
 2. **Window behind the last start.** The last worker to start publishes the deadline, its own start plus `--time`, with one atomic store. The others keep working and read the deadline with one atomic load per operation: no spin, no second wake (`24b6807e7`). Every worker therefore runs for at least `--time` after all are running.
 
-`wall_s` spans release to the last exit, so `GiB_s` counts every op inside its own wall time. `max_start_us` still reports the start ramp. `idle_workers` and the error checks are unchanged and still fail closed on an I/O or verification error. The abort path sets `gate.abort` before the same unlock. `docs/how-it-works/performance.md` describes the new start gate.
+`wall_s` spans release to the last exit, so `GiB_s` counts every op inside its own wall time. `wall_s` can now exceed `--time` by the start ramp. No caller derives a timeout from `--time`: `scripts/bench_profile.py` uses a fixed 600 s per subprocess. One behaviour changes. Every worker now completes at least one operation by construction, so a host that is slow to schedule the workers no longer gives `BENCH_FAIL` through `idle_workers`. It shows instead as a longer `wall_s` and `max_start_us`. `idle_workers` still counts a worker whose first operation failed, and the I/O and verification errors still fail closed. The abort path sets `gate.abort` before the same unlock. `docs/how-it-works/performance.md` describes the new start gate.
 
 **Old and new interleaved** (`scripts/evidence/fb/io_start_compare.sh OLD NEW 10 CPUS`, beside this task's 8-job gate, two sets about four minutes apart, load 6 to 200):
 
@@ -57,7 +57,7 @@ Even unpinned on an idle 96-CPU host, the serial loop takes up to 0.2 s of the 1
 | `0-3` | 1/20, 1,001 ms | 0/20, 1,549 ms |
 | all 96 | 0/20, 212 ms | 0/20, 219 ms |
 
-**New build start spread** (`io_start_diag.py spread`, 9 runs labelled idle, all BENCH_OK). The load was 24 to 104 when these ran, so they are not idle-host figures. Something besides this task drove the host from load 1 to about 100 within the first minutes; it may have been another session, and it was not identified.
+**New build start spread** (`io_start_diag.py spread`, 9 runs on the otherwise idle host, all BENCH_OK). The load average climbed from 24 to 104 during these runs. That is the bench's own 256 threads: they ran pinned first, and a load average counts runnable threads. The unpinned rows ran last and are the idle-host comparison with the old build's 370 to 410 ms latest start.
 
 | CPUs | p50 | max |
 | --- | --- | --- |
@@ -65,11 +65,11 @@ Even unpinned on an idle 96-CPU host, the serial loop takes up to 0.2 s of the 1
 | `0-3` | 125 to 136 ms | 2.1 s |
 | unpinned | 29 to 108 ms | 0.45 s |
 
-Beside the gate (6 runs, all BENCH_OK), `0-3` gave a max of 45 to 210 ms and unpinned 13 to 102 ms. On one CPU, 256 runnable threads take seconds to all reach a CPU. The old build failed those runs; the new build waits for them.
+Beside the gate (6 runs, all BENCH_OK), `0-3` gave a max of 45 to 210 ms and unpinned 13 to 102 ms. On one CPU, 256 runnable threads take seconds to all reach a CPU. The old build failed those runs; the new build waits for them. Unpinned on an idle host the latest start is about the same for both builds (new 148 to 449 ms, old 370 to 410 ms), so on 96 CPUs the gain is that no start ramp can empty a worker's window, not a faster start.
 
 ## Runs and environment
 
-fstor007 (96 CPUs, RHEL 9.7, kernel 5.14.0-687.36.1, gcc 11.5.0, Python 3.9.25), `EFS_FUSE_PREFIX` shim to the private libfuse 3.16.2, TCP loopback plus RDMA on mlx5_0 for the RDMA tests. Each round started on a quiet host: `ps -u erbmi1` showed no other gate, and the load was 1.1 to 2.
+fstor007 (96 CPUs, RHEL 9.7, kernel 5.14.0-687.36.1, gcc 11.5.0, Python 3.9.25), `EFS_FUSE_PREFIX` shim to the private libfuse 3.16.2, TCP loopback plus RDMA on mlx5_0 for the RDMA tests. Before each round no other gate's screen was running; round 1 started at load about 6 and round 3 at 1.1 after a `ps -u erbmi1` check.
 
 - **Round 1**, Nov 9, `ab88399e9`, `git archive` tar.gz sha256 `ad5f6be40e263026a615350999e50f3935b5ae58866db7d28a20a78595541cf1`. `make test` rc 0; 8-job gate `TOTAL 595 FAIL 0 NOTRUN 3 STATUS COMPLETE (664s)`. That build still had the deadline fixed at release. Artifacts: fstor007 `~/efs-artifacts/taskFB-20261109/`, `SHA256SUMS` sha256 `b07f8f961c99796048acd70fc7ca22cfff9c47e6705e43cc6b7a84d0c5c02cd2`.
 - **Round 2** was stopped at the merge coordinator's request because a merge gate ran at the same time. Its partial output is a note in the shared session notes, not evidence.
@@ -102,6 +102,6 @@ The `--storage` root must be absent or empty, and the bench removes its files. D
 
 ## Remaining
 
-- `test_k41_packer_placement.py` failed once in round 3 under the extra load. It passed in round 1's gate and in Task EX's gates, and K41 load failures are known on loaded hosts. A solo rerun on fstor007 is owed once the merge coordinator frees the host. Until then the round-3 gate is not a clean pass.
+- `test_k41_packer_placement.py` failed once in round 3, beside this task's pinned benches (which held CPUs 0 to 3 only). It passed in round 1's gate and in both of Task EX's gates. The same test failed on both candidate and base in the Oct 25 Task D nuc gate ([October ledger](../2026-10/ledger.md)), which does not explain this failure. Owed: three solo runs on the final tree once the merge coordinator frees the host, and on `2dd280cee` too if any of them fails. Until then the gate on the final code is not a clean pass.
 - `src/bench/bench_local.c` (start gate near line 545) and `src/bench/storage_principles.c` (shared `go_cv`) keep the shape this task removed from `io_bench.c`: the deadline is fixed first and the workers released after. They are not changed here, and neither failed in batch F.
 - F1 still needs a clean gate on the batch F candidate. This task's gates ran on its own branch.
