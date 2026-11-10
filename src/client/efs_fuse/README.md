@@ -86,7 +86,7 @@ compile).
 
 ## Tests
 
-- `python3 scripts/tests_for.py client/efs_fuse` lists all 55 rows; the dotted
+- `python3 scripts/tests_for.py client/efs_fuse` lists all 56 rows; the dotted
   forms above select one file's rows (add `--run` after `make all`).
 - Contract → case maps (Task EU): one row per operation or invariant the
   owner's header states, the case that proves it and the command that runs

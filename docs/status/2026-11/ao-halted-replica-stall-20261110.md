@@ -1,5 +1,7 @@
 # K104: a 30 s stall and `EBUSY` with one replica halted (Task FF)
 
+**Status (Nov 10):** merged into devel in wave 72; K104 from OPEN to FIXED at the merge. The three halted-member waits listed under "What is not verified" became row K106 (OPEN, blocks alpha: yes, coordinator's ruling). The wave 72 merge gates are the first `make test-all` on the client fix.
+
 Task FF, Nov 10 2026, node9900 and intel1 (private clusters only). Purpose: find why `tests/test_ao_readdir_live.py` stalled about 30 s and its churn writer's create/unlink returned `EBUSY` (errno 16) right after one replica was halted with SIGSTOP and continued (wave 70 merge gate, node9900), fix the root cause and prove it. Linked row: K104 (both tables of [the checklist](../alpha-1.0-2plus1-checklist.md)).
 
 **Verdict: cause found in two places, both fixed with regression tests; the unchanged gate test reproduced it once (1 of 96 runs) and a variant of its step that forces the gate's election outcome reproduces it at about 4 % (`pstack` captures from that variant); not introduced by wave 69, which leaves the wave 69 rate change unexplained.** A request sent to a member that has stopped answering (SIGSTOP or a hung host: the kernel still accepts TCP, nothing replies) waits the full 30 s transport timeout (`EFS_IO_TIMEOUT_MS`), which is also the client's operation budget. Two routing defects sent requests there although two live members could serve them:

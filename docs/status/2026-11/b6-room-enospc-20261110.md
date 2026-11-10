@@ -1,5 +1,7 @@
 # B6 full mode: room freed on a full node went to a held chunk (Task FE, Nov 10)
 
+**Status (Nov 10):** merged into devel in wave 72. The coordinator accepted the verdict (test defect, no K row) on the fixture trace and the K90 contract; the failure was never reproduced, and which client path re-sent the held chunk is not identified.
+
 **Verdict: PASS for the fix (test only, no K row, blocks alpha: no). The product
 admitted correctly; the gate failure is not reproduced.** In the wave 69 merge gate on fstor007,
 `room_scenario` in `tests/test_b6_unavailable.py` failed with `room: ENOSPC then

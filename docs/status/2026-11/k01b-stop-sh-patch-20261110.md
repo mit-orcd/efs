@@ -1,5 +1,7 @@
 # K1 / O4: the devops `stop.sh` patch applied on a branch (Task FJ, phase 1)
 
+**Status (Nov 10):** this page merged into devel in wave 72. The devops branch is still unmerged and undeployed; phase 2 (merge into devops `devel`, deploy `stop.sh`, run O4) waits for the user's approval.
+
 **Status (Nov 10 2026): applied on devops branch `k01b-stop-nonorderly`, commit `f2a1fc5d91f84748220da91e43394e0eda73726d`, on top of devops `devel` `8bc872e`. Not merged into devops `devel`. Not deployed to any host. O4 is still NOTRUN, K1 stays VERIFY. Phase 2 (merge, push, run O4) waits for the user's approval.**
 
 Linked item: Alpha 1.0 Stage 1 row K1 (W145), run O4 of the [acceptance matrix](../stage1-acceptance-matrix-20261030.md). The user lifted the standing rule against editing `~/git/devops` for this task only, limited to `nuc-efs/stop.sh` and its fixture `nuc-efs/test_daemon_ownership.py`. Work was done in the separate devops worktree `/Users/mike/git/devops-k01b`. The devops main checkout (`~/git/devops`) stayed on `devel` with `git status --short` empty; `~/git/cluster` was only read.
