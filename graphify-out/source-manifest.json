@@ -72,6 +72,7 @@
     "scripts/bench_profile.py": 21,
     "scripts/build-code-graph.py": 21,
     "scripts/calibrate_test_budgets.sh": 7,
+    "scripts/check_concern_map.py": 4,
     "scripts/check_doc_links.py": 6,
     "scripts/check_guide_counts.py": 7,
     "scripts/check_include_boundary.py": 5,
@@ -1498,7 +1499,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "51bd66b581af375c353c4c2bd732c071b1b13fe9a9a2c782411fb62995075353",
+    "Makefile": "f0b693943c5e267ff357a4e6202799717afc965d8385db8f29e78e19eb5efbaa",
     "README.md": "f646cf19b6605664ea80ee9a539ea8c7938be322ee12ba520447204095e3d216",
     "docs/backlog/crash-safe-durable-versions.md": "b57a8c2376ec9e85d9403196a237c57b69f7515a60e73ceb2ac997788016d6b3",
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
@@ -1518,6 +1519,7 @@
     "docs/how-it-works/settings.md": "9d5c617b7caa40ff7efb6381817d37efe820528e637382e3354c7e1a82176048",
     "docs/how-it-works/testing.md": "1a9b15c138ad86fa23863909b71f36139829b7fa0992db80fab99c03ae7630ef",
     "docs/how-it-works/verification.md": "f6903aae01af5eac47ef837a31544d2033f505803fc9066daadac5198ff9c270",
+    "docs/how-it-works/write-path-map.md": "da857e4bb9b366cc1be15d87c489d941637c9af3b265eb4440fd1c284d0be28c",
     "docs/operations/runbooks.md": "0794184671348626a05380aeca58e9b26c64f4413cd9f6e6893e347b12a486e9",
     "docs/status/2026-10/alpha-1.0-node-addition-20261023.md": "c76ddd28ebefa81863b586dd6b4e49bcefd1b7e09765044bed38a78bdd3c48fb",
     "docs/status/2026-10/d39-consolidated-model-20261023.md": "68211f94877f2acbf05645ba2ef455c9f320cde460e821371b534451284f8bcc",
@@ -1606,6 +1608,7 @@
     "scripts/bench_profile.py": "73de02e1fed4f1d2d19a260d73299ea98370c9f0d18c22d33489ef8a1d38dab8",
     "scripts/build-code-graph.py": "9fc67ce1e5866dd68709caec57766474a012b203116738c0e48126008d6e1b38",
     "scripts/calibrate_test_budgets.sh": "26d0675574f0749aeb33127f7c390bdcbb7d2beee6b6adbb48dae840972bd51d",
+    "scripts/check_concern_map.py": "0c303c96ec868ddd6dd5cae9067041cc4c71dfa64c69831188ad5d3ba7ecf089",
     "scripts/check_doc_links.py": "3cc40133ba30aef5ac48df7e9adbdcb7c6a32d5c9385b24acbba0b3d5c18e37d",
     "scripts/check_guide_counts.py": "2cb99aeeb33284de5e6809e2094819051cc5d9ea896942f5925a103eedb3bd77",
     "scripts/check_include_boundary.py": "138b840b33146e7c9c8d08d46d01a6f14d3926da23a95b7e07b8eebf70f54e83",
@@ -1925,7 +1928,7 @@
     "src/bench/perf_control.h": "1065b26c7718d721ae3ae05af1dae6149b51a0f60e9f5b3f9f47f0331903a820",
     "src/bench/storage_principles.c": "4eac85bf8646ba810085cab6322361ef2fe9577a5e4179102b9849ed7ae280cb",
     "src/bench/storage_principles.h": "5e9fc23c21af09c88ad572da38b36191b49672701ceea881b7f921633d08e77a",
-    "src/client/README.md": "722bb934bbe2a40b1522d968719faae3d998e78dd024ee8f002411976d823c4e",
+    "src/client/README.md": "ff16bca26935284c0cc8487fbec84370fe85efe9385c72d0f346d6ac3a9c2dab",
     "src/client/bufpool.c": "82412fc2b9623db57565a99167ea807b1917686ef76a8afea6f5b3b0963e39af",
     "src/client/client.c": "c8b87f3d6ba8f493fffcb959b6638c76dbaed5fd8e934e4db9b7128cabddf7af",
     "src/client/client_internal.h": "71218def1d0c7cf6806d74ff16a7695cd171e8b83ee30ee93351b871d0660cc0",
@@ -3044,10 +3047,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1812
+    "calls": 1813
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "9553902fee634d57f044a539c3cc223470c80a33"
+  "source_commit": "dfcb93b7d9704fa7e056c0112ba6f1cbb0c2e16e"
 }
