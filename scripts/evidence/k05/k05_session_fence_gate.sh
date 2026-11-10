@@ -10,7 +10,9 @@
 # REL is a built tree (efsd, efs-fuse, efs-mgmt, scripts/, tests/). DIR must
 # not exist or be empty and be writable by this user (on efs2:
 # `sudo install -d -o $USER /data1/k05`); it is deleted at the end. Ports PORT+1..PORT+3
-# (default 18600 -> 18601-18603). Buffered I/O (--no-direct-io), TCP only.
+# (default 18600 -> 18601-18603). EFS_TRANSPORT (default tcp) and K05_ADDR
+# (default 127.0.0.1; an RDMA run needs an address on the RDMA device) pick
+# the transport and the members' address.
 # Never point this at a shared cluster: it formats its own stores.
 #
 # Output: one "CHECK <name> PASS|FAIL <detail>" line per check and a final
@@ -18,8 +20,8 @@
 # set K05_KEEP=1 to keep DIR (e.g. to inspect a failure).
 set -u
 REL=$(cd "$1" && pwd); D=$2; PORT=${3:-18600}
-ADDR=127.0.0.1
-export EFS_TRANSPORT=tcp
+ADDR=${K05_ADDR:-127.0.0.1}
+export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp}
 POSIX_JOBS=${K05_POSIX_JOBS:-2}
 fails=0
 check() { # name rc detail
@@ -59,15 +61,19 @@ rm -f "$D"/.efs-mnt?.lock 2>/dev/null # client.sh lock files of an earlier run
 mkdir -p "$D"/{n1,n2,n3,logs,mntA,mntB}
 (cd "$REL" && sha256sum efsd efs-fuse efs-mgmt | sed 's/^/binary /')
 for i in 1 2 3; do
-    join=""; [ $i -gt 1 ] && join="--join $ADDR:$((PORT+1))"
-    nohup "$REL/efsd" --node-id $i --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
-        --quota 2G --no-direct-io $join >> "$D/logs/efsd-n$i.log" 2>&1 &
+    # K33: the seed starts on its endpoint, members join it; ids come from the cluster.
+    if [ $i = 1 ]; then node=("$ADDR:$((PORT+1))" "$D/n1")
+    else node=(--join "$ADDR:$((PORT+1))" --listen "$ADDR:$((PORT+i))" "$D/n$i"); fi
+    nohup "$REL/efsd" "${node[@]}" --quota 2G --discovery-port 0 >> "$D/logs/efsd-n$i.log" 2>&1 &
     echo $! > "$D/logs/n$i.pid"
     for t in $(seq 60); do grep -q listening "$D/logs/efsd-n$i.log" && break; sleep 0.5; done
 done
 ok=1
-for t in $(seq 60); do "$REL/efs-mgmt" raft-mkfs $ADDR:$((PORT+1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && { ok=0; break; }; sleep 1; done
-check mkfs $ok
+for t in $(seq 60); do
+    [ "$(grep -l 'formed: 3 members' "$D"/logs/efsd-n{1,2,3}.log 2>/dev/null | wc -l)" = 3 ] && { ok=0; break; }
+    sleep 1
+done
+check formed $ok
 for m in A B; do
     (cd "$REL" && EFS_FUSE_LOG="$D/logs/fuse-$m.log" ./scripts/client.sh $ADDR:$((PORT+1)) "$D/mnt$m" > "$D/logs/client-$m.out" 2>&1)
     findmnt -rn "$D/mnt$m" > /dev/null; check "mount-$m" $? "$D/mnt$m"
