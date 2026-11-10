@@ -54,9 +54,13 @@ kind (deployment inputs first) then name; `--writers` comes last.
 Columns: **Readers** gives the first call site (`file:line`, function, the
 helper when not `getenv`) and how many more; **Launch / portal** the devops
 and cluster files that name it; **Tests** the files under `tests/` and then
-`scripts/`. "Keep until A8" marks a numeric tunable that a test or launch
-script sets: A8 qualifies a built-in value or a bounded automatic range for
-it before it can go.
+`scripts/`. A8 (Nov 10, D46 item 7) gave every numeric tunable a
+disposition: built in (removed, refused at startup), test-only (an
+`EFS_FAULT_*` hook in `EFS_FAULTS` builds or a test hook with no
+environment name), or justified operator configuration with its need and
+the tests that cover its range; the
+[A8 evidence](../status/2026-11/a8-tunables-20261110.md) has the table.
+Reader line numbers are those of the audit that added the row.
 
 ### Feature enablement and behavior selectors (efsd, efs-fuse)
 
@@ -80,11 +84,11 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| `EFS_CLIENT_META_MB` | `common/stage_limit.h:9` (efs_stage_cap_bytes) | 256 MiB staging-table cap (16..1 Mi MiB) | numeric tunable | portal (observed only) | `test_rollup_budget.py`; `orcd_mini_stage_evict_ab.sh`, `w125_evict_rmw.py` | Keep until A8: set by tests and W125 scripts; client memory sizing |
-| `EFS_DCACHE_BYTES` | `client/write.c:7788` (dcache_reclaim_limit) | 128 MiB soft dirty-body reclaim target (1 MiB..4 GiB) | numeric tunable | portal (observed only) | `gate_k9_append_load.sh`, `gc_reclamation.py` | Keep until A8: client memory sizing, set by live tests |
-| `EFS_DCACHE_DRAIN_BYTES` | `client/bufpool.c:56` (buf_init) via `budget_env` | 64 MiB drain reserve | numeric tunable | — | `gc_reclamation.py`, `test_bufpool.c` +1; `scripts/evidence/w125/w125_read_pressure.sh` | Keep until A8: client memory sizing, set by tests |
-| `EFS_DCACHE_HARD_BYTES` | `client/bufpool.c:54` (buf_init) via `budget_env` | 256 MiB body-admission budget | numeric tunable | — | `gc_reclamation.py`, `test_bufpool.c` +1; `scripts/evidence/w125/w125_read_pressure.sh` | Keep until A8: client memory sizing, set by tests |
-| `EFS_DCACHE_READ_BYTES` | `client/bufpool.c:63` (buf_init) via `budget_env` | 64 MiB read headroom | numeric tunable | — | `test_bufpool.c` | Keep until A8: set by `test_bufpool.c` |
+| `EFS_CLIENT_META_MB` | `common/stage_limit.h:9` (efs_stage_cap_bytes) | 256 MiB staging-table cap (16..1 Mi MiB) | numeric tunable | portal (observed only) | `test_rollup_budget.py`; `orcd_mini_stage_evict_ab.sh`, `w125_evict_rmw.py` | Justified (A8): client memory sizing; a client host with little memory lowers the 256 MiB staging cap, one with large metadata working sets raises it. Bounded 16..1048576 MiB (out of range keeps 256); `test_rollup_budget.py` runs at the 16 MiB floor, the product tests at 256. The top of the range is not exercised |
+| `EFS_DCACHE_BYTES` | `client/write.c:7788` (dcache_reclaim_limit) | 128 MiB soft dirty-body reclaim target (1 MiB..4 GiB) | numeric tunable | portal (observed only) | `gate_k9_append_load.sh`, `gc_reclamation.py` | Justified (A8): client memory sizing, the soft dirty-body reclaim target. Bounded 1 MiB..4 GiB; `test_k38_shared_chunk_pressure.py` runs at the 1 MiB floor, `gate_k9_append_load.sh` at 4 MiB, the K38 ORCD campaign (`k38_dw_campaign.py`, product build) at 1 MiB; the default is 128 MiB. Above 128 MiB is not exercised |
+| `EFS_DCACHE_DRAIN_BYTES` | `client/bufpool.c:56` (buf_init) via `budget_env` | 64 MiB drain reserve | numeric tunable | — | `gc_reclamation.py`, `test_bufpool.c` +1; `scripts/evidence/w125/w125_read_pressure.sh` | Justified (A8): client memory sizing, the drain reserve inside the client buffer budget. Bounded 1 slab..1 GiB; `test_bufpool.c` and `test_client_memory.py` run at 32 MiB, the product tests at 64 MiB. Above 64 MiB is not exercised |
+| `EFS_DCACHE_HARD_BYTES` | `client/bufpool.c:54` (buf_init) via `budget_env` | 256 MiB body-admission budget | numeric tunable | — | `gc_reclamation.py`, `test_bufpool.c` +1; `scripts/evidence/w125/w125_read_pressure.sh` | Justified (A8): client memory sizing, the hard body-admission budget (the bulk of efs-fuse buffer memory). Bounded 1 slab..4 GiB; `test_bufpool.c`, `test_client_memory.py` and `test_k38_shared_chunk_pressure.py` run at 32 MiB, `test_settings_listing.py` at 128 MiB, the product tests at 256 MiB. Above 256 MiB is not exercised |
+| `EFS_DCACHE_READ_BYTES` | `client/bufpool.c:63` (buf_init) via `budget_env` | 64 MiB read headroom | numeric tunable | — | `test_bufpool.c` | Justified (A8): client memory sizing, the read headroom added to the hard budget (an operator who caps client memory sets it with `EFS_DCACHE_HARD_BYTES`). Bounded 1 slab..1 GiB; `test_bufpool.c` runs at 32 MiB, the product tests at 64 MiB. Above 64 MiB is not exercised |
 
 ### Server data path, GC, rebuild and packing (efsd)
 
@@ -96,11 +100,11 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
 | `EFS_QUERY_DISK_MAX_MIB` | `meta/query_disk.c:134` (configure_reserve) | 16384 MiB per query generation | deployment input | portal (observed only) | `amd_query_cache_transition.py` | Keep: documented cache capacity input (power-user.md) |
-| `EFS_QUERY_DISK_RESERVE_MIB` | `meta/query_disk.c:129` (configure_reserve) | 64 MiB free-space guard | deployment input | portal (observed only) | — | Keep: documented cache capacity input; never set in a test or launch, A8 may fold it |
+| `EFS_QUERY_DISK_RESERVE_MIB` | `meta/query_disk.c:129` (configure_reserve) | 64 MiB free-space guard | deployment input | portal (observed only) | — | Keep: documented cache capacity input (a deployment input, outside the A8 numeric audit); never set in a test or launch |
 | `EFS_QUERY_DISK_TOTAL_MIB` | `meta/query_disk.c:139` (configure_reserve) | 32768 MiB all query generations | deployment input | portal (observed only) | `amd_query_cache_transition.py` | Keep: documented cache capacity input |
 | `EFS_QUERY_EXPORT_MAX_MS` | `server/raft_host.c:11947` (query_export_configure) | 3600000 ms total paged-export lifetime (60000..604800000) | deployment input | portal (observed only) | — | Keep: documented operator need (long exports, power-user.md); never set in a test or launch |
 | `EFS_QUERY_REFRESH_MS` | `server/raft_host.c:12225` (host_query_thread) | 60000 ms query refresh, 200..3600000 (invalid keeps the default and logs `query-config`) | numeric tunable | — | `efs_commands.py`, `gc_reclamation.py` +2 | Justified (A8): the catalog's freshness against full-shard rebuild cost; an operator with a large namespace lengthens the interval, the query gates shorten it. Bounded 200..3600000 ms; `test_query_refresh.c` (make test) checks the parser over the range, `tests/live/gc_reclamation.py` (30 harness uses, product build) and the D4 tests run 2000 ms, `test_query_first_catalog.py` the default |
-| `EFS_RAFT_APPLIED_INTERVAL_MS` | `server/raft_host.c:12943` (server_raft_host_start) | 100 ms applied-index checkpoint (10..1000); bad values refuse startup | numeric tunable | cluster:cluster.sh, devops:intel.env, devops:start.sh, devops:test_start_mode.py; portal (observed only) | `applied_checkpoint_replay.py`, `runner.py` +14 | Keep until A8: set by devops `start.sh` (default 1000 there) and live tests; launch and code disagree |
+| `EFS_RAFT_APPLIED_INTERVAL_MS` | `server/raft_host.c:12943` (server_raft_host_start) | 100 ms applied-index checkpoint (10..1000); bad values refuse startup | numeric tunable | cluster:cluster.sh, devops:intel.env, devops:start.sh, devops:test_start_mode.py; portal (observed only) | `applied_checkpoint_replay.py`, `runner.py` +14 | Justified (A8): the applied-index checkpoint cadence trades one small write per group per interval against Raft replay after a crash; the user's nuc-efs launch sets it (`devops/nuc-efs/clusters/intel.env:23` defaults it to 1000, `start.sh:11-15,99` passes it). Bounded 10..1000 ms, anything else refuses startup; `test_applied_interval.py` (make test) checks the parser over the range, `test_settings_listing.py` runs a daemon at 50 ms. Finding: the launch default 1000 ms and the built-in 100 ms disagree (for the user; not changed) |
 
 ### Observability and trace (efsd, efs-fuse)
 
@@ -341,7 +345,7 @@ before/after counts earlier on this page describe the original Oct 24 audit.
 | `--discover-on IFACE` | efsd | all interfaces | deployment input | K33 tests (`lo`) | Keep |
 | `--quota SIZE` | efsd | automatic safe quota | deployment input | launch, tests | Keep |
 | `--meta-storage PATH` | efsd | first storage root | deployment input | launch | Keep |
-| `--writers N` | efsd | 8 durable I/O workers; `0` inline | numeric tunable | tests | Keep until A8 |
+| `--writers N` | efsd | 8 durable I/O workers; `0` inline | numeric tunable | tests | Justified (A8): storage parallelism per host (devices and cores); bounded 0..64 (`EFS_MAX_WRITERS`, else a usage error). The daemon tests run 2 (`k33_daemons.py`), the leak gate 0 (`valgrind_leaks.sh`), launches the default 8; `test_settings_listing.py` checks the command-line provenance |
 | `--direct-io` / `--no-direct-io` | efsd, `efs-bench --bench data/meta` | refused (D42): fragment I/O is always `O_DIRECT`; storage that cannot do it is refused at startup | removed | launch (`EFS_DIRECT_IO`), external | Keep refusing |
 | `--no-persist` | efsd | refused (D42): membership is always persisted | removed | none | Keep refusing |
 | `--perf`, `--strace` | efsd, efs-fuse | record a CPU profile / system calls | observability | `scripts/server.sh`, `client.sh` | Keep |

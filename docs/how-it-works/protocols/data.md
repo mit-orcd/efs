@@ -1000,7 +1000,7 @@ larger of two linear ramps:
 
 The busy rate is `floor + (idle − floor) × pressure`. The backlog is
 counted every 30 s. A pass reads its segments' files on 16 threads and
-builds and switches its segments concurrently (`EFS_PACK_SEGMENTS_PER_PASS`, at most 32). Passes run back to
+builds and switches its segments concurrently (8 per pass). Passes run back to
 back while backlog and budget remain.
 
 **Segment quota reserve.** `PUT_SEGMENT` may exceed a node's quota by
@@ -1036,24 +1036,27 @@ segments, live, dead, holed, underfilled and compacted total.
 **Backfill.** `PACK_INDEX` (MD 78) backfills the candidate index from a
 leader scan of inode shards, for stores written before packing.
 
-**Tunables** (efsd environment; defaults in parentheses):
+**Pacing** (built in; A8 removed their `EFS_PACK_*` environment overrides,
+which now stop efsd when set):
 
-| Variable | Meaning |
+| Value | Meaning |
 | --- | --- |
-| `EFS_PACK_MIN_AGE_MS` (60000) | quiet time before a closed file is packed |
-| `EFS_PACK_FILES_PER_S` (5000) | idle packing rate per group |
-| `EFS_PACK_BUSY_FILES_PER_S` (50) | floor while busy |
-| `EFS_PACK_BUSY_COMMITS_PER_S` (100) | foreground commit rate that counts as busy |
-| `EFS_PACK_UNPACKED_GIB` (64) | unpacked bytes where pressure starts (full at 2×) |
-| `EFS_PACK_SPACE_START_PCT` / `_FULL_PCT` (50 / 80) | quota-usage pressure ramp |
-| `EFS_PACK_SEGMENTS_PER_PASS` (8) | segments per pass, and compaction per daily pass |
-| `EFS_PACK_COMPACT_IDLE_S` (60) | idle time before idle compaction |
-| `EFS_PACK_COMPACT_IDLE_SEGS` (256) | output segments per idle batch |
-| `EFS_PACK_COMPACT_DAILY_START_MIN` (180) | daily window start, UTC minute of day |
-| `EFS_PACK_BACKFILL_SHARDS` (64) | inode shards scanned per backfill step |
+| 60000 ms | quiet time before a closed file is packed |
+| 5000 files/s | idle packing rate per group |
+| 50 files/s | floor while busy |
+| 100 commits/s | foreground commit rate that counts as busy |
+| 64 GiB | unpacked bytes where pressure starts (full at 2×) |
+| 50 % / 80 % | quota-usage pressure ramp |
+| 8 | segments per pass, and compaction per daily pass |
+| 60 s | idle time before idle compaction |
+| 256 | output segments per idle batch |
+| 03:00 UTC | daily window start |
+| 64 | inode shards scanned per backfill step |
 
-Built in since A6 (a set variable stops efsd): a 10 s work cap per idle
-compaction batch, a 120 min daily window and full coldness at 86400 s
+Also built in (A6): a 10 s work cap per idle compaction batch, a 120 min
+daily window and full coldness at 86400 s. Test builds (`EFS_FAULTS`) read
+`EFS_FAULT_PACK_MIN_AGE_MS`, `_INTERVAL_MS`, `_FAIL_BACKOFF_MS`,
+`_COMPACT_IDLE_S` and `_COMPACT_DAILY_START_MIN`
 ([inventory](../settings.md)).
 
 **Reads.** GETCHUNKS returns a packed base with `EFS_CHUNK_REC_F_PACKED`

@@ -328,8 +328,7 @@ this list, before it ships.
   client, read-your-writes hold via the dcache. This resembles NFS
   close-to-open consistency (publication at `flush`, visibility on the
   next open/read elsewhere). Reads on an already-open description may retain
-  a chunk mapping for `EFS_READ_MAP_TTL_MS` (default 200 ms, zero disables
-  this cache); a new open invalidates mapping freshness. This is only
+  a chunk mapping for 200 ms (built in); a new open invalidates mapping freshness. This is only
   close-to-open consistency: client-side buffering does
   not by itself imply weak coherence — lock- or lease-based PFSs recall
   buffered data to make it visible, and EFS has no such recall. It is a
@@ -10890,7 +10889,7 @@ larger of two linear ramps:
 
 The busy rate is `floor + (idle − floor) × pressure`. The backlog is
 counted every 30 s. A pass reads its segments' files on 16 threads and
-builds and switches its segments concurrently (`EFS_PACK_SEGMENTS_PER_PASS`, at most 32). Passes run back to
+builds and switches its segments concurrently (8 per pass). Passes run back to
 back while backlog and budget remain.
 
 **Segment quota reserve.** `PUT_SEGMENT` may exceed a node's quota by
@@ -10926,24 +10925,27 @@ segments, live, dead, holed, underfilled and compacted total.
 **Backfill.** `PACK_INDEX` (MD 78) backfills the candidate index from a
 leader scan of inode shards, for stores written before packing.
 
-**Tunables** (efsd environment; defaults in parentheses):
+**Pacing** (built in; A8 removed their `EFS_PACK_*` environment overrides,
+which now stop efsd when set):
 
-| Variable | Meaning |
+| Value | Meaning |
 | --- | --- |
-| `EFS_PACK_MIN_AGE_MS` (60000) | quiet time before a closed file is packed |
-| `EFS_PACK_FILES_PER_S` (5000) | idle packing rate per group |
-| `EFS_PACK_BUSY_FILES_PER_S` (50) | floor while busy |
-| `EFS_PACK_BUSY_COMMITS_PER_S` (100) | foreground commit rate that counts as busy |
-| `EFS_PACK_UNPACKED_GIB` (64) | unpacked bytes where pressure starts (full at 2×) |
-| `EFS_PACK_SPACE_START_PCT` / `_FULL_PCT` (50 / 80) | quota-usage pressure ramp |
-| `EFS_PACK_SEGMENTS_PER_PASS` (8) | segments per pass, and compaction per daily pass |
-| `EFS_PACK_COMPACT_IDLE_S` (60) | idle time before idle compaction |
-| `EFS_PACK_COMPACT_IDLE_SEGS` (256) | output segments per idle batch |
-| `EFS_PACK_COMPACT_DAILY_START_MIN` (180) | daily window start, UTC minute of day |
-| `EFS_PACK_BACKFILL_SHARDS` (64) | inode shards scanned per backfill step |
+| 60000 ms | quiet time before a closed file is packed |
+| 5000 files/s | idle packing rate per group |
+| 50 files/s | floor while busy |
+| 100 commits/s | foreground commit rate that counts as busy |
+| 64 GiB | unpacked bytes where pressure starts (full at 2×) |
+| 50 % / 80 % | quota-usage pressure ramp |
+| 8 | segments per pass, and compaction per daily pass |
+| 60 s | idle time before idle compaction |
+| 256 | output segments per idle batch |
+| 03:00 UTC | daily window start |
+| 64 | inode shards scanned per backfill step |
 
-Built in since A6 (a set variable stops efsd): a 10 s work cap per idle
-compaction batch, a 120 min daily window and full coldness at 86400 s
+Also built in (A6): a 10 s work cap per idle compaction batch, a 120 min
+daily window and full coldness at 86400 s. Test builds (`EFS_FAULTS`) read
+`EFS_FAULT_PACK_MIN_AGE_MS`, `_INTERVAL_MS`, `_FAIL_BACKOFF_MS`,
+`_COMPACT_IDLE_S` and `_COMPACT_DAILY_START_MIN`
 ([inventory](settings.md)).
 
 **Reads.** GETCHUNKS returns a packed base with `EFS_CHUNK_REC_F_PACKED`
@@ -11351,8 +11353,8 @@ The LOCAL inode row carries `nents`, a count of immediate children
 decrement it). Crossing `nents > EFS_DIR_SPREAD_MIN` commits `SPLITTING` on
 that same parent-row PUT — one Raft entry, no extra round. After spread the
 count is frozen; HASHED emptiness is the per-lane `dentry_seq` read set, not
-a distributed counter (the spec rejected that). Runtime override:
-`EFS_DIR_SPREAD_MIN` (tests). Pressure-triggered spread is specified; the
+a distributed counter (the spec rejected that). Test builds only:
+`EFS_FAULT_DIR_SPREAD_MIN` (`EFS_FAULTS`, A8). Pressure-triggered spread is specified; the
 bound is not a number in the spec and is not invented here. Source review
 found size-based admission and migration of already-SPLITTING directories,
 but no pressure-based automatic trigger ([W81](#w81)). Draining
@@ -11892,7 +11894,7 @@ A request whose reply was lost after it was sent, or whose retry budget ran
 out after a send, has an **unknown** outcome: the server may have applied
 it. The client never turns that into an error by guessing. Before failing
 it resolves the request against its receipt, under the **same identity**
-and a fresh bounded window (`EFS_RESOLVE_MS`, default 8 s):
+and a fresh bounded window (8 s, built in):
 
 ```text
 identified directory op    receipt = the op-id window above (durable)

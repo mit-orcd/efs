@@ -1441,6 +1441,19 @@ alternatives reduces both product complexity and the supported test matrix.
   product; 19 removed names stop efsd and efs-fuse at startup. Open: the
   33 remaining numeric tunables need a qualified built-in value or bound,
   and the A7 decisions.**
+  **Nov 10, numeric audit (Task FA, D46 item 7, branch
+  `claude/epic-yonath-69bc96`; [evidence](2026-11/a8-tunables-20261110.md)):
+  all 40 numeric tunables (the 36 "Keep until A8" rows and four `#ifndef`
+  constants) have a disposition: 18 built in, 14 test-only (6 `EFS_FAULT_*`
+  hooks in `EFS_FAULTS` builds, 7 test hooks with no environment name, the
+  `EFS_STOP_MS` test seam), 8 justified operator configuration (the five
+  client memory budgets, `EFS_QUERY_REFRESH_MS`,
+  `EFS_RAFT_APPLIED_INTERVAL_MS`, `--writers`),
+  0 for the user. 28 more names are refused at startup (61 in all). Finding
+  for the user: the nuc-efs launch defaults `EFS_RAFT_APPLIED_INTERVAL_MS`
+  to 1000 ms against the built-in 100 ms (not changed). A8's numeric part is
+  done once the branch merges; the item stays open for the deployment-input
+  review and the live qualification of the retained paths.**
 - [ ] **A9 — Metadata leadership.** Remove `EFS_METADATA_BALANCE` as an operator
   choice after selecting and qualifying the automatic policy. Do not force its
   present common-voter/co-located-leader preference on as a substitute for that
