@@ -1054,6 +1054,18 @@ static void pk_read_failure(const char *kind, uint8_t group, uint64_t object,
                 rc, (unsigned long long)n);
 }
 
+/* K105 diagnostic: after a failed candidate read, whether the file is still
+ * the live inode the pass read (0), gone or republished (STALE) or the KV
+ * read failed. */
+static void pk_candidate_state(struct efs_kv *kv, const struct efs_pack_candidate *c)
+{
+    static uint64_t noted;
+    uint64_t n = __atomic_add_fetch(&noted, 1, __ATOMIC_RELAXED);
+    if (n <= 256 || !(n % 1024))
+        efs_telemetry_log(0, "packer: candidate-state ino=%016llx alive_rc=%d failure=%llu\n",
+                (unsigned long long)c->ino, efs_meta_pack_candidate_alive(kv, c), (unsigned long long)n);
+}
+
 static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
                            const struct efs_node *nodes, uint32_t count)
 {
@@ -1439,6 +1451,7 @@ static int pk_group(uint8_t group, uint64_t term)
                     pk_read_failure("candidate", group, files[x].c.ino,
                                     files[x].c.base.generation,
                                     rcs ? rcs[x - first] : EFS_ERR_NOMEM);
+                    pk_candidate_state(kv, &files[x].c);
                     STAT_ADD(read_errors, 1);
                     free(files[x].data);
                     files[x].data = NULL;

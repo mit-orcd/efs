@@ -426,6 +426,17 @@ int efs_meta_pack_candidate(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen
     return EFS_OK;
 }
 
+int efs_meta_pack_candidate_alive(struct efs_kv *kv, const struct efs_pack_candidate *seen)
+{
+    struct efs_pack_candidate *now = calloc(1, sizeof(*now));
+    if (!now) return EFS_ERR_NOMEM;
+    int rc = efs_meta_pack_candidate(kv, seen->ino, seen->inode_generation, now);
+    if (rc == EFS_OK && (!now->nlink || memcmp(now->source_digest, seen->source_digest, EFS_HASH_SIZE)))
+        rc = EFS_ERR_STALE;
+    free(now);
+    return rc;
+}
+
 int efs_meta_apply_pack_unindex(struct efs_kv *kv, uint32_t group,
                                 const struct efs_pack_unindex_item *items, uint32_t n)
 {
