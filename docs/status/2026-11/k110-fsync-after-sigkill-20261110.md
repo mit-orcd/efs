@@ -19,10 +19,12 @@ barrier epoch, read under the lock that a barrier takes (and then increments)
 before it calls `syncfs`, after the fragment's write and close completed, so
 the barrier the acknowledgement names always begins after the write. That
 barrier's record is written after `syncfs` returned and `fdatasync`ed (and is
-reverted if that sync fails), so a record that names seq `N` proves barrier `N`
-finished and every fragment acknowledged at `N` or earlier is on stable
-storage. The successor offers that record only after a verified recovery that
-dropped no file the barrier could cover, for the same root layout, and the
+reverted if that sync fails, and never raised after a barrier failed in that
+boot), so a record that names seq `N` proves barrier `N` finished and every
+fragment acknowledged at `N` or earlier is on stable storage. The successor
+offers that record only after a verified recovery that dropped no file the
+barrier could cover and found no published fragment missing without a mark
+(either forgets the history at once), for the same root layout, and the
 client counts a fragment durable only when verifier, root and position match;
 every other case stays lost.
 
@@ -65,8 +67,13 @@ count and root index equal the current ones (otherwise the ring starts empty);
 barrier's epoch, then `fdatasync`; `durable_seq` is raised only after that
 returned, and when the `fdatasync` fails the record is rewritten (no sync) with
 the previous durable seq so the file never names a barrier whose record sync
-failed; (3) verified recovery (K36): `ring_ok`, or the ring forgotten, before
-the fence clears; (4) orderly stop: final barrier, then `clean`. The record
+failed; (3) verified recovery (K36): `ring_ok` set; the ring is forgotten at the
+moment a covered file is dropped or a published fragment is found lost
+without a mark (`put_sync_void`, also after the fence cleared), and the
+verdict write keeps the seq the record already names (`PUT_SYNC_KEEP_SEQ`), so
+it cannot lower a barrier's seq; `ring_n`, `ring_ok` and the named seq change
+and are read only under `rec_mu`, so a barrier racing the verdict never writes
+voided entries as validated; (4) orderly stop: final barrier, then `clean`. The record
 costs nothing extra on the PUT path: it is the file the barrier already wrote.
 
 **Wire.** PUT reply (`EFS_MSG_PUT_CHUNK_REPLY`): 18 bytes (was 10), the status,
@@ -111,8 +118,13 @@ back names seq `>= N` for that boot.
    design of the barrier).
 4. The record names seq `N` only after step 3 returned OK for target `N` (the
    `pwrite` is after `syncfs`), and with the revert the file does not keep `N`
-   when the record sync failed. A later barrier covers fragments of a failed
-   one, so a record naming `N' >= N` is sound.
+   when the record sync failed. **A later barrier does not cover fragments of
+   a failed one** (corrected after review: Linux reports a writeback error
+   once, so a `syncfs` after a failed one can return 0 although the pages of
+   the failed one were dropped). Once a barrier failed in a boot, no later
+   barrier of that boot may raise the record's seq or `durable_seq`
+   (`tainted` in `put_sync_barrier_locked`); the record keeps the last barrier
+   before the failure, and the successor offers nothing later.
 5. The successor reads that record at attach and offers `(E, position)` only
    after verified recovery (K36) dropped no file the earlier barriers could
    have covered (mtime not after the predecessor's last record), and the
@@ -135,7 +147,12 @@ power-loss qualification stays a separate scope decision.
 | root count or root index mismatch at attach | ring dropped, nothing offered | `test_store_durability` |
 | record fails its CRC, is short, has another magic or version | `efsd` refuses to start | `test_store_durability` |
 | store wiped (no record) or another store's record (no matching verifier) | ring empty, `L` | `test_store_durability` |
-| recovery dropped a covered file, or a boot killed before its recovery finished | ring forgotten, `L` | `test_store_durability` |
+| recovery dropped a covered file (also after the fence cleared), or a boot killed before its recovery finished | ring forgotten at the drop, `L` | `test_store_durability` (drop rule, after the fence) |
+| recovery dropped or found a file under no known root | every root forgets, `L` | `test_store_durability` |
+| a published fragment missing with no mark at publication (recovery, `rv_mark`) | every root forgets before the mark is written, `L` | `test_k36_recovery.py` step 3 (log line) |
+| a barrier failed earlier in this boot, a later `syncfs` succeeded | record and `durable_seq` keep the last barrier before the failure; successor offers nothing later | `test_store_durability` (`test_failed_barrier_not_named`, back-off case) |
+| verdict written while a barrier raised the seq | seq kept | `test_store_durability` (`test_recovered_keeps_record_seq`) |
+| COMMIT reply entry with zero verifier, a position over 56 bits or a root out of range | whole reply rejected, fragment unproven | `test_data_commit` (modes 3 to 5) |
 | incarnation older than the ring | `L` | `test_store_durability` (bound) |
 | reply without history, ack 0, boot above 65535 | `L` | `test_data_commit`, `test_store_durability` |
 
@@ -158,6 +175,58 @@ a member with unclean predecessors.
 **No compatibility.** The wire and record versions are new, old records and
 old replies are refused (a PUT reply of 10 bytes, a COMMIT reply without the
 history fields); a freshly formatted cluster is assumed.
+
+### Review round (coordinator's independent review, head `252cdebd5`)
+
+The review found no path to a wrong `fsync` 0 under the stated assumptions and
+three places weaker than fail closed. Each is fixed on the branch:
+
+1. **A failed barrier stayed failed only for COMMIT, not for the record.**
+   `put_sync_barrier_locked` kept running barriers after one failed and a later
+   success wrote a higher seq and raised `durable_seq`. Fixed as in proof step 4
+   (`tainted`): after a failure in the boot, a successful retry still drains the
+   accounting and resets the back-off but names nothing. The existing back-off
+   test now asserts the record and `durable_seq` stay at 0, and
+   `test_failed_barrier_not_named` shows a good barrier, a failed one, a
+   successful retry, then a restart whose ring holds the good barrier and
+   nothing later. With the guard removed the back-off case fails.
+2. **A record could pair `ring_ok=1` with a ring recovery had just voided.**
+   `put_sync_record_put` loaded `ring_n` and `ring_ok`, `server_put_sync_recovered`
+   stored them under `mu` while the barrier thread wrote records without it.
+   Now every store of the pair (`put_sync_void`, the verdict) and the writer's
+   loads happen under `rec_mu`, so the writer sees one of the states
+   (entries, unvalidated), (none, unvalidated), (none, validated) and never
+   (entries, validated). This is an argument, not a deterministic test: the
+   interleaving cannot be forced without a hook inside the writer, so
+   `test_record_ring_pair` is a stress check (a writer thread rewriting the
+   record while the ring is re-armed, voided and validated 100 times; no record
+   may say validated with entries). It also passed with the lock removed from
+   the stores in three trial runs, so it does not demonstrate the defect.
+3. **"Recovery dropped no covered file" was narrower in the code than here.**
+   (a) A published fragment that is missing was marked for rebuild
+   (`refs_missing`) without voiding the history. `rv_mark` now forgets every
+   root's ring, durably, before it writes a new mark (a crash right after the
+   mark cannot keep it); a slot already marked when the stripe was published (a
+   fragment never acknowledged here) takes the other branch and voids nothing.
+   (b) `covered_drops` was read once at the verdict; a drop after the fence
+   cleared never voided. A covered drop now voids the ring at once, whenever it
+   happens. (c) An unknown root did not count; it now voids every root (as the
+   code comment already said). (d) The comments in `recovery.c` that said the
+   client's `fsync` fails "because the verifier changed" were rewritten: the
+   client decides from the barrier history. Packed segment fragments take no
+   part in the client's `fsync` proof and still void nothing.
+4. **Small.** The client's reply check (`efs_data_commit_reply_ok`) refuses a
+   reply with a history entry whose verifier is zero, whose position has bits
+   above the 56 an ack holds, or whose root is not below `EFS_MAX_STORAGE_PATHS`
+   (three rows in `test_history_table`, each fails without the check). The
+   verdict write that could lower the on-disk seq by one barrier is fixed by
+   `PUT_SYNC_KEEP_SEQ` (`test_recovered_keeps_record_seq`, fails with the old
+   snapshot).
+
+Voiding is coarse on purpose: a real loss on one root forgets the history of
+every root of that node (a lost fragment is rare; the cost is that an `fsync`
+of data the node's earlier incarnations acknowledged then fails with `EIO`, as
+it did before the fix, and nothing re-sends it).
 
 ## Results after the fix
 
@@ -324,8 +393,22 @@ family above, with data and `fsync` exact.
   barrier whose sync failed.
 - Arity and format updates in `test_put_retry_budget.py`,
   `test_put_reply_deadline.py`, `test_put_tcp_frame.py` and the live drivers.
-- `tests/test_k36_recovery.py` (24 s) and `tests/test_k35_fsync_degraded.py`
-  (128 s on nuc, 129.6 s on node9900) are unchanged and pass.
+- `tests/test_k36_recovery.py` (27 s) gained one assertion in step 3: after the
+  crash at the first mark, the log has `barrier history forgotten ... a
+  published fragment is missing without a mark` before the crash line (the
+  deleted fragment of a published stripe; the truncated file is not "covered"
+  because the truncation refreshed its mtime). `tests/test_k35_fsync_degraded.py`
+  (128 s on nuc, 129.6 s on node9900) is unchanged and passes.
+- Review round: `test_store_durability` gained the drop rule after the fence,
+  the unknown-root drop, `server_put_sync_void_all`, `test_failed_barrier_not_named`,
+  `test_recovered_keeps_record_seq` and `test_record_ring_pair` (stress, see the
+  review round); the back-off case asserts the record and `durable_seq` stay
+  put after a later success; `test_data_commit`'s malformed-reply loop has three
+  more rows. Mutations checked on nuc: with `tainted` forced to 0 the back-off
+  case fails; with the verdict write using `durable_seq` again
+  `test_recovered_keeps_record_seq` fails; with the entry check removed from
+  `efs_data_commit_reply_ok` the first new row fails; with `rec_mu` removed from
+  the stores, `test_record_ring_pair` still passed (no demonstration).
 
 ## Diagnosis before the fix
 
@@ -606,7 +689,9 @@ restarted member cannot show was made durable, and no longer for one it can: a
 fragment acknowledged by incarnation V at a position at or before V's last
 *completed* durability barrier (`syncfs` of the root, then the fdatasynced
 durability record) is durable once the successor's verified recovery (K36)
-dropped no file that barrier could cover. The successor reports its
+dropped no file that barrier could cover and found no published fragment
+missing without a mark; a barrier that failed in the incarnation ends its
+history at the last good barrier. The successor reports its
 predecessors' last barriers in its COMMIT reply (the 7 newest per root, newest
 first) and the client counts such a fragment durable instead of lost. A
 fragment acknowledged after that barrier, one on a root whose history
@@ -712,6 +797,31 @@ nuc's own services idle):
 The node9900 gate of the first build (`TOTAL 595 FAIL 0`, 620 s, TSan 32 of 32,
 ASan 60 of 60) stands for that build only.
 
+**Review round** (nuc, `git archive` of `1774dde0b`, tests edited after it and
+re-run; the `make test-all` gate and the 28-run series were *not* repeated):
+
+- `make test`: rc 0 (145 s) on the final tree. Before the last two test edits
+  (the k36 assertion and a smaller ring stress) it was rc 0 (208 s).
+- `test_store_durability` 2.2 to 3.3 s (budget 5 s), `test_data_commit` 4.6 s
+  (budget 30 s), three solo runs each, all pass.
+- `tests/test_k110_barrier_history.py` 8 to 9 s, `tests/test_k36_recovery.py`
+  27 s (with the new step 3 assertion; its first run failed on an assertion
+  that wrongly expected the truncated file to count as covered, see the test
+  comment), `tests/test_k35_fsync_degraded.py` 130.6 s: all pass.
+- `bash tests/sanitizer_check.sh asan`: PASS (60 run, 0 failed, 394 s).
+  `bash tests/sanitizer_check.sh tsan`: PASS (32 run, 0 failed, 570 s), the new
+  `test_store_durability` threads included.
+- The proven path did change (record seq handling, void on drop, reply check),
+  so a short kill series was repeated: 8 settled runs of `run_series.sh`
+  (`--settle-before-fsync --failover-window 45 --records 2000`, two series in
+  parallel plus one replacement), tags `ra-1..4`, `rb-1..4`, `rr-1`. Final
+  `fsync` 0 and the three views identical in 8 of 8; 7 PASS, `rb-4` failed only
+  the REPORT latency criterion (6.7 s, K104 family). `ra-3` died at setup (`efs-fuse mnt
+  exited` after 7 s, the same harness start flake as `nb-2`) and was replaced
+  by `rr-1`. Last `fsync` of each run: 667 fragments proven by their barrier
+  history, 18 lost, each marked degraded; no `need 2` line; no run logged
+  `barrier history forgotten` (no covered file was dropped or lost).
+
 ## Not checked
 
 - RDMA (the PUT and COMMIT reply changes are in the RDMA path and the buffered
@@ -726,8 +836,14 @@ ASan 60 of 60) stands for that build only.
   COMMIT, `syncfs` plus an fdatasynced record, and says nothing beyond it.
 - The wall-clock assumption of the validity rule (a restart does not step the
   clock back past file modification times) is not checked at run time.
-- A fragment file removed by hand under a retained record (a partial wipe of a
-  store) is not detected by the history; a whole wiped store has no record.
+- A fragment file removed by hand under a retained record is detected by the
+  history only at the next recovery, and only when a published object places a
+  fragment there (`rv_mark`); an unpublished file removed that way, and packed
+  segment fragments, void nothing. A whole wiped store has no record.
+- Voiding rewrites the record best effort (a failed write leaves the entries on
+  disk until the next barrier writes the in-memory state); `test_record_ring_pair`
+  is a stress check that does not demonstrate the race it guards (argument in
+  the review round).
 - No log line states whether a ring was kept or forgotten at a recovery.
 - The failed-record-sync revert is a best effort (a second failure can leave
   the file naming the failed barrier); it has no fault-injection test beyond the
@@ -752,10 +868,14 @@ each run's `*.out`, `*.report.json`, `*.logs/` with `fuse-mnt.log` and
 to `run4.sh` and logs; `gate/` with `summary.txt`, `timings.tsv`, the two
 failure logs; `sanitizers/`; `solo/` with the nine solo reruns;
 `host-and-binaries.txt`; `series-ey-probe/` with `eya-1` and `eyb-1`; `dml/` with
-the pre-fix DML-only run) with `SHA256SUMS` (343 files; SHA256 of the manifest
-`f30120bbe3e5fb61dbd4724b273c3867b8b5aeeb3542162d11072dc827ba03bb`; the
+the pre-fix DML-only run) with `SHA256SUMS` and, for the review round, `review-round/` (`series-settled/`
+with the 9 kill runs, `lanes/` with the test and sanitizer logs and the driver
+scripts `run6.sh` to `run8.sh`, `binaries.txt`); `SHA256SUMS` (437 files;
+SHA256 of the manifest
+`0a7541c6cc360311d91a74c420cd32f321aace5e5b22d9d0dd02d44b9214c4d1`; the
 Task EY runs used a second build of the same source, whose `efsd`, `efs-fuse`
-and `efs-mgmt` hashes are at the end of `host-and-binaries.txt`). nuc
+and `efs-mgmt` hashes are at the end of `host-and-binaries.txt`, and the review
+round a third, in `review-round/binaries.txt`). nuc
 binaries of the tested tree: `efsd`
 `908c9a2f37dc737da7a7a740c52c293ad639c674a0901f589260610b38e653e7`, `efs-fuse`
 `ec07217ccce8b155a24d8316a19cf9dd3f6e41a4a4205e3e5e96baff8e639a02`, `efs-mgmt`
