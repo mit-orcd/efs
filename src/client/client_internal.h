@@ -145,6 +145,9 @@ struct efs_client {
     int64_t node_down_until_ms[EFS_MAX_NODES]; /* CLOCK_MONOTONIC ms; 0 = up */
     int64_t node_probe_after_ms[EFS_MAX_NODES]; /* next background reprobe while down */
     int node_probe_inflight[EFS_MAX_NODES];
+    int node_probe_fd[EFS_MAX_NODES]; /* the running probe's socket, -1 none: shutdown cuts it short */
+    int node_probe_stop; /* shutdown began: no probe starts or re-arms (atomic) */
+    int node_mute[EFS_MAX_NODES]; /* last contact: TCP accepted, declaration unanswered */
 
     /* When non-zero, metadata replication is coalesced: changes only mark
      * dirty and flush every meta_batch_ops operations (or when forced on
