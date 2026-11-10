@@ -30,6 +30,13 @@ struct efs_conn *server_peer_status_conn_get(const char *host, uint16_t port);
 /* K41: 1 while the peer pool's connect cooldown refuses host:port. */
 int server_peer_is_down(const char *host, uint16_t port);
 struct efs_conn *server_peer_conn_new(const char *host, uint16_t port);
+/* The same, telling the caller the socket while the handshake runs (peer_pool.c). */
+struct server_peer_arm {
+    int (*arm)(int fd, void *ctx);   /* nonzero: abandon the connection */
+    void (*disarm)(void *ctx);
+    void *ctx;
+};
+struct efs_conn *server_peer_conn_new_armed(const char *host, uint16_t port, const struct server_peer_arm *ar);
 /* Return conn to the pool after a successful request/response. */
 void server_peer_conn_release(const char *host, uint16_t port, struct efs_conn *c);
 /* Close and discard a broken conn (net/protocol error). */

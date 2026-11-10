@@ -72,8 +72,10 @@ Ordinary client stop quiesces mutations, attempts a bounded drain, and refuses
 to detach unresolved writes. If stop fails, keep the servers available and
 resolve the failure. The session revoke seals a strict majority of the
 configured storage members, so one member that is down or stalled does not stop
-it; with fewer than a majority sealed it fails after 15 s
-(`revoke rc=-13 phase=storage-fence`) and the stop exits 1 with
+it; with fewer than a majority sealed it fails closed at
+`phase=storage-fence` with the code of the first member that answered without
+sealing, else `rc=-13` (the client repeats only BUSY and NOT_PRIMARY for 15 s;
+IO and NOT_FOUND end it at once), and the stop exits 1 with
 the mount already detached; see the
 [alpha guide](../using/alpha-1.0-guide.md#mount-and-unmount-a-client). `--force-discard` explicitly permits loss and lazy detach;
 see the [controlled-stop contract](#scripts). Signals and

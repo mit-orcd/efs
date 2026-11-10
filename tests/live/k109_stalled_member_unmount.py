@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """K109: a clean unmount while storage members are alive but stalled.
 
-Usage: python3 tests/live/k109_stalled_member_unmount.py [--runs N] [--refused M]
+Usage: python3 tests/live/k109_stalled_member_unmount.py [--runs N] [--refused M] [--park|--sigstop]
            [--report-only] [--port-base N] [--keep]
 
 Run from the root of a built tree (make, make tests/faults/efsd). Three private
@@ -12,10 +12,14 @@ the K22 rehearsal caps): metadata load fills its L0, its apply defers and it
 stays alive and reachable but cannot read the session shard (the state of Task
 EZ's batch S2). The load then stops.
 
-  phase 1: node 3 stalled (or, with --sigstop, SIGSTOPped: alive, accepting, never answering; node 1 is
-           then stopped with a fence worker still parked, and must exit 0). N times a client mounts on node 1, writes and fsyncs
-           a few files and unmounts with `scripts/client.sh stop`. Each must exit
-           0 with `session revoked at unmount ... rc=0` in with ms= under CLEAN_MS.
+  phase 1: node 3 stalled. N times a client mounts on node 1, writes and fsyncs a few files and unmounts
+           with `scripts/client.sh stop`. Each must exit 0 with `session revoked at unmount ... rc=0`
+           and ms= under CLEAN_MS.
+           --sigstop: node 3 is SIGSTOPped instead (alive, accepting, never answering). --park: a fault
+           build whose fence handler never answers while the node stays reachable (EFS_FAULT_FENCE_PARK).
+           With either, node 1 is then stopped while fence workers still wait on node 3: it must wake and
+           join them, finish its teardown and exit 0, and node 3 is killed only once the teardown is over
+           (a worker the stop had not drained would then wake on a freed connection; ASan: use after free).
   phase 2: node 2 stalled as well (two of three members). M times the same
            unmount must fail closed at phase=storage-fence (no strict majority sealed).
 
@@ -29,6 +33,7 @@ from k33_daemons import Cluster, Mount, mgmt, payload, place_leaders  # noqa: E4
 
 ROOT = Path(__file__).resolve().parents[2]
 L0_BYTES, MEMTABLE_BYTES = str(1 << 20), str(256 << 10)
+STALL_LOG = r'kv-bound: apply deferred'   # the node log line when the apply defers at the L0 bound
 CLEAN_MS = 5000   # the old failure took 15000 ms; a clean unmount with a healthy majority takes about 300 ms
 
 
@@ -44,7 +49,7 @@ def stalled(c, i):
 
 
 def fill(c, victims, deadline):
-    """Metadata load through node 1 until every victim's L0 is full and its apply deferred."""
+    """Metadata load through node 1 until every victim's L0 is full and its apply deferred (its log says so)."""
     stop = threading.Event()
     procs = []
 
@@ -61,14 +66,11 @@ def fill(c, victims, deadline):
     threads = [threading.Thread(target=loop, args=(w,), daemon=True) for w in range(2)]
     for t in threads:
         t.start()
-    end, t0 = time.time() + deadline, time.time()
+    t0 = time.time()
     try:
-        while time.time() < end:
-            time.sleep(2)
-            if all(stalled(c, v) for v in victims):
-                print(f'stall reached on node(s) {victims} after {time.time() - t0:.0f} s', flush=True)
-                return
-        raise AssertionError(f'node(s) {victims} never reached the L0 bound within {deadline} s')
+        for v in victims:
+            c.wait_log(v, STALL_LOG, timeout=deadline)
+        print(f'stall reached on node(s) {victims} after {time.time() - t0:.0f} s', flush=True)
     finally:
         stop.set()
         for p in procs:
@@ -76,6 +78,8 @@ def fill(c, victims, deadline):
                 p.terminate()
         for t in threads:
             t.join(timeout=30)
+    for v in victims:   # the log line is the first deferral; the raft status says the stall holds
+        assert stalled(c, v), f'node {v} logged a deferral but is not at its L0 bound'
 
 
 def one_run(c, run, files, node=1, freeze=None):
@@ -108,6 +112,7 @@ def main():
     ap.add_argument('--files', type=int, default=4)
     ap.add_argument('--report-only', action='store_true')
     ap.add_argument('--sigstop', action='store_true', help='phase 1 stalls node 3 with SIGSTOP instead of the parked compactor')
+    ap.add_argument('--park', action='store_true', help='phase 1: node 3 never answers a fence but stays reachable (EFS_FAULT_FENCE_PARK); then node 1 is stopped')
     ap.add_argument('--client-node', type=int, default=1, help='node the client mounts (2 with --split)')
     ap.add_argument('--split', action='store_true', help='group 0 leader on node 1, group 2 leader on node 2')
     ap.add_argument('--fill-deadline', type=int, default=900)
@@ -124,6 +129,7 @@ def main():
             h.close()
         c.held = []
         c.ports = {i: a.port_base + i for i in ids}
+    stop_node1 = a.sigstop or a.park
     bad = total = 0
 
     def phase(n, victims, want_clean):
@@ -143,10 +149,12 @@ def main():
                   f'ok={int(ok)}\n  {line}', flush=True)
 
     try:
-        c.start(1)
+        # --sigstop, --park: node 1 parks its exit record, so the process outlives its teardown by up to 5 s (EFS_SHUTDOWN_REPORT_MS)
+        c.start(1, extra_env=dict(EFS_FAULT_SHUTDOWN_RECORD_PARK='write') if stop_node1 else None)
         for i in (2, 3):
-            c.start(i, join=1, extra_env=dict(EFS_FAULT_COMPACT_STALL='1', EFS_FAULT_COMPACT_FILE=str(work / f'fault-{i}'),
-                                              EFS_FAULT_L0_BYTES=L0_BYTES, EFS_FAULT_MEMTABLE_BYTES=MEMTABLE_BYTES))
+            stall = dict(EFS_FAULT_COMPACT_STALL='1', EFS_FAULT_COMPACT_FILE=str(work / f'fault-{i}'),
+                         EFS_FAULT_L0_BYTES=L0_BYTES, EFS_FAULT_MEMTABLE_BYTES=MEMTABLE_BYTES)
+            c.start(i, join=1, extra_env=dict(EFS_FAULT_FENCE_PARK='1') if a.park and i == 3 else stall)
         for i in ids:
             c.wait_log(i, r'raft-host: formed: 3 members', timeout=120)
         if a.split:
@@ -154,28 +162,34 @@ def main():
             place_leaders(c, 2, groups=(2,))
         else:
             place_leaders(c, 1)
-        if not a.sigstop:
+        if not stop_node1:
             (work / 'fault-3').touch()
             fill(c, [3], a.fill_deadline)
         phase(a.runs, [3], True)
-        if not a.sigstop:   # the leader asked node 3 and was told it did not seal
+        if not stop_node1:   # the leader asked node 3 and was told it did not seal
             logs = ''.join(c.log(i) for i in (1, 2))
             assert re.search(r'storage-fence: member=3 floor=\d+ check=0 rc=-', logs), 'node 3 never answered a fence with an error'
-        if a.sigstop:
+        if stop_node1:
+            # Node 3 is frozen or its fence handler is parked and the last unmount left its fence workers waiting on it. Stop node 1: the stop must wake
+            # and join them. Once its teardown is over (the pool is destroyed) node 3 dies, so a worker the stop had not
+            # drained would wake on a freed connection (ASan: use after free) inside the 5 s the parked record leaves.
             t0 = time.time()
-            c.procs[1].terminate()
             c.expect_exit(1)
+            c.procs[1].terminate()
+            c.wait_log(1, r'shutdown: outcome=orderly rc=0', timeout=60)
+            c.expect_exit(3)
+            c.procs[3].kill()
             rc1 = c.procs[1].wait(timeout=60)
-            print(f'node 1 stopped with a fence worker parked on the stopped node 3: exit {rc1} in {time.time() - t0:.1f} s', flush=True)
+            c.wait_log(1, r'storage-fence: stop woke [1-9]\d* worker\(s\) waiting on a member', run=False)
+            print(f'node 1 stopped with fence workers waiting on the stopped node 3: exit {rc1} in {time.time() - t0:.1f} s', flush=True)
             bad += rc1 != 0
             total += 1
-            c.procs[3].send_signal(signal.SIGCONT)
         if a.refused:
             (work / 'fault-2').touch()
             fill(c, [2, 3], a.fill_deadline)
             phase(a.refused, [2, 3], False)
     finally:
-        if a.sigstop and 3 in c.procs:
+        if a.sigstop and 3 in c.procs and c.procs[3].poll() is None:
             c.procs[3].send_signal(signal.SIGCONT)
         c.stop_all()
         print(f'{"PASS" if not bad else "FAIL"} {total - bad}/{total}', flush=True)

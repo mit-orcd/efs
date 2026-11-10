@@ -6427,18 +6427,20 @@ static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
     return host_propose_wait_idx(h, group, cmd, clen, hint, NULL);
 }
 
-/* The exchange itself, by endpoint: it touches no host state, so a caller
- * that stops waiting may leave it running (host_storage_fence_members). */
-static int host_inode_rpc_addr(const char *host, uint16_t port, uint8_t req_type,
+static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_type,
                                const void *req, uint32_t reqlen,
                                uint8_t reply_type, void *out, uint32_t outlen)
 {
+    char host[64];
+    uint16_t port = 0;
     struct efs_conn *pc;
     uint8_t rtype = 0;
     void *reply = NULL;
     uint32_t rlen = 0;
 
-    if (!req || !out || outlen == 0)
+    if (rid < 0 || rid == h->raft_id || !req || !out || outlen == 0)
+        return -1;
+    if (peer_addr(h, rid, host, sizeof(host), &port) != 0)
         return -1;
     pc = server_peer_conn_get(host, port);
     if (!pc)
@@ -6485,20 +6487,6 @@ static int host_inode_rpc_addr(const char *host, uint16_t port, uint8_t req_type
     free(reply);
     server_peer_conn_release(host, port, pc);
     return 0;
-}
-
-static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_type,
-                               const void *req, uint32_t reqlen,
-                               uint8_t reply_type, void *out, uint32_t outlen)
-{
-    char host[64];
-    uint16_t port = 0;
-
-    if (rid < 0 || rid == h->raft_id || !req || !out || outlen == 0)
-        return -1;
-    if (peer_addr(h, rid, host, sizeof(host), &port) != 0)
-        return -1;
-    return host_inode_rpc_addr(host, port, req_type, req, reqlen, reply_type, out, outlen);
 }
 
 /* Bounce an inode RPC to a peer that hosts every listed group. Never
@@ -13867,6 +13855,14 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     return EFS_OK;
 }
 
+/* Storage-fence workers' private connections; see host_fence_rpc. */
+struct host_fence_conn{int fd;struct host_fence_conn *next;};
+static pthread_mutex_t g_fence_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_fence_cv=PTHREAD_COND_INITIALIZER;
+static struct host_fence_conn *g_fence_conns;
+static unsigned g_fence_active;
+static int g_fence_stopping;
+
 int server_raft_host_start(struct efsd_server *s)
 {
     struct efs_raft_host *h;
@@ -13879,6 +13875,7 @@ int server_raft_host_start(struct efsd_server *s)
      * starts — there is no env gate. */
     if (!s || g_host)
         return EFS_ERR_INVAL;
+    pthread_mutex_lock(&g_fence_mu);g_fence_stopping=0;pthread_mutex_unlock(&g_fence_mu);
     uint64_t applied_interval;
     if (host_applied_interval(getenv("EFS_RAFT_APPLIED_INTERVAL_MS"),&applied_interval)!=EFS_OK) {
         /* sync: startup, before the reporter exists */
@@ -14119,6 +14116,8 @@ static void host_stop_senders(struct efs_raft_host *h)
     }
 }
 
+static void host_fence_drain(void);
+
 void server_raft_host_stop(void)
 {
     struct efs_raft_host *h = g_host;
@@ -14127,6 +14126,7 @@ void server_raft_host_stop(void)
 
     if (!h)
         return;
+    host_fence_drain();
     __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
     if (h->query_started) pthread_join(h->query_tid,NULL);
     query_page_sweep(1);
@@ -15253,6 +15253,78 @@ static int host_lease_submission_result(struct efs_raft_host *h,const uint8_t *c
 static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
                             const uint8_t *cmd, uint32_t clen, int *hint);
 
+/* Fence workers ask a member over a private connection (server_peer_conn_new_armed),
+ * never over the shared pool: the pool is destroyed after the host stops, so a
+ * worker parked in a receive on a pooled connection would use one that
+ * server_peer_pool_shutdown already freed. A worker lists its socket from the
+ * connect to the end of the exchange (the handshake with a stalled member waits
+ * too); server_raft_host_stop calls host_fence_drain first, which refuses new
+ * exchanges, shuts the listed sockets down (a TCP wait returns at once) and waits
+ * until no worker is left. Two waits are not woken and end at their own bounds:
+ * the connect itself (a member that does not answer SYN) and, on RDMA, an
+ * exchange (it waits on the completion queue, not the socket). */
+/* The socket is listed from before the handshake until the exchange ends; both
+ * run with the lock, so a listed fd is open. Refused once the stop began. */
+static int host_fence_arm(int fd,void *ctx)
+{
+    struct host_fence_conn *reg=ctx;int rc=-1;
+    pthread_mutex_lock(&g_fence_mu);
+    if(!g_fence_stopping){reg->fd=fd;reg->next=g_fence_conns;g_fence_conns=reg;rc=0;}
+    pthread_mutex_unlock(&g_fence_mu);
+    return rc;
+}
+
+static void host_fence_disarm(void *ctx)
+{
+    struct host_fence_conn *reg=ctx;
+    pthread_mutex_lock(&g_fence_mu);
+    for(struct host_fence_conn **pp=&g_fence_conns;*pp;pp=&(*pp)->next)
+        if(*pp==reg){*pp=reg->next;break;}
+    reg->fd=-1;
+    pthread_mutex_unlock(&g_fence_mu);
+}
+
+static int host_fence_rpc(const char *host,uint16_t port,const void *req,uint32_t reqlen,void *out,uint32_t outlen)
+{
+    struct host_fence_conn reg={-1,NULL};
+    const struct server_peer_arm ar={host_fence_arm,host_fence_disarm,&reg};
+    uint8_t rtype=0;void *reply=NULL;uint32_t rlen=0;int rc=-1;
+    pthread_mutex_lock(&g_fence_mu);
+    if(g_fence_stopping){pthread_mutex_unlock(&g_fence_mu);return -1;}
+    g_fence_active++;
+    pthread_mutex_unlock(&g_fence_mu);
+    struct efs_conn *c=server_peer_conn_new_armed(host,port,&ar);
+    if(c){
+        if(host_fence_arm(c->fd,&reg)==0 &&
+           efs_conn_send_msg(c,EFS_MSG_STORAGE_SESSION_FENCE,req,reqlen)==0 &&
+           efs_conn_recv_msg(c,&rtype,&reply,&rlen)==0 &&
+           rtype==EFS_MSG_STORAGE_SESSION_FENCE_REPLY && rlen==outlen){
+            memcpy(out,reply,outlen);rc=0;
+        }
+        free(reply);
+        host_fence_disarm(&reg);
+        efs_conn_destroy(c);
+    }
+    pthread_mutex_lock(&g_fence_mu);
+    if(--g_fence_active==0)pthread_cond_broadcast(&g_fence_cv);
+    pthread_mutex_unlock(&g_fence_mu);
+    return rc;
+}
+
+static void host_fence_drain(void)
+{
+    unsigned parked=0;
+    pthread_mutex_lock(&g_fence_mu);
+    g_fence_stopping=1;
+    for(struct host_fence_conn *x=g_fence_conns;x;x=x->next){
+        parked++;
+        shutdown(x->fd,SHUT_RDWR);
+    }
+    while(g_fence_active)pthread_cond_wait(&g_fence_cv,&g_fence_mu);
+    pthread_mutex_unlock(&g_fence_mu);
+    if(parked)efs_telemetry_log(0,"storage-fence: stop woke %u worker(s) waiting on a member\n",parked);
+}
+
 /* A metadata quorum is not a storage-member acknowledgement. Every
  * configured member is asked at once (a non-hosting replica too), and a strict
  * majority of the configured members must seal or prove its certificate
@@ -15333,8 +15405,7 @@ static void *host_fence_worker(void *arg)
 {
     struct host_fence_member *m=arg;
     struct efs_msg_storage_session_fence_reply reply={0};
-    int failed=host_inode_rpc_addr(m->host,m->port,EFS_MSG_STORAGE_SESSION_FENCE,
-        &m->request,sizeof(m->request),EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply));
+    int failed=host_fence_rpc(m->host,m->port,&m->request,sizeof(m->request),&reply,sizeof(reply));
     host_fence_record(m,failed!=0,&reply,1);
     return NULL;
 }
@@ -16187,6 +16258,11 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
     memset(out,0,sizeof(*out));out->rc=EFS_ERR_INVAL;
     if(!request)return;
     memcpy(out->uuid,request->uuid,16);out->floor=request->floor;
+#if EFS_FAULTS
+    /* Test-only (K109): EFS_FAULT_FENCE_PARK=1 never answers a storage fence, as a member whose handler hangs
+     * while the node stays reachable for everything else. */
+    if(getenv("EFS_FAULT_FENCE_PARK"))for(;;)sleep(60); /* sync: test-only fault hook */
+#endif
     /* A host that is not (or no longer) running has not sealed: BUSY, not a refusal (K109). */
     if(!g_host || !__atomic_load_n(&g_host->running, __ATOMIC_ACQUIRE)){out->rc=EFS_ERR_BUSY;return;}
     if(request->floor<2 || request->check_only>1)return;

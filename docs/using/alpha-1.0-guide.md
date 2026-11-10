@@ -224,12 +224,24 @@ The session revoke seals the revoked epoch on a strict majority of the
 configured storage members (2 of 3, 3 of 4 or 5); it does not need every
 member. A member that cannot be reached, or that answers that it did not
 seal (its apply is stalled, its disk fails), counts as not sealed and does
-not fail the stop while a majority sealed, and the stop does not wait for it.
+not fail the stop while a majority sealed. The stop does not wait for a
+slow remote member once a majority sealed; it does wait for the member on
+the node that runs the fence (asked inline), and for every remote member too
+when that node cannot start a thread to ask them in parallel.
 The epoch is committed in the session shard log, so a returning member
-refuses the revoked epoch before it could seal. With fewer than a majority
-sealed the stop fails closed after 15 s with `revoke rc=-13 phase=storage-fence`
-(or the member's own code, such as `rc=-15`); the client logs `unmount not
-clean: flush rc=0 settle rc=0 revoke rc=-13`, `client.sh stop` exits 1, the
+refuses the revoked epoch before it could seal: every storage admission on a
+member first needs a fresh proof from the lane leader. One window remains
+(K54): a live member that the leader cannot reach, with an upload that passed
+its status check before the revoke began, can still store that fragment after
+the revoke returned; the upload cannot be settled and stays an unsettled
+ticket in the orphan ledger, whose collection of it stays blocked until that
+member holds the sealed epoch. With fewer than a majority
+sealed the stop fails closed at `phase=storage-fence` with the code of the
+first member, in member order, that answered without sealing, else
+`rc=-13` (BUSY: nobody answered). The client repeats the fence for 15 s only
+on BUSY (`-13`) or NOT_PRIMARY (`-15`); any other code, such as IO or
+NOT_FOUND, ends it at once. The client logs `unmount not
+clean: flush rc=0 settle rc=0 revoke rc=-13` (the code differs), `client.sh stop` exits 1, the
 mount is gone and the mount session's leases and locks stay unrevoked until
 enough members are back and `efs-mgmt raft-session fence` or the next session
 cleanup retires them. A refusal (the session moved to another epoch) that

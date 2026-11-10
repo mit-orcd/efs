@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute the storage-revocation counting rule (K54, K109): sealed, unreached, did-not-seal and refusing members, 3 to 5, with slow and changing rosters."""
+"""Execute the storage-revocation counting rule (K54, K109): sealed, unreached, did-not-seal and refusing members, 3 to 5, with slow, late-refusing and changing rosters, with a thread per member and with thread creation failing."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 import csrc
@@ -16,7 +16,8 @@ code=r'''
 #include <stdlib.h>
 #include <stdarg.h>
 #include <pthread.h>
-static int gate,recorded; /* a row with a refusal: the sealing members answer after it is recorded */
+#include <errno.h>
+static int gate,recorded,fail_spawn; /* a row with a refusal: the sealing members answer after it is recorded */
 static pthread_mutex_t mu=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv=PTHREAD_COND_INITIALIZER;
 void efs_telemetry_log(int critical, const char *format, ...) {
@@ -33,6 +34,7 @@ static void *tramp_run(void *p) {
 }
 int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg) {
  struct tramp *t=malloc(sizeof(*t));t->fn=fn;t->arg=arg;
+ if(fail_spawn){free(t);return EAGAIN;}
  pthread_mutex_lock(&mu);spawned++;pthread_mutex_unlock(&mu);
  int rc=pthread_create(tid,NULL,tramp_run,t);
  if(rc){pthread_mutex_lock(&mu);spawned--;pthread_mutex_unlock(&mu);free(t);}
@@ -40,15 +42,18 @@ int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg) {
 }
 struct efs_raft_host {struct efsd_server *s;};
 /* What each member answers: a reply rc, or one of these. */
-enum {DOWN=1000,SLOW,BAD_UUID,BAD_FLOOR};
-static int beh[EFS_MAX_NODES+1],mode,calls,done,roster_shrinks,released;
+enum {DOWN=1000,SLOW,BAD_UUID,BAD_FLOOR,LATE_ST,LATE_IV,LATE_PR}; /* LATE_*: the refusal comes only after the call returned */
+static int beh[EFS_MAX_NODES+1],mode,calls,local_calls,done,roster_shrinks,released;
 static struct efsd_server server;
 static int answer(unsigned id,const struct efs_msg_storage_session_fence *q,struct efs_msg_storage_session_fence_reply *r) {
  assert(q->uuid[0]==17&&q->floor==2&&q->check_only==(unsigned)mode);
  __atomic_fetch_add(&calls,1,__ATOMIC_RELAXED);
  int b=beh[id];
  if(gate && b==0 && id!=server.id){pthread_mutex_lock(&mu);while(!recorded)pthread_cond_wait(&cv,&mu);pthread_mutex_unlock(&mu);}
- if(b==SLOW){pthread_mutex_lock(&mu);while(!released)pthread_cond_wait(&cv,&mu);pthread_mutex_unlock(&mu);b=0;}
+ if(b==SLOW||b>=LATE_ST){
+  pthread_mutex_lock(&mu);while(!released)pthread_cond_wait(&cv,&mu);pthread_mutex_unlock(&mu);
+  b=b==SLOW?0:b==LATE_ST?EFS_ERR_STALE:b==LATE_IV?EFS_ERR_INVAL:BAD_UUID;
+ }
  if(b!=DOWN){
   memcpy(r->uuid,q->uuid,16);r->floor=q->floor;r->rc=b==BAD_UUID||b==BAD_FLOOR?0:b;
   if(b==BAD_UUID)r->uuid[0]^=1;
@@ -59,10 +64,11 @@ static int answer(unsigned id,const struct efs_msg_storage_session_fence *q,stru
 }
 void server_raft_host_storage_session_fence(const struct efs_msg_storage_session_fence *q,struct efs_msg_storage_session_fence_reply *r) {
  if(roster_shrinks){pthread_mutex_lock(&server.lock);server.node_count=3;pthread_mutex_unlock(&server.lock);}
+__atomic_fetch_add(&local_calls,1,__ATOMIC_RELAXED);
  int down=answer(server.id,q,r);assert(!down);(void)down; /* this node always answers */
 }
-static int host_inode_rpc_addr(const char *host,uint16_t port,uint8_t type,const void *body,uint32_t bytes,uint8_t expected,void *out,uint32_t out_bytes) {
- assert(!strcmp(host,"127.0.0.1")&&port>9000&&port<=9000+EFS_MAX_NODES&&type==EFS_MSG_STORAGE_SESSION_FENCE&&expected==EFS_MSG_STORAGE_SESSION_FENCE_REPLY);
+static int host_fence_rpc(const char *host,uint16_t port,const void *body,uint32_t bytes,void *out,uint32_t out_bytes) {
+ assert(!strcmp(host,"127.0.0.1")&&port>9000&&port<=9000+EFS_MAX_NODES);
  assert(bytes==sizeof(struct efs_msg_storage_session_fence)&&out_bytes==sizeof(struct efs_msg_storage_session_fence_reply));
  return answer(port-9000,body,out);
 }
@@ -71,7 +77,7 @@ static void reset(unsigned n) {
  pthread_mutex_lock(&server.lock);server.node_count=n;pthread_mutex_unlock(&server.lock);
  for(unsigned i=0;i<n;i++){server.nodes[i].id=i+1;snprintf(server.nodes[i].addr,sizeof(server.nodes[i].addr),"127.0.0.1");server.nodes[i].port=9001+i;}
  pthread_mutex_lock(&mu);
- memset(beh,0,sizeof(beh));calls=done=roster_shrinks=released=gate=recorded=spawned=exited=0;
+ memset(beh,0,sizeof(beh));calls=local_calls=done=roster_shrinks=released=gate=recorded=spawned=exited=0;
  pthread_mutex_unlock(&mu);
 }
 /* Every member that was asked has answered; the late ones are released first. */
@@ -107,21 +113,47 @@ static const struct {unsigned n;int a[5];int rc;} rows[]={
 int main(void) {
  pthread_mutex_init(&server.lock,NULL);server.id=1;
  struct efs_raft_host host={&server};uint8_t uuid[16]={17};
+ /* Each row runs with a thread per remote member, then with thread creation failing (every member is asked inline).
+  * Every member is asked exactly once and this node's check runs once, whatever the answers, so those counts are checked
+  * after the late workers settle. At return the counts are exact only where the call had to wait for every member
+  * (no majority reached, or all asked inline); a call that returns on a majority or a refusal leaves a varying number
+  * of workers unanswered, so a row there has no exact count at return. */
+ for(fail_spawn=0;fail_spawn<2;fail_spawn++)
  for(mode=0;mode<2;mode++)
   for(unsigned r=0;r<sizeof(rows)/sizeof(rows[0]);r++){
    reset(rows[r].n);memcpy(beh+1,rows[r].a,rows[r].n*sizeof(int));
-   for(unsigned i=1;i<rows[r].n;i++)gate|=rows[r].a[i]==ST||rows[r].a[i]==IV||rows[r].a[i]==BAD_UUID||rows[r].a[i]==BAD_FLOOR;
+   int refusal=0;
+   for(unsigned i=0;i<rows[r].n;i++)refusal|=rows[r].a[i]==ST||rows[r].a[i]==IV||rows[r].a[i]==BAD_UUID||rows[r].a[i]==BAD_FLOOR;
+   gate=refusal&&!fail_spawn;
    int rc=host_storage_fence_members(&host,uuid,2,mode);
-   if(rc!=rows[r].rc){fprintf(stderr,"row %u mode %d: got %d want %d\n",r,mode,rc,rows[r].rc);abort();}
+   if(rc!=rows[r].rc){fprintf(stderr,"row %u mode %d inline %d: got %d want %d\n",r,mode,fail_spawn,rc,rows[r].rc);abort();}
+   pthread_mutex_lock(&mu);int d=done,sp=spawned;pthread_mutex_unlock(&mu);
+   assert(local_calls==1); /* this node's check runs inline before the wait */
+   if(fail_spawn){assert(sp==0&&d==(int)rows[r].n);}
+   else if(rc!=0&&!refusal){assert(d==(int)rows[r].n);} /* no majority: the call waited for every member */
    settle((int)rows[r].n);
+   assert(calls==(int)rows[r].n&&local_calls==1);
   }
+ fail_spawn=0;
  /* A slow member is not waited for once a majority sealed; its answer is left to arrive. */
  static const struct {unsigned n;int a[5];} slow[]={{3,{O,O,S}},{3,{O,S,O}},{5,{O,O,O,S,S}},{5,{O,S,O,O,S}},{4,{O,O,O,S}}};
  for(mode=0;mode<2;mode++)
   for(unsigned r=0;r<sizeof(slow)/sizeof(slow[0]);r++){
    reset(slow[r].n);memcpy(beh+1,slow[r].a,slow[r].n*sizeof(int));
    assert(host_storage_fence_members(&host,uuid,2,mode)==0);
-   settle((int)slow[r].n);assert(calls==(int)slow[r].n);
+   assert(local_calls==1);
+   settle((int)slow[r].n);assert(calls==(int)slow[r].n&&local_calls==1);
+  }
+ /* A refusal that arrives after the majority sealed is not seen: the call returned OK and the refusal is only logged.
+  * (It cannot be, and is not, relied on: the epoch-bound FINISH decides, see the status page.) */
+ static const struct {unsigned n;int a[5];} late[]={{3,{O,O,LATE_ST}},{3,{O,LATE_IV,O}},{3,{O,O,LATE_PR}},{5,{O,O,O,LATE_ST,LATE_PR}},{4,{O,O,O,LATE_IV}}};
+ for(mode=0;mode<2;mode++)
+  for(unsigned r=0;r<sizeof(late)/sizeof(late[0]);r++){
+   reset(late[r].n);memcpy(beh+1,late[r].a,late[r].n*sizeof(int));
+   assert(host_storage_fence_members(&host,uuid,2,mode)==0);
+   pthread_mutex_lock(&mu);assert(!recorded&&done<(int)late[r].n);pthread_mutex_unlock(&mu); /* still unanswered at return */
+   settle((int)late[r].n);
+   assert(calls==(int)late[r].n&&recorded); /* the refusal arrived and was logged, after the call had returned OK */
   }
  mode=0;
  /* A slow member that decides the majority is waited for, and a refusal does not wait for a slow one. */
@@ -137,4 +169,4 @@ with tempfile.TemporaryDirectory(prefix='efs-storage-members-') as directory:
  p=Path(directory)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-pthread']+cflags()+['-I'+str(root),'-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run(wrap()+[str(p.with_suffix(''))],check=True)
-print('storage revocation: strict majority of members sealed; unreached or not-sealed answers count alike, a slow member is not awaited, refusals (STALE, INVAL, PROTO) seen before a majority sealed fail it, changed roster and duplicate identity rejection PASS')
+print('storage revocation: strict majority of members sealed; unreached or not-sealed answers count alike, a slow member is not awaited, refusals (STALE, INVAL, PROTO) seen before a majority sealed fail it and later ones are only logged, every member asked once (threads and inline fallback), changed roster and duplicate identity rejection PASS')
