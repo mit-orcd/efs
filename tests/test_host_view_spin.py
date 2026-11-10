@@ -61,8 +61,8 @@ static int counted_lock(pthread_mutex_t *m) {
     return pthread_mutex_lock(m);
 }
 #define pthread_mutex_lock counted_lock
-#define __atomic_load_n(p, m) ({ if ((const void *)(p) == (const void *)&host.g[0].v_seq) \
-    __atomic_add_fetch(&seq_loads, 1, __ATOMIC_RELAXED); __atomic_load_n(p, m); })
+#define __atomic_load_n(p, m) ({ if ((const void *)(p) == (const void *)&host.g[0].v_seq) { \
+    __atomic_add_fetch(&seq_loads, 1, __ATOMIC_RELAXED); } __atomic_load_n(p, m); })
 /* The hook holds the publisher between its third and fourth field store. */
 static pthread_mutex_t hold_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t hold_cv = PTHREAD_COND_INITIALIZER;
