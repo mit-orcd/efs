@@ -492,25 +492,63 @@ Waiting for the restarted member and re-sending from held bytes are the two
 retry paths class B names; neither is possible (the epoch is permanent; the
 bytes are gone).
 
-## Proposed K110 wording (the K tables are not edited here)
+## Text to apply at merge (the coordinator applies it; none of it is edited on this branch)
+
+**D42 F23** (`docs/status/decisions.md`): keep the F23 row and add after the
+table, as in the Oct 24 text for other amendments:
+
+````text
+**F23 amended Nov 10 (K110, user: "Build the fix").** F23 said an earlier
+ambiguous write is not thereby proven. That stays true for a write the
+restarted member cannot show was made durable, and no longer for one it can: a
+fragment acknowledged by incarnation V at a position at or before V's last
+*completed* durability barrier (`syncfs` of the root, then the fdatasynced
+durability record) is durable once the successor's verified recovery (K36)
+dropped no file that barrier could cover. The successor reports its
+predecessors' last barriers in its COMMIT reply (the 7 newest per root, newest
+first) and the client counts such a fragment durable instead of lost. A
+fragment acknowledged after that barrier, one on a root whose history
+recovery could not validate or whose layout (root count or place in the list)
+changed, one from a wiped or replaced store, one older than the 7 newest
+predecessors, and any reply without or with a malformed history stay lost, and
+`fsync` stays `EIO` when the stripe needs them. Scope: the same process-kill
+and OS-crash assumptions as the asynchronous acknowledgement; full power-loss
+qualification stays a separate scope decision. Design, proof and evidence:
+[K110](2026-11/k110-fsync-after-sigkill-20261110.md).
+````
+
+**K36 page** (`docs/status/2026-10/k36-verified-recovery-20261024.md`, lines
+43 to 48): replace "`EIO` when it needs that fragment, and never counts it
+durable. Test step 4 checks both." with:
+
+````text
+`EIO` when it needs that fragment. *Amended Nov 10 (K110, D42 F23): a fragment
+acknowledged at or before the crashed run's last completed barrier is proven by
+the barrier history the recovered member reports in its COMMIT reply; only the
+rest stays lost.* Test step 4 checks the lost remainder.
+````
+
+**K35 page** (`docs/status/2026-10/k35-fsync-degraded-20261024.md`): after "never
+forgotten)" in step 2 add " unless the node's COMMIT reply carries a barrier
+history that covers the fragment's root and position (K110, D42 F23 as amended
+Nov 10)" before "A refusal"; and in the unclean-stop bullet replace "fails EIO
+for good. Not exercised by a daemon test here." with "fails EIO for good, except
+where the restarted member's barrier history covers the fragment (K110, D42 F23
+as amended Nov 10). Not exercised by a daemon test here."
+
+**K110 rows** (the K tables are not edited here).
 
 Register row, `Item | Kind | Disposition`:
 
 ````text
-Task EY (batch D H1, candidate `9bb50fe79`, Nov 10), diagnosed by Task FH ([evidence](2026-11/k110-fsync-after-sigkill-20261110.md)): `tests/live/append_failover.py --failover kill` failed its final `fsync` with `EIO` in 14 of 14 private runs, permanently (a second `fsync` after every member was back failed too), with every byte reading back exact. Cause: a fragment acknowledged by an incarnation that was SIGKILLed before any COMMIT was counted lost forever (K35/K36 rule), although that incarnation's own durability barrier had covered it | durability proof / fsync availability across member restarts | FIXED on branch `claude/determined-mclean-7c3b6f` (Task FH, not merged): the user chose the cross-incarnation barrier proof ("Barrier proof", amends D42 F23). The PUT reply carries the acknowledgement's barrier position, the durability record v3 keeps a ring of predecessors' last completed barriers (valid only after a verified recovery that dropped no covered file), the COMMIT reply returns it, and the client counts a covered fragment durable. After the fix 28 of 28 kill-mode runs with the final `fsync` taken after the failover controller stopped and the members' recovery verified have every final `fsync`, both post fsyncs and the integrity check pass (25 of 28 runs PASS; the other 3 fail only the REPORT latency criterion that fails in 3 of 14 pre-fix runs too); an `fsync` landing inside a member's outage or recovery fence still returns `EIO` by design (28 unsettled runs: 10 transient). New `tests/test_k110_barrier_history.py` fails before and passes after. VERIFIED on the merge gates; not covered: RDMA, power loss, `tests/live/rdma_async_commit.py` still expects the old `EIO` after a restart
+Task EY (batch D H1, candidate `9bb50fe79`, Nov 10), diagnosed by Task FH ([evidence](2026-11/k110-fsync-after-sigkill-20261110.md)): `tests/live/append_failover.py --failover kill` failed its final `fsync` with `EIO` in 14 of 14 private runs, permanently, with every byte reading back exact. Cause: a fragment acknowledged by an incarnation SIGKILLed before any COMMIT was counted lost forever (K35/K36 rule) although that incarnation's own durability barrier had covered it | durability proof / fsync availability across member restarts | FIXED on branch `claude/determined-mclean-7c3b6f` (Task FH, user: "Build the fix", D42 F23 amended; not merged): the PUT reply carries the acknowledgement's barrier position, the durability record v3 keeps a ring of the 7 newest predecessors' last completed barriers (offered only after a verified recovery that dropped no covered file, only for the same root layout), the COMMIT reply returns it and the client counts a covered fragment durable; everything else fails closed. Regression `tests/test_k110_barrier_history.py` fails before and passes after; unit tables in `test_data_commit` and `test_store_durability`. Live distinct-host H1 kill rerun owed (TCP and RDMA); VERIFIED on the merge gates. `blocks alpha: no`
 ````
 
 Status row:
 
 ````text
-FIXED, **blocks alpha: no** (Nov 10, Task FH): barrier-proof `fsync` after sequential SIGKILLs, 28 of 28 settled kill-mode runs with every final `fsync` 0 and data exact, new regression test fails before and passes after; VERIFIED awaits merge gates; the kill gate's remaining failures are REPORT latency (3 of 28 after, 3 of 14 before; K104 family), and `fsync` during a member outage or recovery fence is `EIO` by design ([evidence](2026-11/k110-fsync-after-sigkill-20261110.md)).
+FIXED on branch `claude/determined-mclean-7c3b6f` (Nov 10, Task FH, **blocks alpha: no**): barrier-proof `fsync` after sequential SIGKILLs; settled kill-mode runs pass the final `fsync` and integrity (table in the evidence page); an `fsync` taken inside a member's outage or recovery fence is `EIO` by design; live distinct-host H1 kill rerun owed, VERIFIED on the merge gates ([evidence](2026-11/k110-fsync-after-sigkill-20261110.md)).
 ````
-
-`blocks alpha: no`: the persistent loss of an `fsync` after two members of a
-stripe restarted is gone; what remains is an `EIO` while a member is down or
-recovering, which D42 F22 and K36 allow and the application can retry. It turns
-to `yes` if the merge gate shows a persistent `fsync` failure after the fix, or
-if the user wants `fsync` to wait out the recovery fence (a separate change).
 
 ## Reproduction
 

@@ -44,10 +44,8 @@ An earlier ambiguous write is not thereby proven: the PUT verifier changed
 with the unclean boot, so a fragment the crashed run acknowledged and did not
 COMMIT stays lost in its client's per-stripe `fsync` (K35, `data_commit.c`):
 the stripe is proven on its other two fragments with a degraded mark, or is
-`EIO` when it needs that fragment. *Amended Nov 10 (K110, D42 F23): a fragment
-acknowledged at or before the crashed run's last completed barrier is proven
-by the barrier history the recovered member reports in its COMMIT reply; only
-the rest stays lost.* Test step 4 checks the lost remainder.
+`EIO` when it needs that fragment, and never counts it durable. Test step 4
+checks both.
 
 **New numbers** (taken from the high end of each free range; unique per
 `tests/test_kv_kind_unique.py`):

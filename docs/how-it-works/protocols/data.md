@@ -1337,30 +1337,36 @@ COMMIT stays lost in its client's `fsync` (K35: proven on the other two with
 a degraded mark, or `EIO`) unless the barrier history below covers it, and a
 crash before the tail finishes is caught by the next recovery's inventory.
 
-**Barrier history (K110, D42 F23 as amended).** Every PUT reply carries an
-*ack* after the verifier: the storage root's index in the top byte and, in the
-low 56 bits, the root's open barrier epoch (`efs_put_pos`: boot counter 16
-bits, sequence 40). The epoch is read after the fragment is stored, so it is
-never earlier than the epoch the fragment joined. The root's durability record
-(`.efs-durable-epoch`, v3) names the last barrier that completed (`syncfs`,
-then the fdatasynced record) and, since a new boot rewrites it, a ring of up to
-seven predecessors: for each earlier incarnation (its verifier) the position of
-its last completed barrier. A boot that follows an unclean stop adds the
-predecessor it found and keeps the predecessor's own ring only if that ring was
-validated. A ring is validated when verified recovery finished without
-dropping any file whose modification time is not after the predecessor's last
-record (such a file may be one a barrier covered); recovery then rewrites the
-record with the verdict before it clears the fence, and forgets the ring if it
-dropped such a file. A COMMIT reply (`efs_msg_data_commit_reply`) lists the
-validated entries as `{verifier, position, root}` after its header. The client
-(`data_commit.c`) records each fragment's verifier and ack; when a restarted
-member answers with another verifier, the fragment is durable if an entry has
-that verifier, that root and a position at or after the ack, and lost
-otherwise. Boot counters of one root never decrease and an incarnation can
-only have been followed by a clean stop, a kill or a crash, so comparing the
-positions numerically is sound. A boot counter above 65535 or a sequence above
-2^40 gives no ack (fail closed). Assumption: the wall clock does not step back
-across a restart by more than the file times it compares.
+**Barrier history (K110, D42 F23 as amended).** Every PUT reply (18 bytes) carries
+an *ack* after the verifier: the storage root's index in the top byte and, in
+the low 56 bits, the root's open barrier epoch (`efs_put_pos`: boot counter 16
+bits, sequence 40). It is read under the root's lock after the fragment is
+stored, and a barrier increments the open epoch under that lock before its
+`syncfs`, so the barrier the ack names has not started when the write is
+complete. The root's durability record (`<root>/.efs-durable-epoch`, 200
+bytes, magic `EFSDUR03`, CRC-32 over the first 192 bytes, any other version or
+a failed CRC refuses startup) names the last barrier that completed (`syncfs`,
+then the fdatasynced record; a failed record sync rewrites the previous
+durable seq), the root count and index, and a ring of up to seven
+predecessors: for each earlier incarnation (its verifier) the position of its
+last completed barrier. A boot that follows an unclean stop (or another
+verifier) adds the predecessor it found, and keeps the predecessor's own ring
+only if that ring was validated and the root count and index are unchanged.
+A ring is validated when verified recovery finished without dropping any file
+whose modification time is not after the predecessor's last record (such a
+file may be one a barrier covered); recovery then rewrites the record with the
+verdict before it clears the fence, and forgets the ring if it dropped such a
+file. A COMMIT reply (`efs_msg_data_commit_reply`, a length that is not header
+plus 24 bytes per entry is refused) lists the validated entries as
+`{verifier, position, root}` after its header; a root still fenced or in a
+barrier error adds none. The client (`data_commit.c`) records each fragment's
+verifier and ack; when a restarted member answers with another verifier, the
+fragment is durable if an entry has that verifier, that root and a position at
+or after the ack, and lost otherwise. Boot counters of one root never
+decrease, so comparing the positions numerically is sound. A boot counter
+above 65535 or a sequence above 2^40 gives no ack (fail closed). Assumption:
+the wall clock does not step back across a restart by more than the file times
+it compares.
 
 A transient obstacle (no leader yet, a peer unreachable) is retried and shown
 as the reason. A failed verification (an unreadable certificate, a fragment
