@@ -21,44 +21,123 @@ reports its predecessors' last completed barriers in its COMMIT reply (only
 when verified recovery dropped no file those barriers cover), and the client
 counts a fragment durable when a reported barrier is at or after its position.
 
-## Resolution (the fix)
+## Design (option 2)
 
-Decision: user, Nov 10, "Barrier proof" (option 2 of the options below). It
-amends the sentences "an earlier ambiguous write is not thereby proven" in
-[D42](../decisions.md) F23 and "never counts it durable" in
-[K36](../2026-10/k36-verified-recovery-20261024.md) and
-[K35](../2026-10/k35-fsync-degraded-20261024.md); the amended text is in those
-pages. Mechanism, as built (the protocol page
-[data.md](../../how-it-works/protocols/data.md#verified-recovery-k36) has the long form):
+Decision: user, Nov 10, "Build the fix" / "Barrier proof" (option 2 below).
+Written before the second round of code changes (root identity in the record,
+old record versions refused, a failed record sync reverted); sections "Wire",
+"Record" and "Proof" describe the code after them.
 
-- **PUT reply** (18 bytes after the status, was 10): the verifier and an *ack*,
-  the storage root's index (top byte) and the root's open barrier position
-  (boot counter 16 bits, sequence 40 bits), read after the fragment is stored.
-  A boot counter above 65535 or a sequence above 2^40 gives no ack.
-- **Durability record** `.efs-durable-epoch` v3 (`EFSDUR03`, CRC): the last
-  completed barrier plus a ring of up to seven predecessors (verifier, position
-  of that incarnation's last completed barrier). A boot after an unclean stop
-  adds the predecessor and keeps the predecessor's own ring only if it was
-  validated. Verified recovery validates the ring when it dropped no file whose
-  modification time is not after the predecessor's last record (such a file
-  might be one a barrier covered), and rewrites the record durably before the
-  fence clears; otherwise the ring is forgotten.
-- **COMMIT reply**: a variable-length list of `{verifier, position, root}`
-  entries after its header (`efs_data_commit_reply_ok()` checks the length).
-- **Client fold** (`data_commit.c`): a fragment whose incarnation differs from
-  the answering one turns `L` into `D` if an entry has the fragment's verifier,
-  its root and a position at or after the fragment's ack; otherwise it stays
-  `L`. The log line `fsync: restarted members: N fragments proven by their
-  barrier history, M lost` counts both.
+**Record.** One file per storage root, `<root>/.efs-durable-epoch`, inside the
+store it describes (so a wiped or replaced store takes its history with it).
+Fixed 200 bytes, big-endian `u64` fields, magic `EFSDUR03`: `0` magic, `8`
+boot, `16` clean, `24` seq (the last barrier of this boot that completed, 0
+before the first), `32` wall time of the last write, `40` verifier, `48` root
+count, `56` ring_ok, `64` ring_n, `72 + 16 i` ring entry `{verifier, position}`
+for `i < 7` (position = `efs_put_pos(boot, seq)`, boot 16 bits, seq 40 bits,
+non-zero), `184` root index, `192` CRC-32 of bytes 0 to 191. A record that is
+short, fails its CRC, has a field out of range or any other magic (the v1 text
+and `EFSDUR02` records included) makes `efsd` refuse to start with a clear
+error; nothing is migrated or skipped.
 
-Fails closed (stays `L`, `fsync` stays `EIO` when the stripe needs it): a
-fragment acknowledged after its incarnation's last completed barrier, a missing
-or unvalidated history, a root or position mismatch, an incarnation that fell out
-of the ring (more than seven restarts without a clean stop in between), a reply without a history, and
-any ack the server could not form. Assumption that cannot be checked from the
-data: the wall clock does not step back across a restart by more than the file
-times the validity rule compares. No backward compatibility was built (new
-wire and record; a freshly formatted cluster).
+**Writes** (`store.c`). The record changes in four places, each a `pwrite` of the
+whole 200 bytes followed by `fdatasync`: (1) attach, a new boot: seq 0, and the
+predecessor's `(verifier, efs_put_pos(boot, seq))` pushed to the ring front
+with the predecessor's own ring behind it when that was valid, only when the
+predecessor stopped unclean or had another verifier, and only when its root
+count and root index equal the current ones (otherwise the ring starts empty);
+(2) each barrier: `syncfs(root)` first, then the record with seq = the
+barrier's epoch, then `fdatasync`; `durable_seq` is raised only after that
+returned, and when the `fdatasync` fails the record is rewritten (no sync) with
+the previous durable seq so the file never names a barrier whose record sync
+failed; (3) verified recovery (K36): `ring_ok`, or the ring forgotten, before
+the fence clears; (4) orderly stop: final barrier, then `clean`. The record
+costs nothing extra on the PUT path: it is the file the barrier already wrote.
+
+**Wire.** PUT reply (`EFS_MSG_PUT_CHUNK_REPLY`): 18 bytes (was 10), the status,
+root index, verifier and an *ack* `u64`: root index (top byte) | `efs_put_pos`
+(boot 16 bits, seq 40 bits). +8 bytes per PUT, no round trip. 0 means no
+barrier (benchmark build, boot above 65535, seq above 2^40): fail closed.
+COMMIT reply: the existing header, `history` and `reserved` (+8 bytes), then
+`history` entries of 24 bytes `{verifier, position, root}`: each validated
+predecessor of each root, newest first; none from a root still fenced, in a
+barrier error, or whose ring recovery forgot. A reply whose length is not
+exactly `sizeof(header) + 24 history` is rejected (`efs_data_commit_reply_ok`)
+and counts as no reply.
+
+**Condition (client, `data_commit.c`).** A fragment with ack `a` (root `r`,
+position `p`) acknowledged by verifier `V` is `P`. The COMMIT answer carries
+verifier `V'` and a history `H`. If `V' == V` the fragment is `D` (unchanged). If
+`V' != V` it is `D` iff `H` has an entry with verifier `V`, root `r` and
+position `>= p`; otherwise `L` (unchanged). `D` is counted exactly as before:
+three `D`, or two `D` and the third covered by a mark (published `M` or a mark
+written now), else `EIO`. Option 4 (a rebuilt `M` slot) is not built and stays
+a follow-up. No path returns 0 from `fsync` without two proven fragments per
+stripe.
+
+**Proof.** Claim: a fragment acknowledged with position `(E, N)` by
+incarnation `E` on root `r` is on stable storage whenever a record of `E` read
+back names seq `>= N` for that boot.
+1. A fragment file is written and closed (`finish_shard_write`) before
+   `put_sync_note` and before the handler reads the position
+   (`handler.c:550`, after `server_put_upload` returned; fragments are written
+   in place, there is no rename).
+2. The position is read under `r->mu` as `r->seq`, the *open* epoch. A barrier
+   takes `target = r->seq` and increments `r->seq` under the same mutex
+   (`put_sync_barrier_locked`) before it calls `syncfs`. So when the read
+   returns `N`, no barrier with target `N` had started, and its `syncfs`
+   starts after the fragment's write completed. The tag is therefore already
+   "the next barrier that has not started"; no change to the tagging is needed
+   (the earlier comment in `handler.c`, "can only over-state", is the safe
+   direction: a later position is harder to cover).
+3. `syncfs` returns only after all data and metadata written before it began
+   are written and the journal committed; the following record `fdatasync`
+   issues the device flush that also covers `O_DIRECT` overwrites (the existing
+   design of the barrier).
+4. The record names seq `N` only after step 3 returned OK for target `N` (the
+   `pwrite` is after `syncfs`), and with the revert the file does not keep `N`
+   when the record sync failed. A later barrier covers fragments of a failed
+   one, so a record naming `N' >= N` is sound.
+5. The successor reads that record at attach and offers `(E, position)` only
+   after verified recovery (K36) dropped no file the earlier barriers could
+   have covered (mtime not after the predecessor's last record), and the
+   history is dropped when the root count or index differ. A file recovery
+   dropped is a fragment the history would have claimed.
+
+Assumptions that are not checked at run time: the wall clock does not step back
+across a restart by more than the file times compared in 5; the file system
+honours `syncfs`; a store is not partially wiped while its record is kept (a
+wiped store has no record, hence no history). Scope: process kill and OS crash;
+power-loss qualification stays a separate scope decision.
+
+**Fail closed, with a test each.**
+
+| Case | Result | Test |
+| --- | --- | --- |
+| ack inside the last unfinished window (position after the predecessor's last barrier) | `L` | `test_data_commit` (`p101`), `test_store_durability` (position vs durable seq) |
+| history entry missing (no entry, none for that verifier or root, empty history) | `L` | `test_data_commit` fold table |
+| entry truncated (reply length is not header plus entries) | reply rejected, fragment unproven | `test_data_commit` malformed reply |
+| root count or root index mismatch at attach | ring dropped, nothing offered | `test_store_durability` |
+| record fails its CRC, is short, has another magic or version | `efsd` refuses to start | `test_store_durability` |
+| store wiped (no record) or another store's record (no matching verifier) | ring empty, `L` | `test_store_durability` |
+| recovery dropped a covered file, or a boot killed before its recovery finished | ring forgotten, `L` | `test_store_durability` |
+| incarnation older than the ring | `L` | `test_store_durability` (bound) |
+| reply without history, ack 0, boot above 65535 | `L` | `test_data_commit`, `test_store_durability` |
+
+**Bound.** The ring keeps the 7 newest predecessors per root. Each unclean
+restart pushes one; a fragment is `L` only until `fsync` or the next COMMIT, and
+`fsync` is the only caller. Seven unclean restarts of one member between a
+write and the `fsync` that covers it is far above the 4 to 7 kills of a whole
+cluster over 90 s in the kill gate (a member took at most 3), and above any
+period an application leaves data without `fsync` while members crash that
+often. An entry past the bound is not offered and the fragment stays `L`: a
+loss of availability, not of safety. The ring costs 112 bytes in the record and
+at most 168 bytes per root in a COMMIT reply, only for a member with unclean
+predecessors.
+
+**No compatibility.** The wire and record versions are new, old records and
+old replies are refused (a PUT reply of 10 bytes, a COMMIT reply without the
+history fields); a freshly formatted cluster is assumed.
 
 ## Results after the fix
 
