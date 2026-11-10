@@ -501,7 +501,7 @@ static int stripe_prove(efs_ino_t ino, int all)
     pthread_mutex_unlock(&group.mu);
 
     int rc = EFS_OK, expired_logged = 0;
-    unsigned logged = 0, marked = 0, remaining = ns;
+    unsigned logged = 0, marked = 0, remaining = ns, by_history = 0, lost_frags = 0;
     const char *what = all ? "data-commit sweep" : "fsync";
     efs_client_rpc_set_deadline_ms(deadline);
     for (int pass = 0; pass < 2; pass++) {
@@ -535,9 +535,15 @@ static int stripe_prove(efs_ino_t ino, int all)
                 if (p->state[i] != FRAG_PENDING || s < 0 || !finished[s] ||
                     jobs[s].rc != EFS_OK || p->seq[i] > jobs[s].target)
                     continue;
-                p->state[i] = p->epoch[i] == jobs[s].epoch ||
-                              history_covers(&jobs[s], p->epoch[i], p->ack[i])
-                              ? FRAG_DURABLE : FRAG_LOST;
+                if (p->epoch[i] == jobs[s].epoch) {
+                    p->state[i] = FRAG_DURABLE;
+                } else if (history_covers(&jobs[s], p->epoch[i], p->ack[i])) {
+                    p->state[i] = FRAG_DURABLE;
+                    by_history++;
+                } else {
+                    p->state[i] = FRAG_LOST;
+                    lost_frags++;
+                }
             }
             snap[k] = *p;
         }
@@ -627,6 +633,9 @@ static int stripe_prove(efs_ino_t ino, int all)
             }
         }
     }
+    if (by_history || lost_frags)
+        fprintf(stderr, "%s: restarted members: %u fragments proven by their barrier history, "
+                "%u lost\n", what, by_history, lost_frags);
     for (int i = 0; i < n; i++)
         free(jobs[i].hist);
     pthread_cond_destroy(&group.cv);
