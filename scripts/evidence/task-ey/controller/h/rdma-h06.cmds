@@ -1,0 +1,2 @@
+gc-reclamation-posix	1	mkdir -p $T/p1 $T/p2 && python3 tests/live/gc_reclamation.py --port 19560 --transport rdma --root $T/p1 --root $T/p2 --posix
+gc-put-barrier	1	mkdir -p $T/p3 $T/p4 && python3 tests/live/gc_reclamation.py --port 19560 --transport rdma --root $T/p3 --root $T/p4 --put-barrier-fault

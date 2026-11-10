@@ -1,0 +1,7 @@
+k33-payload	20	python3 tests/test_k33_payload.py
+e2-peer-stop-loop	1	python3 tests/live/e2_peer_stop_loop.py --runs 20 --port-base 19600
+k35-fsync-degraded	1	python3 tests/test_k35_fsync_degraded.py
+k33-growth	10	python3 tests/test_k33_growth.py
+k41-packer-placement	10	python3 tests/test_k41_packer_placement.py
+k54-member-down-unmount	1	python3 tests/live/k54_member_down_unmount.py --runs 20 --mode alternate
+k43-coordinator-kill	3	python3 tests/test_k43_coordinator_kill.py

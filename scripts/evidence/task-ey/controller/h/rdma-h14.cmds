@@ -1,0 +1,1 @@
+k05-fence-gate	2	K05_ADDR=172.16.223.66 bash scripts/evidence/k05/k05_session_fence_gate.sh $S $T/k05 19580

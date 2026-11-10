@@ -1,0 +1,2 @@
+pump-file	3	python3 scripts/evidence/pump-logging/pump_logging_profile.py --work $T/run --output $T/out --obs 1 --require-progress --versioned --transport rdma --rdma-dev mlx5_2 --listen 172.16.223.66 --sink file
+pump-blocked	3	python3 scripts/evidence/pump-logging/pump_logging_profile.py --work $T/run --output $T/out --obs 1 --require-progress --versioned --transport rdma --rdma-dev mlx5_2 --listen 172.16.223.66 --sink blocked

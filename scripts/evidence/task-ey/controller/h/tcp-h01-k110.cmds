@@ -1,0 +1,1 @@
+sigkill-8k-post	1	python3 tests/live/append_failover.py --root $T/run --port 19500 --rel $S --records 8000 --writers 4 --failover kill --interval 4 --first-event 3 --down 5 --post-fsync
