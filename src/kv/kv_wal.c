@@ -340,6 +340,16 @@ int kv_wal_sync_prefix(struct kv_wal *w,uint64_t prefix)
     pthread_mutex_unlock(&w->mu);return rc;
 }
 
+/* fsync everything appended so far; an outer hold stays owned. */
+int kv_wal_sync_now(struct kv_wal *w)
+{
+    if(!w)return EFS_ERR_INVAL;
+    pthread_mutex_lock(&w->mu);
+    int rc=w->io_failed?EFS_ERR_IO:EFS_OK;
+    if(!rc && w->sync_mode!=EFS_KV_LSM_NOSYNC)rc=kv_wal_fsync_to_locked(w,w->appended);
+    pthread_mutex_unlock(&w->mu);return rc;
+}
+
 int kv_wal_sync_covered(struct kv_wal *w,uint64_t prefix,int *covered)
 {
     if(!covered)return EFS_ERR_INVAL;

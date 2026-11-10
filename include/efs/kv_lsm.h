@@ -125,6 +125,9 @@ int efs_kv_lsm_sync_release(struct efs_kv *kv);
  * Nested holds return BUSY unchanged, permitting synchronous fallback. */
 int efs_kv_lsm_sync_detach(struct efs_kv *kv,uint64_t *prefix);
 int efs_kv_lsm_sync_prefix(struct efs_kv *kv,uint64_t prefix);
+/* fsync every record appended so far, under any hold. The hold stays owned.
+ * A caller that must order a write before another durable record uses this. */
+int efs_kv_lsm_sync_now(struct efs_kv *kv);
 /* Nonblocking probe of the actual durable WAL frontier. Unknown/future
  * prefixes and sticky storage failures never produce covered=true. */
 int efs_kv_lsm_sync_covered(struct efs_kv *kv,uint64_t prefix,int *covered);

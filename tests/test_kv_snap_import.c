@@ -4,11 +4,12 @@
  * counted (-Wl,--wrap in the Makefile); the live heap the importer reaches
  * must stay under 2 MiB, and the KV must end with exactly the incoming
  * group keys. Also: an import cut off between batches (a restart) is redone
- * from a fresh local image and converges; a failed batch is applied again by
- * the next step; a malformed or unsorted image is refused before any write. */
+ * from a fresh local image and converges; a batch the KV refused stays pending
+ * and a further step applies it; a malformed or unsorted image is refused before any write. */
 #include "efs/common.h"
 #include "efs/kv.h"
 #include "efs/kv_key.h"
+#include "efs/kv_lsm.h"
 #include "efs/kv_snap.h"
 #include "efs/raft.h"
 #include "test_tmpdir.h"
@@ -386,7 +387,9 @@ static void test_interrupted(void)
     world_free(&w);
 }
 
-/* A batch that fails is applied again by the next step: no key is skipped. */
+/* A batch the KV refuses stays pending: a further step applies it, no key is
+ * skipped. (The host steps again only on BUSY and discards the importer on
+ * any other error: test_snap_import_host.) */
 static void test_failed_batch(void)
 {
     struct world w;
@@ -431,12 +434,220 @@ static void test_refused(void)
     world_free(&w);
 }
 
+/* ---- small shapes: the images are lists of (inode, value length) ---- */
+struct spec {
+    uint32_t ino, vlen;
+};
+static void sval(uint8_t *v, uint32_t ino, uint32_t vlen, uint32_t variant)
+{
+    for (uint32_t j = 0; j < vlen; j++)
+        v[j] = (uint8_t)(ino * 31u + variant * 7u + j);
+}
+/* raw image: n records of s[], in the order given, optionally with one
+ * record in shard 2 (outside group 0) at position bad_at (or -1) */
+static void write_img(const char *path, const struct spec *s, uint32_t n,
+                      int bad_at)
+{
+    FILE *f = fopen(path, "wb");
+    uint8_t k[64], v[64];
+    uint32_t kl;
+
+    CHECK(f != NULL, "open image");
+    put_le32(f, n);
+    for (uint32_t i = 0; i < n; i++) {
+        ikey(bad_at == (int)i ? 2 : 1, s[i].ino, k, &kl);
+        sval(v, s[i].ino, s[i].vlen, 0);
+        put_rec(f, k, kl, v, s[i].vlen);
+    }
+    fclose(f);
+}
+static void put_specs(struct efs_kv *kv, const struct spec *s, uint32_t n,
+                      uint32_t variant)
+{
+    uint8_t k[64], v[64];
+    uint32_t kl;
+
+    for (uint32_t i = 0; i < n; i++) {
+        ikey(1, s[i].ino, k, &kl);
+        sval(v, s[i].ino, s[i].vlen, variant);
+        CHECK(efs_kv_put(kv, k, kl, v, s[i].vlen) == EFS_OK, "put");
+    }
+}
+/* The group-0 keys of kv are exactly s[] with the incoming values. */
+struct want {
+    const struct spec *s;
+    uint32_t n, seen, wrong;
+};
+static int want_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v,
+                   uint32_t vl)
+{
+    struct want *w = u;
+    uint8_t exp[64];
+    uint64_t ino = 0;
+
+    if ((((uint32_t)k[0] << 8) | k[1]) != 1)
+        return 0;
+    for (int j = 0; kl == 11 && j < 8; j++)
+        ino = ino << 8 | k[3 + j];
+    if (w->seen >= w->n || kl != 11 || ino != w->s[w->seen].ino ||
+        vl != w->s[w->seen].vlen) {
+        w->wrong++;
+    } else {
+        sval(exp, w->s[w->seen].ino, vl, 0);
+        if (vl && memcmp(exp, v, vl) != 0)
+            w->wrong++;
+    }
+    w->seen++;
+    return 0;
+}
+static int holds_exactly(struct efs_kv *kv, const struct spec *s, uint32_t n)
+{
+    struct want w = {s, n, 0, 0};
+    uint8_t k[64], buf[8];
+    uint32_t kl, bl = sizeof(buf);
+
+    if (efs_kv_scan(kv, want_cb, &w) != EFS_OK)
+        return 0;
+    ikey(2, 77, k, &kl);        /* another group's key is never touched */
+    return w.seen == n && !w.wrong &&
+           efs_kv_get(kv, k, kl, buf, &bl) == EFS_OK && bl == 2;
+}
+/* Import in -> lo on a kv holding lo (+ one group-2 key); true when the kv
+ * ends with exactly in. lo_kv: a store to use instead of a mem kv, or NULL. */
+static int merge_case(const struct spec *in, uint32_t nin, const struct spec *lo,
+                      uint32_t nlo, struct efs_kv *lo_kv, int real_export)
+{
+    char dir[EFS_TEST_PATH], inp[EFS_TEST_PATH + 16], locp[EFS_TEST_PATH + 16];
+    struct efs_kv *kv = lo_kv ? lo_kv : efs_kv_mem_create();
+    struct efs_kv_import *im = NULL;
+    uint8_t k[64];
+    uint32_t kl;
+    int done = 0, steps = 0, ok;
+
+    efs_test_path(dir, sizeof(dir), "efs-snapshape-XXXXXX");
+    CHECK(efs_test_mkdtemp(dir) != NULL, "tmpdir");
+    snprintf(inp, sizeof(inp), "%s/in.kvx", dir);
+    snprintf(locp, sizeof(locp), "%s/local.kvx", dir);
+    put_specs(kv, lo, nlo, 5);
+    ikey(2, 77, k, &kl);
+    CHECK(efs_kv_put(kv, k, kl, (const uint8_t *)"g2", 2) == EFS_OK, "g2");
+    write_img(inp, in, nin, -1);
+    if (real_export) {  /* the exporter the host uses, not the test's own */
+        struct efs_kv_lsm_view *view;
+
+        CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush");
+        CHECK(efs_kv_lsm_view_pin(kv, &view) == EFS_OK, "pin");
+        CHECK(efs_kv_lsm_view_export(view, EFS_RAFT_GROUP_SHARD, locp) == EFS_OK,
+              "export");
+        efs_kv_lsm_view_unpin(view);
+    } else {
+        write_local(kv, locp);
+    }
+    CHECK(efs_kv_import_open(kv, EFS_RAFT_GROUP_SHARD, inp, locp, &im) == EFS_OK,
+          "open");
+    while (!done && steps++ < 100)
+        CHECK(efs_kv_import_step(im, &done) == EFS_OK, "step");
+    efs_kv_import_close(im);
+    ok = done && holds_exactly(kv, in, nin);
+    if (lo_kv) {
+        efs_kv_lsm_close(kv);
+    } else {
+        efs_kv_destroy(kv);
+        free(kv);
+    }
+    return ok;
+}
+
+static void test_shapes(void)
+{
+    static const struct spec e[1] = {{0, 0}};
+    static const struct spec a[] = {{1, 8}, {2, 8}, {3, 8}};
+    static const struct spec hi[] = {{5, 8}, {6, 8}, {7, 8}, {8, 8}};
+    static const struct spec lo[] = {{1, 8}, {2, 8}};
+    static const struct spec b[] = {{2, 8}, {3, 8}};
+    static const struct spec one[] = {{1, 8}};
+    static const struct spec zin[] = {{1, 0}, {2, 0}, {3, 5}};
+    static const struct spec zlo[] = {{2, 7}, {3, 0}, {4, 0}};
+
+    CHECK(merge_case(e, 0, e, 0, NULL, 0), "both empty");
+    CHECK(merge_case(e, 0, a, 3, NULL, 0), "empty incoming deletes every local key");
+    CHECK(merge_case(a, 3, e, 0, NULL, 0), "empty local takes every incoming key");
+    CHECK(merge_case(hi, 4, lo, 2, NULL, 0), "local ends before incoming starts");
+    CHECK(merge_case(lo, 2, hi, 4, NULL, 0), "incoming ends before local starts");
+    CHECK(merge_case(one, 1, b, 2, NULL, 0), "incoming exhausted first");
+    CHECK(merge_case(b, 2, one, 1, NULL, 0), "local exhausted first");
+    CHECK(merge_case(zin, 3, zlo, 3, NULL, 0),
+          "zero-length values: kept, written over, written empty, deleted");
+    {
+        char dir[EFS_TEST_PATH];
+        struct efs_kv *lsm;
+
+        efs_test_path(dir, sizeof(dir), "efs-snaplsm-XXXXXX");
+        CHECK(efs_test_mkdtemp(dir) != NULL, "tmpdir");
+        lsm = efs_kv_lsm_open(dir, NULL);
+        CHECK(lsm != NULL, "open lsm");
+        CHECK(merge_case(zin, 3, zlo, 3, lsm, 1),
+              "real LSM export and apply: zero-length values");
+        efs_test_path(dir, sizeof(dir), "efs-snaplsm-XXXXXX");
+        CHECK(efs_test_mkdtemp(dir) != NULL, "tmpdir");
+        lsm = efs_kv_lsm_open(dir, NULL);
+        CHECK(lsm != NULL, "open lsm");
+        CHECK(merge_case(hi, 4, a, 3, lsm, 1), "real LSM export and apply: disjoint");
+    }
+}
+
+/* Every refusal happens at open, before any write; no importer is returned. */
+static void refuse_case(const struct spec *in, uint32_t nin, const struct spec *lo,
+                        uint32_t nlo, int bad_in_at, int bad_lo_at, int cut,
+                        const char *why)
+{
+    char dir[EFS_TEST_PATH], inp[EFS_TEST_PATH + 16], locp[EFS_TEST_PATH + 16];
+    struct efs_kv_import *im = NULL;
+    struct efs_kv *kv = efs_kv_mem_create();
+    off_t sz;
+
+    efs_test_path(dir, sizeof(dir), "efs-snaprefuse-XXXXXX");
+    CHECK(efs_test_mkdtemp(dir) != NULL, "tmpdir");
+    snprintf(inp, sizeof(inp), "%s/in.kvx", dir);
+    snprintf(locp, sizeof(locp), "%s/local.kvx", dir);
+    write_img(inp, in, nin, bad_in_at);
+    write_img(locp, lo, nlo, bad_lo_at);
+    if (cut) {
+        FILE *f = fopen(inp, "rb");
+
+        fseek(f, 0, SEEK_END);
+        sz = ftell(f);
+        fclose(f);
+        CHECK(truncate(inp, sz - 3) == 0, "truncate");
+    }
+    CHECK(efs_kv_import_open(kv, EFS_RAFT_GROUP_SHARD, inp, locp, &im) ==
+              EFS_ERR_PROTO && !im, why);
+    efs_kv_destroy(kv);
+    free(kv);
+}
+
+static void test_refused_shapes(void)
+{
+    static const struct spec dup[] = {{1, 8}, {2, 8}, {2, 8}, {3, 8}};
+    static const struct spec ok[] = {{1, 8}, {2, 8}, {3, 8}};
+    static const struct spec down[] = {{3, 8}, {2, 8}};
+
+    refuse_case(dup, 4, ok, 3, -1, -1, 0, "duplicate key in the incoming image");
+    refuse_case(ok, 3, dup, 4, -1, -1, 0, "duplicate key in the local image");
+    refuse_case(ok, 3, down, 2, -1, -1, 0, "unsorted local image");
+    refuse_case(ok, 3, ok, 3, -1, -1, 1, "truncated last record");
+    refuse_case(ok, 3, ok, 3, 1, -1, 0, "incoming key outside the group");
+    refuse_case(ok, 3, ok, 3, -1, 2, 0, "local key outside the group");
+}
+
 int main(void)
 {
     test_bounded();
     test_interrupted();
     test_failed_batch();
     test_refused();
+    test_shapes();
+    test_refused_shapes();
     if (failures) {
         fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

@@ -763,7 +763,7 @@ int efs_kv_import_step(struct efs_kv_import *im, int *done)
         }
         rc = efs_kv_batch(im->kv, im->items, im->n);
         if (rc != EFS_OK)
-            return rc;      /* the same batch is applied again next step */
+            return rc;      /* the pending batch is kept; a caller may step again */
         im->n = 0;
     }
     *done = im->finished;

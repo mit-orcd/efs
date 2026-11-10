@@ -168,6 +168,7 @@ TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_
 TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c
 TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface
 TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view tests/test_kv_snap_import
+TEST_BINS += tests/test_snap_import_host
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
@@ -853,6 +854,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_crc32
 	./tests/test_kv_seg_stdio
 	./tests/test_kv_snap_import
+	./tests/test_snap_import_host
 	./tests/test_kv_compact_manifest_view
 	./tests/test_pack_validate_once
 	./tests/test_kv_reader_gate
@@ -1376,6 +1378,11 @@ tests/test_b_geometry tests/test_frag_record tests/test_packed_segment tests/tes
 tests/test_child_vec_index: override LDFLAGS += -Wl,--wrap=realloc -Wl,--wrap=calloc
 tests/test_kv_seg_stdio: override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=setvbuf -Wl,--wrap=fsync
 tests/test_kv_snap_import: override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=free
+# Compiles the real raft_host.c in this TU, like tests/decoders/apply; --wrap lets the
+# test cancel an import from inside its open and see that the pass takes h->mu before its export.
+tests/test_snap_import_host: override LDFLAGS += -Wl,--wrap=efs_kv_import_open -Wl,--wrap=efs_kv_lsm_flush -Wl,--wrap=pthread_mutex_lock
+tests/test_snap_import_host: tests/test_snap_import_host.c src/server/raft_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_snap_import_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB) $(LDFLAGS)
 tests/test_kv_compact_manifest_view: override LDFLAGS += -Wl,--wrap=fsync
 
 tests/test_directory_sync_group: tests/test_directory_sync_group.c src/server/directory_sync_group.h

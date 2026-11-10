@@ -89,6 +89,7 @@ int kv_wal_append(struct kv_wal *w, const struct efs_kv_item *items, uint32_t n,
 int kv_wal_hold(struct kv_wal *w, int on);
 int kv_wal_detach(struct kv_wal *w,uint64_t *prefix);
 int kv_wal_sync_prefix(struct kv_wal *w,uint64_t prefix);
+int kv_wal_sync_now(struct kv_wal *w);
 int kv_wal_sync_covered(struct kv_wal *w,uint64_t prefix,int *covered);
 /* Empties the log; call only after the memtable is a durable segment. */
 /* Reset only when every appended record is already in durable segments.

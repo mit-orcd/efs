@@ -27,7 +27,10 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
  * an image that is malformed, out of order, outside the group or holds
  * reserved rows (EFS_ERR_PROTO). Each step builds and applies one batch of at
  * most 1024 keys / 1 MiB of key+value bytes and merges at most 16384 records;
- * a failed batch is applied again by the next step. Memory held between steps
+ * a batch the KV refused stays pending, so another step applies it again,
+ * while a read or format error is sticky. The host retries only BUSY and
+ * discards the importer on any other error, so the leader's resend starts a
+ * fresh import. Memory held between steps
  * is two read windows and one batch, independent of the image sizes. The files
  * may be unlinked after open. A half-applied import is not resumed: a new open
  * diffs the incoming image against the then-current local image. */

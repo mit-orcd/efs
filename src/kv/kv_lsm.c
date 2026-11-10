@@ -1961,6 +1961,13 @@ int efs_kv_lsm_sync_prefix(struct efs_kv *kv,uint64_t prefix)
     return l->magic!=KV_LSM_MAGIC || !l->wal?EFS_OK:kv_wal_sync_prefix(l->wal,prefix);
 }
 
+int efs_kv_lsm_sync_now(struct efs_kv *kv)
+{
+    if(!kv || kv->ops!=&lsm_ops || !kv->ctx)return EFS_OK;
+    struct kv_lsm *l=kv->ctx;
+    return l->magic!=KV_LSM_MAGIC || !l->wal?EFS_OK:kv_wal_sync_now(l->wal);
+}
+
 int efs_kv_lsm_sync_covered(struct efs_kv *kv,uint64_t prefix,int *covered)
 {
     if(!covered)return EFS_ERR_INVAL;

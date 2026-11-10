@@ -291,6 +291,9 @@ struct host_group {
      * before the first batch lands. */
     struct efs_kv_import *import_im;
     int import_applying;     /* pump holds the importer; cancel must not free */
+    uint64_t import_t0_us;   /* import start (pass), for the applied line */
+    uint64_t import_step_max_us; /* longest efs_kv_import_step + sync */
+    uint32_t import_steps;
     uint64_t import_retry_us;
     int kv_incomplete;  /* apply missed a committed row; do not lead */
     /* W127: a committed entry this build cannot apply. Sticky until restart
@@ -3829,9 +3832,9 @@ static void host_snap_close(void *handle)
 #define SNAP_IMP_DONE   3
 #define SNAP_IMP_FAIL   4
 #define SNAP_IMP_APPLY  5
-/* One efs_kv_import_step per pump cycle (at most 1024 keys written, 16384
- * records merged), then back to the pump so the same cycle can answer
- * AppendEntries. Fixed counts in kv_snap.c, not knobs. */
+/* One efs_kv_import_step per leader retry of the closing chunk (about every
+ * 50 ms; at most 1024 keys written, 16384 records merged), then back to the
+ * pump. Fixed counts in kv_snap.c, not knobs. */
 static void snap_import_free_diff(struct host_group *g)
 {
     efs_kv_import_close(g->import_im);
@@ -3885,6 +3888,7 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
     if (st == SNAP_IMP_DONE) {
         struct efs_kv_import *im = g->import_im;
         int done = 0;
+        uint64_t step_t0, step_us;
 
         g->import_applying = 1;
         g->import_state = SNAP_IMP_APPLY;
@@ -3894,10 +3898,20 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
          * importer has merged both images to the end; until then the
          * retry gets BUSY. */
         __atomic_store_n(&h->snap_batch, 1, __ATOMIC_RELEASE);
+        step_t0 = now_us_();
         *rc = efs_kv_import_step(im, &done);
+        /* The pump's KV WAL hold defers this fsync past the ack, and the
+         * ack saves the Raft snapshot record at once: the last batch must
+         * be durable first, or a crash leaves a record over a stale KV. */
+        if (*rc == EFS_OK && done)
+            *rc = efs_kv_lsm_sync_now(h->kv);
+        step_us = now_us_() - step_t0;
         __atomic_store_n(&h->snap_batch, 0, __ATOMIC_RELEASE);
         pthread_mutex_lock(&h->snap_mu);
         g->import_applying = 0;
+        g->import_steps++;
+        if (step_us > g->import_step_max_us)
+            g->import_step_max_us = step_us;
         if (g->import_state != SNAP_IMP_APPLY) {
             snap_import_free_diff(g);
             __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
@@ -3905,8 +3919,20 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
             *rc = EFS_ERR_BUSY;
             return 1;
         }
-        if (*rc != EFS_OK) {
+        if (*rc == EFS_ERR_BUSY) { /* batch refused for now: same batch again */
             g->import_state = SNAP_IMP_DONE;
+            pthread_mutex_unlock(&h->snap_mu);
+            return 1;
+        }
+        if (*rc != EFS_OK) {
+            /* A failed importer is never kept: its error is sticky, and the
+             * leader's resend of a one-chunk image lands here first. Drop
+             * it; the next chunk at offset 0 queues a fresh import. */
+            snap_import_free_diff(g);
+            g->import_state = SNAP_IMP_IDLE;
+            efs_meta_gc_pending_invalidate(g->group == 0 ? 1u : 2u);
+            efs_meta_degraded_count_invalidate(g->group == 0 ? 1u : 2u);
+            __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
             pthread_mutex_unlock(&h->snap_mu);
             return 1;
         }
@@ -3923,9 +3949,13 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
 
             efs_kv_import_stat(im, NULL, NULL, &peak, &nd);
             efs_telemetry_log(0, "raft-snap: import applied group=%u "
-                    "incl=%llu diff_keys=%llu buf_peak=%llu\n", g->group,
+                    "incl=%llu diff_keys=%llu buf_peak=%llu steps=%u "
+                    "step_max_us=%llu total_ms=%llu\n", g->group,
                     (unsigned long long)g->import_incl,
-                    (unsigned long long)nd, (unsigned long long)peak);
+                    (unsigned long long)nd, (unsigned long long)peak,
+                    g->import_steps,
+                    (unsigned long long)g->import_step_max_us,
+                    (unsigned long long)((now_us_() - g->import_t0_us) / 1000));
         }
         snap_import_free_diff(g);
         /* The diff replaced this group's keyspace — the pending-GC
@@ -11426,12 +11456,21 @@ static void host_snap_import_pass(struct efs_raft_host *h)
             continue;
         }
         h->g[gi].import_state = SNAP_IMP_RUN;
+        h->g[gi].import_t0_us = now_us_();
+        h->g[gi].import_step_max_us = 0;
+        h->g[gi].import_steps = 0;
         gen = h->g[gi].import_gen;
         incl = h->g[gi].import_incl;
         group = h->g[gi].group;
         snprintf(path, sizeof(path), "%s", h->g[gi].import_path);
         pthread_mutex_unlock(&h->snap_mu);
         __atomic_store_n(&h->g[gi].import_block, 1, __ATOMIC_RELEASE);
+        /* Every raft apply runs on the pump under h->mu and tests import_block
+         * only on entry. Taking and dropping h->mu here waits out an apply
+         * already past that test, so no write of this group lands after the
+         * local export below, where the diff could not correct it. */
+        pthread_mutex_lock(&h->mu);
+        pthread_mutex_unlock(&h->mu);
         t0 = now_us_();
         efs_telemetry_log(0, "raft-snap: import start group=%u incl=%llu\n",
                 group, (unsigned long long)incl);
@@ -11486,6 +11525,8 @@ static void host_snap_import_pass(struct efs_raft_host *h)
                     im = NULL;
                 }
                 pthread_mutex_unlock(&h->snap_mu);
+                if (im) /* cancelled while open ran: nobody else clears it */
+                    __atomic_store_n(&h->g[gi].import_block, 0, __ATOMIC_RELEASE);
                 efs_kv_import_close(im);
                 continue;
             }
