@@ -1,6 +1,6 @@
 # Batch F candidate regression on fstor007, November 9 (Task EX)
 
-**Verdict: FAIL on F1, PASS on F2, F3, F4 (rerun) and F5.** F1 (`make test-all`, 8 jobs) ran twice on one build and failed once in each run, on a different load intermittent each time: run 1 `test_pump_logging.py` (48 writes, floor 50, no errors), run 2 `test_bench_cli.py` (4 of 256 `efs-bench` workers did no I/O within the 1 s window). Each test passed alone 3 of 3 and passed in the other gate run. Neither run reached 0 FAIL, so the rows served by F1 alone stay FIXED. F2 ASan 59/59 and TSan 31/31, F3 Memcheck 41/41. F4 failed its first driver run in a harness listing race after the K11 case had passed; the driver rerun passed both gates and the direct K11 case passed 3 of 3. **K56 and K73 become VERIFIED**; no new K row (no failure is attributed to the product).
+**Verdict: PASS on F1 (third gate run), F2, F3, F4 (rerun) and F5.** F1 (`make test-all`, 8 jobs) failed once in each of its first two runs on one build, on a different load intermittent each time: run 1 `test_pump_logging.py` (48 writes, floor 50, no errors), run 2 `test_bench_cli.py` (4 of 256 `efs-bench` workers did no I/O within the 1 s window). Each test passed alone 3 of 3 and passed in the other gate run. A third gate run, on a fresh build of the same commit and asked for by the user, reached 0 FAIL: `TOTAL 594 FAIL 0 NOTRUN 3 STATUS INCOMPLETE (666s) OVERBUDGET 3 HOSTLIMIT 3 BUILD 13s` (the three over-budget rows are recorded, not raised, and make the status INCOMPLETE rather than COMPLETE). On that run the rows served by F1 alone become VERIFIED. F2 ASan 59/59 and TSan 31/31, F3 Memcheck 41/41. F4 failed its first driver run in a harness listing race after the K11 case had passed; the driver rerun passed both gates and the direct K11 case passed 3 of 3. **K56, K73 and the 16 F1-only rows become VERIFIED**; no new K row (no failure is attributed to the product).
 
 **Purpose:** Stage 1 batch F ([acceptance matrix](../stage1-acceptance-matrix-20261030.md), runs F1 to F5) on the frozen candidate, judged against each served row's acceptance ([definitions](../2026-10/acceptance-definitions-20261031.md)). Release gate: alpha 1.0 Stage 1, [K register](../alpha-1.0-2plus1-checklist.md#k-stage-1-known-defects-in-the-alpha-scope).
 
@@ -16,6 +16,7 @@
 | F1 solo | `python3 tests/test_pump_logging.py` x3 | 84 to 88 s each | PASS 3/3 |
 | F1 run 2 (same build) | same | 10 min 56 s | `TOTAL 594 FAIL 1 NOTRUN 3 STATUS FAIL (655s) HOSTLIMIT 3 BUILD 0s`; FAIL 568 `test_bench_cli.py`; `test_pump_logging.py` PASS (87.6 s) |
 | F1 solo | `python3 tests/test_bench_cli.py` x3 | 3 s each | PASS 3/3 (it passed in run 1 too, 2.9 s) |
+| F1 run 3 (fresh `git archive \| gzip -n` of `9bb50fe79`, tar sha256 `99920283bf4be193…`, rebuilt 2026-11-10T00:58:47Z; fstor007 otherwise idle) | same | 11 min 20 s | `TOTAL 594 FAIL 0 NOTRUN 3 STATUS INCOMPLETE (666s) OVERBUDGET 3 HOSTLIMIT 3 BUILD 13s`; OVERBUDGET `test_member_limit.py` 19.2 s of 15, `EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta` 5.6 s of 5, `test_raft_ack_window.py` 16.9 s of 15; `test_pump_logging.py` and `test_bench_cli.py` PASS |
 | F2 ASan | `bash tests/sanitizer_check.sh asan` | 7 min 26 s | `VERDICT: PASS (59 run, 0 failed, 386s)` |
 | F2 TSan | `bash tests/sanitizer_check.sh tsan` | 10 min 47 s | `VERDICT: PASS (31 run, 0 failed, 632s)` |
 | F3 | `PATH=$HOME/.local/valgrind-3.28.0/bin:$PATH CPATH=$HOME/.local/valgrind-3.28.0/include make leak-check` | 5 min 16 s | `VERDICT: PASS (41 run, 0 failed, 310s)` |
@@ -38,7 +39,7 @@ None is a product defect on this evidence, so no K row was added. Items 2 and 3 
 
 | K | F acceptance (definition) | Met? | Row change |
 | --- | --- | --- | --- |
-| K3, K7, K24, K25, K30, K57, K58, K59, K60, K65, K67, K68, K71, K76, K77, K78 | candidate regression: F1 `make test-all` with no failure | **No**: both F1 runs FAIL (593 of 594 PASS each), on tests outside these rows | FIXED kept, dated clause |
+| K3, K7, K24, K25, K30, K57, K58, K59, K60, K65, K67, K68, K71, K76, K77, K78 | candidate regression: F1 `make test-all` with no failure | **Yes on run 3**: 594 of 594 PASS (runs 1 and 2 each failed one load intermittent outside these rows) | **VERIFIED** |
 | K2 | F1 `test_decoder_inputs.py`, `test_decoder_refusal.py`; F5 25/25 rc 0 | F1 PASS both runs; F5 26/26 rc 0 (gcc, not clang) | VERIFY kept (c5 cells, BT-1) |
 | K4 | F1 `./tests/test_declaration_gate`, `test_declaration_gate_handler.py` | PASS both runs | VERIFY kept (c5 cells) |
 | K11 | F4 failed-PUT-barrier case, no `fetch published .* rc=-9` | case PASS in driver runs 1 and 2 and direct 3/3; `put-barrier-fault.json` `fsync_errno` null, 5, 5 and the refusal line in three of four `n*.log` in each direct run; the `rc=-9` scan over the direct runs' trees and the gate logs prints nothing | VERIFY kept (cells, BT-2) |
@@ -58,7 +59,7 @@ No sanitizer entry printed NOTRUN or SKIP (grep over every `*.out`).
 
 ## Follow-ups (not done here)
 
-- F1 at 0 FAIL: a third gate on this build, or the coordinator's acceptance of the two load intermittents, would let the 16 F1-only rows become VERIFIED. Not run unasked.
+- The three run-3 OVERBUDGET rows (`test_member_limit.py`, `test_query_delta` with `EFS_QUERY_DELTA_DIRS=1`, `test_raft_ack_window.py`) are recorded; budgets were not raised.
 - `tests/live/gc_reclamation.py` `files()`: tolerate a directory removed between listing and scan (the state it waits for). Harness fix; no W identity filed by this task.
 - `tests/test_bench_cli.py` many-workers case: 256 workers in a 1 s window under the 8-job pool.
 - F5 used gcc 11.5 where the K2 definition names `CC=clang`; fstor007 has no clang.
@@ -83,8 +84,8 @@ Prerequisites: Linux, gcc with the ASan/UBSan/TSan runtimes, fuse3, valgrind 3.2
 
 ## Raw evidence
 
-On fstor007 `~erbmi1/efs-artifacts/taskEX-20261109/` (outside Git): `f1-run1/` and `f1-run2/` (`summary.txt`, `progress.txt`, `timings.tsv`, `fail-*.log`, gate log and time), `f1-run1/pump-logging-fixture/` (the failed fixture's daemon logs and result), `f1-solo/`, `f1-test_raft.log`, `f2-asan.log`, `f2-tsan.log`, `f2-asan-logs/`, `f2-tsan-logs/` (per-entry output), `f3-leak.log`, `f4-run1/` (driver log, gate logs, draft summary), `f4-rerun/` (direct runs with `n*.log` and `put-barrier-fault.json`, driver run 2), `f5-decoder.log`, `f5-results/` (per-target `run.log`, `summary.json`; `apply/run.log` kept as its last 200 lines plus the full file's sha256 `3cac3c4633da3606…`), `PRUNED.txt`. `SHA256SUMS` there: 326 files, its own sha256 `41428357cf08f13d201c8d2090901a65f7718511efbc104cda608ebabfdf58e3`.
+On fstor007 `~erbmi1/efs-artifacts/taskEX-20261109/` (outside Git): `f1-run1/`, `f1-run2/` and `f1-run3/` (`summary.txt`, `progress.txt`, `timings.tsv`, `fail-*.log`, gate log and time), `f1-run1/pump-logging-fixture/` (the failed fixture's daemon logs and result), `f1-solo/`, `f1-test_raft.log`, `f2-asan.log`, `f2-tsan.log`, `f2-asan-logs/`, `f2-tsan-logs/` (per-entry output), `f3-leak.log`, `f4-run1/` (driver log, gate logs, draft summary), `f4-rerun/` (direct runs with `n*.log` and `put-barrier-fault.json`, driver run 2), `f5-decoder.log`, `f5-results/` (per-target `run.log`, `summary.json`; `apply/run.log` kept as its last 200 lines plus the full file's sha256 `3cac3c4633da3606…`), `PRUNED.txt`. `SHA256SUMS` there: 334 files, its own sha256 `b87f682f901a406706c6bf5e9da8f8d0e8f273805a303386d1b88345050de25d`.
 
 ## Limitations
 
-One host, single-host loopback, TCP only. F1 rerun once, as the brief allows; a passing third gate was not sought. F5 overlapped F2 to F4. Neither driver run's work tree (daemon logs) was kept, so the log scans rest on the direct runs and the gate logs. The F1 pump-logging failure is not attributed beyond "load"; the passing runs left no fixture for comparison.
+One host, single-host loopback, TCP only. F1 ran three times; the third run, on a fresh build of the same commit, is the one the F1-only rows rest on, and it was INCOMPLETE only by three over-budget rows. F5 overlapped F2 to F4. Neither driver run's work tree (daemon logs) was kept, so the log scans rest on the direct runs and the gate logs. The F1 pump-logging failure is not attributed beyond "load"; the passing runs left no fixture for comparison.
