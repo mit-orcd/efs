@@ -146,7 +146,7 @@ static int dcache_put_now(efs_ino_t ino,uint32_t ci,const uint8_t *chunk,uint32_
     fn('dcache_unpublished') + fn('dcache_object_of') + fn('report_fill_owned') + \
     fn('chunk_obs_has_live_spans') + fn('chunk_obs_masked') + fn('stale_pair_cmp') + \
     (fn('stale_sent_cmp') if SENT else '') + \
-    (block('struct stale_retry_view {', '\n};') if 'struct stale_retry_view {' in src else '') + fn('stale_retry_owned', True) + fn('stale_repull_replay') + fn('dcache_identity_abandon', True) + \
+    (block('struct stale_retry_view {', '\n};') if 'struct stale_retry_view {' in src else '') + fn('span_refused', True) + fn('stale_retry_owned', True) + fn('stale_repull_replay') + fn('dcache_identity_abandon', True) + \
     fn('replay_span_without_body', True) + fn('dcache_replay_stale_ex_budgeted') + \
     (fn('dcache_object_seq_of', True) or
      'static uint64_t dcache_object_seq_of(efs_ino_t i,uint32_t c){(void)i;(void)c;return 0;}') + r'''
