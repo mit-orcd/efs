@@ -88,7 +88,7 @@ static int sink_batch(void *ctx, const struct efs_kv_item *it, uint32_t n)
     s->calls++;
     if (s->calls == s->fail_at) {
         s->failed++;
-        return EFS_ERR_IO;
+        return EFS_ERR_BUSY;
     }
     track = 0;
     rc = efs_kv_batch(s->inner, it, n);
@@ -636,7 +636,7 @@ static void test_refused_shapes(void)
     refuse_case(ok, 3, dup, 4, -1, -1, 0, "duplicate key in the local image");
     refuse_case(ok, 3, down, 2, -1, -1, 0, "unsorted local image");
     refuse_case(ok, 3, ok, 3, -1, -1, 1, "truncated last record");
-    refuse_case(ok, 3, ok, 3, 1, -1, 0, "incoming key outside the group");
+    refuse_case(ok, 3, ok, 3, 2, -1, 0, "incoming key outside the group");
     refuse_case(ok, 3, ok, 3, -1, 2, 0, "local key outside the group");
 }
 

@@ -11465,10 +11465,11 @@ static void host_snap_import_pass(struct efs_raft_host *h)
         snprintf(path, sizeof(path), "%s", h->g[gi].import_path);
         pthread_mutex_unlock(&h->snap_mu);
         __atomic_store_n(&h->g[gi].import_block, 1, __ATOMIC_RELEASE);
-        /* Every raft apply runs on the pump under h->mu and tests import_block
-         * only on entry. Taking and dropping h->mu here waits out an apply
-         * already past that test, so no write of this group lands after the
-         * local export below, where the diff could not correct it. */
+        /* Every raft apply runs under h->mu (the raft core has no lock of its
+         * own) and tests import_block only on entry. Taking and dropping h->mu
+         * here waits out an apply already past that test, so no apply of this
+         * group lands after the local export below, where the diff could not
+         * correct it. */
         pthread_mutex_lock(&h->mu);
         pthread_mutex_unlock(&h->mu);
         t0 = now_us_();

@@ -228,6 +228,8 @@ def main():
         res['import_diff'] = re.findall(r'raft-snap: import diff group=(\d+) rc=(-?\d+) n=(\d+)', txt)
         # fixed tree: keys applied and the importer's own buffer high-water per group
         res['import_applied'] = re.findall(r'raft-snap: import applied group=(\d+) incl=\d+ diff_keys=(\d+) buf_peak=(\d+)', txt)
+        # follow-up: (group, steps, longest step in us, import start to ack in ms)
+        res['import_timing'] = re.findall(r'raft-snap: import applied group=(\d+) .* steps=(\d+) step_max_us=(\d+) total_ms=(\d+)', txt)
         res['installed'] = len(re.findall(r'on_snap_req .*INSTALLED', txt))
         res['snap_lines'] = [l for l in txt.splitlines() if 'raft-snap: import' in l or 'INSTALLED' in l][-12:]
         res['rc'] = 'ok'

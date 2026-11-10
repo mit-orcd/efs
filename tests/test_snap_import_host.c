@@ -78,6 +78,7 @@ static void fixture_make(struct fixture *f)
     char sub[EFS_TEST_PATH + 16];
     struct efs_kv *src;
     struct efs_kv_lsm_view *view;
+    struct efs_kv_lsm_cfg nosync = {.sync_mode = EFS_KV_LSM_NOSYNC};
     FILE *fp;
 
     memset(f, 0, sizeof(*f));
@@ -85,7 +86,7 @@ static void fixture_make(struct fixture *f)
     CHECK(efs_test_mkdtemp(f->dir) != NULL, "tmpdir");
     /* the leader's store, exported as the snapshot image */
     snprintf(sub, sizeof(sub), "%s/src", f->dir);
-    src = efs_kv_lsm_open(sub, NULL);
+    src = efs_kv_lsm_open(sub, &nosync);    /* only its export is used */
     CHECK(src != NULL, "open src");
     for (uint32_t i = 1; i <= N_SRC; i++)
         put_ino(src, i, 0);
@@ -109,8 +110,10 @@ static void fixture_make(struct fixture *f)
     snprintf(sub, sizeof(sub), "%s/host", f->dir);
     f->h->kv = efs_kv_lsm_open(sub, NULL);
     CHECK(f->h->kv != NULL, "open host kv");
+    CHECK(efs_kv_lsm_sync_hold(f->h->kv) == EFS_OK, "seed hold");  /* one fsync, not 200 */
     for (uint32_t i = N_HOST_LO; i <= N_HOST_HI; i++)
         put_ino(f->h->kv, i, 1);
+    CHECK(efs_kv_lsm_sync_release(f->h->kv) == EFS_OK, "seed release");
     snprintf(f->h->mdraft, sizeof(f->h->mdraft), "%s", f->dir);
     f->h->gc_running = 1;
     CHECK(pthread_mutex_init(&f->h->snap_mu, NULL) == 0 &&
