@@ -379,6 +379,7 @@ python3 tests/test_client_stop.py	30	1	fast suite, 30 s ceiling	test	harness	Exe
 python3 tests/test_client_ready.py	30	1	fast suite, 30 s ceiling	test	harness	Execute production mount serving probes with deterministic timeout faults
 python3 tests/test_stop_dirty_drain.py	30	1	fast suite, 30 s ceiling	test	client/write,client/efs_fuse.release	Explicit stop drains unpublished partial bodies without reclaim's skip
 python3 tests/test_k90_unmount_enospc.py	30	1	fast suite, 30 s ceiling; DF: measured 19.9 s solo on node9900	test	client/efs_fuse.main,client/write	K90: an unmount after ENOSPC decides in seconds: full member exit 1 naming the given-up chunk, room back exit 0 with the file exact
+python3 tests/test_k102_removed_inode_flush.py	25	1	fast suite, 25 s ceiling; FC: measured 11.6, 10.3 and 16.7 s solo on node9900 (load average 12 to 20), 1.25 x 16.7 rounded up to 5 s	test	client/write,client/efs_fuse.release	K102: write-back of a removed inode is retired once and the stop succeeds (before: endless dcache-flush-fail, stop refused with all-zero counts)
 python3 tests/test_fixture_interrupt.py	30	1	fast suite, 30 s ceiling	test	harness	Actual private fixture signal setup permits cleanup after background exec
 python3 tests/test_lookup_memo.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.getattr	Exercise production memo and FUSE callbacks with deterministic RPC stubs
 python3 tests/test_bench_lookup_walk.py	30	1	fast suite, 30 s ceiling	test	client/ops	Exercise the actual benchmark walker with deterministic owner-RPC stubs

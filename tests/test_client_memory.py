@@ -90,6 +90,7 @@ source += '\n'+block(w, 'struct chunk_put_job {')+'\n'+block(w, 'struct flush_pi
 source += r'''
 static unsigned pipe_windows_closed;
 static void put_win_close(efs_ino_t ino) { (void)ino; pipe_windows_closed++; }
+static int dcache_retire_gone(efs_ino_t ino, uint32_t ci, int rc) { (void)ino; (void)ci; (void)rc; return 0; }
 static int put_pool_run(struct chunk_put_job *jobs, uint32_t n) {
     for (uint32_t i=0;i<n;i++) jobs[i].rc=EFS_ERR_IO;
     return EFS_ERR_IO;

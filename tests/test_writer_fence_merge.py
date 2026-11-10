@@ -52,6 +52,7 @@ static void dcache_pin_add(struct dcache_ent *e) { e->pin_held=1; }
 static void dcache_pin_release(struct dcache_ent *e) { e->pin_held=0; }
 static void put_win_open(efs_ino_t ino) { (void)ino;windows++; }
 static void put_win_close(efs_ino_t ino) { (void)ino;windows--; }
+static int dcache_retire_gone(efs_ino_t ino,uint32_t ci,int rc) { (void)ino;(void)ci;(void)rc;return 0; }
 static int dcache_chain_has(uint32_t s,const struct dcache_ent *e) { (void)s;return e==&g_dcache.e[0]; }
 void *efs_buf_alloc(uint32_t n) { return malloc(n); }
 void efs_buf_free(void *p,uint32_t n) { (void)n;free(p); }

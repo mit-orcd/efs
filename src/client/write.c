@@ -7246,6 +7246,31 @@ static void dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
     pthread_mutex_unlock(mu);
 }
 
+/* K102: a flush of (ino, ci) failed with rc. NOT_FOUND (the chunk's merge-base
+ * fetch) and STALE (the PUT ticket of a removed FileID is not admitted) are
+ * the two answers a removed inode gives. When a fresh getattr confirms the
+ * inode itself is gone (the same rc from a session or ticket lookup is not
+ * that), the chunk can never be published: retire its cache entry instead of
+ * re-dirtying it for every later pass, and report the loss once through the
+ * writeback error that fsync/close return. Any other rc, and a STALE or
+ * NOT_FOUND for an inode that still exists, keep the existing retry handling.
+ * Returns 1 when retired. Takes no cache locks. */
+static int dcache_retire_gone(efs_ino_t ino, uint32_t ci, int rc)
+{
+    struct efs_inode ri;
+
+    if ((rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_STALE) ||
+        efs_client_rpc_getattr(g_client.export_id, ino, &ri) != EFS_ERR_NOT_FOUND)
+        return 0;
+    efs_dcache_drop(ino, ci);
+    if (!efs_wb_inode_stalled(ino))
+        (void)wb_error_record_add(ino);
+    fprintf(stderr, "dcache-inode-gone ino=%llu ci=%u: removed on the server; its "
+            "unpublished bytes are dropped, writeback error recorded\n",
+            (unsigned long long)ino, ci);
+    return 1;
+}
+
 struct flush_pipe {
     struct chunk_put_job jobs[EFS_WRITE_PIPELINE];
     uint8_t *copies[EFS_WRITE_PIPELINE];
@@ -7269,6 +7294,12 @@ static int flush_pipe_drain(struct flush_pipe *p)
     for (i = 0; i < p->n; i++) {
         int pok = (p->jobs[i].rc == EFS_OK);
 
+        if (!pok && dcache_retire_gone(p->jobs[i].ino, p->jobs[i].ci, p->jobs[i].rc)) {
+            efs_buf_free(p->copies[i], p->lens[i]);
+            p->copies[i] = NULL;
+            put_win_close(p->jobs[i].ino);
+            continue;
+        }
         dcache_flush_keep(p->jobs[i].ino, p->jobs[i].ci, p->copies[i],
                           p->lens[i], pok, p->jobs[i].flush_seq);
         efs_buf_free(p->copies[i], p->lens[i]);
@@ -7451,10 +7482,16 @@ static int dcache_flush_slot_inner_budgeted(uint32_t s, efs_ino_t only_ino, int 
             int rrc = dcache_fetch_merge_base(ino, ci, base, len,
                                                &merge_obs, &merge_have_obs);
             if (rrc != EFS_OK) {
+                int retired = dcache_retire_gone(ino, ci, rrc);
                 efs_buf_free(base, len);
                 efs_buf_free(copy, len);
                 pthread_mutex_lock(io);
                 pthread_mutex_lock(mu);
+                if (retired) { /* K102: nothing left to re-dirty; walk on from the head */
+                    put_win_close(ino);
+                    e = &g_dcache.e[s];
+                    continue;
+                }
                 e = dcache_find(s, ino, ci);
                 if (e && !e->dirty) {
                     dcache_set_dirty(e, s);
@@ -7484,6 +7521,7 @@ static int dcache_flush_slot_inner_budgeted(uint32_t s, efs_ino_t only_ino, int 
             span_of(ino, ci, slot_bg, nrange, roff, rlen, len, &doff, &dlen);
         int prc = dcache_put_now(ino, ci, copy, len, slot_bg, seq, doff,
                                  dlen, merge_have_obs ? &merge_obs : NULL);
+        int retired = prc != EFS_OK && dcache_retire_gone(ino, ci, prc);
         pthread_mutex_lock(io);
         pthread_mutex_lock(mu);
         /* The put-record (or the re-dirty below on failure) is what the
@@ -7491,6 +7529,11 @@ static int dcache_flush_slot_inner_budgeted(uint32_t s, efs_ino_t only_ino, int 
          * hold the locks again. A failed PUT re-dirties under these
          * locks before any snapshot can run. */
         put_win_close(ino);
+        if (retired) { /* K102: the inode is gone; nothing to re-dirty */
+            efs_buf_free(copy, len);
+            e = &g_dcache.e[s];
+            continue;
+        }
         if (!dcache_chain_has(s, e)) {
             /* The node was dropped while the PUT ran. Whatever holds
              * (ino,ci) now, if anything, gets the result; the walk
@@ -7689,6 +7732,8 @@ static int dcache_flush_ino_pass(efs_ino_t ino, uint32_t max_chunks)
         int st = dcache_steal_dirty(ino, ci, &copy, &len, &bg, &seq, &doff,
                                     &dlen, &obs, &have_obs);
 
+        if (st < 0 && dcache_retire_gone(ino, ci, st))
+            continue;
         if (st < 0)
             pipe.rc = st;
         else if (st > 0 &&
@@ -9005,6 +9050,8 @@ static void *dcache_reclaim_main(void *arg)
                             e->reclaim_claimed)
                             e->reclaim_claimed = 0;
                     pthread_mutex_unlock(mu);
+                    if (st < 0 && dcache_retire_gone(pino, pci, st))
+                        continue;
                     if (st < 0)
                         pipe.rc = st;
                     continue;
@@ -9076,10 +9123,14 @@ static void dcache_kick_complete(void)
 void efs_dcache_maybe_reclaim(void)
 {
     /* getenv per write walks environ on the hot path; the limit is fixed
-     * for the process, so read it once (idempotent benign race). */
-    static uint64_t lim;
-    if (!lim)
+     * for the process, so it is cached atomically (every thread computes
+     * the same value). */
+    static uint64_t lim_cache;
+    uint64_t lim = __atomic_load_n(&lim_cache, __ATOMIC_RELAXED);
+    if (!lim) {
         lim = dcache_reclaim_limit();
+        __atomic_store_n(&lim_cache, lim, __ATOMIC_RELAXED);
+    }
     uint64_t dirty =
         __atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED);
     if (dirty <= lim)

@@ -67,6 +67,12 @@ int efs_control_drain(uint64_t deadline, int force)
     uint64_t previous = efs_client_rpc_deadline_ms();
     efs_client_rpc_set_deadline_ms(deadline);
     int result = -1;
+    /* K102: the last pass's values, so a refusal names every condition the
+     * loop tests (a nonzero return code or counter is what refused it). */
+    unsigned passes = 0;
+    int ownership_rc = EFS_OK, data_rc = EFS_OK, report_rc = EFS_OK;
+    uint64_t dcache_pending = 0;
+    struct efs_report_pressure pressure = {0};
     while (stats_now_ms() < deadline) {
         if (efs_wb_pending(0)) {
             usleep(10000);
@@ -76,16 +82,16 @@ int efs_control_drain(uint64_t deadline, int force)
         uint64_t ownership_deadline = stats_now_ms() + 1000;
         if (deadline < ownership_deadline)
             ownership_deadline = deadline;
-        int ownership_rc = efs_open_retry_pass(ownership_deadline);
-        int data_rc = efs_dcache_drain_pending();
-        int report_rc = efs_client_report_dirty(1);
+        ownership_rc = efs_open_retry_pass(ownership_deadline);
+        data_rc = efs_dcache_drain_pending();
+        report_rc = efs_client_report_dirty(1);
         efs_buf_drain_leave();
-        struct efs_report_pressure pressure;
         efs_client_report_pressure_stats(&pressure);
+        dcache_pending = efs_dcache_pending_records(NULL);
+        passes++;
         if (data_rc == EFS_OK && report_rc == EFS_OK && ownership_rc == EFS_OK &&
             !pressure.pending_records && !pressure.reserved_records &&
-            !pressure.inflight_records &&
-            !efs_dcache_pending_records(NULL)) {
+            !pressure.inflight_records && !dcache_pending) {
             result = 0;
             break;
         }
@@ -93,7 +99,14 @@ int efs_control_drain(uint64_t deadline, int force)
     }
     if (result)
         fprintf(stderr, "stop-refused: unresolved writes or lease releases remain; mount retained "
-                "(retained-releases=%u wb-pending=%d)\n", efs_open_retained(), efs_wb_pending(0));
+                "(retained-releases=%u wb-pending=%d passes=%u ownership-rc=%d data-rc=%d "
+                "report-rc=%d report-pending=%llu report-reserved=%llu report-inflight=%llu "
+                "dcache-pending=%llu)\n", efs_open_retained(), efs_wb_pending(0), passes,
+                ownership_rc, data_rc, report_rc,
+                (unsigned long long)pressure.pending_records,
+                (unsigned long long)pressure.reserved_records,
+                (unsigned long long)pressure.inflight_records,
+                (unsigned long long)dcache_pending);
     efs_client_rpc_set_deadline_ms(previous);
     return result;
 }

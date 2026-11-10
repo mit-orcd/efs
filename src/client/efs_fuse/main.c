@@ -117,7 +117,9 @@ static void efs_fuse_destroy(void *userdata)
     /* Diagnostic only, not unclean: efs_wb_stop finished those jobs (their
      * failures are the sticky error above) and the session revoke in
      * efs_client_shutdown deletes this mount's leases, retained CLOSEs
-     * included; its rc decides the stop. Same counts as stop-refused. */
+     * included; its rc decides the stop. Same retained-releases and
+     * wb-pending counts as stop-refused, which also prints the return codes
+     * and counters that refused. */
     unsigned retained = efs_open_retained();
     if (retained || wb_left)
         fprintf(stderr, "efs-fuse: unmount: left to the stop (retained-releases=%u "
