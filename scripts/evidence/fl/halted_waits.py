@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Task FL (K106) probe: the three waits one halted member (SIGSTOP) causes.
 
-Usage: halted_waits.py TREE a|b|c halt|nohalt [WINDOW_S]
+Usage: halted_waits.py TREE a|b|r|c halt|nohalt [WINDOW_S]
 (TREE built with `make all tests/faults/efsd`; TMPDIR holds the retained
 fixture; on intel1 run through scripts/evidence/ff/port_range.py)
 
@@ -10,6 +10,9 @@ The last line is `ROW {json}`.
   b  both groups led by node 1; 30 sequential 256 KiB file writes after the
      halt. Every PUT places a fragment on node 3, so each write pays the
      client's reconnect to it. ROW: seconds per write.
+  r  as b, then SIGCONT after 6 writes and writes back to back for 8 s more.
+     ROW: seconds from the SIGCONT to the last write that left a fragment for
+     node 3 unacknowledged (the client log's `degraded acknowledgement` lines).
   a  both groups led by node 3 (the client has noted it as leader); right
      after the halt 3 mkdirs. The first is a request in flight to the member
      that stopped. ROW: seconds and errno per mkdir.
@@ -43,7 +46,16 @@ try:
     c.wait_voters((1,2,3),lambda i,v:v=={0:(1,7),2:(1,7)})
     k.place_leaders(c,3 if mode=='a' else 1,groups=(0,2),timeout=15)
     m=k.Mount(c,1,'mnt');d=m.path/'d';d.mkdir()
-    if mode=='b':
+    if mode=='r':
+        for i in range(8):(d/f'w{i}').write_bytes(os.urandom(256<<10))
+        c.procs[3].send_signal(signal.SIGSTOP)
+        row['write_s']=[secs(lambda i=i:(d/f'x{i:02d}').write_bytes(os.urandom(256<<10))) for i in range(6)]
+        t_cont=time.time();c.procs[3].send_signal(signal.SIGCONT);row['t_cont']=t_cont
+        n=0
+        while time.time()<t_cont+8:
+            (d/f'y{n:04d}').write_bytes(os.urandom(256<<10));n+=1
+        row['writes_after_cont']=n
+    elif mode=='b':
         for i in range(8):(d/f'w{i}').write_bytes(os.urandom(256<<10))
         if halt:c.procs[3].send_signal(signal.SIGSTOP)
         row['write_s']=[secs(lambda i=i:(d/f'x{i:02d}').write_bytes(os.urandom(256<<10))) for i in range(30)]
@@ -79,6 +91,11 @@ finally:
     for p in c.procs.values():
         if p.poll() is None:p.send_signal(signal.SIGCONT)
     c.stop_all()
+if mode=='r':
+    lines=(c.dir/'mnt.log').read_text(errors='replace').splitlines()
+    t=[datetime.fromisoformat(l[:23]+'+00:00').timestamp() for l in lines if 'degraded acknowledgement' in l and 'node 3' in l]
+    row['last_degraded_after_cont_s']=round(max(t)-row['t_cont'],2) if t else None
+    row['degraded_lines']=len(t)
 if mode=='c':
     def ts(l):
         mt=re.match(r'(\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:\.\d+)?)',l)

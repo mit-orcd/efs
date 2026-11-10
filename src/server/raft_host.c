@@ -12665,30 +12665,6 @@ static void host_put_drain_pass(struct efs_raft_host *h, uint8_t group, uint32_t
     free(scan);
 }
 
-/* Stranded-transaction recovery runs on its own thread. It used to end every
- * GC pass, behind the reclaim step whose acceptance waits for every member's
- * reply, so one halted member (the kernel accepts, nothing answers) delayed a
- * recovery by the whole step: 29 to 30 s instead of the 5 s record age (K106). */
-static void *host_recover_thread(void *arg)
-{
-    struct efs_raft_host *h = arg;
-
-    while (__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE)) {
-        struct timespec ts;
-
-        host_txn_recover_pass(h);
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_nsec += (long)GC_LOOP_MS * 1000000L;
-        ts.tv_sec += ts.tv_nsec / 1000000000L;
-        ts.tv_nsec %= 1000000000L;
-        pthread_mutex_lock(&h->rec_mu);
-        if (__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
-            pthread_cond_timedwait(&h->rec_cv, &h->rec_mu, &ts);
-        pthread_mutex_unlock(&h->rec_mu);
-    }
-    return NULL;
-}
-
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -12872,6 +12848,30 @@ static void *host_gc_thread(void *arg)
             if (sleep_us > 20000) sleep_us = 20000;
             usleep((useconds_t)sleep_us);
         }
+    }
+    return NULL;
+}
+
+/* Stranded-transaction recovery runs on its own thread. It used to end every
+ * GC pass, behind the reclaim step whose acceptance waits for every member's
+ * reply, so one halted member (the kernel accepts, nothing answers) delayed a
+ * recovery by the whole step: 29 to 30 s instead of the 5 s record age (K106). */
+static void *host_recover_thread(void *arg)
+{
+    struct efs_raft_host *h = arg;
+
+    while (__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE)) {
+        struct timespec ts;
+
+        host_txn_recover_pass(h);
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_nsec += (long)GC_LOOP_MS * 1000000L;
+        ts.tv_sec += ts.tv_nsec / 1000000000L;
+        ts.tv_nsec %= 1000000000L;
+        pthread_mutex_lock(&h->rec_mu);
+        if (__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
+            pthread_cond_timedwait(&h->rec_cv, &h->rec_mu, &ts);
+        pthread_mutex_unlock(&h->rec_mu);
     }
     return NULL;
 }

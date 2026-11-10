@@ -11,9 +11,9 @@ import os,shlex,subprocess,tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
 s=csrc.module('raft_host')
-gc=s[s.index('static void *host_gc_thread('):s.index('/* W92 query publication:')]
+gc=s[s.index('static void *host_gc_thread('):s.index('static void *host_recover_thread(')]
 assert 'host_txn_recover_pass(' not in gc, 'recovery must not run on the GC thread'
-a=s.index('static void *host_recover_thread(');b=s.index('static void *host_gc_thread(')
+a=s.index('static void *host_recover_thread(');b=s.index('/* W92 query publication:')
 assert 'efsd_pthread_create(&h->rec_tid, host_recover_thread, h)' in s
 assert 'pthread_join(h->rec_tid, NULL)' in s
 code=r'''
