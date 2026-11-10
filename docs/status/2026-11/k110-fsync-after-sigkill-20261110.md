@@ -222,6 +222,69 @@ K104 (Task FF). Data and `fsync` are exact in all of them (integrity PASS, post
 fsyncs 0). They keep the kill gate from passing every run and need their own
 fix.
 
+### Task EY's probe (tcp-h01-k110): the D/M/L stripes and the later fsync
+
+Task EY (branch `claude/kind-darwin-bbba2f`, commit `b35ecd129`, page
+`batch-d-distinct-host-20261109.md`, "K110 capture", not merged here) ran H1
+`sigkill-8k` with `--post-fsync` on distinct hosts: the final `fsync` of all
+four writers returned `EIO` 6.5 to 6.9 s after the last member was back, two
+more `fsync` calls returned `EIO` too, and the same 227 stripes stayed
+unproven: three fragments D, M and L (chunk 178 on nodes 3, 1, 2: node 3 D,
+node 1 M "never acknowledged, no degraded mark", node 2 L acknowledged before
+the kill), nothing re-sent, `stripe_close_for_absence()` retired none in 24.7 s.
+The questions, answered with this branch:
+
+**(a) Does the fix change that outcome?** Yes for the L, and the M needs no
+change. The L is a fragment of a killed incarnation; the fix proves it durable
+when it was acknowledged at or before that incarnation's last completed barrier
+(the history entry named by the node's COMMIT reply, condition above). In
+Task EY's stripe the L was written during node 1's outage and node 2 was killed
+at least 7 s later, so a barrier (every 200 ms or 256 MiB) covered it: the
+stripe is then D, D, M, two durable plus a published-degraded fragment, and the
+`fsync` returns 0. The M is not an open defect: a fragment that was never
+acknowledged is, by design, a slot the publication marks degraded (the W154
+mark rides on the publication that wrote the stripe, K35), so a stripe
+D, D, M passes without a new mark; the fate table in `test_history_table`
+covers it (U with two D: `OK`, no mark added). What Task EY read as "no
+degraded mark" is the log line of the fold, which only counts marks it had to
+add. The pattern is in `tests/test_k110_barrier_history.py` (above): fails
+before, passes after.
+
+**(b) Contract for a later `fsync` once every member is back.** It returns 0
+whenever every unproven fragment on the stripe is either durable on its own
+incarnation or covered by a barrier recorded by the node that now holds it, and
+the stripe has two such fragments or one plus a mark. With the fix that holds
+for Task EY's stripes (the two later `fsync` calls in the regression test, and
+the two post `fsync` calls of the runs below, return 0). It still returns
+`EIO`, permanently and without re-PUT, for one case: an L acknowledged after
+its incarnation's last barrier (the 200 ms window, or 256 MiB), on a stripe
+that also has an M, so only one fragment is durable (D, M, L-uncovered, "1 of 3
+durable; need 2"). The client keeps no copy and the PUT is not re-sent, so no
+later event changes it. Closing it needs either option 4 (a rebuilt M slot
+proven by a cleared mark, the chunk reply exposing the mark state) or the
+client re-sending or repairing the stripe; both are a task of their own, and no
+wait is widened for it. That residual stripe was not seen in any run listed
+here (nor in Task EY's capture, whose L was covered).
+
+**(c) Task EY's command on the fixed tree.** The H1 `sigkill-8k` arguments of
+`scripts/evidence/k110/run_series.sh` plus `--post-fsync` (8,000 records, four
+writers, interval 4, first event 3, down 5), with `--failover-window 62` because
+nuc takes 0.39 s per append, no settle flag, two runs in parallel on nuc from
+the source of `d4a6876d2` (`~/efs-artifacts/taskFH-20261110/series-ey-probe/`):
+
+| Run | Verdict | Final `fsync` (4 writers) | Post `fsync` | Unproven stripes at any `fsync` | Proven / lost (marked) | Kills | Integrity |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `eya-1` | FAIL, only `report_within_latency_bound` | 0, 0, 0, 0 (max 0.69 s) | 0, 0 | 0 | 91 / 4 (4) | 5 | PASS |
+| `eyb-1` | PASS | 0, 0, 0, 0 | 0, 0 | 0 | 133 / 3 (3) | 5 | PASS |
+
+The client logs have no `need 2` or "without proof" line in either run, so the
+count of unproven stripes is 0 where Task EY's capture had 227 (one `fsync` of
+the four writers takes 0.19 to 0.85 s here). Each run took about 1,580 s. These
+runs are on one host, loopback, not on Task EY's distinct hosts, so they show
+that the fix removes the D/M/L stripe on this tree; the distinct-host H1 rerun
+is still owed. The `eya-1` failure is the REPORT latency criterion of the K104
+family above, with data and `fsync` exact.
+
 ### Tests
 
 - `tests/test_k110_barrier_history.py` (new, `make test-long`; budget 10 s):
@@ -231,7 +294,13 @@ fix.
   proven by their barrier history, 0 lost` (N at least 2) and no degraded mark.
   **Fails on the pre-fix tree** (`4a24916a1`, built on node9900): `OSError:
   [Errno 5] Input/output error` at the `fsync`. **Passes on the fix** (5.5 to
-  7.7 s on node9900, 6 to 6.4 s on nuc).
+  7.7 s on node9900, 6 to 6.4 s on nuc). A second part reproduces Task EY's
+  stripes (see below): file X is written while node 3 is down, node 2 is
+  SIGKILLed after the barrier, and two `fsync` calls of X must return 0 with at
+  least one fragment proven, none lost and no `need 2`. On the pre-fix tree a
+  DML-only variant fails with `Errno 5` and the client logs `fragments=MDL` and
+  `LMD`, "1 of 3 durable; need 2", the stripes Task EY saw. On the fix the whole
+  test passes (7.7 s and 8.7 s on nuc).
 - `tests/test_data_commit.c`, fast suite (4.6 s on nuc, budget 30 s): the
   fate table of the client fold, `test_history_table`: each fragment of a stripe
   is F (acknowledged by the answering incarnation), C (replaced, covered by the
@@ -665,6 +734,9 @@ ASan 60 of 60) stands for that build only.
   record round trip.
 - The ring bound (7) was exceeded once on nuc (22 restarts of a member), where
   the `fsync` fails closed as designed; the capture was not kept.
+- Task EY's D/M/L stripes were reproduced and removed on one host only; the
+  residual "uncovered L plus M" stripe (answer (b)) has no test of its own on a
+  live cluster, only the fate table (`N` with `U`: `EIO`).
 - The REPORT failures of the kill gate (K104 family) were not investigated; the
   unsettled `fsync` during an outage or recovery fence stays `EIO` by design.
 - nuc's per-write latency (0.39 s) makes its timings unlike node9900's; its
@@ -679,8 +751,11 @@ each run's `*.out`, `*.report.json`, `*.logs/` with `fuse-mnt.log` and
 `efsd-n*.log`; `tests/` with the test outputs and the driver scripts `run1.sh`
 to `run4.sh` and logs; `gate/` with `summary.txt`, `timings.tsv`, the two
 failure logs; `sanitizers/`; `solo/` with the nine solo reruns;
-`host-and-binaries.txt`) with `SHA256SUMS` (319 files; SHA256 of the manifest
-`b232b7fca7e5c50d76422670aad9b01b70ec82b75c58f1557b774d3036b0ba63`). nuc
+`host-and-binaries.txt`; `series-ey-probe/` with `eya-1` and `eyb-1`; `dml/` with
+the pre-fix DML-only run) with `SHA256SUMS` (343 files; SHA256 of the manifest
+`f30120bbe3e5fb61dbd4724b273c3867b8b5aeeb3542162d11072dc827ba03bb`; the
+Task EY runs used a second build of the same source, whose `efsd`, `efs-fuse`
+and `efs-mgmt` hashes are at the end of `host-and-binaries.txt`). nuc
 binaries of the tested tree: `efsd`
 `908c9a2f37dc737da7a7a740c52c293ad639c674a0901f589260610b38e653e7`, `efs-fuse`
 `ec07217ccce8b155a24d8316a19cf9dd3f6e41a4a4205e3e5e96baff8e639a02`, `efs-mgmt`
