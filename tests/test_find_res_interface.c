@@ -22,6 +22,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static __thread struct fuse_ctx t_ctx;
@@ -359,19 +360,73 @@ static void *churn(void *arg)
     return NULL;
 }
 
-int main(void)
+/* Case filter: no argument runs every case; an argument runs the cases whose
+ * name contains it; --list prints the names; an argument that matches no case
+ * exits 2, so a misspelling is not a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
 {
-    serve_own_result();
-    errors_never_serve_cached_bytes();
-    other_uid_gets_its_own();
-    many_terms_through_sixteen_slots();
-    byte_budget();
-    third_fetch_is_busy();
-    same_term_pairs();
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
+    }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+static void concurrent_callers(void)
+{
     pthread_t t[4];
     for (uintptr_t i = 0; i < 4; i++) assert(!pthread_create(&t[i], NULL, churn, (void *)i));
     for (int i = 0; i < 4; i++) assert(!pthread_join(t[i], NULL));
     find_res_clear();
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
+    RUN(serve_own_result);
+    RUN(errors_never_serve_cached_bytes);
+    RUN(other_uid_gets_its_own);
+    RUN(many_terms_through_sixteen_slots);
+    RUN(byte_budget);
+    RUN(third_fetch_is_busy);
+    RUN(same_term_pairs);
+    RUN(concurrent_callers);
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     puts("find_res interface: own fresh result on LOOKUP/OPEN/GETATTR/READ, ESTALE, errors pass "
          "through, per-uid results and hints, 16 slots, 64 MiB budget, fetch limit, clear, "
          "concurrent callers PASS");
