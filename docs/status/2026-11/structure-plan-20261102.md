@@ -26,7 +26,10 @@ merged Tasks EF (graph and selector share one resolver), EH (this block),
 EI (two changes by blind readers) and EJ (K54 fence test); wave 67 (Nov 9)
 merged the degraded-count begin fix (Task EK) and eight small tasks EL to
 ES (fuse prefix build, sanitizer lists, budget refit, K101 audit, stop files,
-script citations, open splice tests, gate summary). Active run:
+script citations, open splice tests, gate summary); wave 68 (Nov 10)
+merged the apply visibility contract (Task ET), the contract-to-case maps
+in the owner guides (Task EU) and the measurement method with necessary
+expansion and validation reported apart (Task EV). Active run:
 none. Next action: start 2b after W123 recovery merges. Rule: at each
 wave merge the coordinator sets the status line of every merged task page
 (merged in wave N on date), with the ledger entry and the W171 row.

@@ -2,7 +2,7 @@
 
 **Verdict: PASS, docs and comments only, no code or behavior change, no K
 row, blocks alpha: no** (Nov 9, branch `claude/eager-sammet-10c74c` on devel
-`9bb50fe79`; not merged, not pushed).
+`9bb50fe79`; merged into devel in wave 68, Nov 10).
 
 - Purpose: an outside reviewer asked for one short authoritative
   description of when a metadata batch is staged, committed and visible,
