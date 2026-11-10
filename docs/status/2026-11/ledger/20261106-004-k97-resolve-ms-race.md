@@ -1,0 +1,3 @@
+# K97 `rpc_resolve_ms` lazy init race (Task DR)
+
+[K97 `rpc_resolve_ms` lazy init race (Task DR)](../k97-resolve-ms-race-20261106.md): **PASS, K97 FIXED, blocks alpha: no** (Nov 6, branch `claude/exciting-tu-27838c`, tested `c55723ce0` on Task DQ's `a537e769d`; not merged into devel). The client cached `EFS_RESOLVE_MS` in a plain function static that concurrent `efs-bench` creates read and wrote; now acquire/release atomic as K83. `k96_status_slots_live` (`K96_ROUNDS=1`) joins the TSan list: node9900 FAIL before (8 reports, 6 this race), PASS after with `k88_chunk_hints_live`; fast suite PASS. Not this row: the before run also showed an intermittent server race in `host_export_salt` (`raft_host.c:7486`), no K row yet; raw output `~/efs-artifacts/taskK97-20261106/`.

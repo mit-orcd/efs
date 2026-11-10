@@ -449,6 +449,7 @@ docs-check:
 	python3 docs/check-architecture.py
 	python3 scripts/check_include_boundary.py
 	python3 scripts/check_doc_links.py
+	python3 scripts/gen_ledger.py
 	python3 scripts/check_guide_counts.py
 	python3 scripts/check_concern_map.py docs/how-it-works/write-path-map.md src/client/write.c
 	python3 scripts/evidence/do/check_entry_map.py

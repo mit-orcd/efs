@@ -1,0 +1,3 @@
+# Task CX — scripts/ triage
+
+[Task CX — scripts/ triage](../scripts-triage-20261104.md): **PASS, docs and layout only, no K row, blocks alpha: no** (W171 phase 3, Nov 4): `scripts/` went from 286 entries to 35 (33 files plus `evidence/` and `reviews/`); 258 task-named scripts moved with `git mv` into 45 `scripts/evidence/<task>/` directories and nothing was deleted. Every citation in `docs/`, `tests/`, `efs-bench.sh` and between scripts was re-pointed, and repo-root-relative paths inside the moved scripts were fixed; `check_doc_links.py`, `make docs-check`, `test_make_test_recipe.py` and the affected Python tests pass on the Mac, Linux-only tests are NOTRUN (listed in the page).

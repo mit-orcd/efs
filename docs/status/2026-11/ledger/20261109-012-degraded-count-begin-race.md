@@ -1,0 +1,3 @@
+# degraded-count begin race
+
+Task EI follow-up, [degraded-count begin race](../degraded-count-begin-race-20261109.md): **PASS (Nov 9)**: `efs_meta_degraded_count_begin` dropped every mark noted while the count was unknown, but a mark is noted inside the raft apply scope before it commits while the rebuild reaper's derive scan reads the committed table, so a mark of the apply in flight could be missed until the next derive; `begin` now keeps the latest apply's marks through Task EI's apply-start hook (`946095b28`, branch `claude/task-ek-degraded-begin-race` on the EI branch). node9900: `make test` rc 0, `tests_for.py meta/meta_apply --run` rc 0, `./tests/test_meta_apply degraded` rc 0 and rc 1 with the old rule. No K row, blocks alpha: no.
