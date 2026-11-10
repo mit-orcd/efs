@@ -10,6 +10,9 @@ its COMMIT reply, and the client counts the fragments that barrier covered
 durable. The fsync must succeed with no degraded mark, and the client must say
 how many fragments the barrier history proved.
 
+A second file is written while node 3 is down (Task EY's DML stripes: one
+member's fragment missing, one covered by a barrier, one durable) and node 2
+is killed after the barrier: its fsync, and a later one, succeed too.
 A fragment acknowledged after the barrier stays lost; that rule is checked on
 the units (tests/test_data_commit.c, tests/test_store_durability.c) and with a
 daemon crash in tests/test_k36_recovery.py step 4.
@@ -87,6 +90,33 @@ try:
     assert proven >= 2 and lost == 0, (proven, lost, tail[-2000:])
     assert 'marked degraded' not in tail, ('a covered fragment was marked, not proven', tail[-2000:])
     assert (a.path / 'W').read_bytes() == data
+    # Task EY's pattern (tcp-h01-k110): a stripe written while node 3 was down (its
+    # fragment M: never acknowledged, the publication carries the degraded
+    # mark), then node 2, whose fragment the barrier covered, is SIGKILLed and
+    # restarted. Node 1 holds D, node 2's L is proven by its history, M is
+    # covered by the mark: the fsync must succeed, and so must a later one.
+    c.stop(3, sig=signal.SIGKILL)
+    data2 = payload('X', SIZE)
+    with open(a.path / 'X', 'wb') as f:
+        f.write(data2)
+    c.restart(3)
+    up(c, 3)
+    verified(c, 3)
+    wait_barrier(c, (1, 2))
+    c.stop(2, sig=signal.SIGKILL)
+    c.restart(2)
+    up(c, 2)
+    verified(c, 2)
+    old = a.logp.read_text().count('\n')
+    for _ in range(2):   # the later fsync of the same stripes too, every member back
+        with open(a.path / 'X', 'rb+') as f:
+            os.fsync(f.fileno())
+    tail = ''.join(a.logp.read_text().splitlines(True)[old:])
+    m2 = re.search(r'fsync: restarted members: (\d+) fragments proven by their barrier history, '
+                   r'(\d+) lost', tail)
+    assert m2 and int(m2.group(1)) >= 1 and int(m2.group(2)) == 0, (m2, tail[-2000:])
+    assert 'need 2' not in tail, tail[-2000:]
+    assert (a.path / 'X').read_bytes() == data2
     print(f'K110 barrier history: fsync after SIGKILL of node 3 then node 2 proves {proven} '
           f'fragments from the restarted members\' barriers (none lost, no degraded mark) '
           f'PASS ({time.time() - t0:.1f} s)')
