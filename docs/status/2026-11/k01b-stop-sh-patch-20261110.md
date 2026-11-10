@@ -190,7 +190,7 @@ All runs are on this Mac (Darwin 25.6.0, Python 3.9, bash 3.2); no remote host a
 | Check | Before (devops `8bc872e`) | After (`f2a1fc5`) |
 |---|---|---|
 | `bash -n nuc-efs/stop.sh` | OK | OK |
-| `python3 nuc-efs/test_daemon_ownership.py` | **NOTRUN on macOS:** exits 1 with `Run this ownership fixture on Linux with --efs-source pointing to EFS.` (the script guard `sys.platform != 'linux'`; the real `server_processes.py` needs `/proc` and `os.pidfd_open`) | same, NOTRUN on macOS; a Linux run is owed (phase 2, step 2) |
+| `python3 nuc-efs/test_daemon_ownership.py` | **NOTRUN on macOS:** exits 1 with `Run this ownership fixture on Linux with --efs-source pointing to EFS.` (the script guard `sys.platform != 'linux'`; the real `server_processes.py` needs `/proc` and `os.pidfd_open`). Linux run: see the table below | same, NOTRUN on macOS. Linux run: PASS, see below |
 | `python3 nuc-efs/test_start_mode.py` | not run (does not touch `stop.sh`) | 2 lines PASS, integration part `requires Linux /proc: SKIP` |
 | `python3 nuc-efs/test_efs_identity.py` | not run (does not touch `stop.sh`) | PASS |
 | `python3 nuc-efs/test_gc_driver.py` | not run (does not touch `stop.sh`) | PASS |
@@ -204,6 +204,17 @@ Because the ownership fixture cannot run here, its flow was exercised on macOS w
 | new test | old | **FAIL** at the new orderly-line assertion: stdout was `intel-efs stopped` |
 | new test | old with only the success text changed to `(orderly)` | **FAIL** at the non-orderly case: `daemon after the non-orderly one was not stopped` (n2 still running, `TimeoutExpired`) |
 | new test | new | PASS |
+
+### Real helper on Linux (host `nuc`, Nov 10)
+
+Requested by the coordinator after phase 1; private fixture only. Host `nuc` (Linux 6.12.0-211.67.1.el10_2.x86_64, Python 3.12.15, gcc 14.3.1), user `maik`, work under `~/efs-taskFJ/` with `TMPDIR=~/efs-taskFJ/tmp`, removed afterwards (`rm -rf ~/efs-taskFJ`; no leftover process). Inputs: the devops tree of branch `k01b-stop-nonorderly` (`f2a1fc5`) and of devops `devel` (`8bc872e`) from `git archive`, and the real `scripts/server_processes.py` of efs `devel` (SHA-256 `5055d053955bc70aa9cebec6d2de180e6e4068663e22e26933cd3232041263c0`, identical to this branch's). Nothing under `/data1` or `/data2`, no nuc-efs script and no real daemon, store or mount was touched. In the remote copies of the test only, the fake daemons' arguments `17431`, `17432`, `17433` were changed to `18900`, `18901`, `18902` (private range; the fake never binds a port). The command in each case: `python3 test_daemon_ownership.py --efs-source ~/efs-taskFJ/efs` in the `nuc-efs` directory of that tree.
+
+| Test | `stop.sh` | Result |
+|---|---|---|
+| devops `devel` test (existing assertions only) | old | PASS |
+| new test | **old** | **FAIL** at the new orderly-line assertion: stdout ended with `intel-efs stopped` |
+| new test | old with only the success text changed to `(orderly)` | **FAIL** at the non-orderly case: `TimeoutExpired` waiting for n2 (still running) |
+| new test | **new** | **PASS** |
 
 ## Reproduction
 
@@ -221,7 +232,7 @@ for c in "test.head.py stop.old.sh" "test.head.py stop.new.sh" "test.new.py stop
 cd ~/git/devops-k01b && for t in test_start_mode test_efs_identity test_gc_driver; do python3 nuc-efs/$t.py; done; bash -n nuc-efs/stop.sh
 ```
 
-The Linux run of the ownership fixture is the open check: `python3 nuc-efs/test_daemon_ownership.py --efs-source <efs checkout>` on a Linux host with `gcc`.
+The Linux run of the ownership fixture: `python3 nuc-efs/test_daemon_ownership.py --efs-source <efs checkout>` in a Linux host with `gcc` (done on nuc, see above; the same command with `devel`'s `stop.sh` copied over gives the before result).
 
 ## Phase 2 (not done)
 
@@ -230,8 +241,7 @@ Starts only on the coordinator's word that the user approved. O4 itself is not d
 ```sh
 # 1. Merge into devops devel (main checkout clean and on devel; fast-forward only)
 git -C /Users/mike/git/devops merge --ff-only k01b-stop-nonorderly
-# 2. Run the ownership fixture on a Linux host first (needs the user's OK for the host)
-python3 nuc-efs/test_daemon_ownership.py --efs-source <efs checkout on that host>
+# 2. (ownership fixture on Linux already run on nuc, see "Test results")
 # 3. Compare the deployed script with the old one before replacing it
 ssh node9901 'sha256sum /data1/efs/devops/stop.sh'   # via the sanctioned ORCD socket
 git -C /Users/mike/git/devops show 8bc872e:nuc-efs/stop.sh | shasum -a 256
@@ -248,6 +258,5 @@ Step 5 is a sketch, not a tested procedure; its blocked-handler method has to be
 
 ## Not verified
 
-- The ownership fixture against the real `scripts/server_processes.py` on Linux (macOS cannot run it).
 - Any run of the patched `stop.sh` on a real daemon, mount or cluster; nothing was pushed to or run on any host.
 - The multi-host (`intel`) driver path in `env.sh` with the new codes; only read.
