@@ -1523,7 +1523,7 @@
     "docs/status/2026-10/d39-consolidated-model-20261023.md": "68211f94877f2acbf05645ba2ef455c9f320cde460e821371b534451284f8bcc",
     "docs/status/2026-10/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
     "docs/status/2026-10/w100-eof-contract-20261013.md": "f8d0ef05a9b9d02a7118405d4bce0d6c4dbe4975b5138880b74a7cd995c2190c",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "b283801e4fa2e57e0a3ab439004e7e5d68dea4045b82a8c9edb2f524b7b8f6cf",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "c68aa746be1d1196fd5e4051bb88149dfc5c705029888578c99865d61c075526",
     "docs/status/alpha-1.1-consolidation.md": "c24210e5af50ff0c1d9f0fea74efb982947486c547230718a00b59f6c6d106a2",
     "docs/status/decisions.md": "475320dbb41c382dfe66ad5a8c3382f599ff7b61f188db351cc03aeb776bb9e4",
     "docs/using/alpha-1.0-guide.md": "af171553530fdac62596e108d0accbd8e12824abbae1eab8af4355ce5ce1289f",
@@ -3049,5 +3049,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "b9e8ed371bc07ca202682a8fee5343e2fe172961"
+  "source_commit": "4bd4788e5e672a95005487dccb857371c35f007c"
 }
