@@ -23,7 +23,21 @@ void efs_telemetry_log(int critical, const char *format, ...) {
     (void)critical; va_list ap; va_start(ap, format); vfprintf(stderr, format, ap); va_end(ap);
     if(strstr(format,"rc=%d")){pthread_mutex_lock(&mu);recorded=1;pthread_cond_broadcast(&cv);pthread_mutex_unlock(&mu);}
 }
-int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg) {return pthread_create(tid,NULL,fn,arg);}
+/* Workers are counted in and out so that a row ends only when every worker, its logging included, has finished. */
+static int spawned,exited;
+struct tramp {void *(*fn)(void *);void *arg;};
+static void *tramp_run(void *p) {
+ struct tramp t=*(struct tramp *)p;free(p);t.fn(t.arg);
+ pthread_mutex_lock(&mu);exited++;pthread_cond_broadcast(&cv);pthread_mutex_unlock(&mu);
+ return NULL;
+}
+int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg) {
+ struct tramp *t=malloc(sizeof(*t));t->fn=fn;t->arg=arg;
+ pthread_mutex_lock(&mu);spawned++;pthread_mutex_unlock(&mu);
+ int rc=pthread_create(tid,NULL,tramp_run,t);
+ if(rc){pthread_mutex_lock(&mu);spawned--;pthread_mutex_unlock(&mu);free(t);}
+ return rc;
+}
 struct efs_raft_host {struct efsd_server *s;};
 /* What each member answers: a reply rc, or one of these. */
 enum {DOWN=1000,SLOW,BAD_UUID,BAD_FLOOR};
@@ -56,12 +70,14 @@ static int host_inode_rpc_addr(const char *host,uint16_t port,uint8_t type,const
 static void reset(unsigned n) {
  pthread_mutex_lock(&server.lock);server.node_count=n;pthread_mutex_unlock(&server.lock);
  for(unsigned i=0;i<n;i++){server.nodes[i].id=i+1;snprintf(server.nodes[i].addr,sizeof(server.nodes[i].addr),"127.0.0.1");server.nodes[i].port=9001+i;}
- memset(beh,0,sizeof(beh));calls=done=roster_shrinks=released=gate=recorded=0;
+ pthread_mutex_lock(&mu);
+ memset(beh,0,sizeof(beh));calls=done=roster_shrinks=released=gate=recorded=spawned=exited=0;
+ pthread_mutex_unlock(&mu);
 }
 /* Every member that was asked has answered; the late ones are released first. */
 static void settle(int want) {
  pthread_mutex_lock(&mu);released=1;pthread_cond_broadcast(&cv);
- while(done<want)pthread_cond_wait(&cv,&mu);
+ while(done<want || exited<spawned)pthread_cond_wait(&cv,&mu);
  pthread_mutex_unlock(&mu);
 }
 /* The counting rule: rows are (members, answers of members 1..n, expected result). Member 1 is this node. */
