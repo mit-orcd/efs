@@ -55,6 +55,10 @@ Hosts: fcstor010-014, AMD EPYC 7402P (24 CPUs), 250 GB, RHEL 9 (5.14.0-687.39.1.
 
 (filled in at the end)
 
+## Follow-ups
+
+- **d4-progress cannot collect member RSS on these hosts: NOTRUN (harness) in every cell.** `scripts/d4_progress.py` runs on the mount host and samples each member's RSS with its own `ssh HOST ps ...` (`server_rss()` in the sampler class, called from the per-sample loop); fcstor hosts cannot ssh to each other, so every sample is `None` and the gate's RSS bound fails. The controller reaches every member through the description's `ssh` wrapper, but the daemons report no RSS over `efs-mgmt`, and the gate needs the local mount, so routing the samples through the controller is not a small change (a member-side sampler started by the driver, or an RSS field in `efs-mgmt status`). The gate's other checks (foreground deadline, KV bounds, pack backlog, index age, drain) are reported for the record but do not make the gate PASS.
+
 ## Reproduction
 
 (filled in at the end)
